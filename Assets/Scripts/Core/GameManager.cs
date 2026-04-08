@@ -27,6 +27,7 @@ public class GameManager : MonoBehaviour
     private List<HexCell> _highlightedCells = new List<HexCell>();
     private bool _waitingForAttackTarget;
     private string _lastCombatLog = "";
+    private Camera _mainCam;
 
     private void Awake()
     {
@@ -49,8 +50,73 @@ public class GameManager : MonoBehaviour
         // Center camera
         CenterCamera();
 
+        // Cache camera reference for raycasting
+        _mainCam = Camera.main;
+
         // Start with player turn
         StartPlayerTurn();
+
+        Debug.Log("[GameManager] Initialization complete. Phase: " + CurrentPhase);
+    }
+
+    /// <summary>
+    /// Detect hex clicks via Physics2D raycasting every frame.
+    /// This replaces OnMouseDown on HexCell for reliable input across
+    /// both the legacy and new Input System configurations in Unity 6+.
+    /// </summary>
+    private void Update()
+    {
+        // Only process clicks during player phases
+        if (!IsPlayerTurn) return;
+
+        // Detect left mouse button press (works with both Input Systems when activeInputHandler=2)
+        bool clicked = false;
+        Vector3 mouseScreenPos = Vector3.zero;
+
+        // Try legacy Input first
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetMouseButtonDown(0))
+        {
+            clicked = true;
+            mouseScreenPos = Input.mousePosition;
+        }
+#endif
+
+        // Fallback / alternative: New Input System
+#if ENABLE_INPUT_SYSTEM
+        if (!clicked)
+        {
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse != null && mouse.leftButton.wasPressedThisFrame)
+            {
+                clicked = true;
+                mouseScreenPos = mouse.position.ReadValue();
+            }
+        }
+#endif
+
+        if (!clicked || _mainCam == null) return;
+
+        // Check if click is over a UI element — if so, ignore (let UI handle it)
+        if (UnityEngine.EventSystems.EventSystem.current != null &&
+            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        {
+            return;
+        }
+
+        // Raycast into 2D world
+        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        RaycastHit2D hit = Physics2D.Raycast(worldPoint, Vector2.zero);
+
+        if (hit.collider != null)
+        {
+            HexCell cell = hit.collider.GetComponent<HexCell>();
+            if (cell != null)
+            {
+                Debug.Log($"[GameManager] Hex clicked: ({cell.Q}, {cell.R}) Phase={CurrentPhase}");
+                OnHexClicked(cell);
+            }
+        }
     }
 
     private void SetupCharacters()

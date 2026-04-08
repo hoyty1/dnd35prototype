@@ -61,10 +61,8 @@ public class HexCell : MonoBehaviour
         }
     }
 
-    private void OnMouseDown()
-    {
-        GameManager.Instance?.OnHexClicked(this);
-    }
+    // OnMouseDown removed — click detection is handled via 2D raycasting
+    // in GameManager.Update() for reliable behaviour across Input System modes.
 }
 
 public enum HighlightType
