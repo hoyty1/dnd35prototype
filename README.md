@@ -34,7 +34,7 @@ A 2D sprite-based turn-based RPG prototype built with Unity.
 
 ## How to Play
 
-1. **Open in Unity** (2021.3 LTS or newer recommended)
+1. **Open in Unity** (Unity 6.4 / 6000.4.0f1 or newer recommended)
 2. **Open** `Assets/Scenes/MainScene.unity`
 3. **Press Play**
 

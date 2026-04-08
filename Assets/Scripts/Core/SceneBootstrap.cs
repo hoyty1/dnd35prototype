@@ -151,7 +151,7 @@ public class SceneBootstrap : MonoBehaviour
         canvasGO.AddComponent<GraphicRaycaster>();
 
         // EventSystem
-        if (FindObjectOfType<UnityEngine.EventSystems.EventSystem>() == null)
+        if (FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
         {
             GameObject esGO = new GameObject("EventSystem");
             esGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
@@ -304,9 +304,17 @@ public class SceneBootstrap : MonoBehaviour
         t.fontSize = fontSize;
         t.color = color;
         t.alignment = alignment;
+        // Unity 6+ uses LegacyRuntime.ttf; Arial.ttf is no longer a built-in resource
         t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (t.font == null)
+        {
+            // Fallback for older Unity versions
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        }
+        if (t.font == null)
+        {
+            t.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
+        }
 
         return t;
     }
