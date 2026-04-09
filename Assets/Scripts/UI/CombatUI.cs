@@ -191,6 +191,10 @@ public class CombatUI : MonoBehaviour
         // Highlight slain messages
         text = text.Replace("has been slain!", "<color=#FF6666><b>has been slain!</b></color>");
 
+        // Highlight range penalty info
+        text = text.Replace("no penalty)", "<color=#66FF66>no penalty)</color>");
+        text = text.Replace("beyond maximum range!", "<color=#FF4444><b>beyond maximum range!</b></color>");
+
         return text;
     }
 

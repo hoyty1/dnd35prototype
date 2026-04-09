@@ -99,6 +99,9 @@ public class ItemData
     public int CompositeRating;            // For composite bows: max STR bonus allowed (0 = no bonus)
     public bool IsThrown;                  // Whether this weapon can be thrown (gets STR on throw)
 
+    // --- Range Increment (D&D 3.5) ---
+    public int RangeIncrement;             // Range increment in feet (0 = melee only). Max range = 10 × this.
+
     // --- Critical Hit (D&D 3.5) ---
     public int CritThreatMin;   // Minimum natural d20 roll to threaten a crit (e.g., 19 for 19-20, 20 for 20 only)
     public int CritMultiplier;  // Damage multiplier on confirmed crit (e.g., 2 for ×2, 3 for ×3)
@@ -157,7 +160,14 @@ public class ItemData
             if (BonusDamage > 0) dmg += $"+{BonusDamage}";
             stats = $"Damage: {dmg} | Crit: {GetCritRangeString()}";
             if (!string.IsNullOrEmpty(DamageType)) stats += $"\nType: {DamageType}";
-            if (AttackRange > 1) stats += $" | Range: {AttackRange} ft";
+            if (RangeIncrement > 0)
+            {
+                int maxRange = RangeIncrement * 10;
+                int incHexes = RangeIncrement / 5;
+                int maxHexes = maxRange / 5;
+                stats += $"\nRange: {RangeIncrement} ft increment ({incHexes} hex), max {maxRange} ft ({maxHexes} hex)";
+            }
+            else if (AttackRange > 1) stats += $" | Range: {AttackRange} ft";
             string props = "";
             if (IsLightWeapon) props += "Light, ";
             if (IsTwoHanded) props += "Two-handed, ";

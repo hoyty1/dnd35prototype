@@ -673,14 +673,53 @@ public class GameManager : MonoBehaviour
 
         CharacterController otherPC = (pc == PC1) ? PC2 : PC1;
 
-        List<HexCell> rangeCells = Grid.GetCellsInRange(pc.GridPosition, pc.Stats.AttackRange);
+        // Determine the equipped weapon's range increment
+        ItemData weapon = pc.GetEquippedMainWeapon();
+        int rangeIncrement = (weapon != null) ? weapon.RangeIncrement : 0;
+        bool isRangedWeapon = (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged) || rangeIncrement > 0;
+
+        // Calculate effective attack range in hexes
+        int maxRangeHexes;
+        if (isRangedWeapon && rangeIncrement > 0)
+        {
+            maxRangeHexes = RangeCalculator.GetMaxRangeHexes(rangeIncrement);
+        }
+        else
+        {
+            // Melee weapon: use AttackRange from stats (typically 1, or 2 for reach)
+            maxRangeHexes = pc.Stats.AttackRange;
+        }
+
+        // Show range zone highlights for ranged weapons
+        if (isRangedWeapon && rangeIncrement > 0)
+        {
+            ShowRangeZoneHighlights(pc, rangeIncrement, maxRangeHexes);
+        }
+
+        // Find all valid targets within range
+        List<HexCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeHexes);
         bool hasTarget = false;
         bool anyFlanking = false;
 
-        foreach (var cell in rangeCells)
+        foreach (var cell in allCells)
         {
             if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead)
             {
+                int hexDist = HexUtils.HexDistance(pc.GridPosition, cell.Coords);
+
+                // Check if within max range
+                if (isRangedWeapon && rangeIncrement > 0)
+                {
+                    int distFeet = RangeCalculator.HexesToFeet(hexDist);
+                    if (!RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement))
+                        continue; // Beyond max range, skip
+                }
+                else
+                {
+                    if (hexDist > pc.Stats.AttackRange)
+                        continue;
+                }
+
                 bool flanking = !otherPC.Stats.IsDead &&
                     CombatUtils.IsFlanking(pc.GridPosition, otherPC.GridPosition, cell.Occupant.GridPosition);
 
@@ -708,13 +747,47 @@ public class GameManager : MonoBehaviour
                 case PendingAttackMode.FullAttack: modeStr = "FULL ATTACK"; break;
                 case PendingAttackMode.DualWield: modeStr = "DUAL WIELD"; break;
             }
+
+            // Build range info string
+            string rangeMsg = "";
+            if (isRangedWeapon && rangeIncrement > 0)
+            {
+                int incHexes = RangeCalculator.GetRangeIncrementHexes(rangeIncrement);
+                rangeMsg = $"\n{weapon.Name}: {rangeIncrement} ft increment ({incHexes} hex), max {rangeIncrement * 10} ft";
+            }
+
             if (CombatUI.TurnIndicatorText != null && !CombatUI.TurnIndicatorText.text.Contains("DUAL WIELD"))
-                CombatUI.SetTurnIndicator($"{modeStr}: Click an enemy to attack!{flankMsg}");
+                CombatUI.SetTurnIndicator($"{modeStr}: Click an enemy to attack!{flankMsg}{rangeMsg}");
         }
         else
         {
-            CombatUI.SetTurnIndicator("No enemies in range!");
+            string noRangeMsg = isRangedWeapon ? "No enemies within maximum range!" : "No enemies in range!";
+            CombatUI.SetTurnIndicator(noRangeMsg);
             StartCoroutine(ReturnToActionChoicesAfterDelay(1.5f));
+        }
+    }
+
+    /// <summary>
+    /// Show range zone highlights on the grid for a ranged weapon.
+    /// Green = 1st increment (no penalty), Yellow = 2nd-5th (-2 to -8), Orange = 6th-10th (-10 to -18).
+    /// </summary>
+    private void ShowRangeZoneHighlights(CharacterController pc, int rangeIncrement, int maxRangeHexes)
+    {
+        List<HexCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeHexes);
+        foreach (var cell in allCells)
+        {
+            if (cell.Coords == pc.GridPosition) continue;
+
+            int hexDist = HexUtils.HexDistance(pc.GridPosition, cell.Coords);
+            int zone = RangeCalculator.GetRangeZone(hexDist, rangeIncrement);
+
+            switch (zone)
+            {
+                case 1: cell.SetHighlight(HighlightType.RangeClose); break;
+                case 2: cell.SetHighlight(HighlightType.RangeMedium); break;
+                case 3: cell.SetHighlight(HighlightType.RangeFar); break;
+                // zone 0 = out of range, don't highlight
+            }
         }
     }
 
@@ -814,29 +887,44 @@ public class GameManager : MonoBehaviour
         int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
         string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
 
+        // Calculate range info for ranged weapons
+        RangeInfo rangeInfo = CalculateRangeInfo(attacker, target);
+
         switch (_pendingAttackMode)
         {
             case PendingAttackMode.Single:
-                PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName);
+                PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
 
             case PendingAttackMode.FullAttack:
-                PerformFullAttack(attacker, target, isFlanking, flankBonus, partnerName);
+                PerformFullAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
 
             case PendingAttackMode.DualWield:
-                PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName);
+                PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
         }
     }
 
+    /// <summary>
+    /// Calculate range info for an attack between two characters.
+    /// Returns a RangeInfo with distance, increment, and penalty data.
+    /// </summary>
+    private RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target)
+    {
+        ItemData weapon = attacker.GetEquippedMainWeapon();
+        int rangeIncrement = (weapon != null) ? weapon.RangeIncrement : 0;
+        int hexDist = HexUtils.HexDistance(attacker.GridPosition, target.GridPosition);
+        return RangeCalculator.GetRangeInfo(hexDist, rangeIncrement);
+    }
+
     private void PerformSingleAttack(CharacterController attacker, CharacterController target,
-        bool isFlanking, int flankBonus, string partnerName)
+        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
         // Standard Action
         attacker.Actions.UseStandardAction();
 
-        CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName);
+        CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetSummary();
         CombatUI.ShowCombatLog(_lastCombatLog);
         CombatUI.UpdateAllStats(PC1, PC2, NPC);
@@ -856,12 +944,12 @@ public class GameManager : MonoBehaviour
     }
 
     private void PerformFullAttack(CharacterController attacker, CharacterController target,
-        bool isFlanking, int flankBonus, string partnerName)
+        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
         // Full-Round Action
         attacker.Actions.UseFullRoundAction();
 
-        FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName);
+        FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetFullSummary();
         CombatUI.ShowCombatLog(_lastCombatLog);
         CombatUI.UpdateAllStats(PC1, PC2, NPC);
@@ -881,12 +969,12 @@ public class GameManager : MonoBehaviour
     }
 
     private void PerformDualWieldAttack(CharacterController attacker, CharacterController target,
-        bool isFlanking, int flankBonus, string partnerName)
+        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
         // Full-Round Action
         attacker.Actions.UseFullRoundAction();
 
-        FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName);
+        FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetFullSummary();
         CombatUI.ShowCombatLog(_lastCombatLog);
         CombatUI.UpdateAllStats(PC1, PC2, NPC);
@@ -1012,7 +1100,8 @@ public class GameManager : MonoBehaviour
         if (distToTarget <= NPC.Stats.AttackRange && !closestPC.Stats.IsDead)
         {
             NPC.Actions.UseStandardAction();
-            CombatResult result = NPC.Attack(closestPC);
+            RangeInfo npcRangeInfo = CalculateRangeInfo(NPC, closestPC);
+            CombatResult result = NPC.Attack(closestPC, false, 0, null, npcRangeInfo);
             _lastCombatLog = result.GetSummary();
             CombatUI.ShowCombatLog(_lastCombatLog);
             CombatUI.UpdateAllStats(PC1, PC2, NPC);

@@ -27,6 +27,10 @@ public class HexCell : MonoBehaviour
     private static readonly Color HighlightAttack = new Color(1f, 0.3f, 0.3f, 0.5f);
     private static readonly Color HighlightSelected = new Color(1f, 1f, 0.3f, 0.6f);
     private static readonly Color HighlightFlanking = new Color(1f, 0.6f, 0.0f, 0.6f); // Orange for flanking
+    // Range increment zone colors
+    private static readonly Color HighlightRangeClose = new Color(0.3f, 0.9f, 0.3f, 0.35f);   // Green: 1st increment, no penalty
+    private static readonly Color HighlightRangeMedium = new Color(0.9f, 0.9f, 0.2f, 0.35f);  // Yellow: 2nd-5th increments
+    private static readonly Color HighlightRangeFar = new Color(0.9f, 0.5f, 0.1f, 0.35f);     // Orange: 6th-10th increments
 
     public void Init(int q, int r)
     {
@@ -62,6 +66,15 @@ public class HexCell : MonoBehaviour
             case HighlightType.Flanking:
                 _sr.color = HighlightFlanking;
                 break;
+            case HighlightType.RangeClose:
+                _sr.color = HighlightRangeClose;
+                break;
+            case HighlightType.RangeMedium:
+                _sr.color = HighlightRangeMedium;
+                break;
+            case HighlightType.RangeFar:
+                _sr.color = HighlightRangeFar;
+                break;
         }
     }
 
@@ -75,5 +88,8 @@ public enum HighlightType
     Move,
     Attack,
     Selected,
-    Flanking
+    Flanking,
+    RangeClose,    // 1st range increment (green) - no penalty
+    RangeMedium,   // 2nd-5th range increments (yellow) - moderate penalty
+    RangeFar       // 6th-10th range increments (orange) - heavy penalty
 }

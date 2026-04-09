@@ -78,6 +78,7 @@ public static class ItemDatabase
             DamageType = "piercing/slashing",
             DmgModType = DamageModifierType.Strength,
             IsThrown = true,
+            RangeIncrement = 10,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 1f,
             IconChar = "\u2020", IconColor = new Color(0.8f, 0.8f, 0.7f)
@@ -171,6 +172,7 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.Strength,
             IsThrown = true,
+            RangeIncrement = 20,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 3f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -239,6 +241,7 @@ public static class ItemDatabase
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 80,
             DamageType = "piercing",
             DmgModType = DamageModifierType.None,
+            RangeIncrement = 80,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 4f,
             IconChar = "\u2732", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -254,6 +257,7 @@ public static class ItemDatabase
             DamageDice = 10, DamageCount = 1, BonusDamage = 0, AttackRange = 120,
             DamageType = "piercing",
             DmgModType = DamageModifierType.None,
+            RangeIncrement = 120,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 8f,
             IconChar = "\u2732", IconColor = new Color(0.5f, 0.5f, 0.5f)
@@ -270,6 +274,7 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.Strength,
             IsThrown = true,
+            RangeIncrement = 20,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 0.5f,
             IconChar = "\u2794", IconColor = new Color(0.7f, 0.7f, 0.5f)
@@ -286,6 +291,7 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.Strength,
             IsThrown = true,
+            RangeIncrement = 30,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 2f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -301,6 +307,7 @@ public static class ItemDatabase
             DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 50,
             DamageType = "bludgeoning",
             DmgModType = DamageModifierType.None,
+            RangeIncrement = 50,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 0f,
             IconChar = "\u223F", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -326,6 +333,7 @@ public static class ItemDatabase
             DamageType = "slashing",
             DmgModType = DamageModifierType.Strength,
             IsThrown = true,
+            RangeIncrement = 10,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 3f,
             IconChar = "\u2692", IconColor = new Color(0.7f, 0.5f, 0.3f)
@@ -451,6 +459,7 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.Strength,
             IsThrown = true,
+            RangeIncrement = 10,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 4f,
             IconChar = "\u2191", IconColor = new Color(0.5f, 0.6f, 0.7f)
@@ -602,6 +611,7 @@ public static class ItemDatabase
             IsTwoHanded = true,
             DamageType = "piercing",
             DmgModType = DamageModifierType.None,
+            RangeIncrement = 100,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 3f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -618,6 +628,7 @@ public static class ItemDatabase
             IsTwoHanded = true,
             DamageType = "piercing",
             DmgModType = DamageModifierType.None,
+            RangeIncrement = 60,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 2f,
             IconChar = "\u2191", IconColor = new Color(0.5f, 0.5f, 0.3f)
@@ -635,6 +646,7 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.Composite,
             CompositeRating = 0,
+            RangeIncrement = 110,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 3f,
             IconChar = "\u2191", IconColor = new Color(0.7f, 0.5f, 0.3f)
@@ -652,6 +664,7 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.Composite,
             CompositeRating = 0,
+            RangeIncrement = 70,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 2f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -671,6 +684,7 @@ public static class ItemDatabase
                 DamageType = "piercing",
                 DmgModType = DamageModifierType.Composite,
                 CompositeRating = rating,
+                RangeIncrement = 110,
                 CritThreatMin = 20, CritMultiplier = 3,
                 WeightLbs = 3f,
                 IconChar = "\u2191", IconColor = new Color(0.7f, 0.5f, 0.3f)
@@ -691,6 +705,7 @@ public static class ItemDatabase
                 DamageType = "piercing",
                 DmgModType = DamageModifierType.Composite,
                 CompositeRating = rating,
+                RangeIncrement = 70,
                 CritThreatMin = 20, CritMultiplier = 3,
                 WeightLbs = 2f,
                 IconChar = "\u2191", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -1013,7 +1028,7 @@ public static class ItemDatabase
             IsLightWeapon = src.IsLightWeapon, IsTwoHanded = src.IsTwoHanded,
             HasReach = src.HasReach, DamageType = src.DamageType,
             DmgModType = src.DmgModType, CompositeRating = src.CompositeRating,
-            IsThrown = src.IsThrown,
+            IsThrown = src.IsThrown, RangeIncrement = src.RangeIncrement,
             CritThreatMin = src.CritThreatMin, CritMultiplier = src.CritMultiplier,
             // Armor/Shield properties
             ArmorBonus = src.ArmorBonus, ShieldBonus = src.ShieldBonus,

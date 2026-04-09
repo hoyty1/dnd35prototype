@@ -88,19 +88,20 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public CombatResult Attack(CharacterController target)
     {
-        return Attack(target, false, 0, null);
+        return Attack(target, false, 0, null, null);
     }
 
     /// <summary>
-    /// Perform a single attack with flanking context.
+    /// Perform a single attack with flanking context and optional range info.
     /// Includes full D&D 3.5 critical hit mechanics and racial attack bonuses.
     /// Uses weapon's DamageModifierType for correct STR bonus to damage.
     /// </summary>
-    public CombatResult Attack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
+    public CombatResult Attack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
     {
         // Calculate racial attack bonus against target
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
-        int totalAtkMod = Stats.AttackBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus;
+        int rangePenalty = (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange) ? rangeInfo.Penalty : 0;
+        int totalAtkMod = Stats.AttackBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty;
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
 
@@ -113,6 +114,18 @@ public class CharacterController : MonoBehaviour
 
         result.RacialAttackBonus = racialAtkBonus;
         result.SizeAttackBonus = Stats.SizeModifier;
+
+        // Store range info on result
+        if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
+        {
+            result.IsRangedAttack = true;
+            result.RangeDistanceFeet = rangeInfo.DistanceFeet;
+            result.RangeIncrementNumber = rangeInfo.IncrementNumber;
+            result.RangePenalty = rangeInfo.Penalty;
+        }
+        if (equippedWeapon != null)
+            result.WeaponName = equippedWeapon.Name;
+
         HasAttackedThisTurn = true;
         return result;
     }
@@ -122,9 +135,9 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Perform a Full Attack action - all iterative attacks based on BAB.
     /// Each attack can independently threaten and confirm a critical hit.
-    /// Includes racial attack bonuses.
+    /// Includes racial attack bonuses and range penalties.
     /// </summary>
-    public FullAttackResult FullAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
+    public FullAttackResult FullAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
     {
         var result = new FullAttackResult();
         result.Type = FullAttackResult.AttackType.FullAttack;
@@ -135,6 +148,7 @@ public class CharacterController : MonoBehaviour
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
+        int rangePenalty = (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange) ? rangeInfo.Penalty : 0;
 
         // Get equipped weapon for damage modifier calculation
         ItemData equippedWeapon = GetEquippedMainWeapon();
@@ -143,7 +157,7 @@ public class CharacterController : MonoBehaviour
         {
             if (target.Stats.IsDead) break;
 
-            int atkMod = attackBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus;
+            int atkMod = attackBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty;
             string label = (i == 0) ? $"Attack ({CharacterStats.FormatMod(attackBonuses[i])})" :
                 $"Attack {i + 1} ({CharacterStats.FormatMod(attackBonuses[i])})";
 
@@ -153,6 +167,17 @@ public class CharacterController : MonoBehaviour
 
             atk.RacialAttackBonus = racialAtkBonus;
             atk.SizeAttackBonus = Stats.SizeModifier;
+
+            // Store range info on each attack result
+            if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
+            {
+                atk.IsRangedAttack = true;
+                atk.RangeDistanceFeet = rangeInfo.DistanceFeet;
+                atk.RangeIncrementNumber = rangeInfo.IncrementNumber;
+                atk.RangePenalty = rangeInfo.Penalty;
+            }
+            if (equippedWeapon != null) atk.WeaponName = equippedWeapon.Name;
+
             result.Attacks.Add(atk);
             result.AttackLabels.Add(label);
         }
@@ -199,7 +224,7 @@ public class CharacterController : MonoBehaviour
     /// Perform a Dual Wield attack - main hand and off-hand attacks.
     /// Each hand uses its own weapon's critical hit properties.
     /// </summary>
-    public FullAttackResult DualWieldAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
+    public FullAttackResult DualWieldAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
     {
         var result = new FullAttackResult();
         result.Type = FullAttackResult.AttackType.DualWield;
@@ -216,11 +241,12 @@ public class CharacterController : MonoBehaviour
 
         var (mainPenalty, offPenalty, lightOff) = GetDualWieldPenalties();
 
-        // Racial attack bonus
+        // Racial attack bonus and range penalty
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
+        int rangePenalty = (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange) ? rangeInfo.Penalty : 0;
 
-        // Main hand attack: BAB + STR + penalty + flanking + racial, uses main weapon's crit stats
-        int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus;
+        // Main hand attack: BAB + STR + penalty + flanking + racial + range, uses main weapon's crit stats
+        int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty;
         string mainLabel = $"Main Hand ({mainWeapon.Name}, {CharacterStats.FormatMod(Stats.AttackBonus + mainPenalty)})";
 
         int mainCritMin = mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20;
@@ -231,13 +257,21 @@ public class CharacterController : MonoBehaviour
             mainWeapon, false);
         mainAtk.RacialAttackBonus = racialAtkBonus;
         mainAtk.SizeAttackBonus = Stats.SizeModifier;
+        mainAtk.WeaponName = mainWeapon.Name;
+        if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
+        {
+            mainAtk.IsRangedAttack = true;
+            mainAtk.RangeDistanceFeet = rangeInfo.DistanceFeet;
+            mainAtk.RangeIncrementNumber = rangeInfo.IncrementNumber;
+            mainAtk.RangePenalty = rangeInfo.Penalty;
+        }
         result.Attacks.Add(mainAtk);
         result.AttackLabels.Add(mainLabel);
 
         // Off-hand attack (only if target still alive)
         if (!target.Stats.IsDead)
         {
-            int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus;
+            int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty;
             string offLabel = $"Off-Hand ({offWeapon.Name}, {CharacterStats.FormatMod(Stats.AttackBonus + offPenalty)})";
 
             int offCritMin = offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20;
@@ -248,6 +282,14 @@ public class CharacterController : MonoBehaviour
                 offWeapon, true);
             offAtk.RacialAttackBonus = racialAtkBonus;
             offAtk.SizeAttackBonus = Stats.SizeModifier;
+            offAtk.WeaponName = offWeapon.Name;
+            if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
+            {
+                offAtk.IsRangedAttack = true;
+                offAtk.RangeDistanceFeet = rangeInfo.DistanceFeet;
+                offAtk.RangeIncrementNumber = rangeInfo.IncrementNumber;
+                offAtk.RangePenalty = rangeInfo.Penalty;
+            }
             result.Attacks.Add(offAtk);
             result.AttackLabels.Add(offLabel);
         }
@@ -368,7 +410,7 @@ public class CharacterController : MonoBehaviour
     /// Get the equipped main-hand weapon (right hand first, then left hand).
     /// Returns null if no weapon equipped (unarmed).
     /// </summary>
-    private ItemData GetEquippedMainWeapon()
+    public ItemData GetEquippedMainWeapon()
     {
         var inv = GetComponent<InventoryComponent>();
         if (inv == null || inv.CharacterInventory == null) return null;

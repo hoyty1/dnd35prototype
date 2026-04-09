@@ -46,6 +46,13 @@ public class CombatResult
     public int DamageModifier;            // The actual STR-based damage bonus applied (e.g., +6 for 1.5× STR)
     public string DamageModifierDesc;     // Description for combat log (e.g., "1.5× STR", "composite +2")
 
+    // Range increment fields (D&D 3.5 ranged attack rules)
+    public bool IsRangedAttack;           // Whether this was a ranged attack
+    public int RangeDistanceFeet;         // Distance to target in feet
+    public int RangeIncrementNumber;      // Which range increment (1 = first, no penalty)
+    public int RangePenalty;              // Attack penalty from range (-2 per increment beyond first)
+    public string WeaponName;             // Name of weapon used (for combat log)
+
     /// <summary>Total damage dealt including sneak attack.</summary>
     public int TotalDamage => Damage + SneakAttackDamage;
 
@@ -59,6 +66,21 @@ public class CombatResult
         string critNote = "";
         if (NaturalTwenty) critNote = " (NATURAL 20!)";
         else if (NaturalOne) critNote = " (NATURAL 1!)";
+
+        // Weapon name for ranged attacks
+        string weaponNote = "";
+        if (!string.IsNullOrEmpty(WeaponName))
+            weaponNote = $" with {WeaponName}";
+
+        // Range info note
+        string rangeNote = "";
+        if (IsRangedAttack)
+        {
+            if (RangePenalty == 0)
+                rangeNote = $" at {RangeDistanceFeet} ft (increment {RangeIncrementNumber}, no penalty)";
+            else
+                rangeNote = $" at {RangeDistanceFeet} ft (increment {RangeIncrementNumber}, {RangePenalty} penalty)";
+        }
 
         // Flanking note for the attack line
         string flankNote = "";
@@ -81,10 +103,11 @@ public class CombatResult
             string rollBreakdown;
             string racialStr = RacialAttackBonus > 0 ? $" +{RacialAttackBonus} racial" : "";
             string sizeStr = SizeAttackBonus != 0 ? $" {CharacterStats.FormatMod(SizeAttackBonus)} size" : "";
+            string rangeStr = (IsRangedAttack && RangePenalty != 0) ? $" {RangePenalty} range" : "";
             if (IsFlanking)
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr} +{FlankingBonus} flanking{racialStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr} +{FlankingBonus} flanking{racialStr}{rangeStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
             else
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr}{racialStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr}{racialStr}{rangeStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
 
             // Critical hit info
             string critInfo = "";
@@ -124,7 +147,7 @@ public class CombatResult
                     damageStr = $"Deals {Damage} damage!{dmgModNote}";
             }
 
-            string msg = $"{attackerName} attacks {defenderName}!{flankNote}{racialNote}{sizeNote}\n{rollBreakdown}{critInfo}\n{damageStr}";
+            string msg = $"{attackerName} attacks {defenderName}{weaponNote}{rangeNote}!{flankNote}{racialNote}{sizeNote}\n{rollBreakdown}{critInfo}\n{damageStr}";
 
             if (TargetKilled)
                 msg += $"\n{defenderName} has been slain!";
@@ -135,12 +158,13 @@ public class CombatResult
             string rollBreakdown;
             string racialStr = RacialAttackBonus > 0 ? $" +{RacialAttackBonus} racial" : "";
             string sizeStr = SizeAttackBonus != 0 ? $" {CharacterStats.FormatMod(SizeAttackBonus)} size" : "";
+            string rangeStr = (IsRangedAttack && RangePenalty != 0) ? $" {RangePenalty} range" : "";
             if (IsFlanking)
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr} +{FlankingBonus} flanking{racialStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr} +{FlankingBonus} flanking{racialStr}{rangeStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
             else
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr}{racialStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr}{racialStr}{rangeStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
 
-            return $"{attackerName} attacks {defenderName}!{flankNote}{racialNote}{sizeNote}\n{rollBreakdown}";
+            return $"{attackerName} attacks {defenderName}{weaponNote}{rangeNote}!{flankNote}{racialNote}{sizeNote}\n{rollBreakdown}";
         }
     }
 }
