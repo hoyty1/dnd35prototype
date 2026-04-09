@@ -100,7 +100,8 @@ public class ItemData
     public bool IsThrown;                  // Whether this weapon can be thrown (gets STR on throw)
 
     // --- Range Increment (D&D 3.5) ---
-    public int RangeIncrement;             // Range increment in feet (0 = melee only). Max range = 10 × this.
+    // Max range = 5 × RangeIncrement for thrown weapons (IsThrown), 10 × RangeIncrement for projectile weapons.
+    public int RangeIncrement;             // Range increment in feet (0 = melee only).
 
     // --- Critical Hit (D&D 3.5) ---
     public int CritThreatMin;   // Minimum natural d20 roll to threaten a crit (e.g., 19 for 19-20, 20 for 20 only)
@@ -162,10 +163,12 @@ public class ItemData
             if (!string.IsNullOrEmpty(DamageType)) stats += $"\nType: {DamageType}";
             if (RangeIncrement > 0)
             {
-                int maxRange = RangeIncrement * 10;
+                int maxIncrements = IsThrown ? 5 : 10;
+                int maxRange = RangeIncrement * maxIncrements;
                 int incHexes = RangeIncrement / 5;
                 int maxHexes = maxRange / 5;
-                stats += $"\nRange: {RangeIncrement} ft increment ({incHexes} hex), max {maxRange} ft ({maxHexes} hex)";
+                string weaponType = IsThrown ? "thrown" : "projectile";
+                stats += $"\nRange: {RangeIncrement} ft increment ({incHexes} hex), max {maxRange} ft ({maxHexes} hex) [{weaponType}]";
             }
             else if (AttackRange > 1) stats += $" | Range: {AttackRange} ft";
             string props = "";

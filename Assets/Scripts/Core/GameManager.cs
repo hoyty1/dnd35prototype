@@ -676,13 +676,14 @@ public class GameManager : MonoBehaviour
         // Determine the equipped weapon's range increment
         ItemData weapon = pc.GetEquippedMainWeapon();
         int rangeIncrement = (weapon != null) ? weapon.RangeIncrement : 0;
+        bool isThrownWeapon = (weapon != null) && weapon.IsThrown;
         bool isRangedWeapon = (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged) || rangeIncrement > 0;
 
         // Calculate effective attack range in hexes
         int maxRangeHexes;
         if (isRangedWeapon && rangeIncrement > 0)
         {
-            maxRangeHexes = RangeCalculator.GetMaxRangeHexes(rangeIncrement);
+            maxRangeHexes = RangeCalculator.GetMaxRangeHexes(rangeIncrement, isThrownWeapon);
         }
         else
         {
@@ -693,7 +694,7 @@ public class GameManager : MonoBehaviour
         // Show range zone highlights for ranged weapons
         if (isRangedWeapon && rangeIncrement > 0)
         {
-            ShowRangeZoneHighlights(pc, rangeIncrement, maxRangeHexes);
+            ShowRangeZoneHighlights(pc, rangeIncrement, maxRangeHexes, isThrownWeapon);
         }
 
         // Find all valid targets within range
@@ -711,7 +712,7 @@ public class GameManager : MonoBehaviour
                 if (isRangedWeapon && rangeIncrement > 0)
                 {
                     int distFeet = RangeCalculator.HexesToFeet(hexDist);
-                    if (!RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement))
+                    if (!RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement, isThrownWeapon))
                         continue; // Beyond max range, skip
                 }
                 else
@@ -753,7 +754,8 @@ public class GameManager : MonoBehaviour
             if (isRangedWeapon && rangeIncrement > 0)
             {
                 int incHexes = RangeCalculator.GetRangeIncrementHexes(rangeIncrement);
-                rangeMsg = $"\n{weapon.Name}: {rangeIncrement} ft increment ({incHexes} hex), max {rangeIncrement * 10} ft";
+                int maxRange = RangeCalculator.GetMaxRangeFeet(rangeIncrement, isThrownWeapon);
+                rangeMsg = $"\n{weapon.Name}: {rangeIncrement} ft increment ({incHexes} hex), max {maxRange} ft";
             }
 
             if (CombatUI.TurnIndicatorText != null && !CombatUI.TurnIndicatorText.text.Contains("DUAL WIELD"))
@@ -769,9 +771,10 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Show range zone highlights on the grid for a ranged weapon.
-    /// Green = 1st increment (no penalty), Yellow = 2nd-5th (-2 to -8), Orange = 6th-10th (-10 to -18).
+    /// Green = 1st increment (no penalty), Yellow = moderate, Orange = far.
+    /// Thrown weapons: max 5 increments. Projectile weapons: max 10 increments.
     /// </summary>
-    private void ShowRangeZoneHighlights(CharacterController pc, int rangeIncrement, int maxRangeHexes)
+    private void ShowRangeZoneHighlights(CharacterController pc, int rangeIncrement, int maxRangeHexes, bool isThrownWeapon = false)
     {
         List<HexCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeHexes);
         foreach (var cell in allCells)
@@ -779,7 +782,7 @@ public class GameManager : MonoBehaviour
             if (cell.Coords == pc.GridPosition) continue;
 
             int hexDist = HexUtils.HexDistance(pc.GridPosition, cell.Coords);
-            int zone = RangeCalculator.GetRangeZone(hexDist, rangeIncrement);
+            int zone = RangeCalculator.GetRangeZone(hexDist, rangeIncrement, isThrownWeapon);
 
             switch (zone)
             {
@@ -909,13 +912,15 @@ public class GameManager : MonoBehaviour
     /// <summary>
     /// Calculate range info for an attack between two characters.
     /// Returns a RangeInfo with distance, increment, and penalty data.
+    /// Correctly uses 5 max increments for thrown weapons, 10 for projectile weapons.
     /// </summary>
     private RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target)
     {
         ItemData weapon = attacker.GetEquippedMainWeapon();
         int rangeIncrement = (weapon != null) ? weapon.RangeIncrement : 0;
+        bool isThrownWeapon = (weapon != null) && weapon.IsThrown;
         int hexDist = HexUtils.HexDistance(attacker.GridPosition, target.GridPosition);
-        return RangeCalculator.GetRangeInfo(hexDist, rangeIncrement);
+        return RangeCalculator.GetRangeInfo(hexDist, rangeIncrement, isThrownWeapon);
     }
 
     private void PerformSingleAttack(CharacterController attacker, CharacterController target,
