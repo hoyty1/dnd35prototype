@@ -1,8 +1,10 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 /// <summary>
 /// D&D 3.5 edition character stats system.
 /// Holds the six core ability scores and derives all combat stats from them.
+/// Now supports racial modifiers applied to base ability scores.
 /// </summary>
 [System.Serializable]
 public class CharacterStats
@@ -15,7 +17,18 @@ public class CharacterStats
     /// <summary>Whether this character is a Rogue (eligible for sneak attack).</summary>
     public bool IsRogue => CharacterClass == "Rogue";
 
-    // ========== CORE ABILITY SCORES (D&D 3.5) ==========
+    // ========== RACE ==========
+    /// <summary>The character's race data (Dwarf, Elf, Human, etc.).</summary>
+    public RaceData Race;
+
+    /// <summary>Creature type tags for this character (e.g., "Goblinoid", "Orc"). Used for racial attack bonuses.</summary>
+    public List<string> CreatureTags = new List<string>();
+
+    // ========== BASE ABILITY SCORES (before racial modifiers) ==========
+    /// <summary>Base ability scores BEFORE racial modifiers are applied.</summary>
+    public int BaseSTR, BaseDEX, BaseCON, BaseWIS, BaseINT, BaseCHA;
+
+    // ========== CORE ABILITY SCORES (D&D 3.5, with racial modifiers applied) ==========
     public int STR; // Strength
     public int DEX; // Dexterity
     public int CON; // Constitution
@@ -87,48 +100,81 @@ public class CharacterStats
     // ========== CONSTRUCTOR ==========
 
     /// <summary>
-    /// Create a character with full D&D 3.5 ability scores.
+    /// Create a character with full D&D 3.5 ability scores and racial modifiers.
+    /// Ability scores passed in are BASE scores (before racial modifiers).
+    /// Racial modifiers are applied automatically if a race is specified.
     /// </summary>
     /// <param name="name">Character name</param>
     /// <param name="level">Character level</param>
     /// <param name="characterClass">Character class (e.g., "Fighter", "Rogue")</param>
-    /// <param name="str">Strength score</param>
-    /// <param name="dex">Dexterity score</param>
-    /// <param name="con">Constitution score</param>
-    /// <param name="wis">Wisdom score</param>
-    /// <param name="intelligence">Intelligence score</param>
-    /// <param name="cha">Charisma score</param>
+    /// <param name="str">Base Strength score (before racial modifier)</param>
+    /// <param name="dex">Base Dexterity score (before racial modifier)</param>
+    /// <param name="con">Base Constitution score (before racial modifier)</param>
+    /// <param name="wis">Base Wisdom score (before racial modifier)</param>
+    /// <param name="intelligence">Base Intelligence score (before racial modifier)</param>
+    /// <param name="cha">Base Charisma score (before racial modifier)</param>
     /// <param name="bab">Base Attack Bonus</param>
     /// <param name="armorBonus">Armor bonus to AC</param>
     /// <param name="shieldBonus">Shield bonus to AC</param>
     /// <param name="damageDice">Sides on weapon damage die (e.g. 8 for d8)</param>
     /// <param name="damageCount">Number of weapon damage dice</param>
     /// <param name="bonusDamage">Flat bonus damage</param>
-    /// <param name="baseSpeed">Movement range in hexes</param>
+    /// <param name="baseSpeed">Movement range in hexes (overridden by race if set)</param>
     /// <param name="atkRange">Attack range in hexes</param>
     /// <param name="baseHitDieHP">Base HP from hit dice (before CON)</param>
+    /// <param name="raceName">Race name (e.g., "Dwarf", "Elf", "Human"). Null for no race.</param>
     public CharacterStats(string name, int level, string characterClass,
         int str, int dex, int con, int wis, int intelligence, int cha,
         int bab, int armorBonus, int shieldBonus,
         int damageDice, int damageCount, int bonusDamage,
-        int baseSpeed, int atkRange, int baseHitDieHP)
+        int baseSpeed, int atkRange, int baseHitDieHP,
+        string raceName = null)
     {
         CharacterName = name;
         Level = level;
         CharacterClass = characterClass;
-        STR = str;
-        DEX = dex;
-        CON = con;
-        WIS = wis;
-        INT = intelligence;
-        CHA = cha;
+
+        // Store base ability scores (before racial modifiers)
+        BaseSTR = str;
+        BaseDEX = dex;
+        BaseCON = con;
+        BaseWIS = wis;
+        BaseINT = intelligence;
+        BaseCHA = cha;
+
+        // Apply racial modifiers if a race is specified
+        RaceDatabase.Init();
+        Race = raceName != null ? RaceDatabase.GetRace(raceName) : null;
+
+        if (Race != null)
+        {
+            STR = str + Race.STRModifier;
+            DEX = dex + Race.DEXModifier;
+            CON = con + Race.CONModifier;
+            WIS = wis + Race.WISModifier;
+            INT = intelligence + Race.INTModifier;
+            CHA = cha + Race.CHAModifier;
+
+            // Use racial speed (in hexes)
+            BaseSpeed = Race.BaseSpeedHexes;
+        }
+        else
+        {
+            STR = str;
+            DEX = dex;
+            CON = con;
+            WIS = wis;
+            INT = intelligence;
+            CHA = cha;
+            BaseSpeed = baseSpeed;
+        }
+
         BaseAttackBonus = bab;
         ArmorBonus = armorBonus;
         ShieldBonus = shieldBonus;
         BaseDamageDice = damageDice;
         BaseDamageCount = damageCount;
         BonusDamage = bonusDamage;
-        BaseSpeed = baseSpeed;
         AttackRange = atkRange;
 
         // Default crit stats (can be overridden by equipped weapons via Inventory.RecalculateStats)
@@ -141,7 +187,8 @@ public class CharacterStats
         ArcaneSpellFailure = 0;
 
         // Calculate MaxHP: base + CON mod × level (minimum 1 HP per level)
-        int conModPerLevel = Mathf.Max(1, GetModifier(con));
+        // Uses final CON (with racial modifier applied)
+        int conModPerLevel = Mathf.Max(1, GetModifier(CON));
         MaxHP = baseHitDieHP + (conModPerLevel * level);
         // Ensure at least baseHitDieHP if CON mod is negative
         if (MaxHP < 1) MaxHP = 1;
@@ -344,4 +391,63 @@ public class CharacterStats
     {
         return $"{abilityName} {score} ({FormatMod(GetModifier(score))})";
     }
+
+    // ========== RACIAL HELPERS ==========
+
+    /// <summary>
+    /// Get formatted ability score string with racial modifier annotation.
+    /// E.g., "CON 16 (+3) [+2 racial]" for a Dwarf with base CON 14.
+    /// </summary>
+    public string GetAbilityStringWithRacial(string abilityName, int finalScore, int racialMod)
+    {
+        string baseStr = $"{abilityName} {finalScore}({FormatMod(GetModifier(finalScore))})";
+        if (racialMod != 0)
+            baseStr += $"<size=10>[{FormatMod(racialMod)}]</size>";
+        return baseStr;
+    }
+
+    /// <summary>Get the racial modifier for a specific ability, or 0 if no race.</summary>
+    public int GetRacialModifier(string ability)
+    {
+        if (Race == null) return 0;
+        switch (ability.ToUpper())
+        {
+            case "STR": return Race.STRModifier;
+            case "DEX": return Race.DEXModifier;
+            case "CON": return Race.CONModifier;
+            case "WIS": return Race.WISModifier;
+            case "INT": return Race.INTModifier;
+            case "CHA": return Race.CHAModifier;
+            default: return 0;
+        }
+    }
+
+    /// <summary>
+    /// Get racial attack bonus against a specific target's creature tags.
+    /// </summary>
+    public int GetRacialAttackBonus(CharacterStats target)
+    {
+        if (Race == null || target == null || target.CreatureTags == null) return 0;
+        return Race.GetRacialAttackBonus(target.CreatureTags);
+    }
+
+    /// <summary>
+    /// Check if this character has racial proficiency with a weapon (by item ID).
+    /// </summary>
+    public bool HasRacialWeaponProficiency(string weaponId)
+    {
+        if (Race == null) return false;
+        return Race.HasRacialProficiency(weaponId);
+    }
+
+    /// <summary>
+    /// Whether this character's race prevents armor from reducing speed.
+    /// </summary>
+    public bool SpeedNotReducedByArmor => Race != null && Race.SpeedNotReducedByArmor;
+
+    /// <summary>Race name string for display (or "Unknown" if no race set).</summary>
+    public string RaceName => Race != null ? Race.RaceName : "";
+
+    /// <summary>Speed in feet for display purposes.</summary>
+    public int SpeedInFeet => Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5;
 }

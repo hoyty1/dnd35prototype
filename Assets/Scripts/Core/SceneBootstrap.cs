@@ -133,9 +133,9 @@ public class SceneBootstrap : MonoBehaviour
     }
 
     // ========== UI ==========
-    // Panel dimensions — taller to accommodate ability scores
-    private const float PanelWidth = 280f;
-    private const float PanelHeight = 210f;
+    // Panel dimensions — taller and wider to accommodate ability scores + racial info
+    private const float PanelWidth = 310f;
+    private const float PanelHeight = 220f;
 
     private CombatUI CreateUI()
     {
@@ -271,7 +271,7 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.PC1NameText = CreateText(panel.transform, "PC1Name",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, y), new Vector2(PanelWidth - 20, 22),
-            "Aldric (Lv 3)", 18, new Color(0.3f, 0.9f, 0.3f), TextAnchor.MiddleLeft);
+            "Aldric (Lv 3 Dwarf Fighter)", 16, new Color(0.3f, 0.9f, 0.3f), TextAnchor.MiddleLeft);
         y -= 22;
 
         // Ability scores (2 rows of 3)
@@ -320,7 +320,7 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.PC1SpeedText = CreateText(panel.transform, "PC1Speed",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Speed: 4 hexes", 14, Color.white, TextAnchor.MiddleLeft);
+            "Speed: 4 hexes (20 ft) (no armor penalty)", 12, Color.white, TextAnchor.MiddleLeft);
     }
 
     /// <summary>Create PC2 stats panel with D&D 3.5 ability scores.</summary>
@@ -340,7 +340,7 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.PC2NameText = CreateText(panel.transform, "PC2Name",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, y), new Vector2(PanelWidth - 20, 22),
-            "Lyra (Lv 3)", 18, new Color(0.5f, 0.7f, 1f), TextAnchor.MiddleLeft);
+            "Lyra (Lv 3 Elf Rogue)", 16, new Color(0.5f, 0.7f, 1f), TextAnchor.MiddleLeft);
         y -= 22;
 
         combatUI.PC2AbilityText = CreateText(panel.transform, "PC2Abilities",
@@ -382,7 +382,7 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.PC2SpeedText = CreateText(panel.transform, "PC2Speed",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Speed: 5 hexes", 14, Color.white, TextAnchor.MiddleLeft);
+            "Speed: 6 hexes (30 ft)", 12, Color.white, TextAnchor.MiddleLeft);
     }
 
     /// <summary>Create NPC stats panel with D&D 3.5 ability scores.</summary>
@@ -398,7 +398,7 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.NPCNameText = CreateText(panel.transform, "NPCName",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, y), new Vector2(PanelWidth - 20, 22),
-            "Goblin Warchief (Lv 2)", 18, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
+            "Goblin Warchief (Lv 2 Warrior)", 16, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
         y -= 22;
 
         combatUI.NPCAbilityText = CreateText(panel.transform, "NPCAbilities",
@@ -440,7 +440,7 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.NPCSpeedText = CreateText(panel.transform, "NPCSpeed",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Speed: 3 hexes", 14, Color.white, TextAnchor.MiddleLeft);
+            "Speed: 3 hexes (15 ft)", 12, Color.white, TextAnchor.MiddleLeft);
     }
 
     // ========== GAME MANAGER ==========

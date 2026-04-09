@@ -81,7 +81,8 @@ public class CombatUI : MonoBehaviour
 
         if (nameText != null)
         {
-            nameText.text = $"{s.CharacterName} (Lv {s.Level} {s.CharacterClass})";
+            string raceStr = !string.IsNullOrEmpty(s.RaceName) ? $"{s.RaceName} " : "";
+            nameText.text = $"{s.CharacterName} (Lv {s.Level} {raceStr}{s.CharacterClass})";
             if (s.IsDead) nameText.text += " (DEAD)";
         }
 
@@ -107,17 +108,24 @@ public class CombatUI : MonoBehaviour
             atkText.text = $"Atk: {CharacterStats.FormatMod(s.AttackBonus)} (BAB {CharacterStats.FormatMod(s.BaseAttackBonus)} {CharacterStats.FormatMod(s.STRMod)} STR)";
 
         if (speedText != null)
-            speedText.text = $"Speed: {s.MoveRange} hexes";
+        {
+            string speedExtra = "";
+            if (s.SpeedNotReducedByArmor)
+                speedExtra = " (no armor penalty)";
+            speedText.text = $"Speed: {s.MoveRange} hexes ({s.SpeedInFeet} ft){speedExtra}";
+        }
 
         if (abilityText != null)
         {
+            abilityText.supportRichText = true;
+            // Show racial modifiers as annotations (e.g., CON 16(+3)[+2] for Dwarf)
             abilityText.text =
-                $"STR {s.STR}({CharacterStats.FormatMod(s.STRMod)}) " +
-                $"DEX {s.DEX}({CharacterStats.FormatMod(s.DEXMod)}) " +
-                $"CON {s.CON}({CharacterStats.FormatMod(s.CONMod)})\n" +
-                $"WIS {s.WIS}({CharacterStats.FormatMod(s.WISMod)}) " +
-                $"INT {s.INT}({CharacterStats.FormatMod(s.INTMod)}) " +
-                $"CHA {s.CHA}({CharacterStats.FormatMod(s.CHAMod)})";
+                $"{s.GetAbilityStringWithRacial("STR", s.STR, s.GetRacialModifier("STR"))} " +
+                $"{s.GetAbilityStringWithRacial("DEX", s.DEX, s.GetRacialModifier("DEX"))} " +
+                $"{s.GetAbilityStringWithRacial("CON", s.CON, s.GetRacialModifier("CON"))}\n" +
+                $"{s.GetAbilityStringWithRacial("WIS", s.WIS, s.GetRacialModifier("WIS"))} " +
+                $"{s.GetAbilityStringWithRacial("INT", s.INT, s.GetRacialModifier("INT"))} " +
+                $"{s.GetAbilityStringWithRacial("CHA", s.CHA, s.GetRacialModifier("CHA"))}";
         }
 
         if (hpBar != null)

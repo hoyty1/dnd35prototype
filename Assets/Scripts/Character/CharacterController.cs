@@ -93,17 +93,20 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Perform a single attack with flanking context.
-    /// Includes full D&D 3.5 critical hit mechanics.
+    /// Includes full D&D 3.5 critical hit mechanics and racial attack bonuses.
     /// </summary>
     public CombatResult Attack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
     {
-        int totalAtkMod = Stats.AttackBonus + (isFlanking ? flankingBonus : 0);
+        // Calculate racial attack bonus against target
+        int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
+        int totalAtkMod = Stats.AttackBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus;
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
 
         var result = PerformSingleAttackWithCrit(target, totalAtkMod, isFlanking, flankingBonus, flankingPartnerName,
             Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, 1.0f, critThreatMin, critMult);
 
+        result.RacialAttackBonus = racialAtkBonus;
         HasAttackedThisTurn = true;
         return result;
     }
@@ -113,6 +116,7 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Perform a Full Attack action - all iterative attacks based on BAB.
     /// Each attack can independently threaten and confirm a critical hit.
+    /// Includes racial attack bonuses.
     /// </summary>
     public FullAttackResult FullAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
     {
@@ -124,18 +128,20 @@ public class CharacterController : MonoBehaviour
         int[] attackBonuses = Stats.GetIterativeAttackBonuses();
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
+        int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
 
         for (int i = 0; i < attackBonuses.Length; i++)
         {
             if (target.Stats.IsDead) break;
 
-            int atkMod = attackBonuses[i] + (isFlanking ? flankingBonus : 0);
+            int atkMod = attackBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus;
             string label = (i == 0) ? $"Attack ({CharacterStats.FormatMod(attackBonuses[i])})" :
                 $"Attack {i + 1} ({CharacterStats.FormatMod(attackBonuses[i])})";
 
             CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
                 Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, 1.0f, critThreatMin, critMult);
 
+            atk.RacialAttackBonus = racialAtkBonus;
             result.Attacks.Add(atk);
             result.AttackLabels.Add(label);
         }
@@ -199,8 +205,11 @@ public class CharacterController : MonoBehaviour
 
         var (mainPenalty, offPenalty, lightOff) = GetDualWieldPenalties();
 
-        // Main hand attack: BAB + STR + penalty + flanking, uses main weapon's crit stats
-        int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0);
+        // Racial attack bonus
+        int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
+
+        // Main hand attack: BAB + STR + penalty + flanking + racial, uses main weapon's crit stats
+        int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus;
         string mainLabel = $"Main Hand ({mainWeapon.Name}, {CharacterStats.FormatMod(Stats.AttackBonus + mainPenalty)})";
 
         int mainCritMin = mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20;
@@ -208,13 +217,14 @@ public class CharacterController : MonoBehaviour
 
         CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
             mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, 1.0f, mainCritMin, mainCritMult);
+        mainAtk.RacialAttackBonus = racialAtkBonus;
         result.Attacks.Add(mainAtk);
         result.AttackLabels.Add(mainLabel);
 
         // Off-hand attack (only if target still alive)
         if (!target.Stats.IsDead)
         {
-            int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0);
+            int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus;
             string offLabel = $"Off-Hand ({offWeapon.Name}, {CharacterStats.FormatMod(Stats.AttackBonus + offPenalty)})";
 
             int offCritMin = offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20;
@@ -222,6 +232,7 @@ public class CharacterController : MonoBehaviour
 
             CombatResult offAtk = PerformSingleAttackWithCrit(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
                 offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, 0.5f, offCritMin, offCritMult);
+            offAtk.RacialAttackBonus = racialAtkBonus;
             result.Attacks.Add(offAtk);
             result.AttackLabels.Add(offLabel);
         }

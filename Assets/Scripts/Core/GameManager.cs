@@ -181,8 +181,14 @@ public class GameManager : MonoBehaviour
 
     private void SetupCharacters()
     {
+        // Initialize race database
+        RaceDatabase.Init();
+
         // ==========================================
-        // PC1: "Aldric" - Human Fighter (Level 3)
+        // PC1: "Aldric" - Dwarf Fighter (Level 3)
+        // Base scores: STR 16, DEX 12, CON 14, WIS 10, INT 10, CHA 13
+        // Dwarf racial: CON +2 = 16, CHA -2 = 11
+        // Dwarf speed: 20 ft (4 hexes), NOT reduced by armor
         // ==========================================
         CharacterStats pc1Stats = new CharacterStats(
             name: "Aldric",
@@ -195,10 +201,15 @@ public class GameManager : MonoBehaviour
             damageDice: 8,
             damageCount: 1,
             bonusDamage: 0,
-            baseSpeed: 4,
+            baseSpeed: 4,  // overridden by race
             atkRange: 1,
-            baseHitDieHP: 22
+            baseHitDieHP: 22,
+            raceName: "Dwarf"
         );
+
+        Debug.Log($"[GameManager] Aldric (Dwarf Fighter): STR {pc1Stats.STR} DEX {pc1Stats.DEX} CON {pc1Stats.CON} " +
+                  $"WIS {pc1Stats.WIS} INT {pc1Stats.INT} CHA {pc1Stats.CHA} | " +
+                  $"HP {pc1Stats.MaxHP} | Speed {pc1Stats.MoveRange} hexes ({pc1Stats.SpeedInFeet} ft)");
 
         Sprite pcAlive = LoadSprite("Sprites/pc_alive");
         Sprite pcDead = LoadSprite("Sprites/pc_dead");
@@ -212,6 +223,10 @@ public class GameManager : MonoBehaviour
 
         // ==========================================
         // PC2: "Lyra" - Elf Rogue (Level 3)
+        // Base scores: STR 12, DEX 17, CON 12, WIS 13, INT 14, CHA 10
+        // Elf racial: DEX +2 = 19, CON -2 = 10
+        // Elf speed: 30 ft (6 hexes)
+        // Elf weapon proficiencies: longsword, rapier, longbow, shortbow
         // ==========================================
         CharacterStats pc2Stats = new CharacterStats(
             name: "Lyra",
@@ -224,10 +239,15 @@ public class GameManager : MonoBehaviour
             damageDice: 6,
             damageCount: 1,
             bonusDamage: 0,
-            baseSpeed: 5,
+            baseSpeed: 5,  // overridden by race
             atkRange: 1,
-            baseHitDieHP: 15
+            baseHitDieHP: 15,
+            raceName: "Elf"
         );
+
+        Debug.Log($"[GameManager] Lyra (Elf Rogue): STR {pc2Stats.STR} DEX {pc2Stats.DEX} CON {pc2Stats.CON} " +
+                  $"WIS {pc2Stats.WIS} INT {pc2Stats.INT} CHA {pc2Stats.CHA} | " +
+                  $"HP {pc2Stats.MaxHP} | Speed {pc2Stats.MoveRange} hexes ({pc2Stats.SpeedInFeet} ft)");
 
         Vector2Int pc2Start = new Vector2Int(3, 12);
         PC2.Init(pc2Stats, pc2Start, pcAlive, pcDead);
@@ -241,7 +261,8 @@ public class GameManager : MonoBehaviour
             pc2SR.color = new Color(0.6f, 0.7f, 1f, 1f);
 
         // ==========================================
-        // NPC: "Goblin Warchief"
+        // NPC: "Goblin Warchief" - Goblinoid creature
+        // Goblinoid tag: triggers Dwarf's +1 racial attack bonus
         // ==========================================
         CharacterStats npcStats = new CharacterStats(
             name: "Goblin Warchief",
@@ -258,6 +279,8 @@ public class GameManager : MonoBehaviour
             atkRange: 1,
             baseHitDieHP: 12
         );
+        // Tag the goblin as a Goblinoid for racial attack bonus purposes
+        npcStats.CreatureTags.Add("Goblinoid");
 
         Sprite npcAlive = LoadSprite("Sprites/npc_enemy_alive");
         Sprite npcDead = LoadSprite("Sprites/npc_enemy_dead");
