@@ -46,6 +46,10 @@ public class ItemData
     public int AttackRange;     // 1 = melee, >1 = ranged
     public bool IsLightWeapon;  // Light weapon (dagger, short sword) - reduces TWF penalties
 
+    // --- Critical Hit (D&D 3.5) ---
+    public int CritThreatMin;   // Minimum natural d20 roll to threaten a crit (e.g., 19 for 19-20, 20 for 20 only)
+    public int CritMultiplier;  // Damage multiplier on confirmed crit (e.g., 2 for ×2, 3 for ×3)
+
     // --- Consumable ---
     public int HealAmount;      // HP restored if consumable
 
@@ -72,6 +76,15 @@ public class ItemData
         return false;
     }
 
+    /// <summary>Get a formatted critical hit range string (e.g., "19-20/×2").</summary>
+    public string GetCritRangeString()
+    {
+        int threatMin = CritThreatMin > 0 ? CritThreatMin : 20;
+        int mult = CritMultiplier > 0 ? CritMultiplier : 2;
+        string range = threatMin < 20 ? $"{threatMin}-20" : "20";
+        return $"{range}/×{mult}";
+    }
+
     /// <summary>Get a short stat summary for tooltips.</summary>
     public string GetStatSummary()
     {
@@ -80,7 +93,7 @@ public class ItemData
         {
             string dmg = $"{DamageCount}d{DamageDice}";
             if (BonusDamage > 0) dmg += $"+{BonusDamage}";
-            stats = $"Damage: {dmg}";
+            stats = $"Damage: {dmg} | Crit: {GetCritRangeString()}";
             if (AttackRange > 1) stats += $" | Range: {AttackRange}";
         }
         else if (Type == ItemType.Armor)

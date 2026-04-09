@@ -157,6 +157,8 @@ public class Inventory
             OwnerStats.BaseDamageCount = RightHandSlot.DamageCount;
             OwnerStats.BonusDamage = RightHandSlot.BonusDamage;
             OwnerStats.AttackRange = RightHandSlot.AttackRange;
+            OwnerStats.CritThreatMin = RightHandSlot.CritThreatMin > 0 ? RightHandSlot.CritThreatMin : 20;
+            OwnerStats.CritMultiplier = RightHandSlot.CritMultiplier > 0 ? RightHandSlot.CritMultiplier : 2;
         }
         else if (LeftHandSlot != null && LeftHandSlot.IsWeapon)
         {
@@ -165,14 +167,18 @@ public class Inventory
             OwnerStats.BaseDamageCount = LeftHandSlot.DamageCount;
             OwnerStats.BonusDamage = LeftHandSlot.BonusDamage;
             OwnerStats.AttackRange = LeftHandSlot.AttackRange;
+            OwnerStats.CritThreatMin = LeftHandSlot.CritThreatMin > 0 ? LeftHandSlot.CritThreatMin : 20;
+            OwnerStats.CritMultiplier = LeftHandSlot.CritMultiplier > 0 ? LeftHandSlot.CritMultiplier : 2;
         }
         else
         {
-            // Unarmed
+            // Unarmed: 20/×2
             OwnerStats.BaseDamageDice = 3; // 1d3 unarmed
             OwnerStats.BaseDamageCount = 1;
             OwnerStats.BonusDamage = 0;
             OwnerStats.AttackRange = 1;
+            OwnerStats.CritThreatMin = 20;
+            OwnerStats.CritMultiplier = 2;
         }
     }
 

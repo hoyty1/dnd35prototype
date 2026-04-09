@@ -4,6 +4,7 @@ using System.Text;
 /// <summary>
 /// Holds results from a Full Attack, Dual Wield, or any multi-attack sequence.
 /// Each individual attack is a CombatResult; this aggregates them.
+/// Includes critical hit information for each individual attack.
 /// </summary>
 public class FullAttackResult
 {
@@ -46,7 +47,19 @@ public class FullAttackResult
         }
     }
 
-    /// <summary>Generate a full combat log summary of all attacks.</summary>
+    /// <summary>Number of confirmed critical hits.</summary>
+    public int CritCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (var atk in Attacks)
+                if (atk.CritConfirmed) count++;
+            return count;
+        }
+    }
+
+    /// <summary>Generate a full combat log summary of all attacks including crit details.</summary>
     public string GetFullSummary()
     {
         var sb = new StringBuilder();
@@ -81,13 +94,32 @@ public class FullAttackResult
 
             if (atk.Hit)
             {
+                // Build damage string
                 string dmgStr;
-                if (atk.SneakAttackApplied)
-                    dmgStr = $"{atk.Damage} + {atk.SneakAttackDamage} sneak ({atk.SneakAttackDice}d6) = {atk.TotalDamage}";
+                if (atk.CritConfirmed)
+                {
+                    // Critical hit!
+                    if (atk.SneakAttackApplied)
+                        dmgStr = $"CRIT! {atk.CritDamageDice}={atk.Damage} + {atk.SneakAttackDamage} sneak ({atk.SneakAttackDice}d6) = {atk.TotalDamage}";
+                    else
+                        dmgStr = $"CRIT(×{atk.CritMultiplier})! {atk.CritDamageDice}={atk.Damage}";
+                }
                 else
-                    dmgStr = $"{atk.Damage}";
+                {
+                    if (atk.SneakAttackApplied)
+                        dmgStr = $"{atk.Damage} + {atk.SneakAttackDamage} sneak ({atk.SneakAttackDice}d6) = {atk.TotalDamage}";
+                    else
+                        dmgStr = $"{atk.Damage}";
+                }
 
-                sb.AppendLine($"  [{label}] d20={atk.DieRoll}{flankStr} → {atk.TotalRoll} vs AC {atk.TargetAC} HIT!{critNote} ({dmgStr} dmg)");
+                // Show threat info inline
+                string threatStr = "";
+                if (atk.IsCritThreat && !atk.CritConfirmed)
+                    threatStr = $" [Threat! Confirm: {atk.ConfirmationRoll}→{atk.ConfirmationTotal} vs AC {atk.TargetAC} FAILED]";
+                else if (atk.CritConfirmed)
+                    threatStr = $" [Confirm: {atk.ConfirmationRoll}→{atk.ConfirmationTotal} vs AC {atk.TargetAC} ✓]";
+
+                sb.AppendLine($"  [{label}] d20={atk.DieRoll}{flankStr} → {atk.TotalRoll} vs AC {atk.TargetAC} HIT!{critNote}{threatStr} ({dmgStr} dmg)");
             }
             else
             {
@@ -96,7 +128,8 @@ public class FullAttackResult
         }
 
         // Summary line
-        sb.AppendLine($"--- {HitCount}/{Attacks.Count} hits, {TotalDamageDealt} total damage ---");
+        string critSummary = CritCount > 0 ? $", {CritCount} crit(s)!" : "";
+        sb.AppendLine($"--- {HitCount}/{Attacks.Count} hits{critSummary}, {TotalDamageDealt} total damage ---");
 
         if (TargetKilled)
             sb.Append($"{defenderName} has been slain!");

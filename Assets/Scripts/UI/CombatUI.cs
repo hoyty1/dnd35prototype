@@ -135,7 +135,38 @@ public class CombatUI : MonoBehaviour
     public void ShowCombatLog(string message)
     {
         if (CombatLogText != null)
-            CombatLogText.text = message;
+        {
+            // Apply rich-text highlighting for critical hits
+            CombatLogText.supportRichText = true;
+            string formatted = HighlightCriticalHits(message);
+            CombatLogText.text = formatted;
+        }
+    }
+
+    /// <summary>
+    /// Apply rich-text color highlights for critical hit related text in combat logs.
+    /// </summary>
+    private string HighlightCriticalHits(string text)
+    {
+        // Highlight critical hit confirmations and damage in gold/yellow
+        text = text.Replace("CRITICAL HIT!", "<color=#FFD700><b>CRITICAL HIT!</b></color>");
+        text = text.Replace("CRIT!", "<color=#FFD700><b>CRIT!</b></color>");
+        text = text.Replace("*** Critical Threat!", "<color=#FFA500><b>*** Critical Threat!</b></color>");
+        text = text.Replace("CONFIRMED!", "<color=#FFD700><b>CONFIRMED!</b></color>");
+        text = text.Replace("Not confirmed, normal hit", "<color=#AAAAAA>Not confirmed, normal hit</color>");
+
+        // Highlight natural 20s in bright gold
+        text = text.Replace("(NATURAL 20!)", "<color=#FFD700><b>(NATURAL 20!)</b></color>");
+        text = text.Replace("(NAT 20!)", "<color=#FFD700><b>(NAT 20!)</b></color>");
+
+        // Highlight natural 1s in red
+        text = text.Replace("(NATURAL 1!)", "<color=#FF4444><b>(NATURAL 1!)</b></color>");
+        text = text.Replace("(NAT 1!)", "<color=#FF4444><b>(NAT 1!)</b></color>");
+
+        // Highlight slain messages
+        text = text.Replace("has been slain!", "<color=#FF6666><b>has been slain!</b></color>");
+
+        return text;
     }
 
     public void SetActionButtonsVisible(bool visible)

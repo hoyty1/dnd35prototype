@@ -2,6 +2,7 @@
 /// Holds the result of a single attack action using D&D 3.5 mechanics.
 /// Attack roll: d20 + BAB + STR mod + flanking bonus vs AC (10 + DEX mod + armor + shield)
 /// Damage roll: weapon dice + STR mod + bonus damage + sneak attack (if applicable)
+/// Now includes full critical hit tracking per D&D 3.5 rules.
 /// </summary>
 public class CombatResult
 {
@@ -11,7 +12,7 @@ public class CombatResult
     public int TotalRoll;     // Roll + total attack bonus (BAB + STR mod + flanking)
     public int TargetAC;      // Defender's AC (10 + DEX mod + armor + shield)
     public bool Hit;          // Whether the attack hit
-    public int Damage;        // Base damage dealt (0 if miss)
+    public int Damage;        // Base weapon damage dealt (0 if miss)
     public bool TargetKilled; // Whether the target died
     public bool NaturalTwenty;  // Natural 20 (auto-hit)
     public bool NaturalOne;     // Natural 1 (auto-miss)
@@ -25,6 +26,15 @@ public class CombatResult
     public bool SneakAttackApplied;       // Whether sneak attack damage was added
     public int SneakAttackDice;           // Number of d6 rolled (e.g., 2 for 2d6)
     public int SneakAttackDamage;         // Total sneak attack damage rolled
+
+    // Critical Hit fields (D&D 3.5)
+    public bool IsCritThreat;             // Whether the natural roll was in the weapon's threat range
+    public bool CritConfirmed;            // Whether the confirmation roll succeeded
+    public int ConfirmationRoll;          // Natural d20 of the confirmation roll
+    public int ConfirmationTotal;         // Total of confirmation roll (roll + attack mod)
+    public int CritMultiplier;            // Weapon's crit multiplier (×2, ×3, etc.)
+    public int CritThreatMin;             // Weapon's threat range minimum (e.g. 19 for 19-20)
+    public string CritDamageDice;         // Description of crit damage dice (e.g. "2d8+3")
 
     /// <summary>Total damage dealt including sneak attack.</summary>
     public int TotalDamage => Damage + SneakAttackDamage;
@@ -54,14 +64,41 @@ public class CombatResult
             else
                 rollBreakdown = $"Roll: {DieRoll} {atkBonusStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
 
+            // Critical hit info
+            string critInfo = "";
+            if (IsCritThreat)
+            {
+                string threatRange = CritThreatMin < 20 ? $"{CritThreatMin}-20" : "20";
+                critInfo = $"\n*** Critical Threat! (threat range {threatRange}) ***";
+                string confModStr = CharacterStats.FormatMod(ConfirmationTotal - ConfirmationRoll);
+                if (CritConfirmed)
+                {
+                    critInfo += $"\nConfirmation: {ConfirmationRoll} {confModStr} = {ConfirmationTotal} vs AC {TargetAC} - CONFIRMED! (×{CritMultiplier})";
+                }
+                else
+                {
+                    critInfo += $"\nConfirmation: {ConfirmationRoll} {confModStr} = {ConfirmationTotal} vs AC {TargetAC} - Not confirmed, normal hit";
+                }
+            }
+
             // Build the damage line
             string damageStr;
-            if (SneakAttackApplied)
-                damageStr = $"Deals {Damage} damage + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6) = {TotalDamage} total!";
+            if (CritConfirmed)
+            {
+                if (SneakAttackApplied)
+                    damageStr = $"CRITICAL HIT! {CritDamageDice} = {Damage} damage + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6) = {TotalDamage} total!";
+                else
+                    damageStr = $"CRITICAL HIT! {CritDamageDice} = {Damage} damage!";
+            }
             else
-                damageStr = $"Deals {Damage} damage! (STR {CharacterStats.FormatMod(Attacker.Stats.STRMod)})";
+            {
+                if (SneakAttackApplied)
+                    damageStr = $"Deals {Damage} damage + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6) = {TotalDamage} total!";
+                else
+                    damageStr = $"Deals {Damage} damage! (STR {CharacterStats.FormatMod(Attacker.Stats.STRMod)})";
+            }
 
-            string msg = $"{attackerName} attacks {defenderName}!{flankNote}\n{rollBreakdown}\n{damageStr}";
+            string msg = $"{attackerName} attacks {defenderName}!{flankNote}\n{rollBreakdown}{critInfo}\n{damageStr}";
 
             if (TargetKilled)
                 msg += $"\n{defenderName} has been slain!";

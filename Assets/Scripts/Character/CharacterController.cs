@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// Controls a character on the hex grid (both PC and NPC).
-/// Supports D&D 3.5 action economy, full attacks, and dual wielding.
+/// Supports D&D 3.5 action economy, full attacks, dual wielding, and critical hits.
 /// </summary>
 public class CharacterController : MonoBehaviour
 {
@@ -84,7 +84,7 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Perform a single attack against another character (standard action).
-    /// Returns a CombatResult with details.
+    /// Returns a CombatResult with details including critical hit info.
     /// </summary>
     public CombatResult Attack(CharacterController target)
     {
@@ -93,52 +93,16 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Perform a single attack with flanking context.
+    /// Includes full D&D 3.5 critical hit mechanics.
     /// </summary>
     public CombatResult Attack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
     {
-        var result = new CombatResult();
-        result.Attacker = this;
-        result.Defender = target;
+        int totalAtkMod = Stats.AttackBonus + (isFlanking ? flankingBonus : 0);
+        int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
+        int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
 
-        // Flanking info
-        result.IsFlanking = isFlanking;
-        result.FlankingBonus = isFlanking ? flankingBonus : 0;
-        result.FlankingPartnerName = flankingPartnerName ?? "";
-
-        // Roll to hit with flanking bonus included
-        var (hit, roll, total) = Stats.RollToHitWithFlanking(target.Stats.ArmorClass, result.FlankingBonus);
-        result.DieRoll = roll;
-        result.TotalRoll = total;
-        result.TargetAC = target.Stats.ArmorClass;
-        result.Hit = hit;
-        result.NaturalTwenty = (roll == 20);
-        result.NaturalOne = (roll == 1);
-
-        if (hit)
-        {
-            // Roll base weapon damage
-            int damage = Stats.RollDamage();
-            result.Damage = damage;
-
-            // Sneak attack: applies if attacker is a Rogue and is flanking
-            if (Stats.IsRogue && isFlanking)
-            {
-                int sneakDice = CombatUtils.GetSneakAttackDice(Stats.Level);
-                int sneakDmg = CombatUtils.RollSneakAttackDamage(Stats.Level);
-                result.SneakAttackApplied = true;
-                result.SneakAttackDice = sneakDice;
-                result.SneakAttackDamage = sneakDmg;
-            }
-
-            // Apply total damage to target
-            target.Stats.TakeDamage(result.TotalDamage);
-
-            if (target.Stats.IsDead)
-            {
-                target.OnDeath();
-                result.TargetKilled = true;
-            }
-        }
+        var result = PerformSingleAttackWithCrit(target, totalAtkMod, isFlanking, flankingBonus, flankingPartnerName,
+            Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, 1.0f, critThreatMin, critMult);
 
         HasAttackedThisTurn = true;
         return result;
@@ -148,8 +112,7 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Perform a Full Attack action - all iterative attacks based on BAB.
-    /// BAB +6 gets 2 attacks at +6/+1, BAB +11 gets 3 at +11/+6/+1, etc.
-    /// This is a Full-Round Action.
+    /// Each attack can independently threaten and confirm a critical hit.
     /// </summary>
     public FullAttackResult FullAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
     {
@@ -159,6 +122,8 @@ public class CharacterController : MonoBehaviour
         result.Defender = target;
 
         int[] attackBonuses = Stats.GetIterativeAttackBonuses();
+        int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
+        int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
 
         for (int i = 0; i < attackBonuses.Length; i++)
         {
@@ -168,8 +133,8 @@ public class CharacterController : MonoBehaviour
             string label = (i == 0) ? $"Attack ({CharacterStats.FormatMod(attackBonuses[i])})" :
                 $"Attack {i + 1} ({CharacterStats.FormatMod(attackBonuses[i])})";
 
-            CombatResult atk = PerformSingleAttackWithMod(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
-                Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, 1.0f);
+            CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
+                Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, 1.0f, critThreatMin, critMult);
 
             result.Attacks.Add(atk);
             result.AttackLabels.Add(label);
@@ -218,8 +183,7 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Perform a Dual Wield attack - main hand and off-hand attacks.
-    /// Full-Round Action. Main hand gets full STR to damage, off-hand gets half STR.
-    /// Both can benefit from flanking and sneak attack.
+    /// Each hand uses its own weapon's critical hit properties.
     /// </summary>
     public FullAttackResult DualWieldAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
     {
@@ -238,12 +202,15 @@ public class CharacterController : MonoBehaviour
 
         var (mainPenalty, offPenalty, lightOff) = GetDualWieldPenalties();
 
-        // Main hand attack: BAB + STR + penalty + flanking
+        // Main hand attack: BAB + STR + penalty + flanking, uses main weapon's crit stats
         int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0);
         string mainLabel = $"Main Hand ({mainWeapon.Name}, {CharacterStats.FormatMod(Stats.AttackBonus + mainPenalty)})";
 
-        CombatResult mainAtk = PerformSingleAttackWithMod(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-            mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, 1.0f);
+        int mainCritMin = mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20;
+        int mainCritMult = mainWeapon.CritMultiplier > 0 ? mainWeapon.CritMultiplier : 2;
+
+        CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
+            mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, 1.0f, mainCritMin, mainCritMult);
         result.Attacks.Add(mainAtk);
         result.AttackLabels.Add(mainLabel);
 
@@ -253,8 +220,11 @@ public class CharacterController : MonoBehaviour
             int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0);
             string offLabel = $"Off-Hand ({offWeapon.Name}, {CharacterStats.FormatMod(Stats.AttackBonus + offPenalty)})";
 
-            CombatResult offAtk = PerformSingleAttackWithMod(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-                offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, 0.5f); // Half STR for off-hand
+            int offCritMin = offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20;
+            int offCritMult = offWeapon.CritMultiplier > 0 ? offWeapon.CritMultiplier : 2;
+
+            CombatResult offAtk = PerformSingleAttackWithCrit(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
+                offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, 0.5f, offCritMin, offCritMult);
             result.Attacks.Add(offAtk);
             result.AttackLabels.Add(offLabel);
         }
@@ -264,15 +234,18 @@ public class CharacterController : MonoBehaviour
         return result;
     }
 
-    // ========== INTERNAL: Single attack with specific modifier ==========
+    // ========== INTERNAL: Single attack with critical hit support ==========
 
     /// <summary>
-    /// Perform a single attack roll with a specific total attack modifier and weapon stats.
-    /// Used internally by FullAttack and DualWieldAttack.
+    /// Perform a single attack with full D&D 3.5 critical hit mechanics.
+    /// Step 1: Roll d20. Check if in threat range.
+    /// Step 2: If threat, roll confirmation vs same AC with same bonus.
+    /// Step 3: If confirmed, multiply weapon dice (not static bonuses or sneak attack).
     /// </summary>
-    private CombatResult PerformSingleAttackWithMod(CharacterController target, int totalAtkMod,
+    private CombatResult PerformSingleAttackWithCrit(CharacterController target, int totalAtkMod,
         bool isFlanking, int flankingBonus, string flankingPartnerName,
-        int damageDice, int damageCount, int bonusDamage, float strMultiplier)
+        int damageDice, int damageCount, int bonusDamage, float strMultiplier,
+        int critThreatMin, int critMultiplier)
     {
         var result = new CombatResult();
         result.Attacker = this;
@@ -281,7 +254,11 @@ public class CharacterController : MonoBehaviour
         result.FlankingBonus = isFlanking ? flankingBonus : 0;
         result.FlankingPartnerName = flankingPartnerName ?? "";
 
-        // Roll to hit
+        // Store weapon crit properties on result for display
+        result.CritThreatMin = critThreatMin;
+        result.CritMultiplier = critMultiplier;
+
+        // Step 1: Roll to hit
         var (hit, roll, total) = Stats.RollToHitWithMod(totalAtkMod, target.Stats.ArmorClass);
         result.DieRoll = roll;
         result.TotalRoll = total;
@@ -290,13 +267,47 @@ public class CharacterController : MonoBehaviour
         result.NaturalTwenty = (roll == 20);
         result.NaturalOne = (roll == 1);
 
+        // Step 2: Check for critical threat (only if the attack hit)
+        bool isThreat = false;
+        bool critConfirmed = false;
+        int confirmRoll = 0;
+        int confirmTotal = 0;
+
         if (hit)
         {
-            // Roll weapon damage with appropriate STR multiplier
-            int damage = Stats.RollDamageWithWeapon(damageDice, damageCount, bonusDamage, strMultiplier);
+            isThreat = CharacterStats.IsCritThreat(roll, critThreatMin);
+            result.IsCritThreat = isThreat;
+
+            if (isThreat)
+            {
+                // Roll confirmation with the same attack modifier
+                var (confirmed, confRoll, confTotal) = Stats.RollCritConfirmation(totalAtkMod, target.Stats.ArmorClass);
+                critConfirmed = confirmed;
+                confirmRoll = confRoll;
+                confirmTotal = confTotal;
+                result.CritConfirmed = critConfirmed;
+                result.ConfirmationRoll = confirmRoll;
+                result.ConfirmationTotal = confirmTotal;
+            }
+
+            // Step 3: Roll damage
+            int damage;
+            if (critConfirmed)
+            {
+                // Critical damage: multiply weapon dice, add static bonuses once
+                damage = Stats.RollCritDamage(damageDice, damageCount, bonusDamage, strMultiplier, critMultiplier);
+                int strBonus = Mathf.FloorToInt(Stats.STRMod * strMultiplier);
+                result.CritDamageDice = $"{damageCount * critMultiplier}d{damageDice}+{strBonus + bonusDamage}";
+            }
+            else
+            {
+                // Normal damage
+                damage = Stats.RollDamageWithWeapon(damageDice, damageCount, bonusDamage, strMultiplier);
+            }
             result.Damage = damage;
 
-            // Sneak attack applies to each attack if flanking and attacker is Rogue
+            // Sneak attack: applies if attacker is Rogue and is flanking
+            // Sneak attack is NOT multiplied on critical hits (D&D 3.5 rule)
             if (Stats.IsRogue && isFlanking)
             {
                 int sneakDice = CombatUtils.GetSneakAttackDice(Stats.Level);
@@ -306,7 +317,7 @@ public class CharacterController : MonoBehaviour
                 result.SneakAttackDamage = sneakDmg;
             }
 
-            // Apply damage
+            // Apply total damage to target
             target.Stats.TakeDamage(result.TotalDamage);
 
             if (target.Stats.IsDead)

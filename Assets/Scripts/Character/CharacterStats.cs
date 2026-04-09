@@ -32,6 +32,8 @@ public class CharacterStats
     public int BonusDamage;     // Extra flat damage (magic weapon, etc.)
     public int AttackRange;     // Hex tiles for attack reach (1 = melee)
     public int BaseSpeed;       // Base movement speed in hexes
+    public int CritThreatMin;   // Minimum natural d20 roll for crit threat (from equipped weapon, default 20)
+    public int CritMultiplier;  // Crit damage multiplier (from equipped weapon, default 2)
 
     // ========== DERIVED STATS (calculated) ==========
 
@@ -111,6 +113,10 @@ public class CharacterStats
         BonusDamage = bonusDamage;
         BaseSpeed = baseSpeed;
         AttackRange = atkRange;
+
+        // Default crit stats (can be overridden by equipped weapons via Inventory.RecalculateStats)
+        CritThreatMin = 20;   // Only natural 20 threatens by default
+        CritMultiplier = 2;   // ×2 by default
 
         // Calculate MaxHP: base + CON mod × level (minimum 1 HP per level)
         int conModPerLevel = Mathf.Max(1, GetModifier(con));
@@ -230,6 +236,68 @@ public class CharacterStats
         }
         int strBonus = Mathf.FloorToInt(STRMod * strMultiplier);
         total += strBonus + bonusDamage;
+        return Mathf.Max(1, total);
+    }
+
+    // ========== CRITICAL HIT METHODS (D&D 3.5) ==========
+
+    /// <summary>
+    /// Check if a natural d20 roll threatens a critical hit given the weapon's threat range.
+    /// Natural 20 is always a threat regardless of weapon.
+    /// </summary>
+    /// <param name="naturalRoll">The natural d20 roll (1-20)</param>
+    /// <param name="critThreatMin">Minimum roll to threaten (e.g. 19 for 19-20 range, 20 for 20 only)</param>
+    public static bool IsCritThreat(int naturalRoll, int critThreatMin)
+    {
+        if (naturalRoll == 20) return true; // Natural 20 always threatens
+        int threatMin = critThreatMin > 0 ? critThreatMin : 20;
+        return naturalRoll >= threatMin;
+    }
+
+    /// <summary>
+    /// Roll a confirmation roll for a critical hit threat.
+    /// Uses the same attack modifier as the original attack, rolled against the same AC.
+    /// </summary>
+    /// <param name="totalAttackMod">Total attack modifier (same as original attack)</param>
+    /// <param name="targetAC">Target's Armor Class</param>
+    /// <returns>(confirmed, naturalRoll, total) - confirmed is true if the crit is confirmed</returns>
+    public (bool confirmed, int roll, int total) RollCritConfirmation(int totalAttackMod, int targetAC)
+    {
+        int roll = Random.Range(1, 21);
+        int total = roll + totalAttackMod;
+
+        // Natural 20 on confirmation always confirms; natural 1 always fails confirmation
+        bool confirmed;
+        if (roll == 20) confirmed = true;
+        else if (roll == 1) confirmed = false;
+        else confirmed = total >= targetAC;
+
+        return (confirmed, roll, total);
+    }
+
+    /// <summary>
+    /// Roll critical hit damage: multiply only the weapon dice by the crit multiplier,
+    /// then add static bonuses (STR, magic, etc.) once. D&D 3.5 rules.
+    /// Example: Longsword 1d8+3 with ×2 crit = 2d8 + 3
+    /// </summary>
+    /// <param name="damageDice">Sides of the damage die</param>
+    /// <param name="damageCount">Base number of dice</param>
+    /// <param name="bonusDamage">Flat bonus damage from weapon</param>
+    /// <param name="strMultiplier">STR mod multiplier (1.0 main hand, 0.5 off-hand)</param>
+    /// <param name="critMultiplier">Crit damage multiplier (2, 3, or 4)</param>
+    public int RollCritDamage(int damageDice, int damageCount, int bonusDamage, float strMultiplier, int critMultiplier)
+    {
+        int mult = critMultiplier > 0 ? critMultiplier : 2;
+        // Roll weapon dice × multiplier
+        int diceTotal = 0;
+        int totalDice = damageCount * mult;
+        for (int i = 0; i < totalDice; i++)
+        {
+            diceTotal += Random.Range(1, damageDice + 1);
+        }
+        // Add static bonuses once (NOT multiplied per D&D 3.5)
+        int strBonus = Mathf.FloorToInt(STRMod * strMultiplier);
+        int total = diceTotal + strBonus + bonusDamage;
         return Mathf.Max(1, total);
     }
 

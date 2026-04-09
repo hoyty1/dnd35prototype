@@ -17,15 +17,18 @@ public static class ItemDatabase
         _items.Clear();
 
         // ===== WEAPONS =====
+        // Longsword: 19-20/×2
         Register(new ItemData
         {
             Id = "longsword", Name = "Longsword", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Description = "A versatile one-handed sword favored by fighters.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            CritThreatMin = 19, CritMultiplier = 2,
             IconChar = "\u2694", IconColor = new Color(0.7f, 0.7f, 0.8f)
         });
 
+        // Short Sword: 19-20/×2
         Register(new ItemData
         {
             Id = "short_sword", Name = "Short Sword", Type = ItemType.Weapon,
@@ -33,9 +36,11 @@ public static class ItemDatabase
             Description = "A light blade ideal for quick strikes and finesse.",
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsLightWeapon = true,
+            CritThreatMin = 19, CritMultiplier = 2,
             IconChar = "\u2694", IconColor = new Color(0.6f, 0.8f, 0.6f)
         });
 
+        // Dagger: 19-20/×2
         Register(new ItemData
         {
             Id = "dagger", Name = "Dagger", Type = ItemType.Weapon,
@@ -43,27 +48,66 @@ public static class ItemDatabase
             Description = "A small blade. Light and easy to conceal.",
             DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsLightWeapon = true,
+            CritThreatMin = 19, CritMultiplier = 2,
             IconChar = "\u2020", IconColor = new Color(0.8f, 0.8f, 0.7f)
         });
 
+        // Rapier: 18-20/×2
+        Register(new ItemData
+        {
+            Id = "rapier", Name = "Rapier", Type = ItemType.Weapon,
+            Slot = EquipSlot.EitherHand,
+            Description = "An elegant thrusting sword with a wide critical range.",
+            DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            CritThreatMin = 18, CritMultiplier = 2,
+            IconChar = "\u2694", IconColor = new Color(0.8f, 0.8f, 0.9f)
+        });
+
+        // Mace: 20/×2
         Register(new ItemData
         {
             Id = "mace", Name = "Mace", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Description = "A heavy bludgeoning weapon effective against armored foes.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            CritThreatMin = 20, CritMultiplier = 2,
             IconChar = "\u2692", IconColor = new Color(0.6f, 0.6f, 0.6f)
         });
 
+        // Battleaxe: 20/×3
+        Register(new ItemData
+        {
+            Id = "battleaxe", Name = "Battleaxe", Type = ItemType.Weapon,
+            Slot = EquipSlot.EitherHand,
+            Description = "A sturdy one-handed axe capable of devastating critical hits.",
+            DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            CritThreatMin = 20, CritMultiplier = 3,
+            IconChar = "\u2692", IconColor = new Color(0.7f, 0.55f, 0.35f)
+        });
+
+        // Greataxe: 20/×3
         Register(new ItemData
         {
             Id = "greataxe", Name = "Greataxe", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Description = "A massive two-handed axe dealing devastating blows.",
             DamageDice = 12, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            CritThreatMin = 20, CritMultiplier = 3,
             IconChar = "\u2694", IconColor = new Color(0.9f, 0.5f, 0.3f)
         });
 
+        // Quarterstaff: 20/×2
+        Register(new ItemData
+        {
+            Id = "quarterstaff", Name = "Quarterstaff", Type = ItemType.Weapon,
+            Slot = EquipSlot.EitherHand,
+            Description = "A simple wooden staff. Reliable and versatile.",
+            DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            CritThreatMin = 20, CritMultiplier = 2,
+            IconChar = "\u2502", IconColor = new Color(0.6f, 0.5f, 0.3f)
+        });
+
+        // Handaxe: 20/×3
         Register(new ItemData
         {
             Id = "handaxe", Name = "Handaxe", Type = ItemType.Weapon,
@@ -71,6 +115,7 @@ public static class ItemDatabase
             Description = "A small axe suitable for one-handed combat.",
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsLightWeapon = true,
+            CritThreatMin = 20, CritMultiplier = 3,
             IconChar = "\u2692", IconColor = new Color(0.7f, 0.5f, 0.3f)
         });
 
@@ -209,6 +254,7 @@ public static class ItemDatabase
             DamageDice = src.DamageDice, DamageCount = src.DamageCount,
             BonusDamage = src.BonusDamage, AttackRange = src.AttackRange,
             IsLightWeapon = src.IsLightWeapon,
+            CritThreatMin = src.CritThreatMin, CritMultiplier = src.CritMultiplier,
             HealAmount = src.HealAmount,
             IconChar = src.IconChar, IconColor = src.IconColor
         };
