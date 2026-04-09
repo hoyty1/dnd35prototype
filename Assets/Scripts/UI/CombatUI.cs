@@ -301,14 +301,23 @@ public class CombatUI : MonoBehaviour
             if (faLabel != null)
             {
                 int atkCount = pc.Stats.IterativeAttackCount;
+                // Rapid Shot only adds an extra attack with a ranged weapon equipped
+                bool weaponIsRanged = pc.IsEquippedWeaponRanged();
+                bool rapidShotWillApply = hasRapidShot && pc.RapidShotEnabled && weaponIsRanged;
+
                 string label;
                 if (!showFullAtk)
                 {
                     label = "Full Attack (N/A)";
                 }
-                else if (hasRapidShot && pc.RapidShotEnabled)
+                else if (rapidShotWillApply)
                 {
                     label = $"Full Attack x{atkCount + 1} (Rapid Shot)";
+                }
+                else if (hasRapidShot && pc.RapidShotEnabled && !weaponIsRanged)
+                {
+                    // Rapid Shot is ON but weapon is melee — warn the user
+                    label = $"Full Attack x{atkCount} (RS: need ranged wpn)";
                 }
                 else if (hasIterativeAttacks)
                 {
@@ -412,7 +421,10 @@ public class CombatUI : MonoBehaviour
         if (RapidShotLabel == null || pc == null) return;
         if (pc.RapidShotEnabled)
         {
-            RapidShotLabel.text = "Rapid Shot: ON (Extra atk, -2 all)";
+            bool weaponIsRanged = pc.IsEquippedWeaponRanged();
+            RapidShotLabel.text = weaponIsRanged
+                ? "Rapid Shot: ON (Extra atk, -2 all)"
+                : "Rapid Shot: ON (Equip ranged weapon!)";
             if (RapidShotToggle != null)
             {
                 var colors = RapidShotToggle.colors;

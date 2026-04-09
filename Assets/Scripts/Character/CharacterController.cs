@@ -48,6 +48,7 @@ public class CharacterController : MonoBehaviour
     public void SetRapidShot(bool enabled)
     {
         RapidShotEnabled = enabled;
+        Debug.Log($"[RapidShot] {(Stats != null ? Stats.CharacterName : "unknown")}: SetRapidShot({enabled}) → RapidShotEnabled = {RapidShotEnabled}");
     }
 
     /// <summary>Check if the given weapon is two-handed.</summary>
@@ -277,28 +278,51 @@ public class CharacterController : MonoBehaviour
         bool rapidShotActive = isRanged && hasRapidShotFeat && RapidShotEnabled;
         int rapidShotPenalty = rapidShotActive ? -2 : 0;
 
-        // Debug logging for Rapid Shot
-        Debug.Log($"[FullAttack] {Stats.CharacterName}: Rapid Shot enabled: {RapidShotEnabled}");
-        Debug.Log($"[FullAttack] {Stats.CharacterName}: Has Rapid Shot feat: {hasRapidShotFeat}");
-        Debug.Log($"[FullAttack] {Stats.CharacterName}: Using ranged weapon: {isRanged}" +
-                  (equippedWeapon != null ? $" ({equippedWeapon.Name})" : " (unarmed)"));
-        Debug.Log($"[FullAttack] {Stats.CharacterName}: Rapid Shot active: {rapidShotActive}");
+        // === Extensive Debug Logging ===
+        Debug.Log($"[FullAttack] FullAttack() called");
+        Debug.Log($"[FullAttack] Character: {Stats.CharacterName}");
+        Debug.Log($"[FullAttack] Has Rapid Shot feat: {hasRapidShotFeat}");
+        Debug.Log($"[FullAttack] rapidShotEnabled: {RapidShotEnabled}");
+        Debug.Log($"[FullAttack] Weapon: {(equippedWeapon != null ? equippedWeapon.Name : "(unarmed)")}");
+        if (equippedWeapon != null)
+            Debug.Log($"[FullAttack] Weapon {equippedWeapon.Name}: IsRanged={equippedWeapon.WeaponCat == WeaponCategory.Ranged}, " +
+                      $"RangeIncrement={equippedWeapon.RangeIncrement}, IsMelee={isMelee}");
+        Debug.Log($"[FullAttack] Weapon is ranged: {isRanged}");
+        Debug.Log($"[FullAttack] Base attack count: {attackBonuses.Length}");
+        Debug.Log($"[FullAttack] Checking Rapid Shot conditions...");
+        Debug.Log($"[FullAttack]   isRanged={isRanged}, hasRapidShotFeat={hasRapidShotFeat}, RapidShotEnabled={RapidShotEnabled}");
+        Debug.Log($"[FullAttack] All conditions met: {rapidShotActive}");
 
         // Build the list of attack bonuses, inserting Rapid Shot extra attack
         var allAttackBonuses = new List<int>(attackBonuses);
+        int baseAttackCount = allAttackBonuses.Count;
 
         if (rapidShotActive)
         {
-            // Insert extra attack at highest BAB (index 0)
+            // Insert extra Rapid Shot attack at highest BAB (index 0)
             allAttackBonuses.Insert(0, attackBonuses[0]);
-            Debug.Log($"[FullAttack] {Stats.CharacterName}: Rapid Shot adding extra attack at bonus {attackBonuses[0]}, attack penalties applied: -2");
+            Debug.Log($"[FullAttack] Rapid Shot: adding extra attack at bonus {attackBonuses[0]}, -2 penalty to all attacks");
+            Debug.Log($"[FullAttack] Attack count: {baseAttackCount} → {allAttackBonuses.Count}");
+        }
+        else if (RapidShotEnabled && hasRapidShotFeat)
+        {
+            // Rapid Shot is ON and feat exists, but weapon isn't ranged — explain why no extra attack
+            Debug.LogWarning($"[FullAttack] {Stats.CharacterName}: Rapid Shot is ON but weapon is not ranged " +
+                             $"(isRanged={isRanged}). Equip a ranged weapon (Shortbow, Longbow, etc.) for Rapid Shot to work!");
         }
 
-        Debug.Log($"[FullAttack] {Stats.CharacterName}: Number of attacks: {allAttackBonuses.Count}");
+        Debug.Log($"[FullAttack] Final attack count: {allAttackBonuses.Count}");
 
         for (int i = 0; i < allAttackBonuses.Count; i++)
         {
-            if (target.Stats.IsDead) break;
+            Debug.Log($"[FullAttack] Executing attack {i + 1} of {allAttackBonuses.Count}" +
+                      (rapidShotActive && i == 0 ? " (Rapid Shot extra attack)" : ""));
+
+            if (target.Stats.IsDead)
+            {
+                Debug.Log($"[FullAttack] Target is dead, stopping attacks at {i + 1} of {allAttackBonuses.Count}");
+                break;
+            }
 
             int baseBonus = allAttackBonuses[i];
             int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
@@ -657,6 +681,17 @@ public class CharacterController : MonoBehaviour
     }
 
     // ========== WEAPON HELPERS ==========
+
+    /// <summary>
+    /// Check if the equipped main weapon is a ranged weapon.
+    /// Used by UI to determine if Rapid Shot can actually apply.
+    /// </summary>
+    public bool IsEquippedWeaponRanged()
+    {
+        ItemData weapon = GetEquippedMainWeapon();
+        if (weapon == null) return false;
+        return weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0;
+    }
 
     /// <summary>
     /// Get the equipped main-hand weapon (right hand first, then left hand).

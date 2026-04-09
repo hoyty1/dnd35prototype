@@ -665,8 +665,12 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
+        bool oldValue = pc.RapidShotEnabled;
         pc.SetRapidShot(!pc.RapidShotEnabled);
+        Debug.Log($"[RapidShot] Rapid Shot toggle clicked, new value: {pc.RapidShotEnabled} (was {oldValue}) for {pc.Stats.CharacterName}");
         CombatUI.UpdateRapidShotLabel(pc);
+        // Refresh action buttons so Full Attack label reflects Rapid Shot state + weapon type
+        CombatUI.UpdateActionButtons(pc);
     }
 
     // ========== MOVEMENT ==========
