@@ -26,6 +26,7 @@ public class HexCell : MonoBehaviour
     private static readonly Color HighlightMove = new Color(0.3f, 0.8f, 1f, 0.5f);
     private static readonly Color HighlightAttack = new Color(1f, 0.3f, 0.3f, 0.5f);
     private static readonly Color HighlightSelected = new Color(1f, 1f, 0.3f, 0.6f);
+    private static readonly Color HighlightFlanking = new Color(1f, 0.6f, 0.0f, 0.6f); // Orange for flanking
 
     public void Init(int q, int r)
     {
@@ -58,6 +59,9 @@ public class HexCell : MonoBehaviour
             case HighlightType.Selected:
                 _sr.color = HighlightSelected;
                 break;
+            case HighlightType.Flanking:
+                _sr.color = HighlightFlanking;
+                break;
         }
     }
 
@@ -70,5 +74,6 @@ public enum HighlightType
     None,
     Move,
     Attack,
-    Selected
+    Selected,
+    Flanking
 }

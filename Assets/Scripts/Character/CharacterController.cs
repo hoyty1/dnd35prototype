@@ -81,11 +81,29 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public CombatResult Attack(CharacterController target)
     {
+        return Attack(target, false, 0, null);
+    }
+
+    /// <summary>
+    /// Perform an attack with flanking context.
+    /// </summary>
+    /// <param name="target">The defender being attacked</param>
+    /// <param name="isFlanking">Whether the attacker is flanking the target</param>
+    /// <param name="flankingBonus">Attack bonus from flanking (+2 in D&D 3.5)</param>
+    /// <param name="flankingPartnerName">Name of the ally providing flanking</param>
+    public CombatResult Attack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
+    {
         var result = new CombatResult();
         result.Attacker = this;
         result.Defender = target;
 
-        var (hit, roll, total) = Stats.RollToHit(target.Stats.ArmorClass);
+        // Flanking info
+        result.IsFlanking = isFlanking;
+        result.FlankingBonus = isFlanking ? flankingBonus : 0;
+        result.FlankingPartnerName = flankingPartnerName ?? "";
+
+        // Roll to hit with flanking bonus included
+        var (hit, roll, total) = Stats.RollToHitWithFlanking(target.Stats.ArmorClass, result.FlankingBonus);
         result.DieRoll = roll;
         result.TotalRoll = total;
         result.TargetAC = target.Stats.ArmorClass;
@@ -95,9 +113,22 @@ public class CharacterController : MonoBehaviour
 
         if (hit)
         {
+            // Roll base weapon damage
             int damage = Stats.RollDamage();
             result.Damage = damage;
-            target.Stats.TakeDamage(damage);
+
+            // Sneak attack: applies if attacker is a Rogue and is flanking
+            if (Stats.IsRogue && isFlanking)
+            {
+                int sneakDice = CombatUtils.GetSneakAttackDice(Stats.Level);
+                int sneakDmg = CombatUtils.RollSneakAttackDamage(Stats.Level);
+                result.SneakAttackApplied = true;
+                result.SneakAttackDice = sneakDice;
+                result.SneakAttackDamage = sneakDmg;
+            }
+
+            // Apply total damage to target
+            target.Stats.TakeDamage(result.TotalDamage);
 
             if (target.Stats.IsDead)
             {

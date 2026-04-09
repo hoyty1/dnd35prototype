@@ -142,6 +142,7 @@ public class GameManager : MonoBehaviour
         CharacterStats pc1Stats = new CharacterStats(
             name: "Aldric",
             level: 3,
+            characterClass: "Fighter",
             str: 16, dex: 12, con: 14, wis: 10, intelligence: 10, cha: 13,
             bab: 3,             // Fighter BAB = level
             armorBonus: 4,      // Chain shirt
@@ -170,6 +171,7 @@ public class GameManager : MonoBehaviour
         CharacterStats pc2Stats = new CharacterStats(
             name: "Lyra",
             level: 3,
+            characterClass: "Rogue",
             str: 12, dex: 17, con: 12, wis: 13, intelligence: 14, cha: 10,
             bab: 2,             // Rogue BAB = floor(level * 3/4)
             armorBonus: 2,      // Leather armor
@@ -200,6 +202,7 @@ public class GameManager : MonoBehaviour
         CharacterStats npcStats = new CharacterStats(
             name: "Goblin Warchief",
             level: 2,
+            characterClass: "Warrior",
             str: 14, dex: 15, con: 13, wis: 10, intelligence: 10, cha: 8,
             bab: 2,             // Warrior BAB
             armorBonus: 3,      // Studded leather
@@ -329,13 +332,29 @@ public class GameManager : MonoBehaviour
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
 
+        // Determine the other PC for flanking checks
+        CharacterController otherPC = (pc == PC1) ? PC2 : PC1;
+
         List<HexCell> rangeCells = Grid.GetCellsInRange(pc.GridPosition, pc.Stats.AttackRange);
         bool hasTarget = false;
+        bool anyFlanking = false;
         foreach (var cell in rangeCells)
         {
             if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead)
             {
-                cell.SetHighlight(HighlightType.Attack);
+                // Check if flanking this target
+                bool flanking = !otherPC.Stats.IsDead &&
+                    CombatUtils.IsFlanking(pc.GridPosition, otherPC.GridPosition, cell.Occupant.GridPosition);
+
+                if (flanking)
+                {
+                    cell.SetHighlight(HighlightType.Flanking);
+                    anyFlanking = true;
+                }
+                else
+                {
+                    cell.SetHighlight(HighlightType.Attack);
+                }
                 _highlightedCells.Add(cell);
                 hasTarget = true;
             }
@@ -343,7 +362,8 @@ public class GameManager : MonoBehaviour
 
         if (hasTarget)
         {
-            CombatUI.SetTurnIndicator("Click an enemy to attack!");
+            string flankMsg = anyFlanking ? " (FLANKING available! +2 to hit)" : "";
+            CombatUI.SetTurnIndicator($"Click an enemy to attack!{flankMsg}");
         }
         else
         {
@@ -430,7 +450,17 @@ public class GameManager : MonoBehaviour
 
     private void PerformPlayerAttack(CharacterController attacker, CharacterController target)
     {
-        CombatResult result = attacker.Attack(target);
+        // Check for flanking: see if the other PC is on the opposite side of the target
+        var allies = new System.Collections.Generic.List<CharacterController>();
+        if (attacker == PC1) allies.Add(PC2);
+        else if (attacker == PC2) allies.Add(PC1);
+
+        CharacterController flankPartner;
+        bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allies, out flankPartner);
+        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+        string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
+
+        CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName);
         _lastCombatLog = result.GetSummary();
         CombatUI.ShowCombatLog(_lastCombatLog);
         CombatUI.UpdateAllStats(PC1, PC2, NPC);

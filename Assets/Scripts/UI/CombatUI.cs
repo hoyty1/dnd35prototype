@@ -76,7 +76,7 @@ public class CombatUI : MonoBehaviour
 
         if (nameText != null)
         {
-            nameText.text = $"{s.CharacterName} (Lv {s.Level})";
+            nameText.text = $"{s.CharacterName} (Lv {s.Level} {s.CharacterClass})";
             if (s.IsDead) nameText.text += " (DEAD)";
         }
 

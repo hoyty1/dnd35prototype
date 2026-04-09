@@ -10,6 +10,10 @@ public class CharacterStats
     // ========== IDENTITY ==========
     public string CharacterName;
     public int Level;
+    public string CharacterClass; // e.g., "Fighter", "Rogue", "Warrior"
+
+    /// <summary>Whether this character is a Rogue (eligible for sneak attack).</summary>
+    public bool IsRogue => CharacterClass == "Rogue";
 
     // ========== CORE ABILITY SCORES (D&D 3.5) ==========
     public int STR; // Strength
@@ -68,6 +72,7 @@ public class CharacterStats
     /// </summary>
     /// <param name="name">Character name</param>
     /// <param name="level">Character level</param>
+    /// <param name="characterClass">Character class (e.g., "Fighter", "Rogue")</param>
     /// <param name="str">Strength score</param>
     /// <param name="dex">Dexterity score</param>
     /// <param name="con">Constitution score</param>
@@ -83,7 +88,7 @@ public class CharacterStats
     /// <param name="baseSpeed">Movement range in hexes</param>
     /// <param name="atkRange">Attack range in hexes</param>
     /// <param name="baseHitDieHP">Base HP from hit dice (before CON)</param>
-    public CharacterStats(string name, int level,
+    public CharacterStats(string name, int level, string characterClass,
         int str, int dex, int con, int wis, int intelligence, int cha,
         int bab, int armorBonus, int shieldBonus,
         int damageDice, int damageCount, int bonusDamage,
@@ -91,6 +96,7 @@ public class CharacterStats
     {
         CharacterName = name;
         Level = level;
+        CharacterClass = characterClass;
         STR = str;
         DEX = dex;
         CON = con;
@@ -126,6 +132,22 @@ public class CharacterStats
         int total = roll + AttackBonus;
 
         // Natural 20 always hits, natural 1 always misses
+        bool hit;
+        if (roll == 20) hit = true;
+        else if (roll == 1) hit = false;
+        else hit = total >= targetAC;
+
+        return (hit, roll, total);
+    }
+
+    /// <summary>
+    /// Roll a d20 + total attack bonus + flanking bonus vs target AC.
+    /// </summary>
+    public (bool hit, int roll, int total) RollToHitWithFlanking(int targetAC, int flankingBonus)
+    {
+        int roll = Random.Range(1, 21);
+        int total = roll + AttackBonus + flankingBonus;
+
         bool hit;
         if (roll == 20) hit = true;
         else if (roll == 1) hit = false;
