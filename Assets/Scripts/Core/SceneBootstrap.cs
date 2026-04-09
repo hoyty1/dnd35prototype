@@ -416,6 +416,15 @@ public class SceneBootstrap : MonoBehaviour
         gm.NPC = npc;
         gm.CombatUI = combatUI;
 
+        // Create Inventory UI on the canvas
+        Canvas canvas = combatUI.GetComponent<Canvas>();
+        if (canvas != null)
+        {
+            InventoryUI invUI = canvas.gameObject.AddComponent<InventoryUI>();
+            invUI.BuildUI(canvas);
+            gm.InventoryUI = invUI;
+        }
+
         // Wire up button events (deferred to next frame so GameManager.Instance is set)
         StartCoroutine(WireButtons(combatUI));
     }

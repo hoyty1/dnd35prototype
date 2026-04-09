@@ -24,6 +24,7 @@ public class GameManager : MonoBehaviour
 
     [Header("UI")]
     public CombatUI CombatUI;
+    public InventoryUI InventoryUI;
 
     // Game state
     public enum TurnPhase { PC1Move, PC1Action, PC2Move, PC2Action, NPCTurn, CombatOver }
@@ -79,11 +80,18 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Detect hex clicks via Physics2D raycasting every frame.
+    /// Also handles "I" key for inventory toggle.
     /// </summary>
     private void Update()
     {
+        // Handle inventory toggle with "I" key
+        HandleInventoryInput();
+
         // Only process clicks during player phases
         if (!IsPlayerTurn) return;
+
+        // Don't process hex clicks when inventory is open
+        if (InventoryUI != null && InventoryUI.IsOpen) return;
 
         bool clicked = false;
         Vector3 mouseScreenPos = Vector3.zero;
@@ -130,6 +138,44 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private void HandleInventoryInput()
+    {
+        bool iPressed = false;
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetKeyDown(KeyCode.I))
+            iPressed = true;
+#endif
+
+#if ENABLE_INPUT_SYSTEM
+        if (!iPressed)
+        {
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (keyboard != null && keyboard.iKey.wasPressedThisFrame)
+                iPressed = true;
+        }
+#endif
+
+        if (iPressed && InventoryUI != null)
+        {
+            if (InventoryUI.IsOpen)
+            {
+                InventoryUI.Close();
+            }
+            else if (IsPlayerTurn && ActivePC != null)
+            {
+                InventoryUI.Toggle(ActivePC);
+            }
+        }
+    }
+
+    /// <summary>Close inventory if open (called on turn transitions).</summary>
+    private void CloseInventoryIfOpen()
+    {
+        if (InventoryUI != null && InventoryUI.IsOpen)
+            InventoryUI.Close();
+    }
+
     private void SetupCharacters()
     {
         // ==========================================
@@ -161,6 +207,11 @@ public class GameManager : MonoBehaviour
         Vector2Int pc1Start = new Vector2Int(3, 8);
         PC1.Init(pc1Stats, pc1Start, pcAlive, pcDead);
 
+        // Setup inventory for PC1
+        var pc1Inv = PC1.gameObject.AddComponent<InventoryComponent>();
+        pc1Inv.Init(pc1Stats);
+        pc1Inv.SetupAldric();
+
         // ==========================================
         // PC2: "Lyra" - Elf Rogue (Level 3)
         // High DEX, decent INT — nimble striker
@@ -186,6 +237,11 @@ public class GameManager : MonoBehaviour
 
         Vector2Int pc2Start = new Vector2Int(3, 12);
         PC2.Init(pc2Stats, pc2Start, pcAlive, pcDead);
+
+        // Setup inventory for PC2
+        var pc2Inv = PC2.gameObject.AddComponent<InventoryComponent>();
+        pc2Inv.Init(pc2Stats);
+        pc2Inv.SetupLyra();
 
         // Apply a blue tint to PC2 so the two heroes are visually distinct
         SpriteRenderer pc2SR = PC2.GetComponent<SpriteRenderer>();
@@ -260,6 +316,9 @@ public class GameManager : MonoBehaviour
     {
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
+        // Close inventory on turn switch
+        CloseInventoryIfOpen();
+
         // If this PC is dead, advance to the next phase
         if (pc.Stats.IsDead)
         {
@@ -275,7 +334,7 @@ public class GameManager : MonoBehaviour
             CurrentPhase = TurnPhase.PC2Move;
 
         string pcLabel = (pc == PC1) ? "Hero 1" : "Hero 2";
-        CombatUI.SetTurnIndicator($"{pcLabel}'s Turn - Click a highlighted tile to move");
+        CombatUI.SetTurnIndicator($"{pcLabel}'s Turn - Click a highlighted tile to move  [I] Inventory");
         CombatUI.SetActionButtonsVisible(false);
         CombatUI.SetActivePC(pc == PC1 ? 1 : 2);
         _waitingForAttackTarget = false;
