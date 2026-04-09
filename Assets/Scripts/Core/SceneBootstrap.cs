@@ -462,6 +462,18 @@ public class SceneBootstrap : MonoBehaviour
             gm.InventoryUI = invUI;
         }
 
+        // Create Character Creation UI on the canvas
+        if (canvas != null)
+        {
+            // Initialize race database early for character creation
+            RaceDatabase.Init();
+            ItemDatabase.Init();
+
+            CharacterCreationUI ccUI = canvas.gameObject.AddComponent<CharacterCreationUI>();
+            ccUI.BuildUI(canvas);
+            gm.CharacterCreationUI = ccUI;
+        }
+
         // Wire up button events (deferred to next frame so GameManager.Instance is set)
         StartCoroutine(WireButtons(combatUI));
     }

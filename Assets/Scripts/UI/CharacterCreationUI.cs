@@ -1,0 +1,1033 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+/// <summary>
+/// Complete character creation UI for D&D 3.5.
+/// 5-step flow: Roll Stats → Assign Stats → Choose Race → Choose Class → Review.
+/// Creates 2 PCs before starting the game.
+/// </summary>
+public class CharacterCreationUI : MonoBehaviour
+{
+    // ========== STATE ==========
+    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, Review }
+
+    public Step CurrentStep = Step.RollStats;
+    public int CurrentCharacterIndex = 0; // 0 = PC1, 1 = PC2
+    public CharacterCreationData[] CreatedCharacters = new CharacterCreationData[2];
+    public bool IsComplete { get; private set; }
+
+    // Callback when both characters are created
+    public System.Action<CharacterCreationData, CharacterCreationData> OnCreationComplete;
+
+    // ========== UI REFERENCES ==========
+    private GameObject _rootPanel;
+    private Text _titleText;
+    private Text _stepText;
+    private GameObject _contentArea;
+    private Button _backButton;
+    private Button _quickStartButton;
+
+    // Step 1: Roll Stats
+    private Text _rollDetailsText;
+    private Text _rollResultsText;
+    private Button _rollButton;
+    private Button _rerollButton;
+    private Button _acceptStatsButton;
+    private int[] _currentRolls;
+    private int[][] _currentRollDetails; // 4 dice per roll
+
+    // Step 2: Assign Stats
+    private int[] _assignedValues; // index 0-5 = STR,DEX,CON,INT,WIS,CHA; value = rolled value or -1
+    private int _selectedRollIndex = -1; // which rolled value is selected
+    private Button[] _statSlotButtons;
+    private Button[] _rollValueButtons;
+    private Text _assignPreviewText;
+    private Button _confirmAssignButton;
+    private Text[] _statSlotTexts;
+    private Text[] _rollValueTexts;
+    private bool[] _rollUsed;
+
+    // Step 3: Choose Race
+    private string _selectedRace = null;
+    private Button[] _raceButtons;
+    private Text _raceInfoText;
+    private Text _racePreviewText;
+    private Button _confirmRaceButton;
+
+    // Step 4: Choose Class
+    private string _selectedClass = null;
+    private Button[] _classButtons;
+    private Text _classInfoText;
+    private Button _confirmClassButton;
+
+    // Step 5: Review
+    private Text _reviewText;
+    private InputField _nameInput;
+    private Button _createButton;
+
+    // UI Layout constants
+    private Font _font;
+    private const float PANEL_W = 900f;
+    private const float PANEL_H = 680f;
+
+    // ========== RACE/CLASS DATA ==========
+    private static readonly string[] RaceNames = { "Dwarf", "Elf", "Gnome", "Half-Elf", "Half-Orc", "Halfling", "Human" };
+    private static readonly string[] ClassNames = { "Fighter", "Rogue" };
+
+    // ========== INITIALIZATION ==========
+
+    public void BuildUI(Canvas canvas)
+    {
+        _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (_font == null) _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (_font == null) _font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        CreatedCharacters[0] = new CharacterCreationData();
+        CreatedCharacters[1] = new CharacterCreationData();
+
+        // Root panel - dark overlay covering entire screen
+        GameObject overlay = CreatePanel(canvas.transform, "CCOverlay",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, new Color(0, 0, 0, 0.85f));
+        RectTransform overlayRT = overlay.GetComponent<RectTransform>();
+        overlayRT.offsetMin = Vector2.zero;
+        overlayRT.offsetMax = Vector2.zero;
+
+        // Main panel
+        _rootPanel = CreatePanel(overlay.transform, "CCPanel",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(PANEL_W, PANEL_H), new Color(0.12f, 0.12f, 0.18f, 0.98f));
+
+        // Title
+        _titleText = MakeText(_rootPanel.transform, "Title",
+            new Vector2(0, PANEL_H / 2 - 30), new Vector2(PANEL_W - 40, 40),
+            "CHARACTER CREATION - Hero 1", 28, Color.white, TextAnchor.MiddleCenter);
+
+        // Step indicator
+        _stepText = MakeText(_rootPanel.transform, "StepIndicator",
+            new Vector2(0, PANEL_H / 2 - 60), new Vector2(PANEL_W - 40, 25),
+            "Step 1 of 5: Roll Stats", 16, new Color(0.7f, 0.8f, 1f), TextAnchor.MiddleCenter);
+
+        // Content area
+        _contentArea = CreatePanel(_rootPanel.transform, "ContentArea",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0, -20), new Vector2(PANEL_W - 40, PANEL_H - 130),
+            new Color(0, 0, 0, 0));
+
+        // Back button (bottom left)
+        _backButton = MakeButton(_rootPanel.transform, "BackBtn",
+            new Vector2(-PANEL_W / 2 + 80, -PANEL_H / 2 + 30), new Vector2(120, 36),
+            "← Back", new Color(0.4f, 0.4f, 0.4f), Color.white, 16);
+        _backButton.onClick.AddListener(OnBackPressed);
+
+        // Quick Start button (bottom right)
+        _quickStartButton = MakeButton(_rootPanel.transform, "QuickStartBtn",
+            new Vector2(PANEL_W / 2 - 100, -PANEL_H / 2 + 30), new Vector2(160, 36),
+            "⚡ Quick Start", new Color(0.5f, 0.35f, 0.1f), Color.white, 16);
+        _quickStartButton.onClick.AddListener(OnQuickStart);
+
+        BuildStepRollStats();
+        BuildStepAssignStats();
+        BuildStepChooseRace();
+        BuildStepChooseClass();
+        BuildStepReview();
+
+        ShowStep(Step.RollStats);
+    }
+
+    // ========== STEP 1: ROLL STATS ==========
+
+    private GameObject _step1Panel;
+
+    private void BuildStepRollStats()
+    {
+        _step1Panel = CreatePanel(_contentArea.transform, "Step1",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(PANEL_W - 60, PANEL_H - 150),
+            new Color(0, 0, 0, 0));
+
+        // Tooltip explaining the system
+        MakeText(_step1Panel.transform, "RollTooltip",
+            new Vector2(0, 200), new Vector2(700, 50),
+            "Roll 4d6 six times, dropping the lowest die each time.\nThese 6 numbers become your ability scores to assign in the next step.",
+            14, new Color(0.7f, 0.7f, 0.7f), TextAnchor.MiddleCenter);
+
+        // Roll details (shows each die)
+        _rollDetailsText = MakeText(_step1Panel.transform, "RollDetails",
+            new Vector2(0, 80), new Vector2(700, 180),
+            "(Click 'Roll Stats' to begin)", 16, new Color(0.9f, 0.9f, 0.7f), TextAnchor.MiddleCenter);
+
+        // Results summary
+        _rollResultsText = MakeText(_step1Panel.transform, "RollResults",
+            new Vector2(0, -60), new Vector2(700, 40),
+            "", 22, Color.white, TextAnchor.MiddleCenter);
+
+        // Buttons
+        _rollButton = MakeButton(_step1Panel.transform, "RollBtn",
+            new Vector2(-130, -130), new Vector2(200, 45),
+            "🎲 Roll Stats", new Color(0.2f, 0.5f, 0.8f), Color.white, 20);
+        _rollButton.onClick.AddListener(DoRollStats);
+
+        _rerollButton = MakeButton(_step1Panel.transform, "RerollBtn",
+            new Vector2(-130, -130), new Vector2(200, 45),
+            "🎲 Re-Roll", new Color(0.6f, 0.4f, 0.1f), Color.white, 20);
+        _rerollButton.onClick.AddListener(DoRollStats);
+        _rerollButton.gameObject.SetActive(false);
+
+        _acceptStatsButton = MakeButton(_step1Panel.transform, "AcceptBtn",
+            new Vector2(130, -130), new Vector2(200, 45),
+            "Accept These Stats ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 18);
+        _acceptStatsButton.onClick.AddListener(OnAcceptStats);
+        _acceptStatsButton.gameObject.SetActive(false);
+    }
+
+    private void DoRollStats()
+    {
+        _currentRolls = new int[6];
+        _currentRollDetails = new int[6][];
+        string details = "";
+
+        for (int i = 0; i < 6; i++)
+        {
+            int[] dice = new int[4];
+            for (int d = 0; d < 4; d++)
+                dice[d] = UnityEngine.Random.Range(1, 7);
+
+            // Sort descending to find lowest
+            System.Array.Sort(dice);
+            System.Array.Reverse(dice);
+
+            int dropped = dice[3]; // lowest after sort
+            int result = dice[0] + dice[1] + dice[2];
+            _currentRolls[i] = result;
+            _currentRollDetails[i] = dice;
+
+            details += $"Roll {i + 1}: {dice[0]}, {dice[1]}, {dice[2]}, <color=#666666>{dropped}</color>  →  <color=#FFDD44><b>{result}</b></color>\n";
+        }
+
+        _rollDetailsText.text = details;
+
+        // Sort for display
+        int[] sorted = (int[])_currentRolls.Clone();
+        System.Array.Sort(sorted);
+        System.Array.Reverse(sorted);
+        int total = 0;
+        foreach (int v in sorted) total += v;
+        _rollResultsText.text = $"Your stats: {string.Join(", ", sorted)}  (Total: {total})";
+
+        _rollButton.gameObject.SetActive(false);
+        _rerollButton.gameObject.SetActive(true);
+        _acceptStatsButton.gameObject.SetActive(true);
+    }
+
+    private void OnAcceptStats()
+    {
+        if (_currentRolls == null) return;
+        CreatedCharacters[CurrentCharacterIndex].RolledStats = (int[])_currentRolls.Clone();
+        ShowStep(Step.AssignStats);
+    }
+
+    // ========== STEP 2: ASSIGN STATS ==========
+
+    private GameObject _step2Panel;
+    private static readonly string[] AbilityNames = { "STR", "DEX", "CON", "INT", "WIS", "CHA" };
+    private static readonly string[] AbilityDescriptions = {
+        "Melee attack & damage",
+        "AC, ranged attack, initiative",
+        "Hit points per level",
+        "Skill points (future)",
+        "Will saves, perception",
+        "Social skills, spellcasting"
+    };
+
+    private void BuildStepAssignStats()
+    {
+        _step2Panel = CreatePanel(_contentArea.transform, "Step2",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(PANEL_W - 60, PANEL_H - 150),
+            new Color(0, 0, 0, 0));
+
+        MakeText(_step2Panel.transform, "AssignTooltip",
+            new Vector2(0, 220), new Vector2(700, 40),
+            "Click a rolled value, then click an ability slot to assign it. Each value can only be used once.",
+            13, new Color(0.7f, 0.7f, 0.7f), TextAnchor.MiddleCenter);
+
+        // Rolled values row
+        MakeText(_step2Panel.transform, "RolledLabel",
+            new Vector2(0, 185), new Vector2(700, 25),
+            "Rolled Values:", 15, new Color(0.8f, 0.8f, 0.6f), TextAnchor.MiddleCenter);
+
+        _rollValueButtons = new Button[6];
+        _rollValueTexts = new Text[6];
+        _rollUsed = new bool[6];
+
+        float startX = -250f;
+        for (int i = 0; i < 6; i++)
+        {
+            int idx = i;
+            float x = startX + i * 90;
+            _rollValueButtons[i] = MakeButton(_step2Panel.transform, $"RollVal{i}",
+                new Vector2(x, 150), new Vector2(78, 42),
+                "?", new Color(0.3f, 0.3f, 0.5f), Color.white, 20);
+            _rollValueTexts[i] = _rollValueButtons[i].GetComponentInChildren<Text>();
+            _rollValueButtons[i].onClick.AddListener(() => OnRollValueClicked(idx));
+        }
+
+        // Ability slots (2 columns of 3)
+        _statSlotButtons = new Button[6];
+        _statSlotTexts = new Text[6];
+        _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
+
+        for (int i = 0; i < 6; i++)
+        {
+            int idx = i;
+            int col = i / 3;
+            int row = i % 3;
+            float x = -180 + col * 360;
+            float y = 70 - row * 70;
+
+            // Ability name label
+            MakeText(_step2Panel.transform, $"AbilLabel{i}",
+                new Vector2(x - 100, y), new Vector2(90, 30),
+                AbilityNames[i], 18, new Color(0.9f, 0.8f, 0.4f), TextAnchor.MiddleRight);
+
+            // Slot button
+            _statSlotButtons[i] = MakeButton(_step2Panel.transform, $"StatSlot{i}",
+                new Vector2(x, y), new Vector2(70, 42),
+                "---", new Color(0.2f, 0.2f, 0.3f), Color.white, 20);
+            _statSlotTexts[i] = _statSlotButtons[i].GetComponentInChildren<Text>();
+            _statSlotButtons[i].onClick.AddListener(() => OnStatSlotClicked(idx));
+
+            // Description
+            MakeText(_step2Panel.transform, $"AbilDesc{i}",
+                new Vector2(x + 110, y), new Vector2(150, 25),
+                AbilityDescriptions[i], 11, new Color(0.6f, 0.6f, 0.6f), TextAnchor.MiddleLeft);
+        }
+
+        // Preview text
+        _assignPreviewText = MakeText(_step2Panel.transform, "AssignPreview",
+            new Vector2(0, -120), new Vector2(700, 40),
+            "", 14, new Color(0.7f, 0.9f, 0.7f), TextAnchor.MiddleCenter);
+
+        // Confirm button
+        _confirmAssignButton = MakeButton(_step2Panel.transform, "ConfirmAssign",
+            new Vector2(0, -170), new Vector2(220, 45),
+            "Confirm Assignment ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 18);
+        _confirmAssignButton.onClick.AddListener(OnConfirmAssignment);
+    }
+
+    private void RefreshAssignUI()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+
+        // Update roll value buttons
+        for (int i = 0; i < 6; i++)
+        {
+            int val = data.RolledStats[i];
+            _rollValueTexts[i].text = _rollUsed[i] ? "-" : val.ToString();
+
+            var colors = _rollValueButtons[i].colors;
+            if (_rollUsed[i])
+                colors.normalColor = new Color(0.2f, 0.2f, 0.2f);
+            else if (i == _selectedRollIndex)
+                colors.normalColor = new Color(0.5f, 0.5f, 0.1f);
+            else
+                colors.normalColor = new Color(0.3f, 0.3f, 0.5f);
+            colors.highlightedColor = colors.normalColor * 1.2f;
+            _rollValueButtons[i].colors = colors;
+        }
+
+        // Update stat slot buttons
+        for (int i = 0; i < 6; i++)
+        {
+            if (_assignedValues[i] >= 0)
+            {
+                int mod = CharacterStats.GetModifier(_assignedValues[i]);
+                string modStr = mod >= 0 ? $"+{mod}" : $"{mod}";
+                _statSlotTexts[i].text = $"{_assignedValues[i]}";
+                var c = _statSlotButtons[i].colors;
+                c.normalColor = new Color(0.15f, 0.35f, 0.15f);
+                c.highlightedColor = c.normalColor * 1.2f;
+                _statSlotButtons[i].colors = c;
+            }
+            else
+            {
+                _statSlotTexts[i].text = "---";
+                var c = _statSlotButtons[i].colors;
+                c.normalColor = new Color(0.2f, 0.2f, 0.3f);
+                c.highlightedColor = c.normalColor * 1.2f;
+                _statSlotButtons[i].colors = c;
+            }
+        }
+
+        // Update preview
+        bool allAssigned = true;
+        string preview = "";
+        for (int i = 0; i < 6; i++)
+        {
+            if (_assignedValues[i] < 0) { allAssigned = false; continue; }
+            int mod = CharacterStats.GetModifier(_assignedValues[i]);
+            string modStr = mod >= 0 ? $"+{mod}" : $"{mod}";
+            preview += $"{AbilityNames[i]}: {_assignedValues[i]} ({modStr})  ";
+        }
+        _assignPreviewText.text = allAssigned ? preview : $"Assign all 6 values. {preview}";
+        _confirmAssignButton.interactable = allAssigned;
+    }
+
+    private void OnRollValueClicked(int index)
+    {
+        if (_rollUsed[index]) return;
+        _selectedRollIndex = index;
+        RefreshAssignUI();
+    }
+
+    private void OnStatSlotClicked(int abilityIndex)
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+
+        // If clicking an already-assigned slot, un-assign it
+        if (_assignedValues[abilityIndex] >= 0)
+        {
+            // Find the roll index that was used for this slot and free it
+            int val = _assignedValues[abilityIndex];
+            for (int i = 0; i < 6; i++)
+            {
+                if (_rollUsed[i] && data.RolledStats[i] == val)
+                {
+                    _rollUsed[i] = false;
+                    break;
+                }
+            }
+            _assignedValues[abilityIndex] = -1;
+            RefreshAssignUI();
+            return;
+        }
+
+        // Assign selected roll value to this ability
+        if (_selectedRollIndex < 0 || _rollUsed[_selectedRollIndex]) return;
+
+        _assignedValues[abilityIndex] = data.RolledStats[_selectedRollIndex];
+        _rollUsed[_selectedRollIndex] = true;
+        _selectedRollIndex = -1;
+        RefreshAssignUI();
+    }
+
+    private void OnConfirmAssignment()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        data.STR = _assignedValues[0];
+        data.DEX = _assignedValues[1];
+        data.CON = _assignedValues[2];
+        data.INT = _assignedValues[3];
+        data.WIS = _assignedValues[4];
+        data.CHA = _assignedValues[5];
+        ShowStep(Step.ChooseRace);
+    }
+
+    // ========== STEP 3: CHOOSE RACE ==========
+
+    private GameObject _step3Panel;
+
+    private void BuildStepChooseRace()
+    {
+        _step3Panel = CreatePanel(_contentArea.transform, "Step3",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(PANEL_W - 60, PANEL_H - 150),
+            new Color(0, 0, 0, 0));
+
+        MakeText(_step3Panel.transform, "RaceTooltip",
+            new Vector2(0, 225), new Vector2(700, 25),
+            "Select a race. Racial modifiers will be applied to your assigned ability scores.",
+            13, new Color(0.7f, 0.7f, 0.7f), TextAnchor.MiddleCenter);
+
+        // Race buttons (in a row + second row)
+        _raceButtons = new Button[RaceNames.Length];
+        for (int i = 0; i < RaceNames.Length; i++)
+        {
+            int idx = i;
+            int row = i / 4;
+            int col = i % 4;
+            float x = -250 + col * 170;
+            float y = 180 - row * 50;
+            _raceButtons[i] = MakeButton(_step3Panel.transform, $"Race{i}",
+                new Vector2(x, y), new Vector2(155, 40),
+                RaceNames[i], new Color(0.25f, 0.25f, 0.4f), Color.white, 16);
+            _raceButtons[i].onClick.AddListener(() => OnRaceSelected(idx));
+        }
+
+        // Race info text (scrollable area approximated with large text)
+        _raceInfoText = MakeText(_step3Panel.transform, "RaceInfo",
+            new Vector2(-180, -10), new Vector2(380, 260),
+            "Select a race to see details.", 13, new Color(0.85f, 0.85f, 0.8f), TextAnchor.UpperLeft);
+
+        // Preview with stats
+        _racePreviewText = MakeText(_step3Panel.transform, "RacePreview",
+            new Vector2(210, -10), new Vector2(350, 260),
+            "", 13, new Color(0.7f, 0.9f, 0.7f), TextAnchor.UpperLeft);
+
+        // Confirm race button
+        _confirmRaceButton = MakeButton(_step3Panel.transform, "ConfirmRace",
+            new Vector2(0, -190), new Vector2(200, 42),
+            "Confirm Race ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 18);
+        _confirmRaceButton.onClick.AddListener(OnConfirmRace);
+        _confirmRaceButton.interactable = false;
+    }
+
+    private void OnRaceSelected(int index)
+    {
+        _selectedRace = RaceNames[index];
+        RaceDatabase.Init();
+        RaceData race = RaceDatabase.GetRace(_selectedRace);
+
+        // Highlight selected button
+        for (int i = 0; i < _raceButtons.Length; i++)
+        {
+            var c = _raceButtons[i].colors;
+            c.normalColor = (i == index) ? new Color(0.4f, 0.4f, 0.15f) : new Color(0.25f, 0.25f, 0.4f);
+            c.highlightedColor = c.normalColor * 1.2f;
+            _raceButtons[i].colors = c;
+        }
+
+        // Show race details
+        if (race != null)
+        {
+            _raceInfoText.text = race.GetFeatureSummary();
+            _confirmRaceButton.interactable = true;
+
+            // Show stat preview with racial mods
+            var data = CreatedCharacters[CurrentCharacterIndex];
+            string preview = "--- Stats with Racial Modifiers ---\n\n";
+            preview += FormatStatPreview("STR", data.STR, race.STRModifier);
+            preview += FormatStatPreview("DEX", data.DEX, race.DEXModifier);
+            preview += FormatStatPreview("CON", data.CON, race.CONModifier);
+            preview += FormatStatPreview("INT", data.INT, race.INTModifier);
+            preview += FormatStatPreview("WIS", data.WIS, race.WISModifier);
+            preview += FormatStatPreview("CHA", data.CHA, race.CHAModifier);
+
+            int finalCon = data.CON + race.CONModifier;
+            int conMod = CharacterStats.GetModifier(finalCon);
+            preview += $"\nSize: {race.SizeName}";
+            preview += $"\nSpeed: {race.BaseSpeedFeet} ft ({race.BaseSpeedHexes} hexes)";
+            if (race.SizeACAndAttackModifier != 0)
+                preview += $"\nSize bonus: {CharacterStats.FormatMod(race.SizeACAndAttackModifier)} AC/Attack";
+
+            _racePreviewText.text = preview;
+        }
+    }
+
+    private string FormatStatPreview(string name, int baseVal, int raceMod)
+    {
+        int final_ = baseVal + raceMod;
+        int mod = CharacterStats.GetModifier(final_);
+        string modStr = mod >= 0 ? $"+{mod}" : $"{mod}";
+        string raceNote = raceMod != 0 ? $" <color={(raceMod > 0 ? "#44FF44" : "#FF4444")}>{(raceMod > 0 ? "+" : "")}{raceMod}</color>" : "";
+        return $"{name}: {baseVal}{raceNote} = {final_} ({modStr})\n";
+    }
+
+    private void OnConfirmRace()
+    {
+        if (_selectedRace == null) return;
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        data.RaceName = _selectedRace;
+        data.Race = RaceDatabase.GetRace(_selectedRace);
+        ShowStep(Step.ChooseClass);
+    }
+
+    // ========== STEP 4: CHOOSE CLASS ==========
+
+    private GameObject _step4Panel;
+
+    private void BuildStepChooseClass()
+    {
+        _step4Panel = CreatePanel(_contentArea.transform, "Step4",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(PANEL_W - 60, PANEL_H - 150),
+            new Color(0, 0, 0, 0));
+
+        MakeText(_step4Panel.transform, "ClassTooltip",
+            new Vector2(0, 225), new Vector2(700, 25),
+            "Select a class. Your class determines hit points, combat abilities, and starting equipment.",
+            13, new Color(0.7f, 0.7f, 0.7f), TextAnchor.MiddleCenter);
+
+        // Fighter panel
+        float leftX = -210f;
+        CreatePanel(_step4Panel.transform, "FighterBG",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(leftX, 40), new Vector2(360, 330),
+            new Color(0.15f, 0.15f, 0.25f, 0.8f));
+
+        MakeText(_step4Panel.transform, "FighterTitle",
+            new Vector2(leftX, 185), new Vector2(340, 30),
+            "FIGHTER", 22, new Color(0.9f, 0.6f, 0.3f), TextAnchor.MiddleCenter);
+
+        MakeText(_step4Panel.transform, "FighterInfo",
+            new Vector2(leftX, 50), new Vector2(330, 230),
+            "Hit Die: d10\n" +
+            "BAB: +3 at level 3 (full)\n" +
+            "Good Saves: Fortitude\n\n" +
+            "Key Features:\n" +
+            "• Proficient with all simple/martial\n  weapons, all armor, and shields\n" +
+            "• Bonus combat feats\n" +
+            "• Highest hit points\n\n" +
+            "Starting Equipment:\n" +
+            "• Scale Mail (+4 AC)\n" +
+            "• Heavy Wooden Shield (+2 AC)\n" +
+            "• Longsword (1d8, 19-20/x2)\n" +
+            "• Shortbow + 20 arrows",
+            12, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
+
+        // Rogue panel
+        float rightX = 210f;
+        CreatePanel(_step4Panel.transform, "RogueBG",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(rightX, 40), new Vector2(360, 330),
+            new Color(0.15f, 0.15f, 0.25f, 0.8f));
+
+        MakeText(_step4Panel.transform, "RogueTitle",
+            new Vector2(rightX, 185), new Vector2(340, 30),
+            "ROGUE", 22, new Color(0.5f, 0.8f, 0.5f), TextAnchor.MiddleCenter);
+
+        MakeText(_step4Panel.transform, "RogueInfo",
+            new Vector2(rightX, 50), new Vector2(330, 230),
+            "Hit Die: d6\n" +
+            "BAB: +2 at level 3 (3/4)\n" +
+            "Good Saves: Reflex\n\n" +
+            "Key Features:\n" +
+            "• Sneak Attack +2d6\n" +
+            "• Proficient with simple weapons,\n  rapier, shortbow, short sword\n" +
+            "• Light armor only\n\n" +
+            "Starting Equipment:\n" +
+            "• Leather Armor (+2 AC)\n" +
+            "• Rapier (1d6, 18-20/x2)\n" +
+            "• Shortbow + 20 arrows\n" +
+            "• Thieves' tools",
+            12, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
+
+        // Class selection buttons
+        _classButtons = new Button[2];
+        _classButtons[0] = MakeButton(_step4Panel.transform, "SelectFighter",
+            new Vector2(leftX, -155), new Vector2(200, 42),
+            "Select Fighter", new Color(0.5f, 0.3f, 0.15f), Color.white, 18);
+        _classButtons[0].onClick.AddListener(() => OnClassSelected(0));
+
+        _classButtons[1] = MakeButton(_step4Panel.transform, "SelectRogue",
+            new Vector2(rightX, -155), new Vector2(200, 42),
+            "Select Rogue", new Color(0.2f, 0.4f, 0.2f), Color.white, 18);
+        _classButtons[1].onClick.AddListener(() => OnClassSelected(1));
+
+        // Info text for selected class
+        _classInfoText = MakeText(_step4Panel.transform, "ClassInfo",
+            new Vector2(0, -210), new Vector2(700, 25),
+            "", 14, new Color(0.9f, 0.9f, 0.5f), TextAnchor.MiddleCenter);
+
+        // Confirm class button
+        _confirmClassButton = MakeButton(_step4Panel.transform, "ConfirmClass",
+            new Vector2(0, -240), new Vector2(200, 42),
+            "Confirm Class ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 18);
+        _confirmClassButton.onClick.AddListener(OnConfirmClass);
+        _confirmClassButton.interactable = false;
+    }
+
+    private void OnClassSelected(int index)
+    {
+        _selectedClass = ClassNames[index];
+
+        for (int i = 0; i < _classButtons.Length; i++)
+        {
+            var c = _classButtons[i].colors;
+            c.normalColor = (i == index) ? new Color(0.5f, 0.5f, 0.15f) : (i == 0 ? new Color(0.5f, 0.3f, 0.15f) : new Color(0.2f, 0.4f, 0.2f));
+            c.highlightedColor = c.normalColor * 1.2f;
+            _classButtons[i].colors = c;
+        }
+
+        _classInfoText.text = $"Selected: {_selectedClass}";
+        _confirmClassButton.interactable = true;
+    }
+
+    private void OnConfirmClass()
+    {
+        if (_selectedClass == null) return;
+        CreatedCharacters[CurrentCharacterIndex].ClassName = _selectedClass;
+        ShowStep(Step.Review);
+    }
+
+    // ========== STEP 5: REVIEW ==========
+
+    private GameObject _step5Panel;
+
+    private void BuildStepReview()
+    {
+        _step5Panel = CreatePanel(_contentArea.transform, "Step5",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(PANEL_W - 60, PANEL_H - 150),
+            new Color(0, 0, 0, 0));
+
+        // Name input
+        MakeText(_step5Panel.transform, "NameLabel",
+            new Vector2(-160, 220), new Vector2(120, 30),
+            "Character Name:", 16, Color.white, TextAnchor.MiddleRight);
+
+        GameObject inputGO = new GameObject("NameInput");
+        inputGO.transform.SetParent(_step5Panel.transform, false);
+        RectTransform inputRT = inputGO.AddComponent<RectTransform>();
+        inputRT.anchorMin = new Vector2(0.5f, 0.5f);
+        inputRT.anchorMax = new Vector2(0.5f, 0.5f);
+        inputRT.pivot = new Vector2(0.5f, 0.5f);
+        inputRT.anchoredPosition = new Vector2(60, 220);
+        inputRT.sizeDelta = new Vector2(280, 35);
+
+        Image inputBG = inputGO.AddComponent<Image>();
+        inputBG.color = new Color(0.2f, 0.2f, 0.25f);
+
+        _nameInput = inputGO.AddComponent<InputField>();
+        _nameInput.characterLimit = 20;
+
+        // Create child text for input
+        Text inputText = MakeText(inputGO.transform, "InputText",
+            Vector2.zero, new Vector2(270, 30),
+            "", 18, Color.white, TextAnchor.MiddleLeft);
+        RectTransform itRT = inputText.GetComponent<RectTransform>();
+        itRT.anchorMin = Vector2.zero;
+        itRT.anchorMax = Vector2.one;
+        itRT.offsetMin = new Vector2(8, 2);
+        itRT.offsetMax = new Vector2(-8, -2);
+        _nameInput.textComponent = inputText;
+
+        // Placeholder
+        Text placeholder = MakeText(inputGO.transform, "Placeholder",
+            Vector2.zero, new Vector2(270, 30),
+            "Enter name...", 18, new Color(0.5f, 0.5f, 0.5f), TextAnchor.MiddleLeft);
+        RectTransform phRT = placeholder.GetComponent<RectTransform>();
+        phRT.anchorMin = Vector2.zero;
+        phRT.anchorMax = Vector2.one;
+        phRT.offsetMin = new Vector2(8, 2);
+        phRT.offsetMax = new Vector2(-8, -2);
+        _nameInput.placeholder = placeholder;
+
+        // Review text
+        _reviewText = MakeText(_step5Panel.transform, "ReviewText",
+            new Vector2(0, -10), new Vector2(750, 360),
+            "", 14, new Color(0.9f, 0.9f, 0.85f), TextAnchor.UpperCenter);
+
+        // Create Character button
+        _createButton = MakeButton(_step5Panel.transform, "CreateBtn",
+            new Vector2(0, -220), new Vector2(260, 50),
+            "Create Character ✓", new Color(0.15f, 0.55f, 0.15f), Color.white, 22);
+        _createButton.onClick.AddListener(OnCreateCharacter);
+    }
+
+    private void RefreshReview()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        data.ComputeFinalStats();
+
+        // Compute AC and attack based on class equipment
+        int armorBonus = 0, shieldBonus = 0, weaponDie = 8;
+        string weaponName = "", armorName = "";
+        if (data.ClassName == "Fighter")
+        {
+            armorBonus = 4; shieldBonus = 2; weaponDie = 8;
+            armorName = "Scale Mail"; weaponName = "Longsword (1d8)";
+        }
+        else
+        {
+            armorBonus = 2; shieldBonus = 0; weaponDie = 6;
+            armorName = "Leather Armor"; weaponName = "Rapier (1d6)";
+        }
+
+        int dexMod = CharacterStats.GetModifier(data.FinalDEX);
+        int strMod = CharacterStats.GetModifier(data.FinalSTR);
+        int sizeMod = data.Race != null ? data.Race.SizeACAndAttackModifier : 0;
+
+        // Max Dex for armor
+        int maxDex = data.ClassName == "Fighter" ? 3 : 6; // Scale mail = 3, Leather = 6
+        int effectiveDex = dexMod > maxDex ? maxDex : dexMod;
+
+        int ac = 10 + effectiveDex + armorBonus + shieldBonus + sizeMod;
+        int attackBonus = data.BAB + strMod + sizeMod;
+
+        string sizeStr = data.Race != null && data.Race.SizeACAndAttackModifier != 0 ?
+            $" ({data.Race.SizeName}: {CharacterStats.FormatMod(sizeMod)} AC/Atk)" : "";
+
+        string review = $"══════════ CHARACTER SHEET ══════════\n\n";
+        review += $"Race: {data.RaceName}   Class: {data.ClassName}   Level: 3{sizeStr}\n\n";
+
+        review += "--- Ability Scores ---\n";
+        review += data.GetFinalStatString("STR", data.STR, data.Race != null ? data.Race.STRModifier : 0) + "\n";
+        review += data.GetFinalStatString("DEX", data.DEX, data.Race != null ? data.Race.DEXModifier : 0) + "\n";
+        review += data.GetFinalStatString("CON", data.CON, data.Race != null ? data.Race.CONModifier : 0) + "\n";
+        review += data.GetFinalStatString("INT", data.INT, data.Race != null ? data.Race.INTModifier : 0) + "\n";
+        review += data.GetFinalStatString("WIS", data.WIS, data.Race != null ? data.Race.WISModifier : 0) + "\n";
+        review += data.GetFinalStatString("CHA", data.CHA, data.Race != null ? data.Race.CHAModifier : 0) + "\n\n";
+
+        review += "--- Combat Stats ---\n";
+        review += $"HP: {data.HP}   (Hit Die: d{data.HitDie} + CON mod per level)\n";
+        review += $"AC: {ac}   (10 + {effectiveDex} DEX + {armorBonus} armor + {shieldBonus} shield{(sizeMod != 0 ? $" + {sizeMod} size" : "")})\n";
+        review += $"Attack: {CharacterStats.FormatMod(attackBonus)}   (BAB {CharacterStats.FormatMod(data.BAB)} + {CharacterStats.FormatMod(strMod)} STR{(sizeMod != 0 ? $" + {sizeMod} size" : "")})\n";
+        review += $"Speed: {(data.Race != null ? data.Race.BaseSpeedFeet : 30)} ft ({data.BaseSpeed} hexes)\n\n";
+
+        review += "--- Equipment ---\n";
+        review += $"Armor: {armorName}\n";
+        if (data.ClassName == "Fighter") review += "Shield: Heavy Wooden Shield\n";
+        review += $"Weapon: {weaponName}\n";
+        review += "Shortbow + 20 arrows\n";
+        if (data.ClassName == "Rogue") review += "Thieves' tools\n";
+        review += "Backpack, bedroll, waterskin, rations\n";
+
+        _reviewText.text = review;
+
+        // Default name
+        if (string.IsNullOrEmpty(_nameInput.text))
+        {
+            _nameInput.text = CurrentCharacterIndex == 0 ? "Aldric" : "Lyra";
+        }
+    }
+
+    private void OnCreateCharacter()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        data.CharacterName = string.IsNullOrEmpty(_nameInput.text) ?
+            (CurrentCharacterIndex == 0 ? "Hero 1" : "Hero 2") : _nameInput.text;
+        data.ComputeFinalStats();
+
+        Debug.Log($"[CharCreation] Created {data.CharacterName}: {data.RaceName} {data.ClassName} " +
+                  $"STR {data.FinalSTR} DEX {data.FinalDEX} CON {data.FinalCON} " +
+                  $"INT {data.FinalINT} WIS {data.FinalWIS} CHA {data.FinalCHA} HP {data.HP}");
+
+        if (CurrentCharacterIndex == 0)
+        {
+            // Move to PC2 creation
+            CurrentCharacterIndex = 1;
+            ResetForNewCharacter();
+            ShowStep(Step.RollStats);
+        }
+        else
+        {
+            // Both characters created - start game!
+            IsComplete = true;
+            _rootPanel.transform.parent.gameObject.SetActive(false);
+            OnCreationComplete?.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
+        }
+    }
+
+    // ========== NAVIGATION ==========
+
+    private void ShowStep(Step step)
+    {
+        CurrentStep = step;
+
+        // Hide all step panels
+        _step1Panel.SetActive(false);
+        _step2Panel.SetActive(false);
+        _step3Panel.SetActive(false);
+        _step4Panel.SetActive(false);
+        _step5Panel.SetActive(false);
+
+        string heroLabel = CurrentCharacterIndex == 0 ? "Hero 1" : "Hero 2";
+        _titleText.text = $"CHARACTER CREATION - {heroLabel}";
+        _backButton.gameObject.SetActive(step != Step.RollStats);
+
+        switch (step)
+        {
+            case Step.RollStats:
+                _step1Panel.SetActive(true);
+                _stepText.text = "Step 1 of 5: Roll Stats";
+                // Reset roll UI
+                if (_currentRolls == null)
+                {
+                    _rollButton.gameObject.SetActive(true);
+                    _rerollButton.gameObject.SetActive(false);
+                    _acceptStatsButton.gameObject.SetActive(false);
+                    _rollDetailsText.text = "(Click 'Roll Stats' to begin)";
+                    _rollResultsText.text = "";
+                }
+                break;
+
+            case Step.AssignStats:
+                _step2Panel.SetActive(true);
+                _stepText.text = "Step 2 of 5: Assign Stats";
+                // Reset assignment
+                _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
+                _rollUsed = new bool[6];
+                _selectedRollIndex = -1;
+                RefreshAssignUI();
+                break;
+
+            case Step.ChooseRace:
+                _step3Panel.SetActive(true);
+                _stepText.text = "Step 3 of 5: Choose Race";
+                _selectedRace = null;
+                _raceInfoText.text = "Select a race to see details.";
+                _racePreviewText.text = "";
+                _confirmRaceButton.interactable = false;
+                // Reset button colors
+                for (int i = 0; i < _raceButtons.Length; i++)
+                {
+                    var c = _raceButtons[i].colors;
+                    c.normalColor = new Color(0.25f, 0.25f, 0.4f);
+                    c.highlightedColor = c.normalColor * 1.2f;
+                    _raceButtons[i].colors = c;
+                }
+                break;
+
+            case Step.ChooseClass:
+                _step4Panel.SetActive(true);
+                _stepText.text = "Step 4 of 5: Choose Class";
+                _selectedClass = null;
+                _classInfoText.text = "";
+                _confirmClassButton.interactable = false;
+                for (int i = 0; i < _classButtons.Length; i++)
+                {
+                    var c = _classButtons[i].colors;
+                    c.normalColor = i == 0 ? new Color(0.5f, 0.3f, 0.15f) : new Color(0.2f, 0.4f, 0.2f);
+                    c.highlightedColor = c.normalColor * 1.2f;
+                    _classButtons[i].colors = c;
+                }
+                break;
+
+            case Step.Review:
+                _step5Panel.SetActive(true);
+                _stepText.text = "Step 5 of 5: Review & Name";
+                _nameInput.text = "";
+                RefreshReview();
+                break;
+        }
+    }
+
+    private void OnBackPressed()
+    {
+        switch (CurrentStep)
+        {
+            case Step.AssignStats: ShowStep(Step.RollStats); break;
+            case Step.ChooseRace: ShowStep(Step.AssignStats); break;
+            case Step.ChooseClass: ShowStep(Step.ChooseRace); break;
+            case Step.Review: ShowStep(Step.ChooseClass); break;
+        }
+    }
+
+    private void ResetForNewCharacter()
+    {
+        _currentRolls = null;
+        _currentRollDetails = null;
+        _selectedRace = null;
+        _selectedClass = null;
+        _selectedRollIndex = -1;
+        _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
+        _rollUsed = new bool[6];
+
+        _rollButton.gameObject.SetActive(true);
+        _rerollButton.gameObject.SetActive(false);
+        _acceptStatsButton.gameObject.SetActive(false);
+        _rollDetailsText.text = "(Click 'Roll Stats' to begin)";
+        _rollResultsText.text = "";
+    }
+
+    // ========== QUICK START ==========
+
+    private void OnQuickStart()
+    {
+        Debug.Log("[CharCreation] Quick Start - using default Aldric and Lyra");
+
+        // PC1: Aldric the Dwarf Fighter
+        var pc1 = CreatedCharacters[0];
+        pc1.CharacterName = "Aldric";
+        pc1.RaceName = "Dwarf";
+        pc1.Race = RaceDatabase.GetRace("Dwarf");
+        pc1.ClassName = "Fighter";
+        pc1.STR = 16; pc1.DEX = 12; pc1.CON = 14;
+        pc1.INT = 10; pc1.WIS = 10; pc1.CHA = 13;
+        pc1.ComputeFinalStats();
+
+        // PC2: Lyra the Elf Rogue
+        var pc2 = CreatedCharacters[1];
+        pc2.CharacterName = "Lyra";
+        pc2.RaceName = "Elf";
+        pc2.Race = RaceDatabase.GetRace("Elf");
+        pc2.ClassName = "Rogue";
+        pc2.STR = 12; pc2.DEX = 17; pc2.CON = 12;
+        pc2.INT = 14; pc2.WIS = 13; pc2.CHA = 10;
+        pc2.ComputeFinalStats();
+
+        IsComplete = true;
+        _rootPanel.transform.parent.gameObject.SetActive(false);
+        OnCreationComplete?.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
+    }
+
+    // ========== UI HELPER METHODS ==========
+
+    private Text MakeText(Transform parent, string name, Vector2 pos, Vector2 size,
+        string text, int fontSize, Color color, TextAnchor align)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = pos;
+        rt.sizeDelta = size;
+
+        Text t = go.AddComponent<Text>();
+        t.text = text;
+        t.fontSize = fontSize;
+        t.color = color;
+        t.alignment = align;
+        t.font = _font;
+        t.supportRichText = true;
+        return t;
+    }
+
+    private Button MakeButton(Transform parent, string name, Vector2 pos, Vector2 size,
+        string label, Color bgColor, Color textColor, int fontSize)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = pos;
+        rt.sizeDelta = size;
+
+        Image img = go.AddComponent<Image>();
+        img.color = bgColor;
+
+        Button btn = go.AddComponent<Button>();
+        ColorBlock cb = btn.colors;
+        cb.normalColor = bgColor;
+        cb.highlightedColor = bgColor * 1.3f;
+        cb.pressedColor = bgColor * 0.7f;
+        cb.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.5f);
+        btn.colors = cb;
+
+        // Label text
+        MakeText(go.transform, name + "Label", Vector2.zero, size,
+            label, fontSize, textColor, TextAnchor.MiddleCenter);
+
+        return btn;
+    }
+
+    private GameObject CreatePanel(Transform parent, string name,
+        Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
+        Vector2 pos, Vector2 size, Color color)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.pivot = pivot;
+        rt.anchoredPosition = pos;
+        rt.sizeDelta = size;
+
+        if (color.a > 0)
+        {
+            Image img = go.AddComponent<Image>();
+            img.color = color;
+        }
+
+        return go;
+    }
+}

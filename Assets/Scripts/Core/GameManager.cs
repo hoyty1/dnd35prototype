@@ -32,6 +32,10 @@ public class GameManager : MonoBehaviour
     [Header("UI")]
     public CombatUI CombatUI;
     public InventoryUI InventoryUI;
+    public CharacterCreationUI CharacterCreationUI;
+
+    /// <summary>Whether the game is waiting for character creation to complete.</summary>
+    public bool WaitingForCharacterCreation { get; private set; }
 
     // Game state - simplified phases
     public enum TurnPhase { PC1Turn, PC2Turn, NPCTurn, CombatOver }
@@ -76,11 +80,182 @@ public class GameManager : MonoBehaviour
     private void Start()
     {
         Grid.GenerateGrid();
-        SetupCharacters();
         CenterCamera();
         _mainCam = Camera.main;
+
+        // Check if character creation UI exists
+        if (CharacterCreationUI != null)
+        {
+            WaitingForCharacterCreation = true;
+            CharacterCreationUI.OnCreationComplete = OnCharacterCreationComplete;
+            Debug.Log("[GameManager] Waiting for character creation...");
+        }
+        else
+        {
+            // No creation UI - use default characters
+            SetupCharacters();
+            StartPCTurn(PC1);
+            Debug.Log("[GameManager] Initialization complete (default characters). Phase: " + CurrentPhase);
+        }
+    }
+
+    /// <summary>
+    /// Called when both characters have been created through the character creation UI.
+    /// </summary>
+    private void OnCharacterCreationComplete(CharacterCreationData pc1Data, CharacterCreationData pc2Data)
+    {
+        WaitingForCharacterCreation = false;
+        Debug.Log($"[GameManager] Character creation complete: {pc1Data.CharacterName} ({pc1Data.RaceName} {pc1Data.ClassName}), " +
+                  $"{pc2Data.CharacterName} ({pc2Data.RaceName} {pc2Data.ClassName})");
+
+        SetupCreatedCharacters(pc1Data, pc2Data);
+        CombatUI.UpdateAllStats(PC1, PC2, NPC);
         StartPCTurn(PC1);
-        Debug.Log("[GameManager] Initialization complete. Phase: " + CurrentPhase);
+    }
+
+    /// <summary>
+    /// Set up characters from character creation data.
+    /// </summary>
+    private void SetupCreatedCharacters(CharacterCreationData pc1Data, CharacterCreationData pc2Data)
+    {
+        RaceDatabase.Init();
+        ItemDatabase.Init();
+
+        // ===== PC1 =====
+        pc1Data.ComputeFinalStats();
+        int pc1ArmorBonus = pc1Data.ClassName == "Fighter" ? 4 : 2;
+        int pc1ShieldBonus = pc1Data.ClassName == "Fighter" ? 2 : 0;
+        int pc1DamageDice = pc1Data.ClassName == "Fighter" ? 8 : 6;
+
+        CharacterStats pc1Stats = new CharacterStats(
+            name: pc1Data.CharacterName,
+            level: 3,
+            characterClass: pc1Data.ClassName,
+            str: pc1Data.STR, dex: pc1Data.DEX, con: pc1Data.CON,
+            wis: pc1Data.WIS, intelligence: pc1Data.INT, cha: pc1Data.CHA,
+            bab: pc1Data.BAB,
+            armorBonus: pc1ArmorBonus,
+            shieldBonus: pc1ShieldBonus,
+            damageDice: pc1DamageDice,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: pc1Data.BaseSpeed,
+            atkRange: 1,
+            baseHitDieHP: pc1Data.HP,
+            raceName: pc1Data.RaceName
+        );
+
+        Sprite pcAlive = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        Vector2Int pc1Start = new Vector2Int(3, 8);
+        PC1.Init(pc1Stats, pc1Start, pcAlive, pcDead);
+
+        var pc1Inv = PC1.gameObject.AddComponent<InventoryComponent>();
+        pc1Inv.Init(pc1Stats);
+        SetupStartingEquipment(pc1Inv, pc1Data.ClassName);
+
+        Debug.Log($"[GameManager] {pc1Data.CharacterName} ({pc1Data.RaceName} {pc1Data.ClassName}): " +
+                  $"STR {pc1Stats.STR} DEX {pc1Stats.DEX} CON {pc1Stats.CON} " +
+                  $"HP {pc1Stats.MaxHP} AC {pc1Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc1Stats.AttackBonus)}");
+
+        // ===== PC2 =====
+        pc2Data.ComputeFinalStats();
+        int pc2ArmorBonus = pc2Data.ClassName == "Fighter" ? 4 : 2;
+        int pc2ShieldBonus = pc2Data.ClassName == "Fighter" ? 2 : 0;
+        int pc2DamageDice = pc2Data.ClassName == "Fighter" ? 8 : 6;
+
+        CharacterStats pc2Stats = new CharacterStats(
+            name: pc2Data.CharacterName,
+            level: 3,
+            characterClass: pc2Data.ClassName,
+            str: pc2Data.STR, dex: pc2Data.DEX, con: pc2Data.CON,
+            wis: pc2Data.WIS, intelligence: pc2Data.INT, cha: pc2Data.CHA,
+            bab: pc2Data.BAB,
+            armorBonus: pc2ArmorBonus,
+            shieldBonus: pc2ShieldBonus,
+            damageDice: pc2DamageDice,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: pc2Data.BaseSpeed,
+            atkRange: 1,
+            baseHitDieHP: pc2Data.HP,
+            raceName: pc2Data.RaceName
+        );
+
+        Vector2Int pc2Start = new Vector2Int(3, 12);
+        PC2.Init(pc2Stats, pc2Start, pcAlive, pcDead);
+
+        SpriteRenderer pc2SR = PC2.GetComponent<SpriteRenderer>();
+        if (pc2SR != null)
+            pc2SR.color = new Color(0.6f, 0.7f, 1f, 1f);
+
+        var pc2Inv = PC2.gameObject.AddComponent<InventoryComponent>();
+        pc2Inv.Init(pc2Stats);
+        SetupStartingEquipment(pc2Inv, pc2Data.ClassName);
+
+        Debug.Log($"[GameManager] {pc2Data.CharacterName} ({pc2Data.RaceName} {pc2Data.ClassName}): " +
+                  $"STR {pc2Stats.STR} DEX {pc2Stats.DEX} CON {pc2Stats.CON} " +
+                  $"HP {pc2Stats.MaxHP} AC {pc2Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc2Stats.AttackBonus)}");
+
+        // ===== NPC =====
+        CharacterStats npcStats = new CharacterStats(
+            name: "Goblin Warchief",
+            level: 2,
+            characterClass: "Warrior",
+            str: 14, dex: 15, con: 13, wis: 10, intelligence: 10, cha: 8,
+            bab: 2,
+            armorBonus: 3,
+            shieldBonus: 1,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 3,
+            atkRange: 1,
+            baseHitDieHP: 12
+        );
+        npcStats.CreatureTags.Add("Goblinoid");
+
+        Sprite npcAlive = LoadSprite("Sprites/npc_enemy_alive");
+        Sprite npcDead = LoadSprite("Sprites/npc_enemy_dead");
+
+        Vector2Int npcStart = new Vector2Int(16, 10);
+        NPC.Init(npcStats, npcStart, npcAlive, npcDead);
+    }
+
+    /// <summary>
+    /// Set up starting equipment based on class (PHB starting packages).
+    /// </summary>
+    private void SetupStartingEquipment(InventoryComponent inv, string className)
+    {
+        ItemDatabase.Init();
+
+        if (className == "Fighter")
+        {
+            // Fighter Starting Package: Scale Mail, Heavy Wooden Shield, Longsword, Shortbow
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("scale_mail"), EquipSlot.Armor);
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
+
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("torch"));
+        }
+        else // Rogue
+        {
+            // Rogue Starting Package: Leather Armor, Rapier, Shortbow
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("rapier"), EquipSlot.RightHand);
+
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("rope"));
+        }
+
+        inv.CharacterInventory.RecalculateStats();
     }
 
     /// <summary>
@@ -88,6 +263,9 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void Update()
     {
+        // Skip all game input during character creation
+        if (WaitingForCharacterCreation) return;
+
         HandleInventoryInput();
 
         if (!IsPlayerTurn) return;
