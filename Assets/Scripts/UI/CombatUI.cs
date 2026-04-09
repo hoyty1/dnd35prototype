@@ -82,7 +82,8 @@ public class CombatUI : MonoBehaviour
         if (nameText != null)
         {
             string raceStr = !string.IsNullOrEmpty(s.RaceName) ? $"{s.RaceName} " : "";
-            nameText.text = $"{s.CharacterName} (Lv {s.Level} {raceStr}{s.CharacterClass})";
+            string sizeStr = (s.SizeCategory != "Medium") ? $" [{s.SizeCategory}]" : "";
+            nameText.text = $"{s.CharacterName} (Lv {s.Level} {raceStr}{s.CharacterClass}){sizeStr}";
             if (s.IsDead) nameText.text += " (DEAD)";
         }
 
@@ -98,14 +99,18 @@ public class CombatUI : MonoBehaviour
             string dexLabel = (s.MaxDexBonus >= 0 && s.DEXMod > s.MaxDexBonus)
                 ? $"DEX*"  // Asterisk indicates capped
                 : "DEX";
-            string acDetails = $"AC: {s.ArmorClass} (10{FormatBonusDetail(effectiveDex, dexLabel)}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")})";
+            string sizeDetail = FormatBonusDetail(s.SizeModifier, "Size");
+            string acDetails = $"AC: {s.ArmorClass} (10{FormatBonusDetail(effectiveDex, dexLabel)}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")}{sizeDetail})";
             if (s.ArmorCheckPenalty > 0)
                 acDetails += $" ACP:-{s.ArmorCheckPenalty}";
             acText.text = acDetails;
         }
 
         if (atkText != null)
-            atkText.text = $"Atk: {CharacterStats.FormatMod(s.AttackBonus)} (BAB {CharacterStats.FormatMod(s.BaseAttackBonus)} {CharacterStats.FormatMod(s.STRMod)} STR)";
+        {
+            string sizeAtkStr = s.SizeModifier != 0 ? $" {CharacterStats.FormatMod(s.SizeModifier)} Size" : "";
+            atkText.text = $"Atk: {CharacterStats.FormatMod(s.AttackBonus)} (BAB {CharacterStats.FormatMod(s.BaseAttackBonus)} {CharacterStats.FormatMod(s.STRMod)} STR{sizeAtkStr})";
+        }
 
         if (speedText != null)
         {

@@ -75,8 +75,14 @@ public class CharacterStats
     public int CurrentHP;
 
     /// <summary>
-    /// AC = 10 + effective DEX modifier (capped by armor's Max Dex Bonus) + armor bonus + shield bonus.
+    /// Size modifier to AC and attack rolls from race (Small = +1, Medium = 0, etc.)
+    /// </summary>
+    public int SizeModifier => Race != null ? Race.SizeACAndAttackModifier : 0;
+
+    /// <summary>
+    /// AC = 10 + effective DEX modifier (capped by armor's Max Dex Bonus) + armor bonus + shield bonus + size modifier.
     /// D&D 3.5: MaxDexBonus of -1 means no limit; 0+ caps the DEX bonus to AC.
+    /// Size bonus: Small +1, Medium 0, Large -1, etc.
     /// </summary>
     public int ArmorClass
     {
@@ -85,12 +91,12 @@ public class CharacterStats
             int dexToAC = DEXMod;
             if (MaxDexBonus >= 0 && dexToAC > MaxDexBonus)
                 dexToAC = MaxDexBonus;
-            return 10 + dexToAC + ArmorBonus + ShieldBonus;
+            return 10 + dexToAC + ArmorBonus + ShieldBonus + SizeModifier;
         }
     }
 
-    /// <summary>Total attack bonus = BAB + STR modifier (melee).</summary>
-    public int AttackBonus => BaseAttackBonus + STRMod;
+    /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier.</summary>
+    public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier;
 
     /// <summary>Movement speed in hexes per turn.</summary>
     public int MoveRange => BaseSpeed;
@@ -207,12 +213,12 @@ public class CharacterStats
         int bab = BaseAttackBonus;
         while (bab > 0)
         {
-            bonuses.Add(bab + STRMod);
+            bonuses.Add(bab + STRMod + SizeModifier);
             bab -= 5;
         }
         // Always have at least one attack
         if (bonuses.Count == 0)
-            bonuses.Add(BaseAttackBonus + STRMod);
+            bonuses.Add(BaseAttackBonus + STRMod + SizeModifier);
         return bonuses.ToArray();
     }
 
@@ -445,8 +451,20 @@ public class CharacterStats
     /// </summary>
     public bool SpeedNotReducedByArmor => Race != null && Race.SpeedNotReducedByArmor;
 
-    /// <summary>Race name string for display (or "Unknown" if no race set).</summary>
+    /// <summary>Race name string for display (or "" if no race set).</summary>
     public string RaceName => Race != null ? Race.RaceName : "";
+
+    /// <summary>Size category string for display (e.g., "Small", "Medium").</summary>
+    public string SizeCategory => Race != null ? Race.SizeName : "Medium";
+
+    /// <summary>Whether this character is Small size.</summary>
+    public bool IsSmallSize => Race != null && Race.IsSmall;
+
+    /// <summary>Size grapple modifier (for future grapple system).</summary>
+    public int SizeGrappleModifier => Race != null ? Race.SizeGrappleModifier : 0;
+
+    /// <summary>Size hide modifier (for future skill system).</summary>
+    public int SizeHideModifier => Race != null ? Race.SizeHideModifier : 0;
 
     /// <summary>Speed in feet for display purposes.</summary>
     public int SpeedInFeet => Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5;

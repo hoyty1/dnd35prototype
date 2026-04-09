@@ -90,6 +90,17 @@ public class RaceData
     /// </summary>
     public Dictionary<string, int> RacialSkillBonuses = new Dictionary<string, int>();
 
+    // ========== RACIAL SAVING THROW BONUSES (additional) ==========
+    /// <summary>Bonus on saves vs illusions (Gnome = +2).</summary>
+    public int SaveVsIllusion;
+
+    /// <summary>Bonus on saves vs fear (Halfling = +2).</summary>
+    public int SaveVsFear;
+
+    // ========== RACIAL THROWN/SLING BONUS ==========
+    /// <summary>Racial bonus on attack rolls with thrown weapons and slings (Halfling = +1).</summary>
+    public int ThrownAndSlingAttackBonus;
+
     // ========== SPECIAL TRAITS ==========
     /// <summary>Immune to sleep effects (Elf).</summary>
     public bool ImmunityToSleep;
@@ -99,6 +110,98 @@ public class RaceData
 
     /// <summary>Automatic Search check within 5 ft of secret door (Elf).</summary>
     public bool AutoSearchSecretDoors;
+
+    /// <summary>Extra feat at 1st level (Human).</summary>
+    public bool ExtraFeatAtFirstLevel;
+
+    /// <summary>Extra skill points per level (Human = 1 extra per level, 4 extra at 1st).</summary>
+    public int ExtraSkillPointsPerLevel;
+
+    /// <summary>Counts as another race for prerequisites (e.g., Half-Elf counts as Elf).</summary>
+    public string CountsAsRace;
+
+    /// <summary>Favored class: "Any" for Human, specific class for others (for future).</summary>
+    public string FavoredClass;
+
+    // ========== SIZE SYSTEM (D&D 3.5) ==========
+
+    /// <summary>
+    /// Get the size modifier to AC and attack rolls.
+    /// Small = +1, Medium = 0, Large = -1, etc.
+    /// </summary>
+    public int SizeACAndAttackModifier
+    {
+        get
+        {
+            switch (RaceSize)
+            {
+                case Size.Fine:        return +8;
+                case Size.Diminutive:  return +4;
+                case Size.Tiny:        return +2;
+                case Size.Small:       return +1;
+                case Size.Medium:      return 0;
+                case Size.Large:       return -1;
+                case Size.Huge:        return -2;
+                case Size.Gargantuan:  return -4;
+                case Size.Colossal:    return -8;
+                default:               return 0;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Get the size modifier to Hide checks.
+    /// Small = +4, Medium = 0, Large = -4, etc.
+    /// </summary>
+    public int SizeHideModifier
+    {
+        get
+        {
+            switch (RaceSize)
+            {
+                case Size.Fine:        return +16;
+                case Size.Diminutive:  return +12;
+                case Size.Tiny:        return +8;
+                case Size.Small:       return +4;
+                case Size.Medium:      return 0;
+                case Size.Large:       return -4;
+                case Size.Huge:        return -8;
+                case Size.Gargantuan:  return -12;
+                case Size.Colossal:    return -16;
+                default:               return 0;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Get the special size modifier to grapple checks.
+    /// Small = -4, Medium = 0, Large = +4, etc.
+    /// </summary>
+    public int SizeGrappleModifier
+    {
+        get
+        {
+            switch (RaceSize)
+            {
+                case Size.Fine:        return -16;
+                case Size.Diminutive:  return -12;
+                case Size.Tiny:        return -8;
+                case Size.Small:       return -4;
+                case Size.Medium:      return 0;
+                case Size.Large:       return +4;
+                case Size.Huge:        return +8;
+                case Size.Gargantuan:  return +12;
+                case Size.Colossal:    return +16;
+                default:               return 0;
+            }
+        }
+    }
+
+    /// <summary>Whether this race is Small size (Gnome, Halfling).</summary>
+    public bool IsSmall => RaceSize == Size.Small;
+
+    /// <summary>Get the size category name for display.</summary>
+    public string SizeName => RaceSize.ToString();
 
     // ========== DISPLAY HELPERS ==========
 
@@ -123,6 +226,9 @@ public class RaceData
         lines.Add($"Ability Mods: {GetAbilityModifierString()}");
         lines.Add($"Speed: {BaseSpeedFeet} ft ({BaseSpeedHexes} hexes)");
 
+        if (SizeACAndAttackModifier != 0)
+            lines.Add($"Size: {RaceSize} ({CharacterStats.FormatMod(SizeACAndAttackModifier)} AC/Attack, {CharacterStats.FormatMod(SizeHideModifier)} Hide, {CharacterStats.FormatMod(SizeGrappleModifier)} Grapple)");
+
         if (SpeedNotReducedByArmor)
             lines.Add("Speed not reduced by armor/encumbrance");
 
@@ -140,8 +246,14 @@ public class RaceData
                 lines.Add($"+{kvp.Value} attack vs {kvp.Key}");
         }
 
+        if (ThrownAndSlingAttackBonus > 0)
+            lines.Add($"+{ThrownAndSlingAttackBonus} attack with thrown weapons and slings");
+
         if (ImmunityToSleep) lines.Add("Immunity to sleep");
         if (Stonecunning) lines.Add("Stonecunning");
+        if (ExtraFeatAtFirstLevel) lines.Add("Extra feat at 1st level");
+        if (ExtraSkillPointsPerLevel > 0) lines.Add($"+{ExtraSkillPointsPerLevel} skill points per level");
+        if (!string.IsNullOrEmpty(CountsAsRace)) lines.Add($"Counts as {CountsAsRace} for prerequisites");
 
         return string.Join("\n", lines);
     }

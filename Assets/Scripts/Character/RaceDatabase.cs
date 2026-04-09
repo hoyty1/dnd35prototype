@@ -19,6 +19,10 @@ public static class RaceDatabase
 
         RegisterDwarf();
         RegisterElf();
+        RegisterGnome();
+        RegisterHalfElf();
+        RegisterHalfOrc();
+        RegisterHalfling();
         RegisterHuman();
     }
 
@@ -179,6 +183,281 @@ public static class RaceDatabase
         _races["elf"] = elf;
     }
 
+    // ========== GNOME ==========
+    private static void RegisterGnome()
+    {
+        var gnome = new RaceData
+        {
+            RaceName = "Gnome",
+            RaceSize = RaceData.Size.Small,  // Small size: +1 AC, +1 attack, +4 Hide, -4 grapple
+            Type = RaceData.CreatureType.Humanoid,
+
+            // Ability Score Modifiers: +2 CON, -2 STR
+            STRModifier = -2,
+            DEXModifier = 0,
+            CONModifier = +2,
+            WISModifier = 0,
+            INTModifier = 0,
+            CHAModifier = 0,
+
+            // Physical Traits
+            BaseSpeedFeet = 20,  // 20 ft = 4 hexes (Small size)
+            SpeedNotReducedByArmor = false,
+
+            // Vision
+            Vision = RaceData.VisionType.LowLight,
+            DarkvisionRange = 0,
+
+            // Combat
+            StabilityBonus = 0,
+
+            // Saving throws
+            SaveVsPoison = 0,
+            SaveVsSpells = 0,
+            SaveVsEnchantment = 0,
+            SaveVsIllusion = 2,  // +2 racial bonus on saves vs illusions
+            SaveVsFear = 0,
+
+            // Special traits
+            Stonecunning = false,
+            ImmunityToSleep = false,
+            AutoSearchSecretDoors = false,
+            ExtraFeatAtFirstLevel = false,
+            ExtraSkillPointsPerLevel = 0,
+            FavoredClass = "Bard",
+
+            // Weapon Familiarity: gnome hooked hammer treated as martial
+            WeaponFamiliarity = new List<string> { "gnome_hooked_hammer" },
+
+            // Racial weapon proficiencies (none beyond familiarity)
+            RacialWeaponProficiencies = new List<string>(),
+
+            // Racial attack bonuses: +1 vs kobolds and goblinoids
+            RacialAttackBonuses = new Dictionary<string, int>
+            {
+                { "Kobold", 1 },
+                { "Goblinoid", 1 }
+            },
+
+            // Racial AC bonuses: +4 dodge vs giants
+            RacialACBonuses = new Dictionary<string, int>
+            {
+                { "Giant", 4 }
+            },
+
+            // Racial skill bonuses: +2 Listen, +2 Craft (alchemy)
+            RacialSkillBonuses = new Dictionary<string, int>
+            {
+                { "Listen", 2 },
+                { "Craft_Alchemy", 2 }
+            },
+
+            ThrownAndSlingAttackBonus = 0
+            // Note for future: Spell-like abilities (1/day): speak with animals (burrowing mammals),
+            // dancing lights, ghost sound, prestidigitation (if CHA >= 10)
+        };
+
+        _races["gnome"] = gnome;
+    }
+
+    // ========== HALF-ELF ==========
+    private static void RegisterHalfElf()
+    {
+        var halfElf = new RaceData
+        {
+            RaceName = "Half-Elf",
+            RaceSize = RaceData.Size.Medium,
+            Type = RaceData.CreatureType.Humanoid,
+
+            // No ability score modifiers
+            STRModifier = 0,
+            DEXModifier = 0,
+            CONModifier = 0,
+            WISModifier = 0,
+            INTModifier = 0,
+            CHAModifier = 0,
+
+            // Physical Traits
+            BaseSpeedFeet = 30,  // 30 ft = 6 hexes
+            SpeedNotReducedByArmor = false,
+
+            // Vision
+            Vision = RaceData.VisionType.LowLight,
+            DarkvisionRange = 0,
+
+            // Combat
+            StabilityBonus = 0,
+
+            // Saving throws
+            SaveVsPoison = 0,
+            SaveVsSpells = 0,
+            SaveVsEnchantment = 2,  // +2 vs enchantment spells and effects
+            SaveVsIllusion = 0,
+            SaveVsFear = 0,
+
+            // Special traits
+            Stonecunning = false,
+            ImmunityToSleep = true,  // Immunity to sleep spells and effects
+            AutoSearchSecretDoors = false,
+            ExtraFeatAtFirstLevel = false,
+            ExtraSkillPointsPerLevel = 0,
+            CountsAsRace = "Elf",  // Elven Blood: counts as elf for prerequisites
+            FavoredClass = "Any",  // Favored class: Any (like human, note for future)
+
+            // No weapon familiarity or racial proficiencies
+            WeaponFamiliarity = new List<string>(),
+            RacialWeaponProficiencies = new List<string>(),
+
+            // No racial attack or AC bonuses
+            RacialAttackBonuses = new Dictionary<string, int>(),
+            RacialACBonuses = new Dictionary<string, int>(),
+
+            // Racial skill bonuses: +1 Listen, Search, Spot; +2 Diplomacy, Gather Information
+            RacialSkillBonuses = new Dictionary<string, int>
+            {
+                { "Listen", 1 },
+                { "Search", 1 },
+                { "Spot", 1 },
+                { "Diplomacy", 2 },
+                { "Gather Information", 2 }
+            },
+
+            ThrownAndSlingAttackBonus = 0
+        };
+
+        _races["half-elf"] = halfElf;
+    }
+
+    // ========== HALF-ORC ==========
+    private static void RegisterHalfOrc()
+    {
+        var halfOrc = new RaceData
+        {
+            RaceName = "Half-Orc",
+            RaceSize = RaceData.Size.Medium,
+            Type = RaceData.CreatureType.Humanoid,
+
+            // Ability Score Modifiers: +2 STR, -2 INT, -2 CHA
+            STRModifier = +2,
+            DEXModifier = 0,
+            CONModifier = 0,
+            WISModifier = 0,
+            INTModifier = -2,
+            CHAModifier = -2,
+
+            // Physical Traits
+            BaseSpeedFeet = 30,  // 30 ft = 6 hexes
+            SpeedNotReducedByArmor = false,
+
+            // Vision
+            Vision = RaceData.VisionType.Darkvision,
+            DarkvisionRange = 60,
+
+            // Combat
+            StabilityBonus = 0,
+
+            // No racial saving throw bonuses
+            SaveVsPoison = 0,
+            SaveVsSpells = 0,
+            SaveVsEnchantment = 0,
+            SaveVsIllusion = 0,
+            SaveVsFear = 0,
+
+            // Special traits
+            Stonecunning = false,
+            ImmunityToSleep = false,
+            AutoSearchSecretDoors = false,
+            ExtraFeatAtFirstLevel = false,
+            ExtraSkillPointsPerLevel = 0,
+            CountsAsRace = "Orc",  // Orc Blood: counts as orc for prerequisites
+            FavoredClass = "Barbarian",
+
+            // No weapon familiarity or racial proficiencies
+            WeaponFamiliarity = new List<string>(),
+            RacialWeaponProficiencies = new List<string>(),
+
+            // No racial attack or AC bonuses
+            RacialAttackBonuses = new Dictionary<string, int>(),
+            RacialACBonuses = new Dictionary<string, int>(),
+
+            // No racial skill bonuses
+            RacialSkillBonuses = new Dictionary<string, int>(),
+
+            ThrownAndSlingAttackBonus = 0
+        };
+
+        _races["half-orc"] = halfOrc;
+    }
+
+    // ========== HALFLING ==========
+    private static void RegisterHalfling()
+    {
+        var halfling = new RaceData
+        {
+            RaceName = "Halfling",
+            RaceSize = RaceData.Size.Small,  // Small size: +1 AC, +1 attack, +4 Hide, -4 grapple
+            Type = RaceData.CreatureType.Humanoid,
+
+            // Ability Score Modifiers: +2 DEX, -2 STR
+            STRModifier = -2,
+            DEXModifier = +2,
+            CONModifier = 0,
+            WISModifier = 0,
+            INTModifier = 0,
+            CHAModifier = 0,
+
+            // Physical Traits
+            BaseSpeedFeet = 20,  // 20 ft = 4 hexes (Small size)
+            SpeedNotReducedByArmor = false,
+
+            // Vision
+            Vision = RaceData.VisionType.Normal,
+            DarkvisionRange = 0,
+
+            // Combat
+            StabilityBonus = 0,
+
+            // Saving throws
+            SaveVsPoison = 0,
+            SaveVsSpells = 0,
+            SaveVsEnchantment = 0,
+            SaveVsIllusion = 0,
+            SaveVsFear = 2,  // +2 racial bonus on saving throws against fear (morale bonus)
+
+            // Special traits
+            Stonecunning = false,
+            ImmunityToSleep = false,
+            AutoSearchSecretDoors = false,
+            ExtraFeatAtFirstLevel = false,
+            ExtraSkillPointsPerLevel = 0,
+            FavoredClass = "Rogue",
+
+            // No weapon familiarity or racial proficiencies
+            WeaponFamiliarity = new List<string>(),
+            RacialWeaponProficiencies = new List<string>(),
+
+            // No racial attack bonuses vs specific creatures
+            RacialAttackBonuses = new Dictionary<string, int>(),
+
+            // No racial AC bonuses
+            RacialACBonuses = new Dictionary<string, int>(),
+
+            // Racial skill bonuses: +2 Climb, Jump, Listen, Move Silently
+            RacialSkillBonuses = new Dictionary<string, int>
+            {
+                { "Climb", 2 },
+                { "Jump", 2 },
+                { "Listen", 2 },
+                { "Move Silently", 2 }
+            },
+
+            // +1 racial bonus on attack rolls with thrown weapons and slings
+            ThrownAndSlingAttackBonus = 1
+        };
+
+        _races["halfling"] = halfling;
+    }
+
     // ========== HUMAN (baseline, no modifiers) ==========
     private static void RegisterHuman()
     {
@@ -206,18 +485,25 @@ public static class RaceDatabase
             SaveVsPoison = 0,
             SaveVsSpells = 0,
             SaveVsEnchantment = 0,
+            SaveVsIllusion = 0,
+            SaveVsFear = 0,
 
             Stonecunning = false,
             ImmunityToSleep = false,
             AutoSearchSecretDoors = false,
 
+            // Human special traits
+            ExtraFeatAtFirstLevel = true,       // Extra feat at 1st level (for future feat system)
+            ExtraSkillPointsPerLevel = 1,       // +1 skill point per level (+4 at 1st, for future skill system)
+            FavoredClass = "Any",               // Favored class: Any
+
             WeaponFamiliarity = new List<string>(),
             RacialWeaponProficiencies = new List<string>(),
             RacialAttackBonuses = new Dictionary<string, int>(),
             RacialACBonuses = new Dictionary<string, int>(),
-            RacialSkillBonuses = new Dictionary<string, int>()
-            // Note: Humans get 1 extra feat and 4 extra skill points at 1st level,
-            // +1 skill point per level thereafter. These are for future implementation.
+            RacialSkillBonuses = new Dictionary<string, int>(),
+
+            ThrownAndSlingAttackBonus = 0
         };
 
         _races["human"] = human;

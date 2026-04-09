@@ -107,6 +107,7 @@ public class CharacterController : MonoBehaviour
             Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, 1.0f, critThreatMin, critMult);
 
         result.RacialAttackBonus = racialAtkBonus;
+        result.SizeAttackBonus = Stats.SizeModifier;
         HasAttackedThisTurn = true;
         return result;
     }
@@ -142,6 +143,7 @@ public class CharacterController : MonoBehaviour
                 Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, 1.0f, critThreatMin, critMult);
 
             atk.RacialAttackBonus = racialAtkBonus;
+            atk.SizeAttackBonus = Stats.SizeModifier;
             result.Attacks.Add(atk);
             result.AttackLabels.Add(label);
         }
@@ -218,6 +220,7 @@ public class CharacterController : MonoBehaviour
         CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
             mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, 1.0f, mainCritMin, mainCritMult);
         mainAtk.RacialAttackBonus = racialAtkBonus;
+        mainAtk.SizeAttackBonus = Stats.SizeModifier;
         result.Attacks.Add(mainAtk);
         result.AttackLabels.Add(mainLabel);
 
@@ -233,6 +236,7 @@ public class CharacterController : MonoBehaviour
             CombatResult offAtk = PerformSingleAttackWithCrit(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
                 offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, 0.5f, offCritMin, offCritMult);
             offAtk.RacialAttackBonus = racialAtkBonus;
+            offAtk.SizeAttackBonus = Stats.SizeModifier;
             result.Attacks.Add(offAtk);
             result.AttackLabels.Add(offLabel);
         }

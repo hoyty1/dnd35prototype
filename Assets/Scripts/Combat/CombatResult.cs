@@ -39,6 +39,9 @@ public class CombatResult
     // Racial bonus fields
     public int RacialAttackBonus;         // Racial attack bonus applied (e.g., Dwarf +1 vs Goblinoids)
 
+    // Size bonus fields
+    public int SizeAttackBonus;           // Size modifier to attack (Small = +1, Medium = 0)
+
     /// <summary>Total damage dealt including sneak attack.</summary>
     public int TotalDamage => Damage + SneakAttackDamage;
 
@@ -63,15 +66,21 @@ public class CombatResult
         if (RacialAttackBonus > 0)
             racialNote = $" [Racial +{RacialAttackBonus} vs {Defender.Stats.CharacterName}]";
 
+        // Size bonus note
+        string sizeNote = "";
+        if (SizeAttackBonus != 0)
+            sizeNote = $" [Size: {Attacker.Stats.SizeCategory}]";
+
         if (Hit)
         {
             // Build the attack roll breakdown
             string rollBreakdown;
             string racialStr = RacialAttackBonus > 0 ? $" +{RacialAttackBonus} racial" : "";
+            string sizeStr = SizeAttackBonus != 0 ? $" {CharacterStats.FormatMod(SizeAttackBonus)} size" : "";
             if (IsFlanking)
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr} +{FlankingBonus} flanking{racialStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr} +{FlankingBonus} flanking{racialStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
             else
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{racialStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr}{racialStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
 
             // Critical hit info
             string critInfo = "";
@@ -107,7 +116,7 @@ public class CombatResult
                     damageStr = $"Deals {Damage} damage! (STR {CharacterStats.FormatMod(Attacker.Stats.STRMod)})";
             }
 
-            string msg = $"{attackerName} attacks {defenderName}!{flankNote}{racialNote}\n{rollBreakdown}{critInfo}\n{damageStr}";
+            string msg = $"{attackerName} attacks {defenderName}!{flankNote}{racialNote}{sizeNote}\n{rollBreakdown}{critInfo}\n{damageStr}";
 
             if (TargetKilled)
                 msg += $"\n{defenderName} has been slain!";
@@ -117,12 +126,13 @@ public class CombatResult
         {
             string rollBreakdown;
             string racialStr = RacialAttackBonus > 0 ? $" +{RacialAttackBonus} racial" : "";
+            string sizeStr = SizeAttackBonus != 0 ? $" {CharacterStats.FormatMod(SizeAttackBonus)} size" : "";
             if (IsFlanking)
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr} +{FlankingBonus} flanking{racialStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr} +{FlankingBonus} flanking{racialStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
             else
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{racialStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr}{racialStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
 
-            return $"{attackerName} attacks {defenderName}!{flankNote}{racialNote}\n{rollBreakdown}";
+            return $"{attackerName} attacks {defenderName}!{flankNote}{racialNote}{sizeNote}\n{rollBreakdown}";
         }
     }
 }
