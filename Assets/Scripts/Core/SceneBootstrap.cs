@@ -5,7 +5,7 @@ using UnityEngine.UI;
 /// Bootstraps the entire game scene programmatically.
 /// Attach this to a single empty GameObject in the scene.
 /// Creates all required GameObjects, components, and UI at runtime.
-/// Now supports two PC characters (PC1, PC2) and one NPC.
+/// Now supports two PC characters (PC1, PC2) and one NPC with full D&D 3.5 stats display.
 /// </summary>
 public class SceneBootstrap : MonoBehaviour
 {
@@ -133,6 +133,10 @@ public class SceneBootstrap : MonoBehaviour
     }
 
     // ========== UI ==========
+    // Panel dimensions — taller to accommodate ability scores
+    private const float PanelWidth = 280f;
+    private const float PanelHeight = 210f;
+
     private CombatUI CreateUI()
     {
         // Create Canvas
@@ -167,93 +171,18 @@ public class SceneBootstrap : MonoBehaviour
         AddBackground(combatUI.TurnIndicatorText.transform, new Color(0, 0, 0, 0.7f), new Vector2(820, 55));
 
         // --- PC1 Stats Panel (bottom left) ---
-        GameObject pc1Panel = CreatePanel(canvasGO.transform, "PC1StatsPanel",
-            new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
-            new Vector2(10, 10), new Vector2(250, 130),
-            new Color(0.1f, 0.2f, 0.4f, 0.85f));
-        combatUI.PC1Panel = pc1Panel;
+        CreatePC1Panel(canvasGO.transform, combatUI);
 
-        // Active indicator (green border-like bar at top of panel)
-        combatUI.PC1ActiveIndicator = CreateActiveIndicator(pc1Panel.transform, "PC1Active",
-            new Vector2(0, 115), new Vector2(250, 6), new Color(0f, 1f, 0.3f));
-
-        combatUI.PC1NameText = CreateText(pc1Panel.transform, "PC1Name",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 90), new Vector2(230, 25),
-            "Hero 1", 20, new Color(0.3f, 0.9f, 0.3f), TextAnchor.MiddleLeft);
-
-        combatUI.PC1HPText = CreateText(pc1Panel.transform, "PC1HP",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 60), new Vector2(200, 25),
-            "HP: 30/30", 18, Color.white, TextAnchor.MiddleLeft);
-
-        combatUI.PC1ACText = CreateText(pc1Panel.transform, "PC1AC",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 35), new Vector2(200, 25),
-            "AC: 14", 18, Color.white, TextAnchor.MiddleLeft);
-
-        combatUI.PC1HPBar = CreateHPBar(pc1Panel.transform, "PC1HPBar",
-            new Vector2(10, 10), new Vector2(230, 15),
-            new Color(0.2f, 0.8f, 0.2f));
-
-        // --- PC2 Stats Panel (bottom left, next to PC1) ---
-        GameObject pc2Panel = CreatePanel(canvasGO.transform, "PC2StatsPanel",
-            new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
-            new Vector2(270, 10), new Vector2(250, 130),
-            new Color(0.1f, 0.15f, 0.35f, 0.85f));
-        combatUI.PC2Panel = pc2Panel;
-
-        combatUI.PC2ActiveIndicator = CreateActiveIndicator(pc2Panel.transform, "PC2Active",
-            new Vector2(0, 115), new Vector2(250, 6), new Color(0.3f, 0.5f, 1f));
-
-        combatUI.PC2NameText = CreateText(pc2Panel.transform, "PC2Name",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 90), new Vector2(230, 25),
-            "Hero 2", 20, new Color(0.5f, 0.7f, 1f), TextAnchor.MiddleLeft);
-
-        combatUI.PC2HPText = CreateText(pc2Panel.transform, "PC2HP",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 60), new Vector2(200, 25),
-            "HP: 30/30", 18, Color.white, TextAnchor.MiddleLeft);
-
-        combatUI.PC2ACText = CreateText(pc2Panel.transform, "PC2AC",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 35), new Vector2(200, 25),
-            "AC: 14", 18, Color.white, TextAnchor.MiddleLeft);
-
-        combatUI.PC2HPBar = CreateHPBar(pc2Panel.transform, "PC2HPBar",
-            new Vector2(10, 10), new Vector2(230, 15),
-            new Color(0.3f, 0.5f, 1f));
+        // --- PC2 Stats Panel (next to PC1) ---
+        CreatePC2Panel(canvasGO.transform, combatUI);
 
         // --- NPC Stats Panel (bottom right) ---
-        GameObject npcPanel = CreatePanel(canvasGO.transform, "NPCStatsPanel",
-            new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
-            new Vector2(-10, 10), new Vector2(250, 130),
-            new Color(0.4f, 0.1f, 0.1f, 0.85f));
+        CreateNPCPanel(canvasGO.transform, combatUI);
 
-        combatUI.NPCNameText = CreateText(npcPanel.transform, "NPCName",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 90), new Vector2(230, 25),
-            "Goblin", 20, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
-
-        combatUI.NPCHPText = CreateText(npcPanel.transform, "NPCHP",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 60), new Vector2(200, 25),
-            "HP: 20/20", 18, Color.white, TextAnchor.MiddleLeft);
-
-        combatUI.NPCACText = CreateText(npcPanel.transform, "NPCAC",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 35), new Vector2(200, 25),
-            "AC: 12", 18, Color.white, TextAnchor.MiddleLeft);
-
-        combatUI.NPCHPBar = CreateHPBar(npcPanel.transform, "NPCHPBar",
-            new Vector2(10, 10), new Vector2(230, 15),
-            new Color(0.8f, 0.2f, 0.2f));
-
-        // --- Combat Log (bottom center) ---
+        // --- Combat Log (bottom center, raised above panels) ---
         GameObject logPanel = CreatePanel(canvasGO.transform, "CombatLogPanel",
             new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
-            new Vector2(0, 150), new Vector2(500, 100),
+            new Vector2(0, PanelHeight + 20), new Vector2(500, 100),
             new Color(0, 0, 0, 0.75f));
 
         combatUI.CombatLogText = CreateText(logPanel.transform, "CombatLog",
@@ -284,6 +213,197 @@ public class SceneBootstrap : MonoBehaviour
         actionPanel.SetActive(false);
 
         return combatUI;
+    }
+
+    /// <summary>Create PC1 stats panel with D&D 3.5 ability scores.</summary>
+    private void CreatePC1Panel(Transform parent, CombatUI combatUI)
+    {
+        GameObject panel = CreatePanel(parent, "PC1StatsPanel",
+            new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
+            new Vector2(10, 10), new Vector2(PanelWidth, PanelHeight),
+            new Color(0.1f, 0.2f, 0.4f, 0.85f));
+        combatUI.PC1Panel = panel;
+
+        // Active indicator
+        combatUI.PC1ActiveIndicator = CreateActiveIndicator(panel.transform, "PC1Active",
+            new Vector2(0, PanelHeight - 6), new Vector2(PanelWidth, 6), new Color(0f, 1f, 0.3f));
+
+        float y = PanelHeight - 18;
+
+        // Name
+        combatUI.PC1NameText = CreateText(panel.transform, "PC1Name",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 22),
+            "Aldric (Lv 3)", 18, new Color(0.3f, 0.9f, 0.3f), TextAnchor.MiddleLeft);
+        y -= 22;
+
+        // Ability scores (2 rows of 3)
+        combatUI.PC1AbilityText = CreateText(panel.transform, "PC1Abilities",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y - 28), new Vector2(PanelWidth - 20, 38),
+            "STR 16(+3) DEX 12(+1) CON 14(+2)\nWIS 10(+0) INT 10(+0) CHA 13(+1)", 12,
+            new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
+        y -= 44;
+
+        // Separator line (thin panel)
+        CreatePanel(panel.transform, "PC1Sep",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 1),
+            new Color(1, 1, 1, 0.2f));
+        y -= 6;
+
+        // HP
+        combatUI.PC1HPText = CreateText(panel.transform, "PC1HP",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 20),
+            "HP: 28/28", 16, Color.white, TextAnchor.MiddleLeft);
+        y -= 18;
+
+        // HP Bar
+        combatUI.PC1HPBar = CreateHPBar(panel.transform, "PC1HPBar",
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 12),
+            new Color(0.2f, 0.8f, 0.2f));
+        y -= 20;
+
+        // AC
+        combatUI.PC1ACText = CreateText(panel.transform, "PC1AC",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
+            "AC: 17", 14, Color.white, TextAnchor.MiddleLeft);
+        y -= 20;
+
+        // Attack Bonus
+        combatUI.PC1AtkText = CreateText(panel.transform, "PC1Atk",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
+            "Atk: +6", 14, Color.white, TextAnchor.MiddleLeft);
+        y -= 20;
+
+        // Speed
+        combatUI.PC1SpeedText = CreateText(panel.transform, "PC1Speed",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
+            "Speed: 4 hexes", 14, Color.white, TextAnchor.MiddleLeft);
+    }
+
+    /// <summary>Create PC2 stats panel with D&D 3.5 ability scores.</summary>
+    private void CreatePC2Panel(Transform parent, CombatUI combatUI)
+    {
+        GameObject panel = CreatePanel(parent, "PC2StatsPanel",
+            new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
+            new Vector2(PanelWidth + 20, 10), new Vector2(PanelWidth, PanelHeight),
+            new Color(0.1f, 0.15f, 0.35f, 0.85f));
+        combatUI.PC2Panel = panel;
+
+        combatUI.PC2ActiveIndicator = CreateActiveIndicator(panel.transform, "PC2Active",
+            new Vector2(0, PanelHeight - 6), new Vector2(PanelWidth, 6), new Color(0.3f, 0.5f, 1f));
+
+        float y = PanelHeight - 18;
+
+        combatUI.PC2NameText = CreateText(panel.transform, "PC2Name",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 22),
+            "Lyra (Lv 3)", 18, new Color(0.5f, 0.7f, 1f), TextAnchor.MiddleLeft);
+        y -= 22;
+
+        combatUI.PC2AbilityText = CreateText(panel.transform, "PC2Abilities",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y - 28), new Vector2(PanelWidth - 20, 38),
+            "STR 12(+1) DEX 17(+3) CON 12(+1)\nWIS 13(+1) INT 14(+2) CHA 10(+0)", 12,
+            new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
+        y -= 44;
+
+        CreatePanel(panel.transform, "PC2Sep",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 1),
+            new Color(1, 1, 1, 0.2f));
+        y -= 6;
+
+        combatUI.PC2HPText = CreateText(panel.transform, "PC2HP",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 20),
+            "HP: 18/18", 16, Color.white, TextAnchor.MiddleLeft);
+        y -= 18;
+
+        combatUI.PC2HPBar = CreateHPBar(panel.transform, "PC2HPBar",
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 12),
+            new Color(0.3f, 0.5f, 1f));
+        y -= 20;
+
+        combatUI.PC2ACText = CreateText(panel.transform, "PC2AC",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
+            "AC: 15", 14, Color.white, TextAnchor.MiddleLeft);
+        y -= 20;
+
+        combatUI.PC2AtkText = CreateText(panel.transform, "PC2Atk",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
+            "Atk: +3", 14, Color.white, TextAnchor.MiddleLeft);
+        y -= 20;
+
+        combatUI.PC2SpeedText = CreateText(panel.transform, "PC2Speed",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
+            "Speed: 5 hexes", 14, Color.white, TextAnchor.MiddleLeft);
+    }
+
+    /// <summary>Create NPC stats panel with D&D 3.5 ability scores.</summary>
+    private void CreateNPCPanel(Transform parent, CombatUI combatUI)
+    {
+        GameObject panel = CreatePanel(parent, "NPCStatsPanel",
+            new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
+            new Vector2(-10, 10), new Vector2(PanelWidth, PanelHeight),
+            new Color(0.4f, 0.1f, 0.1f, 0.85f));
+
+        float y = PanelHeight - 18;
+
+        combatUI.NPCNameText = CreateText(panel.transform, "NPCName",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 22),
+            "Goblin Warchief (Lv 2)", 18, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
+        y -= 22;
+
+        combatUI.NPCAbilityText = CreateText(panel.transform, "NPCAbilities",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y - 28), new Vector2(PanelWidth - 20, 38),
+            "STR 14(+2) DEX 15(+2) CON 13(+1)\nWIS 10(+0) INT 10(+0) CHA 8(-1)", 12,
+            new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
+        y -= 44;
+
+        CreatePanel(panel.transform, "NPCSep",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 1),
+            new Color(1, 1, 1, 0.2f));
+        y -= 6;
+
+        combatUI.NPCHPText = CreateText(panel.transform, "NPCHP",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 20),
+            "HP: 14/14", 16, Color.white, TextAnchor.MiddleLeft);
+        y -= 18;
+
+        combatUI.NPCHPBar = CreateHPBar(panel.transform, "NPCHPBar",
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 12),
+            new Color(0.8f, 0.2f, 0.2f));
+        y -= 20;
+
+        combatUI.NPCACText = CreateText(panel.transform, "NPCAC",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
+            "AC: 16", 14, Color.white, TextAnchor.MiddleLeft);
+        y -= 20;
+
+        combatUI.NPCAtkText = CreateText(panel.transform, "NPCAtk",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
+            "Atk: +4", 14, Color.white, TextAnchor.MiddleLeft);
+        y -= 20;
+
+        combatUI.NPCSpeedText = CreateText(panel.transform, "NPCSpeed",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
+            "Speed: 3 hexes", 14, Color.white, TextAnchor.MiddleLeft);
     }
 
     // ========== GAME MANAGER ==========

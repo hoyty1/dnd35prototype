@@ -2,8 +2,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Manages all combat UI elements: stats panels for PC1, PC2, NPC,
-/// combat log, action buttons, turn indicator, and active-PC highlighting.
+/// Manages all combat UI elements with D&D 3.5 ability score display.
+/// Shows 6 ability scores with modifiers and derived stats for each character.
 /// </summary>
 public class CombatUI : MonoBehaviour
 {
@@ -14,6 +14,9 @@ public class CombatUI : MonoBehaviour
     public Text PC1NameText;
     public Text PC1HPText;
     public Text PC1ACText;
+    public Text PC1AtkText;
+    public Text PC1SpeedText;
+    public Text PC1AbilityText; // Shows all 6 ability scores
     public Image PC1HPBar;
     public GameObject PC1Panel;
 
@@ -21,6 +24,9 @@ public class CombatUI : MonoBehaviour
     public Text PC2NameText;
     public Text PC2HPText;
     public Text PC2ACText;
+    public Text PC2AtkText;
+    public Text PC2SpeedText;
+    public Text PC2AbilityText;
     public Image PC2HPBar;
     public GameObject PC2Panel;
 
@@ -28,6 +34,9 @@ public class CombatUI : MonoBehaviour
     public Text NPCNameText;
     public Text NPCHPText;
     public Text NPCACText;
+    public Text NPCAtkText;
+    public Text NPCSpeedText;
+    public Text NPCAbilityText;
     public Image NPCHPBar;
 
     [Header("Combat Log")]
@@ -53,31 +62,55 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void UpdateAllStats(CharacterController pc1, CharacterController pc2, CharacterController npc)
     {
-        UpdatePCStats(pc1, PC1NameText, PC1HPText, PC1ACText, PC1HPBar);
-        UpdatePCStats(pc2, PC2NameText, PC2HPText, PC2ACText, PC2HPBar);
-
-        if (npc != null && npc.Stats != null)
-        {
-            if (NPCNameText != null) NPCNameText.text = npc.Stats.CharacterName;
-            if (NPCHPText != null) NPCHPText.text = $"HP: {npc.Stats.CurrentHP}/{npc.Stats.MaxHP}";
-            if (NPCACText != null) NPCACText.text = $"AC: {npc.Stats.ArmorClass}";
-            if (NPCHPBar != null) NPCHPBar.fillAmount = (float)npc.Stats.CurrentHP / npc.Stats.MaxHP;
-        }
+        UpdateCharacterStats(pc1, PC1NameText, PC1HPText, PC1ACText, PC1AtkText, PC1SpeedText, PC1AbilityText, PC1HPBar);
+        UpdateCharacterStats(pc2, PC2NameText, PC2HPText, PC2ACText, PC2AtkText, PC2SpeedText, PC2AbilityText, PC2HPBar);
+        UpdateCharacterStats(npc, NPCNameText, NPCHPText, NPCACText, NPCAtkText, NPCSpeedText, NPCAbilityText, NPCHPBar);
     }
 
-    private void UpdatePCStats(CharacterController pc, Text nameText, Text hpText, Text acText, Image hpBar)
+    private void UpdateCharacterStats(CharacterController ch,
+        Text nameText, Text hpText, Text acText, Text atkText, Text speedText, Text abilityText, Image hpBar)
     {
-        if (pc != null && pc.Stats != null)
+        if (ch == null || ch.Stats == null) return;
+
+        var s = ch.Stats;
+
+        if (nameText != null)
         {
-            if (nameText != null)
-            {
-                nameText.text = pc.Stats.CharacterName;
-                if (pc.Stats.IsDead) nameText.text += " (DEAD)";
-            }
-            if (hpText != null) hpText.text = $"HP: {pc.Stats.CurrentHP}/{pc.Stats.MaxHP}";
-            if (acText != null) acText.text = $"AC: {pc.Stats.ArmorClass}";
-            if (hpBar != null) hpBar.fillAmount = (float)pc.Stats.CurrentHP / pc.Stats.MaxHP;
+            nameText.text = $"{s.CharacterName} (Lv {s.Level})";
+            if (s.IsDead) nameText.text += " (DEAD)";
         }
+
+        if (hpText != null)
+            hpText.text = $"HP: {s.CurrentHP}/{s.MaxHP}";
+
+        if (acText != null)
+            acText.text = $"AC: {s.ArmorClass} (10{FormatBonusDetail(s.DEXMod, "DEX")}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")})";
+
+        if (atkText != null)
+            atkText.text = $"Atk: {CharacterStats.FormatMod(s.AttackBonus)} (BAB {CharacterStats.FormatMod(s.BaseAttackBonus)} {CharacterStats.FormatMod(s.STRMod)} STR)";
+
+        if (speedText != null)
+            speedText.text = $"Speed: {s.MoveRange} hexes";
+
+        if (abilityText != null)
+        {
+            abilityText.text =
+                $"STR {s.STR}({CharacterStats.FormatMod(s.STRMod)}) " +
+                $"DEX {s.DEX}({CharacterStats.FormatMod(s.DEXMod)}) " +
+                $"CON {s.CON}({CharacterStats.FormatMod(s.CONMod)})\n" +
+                $"WIS {s.WIS}({CharacterStats.FormatMod(s.WISMod)}) " +
+                $"INT {s.INT}({CharacterStats.FormatMod(s.INTMod)}) " +
+                $"CHA {s.CHA}({CharacterStats.FormatMod(s.CHAMod)})";
+        }
+
+        if (hpBar != null)
+            hpBar.fillAmount = (float)s.CurrentHP / s.MaxHP;
+    }
+
+    private string FormatBonusDetail(int value, string label)
+    {
+        if (value == 0) return "";
+        return value > 0 ? $"+{value} {label}" : $"{value} {label}";
     }
 
     /// <summary>

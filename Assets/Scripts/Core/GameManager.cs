@@ -132,16 +132,26 @@ public class GameManager : MonoBehaviour
 
     private void SetupCharacters()
     {
-        // --- PC1 Setup ---
+        // ==========================================
+        // PC1: "Aldric" - Human Fighter (Level 3)
+        // High STR, good CON — front-line melee tank
+        // STR 16, DEX 12, CON 14, WIS 10, INT 10, CHA 13
+        // Equipment: Longsword (1d8), Chain Shirt (+4 armor), Heavy Shield (+2)
+        // Fighter BAB at level 3 = +3
+        // ==========================================
         CharacterStats pc1Stats = new CharacterStats(
-            name: "Hero 1",
-            maxHP: 30,
-            ac: 14,
-            atkBonus: 5,
-            minDmg: 3,
-            maxDmg: 8,
-            moveRange: 4,
-            atkRange: 1
+            name: "Aldric",
+            level: 3,
+            str: 16, dex: 12, con: 14, wis: 10, intelligence: 10, cha: 13,
+            bab: 3,             // Fighter BAB = level
+            armorBonus: 4,      // Chain shirt
+            shieldBonus: 2,     // Heavy steel shield
+            damageDice: 8,      // Longsword d8
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 4,       // 4 hexes per turn
+            atkRange: 1,        // Melee
+            baseHitDieHP: 22    // ~3d10 averaged (fighter hit die d10)
         );
 
         Sprite pcAlive = LoadSprite("Sprites/pc_alive");
@@ -150,16 +160,26 @@ public class GameManager : MonoBehaviour
         Vector2Int pc1Start = new Vector2Int(3, 8);
         PC1.Init(pc1Stats, pc1Start, pcAlive, pcDead);
 
-        // --- PC2 Setup ---
+        // ==========================================
+        // PC2: "Lyra" - Elf Rogue (Level 3)
+        // High DEX, decent INT — nimble striker
+        // STR 12, DEX 17, CON 12, WIS 13, INT 14, CHA 10
+        // Equipment: Short Sword (1d6), Leather Armor (+2), no shield
+        // Rogue BAB at level 3 = +2 (3/4 progression)
+        // ==========================================
         CharacterStats pc2Stats = new CharacterStats(
-            name: "Hero 2",
-            maxHP: 30,
-            ac: 14,
-            atkBonus: 5,
-            minDmg: 3,
-            maxDmg: 8,
-            moveRange: 4,
-            atkRange: 1
+            name: "Lyra",
+            level: 3,
+            str: 12, dex: 17, con: 12, wis: 13, intelligence: 14, cha: 10,
+            bab: 2,             // Rogue BAB = floor(level * 3/4)
+            armorBonus: 2,      // Leather armor
+            shieldBonus: 0,     // Rogues don't use shields
+            damageDice: 6,      // Short sword d6
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 5,       // 5 hexes — faster (lighter armor)
+            atkRange: 1,        // Melee
+            baseHitDieHP: 15    // ~3d6 averaged (rogue hit die d6)
         );
 
         Vector2Int pc2Start = new Vector2Int(3, 12);
@@ -170,16 +190,26 @@ public class GameManager : MonoBehaviour
         if (pc2SR != null)
             pc2SR.color = new Color(0.6f, 0.7f, 1f, 1f); // light blue tint
 
-        // --- NPC Setup ---
+        // ==========================================
+        // NPC: "Goblin Warchief" - Goblin Warrior (Level 2)
+        // Low STR but decent DEX — small and scrappy
+        // STR 14, DEX 15, CON 13, WIS 10, INT 10, CHA 8
+        // Equipment: Morningstar (1d8), Studded Leather (+3), Light Shield (+1)
+        // Warrior BAB at level 2 = +2
+        // ==========================================
         CharacterStats npcStats = new CharacterStats(
-            name: "Goblin",
-            maxHP: 20,
-            ac: 12,
-            atkBonus: 3,
-            minDmg: 2,
-            maxDmg: 6,
-            moveRange: 3,
-            atkRange: 1
+            name: "Goblin Warchief",
+            level: 2,
+            str: 14, dex: 15, con: 13, wis: 10, intelligence: 10, cha: 8,
+            bab: 2,             // Warrior BAB
+            armorBonus: 3,      // Studded leather
+            shieldBonus: 1,     // Light shield
+            damageDice: 8,      // Morningstar d8
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 3,       // 3 hexes — slower
+            atkRange: 1,        // Melee
+            baseHitDieHP: 12    // ~2d8 averaged (warrior hit die d8)
         );
 
         Sprite npcAlive = LoadSprite("Sprites/npc_enemy_alive");

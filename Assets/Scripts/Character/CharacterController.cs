@@ -90,6 +90,8 @@ public class CharacterController : MonoBehaviour
         result.TotalRoll = total;
         result.TargetAC = target.Stats.ArmorClass;
         result.Hit = hit;
+        result.NaturalTwenty = (roll == 20);
+        result.NaturalOne = (roll == 1);
 
         if (hit)
         {
