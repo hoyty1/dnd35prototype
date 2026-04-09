@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// Utility class for D&D 3.5 combat mechanics including flanking detection
-/// and sneak attack calculations on a hex grid.
+/// and sneak attack calculations on a square grid.
 /// </summary>
 public static class CombatUtils
 {
@@ -13,24 +13,22 @@ public static class CombatUtils
     public const int FlankingAttackBonus = 2;
 
     /// <summary>
-    /// Check if two allies are flanking a target on the hex grid.
+    /// Check if two allies are flanking a target on the square grid.
     /// In D&D 3.5, flanking occurs when two allies are on opposite sides of an enemy.
-    /// For hex grids, we check if the two allies are roughly 180 degrees apart
-    /// relative to the target (within a tolerance for hex geometry).
+    /// For square grids, we check if the two allies are roughly 180 degrees apart
+    /// relative to the target (within a tolerance for grid geometry).
     /// Both allies must be adjacent (within attack range 1) to the target.
     /// </summary>
     public static bool IsFlanking(Vector2Int ally1Pos, Vector2Int ally2Pos, Vector2Int targetPos)
     {
-        // Both allies must be adjacent to the target (distance 1)
-        int dist1 = HexUtils.HexDistance(ally1Pos, targetPos);
-        int dist2 = HexUtils.HexDistance(ally2Pos, targetPos);
+        // Both allies must be adjacent to the target (distance 1 in Chebyshev)
+        if (!SquareGridUtils.IsAdjacent(ally1Pos, targetPos)) return false;
+        if (!SquareGridUtils.IsAdjacent(ally2Pos, targetPos)) return false;
 
-        if (dist1 != 1 || dist2 != 1) return false;
-
-        // Convert hex positions to world positions to calculate angle
-        Vector3 targetWorld = HexUtils.AxialToWorld(targetPos.x, targetPos.y);
-        Vector3 ally1World = HexUtils.AxialToWorld(ally1Pos.x, ally1Pos.y);
-        Vector3 ally2World = HexUtils.AxialToWorld(ally2Pos.x, ally2Pos.y);
+        // Convert grid positions to world positions to calculate angle
+        Vector3 targetWorld = SquareGridUtils.GridToWorld(targetPos);
+        Vector3 ally1World = SquareGridUtils.GridToWorld(ally1Pos);
+        Vector3 ally2World = SquareGridUtils.GridToWorld(ally2Pos);
 
         // Calculate vectors from target to each ally
         Vector2 dir1 = new Vector2(ally1World.x - targetWorld.x, ally1World.y - targetWorld.y).normalized;
@@ -39,10 +37,10 @@ public static class CombatUtils
         // Calculate the angle between the two directions
         float angle = Vector2.Angle(dir1, dir2);
 
-        // For hex grids, opposite hexes are exactly 180 degrees apart.
-        // We use a tolerance of 30 degrees to account for hex geometry
-        // (hex neighbors are 60 degrees apart, so 150+ degrees means opposite side).
-        return angle >= 150f;
+        // For square grids, opposite squares are 180 degrees apart.
+        // We use a tolerance of 45 degrees (square neighbors are 45 degrees apart,
+        // so 135+ degrees means opposite side).
+        return angle >= 135f;
     }
 
     /// <summary>

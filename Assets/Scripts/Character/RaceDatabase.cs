@@ -60,7 +60,7 @@ public static class RaceDatabase
             CHAModifier = -2,
 
             // Physical Traits
-            BaseSpeedFeet = 20,  // 20 ft = 4 hexes
+            BaseSpeedFeet = 20,  // 20 ft = 4 squares
             SpeedNotReducedByArmor = true,  // Dwarf special: speed not reduced by armor/encumbrance
 
             // Vision
@@ -130,7 +130,7 @@ public static class RaceDatabase
             CHAModifier = 0,
 
             // Physical Traits
-            BaseSpeedFeet = 30,  // 30 ft = 6 hexes (standard speed)
+            BaseSpeedFeet = 30,  // 30 ft = 6 squares (standard speed)
             SpeedNotReducedByArmor = false,
 
             // Vision
@@ -201,7 +201,7 @@ public static class RaceDatabase
             CHAModifier = 0,
 
             // Physical Traits
-            BaseSpeedFeet = 20,  // 20 ft = 4 hexes (Small size)
+            BaseSpeedFeet = 20,  // 20 ft = 4 squares (Small size)
             SpeedNotReducedByArmor = false,
 
             // Vision
@@ -278,7 +278,7 @@ public static class RaceDatabase
             CHAModifier = 0,
 
             // Physical Traits
-            BaseSpeedFeet = 30,  // 30 ft = 6 hexes
+            BaseSpeedFeet = 30,  // 30 ft = 6 squares
             SpeedNotReducedByArmor = false,
 
             // Vision
@@ -346,7 +346,7 @@ public static class RaceDatabase
             CHAModifier = -2,
 
             // Physical Traits
-            BaseSpeedFeet = 30,  // 30 ft = 6 hexes
+            BaseSpeedFeet = 30,  // 30 ft = 6 squares
             SpeedNotReducedByArmor = false,
 
             // Vision
@@ -407,7 +407,7 @@ public static class RaceDatabase
             CHAModifier = 0,
 
             // Physical Traits
-            BaseSpeedFeet = 20,  // 20 ft = 4 hexes (Small size)
+            BaseSpeedFeet = 20,  // 20 ft = 4 squares (Small size)
             SpeedNotReducedByArmor = false,
 
             // Vision

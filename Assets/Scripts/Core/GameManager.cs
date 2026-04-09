@@ -19,7 +19,7 @@ public class GameManager : MonoBehaviour
     public static GameManager Instance { get; private set; }
 
     [Header("Grid")]
-    public HexGrid Grid;
+    public SquareGrid Grid;
 
     [Header("Characters")]
     public CharacterController PC1;
@@ -63,7 +63,7 @@ public class GameManager : MonoBehaviour
     private enum PendingAttackMode { Single, FullAttack, DualWield }
     private PendingAttackMode _pendingAttackMode;
 
-    private List<HexCell> _highlightedCells = new List<HexCell>();
+    private List<SquareCell> _highlightedCells = new List<SquareCell>();
     private string _lastCombatLog = "";
     private Camera _mainCam;
 
@@ -259,7 +259,7 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Handle input every frame - inventory toggle and hex clicks.
+    /// Handle input every frame - inventory toggle and cell clicks.
     /// </summary>
     private void Update()
     {
@@ -308,11 +308,11 @@ public class GameManager : MonoBehaviour
 
         if (hit.collider != null)
         {
-            HexCell cell = hit.collider.GetComponent<HexCell>();
+            SquareCell cell = hit.collider.GetComponent<SquareCell>();
             if (cell != null)
             {
-                Debug.Log($"[GameManager] Hex clicked: ({cell.Q}, {cell.R}) Phase={CurrentPhase} Sub={CurrentSubPhase}");
-                OnHexClicked(cell);
+                Debug.Log($"[GameManager] Cell clicked: ({cell.X}, {cell.Y}) Phase={CurrentPhase} Sub={CurrentSubPhase}");
+                OnCellClicked(cell);
             }
         }
     }
@@ -366,7 +366,7 @@ public class GameManager : MonoBehaviour
         // PC1: "Aldric" - Dwarf Fighter (Level 3)
         // Base scores: STR 16, DEX 12, CON 14, WIS 10, INT 10, CHA 13
         // Dwarf racial: CON +2 = 16, CHA -2 = 11
-        // Dwarf speed: 20 ft (4 hexes), NOT reduced by armor
+        // Dwarf speed: 20 ft (4 squares), NOT reduced by armor
         // ==========================================
         CharacterStats pc1Stats = new CharacterStats(
             name: "Aldric",
@@ -387,7 +387,7 @@ public class GameManager : MonoBehaviour
 
         Debug.Log($"[GameManager] Aldric (Dwarf Fighter): STR {pc1Stats.STR} DEX {pc1Stats.DEX} CON {pc1Stats.CON} " +
                   $"WIS {pc1Stats.WIS} INT {pc1Stats.INT} CHA {pc1Stats.CHA} | " +
-                  $"HP {pc1Stats.MaxHP} | Speed {pc1Stats.MoveRange} hexes ({pc1Stats.SpeedInFeet} ft)");
+                  $"HP {pc1Stats.MaxHP} | Speed {pc1Stats.MoveRange} squares ({pc1Stats.SpeedInFeet} ft)");
 
         Sprite pcAlive = LoadSprite("Sprites/pc_alive");
         Sprite pcDead = LoadSprite("Sprites/pc_dead");
@@ -403,7 +403,7 @@ public class GameManager : MonoBehaviour
         // PC2: "Lyra" - Elf Rogue (Level 3)
         // Base scores: STR 12, DEX 17, CON 12, WIS 13, INT 14, CHA 10
         // Elf racial: DEX +2 = 19, CON -2 = 10
-        // Elf speed: 30 ft (6 hexes)
+        // Elf speed: 30 ft (6 squares)
         // Elf weapon proficiencies: longsword, rapier, longbow, shortbow
         // ==========================================
         CharacterStats pc2Stats = new CharacterStats(
@@ -425,7 +425,7 @@ public class GameManager : MonoBehaviour
 
         Debug.Log($"[GameManager] Lyra (Elf Rogue): STR {pc2Stats.STR} DEX {pc2Stats.DEX} CON {pc2Stats.CON} " +
                   $"WIS {pc2Stats.WIS} INT {pc2Stats.INT} CHA {pc2Stats.CHA} | " +
-                  $"HP {pc2Stats.MaxHP} | Speed {pc2Stats.MoveRange} hexes ({pc2Stats.SpeedInFeet} ft)");
+                  $"HP {pc2Stats.MaxHP} | Speed {pc2Stats.MoveRange} squares ({pc2Stats.SpeedInFeet} ft)");
 
         Vector2Int pc2Start = new Vector2Int(3, 12);
         PC2.Init(pc2Stats, pc2Start, pcAlive, pcDead);
@@ -541,7 +541,7 @@ public class GameManager : MonoBehaviour
         _highlightedCells.Clear();
 
         // Highlight current position
-        HexCell current = Grid.GetCell(pc.GridPosition);
+        SquareCell current = Grid.GetCell(pc.GridPosition);
         if (current != null)
             current.SetHighlight(HighlightType.Selected);
 
@@ -648,7 +648,7 @@ public class GameManager : MonoBehaviour
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
 
-        List<HexCell> moveCells = Grid.GetCellsInRange(pc.GridPosition, pc.Stats.MoveRange);
+        List<SquareCell> moveCells = Grid.GetCellsInRange(pc.GridPosition, pc.Stats.MoveRange);
         foreach (var cell in moveCells)
         {
             if (!cell.IsOccupied)
@@ -658,7 +658,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        HexCell current = Grid.GetCell(pc.GridPosition);
+        SquareCell current = Grid.GetCell(pc.GridPosition);
         if (current != null)
             current.SetHighlight(HighlightType.Selected);
     }
@@ -679,26 +679,26 @@ public class GameManager : MonoBehaviour
         bool isThrownWeapon = (weapon != null) && weapon.IsThrown;
         bool isRangedWeapon = (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged) || rangeIncrement > 0;
 
-        // Calculate effective attack range in hexes
-        int maxRangeHexes;
+        // Calculate effective attack range in squares
+        int maxRangeSquares;
         if (isRangedWeapon && rangeIncrement > 0)
         {
-            maxRangeHexes = RangeCalculator.GetMaxRangeHexes(rangeIncrement, isThrownWeapon);
+            maxRangeSquares = RangeCalculator.GetMaxRangeSquares(rangeIncrement, isThrownWeapon);
         }
         else
         {
             // Melee weapon: use AttackRange from stats (typically 1, or 2 for reach)
-            maxRangeHexes = pc.Stats.AttackRange;
+            maxRangeSquares = pc.Stats.AttackRange;
         }
 
         // Show range zone highlights for ranged weapons
         if (isRangedWeapon && rangeIncrement > 0)
         {
-            ShowRangeZoneHighlights(pc, rangeIncrement, maxRangeHexes, isThrownWeapon);
+            ShowRangeZoneHighlights(pc, rangeIncrement, maxRangeSquares, isThrownWeapon);
         }
 
         // Find all valid targets within range
-        List<HexCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeHexes);
+        List<SquareCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares);
         bool hasTarget = false;
         bool anyFlanking = false;
 
@@ -706,18 +706,18 @@ public class GameManager : MonoBehaviour
         {
             if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead)
             {
-                int hexDist = HexUtils.HexDistance(pc.GridPosition, cell.Coords);
+                int sqDist = SquareGridUtils.GetDistance(pc.GridPosition, cell.Coords);
 
                 // Check if within max range
                 if (isRangedWeapon && rangeIncrement > 0)
                 {
-                    int distFeet = RangeCalculator.HexesToFeet(hexDist);
+                    int distFeet = RangeCalculator.SquaresToFeet(sqDist);
                     if (!RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement, isThrownWeapon))
                         continue; // Beyond max range, skip
                 }
                 else
                 {
-                    if (hexDist > pc.Stats.AttackRange)
+                    if (sqDist > pc.Stats.AttackRange)
                         continue;
                 }
 
@@ -753,9 +753,9 @@ public class GameManager : MonoBehaviour
             string rangeMsg = "";
             if (isRangedWeapon && rangeIncrement > 0)
             {
-                int incHexes = RangeCalculator.GetRangeIncrementHexes(rangeIncrement);
+                int incSquares = RangeCalculator.GetRangeIncrementSquares(rangeIncrement);
                 int maxRange = RangeCalculator.GetMaxRangeFeet(rangeIncrement, isThrownWeapon);
-                rangeMsg = $"\n{weapon.Name}: {rangeIncrement} ft increment ({incHexes} hex), max {maxRange} ft";
+                rangeMsg = $"\n{weapon.Name}: {rangeIncrement} ft increment ({incSquares} sq), max {maxRange} ft";
             }
 
             if (CombatUI.TurnIndicatorText != null && !CombatUI.TurnIndicatorText.text.Contains("DUAL WIELD"))
@@ -774,15 +774,15 @@ public class GameManager : MonoBehaviour
     /// Green = 1st increment (no penalty), Yellow = moderate, Orange = far.
     /// Thrown weapons: max 5 increments. Projectile weapons: max 10 increments.
     /// </summary>
-    private void ShowRangeZoneHighlights(CharacterController pc, int rangeIncrement, int maxRangeHexes, bool isThrownWeapon = false)
+    private void ShowRangeZoneHighlights(CharacterController pc, int rangeIncrement, int maxRangeSquares, bool isThrownWeapon = false)
     {
-        List<HexCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeHexes);
+        List<SquareCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares);
         foreach (var cell in allCells)
         {
             if (cell.Coords == pc.GridPosition) continue;
 
-            int hexDist = HexUtils.HexDistance(pc.GridPosition, cell.Coords);
-            int zone = RangeCalculator.GetRangeZone(hexDist, rangeIncrement, isThrownWeapon);
+            int sqDist = SquareGridUtils.GetDistance(pc.GridPosition, cell.Coords);
+            int zone = RangeCalculator.GetRangeZone(sqDist, rangeIncrement, isThrownWeapon);
 
             switch (zone)
             {
@@ -801,9 +801,9 @@ public class GameManager : MonoBehaviour
             ShowActionChoices();
     }
 
-    // ========== HEX CLICK HANDLING ==========
+    // ========== CELL CLICK HANDLING ==========
 
-    public void OnHexClicked(HexCell cell)
+    public void OnCellClicked(SquareCell cell)
     {
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
@@ -826,7 +826,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void HandleMovementClick(CharacterController pc, HexCell cell)
+    private void HandleMovementClick(CharacterController pc, SquareCell cell)
     {
         if (cell.Coords == pc.GridPosition)
         {
@@ -855,7 +855,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void HandleAttackTargetClick(CharacterController pc, HexCell cell)
+    private void HandleAttackTargetClick(CharacterController pc, SquareCell cell)
     {
         // Allow clicking own tile or empty tile to cancel
         if (!cell.IsOccupied || cell.Occupant == pc || cell.Occupant.Stats.IsDead)
@@ -912,6 +912,7 @@ public class GameManager : MonoBehaviour
     /// <summary>
     /// Calculate range info for an attack between two characters.
     /// Returns a RangeInfo with distance, increment, and penalty data.
+    /// Uses D&D 3.5 square grid distance (with diagonal costs).
     /// Correctly uses 5 max increments for thrown weapons, 10 for projectile weapons.
     /// </summary>
     private RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target)
@@ -919,8 +920,8 @@ public class GameManager : MonoBehaviour
         ItemData weapon = attacker.GetEquippedMainWeapon();
         int rangeIncrement = (weapon != null) ? weapon.RangeIncrement : 0;
         bool isThrownWeapon = (weapon != null) && weapon.IsThrown;
-        int hexDist = HexUtils.HexDistance(attacker.GridPosition, target.GridPosition);
-        return RangeCalculator.GetRangeInfo(hexDist, rangeIncrement, isThrownWeapon);
+        int sqDist = SquareGridUtils.GetDistance(attacker.GridPosition, target.GridPosition);
+        return RangeCalculator.GetRangeInfo(sqDist, rangeIncrement, isThrownWeapon);
     }
 
     private void PerformSingleAttack(CharacterController attacker, CharacterController target,
@@ -1076,12 +1077,12 @@ public class GameManager : MonoBehaviour
             yield break;
         }
 
-        int distToTarget = HexUtils.HexDistance(NPC.GridPosition, closestPC.GridPosition);
+        int distToTarget = SquareGridUtils.GetDistance(NPC.GridPosition, closestPC.GridPosition);
 
         // NPC uses simple action economy: move then attack
         if (distToTarget > NPC.Stats.AttackRange)
         {
-            HexCell bestCell = FindBestMoveToward(NPC, closestPC.GridPosition);
+            SquareCell bestCell = FindBestMoveToward(NPC, closestPC.GridPosition);
             if (bestCell != null)
             {
                 NPC.MoveToCell(bestCell);
@@ -1100,7 +1101,7 @@ public class GameManager : MonoBehaviour
             yield break;
         }
 
-        distToTarget = HexUtils.HexDistance(NPC.GridPosition, closestPC.GridPosition);
+        distToTarget = SquareGridUtils.GetDistance(NPC.GridPosition, closestPC.GridPosition);
 
         if (distToTarget <= NPC.Stats.AttackRange && !closestPC.Stats.IsDead)
         {
@@ -1145,22 +1146,22 @@ public class GameManager : MonoBehaviour
         if (pc1Alive && !pc2Alive) return PC1;
         if (!pc1Alive && pc2Alive) return PC2;
 
-        int dist1 = HexUtils.HexDistance(NPC.GridPosition, PC1.GridPosition);
-        int dist2 = HexUtils.HexDistance(NPC.GridPosition, PC2.GridPosition);
+        int dist1 = SquareGridUtils.GetDistance(NPC.GridPosition, PC1.GridPosition);
+        int dist2 = SquareGridUtils.GetDistance(NPC.GridPosition, PC2.GridPosition);
         return dist1 <= dist2 ? PC1 : PC2;
     }
 
-    private HexCell FindBestMoveToward(CharacterController mover, Vector2Int targetPos)
+    private SquareCell FindBestMoveToward(CharacterController mover, Vector2Int targetPos)
     {
-        List<HexCell> moveCells = Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);
-        HexCell bestCell = null;
+        List<SquareCell> moveCells = Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);
+        SquareCell bestCell = null;
         int bestDist = int.MaxValue;
 
         foreach (var cell in moveCells)
         {
             if (cell.IsOccupied) continue;
 
-            int dist = HexUtils.HexDistance(cell.Coords, targetPos);
+            int dist = SquareGridUtils.GetDistance(cell.Coords, targetPos);
             if (dist < bestDist)
             {
                 bestDist = dist;

@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Utility class for D&D 3.5 range increment calculations.
+/// Utility class for D&D 3.5 range increment calculations on a square grid.
 /// Each ranged weapon has a range increment in feet.
 /// Attacks within the first increment: no penalty.
 /// Each additional increment: -2 cumulative penalty.
@@ -11,8 +11,8 @@ using UnityEngine;
 /// </summary>
 public static class RangeCalculator
 {
-    /// <summary>Feet per hex (1 hex = 5 ft in D&D 3.5).</summary>
-    public const int FeetPerHex = 5;
+    /// <summary>Feet per square (1 square = 5 ft in D&D 3.5).</summary>
+    public const int FeetPerSquare = 5;
 
     /// <summary>Maximum number of range increments for projectile weapons (bows, crossbows, slings).</summary>
     public const int MaxIncrementsProjectile = 10;
@@ -82,49 +82,49 @@ public static class RangeCalculator
     }
 
     /// <summary>
-    /// Get maximum range in hexes for a weapon.
+    /// Get maximum range in squares for a weapon.
     /// </summary>
-    public static int GetMaxRangeHexes(int rangeIncrementFeet, bool isThrownWeapon = false)
+    public static int GetMaxRangeSquares(int rangeIncrementFeet, bool isThrownWeapon = false)
     {
-        return GetMaxRangeFeet(rangeIncrementFeet, isThrownWeapon) / FeetPerHex;
+        return GetMaxRangeFeet(rangeIncrementFeet, isThrownWeapon) / FeetPerSquare;
     }
 
     /// <summary>
-    /// Get range increment in hexes.
+    /// Get range increment in squares.
     /// </summary>
-    public static int GetRangeIncrementHexes(int rangeIncrementFeet)
+    public static int GetRangeIncrementSquares(int rangeIncrementFeet)
     {
-        return rangeIncrementFeet / FeetPerHex;
+        return rangeIncrementFeet / FeetPerSquare;
     }
 
     /// <summary>
-    /// Convert hex distance to feet.
+    /// Convert square distance to feet.
     /// </summary>
-    public static int HexesToFeet(int hexDistance)
+    public static int SquaresToFeet(int squareDistance)
     {
-        return hexDistance * FeetPerHex;
+        return squareDistance * FeetPerSquare;
     }
 
     /// <summary>
-    /// Get a full range info object for a ranged attack at a given hex distance.
+    /// Get a full range info object for a ranged attack at a given square distance.
     /// Pass isThrownWeapon = true for thrown weapons (5 increment max) or false for projectile weapons (10 increment max).
     /// </summary>
-    public static RangeInfo GetRangeInfo(int hexDistance, int rangeIncrementFeet, bool isThrownWeapon = false)
+    public static RangeInfo GetRangeInfo(int squareDistance, int rangeIncrementFeet, bool isThrownWeapon = false)
     {
         var info = new RangeInfo();
-        info.HexDistance = hexDistance;
-        info.DistanceFeet = HexesToFeet(hexDistance);
+        info.SquareDistance = squareDistance;
+        info.DistanceFeet = SquaresToFeet(squareDistance);
         info.RangeIncrementFeet = rangeIncrementFeet;
         info.IsThrownWeapon = isThrownWeapon;
         info.MaxRangeFeet = GetMaxRangeFeet(rangeIncrementFeet, isThrownWeapon);
-        info.MaxRangeHexes = GetMaxRangeHexes(rangeIncrementFeet, isThrownWeapon);
+        info.MaxRangeSquares = GetMaxRangeSquares(rangeIncrementFeet, isThrownWeapon);
 
         if (rangeIncrementFeet <= 0)
         {
             // Melee weapon - no range increment system
             info.IncrementNumber = 0;
             info.Penalty = 0;
-            info.IsInRange = (hexDistance <= 1);
+            info.IsInRange = (squareDistance <= 1);
             info.IsMelee = true;
             return info;
         }
@@ -142,17 +142,17 @@ public static class RangeCalculator
     }
 
     /// <summary>
-    /// Determine the range zone a hex falls into for visual highlighting.
+    /// Determine the range zone a square falls into for visual highlighting.
     /// Zone 0: Not in range / melee weapon
     /// Zone 1: First increment (green/normal, no penalty)
     /// Zone 2: 2nd-3rd increments for thrown, 2nd-5th for projectile (yellow, moderate penalty)
     /// Zone 3: 4th-5th increments for thrown, 6th-10th for projectile (orange, heavy penalty)
     /// </summary>
-    public static int GetRangeZone(int hexDistance, int rangeIncrementFeet, bool isThrownWeapon = false)
+    public static int GetRangeZone(int squareDistance, int rangeIncrementFeet, bool isThrownWeapon = false)
     {
         if (rangeIncrementFeet <= 0) return 0;
 
-        int distFeet = HexesToFeet(hexDistance);
+        int distFeet = SquaresToFeet(squareDistance);
         int increment = GetRangeIncrement(distFeet, rangeIncrementFeet, isThrownWeapon);
 
         if (increment == 0) return 0;        // Out of range
@@ -171,6 +171,23 @@ public static class RangeCalculator
             return 3;                          // 6th-10th - far
         }
     }
+
+    // ========== BACKWARD COMPATIBILITY ALIASES ==========
+    // These maintain compatibility with code that still uses "Hex" naming
+
+    /// <summary>Alias for FeetPerSquare (backward compatibility).</summary>
+    public const int FeetPerHex = FeetPerSquare;
+
+    /// <summary>Alias for GetMaxRangeSquares (backward compatibility).</summary>
+    public static int GetMaxRangeHexes(int rangeIncrementFeet, bool isThrownWeapon = false)
+        => GetMaxRangeSquares(rangeIncrementFeet, isThrownWeapon);
+
+    /// <summary>Alias for GetRangeIncrementSquares (backward compatibility).</summary>
+    public static int GetRangeIncrementHexes(int rangeIncrementFeet)
+        => GetRangeIncrementSquares(rangeIncrementFeet);
+
+    /// <summary>Alias for SquaresToFeet (backward compatibility).</summary>
+    public static int HexesToFeet(int distance) => SquaresToFeet(distance);
 }
 
 /// <summary>
@@ -178,16 +195,20 @@ public static class RangeCalculator
 /// </summary>
 public class RangeInfo
 {
-    public int HexDistance;           // Distance in hexes
+    public int SquareDistance;         // Distance in squares (D&D 3.5 diagonal-aware)
     public int DistanceFeet;          // Distance in feet
     public int RangeIncrementFeet;    // Weapon's range increment
     public int MaxRangeFeet;          // Maximum range (5× increment for thrown, 10× for projectile)
-    public int MaxRangeHexes;         // Maximum range in hexes
+    public int MaxRangeSquares;       // Maximum range in squares
     public int IncrementNumber;       // Which increment (1-5 thrown, 1-10 projectile, 0 = out of range)
     public int Penalty;               // Attack penalty (0, -2, -4, etc.)
     public bool IsInRange;            // Whether the target can be attacked
     public bool IsMelee;              // Whether this is a melee weapon
     public bool IsThrownWeapon;       // Whether the weapon is thrown (5 increment max vs 10 for projectile)
+
+    // Backward compatibility alias
+    public int HexDistance { get => SquareDistance; set => SquareDistance = value; }
+    public int MaxRangeHexes { get => MaxRangeSquares; set => MaxRangeSquares = value; }
 
     /// <summary>Get a formatted description for the combat log.</summary>
     public string GetDescription()

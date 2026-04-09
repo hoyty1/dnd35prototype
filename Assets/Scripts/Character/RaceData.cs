@@ -30,8 +30,11 @@ public class RaceData
     /// <summary>Base land speed in feet (e.g., 30 for most Medium races, 20 for dwarves).</summary>
     public int BaseSpeedFeet;
 
-    /// <summary>Base land speed in hexes (derived from feet: 5 ft per hex).</summary>
-    public int BaseSpeedHexes => BaseSpeedFeet / 5;
+    /// <summary>Base land speed in squares (derived from feet: 5 ft per square).</summary>
+    public int BaseSpeedSquares => BaseSpeedFeet / 5;
+
+    /// <summary>Backward compatibility alias.</summary>
+    public int BaseSpeedHexes => BaseSpeedSquares;
 
     /// <summary>If true, speed is NOT reduced by armor or encumbrance (Dwarf trait).</summary>
     public bool SpeedNotReducedByArmor;
@@ -224,7 +227,7 @@ public class RaceData
         var lines = new List<string>();
         lines.Add($"{RaceName} ({RaceSize})");
         lines.Add($"Ability Mods: {GetAbilityModifierString()}");
-        lines.Add($"Speed: {BaseSpeedFeet} ft ({BaseSpeedHexes} hexes)");
+        lines.Add($"Speed: {BaseSpeedFeet} ft ({BaseSpeedSquares} squares)");
 
         if (SizeACAndAttackModifier != 0)
             lines.Add($"Size: {RaceSize} ({CharacterStats.FormatMod(SizeACAndAttackModifier)} AC/Attack, {CharacterStats.FormatMod(SizeHideModifier)} Hide, {CharacterStats.FormatMod(SizeGrappleModifier)} Grapple)");

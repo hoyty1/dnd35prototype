@@ -88,10 +88,10 @@ public class ItemData
     public int DamageDice;      // Sides on damage die (e.g., 8 for d8)
     public int DamageCount;     // Number of damage dice (usually 1)
     public int BonusDamage;     // Flat bonus damage
-    public int AttackRange;     // 1 = melee, >1 = ranged (in feet for ranged weapons, hexes for melee)
+    public int AttackRange;     // 1 = melee, >1 = ranged (in feet for ranged weapons, squares for melee)
     public bool IsLightWeapon;  // Light weapon (dagger, short sword) - reduces TWF penalties
     public bool IsTwoHanded;    // Two-handed weapon - can't be dual-wielded, 1.5x STR to damage
-    public bool HasReach;       // Reach weapon - can attack at 2 hexes
+    public bool HasReach;       // Reach weapon - can attack at 2 squares
     public string DamageType;   // "slashing", "piercing", "bludgeoning", or combinations
 
     // --- Damage Modifier Properties (D&D 3.5) ---
@@ -165,10 +165,10 @@ public class ItemData
             {
                 int maxIncrements = IsThrown ? 5 : 10;
                 int maxRange = RangeIncrement * maxIncrements;
-                int incHexes = RangeIncrement / 5;
-                int maxHexes = maxRange / 5;
-                string weaponType = IsThrown ? "thrown" : "projectile";
-                stats += $"\nRange: {RangeIncrement} ft increment ({incHexes} hex), max {maxRange} ft ({maxHexes} hex) [{weaponType}]";
+                int incSquares = RangeIncrement / 5;
+                int maxSquares = maxRange / 5;
+
+                stats += $"\nRange: {RangeIncrement} ft increment ({incSquares} sq), max {maxRange} ft ({maxSquares} sq) [{weaponType}]";
             }
             else if (AttackRange > 1) stats += $" | Range: {AttackRange} ft";
             string props = "";

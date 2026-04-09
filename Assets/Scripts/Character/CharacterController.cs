@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// Controls a character on the hex grid (both PC and NPC).
+/// Controls a character on the square grid (both PC and NPC).
 /// Supports D&D 3.5 action economy, full attacks, dual wielding, and critical hits.
 /// </summary>
 public class CharacterController : MonoBehaviour
@@ -45,10 +45,10 @@ public class CharacterController : MonoBehaviour
         _sr.sortingOrder = 10;
 
         // Position in world
-        transform.position = HexUtils.AxialToWorld(startPos.x, startPos.y);
+        transform.position = SquareGridUtils.GridToWorld(startPos);
 
         // Register on grid
-        HexCell cell = GameManager.Instance.Grid.GetCell(startPos);
+        SquareCell cell = GameManager.Instance.Grid.GetCell(startPos);
         if (cell != null)
         {
             cell.IsOccupied = true;
@@ -57,12 +57,12 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Move the character to a new hex cell.
+    /// Move the character to a new square cell.
     /// </summary>
-    public void MoveToCell(HexCell targetCell)
+    public void MoveToCell(SquareCell targetCell)
     {
         // Clear old cell
-        HexCell oldCell = GameManager.Instance.Grid.GetCell(GridPosition);
+        SquareCell oldCell = GameManager.Instance.Grid.GetCell(GridPosition);
         if (oldCell != null)
         {
             oldCell.IsOccupied = false;
@@ -71,7 +71,7 @@ public class CharacterController : MonoBehaviour
 
         // Update position
         GridPosition = targetCell.Coords;
-        transform.position = HexUtils.AxialToWorld(targetCell.Q, targetCell.R);
+        transform.position = SquareGridUtils.GridToWorld(targetCell.X, targetCell.Y);
 
         // Register on new cell
         targetCell.IsOccupied = true;

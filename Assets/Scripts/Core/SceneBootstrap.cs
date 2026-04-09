@@ -13,7 +13,7 @@ public class SceneBootstrap : MonoBehaviour
     {
         // Build the entire scene
         SetupCamera();
-        HexGrid grid = CreateHexGrid();
+        SquareGrid grid = CreateSquareGrid();
         var (pc1, pc2, npc) = CreateCharacters();
         CombatUI combatUI = CreateUI();
         SetupGameManager(grid, pc1, pc2, npc, combatUI);
@@ -35,53 +35,40 @@ public class SceneBootstrap : MonoBehaviour
         cam.clearFlags = CameraClearFlags.SolidColor;
     }
 
-    // ========== HEX GRID ==========
-    private HexGrid CreateHexGrid()
+    // ========== SQUARE GRID ==========
+    private SquareGrid CreateSquareGrid()
     {
-        GameObject gridGO = new GameObject("HexGrid");
-        HexGrid grid = gridGO.AddComponent<HexGrid>();
-        grid.hexSprite = CreateHexSprite();
+        GameObject gridGO = new GameObject("SquareGrid");
+        SquareGrid grid = gridGO.AddComponent<SquareGrid>();
+        grid.cellSprite = CreateSquareSprite();
         return grid;
     }
 
-    private Sprite CreateHexSprite()
+    private Sprite CreateSquareSprite()
     {
         int size = 64;
         Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
         tex.filterMode = FilterMode.Point;
 
-        Color transparent = new Color(0, 0, 0, 0);
         Color fill = Color.white;
         Color outline = new Color(0.4f, 0.5f, 0.4f, 1f);
 
         Color[] pixels = new Color[size * size];
-        for (int i = 0; i < pixels.Length; i++)
-            pixels[i] = transparent;
 
-        float cx = size / 2f;
-        float cy = size / 2f;
-        float outerR = size / 2f - 2f;
-
-        Vector2[] verts = new Vector2[6];
-        for (int i = 0; i < 6; i++)
-        {
-            float angle = Mathf.Deg2Rad * (60f * i - 30f);
-            verts[i] = new Vector2(cx + outerR * Mathf.Cos(angle), cy + outerR * Mathf.Sin(angle));
-        }
+        int border = 2; // border thickness in pixels
 
         for (int y = 0; y < size; y++)
         {
             for (int x = 0; x < size; x++)
             {
-                if (IsPointInHex(x, y, verts))
+                // Draw a square with border
+                if (x < border || x >= size - border || y < border || y >= size - border)
                 {
-                    bool nearEdge = false;
-                    for (int dx = -1; dx <= 1 && !nearEdge; dx++)
-                        for (int dy = -1; dy <= 1 && !nearEdge; dy++)
-                            if (!IsPointInHex(x + dx * 2, y + dy * 2, verts))
-                                nearEdge = true;
-
-                    pixels[y * size + x] = nearEdge ? outline : fill;
+                    pixels[y * size + x] = outline;
+                }
+                else
+                {
+                    pixels[y * size + x] = fill;
                 }
             }
         }
@@ -90,22 +77,6 @@ public class SceneBootstrap : MonoBehaviour
         tex.Apply();
 
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 64f);
-    }
-
-    private bool IsPointInHex(float px, float py, Vector2[] verts)
-    {
-        bool inside = false;
-        int j = verts.Length - 1;
-        for (int i = 0; i < verts.Length; i++)
-        {
-            if ((verts[i].y > py) != (verts[j].y > py) &&
-                px < (verts[j].x - verts[i].x) * (py - verts[i].y) / (verts[j].y - verts[i].y) + verts[i].x)
-            {
-                inside = !inside;
-            }
-            j = i;
-        }
-        return inside;
     }
 
     // ========== CHARACTERS ==========
@@ -320,7 +291,7 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.PC1SpeedText = CreateText(panel.transform, "PC1Speed",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Speed: 4 hexes (20 ft) (no armor penalty)", 12, Color.white, TextAnchor.MiddleLeft);
+            "Speed: 4 sq (20 ft) (no armor penalty)", 12, Color.white, TextAnchor.MiddleLeft);
     }
 
     /// <summary>Create PC2 stats panel with D&D 3.5 ability scores.</summary>
@@ -382,7 +353,7 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.PC2SpeedText = CreateText(panel.transform, "PC2Speed",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Speed: 6 hexes (30 ft)", 12, Color.white, TextAnchor.MiddleLeft);
+            "Speed: 6 sq (30 ft)", 12, Color.white, TextAnchor.MiddleLeft);
     }
 
     /// <summary>Create NPC stats panel with D&D 3.5 ability scores.</summary>
@@ -440,11 +411,11 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.NPCSpeedText = CreateText(panel.transform, "NPCSpeed",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Speed: 3 hexes (15 ft)", 12, Color.white, TextAnchor.MiddleLeft);
+            "Speed: 3 sq (15 ft)", 12, Color.white, TextAnchor.MiddleLeft);
     }
 
     // ========== GAME MANAGER ==========
-    private void SetupGameManager(HexGrid grid, CharacterController pc1, CharacterController pc2, CharacterController npc, CombatUI combatUI)
+    private void SetupGameManager(SquareGrid grid, CharacterController pc1, CharacterController pc2, CharacterController npc, CombatUI combatUI)
     {
         GameManager gm = gameObject.AddComponent<GameManager>();
         gm.Grid = grid;

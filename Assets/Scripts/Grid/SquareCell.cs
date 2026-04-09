@@ -1,13 +1,14 @@
 using UnityEngine;
 
 /// <summary>
-/// Represents a single cell in the hex grid.
-/// Attach to a hex tile GameObject.
+/// Represents a single cell in the square grid.
+/// Attach to a square tile GameObject.
+/// Supports 8 neighbors: N, NE, E, SE, S, SW, W, NW.
 /// </summary>
-public class HexCell : MonoBehaviour
+public class SquareCell : MonoBehaviour
 {
-    [HideInInspector] public int Q; // axial q
-    [HideInInspector] public int R; // axial r
+    [HideInInspector] public int X; // grid x coordinate
+    [HideInInspector] public int Y; // grid y coordinate
 
     /// <summary>
     /// Whether this cell is occupied by a character.
@@ -32,19 +33,19 @@ public class HexCell : MonoBehaviour
     private static readonly Color HighlightRangeMedium = new Color(0.9f, 0.9f, 0.2f, 0.35f);  // Yellow: 2nd-5th increments
     private static readonly Color HighlightRangeFar = new Color(0.9f, 0.5f, 0.1f, 0.35f);     // Orange: 6th-10th increments
 
-    public void Init(int q, int r)
+    public void Init(int x, int y)
     {
-        Q = q;
-        R = r;
-        transform.position = HexUtils.AxialToWorld(q, r);
-        gameObject.name = $"Hex_{q}_{r}";
+        X = x;
+        Y = y;
+        transform.position = SquareGridUtils.GridToWorld(x, y);
+        gameObject.name = $"Square_{x}_{y}";
 
         _sr = GetComponent<SpriteRenderer>();
         if (_sr != null)
             _defaultColor = _sr.color;
     }
 
-    public Vector2Int Coords => new Vector2Int(Q, R);
+    public Vector2Int Coords => new Vector2Int(X, Y);
 
     public void SetHighlight(HighlightType type)
     {

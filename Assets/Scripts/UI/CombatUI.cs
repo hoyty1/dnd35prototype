@@ -117,7 +117,7 @@ public class CombatUI : MonoBehaviour
             string speedExtra = "";
             if (s.SpeedNotReducedByArmor)
                 speedExtra = " (no armor penalty)";
-            speedText.text = $"Speed: {s.MoveRange} hexes ({s.SpeedInFeet} ft){speedExtra}";
+            speedText.text = $"Speed: {s.MoveRange} sq ({s.SpeedInFeet} ft){speedExtra}";
         }
 
         if (abilityText != null)

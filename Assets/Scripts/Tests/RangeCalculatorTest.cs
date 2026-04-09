@@ -20,75 +20,75 @@ public class RangeCalculatorTest : MonoBehaviour
 
         // ===== PROJECTILE WEAPON TESTS (10 increment max) =====
 
-        // Test 1: Shortbow at 50 ft (10 hexes): No penalty
+        // Test 1: Shortbow at 50 ft (10 squares): No penalty
         AssertTest("Shortbow 50ft", 10, 60, false, 1, 0, true, ref passed, ref failed);
 
-        // Test 2: Shortbow at 90 ft (18 hexes): -2 penalty (increment 2)
+        // Test 2: Shortbow at 90 ft (18 squares): -2 penalty (increment 2)
         AssertTest("Shortbow 90ft", 18, 60, false, 2, -2, true, ref passed, ref failed);
 
-        // Test 3: Shortbow at 150 ft (30 hexes): -4 penalty (increment 3)
+        // Test 3: Shortbow at 150 ft (30 squares): -4 penalty (increment 3)
         AssertTest("Shortbow 150ft", 30, 60, false, 3, -4, true, ref passed, ref failed);
 
-        // Test 4: Shortbow at 650 ft (130 hexes): Cannot attack (beyond max 600 ft)
+        // Test 4: Shortbow at 650 ft (130 squares): Cannot attack (beyond max 600 ft)
         AssertOutOfRange("Shortbow 650ft", 130, 60, false, ref passed, ref failed);
 
-        // Test 5: Longbow at 200 ft (40 hexes): -2 penalty (increment 2)
+        // Test 5: Longbow at 200 ft (40 squares): -2 penalty (increment 2)
         AssertTest("Longbow 200ft", 40, 100, false, 2, -2, true, ref passed, ref failed);
 
-        // Test 6: Longbow at 250 ft (50 hexes): -4 penalty (increment 3)
+        // Test 6: Longbow at 250 ft (50 squares): -4 penalty (increment 3)
         AssertTest("Longbow 250ft", 50, 100, false, 3, -4, true, ref passed, ref failed);
 
-        // Test 7: Light Crossbow at 80 ft (16 hexes): No penalty (increment 1)
+        // Test 7: Light Crossbow at 80 ft (16 squares): No penalty (increment 1)
         AssertTest("LtCrossbow 80ft", 16, 80, false, 1, 0, true, ref passed, ref failed);
 
-        // Test 8: Sling at 500 ft (100 hexes): max range (increment 10), -18 penalty
+        // Test 8: Sling at 500 ft (100 squares): max range (increment 10), -18 penalty
         AssertTest("Sling 500ft", 100, 50, false, 10, -18, true, ref passed, ref failed);
 
-        // Test 9: Sling at 505 ft (101 hexes): beyond max range
+        // Test 9: Sling at 505 ft (101 squares): beyond max range
         AssertOutOfRange("Sling 505ft", 101, 50, false, ref passed, ref failed);
 
-        // Test 10: Longbow at 1000 ft (200 hexes): max range (increment 10), -18 penalty - STILL VALID
+        // Test 10: Longbow at 1000 ft (200 squares): max range (increment 10), -18 penalty - STILL VALID
         AssertTest("Longbow 1000ft (10th inc)", 200, 100, false, 10, -18, true, ref passed, ref failed);
 
-        // Test 11: Longbow at 1005 ft (201 hexes): beyond max range
+        // Test 11: Longbow at 1005 ft (201 squares): beyond max range
         AssertOutOfRange("Longbow 1005ft", 201, 100, false, ref passed, ref failed);
 
         // ===== THROWN WEAPON TESTS (5 increment max per D&D 3.5) =====
 
-        // Test 12: Javelin at 30 ft (6 hexes): increment 1, no penalty (thrown)
+        // Test 12: Javelin at 30 ft (6 squares): increment 1, no penalty (thrown)
         AssertTest("Javelin 30ft (1st inc, thrown)", 6, 30, true, 1, 0, true, ref passed, ref failed);
 
-        // Test 13: Javelin at 35 ft (7 hexes): -2 penalty (increment 2, thrown)
+        // Test 13: Javelin at 35 ft (7 squares): -2 penalty (increment 2, thrown)
         AssertTest("Javelin 35ft (2nd inc, thrown)", 7, 30, true, 2, -2, true, ref passed, ref failed);
 
-        // Test 14: Javelin at 150 ft (30 hexes): max range for thrown (5th increment), -8 penalty - VALID
+        // Test 14: Javelin at 150 ft (30 squares): max range for thrown (5th increment), -8 penalty - VALID
         AssertTest("Javelin 150ft (5th inc, thrown)", 30, 30, true, 5, -8, true, ref passed, ref failed);
 
-        // Test 15: Javelin at 160 ft (32 hexes): beyond max range for thrown (6th increment) - OUT OF RANGE
+        // Test 15: Javelin at 160 ft (32 squares): beyond max range for thrown (6th increment) - OUT OF RANGE
         AssertOutOfRange("Javelin 160ft (6th inc, thrown)", 32, 30, true, ref passed, ref failed);
 
-        // Test 16: Dagger at 10 ft (2 hexes): increment 1, no penalty (thrown)
+        // Test 16: Dagger at 10 ft (2 squares): increment 1, no penalty (thrown)
         AssertTest("Dagger 10ft (1st inc, thrown)", 2, 10, true, 1, 0, true, ref passed, ref failed);
 
-        // Test 17: Dagger at 50 ft (10 hexes): max range for thrown (5th increment), -8 penalty - VALID
+        // Test 17: Dagger at 50 ft (10 squares): max range for thrown (5th increment), -8 penalty - VALID
         AssertTest("Dagger 50ft (5th inc, thrown)", 10, 10, true, 5, -8, true, ref passed, ref failed);
 
-        // Test 18: Dagger at 55 ft (11 hexes): beyond max range for thrown (6th increment) - OUT OF RANGE
+        // Test 18: Dagger at 55 ft (11 squares): beyond max range for thrown (6th increment) - OUT OF RANGE
         AssertOutOfRange("Dagger 55ft (6th inc, thrown)", 11, 10, true, ref passed, ref failed);
 
-        // Test 19: Dart at 100 ft (20 hexes): max range for thrown (5th increment), -8 penalty - VALID
+        // Test 19: Dart at 100 ft (20 squares): max range for thrown (5th increment), -8 penalty - VALID
         AssertTest("Dart 100ft (5th inc, thrown)", 20, 20, true, 5, -8, true, ref passed, ref failed);
 
-        // Test 20: Dart at 105 ft (21 hexes): beyond max range for thrown - OUT OF RANGE
+        // Test 20: Dart at 105 ft (21 squares): beyond max range for thrown - OUT OF RANGE
         AssertOutOfRange("Dart 105ft (6th inc, thrown)", 21, 20, true, ref passed, ref failed);
 
-        // Test 21: Handaxe at 50 ft (10 hexes): max range for thrown (5th increment), -8 penalty
+        // Test 21: Handaxe at 50 ft (10 squares): max range for thrown (5th increment), -8 penalty
         AssertTest("Handaxe 50ft (5th inc, thrown)", 10, 10, true, 5, -8, true, ref passed, ref failed);
 
-        // Test 22: Shortspear at 100 ft (20 hexes): max range for thrown (5th increment), -8 penalty
+        // Test 22: Shortspear at 100 ft (20 squares): max range for thrown (5th increment), -8 penalty
         AssertTest("Shortspear 100ft (5th inc, thrown)", 20, 20, true, 5, -8, true, ref passed, ref failed);
 
-        // Test 23: Trident at 50 ft (10 hexes): max range for thrown (5th increment), -8 penalty
+        // Test 23: Trident at 50 ft (10 squares): max range for thrown (5th increment), -8 penalty
         AssertTest("Trident 50ft (5th inc, thrown)", 10, 10, true, 5, -8, true, ref passed, ref failed);
 
         // ===== MELEE AND UTILITY TESTS =====
@@ -99,12 +99,12 @@ public class RangeCalculatorTest : MonoBehaviour
             if (info.IsMelee && info.IsInRange)
             {
                 passed++;
-                Debug.Log("[RangeTest] PASS: Melee at 1 hex");
+                Debug.Log("[RangeTest] PASS: Melee at 1 square");
             }
             else
             {
                 failed++;
-                Debug.LogError($"[RangeTest] FAIL: Melee at 1 hex - IsMelee={info.IsMelee}, IsInRange={info.IsInRange}");
+                Debug.LogError($"[RangeTest] FAIL: Melee at 1 square - IsMelee={info.IsMelee}, IsInRange={info.IsInRange}");
             }
         }
 
@@ -181,9 +181,9 @@ public class RangeCalculatorTest : MonoBehaviour
         Debug.Log($"[RangeTest] === RESULTS: {passed} passed, {failed} failed ===");
     }
 
-    private static void AssertTest(string name, int hexDist, int rangeInc, bool isThrown, int expectedInc, int expectedPenalty, bool expectedInRange, ref int passed, ref int failed)
+    private static void AssertTest(string name, int sqDist, int rangeInc, bool isThrown, int expectedInc, int expectedPenalty, bool expectedInRange, ref int passed, ref int failed)
     {
-        RangeInfo info = RangeCalculator.GetRangeInfo(hexDist, rangeInc, isThrown);
+        RangeInfo info = RangeCalculator.GetRangeInfo(sqDist, rangeInc, isThrown);
         bool pass = info.IncrementNumber == expectedInc && info.Penalty == expectedPenalty && info.IsInRange == expectedInRange;
         if (pass)
         {
@@ -197,9 +197,9 @@ public class RangeCalculatorTest : MonoBehaviour
         }
     }
 
-    private static void AssertOutOfRange(string name, int hexDist, int rangeInc, bool isThrown, ref int passed, ref int failed)
+    private static void AssertOutOfRange(string name, int sqDist, int rangeInc, bool isThrown, ref int passed, ref int failed)
     {
-        RangeInfo info = RangeCalculator.GetRangeInfo(hexDist, rangeInc, isThrown);
+        RangeInfo info = RangeCalculator.GetRangeInfo(sqDist, rangeInc, isThrown);
         if (!info.IsInRange && info.IncrementNumber == 0)
         {
             passed++;

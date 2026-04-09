@@ -509,7 +509,7 @@ public class CharacterCreationUI : MonoBehaviour
             int finalCon = data.CON + race.CONModifier;
             int conMod = CharacterStats.GetModifier(finalCon);
             preview += $"\nSize: {race.SizeName}";
-            preview += $"\nSpeed: {race.BaseSpeedFeet} ft ({race.BaseSpeedHexes} hexes)";
+            preview += $"\nSpeed: {race.BaseSpeedFeet} ft ({race.BaseSpeedSquares} squares)";
             if (race.SizeACAndAttackModifier != 0)
                 preview += $"\nSize bonus: {CharacterStats.FormatMod(race.SizeACAndAttackModifier)} AC/Attack";
 
@@ -766,7 +766,7 @@ public class CharacterCreationUI : MonoBehaviour
         review += $"HP: {data.HP}   (Hit Die: d{data.HitDie} + CON mod per level)\n";
         review += $"AC: {ac}   (10 + {effectiveDex} DEX + {armorBonus} armor + {shieldBonus} shield{(sizeMod != 0 ? $" + {sizeMod} size" : "")})\n";
         review += $"Attack: {CharacterStats.FormatMod(attackBonus)}   (BAB {CharacterStats.FormatMod(data.BAB)} + {CharacterStats.FormatMod(strMod)} STR{(sizeMod != 0 ? $" + {sizeMod} size" : "")})\n";
-        review += $"Speed: {(data.Race != null ? data.Race.BaseSpeedFeet : 30)} ft ({data.BaseSpeed} hexes)\n\n";
+        review += $"Speed: {(data.Race != null ? data.Race.BaseSpeedFeet : 30)} ft ({data.BaseSpeed} squares)\n\n";
 
         review += "--- Equipment ---\n";
         review += $"Armor: {armorName}\n";

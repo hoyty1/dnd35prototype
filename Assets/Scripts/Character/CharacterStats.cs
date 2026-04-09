@@ -43,8 +43,8 @@ public class CharacterStats
     public int BaseDamageDice;  // Number of sides on weapon damage die (e.g., 8 for longsword d8)
     public int BaseDamageCount; // Number of damage dice (usually 1)
     public int BonusDamage;     // Extra flat damage (magic weapon, etc.)
-    public int AttackRange;     // Hex tiles for attack reach (1 = melee)
-    public int BaseSpeed;       // Base movement speed in hexes
+    public int AttackRange;     // Square tiles for attack reach (1 = melee)
+    public int BaseSpeed;       // Base movement speed in squares
     public int CritThreatMin;   // Minimum natural d20 roll for crit threat (from equipped weapon, default 20)
     public int CritMultiplier;  // Crit damage multiplier (from equipped weapon, default 2)
 
@@ -98,7 +98,7 @@ public class CharacterStats
     /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier.</summary>
     public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier;
 
-    /// <summary>Movement speed in hexes per turn.</summary>
+    /// <summary>Movement speed in squares per turn.</summary>
     public int MoveRange => BaseSpeed;
 
     public bool IsDead => CurrentHP <= 0;
@@ -125,8 +125,8 @@ public class CharacterStats
     /// <param name="damageDice">Sides on weapon damage die (e.g. 8 for d8)</param>
     /// <param name="damageCount">Number of weapon damage dice</param>
     /// <param name="bonusDamage">Flat bonus damage</param>
-    /// <param name="baseSpeed">Movement range in hexes (overridden by race if set)</param>
-    /// <param name="atkRange">Attack range in hexes</param>
+    /// <param name="baseSpeed">Movement range in squares (overridden by race if set)</param>
+    /// <param name="atkRange">Attack range in squares</param>
     /// <param name="baseHitDieHP">Base HP from hit dice (before CON)</param>
     /// <param name="raceName">Race name (e.g., "Dwarf", "Elf", "Human"). Null for no race.</param>
     public CharacterStats(string name, int level, string characterClass,
@@ -161,8 +161,8 @@ public class CharacterStats
             INT = intelligence + Race.INTModifier;
             CHA = cha + Race.CHAModifier;
 
-            // Use racial speed (in hexes)
-            BaseSpeed = Race.BaseSpeedHexes;
+            // Use racial speed (in squares)
+            BaseSpeed = Race.BaseSpeedSquares;
         }
         else
         {

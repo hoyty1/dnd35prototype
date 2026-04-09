@@ -62,7 +62,7 @@ public class CharacterCreationData
         if (HP < 1) HP = 1;
 
         // Speed from race
-        BaseSpeed = Race != null ? Race.BaseSpeedHexes : 6;
+        BaseSpeed = Race != null ? Race.BaseSpeedSquares : 6;
     }
 
     /// <summary>Get a formatted stat line with racial mods shown.</summary>
