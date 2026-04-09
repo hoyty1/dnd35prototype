@@ -238,6 +238,11 @@ public class CombatUI : MonoBehaviour
         bool canDualWield = pc.CanDualWield();
         bool hasIterativeAttacks = pc.Stats.IterativeAttackCount > 1;
 
+        // Rapid Shot grants an extra attack during full attack with ranged weapon,
+        // so we need to show the Full Attack button even at low BAB
+        bool hasRapidShot = pc.Stats.HasFeat("Rapid Shot");
+        bool fullAttackRelevant = hasIterativeAttacks || hasRapidShot;
+
         // Move button: available if Move Action is available, or can convert Standard to Move
         if (MoveButton != null)
         {
@@ -269,20 +274,37 @@ public class CombatUI : MonoBehaviour
                 atkLabel.text = actions.HasStandardAction ? "Attack (Standard)" : "Attack (Used)";
         }
 
-        // Full Attack button: Full-Round Action, only show if BAB grants extra attacks
+        // Full Attack button: Full-Round Action
+        // Show if BAB grants iterative attacks OR if character has Rapid Shot feat
+        // (Rapid Shot adds an extra attack during full attack with ranged weapon)
         if (FullAttackButton != null)
         {
-            bool showFullAtk = hasIterativeAttacks && actions.HasFullRoundAction;
-            FullAttackButton.gameObject.SetActive(hasIterativeAttacks);
+            bool showFullAtk = fullAttackRelevant && actions.HasFullRoundAction;
+            FullAttackButton.gameObject.SetActive(fullAttackRelevant);
             FullAttackButton.interactable = showFullAtk;
 
             Text faLabel = FullAttackButton.GetComponentInChildren<Text>();
             if (faLabel != null)
             {
                 int atkCount = pc.Stats.IterativeAttackCount;
-                faLabel.text = showFullAtk
-                    ? $"Full Attack x{atkCount} (Full-Round)"
-                    : $"Full Attack (N/A)";
+                string label;
+                if (!showFullAtk)
+                {
+                    label = "Full Attack (N/A)";
+                }
+                else if (hasRapidShot && pc.RapidShotEnabled)
+                {
+                    label = $"Full Attack x{atkCount + 1} (Rapid Shot)";
+                }
+                else if (hasIterativeAttacks)
+                {
+                    label = $"Full Attack x{atkCount} (Full-Round)";
+                }
+                else
+                {
+                    label = "Full Attack (Full-Round)";
+                }
+                faLabel.text = label;
             }
         }
 

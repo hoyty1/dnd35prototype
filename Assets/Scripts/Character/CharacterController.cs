@@ -249,18 +249,28 @@ public class CharacterController : MonoBehaviour
         }
 
         // === FEAT: Rapid Shot (ranged, full attack only) ===
-        bool rapidShotActive = isRanged && Stats.HasFeat("Rapid Shot") && RapidShotEnabled;
+        bool hasRapidShotFeat = Stats.HasFeat("Rapid Shot");
+        bool rapidShotActive = isRanged && hasRapidShotFeat && RapidShotEnabled;
         int rapidShotPenalty = rapidShotActive ? -2 : 0;
+
+        // Debug logging for Rapid Shot
+        Debug.Log($"[FullAttack] {Stats.CharacterName}: Rapid Shot enabled: {RapidShotEnabled}");
+        Debug.Log($"[FullAttack] {Stats.CharacterName}: Has Rapid Shot feat: {hasRapidShotFeat}");
+        Debug.Log($"[FullAttack] {Stats.CharacterName}: Using ranged weapon: {isRanged}" +
+                  (equippedWeapon != null ? $" ({equippedWeapon.Name})" : " (unarmed)"));
+        Debug.Log($"[FullAttack] {Stats.CharacterName}: Rapid Shot active: {rapidShotActive}");
 
         // Build the list of attack bonuses, inserting Rapid Shot extra attack
         var allAttackBonuses = new List<int>(attackBonuses);
-        var allLabels = new List<string>();
 
         if (rapidShotActive)
         {
             // Insert extra attack at highest BAB (index 0)
             allAttackBonuses.Insert(0, attackBonuses[0]);
+            Debug.Log($"[FullAttack] {Stats.CharacterName}: Rapid Shot adding extra attack at bonus {attackBonuses[0]}, attack penalties applied: -2");
         }
+
+        Debug.Log($"[FullAttack] {Stats.CharacterName}: Number of attacks: {allAttackBonuses.Count}");
 
         for (int i = 0; i < allAttackBonuses.Count; i++)
         {

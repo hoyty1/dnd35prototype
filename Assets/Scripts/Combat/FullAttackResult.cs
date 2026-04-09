@@ -92,6 +92,12 @@ public class FullAttackResult
                 break;
         }
 
+        // Show Rapid Shot status if any attack has it
+        if (Attacks.Count > 0 && Attacks[0].RapidShotActive)
+        {
+            sb.AppendLine($"  Rapid Shot: Active (-2 penalty to all attacks, +1 extra attack)");
+        }
+
         // Each attack
         for (int i = 0; i < Attacks.Count; i++)
         {
@@ -103,6 +109,7 @@ public class FullAttackResult
             else if (atk.NaturalOne) critNote = " (NAT 1!)";
 
             string flankStr = atk.IsFlanking ? $" +{atk.FlankingBonus} flank" : "";
+            string rapidStr = atk.RapidShotActive ? " -2 RS" : "";
 
             if (atk.Hit)
             {
@@ -131,11 +138,11 @@ public class FullAttackResult
                 else if (atk.CritConfirmed)
                     threatStr = $" [Confirm: {atk.ConfirmationRoll}→{atk.ConfirmationTotal} vs AC {atk.TargetAC} ✓]";
 
-                sb.AppendLine($"  [{label}] d20={atk.DieRoll}{flankStr} → {atk.TotalRoll} vs AC {atk.TargetAC} HIT!{critNote}{threatStr} ({dmgStr} dmg)");
+                sb.AppendLine($"  [{label}] d20={atk.DieRoll}{flankStr}{rapidStr} → {atk.TotalRoll} vs AC {atk.TargetAC} HIT!{critNote}{threatStr} ({dmgStr} dmg)");
             }
             else
             {
-                sb.AppendLine($"  [{label}] d20={atk.DieRoll}{flankStr} → {atk.TotalRoll} vs AC {atk.TargetAC} MISS{critNote}");
+                sb.AppendLine($"  [{label}] d20={atk.DieRoll}{flankStr}{rapidStr} → {atk.TotalRoll} vs AC {atk.TargetAC} MISS{critNote}");
             }
         }
 
