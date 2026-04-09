@@ -5,6 +5,7 @@ using UnityEngine.UI;
 /// Bootstraps the entire game scene programmatically.
 /// Attach this to a single empty GameObject in the scene.
 /// Creates all required GameObjects, components, and UI at runtime.
+/// Now supports two PC characters (PC1, PC2) and one NPC.
 /// </summary>
 public class SceneBootstrap : MonoBehaviour
 {
@@ -13,9 +14,9 @@ public class SceneBootstrap : MonoBehaviour
         // Build the entire scene
         SetupCamera();
         HexGrid grid = CreateHexGrid();
-        var (pc, npc) = CreateCharacters();
+        var (pc1, pc2, npc) = CreateCharacters();
         CombatUI combatUI = CreateUI();
-        SetupGameManager(grid, pc, npc, combatUI);
+        SetupGameManager(grid, pc1, pc2, npc, combatUI);
     }
 
     // ========== CAMERA ==========
@@ -39,16 +40,10 @@ public class SceneBootstrap : MonoBehaviour
     {
         GameObject gridGO = new GameObject("HexGrid");
         HexGrid grid = gridGO.AddComponent<HexGrid>();
-
-        // Create a simple hex sprite procedurally
         grid.hexSprite = CreateHexSprite();
-
         return grid;
     }
 
-    /// <summary>
-    /// Generate a hexagonal sprite texture procedurally.
-    /// </summary>
     private Sprite CreateHexSprite()
     {
         int size = 64;
@@ -59,17 +54,14 @@ public class SceneBootstrap : MonoBehaviour
         Color fill = Color.white;
         Color outline = new Color(0.4f, 0.5f, 0.4f, 1f);
 
-        // Fill with transparent
         Color[] pixels = new Color[size * size];
         for (int i = 0; i < pixels.Length; i++)
             pixels[i] = transparent;
 
-        // Draw pointy-top hexagon
         float cx = size / 2f;
         float cy = size / 2f;
         float outerR = size / 2f - 2f;
 
-        // Hex vertices (pointy-top)
         Vector2[] verts = new Vector2[6];
         for (int i = 0; i < 6; i++)
         {
@@ -77,14 +69,12 @@ public class SceneBootstrap : MonoBehaviour
             verts[i] = new Vector2(cx + outerR * Mathf.Cos(angle), cy + outerR * Mathf.Sin(angle));
         }
 
-        // Fill hex using scanline
         for (int y = 0; y < size; y++)
         {
             for (int x = 0; x < size; x++)
             {
                 if (IsPointInHex(x, y, verts))
                 {
-                    // Check if near edge for outline
                     bool nearEdge = false;
                     for (int dx = -1; dx <= 1 && !nearEdge; dx++)
                         for (int dy = -1; dy <= 1 && !nearEdge; dy++)
@@ -104,7 +94,6 @@ public class SceneBootstrap : MonoBehaviour
 
     private bool IsPointInHex(float px, float py, Vector2[] verts)
     {
-        // Ray casting algorithm
         bool inside = false;
         int j = verts.Length - 1;
         for (int i = 0; i < verts.Length; i++)
@@ -120,19 +109,27 @@ public class SceneBootstrap : MonoBehaviour
     }
 
     // ========== CHARACTERS ==========
-    private (CharacterController pc, CharacterController npc) CreateCharacters()
+    private (CharacterController pc1, CharacterController pc2, CharacterController npc) CreateCharacters()
     {
-        GameObject pcGO = new GameObject("PC_Hero");
-        pcGO.AddComponent<SpriteRenderer>();
-        CharacterController pc = pcGO.AddComponent<CharacterController>();
-        pc.IsPlayerControlled = true;
+        // PC1
+        GameObject pc1GO = new GameObject("PC_Hero1");
+        pc1GO.AddComponent<SpriteRenderer>();
+        CharacterController pc1 = pc1GO.AddComponent<CharacterController>();
+        pc1.IsPlayerControlled = true;
 
+        // PC2
+        GameObject pc2GO = new GameObject("PC_Hero2");
+        pc2GO.AddComponent<SpriteRenderer>();
+        CharacterController pc2 = pc2GO.AddComponent<CharacterController>();
+        pc2.IsPlayerControlled = true;
+
+        // NPC
         GameObject npcGO = new GameObject("NPC_Goblin");
         npcGO.AddComponent<SpriteRenderer>();
         CharacterController npc = npcGO.AddComponent<CharacterController>();
         npc.IsPlayerControlled = false;
 
-        return (pc, npc);
+        return (pc1, pc2, npc);
     }
 
     // ========== UI ==========
@@ -167,69 +164,102 @@ public class SceneBootstrap : MonoBehaviour
             new Vector2(0, -10), new Vector2(800, 50),
             "", 24, Color.white, TextAnchor.MiddleCenter);
 
-        // Add background to turn indicator
         AddBackground(combatUI.TurnIndicatorText.transform, new Color(0, 0, 0, 0.7f), new Vector2(820, 55));
 
-        // --- PC Stats Panel (bottom left) ---
-        GameObject pcPanel = CreatePanel(canvasGO.transform, "PCStatsPanel",
+        // --- PC1 Stats Panel (bottom left) ---
+        GameObject pc1Panel = CreatePanel(canvasGO.transform, "PC1StatsPanel",
             new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
-            new Vector2(10, 10), new Vector2(280, 120),
+            new Vector2(10, 10), new Vector2(250, 130),
             new Color(0.1f, 0.2f, 0.4f, 0.85f));
+        combatUI.PC1Panel = pc1Panel;
 
-        combatUI.PCNameText = CreateText(pcPanel.transform, "PCName",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 85), new Vector2(260, 30),
-            "Hero", 20, new Color(0.3f, 0.9f, 0.3f), TextAnchor.MiddleLeft);
+        // Active indicator (green border-like bar at top of panel)
+        combatUI.PC1ActiveIndicator = CreateActiveIndicator(pc1Panel.transform, "PC1Active",
+            new Vector2(0, 115), new Vector2(250, 6), new Color(0f, 1f, 0.3f));
 
-        combatUI.PCHPText = CreateText(pcPanel.transform, "PCHP",
+        combatUI.PC1NameText = CreateText(pc1Panel.transform, "PC1Name",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 55), new Vector2(200, 25),
+            new Vector2(10, 90), new Vector2(230, 25),
+            "Hero 1", 20, new Color(0.3f, 0.9f, 0.3f), TextAnchor.MiddleLeft);
+
+        combatUI.PC1HPText = CreateText(pc1Panel.transform, "PC1HP",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, 60), new Vector2(200, 25),
             "HP: 30/30", 18, Color.white, TextAnchor.MiddleLeft);
 
-        combatUI.PCACText = CreateText(pcPanel.transform, "PCAC",
+        combatUI.PC1ACText = CreateText(pc1Panel.transform, "PC1AC",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 30), new Vector2(200, 25),
+            new Vector2(10, 35), new Vector2(200, 25),
             "AC: 14", 18, Color.white, TextAnchor.MiddleLeft);
 
-        combatUI.PCHPBar = CreateHPBar(pcPanel.transform, "PCHPBar",
-            new Vector2(10, 10), new Vector2(260, 15),
+        combatUI.PC1HPBar = CreateHPBar(pc1Panel.transform, "PC1HPBar",
+            new Vector2(10, 10), new Vector2(230, 15),
             new Color(0.2f, 0.8f, 0.2f));
+
+        // --- PC2 Stats Panel (bottom left, next to PC1) ---
+        GameObject pc2Panel = CreatePanel(canvasGO.transform, "PC2StatsPanel",
+            new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
+            new Vector2(270, 10), new Vector2(250, 130),
+            new Color(0.1f, 0.15f, 0.35f, 0.85f));
+        combatUI.PC2Panel = pc2Panel;
+
+        combatUI.PC2ActiveIndicator = CreateActiveIndicator(pc2Panel.transform, "PC2Active",
+            new Vector2(0, 115), new Vector2(250, 6), new Color(0.3f, 0.5f, 1f));
+
+        combatUI.PC2NameText = CreateText(pc2Panel.transform, "PC2Name",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, 90), new Vector2(230, 25),
+            "Hero 2", 20, new Color(0.5f, 0.7f, 1f), TextAnchor.MiddleLeft);
+
+        combatUI.PC2HPText = CreateText(pc2Panel.transform, "PC2HP",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, 60), new Vector2(200, 25),
+            "HP: 30/30", 18, Color.white, TextAnchor.MiddleLeft);
+
+        combatUI.PC2ACText = CreateText(pc2Panel.transform, "PC2AC",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, 35), new Vector2(200, 25),
+            "AC: 14", 18, Color.white, TextAnchor.MiddleLeft);
+
+        combatUI.PC2HPBar = CreateHPBar(pc2Panel.transform, "PC2HPBar",
+            new Vector2(10, 10), new Vector2(230, 15),
+            new Color(0.3f, 0.5f, 1f));
 
         // --- NPC Stats Panel (bottom right) ---
         GameObject npcPanel = CreatePanel(canvasGO.transform, "NPCStatsPanel",
             new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
-            new Vector2(-10, 10), new Vector2(280, 120),
+            new Vector2(-10, 10), new Vector2(250, 130),
             new Color(0.4f, 0.1f, 0.1f, 0.85f));
 
         combatUI.NPCNameText = CreateText(npcPanel.transform, "NPCName",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 85), new Vector2(260, 30),
+            new Vector2(10, 90), new Vector2(230, 25),
             "Goblin", 20, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
 
         combatUI.NPCHPText = CreateText(npcPanel.transform, "NPCHP",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 55), new Vector2(200, 25),
+            new Vector2(10, 60), new Vector2(200, 25),
             "HP: 20/20", 18, Color.white, TextAnchor.MiddleLeft);
 
         combatUI.NPCACText = CreateText(npcPanel.transform, "NPCAC",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 30), new Vector2(200, 25),
+            new Vector2(10, 35), new Vector2(200, 25),
             "AC: 12", 18, Color.white, TextAnchor.MiddleLeft);
 
         combatUI.NPCHPBar = CreateHPBar(npcPanel.transform, "NPCHPBar",
-            new Vector2(10, 10), new Vector2(260, 15),
+            new Vector2(10, 10), new Vector2(230, 15),
             new Color(0.8f, 0.2f, 0.2f));
 
         // --- Combat Log (bottom center) ---
         GameObject logPanel = CreatePanel(canvasGO.transform, "CombatLogPanel",
             new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
-            new Vector2(0, 10), new Vector2(500, 100),
+            new Vector2(0, 150), new Vector2(500, 100),
             new Color(0, 0, 0, 0.75f));
 
         combatUI.CombatLogText = CreateText(logPanel.transform, "CombatLog",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, 5), new Vector2(480, 90),
-            "Combat begins! Move your hero.", 16, Color.yellow, TextAnchor.MiddleCenter);
+            "Combat begins! Move your heroes.", 16, Color.yellow, TextAnchor.MiddleCenter);
 
         // --- Action Panel (right side, middle) ---
         GameObject actionPanel = CreatePanel(canvasGO.transform, "ActionPanel",
@@ -238,18 +268,15 @@ public class SceneBootstrap : MonoBehaviour
             new Color(0.15f, 0.15f, 0.25f, 0.9f));
         combatUI.ActionPanel = actionPanel;
 
-        // Title
         CreateText(actionPanel.transform, "ActionsTitle",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, 95), new Vector2(180, 30),
             "ACTIONS", 20, Color.white, TextAnchor.MiddleCenter);
 
-        // Attack button
         combatUI.AttackButton = CreateButton(actionPanel.transform, "AttackBtn",
             new Vector2(10, 50), new Vector2(180, 35),
             "Attack", new Color(0.8f, 0.2f, 0.2f), Color.white);
 
-        // End Turn button
         combatUI.EndTurnButton = CreateButton(actionPanel.transform, "EndTurnBtn",
             new Vector2(10, 10), new Vector2(180, 35),
             "End Turn", new Color(0.3f, 0.3f, 0.6f), Color.white);
@@ -260,11 +287,12 @@ public class SceneBootstrap : MonoBehaviour
     }
 
     // ========== GAME MANAGER ==========
-    private void SetupGameManager(HexGrid grid, CharacterController pc, CharacterController npc, CombatUI combatUI)
+    private void SetupGameManager(HexGrid grid, CharacterController pc1, CharacterController pc2, CharacterController npc, CombatUI combatUI)
     {
         GameManager gm = gameObject.AddComponent<GameManager>();
         gm.Grid = grid;
-        gm.PC = pc;
+        gm.PC1 = pc1;
+        gm.PC2 = pc2;
         gm.NPC = npc;
         gm.CombatUI = combatUI;
 
@@ -304,17 +332,11 @@ public class SceneBootstrap : MonoBehaviour
         t.fontSize = fontSize;
         t.color = color;
         t.alignment = alignment;
-        // Unity 6+ uses LegacyRuntime.ttf; Arial.ttf is no longer a built-in resource
         t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (t.font == null)
-        {
-            // Fallback for older Unity versions
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        }
         if (t.font == null)
-        {
             t.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
-        }
 
         return t;
     }
@@ -343,7 +365,6 @@ public class SceneBootstrap : MonoBehaviour
     private Image CreateHPBar(Transform parent, string name,
         Vector2 anchoredPos, Vector2 sizeDelta, Color barColor)
     {
-        // Background
         GameObject bgGO = new GameObject(name + "BG");
         bgGO.transform.SetParent(parent, false);
         RectTransform bgRT = bgGO.AddComponent<RectTransform>();
@@ -355,7 +376,6 @@ public class SceneBootstrap : MonoBehaviour
         Image bgImg = bgGO.AddComponent<Image>();
         bgImg.color = new Color(0.2f, 0.2f, 0.2f);
 
-        // Fill bar
         GameObject fillGO = new GameObject(name + "Fill");
         fillGO.transform.SetParent(bgGO.transform, false);
         RectTransform fillRT = fillGO.AddComponent<RectTransform>();
@@ -372,6 +392,29 @@ public class SceneBootstrap : MonoBehaviour
         fillImg.fillAmount = 1f;
 
         return fillImg;
+    }
+
+    /// <summary>
+    /// Create a small colored bar at the top of a panel to indicate the active PC.
+    /// </summary>
+    private Image CreateActiveIndicator(Transform parent, string name,
+        Vector2 anchoredPos, Vector2 sizeDelta, Color color)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.zero;
+        rt.pivot = Vector2.zero;
+        rt.anchoredPosition = anchoredPos;
+        rt.sizeDelta = sizeDelta;
+
+        Image img = go.AddComponent<Image>();
+        img.color = color;
+        img.enabled = false; // hidden by default
+
+        return img;
     }
 
     private void AddBackground(Transform textTransform, Color color, Vector2 size)
@@ -391,7 +434,6 @@ public class SceneBootstrap : MonoBehaviour
         Image img = bgGO.AddComponent<Image>();
         img.color = color;
 
-        // Move text in front
         textTransform.SetAsLastSibling();
     }
 
@@ -419,7 +461,6 @@ public class SceneBootstrap : MonoBehaviour
         colors.pressedColor = bgColor * 0.8f;
         btn.colors = colors;
 
-        // Button label
         CreateText(btnGO.transform, name + "Label",
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero,
