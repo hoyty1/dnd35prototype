@@ -46,6 +46,18 @@ public enum WeaponCategory
 }
 
 /// <summary>
+/// How a weapon applies ability modifiers to damage (D&D 3.5 rules).
+/// </summary>
+public enum DamageModifierType
+{
+    None,               // No ability modifier to damage (bows, crossbows, slings)
+    Strength,           // Add full STR modifier (one-handed melee, thrown weapons)
+    StrengthOneAndHalf, // Add 1.5× STR modifier, rounded down (two-handed melee)
+    StrengthHalf,       // Add 0.5× STR modifier, rounded down (off-hand; handled separately)
+    Composite           // Add STR up to composite rating (composite bows)
+}
+
+/// <summary>
 /// Armor weight category from D&D 3.5 PHB.
 /// </summary>
 public enum ArmorCategory
@@ -81,6 +93,11 @@ public class ItemData
     public bool IsTwoHanded;    // Two-handed weapon - can't be dual-wielded, 1.5x STR to damage
     public bool HasReach;       // Reach weapon - can attack at 2 hexes
     public string DamageType;   // "slashing", "piercing", "bludgeoning", or combinations
+
+    // --- Damage Modifier Properties (D&D 3.5) ---
+    public DamageModifierType DmgModType;  // How STR (or other) applies to damage
+    public int CompositeRating;            // For composite bows: max STR bonus allowed (0 = no bonus)
+    public bool IsThrown;                  // Whether this weapon can be thrown (gets STR on throw)
 
     // --- Critical Hit (D&D 3.5) ---
     public int CritThreatMin;   // Minimum natural d20 roll to threaten a crit (e.g., 19 for 19-20, 20 for 20 only)
@@ -145,6 +162,10 @@ public class ItemData
             if (IsLightWeapon) props += "Light, ";
             if (IsTwoHanded) props += "Two-handed, ";
             if (HasReach) props += "Reach, ";
+            if (IsThrown) props += "Thrown, ";
+            if (DmgModType == DamageModifierType.Composite) props += $"Composite (+{CompositeRating} STR), ";
+            else if (DmgModType == DamageModifierType.StrengthOneAndHalf) props += "1.5× STR dmg, ";
+            else if (DmgModType == DamageModifierType.None && Type == ItemType.Weapon && WeaponCat == WeaponCategory.Ranged) props += "No STR to dmg, ";
             if (props.Length > 0)
             {
                 props = props.TrimEnd(',', ' ');

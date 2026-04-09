@@ -468,4 +468,111 @@ public class CharacterStats
 
     /// <summary>Speed in feet for display purposes.</summary>
     public int SpeedInFeet => Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5;
+
+    // ========== DAMAGE MODIFIER HELPERS (D&D 3.5) ==========
+
+    /// <summary>
+    /// Calculate the STR-based damage bonus for a weapon based on its DamageModifierType.
+    /// Returns the integer bonus to add to damage (can be negative for low STR).
+    /// </summary>
+    /// <param name="weapon">The weapon being used (null = unarmed, uses full STR)</param>
+    /// <param name="isOffHand">True if this is an off-hand attack (overrides to 0.5× STR)</param>
+    public int GetWeaponDamageModifier(ItemData weapon, bool isOffHand = false)
+    {
+        if (isOffHand)
+        {
+            // Off-hand always uses 0.5× STR, regardless of weapon type
+            return Mathf.FloorToInt(STRMod * 0.5f);
+        }
+
+        if (weapon == null)
+        {
+            // Unarmed: full STR
+            return STRMod;
+        }
+
+        switch (weapon.DmgModType)
+        {
+            case DamageModifierType.None:
+                return 0;
+
+            case DamageModifierType.Strength:
+                return STRMod;
+
+            case DamageModifierType.StrengthOneAndHalf:
+                return Mathf.FloorToInt(STRMod * 1.5f);
+
+            case DamageModifierType.StrengthHalf:
+                return Mathf.FloorToInt(STRMod * 0.5f);
+
+            case DamageModifierType.Composite:
+                // Add STR up to the composite rating (minimum 0 — negative STR still applies fully)
+                if (STRMod <= 0) return STRMod; // Negative STR always applies
+                return Mathf.Min(STRMod, weapon.CompositeRating);
+
+            default:
+                return STRMod;
+        }
+    }
+
+    /// <summary>
+    /// Get a descriptive string for the damage modifier type applied by a weapon.
+    /// Used in combat log display.
+    /// </summary>
+    /// <param name="weapon">The weapon being used</param>
+    /// <param name="isOffHand">True if off-hand attack</param>
+    public string GetDamageModifierDescription(ItemData weapon, bool isOffHand = false)
+    {
+        if (isOffHand) return "0.5× STR";
+
+        if (weapon == null) return "STR";
+
+        switch (weapon.DmgModType)
+        {
+            case DamageModifierType.None:
+                return "";
+            case DamageModifierType.Strength:
+                if (weapon.IsThrown) return "thrown, STR";
+                return "STR";
+            case DamageModifierType.StrengthOneAndHalf:
+                return "1.5× STR";
+            case DamageModifierType.StrengthHalf:
+                return "0.5× STR";
+            case DamageModifierType.Composite:
+                return $"composite +{weapon.CompositeRating}";
+            default:
+                return "STR";
+        }
+    }
+
+    /// <summary>
+    /// Roll damage using the weapon's DamageModifierType system instead of a raw strMultiplier.
+    /// </summary>
+    public int RollDamageWithModType(int damageDice, int damageCount, int bonusDamage, int damageModifier)
+    {
+        int total = 0;
+        for (int i = 0; i < damageCount; i++)
+        {
+            total += Random.Range(1, damageDice + 1);
+        }
+        total += damageModifier + bonusDamage;
+        return Mathf.Max(1, total);
+    }
+
+    /// <summary>
+    /// Roll critical damage using the weapon's DamageModifierType system.
+    /// Multiplies weapon dice; adds static bonuses (STR + bonus) once.
+    /// </summary>
+    public int RollCritDamageWithModType(int damageDice, int damageCount, int bonusDamage, int damageModifier, int critMultiplier)
+    {
+        int mult = critMultiplier > 0 ? critMultiplier : 2;
+        int diceTotal = 0;
+        int totalDice = damageCount * mult;
+        for (int i = 0; i < totalDice; i++)
+        {
+            diceTotal += Random.Range(1, damageDice + 1);
+        }
+        int total = diceTotal + damageModifier + bonusDamage;
+        return Mathf.Max(1, total);
+    }
 }

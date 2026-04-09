@@ -45,6 +45,7 @@ public static class ItemDatabase
             Description = "A punch, kick, or other unarmed attack.",
             DamageDice = 3, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 0f,
             IconChar = "\u270A", IconColor = new Color(0.9f, 0.8f, 0.7f)
@@ -59,6 +60,7 @@ public static class ItemDatabase
             Description = "An armored glove that lets you deal lethal damage with unarmed strikes.",
             DamageDice = 3, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 1f,
             IconChar = "\u270A", IconColor = new Color(0.6f, 0.6f, 0.7f)
@@ -74,6 +76,8 @@ public static class ItemDatabase
             DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsLightWeapon = true,
             DamageType = "piercing/slashing",
+            DmgModType = DamageModifierType.Strength,
+            IsThrown = true,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 1f,
             IconChar = "\u2020", IconColor = new Color(0.8f, 0.8f, 0.7f)
@@ -89,6 +93,7 @@ public static class ItemDatabase
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsLightWeapon = true,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 4f,
             IconChar = "\u2692", IconColor = new Color(0.6f, 0.6f, 0.6f)
@@ -104,6 +109,7 @@ public static class ItemDatabase
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsLightWeapon = true,
             DamageType = "slashing",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 2f,
             IconChar = "\u262D", IconColor = new Color(0.5f, 0.6f, 0.4f)
@@ -118,6 +124,7 @@ public static class ItemDatabase
             Description = "A stout piece of wood, simple but effective.",
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 3f,
             IconChar = "\u2502", IconColor = new Color(0.5f, 0.4f, 0.2f)
@@ -132,6 +139,7 @@ public static class ItemDatabase
             Description = "A heavy bludgeoning weapon effective against armored foes.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 8f,
             IconChar = "\u2692", IconColor = new Color(0.6f, 0.6f, 0.6f)
@@ -146,6 +154,7 @@ public static class ItemDatabase
             Description = "A spiked metal ball on the end of a handle. Deals bludgeoning and piercing.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "bludgeoning/piercing",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 6f,
             IconChar = "\u2692", IconColor = new Color(0.5f, 0.5f, 0.5f)
@@ -160,6 +169,8 @@ public static class ItemDatabase
             Description = "A short thrusting spear. Can be thrown.",
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.Strength,
+            IsThrown = true,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 3f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -175,6 +186,7 @@ public static class ItemDatabase
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsTwoHanded = true,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 4f,
             IconChar = "\u2502", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -190,6 +202,7 @@ public static class ItemDatabase
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsTwoHanded = true,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 6f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.6f, 0.5f)
@@ -204,6 +217,7 @@ public static class ItemDatabase
             Description = "A heavy bludgeoning weapon effective against armored foes.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 8f,
             IconChar = "\u2692", IconColor = new Color(0.6f, 0.6f, 0.6f)
@@ -224,6 +238,7 @@ public static class ItemDatabase
             Description = "A light crossbow that fires bolts. Requires two hands to load.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 80,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.None,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 4f,
             IconChar = "\u2732", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -238,6 +253,7 @@ public static class ItemDatabase
             Description = "A heavy crossbow with greater range and damage than its lighter cousin.",
             DamageDice = 10, DamageCount = 1, BonusDamage = 0, AttackRange = 120,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.None,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 8f,
             IconChar = "\u2732", IconColor = new Color(0.5f, 0.5f, 0.5f)
@@ -252,6 +268,8 @@ public static class ItemDatabase
             Description = "A small throwable missile with a weighted tip.",
             DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 20,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.Strength,
+            IsThrown = true,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 0.5f,
             IconChar = "\u2794", IconColor = new Color(0.7f, 0.7f, 0.5f)
@@ -266,6 +284,8 @@ public static class ItemDatabase
             Description = "A light throwing spear designed for ranged combat.",
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 30,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.Strength,
+            IsThrown = true,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 2f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -280,6 +300,7 @@ public static class ItemDatabase
             Description = "A simple weapon that hurls stones at high velocity.",
             DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 50,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.None,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 0f,
             IconChar = "\u223F", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -303,6 +324,8 @@ public static class ItemDatabase
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsLightWeapon = true,
             DamageType = "slashing",
+            DmgModType = DamageModifierType.Strength,
+            IsThrown = true,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 3f,
             IconChar = "\u2692", IconColor = new Color(0.7f, 0.5f, 0.3f)
@@ -318,6 +341,7 @@ public static class ItemDatabase
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsLightWeapon = true,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 2f,
             IconChar = "\u2694", IconColor = new Color(0.6f, 0.8f, 0.6f)
@@ -333,6 +357,7 @@ public static class ItemDatabase
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsLightWeapon = true,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 5f,
             IconChar = "\u2692", IconColor = new Color(0.5f, 0.5f, 0.5f)
@@ -349,6 +374,7 @@ public static class ItemDatabase
             Description = "A versatile one-handed sword favored by fighters.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "slashing",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 4f,
             IconChar = "\u2694", IconColor = new Color(0.7f, 0.7f, 0.8f)
@@ -363,6 +389,7 @@ public static class ItemDatabase
             Description = "An elegant thrusting sword with a wide critical range.",
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 18, CritMultiplier = 2,
             WeightLbs = 2f,
             IconChar = "\u2694", IconColor = new Color(0.8f, 0.8f, 0.9f)
@@ -377,6 +404,7 @@ public static class ItemDatabase
             Description = "A curved blade that excels at slashing attacks. Wide crit range.",
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "slashing",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 18, CritMultiplier = 2,
             WeightLbs = 4f,
             IconChar = "\u2694", IconColor = new Color(0.8f, 0.7f, 0.5f)
@@ -391,6 +419,7 @@ public static class ItemDatabase
             Description = "A sturdy one-handed axe capable of devastating critical hits.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "slashing",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 6f,
             IconChar = "\u2692", IconColor = new Color(0.7f, 0.55f, 0.35f)
@@ -405,6 +434,7 @@ public static class ItemDatabase
             Description = "A heavy hammer designed for war. Devastating critical hits.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 5f,
             IconChar = "\u2692", IconColor = new Color(0.6f, 0.6f, 0.7f)
@@ -419,6 +449,8 @@ public static class ItemDatabase
             Description = "A three-pronged spear. Can be thrown.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.Strength,
+            IsThrown = true,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 4f,
             IconChar = "\u2191", IconColor = new Color(0.5f, 0.6f, 0.7f)
@@ -433,6 +465,7 @@ public static class ItemDatabase
             Description = "A pick designed for piercing armor. Extremely high crit multiplier.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 4,
             WeightLbs = 6f,
             IconChar = "\u2692", IconColor = new Color(0.5f, 0.5f, 0.5f)
@@ -448,6 +481,7 @@ public static class ItemDatabase
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 2,
             HasReach = true,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 10f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.6f, 0.5f)
@@ -465,6 +499,7 @@ public static class ItemDatabase
             DamageDice = 6, DamageCount = 2, BonusDamage = 0, AttackRange = 1,
             IsTwoHanded = true,
             DamageType = "slashing",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 8f,
             IconChar = "\u2694", IconColor = new Color(0.8f, 0.8f, 0.9f)
@@ -480,6 +515,7 @@ public static class ItemDatabase
             DamageDice = 12, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsTwoHanded = true,
             DamageType = "slashing",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 12f,
             IconChar = "\u2694", IconColor = new Color(0.9f, 0.5f, 0.3f)
@@ -495,6 +531,7 @@ public static class ItemDatabase
             DamageDice = 10, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsTwoHanded = true,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 8f,
             IconChar = "\u2502", IconColor = new Color(0.5f, 0.4f, 0.2f)
@@ -510,6 +547,7 @@ public static class ItemDatabase
             DamageDice = 4, DamageCount = 2, BonusDamage = 0, AttackRange = 1,
             IsTwoHanded = true,
             DamageType = "slashing",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
             CritThreatMin = 18, CritMultiplier = 2,
             WeightLbs = 8f,
             IconChar = "\u2694", IconColor = new Color(0.7f, 0.6f, 0.5f)
@@ -525,6 +563,7 @@ public static class ItemDatabase
             DamageDice = 10, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsTwoHanded = true,
             DamageType = "bludgeoning",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 10f,
             IconChar = "\u2692", IconColor = new Color(0.5f, 0.5f, 0.5f)
@@ -540,6 +579,7 @@ public static class ItemDatabase
             DamageDice = 10, DamageCount = 1, BonusDamage = 0, AttackRange = 2,
             IsTwoHanded = true, HasReach = true,
             DamageType = "slashing",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 10f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.6f, 0.6f)
@@ -561,6 +601,7 @@ public static class ItemDatabase
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 100,
             IsTwoHanded = true,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.None,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 3f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -576,6 +617,7 @@ public static class ItemDatabase
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 60,
             IsTwoHanded = true,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.None,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 2f,
             IconChar = "\u2191", IconColor = new Color(0.5f, 0.5f, 0.3f)
@@ -591,6 +633,8 @@ public static class ItemDatabase
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 110,
             IsTwoHanded = true,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.Composite,
+            CompositeRating = 0,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 3f,
             IconChar = "\u2191", IconColor = new Color(0.7f, 0.5f, 0.3f)
@@ -606,10 +650,52 @@ public static class ItemDatabase
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 70,
             IsTwoHanded = true,
             DamageType = "piercing",
+            DmgModType = DamageModifierType.Composite,
+            CompositeRating = 0,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 2f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.5f, 0.3f)
         });
+
+        // --- Composite Longbow Variants (with STR rating) ---
+        for (int rating = 1; rating <= 4; rating++)
+        {
+            Register(new ItemData
+            {
+                Id = $"composite_longbow_{rating}", Name = $"Composite Longbow (+{rating})", Type = ItemType.Weapon,
+                Slot = EquipSlot.EitherHand,
+                Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Ranged,
+                Description = $"A powerful composite longbow rated for up to +{rating} STR bonus to damage.",
+                DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 110,
+                IsTwoHanded = true,
+                DamageType = "piercing",
+                DmgModType = DamageModifierType.Composite,
+                CompositeRating = rating,
+                CritThreatMin = 20, CritMultiplier = 3,
+                WeightLbs = 3f,
+                IconChar = "\u2191", IconColor = new Color(0.7f, 0.5f, 0.3f)
+            });
+        }
+
+        // --- Composite Shortbow Variants (with STR rating) ---
+        for (int rating = 1; rating <= 4; rating++)
+        {
+            Register(new ItemData
+            {
+                Id = $"composite_shortbow_{rating}", Name = $"Composite Shortbow (+{rating})", Type = ItemType.Weapon,
+                Slot = EquipSlot.EitherHand,
+                Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Ranged,
+                Description = $"A compact composite shortbow rated for up to +{rating} STR bonus to damage.",
+                DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 70,
+                IsTwoHanded = true,
+                DamageType = "piercing",
+                DmgModType = DamageModifierType.Composite,
+                CompositeRating = rating,
+                CritThreatMin = 20, CritMultiplier = 3,
+                WeightLbs = 2f,
+                IconChar = "\u2191", IconColor = new Color(0.6f, 0.5f, 0.3f)
+            });
+        }
     }
 
     // ============================================================
@@ -926,6 +1012,8 @@ public static class ItemDatabase
             BonusDamage = src.BonusDamage, AttackRange = src.AttackRange,
             IsLightWeapon = src.IsLightWeapon, IsTwoHanded = src.IsTwoHanded,
             HasReach = src.HasReach, DamageType = src.DamageType,
+            DmgModType = src.DmgModType, CompositeRating = src.CompositeRating,
+            IsThrown = src.IsThrown,
             CritThreatMin = src.CritThreatMin, CritMultiplier = src.CritMultiplier,
             // Armor/Shield properties
             ArmorBonus = src.ArmorBonus, ShieldBonus = src.ShieldBonus,

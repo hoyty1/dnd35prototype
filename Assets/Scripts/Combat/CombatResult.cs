@@ -42,6 +42,10 @@ public class CombatResult
     // Size bonus fields
     public int SizeAttackBonus;           // Size modifier to attack (Small = +1, Medium = 0)
 
+    // Damage modifier fields (D&D 3.5 weapon damage modifiers)
+    public int DamageModifier;            // The actual STR-based damage bonus applied (e.g., +6 for 1.5× STR)
+    public string DamageModifierDesc;     // Description for combat log (e.g., "1.5× STR", "composite +2")
+
     /// <summary>Total damage dealt including sneak attack.</summary>
     public int TotalDamage => Damage + SneakAttackDamage;
 
@@ -99,21 +103,25 @@ public class CombatResult
                 }
             }
 
-            // Build the damage line
+            // Build the damage line with proper damage modifier description
+            string dmgModNote = "";
+            if (!string.IsNullOrEmpty(DamageModifierDesc))
+                dmgModNote = $" ({DamageModifierDesc} {CharacterStats.FormatMod(DamageModifier)})";
+
             string damageStr;
             if (CritConfirmed)
             {
                 if (SneakAttackApplied)
-                    damageStr = $"CRITICAL HIT! {CritDamageDice} = {Damage} damage + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6) = {TotalDamage} total!";
+                    damageStr = $"CRITICAL HIT! {CritDamageDice} = {Damage} damage{dmgModNote} + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6) = {TotalDamage} total!";
                 else
-                    damageStr = $"CRITICAL HIT! {CritDamageDice} = {Damage} damage!";
+                    damageStr = $"CRITICAL HIT! {CritDamageDice} = {Damage} damage!{dmgModNote}";
             }
             else
             {
                 if (SneakAttackApplied)
-                    damageStr = $"Deals {Damage} damage + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6) = {TotalDamage} total!";
+                    damageStr = $"Deals {Damage} damage{dmgModNote} + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6) = {TotalDamage} total!";
                 else
-                    damageStr = $"Deals {Damage} damage! (STR {CharacterStats.FormatMod(Attacker.Stats.STRMod)})";
+                    damageStr = $"Deals {Damage} damage!{dmgModNote}";
             }
 
             string msg = $"{attackerName} attacks {defenderName}!{flankNote}{racialNote}{sizeNote}\n{rollBreakdown}{critInfo}\n{damageStr}";

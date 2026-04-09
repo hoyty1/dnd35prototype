@@ -94,6 +94,7 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Perform a single attack with flanking context.
     /// Includes full D&D 3.5 critical hit mechanics and racial attack bonuses.
+    /// Uses weapon's DamageModifierType for correct STR bonus to damage.
     /// </summary>
     public CombatResult Attack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
     {
@@ -103,8 +104,12 @@ public class CharacterController : MonoBehaviour
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
 
+        // Get equipped weapon for damage modifier calculation
+        ItemData equippedWeapon = GetEquippedMainWeapon();
+
         var result = PerformSingleAttackWithCrit(target, totalAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-            Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, 1.0f, critThreatMin, critMult);
+            Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
+            equippedWeapon, false);
 
         result.RacialAttackBonus = racialAtkBonus;
         result.SizeAttackBonus = Stats.SizeModifier;
@@ -131,6 +136,9 @@ public class CharacterController : MonoBehaviour
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
 
+        // Get equipped weapon for damage modifier calculation
+        ItemData equippedWeapon = GetEquippedMainWeapon();
+
         for (int i = 0; i < attackBonuses.Length; i++)
         {
             if (target.Stats.IsDead) break;
@@ -140,7 +148,8 @@ public class CharacterController : MonoBehaviour
                 $"Attack {i + 1} ({CharacterStats.FormatMod(attackBonuses[i])})";
 
             CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
-                Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, 1.0f, critThreatMin, critMult);
+                Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
+                equippedWeapon, false);
 
             atk.RacialAttackBonus = racialAtkBonus;
             atk.SizeAttackBonus = Stats.SizeModifier;
@@ -218,7 +227,8 @@ public class CharacterController : MonoBehaviour
         int mainCritMult = mainWeapon.CritMultiplier > 0 ? mainWeapon.CritMultiplier : 2;
 
         CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-            mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, 1.0f, mainCritMin, mainCritMult);
+            mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, mainCritMin, mainCritMult,
+            mainWeapon, false);
         mainAtk.RacialAttackBonus = racialAtkBonus;
         mainAtk.SizeAttackBonus = Stats.SizeModifier;
         result.Attacks.Add(mainAtk);
@@ -234,7 +244,8 @@ public class CharacterController : MonoBehaviour
             int offCritMult = offWeapon.CritMultiplier > 0 ? offWeapon.CritMultiplier : 2;
 
             CombatResult offAtk = PerformSingleAttackWithCrit(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-                offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, 0.5f, offCritMin, offCritMult);
+                offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, offCritMin, offCritMult,
+                offWeapon, true);
             offAtk.RacialAttackBonus = racialAtkBonus;
             offAtk.SizeAttackBonus = Stats.SizeModifier;
             result.Attacks.Add(offAtk);
@@ -250,14 +261,18 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Perform a single attack with full D&D 3.5 critical hit mechanics.
+    /// Uses the weapon's DamageModifierType to determine STR bonus to damage.
     /// Step 1: Roll d20. Check if in threat range.
     /// Step 2: If threat, roll confirmation vs same AC with same bonus.
     /// Step 3: If confirmed, multiply weapon dice (not static bonuses or sneak attack).
     /// </summary>
+    /// <param name="weapon">The weapon being used (null = unarmed)</param>
+    /// <param name="isOffHand">True if this is an off-hand attack (overrides to 0.5× STR)</param>
     private CombatResult PerformSingleAttackWithCrit(CharacterController target, int totalAtkMod,
         bool isFlanking, int flankingBonus, string flankingPartnerName,
-        int damageDice, int damageCount, int bonusDamage, float strMultiplier,
-        int critThreatMin, int critMultiplier)
+        int damageDice, int damageCount, int bonusDamage,
+        int critThreatMin, int critMultiplier,
+        ItemData weapon, bool isOffHand)
     {
         var result = new CombatResult();
         result.Attacker = this;
@@ -269,6 +284,12 @@ public class CharacterController : MonoBehaviour
         // Store weapon crit properties on result for display
         result.CritThreatMin = critThreatMin;
         result.CritMultiplier = critMultiplier;
+
+        // Calculate the damage modifier based on weapon's DamageModifierType
+        int damageModifier = Stats.GetWeaponDamageModifier(weapon, isOffHand);
+        string damageModDesc = Stats.GetDamageModifierDescription(weapon, isOffHand);
+        result.DamageModifier = damageModifier;
+        result.DamageModifierDesc = damageModDesc;
 
         // Step 1: Roll to hit
         var (hit, roll, total) = Stats.RollToHitWithMod(totalAtkMod, target.Stats.ArmorClass);
@@ -306,15 +327,14 @@ public class CharacterController : MonoBehaviour
             int damage;
             if (critConfirmed)
             {
-                // Critical damage: multiply weapon dice, add static bonuses once
-                damage = Stats.RollCritDamage(damageDice, damageCount, bonusDamage, strMultiplier, critMultiplier);
-                int strBonus = Mathf.FloorToInt(Stats.STRMod * strMultiplier);
-                result.CritDamageDice = $"{damageCount * critMultiplier}d{damageDice}+{strBonus + bonusDamage}";
+                // Critical damage: multiply weapon dice, add static bonuses (STR + bonus) once
+                damage = Stats.RollCritDamageWithModType(damageDice, damageCount, bonusDamage, damageModifier, critMultiplier);
+                result.CritDamageDice = $"{damageCount * critMultiplier}d{damageDice}+{damageModifier + bonusDamage}";
             }
             else
             {
                 // Normal damage
-                damage = Stats.RollDamageWithWeapon(damageDice, damageCount, bonusDamage, strMultiplier);
+                damage = Stats.RollDamageWithModType(damageDice, damageCount, bonusDamage, damageModifier);
             }
             result.Damage = damage;
 
@@ -340,6 +360,26 @@ public class CharacterController : MonoBehaviour
         }
 
         return result;
+    }
+
+    // ========== WEAPON HELPERS ==========
+
+    /// <summary>
+    /// Get the equipped main-hand weapon (right hand first, then left hand).
+    /// Returns null if no weapon equipped (unarmed).
+    /// </summary>
+    private ItemData GetEquippedMainWeapon()
+    {
+        var inv = GetComponent<InventoryComponent>();
+        if (inv == null || inv.CharacterInventory == null) return null;
+
+        var rightHand = inv.CharacterInventory.RightHandSlot;
+        if (rightHand != null && rightHand.IsWeapon) return rightHand;
+
+        var leftHand = inv.CharacterInventory.LeftHandSlot;
+        if (leftHand != null && leftHand.IsWeapon) return leftHand;
+
+        return null; // Unarmed
     }
 
     // ========== DUAL WIELD INFO ==========
