@@ -4,6 +4,7 @@ using System.Collections.Generic;
 /// <summary>
 /// Controls a character on the square grid (both PC and NPC).
 /// Supports D&D 3.5 action economy, full attacks, dual wielding, and critical hits.
+/// Enhanced with detailed combat log breakdown fields.
 /// </summary>
 public class CharacterController : MonoBehaviour
 {
@@ -174,6 +175,9 @@ public class CharacterController : MonoBehaviour
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
 
+        // Record HP before attack
+        int hpBefore = target.Stats.CurrentHP;
+
         var result = PerformSingleAttackWithCrit(target, totalAtkMod, isFlanking, flankingBonus, flankingPartnerName,
             Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
             equippedWeapon, false, powerAtkDmgBonus + pbsDmgBonus);
@@ -183,17 +187,32 @@ public class CharacterController : MonoBehaviour
         result.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
         result.PowerAttackDamageBonus = powerAtkDmgBonus;
         result.PointBlankShotActive = pointBlankActive;
+        result.FeatDamageBonus = powerAtkDmgBonus + (pointBlankActive ? 1 : 0);
+
+        // Breakdown fields for detailed logging
+        result.BreakdownBAB = Stats.BaseAttackBonus;
+        result.BreakdownAbilityMod = Stats.STRMod;
+        result.BreakdownAbilityName = isRanged ? "DEX" : "STR";
+        if (isRanged) result.BreakdownAbilityMod = Stats.DEXMod;
 
         // Store range info on result
         if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
         {
             result.IsRangedAttack = true;
             result.RangeDistanceFeet = rangeInfo.DistanceFeet;
+            result.RangeDistanceSquares = rangeInfo.SquareDistance;
             result.RangeIncrementNumber = rangeInfo.IncrementNumber;
             result.RangePenalty = rangeInfo.Penalty;
         }
         if (equippedWeapon != null)
+        {
             result.WeaponName = equippedWeapon.Name;
+            result.BaseDamageDiceStr = $"{Stats.BaseDamageCount}d{Stats.BaseDamageDice}";
+        }
+
+        // HP tracking
+        result.DefenderHPBefore = hpBefore;
+        result.DefenderHPAfter = target.Stats.CurrentHP;
 
         HasAttackedThisTurn = true;
         return result;
@@ -215,6 +234,7 @@ public class CharacterController : MonoBehaviour
         result.Type = FullAttackResult.AttackType.FullAttack;
         result.Attacker = this;
         result.Defender = target;
+        result.DefenderHPBefore = target.Stats.CurrentHP;
 
         int[] attackBonuses = Stats.GetIterativeAttackBonuses();
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
@@ -227,6 +247,10 @@ public class CharacterController : MonoBehaviour
         bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || equippedWeapon.RangeIncrement > 0))
                         && rangeInfo != null && !rangeInfo.IsMelee;
         bool isMelee = !isRanged;
+
+        // Store weapon name on result
+        if (equippedWeapon != null)
+            result.MainWeaponName = equippedWeapon.Name;
 
         // === FEAT: Power Attack (melee only) ===
         int powerAtkPenalty = 0;
@@ -290,6 +314,9 @@ public class CharacterController : MonoBehaviour
                     $"Attack {displayIdx} ({CharacterStats.FormatMod(baseBonus)})";
             }
 
+            // Record HP before this individual attack
+            int hpBeforeAtk = target.Stats.CurrentHP;
+
             CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
                 Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
                 equippedWeapon, false, powerAtkDmgBonus + pbsDmgBonus);
@@ -300,21 +327,37 @@ public class CharacterController : MonoBehaviour
             atk.PowerAttackDamageBonus = powerAtkDmgBonus;
             atk.RapidShotActive = rapidShotActive;
             atk.PointBlankShotActive = pointBlankActive;
+            atk.FeatDamageBonus = powerAtkDmgBonus + (pointBlankActive ? 1 : 0);
+
+            // Breakdown fields
+            atk.BreakdownBAB = baseBonus;
+            atk.BreakdownAbilityMod = isRanged ? Stats.DEXMod : Stats.STRMod;
+            atk.BreakdownAbilityName = isRanged ? "DEX" : "STR";
 
             // Store range info on each attack result
             if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
             {
                 atk.IsRangedAttack = true;
                 atk.RangeDistanceFeet = rangeInfo.DistanceFeet;
+                atk.RangeDistanceSquares = rangeInfo.SquareDistance;
                 atk.RangeIncrementNumber = rangeInfo.IncrementNumber;
                 atk.RangePenalty = rangeInfo.Penalty;
             }
-            if (equippedWeapon != null) atk.WeaponName = equippedWeapon.Name;
+            if (equippedWeapon != null)
+            {
+                atk.WeaponName = equippedWeapon.Name;
+                atk.BaseDamageDiceStr = $"{Stats.BaseDamageCount}d{Stats.BaseDamageDice}";
+            }
+
+            // HP tracking
+            atk.DefenderHPBefore = hpBeforeAtk;
+            atk.DefenderHPAfter = target.Stats.CurrentHP;
 
             result.Attacks.Add(atk);
             result.AttackLabels.Add(label);
         }
 
+        result.DefenderHPAfter = target.Stats.CurrentHP;
         result.TargetKilled = target.Stats.IsDead;
         HasAttackedThisTurn = true;
         return result;
@@ -364,6 +407,7 @@ public class CharacterController : MonoBehaviour
         result.Type = FullAttackResult.AttackType.DualWield;
         result.Attacker = this;
         result.Defender = target;
+        result.DefenderHPBefore = target.Stats.CurrentHP;
 
         var inv = GetComponent<InventoryComponent>();
         if (inv == null) return result;
@@ -372,6 +416,10 @@ public class CharacterController : MonoBehaviour
         var offWeapon = inv.CharacterInventory.LeftHandSlot;
 
         if (mainWeapon == null || offWeapon == null) return result;
+
+        // Store weapon names on result
+        result.MainWeaponName = mainWeapon.Name;
+        result.OffWeaponName = offWeapon.Name;
 
         var (mainPenalty, offPenalty, lightOff) = GetDualWieldPenalties();
 
@@ -406,11 +454,12 @@ public class CharacterController : MonoBehaviour
         // Main hand attack
         int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                          + powerAtkPenalty + pbsAtkBonus;
-        string mainLabel = $"Main Hand ({mainWeapon.Name}, {CharacterStats.FormatMod(Stats.AttackBonus + mainPenalty)})";
+        string mainLabel = $"Main Hand ({mainWeapon.Name})";
 
         int mainCritMin = mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20;
         int mainCritMult = mainWeapon.CritMultiplier > 0 ? mainWeapon.CritMultiplier : 2;
 
+        int hpBeforeMain = target.Stats.CurrentHP;
         CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
             mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, mainCritMin, mainCritMult,
             mainWeapon, false, powerAtkDmgBonus + pbsDmgBonus);
@@ -419,11 +468,23 @@ public class CharacterController : MonoBehaviour
         mainAtk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
         mainAtk.PowerAttackDamageBonus = powerAtkDmgBonus;
         mainAtk.PointBlankShotActive = pointBlankActive;
+        mainAtk.FeatDamageBonus = powerAtkDmgBonus + (pointBlankActive ? 1 : 0);
         mainAtk.WeaponName = mainWeapon.Name;
+        mainAtk.BaseDamageDiceStr = $"{mainWeapon.DamageCount}d{mainWeapon.DamageDice}";
+        mainAtk.IsDualWieldAttack = true;
+        mainAtk.IsOffHandAttack = false;
+        mainAtk.BreakdownBAB = Stats.BaseAttackBonus;
+        mainAtk.BreakdownAbilityMod = isRanged ? Stats.DEXMod : Stats.STRMod;
+        mainAtk.BreakdownAbilityName = isRanged ? "DEX" : "STR";
+        mainAtk.BreakdownDualWieldPenalty = mainPenalty;
+        mainAtk.DefenderHPBefore = hpBeforeMain;
+        mainAtk.DefenderHPAfter = target.Stats.CurrentHP;
+
         if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
         {
             mainAtk.IsRangedAttack = true;
             mainAtk.RangeDistanceFeet = rangeInfo.DistanceFeet;
+            mainAtk.RangeDistanceSquares = rangeInfo.SquareDistance;
             mainAtk.RangeIncrementNumber = rangeInfo.IncrementNumber;
             mainAtk.RangePenalty = rangeInfo.Penalty;
         }
@@ -435,11 +496,12 @@ public class CharacterController : MonoBehaviour
         {
             int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                             + powerAtkPenalty + pbsAtkBonus;
-            string offLabel = $"Off-Hand ({offWeapon.Name}, {CharacterStats.FormatMod(Stats.AttackBonus + offPenalty)})";
+            string offLabel = $"Off Hand ({offWeapon.Name})";
 
             int offCritMin = offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20;
             int offCritMult = offWeapon.CritMultiplier > 0 ? offWeapon.CritMultiplier : 2;
 
+            int hpBeforeOff = target.Stats.CurrentHP;
             CombatResult offAtk = PerformSingleAttackWithCrit(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
                 offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, offCritMin, offCritMult,
                 offWeapon, true, powerAtkDmgBonus + pbsDmgBonus);
@@ -448,11 +510,23 @@ public class CharacterController : MonoBehaviour
             offAtk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
             offAtk.PowerAttackDamageBonus = powerAtkDmgBonus;
             offAtk.PointBlankShotActive = pointBlankActive;
+            offAtk.FeatDamageBonus = powerAtkDmgBonus + (pointBlankActive ? 1 : 0);
             offAtk.WeaponName = offWeapon.Name;
+            offAtk.BaseDamageDiceStr = $"{offWeapon.DamageCount}d{offWeapon.DamageDice}";
+            offAtk.IsDualWieldAttack = true;
+            offAtk.IsOffHandAttack = true;
+            offAtk.BreakdownBAB = Stats.BaseAttackBonus;
+            offAtk.BreakdownAbilityMod = isRanged ? Stats.DEXMod : Stats.STRMod;
+            offAtk.BreakdownAbilityName = isRanged ? "DEX" : "STR";
+            offAtk.BreakdownDualWieldPenalty = offPenalty;
+            offAtk.DefenderHPBefore = hpBeforeOff;
+            offAtk.DefenderHPAfter = target.Stats.CurrentHP;
+
             if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
             {
                 offAtk.IsRangedAttack = true;
                 offAtk.RangeDistanceFeet = rangeInfo.DistanceFeet;
+                offAtk.RangeDistanceSquares = rangeInfo.SquareDistance;
                 offAtk.RangeIncrementNumber = rangeInfo.IncrementNumber;
                 offAtk.RangePenalty = rangeInfo.Penalty;
             }
@@ -460,6 +534,7 @@ public class CharacterController : MonoBehaviour
             result.AttackLabels.Add(offLabel);
         }
 
+        result.DefenderHPAfter = target.Stats.CurrentHP;
         result.TargetKilled = target.Stats.IsDead;
         HasAttackedThisTurn = true;
         return result;
@@ -493,6 +568,9 @@ public class CharacterController : MonoBehaviour
         // Store weapon crit properties on result for display
         result.CritThreatMin = critThreatMin;
         result.CritMultiplier = critMultiplier;
+
+        // Store base damage dice string
+        result.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
 
         // Calculate the damage modifier based on weapon's DamageModifierType
         int damageModifier = Stats.GetWeaponDamageModifier(weapon, isOffHand);
@@ -534,21 +612,25 @@ public class CharacterController : MonoBehaviour
 
             // Step 3: Roll damage (feat bonus added as flat bonus, not multiplied on crit)
             int damage;
+            int baseDmgRoll;
             if (critConfirmed)
             {
                 // Critical damage: multiply weapon dice, add static bonuses (STR + bonus) once
-                damage = Stats.RollCritDamageWithModType(damageDice, damageCount, bonusDamage, damageModifier, critMultiplier);
+                int totalCritDice = damageCount * critMultiplier;
+                baseDmgRoll = Stats.RollBaseDamage(damageDice, totalCritDice);
+                damage = baseDmgRoll + damageModifier + bonusDamage;
                 damage += featDamageBonus; // Feat bonus added after crit multiplication
-                result.CritDamageDice = $"{damageCount * critMultiplier}d{damageDice}+{damageModifier + bonusDamage}";
+                result.CritDamageDice = $"{totalCritDice}d{damageDice}+{damageModifier + bonusDamage}";
             }
             else
             {
-                // Normal damage
-                damage = Stats.RollDamageWithModType(damageDice, damageCount, bonusDamage, damageModifier);
-                damage += featDamageBonus;
+                // Normal damage - roll weapon dice separately for breakdown
+                baseDmgRoll = Stats.RollBaseDamage(damageDice, damageCount);
+                damage = baseDmgRoll + damageModifier + bonusDamage + featDamageBonus;
             }
             damage = Mathf.Max(1, damage); // Ensure minimum 1 damage
             result.Damage = damage;
+            result.BaseDamageRoll = baseDmgRoll;
 
             // Sneak attack: applies if attacker is Rogue and is flanking
             // Sneak attack is NOT multiplied on critical hits (D&D 3.5 rule)

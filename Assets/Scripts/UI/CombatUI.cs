@@ -177,16 +177,21 @@ public class CombatUI : MonoBehaviour
     }
 
     /// <summary>
-    /// Apply rich-text color highlights for critical hit related text in combat logs.
+    /// Apply rich-text color highlights for combat log text.
+    /// Colors: Green=hits, Red=misses, Gold=crits/Power Attack, Blue=Rapid Shot, Green=PBS
     /// </summary>
     private string HighlightCriticalHits(string text)
     {
+        // Highlight hit/miss results
+        text = text.Replace("- HIT!", "- <color=#66FF66><b>HIT!</b></color>");
+        text = text.Replace("- MISS!", "- <color=#FF4444><b>MISS!</b></color>");
+
         // Highlight critical hit confirmations and damage in gold/yellow
         text = text.Replace("CRITICAL HIT!", "<color=#FFD700><b>CRITICAL HIT!</b></color>");
         text = text.Replace("CRIT!", "<color=#FFD700><b>CRIT!</b></color>");
-        text = text.Replace("*** Critical Threat!", "<color=#FFA500><b>*** Critical Threat!</b></color>");
+        text = text.Replace("*** Critical Threat", "<color=#FFA500><b>*** Critical Threat</b></color>");
         text = text.Replace("CONFIRMED!", "<color=#FFD700><b>CONFIRMED!</b></color>");
-        text = text.Replace("Not confirmed, normal hit", "<color=#AAAAAA>Not confirmed, normal hit</color>");
+        text = text.Replace("Not confirmed", "<color=#AAAAAA>Not confirmed</color>");
 
         // Highlight natural 20s in bright gold
         text = text.Replace("(NATURAL 20!)", "<color=#FFD700><b>(NATURAL 20!)</b></color>");
@@ -199,15 +204,24 @@ public class CombatUI : MonoBehaviour
         // Highlight slain messages
         text = text.Replace("has been slain!", "<color=#FF6666><b>has been slain!</b></color>");
 
-        // Highlight range penalty info
-        text = text.Replace("no penalty)", "<color=#66FF66>no penalty)</color>");
+        // Highlight range info
+        text = text.Replace("no penalty", "<color=#66FF66>no penalty</color>");
         text = text.Replace("beyond maximum range!", "<color=#FF4444><b>beyond maximum range!</b></color>");
 
-        // Highlight feat text
+        // Highlight feat text - Gold for Power Attack, Blue for Rapid Shot, Green for PBS
         text = text.Replace("Power Attack", "<color=#FF9933>Power Attack</color>");
         text = text.Replace("Rapid Shot", "<color=#66CCFF>Rapid Shot</color>");
         text = text.Replace("Point Blank Shot", "<color=#66FF66>Point Blank Shot</color>");
-        text = text.Replace("PBS", "<color=#66FF66>PBS</color>");
+
+        // Highlight separator lines
+        text = text.Replace("═══════════════════════════════════", "<color=#888888>═══════════════════════════════════</color>");
+
+        // Highlight damage numbers
+        text = text.Replace("total damage", "<color=#FFAA44><b>total damage</b></color>");
+        text = text.Replace(" damage", " <color=#FFAA44>damage</color>");
+
+        // Highlight HP change arrows
+        text = text.Replace(" → ", " <color=#FFFF66>→</color> ");
 
         return text;
     }

@@ -957,7 +957,7 @@ public class GameManager : MonoBehaviour
         attacker.Actions.UseStandardAction();
 
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        _lastCombatLog = result.GetSummary();
+        _lastCombatLog = result.GetDetailedSummary();
         CombatUI.ShowCombatLog(_lastCombatLog);
         CombatUI.UpdateAllStats(PC1, PC2, NPC);
 
@@ -1134,7 +1134,7 @@ public class GameManager : MonoBehaviour
             NPC.Actions.UseStandardAction();
             RangeInfo npcRangeInfo = CalculateRangeInfo(NPC, closestPC);
             CombatResult result = NPC.Attack(closestPC, false, 0, null, npcRangeInfo);
-            _lastCombatLog = result.GetSummary();
+            _lastCombatLog = result.GetDetailedSummary();
             CombatUI.ShowCombatLog(_lastCombatLog);
             CombatUI.UpdateAllStats(PC1, PC2, NPC);
 

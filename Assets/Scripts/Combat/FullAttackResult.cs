@@ -5,6 +5,7 @@ using System.Text;
 /// Holds results from a Full Attack, Dual Wield, or any multi-attack sequence.
 /// Each individual attack is a CombatResult; this aggregates them.
 /// Includes critical hit information for each individual attack.
+/// Enhanced with comprehensive per-attack breakdowns for combat logging.
 /// </summary>
 public class FullAttackResult
 {
@@ -22,6 +23,14 @@ public class FullAttackResult
     public List<CombatResult> Attacks = new List<CombatResult>();
     public List<string> AttackLabels = new List<string>(); // e.g., "Main Hand", "Off-Hand", "2nd Attack"
     public bool TargetKilled;
+
+    // HP tracking for the overall sequence
+    public int DefenderHPBefore;    // HP before the first attack
+    public int DefenderHPAfter;     // HP after the last attack
+
+    // Weapon info for header
+    public string MainWeaponName;
+    public string OffWeaponName;    // For dual wield
 
     /// <summary>Total damage dealt across all attacks.</summary>
     public int TotalDamageDealt
@@ -59,100 +68,95 @@ public class FullAttackResult
         }
     }
 
-    /// <summary>Generate a full combat log summary of all attacks including crit details.</summary>
+    /// <summary>Generate a full combat log summary of all attacks with comprehensive breakdowns.</summary>
     public string GetFullSummary()
     {
         var sb = new StringBuilder();
         string attackerName = Attacker.Stats.CharacterName;
         string defenderName = Defender.Stats.CharacterName;
 
-        // Build feat summary for header
-        string featSummary = "";
-        if (Attacks.Count > 0)
-        {
-            var feats = new List<string>();
-            var first = Attacks[0];
-            if (first.PowerAttackValue > 0) feats.Add($"Power Attack -{first.PowerAttackValue}");
-            if (first.RapidShotActive) feats.Add("Rapid Shot");
-            if (first.PointBlankShotActive) feats.Add("Point Blank Shot");
-            if (feats.Count > 0) featSummary = $" ({string.Join(", ", feats)})";
-        }
+        // ═══ HEADER ═══
+        sb.AppendLine("═══════════════════════════════════");
 
-        // Header
         switch (Type)
         {
             case AttackType.FullAttack:
-                sb.AppendLine($"=== {attackerName} FULL ATTACK vs {defenderName}!{featSummary} ===");
+                sb.AppendLine($"{attackerName} full attacks {defenderName}");
                 break;
             case AttackType.DualWield:
-                sb.AppendLine($"=== {attackerName} DUAL WIELD vs {defenderName}!{featSummary} ===");
+                sb.AppendLine($"{attackerName} dual wields against {defenderName}");
                 break;
             default:
-                sb.AppendLine($"{attackerName} attacks {defenderName}!{featSummary}");
+                sb.AppendLine($"{attackerName} attacks {defenderName}");
                 break;
         }
 
-        // Show Rapid Shot status if any attack has it
-        if (Attacks.Count > 0 && Attacks[0].RapidShotActive)
+        // Weapon info
+        if (Type == AttackType.DualWield && !string.IsNullOrEmpty(MainWeaponName) && !string.IsNullOrEmpty(OffWeaponName))
         {
-            sb.AppendLine($"  Rapid Shot: Active (-2 penalty to all attacks, +1 extra attack)");
+            sb.AppendLine($"  Main Hand: {MainWeaponName}");
+            sb.AppendLine($"  Off Hand: {OffWeaponName}");
+        }
+        else if (!string.IsNullOrEmpty(MainWeaponName))
+        {
+            bool isRanged = Attacks.Count > 0 && Attacks[0].IsRangedAttack;
+            string wpnType = isRanged ? "ranged" : "melee";
+            sb.AppendLine($"  Weapon: {MainWeaponName} ({wpnType})");
         }
 
-        // Each attack
+        // Range info (from first attack)
+        if (Attacks.Count > 0 && Attacks[0].IsRangedAttack)
+        {
+            var first = Attacks[0];
+            string penaltyStr = first.RangePenalty == 0 ? "no penalty" : $"{first.RangePenalty} penalty";
+            sb.AppendLine($"  Range: {first.RangeDistanceFeet} ft ({first.RangeDistanceSquares} squares) - Increment {first.RangeIncrementNumber}, {penaltyStr}");
+        }
+
+        // Active feats (from first attack as representative)
+        if (Attacks.Count > 0)
+        {
+            var first = Attacks[0];
+            var feats = new List<string>();
+            if (first.PowerAttackValue > 0) feats.Add($"Power Attack (-{first.PowerAttackValue} atk/+{first.PowerAttackDamageBonus} dmg)");
+            if (first.RapidShotActive) feats.Add("Rapid Shot (-2 all attacks, +1 extra attack)");
+            if (first.PointBlankShotActive) feats.Add("Point Blank Shot (+1 atk/+1 dmg)");
+            if (feats.Count > 0)
+                sb.AppendLine($"  Active Feats: {string.Join(", ", feats)}");
+        }
+
+        // Flanking
+        if (Attacks.Count > 0 && Attacks[0].IsFlanking)
+        {
+            sb.AppendLine($"  Flanking: Yes (with {Attacks[0].FlankingPartnerName}, +{Attacks[0].FlankingBonus})");
+        }
+
+        sb.AppendLine();
+
+        // ═══ EACH ATTACK ═══
         for (int i = 0; i < Attacks.Count; i++)
         {
             var atk = Attacks[i];
             string label = (i < AttackLabels.Count) ? AttackLabels[i] : $"Attack {i + 1}";
 
-            string critNote = "";
-            if (atk.NaturalTwenty) critNote = " (NAT 20!)";
-            else if (atk.NaturalOne) critNote = " (NAT 1!)";
-
-            string flankStr = atk.IsFlanking ? $" +{atk.FlankingBonus} flank" : "";
-            string rapidStr = atk.RapidShotActive ? " -2 RS" : "";
-
-            if (atk.Hit)
-            {
-                // Build damage string
-                string dmgStr;
-                if (atk.CritConfirmed)
-                {
-                    // Critical hit!
-                    if (atk.SneakAttackApplied)
-                        dmgStr = $"CRIT! {atk.CritDamageDice}={atk.Damage} + {atk.SneakAttackDamage} sneak ({atk.SneakAttackDice}d6) = {atk.TotalDamage}";
-                    else
-                        dmgStr = $"CRIT(×{atk.CritMultiplier})! {atk.CritDamageDice}={atk.Damage}";
-                }
-                else
-                {
-                    if (atk.SneakAttackApplied)
-                        dmgStr = $"{atk.Damage} + {atk.SneakAttackDamage} sneak ({atk.SneakAttackDice}d6) = {atk.TotalDamage}";
-                    else
-                        dmgStr = $"{atk.Damage}";
-                }
-
-                // Show threat info inline
-                string threatStr = "";
-                if (atk.IsCritThreat && !atk.CritConfirmed)
-                    threatStr = $" [Threat! Confirm: {atk.ConfirmationRoll}→{atk.ConfirmationTotal} vs AC {atk.TargetAC} FAILED]";
-                else if (atk.CritConfirmed)
-                    threatStr = $" [Confirm: {atk.ConfirmationRoll}→{atk.ConfirmationTotal} vs AC {atk.TargetAC} ✓]";
-
-                sb.AppendLine($"  [{label}] d20={atk.DieRoll}{flankStr}{rapidStr} → {atk.TotalRoll} vs AC {atk.TargetAC} HIT!{critNote}{threatStr} ({dmgStr} dmg)");
-            }
-            else
-            {
-                sb.AppendLine($"  [{label}] d20={atk.DieRoll}{flankStr}{rapidStr} → {atk.TotalRoll} vs AC {atk.TargetAC} MISS{critNote}");
-            }
+            sb.AppendLine(atk.GetAttackBreakdown(label));
+            sb.AppendLine();
         }
 
-        // Summary line
-        string critSummary = CritCount > 0 ? $", {CritCount} crit(s)!" : "";
-        sb.AppendLine($"--- {HitCount}/{Attacks.Count} hits{critSummary}, {TotalDamageDealt} total damage ---");
+        // ═══ SUMMARY ═══
+        string critSummary = CritCount > 0 ? $", {CritCount} critical(s)!" : "";
+        sb.AppendLine($"  Total: {HitCount}/{Attacks.Count} hits{critSummary}, {TotalDamageDealt} damage");
+
+        // HP Change
+        if (DefenderHPBefore > 0 || DefenderHPAfter >= 0)
+        {
+            sb.AppendLine($"  {defenderName}: {DefenderHPBefore} → {DefenderHPAfter} HP");
+        }
 
         if (TargetKilled)
-            sb.Append($"{defenderName} has been slain!");
+            sb.AppendLine($"  {defenderName} has been slain!");
 
-        return sb.ToString().TrimEnd();
+        sb.Append("═══════════════════════════════════");
+
+        return sb.ToString();
     }
 }

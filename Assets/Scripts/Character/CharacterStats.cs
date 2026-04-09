@@ -574,6 +574,19 @@ public class CharacterStats
     }
 
     /// <summary>
+    /// Roll just the weapon damage dice (no modifiers). Used for combat log breakdown.
+    /// </summary>
+    public int RollBaseDamage(int damageDice, int damageCount)
+    {
+        int total = 0;
+        for (int i = 0; i < damageCount; i++)
+        {
+            total += Random.Range(1, damageDice + 1);
+        }
+        return total;
+    }
+
+    /// <summary>
     /// Roll damage using the weapon's DamageModifierType system instead of a raw strMultiplier.
     /// </summary>
     public int RollDamageWithModType(int damageDice, int damageCount, int bonusDamage, int damageModifier)
