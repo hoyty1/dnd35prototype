@@ -35,6 +35,11 @@ public class CharacterStats
     public int CritThreatMin;   // Minimum natural d20 roll for crit threat (from equipped weapon, default 20)
     public int CritMultiplier;  // Crit damage multiplier (from equipped weapon, default 2)
 
+    // ========== ARMOR PROPERTIES (D&D 3.5) ==========
+    public int MaxDexBonus;         // Max DEX bonus to AC from armor (-1 = no limit)
+    public int ArmorCheckPenalty;   // Total armor check penalty (armor + shield, stored positive)
+    public int ArcaneSpellFailure;  // Total arcane spell failure % (armor + shield)
+
     // ========== DERIVED STATS (calculated) ==========
 
     /// <summary>D&D 3.5 modifier: (score - 10) / 2, rounded down.</summary>
@@ -56,8 +61,20 @@ public class CharacterStats
     /// <summary>Current HP, clamped between 0 and MaxHP.</summary>
     public int CurrentHP;
 
-    /// <summary>AC = 10 + DEX modifier + armor bonus + shield bonus.</summary>
-    public int ArmorClass => 10 + DEXMod + ArmorBonus + ShieldBonus;
+    /// <summary>
+    /// AC = 10 + effective DEX modifier (capped by armor's Max Dex Bonus) + armor bonus + shield bonus.
+    /// D&D 3.5: MaxDexBonus of -1 means no limit; 0+ caps the DEX bonus to AC.
+    /// </summary>
+    public int ArmorClass
+    {
+        get
+        {
+            int dexToAC = DEXMod;
+            if (MaxDexBonus >= 0 && dexToAC > MaxDexBonus)
+                dexToAC = MaxDexBonus;
+            return 10 + dexToAC + ArmorBonus + ShieldBonus;
+        }
+    }
 
     /// <summary>Total attack bonus = BAB + STR modifier (melee).</summary>
     public int AttackBonus => BaseAttackBonus + STRMod;
@@ -117,6 +134,11 @@ public class CharacterStats
         // Default crit stats (can be overridden by equipped weapons via Inventory.RecalculateStats)
         CritThreatMin = 20;   // Only natural 20 threatens by default
         CritMultiplier = 2;   // ×2 by default
+
+        // Default armor properties (no armor = no limit on DEX to AC)
+        MaxDexBonus = -1;       // -1 = no limit
+        ArmorCheckPenalty = 0;
+        ArcaneSpellFailure = 0;
 
         // Calculate MaxHP: base + CON mod × level (minimum 1 HP per level)
         int conModPerLevel = Mathf.Max(1, GetModifier(con));

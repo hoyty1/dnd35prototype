@@ -137,49 +137,119 @@ public class Inventory
 
     /// <summary>
     /// Recalculate the owner's derived stats based on equipped items.
+    /// Handles D&D 3.5 armor properties: Max Dex Bonus, Armor Check Penalty, Arcane Spell Failure.
+    /// Also enforces two-handed weapon restrictions (clears off-hand if main weapon is two-handed).
     /// </summary>
     public void RecalculateStats()
     {
         if (OwnerStats == null) return;
 
-        // Armor bonus
+        // --- Two-Handed Weapon Enforcement ---
+        // If the right hand weapon is two-handed, the left hand must be empty
+        if (RightHandSlot != null && RightHandSlot.IsWeapon && RightHandSlot.IsTwoHanded && LeftHandSlot != null)
+        {
+            // Move left hand item to inventory
+            AddItem(LeftHandSlot);
+            LeftHandSlot = null;
+        }
+        // If the left hand weapon is two-handed, the right hand must be empty
+        if (LeftHandSlot != null && LeftHandSlot.IsWeapon && LeftHandSlot.IsTwoHanded && RightHandSlot != null)
+        {
+            AddItem(RightHandSlot);
+            RightHandSlot = null;
+        }
+
+        // --- Armor Bonus & Properties ---
         OwnerStats.ArmorBonus = ArmorSlot != null ? ArmorSlot.ArmorBonus : 0;
 
-        // Shield bonus
+        // Max Dex Bonus: use the most restrictive (lowest non-negative) from armor
+        // -1 means no limit; armor sets a cap; shield doesn't usually limit max dex (except tower shield)
+        int armorMaxDex = -1;
+        int shieldMaxDex = -1;
+
+        if (ArmorSlot != null)
+        {
+            armorMaxDex = ArmorSlot.MaxDexBonus; // already -1 if no limit
+        }
+
+        // --- Shield Bonus & Properties ---
         OwnerStats.ShieldBonus = 0;
         if (LeftHandSlot != null && LeftHandSlot.IsShield)
+        {
             OwnerStats.ShieldBonus = LeftHandSlot.ShieldBonus;
+            shieldMaxDex = LeftHandSlot.MaxDexBonus;
+        }
 
-        // Weapon stats from right hand (primary weapon)
+        // Compute effective Max Dex Bonus (most restrictive / lowest non-negative)
+        if (armorMaxDex >= 0 && shieldMaxDex >= 0)
+            OwnerStats.MaxDexBonus = Mathf.Min(armorMaxDex, shieldMaxDex);
+        else if (armorMaxDex >= 0)
+            OwnerStats.MaxDexBonus = armorMaxDex;
+        else if (shieldMaxDex >= 0)
+            OwnerStats.MaxDexBonus = shieldMaxDex;
+        else
+            OwnerStats.MaxDexBonus = -1; // No limit
+
+        // --- Armor Check Penalty (sum of armor + shield) ---
+        int totalACP = 0;
+        if (ArmorSlot != null)
+            totalACP += ArmorSlot.ArmorCheckPenalty;
+        if (LeftHandSlot != null && LeftHandSlot.IsShield)
+            totalACP += LeftHandSlot.ArmorCheckPenalty;
+        OwnerStats.ArmorCheckPenalty = totalACP;
+
+        // --- Arcane Spell Failure (sum of armor + shield) ---
+        int totalASF = 0;
+        if (ArmorSlot != null)
+            totalASF += ArmorSlot.ArcaneSpellFailure;
+        if (LeftHandSlot != null && LeftHandSlot.IsShield)
+            totalASF += LeftHandSlot.ArcaneSpellFailure;
+        OwnerStats.ArcaneSpellFailure = totalASF;
+
+        // --- Weapon Stats ---
+        // Primary weapon from right hand
         if (RightHandSlot != null && RightHandSlot.IsWeapon)
         {
-            OwnerStats.BaseDamageDice = RightHandSlot.DamageDice;
-            OwnerStats.BaseDamageCount = RightHandSlot.DamageCount;
-            OwnerStats.BonusDamage = RightHandSlot.BonusDamage;
-            OwnerStats.AttackRange = RightHandSlot.AttackRange;
-            OwnerStats.CritThreatMin = RightHandSlot.CritThreatMin > 0 ? RightHandSlot.CritThreatMin : 20;
-            OwnerStats.CritMultiplier = RightHandSlot.CritMultiplier > 0 ? RightHandSlot.CritMultiplier : 2;
+            ApplyWeaponStats(RightHandSlot);
         }
         else if (LeftHandSlot != null && LeftHandSlot.IsWeapon)
         {
-            // Fallback: weapon in left hand
-            OwnerStats.BaseDamageDice = LeftHandSlot.DamageDice;
-            OwnerStats.BaseDamageCount = LeftHandSlot.DamageCount;
-            OwnerStats.BonusDamage = LeftHandSlot.BonusDamage;
-            OwnerStats.AttackRange = LeftHandSlot.AttackRange;
-            OwnerStats.CritThreatMin = LeftHandSlot.CritThreatMin > 0 ? LeftHandSlot.CritThreatMin : 20;
-            OwnerStats.CritMultiplier = LeftHandSlot.CritMultiplier > 0 ? LeftHandSlot.CritMultiplier : 2;
+            // Fallback: weapon in left hand only
+            ApplyWeaponStats(LeftHandSlot);
         }
         else
         {
-            // Unarmed: 20/×2
-            OwnerStats.BaseDamageDice = 3; // 1d3 unarmed
+            // Unarmed: 1d3, 20/×2, bludgeoning
+            OwnerStats.BaseDamageDice = 3;
             OwnerStats.BaseDamageCount = 1;
             OwnerStats.BonusDamage = 0;
             OwnerStats.AttackRange = 1;
             OwnerStats.CritThreatMin = 20;
             OwnerStats.CritMultiplier = 2;
         }
+    }
+
+    /// <summary>Apply weapon stats from an ItemData to OwnerStats.</summary>
+    private void ApplyWeaponStats(ItemData weapon)
+    {
+        OwnerStats.BaseDamageDice = weapon.DamageDice;
+        OwnerStats.BaseDamageCount = weapon.DamageCount;
+        OwnerStats.BonusDamage = weapon.BonusDamage;
+        OwnerStats.AttackRange = weapon.AttackRange;
+        OwnerStats.CritThreatMin = weapon.CritThreatMin > 0 ? weapon.CritThreatMin : 20;
+        OwnerStats.CritMultiplier = weapon.CritMultiplier > 0 ? weapon.CritMultiplier : 2;
+    }
+
+    /// <summary>
+    /// Check if dual wielding is possible with current equipment.
+    /// Two-handed weapons cannot be dual-wielded.
+    /// </summary>
+    public bool CanDualWield()
+    {
+        if (RightHandSlot == null || !RightHandSlot.IsWeapon) return false;
+        if (LeftHandSlot == null || !LeftHandSlot.IsWeapon) return false;
+        if (RightHandSlot.IsTwoHanded || LeftHandSlot.IsTwoHanded) return false;
+        return true;
     }
 
     /// <summary>Count how many general slots are occupied.</summary>

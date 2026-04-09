@@ -89,7 +89,19 @@ public class CombatUI : MonoBehaviour
             hpText.text = $"HP: {s.CurrentHP}/{s.MaxHP}";
 
         if (acText != null)
-            acText.text = $"AC: {s.ArmorClass} (10{FormatBonusDetail(s.DEXMod, "DEX")}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")})";
+        {
+            // Show effective DEX mod (capped by Max Dex Bonus from armor)
+            int effectiveDex = s.DEXMod;
+            if (s.MaxDexBonus >= 0 && effectiveDex > s.MaxDexBonus)
+                effectiveDex = s.MaxDexBonus;
+            string dexLabel = (s.MaxDexBonus >= 0 && s.DEXMod > s.MaxDexBonus)
+                ? $"DEX*"  // Asterisk indicates capped
+                : "DEX";
+            string acDetails = $"AC: {s.ArmorClass} (10{FormatBonusDetail(effectiveDex, dexLabel)}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")})";
+            if (s.ArmorCheckPenalty > 0)
+                acDetails += $" ACP:-{s.ArmorCheckPenalty}";
+            acText.text = acDetails;
+        }
 
         if (atkText != null)
             atkText.text = $"Atk: {CharacterStats.FormatMod(s.AttackBonus)} (BAB {CharacterStats.FormatMod(s.BaseAttackBonus)} {CharacterStats.FormatMod(s.STRMod)} STR)";

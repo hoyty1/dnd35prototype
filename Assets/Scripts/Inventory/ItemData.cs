@@ -25,6 +25,39 @@ public enum EquipSlot
 }
 
 /// <summary>
+/// Weapon proficiency category from D&D 3.5 PHB.
+/// </summary>
+public enum WeaponProficiency
+{
+    None,
+    Simple,
+    Martial,
+    Exotic
+}
+
+/// <summary>
+/// Weapon category: melee or ranged.
+/// </summary>
+public enum WeaponCategory
+{
+    None,
+    Melee,
+    Ranged
+}
+
+/// <summary>
+/// Armor weight category from D&D 3.5 PHB.
+/// </summary>
+public enum ArmorCategory
+{
+    None,
+    Light,
+    Medium,
+    Heavy,
+    Shield
+}
+
+/// <summary>
 /// Represents a single item with its properties and stats.
 /// Items are value types copied around; use ItemDatabase IDs for identity.
 /// </summary>
@@ -37,18 +70,30 @@ public class ItemData
     public ItemType Type;
     public EquipSlot Slot;
 
-    // --- Stat bonuses ---
-    public int ArmorBonus;      // AC bonus when equipped as armor
-    public int ShieldBonus;     // AC bonus when equipped as shield
+    // --- Weapon Properties ---
+    public WeaponProficiency Proficiency;   // Simple, Martial, Exotic
+    public WeaponCategory WeaponCat;        // Melee or Ranged
     public int DamageDice;      // Sides on damage die (e.g., 8 for d8)
     public int DamageCount;     // Number of damage dice (usually 1)
     public int BonusDamage;     // Flat bonus damage
-    public int AttackRange;     // 1 = melee, >1 = ranged
+    public int AttackRange;     // 1 = melee, >1 = ranged (in feet for ranged weapons, hexes for melee)
     public bool IsLightWeapon;  // Light weapon (dagger, short sword) - reduces TWF penalties
+    public bool IsTwoHanded;    // Two-handed weapon - can't be dual-wielded, 1.5x STR to damage
+    public bool HasReach;       // Reach weapon - can attack at 2 hexes
+    public string DamageType;   // "slashing", "piercing", "bludgeoning", or combinations
 
     // --- Critical Hit (D&D 3.5) ---
     public int CritThreatMin;   // Minimum natural d20 roll to threaten a crit (e.g., 19 for 19-20, 20 for 20 only)
     public int CritMultiplier;  // Damage multiplier on confirmed crit (e.g., 2 for ×2, 3 for ×3)
+
+    // --- Armor/Shield Properties (D&D 3.5 PHB) ---
+    public int ArmorBonus;          // AC bonus when equipped as armor
+    public int ShieldBonus;         // AC bonus when equipped as shield
+    public ArmorCategory ArmorCat;  // Light, Medium, Heavy, Shield
+    public int MaxDexBonus;         // Maximum DEX bonus to AC while wearing (-1 = no limit)
+    public int ArmorCheckPenalty;   // Penalty to STR/DEX skills (stored as positive, applied as negative)
+    public int ArcaneSpellFailure;  // Percentage chance of arcane spell failure (0-100)
+    public float WeightLbs;         // Weight in pounds
 
     // --- Consumable ---
     public int HealAmount;      // HP restored if consumable
@@ -94,15 +139,34 @@ public class ItemData
             string dmg = $"{DamageCount}d{DamageDice}";
             if (BonusDamage > 0) dmg += $"+{BonusDamage}";
             stats = $"Damage: {dmg} | Crit: {GetCritRangeString()}";
-            if (AttackRange > 1) stats += $" | Range: {AttackRange}";
+            if (!string.IsNullOrEmpty(DamageType)) stats += $"\nType: {DamageType}";
+            if (AttackRange > 1) stats += $" | Range: {AttackRange} ft";
+            string props = "";
+            if (IsLightWeapon) props += "Light, ";
+            if (IsTwoHanded) props += "Two-handed, ";
+            if (HasReach) props += "Reach, ";
+            if (props.Length > 0)
+            {
+                props = props.TrimEnd(',', ' ');
+                stats += $"\n{props}";
+            }
+            stats += $"\n{Proficiency} {WeaponCat}";
         }
         else if (Type == ItemType.Armor)
         {
-            stats = $"AC Bonus: +{ArmorBonus}";
+            stats = $"AC Bonus: +{ArmorBonus} ({ArmorCat})";
+            if (MaxDexBonus >= 0) stats += $"\nMax Dex: +{MaxDexBonus}";
+            if (ArmorCheckPenalty > 0) stats += $" | Check: -{ArmorCheckPenalty}";
+            if (ArcaneSpellFailure > 0) stats += $"\nSpell Fail: {ArcaneSpellFailure}%";
+            if (WeightLbs > 0) stats += $" | {WeightLbs} lbs";
         }
         else if (Type == ItemType.Shield)
         {
             stats = $"Shield Bonus: +{ShieldBonus}";
+            if (MaxDexBonus >= 0) stats += $"\nMax Dex: +{MaxDexBonus}";
+            if (ArmorCheckPenalty > 0) stats += $" | Check: -{ArmorCheckPenalty}";
+            if (ArcaneSpellFailure > 0) stats += $"\nSpell Fail: {ArcaneSpellFailure}%";
+            if (WeightLbs > 0) stats += $" | {WeightLbs} lbs";
         }
         else if (Type == ItemType.Consumable && HealAmount > 0)
         {

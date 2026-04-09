@@ -149,16 +149,13 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Check if this character has weapons in both hands (can dual wield).
+    /// Two-handed weapons cannot be dual-wielded.
     /// </summary>
     public bool CanDualWield()
     {
         var inv = GetComponent<InventoryComponent>();
         if (inv == null || inv.CharacterInventory == null) return false;
-
-        var leftItem = inv.CharacterInventory.LeftHandSlot;
-        var rightItem = inv.CharacterInventory.RightHandSlot;
-
-        return leftItem != null && leftItem.IsWeapon && rightItem != null && rightItem.IsWeapon;
+        return inv.CharacterInventory.CanDualWield();
     }
 
     /// <summary>
