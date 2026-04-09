@@ -16,6 +16,8 @@ using UnityEngine;
 /// </summary>
 public class GameManager : MonoBehaviour
 {
+    /// <summary>Enable/disable Debug.Log output of all attack rolls to the Unity Console.</summary>
+    public static bool LogAttacksToConsole = true;
     public static GameManager Instance { get; private set; }
 
     [Header("Grid")]
@@ -958,6 +960,11 @@ public class GameManager : MonoBehaviour
 
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetDetailedSummary();
+
+        // Log to Unity Console for debugging
+        if (LogAttacksToConsole)
+            Debug.Log("[Combat] " + _lastCombatLog);
+
         CombatUI.ShowCombatLog(_lastCombatLog);
         CombatUI.UpdateAllStats(PC1, PC2, NPC);
 
@@ -983,6 +990,11 @@ public class GameManager : MonoBehaviour
 
         FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetFullSummary();
+
+        // Log to Unity Console for debugging
+        if (LogAttacksToConsole)
+            Debug.Log("[Combat] " + _lastCombatLog);
+
         CombatUI.ShowCombatLog(_lastCombatLog);
         CombatUI.UpdateAllStats(PC1, PC2, NPC);
 
@@ -1008,6 +1020,11 @@ public class GameManager : MonoBehaviour
 
         FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetFullSummary();
+
+        // Log to Unity Console for debugging
+        if (LogAttacksToConsole)
+            Debug.Log("[Combat] " + _lastCombatLog);
+
         CombatUI.ShowCombatLog(_lastCombatLog);
         CombatUI.UpdateAllStats(PC1, PC2, NPC);
 
@@ -1135,6 +1152,11 @@ public class GameManager : MonoBehaviour
             RangeInfo npcRangeInfo = CalculateRangeInfo(NPC, closestPC);
             CombatResult result = NPC.Attack(closestPC, false, 0, null, npcRangeInfo);
             _lastCombatLog = result.GetDetailedSummary();
+
+            // Log NPC attack to Unity Console for debugging
+            if (LogAttacksToConsole)
+                Debug.Log("[Combat] " + _lastCombatLog);
+
             CombatUI.ShowCombatLog(_lastCombatLog);
             CombatUI.UpdateAllStats(PC1, PC2, NPC);
 
