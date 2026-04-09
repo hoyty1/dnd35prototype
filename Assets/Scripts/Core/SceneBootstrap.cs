@@ -180,34 +180,71 @@ public class SceneBootstrap : MonoBehaviour
         CreateNPCPanel(canvasGO.transform, combatUI);
 
         // --- Combat Log (bottom center, raised above panels) ---
+        // Taller to accommodate multi-attack results (full attack / dual wield)
         GameObject logPanel = CreatePanel(canvasGO.transform, "CombatLogPanel",
             new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
-            new Vector2(0, PanelHeight + 20), new Vector2(500, 100),
+            new Vector2(0, PanelHeight + 20), new Vector2(540, 140),
             new Color(0, 0, 0, 0.75f));
 
         combatUI.CombatLogText = CreateText(logPanel.transform, "CombatLog",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 5), new Vector2(480, 90),
-            "Combat begins! Move your heroes.", 16, Color.yellow, TextAnchor.MiddleCenter);
+            new Vector2(10, 5), new Vector2(520, 130),
+            "Combat begins! Choose your actions.", 14, Color.yellow, TextAnchor.MiddleCenter);
 
-        // --- Action Panel (right side, middle) ---
+        // --- Action Panel (right side, middle) - D&D 3.5 Action Economy ---
+        float actionPanelHeight = 310f;
+        float actionPanelWidth = 240f;
         GameObject actionPanel = CreatePanel(canvasGO.transform, "ActionPanel",
             new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f),
-            new Vector2(-10, 0), new Vector2(200, 130),
+            new Vector2(-10, 0), new Vector2(actionPanelWidth, actionPanelHeight),
             new Color(0.15f, 0.15f, 0.25f, 0.9f));
         combatUI.ActionPanel = actionPanel;
 
+        float btnW = actionPanelWidth - 20f;
+        float btnH = 35f;
+        float y = actionPanelHeight - 10f;
+
+        // Title
         CreateText(actionPanel.transform, "ActionsTitle",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 95), new Vector2(180, 30),
-            "ACTIONS", 20, Color.white, TextAnchor.MiddleCenter);
+            new Vector2(10, y - 25), new Vector2(btnW, 25),
+            "ACTIONS", 18, Color.white, TextAnchor.MiddleCenter);
+        y -= 30f;
 
+        // Action Status text
+        combatUI.ActionStatusText = CreateText(actionPanel.transform, "ActionStatus",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y - 22), new Vector2(btnW, 22),
+            "[Move] [Standard]", 11, new Color(0.7f, 0.9f, 0.7f), TextAnchor.MiddleCenter);
+        y -= 28f;
+
+        // Move Button (Move Action)
+        combatUI.MoveButton = CreateButton(actionPanel.transform, "MoveBtn",
+            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
+            "Move (Move Action)", new Color(0.2f, 0.5f, 0.2f), Color.white);
+        y -= btnH + 5f;
+
+        // Attack Button (Standard Action)
         combatUI.AttackButton = CreateButton(actionPanel.transform, "AttackBtn",
-            new Vector2(10, 50), new Vector2(180, 35),
-            "Attack", new Color(0.8f, 0.2f, 0.2f), Color.white);
+            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
+            "Attack (Standard)", new Color(0.8f, 0.2f, 0.2f), Color.white);
+        y -= btnH + 5f;
 
+        // Full Attack Button (Full-Round Action)
+        combatUI.FullAttackButton = CreateButton(actionPanel.transform, "FullAttackBtn",
+            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
+            "Full Attack (Full-Round)", new Color(0.7f, 0.15f, 0.15f), Color.white);
+        y -= btnH + 5f;
+
+        // Dual Wield Button (Full-Round Action)
+        combatUI.DualWieldButton = CreateButton(actionPanel.transform, "DualWieldBtn",
+            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
+            "Dual Wield (Full-Round)", new Color(0.6f, 0.3f, 0.6f), Color.white);
+        y -= btnH + 10f;
+
+        // End Turn Button
         combatUI.EndTurnButton = CreateButton(actionPanel.transform, "EndTurnBtn",
-            new Vector2(10, 10), new Vector2(180, 35),
+            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
             "End Turn", new Color(0.3f, 0.3f, 0.6f), Color.white);
 
         actionPanel.SetActive(false);
@@ -433,8 +470,14 @@ public class SceneBootstrap : MonoBehaviour
     {
         yield return null; // wait one frame
 
+        if (ui.MoveButton != null)
+            ui.MoveButton.onClick.AddListener(() => GameManager.Instance.OnMoveButtonPressed());
         if (ui.AttackButton != null)
             ui.AttackButton.onClick.AddListener(() => GameManager.Instance.OnAttackButtonPressed());
+        if (ui.FullAttackButton != null)
+            ui.FullAttackButton.onClick.AddListener(() => GameManager.Instance.OnFullAttackButtonPressed());
+        if (ui.DualWieldButton != null)
+            ui.DualWieldButton.onClick.AddListener(() => GameManager.Instance.OnDualWieldButtonPressed());
         if (ui.EndTurnButton != null)
             ui.EndTurnButton.onClick.AddListener(() => GameManager.Instance.OnEndTurnButtonPressed());
     }

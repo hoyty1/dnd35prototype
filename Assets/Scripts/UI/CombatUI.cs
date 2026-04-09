@@ -4,6 +4,7 @@ using UnityEngine.UI;
 /// <summary>
 /// Manages all combat UI elements with D&D 3.5 ability score display.
 /// Shows 6 ability scores with modifiers and derived stats for each character.
+/// Supports action economy buttons (Move, Attack, Full Attack, Dual Wield, End Turn).
 /// </summary>
 public class CombatUI : MonoBehaviour
 {
@@ -42,10 +43,14 @@ public class CombatUI : MonoBehaviour
     [Header("Combat Log")]
     public Text CombatLogText;
 
-    [Header("Action Buttons")]
+    [Header("Action Buttons - Action Economy")]
     public GameObject ActionPanel;
-    public Button AttackButton;
+    public Button MoveButton;
+    public Button AttackButton;         // Single attack (Standard Action)
+    public Button FullAttackButton;     // Full Attack (Full-Round Action)
+    public Button DualWieldButton;      // Dual Wield (Full-Round Action)
     public Button EndTurnButton;
+    public Text ActionStatusText;       // Shows current action economy status
 
     // Active-PC indicator images on the panels
     public Image PC1ActiveIndicator;
@@ -137,6 +142,95 @@ public class CombatUI : MonoBehaviour
     {
         if (ActionPanel != null)
             ActionPanel.SetActive(visible);
+    }
+
+    // ========== ACTION ECONOMY UI ==========
+
+    /// <summary>
+    /// Update the action panel buttons based on the current action economy state.
+    /// Enables/disables buttons based on available actions.
+    /// </summary>
+    public void UpdateActionButtons(CharacterController pc)
+    {
+        if (pc == null || ActionPanel == null) return;
+
+        var actions = pc.Actions;
+        bool canDualWield = pc.CanDualWield();
+        bool hasIterativeAttacks = pc.Stats.IterativeAttackCount > 1;
+
+        // Move button: available if Move Action is available, or can convert Standard to Move
+        if (MoveButton != null)
+        {
+            bool canMove = actions.HasMoveAction || actions.CanConvertStandardToMove;
+            MoveButton.gameObject.SetActive(true);
+            MoveButton.interactable = canMove;
+
+            // Update label
+            Text moveLabel = MoveButton.GetComponentInChildren<Text>();
+            if (moveLabel != null)
+            {
+                if (actions.HasMoveAction)
+                    moveLabel.text = "Move (Move Action)";
+                else if (actions.CanConvertStandardToMove)
+                    moveLabel.text = "Move (Std\u2192Move)";
+                else
+                    moveLabel.text = "Move (Used)";
+            }
+        }
+
+        // Single Attack button: Standard Action
+        if (AttackButton != null)
+        {
+            AttackButton.gameObject.SetActive(true);
+            AttackButton.interactable = actions.HasStandardAction;
+
+            Text atkLabel = AttackButton.GetComponentInChildren<Text>();
+            if (atkLabel != null)
+                atkLabel.text = actions.HasStandardAction ? "Attack (Standard)" : "Attack (Used)";
+        }
+
+        // Full Attack button: Full-Round Action, only show if BAB grants extra attacks
+        if (FullAttackButton != null)
+        {
+            bool showFullAtk = hasIterativeAttacks && actions.HasFullRoundAction;
+            FullAttackButton.gameObject.SetActive(hasIterativeAttacks);
+            FullAttackButton.interactable = showFullAtk;
+
+            Text faLabel = FullAttackButton.GetComponentInChildren<Text>();
+            if (faLabel != null)
+            {
+                int atkCount = pc.Stats.IterativeAttackCount;
+                faLabel.text = showFullAtk
+                    ? $"Full Attack x{atkCount} (Full-Round)"
+                    : $"Full Attack (N/A)";
+            }
+        }
+
+        // Dual Wield button: Full-Round Action, only show if both hands have weapons
+        if (DualWieldButton != null)
+        {
+            bool showDW = canDualWield;
+            bool canDW = canDualWield && actions.HasFullRoundAction;
+            DualWieldButton.gameObject.SetActive(showDW);
+            DualWieldButton.interactable = canDW;
+
+            Text dwLabel = DualWieldButton.GetComponentInChildren<Text>();
+            if (dwLabel != null)
+                dwLabel.text = canDW ? "Dual Wield (Full-Round)" : "Dual Wield (N/A)";
+        }
+
+        // End Turn always available
+        if (EndTurnButton != null)
+        {
+            EndTurnButton.gameObject.SetActive(true);
+            EndTurnButton.interactable = true;
+        }
+
+        // Action status text
+        if (ActionStatusText != null)
+        {
+            ActionStatusText.text = actions.GetStatusString();
+        }
     }
 
     /// <summary>

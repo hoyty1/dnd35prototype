@@ -123,6 +123,30 @@ public class CharacterStats
     // ========== COMBAT METHODS ==========
 
     /// <summary>
+    /// Get the list of iterative attack bonuses for a Full Attack based on BAB.
+    /// BAB +6 → [+6, +1], BAB +11 → [+11, +6, +1], etc.
+    /// </summary>
+    public int[] GetIterativeAttackBonuses()
+    {
+        var bonuses = new System.Collections.Generic.List<int>();
+        int bab = BaseAttackBonus;
+        while (bab > 0)
+        {
+            bonuses.Add(bab + STRMod);
+            bab -= 5;
+        }
+        // Always have at least one attack
+        if (bonuses.Count == 0)
+            bonuses.Add(BaseAttackBonus + STRMod);
+        return bonuses.ToArray();
+    }
+
+    /// <summary>
+    /// Number of iterative attacks this character gets on a full attack.
+    /// </summary>
+    public int IterativeAttackCount => Mathf.Max(1, 1 + (BaseAttackBonus - 1) / 5);
+
+    /// <summary>
     /// Roll a d20 + total attack bonus vs target AC.
     /// Natural 20 always hits, natural 1 always misses (D&D 3.5 rules).
     /// </summary>
@@ -157,6 +181,24 @@ public class CharacterStats
     }
 
     /// <summary>
+    /// Roll d20 + a specific total attack modifier (for iterative attacks, TWF, etc.) vs target AC.
+    /// </summary>
+    /// <param name="totalAttackMod">The total attack modifier to add to the d20 roll</param>
+    /// <param name="targetAC">Target's Armor Class</param>
+    public (bool hit, int roll, int total) RollToHitWithMod(int totalAttackMod, int targetAC)
+    {
+        int roll = Random.Range(1, 21);
+        int total = roll + totalAttackMod;
+
+        bool hit;
+        if (roll == 20) hit = true;
+        else if (roll == 1) hit = false;
+        else hit = total >= targetAC;
+
+        return (hit, roll, total);
+    }
+
+    /// <summary>
     /// Roll weapon damage: (BaseDamageCount)d(BaseDamageDice) + STR modifier + BonusDamage.
     /// Minimum 1 damage on a hit (D&D 3.5 rule).
     /// </summary>
@@ -169,6 +211,26 @@ public class CharacterStats
         }
         total += STRMod + BonusDamage;
         return Mathf.Max(1, total); // Minimum 1 damage on a hit
+    }
+
+    /// <summary>
+    /// Roll damage for a specific weapon with a specific STR modifier fraction.
+    /// Used for off-hand attacks (half STR) and two-handed (1.5x STR).
+    /// </summary>
+    /// <param name="damageDice">Sides of the damage die</param>
+    /// <param name="damageCount">Number of dice</param>
+    /// <param name="bonusDamage">Flat bonus damage from weapon</param>
+    /// <param name="strMultiplier">STR mod multiplier (1.0 for main hand, 0.5 for off-hand)</param>
+    public int RollDamageWithWeapon(int damageDice, int damageCount, int bonusDamage, float strMultiplier)
+    {
+        int total = 0;
+        for (int i = 0; i < damageCount; i++)
+        {
+            total += Random.Range(1, damageDice + 1);
+        }
+        int strBonus = Mathf.FloorToInt(STRMod * strMultiplier);
+        total += strBonus + bonusDamage;
+        return Mathf.Max(1, total);
     }
 
     /// <summary>

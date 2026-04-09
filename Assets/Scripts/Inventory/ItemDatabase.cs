@@ -32,6 +32,7 @@ public static class ItemDatabase
             Slot = EquipSlot.EitherHand,
             Description = "A light blade ideal for quick strikes and finesse.",
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            IsLightWeapon = true,
             IconChar = "\u2694", IconColor = new Color(0.6f, 0.8f, 0.6f)
         });
 
@@ -41,6 +42,7 @@ public static class ItemDatabase
             Slot = EquipSlot.EitherHand,
             Description = "A small blade. Light and easy to conceal.",
             DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            IsLightWeapon = true,
             IconChar = "\u2020", IconColor = new Color(0.8f, 0.8f, 0.7f)
         });
 
@@ -68,6 +70,7 @@ public static class ItemDatabase
             Slot = EquipSlot.EitherHand,
             Description = "A small axe suitable for one-handed combat.",
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            IsLightWeapon = true,
             IconChar = "\u2692", IconColor = new Color(0.7f, 0.5f, 0.3f)
         });
 
@@ -205,6 +208,7 @@ public static class ItemDatabase
             ArmorBonus = src.ArmorBonus, ShieldBonus = src.ShieldBonus,
             DamageDice = src.DamageDice, DamageCount = src.DamageCount,
             BonusDamage = src.BonusDamage, AttackRange = src.AttackRange,
+            IsLightWeapon = src.IsLightWeapon,
             HealAmount = src.HealAmount,
             IconChar = src.IconChar, IconColor = src.IconColor
         };

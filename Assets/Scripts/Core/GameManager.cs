@@ -3,9 +3,16 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Central game manager handling turn flow, input routing, and game state.
+/// Central game manager handling turn flow with D&D 3.5 action economy.
 /// Supports two PC characters and one NPC with intelligent targeting.
 /// Turn order: PC1 → PC2 → NPC → repeat
+///
+/// Action Economy per turn:
+/// - 1 Move Action + 1 Standard Action (in any order)
+/// - OR 1 Full-Round Action (uses both - e.g., Full Attack, Dual Wield)
+/// - Standard can be converted to a second Move Action
+/// - Plus 1 Swift Action per turn (simplified for now)
+/// - Plus unlimited Free Actions
 /// </summary>
 public class GameManager : MonoBehaviour
 {
@@ -19,32 +26,40 @@ public class GameManager : MonoBehaviour
     public CharacterController PC2;
     public CharacterController NPC;
 
-    // Legacy alias so existing code referencing GM.PC still compiles if needed
+    // Legacy alias
     public CharacterController PC { get => PC1; set => PC1 = value; }
 
     [Header("UI")]
     public CombatUI CombatUI;
     public InventoryUI InventoryUI;
 
-    // Game state
-    public enum TurnPhase { PC1Move, PC1Action, PC2Move, PC2Action, NPCTurn, CombatOver }
-    public TurnPhase CurrentPhase { get; private set; }
+    // Game state - simplified phases
+    public enum TurnPhase { PC1Turn, PC2Turn, NPCTurn, CombatOver }
 
-    /// <summary>Returns the PC whose turn it currently is, or null if not a player phase.</summary>
+    // Sub-states for player turns
+    public enum PlayerSubPhase { ChoosingAction, Moving, SelectingAttackTarget, Animating }
+
+    public TurnPhase CurrentPhase { get; private set; }
+    public PlayerSubPhase CurrentSubPhase { get; private set; }
+
+    /// <summary>Returns the PC whose turn it currently is.</summary>
     public CharacterController ActivePC
     {
         get
         {
-            if (CurrentPhase == TurnPhase.PC1Move || CurrentPhase == TurnPhase.PC1Action) return PC1;
-            if (CurrentPhase == TurnPhase.PC2Move || CurrentPhase == TurnPhase.PC2Action) return PC2;
+            if (CurrentPhase == TurnPhase.PC1Turn) return PC1;
+            if (CurrentPhase == TurnPhase.PC2Turn) return PC2;
             return null;
         }
     }
 
     public bool IsPlayerTurn => ActivePC != null;
 
+    // Current attack mode being selected for
+    private enum PendingAttackMode { Single, FullAttack, DualWield }
+    private PendingAttackMode _pendingAttackMode;
+
     private List<HexCell> _highlightedCells = new List<HexCell>();
-    private bool _waitingForAttackTarget;
     private string _lastCombatLog = "";
     private Camera _mainCam;
 
@@ -60,37 +75,23 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
-        // Generate grid
         Grid.GenerateGrid();
-
-        // Create and place characters
         SetupCharacters();
-
-        // Center camera
         CenterCamera();
-
-        // Cache camera reference for raycasting
         _mainCam = Camera.main;
-
-        // Start with PC1 turn
         StartPCTurn(PC1);
-
         Debug.Log("[GameManager] Initialization complete. Phase: " + CurrentPhase);
     }
 
     /// <summary>
-    /// Detect hex clicks via Physics2D raycasting every frame.
-    /// Also handles "I" key for inventory toggle.
+    /// Handle input every frame - inventory toggle and hex clicks.
     /// </summary>
     private void Update()
     {
-        // Handle inventory toggle with "I" key
         HandleInventoryInput();
 
-        // Only process clicks during player phases
         if (!IsPlayerTurn) return;
-
-        // Don't process hex clicks when inventory is open
+        if (CurrentSubPhase == PlayerSubPhase.Animating) return;
         if (InventoryUI != null && InventoryUI.IsOpen) return;
 
         bool clicked = false;
@@ -132,7 +133,7 @@ public class GameManager : MonoBehaviour
             HexCell cell = hit.collider.GetComponent<HexCell>();
             if (cell != null)
             {
-                Debug.Log($"[GameManager] Hex clicked: ({cell.Q}, {cell.R}) Phase={CurrentPhase}");
+                Debug.Log($"[GameManager] Hex clicked: ({cell.Q}, {cell.R}) Phase={CurrentPhase} Sub={CurrentSubPhase}");
                 OnHexClicked(cell);
             }
         }
@@ -161,6 +162,9 @@ public class GameManager : MonoBehaviour
             if (InventoryUI.IsOpen)
             {
                 InventoryUI.Close();
+                // Refresh action buttons after inventory changes (might affect dual wield)
+                if (IsPlayerTurn && ActivePC != null && CurrentSubPhase == PlayerSubPhase.ChoosingAction)
+                    ShowActionChoices();
             }
             else if (IsPlayerTurn && ActivePC != null)
             {
@@ -169,7 +173,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>Close inventory if open (called on turn transitions).</summary>
     private void CloseInventoryIfOpen()
     {
         if (InventoryUI != null && InventoryUI.IsOpen)
@@ -180,25 +183,21 @@ public class GameManager : MonoBehaviour
     {
         // ==========================================
         // PC1: "Aldric" - Human Fighter (Level 3)
-        // High STR, good CON — front-line melee tank
-        // STR 16, DEX 12, CON 14, WIS 10, INT 10, CHA 13
-        // Equipment: Longsword (1d8), Chain Shirt (+4 armor), Heavy Shield (+2)
-        // Fighter BAB at level 3 = +3
         // ==========================================
         CharacterStats pc1Stats = new CharacterStats(
             name: "Aldric",
             level: 3,
             characterClass: "Fighter",
             str: 16, dex: 12, con: 14, wis: 10, intelligence: 10, cha: 13,
-            bab: 3,             // Fighter BAB = level
-            armorBonus: 4,      // Chain shirt
-            shieldBonus: 2,     // Heavy steel shield
-            damageDice: 8,      // Longsword d8
+            bab: 3,
+            armorBonus: 4,
+            shieldBonus: 2,
+            damageDice: 8,
             damageCount: 1,
             bonusDamage: 0,
-            baseSpeed: 4,       // 4 hexes per turn
-            atkRange: 1,        // Melee
-            baseHitDieHP: 22    // ~3d10 averaged (fighter hit die d10)
+            baseSpeed: 4,
+            atkRange: 1,
+            baseHitDieHP: 22
         );
 
         Sprite pcAlive = LoadSprite("Sprites/pc_alive");
@@ -207,68 +206,57 @@ public class GameManager : MonoBehaviour
         Vector2Int pc1Start = new Vector2Int(3, 8);
         PC1.Init(pc1Stats, pc1Start, pcAlive, pcDead);
 
-        // Setup inventory for PC1
         var pc1Inv = PC1.gameObject.AddComponent<InventoryComponent>();
         pc1Inv.Init(pc1Stats);
         pc1Inv.SetupAldric();
 
         // ==========================================
         // PC2: "Lyra" - Elf Rogue (Level 3)
-        // High DEX, decent INT — nimble striker
-        // STR 12, DEX 17, CON 12, WIS 13, INT 14, CHA 10
-        // Equipment: Short Sword (1d6), Leather Armor (+2), no shield
-        // Rogue BAB at level 3 = +2 (3/4 progression)
         // ==========================================
         CharacterStats pc2Stats = new CharacterStats(
             name: "Lyra",
             level: 3,
             characterClass: "Rogue",
             str: 12, dex: 17, con: 12, wis: 13, intelligence: 14, cha: 10,
-            bab: 2,             // Rogue BAB = floor(level * 3/4)
-            armorBonus: 2,      // Leather armor
-            shieldBonus: 0,     // Rogues don't use shields
-            damageDice: 6,      // Short sword d6
+            bab: 2,
+            armorBonus: 2,
+            shieldBonus: 0,
+            damageDice: 6,
             damageCount: 1,
             bonusDamage: 0,
-            baseSpeed: 5,       // 5 hexes — faster (lighter armor)
-            atkRange: 1,        // Melee
-            baseHitDieHP: 15    // ~3d6 averaged (rogue hit die d6)
+            baseSpeed: 5,
+            atkRange: 1,
+            baseHitDieHP: 15
         );
 
         Vector2Int pc2Start = new Vector2Int(3, 12);
         PC2.Init(pc2Stats, pc2Start, pcAlive, pcDead);
 
-        // Setup inventory for PC2
         var pc2Inv = PC2.gameObject.AddComponent<InventoryComponent>();
         pc2Inv.Init(pc2Stats);
         pc2Inv.SetupLyra();
 
-        // Apply a blue tint to PC2 so the two heroes are visually distinct
         SpriteRenderer pc2SR = PC2.GetComponent<SpriteRenderer>();
         if (pc2SR != null)
-            pc2SR.color = new Color(0.6f, 0.7f, 1f, 1f); // light blue tint
+            pc2SR.color = new Color(0.6f, 0.7f, 1f, 1f);
 
         // ==========================================
-        // NPC: "Goblin Warchief" - Goblin Warrior (Level 2)
-        // Low STR but decent DEX — small and scrappy
-        // STR 14, DEX 15, CON 13, WIS 10, INT 10, CHA 8
-        // Equipment: Morningstar (1d8), Studded Leather (+3), Light Shield (+1)
-        // Warrior BAB at level 2 = +2
+        // NPC: "Goblin Warchief"
         // ==========================================
         CharacterStats npcStats = new CharacterStats(
             name: "Goblin Warchief",
             level: 2,
             characterClass: "Warrior",
             str: 14, dex: 15, con: 13, wis: 10, intelligence: 10, cha: 8,
-            bab: 2,             // Warrior BAB
-            armorBonus: 3,      // Studded leather
-            shieldBonus: 1,     // Light shield
-            damageDice: 8,      // Morningstar d8
+            bab: 2,
+            armorBonus: 3,
+            shieldBonus: 1,
+            damageDice: 8,
             damageCount: 1,
             bonusDamage: 0,
-            baseSpeed: 3,       // 3 hexes — slower
-            atkRange: 1,        // Melee
-            baseHitDieHP: 12    // ~2d8 averaged (warrior hit die d8)
+            baseSpeed: 3,
+            atkRange: 1,
+            baseHitDieHP: 12
         );
 
         Sprite npcAlive = LoadSprite("Sprites/npc_enemy_alive");
@@ -277,7 +265,6 @@ public class GameManager : MonoBehaviour
         Vector2Int npcStart = new Vector2Int(16, 10);
         NPC.Init(npcStats, npcStart, npcAlive, npcDead);
 
-        // Update UI
         CombatUI.UpdateAllStats(PC1, PC2, NPC);
     }
 
@@ -307,19 +294,18 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // ========== TURN MANAGEMENT ==========
+    // ========== TURN MANAGEMENT WITH ACTION ECONOMY ==========
 
     /// <summary>
-    /// Begin a PC's turn. Handles skipping dead PCs.
+    /// Begin a PC's turn with full action economy.
     /// </summary>
     public void StartPCTurn(CharacterController pc)
     {
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
-        // Close inventory on turn switch
         CloseInventoryIfOpen();
 
-        // If this PC is dead, advance to the next phase
+        // If this PC is dead, advance
         if (pc.Stats.IsDead)
         {
             if (pc == PC1) { StartPCTurn(PC2); return; }
@@ -328,22 +314,133 @@ public class GameManager : MonoBehaviour
 
         pc.StartNewTurn();
 
-        if (pc == PC1)
-            CurrentPhase = TurnPhase.PC1Move;
-        else
-            CurrentPhase = TurnPhase.PC2Move;
+        CurrentPhase = (pc == PC1) ? TurnPhase.PC1Turn : TurnPhase.PC2Turn;
+        CurrentSubPhase = PlayerSubPhase.ChoosingAction;
 
         string pcLabel = (pc == PC1) ? "Hero 1" : "Hero 2";
-        CombatUI.SetTurnIndicator($"{pcLabel}'s Turn - Click a highlighted tile to move  [I] Inventory");
-        CombatUI.SetActionButtonsVisible(false);
         CombatUI.SetActivePC(pc == PC1 ? 1 : 2);
-        _waitingForAttackTarget = false;
 
-        ShowMovementRange(pc);
+        ShowActionChoices();
     }
 
-    // Legacy helper — starts PC1 turn (used nowhere now, kept for safety)
+    // Legacy helper
     public void StartPlayerTurn() => StartPCTurn(PC1);
+
+    /// <summary>
+    /// Show the action choice UI for the current PC.
+    /// </summary>
+    private void ShowActionChoices()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        CurrentSubPhase = PlayerSubPhase.ChoosingAction;
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        // Highlight current position
+        HexCell current = Grid.GetCell(pc.GridPosition);
+        if (current != null)
+            current.SetHighlight(HighlightType.Selected);
+
+        // Update action buttons based on action economy
+        CombatUI.SetActionButtonsVisible(true);
+        CombatUI.UpdateActionButtons(pc);
+
+        // Build status message
+        string pcName = pc.Stats.CharacterName;
+        string actionInfo = pc.Actions.GetStatusString();
+
+        // Check if dual wield is possible and add info
+        string dwInfo = "";
+        if (pc.CanDualWield())
+            dwInfo = "\n" + pc.GetDualWieldDescription();
+
+        CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory\n{actionInfo}{dwInfo}");
+
+        // Auto-end turn if no actions left
+        if (!pc.Actions.HasAnyActionLeft)
+        {
+            CombatUI.SetTurnIndicator($"{pcName}'s Turn - No actions remaining");
+            StartCoroutine(DelayedEndActivePCTurn(1.0f));
+        }
+    }
+
+    // ========== ACTION BUTTON HANDLERS ==========
+
+    /// <summary>Called when Move button is pressed.</summary>
+    public void OnMoveButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        // Determine if this uses move action or converted standard
+        if (pc.Actions.HasMoveAction)
+        {
+            // Normal move action
+        }
+        else if (pc.Actions.CanConvertStandardToMove)
+        {
+            // Will convert standard to move when actually moving
+        }
+        else
+        {
+            return; // Can't move
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Moving;
+        ShowMovementRange(pc);
+        CombatUI.SetActionButtonsVisible(false);
+        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (or own tile to cancel)");
+    }
+
+    /// <summary>Called when Attack (Standard Action) button is pressed.</summary>
+    public void OnAttackButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Actions.HasStandardAction) return;
+
+        _pendingAttackMode = PendingAttackMode.Single;
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+        ShowAttackTargets(pc);
+    }
+
+    /// <summary>Called when Full Attack button is pressed.</summary>
+    public void OnFullAttackButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Actions.HasFullRoundAction) return;
+
+        _pendingAttackMode = PendingAttackMode.FullAttack;
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+        ShowAttackTargets(pc);
+    }
+
+    /// <summary>Called when Dual Wield button is pressed.</summary>
+    public void OnDualWieldButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Actions.HasFullRoundAction || !pc.CanDualWield()) return;
+
+        _pendingAttackMode = PendingAttackMode.DualWield;
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+
+        var (mainPen, offPen, lightOff) = pc.GetDualWieldPenalties();
+        string penaltyInfo = lightOff ? $"(light off-hand: {mainPen}/{offPen})" : $"(penalties: {mainPen}/{offPen})";
+
+        ShowAttackTargets(pc);
+        CombatUI.SetTurnIndicator($"DUAL WIELD: Select target {penaltyInfo}");
+    }
+
+    /// <summary>Called when End Turn button is pressed.</summary>
+    public void OnEndTurnButtonPressed()
+    {
+        if (!IsPlayerTurn) return;
+        EndActivePCTurn();
+    }
+
+    // ========== MOVEMENT ==========
 
     private void ShowMovementRange(CharacterController pc)
     {
@@ -365,43 +462,24 @@ public class GameManager : MonoBehaviour
             current.SetHighlight(HighlightType.Selected);
     }
 
-    private void EnterActionPhase()
-    {
-        CharacterController pc = ActivePC;
-        if (pc == PC1)
-            CurrentPhase = TurnPhase.PC1Action;
-        else
-            CurrentPhase = TurnPhase.PC2Action;
+    // ========== ATTACK TARGET SELECTION ==========
 
+    private void ShowAttackTargets(CharacterController pc)
+    {
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
+        CombatUI.SetActionButtonsVisible(false);
 
-        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Choose an action");
-        CombatUI.SetActionButtonsVisible(true);
-    }
-
-    // Called from UI Attack button
-    public void OnAttackButtonPressed()
-    {
-        CharacterController pc = ActivePC;
-        if (pc == null) return;
-        if (CurrentPhase != TurnPhase.PC1Action && CurrentPhase != TurnPhase.PC2Action) return;
-
-        _waitingForAttackTarget = true;
-        Grid.ClearAllHighlights();
-        _highlightedCells.Clear();
-
-        // Determine the other PC for flanking checks
         CharacterController otherPC = (pc == PC1) ? PC2 : PC1;
 
         List<HexCell> rangeCells = Grid.GetCellsInRange(pc.GridPosition, pc.Stats.AttackRange);
         bool hasTarget = false;
         bool anyFlanking = false;
+
         foreach (var cell in rangeCells)
         {
             if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead)
             {
-                // Check if flanking this target
                 bool flanking = !otherPC.Stats.IsDead &&
                     CombatUtils.IsFlanking(pc.GridPosition, otherPC.GridPosition, cell.Occupant.GridPosition);
 
@@ -422,52 +500,28 @@ public class GameManager : MonoBehaviour
         if (hasTarget)
         {
             string flankMsg = anyFlanking ? " (FLANKING available! +2 to hit)" : "";
-            CombatUI.SetTurnIndicator($"Click an enemy to attack!{flankMsg}");
+            string modeStr = "";
+            switch (_pendingAttackMode)
+            {
+                case PendingAttackMode.Single: modeStr = "ATTACK"; break;
+                case PendingAttackMode.FullAttack: modeStr = "FULL ATTACK"; break;
+                case PendingAttackMode.DualWield: modeStr = "DUAL WIELD"; break;
+            }
+            if (CombatUI.TurnIndicatorText != null && !CombatUI.TurnIndicatorText.text.Contains("DUAL WIELD"))
+                CombatUI.SetTurnIndicator($"{modeStr}: Click an enemy to attack!{flankMsg}");
         }
         else
         {
-            CombatUI.SetTurnIndicator("No enemies in range! Ending turn...");
-            _waitingForAttackTarget = false;
-            StartCoroutine(DelayedEndActivePCTurn(1.5f));
+            CombatUI.SetTurnIndicator("No enemies in range!");
+            StartCoroutine(ReturnToActionChoicesAfterDelay(1.5f));
         }
     }
 
-    // Called from UI End Turn button
-    public void OnEndTurnButtonPressed()
-    {
-        if (!IsPlayerTurn) return;
-        EndActivePCTurn();
-    }
-
-    /// <summary>
-    /// End the current active PC's turn and advance to the next phase.
-    /// </summary>
-    private void EndActivePCTurn()
-    {
-        CharacterController pc = ActivePC;
-        Grid.ClearAllHighlights();
-        _highlightedCells.Clear();
-        _waitingForAttackTarget = false;
-        CombatUI.SetActionButtonsVisible(false);
-
-        if (CurrentPhase == TurnPhase.CombatOver) return;
-
-        if (pc == PC1)
-        {
-            // Advance to PC2's turn
-            StartPCTurn(PC2);
-        }
-        else
-        {
-            // PC2 done → NPC turn
-            StartCoroutine(NPCTurnCoroutine());
-        }
-    }
-
-    private IEnumerator DelayedEndActivePCTurn(float delay)
+    private IEnumerator ReturnToActionChoicesAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
-        EndActivePCTurn();
+        if (IsPlayerTurn)
+            ShowActionChoices();
     }
 
     // ========== HEX CLICK HANDLING ==========
@@ -479,38 +533,78 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null) return;
 
-        // Move phase
-        if (CurrentPhase == TurnPhase.PC1Move || CurrentPhase == TurnPhase.PC2Move)
+        switch (CurrentSubPhase)
         {
-            if (_highlightedCells.Contains(cell) && !cell.IsOccupied)
-            {
-                pc.MoveToCell(cell);
-                CombatUI.UpdateAllStats(PC1, PC2, NPC);
-                EnterActionPhase();
-            }
-            else if (cell.Coords == pc.GridPosition)
-            {
-                // Click own tile to skip movement
-                EnterActionPhase();
-            }
-        }
-        // Action phase: attack target selection
-        else if ((CurrentPhase == TurnPhase.PC1Action || CurrentPhase == TurnPhase.PC2Action) && _waitingForAttackTarget)
-        {
-            if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead)
-            {
-                if (_highlightedCells.Contains(cell))
-                {
-                    PerformPlayerAttack(pc, cell.Occupant);
-                }
-            }
+            case PlayerSubPhase.Moving:
+                HandleMovementClick(pc, cell);
+                break;
+
+            case PlayerSubPhase.SelectingAttackTarget:
+                HandleAttackTargetClick(pc, cell);
+                break;
+
+            case PlayerSubPhase.ChoosingAction:
+                // Clicking on own tile when choosing does nothing special
+                break;
         }
     }
 
+    private void HandleMovementClick(CharacterController pc, HexCell cell)
+    {
+        if (cell.Coords == pc.GridPosition)
+        {
+            // Click own tile to cancel movement and return to action choices
+            ShowActionChoices();
+            return;
+        }
+
+        if (_highlightedCells.Contains(cell) && !cell.IsOccupied)
+        {
+            // Consume the appropriate action
+            if (pc.Actions.HasMoveAction)
+            {
+                pc.Actions.UseMoveAction();
+            }
+            else if (pc.Actions.CanConvertStandardToMove)
+            {
+                pc.Actions.ConvertStandardToMove();
+            }
+
+            pc.MoveToCell(cell);
+            CombatUI.UpdateAllStats(PC1, PC2, NPC);
+
+            // Return to action choices (player can still use standard action if available)
+            ShowActionChoices();
+        }
+    }
+
+    private void HandleAttackTargetClick(CharacterController pc, HexCell cell)
+    {
+        // Allow clicking own tile or empty tile to cancel
+        if (!cell.IsOccupied || cell.Occupant == pc || cell.Occupant.Stats.IsDead)
+        {
+            if (cell.Coords == pc.GridPosition || !_highlightedCells.Contains(cell))
+            {
+                // Cancel attack selection
+                ShowActionChoices();
+                return;
+            }
+        }
+
+        if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead && _highlightedCells.Contains(cell))
+        {
+            PerformPlayerAttack(pc, cell.Occupant);
+        }
+    }
+
+    // ========== ATTACK EXECUTION ==========
+
     private void PerformPlayerAttack(CharacterController attacker, CharacterController target)
     {
-        // Check for flanking: see if the other PC is on the opposite side of the target
-        var allies = new System.Collections.Generic.List<CharacterController>();
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        // Check for flanking
+        var allies = new List<CharacterController>();
         if (attacker == PC1) allies.Add(PC2);
         else if (attacker == PC2) allies.Add(PC1);
 
@@ -519,28 +613,144 @@ public class GameManager : MonoBehaviour
         int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
         string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
 
+        switch (_pendingAttackMode)
+        {
+            case PendingAttackMode.Single:
+                PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName);
+                break;
+
+            case PendingAttackMode.FullAttack:
+                PerformFullAttack(attacker, target, isFlanking, flankBonus, partnerName);
+                break;
+
+            case PendingAttackMode.DualWield:
+                PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName);
+                break;
+        }
+    }
+
+    private void PerformSingleAttack(CharacterController attacker, CharacterController target,
+        bool isFlanking, int flankBonus, string partnerName)
+    {
+        // Standard Action
+        attacker.Actions.UseStandardAction();
+
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName);
         _lastCombatLog = result.GetSummary();
         CombatUI.ShowCombatLog(_lastCombatLog);
         CombatUI.UpdateAllStats(PC1, PC2, NPC);
 
-        _waitingForAttackTarget = false;
         Grid.ClearAllHighlights();
 
-        if (result.TargetKilled)
+        if (result.TargetKilled && target == NPC)
         {
-            // NPC killed → check victory
-            if (target == NPC)
-            {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
-                CombatUI.SetActionButtonsVisible(false);
-                return;
-            }
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            return;
         }
 
-        // End this PC's turn after attack
-        StartCoroutine(DelayedEndActivePCTurn(1.5f));
+        // After standard action, check if there are more actions available
+        StartCoroutine(AfterAttackDelay(attacker, 1.5f));
+    }
+
+    private void PerformFullAttack(CharacterController attacker, CharacterController target,
+        bool isFlanking, int flankBonus, string partnerName)
+    {
+        // Full-Round Action
+        attacker.Actions.UseFullRoundAction();
+
+        FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName);
+        _lastCombatLog = result.GetFullSummary();
+        CombatUI.ShowCombatLog(_lastCombatLog);
+        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+
+        Grid.ClearAllHighlights();
+
+        if (result.TargetKilled && target == NPC)
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            return;
+        }
+
+        // Full-round action ends the turn
+        StartCoroutine(DelayedEndActivePCTurn(2.0f));
+    }
+
+    private void PerformDualWieldAttack(CharacterController attacker, CharacterController target,
+        bool isFlanking, int flankBonus, string partnerName)
+    {
+        // Full-Round Action
+        attacker.Actions.UseFullRoundAction();
+
+        FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName);
+        _lastCombatLog = result.GetFullSummary();
+        CombatUI.ShowCombatLog(_lastCombatLog);
+        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+
+        Grid.ClearAllHighlights();
+
+        if (result.TargetKilled && target == NPC)
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            return;
+        }
+
+        // Full-round action ends the turn
+        StartCoroutine(DelayedEndActivePCTurn(2.0f));
+    }
+
+    /// <summary>
+    /// After a standard action attack, return to action choices if more actions available,
+    /// otherwise end turn.
+    /// </summary>
+    private IEnumerator AfterAttackDelay(CharacterController pc, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+
+        if (CurrentPhase == TurnPhase.CombatOver) yield break;
+
+        // Check if the PC still has actions (e.g., unused move action)
+        if (pc.Actions.HasAnyActionLeft)
+        {
+            ShowActionChoices();
+        }
+        else
+        {
+            EndActivePCTurn();
+        }
+    }
+
+    // ========== TURN ENDING ==========
+
+    private void EndActivePCTurn()
+    {
+        CharacterController pc = ActivePC;
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI.SetActionButtonsVisible(false);
+
+        if (CurrentPhase == TurnPhase.CombatOver) return;
+
+        if (pc == PC1)
+        {
+            StartPCTurn(PC2);
+        }
+        else
+        {
+            StartCoroutine(NPCTurnCoroutine());
+        }
+    }
+
+    private IEnumerator DelayedEndActivePCTurn(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        if (CurrentPhase != TurnPhase.CombatOver)
+            EndActivePCTurn();
     }
 
     // ========== NPC AI TURN ==========
@@ -549,7 +759,8 @@ public class GameManager : MonoBehaviour
     {
         CurrentPhase = TurnPhase.NPCTurn;
         CombatUI.SetTurnIndicator("Enemy Turn...");
-        CombatUI.SetActivePC(0); // no PC active
+        CombatUI.SetActivePC(0);
+        CombatUI.SetActionButtonsVisible(false);
 
         if (NPC.Stats.IsDead)
         {
@@ -561,12 +772,10 @@ public class GameManager : MonoBehaviour
         NPC.StartNewTurn();
         yield return new WaitForSeconds(0.8f);
 
-        // Determine closest alive PC
         CharacterController closestPC = GetClosestAlivePC();
 
         if (closestPC == null)
         {
-            // Both PCs dead — should not normally reach here but handle gracefully
             CurrentPhase = TurnPhase.CombatOver;
             CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
             CombatUI.SetActionButtonsVisible(false);
@@ -575,19 +784,20 @@ public class GameManager : MonoBehaviour
 
         int distToTarget = HexUtils.HexDistance(NPC.GridPosition, closestPC.GridPosition);
 
-        // Move toward closest PC if not in attack range
+        // NPC uses simple action economy: move then attack
         if (distToTarget > NPC.Stats.AttackRange)
         {
             HexCell bestCell = FindBestMoveToward(NPC, closestPC.GridPosition);
             if (bestCell != null)
             {
                 NPC.MoveToCell(bestCell);
+                NPC.Actions.UseMoveAction();
                 CombatUI.ShowCombatLog($"{NPC.Stats.CharacterName} moves toward {closestPC.Stats.CharacterName}!");
                 yield return new WaitForSeconds(0.6f);
             }
         }
 
-        // Re-evaluate closest target after moving (could have changed)
+        // Re-evaluate
         closestPC = GetClosestAlivePC();
         if (closestPC == null)
         {
@@ -600,6 +810,7 @@ public class GameManager : MonoBehaviour
 
         if (distToTarget <= NPC.Stats.AttackRange && !closestPC.Stats.IsDead)
         {
+            NPC.Actions.UseStandardAction();
             CombatResult result = NPC.Attack(closestPC);
             _lastCombatLog = result.GetSummary();
             CombatUI.ShowCombatLog(_lastCombatLog);
@@ -607,7 +818,6 @@ public class GameManager : MonoBehaviour
 
             if (result.TargetKilled)
             {
-                // Check if BOTH PCs are dead
                 if (PC1.Stats.IsDead && PC2.Stats.IsDead)
                 {
                     CurrentPhase = TurnPhase.CombatOver;
@@ -631,9 +841,6 @@ public class GameManager : MonoBehaviour
         StartPCTurn(PC1);
     }
 
-    /// <summary>
-    /// Returns the alive PC closest to the NPC, or null if all PCs are dead.
-    /// </summary>
     private CharacterController GetClosestAlivePC()
     {
         bool pc1Alive = !PC1.Stats.IsDead;
@@ -643,15 +850,11 @@ public class GameManager : MonoBehaviour
         if (pc1Alive && !pc2Alive) return PC1;
         if (!pc1Alive && pc2Alive) return PC2;
 
-        // Both alive — pick the closer one
         int dist1 = HexUtils.HexDistance(NPC.GridPosition, PC1.GridPosition);
         int dist2 = HexUtils.HexDistance(NPC.GridPosition, PC2.GridPosition);
         return dist1 <= dist2 ? PC1 : PC2;
     }
 
-    /// <summary>
-    /// Find the best cell for NPC to move toward a target position.
-    /// </summary>
     private HexCell FindBestMoveToward(CharacterController mover, Vector2Int targetPos)
     {
         List<HexCell> moveCells = Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);

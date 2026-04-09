@@ -1,7 +1,9 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 /// <summary>
 /// Controls a character on the hex grid (both PC and NPC).
+/// Supports D&D 3.5 action economy, full attacks, and dual wielding.
 /// </summary>
 public class CharacterController : MonoBehaviour
 {
@@ -16,6 +18,9 @@ public class CharacterController : MonoBehaviour
     [HideInInspector] public Vector2Int GridPosition;
     [HideInInspector] public bool HasMovedThisTurn;
     [HideInInspector] public bool HasAttackedThisTurn;
+
+    /// <summary>Action economy tracker for the current turn.</summary>
+    public ActionEconomy Actions = new ActionEconomy();
 
     private SpriteRenderer _sr;
 
@@ -75,8 +80,10 @@ public class CharacterController : MonoBehaviour
         HasMovedThisTurn = true;
     }
 
+    // ========== SINGLE ATTACK (Standard Action) ==========
+
     /// <summary>
-    /// Perform an attack against another character.
+    /// Perform a single attack against another character (standard action).
     /// Returns a CombatResult with details.
     /// </summary>
     public CombatResult Attack(CharacterController target)
@@ -85,12 +92,8 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Perform an attack with flanking context.
+    /// Perform a single attack with flanking context.
     /// </summary>
-    /// <param name="target">The defender being attacked</param>
-    /// <param name="isFlanking">Whether the attacker is flanking the target</param>
-    /// <param name="flankingBonus">Attack bonus from flanking (+2 in D&D 3.5)</param>
-    /// <param name="flankingPartnerName">Name of the ally providing flanking</param>
     public CombatResult Attack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
     {
         var result = new CombatResult();
@@ -141,6 +144,202 @@ public class CharacterController : MonoBehaviour
         return result;
     }
 
+    // ========== FULL ATTACK (Full-Round Action) ==========
+
+    /// <summary>
+    /// Perform a Full Attack action - all iterative attacks based on BAB.
+    /// BAB +6 gets 2 attacks at +6/+1, BAB +11 gets 3 at +11/+6/+1, etc.
+    /// This is a Full-Round Action.
+    /// </summary>
+    public FullAttackResult FullAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
+    {
+        var result = new FullAttackResult();
+        result.Type = FullAttackResult.AttackType.FullAttack;
+        result.Attacker = this;
+        result.Defender = target;
+
+        int[] attackBonuses = Stats.GetIterativeAttackBonuses();
+
+        for (int i = 0; i < attackBonuses.Length; i++)
+        {
+            if (target.Stats.IsDead) break;
+
+            int atkMod = attackBonuses[i] + (isFlanking ? flankingBonus : 0);
+            string label = (i == 0) ? $"Attack ({CharacterStats.FormatMod(attackBonuses[i])})" :
+                $"Attack {i + 1} ({CharacterStats.FormatMod(attackBonuses[i])})";
+
+            CombatResult atk = PerformSingleAttackWithMod(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
+                Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, 1.0f);
+
+            result.Attacks.Add(atk);
+            result.AttackLabels.Add(label);
+        }
+
+        result.TargetKilled = target.Stats.IsDead;
+        HasAttackedThisTurn = true;
+        return result;
+    }
+
+    // ========== DUAL WIELD ATTACK (Full-Round Action) ==========
+
+    /// <summary>
+    /// Check if this character has weapons in both hands (can dual wield).
+    /// </summary>
+    public bool CanDualWield()
+    {
+        var inv = GetComponent<InventoryComponent>();
+        if (inv == null || inv.CharacterInventory == null) return false;
+
+        var leftItem = inv.CharacterInventory.LeftHandSlot;
+        var rightItem = inv.CharacterInventory.RightHandSlot;
+
+        return leftItem != null && leftItem.IsWeapon && rightItem != null && rightItem.IsWeapon;
+    }
+
+    /// <summary>
+    /// Get the dual wield penalty information.
+    /// Returns (mainHandPenalty, offHandPenalty, isLightOffHand).
+    /// Without TWF feat: -6/-10 (normal) or -4/-8 (light off-hand).
+    /// </summary>
+    public (int mainPenalty, int offPenalty, bool lightOffHand) GetDualWieldPenalties()
+    {
+        var inv = GetComponent<InventoryComponent>();
+        if (inv == null) return (-6, -10, false);
+
+        var offHandItem = inv.CharacterInventory.LeftHandSlot;
+        bool lightOffHand = offHandItem != null && offHandItem.IsLightWeapon;
+
+        // D&D 3.5 TWF penalties without the TWF feat
+        if (lightOffHand)
+            return (-4, -8, true);
+        else
+            return (-6, -10, false);
+    }
+
+    /// <summary>
+    /// Perform a Dual Wield attack - main hand and off-hand attacks.
+    /// Full-Round Action. Main hand gets full STR to damage, off-hand gets half STR.
+    /// Both can benefit from flanking and sneak attack.
+    /// </summary>
+    public FullAttackResult DualWieldAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
+    {
+        var result = new FullAttackResult();
+        result.Type = FullAttackResult.AttackType.DualWield;
+        result.Attacker = this;
+        result.Defender = target;
+
+        var inv = GetComponent<InventoryComponent>();
+        if (inv == null) return result;
+
+        var mainWeapon = inv.CharacterInventory.RightHandSlot;
+        var offWeapon = inv.CharacterInventory.LeftHandSlot;
+
+        if (mainWeapon == null || offWeapon == null) return result;
+
+        var (mainPenalty, offPenalty, lightOff) = GetDualWieldPenalties();
+
+        // Main hand attack: BAB + STR + penalty + flanking
+        int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0);
+        string mainLabel = $"Main Hand ({mainWeapon.Name}, {CharacterStats.FormatMod(Stats.AttackBonus + mainPenalty)})";
+
+        CombatResult mainAtk = PerformSingleAttackWithMod(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
+            mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, 1.0f);
+        result.Attacks.Add(mainAtk);
+        result.AttackLabels.Add(mainLabel);
+
+        // Off-hand attack (only if target still alive)
+        if (!target.Stats.IsDead)
+        {
+            int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0);
+            string offLabel = $"Off-Hand ({offWeapon.Name}, {CharacterStats.FormatMod(Stats.AttackBonus + offPenalty)})";
+
+            CombatResult offAtk = PerformSingleAttackWithMod(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
+                offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, 0.5f); // Half STR for off-hand
+            result.Attacks.Add(offAtk);
+            result.AttackLabels.Add(offLabel);
+        }
+
+        result.TargetKilled = target.Stats.IsDead;
+        HasAttackedThisTurn = true;
+        return result;
+    }
+
+    // ========== INTERNAL: Single attack with specific modifier ==========
+
+    /// <summary>
+    /// Perform a single attack roll with a specific total attack modifier and weapon stats.
+    /// Used internally by FullAttack and DualWieldAttack.
+    /// </summary>
+    private CombatResult PerformSingleAttackWithMod(CharacterController target, int totalAtkMod,
+        bool isFlanking, int flankingBonus, string flankingPartnerName,
+        int damageDice, int damageCount, int bonusDamage, float strMultiplier)
+    {
+        var result = new CombatResult();
+        result.Attacker = this;
+        result.Defender = target;
+        result.IsFlanking = isFlanking;
+        result.FlankingBonus = isFlanking ? flankingBonus : 0;
+        result.FlankingPartnerName = flankingPartnerName ?? "";
+
+        // Roll to hit
+        var (hit, roll, total) = Stats.RollToHitWithMod(totalAtkMod, target.Stats.ArmorClass);
+        result.DieRoll = roll;
+        result.TotalRoll = total;
+        result.TargetAC = target.Stats.ArmorClass;
+        result.Hit = hit;
+        result.NaturalTwenty = (roll == 20);
+        result.NaturalOne = (roll == 1);
+
+        if (hit)
+        {
+            // Roll weapon damage with appropriate STR multiplier
+            int damage = Stats.RollDamageWithWeapon(damageDice, damageCount, bonusDamage, strMultiplier);
+            result.Damage = damage;
+
+            // Sneak attack applies to each attack if flanking and attacker is Rogue
+            if (Stats.IsRogue && isFlanking)
+            {
+                int sneakDice = CombatUtils.GetSneakAttackDice(Stats.Level);
+                int sneakDmg = CombatUtils.RollSneakAttackDamage(Stats.Level);
+                result.SneakAttackApplied = true;
+                result.SneakAttackDice = sneakDice;
+                result.SneakAttackDamage = sneakDmg;
+            }
+
+            // Apply damage
+            target.Stats.TakeDamage(result.TotalDamage);
+
+            if (target.Stats.IsDead)
+            {
+                target.OnDeath();
+                result.TargetKilled = true;
+            }
+        }
+
+        return result;
+    }
+
+    // ========== DUAL WIELD INFO ==========
+
+    /// <summary>
+    /// Get a description of dual wield status for UI display.
+    /// </summary>
+    public string GetDualWieldDescription()
+    {
+        if (!CanDualWield()) return "";
+
+        var inv = GetComponent<InventoryComponent>();
+        var mainWeapon = inv.CharacterInventory.RightHandSlot;
+        var offWeapon = inv.CharacterInventory.LeftHandSlot;
+        var (mainPen, offPen, lightOff) = GetDualWieldPenalties();
+
+        string lightStr = lightOff ? " (light)" : "";
+        return $"Dual Wield: {mainWeapon.Name} / {offWeapon.Name}{lightStr}\n" +
+               $"Penalties: Main {mainPen}, Off-hand {offPen}";
+    }
+
+    // ========== LIFECYCLE ==========
+
     /// <summary>
     /// Called when this character reaches 0 HP.
     /// </summary>
@@ -151,11 +350,12 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Reset turn flags.
+    /// Reset turn flags and action economy.
     /// </summary>
     public void StartNewTurn()
     {
         HasMovedThisTurn = false;
         HasAttackedThisTurn = false;
+        Actions.Reset();
     }
 }

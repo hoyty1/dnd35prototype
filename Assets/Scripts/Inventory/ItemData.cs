@@ -44,6 +44,7 @@ public class ItemData
     public int DamageCount;     // Number of damage dice (usually 1)
     public int BonusDamage;     // Flat bonus damage
     public int AttackRange;     // 1 = melee, >1 = ranged
+    public bool IsLightWeapon;  // Light weapon (dagger, short sword) - reduces TWF penalties
 
     // --- Consumable ---
     public int HealAmount;      // HP restored if consumable

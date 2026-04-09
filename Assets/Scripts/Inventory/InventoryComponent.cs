@@ -47,10 +47,10 @@ public class InventoryComponent : MonoBehaviour
     {
         ItemDatabase.Init();
 
-        // Equipped items
+        // Equipped items - Lyra dual wields short sword + dagger
         CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
         CharacterInventory.DirectEquip(ItemDatabase.CloneItem("short_sword"), EquipSlot.RightHand);
-        // Left hand empty for Lyra
+        CharacterInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.LeftHand);
 
         // Extra items in inventory
         CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
