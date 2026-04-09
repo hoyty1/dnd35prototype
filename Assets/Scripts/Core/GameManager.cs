@@ -995,9 +995,9 @@ public class GameManager : MonoBehaviour
         FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetFullSummary();
 
-        // Log to Unity Console for debugging
+        // Log detailed per-attack breakdown to Unity Console
         if (LogAttacksToConsole)
-            Debug.Log("[Combat] " + _lastCombatLog);
+            LogFullAttackToConsole(result);
 
         CombatUI.ShowCombatLog(_lastCombatLog);
         CombatUI.UpdateAllStats(PC1, PC2, NPC);
@@ -1025,9 +1025,9 @@ public class GameManager : MonoBehaviour
         FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetFullSummary();
 
-        // Log to Unity Console for debugging
+        // Log detailed per-attack breakdown to Unity Console
         if (LogAttacksToConsole)
-            Debug.Log("[Combat] " + _lastCombatLog);
+            LogFullAttackToConsole(result);
 
         CombatUI.ShowCombatLog(_lastCombatLog);
         CombatUI.UpdateAllStats(PC1, PC2, NPC);
@@ -1222,5 +1222,194 @@ public class GameManager : MonoBehaviour
         }
 
         return bestCell;
+    }
+
+    // ========== DETAILED CONSOLE LOGGING ==========
+
+    /// <summary>
+    /// Log a FullAttackResult to the Unity Console with detailed per-attack breakdowns.
+    /// Each attack is logged separately with [Combat] prefix for easy filtering.
+    /// </summary>
+    private void LogFullAttackToConsole(FullAttackResult result)
+    {
+        string attackerName = result.Attacker.Stats.CharacterName;
+        string defenderName = result.Defender.Stats.CharacterName;
+
+        // ═══ HEADER ═══
+        Debug.Log("[Combat] ═══════════════════════════════════════");
+
+        string actionLabel = result.Type == FullAttackResult.AttackType.FullAttack
+            ? "full attacks"
+            : result.Type == FullAttackResult.AttackType.DualWield
+                ? "dual wields against"
+                : "attacks";
+        Debug.Log($"[Combat] {attackerName} {actionLabel} {defenderName}");
+
+        // Weapon info
+        if (result.Type == FullAttackResult.AttackType.DualWield
+            && !string.IsNullOrEmpty(result.MainWeaponName)
+            && !string.IsNullOrEmpty(result.OffWeaponName))
+        {
+            Debug.Log($"[Combat] Main Hand: {result.MainWeaponName}");
+            Debug.Log($"[Combat] Off Hand: {result.OffWeaponName}");
+        }
+        else if (!string.IsNullOrEmpty(result.MainWeaponName))
+        {
+            bool isRanged = result.Attacks.Count > 0 && result.Attacks[0].IsRangedAttack;
+            string wpnType = isRanged ? "ranged" : "melee";
+            Debug.Log($"[Combat] Weapon: {result.MainWeaponName} ({wpnType})");
+        }
+
+        // Active feats
+        if (result.Attacks.Count > 0)
+        {
+            var first = result.Attacks[0];
+            var feats = new List<string>();
+            if (first.PowerAttackValue > 0) feats.Add($"Power Attack (-{first.PowerAttackValue} atk/+{first.PowerAttackDamageBonus} dmg)");
+            if (first.RapidShotActive) feats.Add("Rapid Shot");
+            if (first.PointBlankShotActive) feats.Add("Point Blank Shot");
+            if (feats.Count > 0)
+                Debug.Log($"[Combat] Active Feats: {string.Join(", ", feats)}");
+
+            // Flanking
+            if (first.IsFlanking)
+                Debug.Log($"[Combat] Flanking: Yes (with {first.FlankingPartnerName}, +{first.FlankingBonus})");
+
+            // Range info
+            if (first.IsRangedAttack)
+            {
+                string penaltyStr = first.RangePenalty == 0 ? "no penalty" : $"{first.RangePenalty} penalty";
+                Debug.Log($"[Combat] Range: {first.RangeDistanceFeet} ft ({first.RangeDistanceSquares} sq) - Increment {first.RangeIncrementNumber}, {penaltyStr}");
+            }
+        }
+
+        Debug.Log("[Combat]");
+
+        // ═══ EACH ATTACK ═══
+        for (int i = 0; i < result.Attacks.Count; i++)
+        {
+            Debug.Log("[Combat] ─────────────────────────────────────");
+
+            CombatResult atk = result.Attacks[i];
+
+            // Build the attack label
+            string label = (i < result.AttackLabels.Count) ? result.AttackLabels[i] : $"Attack {i + 1}";
+            Debug.Log($"[Combat] {label}:");
+
+            // --- ATTACK ROLL ---
+            Debug.Log("[Combat]   ATTACK ROLL:");
+            Debug.Log($"[Combat]     d20 roll: {atk.DieRoll}");
+
+            if (atk.BreakdownBAB != 0)
+                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.BreakdownBAB, "BAB")}");
+
+            string abilName = !string.IsNullOrEmpty(atk.BreakdownAbilityName) ? atk.BreakdownAbilityName : "STR";
+            if (atk.BreakdownAbilityMod != 0)
+                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.BreakdownAbilityMod, $"{abilName} modifier")}");
+
+            if (atk.SizeAttackBonus != 0)
+                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.SizeAttackBonus, "size")}");
+
+            if (atk.IsFlanking && atk.FlankingBonus != 0)
+                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.FlankingBonus, "flanking")}");
+
+            if (atk.RacialAttackBonus != 0)
+                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.RacialAttackBonus, "racial")}");
+
+            if (atk.PowerAttackValue > 0)
+                Debug.Log($"[Combat]     {FormatConsoleModLine(-atk.PowerAttackValue, "Power Attack")}");
+
+            if (atk.RapidShotActive)
+                Debug.Log($"[Combat]     {FormatConsoleModLine(-2, "Rapid Shot")}");
+
+            if (atk.PointBlankShotActive)
+                Debug.Log($"[Combat]     {FormatConsoleModLine(1, "Point Blank Shot")}");
+
+            if (atk.IsRangedAttack && atk.RangePenalty != 0)
+                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.RangePenalty, "range")}");
+
+            if (atk.IsDualWieldAttack && atk.BreakdownDualWieldPenalty != 0)
+            {
+                string dwLabel = atk.IsOffHandAttack ? "off-hand penalty" : "dual wield penalty";
+                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.BreakdownDualWieldPenalty, dwLabel)}");
+            }
+
+            // Result line
+            string critNote = "";
+            if (atk.NaturalTwenty) critNote = " (NATURAL 20!)";
+            else if (atk.NaturalOne) critNote = " (NATURAL 1!)";
+            string hitMiss = atk.Hit ? "HIT!" : "MISS!";
+            Debug.Log($"[Combat]     = {atk.TotalRoll} vs AC {atk.TargetAC} - {hitMiss}{critNote}");
+
+            // Critical threat
+            if (atk.IsCritThreat)
+            {
+                string threatRange = atk.CritThreatMin < 20 ? $"{atk.CritThreatMin}-20" : "20";
+                string confModStr = CharacterStats.FormatMod(atk.ConfirmationTotal - atk.ConfirmationRoll);
+                if (atk.CritConfirmed)
+                    Debug.Log($"[Combat]   *** CRITICAL THREAT ({threatRange})! Confirm: {atk.ConfirmationRoll} {confModStr} = {atk.ConfirmationTotal} vs AC {atk.TargetAC} - CONFIRMED! (×{atk.CritMultiplier}) ***");
+                else
+                    Debug.Log($"[Combat]   *** Critical Threat ({threatRange})! Confirm: {atk.ConfirmationRoll} {confModStr} = {atk.ConfirmationTotal} vs AC {atk.TargetAC} - Not confirmed ***");
+            }
+
+            // --- DAMAGE ROLL ---
+            if (atk.Hit)
+            {
+                Debug.Log("[Combat]   DAMAGE ROLL:");
+                string diceStr = !string.IsNullOrEmpty(atk.BaseDamageDiceStr) ? atk.BaseDamageDiceStr : "?";
+
+                if (atk.CritConfirmed)
+                {
+                    Debug.Log($"[Combat]     CRITICAL HIT! (×{atk.CritMultiplier})");
+                    Debug.Log($"[Combat]     {atk.CritDamageDice} = {atk.Damage - atk.FeatDamageBonus} (crit weapon + mods)");
+                }
+                else
+                {
+                    Debug.Log($"[Combat]     {diceStr} roll: {atk.BaseDamageRoll}");
+
+                    if (atk.DamageModifier != 0)
+                    {
+                        string dmgModLabel = !string.IsNullOrEmpty(atk.DamageModifierDesc) ? atk.DamageModifierDesc : abilName;
+                        Debug.Log($"[Combat]     {FormatConsoleModLine(atk.DamageModifier, dmgModLabel)}");
+                    }
+                }
+
+                if (atk.PowerAttackDamageBonus > 0)
+                    Debug.Log($"[Combat]     {FormatConsoleModLine(atk.PowerAttackDamageBonus, "Power Attack")}");
+
+                if (atk.PointBlankShotActive)
+                    Debug.Log($"[Combat]     {FormatConsoleModLine(1, "Point Blank Shot")}");
+
+                Debug.Log($"[Combat]     = {atk.Damage} damage");
+
+                if (atk.SneakAttackApplied)
+                {
+                    Debug.Log($"[Combat]     + {atk.SneakAttackDamage} sneak attack ({atk.SneakAttackDice}d6)");
+                    Debug.Log($"[Combat]     = {atk.TotalDamage} total damage");
+                }
+            }
+
+            Debug.Log("[Combat]");
+        }
+
+        // ═══ SUMMARY ═══
+        Debug.Log("[Combat] ─────────────────────────────────────");
+        string critSummary = result.CritCount > 0 ? $", {result.CritCount} critical(s)!" : "";
+        Debug.Log($"[Combat] SUMMARY: {result.HitCount}/{result.Attacks.Count} hits{critSummary}, {result.TotalDamageDealt} total damage");
+        Debug.Log($"[Combat] {defenderName}: {result.DefenderHPBefore} → {result.DefenderHPAfter} HP");
+
+        if (result.TargetKilled)
+            Debug.Log($"[Combat] {defenderName} has been slain!");
+
+        Debug.Log("[Combat] ═══════════════════════════════════════");
+    }
+
+    /// <summary>Format a modifier for console output like "+ 3 (STR)" or "- 2 (Rapid Shot)".</summary>
+    private static string FormatConsoleModLine(int value, string label)
+    {
+        if (value >= 0)
+            return $"+ {value} ({label})";
+        else
+            return $"- {-value} ({label})";
     }
 }

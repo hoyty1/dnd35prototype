@@ -330,12 +330,11 @@ public class CharacterController : MonoBehaviour
 
             string label;
             if (rapidShotActive && i == 0)
-                label = $"Rapid Shot ({CharacterStats.FormatMod(baseBonus)})";
+                label = $"Attack 1 (Rapid Shot extra attack, {CharacterStats.FormatMod(baseBonus)})";
             else
             {
-                int displayIdx = rapidShotActive ? i : i + 1;
-                label = (displayIdx <= 1) ? $"Attack ({CharacterStats.FormatMod(baseBonus)})" :
-                    $"Attack {displayIdx} ({CharacterStats.FormatMod(baseBonus)})";
+                int displayIdx = rapidShotActive ? i + 1 : i + 1;
+                label = $"Attack {displayIdx} ({CharacterStats.FormatMod(baseBonus)})";
             }
 
             // Record HP before this individual attack
@@ -478,7 +477,7 @@ public class CharacterController : MonoBehaviour
         // Main hand attack
         int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                          + powerAtkPenalty + pbsAtkBonus;
-        string mainLabel = $"Main Hand ({mainWeapon.Name})";
+        string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
 
         int mainCritMin = mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20;
         int mainCritMult = mainWeapon.CritMultiplier > 0 ? mainWeapon.CritMultiplier : 2;
@@ -520,7 +519,7 @@ public class CharacterController : MonoBehaviour
         {
             int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                             + powerAtkPenalty + pbsAtkBonus;
-            string offLabel = $"Off Hand ({offWeapon.Name})";
+            string offLabel = $"Attack 2 - Off Hand ({offWeapon.Name})";
 
             int offCritMin = offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20;
             int offCritMult = offWeapon.CritMultiplier > 0 ? offWeapon.CritMultiplier : 2;
