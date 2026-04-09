@@ -66,17 +66,29 @@ public class FullAttackResult
         string attackerName = Attacker.Stats.CharacterName;
         string defenderName = Defender.Stats.CharacterName;
 
+        // Build feat summary for header
+        string featSummary = "";
+        if (Attacks.Count > 0)
+        {
+            var feats = new List<string>();
+            var first = Attacks[0];
+            if (first.PowerAttackValue > 0) feats.Add($"Power Attack -{first.PowerAttackValue}");
+            if (first.RapidShotActive) feats.Add("Rapid Shot");
+            if (first.PointBlankShotActive) feats.Add("Point Blank Shot");
+            if (feats.Count > 0) featSummary = $" ({string.Join(", ", feats)})";
+        }
+
         // Header
         switch (Type)
         {
             case AttackType.FullAttack:
-                sb.AppendLine($"=== {attackerName} FULL ATTACK vs {defenderName}! ===");
+                sb.AppendLine($"=== {attackerName} FULL ATTACK vs {defenderName}!{featSummary} ===");
                 break;
             case AttackType.DualWield:
-                sb.AppendLine($"=== {attackerName} DUAL WIELD vs {defenderName}! ===");
+                sb.AppendLine($"=== {attackerName} DUAL WIELD vs {defenderName}!{featSummary} ===");
                 break;
             default:
-                sb.AppendLine($"{attackerName} attacks {defenderName}!");
+                sb.AppendLine($"{attackerName} attacks {defenderName}!{featSummary}");
                 break;
         }
 

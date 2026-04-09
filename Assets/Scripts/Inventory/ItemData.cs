@@ -168,6 +168,7 @@ public class ItemData
                 int incSquares = RangeIncrement / 5;
                 int maxSquares = maxRange / 5;
 
+                string weaponType = IsThrown ? "thrown" : "projectile";
                 stats += $"\nRange: {RangeIncrement} ft increment ({incSquares} sq), max {maxRange} ft ({maxSquares} sq) [{weaponType}]";
             }
             else if (AttackRange > 1) stats += $" | Range: {AttackRange} ft";

@@ -17,6 +17,31 @@ public class CharacterStats
     /// <summary>Whether this character is a Rogue (eligible for sneak attack).</summary>
     public bool IsRogue => CharacterClass == "Rogue";
 
+    // ========== FEATS (D&D 3.5) ==========
+    /// <summary>Set of feats this character has. Auto-granted based on class.</summary>
+    public HashSet<string> Feats = new HashSet<string>();
+
+    /// <summary>Check if this character has a specific feat.</summary>
+    public bool HasFeat(string featName) => Feats.Contains(featName);
+
+    /// <summary>
+    /// Auto-grant feats based on character class.
+    /// Fighter: Power Attack. Rogue: Rapid Shot, Point Blank Shot.
+    /// </summary>
+    public void InitFeats()
+    {
+        Feats.Clear();
+        if (CharacterClass == "Fighter")
+        {
+            Feats.Add("Power Attack");
+        }
+        else if (CharacterClass == "Rogue")
+        {
+            Feats.Add("Point Blank Shot");
+            Feats.Add("Rapid Shot");
+        }
+    }
+
     // ========== RACE ==========
     /// <summary>The character's race data (Dwarf, Elf, Human, etc.).</summary>
     public RaceData Race;
@@ -199,6 +224,9 @@ public class CharacterStats
         // Ensure at least baseHitDieHP if CON mod is negative
         if (MaxHP < 1) MaxHP = 1;
         CurrentHP = MaxHP;
+
+        // Auto-grant feats based on class
+        InitFeats();
     }
 
     // ========== COMBAT METHODS ==========

@@ -549,7 +549,10 @@ public class GameManager : MonoBehaviour
         CombatUI.SetActionButtonsVisible(true);
         CombatUI.UpdateActionButtons(pc);
 
-        // Build status message
+        // Update feat controls (Power Attack slider, Rapid Shot toggle)
+        CombatUI.UpdateFeatControls(pc);
+
+        // Build status message with feat info
         string pcName = pc.Stats.CharacterName;
         string actionInfo = pc.Actions.GetStatusString();
 
@@ -558,7 +561,12 @@ public class GameManager : MonoBehaviour
         if (pc.CanDualWield())
             dwInfo = "\n" + pc.GetDualWieldDescription();
 
-        CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory\n{actionInfo}{dwInfo}");
+        // Show active feats
+        string featInfo = "";
+        if (pc.Stats.Feats.Count > 0)
+            featInfo = $"\nFeats: {string.Join(", ", pc.Stats.Feats)}";
+
+        CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory\n{actionInfo}{dwInfo}{featInfo}");
 
         // Auto-end turn if no actions left
         if (!pc.Actions.HasAnyActionLeft)
@@ -639,6 +647,24 @@ public class GameManager : MonoBehaviour
     {
         if (!IsPlayerTurn) return;
         EndActivePCTurn();
+    }
+
+    /// <summary>Called when Power Attack slider value changes.</summary>
+    public void OnPowerAttackSliderChanged(float value)
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+        pc.SetPowerAttack((int)value);
+        CombatUI.UpdatePowerAttackLabel(pc);
+    }
+
+    /// <summary>Called when Rapid Shot toggle button is pressed.</summary>
+    public void OnRapidShotTogglePressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+        pc.SetRapidShot(!pc.RapidShotEnabled);
+        CombatUI.UpdateRapidShotLabel(pc);
     }
 
     // ========== MOVEMENT ==========

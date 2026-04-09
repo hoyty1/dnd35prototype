@@ -52,6 +52,14 @@ public class CombatUI : MonoBehaviour
     public Button EndTurnButton;
     public Text ActionStatusText;       // Shows current action economy status
 
+    [Header("Feat Controls")]
+    public GameObject PowerAttackPanel;     // Panel containing Power Attack slider
+    public Slider PowerAttackSlider;        // Slider for Power Attack value (0 to BAB)
+    public Text PowerAttackLabel;           // Shows "Power Attack: -X attack / +Y damage"
+    public GameObject RapidShotPanel;       // Panel containing Rapid Shot toggle
+    public Button RapidShotToggle;          // Toggle button for Rapid Shot
+    public Text RapidShotLabel;             // Shows "Rapid Shot: ON/OFF"
+
     // Active-PC indicator images on the panels
     public Image PC1ActiveIndicator;
     public Image PC2ActiveIndicator;
@@ -195,6 +203,12 @@ public class CombatUI : MonoBehaviour
         text = text.Replace("no penalty)", "<color=#66FF66>no penalty)</color>");
         text = text.Replace("beyond maximum range!", "<color=#FF4444><b>beyond maximum range!</b></color>");
 
+        // Highlight feat text
+        text = text.Replace("Power Attack", "<color=#FF9933>Power Attack</color>");
+        text = text.Replace("Rapid Shot", "<color=#66CCFF>Rapid Shot</color>");
+        text = text.Replace("Point Blank Shot", "<color=#66FF66>Point Blank Shot</color>");
+        text = text.Replace("PBS", "<color=#66FF66>PBS</color>");
+
         return text;
     }
 
@@ -202,6 +216,12 @@ public class CombatUI : MonoBehaviour
     {
         if (ActionPanel != null)
             ActionPanel.SetActive(visible);
+        // Hide feat controls when action panel is hidden
+        if (!visible)
+        {
+            if (PowerAttackPanel != null) PowerAttackPanel.SetActive(false);
+            if (RapidShotPanel != null) RapidShotPanel.SetActive(false);
+        }
     }
 
     // ========== ACTION ECONOMY UI ==========
@@ -290,6 +310,89 @@ public class CombatUI : MonoBehaviour
         if (ActionStatusText != null)
         {
             ActionStatusText.text = actions.GetStatusString();
+        }
+    }
+
+    // ========== FEAT UI ==========
+
+    /// <summary>
+    /// Update feat controls (Power Attack slider, Rapid Shot toggle) for the active PC.
+    /// Only shows controls for feats the character actually has.
+    /// </summary>
+    public void UpdateFeatControls(CharacterController pc)
+    {
+        if (pc == null || pc.Stats == null) return;
+
+        // === Power Attack ===
+        bool hasPowerAttack = pc.Stats.HasFeat("Power Attack");
+        if (PowerAttackPanel != null)
+        {
+            PowerAttackPanel.SetActive(hasPowerAttack);
+            if (hasPowerAttack && PowerAttackSlider != null)
+            {
+                int maxPA = Mathf.Max(1, pc.Stats.BaseAttackBonus);
+                PowerAttackSlider.minValue = 0;
+                PowerAttackSlider.maxValue = maxPA;
+                PowerAttackSlider.wholeNumbers = true;
+                PowerAttackSlider.value = pc.PowerAttackValue;
+                UpdatePowerAttackLabel(pc);
+            }
+        }
+
+        // === Rapid Shot ===
+        bool hasRapidShot = pc.Stats.HasFeat("Rapid Shot");
+        if (RapidShotPanel != null)
+        {
+            RapidShotPanel.SetActive(hasRapidShot);
+            if (hasRapidShot)
+            {
+                UpdateRapidShotLabel(pc);
+            }
+        }
+    }
+
+    /// <summary>Update Power Attack label to show current penalty/bonus.</summary>
+    public void UpdatePowerAttackLabel(CharacterController pc)
+    {
+        if (PowerAttackLabel == null || pc == null) return;
+        int val = pc.PowerAttackValue;
+        if (val == 0)
+        {
+            PowerAttackLabel.text = "Power Attack: OFF";
+        }
+        else
+        {
+            ItemData weapon = pc.GetEquippedMainWeapon();
+            bool twoHanded = CharacterController.IsWeaponTwoHanded(weapon);
+            int dmgBonus = twoHanded ? val * 2 : val;
+            string thStr = twoHanded ? " (2H)" : "";
+            PowerAttackLabel.text = $"Power Attack: -{val} atk / +{dmgBonus} dmg{thStr}";
+        }
+    }
+
+    /// <summary>Update Rapid Shot label to show ON/OFF state.</summary>
+    public void UpdateRapidShotLabel(CharacterController pc)
+    {
+        if (RapidShotLabel == null || pc == null) return;
+        if (pc.RapidShotEnabled)
+        {
+            RapidShotLabel.text = "Rapid Shot: ON (Extra atk, -2 all)";
+            if (RapidShotToggle != null)
+            {
+                var colors = RapidShotToggle.colors;
+                colors.normalColor = new Color(0.2f, 0.6f, 0.2f, 1f);
+                RapidShotToggle.colors = colors;
+            }
+        }
+        else
+        {
+            RapidShotLabel.text = "Rapid Shot: OFF";
+            if (RapidShotToggle != null)
+            {
+                var colors = RapidShotToggle.colors;
+                colors.normalColor = new Color(0.5f, 0.5f, 0.5f, 1f);
+                RapidShotToggle.colors = colors;
+            }
         }
     }
 

@@ -217,8 +217,12 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.EndTurnButton = CreateButton(actionPanel.transform, "EndTurnBtn",
             new Vector2(10, y - btnH), new Vector2(btnW, btnH),
             "End Turn", new Color(0.3f, 0.3f, 0.6f), Color.white);
+        y -= btnH + 10f;
 
         actionPanel.SetActive(false);
+
+        // --- Feat Controls (positioned above action panel) ---
+        CreateFeatControls(canvasGO.transform, combatUI, actionPanelWidth);
 
         return combatUI;
     }
@@ -414,6 +418,50 @@ public class SceneBootstrap : MonoBehaviour
             "Speed: 3 sq (15 ft)", 12, Color.white, TextAnchor.MiddleLeft);
     }
 
+    /// <summary>Create feat control panels (Power Attack slider, Rapid Shot toggle).</summary>
+    private void CreateFeatControls(Transform canvasTransform, CombatUI combatUI, float actionPanelWidth)
+    {
+        float featPanelW = actionPanelWidth;
+        float featPanelH = 50f;
+
+        // Power Attack Panel (positioned above the action panel on the right side)
+        GameObject paPanel = CreatePanel(canvasTransform, "PowerAttackPanel",
+            new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f),
+            new Vector2(-10, 175), new Vector2(featPanelW, featPanelH),
+            new Color(0.3f, 0.15f, 0.1f, 0.9f));
+        combatUI.PowerAttackPanel = paPanel;
+
+        // Power Attack Label
+        combatUI.PowerAttackLabel = CreateText(paPanel.transform, "PALabel",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, featPanelH - 22), new Vector2(featPanelW - 20, 20),
+            "Power Attack: OFF", 13, new Color(1f, 0.8f, 0.5f), TextAnchor.MiddleLeft);
+
+        // Power Attack Slider
+        combatUI.PowerAttackSlider = CreateSlider(paPanel.transform, "PASlider",
+            new Vector2(10, 5), new Vector2(featPanelW - 20, 20),
+            0, 3, 0);
+
+        paPanel.SetActive(false);
+
+        // Rapid Shot Panel (positioned below Power Attack)
+        GameObject rsPanel = CreatePanel(canvasTransform, "RapidShotPanel",
+            new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f),
+            new Vector2(-10, 230), new Vector2(featPanelW, 40f),
+            new Color(0.1f, 0.2f, 0.3f, 0.9f));
+        combatUI.RapidShotPanel = rsPanel;
+
+        // Rapid Shot Toggle Button
+        combatUI.RapidShotToggle = CreateButton(rsPanel.transform, "RSToggle",
+            new Vector2(5, 5), new Vector2(featPanelW - 10, 30f),
+            "Rapid Shot: OFF", new Color(0.5f, 0.5f, 0.5f), Color.white);
+
+        // Rapid Shot Label (use the button's text)
+        combatUI.RapidShotLabel = combatUI.RapidShotToggle.GetComponentInChildren<Text>();
+
+        rsPanel.SetActive(false);
+    }
+
     // ========== GAME MANAGER ==========
     private void SetupGameManager(SquareGrid grid, CharacterController pc1, CharacterController pc2, CharacterController npc, CombatUI combatUI)
     {
@@ -463,6 +511,12 @@ public class SceneBootstrap : MonoBehaviour
             ui.DualWieldButton.onClick.AddListener(() => GameManager.Instance.OnDualWieldButtonPressed());
         if (ui.EndTurnButton != null)
             ui.EndTurnButton.onClick.AddListener(() => GameManager.Instance.OnEndTurnButtonPressed());
+
+        // Feat controls
+        if (ui.PowerAttackSlider != null)
+            ui.PowerAttackSlider.onValueChanged.AddListener((val) => GameManager.Instance.OnPowerAttackSliderChanged(val));
+        if (ui.RapidShotToggle != null)
+            ui.RapidShotToggle.onClick.AddListener(() => GameManager.Instance.OnRapidShotTogglePressed());
     }
 
     // ========== UI HELPER METHODS ==========
@@ -590,6 +644,82 @@ public class SceneBootstrap : MonoBehaviour
         img.color = color;
 
         textTransform.SetAsLastSibling();
+    }
+
+    /// <summary>Create a UI Slider programmatically.</summary>
+    private Slider CreateSlider(Transform parent, string name,
+        Vector2 anchoredPos, Vector2 sizeDelta,
+        float minValue, float maxValue, float defaultValue)
+    {
+        GameObject sliderGO = new GameObject(name);
+        sliderGO.transform.SetParent(parent, false);
+
+        RectTransform rt = sliderGO.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.zero;
+        rt.pivot = Vector2.zero;
+        rt.anchoredPosition = anchoredPos;
+        rt.sizeDelta = sizeDelta;
+
+        // Background
+        GameObject bgGO = new GameObject("Background");
+        bgGO.transform.SetParent(sliderGO.transform, false);
+        RectTransform bgRT = bgGO.AddComponent<RectTransform>();
+        bgRT.anchorMin = new Vector2(0, 0.25f);
+        bgRT.anchorMax = new Vector2(1, 0.75f);
+        bgRT.offsetMin = Vector2.zero;
+        bgRT.offsetMax = Vector2.zero;
+        Image bgImg = bgGO.AddComponent<Image>();
+        bgImg.color = new Color(0.3f, 0.3f, 0.3f, 1f);
+
+        // Fill Area
+        GameObject fillAreaGO = new GameObject("Fill Area");
+        fillAreaGO.transform.SetParent(sliderGO.transform, false);
+        RectTransform fillAreaRT = fillAreaGO.AddComponent<RectTransform>();
+        fillAreaRT.anchorMin = new Vector2(0, 0.25f);
+        fillAreaRT.anchorMax = new Vector2(1, 0.75f);
+        fillAreaRT.offsetMin = new Vector2(5, 0);
+        fillAreaRT.offsetMax = new Vector2(-5, 0);
+
+        GameObject fillGO = new GameObject("Fill");
+        fillGO.transform.SetParent(fillAreaGO.transform, false);
+        RectTransform fillRT = fillGO.AddComponent<RectTransform>();
+        fillRT.anchorMin = Vector2.zero;
+        fillRT.anchorMax = Vector2.one;
+        fillRT.offsetMin = Vector2.zero;
+        fillRT.offsetMax = Vector2.zero;
+        Image fillImg = fillGO.AddComponent<Image>();
+        fillImg.color = new Color(0.8f, 0.4f, 0.2f, 1f);
+
+        // Handle Slide Area
+        GameObject handleAreaGO = new GameObject("Handle Slide Area");
+        handleAreaGO.transform.SetParent(sliderGO.transform, false);
+        RectTransform handleAreaRT = handleAreaGO.AddComponent<RectTransform>();
+        handleAreaRT.anchorMin = Vector2.zero;
+        handleAreaRT.anchorMax = Vector2.one;
+        handleAreaRT.offsetMin = new Vector2(10, 0);
+        handleAreaRT.offsetMax = new Vector2(-10, 0);
+
+        GameObject handleGO = new GameObject("Handle");
+        handleGO.transform.SetParent(handleAreaGO.transform, false);
+        RectTransform handleRT = handleGO.AddComponent<RectTransform>();
+        handleRT.sizeDelta = new Vector2(20, 0);
+        handleRT.anchorMin = new Vector2(0, 0);
+        handleRT.anchorMax = new Vector2(0, 1);
+        Image handleImg = handleGO.AddComponent<Image>();
+        handleImg.color = new Color(1f, 0.7f, 0.3f, 1f);
+
+        // Create the Slider component
+        Slider slider = sliderGO.AddComponent<Slider>();
+        slider.fillRect = fillRT;
+        slider.handleRect = handleRT;
+        slider.targetGraphic = handleImg;
+        slider.minValue = minValue;
+        slider.maxValue = maxValue;
+        slider.wholeNumbers = true;
+        slider.value = defaultValue;
+
+        return slider;
     }
 
     private Button CreateButton(Transform parent, string name,

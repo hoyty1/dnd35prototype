@@ -53,7 +53,13 @@ public class CombatResult
     public int RangePenalty;              // Attack penalty from range (-2 per increment beyond first)
     public string WeaponName;             // Name of weapon used (for combat log)
 
-    /// <summary>Total damage dealt including sneak attack.</summary>
+    // Feat fields (D&D 3.5)
+    public int PowerAttackValue;          // Power Attack penalty/bonus value (0 = not active)
+    public int PowerAttackDamageBonus;    // Actual damage bonus from Power Attack (may be 2× for two-handed)
+    public bool RapidShotActive;          // Whether Rapid Shot was active for this attack
+    public bool PointBlankShotActive;     // Whether Point Blank Shot bonus was applied
+
+    /// <summary>Total damage dealt including sneak attack and feat bonuses.</summary>
     public int TotalDamage => Damage + SneakAttackDamage;
 
     public string GetSummary()
@@ -71,6 +77,15 @@ public class CombatResult
         string weaponNote = "";
         if (!string.IsNullOrEmpty(WeaponName))
             weaponNote = $" with {WeaponName}";
+
+        // Active feats note
+        string featsNote = "";
+        var activeFeats = new System.Collections.Generic.List<string>();
+        if (PowerAttackValue > 0) activeFeats.Add($"Power Attack -{PowerAttackValue}");
+        if (RapidShotActive) activeFeats.Add("Rapid Shot");
+        if (PointBlankShotActive) activeFeats.Add("Point Blank Shot");
+        if (activeFeats.Count > 0)
+            featsNote = $" ({string.Join(", ", activeFeats)})";
 
         // Range info note
         string rangeNote = "";
@@ -104,10 +119,13 @@ public class CombatResult
             string racialStr = RacialAttackBonus > 0 ? $" +{RacialAttackBonus} racial" : "";
             string sizeStr = SizeAttackBonus != 0 ? $" {CharacterStats.FormatMod(SizeAttackBonus)} size" : "";
             string rangeStr = (IsRangedAttack && RangePenalty != 0) ? $" {RangePenalty} range" : "";
+            string powerAtkStr = PowerAttackValue > 0 ? $" -{PowerAttackValue} Power Attack" : "";
+            string rapidShotStr = RapidShotActive ? " -2 Rapid Shot" : "";
+            string pbsAtkStr = PointBlankShotActive ? " +1 PBS" : "";
             if (IsFlanking)
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr} +{FlankingBonus} flanking{racialStr}{rangeStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr} +{FlankingBonus} flanking{racialStr}{rangeStr}{powerAtkStr}{rapidShotStr}{pbsAtkStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
             else
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr}{racialStr}{rangeStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr}{racialStr}{rangeStr}{powerAtkStr}{rapidShotStr}{pbsAtkStr} = {TotalRoll} vs AC {TargetAC} - HIT!{critNote}";
 
             // Critical hit info
             string critInfo = "";
@@ -131,23 +149,30 @@ public class CombatResult
             if (!string.IsNullOrEmpty(DamageModifierDesc))
                 dmgModNote = $" ({DamageModifierDesc} {CharacterStats.FormatMod(DamageModifier)})";
 
+            // Feat damage bonuses
+            string featDmgNote = "";
+            var featDmgParts = new System.Collections.Generic.List<string>();
+            if (PowerAttackDamageBonus > 0) featDmgParts.Add($"+{PowerAttackDamageBonus} Power Attack");
+            if (PointBlankShotActive) featDmgParts.Add("+1 PBS");
+            if (featDmgParts.Count > 0) featDmgNote = $" [{string.Join(", ", featDmgParts)}]";
+
             string damageStr;
             if (CritConfirmed)
             {
                 if (SneakAttackApplied)
-                    damageStr = $"CRITICAL HIT! {CritDamageDice} = {Damage} damage{dmgModNote} + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6) = {TotalDamage} total!";
+                    damageStr = $"CRITICAL HIT! {CritDamageDice} = {Damage} damage{dmgModNote}{featDmgNote} + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6) = {TotalDamage} total!";
                 else
-                    damageStr = $"CRITICAL HIT! {CritDamageDice} = {Damage} damage!{dmgModNote}";
+                    damageStr = $"CRITICAL HIT! {CritDamageDice} = {Damage} damage!{dmgModNote}{featDmgNote}";
             }
             else
             {
                 if (SneakAttackApplied)
-                    damageStr = $"Deals {Damage} damage{dmgModNote} + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6) = {TotalDamage} total!";
+                    damageStr = $"Deals {Damage} damage{dmgModNote}{featDmgNote} + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6) = {TotalDamage} total!";
                 else
-                    damageStr = $"Deals {Damage} damage!{dmgModNote}";
+                    damageStr = $"Deals {Damage} damage!{dmgModNote}{featDmgNote}";
             }
 
-            string msg = $"{attackerName} attacks {defenderName}{weaponNote}{rangeNote}!{flankNote}{racialNote}{sizeNote}\n{rollBreakdown}{critInfo}\n{damageStr}";
+            string msg = $"{attackerName} attacks {defenderName}{weaponNote}{featsNote}{rangeNote}!{flankNote}{racialNote}{sizeNote}\n{rollBreakdown}{critInfo}\n{damageStr}";
 
             if (TargetKilled)
                 msg += $"\n{defenderName} has been slain!";
@@ -159,12 +184,15 @@ public class CombatResult
             string racialStr = RacialAttackBonus > 0 ? $" +{RacialAttackBonus} racial" : "";
             string sizeStr = SizeAttackBonus != 0 ? $" {CharacterStats.FormatMod(SizeAttackBonus)} size" : "";
             string rangeStr = (IsRangedAttack && RangePenalty != 0) ? $" {RangePenalty} range" : "";
+            string powerAtkStr = PowerAttackValue > 0 ? $" -{PowerAttackValue} Power Attack" : "";
+            string rapidShotStr = RapidShotActive ? " -2 Rapid Shot" : "";
+            string pbsAtkStr = PointBlankShotActive ? " +1 PBS" : "";
             if (IsFlanking)
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr} +{FlankingBonus} flanking{racialStr}{rangeStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr} +{FlankingBonus} flanking{racialStr}{rangeStr}{powerAtkStr}{rapidShotStr}{pbsAtkStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
             else
-                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr}{racialStr}{rangeStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
+                rollBreakdown = $"Roll: {DieRoll} {atkBonusStr}{sizeStr}{racialStr}{rangeStr}{powerAtkStr}{rapidShotStr}{pbsAtkStr} = {TotalRoll} vs AC {TargetAC} - MISS!{critNote}";
 
-            return $"{attackerName} attacks {defenderName}{weaponNote}{rangeNote}!{flankNote}{racialNote}{sizeNote}\n{rollBreakdown}";
+            return $"{attackerName} attacks {defenderName}{weaponNote}{featsNote}{rangeNote}!{flankNote}{racialNote}{sizeNote}\n{rollBreakdown}";
         }
     }
 }
