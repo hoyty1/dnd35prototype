@@ -117,6 +117,66 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
+    /// Check if the character can cast a spell with metamagic applied
+    /// (has a slot at the required effective level).
+    /// </summary>
+    public bool CanCastWithMetamagic(SpellData spell, MetamagicData metamagic)
+    {
+        if (spell == null || SlotsRemaining == null) return false;
+        if (metamagic == null || !metamagic.HasAnyMetamagic)
+            return CanCast(spell);
+
+        int effectiveLevel = metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
+        if (effectiveLevel >= SlotsRemaining.Length) return false;
+
+        // Cantrips with metamagic still need higher level slots
+        return SlotsRemaining[effectiveLevel] > 0;
+    }
+
+    /// <summary>
+    /// Get the highest spell slot level available to this caster.
+    /// </summary>
+    public int GetHighestSlotLevel()
+    {
+        if (SlotsRemaining == null) return -1;
+        return SlotsRemaining.Length - 1;
+    }
+
+    /// <summary>
+    /// Check if a slot at a specific level is available.
+    /// </summary>
+    public bool HasSlotAtLevel(int level)
+    {
+        if (SlotsRemaining == null || level < 0 || level >= SlotsRemaining.Length) return false;
+        return SlotsRemaining[level] > 0;
+    }
+
+    /// <summary>
+    /// Get the list of metamagic feats the character knows (from CharacterStats.Feats).
+    /// </summary>
+    public List<MetamagicFeatId> GetKnownMetamagicFeats()
+    {
+        var result = new List<MetamagicFeatId>();
+        if (Stats == null || Stats.Feats == null) return result;
+
+        foreach (var mmId in MetamagicData.AllMetamagicFeats)
+        {
+            string featName = MetamagicData.GetFeatName(mmId);
+            if (Stats.HasFeat(featName))
+                result.Add(mmId);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Check if the character knows any metamagic feats.
+    /// </summary>
+    public bool HasAnyMetamagicFeat()
+    {
+        return GetKnownMetamagicFeats().Count > 0;
+    }
+
+    /// <summary>
     /// Consume a spell slot for the given spell level.
     /// Returns true if successful.
     /// </summary>

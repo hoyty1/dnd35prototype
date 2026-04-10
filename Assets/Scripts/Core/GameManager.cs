@@ -66,6 +66,7 @@ public class GameManager : MonoBehaviour
     private enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell }
     private PendingAttackMode _pendingAttackMode;
     private SpellData _pendingSpell; // Spell selected for casting
+    private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
 
     private List<SquareCell> _highlightedCells = new List<SquareCell>();
     private string _lastCombatLog = "";
@@ -903,46 +904,61 @@ public class GameManager : MonoBehaviour
         var spellComp = pc.GetComponent<SpellcastingComponent>();
         if (spellComp == null || !spellComp.HasAnyCastableSpell()) return;
 
-        // Show spell selection panel
+        // Show spell selection panel with metamagic support
         CombatUI.SetActionButtonsVisible(false);
-        CombatUI.ShowSpellSelection(spellComp, OnSpellSelected, OnSpellSelectionCancelled);
+        CombatUI.ShowSpellSelection(spellComp, OnSpellSelectedWithMetamagic, OnSpellSelectionCancelled);
     }
 
-    /// <summary>Called when a spell is chosen from the spell selection panel.</summary>
-    private void OnSpellSelected(SpellData spell)
+    /// <summary>Called when a spell is chosen from the spell selection panel (with optional metamagic).</summary>
+    private void OnSpellSelectedWithMetamagic(SpellData spell, MetamagicData metamagic)
     {
         CharacterController pc = ActivePC;
         if (pc == null) { ShowActionChoices(); return; }
 
         _pendingSpell = spell;
+        _pendingMetamagic = metamagic;
+
+        // If metamagic modifies the spell data (range, action type), clone and apply
+        if (metamagic != null && metamagic.HasAnyMetamagic)
+        {
+            _pendingSpell = spell.Clone();
+            SpellCaster.ApplyMetamagicToSpellData(_pendingSpell, metamagic);
+            Debug.Log($"[GameManager] Metamagic applied: {metamagic.GetSummary(spell.SpellLevel)}");
+        }
 
         // Determine targeting based on spell type
-        if (spell.TargetType == SpellTargetType.Self)
+        if (_pendingSpell.TargetType == SpellTargetType.Self)
         {
             // Self-targeting spells (Mage Armor) cast immediately
             PerformSpellCast(pc, pc);
         }
-        else if (spell.TargetType == SpellTargetType.SingleAlly)
+        else if (_pendingSpell.TargetType == SpellTargetType.SingleAlly)
         {
             // Ally targeting (Cure Light Wounds) - show ally targets
             _pendingAttackMode = PendingAttackMode.CastSpell;
             CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
-            ShowSpellTargets(pc, spell);
+            ShowSpellTargets(pc, _pendingSpell);
         }
-        else if (spell.TargetType == SpellTargetType.SingleEnemy)
+        else if (_pendingSpell.TargetType == SpellTargetType.SingleEnemy)
         {
             // Enemy targeting (damage spells) - show enemy targets in range
             _pendingAttackMode = PendingAttackMode.CastSpell;
             CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
-            ShowSpellTargets(pc, spell);
+            ShowSpellTargets(pc, _pendingSpell);
         }
         else
         {
             // Default: show targets
             _pendingAttackMode = PendingAttackMode.CastSpell;
             CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
-            ShowSpellTargets(pc, spell);
+            ShowSpellTargets(pc, _pendingSpell);
         }
+    }
+
+    /// <summary>Legacy callback for backward compat (no metamagic).</summary>
+    private void OnSpellSelected(SpellData spell)
+    {
+        OnSpellSelectedWithMetamagic(spell, null);
     }
 
     /// <summary>Called when spell selection is cancelled.</summary>
@@ -1033,8 +1049,12 @@ public class GameManager : MonoBehaviour
     {
         CurrentSubPhase = PlayerSubPhase.Animating;
 
-        // Consume standard action
-        caster.Actions.UseStandardAction();
+        // Quickened spells don't consume standard action (they're free actions)
+        bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
+        if (!isQuickened)
+        {
+            caster.Actions.UseStandardAction();
+        }
 
         // Get spellcasting component
         var spellComp = caster.GetComponent<SpellcastingComponent>();
@@ -1045,19 +1065,28 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // Consume spell slot (cantrips are free)
-        if (_pendingSpell.SpellLevel > 0)
+        // Determine which slot level to consume
+        int slotLevelToConsume = _pendingSpell.SpellLevel;
+        if (_pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic)
         {
-            if (!spellComp.ConsumeSlot(_pendingSpell.SpellLevel))
+            slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
+            Debug.Log($"[GameManager] Metamagic: consuming level {slotLevelToConsume} slot " +
+                      $"(base {_pendingSpell.SpellLevel} + {slotLevelToConsume - _pendingSpell.SpellLevel} metamagic)");
+        }
+
+        // Consume spell slot (cantrips without metamagic are free)
+        if (slotLevelToConsume > 0)
+        {
+            if (!spellComp.ConsumeSlot(slotLevelToConsume))
             {
-                Debug.LogError($"[GameManager] Failed to consume level {_pendingSpell.SpellLevel} spell slot!");
+                Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} spell slot!");
                 ShowActionChoices();
                 return;
             }
         }
 
-        // Resolve the spell
-        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats);
+        // Resolve the spell with metamagic
+        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic);
 
         // Apply Mage Armor AC bonus
         if (_pendingSpell.SpellId == "mage_armor" && result.Success)
@@ -1095,6 +1124,7 @@ public class GameManager : MonoBehaviour
         }
 
         _pendingSpell = null;
+        _pendingMetamagic = null;
 
         // After standard action, check for remaining actions
         StartCoroutine(AfterAttackDelay(caster, 1.5f));
@@ -1485,6 +1515,7 @@ public class GameManager : MonoBehaviour
             if (!_highlightedCells.Contains(cell))
             {
                 _pendingSpell = null;
+                _pendingMetamagic = null;
                 ShowActionChoices();
                 return;
             }
@@ -1498,6 +1529,7 @@ public class GameManager : MonoBehaviour
 
             // Fallback cancel
             _pendingSpell = null;
+            _pendingMetamagic = null;
             ShowActionChoices();
             return;
         }

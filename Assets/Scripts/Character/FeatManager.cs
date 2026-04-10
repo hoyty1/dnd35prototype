@@ -384,6 +384,27 @@ public static class FeatManager
         if (stats.HasFeat("Blind-Fight")) lines.Add("Blind-Fight: Reroll concealment miss");
         if (stats.HasFeat("Improved Critical")) lines.Add("Improved Critical: Double threat range");
 
+        // Metamagic feats
+        foreach (var mmId in MetamagicData.AllMetamagicFeats)
+        {
+            string featName = MetamagicData.GetFeatName(mmId);
+            if (stats.HasFeat(featName))
+                lines.Add($"⚡ {featName}: {MetamagicData.GetShortEffect(mmId)}");
+        }
+
         return string.Join("\n", lines);
+    }
+
+    /// <summary>
+    /// Check if a character has any metamagic feats.
+    /// </summary>
+    public static bool HasAnyMetamagicFeat(CharacterStats stats)
+    {
+        foreach (var mmId in MetamagicData.AllMetamagicFeats)
+        {
+            if (stats.HasFeat(MetamagicData.GetFeatName(mmId)))
+                return true;
+        }
+        return false;
     }
 }

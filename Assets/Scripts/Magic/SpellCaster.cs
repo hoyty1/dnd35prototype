@@ -6,16 +6,26 @@ using UnityEngine;
 ///
 /// Two entry points:
 /// - Cast(SpellData, CharacterStats, CharacterStats): Used by GameManager when slots are consumed externally.
-/// - CastSpell(CharacterController, CharacterController, SpellData): Full pipeline including slot consumption.
+/// - Cast(SpellData, CharacterStats, CharacterStats, MetamagicData): With metamagic effects applied.
 /// </summary>
 public static class SpellCaster
 {
     /// <summary>
-    /// Simplified spell resolution using stats only.
+    /// Simplified spell resolution using stats only (no metamagic).
     /// Slot consumption is handled by the caller (GameManager).
     /// Mage Armor AC application is also handled externally.
     /// </summary>
     public static SpellResult Cast(SpellData spell, CharacterStats casterStats, CharacterStats targetStats)
+    {
+        return Cast(spell, casterStats, targetStats, null);
+    }
+
+    /// <summary>
+    /// Spell resolution with metamagic support.
+    /// Slot consumption is handled by the caller (GameManager).
+    /// Mage Armor AC application is also handled externally.
+    /// </summary>
+    public static SpellResult Cast(SpellData spell, CharacterStats casterStats, CharacterStats targetStats, MetamagicData metamagic)
     {
         var result = new SpellResult();
         result.Spell = spell;
@@ -23,6 +33,18 @@ public static class SpellCaster
         result.TargetName = targetStats.CharacterName;
         result.DamageType = spell.DamageType ?? "";
         result.Success = true;
+        result.Metamagic = metamagic;
+
+        bool isEmpowered = metamagic != null && metamagic.Has(MetamagicFeatId.EmpowerSpell);
+        bool isMaximized = metamagic != null && metamagic.Has(MetamagicFeatId.MaximizeSpell);
+        bool isHeightened = metamagic != null && metamagic.Has(MetamagicFeatId.HeightenSpell);
+
+        // ========== DETERMINE EFFECTIVE SPELL LEVEL (for save DC with Heighten) ==========
+        int effectiveSpellLevel = spell.SpellLevel;
+        if (isHeightened && metamagic.HeightenToLevel > spell.SpellLevel)
+        {
+            effectiveSpellLevel = metamagic.HeightenToLevel;
+        }
 
         // ========== ATTACK ROLL (touch attacks for damage spells) ==========
         if (spell.EffectType == SpellEffectType.Damage && !spell.AutoHit)
@@ -73,7 +95,8 @@ public static class SpellCaster
             result.RequiredSave = true;
             result.SaveType = spell.SavingThrowType;
             int castingMod = casterStats.IsWizard ? casterStats.INTMod : casterStats.WISMod;
-            result.SaveDC = 10 + spell.SpellLevel + castingMod;
+            // Heighten Spell increases save DC by using the heightened spell level
+            result.SaveDC = 10 + effectiveSpellLevel + castingMod;
 
             int saveRoll = Random.Range(1, 21);
             int saveMod = GetSaveModifier(targetStats, spell.SavingThrowType);
@@ -98,10 +121,24 @@ public static class SpellCaster
 
                 for (int i = 0; i < missileCount; i++)
                 {
-                    int missileDmg = Random.Range(1, spell.DamageDice + 1) + spell.BonusDamage;
+                    int missileDmg;
+                    if (isMaximized)
+                        missileDmg = spell.DamageDice + spell.BonusDamage; // Max die value
+                    else
+                        missileDmg = Random.Range(1, spell.DamageDice + 1) + spell.BonusDamage;
+
                     result.MissileDamages[i] = missileDmg;
                     totalDmg += missileDmg;
                 }
+
+                // Empower: multiply total by 1.5
+                if (isEmpowered)
+                {
+                    int empowerBonus = Mathf.RoundToInt(totalDmg * 0.5f);
+                    result.EmpowerBonus = empowerBonus;
+                    totalDmg += empowerBonus;
+                }
+
                 result.DamageRolled = totalDmg;
                 result.DamageDealt = totalDmg;
             }
@@ -109,9 +146,24 @@ public static class SpellCaster
             {
                 int dmg = 0;
                 for (int i = 0; i < spell.DamageCount; i++)
-                    dmg += Random.Range(1, spell.DamageDice + 1);
+                {
+                    if (isMaximized)
+                        dmg += spell.DamageDice; // Max die value
+                    else
+                        dmg += Random.Range(1, spell.DamageDice + 1);
+                }
                 dmg += spell.BonusDamage;
-                result.DamageRolled = Mathf.Max(0, dmg);
+                int baseDmg = Mathf.Max(0, dmg);
+
+                // Empower: multiply variable portion by 1.5
+                if (isEmpowered)
+                {
+                    int empowerBonus = Mathf.RoundToInt(baseDmg * 0.5f);
+                    result.EmpowerBonus = empowerBonus;
+                    baseDmg += empowerBonus;
+                }
+
+                result.DamageRolled = baseDmg;
 
                 if (result.RequiredSave && result.SaveSucceeded && spell.SaveHalves)
                     result.DamageDealt = Mathf.Max(0, result.DamageRolled / 2);
@@ -136,10 +188,24 @@ public static class SpellCaster
 
             int healRoll = 0;
             for (int i = 0; i < spell.HealCount; i++)
-                healRoll += Random.Range(1, spell.HealDice + 1);
+            {
+                if (isMaximized)
+                    healRoll += spell.HealDice; // Max die value
+                else
+                    healRoll += Random.Range(1, spell.HealDice + 1);
+            }
             result.HealRolled = healRoll;
 
             int totalHeal = healRoll + spell.BonusHealing;
+
+            // Empower: multiply total by 1.5
+            if (isEmpowered)
+            {
+                int empowerBonus = Mathf.RoundToInt(totalHeal * 0.5f);
+                result.EmpowerBonus = empowerBonus;
+                totalHeal += empowerBonus;
+            }
+
             totalHeal = Mathf.Max(1, totalHeal);
 
             targetStats.CurrentHP = Mathf.Min(targetStats.CurrentHP + totalHeal, targetStats.TotalMaxHP);
@@ -158,6 +224,48 @@ public static class SpellCaster
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Apply metamagic modifications to a cloned SpellData before casting.
+    /// Call this on a Clone() of the spell - do NOT modify the original.
+    /// Handles: Enlarge (double range), Extend (double duration), Widen (double area),
+    /// Quicken (change action type).
+    /// Empower/Maximize/Heighten are handled during Cast() resolution.
+    /// </summary>
+    public static void ApplyMetamagicToSpellData(SpellData spell, MetamagicData metamagic)
+    {
+        if (metamagic == null || !metamagic.HasAnyMetamagic) return;
+
+        // Enlarge Spell: double range
+        if (metamagic.Has(MetamagicFeatId.EnlargeSpell) && spell.RangeSquares > 0)
+        {
+            spell.RangeSquares *= 2;
+            Debug.Log($"[Metamagic] Enlarge Spell: range doubled to {spell.RangeSquares} squares");
+        }
+
+        // Extend Spell: double duration
+        if (metamagic.Has(MetamagicFeatId.ExtendSpell) && spell.BuffDurationRounds != 0)
+        {
+            if (spell.BuffDurationRounds > 0)
+                spell.BuffDurationRounds *= 2;
+            // -1 (hours/level) stays as -1 but could be tracked separately
+            Debug.Log($"[Metamagic] Extend Spell: duration doubled to {spell.BuffDurationRounds} rounds");
+        }
+
+        // Widen Spell: double area radius
+        if (metamagic.Has(MetamagicFeatId.WidenSpell) && spell.AreaRadius > 0)
+        {
+            spell.AreaRadius *= 2;
+            Debug.Log($"[Metamagic] Widen Spell: area doubled to {spell.AreaRadius} sq radius");
+        }
+
+        // Quicken Spell: change action type to free
+        if (metamagic.Has(MetamagicFeatId.QuickenSpell))
+        {
+            spell.ActionType = SpellActionType.Free;
+            Debug.Log($"[Metamagic] Quicken Spell: action type changed to Free");
+        }
     }
 
     /// <summary>

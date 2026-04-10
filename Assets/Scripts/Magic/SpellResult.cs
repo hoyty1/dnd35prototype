@@ -50,6 +50,10 @@ public class SpellResult
     public int MissileCount;
     public int[] MissileDamages;        // Damage per missile
 
+    // ========== METAMAGIC ==========
+    public MetamagicData Metamagic;       // Applied metamagic (null if none)
+    public int EmpowerBonus;              // Extra damage/healing from Empower
+
     // ========== HP TRACKING ==========
     public int TargetHPBefore;
     public int TargetHPAfter;
@@ -74,6 +78,13 @@ public class SpellResult
         // Spell info
         string levelStr = Spell.SpellLevel == 0 ? "Cantrip" : $"Level {Spell.SpellLevel}";
         sb.AppendLine($"  [{levelStr}] {Spell.School}");
+
+        // Metamagic info
+        if (Metamagic != null && Metamagic.HasAnyMetamagic)
+        {
+            string mmSummary = Metamagic.GetSummary(Spell.SpellLevel);
+            sb.AppendLine($"  ⚡ {mmSummary}");
+        }
 
         // Target
         if (Spell.TargetType == SpellTargetType.Self)
@@ -117,6 +128,8 @@ public class SpellResult
                 sb.AppendLine($"  Damage ({MissileCount} missiles):");
                 for (int i = 0; i < MissileDamages.Length; i++)
                     sb.AppendLine($"    Missile {i + 1}: 1d{Spell.DamageDice}+{Spell.BonusDamage} = {MissileDamages[i]} {DamageType}");
+                if (EmpowerBonus > 0)
+                    sb.AppendLine($"    Empower: +{EmpowerBonus} (×1.5)");
                 sb.AppendLine($"    = {DamageDealt} total {DamageType} damage");
             }
             else if (DamageDealt > 0 || DamageRolled > 0)
@@ -127,6 +140,8 @@ public class SpellResult
                 if (Spell.BonusDamage > 0 && Spell.DamageCount > 0)
                     sb.AppendLine($"    + {Spell.BonusDamage} bonus");
 
+                if (EmpowerBonus > 0)
+                    sb.AppendLine($"    Empower: +{EmpowerBonus} (×1.5)");
                 if (RequiredSave && SaveSucceeded && Spell.SaveHalves)
                     sb.AppendLine($"    Save halves: {DamageRolled} → {DamageDealt}");
                 sb.AppendLine($"    = {DamageDealt} {DamageType} damage");
@@ -149,6 +164,8 @@ public class SpellResult
                 sb.AppendLine($"    {Spell.HealCount}d{Spell.HealDice} = {HealRolled}");
             if (Spell.BonusHealing > 0)
                 sb.AppendLine($"    + {Spell.BonusHealing} (caster level)");
+            if (EmpowerBonus > 0)
+                sb.AppendLine($"    Empower: +{EmpowerBonus} (×1.5)");
             sb.AppendLine($"    = {HealingDone} HP restored");
             sb.AppendLine($"  {TargetName}: {TargetHPBefore} → {TargetHPAfter} HP");
         }
