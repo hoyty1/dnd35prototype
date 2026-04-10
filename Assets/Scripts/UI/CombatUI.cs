@@ -297,6 +297,21 @@ public class CombatUI : MonoBehaviour
         text = text.Replace("Power Attack", "<color=#FF9933>Power Attack</color>");
         text = text.Replace("Rapid Shot", "<color=#66CCFF>Rapid Shot</color>");
         text = text.Replace("Point Blank Shot", "<color=#66FF66>Point Blank Shot</color>");
+
+        // Highlight spellcasting and metamagic
+        text = text.Replace("SPELL CAST!", "<color=#BB88FF><b>SPELL CAST!</b></color>");
+        text = text.Replace("Metamagic:", "<color=#FFB833><b>Metamagic:</b></color>");
+        text = text.Replace("Empower:", "<color=#FFB833>Empower:</color>");
+        text = text.Replace("QUICKENED", "<color=#FFD700><b>QUICKENED</b></color>");
+        text = text.Replace("⚡", "<color=#FFB833>⚡</color>");
+        text = text.Replace("healed!", "<color=#66FF66><b>healed!</b></color>");
+        text = text.Replace("BUFF APPLIED!", "<color=#6699FF><b>BUFF APPLIED!</b></color>");
+        text = text.Replace("RESISTED!", "<color=#AAAAAA><b>RESISTED!</b></color>");
+        text = text.Replace("Touch Attack", "<color=#BB88FF>Touch Attack</color>");
+        text = text.Replace("Fortitude save", "<color=#FFAA44>Fortitude save</color>");
+        text = text.Replace("Reflex save", "<color=#FFAA44>Reflex save</color>");
+        text = text.Replace("Will save", "<color=#FFAA44>Will save</color>");
+
         text = text.Replace("═══════════════════════════════════", "<color=#888888>═══════════════════════════════════</color>");
         text = text.Replace("total damage", "<color=#FFAA44><b>total damage</b></color>");
         text = text.Replace(" damage", " <color=#FFAA44>damage</color>");
@@ -709,6 +724,619 @@ public class CombatUI : MonoBehaviour
 
         return btn;
     }
+
+    // ========================================================================
+    // SPELL SELECTION PANEL (with Metamagic Support)
+    // ========================================================================
+
+    private GameObject _spellSelectionPanel;
+    private System.Action<SpellData> _onSpellSelected;
+    private System.Action _onSpellCancelled;
+    private SpellcastingComponent _currentSpellComp;
+
+    /// <summary>Current metamagic data being configured for the next spell cast.</summary>
+    public MetamagicData PendingMetamagic { get; private set; }
+
+    /// <summary>Callback with metamagic: (spell, metamagic)</summary>
+    private System.Action<SpellData, MetamagicData> _onSpellSelectedWithMetamagic;
+
+    /// <summary>
+    /// Show the spell selection panel with all castable spells for the current character.
+    /// Overload that supports metamagic callback.
+    /// </summary>
+    public void ShowSpellSelection(SpellcastingComponent spellComp,
+        System.Action<SpellData, MetamagicData> onSelect, System.Action onCancel)
+    {
+        _onSpellSelectedWithMetamagic = onSelect;
+        _onSpellSelected = null;
+        _onSpellCancelled = onCancel;
+        _currentSpellComp = spellComp;
+        PendingMetamagic = new MetamagicData();
+
+        if (_spellSelectionPanel != null)
+            Destroy(_spellSelectionPanel);
+
+        BuildSpellSelectionPanel(spellComp);
+        _spellSelectionPanel.SetActive(true);
+    }
+
+    /// <summary>
+    /// Show the spell selection panel (legacy overload without metamagic).
+    /// </summary>
+    public void ShowSpellSelection(SpellcastingComponent spellComp,
+        System.Action<SpellData> onSelect, System.Action onCancel)
+    {
+        _onSpellSelected = onSelect;
+        _onSpellSelectedWithMetamagic = null;
+        _onSpellCancelled = onCancel;
+        _currentSpellComp = spellComp;
+        PendingMetamagic = new MetamagicData();
+
+        if (_spellSelectionPanel != null)
+            Destroy(_spellSelectionPanel);
+
+        BuildSpellSelectionPanel(spellComp);
+        _spellSelectionPanel.SetActive(true);
+    }
+
+    public void HideSpellSelection()
+    {
+        if (_spellSelectionPanel != null)
+        {
+            Destroy(_spellSelectionPanel);
+            _spellSelectionPanel = null;
+        }
+    }
+
+    private void BuildSpellSelectionPanel(SpellcastingComponent spellComp)
+    {
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+        if (canvas == null) return;
+
+        // Overlay panel
+        _spellSelectionPanel = new GameObject("SpellSelectionPanel");
+        _spellSelectionPanel.transform.SetParent(canvas.transform, false);
+        RectTransform panelRT = _spellSelectionPanel.AddComponent<RectTransform>();
+        panelRT.anchorMin = Vector2.zero;
+        panelRT.anchorMax = Vector2.one;
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        Image bgImage = _spellSelectionPanel.AddComponent<Image>();
+        bgImage.color = new Color(0f, 0f, 0f, 0.7f);
+
+        CanvasGroup cg = _spellSelectionPanel.AddComponent<CanvasGroup>();
+        cg.blocksRaycasts = true;
+        cg.interactable = true;
+
+        // Dialog box
+        GameObject dialogBox = new GameObject("DialogBox");
+        dialogBox.transform.SetParent(_spellSelectionPanel.transform, false);
+        RectTransform dialogRT = dialogBox.AddComponent<RectTransform>();
+        dialogRT.anchorMin = new Vector2(0.1f, 0.05f);
+        dialogRT.anchorMax = new Vector2(0.9f, 0.95f);
+        dialogRT.offsetMin = Vector2.zero;
+        dialogRT.offsetMax = Vector2.zero;
+
+        Image dialogBg = dialogBox.AddComponent<Image>();
+        dialogBg.color = new Color(0.1f, 0.1f, 0.2f, 0.95f);
+
+        Outline dialogOutline = dialogBox.AddComponent<Outline>();
+        dialogOutline.effectColor = new Color(0.4f, 0.3f, 0.8f, 1f);
+        dialogOutline.effectDistance = new Vector2(2, 2);
+
+        // Title
+        GameObject titleObj = new GameObject("Title");
+        titleObj.transform.SetParent(dialogBox.transform, false);
+        RectTransform titleRT = titleObj.AddComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0.05f, 0.92f);
+        titleRT.anchorMax = new Vector2(0.95f, 0.99f);
+        titleRT.offsetMin = Vector2.zero;
+        titleRT.offsetMax = Vector2.zero;
+
+        Text titleText = titleObj.AddComponent<Text>();
+        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (titleText.font == null) titleText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        titleText.fontSize = 16;
+        titleText.color = new Color(0.8f, 0.7f, 1f);
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.fontStyle = FontStyle.Bold;
+
+        bool hasMetamagic = spellComp.HasAnyMetamagicFeat();
+        string mmNote = hasMetamagic ? " | ⚡ Metamagic Available" : "";
+        titleText.text = $"✦ CHOOSE A SPELL ✦ — {spellComp.GetSlotSummary()}{mmNote}";
+
+        // Scrollable content area
+        // We'll use a simple layout since Unity UI scroll views are complex to build programmatically
+        // Build spell buttons in the dialog
+        List<SpellData> castable = spellComp.GetCastableSpells();
+        float yStart = 0.88f;
+        float yStep = 0.07f;
+
+        // Group by level
+        var cantrips = castable.FindAll(s => s.SpellLevel == 0);
+        var level1 = castable.FindAll(s => s.SpellLevel == 1);
+
+        float yPos = yStart;
+
+        if (cantrips.Count > 0)
+        {
+            CreateSpellSectionLabel(dialogBox, "── Cantrips (at will) ──", yPos);
+            yPos -= 0.04f;
+            foreach (var spell in cantrips)
+            {
+                CreateSpellButton(dialogBox, spell, yPos, spellComp, hasMetamagic);
+                yPos -= yStep;
+            }
+        }
+
+        if (level1.Count > 0)
+        {
+            CreateSpellSectionLabel(dialogBox, $"── Level 1 ({spellComp.GetSlotsRemaining(1)}/{spellComp.GetMaxSlots(1)} slots) ──", yPos);
+            yPos -= 0.04f;
+            foreach (var spell in level1)
+            {
+                CreateSpellButton(dialogBox, spell, yPos, spellComp, hasMetamagic);
+                yPos -= yStep;
+            }
+        }
+
+        // Cancel button
+        float cancelY = Mathf.Max(yPos - 0.02f, 0.01f);
+        Button cancelBtn = CreateSpellDialogButton(dialogBox, "CancelBtn", "✋ CANCEL",
+            new Vector2(0.3f, cancelY), new Vector2(0.7f, cancelY + 0.06f),
+            new Color(0.5f, 0.2f, 0.2f, 1f));
+        cancelBtn.onClick.AddListener(() =>
+        {
+            HideSpellSelection();
+            _onSpellCancelled?.Invoke();
+        });
+
+        _spellSelectionPanel.SetActive(false);
+    }
+
+    private void CreateSpellSectionLabel(GameObject parent, string label, float yPos)
+    {
+        GameObject obj = new GameObject("SectionLabel");
+        obj.transform.SetParent(parent.transform, false);
+        RectTransform rt = obj.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.05f, yPos - 0.02f);
+        rt.anchorMax = new Vector2(0.95f, yPos + 0.02f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        Text txt = obj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        txt.fontSize = 12;
+        txt.color = new Color(0.7f, 0.7f, 0.9f);
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.fontStyle = FontStyle.Italic;
+        txt.text = label;
+    }
+
+    private void CreateSpellButton(GameObject parent, SpellData spell, float yPos,
+        SpellcastingComponent spellComp, bool hasMetamagic)
+    {
+        // Determine color based on effect type
+        Color btnColor;
+        switch (spell.EffectType)
+        {
+            case SpellEffectType.Damage: btnColor = new Color(0.5f, 0.2f, 0.2f, 1f); break;
+            case SpellEffectType.Healing: btnColor = new Color(0.2f, 0.5f, 0.2f, 1f); break;
+            case SpellEffectType.Buff: btnColor = new Color(0.2f, 0.3f, 0.6f, 1f); break;
+            default: btnColor = new Color(0.3f, 0.3f, 0.4f, 1f); break;
+        }
+
+        // Build label
+        string rangeStr = spell.RangeSquares == 0 ? "Touch" :
+                          spell.RangeSquares < 0 ? "Self" :
+                          $"{spell.RangeSquares} sq";
+        string effectStr = "";
+        if (spell.EffectType == SpellEffectType.Damage)
+            effectStr = $" | {spell.DamageCount}d{spell.DamageDice}{(spell.BonusDamage > 0 ? $"+{spell.BonusDamage}" : "")} {spell.DamageType}";
+        else if (spell.EffectType == SpellEffectType.Healing)
+            effectStr = $" | {spell.HealCount}d{spell.HealDice}+{spell.BonusHealing} HP";
+        else if (spell.EffectType == SpellEffectType.Buff)
+            effectStr = $" | +{spell.BuffACBonus} AC";
+
+        string label = $"{spell.Name} ({rangeStr}){effectStr}";
+
+        // If character has metamagic, clicking spell opens metamagic sub-panel
+        if (hasMetamagic)
+        {
+            // Spell button that opens metamagic options
+            Button btn = CreateSpellDialogButton(parent, spell.SpellId,
+                $"⚡ {label}",
+                new Vector2(0.03f, yPos - 0.03f), new Vector2(0.97f, yPos + 0.03f),
+                btnColor);
+
+            SpellData capturedSpell = spell;
+            btn.onClick.AddListener(() =>
+            {
+                ShowMetamagicPanel(capturedSpell, spellComp);
+            });
+        }
+        else
+        {
+            // No metamagic: direct spell selection
+            Button btn = CreateSpellDialogButton(parent, spell.SpellId,
+                label,
+                new Vector2(0.03f, yPos - 0.03f), new Vector2(0.97f, yPos + 0.03f),
+                btnColor);
+
+            SpellData capturedSpell = spell;
+            btn.onClick.AddListener(() =>
+            {
+                HideSpellSelection();
+                if (_onSpellSelectedWithMetamagic != null)
+                    _onSpellSelectedWithMetamagic.Invoke(capturedSpell, null);
+                else
+                    _onSpellSelected?.Invoke(capturedSpell);
+            });
+        }
+    }
+
+    // ========================================================================
+    // METAMAGIC SELECTION SUB-PANEL
+    // ========================================================================
+
+    private GameObject _metamagicPanel;
+    private MetamagicData _tempMetamagic;
+    private Text _metamagicInfoText;
+    private List<Image> _metamagicToggleImages = new List<Image>();
+    private List<Text> _metamagicToggleTexts = new List<Text>();
+    private List<MetamagicFeatId> _metamagicToggleIds = new List<MetamagicFeatId>();
+
+    /// <summary>
+    /// Show the metamagic options sub-panel for a selected spell.
+    /// </summary>
+    private void ShowMetamagicPanel(SpellData spell, SpellcastingComponent spellComp)
+    {
+        // Clean up any existing metamagic panel
+        if (_metamagicPanel != null)
+            Destroy(_metamagicPanel);
+
+        _tempMetamagic = new MetamagicData();
+        _metamagicToggleImages.Clear();
+        _metamagicToggleTexts.Clear();
+        _metamagicToggleIds.Clear();
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+        if (canvas == null) return;
+
+        // Overlay on top of spell selection
+        _metamagicPanel = new GameObject("MetamagicPanel");
+        _metamagicPanel.transform.SetParent(canvas.transform, false);
+        RectTransform panelRT = _metamagicPanel.AddComponent<RectTransform>();
+        panelRT.anchorMin = Vector2.zero;
+        panelRT.anchorMax = Vector2.one;
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        Image bgImage = _metamagicPanel.AddComponent<Image>();
+        bgImage.color = new Color(0f, 0f, 0f, 0.8f);
+
+        CanvasGroup cg = _metamagicPanel.AddComponent<CanvasGroup>();
+        cg.blocksRaycasts = true;
+        cg.interactable = true;
+
+        // Dialog box
+        GameObject dialogBox = new GameObject("MetamagicDialog");
+        dialogBox.transform.SetParent(_metamagicPanel.transform, false);
+        RectTransform dialogRT = dialogBox.AddComponent<RectTransform>();
+        dialogRT.anchorMin = new Vector2(0.08f, 0.05f);
+        dialogRT.anchorMax = new Vector2(0.92f, 0.95f);
+        dialogRT.offsetMin = Vector2.zero;
+        dialogRT.offsetMax = Vector2.zero;
+
+        Image dialogBg = dialogBox.AddComponent<Image>();
+        dialogBg.color = new Color(0.08f, 0.06f, 0.18f, 0.98f);
+
+        Outline dialogOutline = dialogBox.AddComponent<Outline>();
+        dialogOutline.effectColor = new Color(0.6f, 0.4f, 1f, 1f);
+        dialogOutline.effectDistance = new Vector2(2, 2);
+
+        // Title
+        GameObject titleObj = new GameObject("Title");
+        titleObj.transform.SetParent(dialogBox.transform, false);
+        RectTransform titleRT = titleObj.AddComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0.05f, 0.91f);
+        titleRT.anchorMax = new Vector2(0.95f, 0.99f);
+        titleRT.offsetMin = Vector2.zero;
+        titleRT.offsetMax = Vector2.zero;
+
+        Text titleText = titleObj.AddComponent<Text>();
+        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (titleText.font == null) titleText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        titleText.fontSize = 15;
+        titleText.color = new Color(1f, 0.85f, 0.4f);
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.fontStyle = FontStyle.Bold;
+        titleText.text = $"⚡ METAMAGIC — {spell.Name} (Lv {spell.SpellLevel}) ⚡";
+
+        // Info text: shows current effective level and slot cost
+        GameObject infoObj = new GameObject("InfoText");
+        infoObj.transform.SetParent(dialogBox.transform, false);
+        RectTransform infoRT = infoObj.AddComponent<RectTransform>();
+        infoRT.anchorMin = new Vector2(0.05f, 0.84f);
+        infoRT.anchorMax = new Vector2(0.95f, 0.91f);
+        infoRT.offsetMin = Vector2.zero;
+        infoRT.offsetMax = Vector2.zero;
+
+        _metamagicInfoText = infoObj.AddComponent<Text>();
+        _metamagicInfoText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (_metamagicInfoText.font == null) _metamagicInfoText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        _metamagicInfoText.fontSize = 12;
+        _metamagicInfoText.color = new Color(0.9f, 0.9f, 0.7f);
+        _metamagicInfoText.alignment = TextAnchor.MiddleCenter;
+
+        // Build metamagic toggle buttons
+        var knownMM = spellComp.GetKnownMetamagicFeats();
+        float yPos = 0.80f;
+        float mmStep = 0.065f;
+
+        foreach (var mmId in knownMM)
+        {
+            bool applicable = MetamagicData.IsApplicable(mmId, spell);
+
+            // D&D 3.5e: Only one quickened spell per round
+            bool quickenBlocked = false;
+            if (mmId == MetamagicFeatId.QuickenSpell && !spellComp.CanUseQuickenSpell())
+            {
+                applicable = false;
+                quickenBlocked = true;
+            }
+
+            CreateMetamagicToggleButton(dialogBox, mmId, spell, spellComp, yPos, applicable, quickenBlocked);
+            yPos -= mmStep;
+        }
+
+        // Update info text initially
+        UpdateMetamagicInfoText(spell, spellComp);
+
+        // "Cast with no metamagic" button
+        float btnY = Mathf.Max(yPos - 0.02f, 0.12f);
+        Button castNormalBtn = CreateSpellDialogButton(dialogBox, "CastNormal",
+            $"✨ Cast {spell.Name} (No Metamagic)",
+            new Vector2(0.05f, btnY - 0.04f), new Vector2(0.95f, btnY + 0.02f),
+            new Color(0.2f, 0.4f, 0.3f, 1f));
+        SpellData capturedSpell1 = spell;
+        castNormalBtn.onClick.AddListener(() =>
+        {
+            if (_metamagicPanel != null) Destroy(_metamagicPanel);
+            HideSpellSelection();
+            if (_onSpellSelectedWithMetamagic != null)
+                _onSpellSelectedWithMetamagic.Invoke(capturedSpell1, null);
+            else
+                _onSpellSelected?.Invoke(capturedSpell1);
+        });
+
+        // "Cast with metamagic" button
+        float castMMY = btnY - 0.08f;
+        Button castMMBtn = CreateSpellDialogButton(dialogBox, "CastMM",
+            $"⚡ Cast with Metamagic",
+            new Vector2(0.05f, castMMY - 0.04f), new Vector2(0.95f, castMMY + 0.02f),
+            new Color(0.4f, 0.2f, 0.5f, 1f));
+        SpellData capturedSpell2 = spell;
+        SpellcastingComponent capturedComp = spellComp;
+        castMMBtn.onClick.AddListener(() =>
+        {
+            if (!_tempMetamagic.HasAnyMetamagic)
+            {
+                // No metamagic selected, cast normally
+                if (_metamagicPanel != null) Destroy(_metamagicPanel);
+                HideSpellSelection();
+                if (_onSpellSelectedWithMetamagic != null)
+                    _onSpellSelectedWithMetamagic.Invoke(capturedSpell2, null);
+                else
+                    _onSpellSelected?.Invoke(capturedSpell2);
+                return;
+            }
+
+            // Check if caster has a slot at the effective level
+            int effectiveLevel = _tempMetamagic.GetEffectiveSpellLevel(capturedSpell2.SpellLevel);
+            if (!capturedComp.HasSlotAtLevel(effectiveLevel))
+            {
+                Debug.Log($"[Metamagic] No slot available at level {effectiveLevel}!");
+                // Flash info text red
+                if (_metamagicInfoText != null)
+                    _metamagicInfoText.color = Color.red;
+                return;
+            }
+
+            MetamagicData finalMM = _tempMetamagic;
+            if (_metamagicPanel != null) Destroy(_metamagicPanel);
+            HideSpellSelection();
+            if (_onSpellSelectedWithMetamagic != null)
+                _onSpellSelectedWithMetamagic.Invoke(capturedSpell2, finalMM);
+            else
+                _onSpellSelected?.Invoke(capturedSpell2);
+        });
+
+        // Back button
+        float backY = castMMY - 0.08f;
+        Button backBtn = CreateSpellDialogButton(dialogBox, "BackBtn", "← Back to Spells",
+            new Vector2(0.25f, backY - 0.04f), new Vector2(0.75f, backY + 0.02f),
+            new Color(0.4f, 0.3f, 0.2f, 1f));
+        backBtn.onClick.AddListener(() =>
+        {
+            if (_metamagicPanel != null) Destroy(_metamagicPanel);
+        });
+    }
+
+    private void CreateMetamagicToggleButton(GameObject parent, MetamagicFeatId mmId,
+        SpellData spell, SpellcastingComponent spellComp, float yPos, bool applicable,
+        bool quickenBlocked = false)
+    {
+        string displayName = MetamagicData.GetDisplayName(mmId);
+        string effect = MetamagicData.GetShortEffect(mmId);
+        string label;
+
+        if (quickenBlocked)
+        {
+            // Show clear message that quickened spell limit is reached
+            label = $"[✗] {displayName}: Already cast a quickened spell this round";
+        }
+        else
+        {
+            label = $"[ ] {displayName}: {effect}";
+        }
+
+        Color btnColor = applicable
+            ? new Color(0.25f, 0.2f, 0.4f, 1f)
+            : quickenBlocked
+                ? new Color(0.3f, 0.15f, 0.15f, 0.6f) // Red-tinted for quicken blocked
+                : new Color(0.2f, 0.2f, 0.2f, 0.6f);
+
+        GameObject btnObj = new GameObject($"MM_{mmId}");
+        btnObj.transform.SetParent(parent.transform, false);
+        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
+        btnRT.anchorMin = new Vector2(0.03f, yPos - 0.028f);
+        btnRT.anchorMax = new Vector2(0.97f, yPos + 0.028f);
+        btnRT.offsetMin = Vector2.zero;
+        btnRT.offsetMax = Vector2.zero;
+
+        Image btnImg = btnObj.AddComponent<Image>();
+        btnImg.color = btnColor;
+
+        int toggleIdx = _metamagicToggleImages.Count;
+        _metamagicToggleImages.Add(btnImg);
+        _metamagicToggleIds.Add(mmId);
+
+        GameObject txtObj = new GameObject("Text");
+        txtObj.transform.SetParent(btnObj.transform, false);
+        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = new Vector2(8, 1);
+        txtRT.offsetMax = new Vector2(-8, -1);
+
+        Text txt = txtObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        txt.fontSize = 12;
+        txt.color = applicable ? Color.white :
+                   quickenBlocked ? new Color(0.8f, 0.3f, 0.3f) : // Red text for quicken blocked
+                   new Color(0.5f, 0.5f, 0.5f);
+        txt.alignment = TextAnchor.MiddleLeft;
+        txt.text = label;
+        txt.fontStyle = FontStyle.Bold;
+
+        _metamagicToggleTexts.Add(txt);
+
+        if (applicable)
+        {
+            Button btn = btnObj.AddComponent<Button>();
+            var colors = btn.colors;
+            colors.highlightedColor = new Color(btnColor.r + 0.1f, btnColor.g + 0.1f, btnColor.b + 0.15f, 1f);
+            colors.pressedColor = new Color(btnColor.r - 0.05f, btnColor.g - 0.05f, btnColor.b - 0.05f, 1f);
+            btn.colors = colors;
+
+            MetamagicFeatId capturedId = mmId;
+            SpellData capturedSpell = spell;
+            SpellcastingComponent capturedComp = spellComp;
+            int capturedIdx = toggleIdx;
+            btn.onClick.AddListener(() =>
+            {
+                _tempMetamagic.Toggle(capturedId);
+                RefreshMetamagicToggle(capturedIdx, _tempMetamagic.Has(capturedId));
+                UpdateMetamagicInfoText(capturedSpell, capturedComp);
+            });
+        }
+    }
+
+    private void RefreshMetamagicToggle(int idx, bool active)
+    {
+        if (idx < 0 || idx >= _metamagicToggleImages.Count) return;
+
+        if (active)
+        {
+            _metamagicToggleImages[idx].color = new Color(0.3f, 0.15f, 0.5f, 1f);
+            string currentText = _metamagicToggleTexts[idx].text;
+            if (currentText.StartsWith("[ ]"))
+                _metamagicToggleTexts[idx].text = "[✓]" + currentText.Substring(3);
+            _metamagicToggleTexts[idx].color = new Color(1f, 0.9f, 0.4f);
+        }
+        else
+        {
+            _metamagicToggleImages[idx].color = new Color(0.25f, 0.2f, 0.4f, 1f);
+            string currentText = _metamagicToggleTexts[idx].text;
+            if (currentText.StartsWith("[✓]"))
+                _metamagicToggleTexts[idx].text = "[ ]" + currentText.Substring(3);
+            _metamagicToggleTexts[idx].color = Color.white;
+        }
+    }
+
+    private void UpdateMetamagicInfoText(SpellData spell, SpellcastingComponent spellComp)
+    {
+        if (_metamagicInfoText == null) return;
+
+        int baseLvl = spell.SpellLevel;
+        int effectiveLvl = _tempMetamagic.GetEffectiveSpellLevel(baseLvl);
+        bool hasSlot = spellComp.HasSlotAtLevel(effectiveLvl);
+        int maxSlot = spellComp.GetHighestSlotLevel();
+
+        string slotStatus = hasSlot
+            ? $"<color=#80ff80>Slot Available (Lv{effectiveLvl})</color>"
+            : $"<color=#ff6060>No Lv{effectiveLvl} Slot! (Max: Lv{maxSlot})</color>";
+
+        if (!_tempMetamagic.HasAnyMetamagic)
+        {
+            _metamagicInfoText.text = $"Base Spell Level: {baseLvl} | Select metamagic feats to apply";
+            _metamagicInfoText.color = new Color(0.9f, 0.9f, 0.7f);
+        }
+        else
+        {
+            _metamagicInfoText.text = $"Lv{baseLvl} → Lv{effectiveLvl} slot needed | {slotStatus}";
+            _metamagicInfoText.supportRichText = true;
+            _metamagicInfoText.color = hasSlot ? new Color(0.9f, 0.9f, 0.7f) : new Color(1f, 0.5f, 0.5f);
+        }
+    }
+
+    private Button CreateSpellDialogButton(GameObject parent, string name, string label,
+        Vector2 anchorMin, Vector2 anchorMax, Color bgColor)
+    {
+        GameObject btnObj = new GameObject(name);
+        btnObj.transform.SetParent(parent.transform, false);
+        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
+        btnRT.anchorMin = anchorMin;
+        btnRT.anchorMax = anchorMax;
+        btnRT.offsetMin = Vector2.zero;
+        btnRT.offsetMax = Vector2.zero;
+
+        Image btnImg = btnObj.AddComponent<Image>();
+        btnImg.color = bgColor;
+
+        Button btn = btnObj.AddComponent<Button>();
+        var colors = btn.colors;
+        colors.highlightedColor = new Color(bgColor.r + 0.15f, bgColor.g + 0.15f, bgColor.b + 0.15f, 1f);
+        colors.pressedColor = new Color(bgColor.r - 0.1f, bgColor.g - 0.1f, bgColor.b - 0.1f, 1f);
+        btn.colors = colors;
+
+        GameObject txtObj = new GameObject("Text");
+        txtObj.transform.SetParent(btnObj.transform, false);
+        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = new Vector2(5, 2);
+        txtRT.offsetMax = new Vector2(-5, -2);
+
+        Text txt = txtObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        txt.fontSize = 14;
+        txt.color = Color.white;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.text = label;
+        txt.fontStyle = FontStyle.Bold;
+
+        return btn;
+    }
+
+
 }
 
 
