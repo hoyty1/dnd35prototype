@@ -72,6 +72,9 @@ public class GameManager : MonoBehaviour
     private string _lastCombatLog = "";
     private Camera _mainCam;
 
+    /// <summary>Current combat round number (starts at 1).</summary>
+    private int _currentRound = 0;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -670,6 +673,15 @@ public class GameManager : MonoBehaviour
             if (pc == PC2) { StartCoroutine(NPCTurnCoroutine()); return; }
         }
 
+        // ===== NEW ROUND DETECTION =====
+        // A new round begins when PC1's turn starts (turn order: PC1 → PC2 → NPC → repeat)
+        if (pc == PC1)
+        {
+            _currentRound++;
+            Debug.Log($"[GameManager] ═══ ROUND {_currentRound} BEGINS ═══");
+            ResetQuickenedSpellTrackingForAllCharacters();
+        }
+
         // Tick Barbarian Rage at start of turn
         if (pc.Stats.IsBarbarian && pc.Stats.IsRaging)
         {
@@ -1055,6 +1067,15 @@ public class GameManager : MonoBehaviour
         {
             caster.Actions.UseStandardAction();
         }
+        else
+        {
+            // Mark that this character has used their one quickened spell for this round
+            var casterSpellComp = caster.GetComponent<SpellcastingComponent>();
+            if (casterSpellComp != null)
+            {
+                casterSpellComp.MarkQuickenedSpellCast();
+            }
+        }
 
         // Get spellcasting component
         var spellComp = caster.GetComponent<SpellcastingComponent>();
@@ -1103,8 +1124,14 @@ public class GameManager : MonoBehaviour
             target.OnDeath();
         }
 
-        // Build combat log
+        // Build combat log with quickened spell indicator
         _lastCombatLog = result.GetFormattedLog();
+
+        if (isQuickened)
+        {
+            string quickenedPrefix = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n";
+            _lastCombatLog = quickenedPrefix + _lastCombatLog;
+        }
 
         if (GameManager.LogAttacksToConsole)
             Debug.Log("[Spell] " + _lastCombatLog);
@@ -2085,6 +2112,25 @@ public class GameManager : MonoBehaviour
             Debug.Log($"[Combat] {defenderName} has been slain!");
 
         Debug.Log("[Combat] ═══════════════════════════════════════");
+    }
+
+    // ========== QUICKENED SPELL TRACKING (D&D 3.5e: ONE PER ROUND) ==========
+
+    /// <summary>
+    /// Reset quickened spell tracking for all characters at the start of a new round.
+    /// D&D 3.5e: Each character can cast only one quickened spell per round.
+    /// </summary>
+    private void ResetQuickenedSpellTrackingForAllCharacters()
+    {
+        foreach (var character in GetAllCharacters())
+        {
+            var spellComp = character.GetComponent<SpellcastingComponent>();
+            if (spellComp != null)
+            {
+                spellComp.ResetQuickenedSpellTracking();
+            }
+        }
+        Debug.Log("[GameManager] Quickened spell tracking reset for new round");
     }
 
     /// <summary>Format a modifier for console output like "+ 3 (STR)" or "- 2 (Rapid Shot)".</summary>

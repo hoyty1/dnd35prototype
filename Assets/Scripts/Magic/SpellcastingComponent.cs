@@ -40,6 +40,13 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>Whether Mage Armor buff is currently active.</summary>
     public bool MageArmorActive { get; set; }
 
+    /// <summary>
+    /// D&D 3.5e Rule: Only one quickened spell per round.
+    /// Tracks whether this character has already cast a quickened spell this round.
+    /// Reset at the start of each new round (when PC1's turn begins after NPC turn).
+    /// </summary>
+    public bool HasCastQuickenedSpellThisRound { get; set; }
+
     /// <summary>Whether this character has any spellcasting ability.</summary>
     public bool CanCastSpells => Stats != null && (Stats.IsWizard || Stats.IsCleric);
 
@@ -356,6 +363,33 @@ public class SpellcastingComponent : MonoBehaviour
     {
         if (SlotsMax == null || level >= SlotsMax.Length) return 0;
         return SlotsMax[level];
+    }
+
+    /// <summary>
+    /// Reset the quickened spell tracking for a new round.
+    /// Called at the start of each combat round (when PC1's turn begins).
+    /// </summary>
+    public void ResetQuickenedSpellTracking()
+    {
+        HasCastQuickenedSpellThisRound = false;
+    }
+
+    /// <summary>
+    /// Record that this character has cast a quickened spell this round.
+    /// </summary>
+    public void MarkQuickenedSpellCast()
+    {
+        HasCastQuickenedSpellThisRound = true;
+        Debug.Log($"[Spellcasting] {Stats.CharacterName}: Quickened spell cast this round (limit reached)");
+    }
+
+    /// <summary>
+    /// Check if this character can use Quicken Spell metamagic this round.
+    /// D&D 3.5e: Only one quickened spell per round.
+    /// </summary>
+    public bool CanUseQuickenSpell()
+    {
+        return !HasCastQuickenedSpellThisRound;
     }
 
     /// <summary>

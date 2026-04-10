@@ -228,6 +228,7 @@ public class CombatUI : MonoBehaviour
         text = text.Replace("SPELL CAST!", "<color=#BB88FF><b>SPELL CAST!</b></color>");
         text = text.Replace("Metamagic:", "<color=#FFB833><b>Metamagic:</b></color>");
         text = text.Replace("Empower:", "<color=#FFB833>Empower:</color>");
+        text = text.Replace("QUICKENED", "<color=#FFD700><b>QUICKENED</b></color>");
         text = text.Replace("⚡", "<color=#FFB833>⚡</color>");
         text = text.Replace("healed!", "<color=#66FF66><b>healed!</b></color>");
         text = text.Replace("BUFF APPLIED!", "<color=#6699FF><b>BUFF APPLIED!</b></color>");
@@ -1087,7 +1088,16 @@ public class CombatUI : MonoBehaviour
         foreach (var mmId in knownMM)
         {
             bool applicable = MetamagicData.IsApplicable(mmId, spell);
-            CreateMetamagicToggleButton(dialogBox, mmId, spell, spellComp, yPos, applicable);
+
+            // D&D 3.5e: Only one quickened spell per round
+            bool quickenBlocked = false;
+            if (mmId == MetamagicFeatId.QuickenSpell && !spellComp.CanUseQuickenSpell())
+            {
+                applicable = false;
+                quickenBlocked = true;
+            }
+
+            CreateMetamagicToggleButton(dialogBox, mmId, spell, spellComp, yPos, applicable, quickenBlocked);
             yPos -= mmStep;
         }
 
@@ -1165,15 +1175,28 @@ public class CombatUI : MonoBehaviour
     }
 
     private void CreateMetamagicToggleButton(GameObject parent, MetamagicFeatId mmId,
-        SpellData spell, SpellcastingComponent spellComp, float yPos, bool applicable)
+        SpellData spell, SpellcastingComponent spellComp, float yPos, bool applicable,
+        bool quickenBlocked = false)
     {
         string displayName = MetamagicData.GetDisplayName(mmId);
         string effect = MetamagicData.GetShortEffect(mmId);
-        string label = $"[ ] {displayName}: {effect}";
+        string label;
+
+        if (quickenBlocked)
+        {
+            // Show clear message that quickened spell limit is reached
+            label = $"[✗] {displayName}: Already cast a quickened spell this round";
+        }
+        else
+        {
+            label = $"[ ] {displayName}: {effect}";
+        }
 
         Color btnColor = applicable
             ? new Color(0.25f, 0.2f, 0.4f, 1f)
-            : new Color(0.2f, 0.2f, 0.2f, 0.6f);
+            : quickenBlocked
+                ? new Color(0.3f, 0.15f, 0.15f, 0.6f) // Red-tinted for quicken blocked
+                : new Color(0.2f, 0.2f, 0.2f, 0.6f);
 
         GameObject btnObj = new GameObject($"MM_{mmId}");
         btnObj.transform.SetParent(parent.transform, false);
@@ -1202,7 +1225,9 @@ public class CombatUI : MonoBehaviour
         txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
         txt.fontSize = 12;
-        txt.color = applicable ? Color.white : new Color(0.5f, 0.5f, 0.5f);
+        txt.color = applicable ? Color.white :
+                   quickenBlocked ? new Color(0.8f, 0.3f, 0.3f) : // Red text for quicken blocked
+                   new Color(0.5f, 0.5f, 0.5f);
         txt.alignment = TextAnchor.MiddleLeft;
         txt.text = label;
         txt.fontStyle = FontStyle.Bold;
