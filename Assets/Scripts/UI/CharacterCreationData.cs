@@ -20,7 +20,10 @@ public class CharacterCreationData
     // Step 4: Class
     public string ClassName; // "Fighter" or "Rogue"
 
-    // Step 5: Name
+    // Step 5: Skills
+    public Dictionary<string, int> SkillRanks = new Dictionary<string, int>();
+
+    // Step 6: Name
     public string CharacterName = "";
 
     // Derived values (computed during review)

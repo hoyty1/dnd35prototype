@@ -497,6 +497,160 @@ public class CharacterStats
     /// <summary>Speed in feet for display purposes.</summary>
     public int SpeedInFeet => Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5;
 
+    // ========== SKILLS SYSTEM (D&D 3.5) ==========
+
+    /// <summary>Dictionary of all skills this character has, keyed by skill name.</summary>
+    public Dictionary<string, Skill> Skills = new Dictionary<string, Skill>();
+
+    /// <summary>Number of unspent skill points available for allocation.</summary>
+    public int AvailableSkillPoints;
+
+    /// <summary>Total skill points this character has been granted.</summary>
+    public int TotalSkillPoints;
+
+    /// <summary>
+    /// Initialize all skills for this character based on class and level.
+    /// Creates all skill entries and calculates available skill points.
+    /// </summary>
+    /// <param name="characterClass">Character's class name (e.g., "Fighter", "Rogue")</param>
+    /// <param name="level">Character level</param>
+    public void InitializeSkills(string characterClass, int level)
+    {
+        Skills.Clear();
+        HashSet<string> classSkills = ClassSkillDefinitions.GetClassSkills(characterClass);
+
+        foreach (var skillDef in ClassSkillDefinitions.AllSkills)
+        {
+            bool isClass = classSkills.Contains(skillDef.name);
+            Skill skill = new Skill(skillDef.name, skillDef.ability, isClass, skillDef.trainedOnly);
+            Skills[skillDef.name] = skill;
+        }
+
+        TotalSkillPoints = ClassSkillDefinitions.CalculateSkillPoints(characterClass, level, INTMod);
+        AvailableSkillPoints = TotalSkillPoints;
+
+        Debug.Log($"[Skills] {CharacterName} ({characterClass} Lv{level}): {TotalSkillPoints} skill points " +
+                  $"({ClassSkillDefinitions.GetBaseSkillPointsPerLevel(characterClass)} + {INTMod} INT mod" +
+                  (level == 1 ? " × 4 at level 1)" : $" × {level} levels)"));
+    }
+
+    /// <summary>
+    /// Add one rank to a skill. Costs 1 skill point.
+    /// Returns false if: no points available, max ranks reached, or skill not found.
+    /// </summary>
+    public bool AddSkillRank(string skillName)
+    {
+        if (!Skills.ContainsKey(skillName))
+        {
+            Debug.LogWarning($"[Skills] Skill '{skillName}' not found.");
+            return false;
+        }
+
+        if (AvailableSkillPoints <= 0)
+        {
+            Debug.Log($"[Skills] No skill points available to add rank to {skillName}.");
+            return false;
+        }
+
+        Skill skill = Skills[skillName];
+        int maxRanks = skill.GetMaxRanks(Level);
+        if (skill.Ranks >= maxRanks)
+        {
+            Debug.Log($"[Skills] {skillName} already at max ranks ({maxRanks}) for level {Level}.");
+            return false;
+        }
+
+        skill.Ranks++;
+        AvailableSkillPoints--;
+        Debug.Log($"[Skills] Added rank to {skillName}: now {skill.Ranks}/{maxRanks} ({AvailableSkillPoints} points remaining)");
+        return true;
+    }
+
+    /// <summary>
+    /// Remove one rank from a skill. Refunds 1 skill point.
+    /// Returns false if skill has 0 ranks or skill not found.
+    /// </summary>
+    public bool RemoveSkillRank(string skillName)
+    {
+        if (!Skills.ContainsKey(skillName))
+        {
+            Debug.LogWarning($"[Skills] Skill '{skillName}' not found.");
+            return false;
+        }
+
+        Skill skill = Skills[skillName];
+        if (skill.Ranks <= 0)
+        {
+            Debug.Log($"[Skills] {skillName} already has 0 ranks.");
+            return false;
+        }
+
+        skill.Ranks--;
+        AvailableSkillPoints++;
+        Debug.Log($"[Skills] Removed rank from {skillName}: now {skill.Ranks} ({AvailableSkillPoints} points remaining)");
+        return true;
+    }
+
+    /// <summary>
+    /// Get the total bonus for a skill (ranks + ability mod + class skill bonus).
+    /// Returns 0 if skill not found.
+    /// </summary>
+    public int GetSkillBonus(string skillName)
+    {
+        if (!Skills.ContainsKey(skillName)) return 0;
+        Skill skill = Skills[skillName];
+        return skill.GetTotalBonus(GetAbilityModForSkill(skill));
+    }
+
+    /// <summary>
+    /// Roll a skill check for a specific skill.
+    /// Returns d20 + total bonus, or -1 if trained only and untrained.
+    /// Logs full breakdown to console.
+    /// </summary>
+    public int RollSkillCheck(string skillName)
+    {
+        if (!Skills.ContainsKey(skillName))
+        {
+            Debug.LogWarning($"[Skills] Skill '{skillName}' not found for {CharacterName}.");
+            return -1;
+        }
+
+        Skill skill = Skills[skillName];
+        int abilityMod = GetAbilityModForSkill(skill);
+
+        if (skill.TrainedOnly && skill.Ranks == 0)
+        {
+            Debug.Log($"[Skills] {CharacterName} cannot use {skillName} - requires training (0 ranks)");
+            return -1;
+        }
+
+        int d20 = Random.Range(1, 21);
+        int totalBonus = skill.GetTotalBonus(abilityMod);
+        int total = d20 + totalBonus;
+
+        string classStr = skill.ClassSkillBonus > 0 ? $" + {skill.ClassSkillBonus}(class)" : "";
+        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){classStr} = {total}");
+
+        return total;
+    }
+
+    /// <summary>
+    /// Get the ability modifier that applies to a skill based on its key ability.
+    /// </summary>
+    public int GetAbilityModForSkill(Skill skill)
+    {
+        switch (skill.KeyAbility)
+        {
+            case AbilityType.STR: return STRMod;
+            case AbilityType.DEX: return DEXMod;
+            case AbilityType.CON: return CONMod;
+            case AbilityType.WIS: return WISMod;
+            case AbilityType.INT: return INTMod;
+            case AbilityType.CHA: return CHAMod;
+            default: return 0;
+        }
+    }
+
     // ========== DAMAGE MODIFIER HELPERS (D&D 3.5) ==========
 
     /// <summary>

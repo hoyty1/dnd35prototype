@@ -491,6 +491,12 @@ public class SceneBootstrap : MonoBehaviour
             CharacterCreationUI ccUI = canvas.gameObject.AddComponent<CharacterCreationUI>();
             ccUI.BuildUI(canvas);
             gm.CharacterCreationUI = ccUI;
+
+            // Create Skills UI Panel
+            SkillsUIPanel skillsUI = canvas.gameObject.AddComponent<SkillsUIPanel>();
+            skillsUI.BuildUI(canvas);
+            gm.SkillsUI = skillsUI;
+            ccUI.SkillsUI = skillsUI;
         }
 
         // Wire up button events (deferred to next frame so GameManager.Instance is set)

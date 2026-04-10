@@ -35,6 +35,7 @@ public class GameManager : MonoBehaviour
     public CombatUI CombatUI;
     public InventoryUI InventoryUI;
     public CharacterCreationUI CharacterCreationUI;
+    public SkillsUIPanel SkillsUI;
 
     /// <summary>Whether the game is waiting for character creation to complete.</summary>
     public bool WaitingForCharacterCreation { get; private set; }
@@ -157,6 +158,18 @@ public class GameManager : MonoBehaviour
         pc1Inv.Init(pc1Stats);
         SetupStartingEquipment(pc1Inv, pc1Data.ClassName);
 
+        // Initialize skills (skill allocation was done during character creation)
+        pc1Stats.InitializeSkills(pc1Data.ClassName, 3);
+        // Apply pre-allocated skill ranks from character creation
+        if (pc1Data.SkillRanks != null)
+        {
+            foreach (var kvp in pc1Data.SkillRanks)
+            {
+                for (int i = 0; i < kvp.Value; i++)
+                    pc1Stats.AddSkillRank(kvp.Key);
+            }
+        }
+
         Debug.Log($"[GameManager] {pc1Data.CharacterName} ({pc1Data.RaceName} {pc1Data.ClassName}): " +
                   $"STR {pc1Stats.STR} DEX {pc1Stats.DEX} CON {pc1Stats.CON} " +
                   $"HP {pc1Stats.MaxHP} AC {pc1Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc1Stats.AttackBonus)}");
@@ -195,6 +208,17 @@ public class GameManager : MonoBehaviour
         var pc2Inv = PC2.gameObject.AddComponent<InventoryComponent>();
         pc2Inv.Init(pc2Stats);
         SetupStartingEquipment(pc2Inv, pc2Data.ClassName);
+
+        // Initialize skills for PC2
+        pc2Stats.InitializeSkills(pc2Data.ClassName, 3);
+        if (pc2Data.SkillRanks != null)
+        {
+            foreach (var kvp in pc2Data.SkillRanks)
+            {
+                for (int i = 0; i < kvp.Value; i++)
+                    pc2Stats.AddSkillRank(kvp.Key);
+            }
+        }
 
         Debug.Log($"[GameManager] {pc2Data.CharacterName} ({pc2Data.RaceName} {pc2Data.ClassName}): " +
                   $"STR {pc2Stats.STR} DEX {pc2Stats.DEX} CON {pc2Stats.CON} " +
@@ -269,10 +293,12 @@ public class GameManager : MonoBehaviour
         if (WaitingForCharacterCreation) return;
 
         HandleInventoryInput();
+        HandleSkillsInput();
 
         if (!IsPlayerTurn) return;
         if (CurrentSubPhase == PlayerSubPhase.Animating) return;
         if (InventoryUI != null && InventoryUI.IsOpen) return;
+        if (SkillsUI != null && SkillsUI.IsOpen) return;
 
         bool clicked = false;
         Vector3 mouseScreenPos = Vector3.zero;
@@ -353,6 +379,37 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private void HandleSkillsInput()
+    {
+        bool kPressed = false;
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetKeyDown(KeyCode.K))
+            kPressed = true;
+#endif
+
+#if ENABLE_INPUT_SYSTEM
+        if (!kPressed)
+        {
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (keyboard != null && keyboard.kKey.wasPressedThisFrame)
+                kPressed = true;
+        }
+#endif
+
+        if (kPressed && SkillsUI != null)
+        {
+            if (SkillsUI.IsOpen)
+            {
+                SkillsUI.Close();
+            }
+            else if (IsPlayerTurn && ActivePC != null)
+            {
+                SkillsUI.OpenForDisplay(ActivePC.Stats);
+            }
+        }
+    }
+
     private void CloseInventoryIfOpen()
     {
         if (InventoryUI != null && InventoryUI.IsOpen)
@@ -401,6 +458,14 @@ public class GameManager : MonoBehaviour
         pc1Inv.Init(pc1Stats);
         pc1Inv.SetupAldric();
 
+        // Initialize skills for Aldric (Fighter)
+        pc1Stats.InitializeSkills("Fighter", 3);
+        // Default skill allocation: Climb 4, Intimidate 4, Jump 3, Swim 3
+        for (int i = 0; i < 4; i++) pc1Stats.AddSkillRank("Climb");
+        for (int i = 0; i < 4; i++) pc1Stats.AddSkillRank("Intimidate");
+        for (int i = 0; i < 3; i++) pc1Stats.AddSkillRank("Jump");
+        for (int i = 0; i < 3; i++) pc1Stats.AddSkillRank("Swim");
+
         // ==========================================
         // PC2: "Lyra" - Elf Rogue (Level 3)
         // Base scores: STR 12, DEX 17, CON 12, WIS 13, INT 14, CHA 10
@@ -435,6 +500,23 @@ public class GameManager : MonoBehaviour
         var pc2Inv = PC2.gameObject.AddComponent<InventoryComponent>();
         pc2Inv.Init(pc2Stats);
         pc2Inv.SetupLyra();
+
+        // Initialize skills for Lyra (Rogue) - INT 14 (+2), so (8+2)×4 = 40 at level 1, +10×2 = 60 total
+        pc2Stats.InitializeSkills("Rogue", 3);
+        // Default skill allocation for Lyra
+        for (int i = 0; i < 6; i++) pc2Stats.AddSkillRank("Hide");
+        for (int i = 0; i < 6; i++) pc2Stats.AddSkillRank("Move Silently");
+        for (int i = 0; i < 6; i++) pc2Stats.AddSkillRank("Spot");
+        for (int i = 0; i < 6; i++) pc2Stats.AddSkillRank("Listen");
+        for (int i = 0; i < 5; i++) pc2Stats.AddSkillRank("Disable Device");
+        for (int i = 0; i < 5; i++) pc2Stats.AddSkillRank("Open Lock");
+        for (int i = 0; i < 5; i++) pc2Stats.AddSkillRank("Search");
+        for (int i = 0; i < 4; i++) pc2Stats.AddSkillRank("Tumble");
+        for (int i = 0; i < 4; i++) pc2Stats.AddSkillRank("Bluff");
+        for (int i = 0; i < 4; i++) pc2Stats.AddSkillRank("Diplomacy");
+        for (int i = 0; i < 4; i++) pc2Stats.AddSkillRank("Climb");
+        for (int i = 0; i < 3; i++) pc2Stats.AddSkillRank("Balance");
+        for (int i = 0; i < 2; i++) pc2Stats.AddSkillRank("Sleight of Hand");
 
         SpriteRenderer pc2SR = PC2.GetComponent<SpriteRenderer>();
         if (pc2SR != null)
@@ -568,7 +650,7 @@ public class GameManager : MonoBehaviour
         if (pc.Stats.Feats.Count > 0)
             featInfo = $"\nFeats: {string.Join(", ", pc.Stats.Feats)}";
 
-        CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory\n{actionInfo}{dwInfo}{featInfo}");
+        CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory  [K] Skills\n{actionInfo}{dwInfo}{featInfo}");
 
         // Auto-end turn if no actions left
         if (!pc.Actions.HasAnyActionLeft)

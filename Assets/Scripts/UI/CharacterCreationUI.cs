@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class CharacterCreationUI : MonoBehaviour
 {
     // ========== STATE ==========
-    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, Review }
+    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, AllocateSkills, Review }
 
     public Step CurrentStep = Step.RollStats;
     public int CurrentCharacterIndex = 0; // 0 = PC1, 1 = PC2
@@ -20,6 +20,9 @@ public class CharacterCreationUI : MonoBehaviour
 
     // Callback when both characters are created
     public System.Action<CharacterCreationData, CharacterCreationData> OnCreationComplete;
+
+    // Reference to skills UI for skill allocation step
+    public SkillsUIPanel SkillsUI;
 
     // ========== UI REFERENCES ==========
     private GameObject _rootPanel;
@@ -237,7 +240,7 @@ public class CharacterCreationUI : MonoBehaviour
         "Melee attack & damage",
         "AC, ranged attack, initiative",
         "Hit points per level",
-        "Skill points (future)",
+        "Skill points per level",
         "Will saves, perception",
         "Social skills, spellcasting"
     };
@@ -650,10 +653,70 @@ public class CharacterCreationUI : MonoBehaviour
     {
         if (_selectedClass == null) return;
         CreatedCharacters[CurrentCharacterIndex].ClassName = _selectedClass;
+        ShowStep(Step.AllocateSkills);
+    }
+
+    // ========== STEP 5: ALLOCATE SKILLS ==========
+
+    /// <summary>Temporary CharacterStats used during skill allocation in character creation.</summary>
+    private CharacterStats _tempStatsForSkills;
+
+    private void StartSkillAllocation()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        data.ComputeFinalStats();
+
+        // Create a temporary CharacterStats to use for skill allocation
+        _tempStatsForSkills = new CharacterStats(
+            name: data.CharacterName.Length > 0 ? data.CharacterName : (CurrentCharacterIndex == 0 ? "Hero 1" : "Hero 2"),
+            level: 3,
+            characterClass: data.ClassName,
+            str: data.STR, dex: data.DEX, con: data.CON,
+            wis: data.WIS, intelligence: data.INT, cha: data.CHA,
+            bab: data.BAB,
+            armorBonus: 0, shieldBonus: 0,
+            damageDice: 8, damageCount: 1, bonusDamage: 0,
+            baseSpeed: data.BaseSpeed, atkRange: 1,
+            baseHitDieHP: data.HP,
+            raceName: data.RaceName
+        );
+
+        _tempStatsForSkills.InitializeSkills(data.ClassName, 3);
+
+        if (SkillsUI != null)
+        {
+            SkillsUI.OnAllocationConfirmed = OnSkillAllocationConfirmed;
+            SkillsUI.OpenForAllocation(_tempStatsForSkills);
+        }
+        else
+        {
+            Debug.LogWarning("[CharCreation] SkillsUI not available, skipping skill allocation.");
+            ShowStep(Step.Review);
+        }
+    }
+
+    private void OnSkillAllocationConfirmed()
+    {
+        // Save the allocated skill ranks to character creation data
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        data.SkillRanks.Clear();
+
+        foreach (var kvp in _tempStatsForSkills.Skills)
+        {
+            if (kvp.Value.Ranks > 0)
+            {
+                data.SkillRanks[kvp.Key] = kvp.Value.Ranks;
+            }
+        }
+
+        int totalSpent = _tempStatsForSkills.TotalSkillPoints - _tempStatsForSkills.AvailableSkillPoints;
+        Debug.Log($"[CharCreation] Skill allocation complete: {totalSpent}/{_tempStatsForSkills.TotalSkillPoints} points spent, {data.SkillRanks.Count} skills with ranks.");
+
+        _tempStatsForSkills = null;
         ShowStep(Step.Review);
     }
 
-    // ========== STEP 5: REVIEW ==========
+    // ========== STEP 6: REVIEW ==========
 
     private GameObject _step5Panel;
 
@@ -776,6 +839,18 @@ public class CharacterCreationUI : MonoBehaviour
         if (data.ClassName == "Rogue") review += "Thieves' tools\n";
         review += "Backpack, bedroll, waterskin, rations\n";
 
+        // Show allocated skills
+        if (data.SkillRanks != null && data.SkillRanks.Count > 0)
+        {
+            review += "\n--- Skills ---\n";
+            foreach (var kvp in data.SkillRanks)
+            {
+                string skillName = kvp.Key;
+                int ranks = kvp.Value;
+                review += $"  {skillName}: {ranks} ranks\n";
+            }
+        }
+
         _reviewText.text = review;
 
         // Default name
@@ -833,7 +908,7 @@ public class CharacterCreationUI : MonoBehaviour
         {
             case Step.RollStats:
                 _step1Panel.SetActive(true);
-                _stepText.text = "Step 1 of 5: Roll Stats";
+                _stepText.text = "Step 1 of 6: Roll Stats";
                 // Reset roll UI
                 if (_currentRolls == null)
                 {
@@ -847,7 +922,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.AssignStats:
                 _step2Panel.SetActive(true);
-                _stepText.text = "Step 2 of 5: Assign Stats";
+                _stepText.text = "Step 2 of 6: Assign Stats";
                 // Reset assignment
                 _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
                 _rollUsed = new bool[6];
@@ -857,7 +932,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseRace:
                 _step3Panel.SetActive(true);
-                _stepText.text = "Step 3 of 5: Choose Race";
+                _stepText.text = "Step 3 of 6: Choose Race";
                 _selectedRace = null;
                 _raceInfoText.text = "Select a race to see details.";
                 _racePreviewText.text = "";
@@ -874,7 +949,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseClass:
                 _step4Panel.SetActive(true);
-                _stepText.text = "Step 4 of 5: Choose Class";
+                _stepText.text = "Step 4 of 6: Choose Class";
                 _selectedClass = null;
                 _classInfoText.text = "";
                 _confirmClassButton.interactable = false;
@@ -887,9 +962,15 @@ public class CharacterCreationUI : MonoBehaviour
                 }
                 break;
 
+            case Step.AllocateSkills:
+                // Skills allocation is handled by the SkillsUIPanel overlay
+                _stepText.text = "Step 5 of 6: Allocate Skills";
+                StartSkillAllocation();
+                break;
+
             case Step.Review:
                 _step5Panel.SetActive(true);
-                _stepText.text = "Step 5 of 5: Review & Name";
+                _stepText.text = "Step 6 of 6: Review & Name";
                 _nameInput.text = "";
                 RefreshReview();
                 break;
@@ -903,7 +984,13 @@ public class CharacterCreationUI : MonoBehaviour
             case Step.AssignStats: ShowStep(Step.RollStats); break;
             case Step.ChooseRace: ShowStep(Step.AssignStats); break;
             case Step.ChooseClass: ShowStep(Step.ChooseRace); break;
-            case Step.Review: ShowStep(Step.ChooseClass); break;
+            case Step.AllocateSkills:
+                // Close skills UI if open
+                if (SkillsUI != null && SkillsUI.IsOpen)
+                    SkillsUI.Close();
+                ShowStep(Step.ChooseClass);
+                break;
+            case Step.Review: ShowStep(Step.AllocateSkills); break;
         }
     }
 
@@ -939,6 +1026,11 @@ public class CharacterCreationUI : MonoBehaviour
         pc1.STR = 16; pc1.DEX = 12; pc1.CON = 14;
         pc1.INT = 10; pc1.WIS = 10; pc1.CHA = 13;
         pc1.ComputeFinalStats();
+        // Default Fighter skills
+        pc1.SkillRanks["Climb"] = 4;
+        pc1.SkillRanks["Intimidate"] = 4;
+        pc1.SkillRanks["Jump"] = 3;
+        pc1.SkillRanks["Swim"] = 3;
 
         // PC2: Lyra the Elf Rogue
         var pc2 = CreatedCharacters[1];
@@ -949,6 +1041,20 @@ public class CharacterCreationUI : MonoBehaviour
         pc2.STR = 12; pc2.DEX = 17; pc2.CON = 12;
         pc2.INT = 14; pc2.WIS = 13; pc2.CHA = 10;
         pc2.ComputeFinalStats();
+        // Default Rogue skills
+        pc2.SkillRanks["Hide"] = 6;
+        pc2.SkillRanks["Move Silently"] = 6;
+        pc2.SkillRanks["Spot"] = 6;
+        pc2.SkillRanks["Listen"] = 6;
+        pc2.SkillRanks["Disable Device"] = 5;
+        pc2.SkillRanks["Open Lock"] = 5;
+        pc2.SkillRanks["Search"] = 5;
+        pc2.SkillRanks["Tumble"] = 4;
+        pc2.SkillRanks["Bluff"] = 4;
+        pc2.SkillRanks["Diplomacy"] = 4;
+        pc2.SkillRanks["Climb"] = 4;
+        pc2.SkillRanks["Balance"] = 3;
+        pc2.SkillRanks["Sleight of Hand"] = 2;
 
         IsComplete = true;
         _rootPanel.transform.parent.gameObject.SetActive(false);
