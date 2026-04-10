@@ -43,6 +43,9 @@ public class FeatSelectionUI : MonoBehaviour
     private List<FeatRowUI> _featRows = new List<FeatRowUI>();
     private List<Button> _filterButtons = new List<Button>();
 
+    // ========== FONT ==========
+    private Font _font;
+
     // ========== COLORS ==========
     private static readonly Color COLOR_BG = new Color(0.12f, 0.12f, 0.15f, 0.95f);
     private static readonly Color COLOR_PANEL = new Color(0.18f, 0.18f, 0.22f, 1f);
@@ -66,6 +69,13 @@ public class FeatSelectionUI : MonoBehaviour
     public void BuildUI(Canvas canvas)
     {
         if (_isBuilt) return;
+
+        // Load font with fallbacks (matching other UI panels)
+        _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (_font == null) _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (_font == null) _font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        if (_font == null) Debug.LogError("[FeatSelectionUI] CRITICAL: No font could be loaded! Text will be invisible.");
+        else Debug.Log($"[FeatSelectionUI] Font loaded: {_font.name}");
 
         // Full-screen overlay
         _overlay = new GameObject("FeatSelectionOverlay");
@@ -157,6 +167,9 @@ public class FeatSelectionUI : MonoBehaviour
         mask.showMaskGraphic = true;
         _scrollRect = scrollGO.AddComponent<ScrollRect>();
         _scrollRect.horizontal = false;
+        _scrollRect.vertical = true;
+        _scrollRect.movementType = ScrollRect.MovementType.Clamped;
+        _scrollRect.scrollSensitivity = 30f;
 
         _scrollContent = new GameObject("Content");
         _scrollContent.transform.SetParent(scrollGO.transform, false);
@@ -216,6 +229,12 @@ public class FeatSelectionUI : MonoBehaviour
     /// <param name="fighterBonusOnly">If true, only show fighter bonus feats</param>
     public void OpenForSelection(CharacterStats stats, int featsToSelect, bool fighterBonusOnly = false)
     {
+        if (!_isBuilt)
+        {
+            Debug.LogError("[FeatSelectionUI] Cannot open - UI has not been built! Call BuildUI() first.");
+            return;
+        }
+
         _stats = stats;
         _featsToSelect = featsToSelect;
         _isFighterBonus = fighterBonusOnly;
@@ -231,12 +250,17 @@ public class FeatSelectionUI : MonoBehaviour
             _searchInput.text = "";
 
         FeatDefinitions.Init();
+
+        Debug.Log($"[FeatSelectionUI] Opening for {stats.CharacterName} ({stats.CharacterClass}): " +
+                  $"{featsToSelect} feats to select" +
+                  (fighterBonusOnly ? " (fighter bonus only)" : "") +
+                  $", total feats in database: {FeatDefinitions.AllFeats.Count}");
+
         PopulateFeatList();
         UpdateSelectedDisplay();
         SetPanelVisible(true);
 
-        Debug.Log($"[FeatSelectionUI] Opened for {stats.CharacterName}: {featsToSelect} feats to select" +
-                  (fighterBonusOnly ? " (fighter bonus only)" : ""));
+        Debug.Log($"[FeatSelectionUI] Opened successfully. Feat rows created: {_featRows.Count}, font loaded: {(_font != null ? _font.name : "NULL")}");
     }
 
     /// <summary>Close the panel.</summary>
@@ -288,8 +312,10 @@ public class FeatSelectionUI : MonoBehaviour
 
     private bool PassesFilter(FeatDefinition feat)
     {
-        if (_filterType == "All") return true;
+        // Fighter bonus mode: always filter to fighter bonus feats regardless of type filter
         if (_isFighterBonus && !feat.IsFighterBonus) return false;
+
+        if (_filterType == "All") return true;
 
         switch (_filterType)
         {
@@ -565,7 +591,7 @@ public class FeatSelectionUI : MonoBehaviour
         rt.sizeDelta = size;
         var t = go.AddComponent<Text>();
         t.text = text;
-        t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        t.font = _font;
         t.fontSize = fontSize;
         t.color = color;
         t.alignment = align;
