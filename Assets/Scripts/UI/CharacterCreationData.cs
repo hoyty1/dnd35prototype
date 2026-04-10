@@ -51,36 +51,13 @@ public class CharacterCreationData
         FinalWIS = WIS + (Race != null ? Race.WISModifier : 0);
         FinalCHA = CHA + (Race != null ? Race.CHAModifier : 0);
 
-        // Class-specific
-        if (ClassName == "Fighter")
+        // Look up class definition from registry
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(ClassName);
+        if (classDef != null)
         {
-            HitDie = 10;
-            BAB = 3; // Level 3 fighter BAB (full progression)
-        }
-        else if (ClassName == "Rogue")
-        {
-            HitDie = 6;
-            BAB = 2; // Level 3 rogue BAB (3/4 progression)
-        }
-        else if (ClassName == "Monk")
-        {
-            HitDie = 8;
-            BAB = 2; // Level 3 monk BAB (3/4 progression)
-        }
-        else if (ClassName == "Barbarian")
-        {
-            HitDie = 12;
-            BAB = 3; // Level 3 barbarian BAB (full progression)
-        }
-        else if (ClassName == "Wizard")
-        {
-            HitDie = 4;
-            BAB = 1; // Level 3 wizard BAB (1/2 progression)
-        }
-        else if (ClassName == "Cleric")
-        {
-            HitDie = 8;
-            BAB = 2; // Level 3 cleric BAB (3/4 progression)
+            HitDie = classDef.HitDie;
+            BAB = classDef.BABAtLevel3;
         }
         else
         {

@@ -305,109 +305,41 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Get default armor bonus, shield bonus, and damage dice for a class.
-    /// Used when setting up characters from character creation data.
+    /// Delegates to ClassRegistry for class-specific values.
     /// </summary>
     private void GetClassDefaults(string className, out int armorBonus, out int shieldBonus, out int damageDice)
     {
-        switch (className)
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(className);
+        if (classDef != null)
         {
-            case "Fighter":
-                armorBonus = 4; shieldBonus = 2; damageDice = 8; break;
-            case "Rogue":
-                armorBonus = 2; shieldBonus = 0; damageDice = 6; break;
-            case "Monk":
-                armorBonus = 0; shieldBonus = 0; damageDice = 6; break; // Monk: unarmored, unarmed 1d6
-            case "Barbarian":
-                armorBonus = 3; shieldBonus = 0; damageDice = 12; break; // Barbarian: hide armor, greataxe 1d12
-            case "Wizard":
-                armorBonus = 0; shieldBonus = 0; damageDice = 6; break;  // Wizard: no armor, quarterstaff 1d6
-            case "Cleric":
-                armorBonus = 4; shieldBonus = 2; damageDice = 8; break;  // Cleric: chain shirt+shield, heavy mace 1d8
-            default:
-                armorBonus = 0; shieldBonus = 0; damageDice = 6; break;
+            armorBonus = classDef.DefaultArmorBonus;
+            shieldBonus = classDef.DefaultShieldBonus;
+            damageDice = classDef.DefaultDamageDice;
+        }
+        else
+        {
+            armorBonus = 0; shieldBonus = 0; damageDice = 6;
         }
     }
 
     /// <summary>
     /// Set up starting equipment based on class (PHB starting packages).
+    /// Delegates to the class definition from ClassRegistry.
     /// </summary>
     private void SetupStartingEquipment(InventoryComponent inv, string className)
     {
         ItemDatabase.Init();
-
-        if (className == "Fighter")
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(className);
+        if (classDef != null)
         {
-            // Fighter Starting Package: Scale Mail, Heavy Wooden Shield, Longsword, Shortbow
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("scale_mail"), EquipSlot.Armor);
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
-
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("torch"));
-            Debug.Log("[GameManager] Fighter equipment: Scale Mail, Heavy Shield, Longsword, Shortbow");
+            classDef.SetupStartingEquipment(inv);
         }
-        else if (className == "Rogue")
+        else
         {
-            // Rogue Starting Package: Leather Armor, Rapier, Shortbow
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("rapier"), EquipSlot.RightHand);
-
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("rope"));
-            Debug.Log("[GameManager] Rogue equipment: Leather Armor, Rapier, Shortbow, Dagger");
+            Debug.LogWarning($"[GameManager] No class definition found for '{className}', skipping equipment setup.");
         }
-        else if (className == "Monk")
-        {
-            // Monk Starting Package: No armor (AC from WIS), Quarterstaff, Sling
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
-
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("sling"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            Debug.Log("[GameManager] Monk equipment: Quarterstaff, Sling (unarmored for WIS AC bonus)");
-        }
-        else if (className == "Barbarian")
-        {
-            // Barbarian Starting Package: Hide Armor, Greataxe, Javelins
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("hide_armor"), EquipSlot.Armor);
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("greataxe"), EquipSlot.RightHand);
-
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            Debug.Log("[GameManager] Barbarian equipment: Hide Armor, Greataxe, 3x Javelin");
-        }
-        else if (className == "Wizard")
-        {
-            // Wizard Starting Package: No armor, Quarterstaff, Light Crossbow
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
-
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("crossbow_light"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            Debug.Log("[GameManager] Wizard equipment: Quarterstaff, Light Crossbow, Dagger (no armor)");
-        }
-        else if (className == "Cleric")
-        {
-            // Cleric Starting Package: Chain Shirt, Heavy Shield, Heavy Mace
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
-
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("crossbow_light"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            Debug.Log("[GameManager] Cleric equipment: Chain Shirt, Heavy Shield, Heavy Mace, Light Crossbow");
-        }
-
         inv.CharacterInventory.RecalculateStats();
     }
 

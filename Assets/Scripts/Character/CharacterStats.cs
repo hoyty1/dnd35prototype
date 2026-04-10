@@ -29,8 +29,16 @@ public class CharacterStats
     /// <summary>Whether this character is a Cleric.</summary>
     public bool IsCleric => CharacterClass == "Cleric";
 
-    /// <summary>Whether this character is a spellcaster (Wizard or Cleric).</summary>
-    public bool IsSpellcaster => IsWizard || IsCleric;
+    /// <summary>Whether this character is a spellcaster. Delegates to ClassRegistry.</summary>
+    public bool IsSpellcaster
+    {
+        get
+        {
+            ClassRegistry.Init();
+            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
+            return classDef != null && classDef.IsSpellcaster;
+        }
+    }
 
     // ========== MONK CLASS FEATURES (D&D 3.5) ==========
 
@@ -231,41 +239,46 @@ public class CharacterStats
     /// <summary>
     /// Class-based Fortitude save bonus (good save progression).
     /// Good: +2 + level/2. Poor: level/3.
-    /// Fighter (good), Barbarian (good), Monk (good), Rogue (poor).
+    /// Delegates to ClassRegistry for which saves are good/poor per class.
     /// At level 3: Good=+3, Poor=+1.
     /// </summary>
     public int ClassFortSave
     {
         get
         {
-            bool goodFort = CharacterClass == "Fighter" || CharacterClass == "Barbarian"
-                         || CharacterClass == "Monk" || CharacterClass == "Cleric";
+            ClassRegistry.Init();
+            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
+            bool goodFort = classDef != null && classDef.GoodFortitude;
             return goodFort ? (2 + Level / 2) : (Level / 3);
         }
     }
 
     /// <summary>
     /// Class-based Reflex save bonus.
-    /// Rogue (good), Monk (good). Fighter/Barbarian/Cleric/Wizard (poor).
+    /// Delegates to ClassRegistry for which saves are good/poor per class.
     /// </summary>
     public int ClassRefSave
     {
         get
         {
-            bool goodRef = CharacterClass == "Rogue" || CharacterClass == "Monk";
+            ClassRegistry.Init();
+            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
+            bool goodRef = classDef != null && classDef.GoodReflex;
             return goodRef ? (2 + Level / 2) : (Level / 3);
         }
     }
 
     /// <summary>
     /// Class-based Will save bonus.
-    /// Monk (good), Cleric (good), Wizard (good). Fighter/Rogue/Barbarian (poor).
+    /// Delegates to ClassRegistry for which saves are good/poor per class.
     /// </summary>
     public int ClassWillSave
     {
         get
         {
-            bool goodWill = CharacterClass == "Monk" || CharacterClass == "Cleric" || CharacterClass == "Wizard";
+            ClassRegistry.Init();
+            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
+            bool goodWill = classDef != null && classDef.GoodWill;
             return goodWill ? (2 + Level / 2) : (Level / 3);
         }
     }
@@ -333,47 +346,16 @@ public class CharacterStats
 
     /// <summary>
     /// Auto-grant feats based on character class.
-    /// Fighter: Power Attack. Rogue: Rapid Shot, Point Blank Shot.
-    /// Monk: Improved Grapple, Stunning Fist, Improved Unarmed Strike.
-    /// Barbarian: (no auto feats - relies on class features).
+    /// Delegates to the class definition from ClassRegistry.
     /// </summary>
     public void InitFeats()
     {
         Feats.Clear();
-        if (CharacterClass == "Fighter")
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
+        if (classDef != null)
         {
-            Feats.Add("Power Attack");
-        }
-        else if (CharacterClass == "Rogue")
-        {
-            Feats.Add("Point Blank Shot");
-            Feats.Add("Rapid Shot");
-        }
-        else if (CharacterClass == "Monk")
-        {
-            // Monk bonus feats (D&D 3.5 PHB):
-            // Level 1: Improved Unarmed Strike (free), Stunning Fist or Improved Grapple (bonus)
-            // Level 2: Combat Reflexes or Deflect Arrows (bonus)
-            Feats.Add("Improved Unarmed Strike");
-            Feats.Add("Stunning Fist");
-            Feats.Add("Improved Grapple");
-            Debug.Log($"[Monk] {CharacterName}: Granted monk bonus feats: Improved Unarmed Strike, Stunning Fist, Improved Grapple");
-        }
-        else if (CharacterClass == "Barbarian")
-        {
-            // Barbarian has no bonus feats, but gets class features (Rage, Fast Movement, etc.)
-            Debug.Log($"[Barbarian] {CharacterName}: Barbarian class features active (Rage, Fast Movement, Uncanny Dodge)");
-        }
-        else if (CharacterClass == "Wizard")
-        {
-            // Wizard gets Scribe Scroll at level 1 (not implemented) and bonus metamagic feat at level 1
-            // For now, just log class features
-            Debug.Log($"[Wizard] {CharacterName}: Wizard class features active (Spellcasting, Arcane Bond)");
-        }
-        else if (CharacterClass == "Cleric")
-        {
-            // Cleric gets Turn Undead (not implemented in combat prototype)
-            Debug.Log($"[Cleric] {CharacterName}: Cleric class features active (Spellcasting, Turn Undead)");
+            classDef.InitFeats(this);
         }
     }
 
