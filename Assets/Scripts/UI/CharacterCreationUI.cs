@@ -6,7 +6,7 @@ using UnityEngine.UI;
 /// <summary>
 /// Complete character creation UI for D&D 3.5.
 /// 5-step flow: Roll Stats → Assign Stats → Choose Race → Choose Class → Review.
-/// Creates 2 PCs before starting the game.
+/// Creates 4 PCs before starting the game.
 /// </summary>
 public class CharacterCreationUI : MonoBehaviour
 {
@@ -14,12 +14,21 @@ public class CharacterCreationUI : MonoBehaviour
     public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, AllocateSkills, SelectFeats, Review }
 
     public Step CurrentStep = Step.RollStats;
-    public int CurrentCharacterIndex = 0; // 0 = PC1, 1 = PC2
-    public CharacterCreationData[] CreatedCharacters = new CharacterCreationData[2];
+    public int CurrentCharacterIndex = 0; // 0 = PC1, 1 = PC2, 2 = PC3, 3 = PC4
+    public CharacterCreationData[] CreatedCharacters = new CharacterCreationData[4];
     public bool IsComplete { get; private set; }
 
-    // Callback when both characters are created
+    /// <summary>Total number of PCs to create.</summary>
+    private const int TotalPCs = 4;
+
+    /// <summary>Default names for each PC slot.</summary>
+    private static readonly string[] DefaultNames = { "Aldric", "Lyra", "Kael", "Grunk" };
+
+    // Legacy callback when 2 characters are created (for backward compat)
     public System.Action<CharacterCreationData, CharacterCreationData> OnCreationComplete;
+
+    /// <summary>Callback when all 4 characters are created (array version).</summary>
+    public System.Action<CharacterCreationData[]> OnCreationComplete4;
 
     // Reference to skills UI for skill allocation step
     public SkillsUIPanel SkillsUI;
@@ -92,8 +101,8 @@ public class CharacterCreationUI : MonoBehaviour
         if (_font == null) _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         if (_font == null) _font = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
-        CreatedCharacters[0] = new CharacterCreationData();
-        CreatedCharacters[1] = new CharacterCreationData();
+        for (int i = 0; i < TotalPCs; i++)
+            CreatedCharacters[i] = new CharacterCreationData();
 
         // Root panel - dark overlay covering entire screen
         _overlayPanel = CreatePanel(canvas.transform, "CCOverlay",
@@ -1031,7 +1040,7 @@ public class CharacterCreationUI : MonoBehaviour
         // Default name
         if (string.IsNullOrEmpty(_nameInput.text))
         {
-            _nameInput.text = CurrentCharacterIndex == 0 ? "Aldric" : "Lyra";
+            _nameInput.text = (CurrentCharacterIndex < DefaultNames.Length) ? DefaultNames[CurrentCharacterIndex] : $"Hero {CurrentCharacterIndex + 1}";
         }
     }
 
@@ -1039,26 +1048,36 @@ public class CharacterCreationUI : MonoBehaviour
     {
         var data = CreatedCharacters[CurrentCharacterIndex];
         data.CharacterName = string.IsNullOrEmpty(_nameInput.text) ?
-            (CurrentCharacterIndex == 0 ? "Hero 1" : "Hero 2") : _nameInput.text;
+            $"Hero {CurrentCharacterIndex + 1}" : _nameInput.text;
         data.ComputeFinalStats();
 
         Debug.Log($"[CharCreation] Created {data.CharacterName}: {data.RaceName} {data.ClassName} " +
                   $"STR {data.FinalSTR} DEX {data.FinalDEX} CON {data.FinalCON} " +
                   $"INT {data.FinalINT} WIS {data.FinalWIS} CHA {data.FinalCHA} HP {data.HP}");
 
-        if (CurrentCharacterIndex == 0)
+        if (CurrentCharacterIndex < TotalPCs - 1)
         {
-            // Move to PC2 creation
-            CurrentCharacterIndex = 1;
+            // Move to next PC creation
+            CurrentCharacterIndex++;
             ResetForNewCharacter();
             ShowStep(Step.RollStats);
         }
         else
         {
-            // Both characters created - start game!
+            // All characters created - start game!
             IsComplete = true;
             HideCreationUI();
-            OnCreationComplete?.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
+
+            // Fire both callbacks for compatibility
+            if (OnCreationComplete4 != null)
+            {
+                OnCreationComplete4.Invoke(CreatedCharacters);
+            }
+            else if (OnCreationComplete != null)
+            {
+                // Legacy: only send first 2
+                OnCreationComplete.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
+            }
         }
     }
 
@@ -1075,7 +1094,7 @@ public class CharacterCreationUI : MonoBehaviour
         _step4Panel.SetActive(false);
         _step5Panel.SetActive(false);
 
-        string heroLabel = CurrentCharacterIndex == 0 ? "Hero 1" : "Hero 2";
+        string heroLabel = $"Hero {CurrentCharacterIndex + 1} of {TotalPCs}";
         _titleText.text = $"CHARACTER CREATION - {heroLabel}";
         _backButton.gameObject.SetActive(step != Step.RollStats);
 
@@ -1201,51 +1220,95 @@ public class CharacterCreationUI : MonoBehaviour
 
     private void OnQuickStart()
     {
-        Debug.Log("[CharCreation] Quick Start - using default Kael (Monk) and Grunk (Barbarian)");
+        Debug.Log("[CharCreation] Quick Start - creating 4 PCs: Aldric (Fighter), Lyra (Rogue), Kael (Monk), Grunk (Barbarian)");
 
         FeatDefinitions.Init();
 
-        // PC1: Kael the Human Monk
+        // PC1: Aldric the Dwarf Fighter
         var pc1 = CreatedCharacters[0];
-        pc1.CharacterName = "Kael";
-        pc1.RaceName = "Human";
-        pc1.Race = RaceDatabase.GetRace("Human");
-        pc1.ClassName = "Monk";
-        pc1.STR = 14; pc1.DEX = 16; pc1.CON = 12;
-        pc1.INT = 10; pc1.WIS = 15; pc1.CHA = 8;
+        pc1.CharacterName = "Aldric";
+        pc1.RaceName = "Dwarf";
+        pc1.Race = RaceDatabase.GetRace("Dwarf");
+        pc1.ClassName = "Fighter";
+        pc1.STR = 16; pc1.DEX = 12; pc1.CON = 14;
+        pc1.INT = 10; pc1.WIS = 10; pc1.CHA = 13;
         pc1.ComputeFinalStats();
-        // Default Monk skills (4+INT mod=4 per level, ×4 at level 1 = 16 + 8 = 24 total)
-        pc1.SkillRanks["Balance"] = 6;
         pc1.SkillRanks["Climb"] = 4;
-        pc1.SkillRanks["Jump"] = 4;
-        pc1.SkillRanks["Listen"] = 4;
-        pc1.SkillRanks["Move Silently"] = 4;
-        pc1.SkillRanks["Tumble"] = 6;
-        // Kael feats: Monk auto-feats (Improved Unarmed Strike, Stunning Fist, Improved Grapple)
-        // + 2 general feats (level 1 + level 3) + 1 human bonus feat
-        pc1.SelectedFeats = new System.Collections.Generic.List<string> { "Dodge", "Combat Reflexes", "Improved Initiative" };
+        pc1.SkillRanks["Intimidate"] = 4;
+        pc1.SkillRanks["Jump"] = 3;
+        pc1.SkillRanks["Swim"] = 3;
+        pc1.SelectedFeats = new System.Collections.Generic.List<string> { "Power Attack", "Cleave" };
+        pc1.BonusFeats = new System.Collections.Generic.List<string> { "Weapon Focus" };
+        pc1.WeaponFocusChoice = "Longsword";
 
-        // PC2: Grunk the Half-Orc Barbarian
+        // PC2: Lyra the Elf Rogue
         var pc2 = CreatedCharacters[1];
-        pc2.CharacterName = "Grunk";
-        pc2.RaceName = "Half-Orc";
-        pc2.Race = RaceDatabase.GetRace("Half-Orc");
-        pc2.ClassName = "Barbarian";
-        pc2.STR = 17; pc2.DEX = 13; pc2.CON = 16;
-        pc2.INT = 8; pc2.WIS = 10; pc2.CHA = 10;
+        pc2.CharacterName = "Lyra";
+        pc2.RaceName = "Elf";
+        pc2.Race = RaceDatabase.GetRace("Elf");
+        pc2.ClassName = "Rogue";
+        pc2.STR = 12; pc2.DEX = 17; pc2.CON = 12;
+        pc2.INT = 14; pc2.WIS = 13; pc2.CHA = 10;
         pc2.ComputeFinalStats();
-        // Default Barbarian skills (4+INT mod=3 per level, ×4 at level 1 = 12 + 6 = 18 total)
-        pc2.SkillRanks["Climb"] = 6;
-        pc2.SkillRanks["Intimidate"] = 6;
-        pc2.SkillRanks["Jump"] = 6;
+        pc2.SkillRanks["Hide"] = 6;
+        pc2.SkillRanks["Move Silently"] = 6;
+        pc2.SkillRanks["Spot"] = 6;
         pc2.SkillRanks["Listen"] = 6;
-        pc2.SkillRanks["Swim"] = 6;
-        // Grunk feats: 2 general feats (level 1 + level 3)
-        pc2.SelectedFeats = new System.Collections.Generic.List<string> { "Power Attack", "Cleave" };
+        pc2.SkillRanks["Disable Device"] = 5;
+        pc2.SkillRanks["Open Lock"] = 5;
+        pc2.SkillRanks["Search"] = 5;
+        pc2.SkillRanks["Tumble"] = 4;
+        pc2.SkillRanks["Bluff"] = 4;
+        pc2.SkillRanks["Diplomacy"] = 4;
+        pc2.SkillRanks["Climb"] = 4;
+        pc2.SkillRanks["Balance"] = 3;
+        pc2.SkillRanks["Sleight of Hand"] = 2;
+        pc2.SelectedFeats = new System.Collections.Generic.List<string> { "Weapon Finesse", "Dodge" };
+
+        // PC3: Kael the Human Monk
+        var pc3 = CreatedCharacters[2];
+        pc3.CharacterName = "Kael";
+        pc3.RaceName = "Human";
+        pc3.Race = RaceDatabase.GetRace("Human");
+        pc3.ClassName = "Monk";
+        pc3.STR = 14; pc3.DEX = 16; pc3.CON = 12;
+        pc3.INT = 10; pc3.WIS = 15; pc3.CHA = 8;
+        pc3.ComputeFinalStats();
+        pc3.SkillRanks["Balance"] = 6;
+        pc3.SkillRanks["Climb"] = 4;
+        pc3.SkillRanks["Jump"] = 4;
+        pc3.SkillRanks["Listen"] = 4;
+        pc3.SkillRanks["Move Silently"] = 4;
+        pc3.SkillRanks["Tumble"] = 6;
+        pc3.SelectedFeats = new System.Collections.Generic.List<string> { "Dodge", "Combat Reflexes", "Improved Initiative" };
+
+        // PC4: Grunk the Half-Orc Barbarian
+        var pc4 = CreatedCharacters[3];
+        pc4.CharacterName = "Grunk";
+        pc4.RaceName = "Half-Orc";
+        pc4.Race = RaceDatabase.GetRace("Half-Orc");
+        pc4.ClassName = "Barbarian";
+        pc4.STR = 17; pc4.DEX = 13; pc4.CON = 16;
+        pc4.INT = 8; pc4.WIS = 10; pc4.CHA = 10;
+        pc4.ComputeFinalStats();
+        pc4.SkillRanks["Climb"] = 6;
+        pc4.SkillRanks["Intimidate"] = 6;
+        pc4.SkillRanks["Jump"] = 6;
+        pc4.SkillRanks["Listen"] = 6;
+        pc4.SkillRanks["Swim"] = 6;
+        pc4.SelectedFeats = new System.Collections.Generic.List<string> { "Power Attack", "Cleave" };
 
         IsComplete = true;
         HideCreationUI();
-        OnCreationComplete?.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
+
+        if (OnCreationComplete4 != null)
+        {
+            OnCreationComplete4.Invoke(CreatedCharacters);
+        }
+        else if (OnCreationComplete != null)
+        {
+            OnCreationComplete.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
+        }
     }
 
     // ========== SHOW / HIDE ==========

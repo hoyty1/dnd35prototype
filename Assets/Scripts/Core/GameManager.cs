@@ -5,8 +5,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Central game manager handling turn flow with D&D 3.5 action economy.
-/// Supports two PC characters and multiple NPC enemies with varied AI behaviors.
-/// Turn order: PC1 → PC2 → All NPCs (sequential) → repeat
+/// Supports four PC characters and multiple NPC enemies with varied AI behaviors.
+/// Turn order is determined by D&D 3.5 Initiative rolls at combat start.
 ///
 /// Action Economy per turn:
 /// - 1 Move Action + 1 Standard Action (in any order)
@@ -27,7 +27,12 @@ public class GameManager : MonoBehaviour
     [Header("Characters")]
     public CharacterController PC1;
     public CharacterController PC2;
+    public CharacterController PC3;
+    public CharacterController PC4;
     public CharacterController NPC;  // Legacy field — first NPC for backward compat
+
+    /// <summary>All player characters in the party (supports 4 PCs).</summary>
+    public List<CharacterController> PCs = new List<CharacterController>();
 
     /// <summary>All NPC enemies in the encounter (supports multiple enemies).</summary>
     public List<CharacterController> NPCs = new List<CharacterController>();
@@ -47,8 +52,8 @@ public class GameManager : MonoBehaviour
     /// <summary>Whether the game is waiting for character creation to complete.</summary>
     public bool WaitingForCharacterCreation { get; private set; }
 
-    // Game state - simplified phases
-    public enum TurnPhase { PC1Turn, PC2Turn, NPCTurn, CombatOver }
+    // Game state
+    public enum TurnPhase { PCTurn, NPCTurn, CombatOver }
 
     // Sub-states for player turns
     public enum PlayerSubPhase { ChoosingAction, Moving, SelectingAttackTarget, Animating }
@@ -56,13 +61,22 @@ public class GameManager : MonoBehaviour
     public TurnPhase CurrentPhase { get; private set; }
     public PlayerSubPhase CurrentSubPhase { get; private set; }
 
-    /// <summary>Returns the PC whose turn it currently is.</summary>
+    // ========== INITIATIVE SYSTEM ==========
+    /// <summary>Sorted initiative order for all combatants.</summary>
+    private List<InitiativeSystem.InitiativeEntry> _initiativeOrder = new List<InitiativeSystem.InitiativeEntry>();
+    /// <summary>Current index in initiative order (whose turn it is).</summary>
+    private int _currentInitiativeIndex;
+
+    /// <summary>The character currently taking their turn (PC or NPC).</summary>
+    private CharacterController _activeTurnCharacter;
+
+    /// <summary>Returns the PC whose turn it currently is (null during NPC turns).</summary>
     public CharacterController ActivePC
     {
         get
         {
-            if (CurrentPhase == TurnPhase.PC1Turn) return PC1;
-            if (CurrentPhase == TurnPhase.PC2Turn) return PC2;
+            if (CurrentPhase == TurnPhase.PCTurn && _activeTurnCharacter != null && IsPC(_activeTurnCharacter))
+                return _activeTurnCharacter;
             return null;
         }
     }
@@ -93,178 +107,177 @@ public class GameManager : MonoBehaviour
         CenterCamera();
         _mainCam = Camera.main;
 
+        // Initialize icon system
+        IconManager.Init();
+
         // Check if character creation UI exists
         if (CharacterCreationUI != null)
         {
             WaitingForCharacterCreation = true;
             CharacterCreationUI.OnCreationComplete = OnCharacterCreationComplete;
+            CharacterCreationUI.OnCreationComplete4 = OnCharacterCreationComplete4;
             Debug.Log("[GameManager] Waiting for character creation...");
         }
         else
         {
             // No creation UI - use default characters
             SetupCharacters();
-            StartPCTurn(PC1);
-            Debug.Log("[GameManager] Initialization complete (default characters). Phase: " + CurrentPhase);
+            StartCombat();
+            Debug.Log("[GameManager] Initialization complete (default characters).");
         }
     }
 
-    /// <summary>
-    /// Called when both characters have been created through the character creation UI.
-    /// </summary>
-    private void OnCharacterCreationComplete(CharacterCreationData pc1Data, CharacterCreationData pc2Data)
+    // ========== HELPER: Check if a character is a PC ==========
+    private bool IsPC(CharacterController c)
     {
-        WaitingForCharacterCreation = false;
-        Debug.Log($"[GameManager] Character creation complete: {pc1Data.CharacterName} ({pc1Data.RaceName} {pc1Data.ClassName}), " +
-                  $"{pc2Data.CharacterName} ({pc2Data.RaceName} {pc2Data.ClassName})");
+        return PCs.Contains(c);
+    }
 
-        SetupCreatedCharacters(pc1Data, pc2Data);
-        UpdateAllStatsUI();
-        StartPCTurn(PC1);
+    /// <summary>Get the 1-based PC index (1-4) for a given character, or 0 if not a PC.</summary>
+    private int GetPCIndex(CharacterController c)
+    {
+        int idx = PCs.IndexOf(c);
+        return idx >= 0 ? idx + 1 : 0;
     }
 
     /// <summary>
-    /// Set up characters from character creation data.
+    /// Called when all characters have been created through the character creation UI.
+    /// Supports both legacy 2-param callback and new 4-param array callback.
     /// </summary>
-    private void SetupCreatedCharacters(CharacterCreationData pc1Data, CharacterCreationData pc2Data)
+    private void OnCharacterCreationComplete(CharacterCreationData pc1Data, CharacterCreationData pc2Data)
+    {
+        // Legacy 2-PC callback — wrap into array with 2 entries
+        WaitingForCharacterCreation = false;
+        Debug.Log($"[GameManager] Character creation complete (2 PCs): {pc1Data.CharacterName}, {pc2Data.CharacterName}");
+        SetupCreatedCharacters(new CharacterCreationData[] { pc1Data, pc2Data });
+        UpdateAllStatsUI();
+        StartCombat();
+    }
+
+    /// <summary>
+    /// Called when all 4 characters have been created through the character creation UI.
+    /// </summary>
+    public void OnCharacterCreationComplete4(CharacterCreationData[] pcDataArray)
+    {
+        WaitingForCharacterCreation = false;
+        Debug.Log($"[GameManager] Character creation complete ({pcDataArray.Length} PCs)");
+        SetupCreatedCharacters(pcDataArray);
+        UpdateAllStatsUI();
+        StartCombat();
+    }
+
+    /// <summary>
+    /// Set up characters from character creation data (supports 2-4 PCs).
+    /// </summary>
+    private void SetupCreatedCharacters(CharacterCreationData[] pcDataArray)
     {
         RaceDatabase.Init();
         ItemDatabase.Init();
-
-        // ===== PC1 =====
-        pc1Data.ComputeFinalStats();
-        int pc1ArmorBonus, pc1ShieldBonus, pc1DamageDice;
-        GetClassDefaults(pc1Data.ClassName, out pc1ArmorBonus, out pc1ShieldBonus, out pc1DamageDice);
-
-        CharacterStats pc1Stats = new CharacterStats(
-            name: pc1Data.CharacterName,
-            level: 3,
-            characterClass: pc1Data.ClassName,
-            str: pc1Data.STR, dex: pc1Data.DEX, con: pc1Data.CON,
-            wis: pc1Data.WIS, intelligence: pc1Data.INT, cha: pc1Data.CHA,
-            bab: pc1Data.BAB,
-            armorBonus: pc1ArmorBonus,
-            shieldBonus: pc1ShieldBonus,
-            damageDice: pc1DamageDice,
-            damageCount: 1,
-            bonusDamage: 0,
-            baseSpeed: pc1Data.BaseSpeed,
-            atkRange: 1,
-            baseHitDieHP: pc1Data.HP,
-            raceName: pc1Data.RaceName
-        );
+        FeatDefinitions.Init();
 
         Sprite pcAlive = LoadSprite("Sprites/pc_alive");
         Sprite pcDead = LoadSprite("Sprites/pc_dead");
 
-        Vector2Int pc1Start = new Vector2Int(3, 8);
-        PC1.Init(pc1Stats, pc1Start, pcAlive, pcDead);
-
-        var pc1Inv = PC1.gameObject.AddComponent<InventoryComponent>();
-        pc1Inv.Init(pc1Stats);
-        SetupStartingEquipment(pc1Inv, pc1Data.ClassName);
-
-        // Initialize skills (skill allocation was done during character creation)
-        pc1Stats.InitializeSkills(pc1Data.ClassName, 3);
-        // Apply pre-allocated skill ranks from character creation
-        if (pc1Data.SkillRanks != null)
+        // PC starting positions
+        Vector2Int[] pcPositions = new Vector2Int[]
         {
-            foreach (var kvp in pc1Data.SkillRanks)
+            new Vector2Int(3, 6),
+            new Vector2Int(3, 9),
+            new Vector2Int(3, 12),
+            new Vector2Int(3, 15)
+        };
+
+        // Tint colors for PCs (each distinct)
+        Color[] pcColors = new Color[]
+        {
+            Color.white,
+            new Color(0.6f, 0.7f, 1f, 1f),
+            new Color(0.7f, 1f, 0.7f, 1f),
+            new Color(1f, 0.8f, 0.6f, 1f)
+        };
+
+        CharacterController[] pcSlots = new CharacterController[] { PC1, PC2, PC3, PC4 };
+
+        for (int i = 0; i < pcDataArray.Length && i < pcSlots.Length; i++)
+        {
+            if (pcSlots[i] == null) continue;
+            CharacterCreationData data = pcDataArray[i];
+            data.ComputeFinalStats();
+
+            int armorBonus, shieldBonus, damageDice;
+            GetClassDefaults(data.ClassName, out armorBonus, out shieldBonus, out damageDice);
+
+            CharacterStats stats = new CharacterStats(
+                name: data.CharacterName,
+                level: 3,
+                characterClass: data.ClassName,
+                str: data.STR, dex: data.DEX, con: data.CON,
+                wis: data.WIS, intelligence: data.INT, cha: data.CHA,
+                bab: data.BAB,
+                armorBonus: armorBonus,
+                shieldBonus: shieldBonus,
+                damageDice: damageDice,
+                damageCount: 1,
+                bonusDamage: 0,
+                baseSpeed: data.BaseSpeed,
+                atkRange: 1,
+                baseHitDieHP: data.HP,
+                raceName: data.RaceName
+            );
+
+            Vector2Int startPos = (i < pcPositions.Length) ? pcPositions[i] : new Vector2Int(3, 6 + i * 3);
+            pcSlots[i].Init(stats, startPos, pcAlive, pcDead);
+
+            // Tint
+            if (i > 0)
             {
-                for (int i = 0; i < kvp.Value; i++)
-                    pc1Stats.AddSkillRank(kvp.Key);
+                SpriteRenderer sr = pcSlots[i].GetComponent<SpriteRenderer>();
+                if (sr != null) sr.color = pcColors[i];
             }
-        }
 
-        // Apply feats from character creation
-        FeatDefinitions.Init();
-        if (pc1Data.SelectedFeats != null && pc1Data.SelectedFeats.Count > 0)
-        {
-            pc1Stats.AddFeats(pc1Data.SelectedFeats);
-            Debug.Log($"[GameManager] {pc1Data.CharacterName} general feats: {string.Join(", ", pc1Data.SelectedFeats)}");
-        }
-        if (pc1Data.BonusFeats != null && pc1Data.BonusFeats.Count > 0)
-        {
-            pc1Stats.AddFeats(pc1Data.BonusFeats);
-            Debug.Log($"[GameManager] {pc1Data.CharacterName} bonus feats: {string.Join(", ", pc1Data.BonusFeats)}");
-        }
-        if (!string.IsNullOrEmpty(pc1Data.WeaponFocusChoice))
-            pc1Stats.WeaponFocusChoice = pc1Data.WeaponFocusChoice;
-        if (!string.IsNullOrEmpty(pc1Data.SkillFocusChoice))
-            pc1Stats.SkillFocusChoice = pc1Data.SkillFocusChoice;
-        FeatManager.ApplyPassiveFeats(pc1Stats);
+            // Inventory
+            var inv = pcSlots[i].gameObject.AddComponent<InventoryComponent>();
+            inv.Init(stats);
+            SetupStartingEquipment(inv, data.ClassName);
 
-        Debug.Log($"[GameManager] {pc1Data.CharacterName} ({pc1Data.RaceName} {pc1Data.ClassName}): " +
-                  $"STR {pc1Stats.STR} DEX {pc1Stats.DEX} CON {pc1Stats.CON} " +
-                  $"HP {pc1Stats.MaxHP} AC {pc1Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc1Stats.AttackBonus)} " +
-                  $"Feats: {pc1Stats.Feats.Count}");
-
-        // ===== PC2 =====
-        pc2Data.ComputeFinalStats();
-        int pc2ArmorBonus, pc2ShieldBonus, pc2DamageDice;
-        GetClassDefaults(pc2Data.ClassName, out pc2ArmorBonus, out pc2ShieldBonus, out pc2DamageDice);
-
-        CharacterStats pc2Stats = new CharacterStats(
-            name: pc2Data.CharacterName,
-            level: 3,
-            characterClass: pc2Data.ClassName,
-            str: pc2Data.STR, dex: pc2Data.DEX, con: pc2Data.CON,
-            wis: pc2Data.WIS, intelligence: pc2Data.INT, cha: pc2Data.CHA,
-            bab: pc2Data.BAB,
-            armorBonus: pc2ArmorBonus,
-            shieldBonus: pc2ShieldBonus,
-            damageDice: pc2DamageDice,
-            damageCount: 1,
-            bonusDamage: 0,
-            baseSpeed: pc2Data.BaseSpeed,
-            atkRange: 1,
-            baseHitDieHP: pc2Data.HP,
-            raceName: pc2Data.RaceName
-        );
-
-        Vector2Int pc2Start = new Vector2Int(3, 12);
-        PC2.Init(pc2Stats, pc2Start, pcAlive, pcDead);
-
-        SpriteRenderer pc2SR = PC2.GetComponent<SpriteRenderer>();
-        if (pc2SR != null)
-            pc2SR.color = new Color(0.6f, 0.7f, 1f, 1f);
-
-        var pc2Inv = PC2.gameObject.AddComponent<InventoryComponent>();
-        pc2Inv.Init(pc2Stats);
-        SetupStartingEquipment(pc2Inv, pc2Data.ClassName);
-
-        // Initialize skills for PC2
-        pc2Stats.InitializeSkills(pc2Data.ClassName, 3);
-        if (pc2Data.SkillRanks != null)
-        {
-            foreach (var kvp in pc2Data.SkillRanks)
+            // Skills
+            stats.InitializeSkills(data.ClassName, 3);
+            if (data.SkillRanks != null)
             {
-                for (int i = 0; i < kvp.Value; i++)
-                    pc2Stats.AddSkillRank(kvp.Key);
+                foreach (var kvp in data.SkillRanks)
+                {
+                    for (int r = 0; r < kvp.Value; r++)
+                        stats.AddSkillRank(kvp.Key);
+                }
             }
-        }
 
-        // Apply feats from character creation
-        if (pc2Data.SelectedFeats != null && pc2Data.SelectedFeats.Count > 0)
-        {
-            pc2Stats.AddFeats(pc2Data.SelectedFeats);
-            Debug.Log($"[GameManager] {pc2Data.CharacterName} general feats: {string.Join(", ", pc2Data.SelectedFeats)}");
-        }
-        if (pc2Data.BonusFeats != null && pc2Data.BonusFeats.Count > 0)
-        {
-            pc2Stats.AddFeats(pc2Data.BonusFeats);
-            Debug.Log($"[GameManager] {pc2Data.CharacterName} bonus feats: {string.Join(", ", pc2Data.BonusFeats)}");
-        }
-        if (!string.IsNullOrEmpty(pc2Data.WeaponFocusChoice))
-            pc2Stats.WeaponFocusChoice = pc2Data.WeaponFocusChoice;
-        if (!string.IsNullOrEmpty(pc2Data.SkillFocusChoice))
-            pc2Stats.SkillFocusChoice = pc2Data.SkillFocusChoice;
-        FeatManager.ApplyPassiveFeats(pc2Stats);
+            // Feats
+            if (data.SelectedFeats != null && data.SelectedFeats.Count > 0)
+            {
+                stats.AddFeats(data.SelectedFeats);
+                Debug.Log($"[GameManager] {data.CharacterName} general feats: {string.Join(", ", data.SelectedFeats)}");
+            }
+            if (data.BonusFeats != null && data.BonusFeats.Count > 0)
+            {
+                stats.AddFeats(data.BonusFeats);
+                Debug.Log($"[GameManager] {data.CharacterName} bonus feats: {string.Join(", ", data.BonusFeats)}");
+            }
+            if (!string.IsNullOrEmpty(data.WeaponFocusChoice))
+                stats.WeaponFocusChoice = data.WeaponFocusChoice;
+            if (!string.IsNullOrEmpty(data.SkillFocusChoice))
+                stats.SkillFocusChoice = data.SkillFocusChoice;
+            FeatManager.ApplyPassiveFeats(stats);
 
-        Debug.Log($"[GameManager] {pc2Data.CharacterName} ({pc2Data.RaceName} {pc2Data.ClassName}): " +
-                  $"STR {pc2Stats.STR} DEX {pc2Stats.DEX} CON {pc2Stats.CON} " +
-                  $"HP {pc2Stats.MaxHP} AC {pc2Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc2Stats.AttackBonus)} " +
-                  $"Feats: {pc2Stats.Feats.Count}");
+            Debug.Log($"[GameManager] {data.CharacterName} ({data.RaceName} {data.ClassName}): " +
+                      $"STR {stats.STR} DEX {stats.DEX} CON {stats.CON} " +
+                      $"HP {stats.MaxHP} AC {stats.ArmorClass} Atk {CharacterStats.FormatMod(stats.AttackBonus)} " +
+                      $"Feats: {stats.Feats.Count}");
+
+            // Set PC icon
+            Sprite classIcon = IconManager.GetClassIcon(data.ClassName);
+            if (classIcon != null && CombatUI != null)
+                CombatUI.SetPCIcon(i + 1, classIcon);
+        }
 
         // ===== NPCs (Multiple Enemies) =====
         SetupEnemyEncounter();
@@ -283,9 +296,9 @@ public class GameManager : MonoBehaviour
             case "Rogue":
                 armorBonus = 2; shieldBonus = 0; damageDice = 6; break;
             case "Monk":
-                armorBonus = 0; shieldBonus = 0; damageDice = 6; break; // Monk: unarmored, unarmed 1d6
+                armorBonus = 0; shieldBonus = 0; damageDice = 6; break;
             case "Barbarian":
-                armorBonus = 3; shieldBonus = 0; damageDice = 12; break; // Barbarian: hide armor, greataxe 1d12
+                armorBonus = 3; shieldBonus = 0; damageDice = 12; break;
             default:
                 armorBonus = 0; shieldBonus = 0; damageDice = 6; break;
         }
@@ -300,11 +313,9 @@ public class GameManager : MonoBehaviour
 
         if (className == "Fighter")
         {
-            // Fighter Starting Package: Scale Mail, Heavy Wooden Shield, Longsword, Shortbow
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("scale_mail"), EquipSlot.Armor);
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
-
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
@@ -313,10 +324,8 @@ public class GameManager : MonoBehaviour
         }
         else if (className == "Rogue")
         {
-            // Rogue Starting Package: Leather Armor, Rapier, Shortbow
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("rapier"), EquipSlot.RightHand);
-
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
@@ -326,9 +335,7 @@ public class GameManager : MonoBehaviour
         }
         else if (className == "Monk")
         {
-            // Monk Starting Package: No armor (AC from WIS), Quarterstaff, Sling
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
-
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("sling"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
@@ -336,10 +343,8 @@ public class GameManager : MonoBehaviour
         }
         else if (className == "Barbarian")
         {
-            // Barbarian Starting Package: Hide Armor, Greataxe, Javelins
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("hide_armor"), EquipSlot.Armor);
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("greataxe"), EquipSlot.RightHand);
-
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
@@ -364,13 +369,9 @@ public class GameManager : MonoBehaviour
 
         if (!IsPlayerTurn) return;
         if (CurrentSubPhase == PlayerSubPhase.Animating) return;
-        if (_waitingForAoOConfirmation) return; // Block input during AoO confirmation dialog
+        if (_waitingForAoOConfirmation) return;
         if (InventoryUI != null && InventoryUI.IsOpen) return;
-        if (SkillsUI != null && SkillsUI.IsOpen)
-        {
-            // Debug: log only once per open state to avoid spam
-            return;
-        }
+        if (SkillsUI != null && SkillsUI.IsOpen) return;
 
         bool clicked = false;
         Vector3 mouseScreenPos = Vector3.zero;
@@ -397,7 +398,7 @@ public class GameManager : MonoBehaviour
 
         if (!clicked || _mainCam == null) return;
 
-        // Check if pointer is over a UI element (buttons, panels, etc.)
+        // Check if pointer is over a UI element
         if (UnityEngine.EventSystems.EventSystem.current != null &&
             UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
         {
@@ -446,7 +447,6 @@ public class GameManager : MonoBehaviour
             if (InventoryUI.IsOpen)
             {
                 InventoryUI.Close();
-                // Refresh action buttons after inventory changes (might affect dual wield)
                 if (IsPlayerTurn && ActivePC != null && CurrentSubPhase == PlayerSubPhase.ChoosingAction)
                     ShowActionChoices();
             }
@@ -496,16 +496,18 @@ public class GameManager : MonoBehaviour
             InventoryUI.Close();
     }
 
+    // ========== DEFAULT CHARACTER SETUP (Quick Start / No Creation UI) ==========
+
     private void SetupCharacters()
     {
-        // Initialize race database
         RaceDatabase.Init();
+        FeatDefinitions.Init();
+
+        Sprite pcAlive = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
 
         // ==========================================
         // PC1: "Aldric" - Dwarf Fighter (Level 3)
-        // Base scores: STR 16, DEX 12, CON 14, WIS 10, INT 10, CHA 13
-        // Dwarf racial: CON +2 = 16, CHA -2 = 11
-        // Dwarf speed: 20 ft (4 squares), NOT reduced by armor
         // ==========================================
         CharacterStats pc1Stats = new CharacterStats(
             name: "Aldric",
@@ -518,7 +520,7 @@ public class GameManager : MonoBehaviour
             damageDice: 8,
             damageCount: 1,
             bonusDamage: 0,
-            baseSpeed: 4,  // overridden by race
+            baseSpeed: 4,
             atkRange: 1,
             baseHitDieHP: 22,
             raceName: "Dwarf"
@@ -528,19 +530,14 @@ public class GameManager : MonoBehaviour
                   $"WIS {pc1Stats.WIS} INT {pc1Stats.INT} CHA {pc1Stats.CHA} | " +
                   $"HP {pc1Stats.MaxHP} | Speed {pc1Stats.MoveRange} squares ({pc1Stats.SpeedInFeet} ft)");
 
-        Sprite pcAlive = LoadSprite("Sprites/pc_alive");
-        Sprite pcDead = LoadSprite("Sprites/pc_dead");
-
-        Vector2Int pc1Start = new Vector2Int(3, 8);
+        Vector2Int pc1Start = new Vector2Int(3, 6);
         PC1.Init(pc1Stats, pc1Start, pcAlive, pcDead);
 
         var pc1Inv = PC1.gameObject.AddComponent<InventoryComponent>();
         pc1Inv.Init(pc1Stats);
         pc1Inv.SetupAldric();
 
-        // Initialize skills for Aldric (Fighter)
         pc1Stats.InitializeSkills("Fighter", 3);
-        // Default skill allocation: Climb 4, Intimidate 4, Jump 3, Swim 3
         for (int i = 0; i < 4; i++) pc1Stats.AddSkillRank("Climb");
         for (int i = 0; i < 4; i++) pc1Stats.AddSkillRank("Intimidate");
         for (int i = 0; i < 3; i++) pc1Stats.AddSkillRank("Jump");
@@ -548,10 +545,6 @@ public class GameManager : MonoBehaviour
 
         // ==========================================
         // PC2: "Lyra" - Elf Rogue (Level 3)
-        // Base scores: STR 12, DEX 17, CON 12, WIS 13, INT 14, CHA 10
-        // Elf racial: DEX +2 = 19, CON -2 = 10
-        // Elf speed: 30 ft (6 squares)
-        // Elf weapon proficiencies: longsword, rapier, longbow, shortbow
         // ==========================================
         CharacterStats pc2Stats = new CharacterStats(
             name: "Lyra",
@@ -564,7 +557,7 @@ public class GameManager : MonoBehaviour
             damageDice: 6,
             damageCount: 1,
             bonusDamage: 0,
-            baseSpeed: 5,  // overridden by race
+            baseSpeed: 5,
             atkRange: 1,
             baseHitDieHP: 15,
             raceName: "Elf"
@@ -574,16 +567,14 @@ public class GameManager : MonoBehaviour
                   $"WIS {pc2Stats.WIS} INT {pc2Stats.INT} CHA {pc2Stats.CHA} | " +
                   $"HP {pc2Stats.MaxHP} | Speed {pc2Stats.MoveRange} squares ({pc2Stats.SpeedInFeet} ft)");
 
-        Vector2Int pc2Start = new Vector2Int(3, 12);
+        Vector2Int pc2Start = new Vector2Int(3, 9);
         PC2.Init(pc2Stats, pc2Start, pcAlive, pcDead);
 
         var pc2Inv = PC2.gameObject.AddComponent<InventoryComponent>();
         pc2Inv.Init(pc2Stats);
         pc2Inv.SetupLyra();
 
-        // Initialize skills for Lyra (Rogue) - INT 14 (+2), so (8+2)×4 = 40 at level 1, +10×2 = 60 total
         pc2Stats.InitializeSkills("Rogue", 3);
-        // Default skill allocation for Lyra
         for (int i = 0; i < 6; i++) pc2Stats.AddSkillRank("Hide");
         for (int i = 0; i < 6; i++) pc2Stats.AddSkillRank("Move Silently");
         for (int i = 0; i < 6; i++) pc2Stats.AddSkillRank("Spot");
@@ -603,22 +594,133 @@ public class GameManager : MonoBehaviour
             pc2SR.color = new Color(0.6f, 0.7f, 1f, 1f);
 
         // ==========================================
+        // PC3: "Kael" - Human Monk (Level 3)
+        // ==========================================
+        CharacterStats pc3Stats = new CharacterStats(
+            name: "Kael",
+            level: 3,
+            characterClass: "Monk",
+            str: 14, dex: 16, con: 12, wis: 15, intelligence: 10, cha: 8,
+            bab: 2,
+            armorBonus: 0,  // Monk: unarmored (WIS to AC)
+            shieldBonus: 0,
+            damageDice: 6,  // Monk unarmed 1d6 at level 3
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,   // Monk: 30 ft base + fast movement = 40 ft (8 sq) at level 3
+            atkRange: 1,
+            baseHitDieHP: 18,
+            raceName: "Human"
+        );
+
+        Debug.Log($"[GameManager] Kael (Human Monk): STR {pc3Stats.STR} DEX {pc3Stats.DEX} CON {pc3Stats.CON} " +
+                  $"WIS {pc3Stats.WIS} INT {pc3Stats.INT} CHA {pc3Stats.CHA} | " +
+                  $"HP {pc3Stats.MaxHP} | Speed {pc3Stats.MoveRange} squares ({pc3Stats.SpeedInFeet} ft)");
+
+        Vector2Int pc3Start = new Vector2Int(3, 12);
+        if (PC3 != null)
+        {
+            PC3.Init(pc3Stats, pc3Start, pcAlive, pcDead);
+
+            var pc3Inv = PC3.gameObject.AddComponent<InventoryComponent>();
+            pc3Inv.Init(pc3Stats);
+            SetupStartingEquipment(pc3Inv, "Monk");
+
+            pc3Stats.InitializeSkills("Monk", 3);
+            for (int i = 0; i < 6; i++) pc3Stats.AddSkillRank("Tumble");
+            for (int i = 0; i < 6; i++) pc3Stats.AddSkillRank("Balance");
+            for (int i = 0; i < 6; i++) pc3Stats.AddSkillRank("Listen");
+            for (int i = 0; i < 6; i++) pc3Stats.AddSkillRank("Spot");
+
+            SpriteRenderer pc3SR = PC3.GetComponent<SpriteRenderer>();
+            if (pc3SR != null)
+                pc3SR.color = new Color(0.7f, 1f, 0.7f, 1f);
+        }
+
+        // ==========================================
+        // PC4: "Grunk" - Half-Orc Barbarian (Level 3)
+        // ==========================================
+        CharacterStats pc4Stats = new CharacterStats(
+            name: "Grunk",
+            level: 3,
+            characterClass: "Barbarian",
+            str: 18, dex: 13, con: 16, wis: 10, intelligence: 8, cha: 6,
+            bab: 3,
+            armorBonus: 3,  // Hide armor
+            shieldBonus: 0,
+            damageDice: 12, // Greataxe 1d12
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 8,   // Barbarian fast movement: 40 ft (8 squares)
+            atkRange: 1,
+            baseHitDieHP: 28,
+            raceName: "Half-Orc"
+        );
+
+        Debug.Log($"[GameManager] Grunk (Half-Orc Barbarian): STR {pc4Stats.STR} DEX {pc4Stats.DEX} CON {pc4Stats.CON} " +
+                  $"WIS {pc4Stats.WIS} INT {pc4Stats.INT} CHA {pc4Stats.CHA} | " +
+                  $"HP {pc4Stats.MaxHP} | Speed {pc4Stats.MoveRange} squares ({pc4Stats.SpeedInFeet} ft)");
+
+        Vector2Int pc4Start = new Vector2Int(3, 15);
+        if (PC4 != null)
+        {
+            PC4.Init(pc4Stats, pc4Start, pcAlive, pcDead);
+
+            var pc4Inv = PC4.gameObject.AddComponent<InventoryComponent>();
+            pc4Inv.Init(pc4Stats);
+            SetupStartingEquipment(pc4Inv, "Barbarian");
+
+            pc4Stats.InitializeSkills("Barbarian", 3);
+            for (int i = 0; i < 6; i++) pc4Stats.AddSkillRank("Climb");
+            for (int i = 0; i < 6; i++) pc4Stats.AddSkillRank("Intimidate");
+            for (int i = 0; i < 6; i++) pc4Stats.AddSkillRank("Jump");
+            for (int i = 0; i < 6; i++) pc4Stats.AddSkillRank("Swim");
+
+            SpriteRenderer pc4SR = PC4.GetComponent<SpriteRenderer>();
+            if (pc4SR != null)
+                pc4SR.color = new Color(1f, 0.8f, 0.6f, 1f);
+        }
+
+        // ==========================================
         // NPCs: Multiple enemies from EnemyDatabase
         // ==========================================
         SetupEnemyEncounter();
 
+        // Set PC icons
+        SetupPCIcons();
+
         UpdateAllStatsUI();
+    }
+
+    /// <summary>Set class icons for all PCs based on their character class.</summary>
+    private void SetupPCIcons()
+    {
+        if (CombatUI == null) return;
+        for (int i = 0; i < PCs.Count; i++)
+        {
+            if (PCs[i] != null && PCs[i].Stats != null)
+            {
+                Sprite icon = IconManager.GetClassIcon(PCs[i].Stats.CharacterClass);
+                if (icon != null)
+                    CombatUI.SetPCIcon(i + 1, icon);
+            }
+        }
+    }
+
+    /// <summary>Set enemy icons for all NPCs based on their enemy type.</summary>
+    private void SetupNPCIcons()
+    {
+        if (CombatUI == null) return;
+        for (int i = 0; i < NPCs.Count && i < DefaultEncounterEnemyIds.Length; i++)
+        {
+            Sprite icon = IconManager.GetEnemyIcon(DefaultEncounterEnemyIds[i]);
+            if (icon != null)
+                CombatUI.SetNPCIcon(i, icon);
+        }
     }
 
     // ========== ENEMY ENCOUNTER SETUP ==========
 
-    /// <summary>
-    /// Default enemy encounter IDs and grid positions.
-    /// The encounter features three varied enemies:
-    ///   1. Skeleton Archer  — ranged threat that stays back and shoots
-    ///   2. Orc Berserker    — aggressive melee brute that charges in
-    ///   3. Hobgoblin Sergeant — tanky armored melee fighter
-    /// </summary>
     private static readonly string[] DefaultEncounterEnemyIds = {
         "skeleton_archer",
         "orc_berserker",
@@ -626,16 +728,11 @@ public class GameManager : MonoBehaviour
     };
 
     private static readonly Vector2Int[] DefaultEncounterPositions = {
-        new Vector2Int(16, 6),   // Skeleton Archer — back line
-        new Vector2Int(14, 10),  // Orc Berserker — mid-front
-        new Vector2Int(16, 14),  // Hobgoblin Sergeant — flank
+        new Vector2Int(16, 6),
+        new Vector2Int(14, 10),
+        new Vector2Int(16, 14),
     };
 
-    /// <summary>
-    /// Set up all enemies for the encounter using EnemyDatabase definitions.
-    /// Creates CharacterStats, equips items, assigns AI behaviors, and initializes
-    /// each NPC CharacterController on the grid.
-    /// </summary>
     private void SetupEnemyEncounter()
     {
         EnemyDatabase.Init();
@@ -664,11 +761,9 @@ public class GameManager : MonoBehaviour
             InitializeNPCFromDefinition(npc, def, pos, npcAlive, npcDead);
             _npcAIBehaviors.Add(def.AIBehavior);
 
-            // Apply sprite tint color per enemy type
             SpriteRenderer sr = npc.GetComponent<SpriteRenderer>();
             if (sr != null) sr.color = def.SpriteColor;
 
-            // Update NPC panel color if available
             if (i < CombatUI.NPCPanels.Count)
             {
                 var panelUI = CombatUI.NPCPanels[i];
@@ -691,12 +786,11 @@ public class GameManager : MonoBehaviour
         // Hide legacy single-NPC panel since we're using multi-panels
         if (CombatUI.NPCNameText != null)
             CombatUI.NPCNameText.transform.parent.gameObject.SetActive(false);
+
+        // Set NPC icons
+        SetupNPCIcons();
     }
 
-    /// <summary>
-    /// Initialize a single NPC CharacterController from an EnemyDefinition.
-    /// Creates stats, adds feats, equips items, and places on the grid.
-    /// </summary>
     private void InitializeNPCFromDefinition(CharacterController npc, EnemyDefinition def,
         Vector2Int pos, Sprite alive, Sprite dead)
     {
@@ -717,11 +811,9 @@ public class GameManager : MonoBehaviour
             baseHitDieHP: def.BaseHitDieHP
         );
 
-        // Add creature tags
         foreach (string tag in def.CreatureTags)
             stats.CreatureTags.Add(tag);
 
-        // Add feats
         foreach (string featName in def.Feats)
         {
             if (!stats.HasFeat(featName))
@@ -732,15 +824,12 @@ public class GameManager : MonoBehaviour
 
         FeatManager.ApplyPassiveFeats(stats);
 
-        // Initialize the character controller
         npc.Init(stats, pos, alive, dead);
 
-        // Set up equipment via InventoryComponent
         InventoryComponent inv = npc.gameObject.GetComponent<InventoryComponent>();
         if (inv == null) inv = npc.gameObject.AddComponent<InventoryComponent>();
         inv.Init(stats);
 
-        // Equip items
         foreach (var eq in def.EquipmentIds)
         {
             ItemData item = ItemDatabase.CloneItem(eq.ItemId);
@@ -750,7 +839,6 @@ public class GameManager : MonoBehaviour
                 Debug.LogWarning($"[GameManager] Item not found: {eq.ItemId} for {def.Name}");
         }
 
-        // Add backpack items
         foreach (string itemId in def.BackpackItemIds)
         {
             ItemData item = ItemDatabase.CloneItem(itemId);
@@ -764,11 +852,11 @@ public class GameManager : MonoBehaviour
                   $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq");
     }
 
-    /// <summary>Helper to update all stat UI panels using multi-NPC system.</summary>
+    /// <summary>Helper to update all stat UI panels using 4-PC multi-NPC system.</summary>
     private void UpdateAllStatsUI()
     {
         if (CombatUI == null) return;
-        CombatUI.UpdateAllStatsMultiNPC(PC1, PC2, NPCs);
+        CombatUI.UpdateAllStats4PC(PCs, NPCs);
     }
 
     /// <summary>Check if all NPCs in the encounter are dead.</summary>
@@ -777,6 +865,16 @@ public class GameManager : MonoBehaviour
         foreach (var npc in NPCs)
         {
             if (npc != null && !npc.Stats.IsDead) return false;
+        }
+        return true;
+    }
+
+    /// <summary>Check if all PCs in the party are dead.</summary>
+    private bool AreAllPCsDead()
+    {
+        foreach (var pc in PCs)
+        {
+            if (pc != null && !pc.Stats.IsDead) return false;
         }
         return true;
     }
@@ -828,6 +926,87 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // ========== INITIATIVE & COMBAT START ==========
+
+    /// <summary>
+    /// Roll initiative for all combatants and start the first turn.
+    /// D&D 3.5: 1d20 + initiative modifier (DEX mod + Improved Initiative feat bonus).
+    /// </summary>
+    public void StartCombat()
+    {
+        _initiativeOrder = InitiativeSystem.RollInitiative(PCs, NPCs);
+        _currentInitiativeIndex = 0;
+
+        // Log initiative order
+        string orderStr = InitiativeSystem.GetInitiativeOrderString(_initiativeOrder);
+        Debug.Log($"[Initiative] Combat begins! Initiative order:\n{orderStr}");
+
+        // Update initiative display in UI
+        UpdateInitiativeUI();
+
+        // Start the first turn
+        AdvanceToNextTurn();
+    }
+
+    /// <summary>Update the initiative panel in the UI.</summary>
+    private void UpdateInitiativeUI()
+    {
+        if (CombatUI == null) return;
+        string display = InitiativeSystem.GetInitiativeDisplayString(_initiativeOrder, _currentInitiativeIndex);
+        CombatUI.UpdateInitiativeDisplay(display);
+    }
+
+    /// <summary>
+    /// Advance to the next combatant in initiative order.
+    /// Skips dead characters. Wraps around to the beginning for a new round.
+    /// </summary>
+    private void AdvanceToNextTurn()
+    {
+        if (CurrentPhase == TurnPhase.CombatOver) return;
+
+        // Find next alive character
+        int attempts = 0;
+        while (attempts < _initiativeOrder.Count)
+        {
+            if (_currentInitiativeIndex >= _initiativeOrder.Count)
+                _currentInitiativeIndex = 0; // New round
+
+            var entry = _initiativeOrder[_currentInitiativeIndex];
+
+            if (entry.Character != null && !entry.Character.Stats.IsDead)
+            {
+                _activeTurnCharacter = entry.Character;
+
+                if (entry.IsPC)
+                {
+                    StartPCTurn(entry.Character);
+                }
+                else
+                {
+                    StartCoroutine(SingleNPCTurnFromInitiative(entry.Character));
+                }
+                return;
+            }
+
+            // This character is dead, skip
+            _currentInitiativeIndex++;
+            attempts++;
+        }
+
+        // All characters are dead somehow
+        CurrentPhase = TurnPhase.CombatOver;
+        CombatUI.SetTurnIndicator("Combat has ended.");
+        CombatUI.SetActionButtonsVisible(false);
+    }
+
+    /// <summary>Move to the next initiative slot and start that turn.</summary>
+    private void NextInitiativeTurn()
+    {
+        _currentInitiativeIndex++;
+        UpdateInitiativeUI();
+        AdvanceToNextTurn();
+    }
+
     // ========== TURN MANAGEMENT WITH ACTION ECONOMY ==========
 
     /// <summary>
@@ -839,11 +1018,11 @@ public class GameManager : MonoBehaviour
 
         CloseInventoryIfOpen();
 
-        // If this PC is dead, advance
+        // If this PC is dead, advance to next in initiative
         if (pc.Stats.IsDead)
         {
-            if (pc == PC1) { StartPCTurn(PC2); return; }
-            if (pc == PC2) { StartCoroutine(NPCTurnCoroutine()); return; }
+            NextInitiativeTurn();
+            return;
         }
 
         // Tick Barbarian Rage at start of turn
@@ -863,17 +1042,28 @@ public class GameManager : MonoBehaviour
 
         pc.StartNewTurn();
 
-        CurrentPhase = (pc == PC1) ? TurnPhase.PC1Turn : TurnPhase.PC2Turn;
+        CurrentPhase = TurnPhase.PCTurn;
+        _activeTurnCharacter = pc;
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
 
-        string pcLabel = (pc == PC1) ? "Hero 1" : "Hero 2";
-        CombatUI.SetActivePC(pc == PC1 ? 1 : 2);
+        int pcIdx = GetPCIndex(pc);
+        CombatUI.SetActivePC(pcIdx);
+
+        // Update initiative UI to highlight current character
+        UpdateInitiativeUI();
 
         ShowActionChoices();
     }
 
     // Legacy helper
-    public void StartPlayerTurn() => StartPCTurn(PC1);
+    public void StartPlayerTurn()
+    {
+        // Start combat from beginning if no initiative order
+        if (_initiativeOrder.Count == 0)
+            StartCombat();
+        else
+            AdvanceToNextTurn();
+    }
 
     /// <summary>
     /// Show the action choice UI for the current PC.
@@ -888,35 +1078,27 @@ public class GameManager : MonoBehaviour
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
 
-        // Highlight current position
         SquareCell current = Grid.GetCell(pc.GridPosition);
         if (current != null)
             current.SetHighlight(HighlightType.Selected);
 
-        // Update action buttons based on action economy
         CombatUI.SetActionButtonsVisible(true);
         CombatUI.UpdateActionButtons(pc);
-
-        // Update feat controls (Power Attack slider, Rapid Shot toggle)
         CombatUI.UpdateFeatControls(pc);
 
-        // Build status message with feat info
         string pcName = pc.Stats.CharacterName;
         string actionInfo = pc.Actions.GetStatusString();
 
-        // Check if dual wield is possible and add info
         string dwInfo = "";
         if (pc.CanDualWield())
             dwInfo = "\n" + pc.GetDualWieldDescription();
 
-        // Show active feats
         string featInfo = "";
         if (pc.Stats.Feats.Count > 0)
             featInfo = $"\nFeats: {string.Join(", ", pc.Stats.Feats)}";
 
         CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory  [K] Skills\n{actionInfo}{dwInfo}{featInfo}");
 
-        // Auto-end turn if no actions left
         if (!pc.Actions.HasAnyActionLeft)
         {
             CombatUI.SetTurnIndicator($"{pcName}'s Turn - No actions remaining");
@@ -926,25 +1108,14 @@ public class GameManager : MonoBehaviour
 
     // ========== ACTION BUTTON HANDLERS ==========
 
-    /// <summary>Called when Move button is pressed.</summary>
     public void OnMoveButtonPressed()
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
 
-        // Determine if this uses move action or converted standard
-        if (pc.Actions.HasMoveAction)
-        {
-            // Normal move action
-        }
-        else if (pc.Actions.CanConvertStandardToMove)
-        {
-            // Will convert standard to move when actually moving
-        }
-        else
-        {
-            return; // Can't move
-        }
+        if (pc.Actions.HasMoveAction) { /* Normal move */ }
+        else if (pc.Actions.CanConvertStandardToMove) { /* Will convert */ }
+        else return;
 
         CurrentSubPhase = PlayerSubPhase.Moving;
         ShowMovementRange(pc);
@@ -952,7 +1123,6 @@ public class GameManager : MonoBehaviour
         CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (or own tile to cancel)");
     }
 
-    /// <summary>Called when Attack (Standard Action) button is pressed.</summary>
     public void OnAttackButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -963,7 +1133,6 @@ public class GameManager : MonoBehaviour
         ShowAttackTargets(pc);
     }
 
-    /// <summary>Called when Full Attack button is pressed.</summary>
     public void OnFullAttackButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -974,7 +1143,6 @@ public class GameManager : MonoBehaviour
         ShowAttackTargets(pc);
     }
 
-    /// <summary>Called when Dual Wield button is pressed.</summary>
     public void OnDualWieldButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -990,14 +1158,12 @@ public class GameManager : MonoBehaviour
         CombatUI.SetTurnIndicator($"DUAL WIELD: Select target {penaltyInfo}");
     }
 
-    /// <summary>Called when End Turn button is pressed.</summary>
     public void OnEndTurnButtonPressed()
     {
         if (!IsPlayerTurn) return;
         EndActivePCTurn();
     }
 
-    /// <summary>Called when Power Attack slider value changes.</summary>
     public void OnPowerAttackSliderChanged(float value)
     {
         CharacterController pc = ActivePC;
@@ -1006,7 +1172,6 @@ public class GameManager : MonoBehaviour
         CombatUI.UpdatePowerAttackLabel(pc);
     }
 
-    /// <summary>Called when Rapid Shot toggle button is pressed.</summary>
     public void OnRapidShotTogglePressed()
     {
         CharacterController pc = ActivePC;
@@ -1015,11 +1180,9 @@ public class GameManager : MonoBehaviour
         pc.SetRapidShot(!pc.RapidShotEnabled);
         Debug.Log($"[RapidShot] Rapid Shot toggle clicked, new value: {pc.RapidShotEnabled} (was {oldValue}) for {pc.Stats.CharacterName}");
         CombatUI.UpdateRapidShotLabel(pc);
-        // Refresh action buttons so Full Attack label reflects Rapid Shot state + weapon type
         CombatUI.UpdateActionButtons(pc);
     }
 
-    /// <summary>Called when Flurry of Blows button is pressed (Monk only, Full-Round Action).</summary>
     public void OnFlurryOfBlowsButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -1036,7 +1199,6 @@ public class GameManager : MonoBehaviour
         CombatUI.SetTurnIndicator($"FLURRY OF BLOWS: Select target ({bonusStr})");
     }
 
-    /// <summary>Called when Rage button is pressed (Barbarian only, Free Action).</summary>
     public void OnRageButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -1093,9 +1255,10 @@ public class GameManager : MonoBehaviour
     private List<CharacterController> GetAllCharacters()
     {
         var all = new List<CharacterController>();
-        if (PC1 != null) all.Add(PC1);
-        if (PC2 != null) all.Add(PC2);
-        // Add all NPCs
+        foreach (var pc in PCs)
+        {
+            if (pc != null) all.Add(pc);
+        }
         foreach (var npc in NPCs)
         {
             if (npc != null) all.Add(npc);
@@ -1111,7 +1274,13 @@ public class GameManager : MonoBehaviour
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        CharacterController otherPC = (pc == PC1) ? PC2 : PC1;
+        // Get all ally PCs for flanking calculation (all alive PCs except the attacker)
+        List<CharacterController> allyPCs = new List<CharacterController>();
+        foreach (var ally in PCs)
+        {
+            if (ally != null && ally != pc && !ally.Stats.IsDead)
+                allyPCs.Add(ally);
+        }
 
         // Determine the equipped weapon's range increment
         ItemData weapon = pc.GetEquippedMainWeapon();
@@ -1119,25 +1288,15 @@ public class GameManager : MonoBehaviour
         bool isThrownWeapon = (weapon != null) && weapon.IsThrown;
         bool isRangedWeapon = (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged) || rangeIncrement > 0;
 
-        // Calculate effective attack range in squares
         int maxRangeSquares;
         if (isRangedWeapon && rangeIncrement > 0)
-        {
             maxRangeSquares = RangeCalculator.GetMaxRangeSquares(rangeIncrement, isThrownWeapon);
-        }
         else
-        {
-            // Melee weapon: use AttackRange from stats (typically 1, or 2 for reach)
             maxRangeSquares = pc.Stats.AttackRange;
-        }
 
-        // Show range zone highlights for ranged weapons
         if (isRangedWeapon && rangeIncrement > 0)
-        {
             ShowRangeZoneHighlights(pc, rangeIncrement, maxRangeSquares, isThrownWeapon);
-        }
 
-        // Find all valid targets within range
         List<SquareCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares);
         bool hasTarget = false;
         bool anyFlanking = false;
@@ -1148,12 +1307,11 @@ public class GameManager : MonoBehaviour
             {
                 int sqDist = SquareGridUtils.GetDistance(pc.GridPosition, cell.Coords);
 
-                // Check if within max range
                 if (isRangedWeapon && rangeIncrement > 0)
                 {
                     int distFeet = RangeCalculator.SquaresToFeet(sqDist);
                     if (!RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement, isThrownWeapon))
-                        continue; // Beyond max range, skip
+                        continue;
                 }
                 else
                 {
@@ -1161,8 +1319,16 @@ public class GameManager : MonoBehaviour
                         continue;
                 }
 
-                bool flanking = !otherPC.Stats.IsDead &&
-                    CombatUtils.IsFlanking(pc.GridPosition, otherPC.GridPosition, cell.Occupant.GridPosition);
+                // Check flanking with any ally
+                bool flanking = false;
+                foreach (var ally in allyPCs)
+                {
+                    if (CombatUtils.IsFlanking(pc.GridPosition, ally.GridPosition, cell.Occupant.GridPosition))
+                    {
+                        flanking = true;
+                        break;
+                    }
+                }
 
                 if (flanking)
                 {
@@ -1190,7 +1356,6 @@ public class GameManager : MonoBehaviour
                 case PendingAttackMode.FlurryOfBlows: modeStr = "FLURRY OF BLOWS"; break;
             }
 
-            // Build range info string
             string rangeMsg = "";
             if (isRangedWeapon && rangeIncrement > 0)
             {
@@ -1210,11 +1375,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Show range zone highlights on the grid for a ranged weapon.
-    /// Green = 1st increment (no penalty), Yellow = moderate, Orange = far.
-    /// Thrown weapons: max 5 increments. Projectile weapons: max 10 increments.
-    /// </summary>
     private void ShowRangeZoneHighlights(CharacterController pc, int rangeIncrement, int maxRangeSquares, bool isThrownWeapon = false)
     {
         List<SquareCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares);
@@ -1230,7 +1390,6 @@ public class GameManager : MonoBehaviour
                 case 1: cell.SetHighlight(HighlightType.RangeClose); break;
                 case 2: cell.SetHighlight(HighlightType.RangeMedium); break;
                 case 3: cell.SetHighlight(HighlightType.RangeFar); break;
-                // zone 0 = out of range, don't highlight
             }
         }
     }
@@ -1262,52 +1421,42 @@ public class GameManager : MonoBehaviour
                 break;
 
             case PlayerSubPhase.ChoosingAction:
-                // Clicking on own tile when choosing does nothing special
                 break;
         }
     }
 
     private void HandleMovementClick(CharacterController pc, SquareCell cell)
     {
-        // If waiting for AoO confirmation, ignore clicks on the grid
         if (_waitingForAoOConfirmation) return;
 
         if (cell.Coords == pc.GridPosition)
         {
-            // Click own tile to cancel movement and return to action choices
             ShowActionChoices();
             return;
         }
 
         if (_highlightedCells.Contains(cell) && !cell.IsOccupied)
         {
-            // Check for AoOs before executing movement
             var allCharacters = GetAllCharacters();
             var pathResult = Grid.FindSafePath(pc.GridPosition, cell.Coords, pc, allCharacters);
 
             if (pathResult.ProvokesAoOs)
             {
-                // Movement would provoke AoOs - show warning and wait for confirmation
                 Debug.Log($"[GameManager] Movement to ({cell.Coords.x},{cell.Coords.y}) would provoke {pathResult.ProvokedAoOs.Count} AoO(s)!");
                 _pendingAoOPath = pathResult;
                 _pendingMoveTarget = cell;
                 _waitingForAoOConfirmation = true;
 
-                // Show AoO warning dialog
                 var enemyNames = pathResult.GetThreateningEnemyNames();
                 CombatUI.ShowAoOWarning(enemyNames, OnAoOConfirmed, OnAoOCancelled);
             }
             else
             {
-                // No AoOs - execute movement immediately
                 ExecuteMovement(pc, cell);
             }
         }
     }
 
-    /// <summary>
-    /// Called when player confirms movement despite AoO warning.
-    /// </summary>
     private void OnAoOConfirmed()
     {
         _waitingForAoOConfirmation = false;
@@ -1321,7 +1470,6 @@ public class GameManager : MonoBehaviour
 
         Debug.Log($"[GameManager] Player confirmed movement - resolving AoOs");
 
-        // Resolve each AoO
         if (_pendingAoOPath != null && _pendingAoOPath.ProvokesAoOs)
         {
             StartCoroutine(ResolveAoOsAndMove(pc, _pendingMoveTarget, _pendingAoOPath));
@@ -1335,9 +1483,6 @@ public class GameManager : MonoBehaviour
         _pendingMoveTarget = null;
     }
 
-    /// <summary>
-    /// Called when player cancels movement due to AoO warning.
-    /// </summary>
     private void OnAoOCancelled()
     {
         _waitingForAoOConfirmation = false;
@@ -1356,19 +1501,16 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Resolve AoOs one by one, then execute the movement if the mover is still alive.
-    /// </summary>
     private IEnumerator ResolveAoOsAndMove(CharacterController pc, SquareCell targetCell, AoOPathResult pathResult)
     {
         CurrentSubPhase = PlayerSubPhase.Animating;
 
         foreach (var aooInfo in pathResult.ProvokedAoOs)
         {
-            if (pc.Stats.IsDead) break; // Mover was killed by an AoO
+            if (pc.Stats.IsDead) break;
 
             var threatener = aooInfo.Threatener;
-            if (threatener.Stats.IsDead) continue; // Threatener already dead
+            if (threatener.Stats.IsDead) continue;
 
             CombatResult aooResult = ThreatSystem.ExecuteAoO(threatener, pc);
             if (aooResult != null)
@@ -1384,7 +1526,6 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // If still alive, complete the movement
         if (!pc.Stats.IsDead)
         {
             ExecuteMovement(pc, targetCell);
@@ -1395,8 +1536,7 @@ public class GameManager : MonoBehaviour
             CombatUI.ShowCombatLog($"{pc.Stats.CharacterName} was slain during movement!");
             UpdateAllStatsUI();
 
-            // Check if both PCs are dead
-            if (PC1.Stats.IsDead && PC2.Stats.IsDead)
+            if (AreAllPCsDead())
             {
                 CurrentPhase = TurnPhase.CombatOver;
                 CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
@@ -1404,18 +1544,13 @@ public class GameManager : MonoBehaviour
                 yield break;
             }
 
-            // End this PC's turn
             yield return new WaitForSeconds(1.0f);
             EndActivePCTurn();
         }
     }
 
-    /// <summary>
-    /// Execute the actual movement (consume action, move character, update UI).
-    /// </summary>
     private void ExecuteMovement(CharacterController pc, SquareCell cell)
     {
-        // Consume the appropriate action
         if (pc.Actions.HasMoveAction)
         {
             pc.Actions.UseMoveAction();
@@ -1428,18 +1563,15 @@ public class GameManager : MonoBehaviour
         pc.MoveToCell(cell);
         UpdateAllStatsUI();
 
-        // Return to action choices (player can still use standard action if available)
         ShowActionChoices();
     }
 
     private void HandleAttackTargetClick(CharacterController pc, SquareCell cell)
     {
-        // Allow clicking own tile or empty tile to cancel
         if (!cell.IsOccupied || cell.Occupant == pc || cell.Occupant.Stats.IsDead)
         {
             if (cell.Coords == pc.GridPosition || !_highlightedCells.Contains(cell))
             {
-                // Cancel attack selection
                 ShowActionChoices();
                 return;
             }
@@ -1457,17 +1589,19 @@ public class GameManager : MonoBehaviour
     {
         CurrentSubPhase = PlayerSubPhase.Animating;
 
-        // Check for flanking
+        // Check for flanking with ALL allies (not just one specific PC)
         var allies = new List<CharacterController>();
-        if (attacker == PC1) allies.Add(PC2);
-        else if (attacker == PC2) allies.Add(PC1);
+        foreach (var pc in PCs)
+        {
+            if (pc != null && pc != attacker && !pc.Stats.IsDead)
+                allies.Add(pc);
+        }
 
         CharacterController flankPartner;
         bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allies, out flankPartner);
         int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
         string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
 
-        // Calculate range info for ranged weapons
         RangeInfo rangeInfo = CalculateRangeInfo(attacker, target);
 
         switch (_pendingAttackMode)
@@ -1475,27 +1609,18 @@ public class GameManager : MonoBehaviour
             case PendingAttackMode.Single:
                 PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
-
             case PendingAttackMode.FullAttack:
                 PerformFullAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
-
             case PendingAttackMode.DualWield:
                 PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
-
             case PendingAttackMode.FlurryOfBlows:
                 PerformFlurryOfBlows(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
         }
     }
 
-    /// <summary>
-    /// Calculate range info for an attack between two characters.
-    /// Returns a RangeInfo with distance, increment, and penalty data.
-    /// Uses D&D 3.5 square grid distance (with diagonal costs).
-    /// Correctly uses 5 max increments for thrown weapons, 10 for projectile weapons.
-    /// </summary>
     private RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target)
     {
         ItemData weapon = attacker.GetEquippedMainWeapon();
@@ -1508,19 +1633,16 @@ public class GameManager : MonoBehaviour
     private void PerformSingleAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        // Standard Action
         attacker.Actions.UseStandardAction();
 
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetDetailedSummary();
 
-        // Log to Unity Console for debugging
         if (LogAttacksToConsole)
             Debug.Log("[Combat] " + _lastCombatLog);
 
         CombatUI.ShowCombatLog(_lastCombatLog);
         UpdateAllStatsUI();
-
         Grid.ClearAllHighlights();
 
         if (result.TargetKilled && !target.IsPlayerControlled)
@@ -1539,26 +1661,22 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // After standard action, check if there are more actions available
         StartCoroutine(AfterAttackDelay(attacker, 1.5f));
     }
 
     private void PerformFullAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        // Full-Round Action
         attacker.Actions.UseFullRoundAction();
 
         FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetFullSummary();
 
-        // Log detailed per-attack breakdown to Unity Console
         if (LogAttacksToConsole)
             LogFullAttackToConsole(result);
 
         CombatUI.ShowCombatLog(_lastCombatLog);
         UpdateAllStatsUI();
-
         Grid.ClearAllHighlights();
 
         if (result.TargetKilled && !target.IsPlayerControlled)
@@ -1577,26 +1695,22 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Full-round action ends the turn
         StartCoroutine(DelayedEndActivePCTurn(2.0f));
     }
 
     private void PerformDualWieldAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        // Full-Round Action
         attacker.Actions.UseFullRoundAction();
 
         FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetFullSummary();
 
-        // Log detailed per-attack breakdown to Unity Console
         if (LogAttacksToConsole)
             LogFullAttackToConsole(result);
 
         CombatUI.ShowCombatLog(_lastCombatLog);
         UpdateAllStatsUI();
-
         Grid.ClearAllHighlights();
 
         if (result.TargetKilled && !target.IsPlayerControlled)
@@ -1615,29 +1729,22 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Full-round action ends the turn
         StartCoroutine(DelayedEndActivePCTurn(2.0f));
     }
 
-    /// <summary>
-    /// Perform a Flurry of Blows attack (Monk only, Full-Round Action).
-    /// </summary>
     private void PerformFlurryOfBlows(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        // Full-Round Action
         attacker.Actions.UseFullRoundAction();
 
         FullAttackResult result = attacker.FlurryOfBlows(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetFullSummary();
 
-        // Log detailed per-attack breakdown to Unity Console
         if (LogAttacksToConsole)
             LogFullAttackToConsole(result);
 
         CombatUI.ShowCombatLog(_lastCombatLog);
         UpdateAllStatsUI();
-
         Grid.ClearAllHighlights();
 
         if (result.TargetKilled && !target.IsPlayerControlled)
@@ -1656,21 +1763,15 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Full-round action ends the turn
         StartCoroutine(DelayedEndActivePCTurn(2.0f));
     }
 
-    /// <summary>
-    /// After a standard action attack, return to action choices if more actions available,
-    /// otherwise end turn.
-    /// </summary>
     private IEnumerator AfterAttackDelay(CharacterController pc, float delay)
     {
         yield return new WaitForSeconds(delay);
 
         if (CurrentPhase == TurnPhase.CombatOver) yield break;
 
-        // Check if the PC still has actions (e.g., unused move action)
         if (pc.Actions.HasAnyActionLeft)
         {
             ShowActionChoices();
@@ -1683,6 +1784,9 @@ public class GameManager : MonoBehaviour
 
     // ========== TURN ENDING ==========
 
+    /// <summary>
+    /// End the current PC's turn and advance to the next combatant in initiative order.
+    /// </summary>
     private void EndActivePCTurn()
     {
         CharacterController pc = ActivePC;
@@ -1692,14 +1796,8 @@ public class GameManager : MonoBehaviour
 
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
-        if (pc == PC1)
-        {
-            StartPCTurn(PC2);
-        }
-        else
-        {
-            StartCoroutine(NPCTurnCoroutine());
-        }
+        // Advance to next in initiative order
+        NextInitiativeTurn();
     }
 
     private IEnumerator DelayedEndActivePCTurn(float delay)
@@ -1709,49 +1807,45 @@ public class GameManager : MonoBehaviour
             EndActivePCTurn();
     }
 
-    // ========== NPC AI TURN (Multi-Enemy) ==========
+    // ========== NPC AI TURN (Initiative-Based) ==========
 
     /// <summary>
-    /// Runs all NPC turns sequentially. Each alive NPC takes a turn based on its
-    /// AI behavior archetype (AggressiveMelee, RangedKiter, DefensiveMelee).
+    /// Execute a single NPC turn triggered by the initiative system.
     /// </summary>
-    private IEnumerator NPCTurnCoroutine()
+    private IEnumerator SingleNPCTurnFromInitiative(CharacterController npc)
     {
         CurrentPhase = TurnPhase.NPCTurn;
-        CombatUI.SetTurnIndicator("Enemy Turn...");
-        CombatUI.SetActivePC(0);
+        _activeTurnCharacter = npc;
+        CombatUI.SetActivePC(0); // No PC active
         CombatUI.SetActionButtonsVisible(false);
 
-        // Check if all NPCs are dead (shouldn't happen but safety check)
-        if (AreAllNPCsDead())
+        // Update initiative UI to highlight current NPC
+        UpdateInitiativeUI();
+
+        if (npc.Stats.IsDead)
         {
-            yield return new WaitForSeconds(0.5f);
-            StartPCTurn(PC1);
+            NextInitiativeTurn();
             yield break;
         }
 
-        // Each NPC takes a turn
-        for (int i = 0; i < NPCs.Count; i++)
+        // Determine AI behavior for this NPC
+        int npcIdx = NPCs.IndexOf(npc);
+        EnemyAIBehavior behavior = (npcIdx >= 0 && npcIdx < _npcAIBehaviors.Count)
+            ? _npcAIBehaviors[npcIdx] : EnemyAIBehavior.AggressiveMelee;
+
+        yield return StartCoroutine(SingleNPCTurn(npc, behavior));
+
+        // Check if all PCs are dead after NPC turn
+        if (AreAllPCsDead())
         {
-            CharacterController npc = NPCs[i];
-            if (npc.Stats.IsDead) continue;
-
-            EnemyAIBehavior behavior = (i < _npcAIBehaviors.Count)
-                ? _npcAIBehaviors[i] : EnemyAIBehavior.AggressiveMelee;
-
-            yield return StartCoroutine(SingleNPCTurn(npc, behavior));
-
-            // Check if both PCs are dead after each NPC turn
-            if (PC1.Stats.IsDead && PC2.Stats.IsDead)
-            {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-                CombatUI.SetActionButtonsVisible(false);
-                yield break;
-            }
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+            CombatUI.SetActionButtonsVisible(false);
+            yield break;
         }
 
-        StartPCTurn(PC1);
+        // Advance to next in initiative
+        NextInitiativeTurn();
     }
 
     /// <summary>
@@ -1771,30 +1865,22 @@ public class GameManager : MonoBehaviour
             case EnemyAIBehavior.AggressiveMelee:
                 yield return StartCoroutine(AI_AggressiveMelee(npc, targetPC));
                 break;
-
             case EnemyAIBehavior.RangedKiter:
                 yield return StartCoroutine(AI_RangedKiter(npc));
                 break;
-
             case EnemyAIBehavior.DefensiveMelee:
                 yield return StartCoroutine(AI_DefensiveMelee(npc, targetPC));
                 break;
-
             default:
                 yield return StartCoroutine(AI_AggressiveMelee(npc, targetPC));
                 break;
         }
     }
 
-    /// <summary>
-    /// Aggressive Melee AI: Move toward closest PC, attack in melee.
-    /// Simple and direct — good for orcs, goblins, berserkers.
-    /// </summary>
     private IEnumerator AI_AggressiveMelee(CharacterController npc, CharacterController targetPC)
     {
         int distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
 
-        // Move toward target if out of melee range
         if (distToTarget > npc.Stats.AttackRange)
         {
             SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
@@ -1807,7 +1893,6 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Re-evaluate target (closest may have changed after move)
         targetPC = GetClosestAlivePCTo(npc);
         if (targetPC == null) yield break;
 
@@ -1823,10 +1908,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Ranged Kiter AI: Stay at range and shoot. If enemies are too close, retreat then shoot.
-    /// Good for skeleton archers, goblin slingers, etc.
-    /// </summary>
     private IEnumerator AI_RangedKiter(CharacterController npc)
     {
         CharacterController closestPC = GetClosestAlivePCTo(npc);
@@ -1834,7 +1915,6 @@ public class GameManager : MonoBehaviour
 
         int distToClosestPC = SquareGridUtils.GetDistance(npc.GridPosition, closestPC.GridPosition);
 
-        // If an enemy is too close (within 2 squares), try to kite away
         if (distToClosestPC <= 2)
         {
             SquareCell retreatCell = FindBestMoveAwayFrom(npc, closestPC.GridPosition);
@@ -1847,13 +1927,11 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Now shoot at the best target (which may be different after retreating)
         CharacterController rangedTarget = GetClosestAlivePCTo(npc);
         if (rangedTarget == null) yield break;
 
-        // Check if weapon is ranged — use the equipped weapon's range
         ItemData weapon = npc.GetEquippedMainWeapon();
-        int maxRange = 1; // fallback melee
+        int maxRange = 1;
         if (weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0))
         {
             bool isThrown = weapon.IsThrown;
@@ -1868,7 +1946,6 @@ public class GameManager : MonoBehaviour
         }
         else if (distToRangedTarget > maxRange && npc.Actions.HasMoveAction)
         {
-            // Move closer if too far to shoot
             SquareCell approachCell = FindBestMoveToward(npc, rangedTarget.GridPosition);
             if (approachCell != null)
             {
@@ -1884,19 +1961,13 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Defensive Melee AI: Move cautiously, prefer weaker targets, hold position once engaged.
-    /// Good for hobgoblin sergeants, guards, disciplined fighters.
-    /// </summary>
     private IEnumerator AI_DefensiveMelee(CharacterController npc, CharacterController targetPC)
     {
-        // Prefer targeting the weaker (lower HP) PC
         CharacterController weakerPC = GetWeakerAlivePC();
         if (weakerPC != null) targetPC = weakerPC;
 
         int distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
 
-        // Move toward target, but only if necessary
         if (distToTarget > npc.Stats.AttackRange)
         {
             SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
@@ -1909,7 +1980,6 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Re-evaluate
         targetPC = GetClosestAlivePCTo(npc);
         if (targetPC == null) yield break;
 
@@ -1925,9 +1995,6 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Common NPC attack execution — resolves a single attack and handles results.
-    /// </summary>
     private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
     {
         npc.Actions.UseStandardAction();
@@ -1943,7 +2010,7 @@ public class GameManager : MonoBehaviour
 
         if (result.TargetKilled)
         {
-            if (PC1.Stats.IsDead && PC2.Stats.IsDead)
+            if (AreAllPCsDead())
             {
                 CurrentPhase = TurnPhase.CombatOver;
                 CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
@@ -1959,19 +2026,23 @@ public class GameManager : MonoBehaviour
         yield return new WaitForSeconds(1.0f);
     }
 
-    /// <summary>Find closest alive PC relative to a specific NPC.</summary>
+    /// <summary>Find closest alive PC relative to a specific NPC (checks all 4 PCs).</summary>
     private CharacterController GetClosestAlivePCTo(CharacterController npc)
     {
-        bool pc1Alive = !PC1.Stats.IsDead;
-        bool pc2Alive = !PC2.Stats.IsDead;
+        CharacterController closest = null;
+        int closestDist = int.MaxValue;
 
-        if (!pc1Alive && !pc2Alive) return null;
-        if (pc1Alive && !pc2Alive) return PC1;
-        if (!pc1Alive && pc2Alive) return PC2;
-
-        int dist1 = SquareGridUtils.GetDistance(npc.GridPosition, PC1.GridPosition);
-        int dist2 = SquareGridUtils.GetDistance(npc.GridPosition, PC2.GridPosition);
-        return dist1 <= dist2 ? PC1 : PC2;
+        foreach (var pc in PCs)
+        {
+            if (pc == null || pc.Stats.IsDead) continue;
+            int dist = SquareGridUtils.GetDistance(npc.GridPosition, pc.GridPosition);
+            if (dist < closestDist)
+            {
+                closestDist = dist;
+                closest = pc;
+            }
+        }
+        return closest;
     }
 
     /// <summary>Legacy wrapper for backward compat.</summary>
@@ -1983,22 +2054,26 @@ public class GameManager : MonoBehaviour
     /// <summary>Get the alive PC with the lowest current HP (for defensive AI targeting).</summary>
     private CharacterController GetWeakerAlivePC()
     {
-        bool pc1Alive = !PC1.Stats.IsDead;
-        bool pc2Alive = !PC2.Stats.IsDead;
+        CharacterController weakest = null;
+        int lowestHP = int.MaxValue;
 
-        if (!pc1Alive && !pc2Alive) return null;
-        if (pc1Alive && !pc2Alive) return PC1;
-        if (!pc1Alive && pc2Alive) return PC2;
-
-        return PC1.Stats.CurrentHP <= PC2.Stats.CurrentHP ? PC1 : PC2;
+        foreach (var pc in PCs)
+        {
+            if (pc == null || pc.Stats.IsDead) continue;
+            if (pc.Stats.CurrentHP < lowestHP)
+            {
+                lowestHP = pc.Stats.CurrentHP;
+                weakest = pc;
+            }
+        }
+        return weakest;
     }
 
-    /// <summary>Find best cell to move AWAY from a target (for kiting AI).</summary>
     private SquareCell FindBestMoveAwayFrom(CharacterController mover, Vector2Int threatPos)
     {
         List<SquareCell> moveCells = Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);
         SquareCell bestCell = null;
-        int bestDist = 0; // We want to maximize distance
+        int bestDist = 0;
 
         foreach (var cell in moveCells)
         {
@@ -2038,16 +2113,11 @@ public class GameManager : MonoBehaviour
 
     // ========== DETAILED CONSOLE LOGGING ==========
 
-    /// <summary>
-    /// Log a FullAttackResult to the Unity Console with detailed per-attack breakdowns.
-    /// Each attack is logged separately with [Combat] prefix for easy filtering.
-    /// </summary>
     private void LogFullAttackToConsole(FullAttackResult result)
     {
         string attackerName = result.Attacker.Stats.CharacterName;
         string defenderName = result.Defender.Stats.CharacterName;
 
-        // ═══ HEADER ═══
         Debug.Log("[Combat] ═══════════════════════════════════════");
 
         string actionLabel = result.Type == FullAttackResult.AttackType.FullAttack
@@ -2057,7 +2127,6 @@ public class GameManager : MonoBehaviour
                 : "attacks";
         Debug.Log($"[Combat] {attackerName} {actionLabel} {defenderName}");
 
-        // Weapon info
         if (result.Type == FullAttackResult.AttackType.DualWield
             && !string.IsNullOrEmpty(result.MainWeaponName)
             && !string.IsNullOrEmpty(result.OffWeaponName))
@@ -2072,7 +2141,6 @@ public class GameManager : MonoBehaviour
             Debug.Log($"[Combat] Weapon: {result.MainWeaponName} ({wpnType})");
         }
 
-        // Active feats
         if (result.Attacks.Count > 0)
         {
             var first = result.Attacks[0];
@@ -2083,11 +2151,9 @@ public class GameManager : MonoBehaviour
             if (feats.Count > 0)
                 Debug.Log($"[Combat] Active Feats: {string.Join(", ", feats)}");
 
-            // Flanking
             if (first.IsFlanking)
                 Debug.Log($"[Combat] Flanking: Yes (with {first.FlankingPartnerName}, +{first.FlankingBonus})");
 
-            // Range info
             if (first.IsRangedAttack)
             {
                 string penaltyStr = first.RangePenalty == 0 ? "no penalty" : $"{first.RangePenalty} penalty";
@@ -2097,18 +2163,15 @@ public class GameManager : MonoBehaviour
 
         Debug.Log("[Combat]");
 
-        // ═══ EACH ATTACK ═══
         for (int i = 0; i < result.Attacks.Count; i++)
         {
             Debug.Log("[Combat] ─────────────────────────────────────");
 
             CombatResult atk = result.Attacks[i];
 
-            // Build the attack label
             string label = (i < result.AttackLabels.Count) ? result.AttackLabels[i] : $"Attack {i + 1}";
             Debug.Log($"[Combat] {label}:");
 
-            // --- ATTACK ROLL ---
             Debug.Log("[Combat]   ATTACK ROLL:");
             Debug.Log($"[Combat]     d20 roll: {atk.DieRoll}");
 
@@ -2146,14 +2209,12 @@ public class GameManager : MonoBehaviour
                 Debug.Log($"[Combat]     {FormatConsoleModLine(atk.BreakdownDualWieldPenalty, dwLabel)}");
             }
 
-            // Result line
             string critNote = "";
             if (atk.NaturalTwenty) critNote = " (NATURAL 20!)";
             else if (atk.NaturalOne) critNote = " (NATURAL 1!)";
             string hitMiss = atk.Hit ? "HIT!" : "MISS!";
             Debug.Log($"[Combat]     = {atk.TotalRoll} vs AC {atk.TargetAC} - {hitMiss}{critNote}");
 
-            // Critical threat
             if (atk.IsCritThreat)
             {
                 string threatRange = atk.CritThreatMin < 20 ? $"{atk.CritThreatMin}-20" : "20";
@@ -2164,7 +2225,6 @@ public class GameManager : MonoBehaviour
                     Debug.Log($"[Combat]   *** Critical Threat ({threatRange})! Confirm: {atk.ConfirmationRoll} {confModStr} = {atk.ConfirmationTotal} vs AC {atk.TargetAC} - Not confirmed ***");
             }
 
-            // --- DAMAGE ROLL ---
             if (atk.Hit)
             {
                 Debug.Log("[Combat]   DAMAGE ROLL:");
@@ -2204,7 +2264,6 @@ public class GameManager : MonoBehaviour
             Debug.Log("[Combat]");
         }
 
-        // ═══ SUMMARY ═══
         Debug.Log("[Combat] ─────────────────────────────────────");
         string critSummary = result.CritCount > 0 ? $", {result.CritCount} critical(s)!" : "";
         Debug.Log($"[Combat] SUMMARY: {result.HitCount}/{result.Attacks.Count} hits{critSummary}, {result.TotalDamageDealt} total damage");
@@ -2216,7 +2275,6 @@ public class GameManager : MonoBehaviour
         Debug.Log("[Combat] ═══════════════════════════════════════");
     }
 
-    /// <summary>Format a modifier for console output like "+ 3 (STR)" or "- 2 (Rapid Shot)".</summary>
     private static string FormatConsoleModLine(int value, string label)
     {
         if (value >= 0)

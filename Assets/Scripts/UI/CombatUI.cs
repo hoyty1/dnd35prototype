@@ -5,7 +5,8 @@ using System.Collections.Generic;
 /// <summary>
 /// Manages all combat UI elements with D&D 3.5 ability score display.
 /// Shows 6 ability scores with modifiers and derived stats for each character.
-/// Supports action economy buttons (Move, Attack, Full Attack, Dual Wield, End Turn).
+/// Supports 4 PC panels, multiple NPC panels, initiative order display, and character icons.
+/// Includes action economy buttons (Move, Attack, Full Attack, Dual Wield, End Turn).
 /// Includes AoO warning confirmation dialog.
 /// </summary>
 public class CombatUI : MonoBehaviour
@@ -13,15 +14,20 @@ public class CombatUI : MonoBehaviour
     [Header("Turn Indicator")]
     public Text TurnIndicatorText;
 
+    [Header("Initiative Display")]
+    public Text InitiativeOrderText;
+    public GameObject InitiativePanel;
+
     [Header("PC1 Stats")]
     public Text PC1NameText;
     public Text PC1HPText;
     public Text PC1ACText;
     public Text PC1AtkText;
     public Text PC1SpeedText;
-    public Text PC1AbilityText; // Shows all 6 ability scores
+    public Text PC1AbilityText;
     public Image PC1HPBar;
     public GameObject PC1Panel;
+    public Image PC1Icon;
 
     [Header("PC2 Stats")]
     public Text PC2NameText;
@@ -32,6 +38,29 @@ public class CombatUI : MonoBehaviour
     public Text PC2AbilityText;
     public Image PC2HPBar;
     public GameObject PC2Panel;
+    public Image PC2Icon;
+
+    [Header("PC3 Stats")]
+    public Text PC3NameText;
+    public Text PC3HPText;
+    public Text PC3ACText;
+    public Text PC3AtkText;
+    public Text PC3SpeedText;
+    public Text PC3AbilityText;
+    public Image PC3HPBar;
+    public GameObject PC3Panel;
+    public Image PC3Icon;
+
+    [Header("PC4 Stats")]
+    public Text PC4NameText;
+    public Text PC4HPText;
+    public Text PC4ACText;
+    public Text PC4AtkText;
+    public Text PC4SpeedText;
+    public Text PC4AbilityText;
+    public Image PC4HPBar;
+    public GameObject PC4Panel;
+    public Image PC4Icon;
 
     [Header("NPC Stats")]
     public Text NPCNameText;
@@ -73,6 +102,8 @@ public class CombatUI : MonoBehaviour
     // Active-PC indicator images on the panels
     public Image PC1ActiveIndicator;
     public Image PC2ActiveIndicator;
+    public Image PC3ActiveIndicator;
+    public Image PC4ActiveIndicator;
 
     // Legacy aliases for compatibility
     public Text PCNameText { get => PC1NameText; set => PC1NameText = value; }
@@ -92,7 +123,30 @@ public class CombatUI : MonoBehaviour
     }
 
     /// <summary>
-    /// Update stat displays for both PCs and multiple NPCs.
+    /// Update stat displays for all 4 PCs and multiple NPCs.
+    /// </summary>
+    public void UpdateAllStats4PC(List<CharacterController> pcs, List<CharacterController> npcs)
+    {
+        // Update PC panels
+        if (pcs.Count > 0) UpdateCharacterStats(pcs[0], PC1NameText, PC1HPText, PC1ACText, PC1AtkText, PC1SpeedText, PC1AbilityText, PC1HPBar);
+        if (pcs.Count > 1) UpdateCharacterStats(pcs[1], PC2NameText, PC2HPText, PC2ACText, PC2AtkText, PC2SpeedText, PC2AbilityText, PC2HPBar);
+        if (pcs.Count > 2) UpdateCharacterStats(pcs[2], PC3NameText, PC3HPText, PC3ACText, PC3AtkText, PC3SpeedText, PC3AbilityText, PC3HPBar);
+        if (pcs.Count > 3) UpdateCharacterStats(pcs[3], PC4NameText, PC4HPText, PC4ACText, PC4AtkText, PC4SpeedText, PC4AbilityText, PC4HPBar);
+
+        // Update each NPC panel
+        for (int i = 0; i < NPCPanels.Count && i < npcs.Count; i++)
+        {
+            var p = NPCPanels[i];
+            UpdateCharacterStats(npcs[i], p.NameText, p.HPText, p.ACText, p.AtkText, p.SpeedText, p.AbilityText, p.HPBar);
+        }
+
+        // Also update legacy single-NPC fields if they exist (backward compat)
+        if (npcs.Count > 0)
+            UpdateCharacterStats(npcs[0], NPCNameText, NPCHPText, NPCACText, NPCAtkText, NPCSpeedText, NPCAbilityText, NPCHPBar);
+    }
+
+    /// <summary>
+    /// Update stat displays for both PCs and multiple NPCs (legacy 2-PC version).
     /// </summary>
     public void UpdateAllStatsMultiNPC(CharacterController pc1, CharacterController pc2, List<CharacterController> npcs)
     {
@@ -131,13 +185,11 @@ public class CombatUI : MonoBehaviour
 
         if (acText != null)
         {
-            // Show effective DEX mod (capped by Max Dex Bonus from armor)
             int effectiveDex = s.DEXMod;
             if (s.MaxDexBonus >= 0 && effectiveDex > s.MaxDexBonus)
                 effectiveDex = s.MaxDexBonus;
             string dexLabel = (s.MaxDexBonus >= 0 && s.DEXMod > s.MaxDexBonus)
-                ? $"DEX*"  // Asterisk indicates capped
-                : "DEX";
+                ? $"DEX*" : "DEX";
             string sizeDetail = FormatBonusDetail(s.SizeModifier, "Size");
             string acDetails = $"AC: {s.ArmorClass} (10{FormatBonusDetail(effectiveDex, dexLabel)}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")}{sizeDetail})";
             if (s.ArmorCheckPenalty > 0)
@@ -162,7 +214,6 @@ public class CombatUI : MonoBehaviour
         if (abilityText != null)
         {
             abilityText.supportRichText = true;
-            // Show racial modifiers as annotations (e.g., CON 16(+3)[+2] for Dwarf)
             abilityText.text =
                 $"{s.GetAbilityStringWithRacial("STR", s.STR, s.GetRacialModifier("STR"))} " +
                 $"{s.GetAbilityStringWithRacial("DEX", s.DEX, s.GetRacialModifier("DEX"))} " +
@@ -196,11 +247,24 @@ public class CombatUI : MonoBehaviour
             TurnIndicatorText.text = message;
     }
 
+    /// <summary>
+    /// Update the initiative order display text.
+    /// </summary>
+    public void UpdateInitiativeDisplay(string initiativeText)
+    {
+        if (InitiativeOrderText != null)
+        {
+            InitiativeOrderText.supportRichText = true;
+            InitiativeOrderText.text = initiativeText;
+        }
+        if (InitiativePanel != null)
+            InitiativePanel.SetActive(!string.IsNullOrEmpty(initiativeText));
+    }
+
     public void ShowCombatLog(string message)
     {
         if (CombatLogText != null)
         {
-            // Apply rich-text highlighting for critical hits
             CombatLogText.supportRichText = true;
             string formatted = HighlightCriticalHits(message);
             CombatLogText.text = formatted;
@@ -209,51 +273,30 @@ public class CombatUI : MonoBehaviour
 
     /// <summary>
     /// Apply rich-text color highlights for combat log text.
-    /// Colors: Green=hits, Red=misses, Gold=crits/Power Attack, Blue=Rapid Shot, Green=PBS
     /// </summary>
     private string HighlightCriticalHits(string text)
     {
-        // Highlight hit/miss results
         text = text.Replace("- HIT!", "- <color=#66FF66><b>HIT!</b></color>");
         text = text.Replace("- MISS!", "- <color=#FF4444><b>MISS!</b></color>");
-
-        // Highlight critical hit confirmations and damage in gold/yellow
         text = text.Replace("CRITICAL HIT!", "<color=#FFD700><b>CRITICAL HIT!</b></color>");
         text = text.Replace("CRIT!", "<color=#FFD700><b>CRIT!</b></color>");
         text = text.Replace("*** Critical Threat", "<color=#FFA500><b>*** Critical Threat</b></color>");
         text = text.Replace("CONFIRMED!", "<color=#FFD700><b>CONFIRMED!</b></color>");
         text = text.Replace("Not confirmed", "<color=#AAAAAA>Not confirmed</color>");
-
-        // Highlight natural 20s in bright gold
         text = text.Replace("(NATURAL 20!)", "<color=#FFD700><b>(NATURAL 20!)</b></color>");
         text = text.Replace("(NAT 20!)", "<color=#FFD700><b>(NAT 20!)</b></color>");
-
-        // Highlight natural 1s in red
         text = text.Replace("(NATURAL 1!)", "<color=#FF4444><b>(NATURAL 1!)</b></color>");
         text = text.Replace("(NAT 1!)", "<color=#FF4444><b>(NAT 1!)</b></color>");
-
-        // Highlight slain messages
         text = text.Replace("has been slain!", "<color=#FF6666><b>has been slain!</b></color>");
-
-        // Highlight range info
         text = text.Replace("no penalty", "<color=#66FF66>no penalty</color>");
         text = text.Replace("beyond maximum range!", "<color=#FF4444><b>beyond maximum range!</b></color>");
-
-        // Highlight feat text - Gold for Power Attack, Blue for Rapid Shot, Green for PBS
         text = text.Replace("Power Attack", "<color=#FF9933>Power Attack</color>");
         text = text.Replace("Rapid Shot", "<color=#66CCFF>Rapid Shot</color>");
         text = text.Replace("Point Blank Shot", "<color=#66FF66>Point Blank Shot</color>");
-
-        // Highlight separator lines
         text = text.Replace("═══════════════════════════════════", "<color=#888888>═══════════════════════════════════</color>");
-
-        // Highlight damage numbers
         text = text.Replace("total damage", "<color=#FFAA44><b>total damage</b></color>");
         text = text.Replace(" damage", " <color=#FFAA44>damage</color>");
-
-        // Highlight HP change arrows
         text = text.Replace(" → ", " <color=#FFFF66>→</color> ");
-
         return text;
     }
 
@@ -261,7 +304,6 @@ public class CombatUI : MonoBehaviour
     {
         if (ActionPanel != null)
             ActionPanel.SetActive(visible);
-        // Hide feat controls and rage status when action panel is hidden
         if (!visible)
         {
             if (PowerAttackPanel != null) PowerAttackPanel.SetActive(false);
@@ -274,7 +316,6 @@ public class CombatUI : MonoBehaviour
 
     /// <summary>
     /// Update the action panel buttons based on the current action economy state.
-    /// Enables/disables buttons based on available actions.
     /// </summary>
     public void UpdateActionButtons(CharacterController pc)
     {
@@ -283,107 +324,70 @@ public class CombatUI : MonoBehaviour
         var actions = pc.Actions;
         bool canDualWield = pc.CanDualWield();
         bool hasIterativeAttacks = pc.Stats.IterativeAttackCount > 1;
-
-        // Rapid Shot grants an extra attack during full attack with ranged weapon,
-        // so we need to show the Full Attack button even at low BAB
         bool hasRapidShot = pc.Stats.HasFeat("Rapid Shot");
         bool fullAttackRelevant = hasIterativeAttacks || hasRapidShot;
 
-        // Move button: available if Move Action is available, or can convert Standard to Move
         if (MoveButton != null)
         {
             bool canMove = actions.HasMoveAction || actions.CanConvertStandardToMove;
             MoveButton.gameObject.SetActive(true);
             MoveButton.interactable = canMove;
-
-            // Update label
             Text moveLabel = MoveButton.GetComponentInChildren<Text>();
             if (moveLabel != null)
             {
-                if (actions.HasMoveAction)
-                    moveLabel.text = "Move (Move Action)";
-                else if (actions.CanConvertStandardToMove)
-                    moveLabel.text = "Move (Std\u2192Move)";
-                else
-                    moveLabel.text = "Move (Used)";
+                if (actions.HasMoveAction) moveLabel.text = "Move (Move Action)";
+                else if (actions.CanConvertStandardToMove) moveLabel.text = "Move (Std→Move)";
+                else moveLabel.text = "Move (Used)";
             }
         }
 
-        // Single Attack button: Standard Action
         if (AttackButton != null)
         {
             AttackButton.gameObject.SetActive(true);
             AttackButton.interactable = actions.HasStandardAction;
-
             Text atkLabel = AttackButton.GetComponentInChildren<Text>();
             if (atkLabel != null)
                 atkLabel.text = actions.HasStandardAction ? "Attack (Standard)" : "Attack (Used)";
         }
 
-        // Full Attack button: Full-Round Action
-        // Show if BAB grants iterative attacks OR if character has Rapid Shot feat
-        // (Rapid Shot adds an extra attack during full attack with ranged weapon)
         if (FullAttackButton != null)
         {
             bool showFullAtk = fullAttackRelevant && actions.HasFullRoundAction;
             FullAttackButton.gameObject.SetActive(fullAttackRelevant);
             FullAttackButton.interactable = showFullAtk;
-
             Text faLabel = FullAttackButton.GetComponentInChildren<Text>();
             if (faLabel != null)
             {
                 int atkCount = pc.Stats.IterativeAttackCount;
-                // Rapid Shot only adds an extra attack with a ranged weapon equipped
                 bool weaponIsRanged = pc.IsEquippedWeaponRanged();
                 bool rapidShotWillApply = hasRapidShot && pc.RapidShotEnabled && weaponIsRanged;
-
                 string label;
-                if (!showFullAtk)
-                {
-                    label = "Full Attack (N/A)";
-                }
-                else if (rapidShotWillApply)
-                {
-                    label = $"Full Attack x{atkCount + 1} (Rapid Shot)";
-                }
-                else if (hasRapidShot && pc.RapidShotEnabled && !weaponIsRanged)
-                {
-                    // Rapid Shot is ON but weapon is melee — warn the user
-                    label = $"Full Attack x{atkCount} (RS: need ranged wpn)";
-                }
-                else if (hasIterativeAttacks)
-                {
-                    label = $"Full Attack x{atkCount} (Full-Round)";
-                }
-                else
-                {
-                    label = "Full Attack (Full-Round)";
-                }
+                if (!showFullAtk) label = "Full Attack (N/A)";
+                else if (rapidShotWillApply) label = $"Full Attack x{atkCount + 1} (Rapid Shot)";
+                else if (hasRapidShot && pc.RapidShotEnabled && !weaponIsRanged) label = $"Full Attack x{atkCount} (RS: need ranged wpn)";
+                else if (hasIterativeAttacks) label = $"Full Attack x{atkCount} (Full-Round)";
+                else label = "Full Attack (Full-Round)";
                 faLabel.text = label;
             }
         }
 
-        // Dual Wield button: Full-Round Action, only show if both hands have weapons
         if (DualWieldButton != null)
         {
             bool showDW = canDualWield;
             bool canDW = canDualWield && actions.HasFullRoundAction;
             DualWieldButton.gameObject.SetActive(showDW);
             DualWieldButton.interactable = canDW;
-
             Text dwLabel = DualWieldButton.GetComponentInChildren<Text>();
             if (dwLabel != null)
                 dwLabel.text = canDW ? "Dual Wield (Full-Round)" : "Dual Wield (N/A)";
         }
 
-        // Flurry of Blows button: Full-Round Action, Monk only
         if (FlurryOfBlowsButton != null)
         {
             bool isMonk = pc.Stats.IsMonk;
             bool canFlurry = isMonk && actions.HasFullRoundAction;
             FlurryOfBlowsButton.gameObject.SetActive(isMonk);
             FlurryOfBlowsButton.interactable = canFlurry;
-
             Text flurryLabel = FlurryOfBlowsButton.GetComponentInChildren<Text>();
             if (flurryLabel != null)
             {
@@ -393,14 +397,10 @@ public class CombatUI : MonoBehaviour
                     string bonusStr = string.Join("/", System.Array.ConvertAll(bonuses, b => CharacterStats.FormatMod(b)));
                     flurryLabel.text = $"Flurry of Blows x{bonuses.Length} ({bonusStr})";
                 }
-                else
-                {
-                    flurryLabel.text = "Flurry of Blows (N/A)";
-                }
+                else flurryLabel.text = "Flurry of Blows (N/A)";
             }
         }
 
-        // Rage button: Free Action, Barbarian only
         if (RageButton != null)
         {
             bool isBarbarian = pc.Stats.IsBarbarian;
@@ -408,22 +408,16 @@ public class CombatUI : MonoBehaviour
                            && pc.Stats.RagesUsedToday < pc.Stats.MaxRagesPerDay;
             RageButton.gameObject.SetActive(isBarbarian);
             RageButton.interactable = canRage;
-
             Text rageLabel = RageButton.GetComponentInChildren<Text>();
             if (rageLabel != null)
             {
-                if (pc.Stats.IsRaging)
-                    rageLabel.text = $"RAGING ({pc.Stats.RageRoundsRemaining} rds)";
-                else if (pc.Stats.IsFatigued)
-                    rageLabel.text = "Rage (Fatigued)";
-                else if (canRage)
-                    rageLabel.text = $"Rage ({pc.Stats.MaxRagesPerDay - pc.Stats.RagesUsedToday}/day)";
-                else
-                    rageLabel.text = "Rage (Used)";
+                if (pc.Stats.IsRaging) rageLabel.text = $"RAGING ({pc.Stats.RageRoundsRemaining} rds)";
+                else if (pc.Stats.IsFatigued) rageLabel.text = "Rage (Fatigued)";
+                else if (canRage) rageLabel.text = $"Rage ({pc.Stats.MaxRagesPerDay - pc.Stats.RagesUsedToday}/day)";
+                else rageLabel.text = "Rage (Used)";
             }
         }
 
-        // Rage status text
         if (RageStatusText != null)
         {
             bool isBarbarian = pc.Stats.IsBarbarian;
@@ -434,31 +428,22 @@ public class CombatUI : MonoBehaviour
                 RageStatusText.text = "😫 FATIGUED: -2 STR, -2 DEX";
         }
 
-        // End Turn always available
         if (EndTurnButton != null)
         {
             EndTurnButton.gameObject.SetActive(true);
             EndTurnButton.interactable = true;
         }
 
-        // Action status text
         if (ActionStatusText != null)
-        {
             ActionStatusText.text = actions.GetStatusString();
-        }
     }
 
     // ========== FEAT UI ==========
 
-    /// <summary>
-    /// Update feat controls (Power Attack slider, Rapid Shot toggle) for the active PC.
-    /// Only shows controls for feats the character actually has.
-    /// </summary>
     public void UpdateFeatControls(CharacterController pc)
     {
         if (pc == null || pc.Stats == null) return;
 
-        // === Power Attack ===
         bool hasPowerAttack = pc.Stats.HasFeat("Power Attack");
         if (PowerAttackPanel != null)
         {
@@ -474,38 +459,26 @@ public class CombatUI : MonoBehaviour
             }
         }
 
-        // === Rapid Shot ===
         bool hasRapidShot = pc.Stats.HasFeat("Rapid Shot");
         if (RapidShotPanel != null)
         {
             RapidShotPanel.SetActive(hasRapidShot);
-            if (hasRapidShot)
-            {
-                UpdateRapidShotLabel(pc);
-            }
+            if (hasRapidShot) UpdateRapidShotLabel(pc);
         }
     }
 
-    /// <summary>Update Power Attack label to show current penalty/bonus.</summary>
     public void UpdatePowerAttackLabel(CharacterController pc)
     {
         if (PowerAttackLabel == null || pc == null) return;
         int val = pc.PowerAttackValue;
-        if (val == 0)
-        {
-            PowerAttackLabel.text = "Power Attack: OFF";
-        }
-        else
-        {
-            ItemData weapon = pc.GetEquippedMainWeapon();
-            bool twoHanded = CharacterController.IsWeaponTwoHanded(weapon);
-            int dmgBonus = twoHanded ? val * 2 : val;
-            string thStr = twoHanded ? " (2H)" : "";
-            PowerAttackLabel.text = $"Power Attack: -{val} atk / +{dmgBonus} dmg{thStr}";
-        }
+        if (val == 0) { PowerAttackLabel.text = "Power Attack: OFF"; return; }
+        ItemData weapon = pc.GetEquippedMainWeapon();
+        bool twoHanded = CharacterController.IsWeaponTwoHanded(weapon);
+        int dmgBonus = twoHanded ? val * 2 : val;
+        string thStr = twoHanded ? " (2H)" : "";
+        PowerAttackLabel.text = $"Power Attack: -{val} atk / +{dmgBonus} dmg{thStr}";
     }
 
-    /// <summary>Update Rapid Shot label to show ON/OFF state.</summary>
     public void UpdateRapidShotLabel(CharacterController pc)
     {
         if (RapidShotLabel == null || pc == null) return;
@@ -535,31 +508,59 @@ public class CombatUI : MonoBehaviour
     }
 
     /// <summary>
-    /// Highlight which PC is currently active (1 or 2). Pass 0 to clear.
+    /// Highlight which PC is currently active (1-4). Pass 0 to clear all.
     /// </summary>
     public void SetActivePC(int pcNumber)
     {
-        if (PC1ActiveIndicator != null)
-            PC1ActiveIndicator.enabled = (pcNumber == 1);
-        if (PC2ActiveIndicator != null)
-            PC2ActiveIndicator.enabled = (pcNumber == 2);
+        if (PC1ActiveIndicator != null) PC1ActiveIndicator.enabled = (pcNumber == 1);
+        if (PC2ActiveIndicator != null) PC2ActiveIndicator.enabled = (pcNumber == 2);
+        if (PC3ActiveIndicator != null) PC3ActiveIndicator.enabled = (pcNumber == 3);
+        if (PC4ActiveIndicator != null) PC4ActiveIndicator.enabled = (pcNumber == 4);
 
-        // Dim dead / inactive panel, brighten active
-        if (PC1Panel != null)
+        // Dim inactive panels, brighten active
+        SetPanelActiveState(PC1Panel, pcNumber == 1, new Color(0.1f, 0.3f, 0.5f, 0.95f), new Color(0.1f, 0.2f, 0.4f, 0.65f));
+        SetPanelActiveState(PC2Panel, pcNumber == 2, new Color(0.1f, 0.2f, 0.5f, 0.95f), new Color(0.1f, 0.15f, 0.35f, 0.65f));
+        SetPanelActiveState(PC3Panel, pcNumber == 3, new Color(0.15f, 0.3f, 0.4f, 0.95f), new Color(0.1f, 0.2f, 0.3f, 0.65f));
+        SetPanelActiveState(PC4Panel, pcNumber == 4, new Color(0.3f, 0.15f, 0.15f, 0.95f), new Color(0.25f, 0.1f, 0.1f, 0.65f));
+    }
+
+    private void SetPanelActiveState(GameObject panel, bool active, Color activeColor, Color inactiveColor)
+    {
+        if (panel == null) return;
+        Image panelImg = panel.GetComponent<Image>();
+        if (panelImg != null)
+            panelImg.color = active ? activeColor : inactiveColor;
+    }
+
+    /// <summary>
+    /// Set a PC panel's icon sprite.
+    /// </summary>
+    public void SetPCIcon(int pcNumber, Sprite icon)
+    {
+        Image target = null;
+        switch (pcNumber)
         {
-            Image panelImg = PC1Panel.GetComponent<Image>();
-            if (panelImg != null)
-                panelImg.color = (pcNumber == 1)
-                    ? new Color(0.1f, 0.3f, 0.5f, 0.95f)   // bright active
-                    : new Color(0.1f, 0.2f, 0.4f, 0.65f);   // dimmed
+            case 1: target = PC1Icon; break;
+            case 2: target = PC2Icon; break;
+            case 3: target = PC3Icon; break;
+            case 4: target = PC4Icon; break;
         }
-        if (PC2Panel != null)
+        if (target != null && icon != null)
         {
-            Image panelImg = PC2Panel.GetComponent<Image>();
-            if (panelImg != null)
-                panelImg.color = (pcNumber == 2)
-                    ? new Color(0.1f, 0.2f, 0.5f, 0.95f)
-                    : new Color(0.1f, 0.15f, 0.35f, 0.65f);
+            target.sprite = icon;
+            target.enabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Set an NPC panel's icon sprite.
+    /// </summary>
+    public void SetNPCIcon(int npcIndex, Sprite icon)
+    {
+        if (npcIndex < NPCPanels.Count && NPCPanels[npcIndex].IconImage != null && icon != null)
+        {
+            NPCPanels[npcIndex].IconImage.sprite = icon;
+            NPCPanels[npcIndex].IconImage.enabled = true;
         }
     }
 
@@ -574,23 +575,14 @@ public class CombatUI : MonoBehaviour
     private System.Action _onAoOConfirm;
     private System.Action _onAoOCancel;
 
-    /// <summary>
-    /// Show the AoO warning confirmation dialog.
-    /// Blocks all other actions until the player responds.
-    /// </summary>
-    /// <param name="enemyNames">List of enemy names that would get AoOs.</param>
-    /// <param name="onConfirm">Callback when player confirms movement.</param>
-    /// <param name="onCancel">Callback when player cancels movement.</param>
     public void ShowAoOWarning(List<string> enemyNames, System.Action onConfirm, System.Action onCancel)
     {
         _onAoOConfirm = onConfirm;
         _onAoOCancel = onCancel;
 
-        // Build the warning panel if it doesn't exist
         if (_aooWarningPanel == null)
             BuildAoOWarningPanel();
 
-        // Set the warning text
         string enemyList = string.Join(", ", enemyNames);
         _aooWarningText.text = $"⚠ ATTACK OF OPPORTUNITY WARNING ⚠\n\n" +
                                $"This movement will provoke Attacks of Opportunity from:\n" +
@@ -602,27 +594,18 @@ public class CombatUI : MonoBehaviour
         Debug.Log($"[CombatUI] AoO warning shown: {enemyList}");
     }
 
-    /// <summary>
-    /// Hide the AoO warning dialog.
-    /// </summary>
     public void HideAoOWarning()
     {
         if (_aooWarningPanel != null)
             _aooWarningPanel.SetActive(false);
     }
 
-    /// <summary>
-    /// Build the AoO warning panel UI programmatically.
-    /// </summary>
     private void BuildAoOWarningPanel()
     {
-        // Find or create a canvas
         Canvas canvas = GetComponentInParent<Canvas>();
-        if (canvas == null)
-            canvas = FindObjectOfType<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
         if (canvas == null) return;
 
-        // Create overlay panel (blocks raycasts)
         _aooWarningPanel = new GameObject("AoOWarningPanel");
         _aooWarningPanel.transform.SetParent(canvas.transform, false);
         RectTransform panelRT = _aooWarningPanel.AddComponent<RectTransform>();
@@ -631,16 +614,13 @@ public class CombatUI : MonoBehaviour
         panelRT.offsetMin = Vector2.zero;
         panelRT.offsetMax = Vector2.zero;
 
-        // Semi-transparent background
         Image bgImage = _aooWarningPanel.AddComponent<Image>();
         bgImage.color = new Color(0f, 0f, 0f, 0.7f);
 
-        // Add CanvasGroup to block raycasts
         CanvasGroup cg = _aooWarningPanel.AddComponent<CanvasGroup>();
         cg.blocksRaycasts = true;
         cg.interactable = true;
 
-        // Dialog box
         GameObject dialogBox = new GameObject("DialogBox");
         dialogBox.transform.SetParent(_aooWarningPanel.transform, false);
         RectTransform dialogRT = dialogBox.AddComponent<RectTransform>();
@@ -652,12 +632,10 @@ public class CombatUI : MonoBehaviour
         Image dialogBg = dialogBox.AddComponent<Image>();
         dialogBg.color = new Color(0.15f, 0.1f, 0.1f, 0.95f);
 
-        // Add outline
         Outline dialogOutline = dialogBox.AddComponent<Outline>();
         dialogOutline.effectColor = new Color(0.8f, 0.2f, 0.2f, 1f);
         dialogOutline.effectDistance = new Vector2(2, 2);
 
-        // Warning text
         GameObject textObj = new GameObject("WarningText");
         textObj.transform.SetParent(dialogBox.transform, false);
         RectTransform textRT = textObj.AddComponent<RectTransform>();
@@ -674,32 +652,20 @@ public class CombatUI : MonoBehaviour
         _aooWarningText.color = Color.white;
         _aooWarningText.alignment = TextAnchor.MiddleCenter;
         _aooWarningText.supportRichText = true;
-        _aooWarningText.text = "";
 
-        // Confirm button
         _aooConfirmButton = CreateAoOButton(dialogBox, "ConfirmBtn",
             "⚔ CONFIRM (Provoke AoO)", new Vector2(0.1f, 0.05f), new Vector2(0.48f, 0.22f),
             new Color(0.6f, 0.2f, 0.2f, 1f));
-        _aooConfirmButton.onClick.AddListener(() =>
-        {
-            HideAoOWarning();
-            _onAoOConfirm?.Invoke();
-        });
+        _aooConfirmButton.onClick.AddListener(() => { HideAoOWarning(); _onAoOConfirm?.Invoke(); });
 
-        // Cancel button
         _aooCancelButton = CreateAoOButton(dialogBox, "CancelBtn",
             "✋ CANCEL (Stay Safe)", new Vector2(0.52f, 0.05f), new Vector2(0.9f, 0.22f),
             new Color(0.2f, 0.4f, 0.2f, 1f));
-        _aooCancelButton.onClick.AddListener(() =>
-        {
-            HideAoOWarning();
-            _onAoOCancel?.Invoke();
-        });
+        _aooCancelButton.onClick.AddListener(() => { HideAoOWarning(); _onAoOCancel?.Invoke(); });
 
         _aooWarningPanel.SetActive(false);
     }
 
-    /// <summary>Helper to create a styled button for the AoO dialog.</summary>
     private Button CreateAoOButton(GameObject parent, string name, string label,
         Vector2 anchorMin, Vector2 anchorMax, Color bgColor)
     {
@@ -730,8 +696,7 @@ public class CombatUI : MonoBehaviour
 
         Text txt = txtObj.AddComponent<Text>();
         txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (txt.font == null)
-            txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
         txt.fontSize = 14;
         txt.color = Color.white;
         txt.alignment = TextAnchor.MiddleCenter;
@@ -759,4 +724,5 @@ public class NPCPanelUI
     public Text SpeedText;
     public Text AbilityText;
     public Image HPBar;
+    public Image IconImage;
 }

@@ -5,7 +5,8 @@ using UnityEngine.UI;
 /// Bootstraps the entire game scene programmatically.
 /// Attach this to a single empty GameObject in the scene.
 /// Creates all required GameObjects, components, and UI at runtime.
-/// Supports two PC characters (PC1, PC2) and multiple NPC enemies with full D&D 3.5 stats display.
+/// Supports four PC characters (PC1-PC4) and multiple NPC enemies with full D&D 3.5 stats display.
+/// Includes initiative order display panel and character icons.
 /// </summary>
 public class SceneBootstrap : MonoBehaviour
 {
@@ -14,9 +15,9 @@ public class SceneBootstrap : MonoBehaviour
         // Build the entire scene
         SetupCamera();
         SquareGrid grid = CreateSquareGrid();
-        var (pc1, pc2, npc, npcList) = CreateCharacters();
+        var (pcs, npc, npcList) = CreateCharacters();
         CombatUI combatUI = CreateUI();
-        SetupGameManager(grid, pc1, pc2, npc, combatUI, npcList);
+        SetupGameManager(grid, pcs, npc, combatUI, npcList);
     }
 
     // ========== CAMERA ==========
@@ -54,22 +55,15 @@ public class SceneBootstrap : MonoBehaviour
         Color outline = new Color(0.4f, 0.5f, 0.4f, 1f);
 
         Color[] pixels = new Color[size * size];
-
-        int border = 2; // border thickness in pixels
-
+        int border = 2;
         for (int y = 0; y < size; y++)
         {
             for (int x = 0; x < size; x++)
             {
-                // Draw a square with border
                 if (x < border || x >= size - border || y < border || y >= size - border)
-                {
                     pixels[y * size + x] = outline;
-                }
                 else
-                {
                     pixels[y * size + x] = fill;
-                }
             }
         }
 
@@ -80,19 +74,25 @@ public class SceneBootstrap : MonoBehaviour
     }
 
     // ========== CHARACTERS ==========
-    private (CharacterController pc1, CharacterController pc2, CharacterController npc, System.Collections.Generic.List<CharacterController> npcList) CreateCharacters()
+    private (CharacterController[] pcs, CharacterController npc, System.Collections.Generic.List<CharacterController> npcList) CreateCharacters()
     {
-        // PC1
-        GameObject pc1GO = new GameObject("PC_Hero1");
-        pc1GO.AddComponent<SpriteRenderer>();
-        CharacterController pc1 = pc1GO.AddComponent<CharacterController>();
-        pc1.IsPlayerControlled = true;
+        // Create 4 PCs
+        CharacterController[] pcs = new CharacterController[4];
+        string[] pcNames = { "PC_Hero1", "PC_Hero2", "PC_Hero3", "PC_Hero4" };
+        Color[] pcTints = {
+            Color.white,
+            new Color(0.6f, 0.7f, 1f, 1f),
+            new Color(0.5f, 0.9f, 0.7f, 1f),
+            new Color(1f, 0.6f, 0.5f, 1f)
+        };
 
-        // PC2
-        GameObject pc2GO = new GameObject("PC_Hero2");
-        pc2GO.AddComponent<SpriteRenderer>();
-        CharacterController pc2 = pc2GO.AddComponent<CharacterController>();
-        pc2.IsPlayerControlled = true;
+        for (int i = 0; i < 4; i++)
+        {
+            GameObject pcGO = new GameObject(pcNames[i]);
+            pcGO.AddComponent<SpriteRenderer>();
+            pcs[i] = pcGO.AddComponent<CharacterController>();
+            pcs[i].IsPlayerControlled = true;
+        }
 
         // Legacy NPC (first enemy — kept for backward compatibility)
         GameObject npcGO = new GameObject("NPC_Enemy_0");
@@ -101,9 +101,8 @@ public class SceneBootstrap : MonoBehaviour
         npc.IsPlayerControlled = false;
 
         // Create additional NPC GameObjects for the encounter
-        // Default encounter: Skeleton Archer, Orc Berserker, Hobgoblin Sergeant
         var npcList = new System.Collections.Generic.List<CharacterController>();
-        npcList.Add(npc); // first NPC reuses the legacy field
+        npcList.Add(npc);
 
         string[] enemyNames = { "NPC_Enemy_1", "NPC_Enemy_2" };
         for (int i = 0; i < enemyNames.Length; i++)
@@ -115,14 +114,15 @@ public class SceneBootstrap : MonoBehaviour
             npcList.Add(cc);
         }
 
-        Debug.Log($"[SceneBootstrap] Created {npcList.Count} NPC GameObjects for encounter.");
-        return (pc1, pc2, npc, npcList);
+        Debug.Log($"[SceneBootstrap] Created 4 PC and {npcList.Count} NPC GameObjects for encounter.");
+        return (pcs, npc, npcList);
     }
 
     // ========== UI ==========
-    // Panel dimensions — taller and wider to accommodate ability scores + racial info
-    private const float PanelWidth = 310f;
-    private const float PanelHeight = 220f;
+    // Panel dimensions — compact to fit 4 PCs
+    private const float PanelWidth = 260f;
+    private const float PanelHeight = 200f;
+    private const float IconSize = 40f;
 
     private CombatUI CreateUI()
     {
@@ -157,18 +157,20 @@ public class SceneBootstrap : MonoBehaviour
 
         AddBackground(combatUI.TurnIndicatorText.transform, new Color(0, 0, 0, 0.7f), new Vector2(820, 55));
 
-        // --- PC1 Stats Panel (bottom left) ---
-        CreatePC1Panel(canvasGO.transform, combatUI);
+        // --- Initiative Order Display (below turn indicator) ---
+        CreateInitiativePanel(canvasGO.transform, combatUI);
 
-        // --- PC2 Stats Panel (next to PC1) ---
+        // --- PC Stats Panels (bottom, 4 panels side by side) ---
+        CreatePC1Panel(canvasGO.transform, combatUI);
         CreatePC2Panel(canvasGO.transform, combatUI);
+        CreatePC3Panel(canvasGO.transform, combatUI);
+        CreatePC4Panel(canvasGO.transform, combatUI);
 
         // --- NPC Stats Panels (right side, stacked for each enemy) ---
         CreateNPCPanel(canvasGO.transform, combatUI); // Legacy single NPC panel (index 0)
         CreateMultiNPCPanels(canvasGO.transform, combatUI, 3); // 3 enemy panels
 
         // --- Combat Log (bottom center, raised above panels) ---
-        // Taller to accommodate multi-attack results (full attack / dual wield)
         GameObject logPanel = CreatePanel(canvasGO.transform, "CombatLogPanel",
             new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
             new Vector2(0, PanelHeight + 20), new Vector2(540, 140),
@@ -206,37 +208,37 @@ public class SceneBootstrap : MonoBehaviour
             "[Move] [Standard]", 11, new Color(0.7f, 0.9f, 0.7f), TextAnchor.MiddleCenter);
         y -= 28f;
 
-        // Move Button (Move Action)
+        // Move Button
         combatUI.MoveButton = CreateButton(actionPanel.transform, "MoveBtn",
             new Vector2(10, y - btnH), new Vector2(btnW, btnH),
             "Move (Move Action)", new Color(0.2f, 0.5f, 0.2f), Color.white);
         y -= btnH + 5f;
 
-        // Attack Button (Standard Action)
+        // Attack Button
         combatUI.AttackButton = CreateButton(actionPanel.transform, "AttackBtn",
             new Vector2(10, y - btnH), new Vector2(btnW, btnH),
             "Attack (Standard)", new Color(0.8f, 0.2f, 0.2f), Color.white);
         y -= btnH + 5f;
 
-        // Full Attack Button (Full-Round Action)
+        // Full Attack Button
         combatUI.FullAttackButton = CreateButton(actionPanel.transform, "FullAttackBtn",
             new Vector2(10, y - btnH), new Vector2(btnW, btnH),
             "Full Attack (Full-Round)", new Color(0.7f, 0.15f, 0.15f), Color.white);
         y -= btnH + 5f;
 
-        // Dual Wield Button (Full-Round Action)
+        // Dual Wield Button
         combatUI.DualWieldButton = CreateButton(actionPanel.transform, "DualWieldBtn",
             new Vector2(10, y - btnH), new Vector2(btnW, btnH),
             "Dual Wield (Full-Round)", new Color(0.6f, 0.3f, 0.6f), Color.white);
         y -= btnH + 5f;
 
-        // Flurry of Blows Button (Full-Round Action, Monk only)
+        // Flurry of Blows Button
         combatUI.FlurryOfBlowsButton = CreateButton(actionPanel.transform, "FlurryBtn",
             new Vector2(10, y - btnH), new Vector2(btnW, btnH),
             "Flurry of Blows", new Color(0.2f, 0.6f, 0.6f), Color.white);
         y -= btnH + 5f;
 
-        // Rage Button (Free Action, Barbarian only)
+        // Rage Button
         combatUI.RageButton = CreateButton(actionPanel.transform, "RageBtn",
             new Vector2(10, y - btnH), new Vector2(btnW, btnH),
             "Rage", new Color(0.7f, 0.2f, 0.1f), Color.white);
@@ -258,217 +260,228 @@ public class SceneBootstrap : MonoBehaviour
 
         actionPanel.SetActive(false);
 
-        // --- Feat Controls (positioned above action panel) ---
+        // --- Feat Controls ---
         CreateFeatControls(canvasGO.transform, combatUI, actionPanelWidth);
 
         return combatUI;
     }
 
-    /// <summary>Create PC1 stats panel with D&D 3.5 ability scores.</summary>
-    private void CreatePC1Panel(Transform parent, CombatUI combatUI)
+    /// <summary>Create the initiative order display panel below the turn indicator.</summary>
+    private void CreateInitiativePanel(Transform parent, CombatUI combatUI)
     {
-        GameObject panel = CreatePanel(parent, "PC1StatsPanel",
+        GameObject panel = CreatePanel(parent, "InitiativePanel",
+            new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1),
+            new Vector2(0, -68), new Vector2(900, 30),
+            new Color(0, 0, 0, 0.6f));
+        combatUI.InitiativePanel = panel;
+
+        combatUI.InitiativeOrderText = CreateText(panel.transform, "InitiativeText",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, 2), new Vector2(880, 26),
+            "", 13, new Color(0.9f, 0.9f, 0.8f), TextAnchor.MiddleCenter);
+
+        panel.SetActive(false); // Hidden until combat starts
+    }
+
+    /// <summary>Create a PC stats panel with D&D 3.5 ability scores and icon.</summary>
+    private void CreatePCPanel(Transform parent, CombatUI combatUI, int pcIndex, string panelName,
+        float xOffset, Color panelColor, Color nameColor, Color indicatorColor)
+    {
+        GameObject panel = CreatePanel(parent, panelName,
             new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
-            new Vector2(10, 10), new Vector2(PanelWidth, PanelHeight),
-            new Color(0.1f, 0.2f, 0.4f, 0.85f));
-        combatUI.PC1Panel = panel;
+            new Vector2(xOffset, 10), new Vector2(PanelWidth, PanelHeight),
+            panelColor);
 
         // Active indicator
-        combatUI.PC1ActiveIndicator = CreateActiveIndicator(panel.transform, "PC1Active",
-            new Vector2(0, PanelHeight - 6), new Vector2(PanelWidth, 6), new Color(0f, 1f, 0.3f));
+        Image indicator = CreateActiveIndicator(panel.transform, $"PC{pcIndex}Active",
+            new Vector2(0, PanelHeight - 6), new Vector2(PanelWidth, 6), indicatorColor);
 
         float y = PanelHeight - 18;
 
-        // Name
-        combatUI.PC1NameText = CreateText(panel.transform, "PC1Name",
+        // Icon + Name row
+        Image icon = CreateIconImage(panel.transform, $"PC{pcIndex}Icon",
+            new Vector2(8, y - IconSize + 18), new Vector2(IconSize, IconSize));
+
+        Text nameText = CreateText(panel.transform, $"PC{pcIndex}Name",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 22),
-            "Aldric (Lv 3 Dwarf Fighter)", 16, new Color(0.3f, 0.9f, 0.3f), TextAnchor.MiddleLeft);
+            new Vector2(IconSize + 14, y), new Vector2(PanelWidth - IconSize - 24, 20),
+            $"Hero {pcIndex}", 14, nameColor, TextAnchor.MiddleLeft);
         y -= 22;
 
-        // Ability scores (2 rows of 3)
-        combatUI.PC1AbilityText = CreateText(panel.transform, "PC1Abilities",
+        // Ability scores
+        Text abilityText = CreateText(panel.transform, $"PC{pcIndex}Abilities",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y - 28), new Vector2(PanelWidth - 20, 38),
-            "STR 16(+3) DEX 12(+1) CON 14(+2)\nWIS 10(+0) INT 10(+0) CHA 13(+1)", 12,
+            new Vector2(10, y - 24), new Vector2(PanelWidth - 20, 32),
+            "STR -- DEX -- CON --\nWIS -- INT -- CHA --", 10,
             new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
-        y -= 44;
+        y -= 38;
 
-        // Separator line (thin panel)
-        CreatePanel(panel.transform, "PC1Sep",
+        // Separator
+        CreatePanel(panel.transform, $"PC{pcIndex}Sep",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, y), new Vector2(PanelWidth - 20, 1),
             new Color(1, 1, 1, 0.2f));
-        y -= 6;
+        y -= 5;
 
         // HP
-        combatUI.PC1HPText = CreateText(panel.transform, "PC1HP",
+        Text hpText = CreateText(panel.transform, $"PC{pcIndex}HP",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 20),
-            "HP: 28/28", 16, Color.white, TextAnchor.MiddleLeft);
-        y -= 18;
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
+            "HP: --/--", 14, Color.white, TextAnchor.MiddleLeft);
+        y -= 16;
 
         // HP Bar
-        combatUI.PC1HPBar = CreateHPBar(panel.transform, "PC1HPBar",
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 12),
-            new Color(0.2f, 0.8f, 0.2f));
-        y -= 20;
+        Image hpBar = CreateHPBar(panel.transform, $"PC{pcIndex}HPBar",
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 10),
+            nameColor);
+        y -= 16;
 
         // AC
-        combatUI.PC1ACText = CreateText(panel.transform, "PC1AC",
+        Text acText = CreateText(panel.transform, $"PC{pcIndex}AC",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "AC: 17", 14, Color.white, TextAnchor.MiddleLeft);
-        y -= 20;
-
-        // Attack Bonus
-        combatUI.PC1AtkText = CreateText(panel.transform, "PC1Atk",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Atk: +6", 14, Color.white, TextAnchor.MiddleLeft);
-        y -= 20;
-
-        // Speed
-        combatUI.PC1SpeedText = CreateText(panel.transform, "PC1Speed",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Speed: 4 sq (20 ft) (no armor penalty)", 12, Color.white, TextAnchor.MiddleLeft);
-    }
-
-    /// <summary>Create PC2 stats panel with D&D 3.5 ability scores.</summary>
-    private void CreatePC2Panel(Transform parent, CombatUI combatUI)
-    {
-        GameObject panel = CreatePanel(parent, "PC2StatsPanel",
-            new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
-            new Vector2(PanelWidth + 20, 10), new Vector2(PanelWidth, PanelHeight),
-            new Color(0.1f, 0.15f, 0.35f, 0.85f));
-        combatUI.PC2Panel = panel;
-
-        combatUI.PC2ActiveIndicator = CreateActiveIndicator(panel.transform, "PC2Active",
-            new Vector2(0, PanelHeight - 6), new Vector2(PanelWidth, 6), new Color(0.3f, 0.5f, 1f));
-
-        float y = PanelHeight - 18;
-
-        combatUI.PC2NameText = CreateText(panel.transform, "PC2Name",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 22),
-            "Lyra (Lv 3 Elf Rogue)", 16, new Color(0.5f, 0.7f, 1f), TextAnchor.MiddleLeft);
-        y -= 22;
-
-        combatUI.PC2AbilityText = CreateText(panel.transform, "PC2Abilities",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y - 28), new Vector2(PanelWidth - 20, 38),
-            "STR 12(+1) DEX 17(+3) CON 12(+1)\nWIS 13(+1) INT 14(+2) CHA 10(+0)", 12,
-            new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
-        y -= 44;
-
-        CreatePanel(panel.transform, "PC2Sep",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 1),
-            new Color(1, 1, 1, 0.2f));
-        y -= 6;
-
-        combatUI.PC2HPText = CreateText(panel.transform, "PC2HP",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 20),
-            "HP: 18/18", 16, Color.white, TextAnchor.MiddleLeft);
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 16),
+            "AC: --", 12, Color.white, TextAnchor.MiddleLeft);
         y -= 18;
 
-        combatUI.PC2HPBar = CreateHPBar(panel.transform, "PC2HPBar",
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 12),
-            new Color(0.3f, 0.5f, 1f));
-        y -= 20;
-
-        combatUI.PC2ACText = CreateText(panel.transform, "PC2AC",
+        // Atk
+        Text atkText = CreateText(panel.transform, $"PC{pcIndex}Atk",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "AC: 15", 14, Color.white, TextAnchor.MiddleLeft);
-        y -= 20;
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 16),
+            "Atk: --", 12, Color.white, TextAnchor.MiddleLeft);
+        y -= 18;
 
-        combatUI.PC2AtkText = CreateText(panel.transform, "PC2Atk",
+        // Speed
+        Text speedText = CreateText(panel.transform, $"PC{pcIndex}Speed",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Atk: +3", 14, Color.white, TextAnchor.MiddleLeft);
-        y -= 20;
+            new Vector2(10, y), new Vector2(PanelWidth - 20, 16),
+            "Speed: -- sq", 11, Color.white, TextAnchor.MiddleLeft);
 
-        combatUI.PC2SpeedText = CreateText(panel.transform, "PC2Speed",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Speed: 6 sq (30 ft)", 12, Color.white, TextAnchor.MiddleLeft);
+        // Assign to CombatUI fields
+        switch (pcIndex)
+        {
+            case 1:
+                combatUI.PC1Panel = panel; combatUI.PC1ActiveIndicator = indicator;
+                combatUI.PC1NameText = nameText; combatUI.PC1AbilityText = abilityText;
+                combatUI.PC1HPText = hpText; combatUI.PC1HPBar = hpBar;
+                combatUI.PC1ACText = acText; combatUI.PC1AtkText = atkText;
+                combatUI.PC1SpeedText = speedText; combatUI.PC1Icon = icon;
+                break;
+            case 2:
+                combatUI.PC2Panel = panel; combatUI.PC2ActiveIndicator = indicator;
+                combatUI.PC2NameText = nameText; combatUI.PC2AbilityText = abilityText;
+                combatUI.PC2HPText = hpText; combatUI.PC2HPBar = hpBar;
+                combatUI.PC2ACText = acText; combatUI.PC2AtkText = atkText;
+                combatUI.PC2SpeedText = speedText; combatUI.PC2Icon = icon;
+                break;
+            case 3:
+                combatUI.PC3Panel = panel; combatUI.PC3ActiveIndicator = indicator;
+                combatUI.PC3NameText = nameText; combatUI.PC3AbilityText = abilityText;
+                combatUI.PC3HPText = hpText; combatUI.PC3HPBar = hpBar;
+                combatUI.PC3ACText = acText; combatUI.PC3AtkText = atkText;
+                combatUI.PC3SpeedText = speedText; combatUI.PC3Icon = icon;
+                break;
+            case 4:
+                combatUI.PC4Panel = panel; combatUI.PC4ActiveIndicator = indicator;
+                combatUI.PC4NameText = nameText; combatUI.PC4AbilityText = abilityText;
+                combatUI.PC4HPText = hpText; combatUI.PC4HPBar = hpBar;
+                combatUI.PC4ACText = acText; combatUI.PC4AtkText = atkText;
+                combatUI.PC4SpeedText = speedText; combatUI.PC4Icon = icon;
+                break;
+        }
     }
 
-    /// <summary>Create NPC stats panel with D&D 3.5 ability scores.</summary>
+    private void CreatePC1Panel(Transform parent, CombatUI combatUI)
+    {
+        CreatePCPanel(parent, combatUI, 1, "PC1StatsPanel", 10,
+            new Color(0.1f, 0.2f, 0.4f, 0.85f), new Color(0.3f, 0.9f, 0.3f), new Color(0f, 1f, 0.3f));
+    }
+
+    private void CreatePC2Panel(Transform parent, CombatUI combatUI)
+    {
+        CreatePCPanel(parent, combatUI, 2, "PC2StatsPanel", PanelWidth + 15,
+            new Color(0.1f, 0.15f, 0.35f, 0.85f), new Color(0.5f, 0.7f, 1f), new Color(0.3f, 0.5f, 1f));
+    }
+
+    private void CreatePC3Panel(Transform parent, CombatUI combatUI)
+    {
+        CreatePCPanel(parent, combatUI, 3, "PC3StatsPanel", (PanelWidth + 5) * 2 + 10,
+            new Color(0.1f, 0.25f, 0.25f, 0.85f), new Color(0.4f, 0.9f, 0.7f), new Color(0.2f, 0.8f, 0.6f));
+    }
+
+    private void CreatePC4Panel(Transform parent, CombatUI combatUI)
+    {
+        CreatePCPanel(parent, combatUI, 4, "PC4StatsPanel", (PanelWidth + 5) * 3 + 10,
+            new Color(0.3f, 0.1f, 0.1f, 0.85f), new Color(1f, 0.6f, 0.4f), new Color(0.9f, 0.3f, 0.2f));
+    }
+
+    /// <summary>Create NPC stats panel with D&D 3.5 ability scores (legacy).</summary>
     private void CreateNPCPanel(Transform parent, CombatUI combatUI)
     {
+        float legacyW = 280f;
         GameObject panel = CreatePanel(parent, "NPCStatsPanel",
             new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
-            new Vector2(-10, 10), new Vector2(PanelWidth, PanelHeight),
+            new Vector2(-10, 10), new Vector2(legacyW, PanelHeight),
             new Color(0.4f, 0.1f, 0.1f, 0.85f));
 
         float y = PanelHeight - 18;
 
         combatUI.NPCNameText = CreateText(panel.transform, "NPCName",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 22),
-            "Goblin Warchief (Lv 2 Warrior)", 16, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
+            new Vector2(10, y), new Vector2(legacyW - 20, 22),
+            "Enemy", 16, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
         y -= 22;
 
         combatUI.NPCAbilityText = CreateText(panel.transform, "NPCAbilities",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y - 28), new Vector2(PanelWidth - 20, 38),
-            "STR 14(+2) DEX 15(+2) CON 13(+1)\nWIS 10(+0) INT 10(+0) CHA 8(-1)", 12,
+            new Vector2(10, y - 28), new Vector2(legacyW - 20, 38),
+            "STR -- DEX -- CON --\nWIS -- INT -- CHA --", 12,
             new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
         y -= 44;
 
         CreatePanel(panel.transform, "NPCSep",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 1),
+            new Vector2(10, y), new Vector2(legacyW - 20, 1),
             new Color(1, 1, 1, 0.2f));
         y -= 6;
 
         combatUI.NPCHPText = CreateText(panel.transform, "NPCHP",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 20),
-            "HP: 14/14", 16, Color.white, TextAnchor.MiddleLeft);
+            new Vector2(10, y), new Vector2(legacyW - 20, 20),
+            "HP: --/--", 16, Color.white, TextAnchor.MiddleLeft);
         y -= 18;
 
         combatUI.NPCHPBar = CreateHPBar(panel.transform, "NPCHPBar",
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 12),
+            new Vector2(10, y), new Vector2(legacyW - 20, 12),
             new Color(0.8f, 0.2f, 0.2f));
         y -= 20;
 
         combatUI.NPCACText = CreateText(panel.transform, "NPCAC",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "AC: 16", 14, Color.white, TextAnchor.MiddleLeft);
+            new Vector2(10, y), new Vector2(legacyW - 20, 18),
+            "AC: --", 14, Color.white, TextAnchor.MiddleLeft);
         y -= 20;
 
         combatUI.NPCAtkText = CreateText(panel.transform, "NPCAtk",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Atk: +4", 14, Color.white, TextAnchor.MiddleLeft);
+            new Vector2(10, y), new Vector2(legacyW - 20, 18),
+            "Atk: --", 14, Color.white, TextAnchor.MiddleLeft);
         y -= 20;
 
         combatUI.NPCSpeedText = CreateText(panel.transform, "NPCSpeed",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "Speed: 3 sq (15 ft)", 12, Color.white, TextAnchor.MiddleLeft);
+            new Vector2(10, y), new Vector2(legacyW - 20, 18),
+            "Speed: -- sq", 12, Color.white, TextAnchor.MiddleLeft);
     }
 
     /// <summary>
     /// Create multiple NPC stat panels stacked vertically on the right side.
-    /// Each panel is a compact version of the single-NPC panel, sized to fit
-    /// multiple enemies on screen simultaneously.
+    /// Now includes icon images for each enemy.
     /// </summary>
     private void CreateMultiNPCPanels(Transform parent, CombatUI combatUI, int count)
     {
-        // Compact panel dimensions for multi-enemy display
         float compactWidth = 260f;
         float compactHeight = 130f;
         float spacing = 5f;
-
-        // Hide the legacy single-NPC panel — we'll use multi-panels instead
-        // (Legacy panel kept for backward compat but hidden in multi-NPC mode)
 
         for (int i = 0; i < count; i++)
         {
@@ -476,7 +489,6 @@ public class SceneBootstrap : MonoBehaviour
 
             NPCPanelUI panelUI = new NPCPanelUI();
 
-            // Panel anchored to bottom-right, stacked upward
             Color panelColor = new Color(0.3f, 0.1f, 0.1f, 0.85f);
             GameObject panel = CreatePanel(parent, $"NPCPanel_{i}",
                 new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
@@ -486,10 +498,13 @@ public class SceneBootstrap : MonoBehaviour
 
             float y = compactHeight - 14;
 
-            // Name
+            // Icon + Name row
+            panelUI.IconImage = CreateIconImage(panel.transform, $"NPCIcon_{i}",
+                new Vector2(6, y - 28), new Vector2(32, 32));
+
             panelUI.NameText = CreateText(panel.transform, $"NPCName_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(8, y), new Vector2(compactWidth - 16, 18),
+                new Vector2(42, y), new Vector2(compactWidth - 50, 18),
                 $"Enemy {i + 1}", 13, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
             y -= 18;
 
@@ -551,61 +566,60 @@ public class SceneBootstrap : MonoBehaviour
         float featPanelW = actionPanelWidth;
         float featPanelH = 50f;
 
-        // Power Attack Panel (positioned above the action panel on the right side)
         GameObject paPanel = CreatePanel(canvasTransform, "PowerAttackPanel",
             new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f),
             new Vector2(-10, 175), new Vector2(featPanelW, featPanelH),
             new Color(0.3f, 0.15f, 0.1f, 0.9f));
         combatUI.PowerAttackPanel = paPanel;
 
-        // Power Attack Label
         combatUI.PowerAttackLabel = CreateText(paPanel.transform, "PALabel",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, featPanelH - 22), new Vector2(featPanelW - 20, 20),
             "Power Attack: OFF", 13, new Color(1f, 0.8f, 0.5f), TextAnchor.MiddleLeft);
 
-        // Power Attack Slider
         combatUI.PowerAttackSlider = CreateSlider(paPanel.transform, "PASlider",
             new Vector2(10, 5), new Vector2(featPanelW - 20, 20),
             0, 3, 0);
 
         paPanel.SetActive(false);
 
-        // Rapid Shot Panel (positioned below Power Attack)
         GameObject rsPanel = CreatePanel(canvasTransform, "RapidShotPanel",
             new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f),
             new Vector2(-10, 230), new Vector2(featPanelW, 40f),
             new Color(0.1f, 0.2f, 0.3f, 0.9f));
         combatUI.RapidShotPanel = rsPanel;
 
-        // Rapid Shot Toggle Button
         combatUI.RapidShotToggle = CreateButton(rsPanel.transform, "RSToggle",
             new Vector2(5, 5), new Vector2(featPanelW - 10, 30f),
             "Rapid Shot: OFF", new Color(0.5f, 0.5f, 0.5f), Color.white);
 
-        // Rapid Shot Label (use the button's text)
         combatUI.RapidShotLabel = combatUI.RapidShotToggle.GetComponentInChildren<Text>();
 
         rsPanel.SetActive(false);
     }
 
     // ========== GAME MANAGER ==========
-    private void SetupGameManager(SquareGrid grid, CharacterController pc1, CharacterController pc2, CharacterController npc, CombatUI combatUI, System.Collections.Generic.List<CharacterController> npcList = null)
+    private void SetupGameManager(SquareGrid grid, CharacterController[] pcs,
+        CharacterController npc, CombatUI combatUI,
+        System.Collections.Generic.List<CharacterController> npcList = null)
     {
         GameManager gm = gameObject.AddComponent<GameManager>();
         gm.Grid = grid;
-        gm.PC1 = pc1;
-        gm.PC2 = pc2;
+        gm.PC1 = pcs[0];
+        gm.PC2 = pcs[1];
+        gm.PC3 = pcs[2];
+        gm.PC4 = pcs[3];
         gm.NPC = npc;
         gm.CombatUI = combatUI;
+
+        // Set up PCs list
+        gm.PCs = new System.Collections.Generic.List<CharacterController>(pcs);
 
         // Set up multi-NPC list
         if (npcList != null)
             gm.NPCs = npcList;
         else
-        {
             gm.NPCs = new System.Collections.Generic.List<CharacterController> { npc };
-        }
 
         // Create Inventory UI on the canvas
         Canvas canvas = combatUI.GetComponent<Canvas>();
@@ -619,7 +633,6 @@ public class SceneBootstrap : MonoBehaviour
         // Create Character Creation UI on the canvas
         if (canvas != null)
         {
-            // Initialize race database early for character creation
             RaceDatabase.Init();
             ItemDatabase.Init();
             FeatDefinitions.Init();
@@ -628,25 +641,23 @@ public class SceneBootstrap : MonoBehaviour
             ccUI.BuildUI(canvas);
             gm.CharacterCreationUI = ccUI;
 
-            // Create Skills UI Panel
             SkillsUIPanel skillsUI = canvas.gameObject.AddComponent<SkillsUIPanel>();
             skillsUI.BuildUI(canvas);
             gm.SkillsUI = skillsUI;
             ccUI.SkillsUI = skillsUI;
 
-            // Create Feat Selection UI Panel
             FeatSelectionUI featUI = canvas.gameObject.AddComponent<FeatSelectionUI>();
             featUI.BuildUI(canvas);
             ccUI.FeatUI = featUI;
         }
 
-        // Wire up button events (deferred to next frame so GameManager.Instance is set)
+        // Wire up button events
         StartCoroutine(WireButtons(combatUI));
     }
 
     private System.Collections.IEnumerator WireButtons(CombatUI ui)
     {
-        yield return null; // wait one frame
+        yield return null;
 
         if (ui.MoveButton != null)
             ui.MoveButton.onClick.AddListener(() => GameManager.Instance.OnMoveButtonPressed());
@@ -663,7 +674,6 @@ public class SceneBootstrap : MonoBehaviour
         if (ui.EndTurnButton != null)
             ui.EndTurnButton.onClick.AddListener(() => GameManager.Instance.OnEndTurnButtonPressed());
 
-        // Feat controls
         if (ui.PowerAttackSlider != null)
             ui.PowerAttackSlider.onValueChanged.AddListener((val) => GameManager.Instance.OnPowerAttackSliderChanged(val));
         if (ui.RapidShotToggle != null)
@@ -693,18 +703,15 @@ public class SceneBootstrap : MonoBehaviour
         t.color = color;
         t.alignment = alignment;
         t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (t.font == null)
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        if (t.font == null)
-            t.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
+        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (t.font == null) t.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
 
         return t;
     }
 
     private GameObject CreatePanel(Transform parent, string name,
         Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
-        Vector2 anchoredPos, Vector2 sizeDelta,
-        Color bgColor)
+        Vector2 anchoredPos, Vector2 sizeDelta, Color bgColor)
     {
         GameObject go = new GameObject(name);
         go.transform.SetParent(parent, false);
@@ -754,9 +761,6 @@ public class SceneBootstrap : MonoBehaviour
         return fillImg;
     }
 
-    /// <summary>
-    /// Create a small colored bar at the top of a panel to indicate the active PC.
-    /// </summary>
     private Image CreateActiveIndicator(Transform parent, string name,
         Vector2 anchoredPos, Vector2 sizeDelta, Color color)
     {
@@ -772,7 +776,28 @@ public class SceneBootstrap : MonoBehaviour
 
         Image img = go.AddComponent<Image>();
         img.color = color;
-        img.enabled = false; // hidden by default
+        img.enabled = false;
+
+        return img;
+    }
+
+    /// <summary>Create an Image element for displaying a character icon.</summary>
+    private Image CreateIconImage(Transform parent, string name, Vector2 anchoredPos, Vector2 sizeDelta)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.zero;
+        rt.pivot = Vector2.zero;
+        rt.anchoredPosition = anchoredPos;
+        rt.sizeDelta = sizeDelta;
+
+        Image img = go.AddComponent<Image>();
+        img.color = Color.white;
+        img.preserveAspect = true;
+        img.enabled = false; // Hidden until icon is assigned
 
         return img;
     }
@@ -797,7 +822,6 @@ public class SceneBootstrap : MonoBehaviour
         textTransform.SetAsLastSibling();
     }
 
-    /// <summary>Create a UI Slider programmatically.</summary>
     private Slider CreateSlider(Transform parent, string name,
         Vector2 anchoredPos, Vector2 sizeDelta,
         float minValue, float maxValue, float defaultValue)
@@ -812,7 +836,6 @@ public class SceneBootstrap : MonoBehaviour
         rt.anchoredPosition = anchoredPos;
         rt.sizeDelta = sizeDelta;
 
-        // Background
         GameObject bgGO = new GameObject("Background");
         bgGO.transform.SetParent(sliderGO.transform, false);
         RectTransform bgRT = bgGO.AddComponent<RectTransform>();
@@ -823,7 +846,6 @@ public class SceneBootstrap : MonoBehaviour
         Image bgImg = bgGO.AddComponent<Image>();
         bgImg.color = new Color(0.3f, 0.3f, 0.3f, 1f);
 
-        // Fill Area
         GameObject fillAreaGO = new GameObject("Fill Area");
         fillAreaGO.transform.SetParent(sliderGO.transform, false);
         RectTransform fillAreaRT = fillAreaGO.AddComponent<RectTransform>();
@@ -842,7 +864,6 @@ public class SceneBootstrap : MonoBehaviour
         Image fillImg = fillGO.AddComponent<Image>();
         fillImg.color = new Color(0.8f, 0.4f, 0.2f, 1f);
 
-        // Handle Slide Area
         GameObject handleAreaGO = new GameObject("Handle Slide Area");
         handleAreaGO.transform.SetParent(sliderGO.transform, false);
         RectTransform handleAreaRT = handleAreaGO.AddComponent<RectTransform>();
@@ -860,7 +881,6 @@ public class SceneBootstrap : MonoBehaviour
         Image handleImg = handleGO.AddComponent<Image>();
         handleImg.color = new Color(1f, 0.7f, 0.3f, 1f);
 
-        // Create the Slider component
         Slider slider = sliderGO.AddComponent<Slider>();
         slider.fillRect = fillRT;
         slider.handleRect = handleRT;
