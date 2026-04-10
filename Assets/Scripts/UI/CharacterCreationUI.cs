@@ -26,6 +26,8 @@ public class CharacterCreationUI : MonoBehaviour
 
     // ========== UI REFERENCES ==========
     private GameObject _rootPanel;
+    private GameObject _overlayPanel; // Full-screen overlay (parent of _rootPanel)
+    private CanvasGroup _canvasGroup; // Controls raycast blocking when hidden
     private Text _titleText;
     private Text _stepText;
     private GameObject _contentArea;
@@ -91,15 +93,18 @@ public class CharacterCreationUI : MonoBehaviour
         CreatedCharacters[1] = new CharacterCreationData();
 
         // Root panel - dark overlay covering entire screen
-        GameObject overlay = CreatePanel(canvas.transform, "CCOverlay",
+        _overlayPanel = CreatePanel(canvas.transform, "CCOverlay",
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero, new Color(0, 0, 0, 0.85f));
-        RectTransform overlayRT = overlay.GetComponent<RectTransform>();
+        RectTransform overlayRT = _overlayPanel.GetComponent<RectTransform>();
         overlayRT.offsetMin = Vector2.zero;
         overlayRT.offsetMax = Vector2.zero;
 
+        // Add CanvasGroup so we can control raycast blocking when hidden
+        _canvasGroup = _overlayPanel.AddComponent<CanvasGroup>();
+
         // Main panel
-        _rootPanel = CreatePanel(overlay.transform, "CCPanel",
+        _rootPanel = CreatePanel(_overlayPanel.transform, "CCPanel",
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             Vector2.zero, new Vector2(PANEL_W, PANEL_H), new Color(0.12f, 0.12f, 0.18f, 0.98f));
 
@@ -882,7 +887,7 @@ public class CharacterCreationUI : MonoBehaviour
         {
             // Both characters created - start game!
             IsComplete = true;
-            _rootPanel.transform.parent.gameObject.SetActive(false);
+            HideCreationUI();
             OnCreationComplete?.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
         }
     }
@@ -1057,8 +1062,27 @@ public class CharacterCreationUI : MonoBehaviour
         pc2.SkillRanks["Sleight of Hand"] = 2;
 
         IsComplete = true;
-        _rootPanel.transform.parent.gameObject.SetActive(false);
+        HideCreationUI();
         OnCreationComplete?.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
+    }
+
+    // ========== SHOW / HIDE ==========
+
+    /// <summary>
+    /// Hide the character creation UI and disable raycast blocking.
+    /// </summary>
+    private void HideCreationUI()
+    {
+        if (_overlayPanel != null)
+            _overlayPanel.SetActive(false);
+
+        if (_canvasGroup != null)
+        {
+            _canvasGroup.alpha = 0f;
+            _canvasGroup.interactable = false;
+            _canvasGroup.blocksRaycasts = false;
+        }
+        Debug.Log("[UI] Character creation UI hidden - allowing raycasts");
     }
 
     // ========== UI HELPER METHODS ==========

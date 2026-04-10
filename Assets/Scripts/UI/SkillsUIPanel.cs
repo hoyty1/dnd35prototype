@@ -9,6 +9,7 @@ using UnityEngine.UI;
 ///   2. Display Mode: During gameplay, shows skills and allows rolling skill checks.
 ///
 /// Layout: Scrollable list of all skills with ranks, bonuses, and +/- buttons.
+/// Uses CanvasGroup to properly control raycast blocking when hidden.
 /// </summary>
 public class SkillsUIPanel : MonoBehaviour
 {
@@ -23,6 +24,7 @@ public class SkillsUIPanel : MonoBehaviour
     // ========== UI REFERENCES ==========
     private GameObject _rootPanel;
     private GameObject _overlay;
+    private CanvasGroup _canvasGroup; // Controls raycast blocking
     private Text _titleText;
     private Text _skillPointsText;
     private GameObject _scrollContent;
@@ -40,7 +42,8 @@ public class SkillsUIPanel : MonoBehaviour
     private const float SCROLL_AREA_HEIGHT = 440f;
 
     /// <summary>Whether this panel is currently open/visible.</summary>
-    public bool IsOpen => _rootPanel != null && _rootPanel.activeSelf;
+    /// <remarks>Uses activeInHierarchy to correctly detect when parent overlay is disabled.</remarks>
+    public bool IsOpen => _overlay != null && _overlay.activeInHierarchy;
 
     // ========== BUILD UI ==========
 
@@ -61,6 +64,9 @@ public class SkillsUIPanel : MonoBehaviour
         RectTransform overlayRT = _overlay.GetComponent<RectTransform>();
         overlayRT.offsetMin = Vector2.zero;
         overlayRT.offsetMax = Vector2.zero;
+
+        // Add CanvasGroup so we can control raycast blocking when hidden
+        _canvasGroup = _overlay.AddComponent<CanvasGroup>();
 
         // Main panel
         _rootPanel = CreatePanel(_overlay.transform, "SkillsPanel",
@@ -146,7 +152,8 @@ public class SkillsUIPanel : MonoBehaviour
             "Confirm Skills ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 16);
         _confirmButton.onClick.AddListener(OnConfirmClicked);
 
-        _overlay.SetActive(false);
+        // Start hidden — ensure both GameObject and CanvasGroup are properly disabled
+        SetPanelVisible(false);
     }
 
     // ========== OPEN / CLOSE ==========
@@ -164,7 +171,8 @@ public class SkillsUIPanel : MonoBehaviour
         _logText.text = "Spend your skill points! Class skills are marked with *.";
         PopulateSkillRows();
         RefreshAllRows();
-        _overlay.SetActive(true);
+        SetPanelVisible(true);
+        Debug.Log("[UI] Skills panel opened (allocation mode) - blocking raycasts");
     }
 
     /// <summary>
@@ -180,14 +188,31 @@ public class SkillsUIPanel : MonoBehaviour
         _logText.text = "Click a skill name to roll a skill check.";
         PopulateSkillRows();
         RefreshAllRows();
-        _overlay.SetActive(true);
+        SetPanelVisible(true);
+        Debug.Log("[UI] Skills panel opened (display mode) - blocking raycasts");
     }
 
     /// <summary>Close the skills panel.</summary>
     public void Close()
     {
+        SetPanelVisible(false);
+        Debug.Log("[UI] Skills panel closed - allowing raycasts");
+    }
+
+    /// <summary>
+    /// Show or hide the panel, ensuring CanvasGroup properly blocks/allows raycasts.
+    /// </summary>
+    private void SetPanelVisible(bool visible)
+    {
         if (_overlay != null)
-            _overlay.SetActive(false);
+            _overlay.SetActive(visible);
+
+        if (_canvasGroup != null)
+        {
+            _canvasGroup.alpha = visible ? 1f : 0f;
+            _canvasGroup.interactable = visible;
+            _canvasGroup.blocksRaycasts = visible;
+        }
     }
 
     // ========== POPULATE SKILL ROWS ==========

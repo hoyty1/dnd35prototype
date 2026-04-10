@@ -298,7 +298,11 @@ public class GameManager : MonoBehaviour
         if (!IsPlayerTurn) return;
         if (CurrentSubPhase == PlayerSubPhase.Animating) return;
         if (InventoryUI != null && InventoryUI.IsOpen) return;
-        if (SkillsUI != null && SkillsUI.IsOpen) return;
+        if (SkillsUI != null && SkillsUI.IsOpen)
+        {
+            // Debug: log only once per open state to avoid spam
+            return;
+        }
 
         bool clicked = false;
         Vector3 mouseScreenPos = Vector3.zero;
@@ -325,9 +329,11 @@ public class GameManager : MonoBehaviour
 
         if (!clicked || _mainCam == null) return;
 
+        // Check if pointer is over a UI element (buttons, panels, etc.)
         if (UnityEngine.EventSystems.EventSystem.current != null &&
             UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
         {
+            Debug.Log("[Grid] Click blocked by UI element (IsPointerOverGameObject)");
             return;
         }
 
@@ -339,9 +345,13 @@ public class GameManager : MonoBehaviour
             SquareCell cell = hit.collider.GetComponent<SquareCell>();
             if (cell != null)
             {
-                Debug.Log($"[GameManager] Cell clicked: ({cell.X}, {cell.Y}) Phase={CurrentPhase} Sub={CurrentSubPhase}");
+                Debug.Log($"[Grid] Raycast hit cell at ({cell.X}, {cell.Y}) Phase={CurrentPhase} Sub={CurrentSubPhase}");
                 OnCellClicked(cell);
             }
+        }
+        else
+        {
+            Debug.Log("[Grid] Click detected but no cell hit by raycast");
         }
     }
 
@@ -401,10 +411,12 @@ public class GameManager : MonoBehaviour
         {
             if (SkillsUI.IsOpen)
             {
+                Debug.Log("[UI] K pressed - closing Skills panel");
                 SkillsUI.Close();
             }
             else if (IsPlayerTurn && ActivePC != null)
             {
+                Debug.Log("[UI] K pressed - opening Skills panel");
                 SkillsUI.OpenForDisplay(ActivePC.Stats);
             }
         }
