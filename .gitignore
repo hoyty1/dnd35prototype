@@ -46,3 +46,8 @@ Thumbs.db
 *.aab
 *.unitypackage
 *.app
+*.meta
+*.meta
+*.meta
+Assets/Resources/Sprites/npc_enemy_alive.png.meta
+Assets/Resources/Sprites/npc_enemy_dead.png.meta
