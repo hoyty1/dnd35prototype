@@ -252,6 +252,20 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.RageStatusText.gameObject.SetActive(false);
         y -= 22f;
 
+        // Cast Spell Button (Standard Action, spellcasters only)
+        combatUI.CastSpellButton = CreateButton(actionPanel.transform, "CastSpellBtn",
+            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
+            "Cast Spell", new Color(0.4f, 0.2f, 0.6f), Color.white);
+        y -= btnH + 3f;
+
+        // Spell Slots Text
+        combatUI.SpellSlotsText = CreateText(actionPanel.transform, "SpellSlots",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y - 16), new Vector2(btnW, 16),
+            "", 9, new Color(0.8f, 0.7f, 1f), TextAnchor.MiddleCenter);
+        combatUI.SpellSlotsText.gameObject.SetActive(false);
+        y -= 20f;
+
         // End Turn Button
         combatUI.EndTurnButton = CreateButton(actionPanel.transform, "EndTurnBtn",
             new Vector2(10, y - btnH), new Vector2(btnW, btnH),
@@ -671,6 +685,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.FlurryOfBlowsButton.onClick.AddListener(() => GameManager.Instance.OnFlurryOfBlowsButtonPressed());
         if (ui.RageButton != null)
             ui.RageButton.onClick.AddListener(() => GameManager.Instance.OnRageButtonPressed());
+        if (ui.CastSpellButton != null)
+            ui.CastSpellButton.onClick.AddListener(() => GameManager.Instance.OnCastSpellButtonPressed());
         if (ui.EndTurnButton != null)
             ui.EndTurnButton.onClick.AddListener(() => GameManager.Instance.OnEndTurnButtonPressed());
 

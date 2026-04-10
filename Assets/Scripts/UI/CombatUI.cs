@@ -91,6 +91,10 @@ public class CombatUI : MonoBehaviour
     public Button RageButton;              // Barbarian Rage (Free Action)
     public Text RageStatusText;            // Shows rage/fatigue status
 
+    [Header("Spellcasting")]
+    public Button CastSpellButton;         // Cast Spell (Standard Action)
+    public Text SpellSlotsText;            // Shows remaining spell slots
+
     [Header("Feat Controls")]
     public GameObject PowerAttackPanel;     // Panel containing Power Attack slider
     public Slider PowerAttackSlider;        // Slider for Power Attack value (0 to BAB)

@@ -1,8 +1,9 @@
 using System.Collections.Generic;
 
 /// <summary>
-/// Static definitions for class skill lists and skill point calculations per class.
-/// D&D 3.5 rules for Fighter and Rogue classes.
+/// Static definitions for skill lists and skill point calculations.
+/// Now delegates class-specific data to ClassRegistry and individual class definitions.
+/// Retains the master skill list and calculation methods as utility functions.
 /// </summary>
 public static class ClassSkillDefinitions
 {
@@ -36,81 +37,19 @@ public static class ClassSkillDefinitions
         ("Use Magic Device",    AbilityType.CHA, true),
     };
 
-    // ========== CLASS SKILL LISTS ==========
-
-    /// <summary>Fighter class skills (D&D 3.5 PHB).</summary>
-    public static readonly HashSet<string> FighterClassSkills = new HashSet<string>
-    {
-        "Climb",
-        "Intimidate",
-        "Jump",
-        "Swim"
-    };
-
-    /// <summary>Rogue class skills (D&D 3.5 PHB).</summary>
-    public static readonly HashSet<string> RogueClassSkills = new HashSet<string>
-    {
-        "Appraise",
-        "Balance",
-        "Bluff",
-        "Climb",
-        "Diplomacy",
-        "Disable Device",
-        "Gather Information",
-        "Hide",
-        "Intimidate",
-        "Jump",
-        "Listen",
-        "Move Silently",
-        "Open Lock",
-        "Search",
-        "Sleight of Hand",
-        "Spot",
-        "Tumble",
-        "Use Magic Device"
-    };
-
-    /// <summary>Monk class skills (D&D 3.5 PHB).</summary>
-    public static readonly HashSet<string> MonkClassSkills = new HashSet<string>
-    {
-        "Balance",
-        "Climb",
-        "Diplomacy",
-        "Hide",
-        "Jump",
-        "Listen",
-        "Move Silently",
-        "Spot",
-        "Swim",
-        "Tumble"
-    };
-
-    /// <summary>Barbarian class skills (D&D 3.5 PHB).</summary>
-    public static readonly HashSet<string> BarbarianClassSkills = new HashSet<string>
-    {
-        "Climb",
-        "Intimidate",
-        "Jump",
-        "Listen",
-        "Swim"
-    };
-
     // ========== SKILL POINTS PER LEVEL ==========
 
     /// <summary>
     /// Get the base skill points per level for a given class (before INT modifier).
-    /// Fighter: 2, Rogue: 8, Monk: 4, Barbarian: 4
+    /// Delegates to ClassRegistry for class-specific values.
     /// </summary>
     public static int GetBaseSkillPointsPerLevel(string className)
     {
-        switch (className)
-        {
-            case "Fighter":   return 2;
-            case "Rogue":     return 8;
-            case "Monk":      return 4;
-            case "Barbarian": return 4;
-            default:          return 2; // Default to fighter-like
-        }
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(className);
+        if (classDef != null)
+            return classDef.SkillPointsPerLevel;
+        return 2; // Default fallback
     }
 
     /// <summary>
@@ -143,16 +82,14 @@ public static class ClassSkillDefinitions
 
     /// <summary>
     /// Get the class skill set for a given class name.
+    /// Delegates to ClassRegistry for class-specific skill lists.
     /// </summary>
     public static HashSet<string> GetClassSkills(string className)
     {
-        switch (className)
-        {
-            case "Fighter":   return FighterClassSkills;
-            case "Rogue":     return RogueClassSkills;
-            case "Monk":      return MonkClassSkills;
-            case "Barbarian": return BarbarianClassSkills;
-            default:          return new HashSet<string>();
-        }
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(className);
+        if (classDef != null)
+            return classDef.ClassSkills;
+        return new HashSet<string>();
     }
 }

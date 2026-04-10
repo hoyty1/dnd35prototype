@@ -98,7 +98,7 @@ public class FeatSelectionUI : MonoBehaviour
 
         // Filter buttons row
         float filterY = 220;
-        string[] filters = { "All", "Combat", "Ranged", "Defensive", "TWF", "Skill", "General" };
+        string[] filters = { "All", "Combat", "Ranged", "Defensive", "TWF", "Skill", "Metamagic", "General" };
         float filterStartX = -230;
         float filterWidth = 64;
         for (int i = 0; i < filters.Length; i++)
@@ -299,6 +299,7 @@ public class FeatSelectionUI : MonoBehaviour
             case "TWF": return feat.Type == FeatType.TwoWeaponFighting;
             case "Skill": return feat.Type == FeatType.Skill;
             case "General": return feat.Type == FeatType.General || feat.Type == FeatType.Unarmed || feat.Type == FeatType.MountedCombat;
+            case "Metamagic": return feat.Type == FeatType.Metamagic;
             default: return true;
         }
     }
@@ -438,7 +439,7 @@ public class FeatSelectionUI : MonoBehaviour
         for (int i = 0; i < _filterButtons.Count; i++)
         {
             var btnImg = _filterButtons[i].GetComponent<Image>();
-            string[] filters = { "All", "Combat", "Ranged", "Defensive", "TWF", "Skill", "General" };
+            string[] filters = { "All", "Combat", "Ranged", "Defensive", "TWF", "Skill", "Metamagic", "General" };
             btnImg.color = (i < filters.Length && filters[i] == filter) ? COLOR_FILTER_ACTIVE : COLOR_FILTER_INACTIVE;
         }
 
@@ -525,6 +526,7 @@ public class FeatSelectionUI : MonoBehaviour
             case FeatType.MountedCombat: return "Mount";
             case FeatType.Skill: return "Skill";
             case FeatType.Unarmed: return "Unarmed";
+            case FeatType.Metamagic: return "Metamagic";
             case FeatType.General: return "General";
             default: return "Other";
         }
@@ -541,6 +543,7 @@ public class FeatSelectionUI : MonoBehaviour
             case FeatType.MountedCombat: return new Color(0.7f, 0.5f, 0.3f);
             case FeatType.Skill: return new Color(0.7f, 0.7f, 1f);
             case FeatType.Unarmed: return new Color(0.8f, 0.5f, 0.8f);
+            case FeatType.Metamagic: return new Color(0.6f, 0.4f, 1f);
             case FeatType.General: return new Color(0.7f, 0.7f, 0.7f);
             default: return Color.gray;
         }

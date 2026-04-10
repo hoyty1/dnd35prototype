@@ -91,7 +91,15 @@ public class CharacterCreationUI : MonoBehaviour
 
     // ========== RACE/CLASS DATA ==========
     private static readonly string[] RaceNames = { "Dwarf", "Elf", "Gnome", "Half-Elf", "Half-Orc", "Halfling", "Human" };
-    private static readonly string[] ClassNames = { "Fighter", "Rogue", "Monk", "Barbarian" };
+    /// <summary>Class names populated from ClassRegistry at runtime.</summary>
+    private static string[] ClassNames
+    {
+        get
+        {
+            ClassRegistry.Init();
+            return ClassRegistry.ClassNames;
+        }
+    }
 
     // ========== INITIALIZATION ==========
 
@@ -571,139 +579,82 @@ public class CharacterCreationUI : MonoBehaviour
             "Select a class. Your class determines hit points, combat abilities, and starting equipment.",
             13, new Color(0.7f, 0.7f, 0.7f), TextAnchor.MiddleCenter);
 
-        // --- Top Row: Fighter and Rogue ---
+        // --- Dynamically generate class panels from ClassRegistry ---
+        ClassRegistry.Init();
+        var allClasses = ClassRegistry.GetAllClasses();
+        int classCount = allClasses.Count;
+
         float topLeftX = -210f;
         float topRightX = 210f;
-        float topY = 100f;
+        float row1Y = 155f;
+        float row2Y = -5f;
+        float row3Y = -165f;
         float panelW = 360f;
-        float panelH = 210f;
+        float panelH = 140f;
 
-        // Fighter panel
-        CreatePanel(_step4Panel.transform, "FighterBG",
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(topLeftX, topY), new Vector2(panelW, panelH),
-            new Color(0.15f, 0.15f, 0.25f, 0.8f));
+        // Layout: 2 columns, rows calculated from class count
+        float[] rowYValues = { row1Y, row2Y, row3Y, -325f, -485f }; // Support up to 10 classes (5 rows)
 
-        MakeText(_step4Panel.transform, "FighterTitle",
-            new Vector2(topLeftX, topY + panelH/2 - 15), new Vector2(340, 25),
-            "FIGHTER", 20, new Color(0.9f, 0.6f, 0.3f), TextAnchor.MiddleCenter);
+        for (int i = 0; i < classCount; i++)
+        {
+            ICharacterClass classDef = allClasses[i];
+            int row = i / 2;
+            bool isLeft = (i % 2 == 0);
+            float posX = isLeft ? topLeftX : topRightX;
+            float posY = row < rowYValues.Length ? rowYValues[row] : rowYValues[rowYValues.Length - 1] - (row - rowYValues.Length + 1) * 160f;
 
-        MakeText(_step4Panel.transform, "FighterInfo",
-            new Vector2(topLeftX, topY - 20), new Vector2(330, 160),
-            "Hit Die: d10 | BAB: +3 (full)\nGood Saves: Fortitude\n\n" +
-            "• All weapons, armor, and shields\n" +
-            "• Bonus combat feats\n\n" +
-            "Equipment: Scale Mail, Shield,\nLongsword, Shortbow",
-            11, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
+            // Background panel
+            CreatePanel(_step4Panel.transform, $"{classDef.ClassName}BG",
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(posX, posY), new Vector2(panelW, panelH),
+                new Color(0.15f, 0.15f, 0.25f, 0.8f));
 
-        // Rogue panel
-        CreatePanel(_step4Panel.transform, "RogueBG",
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(topRightX, topY), new Vector2(panelW, panelH),
-            new Color(0.15f, 0.15f, 0.25f, 0.8f));
+            // Title text
+            MakeText(_step4Panel.transform, $"{classDef.ClassName}Title",
+                new Vector2(posX, posY + panelH/2 - 12), new Vector2(340, 22),
+                classDef.ClassName.ToUpper(), 17, classDef.TitleColor, TextAnchor.MiddleCenter);
 
-        MakeText(_step4Panel.transform, "RogueTitle",
-            new Vector2(topRightX, topY + panelH/2 - 15), new Vector2(340, 25),
-            "ROGUE", 20, new Color(0.5f, 0.8f, 0.5f), TextAnchor.MiddleCenter);
+            // Info text
+            MakeText(_step4Panel.transform, $"{classDef.ClassName}Info",
+                new Vector2(posX, posY - 15), new Vector2(330, 100),
+                classDef.InfoText,
+                10, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
+        }
 
-        MakeText(_step4Panel.transform, "RogueInfo",
-            new Vector2(topRightX, topY - 20), new Vector2(330, 160),
-            "Hit Die: d6 | BAB: +2 (3/4)\nGood Saves: Reflex\n\n" +
-            "• Sneak Attack +2d6\n" +
-            "• Evasion, Trapfinding\n\n" +
-            "Equipment: Leather Armor,\nRapier, Shortbow, Dagger",
-            11, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
+        // Class selection buttons - dynamically from ClassRegistry
+        _classButtons = new Button[classCount];
+        _classButtonDefaultColors_dynamic = new Color[classCount];
+        for (int i = 0; i < classCount; i++)
+        {
+            ICharacterClass classDef = allClasses[i];
+            int row = i / 2;
+            bool isLeft = (i % 2 == 0);
+            float posX = isLeft ? topLeftX : topRightX;
+            float posY = row < rowYValues.Length ? rowYValues[row] : rowYValues[rowYValues.Length - 1] - (row - rowYValues.Length + 1) * 160f;
 
-        // --- Bottom Row: Monk and Barbarian ---
-        float botY = -115f;
-
-        // Monk panel
-        CreatePanel(_step4Panel.transform, "MonkBG",
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(topLeftX, botY), new Vector2(panelW, panelH),
-            new Color(0.15f, 0.15f, 0.25f, 0.8f));
-
-        MakeText(_step4Panel.transform, "MonkTitle",
-            new Vector2(topLeftX, botY + panelH/2 - 15), new Vector2(340, 25),
-            "MONK", 20, new Color(0.4f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
-
-        MakeText(_step4Panel.transform, "MonkInfo",
-            new Vector2(topLeftX, botY - 20), new Vector2(330, 160),
-            "Hit Die: d8 | BAB: +2 (3/4)\nGood Saves: Fort, Ref, Will\n\n" +
-            "• Flurry of Blows (2 attacks)\n" +
-            "• Unarmed 1d6, +WIS to AC\n" +
-            "• Evasion, Still Mind, Fast Move\n\n" +
-            "Equipment: Quarterstaff, Sling",
-            11, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
-
-        // Barbarian panel
-        CreatePanel(_step4Panel.transform, "BarbarianBG",
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(topRightX, botY), new Vector2(panelW, panelH),
-            new Color(0.15f, 0.15f, 0.25f, 0.8f));
-
-        MakeText(_step4Panel.transform, "BarbarianTitle",
-            new Vector2(topRightX, botY + panelH/2 - 15), new Vector2(340, 25),
-            "BARBARIAN", 20, new Color(0.9f, 0.4f, 0.3f), TextAnchor.MiddleCenter);
-
-        MakeText(_step4Panel.transform, "BarbarianInfo",
-            new Vector2(topRightX, botY - 20), new Vector2(330, 160),
-            "Hit Die: d12 | BAB: +3 (full)\nGood Saves: Fortitude\n\n" +
-            "• Rage 1/day (+4 STR/CON)\n" +
-            "• Fast Movement +10 ft\n" +
-            "• Uncanny Dodge, Trap Sense\n\n" +
-            "Equipment: Hide Armor,\nGreataxe, 3x Javelin",
-            11, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
-
-        // Class selection buttons (4 buttons, 2 per row)
-        Color[] btnColors = {
-            new Color(0.5f, 0.3f, 0.15f),  // Fighter: orange-brown
-            new Color(0.2f, 0.4f, 0.2f),   // Rogue: green
-            new Color(0.15f, 0.35f, 0.5f), // Monk: teal
-            new Color(0.5f, 0.15f, 0.1f)   // Barbarian: red
-        };
-
-        _classButtons = new Button[4];
-        _classButtons[0] = MakeButton(_step4Panel.transform, "SelectFighter",
-            new Vector2(topLeftX, topY - panelH/2 - 25), new Vector2(200, 36),
-            "Select Fighter", btnColors[0], Color.white, 16);
-        _classButtons[0].onClick.AddListener(() => OnClassSelected(0));
-
-        _classButtons[1] = MakeButton(_step4Panel.transform, "SelectRogue",
-            new Vector2(topRightX, topY - panelH/2 - 25), new Vector2(200, 36),
-            "Select Rogue", btnColors[1], Color.white, 16);
-        _classButtons[1].onClick.AddListener(() => OnClassSelected(1));
-
-        _classButtons[2] = MakeButton(_step4Panel.transform, "SelectMonk",
-            new Vector2(topLeftX, botY - panelH/2 - 25), new Vector2(200, 36),
-            "Select Monk", btnColors[2], Color.white, 16);
-        _classButtons[2].onClick.AddListener(() => OnClassSelected(2));
-
-        _classButtons[3] = MakeButton(_step4Panel.transform, "SelectBarbarian",
-            new Vector2(topRightX, botY - panelH/2 - 25), new Vector2(200, 36),
-            "Select Barbarian", btnColors[3], Color.white, 16);
-        _classButtons[3].onClick.AddListener(() => OnClassSelected(3));
+            int idx = i;
+            _classButtonDefaultColors_dynamic[i] = classDef.ButtonColor;
+            _classButtons[i] = MakeButton(_step4Panel.transform, $"Select{classDef.ClassName}",
+                new Vector2(posX, posY - panelH/2 - 18), new Vector2(180, 30),
+                $"Select {classDef.ClassName}", classDef.ButtonColor, Color.white, 14);
+            _classButtons[i].onClick.AddListener(() => OnClassSelected(idx));
+        }
 
         // Info text for selected class
         _classInfoText = MakeText(_step4Panel.transform, "ClassInfo",
-            new Vector2(0, -248), new Vector2(700, 25),
+            new Vector2(0, -260), new Vector2(700, 25),
             "", 14, new Color(0.9f, 0.9f, 0.5f), TextAnchor.MiddleCenter);
 
         // Confirm class button
         _confirmClassButton = MakeButton(_step4Panel.transform, "ConfirmClass",
-            new Vector2(0, -278), new Vector2(200, 42),
+            new Vector2(0, -288), new Vector2(200, 42),
             "Confirm Class ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 18);
         _confirmClassButton.onClick.AddListener(OnConfirmClass);
         _confirmClassButton.interactable = false;
     }
 
-    // Default button colors for class selection reset
-    private static readonly Color[] _classButtonDefaultColors = {
-        new Color(0.5f, 0.3f, 0.15f),
-        new Color(0.2f, 0.4f, 0.2f),
-        new Color(0.15f, 0.35f, 0.5f),
-        new Color(0.5f, 0.15f, 0.1f)
-    };
+    // Dynamic button colors populated from ClassRegistry during BuildStepChooseClass
+    private Color[] _classButtonDefaultColors_dynamic;
 
     private void OnClassSelected(int index)
     {
@@ -712,7 +663,7 @@ public class CharacterCreationUI : MonoBehaviour
         for (int i = 0; i < _classButtons.Length; i++)
         {
             var c = _classButtons[i].colors;
-            c.normalColor = (i == index) ? new Color(0.5f, 0.5f, 0.15f) : _classButtonDefaultColors[i];
+            c.normalColor = (i == index) ? new Color(0.5f, 0.5f, 0.15f) : _classButtonDefaultColors_dynamic[i];
             c.highlightedColor = c.normalColor * 1.2f;
             _classButtons[i].colors = c;
         }

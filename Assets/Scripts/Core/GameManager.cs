@@ -84,12 +84,17 @@ public class GameManager : MonoBehaviour
     public bool IsPlayerTurn => ActivePC != null;
 
     // Current attack mode being selected for
-    private enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows }
+    private enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell }
     private PendingAttackMode _pendingAttackMode;
+    private SpellData _pendingSpell; // Spell selected for casting
+    private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
 
     private List<SquareCell> _highlightedCells = new List<SquareCell>();
     private string _lastCombatLog = "";
     private Camera _mainCam;
+
+    /// <summary>Current combat round number (starts at 1).</summary>
+    private int _currentRound = 0;
 
     private void Awake()
     {
@@ -285,11 +290,13 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Get default armor bonus, shield bonus, and damage dice for a class.
-    /// Used when setting up characters from character creation data.
+    /// Delegates to ClassRegistry for class-specific values.
     /// </summary>
     private void GetClassDefaults(string className, out int armorBonus, out int shieldBonus, out int damageDice)
     {
-        switch (className)
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(className);
+        if (classDef != null)
         {
             case "Fighter":
                 armorBonus = 4; shieldBonus = 2; damageDice = 8; break;
@@ -306,12 +313,14 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Set up starting equipment based on class (PHB starting packages).
+    /// Delegates to the class definition from ClassRegistry.
     /// </summary>
     private void SetupStartingEquipment(InventoryComponent inv, string className)
     {
         ItemDatabase.Init();
-
-        if (className == "Fighter")
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(className);
+        if (classDef != null)
         {
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("scale_mail"), EquipSlot.Armor);
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
@@ -322,7 +331,7 @@ public class GameManager : MonoBehaviour
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("torch"));
             Debug.Log("[GameManager] Fighter equipment: Scale Mail, Heavy Shield, Longsword, Shortbow");
         }
-        else if (className == "Rogue")
+        else
         {
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("rapier"), EquipSlot.RightHand);
@@ -1025,6 +1034,15 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        // ===== NEW ROUND DETECTION =====
+        // A new round begins when PC1's turn starts (turn order: PC1 → PC2 → NPC → repeat)
+        if (pc == PC1)
+        {
+            _currentRound++;
+            Debug.Log($"[GameManager] ═══ ROUND {_currentRound} BEGINS ═══");
+            ResetQuickenedSpellTrackingForAllCharacters();
+        }
+
         // Tick Barbarian Rage at start of turn
         if (pc.Stats.IsBarbarian && pc.Stats.IsRaging)
         {
@@ -1097,7 +1115,16 @@ public class GameManager : MonoBehaviour
         if (pc.Stats.Feats.Count > 0)
             featInfo = $"\nFeats: {string.Join(", ", pc.Stats.Feats)}";
 
-        CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory  [K] Skills\n{actionInfo}{dwInfo}{featInfo}");
+        // Show spell info for spellcasters
+        string spellInfo = "";
+        if (pc.Stats.IsSpellcaster)
+        {
+            var spellComp = pc.GetComponent<SpellcastingComponent>();
+            if (spellComp != null)
+                spellInfo = $"\n✦ Spells: {spellComp.GetSlotSummary()}";
+        }
+
+        CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory  [K] Skills\n{actionInfo}{dwInfo}{featInfo}{spellInfo}");
 
         if (!pc.Actions.HasAnyActionLeft)
         {
@@ -1220,6 +1247,258 @@ public class GameManager : MonoBehaviour
             CombatUI.ShowCombatLog($"{pc.Stats.CharacterName} cannot rage: {reason}");
             Debug.Log($"[GameManager] {pc.Stats.CharacterName} failed to activate Rage: {reason}");
         }
+    }
+
+    // ========== SPELLCASTING ==========
+
+    /// <summary>Called when Cast Spell button is pressed (Standard Action, spellcasters only).</summary>
+    public void OnCastSpellButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Stats.IsSpellcaster || !pc.Actions.HasStandardAction) return;
+
+        var spellComp = pc.GetComponent<SpellcastingComponent>();
+        if (spellComp == null || !spellComp.HasAnyCastableSpell()) return;
+
+        // Show spell selection panel with metamagic support
+        CombatUI.SetActionButtonsVisible(false);
+        CombatUI.ShowSpellSelection(spellComp, OnSpellSelectedWithMetamagic, OnSpellSelectionCancelled);
+    }
+
+    /// <summary>Called when a spell is chosen from the spell selection panel (with optional metamagic).</summary>
+    private void OnSpellSelectedWithMetamagic(SpellData spell, MetamagicData metamagic)
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) { ShowActionChoices(); return; }
+
+        _pendingSpell = spell;
+        _pendingMetamagic = metamagic;
+
+        // If metamagic modifies the spell data (range, action type), clone and apply
+        if (metamagic != null && metamagic.HasAnyMetamagic)
+        {
+            _pendingSpell = spell.Clone();
+            SpellCaster.ApplyMetamagicToSpellData(_pendingSpell, metamagic);
+            Debug.Log($"[GameManager] Metamagic applied: {metamagic.GetSummary(spell.SpellLevel)}");
+        }
+
+        // Determine targeting based on spell type
+        if (_pendingSpell.TargetType == SpellTargetType.Self)
+        {
+            // Self-targeting spells (Mage Armor) cast immediately
+            PerformSpellCast(pc, pc);
+        }
+        else if (_pendingSpell.TargetType == SpellTargetType.SingleAlly)
+        {
+            // Ally targeting (Cure Light Wounds) - show ally targets
+            _pendingAttackMode = PendingAttackMode.CastSpell;
+            CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+            ShowSpellTargets(pc, _pendingSpell);
+        }
+        else if (_pendingSpell.TargetType == SpellTargetType.SingleEnemy)
+        {
+            // Enemy targeting (damage spells) - show enemy targets in range
+            _pendingAttackMode = PendingAttackMode.CastSpell;
+            CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+            ShowSpellTargets(pc, _pendingSpell);
+        }
+        else
+        {
+            // Default: show targets
+            _pendingAttackMode = PendingAttackMode.CastSpell;
+            CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+            ShowSpellTargets(pc, _pendingSpell);
+        }
+    }
+
+    /// <summary>Legacy callback for backward compat (no metamagic).</summary>
+    private void OnSpellSelected(SpellData spell)
+    {
+        OnSpellSelectedWithMetamagic(spell, null);
+    }
+
+    /// <summary>Called when spell selection is cancelled.</summary>
+    private void OnSpellSelectionCancelled()
+    {
+        ShowActionChoices();
+    }
+
+    /// <summary>
+    /// Highlight valid targets for a spell based on its range and target type.
+    /// </summary>
+    private void ShowSpellTargets(CharacterController caster, SpellData spell)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI.SetActionButtonsVisible(false);
+
+        int range = spell.RangeSquares;
+        if (range <= 0) range = 1; // Touch spells = adjacent (1 square)
+
+        List<SquareCell> allCells = Grid.GetCellsInRange(caster.GridPosition, range);
+        bool hasTarget = false;
+
+        foreach (var cell in allCells)
+        {
+            if (!cell.IsOccupied || cell.Occupant.Stats.IsDead) continue;
+            if (cell.Occupant == caster) continue; // Can't target self here (self spells are handled separately)
+
+            int sqDist = SquareGridUtils.GetDistance(caster.GridPosition, cell.Coords);
+            if (sqDist > range) continue;
+
+            bool validTarget = false;
+            if (spell.TargetType == SpellTargetType.SingleEnemy && cell.Occupant != caster)
+            {
+                // For enemies: NPC is enemy to PCs, PCs are enemies to NPC
+                bool isEnemy = (caster == PC1 || caster == PC2) ? (cell.Occupant == NPC) : (cell.Occupant == PC1 || cell.Occupant == PC2);
+                validTarget = isEnemy;
+            }
+            else if (spell.TargetType == SpellTargetType.SingleAlly)
+            {
+                // For allies: PCs are allies to each other
+                bool isAlly = (caster == PC1 && cell.Occupant == PC2) || (caster == PC2 && cell.Occupant == PC1);
+                // Also allow targeting self for healing (cell won't match since we skipped self above)
+                validTarget = isAlly;
+            }
+
+            if (validTarget)
+            {
+                if (spell.EffectType == SpellEffectType.Healing || spell.EffectType == SpellEffectType.Buff)
+                    cell.SetHighlight(HighlightType.Move); // Green for friendly spells
+                else
+                    cell.SetHighlight(HighlightType.Attack); // Red for damage spells
+                _highlightedCells.Add(cell);
+                hasTarget = true;
+            }
+        }
+
+        // For SingleAlly spells, also allow self-targeting by clicking own tile
+        if (spell.TargetType == SpellTargetType.SingleAlly)
+        {
+            SquareCell selfCell = Grid.GetCell(caster.GridPosition);
+            if (selfCell != null)
+            {
+                selfCell.SetHighlight(HighlightType.Selected);
+                _highlightedCells.Add(selfCell);
+                hasTarget = true;
+            }
+        }
+
+        if (hasTarget)
+        {
+            string targetMsg = spell.TargetType == SpellTargetType.SingleAlly
+                ? "Click an ally (or self) to cast"
+                : "Click an enemy to cast";
+            CombatUI.SetTurnIndicator($"✦ {spell.Name}: {targetMsg} (Range: {spell.RangeSquares} sq)");
+        }
+        else
+        {
+            CombatUI.SetTurnIndicator($"No valid targets for {spell.Name}!");
+            StartCoroutine(ReturnToActionChoicesAfterDelay(1.5f));
+        }
+    }
+
+    /// <summary>
+    /// Execute a spell cast from caster to target.
+    /// </summary>
+    private void PerformSpellCast(CharacterController caster, CharacterController target)
+    {
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        // Quickened spells don't consume standard action (they're free actions)
+        bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
+        if (!isQuickened)
+        {
+            caster.Actions.UseStandardAction();
+        }
+        else
+        {
+            // Mark that this character has used their one quickened spell for this round
+            var casterSpellComp = caster.GetComponent<SpellcastingComponent>();
+            if (casterSpellComp != null)
+            {
+                casterSpellComp.MarkQuickenedSpellCast();
+            }
+        }
+
+        // Get spellcasting component
+        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        if (spellComp == null)
+        {
+            Debug.LogError("[GameManager] PerformSpellCast: No SpellcastingComponent!");
+            ShowActionChoices();
+            return;
+        }
+
+        // Determine which slot level to consume
+        int slotLevelToConsume = _pendingSpell.SpellLevel;
+        if (_pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic)
+        {
+            slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
+            Debug.Log($"[GameManager] Metamagic: consuming level {slotLevelToConsume} slot " +
+                      $"(base {_pendingSpell.SpellLevel} + {slotLevelToConsume - _pendingSpell.SpellLevel} metamagic)");
+        }
+
+        // Consume spell slot (cantrips without metamagic are free)
+        if (slotLevelToConsume > 0)
+        {
+            if (!spellComp.ConsumeSlot(slotLevelToConsume))
+            {
+                Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} spell slot!");
+                ShowActionChoices();
+                return;
+            }
+        }
+
+        // Resolve the spell with metamagic
+        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic);
+
+        // Apply Mage Armor AC bonus
+        if (_pendingSpell.SpellId == "mage_armor" && result.Success)
+        {
+            target.Stats.SpellACBonus = _pendingSpell.BuffACBonus;
+            spellComp.MageArmorActive = true;
+            spellComp.MageArmorACBonus = _pendingSpell.BuffACBonus;
+            Debug.Log($"[GameManager] Mage Armor applied: +{_pendingSpell.BuffACBonus} AC to {target.Stats.CharacterName}");
+        }
+
+        // Handle death if target was killed
+        if (result.TargetKilled && target != null)
+        {
+            target.OnDeath();
+        }
+
+        // Build combat log with quickened spell indicator
+        _lastCombatLog = result.GetFormattedLog();
+
+        if (isQuickened)
+        {
+            string quickenedPrefix = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n";
+            _lastCombatLog = quickenedPrefix + _lastCombatLog;
+        }
+
+        if (GameManager.LogAttacksToConsole)
+            Debug.Log("[Spell] " + _lastCombatLog);
+
+        CombatUI.ShowCombatLog(_lastCombatLog);
+        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+
+        Grid.ClearAllHighlights();
+
+        // Check for NPC kill
+        if (result.TargetKilled && target == NPC)
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            return;
+        }
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+
+        // After standard action, check for remaining actions
+        StartCoroutine(AfterAttackDelay(caster, 1.5f));
     }
 
     // ========== MOVEMENT ==========
@@ -1354,6 +1633,7 @@ public class GameManager : MonoBehaviour
                 case PendingAttackMode.FullAttack: modeStr = "FULL ATTACK"; break;
                 case PendingAttackMode.DualWield: modeStr = "DUAL WIELD"; break;
                 case PendingAttackMode.FlurryOfBlows: modeStr = "FLURRY OF BLOWS"; break;
+                case PendingAttackMode.CastSpell: modeStr = "CAST SPELL"; break;
             }
 
             string rangeMsg = "";

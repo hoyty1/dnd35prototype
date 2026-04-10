@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // ============================================================================
-// D&D 3.5 Player's Handbook - All General Feats (~67 feats)
-// Excludes: Metamagic feats, Item Creation feats
+// D&D 3.5 Player's Handbook - All General Feats + Metamagic Feats (~76 feats)
+// Excludes: Item Creation feats
 // ============================================================================
 
 /// <summary>
@@ -92,6 +92,8 @@ public static class FeatDefinitions
         DefineSkillFeats();
         // ==================== GENERAL FEATS ====================
         DefineGeneralFeats();
+        // ==================== METAMAGIC FEATS ====================
+        DefineMetamagicFeats();
     }
 
     // ========================================================================
@@ -973,5 +975,121 @@ public static class FeatDefinitions
     public static bool GetsRacialBonusFeat(string raceName, int level)
     {
         return raceName == "Human" && level == 1;
+    }
+
+    // ========================================================================
+    // METAMAGIC FEATS (D&D 3.5 PHB Chapter 5)
+    // ========================================================================
+    private static void DefineMetamagicFeats()
+    {
+        // --- Empower Spell ---
+        var empowerSpell = new FeatDefinition("Empower Spell",
+            "All variable, numeric effects of an empowered spell are increased by one-half. An empowered spell uses up a spell slot two levels higher than the spell's actual level.",
+            FeatType.Metamagic);
+        empowerSpell.Benefit = new FeatBenefit
+        {
+            IsMetamagic = true,
+            MetamagicId = MetamagicFeatId.EmpowerSpell,
+            Description = "Increase all variable numeric effects by 50%. Uses a slot 2 levels higher."
+        };
+        Add(empowerSpell);
+
+        // --- Enlarge Spell ---
+        var enlargeSpell = new FeatDefinition("Enlarge Spell",
+            "You can alter a spell with a range of close, medium, or long to increase its range by 100%. An enlarged spell uses up a spell slot one level higher than the spell's actual level.",
+            FeatType.Metamagic);
+        enlargeSpell.Benefit = new FeatBenefit
+        {
+            IsMetamagic = true,
+            MetamagicId = MetamagicFeatId.EnlargeSpell,
+            Description = "Double the spell's range. Uses a slot 1 level higher."
+        };
+        Add(enlargeSpell);
+
+        // --- Extend Spell ---
+        var extendSpell = new FeatDefinition("Extend Spell",
+            "An extended spell lasts twice as long as normal. Spells with a duration of concentration, instantaneous, or permanent are not affected. An extended spell uses up a spell slot one level higher than the spell's actual level.",
+            FeatType.Metamagic);
+        extendSpell.Benefit = new FeatBenefit
+        {
+            IsMetamagic = true,
+            MetamagicId = MetamagicFeatId.ExtendSpell,
+            Description = "Double the spell's duration. Uses a slot 1 level higher."
+        };
+        Add(extendSpell);
+
+        // --- Heighten Spell ---
+        var heightenSpell = new FeatDefinition("Heighten Spell",
+            "A heightened spell has a higher spell level than normal (up to 9th level). Unlike other metamagic feats, Heighten Spell actually increases the effective level of the spell that it modifies. All effects dependent on spell level (such as saving throw DCs) are calculated according to the heightened level.",
+            FeatType.Metamagic);
+        heightenSpell.Benefit = new FeatBenefit
+        {
+            IsMetamagic = true,
+            MetamagicId = MetamagicFeatId.HeightenSpell,
+            Description = "Increase spell's effective level (and save DC). Variable slot cost."
+        };
+        Add(heightenSpell);
+
+        // --- Maximize Spell ---
+        var maximizeSpell = new FeatDefinition("Maximize Spell",
+            "All variable, numeric effects of a maximized spell are maximized. A maximized spell uses up a spell slot three levels higher than the spell's actual level.",
+            FeatType.Metamagic);
+        maximizeSpell.Benefit = new FeatBenefit
+        {
+            IsMetamagic = true,
+            MetamagicId = MetamagicFeatId.MaximizeSpell,
+            Description = "Maximize all variable numeric effects. Uses a slot 3 levels higher."
+        };
+        Add(maximizeSpell);
+
+        // --- Quicken Spell ---
+        var quickenSpell = new FeatDefinition("Quicken Spell",
+            "Casting a quickened spell is a free action. You can perform another action, even casting another spell, in the same round as you cast a quickened spell. A quickened spell uses up a spell slot four levels higher than the spell's actual level.",
+            FeatType.Metamagic);
+        quickenSpell.Benefit = new FeatBenefit
+        {
+            IsMetamagic = true,
+            MetamagicId = MetamagicFeatId.QuickenSpell,
+            Description = "Cast as a free action. Uses a slot 4 levels higher."
+        };
+        Add(quickenSpell);
+
+        // --- Silent Spell ---
+        var silentSpell = new FeatDefinition("Silent Spell",
+            "A silent spell can be cast with no verbal components. A silent spell uses up a spell slot one level higher than the spell's actual level.",
+            FeatType.Metamagic);
+        silentSpell.Benefit = new FeatBenefit
+        {
+            IsMetamagic = true,
+            MetamagicId = MetamagicFeatId.SilentSpell,
+            Description = "Cast without verbal components. Uses a slot 1 level higher."
+        };
+        Add(silentSpell);
+
+        // --- Still Spell ---
+        var stillSpell = new FeatDefinition("Still Spell",
+            "A stilled spell can be cast with no somatic components. A stilled spell uses up a spell slot one level higher than the spell's actual level.",
+            FeatType.Metamagic);
+        stillSpell.Benefit = new FeatBenefit
+        {
+            IsMetamagic = true,
+            MetamagicId = MetamagicFeatId.StillSpell,
+            Description = "Cast without somatic components. Uses a slot 1 level higher."
+        };
+        Add(stillSpell);
+
+        // --- Widen Spell ---
+        var widenSpell = new FeatDefinition("Widen Spell",
+            "You can alter a burst, emanation, line, or spread shaped spell to increase its area. Any numeric measurements of the spell's area increase by 100%. A widened spell uses up a spell slot three levels higher than the spell's actual level.",
+            FeatType.Metamagic);
+        widenSpell.Benefit = new FeatBenefit
+        {
+            IsMetamagic = true,
+            MetamagicId = MetamagicFeatId.WidenSpell,
+            Description = "Double the spell's area of effect. Uses a slot 3 levels higher."
+        };
+        Add(widenSpell);
+
+        Debug.Log("[Feats] 9 metamagic feat definitions registered.");
     }
 }

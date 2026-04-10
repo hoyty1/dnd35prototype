@@ -23,6 +23,23 @@ public class CharacterStats
     /// <summary>Whether this character is a Barbarian.</summary>
     public bool IsBarbarian => CharacterClass == "Barbarian";
 
+    /// <summary>Whether this character is a Wizard.</summary>
+    public bool IsWizard => CharacterClass == "Wizard";
+
+    /// <summary>Whether this character is a Cleric.</summary>
+    public bool IsCleric => CharacterClass == "Cleric";
+
+    /// <summary>Whether this character is a spellcaster. Delegates to ClassRegistry.</summary>
+    public bool IsSpellcaster
+    {
+        get
+        {
+            ClassRegistry.Init();
+            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
+            return classDef != null && classDef.IsSpellcaster;
+        }
+    }
+
     // ========== MONK CLASS FEATURES (D&D 3.5) ==========
 
     /// <summary>
@@ -222,40 +239,46 @@ public class CharacterStats
     /// <summary>
     /// Class-based Fortitude save bonus (good save progression).
     /// Good: +2 + level/2. Poor: level/3.
-    /// Fighter (good), Barbarian (good), Monk (good), Rogue (poor).
+    /// Delegates to ClassRegistry for which saves are good/poor per class.
     /// At level 3: Good=+3, Poor=+1.
     /// </summary>
     public int ClassFortSave
     {
         get
         {
-            bool goodFort = CharacterClass == "Fighter" || CharacterClass == "Barbarian" || CharacterClass == "Monk";
+            ClassRegistry.Init();
+            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
+            bool goodFort = classDef != null && classDef.GoodFortitude;
             return goodFort ? (2 + Level / 2) : (Level / 3);
         }
     }
 
     /// <summary>
     /// Class-based Reflex save bonus.
-    /// Rogue (good), Monk (good). Fighter/Barbarian (poor).
+    /// Delegates to ClassRegistry for which saves are good/poor per class.
     /// </summary>
     public int ClassRefSave
     {
         get
         {
-            bool goodRef = CharacterClass == "Rogue" || CharacterClass == "Monk";
+            ClassRegistry.Init();
+            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
+            bool goodRef = classDef != null && classDef.GoodReflex;
             return goodRef ? (2 + Level / 2) : (Level / 3);
         }
     }
 
     /// <summary>
     /// Class-based Will save bonus.
-    /// Monk (good). Fighter/Rogue/Barbarian (poor).
+    /// Delegates to ClassRegistry for which saves are good/poor per class.
     /// </summary>
     public int ClassWillSave
     {
         get
         {
-            bool goodWill = CharacterClass == "Monk";
+            ClassRegistry.Init();
+            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
+            bool goodWill = classDef != null && classDef.GoodWill;
             return goodWill ? (2 + Level / 2) : (Level / 3);
         }
     }
@@ -323,36 +346,16 @@ public class CharacterStats
 
     /// <summary>
     /// Auto-grant feats based on character class.
-    /// Fighter: Power Attack. Rogue: Rapid Shot, Point Blank Shot.
-    /// Monk: Improved Grapple, Stunning Fist, Improved Unarmed Strike.
-    /// Barbarian: (no auto feats - relies on class features).
+    /// Delegates to the class definition from ClassRegistry.
     /// </summary>
     public void InitFeats()
     {
         Feats.Clear();
-        if (CharacterClass == "Fighter")
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
+        if (classDef != null)
         {
-            Feats.Add("Power Attack");
-        }
-        else if (CharacterClass == "Rogue")
-        {
-            Feats.Add("Point Blank Shot");
-            Feats.Add("Rapid Shot");
-        }
-        else if (CharacterClass == "Monk")
-        {
-            // Monk bonus feats (D&D 3.5 PHB):
-            // Level 1: Improved Unarmed Strike (free), Stunning Fist or Improved Grapple (bonus)
-            // Level 2: Combat Reflexes or Deflect Arrows (bonus)
-            Feats.Add("Improved Unarmed Strike");
-            Feats.Add("Stunning Fist");
-            Feats.Add("Improved Grapple");
-            Debug.Log($"[Monk] {CharacterName}: Granted monk bonus feats: Improved Unarmed Strike, Stunning Fist, Improved Grapple");
-        }
-        else if (CharacterClass == "Barbarian")
-        {
-            // Barbarian has no bonus feats, but gets class features (Rage, Fast Movement, etc.)
-            Debug.Log($"[Barbarian] {CharacterName}: Barbarian class features active (Rage, Fast Movement, Uncanny Dodge)");
+            classDef.InitFeats(this);
         }
     }
 
@@ -455,6 +458,13 @@ public class CharacterStats
     /// D&D 3.5: MaxDexBonus of -1 means no limit; 0+ caps the DEX bonus to AC.
     /// Size bonus: Small +1, Medium 0, Large -1, etc.
     /// </summary>
+    /// <summary>
+    /// Bonus to AC from active spells (e.g., Mage Armor grants +4 armor bonus).
+    /// This acts as an armor bonus and does NOT stack with regular ArmorBonus — 
+    /// only the higher value applies per D&D 3.5 rules.
+    /// </summary>
+    public int SpellACBonus;
+
     public int ArmorClass
     {
         get
@@ -462,7 +472,10 @@ public class CharacterStats
             int dexToAC = DEXMod;
             if (MaxDexBonus >= 0 && dexToAC > MaxDexBonus)
                 dexToAC = MaxDexBonus;
-            return 10 + dexToAC + ArmorBonus + ShieldBonus + SizeModifier
+            // Mage Armor is an armor bonus — it doesn't stack with worn armor.
+            // Use the higher of ArmorBonus (from equipment) or SpellACBonus (from spells).
+            int effectiveArmorBonus = Mathf.Max(ArmorBonus, SpellACBonus);
+            return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + SizeModifier
                    + MonkACBonus + FeatACBonus + RageACPenalty;
         }
     }

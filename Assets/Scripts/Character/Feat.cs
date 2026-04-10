@@ -17,7 +17,8 @@ public enum FeatType
     Ranged,
     TwoWeaponFighting,
     MountedCombat,
-    Unarmed
+    Unarmed,
+    Metamagic
 }
 
 /// <summary>
@@ -181,6 +182,10 @@ public class FeatBenefit
     public bool GrantsWeaponFinesse;     // Weapon Finesse
     public bool GrantsCombatCasting;     // Combat Casting
     public bool GrantsAugmentSummoning;  // Augment Summoning
+
+    // Metamagic feats
+    public bool IsMetamagic;            // True for all metamagic feats
+    public MetamagicFeatId MetamagicId; // Which metamagic feat this is
 
     // Parameterized feats
     public bool RequiresWeaponChoice;   // Weapon Focus, Specialization, Improved Critical
