@@ -801,6 +801,33 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// Check if the character has a melee weapon equipped (or is unarmed, which counts as melee).
+    /// D&D 3.5 Rule: Only characters with melee weapons (including natural/unarmed) threaten squares.
+    /// Ranged-only characters do NOT threaten any squares and cannot make Attacks of Opportunity.
+    /// </summary>
+    public bool HasMeleeWeaponEquipped()
+    {
+        ItemData weapon = GetEquippedMainWeapon();
+
+        // Unarmed counts as melee — unarmed strikes threaten in D&D 3.5
+        // (characters always have at least an unarmed strike available)
+        if (weapon == null) return true;
+
+        // Explicitly check weapon category
+        if (weapon.WeaponCat == WeaponCategory.Melee) return true;
+
+        // Ranged weapons do NOT grant melee threat
+        // Even thrown weapons (javelin, dagger) use ranged rules when equipped as primary
+        if (weapon.WeaponCat == WeaponCategory.Ranged) return false;
+
+        // Fallback: if weapon has no category set, check AttackRange
+        // AttackRange 1 = melee, >1 with RangeIncrement = ranged
+        if (weapon.RangeIncrement > 0) return false;
+
+        return true; // Default to melee if unclear
+    }
+
+    /// <summary>
     /// Get the equipped main-hand weapon (right hand first, then left hand).
     /// Returns null if no weapon equipped (unarmed).
     /// </summary>

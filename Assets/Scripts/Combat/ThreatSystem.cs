@@ -87,6 +87,17 @@ public static class ThreatSystem
         var threatened = new HashSet<Vector2Int>();
         if (character == null || character.Stats == null || character.Stats.IsDead) return threatened;
 
+        // ============================================================
+        // D&D 3.5 Rule: Only characters with MELEE weapons threaten squares.
+        // Ranged weapons (bows, crossbows, slings) do NOT threaten.
+        // Unarmed/natural weapons DO threaten (they count as melee).
+        // ============================================================
+        if (!character.HasMeleeWeaponEquipped())
+        {
+            Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} has NO melee weapon — threatens 0 squares (ranged only)");
+            return threatened;
+        }
+
         int reach = character.Stats.AttackRange; // Default 1 for Medium melee
         Vector2Int pos = character.GridPosition;
 
@@ -108,7 +119,7 @@ public static class ThreatSystem
             }
         }
 
-        Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} threatens {threatened.Count} squares from ({pos.x},{pos.y}) with reach {reach}");
+        Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} threatens {threatened.Count} squares from ({pos.x},{pos.y}) with reach {reach} (melee weapon equipped)");
         return threatened;
     }
 
@@ -184,10 +195,13 @@ public static class ThreatSystem
 
     /// <summary>
     /// Check if a character can still make an AoO this round.
+    /// D&D 3.5: Only characters with melee weapons can make AoOs.
     /// </summary>
     public static bool CanMakeAoO(CharacterController character)
     {
         if (character == null || character.Stats == null || character.Stats.IsDead) return false;
+        // Ranged-only characters cannot make AoOs
+        if (!character.HasMeleeWeaponEquipped()) return false;
         return character.Stats.AttacksOfOpportunityUsed < character.Stats.MaxAttacksOfOpportunity;
     }
 
