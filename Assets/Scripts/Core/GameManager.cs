@@ -63,7 +63,7 @@ public class GameManager : MonoBehaviour
     public bool IsPlayerTurn => ActivePC != null;
 
     // Current attack mode being selected for
-    private enum PendingAttackMode { Single, FullAttack, DualWield }
+    private enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows }
     private PendingAttackMode _pendingAttackMode;
 
     private List<SquareCell> _highlightedCells = new List<SquareCell>();
@@ -126,9 +126,8 @@ public class GameManager : MonoBehaviour
 
         // ===== PC1 =====
         pc1Data.ComputeFinalStats();
-        int pc1ArmorBonus = pc1Data.ClassName == "Fighter" ? 4 : 2;
-        int pc1ShieldBonus = pc1Data.ClassName == "Fighter" ? 2 : 0;
-        int pc1DamageDice = pc1Data.ClassName == "Fighter" ? 8 : 6;
+        int pc1ArmorBonus, pc1ShieldBonus, pc1DamageDice;
+        GetClassDefaults(pc1Data.ClassName, out pc1ArmorBonus, out pc1ShieldBonus, out pc1DamageDice);
 
         CharacterStats pc1Stats = new CharacterStats(
             name: pc1Data.CharacterName,
@@ -195,9 +194,8 @@ public class GameManager : MonoBehaviour
 
         // ===== PC2 =====
         pc2Data.ComputeFinalStats();
-        int pc2ArmorBonus = pc2Data.ClassName == "Fighter" ? 4 : 2;
-        int pc2ShieldBonus = pc2Data.ClassName == "Fighter" ? 2 : 0;
-        int pc2DamageDice = pc2Data.ClassName == "Fighter" ? 8 : 6;
+        int pc2ArmorBonus, pc2ShieldBonus, pc2DamageDice;
+        GetClassDefaults(pc2Data.ClassName, out pc2ArmorBonus, out pc2ShieldBonus, out pc2DamageDice);
 
         CharacterStats pc2Stats = new CharacterStats(
             name: pc2Data.CharacterName,
@@ -287,6 +285,27 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Get default armor bonus, shield bonus, and damage dice for a class.
+    /// Used when setting up characters from character creation data.
+    /// </summary>
+    private void GetClassDefaults(string className, out int armorBonus, out int shieldBonus, out int damageDice)
+    {
+        switch (className)
+        {
+            case "Fighter":
+                armorBonus = 4; shieldBonus = 2; damageDice = 8; break;
+            case "Rogue":
+                armorBonus = 2; shieldBonus = 0; damageDice = 6; break;
+            case "Monk":
+                armorBonus = 0; shieldBonus = 0; damageDice = 6; break; // Monk: unarmored, unarmed 1d6
+            case "Barbarian":
+                armorBonus = 3; shieldBonus = 0; damageDice = 12; break; // Barbarian: hide armor, greataxe 1d12
+            default:
+                armorBonus = 0; shieldBonus = 0; damageDice = 6; break;
+        }
+    }
+
+    /// <summary>
     /// Set up starting equipment based on class (PHB starting packages).
     /// </summary>
     private void SetupStartingEquipment(InventoryComponent inv, string className)
@@ -304,8 +323,9 @@ public class GameManager : MonoBehaviour
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("torch"));
+            Debug.Log("[GameManager] Fighter equipment: Scale Mail, Heavy Shield, Longsword, Shortbow");
         }
-        else // Rogue
+        else if (className == "Rogue")
         {
             // Rogue Starting Package: Leather Armor, Rapier, Shortbow
             inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
@@ -316,6 +336,30 @@ public class GameManager : MonoBehaviour
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("rope"));
+            Debug.Log("[GameManager] Rogue equipment: Leather Armor, Rapier, Shortbow, Dagger");
+        }
+        else if (className == "Monk")
+        {
+            // Monk Starting Package: No armor (AC from WIS), Quarterstaff, Sling
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("sling"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            Debug.Log("[GameManager] Monk equipment: Quarterstaff, Sling (unarmored for WIS AC bonus)");
+        }
+        else if (className == "Barbarian")
+        {
+            // Barbarian Starting Package: Hide Armor, Greataxe, Javelins
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("hide_armor"), EquipSlot.Armor);
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("greataxe"), EquipSlot.RightHand);
+
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            Debug.Log("[GameManager] Barbarian equipment: Hide Armor, Greataxe, 3x Javelin");
         }
 
         inv.CharacterInventory.RecalculateStats();
@@ -647,6 +691,21 @@ public class GameManager : MonoBehaviour
             if (pc == PC2) { StartCoroutine(NPCTurnCoroutine()); return; }
         }
 
+        // Tick Barbarian Rage at start of turn
+        if (pc.Stats.IsBarbarian && pc.Stats.IsRaging)
+        {
+            pc.Stats.TickRage();
+            if (!pc.Stats.IsRaging)
+            {
+                CombatUI.ShowCombatLog($"😫 {pc.Stats.CharacterName}'s rage has ended! Now fatigued.");
+                CombatUI.UpdateAllStats(PC1, PC2, NPC);
+            }
+            else
+            {
+                CombatUI.ShowCombatLog($"⚡ {pc.Stats.CharacterName}: Rage - {pc.Stats.RageRoundsRemaining} rounds remaining");
+            }
+        }
+
         pc.StartNewTurn();
 
         CurrentPhase = (pc == PC1) ? TurnPhase.PC1Turn : TurnPhase.PC2Turn;
@@ -805,6 +864,47 @@ public class GameManager : MonoBehaviour
         CombatUI.UpdateActionButtons(pc);
     }
 
+    /// <summary>Called when Flurry of Blows button is pressed (Monk only, Full-Round Action).</summary>
+    public void OnFlurryOfBlowsButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Stats.IsMonk || !pc.Actions.HasFullRoundAction) return;
+
+        _pendingAttackMode = PendingAttackMode.FlurryOfBlows;
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+
+        int[] bonuses = pc.Stats.GetFlurryOfBlowsBonuses();
+        string bonusStr = string.Join("/", System.Array.ConvertAll(bonuses, b => CharacterStats.FormatMod(b)));
+        Debug.Log($"[Monk] {pc.Stats.CharacterName}: Flurry of Blows selected - {bonuses.Length} attacks at {bonusStr}");
+
+        ShowAttackTargets(pc);
+        CombatUI.SetTurnIndicator($"FLURRY OF BLOWS: Select target ({bonusStr})");
+    }
+
+    /// <summary>Called when Rage button is pressed (Barbarian only, Free Action).</summary>
+    public void OnRageButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Stats.IsBarbarian) return;
+
+        bool success = pc.ActivateRage();
+        if (success)
+        {
+            CombatUI.ShowCombatLog($"⚡ {pc.Stats.CharacterName} enters a BARBARIAN RAGE! " +
+                                  $"+4 STR, +4 CON, +2 Will, -2 AC for {pc.Stats.RageRoundsRemaining} rounds!");
+            CombatUI.UpdateAllStats(PC1, PC2, NPC);
+            CombatUI.UpdateActionButtons(pc);
+            Debug.Log($"[GameManager] {pc.Stats.CharacterName} activated Rage via button");
+        }
+        else
+        {
+            string reason = pc.Stats.IsRaging ? "already raging" :
+                           pc.Stats.IsFatigued ? "fatigued" : "no rages left today";
+            CombatUI.ShowCombatLog($"{pc.Stats.CharacterName} cannot rage: {reason}");
+            Debug.Log($"[GameManager] {pc.Stats.CharacterName} failed to activate Rage: {reason}");
+        }
+    }
+
     // ========== MOVEMENT ==========
 
     // AoO confirmation state
@@ -928,6 +1028,7 @@ public class GameManager : MonoBehaviour
                 case PendingAttackMode.Single: modeStr = "ATTACK"; break;
                 case PendingAttackMode.FullAttack: modeStr = "FULL ATTACK"; break;
                 case PendingAttackMode.DualWield: modeStr = "DUAL WIELD"; break;
+                case PendingAttackMode.FlurryOfBlows: modeStr = "FLURRY OF BLOWS"; break;
             }
 
             // Build range info string
@@ -1223,6 +1324,10 @@ public class GameManager : MonoBehaviour
             case PendingAttackMode.DualWield:
                 PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
+
+            case PendingAttackMode.FlurryOfBlows:
+                PerformFlurryOfBlows(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+                break;
         }
     }
 
@@ -1308,6 +1413,39 @@ public class GameManager : MonoBehaviour
         attacker.Actions.UseFullRoundAction();
 
         FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
+        _lastCombatLog = result.GetFullSummary();
+
+        // Log detailed per-attack breakdown to Unity Console
+        if (LogAttacksToConsole)
+            LogFullAttackToConsole(result);
+
+        CombatUI.ShowCombatLog(_lastCombatLog);
+        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+
+        Grid.ClearAllHighlights();
+
+        if (result.TargetKilled && target == NPC)
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            return;
+        }
+
+        // Full-round action ends the turn
+        StartCoroutine(DelayedEndActivePCTurn(2.0f));
+    }
+
+    /// <summary>
+    /// Perform a Flurry of Blows attack (Monk only, Full-Round Action).
+    /// </summary>
+    private void PerformFlurryOfBlows(CharacterController attacker, CharacterController target,
+        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
+    {
+        // Full-Round Action
+        attacker.Actions.UseFullRoundAction();
+
+        FullAttackResult result = attacker.FlurryOfBlows(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = result.GetFullSummary();
 
         // Log detailed per-attack breakdown to Unity Console

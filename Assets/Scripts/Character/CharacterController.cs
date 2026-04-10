@@ -903,4 +903,125 @@ public class CharacterController : MonoBehaviour
         MoveToCell(targetCell);
         return true;
     }
+
+    // ========== MONK: FLURRY OF BLOWS (Full-Round Action) ==========
+
+    /// <summary>
+    /// Perform a Flurry of Blows attack (Monk only).
+    /// D&D 3.5: Two attacks at reduced BAB. At level 3: +0/+0.
+    /// Must use unarmed strike or special monk weapon.
+    /// </summary>
+    public FullAttackResult FlurryOfBlows(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
+    {
+        var result = new FullAttackResult();
+        result.Type = FullAttackResult.AttackType.FullAttack;
+        result.Attacker = this;
+        result.Defender = target;
+        result.DefenderHPBefore = target.Stats.CurrentHP;
+
+        if (!Stats.IsMonk)
+        {
+            Debug.LogWarning($"[Monk] {Stats.CharacterName}: Cannot use Flurry of Blows - not a Monk!");
+            return result;
+        }
+
+        // Get flurry attack bonuses
+        int[] flurryBonuses = Stats.GetFlurryOfBlowsBonuses();
+        Debug.Log($"[Monk] {Stats.CharacterName}: Flurry of Blows! {flurryBonuses.Length} attacks at " +
+                  $"{string.Join("/", System.Array.ConvertAll(flurryBonuses, b => CharacterStats.FormatMod(b)))}");
+
+        // Use monk unarmed damage (1d6 at level 3) or equipped monk weapon
+        int damageDice = Stats.MonkUnarmedDamageDie > 0 ? Stats.MonkUnarmedDamageDie : Stats.BaseDamageDice;
+        int damageCount = 1;
+        int bonusDamage = Stats.BonusDamage;
+
+        // Check for equipped weapon (quarterstaff is a monk weapon)
+        var inv = GetComponent<InventoryComponent>();
+        ItemData equippedWeapon = inv != null ? inv.CharacterInventory.RightHandSlot : null;
+        int critThreatMin = 20;
+        int critMult = 2;
+
+        if (equippedWeapon != null)
+        {
+            // Use weapon stats if equipped
+            damageDice = equippedWeapon.DamageDice;
+            damageCount = equippedWeapon.DamageCount;
+            bonusDamage = equippedWeapon.BonusDamage;
+            critThreatMin = equippedWeapon.CritThreatMin;
+            critMult = equippedWeapon.CritMultiplier;
+            Debug.Log($"[Monk] Using weapon: {equippedWeapon.Name} ({damageCount}d{damageDice})");
+        }
+        else
+        {
+            Debug.Log($"[Monk] Using unarmed strike: 1d{damageDice}");
+        }
+
+        int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
+
+        for (int i = 0; i < flurryBonuses.Length; i++)
+        {
+            if (target.Stats.IsDead)
+            {
+                Debug.Log($"[Monk] Target is dead, stopping at attack {i + 1}");
+                break;
+            }
+
+            int atkMod = flurryBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus;
+
+            string label = $"Flurry {i + 1} ({CharacterStats.FormatMod(flurryBonuses[i])})";
+            int hpBefore = target.Stats.CurrentHP;
+
+            CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
+                damageDice, damageCount, bonusDamage, critThreatMin, critMult,
+                equippedWeapon, false, 0);
+
+            atk.RacialAttackBonus = racialAtkBonus;
+            atk.SizeAttackBonus = Stats.SizeModifier;
+            if (equippedWeapon != null)
+            {
+                atk.WeaponName = equippedWeapon.Name;
+                atk.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
+            }
+            else
+            {
+                atk.WeaponName = "Unarmed Strike";
+                atk.BaseDamageDiceStr = $"1d{damageDice}";
+            }
+            atk.DefenderHPBefore = hpBefore;
+            atk.DefenderHPAfter = target.Stats.CurrentHP;
+
+            result.Attacks.Add(atk);
+            result.AttackLabels.Add(label);
+        }
+
+        result.DefenderHPAfter = target.Stats.CurrentHP;
+        result.TargetKilled = target.Stats.IsDead;
+        HasAttackedThisTurn = true;
+
+        Debug.Log($"[Monk] {Stats.CharacterName}: Flurry of Blows complete - " +
+                  $"{result.Attacks.Count} attacks, target HP: {result.DefenderHPAfter}");
+        return result;
+    }
+
+    // ========== BARBARIAN: RAGE (Free Action) ==========
+
+    /// <summary>
+    /// Activate Barbarian Rage. This is a free action that can be done at the start of the turn.
+    /// </summary>
+    public bool ActivateRage()
+    {
+        if (Stats == null || !Stats.IsBarbarian)
+        {
+            Debug.LogWarning($"[Barbarian] Cannot rage - not a Barbarian!");
+            return false;
+        }
+
+        bool success = Stats.ActivateRage();
+        if (success)
+        {
+            Debug.Log($"[Barbarian] {Stats.CharacterName}: Rage activated via CharacterController! " +
+                      $"AC now {Stats.ArmorClass} (rage -2 penalty applied)");
+        }
+        return success;
+    }
 }

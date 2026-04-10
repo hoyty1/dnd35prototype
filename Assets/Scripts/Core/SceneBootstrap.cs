@@ -211,7 +211,27 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.DualWieldButton = CreateButton(actionPanel.transform, "DualWieldBtn",
             new Vector2(10, y - btnH), new Vector2(btnW, btnH),
             "Dual Wield (Full-Round)", new Color(0.6f, 0.3f, 0.6f), Color.white);
-        y -= btnH + 10f;
+        y -= btnH + 5f;
+
+        // Flurry of Blows Button (Full-Round Action, Monk only)
+        combatUI.FlurryOfBlowsButton = CreateButton(actionPanel.transform, "FlurryBtn",
+            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
+            "Flurry of Blows", new Color(0.2f, 0.6f, 0.6f), Color.white);
+        y -= btnH + 5f;
+
+        // Rage Button (Free Action, Barbarian only)
+        combatUI.RageButton = CreateButton(actionPanel.transform, "RageBtn",
+            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
+            "Rage", new Color(0.7f, 0.2f, 0.1f), Color.white);
+        y -= btnH + 3f;
+
+        // Rage Status Text
+        combatUI.RageStatusText = CreateText(actionPanel.transform, "RageStatus",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(10, y - 18), new Vector2(btnW, 18),
+            "", 10, new Color(1f, 0.6f, 0.3f), TextAnchor.MiddleCenter);
+        combatUI.RageStatusText.gameObject.SetActive(false);
+        y -= 22f;
 
         // End Turn Button
         combatUI.EndTurnButton = CreateButton(actionPanel.transform, "EndTurnBtn",
@@ -521,6 +541,10 @@ public class SceneBootstrap : MonoBehaviour
             ui.FullAttackButton.onClick.AddListener(() => GameManager.Instance.OnFullAttackButtonPressed());
         if (ui.DualWieldButton != null)
             ui.DualWieldButton.onClick.AddListener(() => GameManager.Instance.OnDualWieldButtonPressed());
+        if (ui.FlurryOfBlowsButton != null)
+            ui.FlurryOfBlowsButton.onClick.AddListener(() => GameManager.Instance.OnFlurryOfBlowsButtonPressed());
+        if (ui.RageButton != null)
+            ui.RageButton.onClick.AddListener(() => GameManager.Instance.OnRageButtonPressed());
         if (ui.EndTurnButton != null)
             ui.EndTurnButton.onClick.AddListener(() => GameManager.Instance.OnEndTurnButtonPressed());
 

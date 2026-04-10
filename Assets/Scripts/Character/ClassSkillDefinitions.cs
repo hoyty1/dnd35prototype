@@ -70,19 +70,46 @@ public static class ClassSkillDefinitions
         "Use Magic Device"
     };
 
+    /// <summary>Monk class skills (D&D 3.5 PHB).</summary>
+    public static readonly HashSet<string> MonkClassSkills = new HashSet<string>
+    {
+        "Balance",
+        "Climb",
+        "Diplomacy",
+        "Hide",
+        "Jump",
+        "Listen",
+        "Move Silently",
+        "Spot",
+        "Swim",
+        "Tumble"
+    };
+
+    /// <summary>Barbarian class skills (D&D 3.5 PHB).</summary>
+    public static readonly HashSet<string> BarbarianClassSkills = new HashSet<string>
+    {
+        "Climb",
+        "Intimidate",
+        "Jump",
+        "Listen",
+        "Swim"
+    };
+
     // ========== SKILL POINTS PER LEVEL ==========
 
     /// <summary>
     /// Get the base skill points per level for a given class (before INT modifier).
-    /// Fighter: 2, Rogue: 8
+    /// Fighter: 2, Rogue: 8, Monk: 4, Barbarian: 4
     /// </summary>
     public static int GetBaseSkillPointsPerLevel(string className)
     {
         switch (className)
         {
-            case "Fighter": return 2;
-            case "Rogue":   return 8;
-            default:        return 2; // Default to fighter-like
+            case "Fighter":   return 2;
+            case "Rogue":     return 8;
+            case "Monk":      return 4;
+            case "Barbarian": return 4;
+            default:          return 2; // Default to fighter-like
         }
     }
 
@@ -121,9 +148,11 @@ public static class ClassSkillDefinitions
     {
         switch (className)
         {
-            case "Fighter": return FighterClassSkills;
-            case "Rogue":   return RogueClassSkills;
-            default:        return new HashSet<string>();
+            case "Fighter":   return FighterClassSkills;
+            case "Rogue":     return RogueClassSkills;
+            case "Monk":      return MonkClassSkills;
+            case "Barbarian": return BarbarianClassSkills;
+            default:          return new HashSet<string>();
         }
     }
 }

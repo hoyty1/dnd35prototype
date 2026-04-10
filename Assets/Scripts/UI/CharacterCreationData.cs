@@ -55,12 +55,27 @@ public class CharacterCreationData
         if (ClassName == "Fighter")
         {
             HitDie = 10;
-            BAB = 3; // Level 3 fighter BAB
+            BAB = 3; // Level 3 fighter BAB (full progression)
         }
-        else // Rogue
+        else if (ClassName == "Rogue")
         {
             HitDie = 6;
             BAB = 2; // Level 3 rogue BAB (3/4 progression)
+        }
+        else if (ClassName == "Monk")
+        {
+            HitDie = 8;
+            BAB = 2; // Level 3 monk BAB (3/4 progression)
+        }
+        else if (ClassName == "Barbarian")
+        {
+            HitDie = 12;
+            BAB = 3; // Level 3 barbarian BAB (full progression)
+        }
+        else
+        {
+            HitDie = 6;
+            BAB = 2; // Default fallback
         }
 
         // HP: Roll max at level 1, average for 2-3 (simplified: use fixed values)

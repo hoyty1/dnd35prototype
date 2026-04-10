@@ -82,7 +82,7 @@ public class CharacterCreationUI : MonoBehaviour
 
     // ========== RACE/CLASS DATA ==========
     private static readonly string[] RaceNames = { "Dwarf", "Elf", "Gnome", "Half-Elf", "Half-Orc", "Halfling", "Human" };
-    private static readonly string[] ClassNames = { "Fighter", "Rogue" };
+    private static readonly string[] ClassNames = { "Fighter", "Rogue", "Monk", "Barbarian" };
 
     // ========== INITIALIZATION ==========
 
@@ -558,88 +558,143 @@ public class CharacterCreationUI : MonoBehaviour
             new Color(0, 0, 0, 0));
 
         MakeText(_step4Panel.transform, "ClassTooltip",
-            new Vector2(0, 225), new Vector2(700, 25),
+            new Vector2(0, 255), new Vector2(700, 25),
             "Select a class. Your class determines hit points, combat abilities, and starting equipment.",
             13, new Color(0.7f, 0.7f, 0.7f), TextAnchor.MiddleCenter);
 
+        // --- Top Row: Fighter and Rogue ---
+        float topLeftX = -210f;
+        float topRightX = 210f;
+        float topY = 100f;
+        float panelW = 360f;
+        float panelH = 210f;
+
         // Fighter panel
-        float leftX = -210f;
         CreatePanel(_step4Panel.transform, "FighterBG",
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(leftX, 40), new Vector2(360, 330),
+            new Vector2(topLeftX, topY), new Vector2(panelW, panelH),
             new Color(0.15f, 0.15f, 0.25f, 0.8f));
 
         MakeText(_step4Panel.transform, "FighterTitle",
-            new Vector2(leftX, 185), new Vector2(340, 30),
-            "FIGHTER", 22, new Color(0.9f, 0.6f, 0.3f), TextAnchor.MiddleCenter);
+            new Vector2(topLeftX, topY + panelH/2 - 15), new Vector2(340, 25),
+            "FIGHTER", 20, new Color(0.9f, 0.6f, 0.3f), TextAnchor.MiddleCenter);
 
         MakeText(_step4Panel.transform, "FighterInfo",
-            new Vector2(leftX, 50), new Vector2(330, 230),
-            "Hit Die: d10\n" +
-            "BAB: +3 at level 3 (full)\n" +
-            "Good Saves: Fortitude\n\n" +
-            "Key Features:\n" +
-            "• Proficient with all simple/martial\n  weapons, all armor, and shields\n" +
-            "• Bonus combat feats\n" +
-            "• Highest hit points\n\n" +
-            "Starting Equipment:\n" +
-            "• Scale Mail (+4 AC)\n" +
-            "• Heavy Wooden Shield (+2 AC)\n" +
-            "• Longsword (1d8, 19-20/x2)\n" +
-            "• Shortbow + 20 arrows",
-            12, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
+            new Vector2(topLeftX, topY - 20), new Vector2(330, 160),
+            "Hit Die: d10 | BAB: +3 (full)\nGood Saves: Fortitude\n\n" +
+            "• All weapons, armor, and shields\n" +
+            "• Bonus combat feats\n\n" +
+            "Equipment: Scale Mail, Shield,\nLongsword, Shortbow",
+            11, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
 
         // Rogue panel
-        float rightX = 210f;
         CreatePanel(_step4Panel.transform, "RogueBG",
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(rightX, 40), new Vector2(360, 330),
+            new Vector2(topRightX, topY), new Vector2(panelW, panelH),
             new Color(0.15f, 0.15f, 0.25f, 0.8f));
 
         MakeText(_step4Panel.transform, "RogueTitle",
-            new Vector2(rightX, 185), new Vector2(340, 30),
-            "ROGUE", 22, new Color(0.5f, 0.8f, 0.5f), TextAnchor.MiddleCenter);
+            new Vector2(topRightX, topY + panelH/2 - 15), new Vector2(340, 25),
+            "ROGUE", 20, new Color(0.5f, 0.8f, 0.5f), TextAnchor.MiddleCenter);
 
         MakeText(_step4Panel.transform, "RogueInfo",
-            new Vector2(rightX, 50), new Vector2(330, 230),
-            "Hit Die: d6\n" +
-            "BAB: +2 at level 3 (3/4)\n" +
-            "Good Saves: Reflex\n\n" +
-            "Key Features:\n" +
+            new Vector2(topRightX, topY - 20), new Vector2(330, 160),
+            "Hit Die: d6 | BAB: +2 (3/4)\nGood Saves: Reflex\n\n" +
             "• Sneak Attack +2d6\n" +
-            "• Proficient with simple weapons,\n  rapier, shortbow, short sword\n" +
-            "• Light armor only\n\n" +
-            "Starting Equipment:\n" +
-            "• Leather Armor (+2 AC)\n" +
-            "• Rapier (1d6, 18-20/x2)\n" +
-            "• Shortbow + 20 arrows\n" +
-            "• Thieves' tools",
-            12, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
+            "• Evasion, Trapfinding\n\n" +
+            "Equipment: Leather Armor,\nRapier, Shortbow, Dagger",
+            11, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
 
-        // Class selection buttons
-        _classButtons = new Button[2];
+        // --- Bottom Row: Monk and Barbarian ---
+        float botY = -115f;
+
+        // Monk panel
+        CreatePanel(_step4Panel.transform, "MonkBG",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(topLeftX, botY), new Vector2(panelW, panelH),
+            new Color(0.15f, 0.15f, 0.25f, 0.8f));
+
+        MakeText(_step4Panel.transform, "MonkTitle",
+            new Vector2(topLeftX, botY + panelH/2 - 15), new Vector2(340, 25),
+            "MONK", 20, new Color(0.4f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
+
+        MakeText(_step4Panel.transform, "MonkInfo",
+            new Vector2(topLeftX, botY - 20), new Vector2(330, 160),
+            "Hit Die: d8 | BAB: +2 (3/4)\nGood Saves: Fort, Ref, Will\n\n" +
+            "• Flurry of Blows (2 attacks)\n" +
+            "• Unarmed 1d6, +WIS to AC\n" +
+            "• Evasion, Still Mind, Fast Move\n\n" +
+            "Equipment: Quarterstaff, Sling",
+            11, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
+
+        // Barbarian panel
+        CreatePanel(_step4Panel.transform, "BarbarianBG",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(topRightX, botY), new Vector2(panelW, panelH),
+            new Color(0.15f, 0.15f, 0.25f, 0.8f));
+
+        MakeText(_step4Panel.transform, "BarbarianTitle",
+            new Vector2(topRightX, botY + panelH/2 - 15), new Vector2(340, 25),
+            "BARBARIAN", 20, new Color(0.9f, 0.4f, 0.3f), TextAnchor.MiddleCenter);
+
+        MakeText(_step4Panel.transform, "BarbarianInfo",
+            new Vector2(topRightX, botY - 20), new Vector2(330, 160),
+            "Hit Die: d12 | BAB: +3 (full)\nGood Saves: Fortitude\n\n" +
+            "• Rage 1/day (+4 STR/CON)\n" +
+            "• Fast Movement +10 ft\n" +
+            "• Uncanny Dodge, Trap Sense\n\n" +
+            "Equipment: Hide Armor,\nGreataxe, 3x Javelin",
+            11, new Color(0.8f, 0.8f, 0.75f), TextAnchor.UpperLeft);
+
+        // Class selection buttons (4 buttons, 2 per row)
+        Color[] btnColors = {
+            new Color(0.5f, 0.3f, 0.15f),  // Fighter: orange-brown
+            new Color(0.2f, 0.4f, 0.2f),   // Rogue: green
+            new Color(0.15f, 0.35f, 0.5f), // Monk: teal
+            new Color(0.5f, 0.15f, 0.1f)   // Barbarian: red
+        };
+
+        _classButtons = new Button[4];
         _classButtons[0] = MakeButton(_step4Panel.transform, "SelectFighter",
-            new Vector2(leftX, -155), new Vector2(200, 42),
-            "Select Fighter", new Color(0.5f, 0.3f, 0.15f), Color.white, 18);
+            new Vector2(topLeftX, topY - panelH/2 - 25), new Vector2(200, 36),
+            "Select Fighter", btnColors[0], Color.white, 16);
         _classButtons[0].onClick.AddListener(() => OnClassSelected(0));
 
         _classButtons[1] = MakeButton(_step4Panel.transform, "SelectRogue",
-            new Vector2(rightX, -155), new Vector2(200, 42),
-            "Select Rogue", new Color(0.2f, 0.4f, 0.2f), Color.white, 18);
+            new Vector2(topRightX, topY - panelH/2 - 25), new Vector2(200, 36),
+            "Select Rogue", btnColors[1], Color.white, 16);
         _classButtons[1].onClick.AddListener(() => OnClassSelected(1));
+
+        _classButtons[2] = MakeButton(_step4Panel.transform, "SelectMonk",
+            new Vector2(topLeftX, botY - panelH/2 - 25), new Vector2(200, 36),
+            "Select Monk", btnColors[2], Color.white, 16);
+        _classButtons[2].onClick.AddListener(() => OnClassSelected(2));
+
+        _classButtons[3] = MakeButton(_step4Panel.transform, "SelectBarbarian",
+            new Vector2(topRightX, botY - panelH/2 - 25), new Vector2(200, 36),
+            "Select Barbarian", btnColors[3], Color.white, 16);
+        _classButtons[3].onClick.AddListener(() => OnClassSelected(3));
 
         // Info text for selected class
         _classInfoText = MakeText(_step4Panel.transform, "ClassInfo",
-            new Vector2(0, -210), new Vector2(700, 25),
+            new Vector2(0, -248), new Vector2(700, 25),
             "", 14, new Color(0.9f, 0.9f, 0.5f), TextAnchor.MiddleCenter);
 
         // Confirm class button
         _confirmClassButton = MakeButton(_step4Panel.transform, "ConfirmClass",
-            new Vector2(0, -240), new Vector2(200, 42),
+            new Vector2(0, -278), new Vector2(200, 42),
             "Confirm Class ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 18);
         _confirmClassButton.onClick.AddListener(OnConfirmClass);
         _confirmClassButton.interactable = false;
     }
+
+    // Default button colors for class selection reset
+    private static readonly Color[] _classButtonDefaultColors = {
+        new Color(0.5f, 0.3f, 0.15f),
+        new Color(0.2f, 0.4f, 0.2f),
+        new Color(0.15f, 0.35f, 0.5f),
+        new Color(0.5f, 0.15f, 0.1f)
+    };
 
     private void OnClassSelected(int index)
     {
@@ -648,7 +703,7 @@ public class CharacterCreationUI : MonoBehaviour
         for (int i = 0; i < _classButtons.Length; i++)
         {
             var c = _classButtons[i].colors;
-            c.normalColor = (i == index) ? new Color(0.5f, 0.5f, 0.15f) : (i == 0 ? new Color(0.5f, 0.3f, 0.15f) : new Color(0.2f, 0.4f, 0.2f));
+            c.normalColor = (i == index) ? new Color(0.5f, 0.5f, 0.15f) : _classButtonDefaultColors[i];
             c.highlightedColor = c.normalColor * 1.2f;
             _classButtons[i].colors = c;
         }
@@ -1146,56 +1201,47 @@ public class CharacterCreationUI : MonoBehaviour
 
     private void OnQuickStart()
     {
-        Debug.Log("[CharCreation] Quick Start - using default Aldric and Lyra");
+        Debug.Log("[CharCreation] Quick Start - using default Kael (Monk) and Grunk (Barbarian)");
 
         FeatDefinitions.Init();
 
-        // PC1: Aldric the Dwarf Fighter
+        // PC1: Kael the Human Monk
         var pc1 = CreatedCharacters[0];
-        pc1.CharacterName = "Aldric";
-        pc1.RaceName = "Dwarf";
-        pc1.Race = RaceDatabase.GetRace("Dwarf");
-        pc1.ClassName = "Fighter";
-        pc1.STR = 16; pc1.DEX = 12; pc1.CON = 14;
-        pc1.INT = 10; pc1.WIS = 10; pc1.CHA = 13;
+        pc1.CharacterName = "Kael";
+        pc1.RaceName = "Human";
+        pc1.Race = RaceDatabase.GetRace("Human");
+        pc1.ClassName = "Monk";
+        pc1.STR = 14; pc1.DEX = 16; pc1.CON = 12;
+        pc1.INT = 10; pc1.WIS = 15; pc1.CHA = 8;
         pc1.ComputeFinalStats();
-        // Default Fighter skills
+        // Default Monk skills (4+INT mod=4 per level, ×4 at level 1 = 16 + 8 = 24 total)
+        pc1.SkillRanks["Balance"] = 6;
         pc1.SkillRanks["Climb"] = 4;
-        pc1.SkillRanks["Intimidate"] = 4;
-        pc1.SkillRanks["Jump"] = 3;
-        pc1.SkillRanks["Swim"] = 3;
-        // Aldric feats: 2 general + 2 fighter bonus = 4 total
-        // General feats (level 1 + level 3)
-        pc1.SelectedFeats = new System.Collections.Generic.List<string> { "Power Attack", "Cleave" };
-        // Fighter bonus feats (level 1 + level 2)
-        pc1.BonusFeats = new System.Collections.Generic.List<string> { "Weapon Focus", "Improved Initiative" };
-        pc1.WeaponFocusChoice = "Longsword";
+        pc1.SkillRanks["Jump"] = 4;
+        pc1.SkillRanks["Listen"] = 4;
+        pc1.SkillRanks["Move Silently"] = 4;
+        pc1.SkillRanks["Tumble"] = 6;
+        // Kael feats: Monk auto-feats (Improved Unarmed Strike, Stunning Fist, Improved Grapple)
+        // + 2 general feats (level 1 + level 3) + 1 human bonus feat
+        pc1.SelectedFeats = new System.Collections.Generic.List<string> { "Dodge", "Combat Reflexes", "Improved Initiative" };
 
-        // PC2: Lyra the Elf Rogue
+        // PC2: Grunk the Half-Orc Barbarian
         var pc2 = CreatedCharacters[1];
-        pc2.CharacterName = "Lyra";
-        pc2.RaceName = "Elf";
-        pc2.Race = RaceDatabase.GetRace("Elf");
-        pc2.ClassName = "Rogue";
-        pc2.STR = 12; pc2.DEX = 17; pc2.CON = 12;
-        pc2.INT = 14; pc2.WIS = 13; pc2.CHA = 10;
+        pc2.CharacterName = "Grunk";
+        pc2.RaceName = "Half-Orc";
+        pc2.Race = RaceDatabase.GetRace("Half-Orc");
+        pc2.ClassName = "Barbarian";
+        pc2.STR = 17; pc2.DEX = 13; pc2.CON = 16;
+        pc2.INT = 8; pc2.WIS = 10; pc2.CHA = 10;
         pc2.ComputeFinalStats();
-        // Default Rogue skills
-        pc2.SkillRanks["Hide"] = 6;
-        pc2.SkillRanks["Move Silently"] = 6;
-        pc2.SkillRanks["Spot"] = 6;
+        // Default Barbarian skills (4+INT mod=3 per level, ×4 at level 1 = 12 + 6 = 18 total)
+        pc2.SkillRanks["Climb"] = 6;
+        pc2.SkillRanks["Intimidate"] = 6;
+        pc2.SkillRanks["Jump"] = 6;
         pc2.SkillRanks["Listen"] = 6;
-        pc2.SkillRanks["Disable Device"] = 5;
-        pc2.SkillRanks["Open Lock"] = 5;
-        pc2.SkillRanks["Search"] = 5;
-        pc2.SkillRanks["Tumble"] = 4;
-        pc2.SkillRanks["Bluff"] = 4;
-        pc2.SkillRanks["Diplomacy"] = 4;
-        pc2.SkillRanks["Climb"] = 4;
-        pc2.SkillRanks["Balance"] = 3;
-        pc2.SkillRanks["Sleight of Hand"] = 2;
-        // Lyra feats: 2 general feats (level 1 + level 3)
-        pc2.SelectedFeats = new System.Collections.Generic.List<string> { "Weapon Finesse", "Dodge" };
+        pc2.SkillRanks["Swim"] = 6;
+        // Grunk feats: 2 general feats (level 1 + level 3)
+        pc2.SelectedFeats = new System.Collections.Generic.List<string> { "Power Attack", "Cleave" };
 
         IsComplete = true;
         HideCreationUI();

@@ -17,6 +17,258 @@ public class CharacterStats
     /// <summary>Whether this character is a Rogue (eligible for sneak attack).</summary>
     public bool IsRogue => CharacterClass == "Rogue";
 
+    /// <summary>Whether this character is a Monk.</summary>
+    public bool IsMonk => CharacterClass == "Monk";
+
+    /// <summary>Whether this character is a Barbarian.</summary>
+    public bool IsBarbarian => CharacterClass == "Barbarian";
+
+    // ========== MONK CLASS FEATURES (D&D 3.5) ==========
+
+    /// <summary>
+    /// Monk AC Bonus: Add WIS modifier to AC when unarmored and unencumbered.
+    /// D&D 3.5: Monk adds WIS mod (if positive) to AC when wearing no armor and carrying no shield.
+    /// </summary>
+    public int MonkACBonus
+    {
+        get
+        {
+            if (!IsMonk) return 0;
+            // Only applies when unarmored (ArmorBonus == 0) and no shield (ShieldBonus == 0)
+            if (ArmorBonus > 0 || ShieldBonus > 0) return 0;
+            return Mathf.Max(0, WISMod);
+        }
+    }
+
+    /// <summary>
+    /// Monk unarmed damage die at current level.
+    /// Level 1-3: 1d6, Level 4-7: 1d8, Level 8-11: 1d10, etc.
+    /// For our level 3 prototype: always 1d6.
+    /// </summary>
+    public int MonkUnarmedDamageDie => IsMonk ? 6 : 0;
+
+    /// <summary>
+    /// Monk Fast Movement: +10 ft speed when unarmored.
+    /// At level 3: +10 ft (2 squares). Requires no armor.
+    /// </summary>
+    public int MonkFastMovementBonus
+    {
+        get
+        {
+            if (!IsMonk || Level < 1) return 0;
+            if (ArmorBonus > 0) return 0; // Must be unarmored
+            return 2; // +10 ft = 2 squares
+        }
+    }
+
+    /// <summary>
+    /// Still Mind: +2 bonus on saving throws against enchantment spells and effects.
+    /// Gained at Monk level 3.
+    /// </summary>
+    public int StillMindBonus => (IsMonk && Level >= 3) ? 2 : 0;
+
+    /// <summary>
+    /// Evasion: On a successful Reflex save for half damage, take no damage instead.
+    /// Monk gains this at level 2. Rogue also gains at level 2.
+    /// </summary>
+    public bool HasEvasion => (IsMonk && Level >= 2) || (IsRogue && Level >= 2);
+
+    /// <summary>
+    /// Flurry of Blows attack bonuses at current level.
+    /// Level 1: -2/-2, Level 2: -1/-1, Level 3: +0/+0, etc.
+    /// Returns array of total attack modifiers (BAB + STR + flurry penalty + size).
+    /// </summary>
+    public int[] GetFlurryOfBlowsBonuses()
+    {
+        if (!IsMonk) return new int[0];
+        // Flurry penalty by level: Lv1=-2, Lv2=-1, Lv3+=0
+        int flurryPenalty = Level >= 3 ? 0 : (Level >= 2 ? -1 : -2);
+        int bonus = BaseAttackBonus + STRMod + SizeModifier + flurryPenalty;
+        return new int[] { bonus, bonus }; // Two attacks at same bonus
+    }
+
+    // ========== BARBARIAN CLASS FEATURES (D&D 3.5) ==========
+
+    /// <summary>Whether the barbarian is currently raging.</summary>
+    public bool IsRaging;
+
+    /// <summary>Rounds of rage remaining in current rage.</summary>
+    public int RageRoundsRemaining;
+
+    /// <summary>Number of times rage has been used today.</summary>
+    public int RagesUsedToday;
+
+    /// <summary>Maximum rages per day. Level 1-3: 1/day.</summary>
+    public int MaxRagesPerDay => IsBarbarian ? 1 : 0;
+
+    /// <summary>Whether the barbarian is fatigued (after rage ends).</summary>
+    public bool IsFatigued;
+
+    /// <summary>
+    /// Barbarian Fast Movement: +10 ft speed in medium or lighter armor.
+    /// Always active (not lost when raging).
+    /// </summary>
+    public int BarbarianFastMovementBonus
+    {
+        get
+        {
+            if (!IsBarbarian) return 0;
+            // +10 ft = 2 squares, only in medium or lighter armor (MaxDexBonus >= 2 or no armor)
+            // Heavy armor has MaxDexBonus of 0 or 1
+            if (MaxDexBonus >= 0 && MaxDexBonus < 2) return 0; // Heavy armor
+            return 2;
+        }
+    }
+
+    /// <summary>
+    /// Uncanny Dodge: Cannot be caught flat-footed, retains DEX bonus to AC.
+    /// Gained at Barbarian level 2.
+    /// </summary>
+    public bool HasUncannyDodge => IsBarbarian && Level >= 2;
+
+    /// <summary>
+    /// Trap Sense: Bonus on Reflex saves vs traps and dodge bonus to AC vs traps.
+    /// +1 at level 3, +2 at level 6, etc.
+    /// </summary>
+    public int TrapSenseBonus => (IsBarbarian && Level >= 3) ? 1 + (Level - 3) / 3 : 0;
+
+    /// <summary>
+    /// Activate Barbarian Rage. Lasts 3 + CON modifier rounds.
+    /// +4 STR, +4 CON, +2 Will saves, -2 AC. Fatigued after rage ends.
+    /// </summary>
+    public bool ActivateRage()
+    {
+        if (!IsBarbarian || IsRaging || IsFatigued || RagesUsedToday >= MaxRagesPerDay)
+        {
+            Debug.Log($"[Barbarian] {CharacterName}: Cannot rage - " +
+                      $"IsBarbarian={IsBarbarian}, IsRaging={IsRaging}, IsFatigued={IsFatigued}, " +
+                      $"RagesUsed={RagesUsedToday}/{MaxRagesPerDay}");
+            return false;
+        }
+
+        IsRaging = true;
+        RageRoundsRemaining = 3 + Mathf.Max(0, CONMod); // Use current CON mod before rage
+        RagesUsedToday++;
+
+        // Apply rage bonuses: +4 STR, +4 CON
+        STR += 4;
+        CON += 4;
+
+        // Recalculate HP from CON increase (+2 CON mod × level = +2 HP per level at level 3 = +6 HP)
+        int hpGain = Level * 1; // +2 CON mod means +1 HP/level extra (since CON mod goes up by 2)
+        // Actually +4 CON = +2 to CON mod = +2 HP per level
+        hpGain = Level * 2;
+        MaxHP += hpGain;
+        CurrentHP += hpGain;
+
+        Debug.Log($"[Barbarian] {CharacterName}: RAGE ACTIVATED! STR {STR}, CON {CON}, " +
+                  $"+{hpGain} HP (now {CurrentHP}/{MaxHP}), " +
+                  $"Duration: {RageRoundsRemaining} rounds, -2 AC penalty");
+        return true;
+    }
+
+    /// <summary>
+    /// End Barbarian Rage. Remove bonuses, apply fatigue.
+    /// Fatigue: -2 STR, -2 DEX, can't charge or run.
+    /// </summary>
+    public void DeactivateRage()
+    {
+        if (!IsRaging) return;
+
+        IsRaging = false;
+
+        // Remove rage bonuses: -4 STR, -4 CON
+        STR -= 4;
+        CON -= 4;
+
+        // Remove HP from CON decrease
+        int hpLoss = Level * 2;
+        MaxHP -= hpLoss;
+        if (CurrentHP > MaxHP) CurrentHP = MaxHP;
+        if (CurrentHP < 0) CurrentHP = 0;
+
+        // Apply fatigue: -2 STR, -2 DEX
+        IsFatigued = true;
+        STR -= 2;
+        DEX -= 2;
+
+        Debug.Log($"[Barbarian] {CharacterName}: Rage ended! Now FATIGUED. " +
+                  $"STR {STR}, DEX {DEX}, CON {CON}, HP {CurrentHP}/{MaxHP}");
+    }
+
+    /// <summary>
+    /// Tick rage duration at start of barbarian's turn. Deactivates if expired.
+    /// </summary>
+    public void TickRage()
+    {
+        if (!IsRaging) return;
+        RageRoundsRemaining--;
+        Debug.Log($"[Barbarian] {CharacterName}: Rage tick - {RageRoundsRemaining} rounds remaining");
+        if (RageRoundsRemaining <= 0)
+        {
+            Debug.Log($"[Barbarian] {CharacterName}: Rage expired!");
+            DeactivateRage();
+        }
+    }
+
+    /// <summary>Rage AC penalty (-2 while raging).</summary>
+    public int RageACPenalty => IsRaging ? -2 : 0;
+
+    /// <summary>Rage Will save bonus (+2 while raging).</summary>
+    public int RageWillBonus => IsRaging ? 2 : 0;
+
+    // ========== CLASS-BASED SAVE BONUSES (D&D 3.5) ==========
+
+    /// <summary>
+    /// Class-based Fortitude save bonus (good save progression).
+    /// Good: +2 + level/2. Poor: level/3.
+    /// Fighter (good), Barbarian (good), Monk (good), Rogue (poor).
+    /// At level 3: Good=+3, Poor=+1.
+    /// </summary>
+    public int ClassFortSave
+    {
+        get
+        {
+            bool goodFort = CharacterClass == "Fighter" || CharacterClass == "Barbarian" || CharacterClass == "Monk";
+            return goodFort ? (2 + Level / 2) : (Level / 3);
+        }
+    }
+
+    /// <summary>
+    /// Class-based Reflex save bonus.
+    /// Rogue (good), Monk (good). Fighter/Barbarian (poor).
+    /// </summary>
+    public int ClassRefSave
+    {
+        get
+        {
+            bool goodRef = CharacterClass == "Rogue" || CharacterClass == "Monk";
+            return goodRef ? (2 + Level / 2) : (Level / 3);
+        }
+    }
+
+    /// <summary>
+    /// Class-based Will save bonus.
+    /// Monk (good). Fighter/Rogue/Barbarian (poor).
+    /// </summary>
+    public int ClassWillSave
+    {
+        get
+        {
+            bool goodWill = CharacterClass == "Monk";
+            return goodWill ? (2 + Level / 2) : (Level / 3);
+        }
+    }
+
+    /// <summary>Total Fortitude save: CON mod + class base + feat bonus.</summary>
+    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus;
+
+    /// <summary>Total Reflex save: DEX mod + class base + feat bonus.</summary>
+    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus;
+
+    /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus.</summary>
+    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus;
+
     // ========== FEATS (D&D 3.5) ==========
     /// <summary>Set of feats this character has.</summary>
     public HashSet<string> Feats = new HashSet<string>();
@@ -72,6 +324,8 @@ public class CharacterStats
     /// <summary>
     /// Auto-grant feats based on character class.
     /// Fighter: Power Attack. Rogue: Rapid Shot, Point Blank Shot.
+    /// Monk: Improved Grapple, Stunning Fist, Improved Unarmed Strike.
+    /// Barbarian: (no auto feats - relies on class features).
     /// </summary>
     public void InitFeats()
     {
@@ -84,6 +338,21 @@ public class CharacterStats
         {
             Feats.Add("Point Blank Shot");
             Feats.Add("Rapid Shot");
+        }
+        else if (CharacterClass == "Monk")
+        {
+            // Monk bonus feats (D&D 3.5 PHB):
+            // Level 1: Improved Unarmed Strike (free), Stunning Fist or Improved Grapple (bonus)
+            // Level 2: Combat Reflexes or Deflect Arrows (bonus)
+            Feats.Add("Improved Unarmed Strike");
+            Feats.Add("Stunning Fist");
+            Feats.Add("Improved Grapple");
+            Debug.Log($"[Monk] {CharacterName}: Granted monk bonus feats: Improved Unarmed Strike, Stunning Fist, Improved Grapple");
+        }
+        else if (CharacterClass == "Barbarian")
+        {
+            // Barbarian has no bonus feats, but gets class features (Rage, Fast Movement, etc.)
+            Debug.Log($"[Barbarian] {CharacterName}: Barbarian class features active (Rage, Fast Movement, Uncanny Dodge)");
         }
     }
 
@@ -193,15 +462,16 @@ public class CharacterStats
             int dexToAC = DEXMod;
             if (MaxDexBonus >= 0 && dexToAC > MaxDexBonus)
                 dexToAC = MaxDexBonus;
-            return 10 + dexToAC + ArmorBonus + ShieldBonus + SizeModifier;
+            return 10 + dexToAC + ArmorBonus + ShieldBonus + SizeModifier
+                   + MonkACBonus + FeatACBonus + RageACPenalty;
         }
     }
 
     /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier.</summary>
     public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier;
 
-    /// <summary>Movement speed in squares per turn.</summary>
-    public int MoveRange => BaseSpeed;
+    /// <summary>Movement speed in squares per turn (includes class fast movement bonuses).</summary>
+    public int MoveRange => BaseSpeed + MonkFastMovementBonus + BarbarianFastMovementBonus;
 
     public bool IsDead => CurrentHP <= 0;
 
@@ -571,8 +841,8 @@ public class CharacterStats
     /// <summary>Size hide modifier (for future skill system).</summary>
     public int SizeHideModifier => Race != null ? Race.SizeHideModifier : 0;
 
-    /// <summary>Speed in feet for display purposes.</summary>
-    public int SpeedInFeet => Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5;
+    /// <summary>Speed in feet for display purposes (includes fast movement bonuses).</summary>
+    public int SpeedInFeet => (Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5) + (MonkFastMovementBonus + BarbarianFastMovementBonus) * 5;
 
     // ========== SKILLS SYSTEM (D&D 3.5) ==========
 

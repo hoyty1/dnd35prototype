@@ -54,6 +54,11 @@ public class CombatUI : MonoBehaviour
     public Button EndTurnButton;
     public Text ActionStatusText;       // Shows current action economy status
 
+    [Header("Monk/Barbarian Buttons")]
+    public Button FlurryOfBlowsButton;     // Flurry of Blows (Full-Round Action, Monk only)
+    public Button RageButton;              // Barbarian Rage (Free Action)
+    public Text RageStatusText;            // Shows rage/fatigue status
+
     [Header("Feat Controls")]
     public GameObject PowerAttackPanel;     // Panel containing Power Attack slider
     public Slider PowerAttackSlider;        // Slider for Power Attack value (0 to BAB)
@@ -232,11 +237,12 @@ public class CombatUI : MonoBehaviour
     {
         if (ActionPanel != null)
             ActionPanel.SetActive(visible);
-        // Hide feat controls when action panel is hidden
+        // Hide feat controls and rage status when action panel is hidden
         if (!visible)
         {
             if (PowerAttackPanel != null) PowerAttackPanel.SetActive(false);
             if (RapidShotPanel != null) RapidShotPanel.SetActive(false);
+            if (RageStatusText != null) RageStatusText.gameObject.SetActive(false);
         }
     }
 
@@ -344,6 +350,64 @@ public class CombatUI : MonoBehaviour
             Text dwLabel = DualWieldButton.GetComponentInChildren<Text>();
             if (dwLabel != null)
                 dwLabel.text = canDW ? "Dual Wield (Full-Round)" : "Dual Wield (N/A)";
+        }
+
+        // Flurry of Blows button: Full-Round Action, Monk only
+        if (FlurryOfBlowsButton != null)
+        {
+            bool isMonk = pc.Stats.IsMonk;
+            bool canFlurry = isMonk && actions.HasFullRoundAction;
+            FlurryOfBlowsButton.gameObject.SetActive(isMonk);
+            FlurryOfBlowsButton.interactable = canFlurry;
+
+            Text flurryLabel = FlurryOfBlowsButton.GetComponentInChildren<Text>();
+            if (flurryLabel != null)
+            {
+                if (canFlurry)
+                {
+                    int[] bonuses = pc.Stats.GetFlurryOfBlowsBonuses();
+                    string bonusStr = string.Join("/", System.Array.ConvertAll(bonuses, b => CharacterStats.FormatMod(b)));
+                    flurryLabel.text = $"Flurry of Blows x{bonuses.Length} ({bonusStr})";
+                }
+                else
+                {
+                    flurryLabel.text = "Flurry of Blows (N/A)";
+                }
+            }
+        }
+
+        // Rage button: Free Action, Barbarian only
+        if (RageButton != null)
+        {
+            bool isBarbarian = pc.Stats.IsBarbarian;
+            bool canRage = isBarbarian && !pc.Stats.IsRaging && !pc.Stats.IsFatigued
+                           && pc.Stats.RagesUsedToday < pc.Stats.MaxRagesPerDay;
+            RageButton.gameObject.SetActive(isBarbarian);
+            RageButton.interactable = canRage;
+
+            Text rageLabel = RageButton.GetComponentInChildren<Text>();
+            if (rageLabel != null)
+            {
+                if (pc.Stats.IsRaging)
+                    rageLabel.text = $"RAGING ({pc.Stats.RageRoundsRemaining} rds)";
+                else if (pc.Stats.IsFatigued)
+                    rageLabel.text = "Rage (Fatigued)";
+                else if (canRage)
+                    rageLabel.text = $"Rage ({pc.Stats.MaxRagesPerDay - pc.Stats.RagesUsedToday}/day)";
+                else
+                    rageLabel.text = "Rage (Used)";
+            }
+        }
+
+        // Rage status text
+        if (RageStatusText != null)
+        {
+            bool isBarbarian = pc.Stats.IsBarbarian;
+            RageStatusText.gameObject.SetActive(isBarbarian && (pc.Stats.IsRaging || pc.Stats.IsFatigued));
+            if (pc.Stats.IsRaging)
+                RageStatusText.text = $"⚡ RAGING! {pc.Stats.RageRoundsRemaining} rounds left | -2 AC | +4 STR/CON | +2 Will";
+            else if (pc.Stats.IsFatigued)
+                RageStatusText.text = "😫 FATIGUED: -2 STR, -2 DEX";
         }
 
         // End Turn always available
