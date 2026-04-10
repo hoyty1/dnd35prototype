@@ -278,6 +278,15 @@ public class GameManager : MonoBehaviour
                       $"HP {stats.MaxHP} AC {stats.ArmorClass} Atk {CharacterStats.FormatMod(stats.AttackBonus)} " +
                       $"Feats: {stats.Feats.Count}");
 
+            // Initialize spellcasting if applicable
+            if (stats.IsSpellcaster)
+            {
+                SpellDatabase.Init();
+                var spellComp = pcSlots[i].gameObject.AddComponent<SpellcastingComponent>();
+                spellComp.Init(stats);
+                Debug.Log($"[GameManager] {data.CharacterName}: Spellcasting initialized - {spellComp.GetSlotSummary()}");
+            }
+
             // Set PC icon
             Sprite classIcon = IconManager.GetClassIcon(data.ClassName);
             if (classIcon != null && CombatUI != null)
@@ -298,16 +307,13 @@ public class GameManager : MonoBehaviour
         ICharacterClass classDef = ClassRegistry.GetClass(className);
         if (classDef != null)
         {
-            case "Fighter":
-                armorBonus = 4; shieldBonus = 2; damageDice = 8; break;
-            case "Rogue":
-                armorBonus = 2; shieldBonus = 0; damageDice = 6; break;
-            case "Monk":
-                armorBonus = 0; shieldBonus = 0; damageDice = 6; break;
-            case "Barbarian":
-                armorBonus = 3; shieldBonus = 0; damageDice = 12; break;
-            default:
-                armorBonus = 0; shieldBonus = 0; damageDice = 6; break;
+            armorBonus = classDef.DefaultArmorBonus;
+            shieldBonus = classDef.DefaultShieldBonus;
+            damageDice = classDef.DefaultDamageDice;
+        }
+        else
+        {
+            armorBonus = 0; shieldBonus = 0; damageDice = 6;
         }
     }
 
@@ -322,46 +328,12 @@ public class GameManager : MonoBehaviour
         ICharacterClass classDef = ClassRegistry.GetClass(className);
         if (classDef != null)
         {
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("scale_mail"), EquipSlot.Armor);
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("torch"));
-            Debug.Log("[GameManager] Fighter equipment: Scale Mail, Heavy Shield, Longsword, Shortbow");
+            classDef.SetupStartingEquipment(inv);
         }
         else
         {
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("rapier"), EquipSlot.RightHand);
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("rope"));
-            Debug.Log("[GameManager] Rogue equipment: Leather Armor, Rapier, Shortbow, Dagger");
+            Debug.LogWarning($"[GameManager] No class definition found for '{className}', skipping equipment setup.");
         }
-        else if (className == "Monk")
-        {
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("sling"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            Debug.Log("[GameManager] Monk equipment: Quarterstaff, Sling (unarmored for WIS AC bonus)");
-        }
-        else if (className == "Barbarian")
-        {
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("hide_armor"), EquipSlot.Armor);
-            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("greataxe"), EquipSlot.RightHand);
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-            Debug.Log("[GameManager] Barbarian equipment: Hide Armor, Greataxe, 3x Javelin");
-        }
-
         inv.CharacterInventory.RecalculateStats();
     }
 
@@ -1848,6 +1820,40 @@ public class GameManager : MonoBehaviour
 
     private void HandleAttackTargetClick(CharacterController pc, SquareCell cell)
     {
+        // ===== SPELL CASTING MODE =====
+        if (_pendingAttackMode == PendingAttackMode.CastSpell && _pendingSpell != null)
+        {
+            // For ally spells, clicking own tile = self-target
+            if (cell.Coords == pc.GridPosition && _pendingSpell.TargetType == SpellTargetType.SingleAlly)
+            {
+                PerformSpellCast(pc, pc);
+                return;
+            }
+
+            // Cancel if clicking non-highlighted cell
+            if (!_highlightedCells.Contains(cell))
+            {
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                ShowActionChoices();
+                return;
+            }
+
+            // Valid target click
+            if (cell.IsOccupied && !cell.Occupant.Stats.IsDead)
+            {
+                PerformSpellCast(pc, cell.Occupant);
+                return;
+            }
+
+            // Fallback cancel
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            ShowActionChoices();
+            return;
+        }
+
+        // ===== NORMAL ATTACK MODE =====
         if (!cell.IsOccupied || cell.Occupant == pc || cell.Occupant.Stats.IsDead)
         {
             if (cell.Coords == pc.GridPosition || !_highlightedCells.Contains(cell))
@@ -2561,5 +2567,24 @@ public class GameManager : MonoBehaviour
             return $"+ {value} ({label})";
         else
             return $"- {-value} ({label})";
+    }
+
+    // ========== QUICKENED SPELL TRACKING (D&D 3.5e: ONE PER ROUND) ==========
+
+    /// <summary>
+    /// Reset quickened spell tracking for all characters at the start of a new round.
+    /// D&D 3.5e: Each character can cast only one quickened spell per round.
+    /// </summary>
+    private void ResetQuickenedSpellTrackingForAllCharacters()
+    {
+        foreach (var character in GetAllCharacters())
+        {
+            var spellComp = character.GetComponent<SpellcastingComponent>();
+            if (spellComp != null)
+            {
+                spellComp.ResetQuickenedSpellTracking();
+            }
+        }
+        Debug.Log("[GameManager] Quickened spell tracking reset for new round");
     }
 }
