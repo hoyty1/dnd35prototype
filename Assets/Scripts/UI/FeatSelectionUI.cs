@@ -260,7 +260,14 @@ public class FeatSelectionUI : MonoBehaviour
         UpdateSelectedDisplay();
         SetPanelVisible(true);
 
-        Debug.Log($"[FeatSelectionUI] Opened successfully. Feat rows created: {_featRows.Count}, font loaded: {(_font != null ? _font.name : "NULL")}");
+        // Ensure the overlay renders on top of all other UI by moving it to the
+        // end of the sibling list. This is critical when re-opening for Fighter
+        // bonus feat selection, as other overlays may have been created after ours.
+        if (_overlay != null)
+            _overlay.transform.SetAsLastSibling();
+
+        Debug.Log($"[FeatSelectionUI] Opened successfully. Feat rows created: {_featRows.Count}, " +
+                  $"overlay active: {_overlay.activeSelf}, font loaded: {(_font != null ? _font.name : "NULL")}");
     }
 
     /// <summary>Close the panel.</summary>
@@ -287,19 +294,36 @@ public class FeatSelectionUI : MonoBehaviour
         // Get all feats sorted
         _allFeats = FeatDefinitions.GetAllFeatsSorted();
 
+        Debug.Log($"[FeatSelectionUI] PopulateFeatList: total feats={_allFeats.Count}, " +
+                  $"isFighterBonus={_isFighterBonus}, filter={_filterType}, search='{_searchText}'");
+
         float rowHeight = 30f;
         int visibleIndex = 0;
+        int filteredOutByBonus = 0;
+        int filteredOutByType = 0;
+        int filteredOutBySearch = 0;
 
         for (int i = 0; i < _allFeats.Count; i++)
         {
             var feat = _allFeats[i];
 
             // Apply filters
-            if (!PassesFilter(feat)) continue;
+            if (!PassesFilter(feat))
+            {
+                if (_isFighterBonus && !feat.IsFighterBonus)
+                    filteredOutByBonus++;
+                else
+                    filteredOutByType++;
+                continue;
+            }
 
             // Apply search
             if (!string.IsNullOrEmpty(_searchText) &&
-                !feat.FeatName.ToLower().Contains(_searchText.ToLower())) continue;
+                !feat.FeatName.ToLower().Contains(_searchText.ToLower()))
+            {
+                filteredOutBySearch++;
+                continue;
+            }
 
             CreateFeatRow(feat, visibleIndex, rowHeight);
             visibleIndex++;
@@ -308,6 +332,10 @@ public class FeatSelectionUI : MonoBehaviour
         // Set content height
         var contentRT = _scrollContent.GetComponent<RectTransform>();
         contentRT.sizeDelta = new Vector2(0, visibleIndex * rowHeight + 10);
+
+        Debug.Log($"[FeatSelectionUI] PopulateFeatList results: {visibleIndex} rows visible, " +
+                  $"filtered out: {filteredOutByBonus} (not fighter bonus), {filteredOutByType} (type filter), " +
+                  $"{filteredOutBySearch} (search). Content height: {contentRT.sizeDelta.y}");
     }
 
     private bool PassesFilter(FeatDefinition feat)
@@ -487,8 +515,15 @@ public class FeatSelectionUI : MonoBehaviour
         }
 
         Debug.Log($"[FeatSelectionUI] Confirmed feats: {string.Join(", ", _selectedFeats)}");
-        OnFeatsConfirmed?.Invoke(new List<string>(_selectedFeats));
+
+        // IMPORTANT: Close BEFORE invoking the callback.
+        // The callback (e.g. OnGeneralFeatsSelected for Fighters) may immediately
+        // re-open this panel for bonus feat selection. If we Close() after the
+        // callback, we'd hide the panel that was just re-opened, leaving a blank screen.
+        var confirmedFeats = new List<string>(_selectedFeats);
+        var callback = OnFeatsConfirmed;
         Close();
+        callback?.Invoke(confirmedFeats);
     }
 
     // ========================================================================
