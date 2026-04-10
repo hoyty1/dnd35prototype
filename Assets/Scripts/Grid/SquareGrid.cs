@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -112,7 +113,15 @@ public class SquareGrid : MonoBehaviour
         if (start == destination) return result;
 
         // A* data structures
-        var openSet = new SortedSet<(int fScore, int tieBreaker, Vector2Int pos)>();
+        // Custom comparer needed because Vector2Int does not implement IComparable.
+        // Since tieBreaker is always unique, comparing fScore then tieBreaker is sufficient.
+        var openSet = new SortedSet<(int fScore, int tieBreaker, Vector2Int pos)>(
+            Comparer<(int fScore, int tieBreaker, Vector2Int pos)>.Create((a, b) =>
+            {
+                int cmp = a.fScore.CompareTo(b.fScore);
+                if (cmp != 0) return cmp;
+                return a.tieBreaker.CompareTo(b.tieBreaker);
+            }));
         var cameFrom = new Dictionary<Vector2Int, Vector2Int>();
         var gScore = new Dictionary<Vector2Int, int>();
         var visited = new HashSet<Vector2Int>();
