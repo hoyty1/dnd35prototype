@@ -91,6 +91,163 @@ public class SquareGrid : MonoBehaviour
         return result;
     }
 
+    // ========================================================================
+    // AoO-AWARE PATHFINDING (A* with threat cost)
+    // ========================================================================
+
+    /// <summary>
+    /// Find a path from start to destination using A* pathfinding.
+    /// Threatened squares have a very high movement cost (but are still traversable).
+    /// Returns the path (excluding start) and which AoOs would be provoked.
+    /// </summary>
+    /// <param name="start">Starting position.</param>
+    /// <param name="destination">Target position.</param>
+    /// <param name="threatenedSquares">Set of squares threatened by enemies. Null = no threat awareness.</param>
+    /// <param name="maxRange">Maximum path length in D&D 3.5 squares.</param>
+    /// <returns>AoOPathResult with the computed path and provoked AoOs.</returns>
+    public AoOPathResult FindPathAoOAware(Vector2Int start, Vector2Int destination,
+        HashSet<Vector2Int> threatenedSquares, int maxRange)
+    {
+        var result = new AoOPathResult();
+        if (start == destination) return result;
+
+        // A* data structures
+        var openSet = new SortedSet<(int fScore, int tieBreaker, Vector2Int pos)>();
+        var cameFrom = new Dictionary<Vector2Int, Vector2Int>();
+        var gScore = new Dictionary<Vector2Int, int>();
+        var visited = new HashSet<Vector2Int>();
+        int tieCounter = 0;
+
+        const int THREAT_COST = 50; // Very high cost for threatened squares (but not infinite)
+        const int NORMAL_COST = 1;
+
+        gScore[start] = 0;
+        int hStart = SquareGridUtils.ChebyshevDistance(start, destination);
+        openSet.Add((hStart, tieCounter++, start));
+
+        while (openSet.Count > 0)
+        {
+            // Get node with lowest fScore
+            var (_, _, current) = openSet.Min;
+            openSet.Remove(openSet.Min);
+
+            if (current == destination)
+            {
+                // Reconstruct path
+                var path = new List<Vector2Int>();
+                Vector2Int node = destination;
+                while (node != start)
+                {
+                    path.Add(node);
+                    node = cameFrom[node];
+                }
+                path.Reverse();
+                result.Path = path;
+
+                Debug.Log($"[SquareGrid] A* path found: {path.Count} steps from ({start.x},{start.y}) to ({destination.x},{destination.y})");
+                return result;
+            }
+
+            if (visited.Contains(current)) continue;
+            visited.Add(current);
+
+            // Expand neighbors
+            Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(current);
+            foreach (var neighbor in neighbors)
+            {
+                if (visited.Contains(neighbor)) continue;
+
+                // Check bounds
+                SquareCell cell = GetCell(neighbor);
+                if (cell == null) continue;
+
+                // Check occupancy (destination is OK even if occupied for pathfinding purposes)
+                if (cell.IsOccupied && neighbor != destination) continue;
+
+                // Calculate step cost
+                int stepCost = NORMAL_COST;
+
+                // Diagonal steps may cost more (D&D 3.5 alternating diagonals)
+                if (SquareGridUtils.IsDiagonalStep(current, neighbor))
+                    stepCost = NORMAL_COST; // Simplified: we use Chebyshev for A* heuristic
+
+                // Add threat penalty for moving into a threatened square
+                if (threatenedSquares != null && threatenedSquares.Contains(current))
+                {
+                    // Leaving a threatened square is what provokes; add cost to leaving
+                    stepCost += THREAT_COST;
+                }
+
+                int tentativeG = gScore.GetValueOrDefault(current, int.MaxValue / 2) + stepCost;
+
+                // Check max range (using D&D 3.5 distance from start)
+                if (SquareGridUtils.GetDistance(start, neighbor) > maxRange) continue;
+
+                if (tentativeG < gScore.GetValueOrDefault(neighbor, int.MaxValue))
+                {
+                    cameFrom[neighbor] = current;
+                    gScore[neighbor] = tentativeG;
+                    int h = SquareGridUtils.ChebyshevDistance(neighbor, destination);
+                    openSet.Add((tentativeG + h, tieCounter++, neighbor));
+                }
+            }
+        }
+
+        // No path found - fall back to simple path
+        Debug.Log($"[SquareGrid] A* found no path, using simple path from ({start.x},{start.y}) to ({destination.x},{destination.y})");
+        result.Path = ThreatSystem.GenerateSimplePath(start, destination);
+
+        // Trim to max range
+        while (result.Path.Count > 0 && SquareGridUtils.GetDistance(start, result.Path[result.Path.Count - 1]) > maxRange)
+        {
+            result.Path.RemoveAt(result.Path.Count - 1);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Find a "safe" path that avoids threatened squares when possible.
+    /// If no safe path exists within movement range, returns the direct path.
+    /// Also returns which AoOs the path would provoke.
+    /// </summary>
+    /// <param name="start">Starting position.</param>
+    /// <param name="destination">Target position.</param>
+    /// <param name="mover">The character moving.</param>
+    /// <param name="allCharacters">All characters in combat (for threat calculation).</param>
+    /// <returns>AoOPathResult with path and provoked AoO info.</returns>
+    public AoOPathResult FindSafePath(Vector2Int start, Vector2Int destination,
+        CharacterController mover, List<CharacterController> allCharacters)
+    {
+        // Build combined set of all enemy-threatened squares
+        var allThreatened = new HashSet<Vector2Int>();
+        foreach (var character in allCharacters)
+        {
+            if (character == mover) continue;
+            if (character.Stats.IsDead) continue;
+            if (character.IsPlayerControlled == mover.IsPlayerControlled) continue;
+
+            var threats = ThreatSystem.GetThreatenedSquares(character);
+            allThreatened.UnionWith(threats);
+        }
+
+        if (allThreatened.Count > 0)
+        {
+            Debug.Log($"[SquareGrid] Total threatened squares: {allThreatened.Count}");
+        }
+
+        // Run A* with threat awareness
+        var pathResult = FindPathAoOAware(start, destination, allThreatened, mover.Stats.MoveRange);
+
+        // If we got a path, analyze it for actual AoOs
+        if (pathResult.Path.Count > 0)
+        {
+            pathResult.ProvokedAoOs = ThreatSystem.AnalyzePathForAoOs(mover, pathResult.Path, allCharacters);
+        }
+
+        return pathResult;
+    }
+
     /// <summary>
     /// Clear all highlights on the grid.
     /// </summary>

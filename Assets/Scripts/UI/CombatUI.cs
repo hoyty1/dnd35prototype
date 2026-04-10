@@ -1,10 +1,12 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections.Generic;
 
 /// <summary>
 /// Manages all combat UI elements with D&D 3.5 ability score display.
 /// Shows 6 ability scores with modifiers and derived stats for each character.
 /// Supports action economy buttons (Move, Attack, Full Attack, Dual Wield, End Turn).
+/// Includes AoO warning confirmation dialog.
 /// </summary>
 public class CombatUI : MonoBehaviour
 {
@@ -471,5 +473,183 @@ public class CombatUI : MonoBehaviour
                     ? new Color(0.1f, 0.2f, 0.5f, 0.95f)
                     : new Color(0.1f, 0.15f, 0.35f, 0.65f);
         }
+    }
+
+    // ========================================================================
+    // AoO WARNING DIALOG
+    // ========================================================================
+
+    private GameObject _aooWarningPanel;
+    private Text _aooWarningText;
+    private Button _aooConfirmButton;
+    private Button _aooCancelButton;
+    private System.Action _onAoOConfirm;
+    private System.Action _onAoOCancel;
+
+    /// <summary>
+    /// Show the AoO warning confirmation dialog.
+    /// Blocks all other actions until the player responds.
+    /// </summary>
+    /// <param name="enemyNames">List of enemy names that would get AoOs.</param>
+    /// <param name="onConfirm">Callback when player confirms movement.</param>
+    /// <param name="onCancel">Callback when player cancels movement.</param>
+    public void ShowAoOWarning(List<string> enemyNames, System.Action onConfirm, System.Action onCancel)
+    {
+        _onAoOConfirm = onConfirm;
+        _onAoOCancel = onCancel;
+
+        // Build the warning panel if it doesn't exist
+        if (_aooWarningPanel == null)
+            BuildAoOWarningPanel();
+
+        // Set the warning text
+        string enemyList = string.Join(", ", enemyNames);
+        _aooWarningText.text = $"⚠ ATTACK OF OPPORTUNITY WARNING ⚠\n\n" +
+                               $"This movement will provoke Attacks of Opportunity from:\n" +
+                               $"<color=#FF6666><b>{enemyList}</b></color>\n\n" +
+                               $"Each enemy will get a free melee attack against you.\n" +
+                               $"Continue moving?";
+
+        _aooWarningPanel.SetActive(true);
+        Debug.Log($"[CombatUI] AoO warning shown: {enemyList}");
+    }
+
+    /// <summary>
+    /// Hide the AoO warning dialog.
+    /// </summary>
+    public void HideAoOWarning()
+    {
+        if (_aooWarningPanel != null)
+            _aooWarningPanel.SetActive(false);
+    }
+
+    /// <summary>
+    /// Build the AoO warning panel UI programmatically.
+    /// </summary>
+    private void BuildAoOWarningPanel()
+    {
+        // Find or create a canvas
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null)
+            canvas = FindObjectOfType<Canvas>();
+        if (canvas == null) return;
+
+        // Create overlay panel (blocks raycasts)
+        _aooWarningPanel = new GameObject("AoOWarningPanel");
+        _aooWarningPanel.transform.SetParent(canvas.transform, false);
+        RectTransform panelRT = _aooWarningPanel.AddComponent<RectTransform>();
+        panelRT.anchorMin = Vector2.zero;
+        panelRT.anchorMax = Vector2.one;
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        // Semi-transparent background
+        Image bgImage = _aooWarningPanel.AddComponent<Image>();
+        bgImage.color = new Color(0f, 0f, 0f, 0.7f);
+
+        // Add CanvasGroup to block raycasts
+        CanvasGroup cg = _aooWarningPanel.AddComponent<CanvasGroup>();
+        cg.blocksRaycasts = true;
+        cg.interactable = true;
+
+        // Dialog box
+        GameObject dialogBox = new GameObject("DialogBox");
+        dialogBox.transform.SetParent(_aooWarningPanel.transform, false);
+        RectTransform dialogRT = dialogBox.AddComponent<RectTransform>();
+        dialogRT.anchorMin = new Vector2(0.25f, 0.25f);
+        dialogRT.anchorMax = new Vector2(0.75f, 0.75f);
+        dialogRT.offsetMin = Vector2.zero;
+        dialogRT.offsetMax = Vector2.zero;
+
+        Image dialogBg = dialogBox.AddComponent<Image>();
+        dialogBg.color = new Color(0.15f, 0.1f, 0.1f, 0.95f);
+
+        // Add outline
+        Outline dialogOutline = dialogBox.AddComponent<Outline>();
+        dialogOutline.effectColor = new Color(0.8f, 0.2f, 0.2f, 1f);
+        dialogOutline.effectDistance = new Vector2(2, 2);
+
+        // Warning text
+        GameObject textObj = new GameObject("WarningText");
+        textObj.transform.SetParent(dialogBox.transform, false);
+        RectTransform textRT = textObj.AddComponent<RectTransform>();
+        textRT.anchorMin = new Vector2(0.05f, 0.3f);
+        textRT.anchorMax = new Vector2(0.95f, 0.95f);
+        textRT.offsetMin = Vector2.zero;
+        textRT.offsetMax = Vector2.zero;
+
+        _aooWarningText = textObj.AddComponent<Text>();
+        _aooWarningText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (_aooWarningText.font == null)
+            _aooWarningText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        _aooWarningText.fontSize = 16;
+        _aooWarningText.color = Color.white;
+        _aooWarningText.alignment = TextAnchor.MiddleCenter;
+        _aooWarningText.supportRichText = true;
+        _aooWarningText.text = "";
+
+        // Confirm button
+        _aooConfirmButton = CreateAoOButton(dialogBox, "ConfirmBtn",
+            "⚔ CONFIRM (Provoke AoO)", new Vector2(0.1f, 0.05f), new Vector2(0.48f, 0.22f),
+            new Color(0.6f, 0.2f, 0.2f, 1f));
+        _aooConfirmButton.onClick.AddListener(() =>
+        {
+            HideAoOWarning();
+            _onAoOConfirm?.Invoke();
+        });
+
+        // Cancel button
+        _aooCancelButton = CreateAoOButton(dialogBox, "CancelBtn",
+            "✋ CANCEL (Stay Safe)", new Vector2(0.52f, 0.05f), new Vector2(0.9f, 0.22f),
+            new Color(0.2f, 0.4f, 0.2f, 1f));
+        _aooCancelButton.onClick.AddListener(() =>
+        {
+            HideAoOWarning();
+            _onAoOCancel?.Invoke();
+        });
+
+        _aooWarningPanel.SetActive(false);
+    }
+
+    /// <summary>Helper to create a styled button for the AoO dialog.</summary>
+    private Button CreateAoOButton(GameObject parent, string name, string label,
+        Vector2 anchorMin, Vector2 anchorMax, Color bgColor)
+    {
+        GameObject btnObj = new GameObject(name);
+        btnObj.transform.SetParent(parent.transform, false);
+        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
+        btnRT.anchorMin = anchorMin;
+        btnRT.anchorMax = anchorMax;
+        btnRT.offsetMin = Vector2.zero;
+        btnRT.offsetMax = Vector2.zero;
+
+        Image btnImg = btnObj.AddComponent<Image>();
+        btnImg.color = bgColor;
+
+        Button btn = btnObj.AddComponent<Button>();
+        var colors = btn.colors;
+        colors.highlightedColor = new Color(bgColor.r + 0.15f, bgColor.g + 0.15f, bgColor.b + 0.15f, 1f);
+        colors.pressedColor = new Color(bgColor.r - 0.1f, bgColor.g - 0.1f, bgColor.b - 0.1f, 1f);
+        btn.colors = colors;
+
+        GameObject txtObj = new GameObject("Text");
+        txtObj.transform.SetParent(btnObj.transform, false);
+        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = new Vector2(5, 2);
+        txtRT.offsetMax = new Vector2(-5, -2);
+
+        Text txt = txtObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null)
+            txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        txt.fontSize = 14;
+        txt.color = Color.white;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.text = label;
+        txt.fontStyle = FontStyle.Bold;
+
+        return btn;
     }
 }

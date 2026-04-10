@@ -851,6 +851,7 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Reset turn flags and action economy.
     /// Power Attack and Rapid Shot settings persist between turns (player choice).
+    /// Also resets Attacks of Opportunity counters for the new round.
     /// </summary>
     public void StartNewTurn()
     {
@@ -859,5 +860,47 @@ public class CharacterController : MonoBehaviour
         Actions.Reset();
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
         // They are player-controlled and reset only when the player changes them
+
+        // Reset AoO counters for the new round
+        ThreatSystem.ResetAoOForTurn(this);
+    }
+
+    // ========== 5-FOOT STEP ==========
+
+    /// <summary>
+    /// Perform a 5-foot step (1 square move that does NOT provoke AoOs).
+    /// D&D 3.5: 5-foot step can be taken if no other movement this turn.
+    /// </summary>
+    /// <param name="targetCell">The adjacent cell to step to.</param>
+    /// <returns>True if the 5-foot step was successful.</returns>
+    public bool FiveFootStep(SquareCell targetCell)
+    {
+        if (targetCell == null) return false;
+
+        // Must be adjacent (1 square away)
+        if (!SquareGridUtils.IsAdjacent(GridPosition, targetCell.Coords))
+        {
+            Debug.Log($"[5ftStep] {Stats.CharacterName}: Target not adjacent, cannot 5-foot step");
+            return false;
+        }
+
+        // Must not have moved this turn
+        if (HasMovedThisTurn)
+        {
+            Debug.Log($"[5ftStep] {Stats.CharacterName}: Already moved this turn, cannot 5-foot step");
+            return false;
+        }
+
+        if (targetCell.IsOccupied)
+        {
+            Debug.Log($"[5ftStep] {Stats.CharacterName}: Target cell occupied, cannot 5-foot step");
+            return false;
+        }
+
+        Debug.Log($"[5ftStep] {Stats.CharacterName} takes a 5-foot step to ({targetCell.Coords.x},{targetCell.Coords.y}) - NO AoO provoked");
+
+        // Move without provoking AoOs
+        MoveToCell(targetCell);
+        return true;
     }
 }

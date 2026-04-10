@@ -33,6 +33,29 @@ public class CharacterStats
     /// <summary>Combat Expertise value (0 to 5): trade attack for AC.</summary>
     public int CombatExpertiseValue;
 
+    // ========== ATTACKS OF OPPORTUNITY (D&D 3.5) ==========
+
+    /// <summary>Number of AoOs used this round.</summary>
+    public int AttacksOfOpportunityUsed;
+
+    /// <summary>Maximum AoOs per round (1 default, 1+DEX mod with Combat Reflexes).</summary>
+    public int MaxAttacksOfOpportunity = 1;
+
+    /// <summary>
+    /// Reset AoO counters at the start of this character's turn.
+    /// Recalculates MaxAttacksOfOpportunity based on Combat Reflexes feat.
+    /// </summary>
+    public void ResetAttacksOfOpportunity()
+    {
+        AttacksOfOpportunityUsed = 0;
+        MaxAttacksOfOpportunity = FeatManager.GetMaxAoOPerRound(this);
+        Debug.Log($"[CharacterStats] {CharacterName} AoO reset: {MaxAttacksOfOpportunity} max" +
+                  (HasFeat("Combat Reflexes") ? $" (Combat Reflexes: 1 + {Mathf.Max(0, DEXMod)} DEX)" : ""));
+    }
+
+    /// <summary>Whether this character has remaining AoOs this round.</summary>
+    public bool HasRemainingAoO => AttacksOfOpportunityUsed < MaxAttacksOfOpportunity;
+
     /// <summary>
     /// Initialize feats from a list of feat names (from character creation).
     /// Does NOT clear existing feats - adds to them.

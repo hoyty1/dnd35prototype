@@ -334,6 +334,7 @@ public class GameManager : MonoBehaviour
 
         if (!IsPlayerTurn) return;
         if (CurrentSubPhase == PlayerSubPhase.Animating) return;
+        if (_waitingForAoOConfirmation) return; // Block input during AoO confirmation dialog
         if (InventoryUI != null && InventoryUI.IsOpen) return;
         if (SkillsUI != null && SkillsUI.IsOpen)
         {
@@ -806,6 +807,11 @@ public class GameManager : MonoBehaviour
 
     // ========== MOVEMENT ==========
 
+    // AoO confirmation state
+    private bool _waitingForAoOConfirmation;
+    private AoOPathResult _pendingAoOPath;
+    private SquareCell _pendingMoveTarget;
+
     private void ShowMovementRange(CharacterController pc)
     {
         Grid.ClearAllHighlights();
@@ -824,6 +830,18 @@ public class GameManager : MonoBehaviour
         SquareCell current = Grid.GetCell(pc.GridPosition);
         if (current != null)
             current.SetHighlight(HighlightType.Selected);
+    }
+
+    /// <summary>
+    /// Get all characters in combat for AoO threat calculations.
+    /// </summary>
+    private List<CharacterController> GetAllCharacters()
+    {
+        var all = new List<CharacterController>();
+        if (PC1 != null) all.Add(PC1);
+        if (PC2 != null) all.Add(PC2);
+        if (NPC != null) all.Add(NPC);
+        return all;
     }
 
     // ========== ATTACK TARGET SELECTION ==========
@@ -991,6 +1009,9 @@ public class GameManager : MonoBehaviour
 
     private void HandleMovementClick(CharacterController pc, SquareCell cell)
     {
+        // If waiting for AoO confirmation, ignore clicks on the grid
+        if (_waitingForAoOConfirmation) return;
+
         if (cell.Coords == pc.GridPosition)
         {
             // Click own tile to cancel movement and return to action choices
@@ -1000,22 +1021,155 @@ public class GameManager : MonoBehaviour
 
         if (_highlightedCells.Contains(cell) && !cell.IsOccupied)
         {
-            // Consume the appropriate action
-            if (pc.Actions.HasMoveAction)
-            {
-                pc.Actions.UseMoveAction();
-            }
-            else if (pc.Actions.CanConvertStandardToMove)
-            {
-                pc.Actions.ConvertStandardToMove();
-            }
+            // Check for AoOs before executing movement
+            var allCharacters = GetAllCharacters();
+            var pathResult = Grid.FindSafePath(pc.GridPosition, cell.Coords, pc, allCharacters);
 
-            pc.MoveToCell(cell);
+            if (pathResult.ProvokesAoOs)
+            {
+                // Movement would provoke AoOs - show warning and wait for confirmation
+                Debug.Log($"[GameManager] Movement to ({cell.Coords.x},{cell.Coords.y}) would provoke {pathResult.ProvokedAoOs.Count} AoO(s)!");
+                _pendingAoOPath = pathResult;
+                _pendingMoveTarget = cell;
+                _waitingForAoOConfirmation = true;
+
+                // Show AoO warning dialog
+                var enemyNames = pathResult.GetThreateningEnemyNames();
+                CombatUI.ShowAoOWarning(enemyNames, OnAoOConfirmed, OnAoOCancelled);
+            }
+            else
+            {
+                // No AoOs - execute movement immediately
+                ExecuteMovement(pc, cell);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Called when player confirms movement despite AoO warning.
+    /// </summary>
+    private void OnAoOConfirmed()
+    {
+        _waitingForAoOConfirmation = false;
+
+        CharacterController pc = ActivePC;
+        if (pc == null || _pendingMoveTarget == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        Debug.Log($"[GameManager] Player confirmed movement - resolving AoOs");
+
+        // Resolve each AoO
+        if (_pendingAoOPath != null && _pendingAoOPath.ProvokesAoOs)
+        {
+            StartCoroutine(ResolveAoOsAndMove(pc, _pendingMoveTarget, _pendingAoOPath));
+        }
+        else
+        {
+            ExecuteMovement(pc, _pendingMoveTarget);
+        }
+
+        _pendingAoOPath = null;
+        _pendingMoveTarget = null;
+    }
+
+    /// <summary>
+    /// Called when player cancels movement due to AoO warning.
+    /// </summary>
+    private void OnAoOCancelled()
+    {
+        _waitingForAoOConfirmation = false;
+        _pendingAoOPath = null;
+        _pendingMoveTarget = null;
+
+        Debug.Log("[GameManager] Player cancelled movement to avoid AoOs");
+
+        CharacterController pc = ActivePC;
+        if (pc != null)
+        {
+            CurrentSubPhase = PlayerSubPhase.Moving;
+            ShowMovementRange(pc);
+            CombatUI.SetActionButtonsVisible(false);
+            CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (or own tile to cancel)");
+        }
+    }
+
+    /// <summary>
+    /// Resolve AoOs one by one, then execute the movement if the mover is still alive.
+    /// </summary>
+    private IEnumerator ResolveAoOsAndMove(CharacterController pc, SquareCell targetCell, AoOPathResult pathResult)
+    {
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        foreach (var aooInfo in pathResult.ProvokedAoOs)
+        {
+            if (pc.Stats.IsDead) break; // Mover was killed by an AoO
+
+            var threatener = aooInfo.Threatener;
+            if (threatener.Stats.IsDead) continue; // Threatener already dead
+
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(threatener, pc);
+            if (aooResult != null)
+            {
+                string aooLog = $"⚔ AoO: {aooResult.GetDetailedSummary()}";
+                CombatUI.ShowCombatLog(aooLog);
+                CombatUI.UpdateAllStats(PC1, PC2, NPC);
+
+                if (LogAttacksToConsole)
+                    Debug.Log("[Combat] " + aooLog);
+
+                yield return new WaitForSeconds(1.0f);
+            }
+        }
+
+        // If still alive, complete the movement
+        if (!pc.Stats.IsDead)
+        {
+            ExecuteMovement(pc, targetCell);
+        }
+        else
+        {
+            Debug.Log($"[GameManager] {pc.Stats.CharacterName} was slain by AoO during movement!");
+            CombatUI.ShowCombatLog($"{pc.Stats.CharacterName} was slain during movement!");
             CombatUI.UpdateAllStats(PC1, PC2, NPC);
 
-            // Return to action choices (player can still use standard action if available)
-            ShowActionChoices();
+            // Check if both PCs are dead
+            if (PC1.Stats.IsDead && PC2.Stats.IsDead)
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+                CombatUI.SetActionButtonsVisible(false);
+                yield break;
+            }
+
+            // End this PC's turn
+            yield return new WaitForSeconds(1.0f);
+            EndActivePCTurn();
         }
+    }
+
+    /// <summary>
+    /// Execute the actual movement (consume action, move character, update UI).
+    /// </summary>
+    private void ExecuteMovement(CharacterController pc, SquareCell cell)
+    {
+        // Consume the appropriate action
+        if (pc.Actions.HasMoveAction)
+        {
+            pc.Actions.UseMoveAction();
+        }
+        else if (pc.Actions.CanConvertStandardToMove)
+        {
+            pc.Actions.ConvertStandardToMove();
+        }
+
+        pc.MoveToCell(cell);
+        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+
+        // Return to action choices (player can still use standard action if available)
+        ShowActionChoices();
     }
 
     private void HandleAttackTargetClick(CharacterController pc, SquareCell cell)

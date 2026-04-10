@@ -18,6 +18,7 @@ public class CombatResult
     public bool Hit;          // Whether the attack hit
     public int Damage;        // Base weapon damage dealt (0 if miss)
     public bool TargetKilled; // Whether the target died
+    public bool IsAttackOfOpportunity; // Whether this was an AoO
 
     public bool NaturalTwenty;  // Natural 20 (auto-hit)
     public bool NaturalOne;     // Natural 1 (auto-miss)
@@ -107,9 +108,10 @@ public class CombatResult
         // === HEADER LINE ===
         string weaponNote = !string.IsNullOrEmpty(WeaponName) ? $" with {WeaponName}" : "";
         string attackType = IsRangedAttack ? "ranged" : "melee";
+        string aooNote = IsAttackOfOpportunity ? " [ATTACK OF OPPORTUNITY]" : "";
 
         sb.AppendLine($"═══════════════════════════════════");
-        sb.AppendLine($"{attackerName} attacks {defenderName}{weaponNote} ({attackType})");
+        sb.AppendLine($"{attackerName} attacks {defenderName}{weaponNote} ({attackType}){aooNote}");
 
         // === WEAPON INFO ===
         if (!string.IsNullOrEmpty(WeaponName))
