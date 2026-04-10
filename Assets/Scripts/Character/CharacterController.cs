@@ -137,6 +137,8 @@ public class CharacterController : MonoBehaviour
     /// Perform a single attack with flanking context and optional range info.
     /// Includes full D&D 3.5 critical hit mechanics, racial attack bonuses, and feat effects.
     /// Uses weapon's DamageModifierType for correct STR bonus to damage.
+    /// Integrates: Power Attack, Point Blank Shot, Weapon Focus, Weapon Specialization,
+    /// Weapon Finesse, Combat Expertise, Improved Critical, Dodge.
     /// </summary>
     public CombatResult Attack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
     {
@@ -170,31 +172,67 @@ public class CharacterController : MonoBehaviour
             pbsDmgBonus = 1;
         }
 
-        int totalAtkMod = Stats.AttackBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                          + powerAtkPenalty + pbsAtkBonus;
+        // === FEAT: Weapon Focus (+1 attack) & Greater Weapon Focus (+1 attack) ===
+        int weaponFocusBonus = Stats.WeaponFocusAttackBonus;
+
+        // === FEAT: Weapon Specialization (+2 damage) & Greater (+2 damage) ===
+        int weaponSpecBonus = Stats.WeaponSpecDamageBonus;
+
+        // === FEAT: Weapon Finesse (DEX instead of STR for attack with light weapons) ===
+        int abilityMod = Stats.STRMod;
+        string abilityName = "STR";
+        if (isRanged)
+        {
+            abilityMod = Stats.DEXMod;
+            abilityName = "DEX";
+        }
+        else if (FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
+        {
+            abilityMod = Stats.DEXMod;
+            abilityName = "DEX(Finesse)";
+            Debug.Log($"[Feats] {Stats.CharacterName}: Weapon Finesse active, using DEX {Stats.DEXMod} for attack");
+        }
+
+        // === FEAT: Combat Expertise (trade attack for AC) ===
+        int combatExpertisePenalty = 0;
+        if (isMelee && Stats.HasFeat("Combat Expertise") && Stats.CombatExpertiseValue > 0)
+        {
+            combatExpertisePenalty = -Stats.CombatExpertiseValue;
+            Debug.Log($"[Feats] {Stats.CharacterName}: Combat Expertise -{Stats.CombatExpertiseValue} attack, +{Stats.CombatExpertiseValue} AC");
+        }
+
+        int totalAtkMod = Stats.BaseAttackBonus + abilityMod + Stats.SizeModifier
+                          + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
+                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty;
 
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
+        // === FEAT: Improved Critical (double threat range) ===
+        critThreatMin = FeatManager.GetAdjustedCritThreatMin(Stats, critThreatMin);
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
+
+        int totalFeatDmgBonus = powerAtkDmgBonus + pbsDmgBonus + weaponSpecBonus;
 
         // Record HP before attack
         int hpBefore = target.Stats.CurrentHP;
 
         var result = PerformSingleAttackWithCrit(target, totalAtkMod, isFlanking, flankingBonus, flankingPartnerName,
             Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
-            equippedWeapon, false, powerAtkDmgBonus + pbsDmgBonus);
+            equippedWeapon, false, totalFeatDmgBonus);
 
         result.RacialAttackBonus = racialAtkBonus;
         result.SizeAttackBonus = Stats.SizeModifier;
         result.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
         result.PowerAttackDamageBonus = powerAtkDmgBonus;
         result.PointBlankShotActive = pointBlankActive;
-        result.FeatDamageBonus = powerAtkDmgBonus + (pointBlankActive ? 1 : 0);
+        result.FeatDamageBonus = totalFeatDmgBonus;
+        result.WeaponFocusBonus = weaponFocusBonus;
+        result.WeaponSpecBonus = weaponSpecBonus;
+        result.CombatExpertisePenalty = combatExpertisePenalty;
 
         // Breakdown fields for detailed logging
         result.BreakdownBAB = Stats.BaseAttackBonus;
-        result.BreakdownAbilityMod = Stats.STRMod;
-        result.BreakdownAbilityName = isRanged ? "DEX" : "STR";
-        if (isRanged) result.BreakdownAbilityMod = Stats.DEXMod;
+        result.BreakdownAbilityMod = abilityMod;
+        result.BreakdownAbilityName = abilityName;
 
         // Store range info on result
         if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
@@ -273,25 +311,48 @@ public class CharacterController : MonoBehaviour
             pbsDmgBonus = 1;
         }
 
+        // === FEAT: Weapon Focus & Greater Weapon Focus ===
+        int weaponFocusBonus = Stats.WeaponFocusAttackBonus;
+
+        // === FEAT: Weapon Specialization & Greater ===
+        int weaponSpecBonus = Stats.WeaponSpecDamageBonus;
+
+        // === FEAT: Weapon Finesse ===
+        int baseAbilityMod = Stats.STRMod;
+        string baseAbilityName = "STR";
+        if (isRanged)
+        {
+            baseAbilityMod = Stats.DEXMod;
+            baseAbilityName = "DEX";
+        }
+        else if (FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
+        {
+            baseAbilityMod = Stats.DEXMod;
+            baseAbilityName = "DEX(Finesse)";
+        }
+
+        // === FEAT: Combat Expertise ===
+        int combatExpertisePenalty = 0;
+        if (isMelee && Stats.HasFeat("Combat Expertise") && Stats.CombatExpertiseValue > 0)
+        {
+            combatExpertisePenalty = -Stats.CombatExpertiseValue;
+        }
+
+        // === FEAT: Improved Critical ===
+        critThreatMin = FeatManager.GetAdjustedCritThreatMin(Stats, critThreatMin);
+
         // === FEAT: Rapid Shot (ranged, full attack only) ===
         bool hasRapidShotFeat = Stats.HasFeat("Rapid Shot");
         bool rapidShotActive = isRanged && hasRapidShotFeat && RapidShotEnabled;
         int rapidShotPenalty = rapidShotActive ? -2 : 0;
 
-        // === Extensive Debug Logging ===
-        Debug.Log($"[FullAttack] FullAttack() called");
-        Debug.Log($"[FullAttack] Character: {Stats.CharacterName}");
-        Debug.Log($"[FullAttack] Has Rapid Shot feat: {hasRapidShotFeat}");
-        Debug.Log($"[FullAttack] rapidShotEnabled: {RapidShotEnabled}");
-        Debug.Log($"[FullAttack] Weapon: {(equippedWeapon != null ? equippedWeapon.Name : "(unarmed)")}");
-        if (equippedWeapon != null)
-            Debug.Log($"[FullAttack] Weapon {equippedWeapon.Name}: IsRanged={equippedWeapon.WeaponCat == WeaponCategory.Ranged}, " +
-                      $"RangeIncrement={equippedWeapon.RangeIncrement}, IsMelee={isMelee}");
-        Debug.Log($"[FullAttack] Weapon is ranged: {isRanged}");
-        Debug.Log($"[FullAttack] Base attack count: {attackBonuses.Length}");
-        Debug.Log($"[FullAttack] Checking Rapid Shot conditions...");
-        Debug.Log($"[FullAttack]   isRanged={isRanged}, hasRapidShotFeat={hasRapidShotFeat}, RapidShotEnabled={RapidShotEnabled}");
-        Debug.Log($"[FullAttack] All conditions met: {rapidShotActive}");
+        int totalFeatDmgBonus = powerAtkDmgBonus + pbsDmgBonus + weaponSpecBonus;
+
+        // === Debug Logging ===
+        Debug.Log($"[FullAttack] {Stats.CharacterName}: FullAttack() called");
+        Debug.Log($"[FullAttack] Weapon: {(equippedWeapon != null ? equippedWeapon.Name : "(unarmed)")}, Ranged: {isRanged}");
+        Debug.Log($"[FullAttack] Feats: WF={weaponFocusBonus}, WS={weaponSpecBonus}, PA={powerAtkDmgBonus}, CE={combatExpertisePenalty}");
+        if (rapidShotActive) Debug.Log($"[FullAttack] Rapid Shot active: -2 penalty, +1 extra attack");
 
         // Build the list of attack bonuses, inserting Rapid Shot extra attack
         var allAttackBonuses = new List<int>(attackBonuses);
@@ -299,50 +360,50 @@ public class CharacterController : MonoBehaviour
 
         if (rapidShotActive)
         {
-            // Insert extra Rapid Shot attack at highest BAB (index 0)
             allAttackBonuses.Insert(0, attackBonuses[0]);
-            Debug.Log($"[FullAttack] Rapid Shot: adding extra attack at bonus {attackBonuses[0]}, -2 penalty to all attacks");
-            Debug.Log($"[FullAttack] Attack count: {baseAttackCount} → {allAttackBonuses.Count}");
+            Debug.Log($"[FullAttack] Rapid Shot: attack count {baseAttackCount} → {allAttackBonuses.Count}");
         }
-        else if (RapidShotEnabled && hasRapidShotFeat)
+        else if (RapidShotEnabled && hasRapidShotFeat && !isRanged)
         {
-            // Rapid Shot is ON and feat exists, but weapon isn't ranged — explain why no extra attack
-            Debug.LogWarning($"[FullAttack] {Stats.CharacterName}: Rapid Shot is ON but weapon is not ranged " +
-                             $"(isRanged={isRanged}). Equip a ranged weapon (Shortbow, Longbow, etc.) for Rapid Shot to work!");
+            Debug.LogWarning($"[FullAttack] {Stats.CharacterName}: Rapid Shot ON but weapon is not ranged");
         }
-
-        Debug.Log($"[FullAttack] Final attack count: {allAttackBonuses.Count}");
 
         for (int i = 0; i < allAttackBonuses.Count; i++)
         {
-            Debug.Log($"[FullAttack] Executing attack {i + 1} of {allAttackBonuses.Count}" +
-                      (rapidShotActive && i == 0 ? " (Rapid Shot extra attack)" : ""));
-
             if (target.Stats.IsDead)
             {
-                Debug.Log($"[FullAttack] Target is dead, stopping attacks at {i + 1} of {allAttackBonuses.Count}");
+                Debug.Log($"[FullAttack] Target is dead, stopping at attack {i + 1}");
                 break;
             }
 
             int baseBonus = allAttackBonuses[i];
             int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                         + powerAtkPenalty + pbsAtkBonus + rapidShotPenalty;
+                         + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty + rapidShotPenalty;
+
+            // Recalculate with correct ability mod (iterative uses BAB-based bonus, not STRMod again)
+            // The baseBonus from GetIterativeAttackBonuses already includes STRMod+SizeModifier
+            // So we need to add other feat/situational modifiers
+            atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
+                     + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty + rapidShotPenalty;
+            // Note: Weapon Finesse already handled in GetIterativeAttackBonuses if needed
+            // For now, the base bonus includes STRMod; if Finesse, we adjust
+            if (!isRanged && FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
+            {
+                // Remove STR, add DEX (base bonus already has STRMod from GetIterativeAttackBonuses)
+                atkMod += (Stats.DEXMod - Stats.STRMod);
+            }
 
             string label;
             if (rapidShotActive && i == 0)
-                label = $"Attack 1 (Rapid Shot extra attack, {CharacterStats.FormatMod(baseBonus)})";
+                label = $"Attack 1 (Rapid Shot, {CharacterStats.FormatMod(baseBonus)})";
             else
-            {
-                int displayIdx = rapidShotActive ? i + 1 : i + 1;
-                label = $"Attack {displayIdx} ({CharacterStats.FormatMod(baseBonus)})";
-            }
+                label = $"Attack {i + 1} ({CharacterStats.FormatMod(baseBonus)})";
 
-            // Record HP before this individual attack
             int hpBeforeAtk = target.Stats.CurrentHP;
 
             CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
                 Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
-                equippedWeapon, false, powerAtkDmgBonus + pbsDmgBonus);
+                equippedWeapon, false, totalFeatDmgBonus);
 
             atk.RacialAttackBonus = racialAtkBonus;
             atk.SizeAttackBonus = Stats.SizeModifier;
@@ -350,12 +411,15 @@ public class CharacterController : MonoBehaviour
             atk.PowerAttackDamageBonus = powerAtkDmgBonus;
             atk.RapidShotActive = rapidShotActive;
             atk.PointBlankShotActive = pointBlankActive;
-            atk.FeatDamageBonus = powerAtkDmgBonus + (pointBlankActive ? 1 : 0);
+            atk.FeatDamageBonus = totalFeatDmgBonus;
+            atk.WeaponFocusBonus = weaponFocusBonus;
+            atk.WeaponSpecBonus = weaponSpecBonus;
+            atk.CombatExpertisePenalty = combatExpertisePenalty;
 
             // Breakdown fields
             atk.BreakdownBAB = baseBonus;
-            atk.BreakdownAbilityMod = isRanged ? Stats.DEXMod : Stats.STRMod;
-            atk.BreakdownAbilityName = isRanged ? "DEX" : "STR";
+            atk.BreakdownAbilityMod = baseAbilityMod;
+            atk.BreakdownAbilityName = baseAbilityName;
 
             // Store range info on each attack result
             if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
@@ -372,7 +436,6 @@ public class CharacterController : MonoBehaviour
                 atk.BaseDamageDiceStr = $"{Stats.BaseDamageCount}d{Stats.BaseDamageDice}";
             }
 
-            // HP tracking
             atk.DefenderHPBefore = hpBeforeAtk;
             atk.DefenderHPAfter = target.Stats.CurrentHP;
 
@@ -402,7 +465,9 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Get the dual wield penalty information.
     /// Returns (mainHandPenalty, offHandPenalty, isLightOffHand).
+    /// Uses FeatManager to account for Two-Weapon Fighting feat.
     /// Without TWF feat: -6/-10 (normal) or -4/-8 (light off-hand).
+    /// With TWF feat: -4/-4 (normal) or -2/-2 (light off-hand).
     /// </summary>
     public (int mainPenalty, int offPenalty, bool lightOffHand) GetDualWieldPenalties()
     {
@@ -412,11 +477,11 @@ public class CharacterController : MonoBehaviour
         var offHandItem = inv.CharacterInventory.LeftHandSlot;
         bool lightOffHand = offHandItem != null && offHandItem.IsLightWeapon;
 
-        // D&D 3.5 TWF penalties without the TWF feat
-        if (lightOffHand)
-            return (-4, -8, true);
-        else
-            return (-6, -10, false);
+        var (mainPen, offPen) = FeatManager.GetTWFPenalties(Stats, lightOffHand);
+        Debug.Log($"[TWF] {Stats.CharacterName}: TWF penalties = {mainPen}/{offPen}" +
+                  (Stats.HasFeat("Two-Weapon Fighting") ? " (TWF feat)" : " (no TWF feat)") +
+                  (lightOffHand ? " (light off-hand)" : ""));
+        return (mainPen, offPen, lightOffHand);
     }
 
     /// <summary>
@@ -474,31 +539,66 @@ public class CharacterController : MonoBehaviour
             pbsDmgBonus = 1;
         }
 
+        // === FEAT: Weapon Focus (+1 attack with chosen weapon) ===
+        int mainWFBonus = FeatManager.GetWeaponFocusBonus(Stats, mainWeapon?.Name ?? "Unarmed");
+        int offWFBonus = FeatManager.GetWeaponFocusBonus(Stats, offWeapon?.Name ?? "Unarmed");
+
+        // === FEAT: Weapon Specialization (+2 damage with chosen weapon) ===
+        int mainWSBonus = FeatManager.GetWeaponSpecializationBonus(Stats, mainWeapon?.Name ?? "Unarmed");
+        int offWSBonus = FeatManager.GetWeaponSpecializationBonus(Stats, offWeapon?.Name ?? "Unarmed");
+
+        // === FEAT: Weapon Finesse (use DEX instead of STR for light/finesse melee) ===
+        int finesseAtkAdjust = 0;
+        string abilityName = isRanged ? "DEX" : "STR";
+        int abilityMod = isRanged ? Stats.DEXMod : Stats.STRMod;
+        if (isMelee && FeatManager.ShouldUseWeaponFinesse(Stats, mainWeapon))
+        {
+            finesseAtkAdjust = Stats.DEXMod - Stats.STRMod;
+            abilityName = "DEX";
+            abilityMod = Stats.DEXMod;
+        }
+
+        // === FEAT: Combat Expertise (trade attack for AC) ===
+        int combatExpertisePenalty = 0;
+        if (isMelee && Stats.HasFeat("Combat Expertise") && Stats.CombatExpertiseValue > 0)
+        {
+            int maxCE = FeatManager.GetMaxCombatExpertise(Stats);
+            combatExpertisePenalty = -Mathf.Min(Stats.CombatExpertiseValue, maxCE);
+        }
+
         // Main hand attack
         int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                         + powerAtkPenalty + pbsAtkBonus;
+                         + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty;
         string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
 
         int mainCritMin = mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20;
         int mainCritMult = mainWeapon.CritMultiplier > 0 ? mainWeapon.CritMultiplier : 2;
 
+        // === FEAT: Improved Critical (double threat range) ===
+        mainCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, mainCritMin);
+
+        int totalMainFeatDmg = powerAtkDmgBonus + (pointBlankActive ? 1 : 0) + mainWSBonus;
+
         int hpBeforeMain = target.Stats.CurrentHP;
         CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
             mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, mainCritMin, mainCritMult,
-            mainWeapon, false, powerAtkDmgBonus + pbsDmgBonus);
+            mainWeapon, false, totalMainFeatDmg);
         mainAtk.RacialAttackBonus = racialAtkBonus;
         mainAtk.SizeAttackBonus = Stats.SizeModifier;
         mainAtk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
         mainAtk.PowerAttackDamageBonus = powerAtkDmgBonus;
         mainAtk.PointBlankShotActive = pointBlankActive;
-        mainAtk.FeatDamageBonus = powerAtkDmgBonus + (pointBlankActive ? 1 : 0);
+        mainAtk.FeatDamageBonus = totalMainFeatDmg;
+        mainAtk.WeaponFocusBonus = mainWFBonus;
+        mainAtk.WeaponSpecBonus = mainWSBonus;
+        mainAtk.CombatExpertisePenalty = combatExpertisePenalty;
         mainAtk.WeaponName = mainWeapon.Name;
         mainAtk.BaseDamageDiceStr = $"{mainWeapon.DamageCount}d{mainWeapon.DamageDice}";
         mainAtk.IsDualWieldAttack = true;
         mainAtk.IsOffHandAttack = false;
         mainAtk.BreakdownBAB = Stats.BaseAttackBonus;
-        mainAtk.BreakdownAbilityMod = isRanged ? Stats.DEXMod : Stats.STRMod;
-        mainAtk.BreakdownAbilityName = isRanged ? "DEX" : "STR";
+        mainAtk.BreakdownAbilityMod = abilityMod;
+        mainAtk.BreakdownAbilityName = abilityName;
         mainAtk.BreakdownDualWieldPenalty = mainPenalty;
         mainAtk.DefenderHPBefore = hpBeforeMain;
         mainAtk.DefenderHPAfter = target.Stats.CurrentHP;
@@ -518,29 +618,37 @@ public class CharacterController : MonoBehaviour
         if (!target.Stats.IsDead)
         {
             int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                            + powerAtkPenalty + pbsAtkBonus;
+                            + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty;
             string offLabel = $"Attack 2 - Off Hand ({offWeapon.Name})";
 
             int offCritMin = offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20;
             int offCritMult = offWeapon.CritMultiplier > 0 ? offWeapon.CritMultiplier : 2;
 
+            // === FEAT: Improved Critical (double threat range) ===
+            offCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, offCritMin);
+
+            int totalOffFeatDmg = powerAtkDmgBonus + (pointBlankActive ? 1 : 0) + offWSBonus;
+
             int hpBeforeOff = target.Stats.CurrentHP;
             CombatResult offAtk = PerformSingleAttackWithCrit(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
                 offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, offCritMin, offCritMult,
-                offWeapon, true, powerAtkDmgBonus + pbsDmgBonus);
+                offWeapon, true, totalOffFeatDmg);
             offAtk.RacialAttackBonus = racialAtkBonus;
             offAtk.SizeAttackBonus = Stats.SizeModifier;
             offAtk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
             offAtk.PowerAttackDamageBonus = powerAtkDmgBonus;
             offAtk.PointBlankShotActive = pointBlankActive;
-            offAtk.FeatDamageBonus = powerAtkDmgBonus + (pointBlankActive ? 1 : 0);
+            offAtk.FeatDamageBonus = totalOffFeatDmg;
+            offAtk.WeaponFocusBonus = offWFBonus;
+            offAtk.WeaponSpecBonus = offWSBonus;
+            offAtk.CombatExpertisePenalty = combatExpertisePenalty;
             offAtk.WeaponName = offWeapon.Name;
             offAtk.BaseDamageDiceStr = $"{offWeapon.DamageCount}d{offWeapon.DamageDice}";
             offAtk.IsDualWieldAttack = true;
             offAtk.IsOffHandAttack = true;
             offAtk.BreakdownBAB = Stats.BaseAttackBonus;
-            offAtk.BreakdownAbilityMod = isRanged ? Stats.DEXMod : Stats.STRMod;
-            offAtk.BreakdownAbilityName = isRanged ? "DEX" : "STR";
+            offAtk.BreakdownAbilityMod = abilityMod;
+            offAtk.BreakdownAbilityName = abilityName;
             offAtk.BreakdownDualWieldPenalty = offPenalty;
             offAtk.DefenderHPBefore = hpBeforeOff;
             offAtk.DefenderHPAfter = target.Stats.CurrentHP;

@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class CharacterCreationUI : MonoBehaviour
 {
     // ========== STATE ==========
-    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, AllocateSkills, Review }
+    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, AllocateSkills, SelectFeats, Review }
 
     public Step CurrentStep = Step.RollStats;
     public int CurrentCharacterIndex = 0; // 0 = PC1, 1 = PC2
@@ -23,6 +23,9 @@ public class CharacterCreationUI : MonoBehaviour
 
     // Reference to skills UI for skill allocation step
     public SkillsUIPanel SkillsUI;
+
+    // Reference to feat selection UI for feat selection step
+    public FeatSelectionUI FeatUI;
 
     // ========== UI REFERENCES ==========
     private GameObject _rootPanel;
@@ -718,6 +721,96 @@ public class CharacterCreationUI : MonoBehaviour
         Debug.Log($"[CharCreation] Skill allocation complete: {totalSpent}/{_tempStatsForSkills.TotalSkillPoints} points spent, {data.SkillRanks.Count} skills with ranks.");
 
         _tempStatsForSkills = null;
+        ShowStep(Step.SelectFeats);
+    }
+
+    // ========== STEP 5b: SELECT FEATS ==========
+
+    private int _featSelectionPhase = 0; // 0 = general feat, 1 = fighter bonus feat
+
+    private void StartFeatSelection()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        data.ComputeFinalStats();
+
+        FeatDefinitions.Init();
+
+        // Create a temp stats for prerequisite checking
+        var tempStats = new CharacterStats(
+            name: data.CharacterName.Length > 0 ? data.CharacterName : (CurrentCharacterIndex == 0 ? "Hero 1" : "Hero 2"),
+            level: 3,
+            characterClass: data.ClassName,
+            str: data.STR, dex: data.DEX, con: data.CON,
+            wis: data.WIS, intelligence: data.INT, cha: data.CHA,
+            bab: data.BAB,
+            armorBonus: 0, shieldBonus: 0,
+            damageDice: 8, damageCount: 1, bonusDamage: 0,
+            baseSpeed: data.BaseSpeed, atkRange: 1,
+            baseHitDieHP: data.HP,
+            raceName: data.RaceName
+        );
+
+        // Characters at level 3 get 2 general feats (level 1 + level 3)
+        // Fighters also get 2 bonus feats (level 1 + level 2)
+        // Humans get 1 bonus feat at level 1
+        // InitFeats already gives some, so we need to account for that
+
+        _featSelectionPhase = 0;
+        data.SelectedFeats.Clear();
+        data.BonusFeats.Clear();
+
+        if (FeatUI != null)
+        {
+            // General feats: 2 at level 3 (lvl 1 + lvl 3)
+            int generalFeats = 2;
+
+            // Human bonus feat
+            if (data.RaceName == "Human") generalFeats++;
+
+            Debug.Log($"[CharCreation] {data.ClassName}: selecting {generalFeats} general feats");
+
+            FeatUI.OnFeatsConfirmed = (selectedFeats) => OnGeneralFeatsSelected(selectedFeats, tempStats);
+            FeatUI.OpenForSelection(tempStats, generalFeats, false);
+        }
+        else
+        {
+            Debug.LogWarning("[CharCreation] FeatUI not available, skipping feat selection.");
+            ShowStep(Step.Review);
+        }
+    }
+
+    private void OnGeneralFeatsSelected(List<string> feats, CharacterStats tempStats)
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        data.SelectedFeats = new List<string>(feats);
+
+        Debug.Log($"[CharCreation] General feats selected: {string.Join(", ", feats)}");
+
+        // Add selected feats to temp stats for prerequisite checking in next phase
+        foreach (string f in feats)
+            tempStats.Feats.Add(f);
+
+        // Fighters get bonus feats
+        if (data.ClassName == "Fighter")
+        {
+            int bonusFeats = 2; // Level 1 + Level 2 bonus feats
+            Debug.Log($"[CharCreation] Fighter: selecting {bonusFeats} bonus feats");
+
+            FeatUI.OnFeatsConfirmed = (bonusSelected) => OnBonusFeatsSelected(bonusSelected);
+            FeatUI.OpenForSelection(tempStats, bonusFeats, true);
+        }
+        else
+        {
+            ShowStep(Step.Review);
+        }
+    }
+
+    private void OnBonusFeatsSelected(List<string> feats)
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        data.BonusFeats = new List<string>(feats);
+
+        Debug.Log($"[CharCreation] Bonus feats selected: {string.Join(", ", feats)}");
         ShowStep(Step.Review);
     }
 
@@ -856,6 +949,28 @@ public class CharacterCreationUI : MonoBehaviour
             }
         }
 
+        // Show selected feats
+        if ((data.SelectedFeats != null && data.SelectedFeats.Count > 0) ||
+            (data.BonusFeats != null && data.BonusFeats.Count > 0))
+        {
+            review += "\n--- Feats ---\n";
+            if (data.SelectedFeats != null)
+            {
+                foreach (string feat in data.SelectedFeats)
+                    review += $"  • {feat}\n";
+            }
+            if (data.BonusFeats != null && data.BonusFeats.Count > 0)
+            {
+                review += "  (Fighter Bonus Feats)\n";
+                foreach (string feat in data.BonusFeats)
+                    review += $"  • {feat}\n";
+            }
+            if (!string.IsNullOrEmpty(data.WeaponFocusChoice))
+                review += $"  Weapon Focus: {data.WeaponFocusChoice}\n";
+            if (!string.IsNullOrEmpty(data.SkillFocusChoice))
+                review += $"  Skill Focus: {data.SkillFocusChoice}\n";
+        }
+
         _reviewText.text = review;
 
         // Default name
@@ -913,7 +1028,7 @@ public class CharacterCreationUI : MonoBehaviour
         {
             case Step.RollStats:
                 _step1Panel.SetActive(true);
-                _stepText.text = "Step 1 of 6: Roll Stats";
+                _stepText.text = "Step 1 of 7: Roll Stats";
                 // Reset roll UI
                 if (_currentRolls == null)
                 {
@@ -927,7 +1042,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.AssignStats:
                 _step2Panel.SetActive(true);
-                _stepText.text = "Step 2 of 6: Assign Stats";
+                _stepText.text = "Step 2 of 7: Assign Stats";
                 // Reset assignment
                 _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
                 _rollUsed = new bool[6];
@@ -937,7 +1052,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseRace:
                 _step3Panel.SetActive(true);
-                _stepText.text = "Step 3 of 6: Choose Race";
+                _stepText.text = "Step 3 of 7: Choose Race";
                 _selectedRace = null;
                 _raceInfoText.text = "Select a race to see details.";
                 _racePreviewText.text = "";
@@ -954,7 +1069,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseClass:
                 _step4Panel.SetActive(true);
-                _stepText.text = "Step 4 of 6: Choose Class";
+                _stepText.text = "Step 4 of 7: Choose Class";
                 _selectedClass = null;
                 _classInfoText.text = "";
                 _confirmClassButton.interactable = false;
@@ -969,13 +1084,18 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.AllocateSkills:
                 // Skills allocation is handled by the SkillsUIPanel overlay
-                _stepText.text = "Step 5 of 6: Allocate Skills";
+                _stepText.text = "Step 5 of 7: Allocate Skills";
                 StartSkillAllocation();
+                break;
+
+            case Step.SelectFeats:
+                _stepText.text = "Step 6 of 7: Select Feats";
+                StartFeatSelection();
                 break;
 
             case Step.Review:
                 _step5Panel.SetActive(true);
-                _stepText.text = "Step 6 of 6: Review & Name";
+                _stepText.text = "Step 7 of 7: Review & Name";
                 _nameInput.text = "";
                 RefreshReview();
                 break;
@@ -995,7 +1115,13 @@ public class CharacterCreationUI : MonoBehaviour
                     SkillsUI.Close();
                 ShowStep(Step.ChooseClass);
                 break;
-            case Step.Review: ShowStep(Step.AllocateSkills); break;
+            case Step.SelectFeats:
+                // Close feat UI if open
+                if (FeatUI != null && FeatUI.IsOpen)
+                    FeatUI.Close();
+                ShowStep(Step.AllocateSkills);
+                break;
+            case Step.Review: ShowStep(Step.SelectFeats); break;
         }
     }
 
@@ -1022,6 +1148,8 @@ public class CharacterCreationUI : MonoBehaviour
     {
         Debug.Log("[CharCreation] Quick Start - using default Aldric and Lyra");
 
+        FeatDefinitions.Init();
+
         // PC1: Aldric the Dwarf Fighter
         var pc1 = CreatedCharacters[0];
         pc1.CharacterName = "Aldric";
@@ -1036,6 +1164,12 @@ public class CharacterCreationUI : MonoBehaviour
         pc1.SkillRanks["Intimidate"] = 4;
         pc1.SkillRanks["Jump"] = 3;
         pc1.SkillRanks["Swim"] = 3;
+        // Aldric feats: 2 general + 2 fighter bonus = 4 total
+        // General feats (level 1 + level 3)
+        pc1.SelectedFeats = new System.Collections.Generic.List<string> { "Power Attack", "Cleave" };
+        // Fighter bonus feats (level 1 + level 2)
+        pc1.BonusFeats = new System.Collections.Generic.List<string> { "Weapon Focus", "Improved Initiative" };
+        pc1.WeaponFocusChoice = "Longsword";
 
         // PC2: Lyra the Elf Rogue
         var pc2 = CreatedCharacters[1];
@@ -1060,6 +1194,8 @@ public class CharacterCreationUI : MonoBehaviour
         pc2.SkillRanks["Climb"] = 4;
         pc2.SkillRanks["Balance"] = 3;
         pc2.SkillRanks["Sleight of Hand"] = 2;
+        // Lyra feats: 2 general feats (level 1 + level 3)
+        pc2.SelectedFeats = new System.Collections.Generic.List<string> { "Weapon Finesse", "Dodge" };
 
         IsComplete = true;
         HideCreationUI();

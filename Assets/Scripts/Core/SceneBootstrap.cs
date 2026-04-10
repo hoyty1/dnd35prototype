@@ -487,6 +487,7 @@ public class SceneBootstrap : MonoBehaviour
             // Initialize race database early for character creation
             RaceDatabase.Init();
             ItemDatabase.Init();
+            FeatDefinitions.Init();
 
             CharacterCreationUI ccUI = canvas.gameObject.AddComponent<CharacterCreationUI>();
             ccUI.BuildUI(canvas);
@@ -497,6 +498,11 @@ public class SceneBootstrap : MonoBehaviour
             skillsUI.BuildUI(canvas);
             gm.SkillsUI = skillsUI;
             ccUI.SkillsUI = skillsUI;
+
+            // Create Feat Selection UI Panel
+            FeatSelectionUI featUI = canvas.gameObject.AddComponent<FeatSelectionUI>();
+            featUI.BuildUI(canvas);
+            ccUI.FeatUI = featUI;
         }
 
         // Wire up button events (deferred to next frame so GameManager.Instance is set)

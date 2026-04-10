@@ -64,6 +64,9 @@ public class CombatResult
     public int PowerAttackDamageBonus;    // Actual damage bonus from Power Attack (may be 2× for two-handed)
     public bool RapidShotActive;          // Whether Rapid Shot was active for this attack
     public bool PointBlankShotActive;     // Whether Point Blank Shot bonus was applied
+    public int WeaponFocusBonus;          // Attack bonus from Weapon Focus/Greater Weapon Focus
+    public int WeaponSpecBonus;           // Damage bonus from Weapon Specialization/Greater
+    public int CombatExpertisePenalty;    // Attack penalty from Combat Expertise (for AC bonus)
 
     // ===== DETAILED BREAKDOWN FIELDS (for enhanced combat log) =====
     public int BreakdownBAB;              // Base Attack Bonus used for this attack
@@ -127,6 +130,9 @@ public class CombatResult
         if (PowerAttackValue > 0) activeFeats.Add($"Power Attack (-{PowerAttackValue} atk/+{PowerAttackDamageBonus} dmg)");
         if (RapidShotActive) activeFeats.Add("Rapid Shot (-2 all attacks)");
         if (PointBlankShotActive) activeFeats.Add("Point Blank Shot (+1 atk/+1 dmg)");
+        if (WeaponFocusBonus > 0) activeFeats.Add($"Weapon Focus (+{WeaponFocusBonus} atk)");
+        if (WeaponSpecBonus > 0) activeFeats.Add($"Weapon Spec (+{WeaponSpecBonus} dmg)");
+        if (CombatExpertisePenalty != 0) activeFeats.Add($"Combat Expertise ({CombatExpertisePenalty} atk/+{-CombatExpertisePenalty} AC)");
         if (activeFeats.Count > 0)
             sb.AppendLine($"  Active Feats: {string.Join(", ", activeFeats)}");
 
@@ -172,6 +178,14 @@ public class CombatResult
         // Point Blank Shot attack bonus
         if (PointBlankShotActive)
             sb.AppendLine($"    {FormatModLine(1, "Point Blank Shot")}");
+
+        // Weapon Focus bonus
+        if (WeaponFocusBonus > 0)
+            sb.AppendLine($"    {FormatModLine(WeaponFocusBonus, "Weapon Focus")}");
+
+        // Combat Expertise penalty
+        if (CombatExpertisePenalty != 0)
+            sb.AppendLine($"    {FormatModLine(CombatExpertisePenalty, "Combat Expertise")}");
 
         // Range penalty
         if (IsRangedAttack && RangePenalty != 0)
@@ -234,8 +248,9 @@ public class CombatResult
             if (PointBlankShotActive)
                 sb.AppendLine($"    {FormatModLine(1, "Point Blank Shot")}");
 
-            // Bonus damage (magic, etc.)
-            // (already included in base if not crit - skip separate line)
+            // Weapon Specialization damage bonus
+            if (WeaponSpecBonus > 0)
+                sb.AppendLine($"    {FormatModLine(WeaponSpecBonus, "Weapon Spec")}");
 
             // Total damage line
             sb.AppendLine($"    = {Damage} damage");
@@ -293,6 +308,10 @@ public class CombatResult
             sb.AppendLine($"      {FormatModLine(-2, "Rapid Shot")}");
         if (PointBlankShotActive)
             sb.AppendLine($"      {FormatModLine(1, "Point Blank Shot")}");
+        if (WeaponFocusBonus > 0)
+            sb.AppendLine($"      {FormatModLine(WeaponFocusBonus, "Weapon Focus")}");
+        if (CombatExpertisePenalty != 0)
+            sb.AppendLine($"      {FormatModLine(CombatExpertisePenalty, "Combat Expertise")}");
         if (IsRangedAttack && RangePenalty != 0)
             sb.AppendLine($"      {FormatModLine(RangePenalty, "range")}");
         if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)

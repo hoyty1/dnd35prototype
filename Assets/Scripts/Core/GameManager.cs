@@ -170,9 +170,28 @@ public class GameManager : MonoBehaviour
             }
         }
 
+        // Apply feats from character creation
+        FeatDefinitions.Init();
+        if (pc1Data.SelectedFeats != null && pc1Data.SelectedFeats.Count > 0)
+        {
+            pc1Stats.AddFeats(pc1Data.SelectedFeats);
+            Debug.Log($"[GameManager] {pc1Data.CharacterName} general feats: {string.Join(", ", pc1Data.SelectedFeats)}");
+        }
+        if (pc1Data.BonusFeats != null && pc1Data.BonusFeats.Count > 0)
+        {
+            pc1Stats.AddFeats(pc1Data.BonusFeats);
+            Debug.Log($"[GameManager] {pc1Data.CharacterName} bonus feats: {string.Join(", ", pc1Data.BonusFeats)}");
+        }
+        if (!string.IsNullOrEmpty(pc1Data.WeaponFocusChoice))
+            pc1Stats.WeaponFocusChoice = pc1Data.WeaponFocusChoice;
+        if (!string.IsNullOrEmpty(pc1Data.SkillFocusChoice))
+            pc1Stats.SkillFocusChoice = pc1Data.SkillFocusChoice;
+        FeatManager.ApplyPassiveFeats(pc1Stats);
+
         Debug.Log($"[GameManager] {pc1Data.CharacterName} ({pc1Data.RaceName} {pc1Data.ClassName}): " +
                   $"STR {pc1Stats.STR} DEX {pc1Stats.DEX} CON {pc1Stats.CON} " +
-                  $"HP {pc1Stats.MaxHP} AC {pc1Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc1Stats.AttackBonus)}");
+                  $"HP {pc1Stats.MaxHP} AC {pc1Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc1Stats.AttackBonus)} " +
+                  $"Feats: {pc1Stats.Feats.Count}");
 
         // ===== PC2 =====
         pc2Data.ComputeFinalStats();
@@ -220,9 +239,27 @@ public class GameManager : MonoBehaviour
             }
         }
 
+        // Apply feats from character creation
+        if (pc2Data.SelectedFeats != null && pc2Data.SelectedFeats.Count > 0)
+        {
+            pc2Stats.AddFeats(pc2Data.SelectedFeats);
+            Debug.Log($"[GameManager] {pc2Data.CharacterName} general feats: {string.Join(", ", pc2Data.SelectedFeats)}");
+        }
+        if (pc2Data.BonusFeats != null && pc2Data.BonusFeats.Count > 0)
+        {
+            pc2Stats.AddFeats(pc2Data.BonusFeats);
+            Debug.Log($"[GameManager] {pc2Data.CharacterName} bonus feats: {string.Join(", ", pc2Data.BonusFeats)}");
+        }
+        if (!string.IsNullOrEmpty(pc2Data.WeaponFocusChoice))
+            pc2Stats.WeaponFocusChoice = pc2Data.WeaponFocusChoice;
+        if (!string.IsNullOrEmpty(pc2Data.SkillFocusChoice))
+            pc2Stats.SkillFocusChoice = pc2Data.SkillFocusChoice;
+        FeatManager.ApplyPassiveFeats(pc2Stats);
+
         Debug.Log($"[GameManager] {pc2Data.CharacterName} ({pc2Data.RaceName} {pc2Data.ClassName}): " +
                   $"STR {pc2Stats.STR} DEX {pc2Stats.DEX} CON {pc2Stats.CON} " +
-                  $"HP {pc2Stats.MaxHP} AC {pc2Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc2Stats.AttackBonus)}");
+                  $"HP {pc2Stats.MaxHP} AC {pc2Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc2Stats.AttackBonus)} " +
+                  $"Feats: {pc2Stats.Feats.Count}");
 
         // ===== NPC =====
         CharacterStats npcStats = new CharacterStats(

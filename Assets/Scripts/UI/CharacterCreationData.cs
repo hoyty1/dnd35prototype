@@ -23,6 +23,12 @@ public class CharacterCreationData
     // Step 5: Skills
     public Dictionary<string, int> SkillRanks = new Dictionary<string, int>();
 
+    // Step 5b: Feats
+    public List<string> SelectedFeats = new List<string>();
+    public List<string> BonusFeats = new List<string>(); // Fighter bonus feats
+    public string WeaponFocusChoice = "";
+    public string SkillFocusChoice = "";
+
     // Step 6: Name
     public string CharacterName = "";
 

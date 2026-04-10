@@ -18,11 +18,33 @@ public class CharacterStats
     public bool IsRogue => CharacterClass == "Rogue";
 
     // ========== FEATS (D&D 3.5) ==========
-    /// <summary>Set of feats this character has. Auto-granted based on class.</summary>
+    /// <summary>Set of feats this character has.</summary>
     public HashSet<string> Feats = new HashSet<string>();
 
     /// <summary>Check if this character has a specific feat.</summary>
     public bool HasFeat(string featName) => Feats.Contains(featName);
+
+    /// <summary>Chosen weapon for Weapon Focus/Specialization/Improved Critical.</summary>
+    public string WeaponFocusChoice;
+
+    /// <summary>Chosen skill for Skill Focus.</summary>
+    public string SkillFocusChoice;
+
+    /// <summary>Combat Expertise value (0 to 5): trade attack for AC.</summary>
+    public int CombatExpertiseValue;
+
+    /// <summary>
+    /// Initialize feats from a list of feat names (from character creation).
+    /// Does NOT clear existing feats - adds to them.
+    /// </summary>
+    public void AddFeats(List<string> featNames)
+    {
+        foreach (string feat in featNames)
+        {
+            Feats.Add(feat);
+            Debug.Log($"[Feats] {CharacterName} gained feat: {feat}");
+        }
+    }
 
     /// <summary>
     /// Auto-grant feats based on character class.
@@ -41,6 +63,38 @@ public class CharacterStats
             Feats.Add("Rapid Shot");
         }
     }
+
+    // ========== FEAT-DERIVED STATS ==========
+
+    /// <summary>Total initiative modifier: DEX mod + feat bonuses (Improved Initiative).</summary>
+    public int InitiativeModifier => DEXMod + FeatManager.GetInitiativeBonus(this);
+
+    /// <summary>Fortitude save bonus from feats (Great Fortitude).</summary>
+    public int FeatFortitudeBonus => FeatManager.GetFortitudeSaveBonus(this);
+
+    /// <summary>Reflex save bonus from feats (Lightning Reflexes).</summary>
+    public int FeatReflexBonus => FeatManager.GetReflexSaveBonus(this);
+
+    /// <summary>Will save bonus from feats (Iron Will).</summary>
+    public int FeatWillBonus => FeatManager.GetWillSaveBonus(this);
+
+    /// <summary>HP bonus from feats (Toughness).</summary>
+    public int FeatHPBonus => FeatManager.GetTotalHPBonus(this);
+
+    /// <summary>Total Max HP including feat bonuses.</summary>
+    public int TotalMaxHP => MaxHP + FeatHPBonus;
+
+    /// <summary>AC bonus from Dodge feat.</summary>
+    public int FeatACBonus => FeatManager.GetACBonus(this);
+
+    /// <summary>Attack bonus from Weapon Focus/Greater Weapon Focus.</summary>
+    public int WeaponFocusAttackBonus => FeatManager.GetWeaponFocusBonus(this, WeaponFocusChoice ?? "");
+
+    /// <summary>Damage bonus from Weapon Specialization/Greater Weapon Specialization.</summary>
+    public int WeaponSpecDamageBonus => FeatManager.GetWeaponSpecializationBonus(this, WeaponFocusChoice ?? "");
+
+    /// <summary>Get feat bonus for a specific skill.</summary>
+    public int GetFeatSkillBonus(string skillName) => FeatManager.GetSkillFeatBonus(this, skillName);
 
     // ========== RACE ==========
     /// <summary>The character's race data (Dwarf, Elf, Human, etc.).</summary>
@@ -592,14 +646,16 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Get the total bonus for a skill (ranks + ability mod + class skill bonus).
+    /// Get the total bonus for a skill (ranks + ability mod + class skill bonus + feat bonuses).
     /// Returns 0 if skill not found.
     /// </summary>
     public int GetSkillBonus(string skillName)
     {
         if (!Skills.ContainsKey(skillName)) return 0;
         Skill skill = Skills[skillName];
-        return skill.GetTotalBonus(GetAbilityModForSkill(skill));
+        int baseBonus = skill.GetTotalBonus(GetAbilityModForSkill(skill));
+        int featBonus = GetFeatSkillBonus(skillName);
+        return baseBonus + featBonus;
     }
 
     /// <summary>
@@ -626,10 +682,12 @@ public class CharacterStats
 
         int d20 = Random.Range(1, 21);
         int totalBonus = skill.GetTotalBonus(abilityMod);
-        int total = d20 + totalBonus;
+        int featBonus = GetFeatSkillBonus(skillName);
+        int total = d20 + totalBonus + featBonus;
 
         string classStr = skill.ClassSkillBonus > 0 ? $" + {skill.ClassSkillBonus}(class)" : "";
-        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){classStr} = {total}");
+        string featStr = featBonus > 0 ? $" + {featBonus}(feat)" : "";
+        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){classStr}{featStr} = {total}");
 
         return total;
     }
