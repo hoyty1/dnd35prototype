@@ -5,7 +5,7 @@ using UnityEngine.UI;
 /// Bootstraps the entire game scene programmatically.
 /// Attach this to a single empty GameObject in the scene.
 /// Creates all required GameObjects, components, and UI at runtime.
-/// Now supports two PC characters (PC1, PC2) and one NPC with full D&D 3.5 stats display.
+/// Supports two PC characters (PC1, PC2) and multiple NPC enemies with full D&D 3.5 stats display.
 /// </summary>
 public class SceneBootstrap : MonoBehaviour
 {
@@ -14,9 +14,9 @@ public class SceneBootstrap : MonoBehaviour
         // Build the entire scene
         SetupCamera();
         SquareGrid grid = CreateSquareGrid();
-        var (pc1, pc2, npc) = CreateCharacters();
+        var (pc1, pc2, npc, npcList) = CreateCharacters();
         CombatUI combatUI = CreateUI();
-        SetupGameManager(grid, pc1, pc2, npc, combatUI);
+        SetupGameManager(grid, pc1, pc2, npc, combatUI, npcList);
     }
 
     // ========== CAMERA ==========
@@ -80,7 +80,7 @@ public class SceneBootstrap : MonoBehaviour
     }
 
     // ========== CHARACTERS ==========
-    private (CharacterController pc1, CharacterController pc2, CharacterController npc) CreateCharacters()
+    private (CharacterController pc1, CharacterController pc2, CharacterController npc, System.Collections.Generic.List<CharacterController> npcList) CreateCharacters()
     {
         // PC1
         GameObject pc1GO = new GameObject("PC_Hero1");
@@ -94,13 +94,29 @@ public class SceneBootstrap : MonoBehaviour
         CharacterController pc2 = pc2GO.AddComponent<CharacterController>();
         pc2.IsPlayerControlled = true;
 
-        // NPC
-        GameObject npcGO = new GameObject("NPC_Goblin");
+        // Legacy NPC (first enemy — kept for backward compatibility)
+        GameObject npcGO = new GameObject("NPC_Enemy_0");
         npcGO.AddComponent<SpriteRenderer>();
         CharacterController npc = npcGO.AddComponent<CharacterController>();
         npc.IsPlayerControlled = false;
 
-        return (pc1, pc2, npc);
+        // Create additional NPC GameObjects for the encounter
+        // Default encounter: Skeleton Archer, Orc Berserker, Hobgoblin Sergeant
+        var npcList = new System.Collections.Generic.List<CharacterController>();
+        npcList.Add(npc); // first NPC reuses the legacy field
+
+        string[] enemyNames = { "NPC_Enemy_1", "NPC_Enemy_2" };
+        for (int i = 0; i < enemyNames.Length; i++)
+        {
+            GameObject go = new GameObject(enemyNames[i]);
+            go.AddComponent<SpriteRenderer>();
+            CharacterController cc = go.AddComponent<CharacterController>();
+            cc.IsPlayerControlled = false;
+            npcList.Add(cc);
+        }
+
+        Debug.Log($"[SceneBootstrap] Created {npcList.Count} NPC GameObjects for encounter.");
+        return (pc1, pc2, npc, npcList);
     }
 
     // ========== UI ==========
@@ -147,8 +163,9 @@ public class SceneBootstrap : MonoBehaviour
         // --- PC2 Stats Panel (next to PC1) ---
         CreatePC2Panel(canvasGO.transform, combatUI);
 
-        // --- NPC Stats Panel (bottom right) ---
-        CreateNPCPanel(canvasGO.transform, combatUI);
+        // --- NPC Stats Panels (right side, stacked for each enemy) ---
+        CreateNPCPanel(canvasGO.transform, combatUI); // Legacy single NPC panel (index 0)
+        CreateMultiNPCPanels(canvasGO.transform, combatUI, 3); // 3 enemy panels
 
         // --- Combat Log (bottom center, raised above panels) ---
         // Taller to accommodate multi-attack results (full attack / dual wield)
@@ -438,6 +455,96 @@ public class SceneBootstrap : MonoBehaviour
             "Speed: 3 sq (15 ft)", 12, Color.white, TextAnchor.MiddleLeft);
     }
 
+    /// <summary>
+    /// Create multiple NPC stat panels stacked vertically on the right side.
+    /// Each panel is a compact version of the single-NPC panel, sized to fit
+    /// multiple enemies on screen simultaneously.
+    /// </summary>
+    private void CreateMultiNPCPanels(Transform parent, CombatUI combatUI, int count)
+    {
+        // Compact panel dimensions for multi-enemy display
+        float compactWidth = 260f;
+        float compactHeight = 130f;
+        float spacing = 5f;
+
+        // Hide the legacy single-NPC panel — we'll use multi-panels instead
+        // (Legacy panel kept for backward compat but hidden in multi-NPC mode)
+
+        for (int i = 0; i < count; i++)
+        {
+            float yOffset = 10f + i * (compactHeight + spacing);
+
+            NPCPanelUI panelUI = new NPCPanelUI();
+
+            // Panel anchored to bottom-right, stacked upward
+            Color panelColor = new Color(0.3f, 0.1f, 0.1f, 0.85f);
+            GameObject panel = CreatePanel(parent, $"NPCPanel_{i}",
+                new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
+                new Vector2(-10, yOffset), new Vector2(compactWidth, compactHeight),
+                panelColor);
+            panelUI.Panel = panel;
+
+            float y = compactHeight - 14;
+
+            // Name
+            panelUI.NameText = CreateText(panel.transform, $"NPCName_{i}",
+                Vector2.zero, Vector2.zero, Vector2.zero,
+                new Vector2(8, y), new Vector2(compactWidth - 16, 18),
+                $"Enemy {i + 1}", 13, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
+            y -= 18;
+
+            // Ability scores (compact single line)
+            panelUI.AbilityText = CreateText(panel.transform, $"NPCAbilities_{i}",
+                Vector2.zero, Vector2.zero, Vector2.zero,
+                new Vector2(8, y - 10), new Vector2(compactWidth - 16, 20),
+                "STR -- DEX -- CON -- WIS -- INT -- CHA --", 9,
+                new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
+            y -= 22;
+
+            // Separator
+            CreatePanel(panel.transform, $"NPCSep_{i}",
+                Vector2.zero, Vector2.zero, Vector2.zero,
+                new Vector2(8, y), new Vector2(compactWidth - 16, 1),
+                new Color(1, 1, 1, 0.2f));
+            y -= 4;
+
+            // HP text
+            panelUI.HPText = CreateText(panel.transform, $"NPCHP_{i}",
+                Vector2.zero, Vector2.zero, Vector2.zero,
+                new Vector2(8, y), new Vector2(compactWidth - 16, 16),
+                "HP: --/--", 13, Color.white, TextAnchor.MiddleLeft);
+            y -= 14;
+
+            // HP bar
+            panelUI.HPBar = CreateHPBar(panel.transform, $"NPCHPBar_{i}",
+                new Vector2(8, y), new Vector2(compactWidth - 16, 8),
+                new Color(0.8f, 0.2f, 0.2f));
+            y -= 14;
+
+            // AC and Atk on same row
+            panelUI.ACText = CreateText(panel.transform, $"NPCAC_{i}",
+                Vector2.zero, Vector2.zero, Vector2.zero,
+                new Vector2(8, y), new Vector2(120, 16),
+                "AC: --", 12, Color.white, TextAnchor.MiddleLeft);
+
+            panelUI.AtkText = CreateText(panel.transform, $"NPCAtk_{i}",
+                Vector2.zero, Vector2.zero, Vector2.zero,
+                new Vector2(130, y), new Vector2(120, 16),
+                "Atk: --", 12, Color.white, TextAnchor.MiddleLeft);
+            y -= 16;
+
+            // Speed
+            panelUI.SpeedText = CreateText(panel.transform, $"NPCSpeed_{i}",
+                Vector2.zero, Vector2.zero, Vector2.zero,
+                new Vector2(8, y), new Vector2(compactWidth - 16, 14),
+                "Speed: -- sq", 10, Color.white, TextAnchor.MiddleLeft);
+
+            combatUI.NPCPanels.Add(panelUI);
+        }
+
+        Debug.Log($"[SceneBootstrap] Created {count} NPC stat panels.");
+    }
+
     /// <summary>Create feat control panels (Power Attack slider, Rapid Shot toggle).</summary>
     private void CreateFeatControls(Transform canvasTransform, CombatUI combatUI, float actionPanelWidth)
     {
@@ -483,7 +590,7 @@ public class SceneBootstrap : MonoBehaviour
     }
 
     // ========== GAME MANAGER ==========
-    private void SetupGameManager(SquareGrid grid, CharacterController pc1, CharacterController pc2, CharacterController npc, CombatUI combatUI)
+    private void SetupGameManager(SquareGrid grid, CharacterController pc1, CharacterController pc2, CharacterController npc, CombatUI combatUI, System.Collections.Generic.List<CharacterController> npcList = null)
     {
         GameManager gm = gameObject.AddComponent<GameManager>();
         gm.Grid = grid;
@@ -491,6 +598,14 @@ public class SceneBootstrap : MonoBehaviour
         gm.PC2 = pc2;
         gm.NPC = npc;
         gm.CombatUI = combatUI;
+
+        // Set up multi-NPC list
+        if (npcList != null)
+            gm.NPCs = npcList;
+        else
+        {
+            gm.NPCs = new System.Collections.Generic.List<CharacterController> { npc };
+        }
 
         // Create Inventory UI on the canvas
         Canvas canvas = combatUI.GetComponent<Canvas>();

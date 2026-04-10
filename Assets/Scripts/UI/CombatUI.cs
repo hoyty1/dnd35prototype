@@ -42,6 +42,9 @@ public class CombatUI : MonoBehaviour
     public Text NPCAbilityText;
     public Image NPCHPBar;
 
+    /// <summary>UI data for each NPC stat panel (supports multiple enemies).</summary>
+    public List<NPCPanelUI> NPCPanels = new List<NPCPanelUI>();
+
     [Header("Combat Log")]
     public Text CombatLogText;
 
@@ -78,13 +81,34 @@ public class CombatUI : MonoBehaviour
     public Image PCHPBar { get => PC1HPBar; set => PC1HPBar = value; }
 
     /// <summary>
-    /// Update stat displays for both PCs and the NPC.
+    /// Update stat displays for both PCs and all NPCs.
+    /// Supports the new multi-NPC system while maintaining backward compatibility.
     /// </summary>
     public void UpdateAllStats(CharacterController pc1, CharacterController pc2, CharacterController npc)
     {
         UpdateCharacterStats(pc1, PC1NameText, PC1HPText, PC1ACText, PC1AtkText, PC1SpeedText, PC1AbilityText, PC1HPBar);
         UpdateCharacterStats(pc2, PC2NameText, PC2HPText, PC2ACText, PC2AtkText, PC2SpeedText, PC2AbilityText, PC2HPBar);
         UpdateCharacterStats(npc, NPCNameText, NPCHPText, NPCACText, NPCAtkText, NPCSpeedText, NPCAbilityText, NPCHPBar);
+    }
+
+    /// <summary>
+    /// Update stat displays for both PCs and multiple NPCs.
+    /// </summary>
+    public void UpdateAllStatsMultiNPC(CharacterController pc1, CharacterController pc2, List<CharacterController> npcs)
+    {
+        UpdateCharacterStats(pc1, PC1NameText, PC1HPText, PC1ACText, PC1AtkText, PC1SpeedText, PC1AbilityText, PC1HPBar);
+        UpdateCharacterStats(pc2, PC2NameText, PC2HPText, PC2ACText, PC2AtkText, PC2SpeedText, PC2AbilityText, PC2HPBar);
+
+        // Update each NPC panel
+        for (int i = 0; i < NPCPanels.Count && i < npcs.Count; i++)
+        {
+            var p = NPCPanels[i];
+            UpdateCharacterStats(npcs[i], p.NameText, p.HPText, p.ACText, p.AtkText, p.SpeedText, p.AbilityText, p.HPBar);
+        }
+
+        // Also update legacy single-NPC fields if they exist (backward compat)
+        if (npcs.Count > 0)
+            UpdateCharacterStats(npcs[0], NPCNameText, NPCHPText, NPCACText, NPCAtkText, NPCSpeedText, NPCAbilityText, NPCHPBar);
     }
 
     private void UpdateCharacterStats(CharacterController ch,
@@ -716,4 +740,23 @@ public class CombatUI : MonoBehaviour
 
         return btn;
     }
+}
+
+
+
+/// <summary>
+/// UI element references for a single NPC stats panel.
+/// Created dynamically by SceneBootstrap for each enemy in the encounter.
+/// </summary>
+[System.Serializable]
+public class NPCPanelUI
+{
+    public GameObject Panel;
+    public Text NameText;
+    public Text HPText;
+    public Text ACText;
+    public Text AtkText;
+    public Text SpeedText;
+    public Text AbilityText;
+    public Image HPBar;
 }

@@ -1,11 +1,12 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// Central game manager handling turn flow with D&D 3.5 action economy.
-/// Supports two PC characters and one NPC with intelligent targeting.
-/// Turn order: PC1 → PC2 → NPC → repeat
+/// Supports two PC characters and multiple NPC enemies with varied AI behaviors.
+/// Turn order: PC1 → PC2 → All NPCs (sequential) → repeat
 ///
 /// Action Economy per turn:
 /// - 1 Move Action + 1 Standard Action (in any order)
@@ -26,7 +27,13 @@ public class GameManager : MonoBehaviour
     [Header("Characters")]
     public CharacterController PC1;
     public CharacterController PC2;
-    public CharacterController NPC;
+    public CharacterController NPC;  // Legacy field — first NPC for backward compat
+
+    /// <summary>All NPC enemies in the encounter (supports multiple enemies).</summary>
+    public List<CharacterController> NPCs = new List<CharacterController>();
+
+    /// <summary>AI behavior assigned to each NPC (indexed same as NPCs list).</summary>
+    private List<EnemyAIBehavior> _npcAIBehaviors = new List<EnemyAIBehavior>();
 
     // Legacy alias
     public CharacterController PC { get => PC1; set => PC1 = value; }
@@ -112,7 +119,7 @@ public class GameManager : MonoBehaviour
                   $"{pc2Data.CharacterName} ({pc2Data.RaceName} {pc2Data.ClassName})");
 
         SetupCreatedCharacters(pc1Data, pc2Data);
-        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+        UpdateAllStatsUI();
         StartPCTurn(PC1);
     }
 
@@ -259,29 +266,8 @@ public class GameManager : MonoBehaviour
                   $"HP {pc2Stats.MaxHP} AC {pc2Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc2Stats.AttackBonus)} " +
                   $"Feats: {pc2Stats.Feats.Count}");
 
-        // ===== NPC =====
-        CharacterStats npcStats = new CharacterStats(
-            name: "Goblin Warchief",
-            level: 2,
-            characterClass: "Warrior",
-            str: 14, dex: 15, con: 13, wis: 10, intelligence: 10, cha: 8,
-            bab: 2,
-            armorBonus: 3,
-            shieldBonus: 1,
-            damageDice: 8,
-            damageCount: 1,
-            bonusDamage: 0,
-            baseSpeed: 3,
-            atkRange: 1,
-            baseHitDieHP: 12
-        );
-        npcStats.CreatureTags.Add("Goblinoid");
-
-        Sprite npcAlive = LoadSprite("Sprites/npc_enemy_alive");
-        Sprite npcDead = LoadSprite("Sprites/npc_enemy_dead");
-
-        Vector2Int npcStart = new Vector2Int(16, 10);
-        NPC.Init(npcStats, npcStart, npcAlive, npcDead);
+        // ===== NPCs (Multiple Enemies) =====
+        SetupEnemyEncounter();
     }
 
     /// <summary>
@@ -617,34 +603,203 @@ public class GameManager : MonoBehaviour
             pc2SR.color = new Color(0.6f, 0.7f, 1f, 1f);
 
         // ==========================================
-        // NPC: "Goblin Warchief" - Goblinoid creature
-        // Goblinoid tag: triggers Dwarf's +1 racial attack bonus
+        // NPCs: Multiple enemies from EnemyDatabase
         // ==========================================
-        CharacterStats npcStats = new CharacterStats(
-            name: "Goblin Warchief",
-            level: 2,
-            characterClass: "Warrior",
-            str: 14, dex: 15, con: 13, wis: 10, intelligence: 10, cha: 8,
-            bab: 2,
-            armorBonus: 3,
-            shieldBonus: 1,
-            damageDice: 8,
-            damageCount: 1,
-            bonusDamage: 0,
-            baseSpeed: 3,
-            atkRange: 1,
-            baseHitDieHP: 12
-        );
-        // Tag the goblin as a Goblinoid for racial attack bonus purposes
-        npcStats.CreatureTags.Add("Goblinoid");
+        SetupEnemyEncounter();
+
+        UpdateAllStatsUI();
+    }
+
+    // ========== ENEMY ENCOUNTER SETUP ==========
+
+    /// <summary>
+    /// Default enemy encounter IDs and grid positions.
+    /// The encounter features three varied enemies:
+    ///   1. Skeleton Archer  — ranged threat that stays back and shoots
+    ///   2. Orc Berserker    — aggressive melee brute that charges in
+    ///   3. Hobgoblin Sergeant — tanky armored melee fighter
+    /// </summary>
+    private static readonly string[] DefaultEncounterEnemyIds = {
+        "skeleton_archer",
+        "orc_berserker",
+        "hobgoblin_sergeant"
+    };
+
+    private static readonly Vector2Int[] DefaultEncounterPositions = {
+        new Vector2Int(16, 6),   // Skeleton Archer — back line
+        new Vector2Int(14, 10),  // Orc Berserker — mid-front
+        new Vector2Int(16, 14),  // Hobgoblin Sergeant — flank
+    };
+
+    /// <summary>
+    /// Set up all enemies for the encounter using EnemyDatabase definitions.
+    /// Creates CharacterStats, equips items, assigns AI behaviors, and initializes
+    /// each NPC CharacterController on the grid.
+    /// </summary>
+    private void SetupEnemyEncounter()
+    {
+        EnemyDatabase.Init();
+        ItemDatabase.Init();
+
+        _npcAIBehaviors.Clear();
 
         Sprite npcAlive = LoadSprite("Sprites/npc_enemy_alive");
         Sprite npcDead = LoadSprite("Sprites/npc_enemy_dead");
 
-        Vector2Int npcStart = new Vector2Int(16, 10);
-        NPC.Init(npcStats, npcStart, npcAlive, npcDead);
+        for (int i = 0; i < NPCs.Count && i < DefaultEncounterEnemyIds.Length; i++)
+        {
+            string enemyId = DefaultEncounterEnemyIds[i];
+            EnemyDefinition def = EnemyDatabase.Get(enemyId);
+            if (def == null)
+            {
+                Debug.LogError($"[GameManager] Unknown enemy ID: {enemyId}");
+                continue;
+            }
 
-        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+            CharacterController npc = NPCs[i];
+            Vector2Int pos = (i < DefaultEncounterPositions.Length)
+                ? DefaultEncounterPositions[i]
+                : new Vector2Int(15 + i, 10);
+
+            InitializeNPCFromDefinition(npc, def, pos, npcAlive, npcDead);
+            _npcAIBehaviors.Add(def.AIBehavior);
+
+            // Apply sprite tint color per enemy type
+            SpriteRenderer sr = npc.GetComponent<SpriteRenderer>();
+            if (sr != null) sr.color = def.SpriteColor;
+
+            // Update NPC panel color if available
+            if (i < CombatUI.NPCPanels.Count)
+            {
+                var panelUI = CombatUI.NPCPanels[i];
+                if (panelUI.Panel != null)
+                {
+                    Image panelImg = panelUI.Panel.GetComponent<UnityEngine.UI.Image>();
+                    if (panelImg != null) panelImg.color = def.PanelColor;
+                }
+                if (panelUI.NameText != null) panelUI.NameText.color = def.NameColor;
+            }
+
+            Debug.Log($"[GameManager] Spawned NPC {i}: {def.Name} (Lv {def.Level} {def.CharacterClass}) " +
+                      $"at ({pos.x},{pos.y}) — AI: {def.AIBehavior}");
+        }
+
+        // Legacy NPC field points to first enemy
+        if (NPCs.Count > 0)
+            NPC = NPCs[0];
+
+        // Hide legacy single-NPC panel since we're using multi-panels
+        if (CombatUI.NPCNameText != null)
+            CombatUI.NPCNameText.transform.parent.gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// Initialize a single NPC CharacterController from an EnemyDefinition.
+    /// Creates stats, adds feats, equips items, and places on the grid.
+    /// </summary>
+    private void InitializeNPCFromDefinition(CharacterController npc, EnemyDefinition def,
+        Vector2Int pos, Sprite alive, Sprite dead)
+    {
+        CharacterStats stats = new CharacterStats(
+            name: def.Name,
+            level: def.Level,
+            characterClass: def.CharacterClass,
+            str: def.STR, dex: def.DEX, con: def.CON,
+            wis: def.WIS, intelligence: def.INT, cha: def.CHA,
+            bab: def.BAB,
+            armorBonus: def.ArmorBonus,
+            shieldBonus: def.ShieldBonus,
+            damageDice: def.DamageDice,
+            damageCount: def.DamageCount,
+            bonusDamage: def.BonusDamage,
+            baseSpeed: def.BaseSpeed,
+            atkRange: def.AttackRange,
+            baseHitDieHP: def.BaseHitDieHP
+        );
+
+        // Add creature tags
+        foreach (string tag in def.CreatureTags)
+            stats.CreatureTags.Add(tag);
+
+        // Add feats
+        foreach (string featName in def.Feats)
+        {
+            if (!stats.HasFeat(featName))
+                stats.Feats.Add(featName);
+        }
+        if (!string.IsNullOrEmpty(def.WeaponFocusChoice))
+            stats.WeaponFocusChoice = def.WeaponFocusChoice;
+
+        FeatManager.ApplyPassiveFeats(stats);
+
+        // Initialize the character controller
+        npc.Init(stats, pos, alive, dead);
+
+        // Set up equipment via InventoryComponent
+        InventoryComponent inv = npc.gameObject.GetComponent<InventoryComponent>();
+        if (inv == null) inv = npc.gameObject.AddComponent<InventoryComponent>();
+        inv.Init(stats);
+
+        // Equip items
+        foreach (var eq in def.EquipmentIds)
+        {
+            ItemData item = ItemDatabase.CloneItem(eq.ItemId);
+            if (item != null)
+                inv.CharacterInventory.DirectEquip(item, eq.Slot);
+            else
+                Debug.LogWarning($"[GameManager] Item not found: {eq.ItemId} for {def.Name}");
+        }
+
+        // Add backpack items
+        foreach (string itemId in def.BackpackItemIds)
+        {
+            ItemData item = ItemDatabase.CloneItem(itemId);
+            if (item != null)
+                inv.CharacterInventory.AddItem(item);
+        }
+
+        inv.CharacterInventory.RecalculateStats();
+
+        Debug.Log($"[GameManager] {def.Name}: HP {stats.MaxHP} AC {stats.ArmorClass} " +
+                  $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq");
+    }
+
+    /// <summary>Helper to update all stat UI panels using multi-NPC system.</summary>
+    private void UpdateAllStatsUI()
+    {
+        if (CombatUI == null) return;
+        CombatUI.UpdateAllStatsMultiNPC(PC1, PC2, NPCs);
+    }
+
+    /// <summary>Check if all NPCs in the encounter are dead.</summary>
+    private bool AreAllNPCsDead()
+    {
+        foreach (var npc in NPCs)
+        {
+            if (npc != null && !npc.Stats.IsDead) return false;
+        }
+        return true;
+    }
+
+    /// <summary>Count remaining alive NPCs.</summary>
+    private int GetAliveNPCCount()
+    {
+        int count = 0;
+        foreach (var npc in NPCs)
+        {
+            if (npc != null && !npc.Stats.IsDead) count++;
+        }
+        return count;
+    }
+
+    /// <summary>Get first alive NPC (for backward compat in single-target scenarios).</summary>
+    private CharacterController GetFirstAliveNPC()
+    {
+        foreach (var npc in NPCs)
+        {
+            if (npc != null && !npc.Stats.IsDead) return npc;
+        }
+        return null;
     }
 
     private Sprite LoadSprite(string path)
@@ -698,7 +853,7 @@ public class GameManager : MonoBehaviour
             if (!pc.Stats.IsRaging)
             {
                 CombatUI.ShowCombatLog($"😫 {pc.Stats.CharacterName}'s rage has ended! Now fatigued.");
-                CombatUI.UpdateAllStats(PC1, PC2, NPC);
+                UpdateAllStatsUI();
             }
             else
             {
@@ -892,7 +1047,7 @@ public class GameManager : MonoBehaviour
         {
             CombatUI.ShowCombatLog($"⚡ {pc.Stats.CharacterName} enters a BARBARIAN RAGE! " +
                                   $"+4 STR, +4 CON, +2 Will, -2 AC for {pc.Stats.RageRoundsRemaining} rounds!");
-            CombatUI.UpdateAllStats(PC1, PC2, NPC);
+            UpdateAllStatsUI();
             CombatUI.UpdateActionButtons(pc);
             Debug.Log($"[GameManager] {pc.Stats.CharacterName} activated Rage via button");
         }
@@ -940,7 +1095,11 @@ public class GameManager : MonoBehaviour
         var all = new List<CharacterController>();
         if (PC1 != null) all.Add(PC1);
         if (PC2 != null) all.Add(PC2);
-        if (NPC != null) all.Add(NPC);
+        // Add all NPCs
+        foreach (var npc in NPCs)
+        {
+            if (npc != null) all.Add(npc);
+        }
         return all;
     }
 
@@ -1216,7 +1375,7 @@ public class GameManager : MonoBehaviour
             {
                 string aooLog = $"⚔ AoO: {aooResult.GetDetailedSummary()}";
                 CombatUI.ShowCombatLog(aooLog);
-                CombatUI.UpdateAllStats(PC1, PC2, NPC);
+                UpdateAllStatsUI();
 
                 if (LogAttacksToConsole)
                     Debug.Log("[Combat] " + aooLog);
@@ -1234,7 +1393,7 @@ public class GameManager : MonoBehaviour
         {
             Debug.Log($"[GameManager] {pc.Stats.CharacterName} was slain by AoO during movement!");
             CombatUI.ShowCombatLog($"{pc.Stats.CharacterName} was slain during movement!");
-            CombatUI.UpdateAllStats(PC1, PC2, NPC);
+            UpdateAllStatsUI();
 
             // Check if both PCs are dead
             if (PC1.Stats.IsDead && PC2.Stats.IsDead)
@@ -1267,7 +1426,7 @@ public class GameManager : MonoBehaviour
         }
 
         pc.MoveToCell(cell);
-        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+        UpdateAllStatsUI();
 
         // Return to action choices (player can still use standard action if available)
         ShowActionChoices();
@@ -1360,16 +1519,24 @@ public class GameManager : MonoBehaviour
             Debug.Log("[Combat] " + _lastCombatLog);
 
         CombatUI.ShowCombatLog(_lastCombatLog);
-        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+        UpdateAllStatsUI();
 
         Grid.ClearAllHighlights();
 
-        if (result.TargetKilled && target == NPC)
+        if (result.TargetKilled && !target.IsPlayerControlled)
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
-            CombatUI.SetActionButtonsVisible(false);
-            return;
+            UpdateAllStatsUI();
+            if (AreAllNPCsDead())
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                CombatUI.SetActionButtonsVisible(false);
+                return;
+            }
+            else
+            {
+                CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+            }
         }
 
         // After standard action, check if there are more actions available
@@ -1390,16 +1557,24 @@ public class GameManager : MonoBehaviour
             LogFullAttackToConsole(result);
 
         CombatUI.ShowCombatLog(_lastCombatLog);
-        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+        UpdateAllStatsUI();
 
         Grid.ClearAllHighlights();
 
-        if (result.TargetKilled && target == NPC)
+        if (result.TargetKilled && !target.IsPlayerControlled)
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
-            CombatUI.SetActionButtonsVisible(false);
-            return;
+            UpdateAllStatsUI();
+            if (AreAllNPCsDead())
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                CombatUI.SetActionButtonsVisible(false);
+                return;
+            }
+            else
+            {
+                CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+            }
         }
 
         // Full-round action ends the turn
@@ -1420,16 +1595,24 @@ public class GameManager : MonoBehaviour
             LogFullAttackToConsole(result);
 
         CombatUI.ShowCombatLog(_lastCombatLog);
-        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+        UpdateAllStatsUI();
 
         Grid.ClearAllHighlights();
 
-        if (result.TargetKilled && target == NPC)
+        if (result.TargetKilled && !target.IsPlayerControlled)
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
-            CombatUI.SetActionButtonsVisible(false);
-            return;
+            UpdateAllStatsUI();
+            if (AreAllNPCsDead())
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                CombatUI.SetActionButtonsVisible(false);
+                return;
+            }
+            else
+            {
+                CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+            }
         }
 
         // Full-round action ends the turn
@@ -1453,16 +1636,24 @@ public class GameManager : MonoBehaviour
             LogFullAttackToConsole(result);
 
         CombatUI.ShowCombatLog(_lastCombatLog);
-        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+        UpdateAllStatsUI();
 
         Grid.ClearAllHighlights();
 
-        if (result.TargetKilled && target == NPC)
+        if (result.TargetKilled && !target.IsPlayerControlled)
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
-            CombatUI.SetActionButtonsVisible(false);
-            return;
+            UpdateAllStatsUI();
+            if (AreAllNPCsDead())
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                CombatUI.SetActionButtonsVisible(false);
+                return;
+            }
+            else
+            {
+                CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+            }
         }
 
         // Full-round action ends the turn
@@ -1518,8 +1709,12 @@ public class GameManager : MonoBehaviour
             EndActivePCTurn();
     }
 
-    // ========== NPC AI TURN ==========
+    // ========== NPC AI TURN (Multi-Enemy) ==========
 
+    /// <summary>
+    /// Runs all NPC turns sequentially. Each alive NPC takes a turn based on its
+    /// AI behavior archetype (AggressiveMelee, RangedKiter, DefensiveMelee).
+    /// </summary>
     private IEnumerator NPCTurnCoroutine()
     {
         CurrentPhase = TurnPhase.NPCTurn;
@@ -1527,92 +1722,245 @@ public class GameManager : MonoBehaviour
         CombatUI.SetActivePC(0);
         CombatUI.SetActionButtonsVisible(false);
 
-        if (NPC.Stats.IsDead)
+        // Check if all NPCs are dead (shouldn't happen but safety check)
+        if (AreAllNPCsDead())
         {
             yield return new WaitForSeconds(0.5f);
             StartPCTurn(PC1);
             yield break;
         }
 
-        NPC.StartNewTurn();
-        yield return new WaitForSeconds(0.8f);
-
-        CharacterController closestPC = GetClosestAlivePC();
-
-        if (closestPC == null)
+        // Each NPC takes a turn
+        for (int i = 0; i < NPCs.Count; i++)
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-            CombatUI.SetActionButtonsVisible(false);
-            yield break;
-        }
+            CharacterController npc = NPCs[i];
+            if (npc.Stats.IsDead) continue;
 
-        int distToTarget = SquareGridUtils.GetDistance(NPC.GridPosition, closestPC.GridPosition);
+            EnemyAIBehavior behavior = (i < _npcAIBehaviors.Count)
+                ? _npcAIBehaviors[i] : EnemyAIBehavior.AggressiveMelee;
 
-        // NPC uses simple action economy: move then attack
-        if (distToTarget > NPC.Stats.AttackRange)
-        {
-            SquareCell bestCell = FindBestMoveToward(NPC, closestPC.GridPosition);
-            if (bestCell != null)
+            yield return StartCoroutine(SingleNPCTurn(npc, behavior));
+
+            // Check if both PCs are dead after each NPC turn
+            if (PC1.Stats.IsDead && PC2.Stats.IsDead)
             {
-                NPC.MoveToCell(bestCell);
-                NPC.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"{NPC.Stats.CharacterName} moves toward {closestPC.Stats.CharacterName}!");
-                yield return new WaitForSeconds(0.6f);
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+                CombatUI.SetActionButtonsVisible(false);
+                yield break;
             }
-        }
-
-        // Re-evaluate
-        closestPC = GetClosestAlivePC();
-        if (closestPC == null)
-        {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-            yield break;
-        }
-
-        distToTarget = SquareGridUtils.GetDistance(NPC.GridPosition, closestPC.GridPosition);
-
-        if (distToTarget <= NPC.Stats.AttackRange && !closestPC.Stats.IsDead)
-        {
-            NPC.Actions.UseStandardAction();
-            RangeInfo npcRangeInfo = CalculateRangeInfo(NPC, closestPC);
-            CombatResult result = NPC.Attack(closestPC, false, 0, null, npcRangeInfo);
-            _lastCombatLog = result.GetDetailedSummary();
-
-            // Log NPC attack to Unity Console for debugging
-            if (LogAttacksToConsole)
-                Debug.Log("[Combat] " + _lastCombatLog);
-
-            CombatUI.ShowCombatLog(_lastCombatLog);
-            CombatUI.UpdateAllStats(PC1, PC2, NPC);
-
-            if (result.TargetKilled)
-            {
-                if (PC1.Stats.IsDead && PC2.Stats.IsDead)
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    yield break;
-                }
-                else
-                {
-                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n{closestPC.Stats.CharacterName} has fallen, but the fight continues!");
-                }
-            }
-
-            yield return new WaitForSeconds(1.2f);
-        }
-        else
-        {
-            yield return new WaitForSeconds(0.5f);
         }
 
         StartPCTurn(PC1);
     }
 
-    private CharacterController GetClosestAlivePC()
+    /// <summary>
+    /// Execute a single NPC's turn with behavior-specific AI logic.
+    /// </summary>
+    private IEnumerator SingleNPCTurn(CharacterController npc, EnemyAIBehavior behavior)
+    {
+        npc.StartNewTurn();
+        CombatUI.SetTurnIndicator($"{npc.Stats.CharacterName}'s turn...");
+        yield return new WaitForSeconds(0.6f);
+
+        CharacterController targetPC = GetClosestAlivePCTo(npc);
+        if (targetPC == null) yield break;
+
+        switch (behavior)
+        {
+            case EnemyAIBehavior.AggressiveMelee:
+                yield return StartCoroutine(AI_AggressiveMelee(npc, targetPC));
+                break;
+
+            case EnemyAIBehavior.RangedKiter:
+                yield return StartCoroutine(AI_RangedKiter(npc));
+                break;
+
+            case EnemyAIBehavior.DefensiveMelee:
+                yield return StartCoroutine(AI_DefensiveMelee(npc, targetPC));
+                break;
+
+            default:
+                yield return StartCoroutine(AI_AggressiveMelee(npc, targetPC));
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Aggressive Melee AI: Move toward closest PC, attack in melee.
+    /// Simple and direct — good for orcs, goblins, berserkers.
+    /// </summary>
+    private IEnumerator AI_AggressiveMelee(CharacterController npc, CharacterController targetPC)
+    {
+        int distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
+
+        // Move toward target if out of melee range
+        if (distToTarget > npc.Stats.AttackRange)
+        {
+            SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
+            if (bestCell != null)
+            {
+                npc.MoveToCell(bestCell);
+                npc.Actions.UseMoveAction();
+                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} charges toward {targetPC.Stats.CharacterName}!");
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+
+        // Re-evaluate target (closest may have changed after move)
+        targetPC = GetClosestAlivePCTo(npc);
+        if (targetPC == null) yield break;
+
+        distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
+
+        if (distToTarget <= npc.Stats.AttackRange && !targetPC.Stats.IsDead)
+        {
+            yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
+        }
+        else
+        {
+            yield return new WaitForSeconds(0.3f);
+        }
+    }
+
+    /// <summary>
+    /// Ranged Kiter AI: Stay at range and shoot. If enemies are too close, retreat then shoot.
+    /// Good for skeleton archers, goblin slingers, etc.
+    /// </summary>
+    private IEnumerator AI_RangedKiter(CharacterController npc)
+    {
+        CharacterController closestPC = GetClosestAlivePCTo(npc);
+        if (closestPC == null) yield break;
+
+        int distToClosestPC = SquareGridUtils.GetDistance(npc.GridPosition, closestPC.GridPosition);
+
+        // If an enemy is too close (within 2 squares), try to kite away
+        if (distToClosestPC <= 2)
+        {
+            SquareCell retreatCell = FindBestMoveAwayFrom(npc, closestPC.GridPosition);
+            if (retreatCell != null)
+            {
+                npc.MoveToCell(retreatCell);
+                npc.Actions.UseMoveAction();
+                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} retreats to maintain distance!");
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+
+        // Now shoot at the best target (which may be different after retreating)
+        CharacterController rangedTarget = GetClosestAlivePCTo(npc);
+        if (rangedTarget == null) yield break;
+
+        // Check if weapon is ranged — use the equipped weapon's range
+        ItemData weapon = npc.GetEquippedMainWeapon();
+        int maxRange = 1; // fallback melee
+        if (weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0))
+        {
+            bool isThrown = weapon.IsThrown;
+            maxRange = RangeCalculator.GetMaxRangeSquares(weapon.RangeIncrement, isThrown);
+        }
+
+        int distToRangedTarget = SquareGridUtils.GetDistance(npc.GridPosition, rangedTarget.GridPosition);
+
+        if (distToRangedTarget <= maxRange && !rangedTarget.Stats.IsDead)
+        {
+            yield return StartCoroutine(NPCPerformAttack(npc, rangedTarget));
+        }
+        else if (distToRangedTarget > maxRange && npc.Actions.HasMoveAction)
+        {
+            // Move closer if too far to shoot
+            SquareCell approachCell = FindBestMoveToward(npc, rangedTarget.GridPosition);
+            if (approachCell != null)
+            {
+                npc.MoveToCell(approachCell);
+                npc.Actions.UseMoveAction();
+                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} moves to get a better shot.");
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+        else
+        {
+            yield return new WaitForSeconds(0.3f);
+        }
+    }
+
+    /// <summary>
+    /// Defensive Melee AI: Move cautiously, prefer weaker targets, hold position once engaged.
+    /// Good for hobgoblin sergeants, guards, disciplined fighters.
+    /// </summary>
+    private IEnumerator AI_DefensiveMelee(CharacterController npc, CharacterController targetPC)
+    {
+        // Prefer targeting the weaker (lower HP) PC
+        CharacterController weakerPC = GetWeakerAlivePC();
+        if (weakerPC != null) targetPC = weakerPC;
+
+        int distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
+
+        // Move toward target, but only if necessary
+        if (distToTarget > npc.Stats.AttackRange)
+        {
+            SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
+            if (bestCell != null)
+            {
+                npc.MoveToCell(bestCell);
+                npc.Actions.UseMoveAction();
+                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances methodically toward {targetPC.Stats.CharacterName}.");
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+
+        // Re-evaluate
+        targetPC = GetClosestAlivePCTo(npc);
+        if (targetPC == null) yield break;
+
+        distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
+
+        if (distToTarget <= npc.Stats.AttackRange && !targetPC.Stats.IsDead)
+        {
+            yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
+        }
+        else
+        {
+            yield return new WaitForSeconds(0.3f);
+        }
+    }
+
+    /// <summary>
+    /// Common NPC attack execution — resolves a single attack and handles results.
+    /// </summary>
+    private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
+    {
+        npc.Actions.UseStandardAction();
+        RangeInfo npcRangeInfo = CalculateRangeInfo(npc, target);
+        CombatResult result = npc.Attack(target, false, 0, null, npcRangeInfo);
+        _lastCombatLog = result.GetDetailedSummary();
+
+        if (LogAttacksToConsole)
+            Debug.Log("[Combat] " + _lastCombatLog);
+
+        CombatUI.ShowCombatLog(_lastCombatLog);
+        UpdateAllStatsUI();
+
+        if (result.TargetKilled)
+        {
+            if (PC1.Stats.IsDead && PC2.Stats.IsDead)
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+                CombatUI.SetActionButtonsVisible(false);
+                yield break;
+            }
+            else
+            {
+                CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
+            }
+        }
+
+        yield return new WaitForSeconds(1.0f);
+    }
+
+    /// <summary>Find closest alive PC relative to a specific NPC.</summary>
+    private CharacterController GetClosestAlivePCTo(CharacterController npc)
     {
         bool pc1Alive = !PC1.Stats.IsDead;
         bool pc2Alive = !PC2.Stats.IsDead;
@@ -1621,9 +1969,50 @@ public class GameManager : MonoBehaviour
         if (pc1Alive && !pc2Alive) return PC1;
         if (!pc1Alive && pc2Alive) return PC2;
 
-        int dist1 = SquareGridUtils.GetDistance(NPC.GridPosition, PC1.GridPosition);
-        int dist2 = SquareGridUtils.GetDistance(NPC.GridPosition, PC2.GridPosition);
+        int dist1 = SquareGridUtils.GetDistance(npc.GridPosition, PC1.GridPosition);
+        int dist2 = SquareGridUtils.GetDistance(npc.GridPosition, PC2.GridPosition);
         return dist1 <= dist2 ? PC1 : PC2;
+    }
+
+    /// <summary>Legacy wrapper for backward compat.</summary>
+    private CharacterController GetClosestAlivePC()
+    {
+        return (NPC != null) ? GetClosestAlivePCTo(NPC) : null;
+    }
+
+    /// <summary>Get the alive PC with the lowest current HP (for defensive AI targeting).</summary>
+    private CharacterController GetWeakerAlivePC()
+    {
+        bool pc1Alive = !PC1.Stats.IsDead;
+        bool pc2Alive = !PC2.Stats.IsDead;
+
+        if (!pc1Alive && !pc2Alive) return null;
+        if (pc1Alive && !pc2Alive) return PC1;
+        if (!pc1Alive && pc2Alive) return PC2;
+
+        return PC1.Stats.CurrentHP <= PC2.Stats.CurrentHP ? PC1 : PC2;
+    }
+
+    /// <summary>Find best cell to move AWAY from a target (for kiting AI).</summary>
+    private SquareCell FindBestMoveAwayFrom(CharacterController mover, Vector2Int threatPos)
+    {
+        List<SquareCell> moveCells = Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);
+        SquareCell bestCell = null;
+        int bestDist = 0; // We want to maximize distance
+
+        foreach (var cell in moveCells)
+        {
+            if (cell.IsOccupied) continue;
+
+            int dist = SquareGridUtils.GetDistance(cell.Coords, threatPos);
+            if (dist > bestDist)
+            {
+                bestDist = dist;
+                bestCell = cell;
+            }
+        }
+
+        return bestCell;
     }
 
     private SquareCell FindBestMoveToward(CharacterController mover, Vector2Int targetPos)
