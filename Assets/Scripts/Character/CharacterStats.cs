@@ -23,6 +23,15 @@ public class CharacterStats
     /// <summary>Whether this character is a Barbarian.</summary>
     public bool IsBarbarian => CharacterClass == "Barbarian";
 
+    /// <summary>Whether this character is a Wizard.</summary>
+    public bool IsWizard => CharacterClass == "Wizard";
+
+    /// <summary>Whether this character is a Cleric.</summary>
+    public bool IsCleric => CharacterClass == "Cleric";
+
+    /// <summary>Whether this character is a spellcaster (Wizard or Cleric).</summary>
+    public bool IsSpellcaster => IsWizard || IsCleric;
+
     // ========== MONK CLASS FEATURES (D&D 3.5) ==========
 
     /// <summary>
@@ -229,14 +238,15 @@ public class CharacterStats
     {
         get
         {
-            bool goodFort = CharacterClass == "Fighter" || CharacterClass == "Barbarian" || CharacterClass == "Monk";
+            bool goodFort = CharacterClass == "Fighter" || CharacterClass == "Barbarian"
+                         || CharacterClass == "Monk" || CharacterClass == "Cleric";
             return goodFort ? (2 + Level / 2) : (Level / 3);
         }
     }
 
     /// <summary>
     /// Class-based Reflex save bonus.
-    /// Rogue (good), Monk (good). Fighter/Barbarian (poor).
+    /// Rogue (good), Monk (good). Fighter/Barbarian/Cleric/Wizard (poor).
     /// </summary>
     public int ClassRefSave
     {
@@ -249,13 +259,13 @@ public class CharacterStats
 
     /// <summary>
     /// Class-based Will save bonus.
-    /// Monk (good). Fighter/Rogue/Barbarian (poor).
+    /// Monk (good), Cleric (good), Wizard (good). Fighter/Rogue/Barbarian (poor).
     /// </summary>
     public int ClassWillSave
     {
         get
         {
-            bool goodWill = CharacterClass == "Monk";
+            bool goodWill = CharacterClass == "Monk" || CharacterClass == "Cleric" || CharacterClass == "Wizard";
             return goodWill ? (2 + Level / 2) : (Level / 3);
         }
     }
@@ -353,6 +363,17 @@ public class CharacterStats
         {
             // Barbarian has no bonus feats, but gets class features (Rage, Fast Movement, etc.)
             Debug.Log($"[Barbarian] {CharacterName}: Barbarian class features active (Rage, Fast Movement, Uncanny Dodge)");
+        }
+        else if (CharacterClass == "Wizard")
+        {
+            // Wizard gets Scribe Scroll at level 1 (not implemented) and bonus metamagic feat at level 1
+            // For now, just log class features
+            Debug.Log($"[Wizard] {CharacterName}: Wizard class features active (Spellcasting, Arcane Bond)");
+        }
+        else if (CharacterClass == "Cleric")
+        {
+            // Cleric gets Turn Undead (not implemented in combat prototype)
+            Debug.Log($"[Cleric] {CharacterName}: Cleric class features active (Spellcasting, Turn Undead)");
         }
     }
 
@@ -455,6 +476,13 @@ public class CharacterStats
     /// D&D 3.5: MaxDexBonus of -1 means no limit; 0+ caps the DEX bonus to AC.
     /// Size bonus: Small +1, Medium 0, Large -1, etc.
     /// </summary>
+    /// <summary>
+    /// Bonus to AC from active spells (e.g., Mage Armor grants +4 armor bonus).
+    /// This acts as an armor bonus and does NOT stack with regular ArmorBonus — 
+    /// only the higher value applies per D&D 3.5 rules.
+    /// </summary>
+    public int SpellACBonus;
+
     public int ArmorClass
     {
         get
@@ -462,7 +490,10 @@ public class CharacterStats
             int dexToAC = DEXMod;
             if (MaxDexBonus >= 0 && dexToAC > MaxDexBonus)
                 dexToAC = MaxDexBonus;
-            return 10 + dexToAC + ArmorBonus + ShieldBonus + SizeModifier
+            // Mage Armor is an armor bonus — it doesn't stack with worn armor.
+            // Use the higher of ArmorBonus (from equipment) or SpellACBonus (from spells).
+            int effectiveArmorBonus = Mathf.Max(ArmorBonus, SpellACBonus);
+            return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + SizeModifier
                    + MonkACBonus + FeatACBonus + RageACPenalty;
         }
     }

@@ -72,6 +72,16 @@ public class CharacterCreationData
             HitDie = 12;
             BAB = 3; // Level 3 barbarian BAB (full progression)
         }
+        else if (ClassName == "Wizard")
+        {
+            HitDie = 4;
+            BAB = 1; // Level 3 wizard BAB (1/2 progression)
+        }
+        else if (ClassName == "Cleric")
+        {
+            HitDie = 8;
+            BAB = 2; // Level 3 cleric BAB (3/4 progression)
+        }
         else
         {
             HitDie = 6;

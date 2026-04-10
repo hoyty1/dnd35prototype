@@ -63,8 +63,9 @@ public class GameManager : MonoBehaviour
     public bool IsPlayerTurn => ActivePC != null;
 
     // Current attack mode being selected for
-    private enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows }
+    private enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell }
     private PendingAttackMode _pendingAttackMode;
+    private SpellData _pendingSpell; // Spell selected for casting
 
     private List<SquareCell> _highlightedCells = new List<SquareCell>();
     private string _lastCombatLog = "";
@@ -192,6 +193,15 @@ public class GameManager : MonoBehaviour
                   $"HP {pc1Stats.MaxHP} AC {pc1Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc1Stats.AttackBonus)} " +
                   $"Feats: {pc1Stats.Feats.Count}");
 
+        // Initialize spellcasting if applicable
+        if (pc1Stats.IsSpellcaster)
+        {
+            SpellDatabase.Init();
+            var spellComp = PC1.gameObject.AddComponent<SpellcastingComponent>();
+            spellComp.Init(pc1Stats);
+            Debug.Log($"[GameManager] {pc1Data.CharacterName}: Spellcasting initialized - {spellComp.GetSlotSummary()}");
+        }
+
         // ===== PC2 =====
         pc2Data.ComputeFinalStats();
         int pc2ArmorBonus, pc2ShieldBonus, pc2DamageDice;
@@ -259,6 +269,15 @@ public class GameManager : MonoBehaviour
                   $"HP {pc2Stats.MaxHP} AC {pc2Stats.ArmorClass} Atk {CharacterStats.FormatMod(pc2Stats.AttackBonus)} " +
                   $"Feats: {pc2Stats.Feats.Count}");
 
+        // Initialize spellcasting if applicable
+        if (pc2Stats.IsSpellcaster)
+        {
+            SpellDatabase.Init();
+            var spellComp = PC2.gameObject.AddComponent<SpellcastingComponent>();
+            spellComp.Init(pc2Stats);
+            Debug.Log($"[GameManager] {pc2Data.CharacterName}: Spellcasting initialized - {spellComp.GetSlotSummary()}");
+        }
+
         // ===== NPC =====
         CharacterStats npcStats = new CharacterStats(
             name: "Goblin Warchief",
@@ -300,6 +319,10 @@ public class GameManager : MonoBehaviour
                 armorBonus = 0; shieldBonus = 0; damageDice = 6; break; // Monk: unarmored, unarmed 1d6
             case "Barbarian":
                 armorBonus = 3; shieldBonus = 0; damageDice = 12; break; // Barbarian: hide armor, greataxe 1d12
+            case "Wizard":
+                armorBonus = 0; shieldBonus = 0; damageDice = 6; break;  // Wizard: no armor, quarterstaff 1d6
+            case "Cleric":
+                armorBonus = 4; shieldBonus = 2; damageDice = 8; break;  // Cleric: chain shirt+shield, heavy mace 1d8
             default:
                 armorBonus = 0; shieldBonus = 0; damageDice = 6; break;
         }
@@ -360,6 +383,29 @@ public class GameManager : MonoBehaviour
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
             inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
             Debug.Log("[GameManager] Barbarian equipment: Hide Armor, Greataxe, 3x Javelin");
+        }
+        else if (className == "Wizard")
+        {
+            // Wizard Starting Package: No armor, Quarterstaff, Light Crossbow
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("crossbow_light"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            Debug.Log("[GameManager] Wizard equipment: Quarterstaff, Light Crossbow, Dagger (no armor)");
+        }
+        else if (className == "Cleric")
+        {
+            // Cleric Starting Package: Chain Shirt, Heavy Shield, Heavy Mace
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
+            inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
+
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("crossbow_light"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+            Debug.Log("[GameManager] Cleric equipment: Chain Shirt, Heavy Shield, Heavy Mace, Light Crossbow");
         }
 
         inv.CharacterInventory.RecalculateStats();
@@ -759,7 +805,16 @@ public class GameManager : MonoBehaviour
         if (pc.Stats.Feats.Count > 0)
             featInfo = $"\nFeats: {string.Join(", ", pc.Stats.Feats)}";
 
-        CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory  [K] Skills\n{actionInfo}{dwInfo}{featInfo}");
+        // Show spell info for spellcasters
+        string spellInfo = "";
+        if (pc.Stats.IsSpellcaster)
+        {
+            var spellComp = pc.GetComponent<SpellcastingComponent>();
+            if (spellComp != null)
+                spellInfo = $"\n✦ Spells: {spellComp.GetSlotSummary()}";
+        }
+
+        CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory  [K] Skills\n{actionInfo}{dwInfo}{featInfo}{spellInfo}");
 
         // Auto-end turn if no actions left
         if (!pc.Actions.HasAnyActionLeft)
@@ -905,6 +960,214 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // ========== SPELLCASTING ==========
+
+    /// <summary>Called when Cast Spell button is pressed (Standard Action, spellcasters only).</summary>
+    public void OnCastSpellButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Stats.IsSpellcaster || !pc.Actions.HasStandardAction) return;
+
+        var spellComp = pc.GetComponent<SpellcastingComponent>();
+        if (spellComp == null || !spellComp.HasAnyCastableSpell()) return;
+
+        // Show spell selection panel
+        CombatUI.SetActionButtonsVisible(false);
+        CombatUI.ShowSpellSelection(spellComp, OnSpellSelected, OnSpellSelectionCancelled);
+    }
+
+    /// <summary>Called when a spell is chosen from the spell selection panel.</summary>
+    private void OnSpellSelected(SpellData spell)
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) { ShowActionChoices(); return; }
+
+        _pendingSpell = spell;
+
+        // Determine targeting based on spell type
+        if (spell.TargetType == SpellTargetType.Self)
+        {
+            // Self-targeting spells (Mage Armor) cast immediately
+            PerformSpellCast(pc, pc);
+        }
+        else if (spell.TargetType == SpellTargetType.SingleAlly)
+        {
+            // Ally targeting (Cure Light Wounds) - show ally targets
+            _pendingAttackMode = PendingAttackMode.CastSpell;
+            CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+            ShowSpellTargets(pc, spell);
+        }
+        else if (spell.TargetType == SpellTargetType.SingleEnemy)
+        {
+            // Enemy targeting (damage spells) - show enemy targets in range
+            _pendingAttackMode = PendingAttackMode.CastSpell;
+            CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+            ShowSpellTargets(pc, spell);
+        }
+        else
+        {
+            // Default: show targets
+            _pendingAttackMode = PendingAttackMode.CastSpell;
+            CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+            ShowSpellTargets(pc, spell);
+        }
+    }
+
+    /// <summary>Called when spell selection is cancelled.</summary>
+    private void OnSpellSelectionCancelled()
+    {
+        ShowActionChoices();
+    }
+
+    /// <summary>
+    /// Highlight valid targets for a spell based on its range and target type.
+    /// </summary>
+    private void ShowSpellTargets(CharacterController caster, SpellData spell)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI.SetActionButtonsVisible(false);
+
+        int range = spell.RangeSquares;
+        if (range <= 0) range = 1; // Touch spells = adjacent (1 square)
+
+        List<SquareCell> allCells = Grid.GetCellsInRange(caster.GridPosition, range);
+        bool hasTarget = false;
+
+        foreach (var cell in allCells)
+        {
+            if (!cell.IsOccupied || cell.Occupant.Stats.IsDead) continue;
+            if (cell.Occupant == caster) continue; // Can't target self here (self spells are handled separately)
+
+            int sqDist = SquareGridUtils.GetDistance(caster.GridPosition, cell.Coords);
+            if (sqDist > range) continue;
+
+            bool validTarget = false;
+            if (spell.TargetType == SpellTargetType.SingleEnemy && cell.Occupant != caster)
+            {
+                // For enemies: NPC is enemy to PCs, PCs are enemies to NPC
+                bool isEnemy = (caster == PC1 || caster == PC2) ? (cell.Occupant == NPC) : (cell.Occupant == PC1 || cell.Occupant == PC2);
+                validTarget = isEnemy;
+            }
+            else if (spell.TargetType == SpellTargetType.SingleAlly)
+            {
+                // For allies: PCs are allies to each other
+                bool isAlly = (caster == PC1 && cell.Occupant == PC2) || (caster == PC2 && cell.Occupant == PC1);
+                // Also allow targeting self for healing (cell won't match since we skipped self above)
+                validTarget = isAlly;
+            }
+
+            if (validTarget)
+            {
+                if (spell.EffectType == SpellEffectType.Healing || spell.EffectType == SpellEffectType.Buff)
+                    cell.SetHighlight(HighlightType.Move); // Green for friendly spells
+                else
+                    cell.SetHighlight(HighlightType.Attack); // Red for damage spells
+                _highlightedCells.Add(cell);
+                hasTarget = true;
+            }
+        }
+
+        // For SingleAlly spells, also allow self-targeting by clicking own tile
+        if (spell.TargetType == SpellTargetType.SingleAlly)
+        {
+            SquareCell selfCell = Grid.GetCell(caster.GridPosition);
+            if (selfCell != null)
+            {
+                selfCell.SetHighlight(HighlightType.Selected);
+                _highlightedCells.Add(selfCell);
+                hasTarget = true;
+            }
+        }
+
+        if (hasTarget)
+        {
+            string targetMsg = spell.TargetType == SpellTargetType.SingleAlly
+                ? "Click an ally (or self) to cast"
+                : "Click an enemy to cast";
+            CombatUI.SetTurnIndicator($"✦ {spell.Name}: {targetMsg} (Range: {spell.RangeSquares} sq)");
+        }
+        else
+        {
+            CombatUI.SetTurnIndicator($"No valid targets for {spell.Name}!");
+            StartCoroutine(ReturnToActionChoicesAfterDelay(1.5f));
+        }
+    }
+
+    /// <summary>
+    /// Execute a spell cast from caster to target.
+    /// </summary>
+    private void PerformSpellCast(CharacterController caster, CharacterController target)
+    {
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        // Consume standard action
+        caster.Actions.UseStandardAction();
+
+        // Get spellcasting component
+        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        if (spellComp == null)
+        {
+            Debug.LogError("[GameManager] PerformSpellCast: No SpellcastingComponent!");
+            ShowActionChoices();
+            return;
+        }
+
+        // Consume spell slot (cantrips are free)
+        if (_pendingSpell.SpellLevel > 0)
+        {
+            if (!spellComp.ConsumeSlot(_pendingSpell.SpellLevel))
+            {
+                Debug.LogError($"[GameManager] Failed to consume level {_pendingSpell.SpellLevel} spell slot!");
+                ShowActionChoices();
+                return;
+            }
+        }
+
+        // Resolve the spell
+        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats);
+
+        // Apply Mage Armor AC bonus
+        if (_pendingSpell.SpellId == "mage_armor" && result.Success)
+        {
+            target.Stats.SpellACBonus = _pendingSpell.BuffACBonus;
+            spellComp.MageArmorActive = true;
+            spellComp.MageArmorACBonus = _pendingSpell.BuffACBonus;
+            Debug.Log($"[GameManager] Mage Armor applied: +{_pendingSpell.BuffACBonus} AC to {target.Stats.CharacterName}");
+        }
+
+        // Handle death if target was killed
+        if (result.TargetKilled && target != null)
+        {
+            target.OnDeath();
+        }
+
+        // Build combat log
+        _lastCombatLog = result.GetFormattedLog();
+
+        if (GameManager.LogAttacksToConsole)
+            Debug.Log("[Spell] " + _lastCombatLog);
+
+        CombatUI.ShowCombatLog(_lastCombatLog);
+        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+
+        Grid.ClearAllHighlights();
+
+        // Check for NPC kill
+        if (result.TargetKilled && target == NPC)
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            return;
+        }
+
+        _pendingSpell = null;
+
+        // After standard action, check for remaining actions
+        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+    }
+
     // ========== MOVEMENT ==========
 
     // AoO confirmation state
@@ -1029,6 +1292,7 @@ public class GameManager : MonoBehaviour
                 case PendingAttackMode.FullAttack: modeStr = "FULL ATTACK"; break;
                 case PendingAttackMode.DualWield: modeStr = "DUAL WIELD"; break;
                 case PendingAttackMode.FlurryOfBlows: modeStr = "FLURRY OF BLOWS"; break;
+                case PendingAttackMode.CastSpell: modeStr = "CAST SPELL"; break;
             }
 
             // Build range info string
@@ -1275,6 +1539,38 @@ public class GameManager : MonoBehaviour
 
     private void HandleAttackTargetClick(CharacterController pc, SquareCell cell)
     {
+        // ===== SPELL CASTING MODE =====
+        if (_pendingAttackMode == PendingAttackMode.CastSpell && _pendingSpell != null)
+        {
+            // For ally spells, clicking own tile = self-target
+            if (cell.Coords == pc.GridPosition && _pendingSpell.TargetType == SpellTargetType.SingleAlly)
+            {
+                PerformSpellCast(pc, pc);
+                return;
+            }
+
+            // Cancel if clicking non-highlighted cell
+            if (!_highlightedCells.Contains(cell))
+            {
+                _pendingSpell = null;
+                ShowActionChoices();
+                return;
+            }
+
+            // Valid target click
+            if (cell.IsOccupied && !cell.Occupant.Stats.IsDead)
+            {
+                PerformSpellCast(pc, cell.Occupant);
+                return;
+            }
+
+            // Fallback cancel
+            _pendingSpell = null;
+            ShowActionChoices();
+            return;
+        }
+
+        // ===== NORMAL ATTACK MODE =====
         // Allow clicking own tile or empty tile to cancel
         if (!cell.IsOccupied || cell.Occupant == pc || cell.Occupant.Stats.IsDead)
         {

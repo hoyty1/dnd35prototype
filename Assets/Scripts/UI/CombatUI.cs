@@ -59,6 +59,10 @@ public class CombatUI : MonoBehaviour
     public Button RageButton;              // Barbarian Rage (Free Action)
     public Text RageStatusText;            // Shows rage/fatigue status
 
+    [Header("Spellcasting")]
+    public Button CastSpellButton;         // Cast Spell (Standard Action)
+    public Text SpellSlotsText;            // Shows remaining spell slots
+
     [Header("Feat Controls")]
     public GameObject PowerAttackPanel;     // Panel containing Power Attack slider
     public Slider PowerAttackSlider;        // Slider for Power Attack value (0 to BAB)
@@ -219,6 +223,16 @@ public class CombatUI : MonoBehaviour
         text = text.Replace("Power Attack", "<color=#FF9933>Power Attack</color>");
         text = text.Replace("Rapid Shot", "<color=#66CCFF>Rapid Shot</color>");
         text = text.Replace("Point Blank Shot", "<color=#66FF66>Point Blank Shot</color>");
+
+        // Highlight spellcasting
+        text = text.Replace("SPELL CAST!", "<color=#BB88FF><b>SPELL CAST!</b></color>");
+        text = text.Replace("healed!", "<color=#66FF66><b>healed!</b></color>");
+        text = text.Replace("BUFF APPLIED!", "<color=#6699FF><b>BUFF APPLIED!</b></color>");
+        text = text.Replace("RESISTED!", "<color=#AAAAAA><b>RESISTED!</b></color>");
+        text = text.Replace("Touch Attack", "<color=#BB88FF>Touch Attack</color>");
+        text = text.Replace("Fortitude save", "<color=#FFAA44>Fortitude save</color>");
+        text = text.Replace("Reflex save", "<color=#FFAA44>Reflex save</color>");
+        text = text.Replace("Will save", "<color=#FFAA44>Will save</color>");
 
         // Highlight separator lines
         text = text.Replace("═══════════════════════════════════", "<color=#888888>═══════════════════════════════════</color>");
@@ -408,6 +422,45 @@ public class CombatUI : MonoBehaviour
                 RageStatusText.text = $"⚡ RAGING! {pc.Stats.RageRoundsRemaining} rounds left | -2 AC | +4 STR/CON | +2 Will";
             else if (pc.Stats.IsFatigued)
                 RageStatusText.text = "😫 FATIGUED: -2 STR, -2 DEX";
+        }
+
+        // Cast Spell button: Standard Action, spellcasters only
+        if (CastSpellButton != null)
+        {
+            bool isSpellcaster = pc.Stats.IsSpellcaster;
+            var spellComp = isSpellcaster ? pc.GetComponent<SpellcastingComponent>() : null;
+            bool hasSpells = spellComp != null && spellComp.HasAnyCastableSpell();
+            bool canCast = isSpellcaster && hasSpells && actions.HasStandardAction;
+            CastSpellButton.gameObject.SetActive(isSpellcaster);
+            CastSpellButton.interactable = canCast;
+
+            Text castLabel = CastSpellButton.GetComponentInChildren<Text>();
+            if (castLabel != null)
+            {
+                if (!isSpellcaster)
+                    castLabel.text = "Cast Spell (N/A)";
+                else if (!hasSpells)
+                    castLabel.text = "Cast Spell (No spells)";
+                else if (canCast)
+                    castLabel.text = "Cast Spell (Standard)";
+                else
+                    castLabel.text = "Cast Spell (Used)";
+            }
+        }
+
+        // Spell slots text
+        if (SpellSlotsText != null)
+        {
+            bool isSpellcaster = pc.Stats.IsSpellcaster;
+            SpellSlotsText.gameObject.SetActive(isSpellcaster);
+            if (isSpellcaster)
+            {
+                var spellComp = pc.GetComponent<SpellcastingComponent>();
+                if (spellComp != null)
+                    SpellSlotsText.text = spellComp.GetSlotSummary();
+                else
+                    SpellSlotsText.text = "";
+            }
         }
 
         // End Turn always available
@@ -673,6 +726,240 @@ public class CombatUI : MonoBehaviour
         });
 
         _aooWarningPanel.SetActive(false);
+    }
+
+    // ========================================================================
+    // SPELL SELECTION PANEL
+    // ========================================================================
+
+    private GameObject _spellSelectionPanel;
+    private System.Action<SpellData> _onSpellSelected;
+    private System.Action _onSpellCancelled;
+
+    /// <summary>
+    /// Show the spell selection panel with all castable spells for the current character.
+    /// </summary>
+    public void ShowSpellSelection(SpellcastingComponent spellComp, System.Action<SpellData> onSelect, System.Action onCancel)
+    {
+        _onSpellSelected = onSelect;
+        _onSpellCancelled = onCancel;
+
+        if (_spellSelectionPanel != null)
+            Destroy(_spellSelectionPanel);
+
+        BuildSpellSelectionPanel(spellComp);
+        _spellSelectionPanel.SetActive(true);
+    }
+
+    public void HideSpellSelection()
+    {
+        if (_spellSelectionPanel != null)
+        {
+            Destroy(_spellSelectionPanel);
+            _spellSelectionPanel = null;
+        }
+    }
+
+    private void BuildSpellSelectionPanel(SpellcastingComponent spellComp)
+    {
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+        if (canvas == null) return;
+
+        // Overlay panel
+        _spellSelectionPanel = new GameObject("SpellSelectionPanel");
+        _spellSelectionPanel.transform.SetParent(canvas.transform, false);
+        RectTransform panelRT = _spellSelectionPanel.AddComponent<RectTransform>();
+        panelRT.anchorMin = Vector2.zero;
+        panelRT.anchorMax = Vector2.one;
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        Image bgImage = _spellSelectionPanel.AddComponent<Image>();
+        bgImage.color = new Color(0f, 0f, 0f, 0.7f);
+
+        CanvasGroup cg = _spellSelectionPanel.AddComponent<CanvasGroup>();
+        cg.blocksRaycasts = true;
+        cg.interactable = true;
+
+        // Dialog box
+        GameObject dialogBox = new GameObject("DialogBox");
+        dialogBox.transform.SetParent(_spellSelectionPanel.transform, false);
+        RectTransform dialogRT = dialogBox.AddComponent<RectTransform>();
+        dialogRT.anchorMin = new Vector2(0.15f, 0.1f);
+        dialogRT.anchorMax = new Vector2(0.85f, 0.9f);
+        dialogRT.offsetMin = Vector2.zero;
+        dialogRT.offsetMax = Vector2.zero;
+
+        Image dialogBg = dialogBox.AddComponent<Image>();
+        dialogBg.color = new Color(0.1f, 0.1f, 0.2f, 0.95f);
+
+        Outline dialogOutline = dialogBox.AddComponent<Outline>();
+        dialogOutline.effectColor = new Color(0.4f, 0.3f, 0.8f, 1f);
+        dialogOutline.effectDistance = new Vector2(2, 2);
+
+        // Title
+        GameObject titleObj = new GameObject("Title");
+        titleObj.transform.SetParent(dialogBox.transform, false);
+        RectTransform titleRT = titleObj.AddComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0.05f, 0.88f);
+        titleRT.anchorMax = new Vector2(0.95f, 0.98f);
+        titleRT.offsetMin = Vector2.zero;
+        titleRT.offsetMax = Vector2.zero;
+
+        Text titleText = titleObj.AddComponent<Text>();
+        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (titleText.font == null) titleText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        titleText.fontSize = 18;
+        titleText.color = new Color(0.8f, 0.7f, 1f);
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.fontStyle = FontStyle.Bold;
+        titleText.text = $"✦ CHOOSE A SPELL ✦ — {spellComp.GetSlotSummary()}";
+
+        // Build spell buttons
+        List<SpellData> castable = spellComp.GetCastableSpells();
+        float yStart = 0.82f;
+        float yStep = 0.09f;
+
+        // Group by level
+        var cantrips = castable.FindAll(s => s.SpellLevel == 0);
+        var level1 = castable.FindAll(s => s.SpellLevel == 1);
+
+        float yPos = yStart;
+
+        if (cantrips.Count > 0)
+        {
+            CreateSpellSectionLabel(dialogBox, "── Cantrips (at will) ──", yPos);
+            yPos -= 0.05f;
+            foreach (var spell in cantrips)
+            {
+                CreateSpellButton(dialogBox, spell, yPos, spellComp);
+                yPos -= yStep;
+            }
+        }
+
+        if (level1.Count > 0)
+        {
+            CreateSpellSectionLabel(dialogBox, $"── Level 1 ({spellComp.GetSlotsRemaining(1)}/{spellComp.GetMaxSlots(1)} slots) ──", yPos);
+            yPos -= 0.05f;
+            foreach (var spell in level1)
+            {
+                CreateSpellButton(dialogBox, spell, yPos, spellComp);
+                yPos -= yStep;
+            }
+        }
+
+        // Cancel button
+        float cancelY = Mathf.Max(yPos - 0.02f, 0.02f);
+        Button cancelBtn = CreateSpellDialogButton(dialogBox, "CancelBtn", "✋ CANCEL",
+            new Vector2(0.3f, cancelY), new Vector2(0.7f, cancelY + 0.07f),
+            new Color(0.5f, 0.2f, 0.2f, 1f));
+        cancelBtn.onClick.AddListener(() =>
+        {
+            HideSpellSelection();
+            _onSpellCancelled?.Invoke();
+        });
+
+        _spellSelectionPanel.SetActive(false);
+    }
+
+    private void CreateSpellSectionLabel(GameObject parent, string label, float yPos)
+    {
+        GameObject obj = new GameObject("SectionLabel");
+        obj.transform.SetParent(parent.transform, false);
+        RectTransform rt = obj.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.05f, yPos - 0.03f);
+        rt.anchorMax = new Vector2(0.95f, yPos + 0.02f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        Text txt = obj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        txt.fontSize = 13;
+        txt.color = new Color(0.7f, 0.7f, 0.9f);
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.fontStyle = FontStyle.Italic;
+        txt.text = label;
+    }
+
+    private void CreateSpellButton(GameObject parent, SpellData spell, float yPos, SpellcastingComponent spellComp)
+    {
+        // Determine color based on effect type
+        Color btnColor;
+        switch (spell.EffectType)
+        {
+            case SpellEffectType.Damage: btnColor = new Color(0.5f, 0.2f, 0.2f, 1f); break;
+            case SpellEffectType.Healing: btnColor = new Color(0.2f, 0.5f, 0.2f, 1f); break;
+            case SpellEffectType.Buff: btnColor = new Color(0.2f, 0.3f, 0.6f, 1f); break;
+            default: btnColor = new Color(0.3f, 0.3f, 0.4f, 1f); break;
+        }
+
+        // Build label
+        string rangeStr = spell.RangeSquares == 0 ? "Touch" :
+                          spell.RangeSquares < 0 ? "Self" :
+                          $"{spell.RangeSquares} sq";
+        string effectStr = "";
+        if (spell.EffectType == SpellEffectType.Damage)
+            effectStr = $" | {spell.DamageCount}d{spell.DamageDice}{(spell.BonusDamage > 0 ? $"+{spell.BonusDamage}" : "")} {spell.DamageType}";
+        else if (spell.EffectType == SpellEffectType.Healing)
+            effectStr = $" | {spell.HealCount}d{spell.HealDice}+{spell.BonusHealing} HP";
+        else if (spell.EffectType == SpellEffectType.Buff)
+            effectStr = $" | +{spell.BuffACBonus} AC";
+
+        string label = $"{spell.Name} ({rangeStr}){effectStr}";
+
+        Button btn = CreateSpellDialogButton(parent, spell.SpellId,
+            label,
+            new Vector2(0.05f, yPos - 0.035f), new Vector2(0.95f, yPos + 0.035f),
+            btnColor);
+
+        SpellData capturedSpell = spell;
+        btn.onClick.AddListener(() =>
+        {
+            HideSpellSelection();
+            _onSpellSelected?.Invoke(capturedSpell);
+        });
+    }
+
+    private Button CreateSpellDialogButton(GameObject parent, string name, string label,
+        Vector2 anchorMin, Vector2 anchorMax, Color bgColor)
+    {
+        GameObject btnObj = new GameObject(name);
+        btnObj.transform.SetParent(parent.transform, false);
+        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
+        btnRT.anchorMin = anchorMin;
+        btnRT.anchorMax = anchorMax;
+        btnRT.offsetMin = Vector2.zero;
+        btnRT.offsetMax = Vector2.zero;
+
+        Image btnImg = btnObj.AddComponent<Image>();
+        btnImg.color = bgColor;
+
+        Button btn = btnObj.AddComponent<Button>();
+        var colors = btn.colors;
+        colors.highlightedColor = new Color(bgColor.r + 0.15f, bgColor.g + 0.15f, bgColor.b + 0.15f, 1f);
+        colors.pressedColor = new Color(bgColor.r - 0.1f, bgColor.g - 0.1f, bgColor.b - 0.1f, 1f);
+        btn.colors = colors;
+
+        GameObject txtObj = new GameObject("Text");
+        txtObj.transform.SetParent(btnObj.transform, false);
+        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = new Vector2(5, 2);
+        txtRT.offsetMax = new Vector2(-5, -2);
+
+        Text txt = txtObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        txt.fontSize = 14;
+        txt.color = Color.white;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.text = label;
+        txt.fontStyle = FontStyle.Bold;
+
+        return btn;
     }
 
     /// <summary>Helper to create a styled button for the AoO dialog.</summary>

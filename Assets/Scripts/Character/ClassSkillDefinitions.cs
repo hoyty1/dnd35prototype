@@ -95,6 +95,23 @@ public static class ClassSkillDefinitions
         "Swim"
     };
 
+    /// <summary>Wizard class skills (D&D 3.5 PHB). Includes Concentration and Spellcraft (simplified).</summary>
+    public static readonly HashSet<string> WizardClassSkills = new HashSet<string>
+    {
+        "Appraise",
+        "Diplomacy",
+        "Search"
+        // Note: Knowledge, Concentration, Spellcraft not in prototype skill list
+    };
+
+    /// <summary>Cleric class skills (D&D 3.5 PHB). Includes Concentration and knowledge skills (simplified).</summary>
+    public static readonly HashSet<string> ClericClassSkills = new HashSet<string>
+    {
+        "Diplomacy",
+        "Intimidate"
+        // Note: Concentration, Heal, Knowledge (Religion) not in prototype skill list
+    };
+
     // ========== SKILL POINTS PER LEVEL ==========
 
     /// <summary>
@@ -109,6 +126,8 @@ public static class ClassSkillDefinitions
             case "Rogue":     return 8;
             case "Monk":      return 4;
             case "Barbarian": return 4;
+            case "Wizard":    return 2;
+            case "Cleric":    return 2;
             default:          return 2; // Default to fighter-like
         }
     }
@@ -152,6 +171,8 @@ public static class ClassSkillDefinitions
             case "Rogue":     return RogueClassSkills;
             case "Monk":      return MonkClassSkills;
             case "Barbarian": return BarbarianClassSkills;
+            case "Wizard":    return WizardClassSkills;
+            case "Cleric":    return ClericClassSkills;
             default:          return new HashSet<string>();
         }
     }
