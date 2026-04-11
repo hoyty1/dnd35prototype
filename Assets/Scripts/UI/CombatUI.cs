@@ -441,6 +441,21 @@ public class CombatUI : MonoBehaviour
             }
         }
 
+        // Cast Spell button: only visible for spellcasters with castable prepared spells
+        if (CastSpellButton != null)
+        {
+            bool isSpellcaster = pc.Stats.IsSpellcaster;
+            var spellComp = pc.GetComponent<SpellcastingComponent>();
+            bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnyCastablePreparedSpell();
+            bool canCast = hasCastableSpells && actions.HasStandardAction;
+
+            CastSpellButton.gameObject.SetActive(hasCastableSpells);
+            CastSpellButton.interactable = canCast;
+            Text castLabel = CastSpellButton.GetComponentInChildren<Text>();
+            if (castLabel != null)
+                castLabel.text = canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)";
+        }
+
         if (RageStatusText != null)
         {
             bool isBarbarian = pc.Stats.IsBarbarian;
