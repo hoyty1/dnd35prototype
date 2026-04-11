@@ -1390,86 +1390,87 @@ public class CharacterCreationUI : MonoBehaviour
 
     private void OnQuickStart()
     {
-        Debug.Log("[CharCreation] Quick Start - creating 4 PCs: Aldric (Fighter), Lyra (Rogue), Kael (Monk), Grunk (Barbarian)");
+        Debug.Log("[CharCreation] Quick Start - creating 4 PCs: Lyra (Rogue), Aldric (Fighter), Theron (Cleric), Elara (Wizard)");
 
         FeatDefinitions.Init();
 
-        // PC1: Aldric the Dwarf Fighter
+        // PC1: Lyra the Elf Rogue
         var pc1 = CreatedCharacters[0];
-        pc1.CharacterName = "Aldric";
-        pc1.RaceName = "Dwarf";
-        pc1.Race = RaceDatabase.GetRace("Dwarf");
-        pc1.ClassName = "Fighter";
-        pc1.STR = 16; pc1.DEX = 12; pc1.CON = 14;
-        pc1.INT = 10; pc1.WIS = 10; pc1.CHA = 13;
+        pc1.CharacterName = "Lyra";
+        pc1.RaceName = "Elf";
+        pc1.Race = RaceDatabase.GetRace("Elf");
+        pc1.ClassName = "Rogue";
+        pc1.STR = 12; pc1.DEX = 17; pc1.CON = 12;
+        pc1.INT = 14; pc1.WIS = 13; pc1.CHA = 10;
         pc1.ComputeFinalStats();
+        pc1.SkillRanks["Hide"] = 6;
+        pc1.SkillRanks["Move Silently"] = 6;
+        pc1.SkillRanks["Spot"] = 6;
+        pc1.SkillRanks["Listen"] = 6;
+        pc1.SkillRanks["Disable Device"] = 5;
+        pc1.SkillRanks["Open Lock"] = 5;
+        pc1.SkillRanks["Search"] = 5;
+        pc1.SkillRanks["Tumble"] = 4;
+        pc1.SkillRanks["Bluff"] = 4;
+        pc1.SkillRanks["Diplomacy"] = 4;
         pc1.SkillRanks["Climb"] = 4;
-        pc1.SkillRanks["Intimidate"] = 4;
-        pc1.SkillRanks["Jump"] = 3;
-        pc1.SkillRanks["Swim"] = 3;
-        pc1.SelectedFeats = new System.Collections.Generic.List<string> { "Power Attack", "Cleave" };
-        pc1.BonusFeats = new System.Collections.Generic.List<string> { "Weapon Focus" };
-        pc1.WeaponFocusChoice = "Longsword";
+        pc1.SkillRanks["Balance"] = 3;
+        pc1.SkillRanks["Sleight of Hand"] = 2;
+        pc1.SelectedFeats = new System.Collections.Generic.List<string> { "Weapon Finesse", "Dodge" };
 
-        // PC2: Lyra the Elf Rogue
+        // PC2: Aldric the Dwarf Fighter
         var pc2 = CreatedCharacters[1];
-        pc2.CharacterName = "Lyra";
-        pc2.RaceName = "Elf";
-        pc2.Race = RaceDatabase.GetRace("Elf");
-        pc2.ClassName = "Rogue";
-        pc2.STR = 12; pc2.DEX = 17; pc2.CON = 12;
-        pc2.INT = 14; pc2.WIS = 13; pc2.CHA = 10;
+        pc2.CharacterName = "Aldric";
+        pc2.RaceName = "Dwarf";
+        pc2.Race = RaceDatabase.GetRace("Dwarf");
+        pc2.ClassName = "Fighter";
+        pc2.STR = 16; pc2.DEX = 12; pc2.CON = 14;
+        pc2.INT = 10; pc2.WIS = 10; pc2.CHA = 13;
         pc2.ComputeFinalStats();
-        pc2.SkillRanks["Hide"] = 6;
-        pc2.SkillRanks["Move Silently"] = 6;
-        pc2.SkillRanks["Spot"] = 6;
-        pc2.SkillRanks["Listen"] = 6;
-        pc2.SkillRanks["Disable Device"] = 5;
-        pc2.SkillRanks["Open Lock"] = 5;
-        pc2.SkillRanks["Search"] = 5;
-        pc2.SkillRanks["Tumble"] = 4;
-        pc2.SkillRanks["Bluff"] = 4;
-        pc2.SkillRanks["Diplomacy"] = 4;
         pc2.SkillRanks["Climb"] = 4;
-        pc2.SkillRanks["Balance"] = 3;
-        pc2.SkillRanks["Sleight of Hand"] = 2;
-        pc2.SelectedFeats = new System.Collections.Generic.List<string> { "Weapon Finesse", "Dodge" };
+        pc2.SkillRanks["Intimidate"] = 4;
+        pc2.SkillRanks["Jump"] = 3;
+        pc2.SkillRanks["Swim"] = 3;
+        pc2.SelectedFeats = new System.Collections.Generic.List<string> { "Power Attack", "Cleave" };
+        pc2.BonusFeats = new System.Collections.Generic.List<string> { "Weapon Focus" };
+        pc2.WeaponFocusChoice = "Longsword";
 
-        // PC3: Kael the Human Monk
+        // PC3: Theron the Human Cleric
         var pc3 = CreatedCharacters[2];
-        pc3.CharacterName = "Kael";
+        pc3.CharacterName = "Theron";
         pc3.RaceName = "Human";
         pc3.Race = RaceDatabase.GetRace("Human");
-        pc3.ClassName = "Monk";
-        pc3.STR = 14; pc3.DEX = 16; pc3.CON = 12;
-        pc3.INT = 10; pc3.WIS = 15; pc3.CHA = 8;
+        pc3.ClassName = "Cleric";
+        pc3.STR = 14; pc3.DEX = 10; pc3.CON = 14;
+        pc3.INT = 10; pc3.WIS = 16; pc3.CHA = 12;
         pc3.ComputeFinalStats();
-        pc3.SkillRanks["Balance"] = 6;
-        pc3.SkillRanks["Climb"] = 4;
-        pc3.SkillRanks["Jump"] = 4;
-        pc3.SkillRanks["Listen"] = 4;
-        pc3.SkillRanks["Move Silently"] = 4;
-        pc3.SkillRanks["Tumble"] = 6;
-        pc3.SelectedFeats = new System.Collections.Generic.List<string> { "Dodge", "Improved Initiative", "Weapon Finesse" };
-        // Monk bonus feats (prerequisites bypassed per D&D 3.5e):
-        // Level 1: Stunning Fist, Level 2: Deflect Arrows
-        pc3.BonusFeats = new System.Collections.Generic.List<string> { "Stunning Fist", "Deflect Arrows" };
+        pc3.SkillRanks["Concentration"] = 6;
+        pc3.SkillRanks["Heal"] = 6;
+        pc3.SkillRanks["Diplomacy"] = 4;
+        pc3.SkillRanks["Knowledge (Religion)"] = 4;
+        pc3.SelectedFeats = new System.Collections.Generic.List<string> { "Combat Casting", "Weapon Focus" };
+        pc3.WeaponFocusChoice = "Mace";
 
-        // PC4: Grunk the Half-Orc Barbarian
+        // PC4: Elara the Elf Wizard
         var pc4 = CreatedCharacters[3];
-        pc4.CharacterName = "Grunk";
-        pc4.RaceName = "Half-Orc";
-        pc4.Race = RaceDatabase.GetRace("Half-Orc");
-        pc4.ClassName = "Barbarian";
-        pc4.STR = 17; pc4.DEX = 13; pc4.CON = 16;
-        pc4.INT = 8; pc4.WIS = 10; pc4.CHA = 10;
+        pc4.CharacterName = "Elara";
+        pc4.RaceName = "Elf";
+        pc4.Race = RaceDatabase.GetRace("Elf");
+        pc4.ClassName = "Wizard";
+        pc4.STR = 8; pc4.DEX = 14; pc4.CON = 12;
+        pc4.INT = 17; pc4.WIS = 13; pc4.CHA = 10;
         pc4.ComputeFinalStats();
-        pc4.SkillRanks["Climb"] = 6;
-        pc4.SkillRanks["Intimidate"] = 6;
-        pc4.SkillRanks["Jump"] = 6;
-        pc4.SkillRanks["Listen"] = 6;
-        pc4.SkillRanks["Swim"] = 6;
-        pc4.SelectedFeats = new System.Collections.Generic.List<string> { "Power Attack", "Cleave" };
+        pc4.SkillRanks["Concentration"] = 6;
+        pc4.SkillRanks["Spellcraft"] = 6;
+        pc4.SkillRanks["Knowledge (Arcana)"] = 6;
+        pc4.SelectedFeats = new System.Collections.Generic.List<string> { "Spell Focus", "Improved Initiative" };
+        pc4.BonusFeats = new System.Collections.Generic.List<string> { "Scribe Scroll" };
+        pc4.SelectedSpellIds = new System.Collections.Generic.List<string>
+        {
+            "magic_missile", "mage_armor", "shield",
+            "burning_hands", "sleep", "charm_person",
+            "scorching_ray", "bulls_strength"
+        };
 
         IsComplete = true;
         HideCreationUI();
