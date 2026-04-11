@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 /// <summary>
@@ -13,14 +14,28 @@ using UnityEngine;
 ///   Wizard: INT modifier determines bonus slots
 ///   Cleric: WIS modifier determines bonus slots
 ///   Bonus = 1 extra slot per spell level where (ability mod >= spell level)
+///
+/// D&D 3.5e Preparation Rules:
+///   Wizards prepare spells from their spellbook into spell slots each day.
+///   Clerics prepare spells from the full Cleric list into spell slots each day.
+///   During combat, only prepared spells can be cast.
+///   For now, all known spells are auto-prepared (full preparation UI can come later).
 /// </summary>
 public class SpellcastingComponent : MonoBehaviour
 {
     /// <summary>Reference to the character stats.</summary>
     public CharacterStats Stats { get; private set; }
 
-    /// <summary>List of all spells this character knows/has prepared.</summary>
+    /// <summary>List of all spells this character knows/has in spellbook.</summary>
     public List<SpellData> KnownSpells = new List<SpellData>();
+
+    /// <summary>
+    /// List of spells currently prepared for casting.
+    /// D&D 3.5e: Only prepared spells can be cast during combat.
+    /// Wizards prepare from spellbook, Clerics prepare from full class list.
+    /// Currently auto-populated from KnownSpells (simplified — full prep UI later).
+    /// </summary>
+    public List<SpellData> PreparedSpells { get; private set; } = new List<SpellData>();
 
     /// <summary>
     /// Spell slots remaining per spell level. Index = spell level.
@@ -76,8 +91,11 @@ public class SpellcastingComponent : MonoBehaviour
             InitCleric(stats.Level);
         }
 
+        // Auto-prepare all known spells (simplified — full preparation UI can come later)
+        PrepareSpells();
+
         Debug.Log($"[Spellcasting] {stats.CharacterName} ({stats.CharacterClass}): " +
-                  $"{KnownSpells.Count} spells, slots: {GetSlotSummary()}");
+                  $"{KnownSpells.Count} known, {PreparedSpells.Count} prepared, slots: {GetSlotSummary()}");
     }
 
     /// <summary>
@@ -166,6 +184,77 @@ public class SpellcastingComponent : MonoBehaviour
         KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 1));
         KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 2));
     }
+
+    // ========== SPELL PREPARATION ==========
+
+    /// <summary>
+    /// Prepare spells for casting. In D&D 3.5e:
+    /// - Wizards prepare spells from their spellbook into specific slots each day
+    /// - Clerics prepare spells from the full Cleric list each day
+    /// For now, all known spells are auto-prepared (simplified).
+    /// A full preparation UI can be added later to let the player choose which
+    /// spells to prepare into their available slots.
+    /// </summary>
+    public void PrepareSpells()
+    {
+        PreparedSpells.Clear();
+
+        // Simplified: prepare all known spells
+        // In a full implementation, the player would choose which spells to prepare
+        // into their available slots for each spell level
+        foreach (var spell in KnownSpells)
+        {
+            PreparedSpells.Add(spell);
+        }
+
+        Debug.Log($"[Spellcasting] {(Stats != null ? Stats.CharacterName : "?")} prepared {PreparedSpells.Count} spells");
+    }
+
+    /// <summary>
+    /// Get prepared spells filtered by spell level.
+    /// Only returns spells that are both prepared AND at the specified level.
+    /// </summary>
+    public List<SpellData> GetPreparedSpellsByLevel(int level)
+    {
+        return PreparedSpells.Where(s => s.SpellLevel == level).ToList();
+    }
+
+    /// <summary>
+    /// Check if a specific spell can be cast right now.
+    /// Requires: spell is prepared AND has available slots at that spell level.
+    /// </summary>
+    public bool CanCastSpell(SpellData spell)
+    {
+        if (spell == null || SlotsRemaining == null) return false;
+        int level = spell.SpellLevel;
+        if (level >= SlotsRemaining.Length) return false;
+        return PreparedSpells.Contains(spell) && SlotsRemaining[level] > 0;
+    }
+
+    /// <summary>
+    /// Get list of prepared spells that can currently be cast (have slots available).
+    /// This is the primary method used by the spell casting UI during combat.
+    /// </summary>
+    public List<SpellData> GetCastablePreparedSpells()
+    {
+        var castable = new List<SpellData>();
+        foreach (var spell in PreparedSpells)
+        {
+            if (CanCastSpell(spell))
+                castable.Add(spell);
+        }
+        return castable;
+    }
+
+    /// <summary>
+    /// Check if the character has at least one prepared spell they can cast.
+    /// </summary>
+    public bool HasAnyCastablePreparedSpell()
+    {
+        return GetCastablePreparedSpells().Count > 0;
+    }
+
+    // ========== SLOT MANAGEMENT ==========
 
     /// <summary>
     /// Check if the character can cast a specific spell (has slots remaining).

@@ -1233,9 +1233,16 @@ public class GameManager : MonoBehaviour
         if (pc == null || !pc.Stats.IsSpellcaster || !pc.Actions.HasStandardAction) return;
 
         var spellComp = pc.GetComponent<SpellcastingComponent>();
-        if (spellComp == null || !spellComp.HasAnyCastableSpell()) return;
+        if (spellComp == null) return;
 
-        // Show spell selection panel with metamagic support
+        // Only allow casting if there are prepared spells with available slots
+        if (!spellComp.HasAnyCastablePreparedSpell())
+        {
+            Debug.Log($"[GameManager] {pc.Stats.CharacterName}: No prepared spells with available slots to cast.");
+            return;
+        }
+
+        // Show spell selection panel with metamagic support (only prepared spells shown)
         CombatUI.SetActionButtonsVisible(false);
         CombatUI.ShowSpellSelection(spellComp, OnSpellSelectedWithMetamagic, OnSpellSelectionCancelled);
     }

@@ -845,40 +845,63 @@ public class CombatUI : MonoBehaviour
 
         bool hasMetamagic = spellComp.HasAnyMetamagicFeat();
         string mmNote = hasMetamagic ? " | ⚡ Metamagic Available" : "";
-        titleText.text = $"✦ CHOOSE A SPELL ✦ — {spellComp.GetSlotSummary()}{mmNote}";
+        titleText.text = $"✦ CAST SPELL ✦ — {spellComp.GetSlotSummary()}{mmNote}";
 
-        // Scrollable content area
-        // We'll use a simple layout since Unity UI scroll views are complex to build programmatically
-        // Build spell buttons in the dialog
-        List<SpellData> castable = spellComp.GetCastableSpells();
+        // Build spell list from PREPARED spells only, grouped by level
+        // Only show spell levels that exist for this caster
         float yStart = 0.88f;
         float yStep = 0.07f;
-
-        // Group by level
-        var cantrips = castable.FindAll(s => s.SpellLevel == 0);
-        var level1 = castable.FindAll(s => s.SpellLevel == 1);
-
         float yPos = yStart;
 
-        if (cantrips.Count > 0)
-        {
-            CreateSpellSectionLabel(dialogBox, "── Cantrips (at will) ──", yPos);
-            yPos -= 0.04f;
-            foreach (var spell in cantrips)
-            {
-                CreateSpellButton(dialogBox, spell, yPos, spellComp, hasMetamagic);
-                yPos -= yStep;
-            }
-        }
+        int highestLevel = spellComp.GetHighestSlotLevel();
 
-        if (level1.Count > 0)
+        for (int level = 0; level <= highestLevel; level++)
         {
-            CreateSpellSectionLabel(dialogBox, $"── Level 1 ({spellComp.GetSlotsRemaining(1)}/{spellComp.GetMaxSlots(1)} slots) ──", yPos);
-            yPos -= 0.04f;
-            foreach (var spell in level1)
+            // Get prepared spells at this level
+            var preparedAtLevel = spellComp.GetPreparedSpellsByLevel(level);
+            int slotsRemaining = spellComp.GetSlotsRemaining(level);
+            int slotsMax = spellComp.GetMaxSlots(level);
+            bool hasSlotsAvailable = slotsRemaining > 0;
+
+            // Skip levels with no prepared spells at all
+            if (preparedAtLevel.Count == 0) continue;
+
+            // Build section header with slot counts
+            string levelName;
+            string slotInfo;
+            if (level == 0)
             {
-                CreateSpellButton(dialogBox, spell, yPos, spellComp, hasMetamagic);
-                yPos -= yStep;
+                levelName = "Cantrips";
+                slotInfo = $"{slotsRemaining}/{slotsMax} slots";
+            }
+            else
+            {
+                string ordinal = level == 1 ? "1st" : level == 2 ? "2nd" : level == 3 ? "3rd" : $"{level}th";
+                levelName = $"{ordinal} Level";
+                slotInfo = $"{slotsRemaining}/{slotsMax} slots";
+            }
+
+            // Mark depleted levels
+            string depletedTag = !hasSlotsAvailable ? " [DEPLETED]" : "";
+            Color headerColor = hasSlotsAvailable ? new Color(0.7f, 0.7f, 0.9f) : new Color(0.6f, 0.3f, 0.3f);
+
+            CreateSpellSectionLabel(dialogBox, $"── {levelName} ({slotInfo}){depletedTag} ──", yPos, headerColor);
+            yPos -= 0.04f;
+
+            if (!hasSlotsAvailable)
+            {
+                // Show depleted message instead of spell buttons
+                CreateSpellSectionLabel(dialogBox, "  (No slots available)", yPos, new Color(0.5f, 0.3f, 0.3f));
+                yPos -= 0.04f;
+            }
+            else
+            {
+                // Show prepared spells as clickable buttons
+                foreach (var spell in preparedAtLevel)
+                {
+                    CreateSpellButton(dialogBox, spell, yPos, spellComp, hasMetamagic);
+                    yPos -= yStep;
+                }
             }
         }
 
@@ -896,7 +919,8 @@ public class CombatUI : MonoBehaviour
         _spellSelectionPanel.SetActive(false);
     }
 
-    private void CreateSpellSectionLabel(GameObject parent, string label, float yPos)
+    private void CreateSpellSectionLabel(GameObject parent, string label, float yPos,
+        Color? color = null)
     {
         GameObject obj = new GameObject("SectionLabel");
         obj.transform.SetParent(parent.transform, false);
@@ -910,7 +934,7 @@ public class CombatUI : MonoBehaviour
         txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
         txt.fontSize = 12;
-        txt.color = new Color(0.7f, 0.7f, 0.9f);
+        txt.color = color ?? new Color(0.7f, 0.7f, 0.9f);
         txt.alignment = TextAnchor.MiddleCenter;
         txt.fontStyle = FontStyle.Italic;
         txt.text = label;
