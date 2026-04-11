@@ -24,7 +24,12 @@ public static class FeatManager
         int hpBonus = GetTotalHPBonus(stats);
         if (hpBonus > 0)
         {
-            Debug.Log($"[FeatManager] {stats.CharacterName}: +{hpBonus} HP from feats (Toughness)");
+            // If character is at full health (fresh init), set CurrentHP to include feat HP bonus
+            if (stats.CurrentHP == stats.MaxHP)
+            {
+                stats.CurrentHP = stats.TotalMaxHP;
+            }
+            Debug.Log($"[FeatManager] {stats.CharacterName}: +{hpBonus} HP from feats (Toughness) → TotalMaxHP={stats.TotalMaxHP}, CurrentHP={stats.CurrentHP}");
         }
 
         // Log save bonuses

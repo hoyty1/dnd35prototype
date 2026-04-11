@@ -193,8 +193,12 @@ public class CombatUI : MonoBehaviour
             if (s.IsDead) nameText.text += " (DEAD)";
         }
 
+        // Use TotalMaxHP (includes feat bonuses like Toughness and spell-based BonusMaxHP)
+        int totalMax = s.TotalMaxHP;
+        if (totalMax <= 0) totalMax = 1; // Guard against division by zero
+
         if (hpText != null)
-            hpText.text = $"HP: {s.CurrentHP}/{s.MaxHP}";
+            hpText.text = $"HP: {s.CurrentHP}/{totalMax}";
 
         if (acText != null)
         {
@@ -237,7 +241,25 @@ public class CombatUI : MonoBehaviour
         }
 
         if (hpBar != null)
-            hpBar.fillAmount = (float)s.CurrentHP / s.MaxHP;
+        {
+            // Update fill amount based on HP percentage using TotalMaxHP
+            float hpPercent = (float)s.CurrentHP / totalMax;
+            hpBar.fillAmount = hpPercent;
+
+            // Update HP bar color based on HP percentage:
+            //   > 50%  → Green
+            //   > 25%  → Yellow
+            //   ≤ 25%  → Red
+            Color hpColor;
+            if (hpPercent > 0.5f)
+                hpColor = new Color(0.2f, 0.8f, 0.2f, 1f);  // Green
+            else if (hpPercent > 0.25f)
+                hpColor = new Color(0.8f, 0.8f, 0.2f, 1f);  // Yellow
+            else
+                hpColor = new Color(0.8f, 0.2f, 0.2f, 1f);  // Red
+
+            hpBar.color = hpColor;
+        }
     }
 
     private string FormatBonusDetail(int value, string label)
