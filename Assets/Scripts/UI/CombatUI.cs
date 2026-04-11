@@ -794,7 +794,7 @@ public class CombatUI : MonoBehaviour
         if (canvas == null) canvas = FindObjectOfType<Canvas>();
         if (canvas == null) return;
 
-        // Overlay panel
+        // Overlay panel (full-screen darkened background)
         _spellSelectionPanel = new GameObject("SpellSelectionPanel");
         _spellSelectionPanel.transform.SetParent(canvas.transform, false);
         RectTransform panelRT = _spellSelectionPanel.AddComponent<RectTransform>();
@@ -826,14 +826,15 @@ public class CombatUI : MonoBehaviour
         dialogOutline.effectColor = new Color(0.4f, 0.3f, 0.8f, 1f);
         dialogOutline.effectDistance = new Vector2(2, 2);
 
-        // Title
+        // Title — anchored to top of dialog
         GameObject titleObj = new GameObject("Title");
         titleObj.transform.SetParent(dialogBox.transform, false);
         RectTransform titleRT = titleObj.AddComponent<RectTransform>();
-        titleRT.anchorMin = new Vector2(0.05f, 0.92f);
-        titleRT.anchorMax = new Vector2(0.95f, 0.99f);
-        titleRT.offsetMin = Vector2.zero;
-        titleRT.offsetMax = Vector2.zero;
+        titleRT.anchorMin = new Vector2(0, 1);
+        titleRT.anchorMax = new Vector2(1, 1);
+        titleRT.pivot = new Vector2(0.5f, 1);
+        titleRT.anchoredPosition = new Vector2(0, -4);
+        titleRT.sizeDelta = new Vector2(-20, 30);
 
         Text titleText = titleObj.AddComponent<Text>();
         titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -847,23 +848,105 @@ public class CombatUI : MonoBehaviour
         string mmNote = hasMetamagic ? " | ⚡ Metamagic Available" : "";
         titleText.text = $"✦ CAST SPELL ✦ — {spellComp.GetSlotSummary()}{mmNote}";
 
+        // Cancel button — anchored to bottom of dialog
+        GameObject cancelObj = new GameObject("CancelBtn");
+        cancelObj.transform.SetParent(dialogBox.transform, false);
+        RectTransform cancelRT = cancelObj.AddComponent<RectTransform>();
+        cancelRT.anchorMin = new Vector2(0.3f, 0);
+        cancelRT.anchorMax = new Vector2(0.7f, 0);
+        cancelRT.pivot = new Vector2(0.5f, 0);
+        cancelRT.anchoredPosition = new Vector2(0, 6);
+        cancelRT.sizeDelta = new Vector2(0, 36);
+
+        Image cancelImg = cancelObj.AddComponent<Image>();
+        cancelImg.color = new Color(0.5f, 0.2f, 0.2f, 1f);
+
+        Button cancelBtn = cancelObj.AddComponent<Button>();
+        var cancelColors = cancelBtn.colors;
+        cancelColors.highlightedColor = new Color(0.65f, 0.35f, 0.35f, 1f);
+        cancelColors.pressedColor = new Color(0.4f, 0.1f, 0.1f, 1f);
+        cancelBtn.colors = cancelColors;
+
+        GameObject cancelTxtObj = new GameObject("Text");
+        cancelTxtObj.transform.SetParent(cancelObj.transform, false);
+        RectTransform cancelTxtRT = cancelTxtObj.AddComponent<RectTransform>();
+        cancelTxtRT.anchorMin = Vector2.zero;
+        cancelTxtRT.anchorMax = Vector2.one;
+        cancelTxtRT.offsetMin = new Vector2(5, 2);
+        cancelTxtRT.offsetMax = new Vector2(-5, -2);
+
+        Text cancelTxt = cancelTxtObj.AddComponent<Text>();
+        cancelTxt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (cancelTxt.font == null) cancelTxt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        cancelTxt.fontSize = 14;
+        cancelTxt.color = Color.white;
+        cancelTxt.alignment = TextAnchor.MiddleCenter;
+        cancelTxt.text = "✋ CANCEL";
+        cancelTxt.fontStyle = FontStyle.Bold;
+
+        cancelBtn.onClick.AddListener(() =>
+        {
+            HideSpellSelection();
+            _onSpellCancelled?.Invoke();
+        });
+
+        // Scroll area — fills space between title and cancel button
+        float titleHeight = 34f;
+        float cancelHeight = 44f;
+        GameObject scrollArea = new GameObject("ScrollArea");
+        scrollArea.transform.SetParent(dialogBox.transform, false);
+        RectTransform scrollAreaRT = scrollArea.AddComponent<RectTransform>();
+        scrollAreaRT.anchorMin = Vector2.zero;
+        scrollAreaRT.anchorMax = Vector2.one;
+        scrollAreaRT.offsetMin = new Vector2(4, cancelHeight);
+        scrollAreaRT.offsetMax = new Vector2(-4, -titleHeight);
+
+        // Viewport with Mask (Color.white + showMaskGraphic=false to avoid invisible content bug)
+        GameObject viewport = new GameObject("Viewport");
+        viewport.transform.SetParent(scrollArea.transform, false);
+        RectTransform vpRT = viewport.AddComponent<RectTransform>();
+        vpRT.anchorMin = Vector2.zero;
+        vpRT.anchorMax = Vector2.one;
+        vpRT.offsetMin = new Vector2(4, 4);
+        vpRT.offsetMax = new Vector2(-4, -4);
+        viewport.AddComponent<Image>().color = Color.white;
+        viewport.AddComponent<Mask>().showMaskGraphic = false;
+
+        // Content container — grows vertically based on spell count
+        GameObject content = new GameObject("Content");
+        content.transform.SetParent(viewport.transform, false);
+        RectTransform contentRT = content.AddComponent<RectTransform>();
+        contentRT.anchorMin = new Vector2(0, 1);
+        contentRT.anchorMax = new Vector2(1, 1);
+        contentRT.pivot = new Vector2(0.5f, 1);
+        contentRT.anchoredPosition = Vector2.zero;
+
+        // ScrollRect component
+        ScrollRect scrollRect = scrollArea.AddComponent<ScrollRect>();
+        scrollRect.content = contentRT;
+        scrollRect.viewport = vpRT;
+        scrollRect.vertical = true;
+        scrollRect.horizontal = false;
+        scrollRect.scrollSensitivity = 30f;
+
+        // Vertical scrollbar via helper
+        ScrollbarHelper.CreateVerticalScrollbar(scrollRect, scrollArea.transform);
+
         // Build spell list from PREPARED spells only, grouped by level
-        // Only show spell levels that exist for this caster
-        float yStart = 0.88f;
-        float yStep = 0.07f;
-        float yPos = yStart;
+        float headerHeight = 24f;
+        float buttonHeight = 32f;
+        float spacing = 4f;
+        float yOffset = 0f; // grows downward from top of content
 
         int highestLevel = spellComp.GetHighestSlotLevel();
 
         for (int level = 0; level <= highestLevel; level++)
         {
-            // Get prepared spells at this level
             var preparedAtLevel = spellComp.GetPreparedSpellsByLevel(level);
             int slotsRemaining = spellComp.GetSlotsRemaining(level);
             int slotsMax = spellComp.GetMaxSlots(level);
             bool hasSlotsAvailable = slotsRemaining > 0;
 
-            // Skip levels with no prepared spells at all
             if (preparedAtLevel.Count == 0) continue;
 
             // Build section header with slot counts
@@ -881,54 +964,47 @@ public class CombatUI : MonoBehaviour
                 slotInfo = $"{slotsRemaining}/{slotsMax} slots";
             }
 
-            // Mark depleted levels
             string depletedTag = !hasSlotsAvailable ? " [DEPLETED]" : "";
             Color headerColor = hasSlotsAvailable ? new Color(0.7f, 0.7f, 0.9f) : new Color(0.6f, 0.3f, 0.3f);
 
-            CreateSpellSectionLabel(dialogBox, $"── {levelName} ({slotInfo}){depletedTag} ──", yPos, headerColor);
-            yPos -= 0.04f;
+            CreateSpellSectionLabel(content, $"── {levelName} ({slotInfo}){depletedTag} ──", yOffset, headerHeight, headerColor);
+            yOffset += headerHeight + spacing;
 
             if (!hasSlotsAvailable)
             {
-                // Show depleted message instead of spell buttons
-                CreateSpellSectionLabel(dialogBox, "  (No slots available)", yPos, new Color(0.5f, 0.3f, 0.3f));
-                yPos -= 0.04f;
+                CreateSpellSectionLabel(content, "  (No slots available)", yOffset, headerHeight, new Color(0.5f, 0.3f, 0.3f));
+                yOffset += headerHeight + spacing;
             }
             else
             {
-                // Show prepared spells as clickable buttons
                 foreach (var spell in preparedAtLevel)
                 {
-                    CreateSpellButton(dialogBox, spell, yPos, spellComp, hasMetamagic);
-                    yPos -= yStep;
+                    CreateSpellButton(content, spell, yOffset, buttonHeight, spellComp, hasMetamagic);
+                    yOffset += buttonHeight + spacing;
                 }
             }
         }
 
-        // Cancel button
-        float cancelY = Mathf.Max(yPos - 0.02f, 0.01f);
-        Button cancelBtn = CreateSpellDialogButton(dialogBox, "CancelBtn", "✋ CANCEL",
-            new Vector2(0.3f, cancelY), new Vector2(0.7f, cancelY + 0.06f),
-            new Color(0.5f, 0.2f, 0.2f, 1f));
-        cancelBtn.onClick.AddListener(() =>
-        {
-            HideSpellSelection();
-            _onSpellCancelled?.Invoke();
-        });
+        // Set content height based on total spell list size
+        contentRT.sizeDelta = new Vector2(0, yOffset + spacing);
 
         _spellSelectionPanel.SetActive(false);
     }
 
-    private void CreateSpellSectionLabel(GameObject parent, string label, float yPos,
-        Color? color = null)
+    /// <summary>
+    /// Creates a section label inside the scrollable content area at a given pixel offset from top.
+    /// </summary>
+    private void CreateSpellSectionLabel(GameObject parent, string label, float yOffset,
+        float height, Color? color = null)
     {
         GameObject obj = new GameObject("SectionLabel");
         obj.transform.SetParent(parent.transform, false);
         RectTransform rt = obj.AddComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.05f, yPos - 0.02f);
-        rt.anchorMax = new Vector2(0.95f, yPos + 0.02f);
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
+        rt.anchorMin = new Vector2(0, 1);
+        rt.anchorMax = new Vector2(1, 1);
+        rt.pivot = new Vector2(0.5f, 1);
+        rt.anchoredPosition = new Vector2(0, -yOffset);
+        rt.sizeDelta = new Vector2(-16, height);
 
         Text txt = obj.AddComponent<Text>();
         txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -940,8 +1016,11 @@ public class CombatUI : MonoBehaviour
         txt.text = label;
     }
 
-    private void CreateSpellButton(GameObject parent, SpellData spell, float yPos,
-        SpellcastingComponent spellComp, bool hasMetamagic)
+    /// <summary>
+    /// Creates a spell button inside the scrollable content area at a given pixel offset from top.
+    /// </summary>
+    private void CreateSpellButton(GameObject parent, SpellData spell, float yOffset,
+        float height, SpellcastingComponent spellComp, bool hasMetamagic)
     {
         // Determine color based on effect type
         Color btnColor;
@@ -967,15 +1046,47 @@ public class CombatUI : MonoBehaviour
 
         string label = $"{spell.Name} ({rangeStr}){effectStr}";
 
-        // If character has metamagic, clicking spell opens metamagic sub-panel
+        // Create button using pixel-based positioning within scroll content
+        string prefix = hasMetamagic ? "⚡ " : "";
+
+        GameObject btnObj = new GameObject(spell.SpellId);
+        btnObj.transform.SetParent(parent.transform, false);
+        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
+        btnRT.anchorMin = new Vector2(0, 1);
+        btnRT.anchorMax = new Vector2(1, 1);
+        btnRT.pivot = new Vector2(0.5f, 1);
+        btnRT.anchoredPosition = new Vector2(0, -yOffset);
+        btnRT.sizeDelta = new Vector2(-16, height);
+
+        Image btnImg = btnObj.AddComponent<Image>();
+        btnImg.color = btnColor;
+
+        Button btn = btnObj.AddComponent<Button>();
+        var colors = btn.colors;
+        colors.highlightedColor = new Color(btnColor.r + 0.15f, btnColor.g + 0.15f, btnColor.b + 0.15f, 1f);
+        colors.pressedColor = new Color(btnColor.r - 0.1f, btnColor.g - 0.1f, btnColor.b - 0.1f, 1f);
+        btn.colors = colors;
+
+        GameObject txtObj = new GameObject("Text");
+        txtObj.transform.SetParent(btnObj.transform, false);
+        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = new Vector2(8, 2);
+        txtRT.offsetMax = new Vector2(-8, -2);
+
+        Text txt = txtObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        txt.fontSize = 14;
+        txt.color = Color.white;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.text = $"{prefix}{label}";
+        txt.fontStyle = FontStyle.Bold;
+
+        // Wire up click handler
         if (hasMetamagic)
         {
-            // Spell button that opens metamagic options
-            Button btn = CreateSpellDialogButton(parent, spell.SpellId,
-                $"⚡ {label}",
-                new Vector2(0.03f, yPos - 0.03f), new Vector2(0.97f, yPos + 0.03f),
-                btnColor);
-
             SpellData capturedSpell = spell;
             btn.onClick.AddListener(() =>
             {
@@ -984,12 +1095,6 @@ public class CombatUI : MonoBehaviour
         }
         else
         {
-            // No metamagic: direct spell selection
-            Button btn = CreateSpellDialogButton(parent, spell.SpellId,
-                label,
-                new Vector2(0.03f, yPos - 0.03f), new Vector2(0.97f, yPos + 0.03f),
-                btnColor);
-
             SpellData capturedSpell = spell;
             btn.onClick.AddListener(() =>
             {
