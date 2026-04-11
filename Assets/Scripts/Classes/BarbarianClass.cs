@@ -58,9 +58,11 @@ public class BarbarianClass : ICharacterClass
     public string InfoText => "Hit Die: d12 | BAB: +3 (full)\nGood Saves: Fortitude\n\u2022 Rage 1/day (+4 STR/CON)\nEquipment: Hide Armor, Greataxe";
 
     // Class Features
+    // D&D 3.5e PHB p.24-26: Barbarians do NOT receive any automatic feats.
+    // Rage, Fast Movement, Uncanny Dodge, etc. are class features, not feats.
     public void InitFeats(CharacterStats stats)
     {
-        // Barbarian has no bonus feats, but gets class features (Rage, Fast Movement, etc.)
-        Debug.Log($"[Barbarian] {stats.CharacterName}: Barbarian class features active (Rage, Fast Movement, Uncanny Dodge)");
+        // No automatic feats for Barbarian — Rage, Fast Movement, etc. are class features.
+        Debug.Log($"[Barbarian] {stats.CharacterName}: Barbarian has no automatic feats (Rage, Fast Movement are class features)");
     }
 }

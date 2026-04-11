@@ -60,11 +60,19 @@ public class MonkClass : ICharacterClass
     public string InfoText => "Hit Die: d8 | BAB: +2 (3/4)\nGood Saves: Fort, Ref, Will\n\u2022 Flurry of Blows, +WIS to AC\nEquipment: Quarterstaff, Sling";
 
     // Class Features
+    // D&D 3.5e PHB p.40-41: Monks receive the following AUTOMATIC feats at 1st level:
+    //   - Improved Unarmed Strike (PHB p.40, Table 3-10)
+    //   - Stunning Fist (PHB p.40, Table 3-10) — granted automatically, separate from bonus feat
+    // Additionally, Monks get a BONUS FEAT CHOICE at 1st level (Improved Grapple or Stunning Fist),
+    // but since Stunning Fist is already automatic, the choice is typically Improved Grapple.
+    // That bonus feat choice is handled by the character creation UI, NOT here.
     public void InitFeats(CharacterStats stats)
     {
+        // Automatic feats per PHB Table 3-10: Monk class features
         stats.Feats.Add("Improved Unarmed Strike");
         stats.Feats.Add("Stunning Fist");
-        stats.Feats.Add("Improved Grapple");
-        Debug.Log($"[Monk] {stats.CharacterName}: Granted monk bonus feats: Improved Unarmed Strike, Stunning Fist, Improved Grapple");
+        // Note: Improved Grapple is NOT automatic — it's a bonus feat CHOICE at level 1
+        // handled by CharacterCreationUI monk bonus feat selection.
+        Debug.Log($"[Monk] {stats.CharacterName}: Granted automatic monk feats: Improved Unarmed Strike, Stunning Fist");
     }
 }

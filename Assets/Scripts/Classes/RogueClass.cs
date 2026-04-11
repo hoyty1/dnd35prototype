@@ -71,9 +71,12 @@ public class RogueClass : ICharacterClass
     public string InfoText => "Hit Die: d6 | BAB: +2 (3/4)\nGood Saves: Reflex\n\u2022 Sneak Attack +2d6, Evasion\nEquipment: Leather Armor, Rapier, Shortbow";
 
     // Class Features
+    // D&D 3.5e PHB p.49-51: Rogues do NOT receive any automatic feats.
+    // Rogues gain class features like Sneak Attack, Trapfinding, Evasion, etc.
+    // but these are class features, not feats. Do not add any feats here.
     public void InitFeats(CharacterStats stats)
     {
-        stats.Feats.Add("Point Blank Shot");
-        stats.Feats.Add("Rapid Shot");
+        // No automatic feats for Rogue — all feats must be selected by the player.
+        Debug.Log($"[Rogue] {stats.CharacterName}: Rogue has no automatic feats");
     }
 }

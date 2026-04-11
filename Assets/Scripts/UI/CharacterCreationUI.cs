@@ -768,7 +768,8 @@ public class CharacterCreationUI : MonoBehaviour
         // Characters at level 3 get 2 general feats (level 1 + level 3)
         // Fighters also get 2 bonus feats (level 1 + level 2)
         // Humans get 1 bonus feat at level 1
-        // InitFeats already gives some, so we need to account for that
+        // Note: InitFeats only grants truly automatic feats (Monk: IUS + Stunning Fist).
+        // All other feats — general, bonus, racial — are selected here.
 
         _featSelectionPhase = 0;
         data.SelectedFeats.Clear();

@@ -55,9 +55,12 @@ public class ClericClass : ICharacterClass
     public string InfoText => "Hit Die: d8 | BAB: +2 (3/4)\nGood Saves: Fortitude, Will\n\u2022 Divine Spells: Cure Light Wounds,\n  Inflict Minor Wounds";
 
     // Class Features
+    // D&D 3.5e PHB p.30-33: Clerics do NOT receive any automatic feats.
+    // Turn/Rebuke Undead is a class feature, not a feat.
+    // Domain powers are class features, not feats.
     public void InitFeats(CharacterStats stats)
     {
-        // Cleric gets Turn Undead (not implemented in combat prototype)
-        Debug.Log($"[Cleric] {stats.CharacterName}: Cleric class features active (Spellcasting, Turn Undead)");
+        // No automatic feats for Cleric — Turn Undead and domain powers are class features.
+        Debug.Log($"[Cleric] {stats.CharacterName}: Cleric has no automatic feats (Turn Undead is a class feature)");
     }
 }

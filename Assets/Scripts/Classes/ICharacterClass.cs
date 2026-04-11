@@ -77,8 +77,16 @@ public interface ICharacterClass
     // ========== CLASS FEATURES ==========
 
     /// <summary>
-    /// Initialize auto-granted feats for this class on the given character stats.
-    /// Called during character creation.
+    /// Initialize AUTOMATIC feats for this class on the given character stats.
+    /// Called during character creation via CharacterStats constructor.
+    /// 
+    /// D&D 3.5e PHB Rules — Only the following classes grant automatic feats:
+    ///   - Monk: Improved Unarmed Strike + Stunning Fist at 1st level (PHB p.40)
+    ///   - All other classes: NO automatic feats
+    /// 
+    /// IMPORTANT: Bonus feat SELECTIONS (Fighter bonus feats, Monk bonus feat choices,
+    /// Wizard bonus feats, etc.) are NOT automatic — they are handled by the
+    /// character creation UI / level-up system, not by this method.
     /// </summary>
     void InitFeats(CharacterStats stats);
 }

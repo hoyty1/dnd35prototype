@@ -345,8 +345,13 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Auto-grant feats based on character class.
+    /// Auto-grant ONLY legitimate automatic feats based on character class.
     /// Delegates to the class definition from ClassRegistry.
+    /// 
+    /// Per D&D 3.5e PHB, only Monk gets automatic feats (Improved Unarmed Strike
+    /// and Stunning Fist at 1st level). All other classes have NO automatic feats.
+    /// Bonus feat selections (Fighter, Wizard, Monk choices) are handled separately
+    /// by the character creation UI / level-up system.
     /// </summary>
     public void InitFeats()
     {

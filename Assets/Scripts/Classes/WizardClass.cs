@@ -55,9 +55,15 @@ public class WizardClass : ICharacterClass
     public string InfoText => "Hit Die: d4 | BAB: +1 (1/2)\nGood Saves: Will\n\u2022 Arcane Spells: Magic Missile,\n  Ray of Frost, Acid Splash, Mage Armor";
 
     // Class Features
+    // D&D 3.5e PHB p.55-57: Wizards do NOT receive any automatic feats.
+    // Scribe Scroll is a bonus feat granted at 1st level (PHB p.57), but it is a
+    // class feature/bonus feat, not truly "automatic" — it's listed under class features.
+    // Wizard bonus feats (metamagic/item creation) at levels 5, 10, 15, 20 are
+    // SELECTIONS handled by the character creation UI / level-up system.
     public void InitFeats(CharacterStats stats)
     {
-        // Wizard gets Scribe Scroll at level 1 (not implemented) and bonus metamagic feat at level 1
-        Debug.Log($"[Wizard] {stats.CharacterName}: Wizard class features active (Spellcasting, Arcane Bond)");
+        // No automatic feats for Wizard — Scribe Scroll and bonus feat selections
+        // are handled by the character creation UI / level-up system.
+        Debug.Log($"[Wizard] {stats.CharacterName}: Wizard has no automatic feats (Scribe Scroll and bonus feats handled separately)");
     }
 }

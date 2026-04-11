@@ -57,8 +57,14 @@ public class FighterClass : ICharacterClass
     public string InfoText => "Hit Die: d10 | BAB: +3 (full)\nGood Saves: Fortitude\n\u2022 Bonus combat feats\nEquipment: Scale Mail, Shield, Longsword";
 
     // Class Features
+    // D&D 3.5e PHB p.38-39: Fighters do NOT receive any automatic feats.
+    // They gain bonus feat SELECTIONS at levels 1, 2, and every 2 levels thereafter,
+    // but these are chosen by the player during character creation / level-up,
+    // not granted automatically. Do not add any feats here.
     public void InitFeats(CharacterStats stats)
     {
-        stats.Feats.Add("Power Attack");
+        // No automatic feats for Fighter — bonus feat selections are handled
+        // by the character creation UI / level-up system.
+        Debug.Log($"[Fighter] {stats.CharacterName}: Fighter has no automatic feats (bonus feat selections handled separately)");
     }
 }
