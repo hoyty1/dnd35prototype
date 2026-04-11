@@ -1072,7 +1072,7 @@ public class CharacterCreationUI : MonoBehaviour
         rvpRT.anchorMax = Vector2.one;
         rvpRT.offsetMin = Vector2.zero;
         rvpRT.offsetMax = Vector2.zero;
-        reviewViewport.AddComponent<Image>().color = Color.clear;
+        reviewViewport.AddComponent<Image>().color = Color.white;
         reviewViewport.AddComponent<Mask>().showMaskGraphic = false;
 
         // Content container that can grow beyond viewport
