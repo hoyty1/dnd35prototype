@@ -154,7 +154,10 @@ public class SpellSelectionUI : MonoBehaviour
         vpRT.anchorMax = Vector2.one;
         vpRT.offsetMin = Vector2.zero;
         vpRT.offsetMax = Vector2.zero;
-        viewport.AddComponent<Image>().color = Color.clear;
+        // Mask image needs non-zero alpha so the stencil buffer is written;
+        // Color.clear (alpha 0) causes all children to be invisible.
+        // showMaskGraphic = false hides the image visually while keeping the mask functional.
+        viewport.AddComponent<Image>().color = Color.white;
         viewport.AddComponent<Mask>().showMaskGraphic = false;
 
         _scrollContent = new GameObject("Content");
