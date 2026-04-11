@@ -895,8 +895,9 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Add one rank to a skill. Costs 1 skill point.
-    /// Returns false if: no points available, max ranks reached, or skill not found.
+    /// Add one rank to a skill.
+    /// D&D 3.5 costs: Class skills = 1 skill point per rank, Cross-class = 2 skill points per rank.
+    /// Returns false if: not enough points, max ranks reached, or skill not found.
     /// </summary>
     public bool AddSkillRank(string skillName)
     {
@@ -906,13 +907,15 @@ public class CharacterStats
             return false;
         }
 
-        if (AvailableSkillPoints <= 0)
+        Skill skill = Skills[skillName];
+        int cost = skill.SkillPointCost;
+
+        if (AvailableSkillPoints < cost)
         {
-            Debug.Log($"[Skills] No skill points available to add rank to {skillName}.");
+            Debug.Log($"[Skills] Not enough skill points to add rank to {skillName} (need {cost}, have {AvailableSkillPoints}).");
             return false;
         }
 
-        Skill skill = Skills[skillName];
         int maxRanks = skill.GetMaxRanks(Level);
         if (skill.Ranks >= maxRanks)
         {
@@ -921,13 +924,15 @@ public class CharacterStats
         }
 
         skill.Ranks++;
-        AvailableSkillPoints--;
-        Debug.Log($"[Skills] Added rank to {skillName}: now {skill.Ranks}/{maxRanks} ({AvailableSkillPoints} points remaining)");
+        AvailableSkillPoints -= cost;
+        string costLabel = skill.IsClassSkill ? "class" : "cross-class";
+        Debug.Log($"[Skills] Added rank to {skillName} ({costLabel}, cost {cost}): now {skill.Ranks}/{maxRanks} ({AvailableSkillPoints} points remaining)");
         return true;
     }
 
     /// <summary>
-    /// Remove one rank from a skill. Refunds 1 skill point.
+    /// Remove one rank from a skill. Refunds the correct amount of skill points.
+    /// D&D 3.5: Class skills refund 1 point, Cross-class skills refund 2 points.
     /// Returns false if skill has 0 ranks or skill not found.
     /// </summary>
     public bool RemoveSkillRank(string skillName)
@@ -945,9 +950,10 @@ public class CharacterStats
             return false;
         }
 
+        int refund = skill.SkillPointCost;
         skill.Ranks--;
-        AvailableSkillPoints++;
-        Debug.Log($"[Skills] Removed rank from {skillName}: now {skill.Ranks} ({AvailableSkillPoints} points remaining)");
+        AvailableSkillPoints += refund;
+        Debug.Log($"[Skills] Removed rank from {skillName} (refunded {refund}): now {skill.Ranks} ({AvailableSkillPoints} points remaining)");
         return true;
     }
 

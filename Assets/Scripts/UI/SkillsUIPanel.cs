@@ -36,10 +36,10 @@ public class SkillsUIPanel : MonoBehaviour
     private List<SkillRowUI> _skillRows = new List<SkillRowUI>();
 
     // Panel dimensions
-    private const float PANEL_W = 780f;
-    private const float PANEL_H = 650f;
+    private const float PANEL_W = 820f;
+    private const float PANEL_H = 680f;
     private const float ROW_HEIGHT = 30f;
-    private const float SCROLL_AREA_HEIGHT = 440f;
+    private const float SCROLL_AREA_HEIGHT = 460f;
 
     /// <summary>Whether this panel is currently open/visible.</summary>
     /// <remarks>Uses activeInHierarchy to correctly detect when parent overlay is disabled.</remarks>
@@ -83,25 +83,35 @@ public class SkillsUIPanel : MonoBehaviour
             new Vector2(0, PANEL_H / 2 - 55), new Vector2(PANEL_W - 40, 25),
             "Skill Points: 0 / 0", 16, new Color(0.9f, 0.85f, 0.4f), TextAnchor.MiddleCenter);
 
+        // Legend for class/cross-class
+        float legendY = PANEL_H / 2 - 80;
+        MakeText(_rootPanel.transform, "SkillLegend",
+            new Vector2(0, legendY), new Vector2(PANEL_W - 40, 18),
+            "<color=#E6D966>★ Class Skill (Cost: 1 pt/rank, Max: Lv+3)</color>  |  <color=#AAAAAA>○ Cross-Class (Cost: 2 pts/rank, Max: (Lv+3)/2)</color>",
+            11, new Color(0.7f, 0.7f, 0.7f), TextAnchor.MiddleCenter);
+
         // Column headers
-        float headerY = PANEL_H / 2 - 85;
+        float headerY = PANEL_H / 2 - 100;
         MakeText(_rootPanel.transform, "HeaderName",
-            new Vector2(-240, headerY), new Vector2(200, 20),
+            new Vector2(-260, headerY), new Vector2(220, 20),
             "Skill (Ability)", 13, new Color(0.7f, 0.7f, 0.9f), TextAnchor.MiddleLeft);
+        MakeText(_rootPanel.transform, "HeaderCost",
+            new Vector2(-100, headerY), new Vector2(50, 20),
+            "Cost", 13, new Color(0.7f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
         MakeText(_rootPanel.transform, "HeaderRanks",
-            new Vector2(-50, headerY), new Vector2(60, 20),
+            new Vector2(-30, headerY), new Vector2(60, 20),
             "Ranks", 13, new Color(0.7f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
         MakeText(_rootPanel.transform, "HeaderBonus",
-            new Vector2(30, headerY), new Vector2(60, 20),
+            new Vector2(40, headerY), new Vector2(60, 20),
             "Total", 13, new Color(0.7f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
         MakeText(_rootPanel.transform, "HeaderBreakdown",
-            new Vector2(190, headerY), new Vector2(240, 20),
+            new Vector2(210, headerY), new Vector2(240, 20),
             "Breakdown", 13, new Color(0.7f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
 
         // Scroll area container (clip mask)
         GameObject scrollArea = CreatePanel(_rootPanel.transform, "SkillsScrollArea",
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0, -40), new Vector2(PANEL_W - 30, SCROLL_AREA_HEIGHT),
+            new Vector2(0, -55), new Vector2(PANEL_W - 30, SCROLL_AREA_HEIGHT),
             new Color(0.08f, 0.08f, 0.12f, 0.9f));
 
         // Add mask for scrolling
@@ -168,7 +178,7 @@ public class SkillsUIPanel : MonoBehaviour
         _titleText.text = $"SKILL ALLOCATION - {stats.CharacterName}";
         _confirmButton.gameObject.SetActive(true);
         _closeButton.gameObject.SetActive(false); // Can't close during allocation
-        _logText.text = "Spend your skill points! Class skills are marked with *.";
+        _logText.text = "★ = Class skill (1 pt/rank)  |  ○ = Cross-class (2 pts/rank)";
         PopulateSkillRows();
         RefreshAllRows();
         SetPanelVisible(true);
@@ -255,11 +265,17 @@ public class SkillsUIPanel : MonoBehaviour
         float y = -(index * ROW_HEIGHT + 5);
         bool isEven = index % 2 == 0;
 
-        // Row background
+        // Row background — class skills get a subtle gold tint, cross-class get default
+        Color rowBg;
+        if (skill.IsClassSkill)
+            rowBg = isEven ? new Color(0.16f, 0.15f, 0.10f, 0.6f) : new Color(0.18f, 0.17f, 0.12f, 0.6f);
+        else
+            rowBg = isEven ? new Color(0.12f, 0.12f, 0.18f, 0.6f) : new Color(0.15f, 0.15f, 0.22f, 0.6f);
+
         GameObject rowGO = CreatePanel(_scrollContent.transform, $"SkillRow_{skill.SkillName}",
             new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
             new Vector2(0, y), new Vector2(0, ROW_HEIGHT),
-            isEven ? new Color(0.12f, 0.12f, 0.18f, 0.6f) : new Color(0.15f, 0.15f, 0.22f, 0.6f));
+            rowBg);
         RectTransform rowRT = rowGO.GetComponent<RectTransform>();
         rowRT.anchorMin = new Vector2(0, 1);
         rowRT.anchorMax = new Vector2(1, 1);
@@ -272,14 +288,14 @@ public class SkillsUIPanel : MonoBehaviour
         row.RowObject = rowGO;
         row.Skill = skill;
 
-        // Skill name (clickable for skill checks in display mode)
-        string classMark = skill.IsClassSkill ? "*" : "";
+        // Skill name with class/cross-class icon indicator
+        string classIcon = skill.IsClassSkill ? "★" : "○";
         string trainedMark = skill.TrainedOnly ? "†" : "";
-        Color nameColor = skill.IsClassSkill ? new Color(0.9f, 0.85f, 0.4f) : new Color(0.8f, 0.8f, 0.8f);
+        Color nameColor = skill.IsClassSkill ? new Color(0.9f, 0.85f, 0.4f) : new Color(0.75f, 0.75f, 0.75f);
 
         Button nameBtn = MakeButton(rowGO.transform, "Name",
-            new Vector2(-130, 0), new Vector2(230, ROW_HEIGHT - 2),
-            $"{classMark}{skill.SkillName}{trainedMark} ({skill.KeyAbility})",
+            new Vector2(-150, 0), new Vector2(240, ROW_HEIGHT - 2),
+            $"{classIcon} {skill.SkillName}{trainedMark} ({skill.KeyAbility})",
             new Color(0, 0, 0, 0), nameColor, 12);
         // Left-align the name text
         Text nameText = nameBtn.GetComponentInChildren<Text>();
@@ -288,31 +304,37 @@ public class SkillsUIPanel : MonoBehaviour
 
         nameBtn.onClick.AddListener(() => OnSkillNameClicked(skill));
 
+        // Cost display — shows how many skill points per rank
+        Color costColor = skill.IsClassSkill ? new Color(0.5f, 0.9f, 0.5f) : new Color(0.9f, 0.6f, 0.3f);
+        row.CostText = MakeText(rowGO.transform, "Cost",
+            new Vector2(-100, 0), new Vector2(50, ROW_HEIGHT),
+            skill.SkillPointCost.ToString(), 13, costColor, TextAnchor.MiddleCenter);
+
         // Ranks display
         row.RanksText = MakeText(rowGO.transform, "Ranks",
-            new Vector2(60, 0), new Vector2(40, ROW_HEIGHT),
+            new Vector2(-30, 0), new Vector2(60, ROW_HEIGHT),
             "0", 14, Color.white, TextAnchor.MiddleCenter);
 
         // Total bonus display
         row.BonusText = MakeText(rowGO.transform, "Bonus",
-            new Vector2(110, 0), new Vector2(50, ROW_HEIGHT),
+            new Vector2(40, 0), new Vector2(50, ROW_HEIGHT),
             "+0", 14, new Color(0.5f, 1f, 0.5f), TextAnchor.MiddleCenter);
 
         // Breakdown text
         row.BreakdownText = MakeText(rowGO.transform, "Breakdown",
-            new Vector2(250, 0), new Vector2(200, ROW_HEIGHT),
+            new Vector2(210, 0), new Vector2(240, ROW_HEIGHT),
             "", 11, new Color(0.6f, 0.6f, 0.6f), TextAnchor.MiddleLeft);
 
         // +/- buttons (only in allocation mode)
         if (_allocationMode)
         {
             row.AddButton = MakeButton(rowGO.transform, "AddRank",
-                new Vector2(155, 0), new Vector2(26, 24),
+                new Vector2(90, 0), new Vector2(26, 24),
                 "+", new Color(0.2f, 0.5f, 0.2f), Color.white, 14);
             row.AddButton.onClick.AddListener(() => OnAddRankClicked(skill));
 
             row.RemoveButton = MakeButton(rowGO.transform, "RemoveRank",
-                new Vector2(130, 0), new Vector2(26, 24),
+                new Vector2(65, 0), new Vector2(26, 24),
                 "-", new Color(0.5f, 0.2f, 0.2f), Color.white, 14);
             row.RemoveButton.onClick.AddListener(() => OnRemoveRankClicked(skill));
         }
@@ -355,10 +377,13 @@ public class SkillsUIPanel : MonoBehaviour
         int abilityMod = _stats.GetAbilityModForSkill(skill);
         int totalBonus = skill.GetTotalBonus(abilityMod);
         int maxRanks = skill.GetMaxRanks(_stats.Level);
+        int cost = skill.SkillPointCost;
 
-        // Ranks
-        row.RanksText.text = skill.Ranks.ToString();
+        // Ranks — show current/max
+        row.RanksText.text = $"{skill.Ranks}/{maxRanks}";
         row.RanksText.color = skill.Ranks > 0 ? Color.white : new Color(0.4f, 0.4f, 0.4f);
+        if (skill.Ranks >= maxRanks)
+            row.RanksText.color = new Color(1f, 0.6f, 0.3f); // Orange when maxed
 
         // Total bonus
         string bonusStr = totalBonus >= 0 ? $"+{totalBonus}" : $"{totalBonus}";
@@ -379,13 +404,15 @@ public class SkillsUIPanel : MonoBehaviour
             breakdown += $" +3cls";
         if (skill.TrainedOnly && skill.Ranks == 0)
             breakdown += " [need training]";
+        if (!skill.IsClassSkill)
+            breakdown += " (×2 cost)";
 
         row.BreakdownText.text = breakdown;
 
-        // +/- button states
+        // +/- button states — check cost against available points
         if (row.AddButton != null)
         {
-            bool canAdd = _stats.AvailableSkillPoints > 0 && skill.Ranks < maxRanks;
+            bool canAdd = _stats.AvailableSkillPoints >= cost && skill.Ranks < maxRanks;
             row.AddButton.interactable = canAdd;
         }
         if (row.RemoveButton != null)
@@ -542,6 +569,7 @@ public class SkillsUIPanel : MonoBehaviour
         public GameObject RowObject;
         public Skill Skill;
         public Button NameButton;
+        public Text CostText;
         public Text RanksText;
         public Text BonusText;
         public Text BreakdownText;

@@ -84,14 +84,26 @@ public class Skill
     }
 
     /// <summary>
+    /// Get the skill point cost to buy one rank.
+    /// D&D 3.5: Class skills cost 1 point per rank, cross-class skills cost 2 points per rank.
+    /// </summary>
+    public int SkillPointCost => IsClassSkill ? 1 : 2;
+
+    /// <summary>
     /// Get the maximum ranks allowed for this skill at the given character level.
-    /// D&D 3.5: max ranks = level + 3.
+    /// D&D 3.5:
+    ///   Class skills: max ranks = level + 3
+    ///   Cross-class skills: max ranks = (level + 3) / 2
     /// </summary>
     /// <param name="characterLevel">Character's current level</param>
     /// <returns>Maximum number of ranks</returns>
     public int GetMaxRanks(int characterLevel)
     {
-        return characterLevel + 3;
+        int classMax = characterLevel + 3;
+        if (IsClassSkill)
+            return classMax;
+        else
+            return classMax / 2; // Integer division: e.g. level 1 => (1+3)/2 = 2
     }
 
     /// <summary>
