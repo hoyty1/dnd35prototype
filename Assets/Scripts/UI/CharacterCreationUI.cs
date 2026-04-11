@@ -1178,7 +1178,7 @@ public class CharacterCreationUI : MonoBehaviour
                     {
                         SpellData spell = SpellDatabase.GetSpell(spellId);
                         if (spell != null)
-                            review += $"  • {spell.Name} (Lvl {spell.Level}){(spell.IsPlaceholder ? " [P]" : "")}\n";
+                            review += $"  • {spell.Name} (Lvl {spell.SpellLevel}){(spell.IsPlaceholder ? " [P]" : "")}\n";
                     }
                 }
                 else
