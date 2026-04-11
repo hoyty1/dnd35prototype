@@ -382,8 +382,8 @@ public class CharacterStats
     /// <summary>HP bonus from feats (Toughness).</summary>
     public int FeatHPBonus => FeatManager.GetTotalHPBonus(this);
 
-    /// <summary>Total Max HP including feat bonuses.</summary>
-    public int TotalMaxHP => MaxHP + FeatHPBonus;
+    /// <summary>Total Max HP including feat bonuses and spell bonuses.</summary>
+    public int TotalMaxHP => MaxHP + FeatHPBonus + BonusMaxHP;
 
     /// <summary>AC bonus from Dodge feat.</summary>
     public int FeatACBonus => FeatManager.GetACBonus(this);
@@ -485,6 +485,9 @@ public class CharacterStats
 
     /// <summary>Temporary hit points from spells (e.g., False Life).</summary>
     public int TempHP;
+
+    /// <summary>Bonus max HP from spell effects (e.g., CON buff retroactive HP).</summary>
+    public int BonusMaxHP;
 
     public int ArmorClass
     {

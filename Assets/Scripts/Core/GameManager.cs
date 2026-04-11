@@ -1621,7 +1621,7 @@ public class GameManager : MonoBehaviour
                 // CON buff also grants retroactive HP
                 int hpBonus = (bonus / 2) * target.Stats.Level;
                 target.Stats.CurrentHP += hpBonus;
-                target.Stats.TotalMaxHP += hpBonus;
+                target.Stats.BonusMaxHP += hpBonus;
                 break;
             case "INT":
                 target.Stats.INT += bonus;
