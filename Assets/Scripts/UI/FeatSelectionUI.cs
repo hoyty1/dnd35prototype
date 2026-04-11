@@ -33,6 +33,7 @@ public class FeatSelectionUI : MonoBehaviour
     private CanvasGroup _canvasGroup;
     private GameObject _rootPanel;
     private Text _titleText;
+    private Text _subtitleText;
     private Text _featsRemainingText;
     private Text _selectedFeatsText;
     private Text _featDetailText;
@@ -95,11 +96,15 @@ public class FeatSelectionUI : MonoBehaviour
 
         // Title
         _titleText = MakeText(_rootPanel.transform, "Title",
-            new Vector2(0, 280), new Vector2(860, 40), "Select Feats", 22, Color.white, TextAnchor.MiddleCenter);
+            new Vector2(0, 286), new Vector2(860, 40), "Select Feats", 24, Color.white, TextAnchor.MiddleCenter);
+
+        // Subtitle (restriction description)
+        _subtitleText = MakeText(_rootPanel.transform, "Subtitle",
+            new Vector2(0, 258), new Vector2(860, 22), "", 13, new Color(0.75f, 0.85f, 1f), TextAnchor.MiddleCenter);
 
         // Feats remaining counter
         _featsRemainingText = MakeText(_rootPanel.transform, "FeatsRemaining",
-            new Vector2(0, 252), new Vector2(860, 25), "Feats to select: 1", 14, Color.yellow, TextAnchor.MiddleCenter);
+            new Vector2(0, 238), new Vector2(860, 25), "Feats to select: 1", 14, Color.yellow, TextAnchor.MiddleCenter);
 
         // ===== LEFT SIDE: Feat list with filters =====
         var leftPanel = CreatePanel(_rootPanel.transform, "LeftPanel",
@@ -222,12 +227,15 @@ public class FeatSelectionUI : MonoBehaviour
     // ========================================================================
 
     /// <summary>
-    /// Open the feat selection panel for selecting general feats.
+    /// Open the feat selection panel for selecting feats.
     /// </summary>
     /// <param name="stats">Character stats to check prerequisites against</param>
     /// <param name="featsToSelect">Number of feats to select</param>
     /// <param name="fighterBonusOnly">If true, only show fighter bonus feats</param>
-    public void OpenForSelection(CharacterStats stats, int featsToSelect, bool fighterBonusOnly = false)
+    /// <param name="title">Custom title for the selection dialog (overrides default)</param>
+    /// <param name="subtitle">Optional subtitle describing restrictions or context</param>
+    public void OpenForSelection(CharacterStats stats, int featsToSelect, bool fighterBonusOnly = false,
+        string title = null, string subtitle = null)
     {
         if (!_isBuilt)
         {
@@ -242,9 +250,29 @@ public class FeatSelectionUI : MonoBehaviour
         _filterType = "All";
         _searchText = "";
 
-        string title = fighterBonusOnly ? "Select Fighter Bonus Feat" : "Select Feat";
-        if (featsToSelect > 1) title = $"Select {featsToSelect} Feats";
-        _titleText.text = title;
+        // Set title - use custom title if provided, otherwise generate a default
+        if (!string.IsNullOrEmpty(title))
+        {
+            _titleText.text = title;
+        }
+        else
+        {
+            string defaultTitle = fighterBonusOnly ? "Select Fighter Bonus Feat" : "Select Feat";
+            if (featsToSelect > 1)
+            {
+                defaultTitle = fighterBonusOnly
+                    ? $"Select {featsToSelect} Fighter Bonus Feats"
+                    : $"Select {featsToSelect} Feats";
+            }
+            _titleText.text = defaultTitle;
+        }
+
+        // Set subtitle - restriction/context description
+        if (_subtitleText != null)
+        {
+            _subtitleText.text = subtitle ?? "";
+            _subtitleText.gameObject.SetActive(!string.IsNullOrEmpty(subtitle));
+        }
 
         if (_searchInput != null)
             _searchInput.text = "";

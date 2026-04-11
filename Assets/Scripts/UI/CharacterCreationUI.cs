@@ -779,13 +779,28 @@ public class CharacterCreationUI : MonoBehaviour
             // General feats: 2 at level 3 (lvl 1 + lvl 3)
             int generalFeats = 2;
 
-            // Human bonus feat
-            if (data.RaceName == "Human") generalFeats++;
+            // Human bonus feat adds 1 more
+            bool isHuman = data.RaceName == "Human";
+            if (isHuman) generalFeats++;
 
-            Debug.Log($"[CharCreation] {data.ClassName}: selecting {generalFeats} general feats");
+            // Build descriptive title and subtitle
+            string featTitle;
+            string featSubtitle;
+            if (isHuman)
+            {
+                featTitle = $"Select General Feats + Human Bonus Feat ({generalFeats} total)";
+                featSubtitle = "Includes 2 general feats (Lvl 1 & 3) + 1 bonus Human feat — any feat you qualify for";
+            }
+            else
+            {
+                featTitle = generalFeats == 1 ? "Select General Feat" : $"Select {generalFeats} General Feats";
+                featSubtitle = "Choose from any feat you meet the prerequisites for";
+            }
+
+            Debug.Log($"[CharCreation] {data.ClassName}: selecting {generalFeats} general feats (human={isHuman})");
 
             FeatUI.OnFeatsConfirmed = (selectedFeats) => OnGeneralFeatsSelected(selectedFeats, tempStats);
-            FeatUI.OpenForSelection(tempStats, generalFeats, false);
+            FeatUI.OpenForSelection(tempStats, generalFeats, false, featTitle, featSubtitle);
         }
         else
         {
@@ -805,14 +820,51 @@ public class CharacterCreationUI : MonoBehaviour
         foreach (string f in feats)
             tempStats.Feats.Add(f);
 
-        // Fighters get bonus feats
+        // Class-specific bonus feats
         if (data.ClassName == "Fighter")
         {
             int bonusFeats = 2; // Level 1 + Level 2 bonus feats
             Debug.Log($"[CharCreation] Fighter: selecting {bonusFeats} bonus feats");
 
+            string title = bonusFeats == 1
+                ? "Select Fighter Bonus Feat"
+                : $"Select {bonusFeats} Fighter Bonus Feats";
+
             FeatUI.OnFeatsConfirmed = (bonusSelected) => OnBonusFeatsSelected(bonusSelected);
-            FeatUI.OpenForSelection(tempStats, bonusFeats, true);
+            FeatUI.OpenForSelection(tempStats, bonusFeats, true,
+                title, "Combat feats only — granted by Fighter class at levels 1 and 2");
+        }
+        else if (data.ClassName == "Monk")
+        {
+            // Monks get bonus feats from a specific list at level 1 and 2
+            int bonusFeats = 1; // Level 1 bonus feat (Improved Grapple or Stunning Fist)
+            Debug.Log($"[CharCreation] Monk: selecting {bonusFeats} bonus feats");
+
+            FeatUI.OnFeatsConfirmed = (bonusSelected) => OnBonusFeatsSelected(bonusSelected);
+            FeatUI.OpenForSelection(tempStats, bonusFeats, false,
+                "Select Monk Bonus Feat",
+                "Monk bonus feat — Stunning Fist, Improved Grapple, or similar unarmed/combat feats");
+        }
+        else if (data.ClassName == "Wizard")
+        {
+            // Wizards get a bonus metamagic or item creation feat at level 5+
+            // At level 3 they don't get one yet, but handle it for future-proofing
+            int wizLevel = 3; // current character level
+            if (wizLevel >= 5)
+            {
+                int bonusFeats = 1;
+                Debug.Log($"[CharCreation] Wizard: selecting {bonusFeats} bonus feats");
+
+                FeatUI.OnFeatsConfirmed = (bonusSelected) => OnBonusFeatsSelected(bonusSelected);
+                FeatUI.OpenForSelection(tempStats, bonusFeats, false,
+                    "Select Wizard Bonus Feat",
+                    "Metamagic or Item Creation feats only — granted by Wizard class");
+            }
+            else
+            {
+                Debug.Log($"[CharCreation] Wizard at level {wizLevel}: no bonus feats yet (first at level 5)");
+                ShowStep(Step.Review);
+            }
         }
         else
         {
