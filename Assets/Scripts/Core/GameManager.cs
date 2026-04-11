@@ -180,7 +180,7 @@ public class GameManager : MonoBehaviour
         ItemDatabase.Init();
         FeatDefinitions.Init();
 
-        Sprite pcAlive = LoadSprite("Sprites/pc_alive");
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
         Sprite pcDead = LoadSprite("Sprites/pc_dead");
 
         // PC starting positions
@@ -192,7 +192,7 @@ public class GameManager : MonoBehaviour
             new Vector2Int(3, 15)
         };
 
-        // Tint colors for PCs (each distinct)
+        // Tint colors for PCs (fallback only if no class token)
         Color[] pcColors = new Color[]
         {
             Color.white,
@@ -230,11 +230,13 @@ public class GameManager : MonoBehaviour
                 raceName: data.RaceName
             );
 
+            // Use class-specific token sprite for grid display; fallback to generic
+            Sprite pcAlive = IconLoader.GetToken(data.ClassName) ?? pcAliveFallback;
             Vector2Int startPos = (i < pcPositions.Length) ? pcPositions[i] : new Vector2Int(3, 6 + i * 3);
             pcSlots[i].Init(stats, startPos, pcAlive, pcDead);
 
-            // Tint
-            if (i > 0)
+            // Only apply tint if using the generic fallback sprite (class tokens are already colored)
+            if (pcAlive == pcAliveFallback && i > 0)
             {
                 SpriteRenderer sr = pcSlots[i].GetComponent<SpriteRenderer>();
                 if (sr != null) sr.color = pcColors[i];
@@ -487,7 +489,7 @@ public class GameManager : MonoBehaviour
         RaceDatabase.Init();
         FeatDefinitions.Init();
 
-        Sprite pcAlive = LoadSprite("Sprites/pc_alive");
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
         Sprite pcDead = LoadSprite("Sprites/pc_dead");
 
         // ==========================================
@@ -515,7 +517,8 @@ public class GameManager : MonoBehaviour
                   $"HP {pc1Stats.MaxHP} | Speed {pc1Stats.MoveRange} squares ({pc1Stats.SpeedInFeet} ft)");
 
         Vector2Int pc1Start = new Vector2Int(3, 6);
-        PC1.Init(pc1Stats, pc1Start, pcAlive, pcDead);
+        Sprite pc1Alive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+        PC1.Init(pc1Stats, pc1Start, pc1Alive, pcDead);
 
         var pc1Inv = PC1.gameObject.AddComponent<InventoryComponent>();
         pc1Inv.Init(pc1Stats);
@@ -552,7 +555,8 @@ public class GameManager : MonoBehaviour
                   $"HP {pc2Stats.MaxHP} | Speed {pc2Stats.MoveRange} squares ({pc2Stats.SpeedInFeet} ft)");
 
         Vector2Int pc2Start = new Vector2Int(3, 9);
-        PC2.Init(pc2Stats, pc2Start, pcAlive, pcDead);
+        Sprite pc2Alive = IconLoader.GetToken("Rogue") ?? pcAliveFallback;
+        PC2.Init(pc2Stats, pc2Start, pc2Alive, pcDead);
 
         var pc2Inv = PC2.gameObject.AddComponent<InventoryComponent>();
         pc2Inv.Init(pc2Stats);
@@ -573,9 +577,13 @@ public class GameManager : MonoBehaviour
         for (int i = 0; i < 3; i++) pc2Stats.AddSkillRank("Balance");
         for (int i = 0; i < 2; i++) pc2Stats.AddSkillRank("Sleight of Hand");
 
-        SpriteRenderer pc2SR = PC2.GetComponent<SpriteRenderer>();
-        if (pc2SR != null)
-            pc2SR.color = new Color(0.6f, 0.7f, 1f, 1f);
+        // Only tint if using generic fallback sprite
+        if (pc2Alive == pcAliveFallback)
+        {
+            SpriteRenderer pc2SR = PC2.GetComponent<SpriteRenderer>();
+            if (pc2SR != null)
+                pc2SR.color = new Color(0.6f, 0.7f, 1f, 1f);
+        }
 
         // ==========================================
         // PC3: "Kael" - Human Monk (Level 3)
@@ -604,7 +612,8 @@ public class GameManager : MonoBehaviour
         Vector2Int pc3Start = new Vector2Int(3, 12);
         if (PC3 != null)
         {
-            PC3.Init(pc3Stats, pc3Start, pcAlive, pcDead);
+            Sprite pc3Alive = IconLoader.GetToken("Monk") ?? pcAliveFallback;
+            PC3.Init(pc3Stats, pc3Start, pc3Alive, pcDead);
 
             var pc3Inv = PC3.gameObject.AddComponent<InventoryComponent>();
             pc3Inv.Init(pc3Stats);
@@ -616,9 +625,13 @@ public class GameManager : MonoBehaviour
             for (int i = 0; i < 6; i++) pc3Stats.AddSkillRank("Listen");
             for (int i = 0; i < 6; i++) pc3Stats.AddSkillRank("Spot");
 
-            SpriteRenderer pc3SR = PC3.GetComponent<SpriteRenderer>();
-            if (pc3SR != null)
-                pc3SR.color = new Color(0.7f, 1f, 0.7f, 1f);
+            // Only tint if using generic fallback sprite
+            if (pc3Alive == pcAliveFallback)
+            {
+                SpriteRenderer pc3SR = PC3.GetComponent<SpriteRenderer>();
+                if (pc3SR != null)
+                    pc3SR.color = new Color(0.7f, 1f, 0.7f, 1f);
+            }
         }
 
         // ==========================================
@@ -648,7 +661,8 @@ public class GameManager : MonoBehaviour
         Vector2Int pc4Start = new Vector2Int(3, 15);
         if (PC4 != null)
         {
-            PC4.Init(pc4Stats, pc4Start, pcAlive, pcDead);
+            Sprite pc4Alive = IconLoader.GetToken("Barbarian") ?? pcAliveFallback;
+            PC4.Init(pc4Stats, pc4Start, pc4Alive, pcDead);
 
             var pc4Inv = PC4.gameObject.AddComponent<InventoryComponent>();
             pc4Inv.Init(pc4Stats);
@@ -660,9 +674,13 @@ public class GameManager : MonoBehaviour
             for (int i = 0; i < 6; i++) pc4Stats.AddSkillRank("Jump");
             for (int i = 0; i < 6; i++) pc4Stats.AddSkillRank("Swim");
 
-            SpriteRenderer pc4SR = PC4.GetComponent<SpriteRenderer>();
-            if (pc4SR != null)
-                pc4SR.color = new Color(1f, 0.8f, 0.6f, 1f);
+            // Only tint if using generic fallback sprite
+            if (pc4Alive == pcAliveFallback)
+            {
+                SpriteRenderer pc4SR = PC4.GetComponent<SpriteRenderer>();
+                if (pc4SR != null)
+                    pc4SR.color = new Color(1f, 0.8f, 0.6f, 1f);
+            }
         }
 
         // ==========================================
@@ -724,7 +742,7 @@ public class GameManager : MonoBehaviour
 
         _npcAIBehaviors.Clear();
 
-        Sprite npcAlive = LoadSprite("Sprites/npc_enemy_alive");
+        Sprite npcAliveFallback = LoadSprite("Sprites/npc_enemy_alive");
         Sprite npcDead = LoadSprite("Sprites/npc_enemy_dead");
 
         for (int i = 0; i < NPCs.Count && i < DefaultEncounterEnemyIds.Length; i++)
@@ -742,11 +760,20 @@ public class GameManager : MonoBehaviour
                 ? DefaultEncounterPositions[i]
                 : new Vector2Int(15 + i, 10);
 
+            // Try class-specific monster token; fallback to generic NPC sprite
+            string monsterType = IconLoader.DetermineMonsterType(def.Name);
+            Sprite npcAlive = null;
+            if (!string.IsNullOrEmpty(monsterType))
+                npcAlive = IconLoader.GetToken(monsterType);
+            if (npcAlive == null)
+                npcAlive = npcAliveFallback;
+
             InitializeNPCFromDefinition(npc, def, pos, npcAlive, npcDead);
             _npcAIBehaviors.Add(def.AIBehavior);
 
+            // Only apply color tint if using the generic fallback sprite
             SpriteRenderer sr = npc.GetComponent<SpriteRenderer>();
-            if (sr != null) sr.color = def.SpriteColor;
+            if (sr != null && npcAlive == npcAliveFallback) sr.color = def.SpriteColor;
 
             if (i < CombatUI.NPCPanels.Count)
             {
