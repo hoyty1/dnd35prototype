@@ -836,14 +836,19 @@ public class CharacterCreationUI : MonoBehaviour
         }
         else if (data.ClassName == "Monk")
         {
-            // Monks get bonus feats from a specific list at level 1 and 2
-            int bonusFeats = 1; // Level 1 bonus feat (Improved Grapple or Stunning Fist)
-            Debug.Log($"[CharCreation] Monk: selecting {bonusFeats} bonus feats");
+            // D&D 3.5e Monk bonus feats: sequential selection
+            // Level 1: Improved Grapple or Stunning Fist
+            // Level 2: Combat Reflexes or Deflect Arrows
+            // Level 6+: also Improved Disarm or Improved Trip
+            // Monks do NOT need to meet prerequisites for these bonus feats
+            Debug.Log($"[CharCreation] Monk: starting sequential bonus feat selection (level 1 first)");
 
-            FeatUI.OnFeatsConfirmed = (bonusSelected) => OnBonusFeatsSelected(bonusSelected);
-            FeatUI.OpenForSelection(tempStats, bonusFeats, false,
-                "Select Monk Bonus Feat",
-                "Monk bonus feat — Stunning Fist, Improved Grapple, or similar unarmed/combat feats");
+            data.BonusFeats.Clear();
+            FeatUI.OnFeatsConfirmed = (bonusSelected) => OnMonkBonusFeatLevel1Selected(bonusSelected, tempStats);
+            FeatUI.OpenForSelection(tempStats, 1, false,
+                "Select Monk Bonus Feat (Level 1)",
+                "Choose: Improved Grapple or Stunning Fist — prerequisites are bypassed",
+                monkBonusLevel: 1);
         }
         else if (data.ClassName == "Wizard")
         {
@@ -878,6 +883,45 @@ public class CharacterCreationUI : MonoBehaviour
         data.BonusFeats = new List<string>(feats);
 
         Debug.Log($"[CharCreation] Bonus feats selected: {string.Join(", ", feats)}");
+        ShowStep(Step.Review);
+    }
+
+    /// <summary>Called after selecting the Monk level 1 bonus feat. Proceeds to level 2 selection.</summary>
+    private void OnMonkBonusFeatLevel1Selected(List<string> feats, CharacterStats tempStats)
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        data.BonusFeats.AddRange(feats);
+
+        // Add to temp stats so they show as already owned
+        foreach (string f in feats)
+            tempStats.Feats.Add(f);
+
+        Debug.Log($"[CharCreation] Monk level 1 bonus feat selected: {string.Join(", ", feats)}");
+
+        // Now select level 2 bonus feat (Combat Reflexes or Deflect Arrows)
+        // Character level 3 means they get both level 1 and level 2 monk bonus feats
+        FeatUI.OnFeatsConfirmed = (bonusSelected) => OnMonkBonusFeatLevel2Selected(bonusSelected, tempStats);
+        FeatUI.OpenForSelection(tempStats, 1, false,
+            "Select Monk Bonus Feat (Level 2)",
+            "Choose: Combat Reflexes or Deflect Arrows — prerequisites are bypassed",
+            monkBonusLevel: 2);
+    }
+
+    /// <summary>Called after selecting the Monk level 2 bonus feat. Proceeds to review (or level 6 if applicable).</summary>
+    private void OnMonkBonusFeatLevel2Selected(List<string> feats, CharacterStats tempStats)
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        data.BonusFeats.AddRange(feats);
+
+        // Add to temp stats
+        foreach (string f in feats)
+            tempStats.Feats.Add(f);
+
+        Debug.Log($"[CharCreation] Monk level 2 bonus feat selected: {string.Join(", ", feats)}");
+        Debug.Log($"[CharCreation] All Monk bonus feats: {string.Join(", ", data.BonusFeats)}");
+
+        // At level 6+, there would be another selection for Improved Disarm or Improved Trip
+        // For now (level 3), we're done with monk bonus feats
         ShowStep(Step.Review);
     }
 
@@ -1028,7 +1072,10 @@ public class CharacterCreationUI : MonoBehaviour
             }
             if (data.BonusFeats != null && data.BonusFeats.Count > 0)
             {
-                review += "  (Fighter Bonus Feats)\n";
+                string bonusLabel = data.ClassName == "Monk" ? "Monk Bonus Feats" :
+                                    data.ClassName == "Fighter" ? "Fighter Bonus Feats" :
+                                    "Class Bonus Feats";
+                review += $"  ({bonusLabel})\n";
                 foreach (string feat in data.BonusFeats)
                     review += $"  • {feat}\n";
             }
@@ -1283,7 +1330,10 @@ public class CharacterCreationUI : MonoBehaviour
         pc3.SkillRanks["Listen"] = 4;
         pc3.SkillRanks["Move Silently"] = 4;
         pc3.SkillRanks["Tumble"] = 6;
-        pc3.SelectedFeats = new System.Collections.Generic.List<string> { "Dodge", "Combat Reflexes", "Improved Initiative" };
+        pc3.SelectedFeats = new System.Collections.Generic.List<string> { "Dodge", "Improved Initiative", "Weapon Finesse" };
+        // Monk bonus feats (prerequisites bypassed per D&D 3.5e):
+        // Level 1: Stunning Fist, Level 2: Deflect Arrows
+        pc3.BonusFeats = new System.Collections.Generic.List<string> { "Stunning Fist", "Deflect Arrows" };
 
         // PC4: Grunk the Half-Orc Barbarian
         var pc4 = CreatedCharacters[3];

@@ -19,9 +19,12 @@ public class FeatSelectionUI : MonoBehaviour
     private CharacterStats _stats;
     private bool _isBuilt = false;
     private bool _isFighterBonus = false;
+    private bool _isMonkBonus = false;
+    private int _monkBonusLevel = 0; // The specific monk level for bonus feat filtering (1, 2, or 6)
     private int _featsToSelect = 1;
     private List<string> _selectedFeats = new List<string>();
     private List<FeatDefinition> _allFeats;
+    private List<FeatDefinition> _monkBonusFeatList; // Filtered list for monk bonus feats
     private string _filterType = "All";
     private string _searchText = "";
 
@@ -234,8 +237,9 @@ public class FeatSelectionUI : MonoBehaviour
     /// <param name="fighterBonusOnly">If true, only show fighter bonus feats</param>
     /// <param name="title">Custom title for the selection dialog (overrides default)</param>
     /// <param name="subtitle">Optional subtitle describing restrictions or context</param>
+    /// <param name="monkBonusLevel">If > 0, only show monk bonus feats for this specific monk level (1, 2, or 6). Prerequisites are bypassed.</param>
     public void OpenForSelection(CharacterStats stats, int featsToSelect, bool fighterBonusOnly = false,
-        string title = null, string subtitle = null)
+        string title = null, string subtitle = null, int monkBonusLevel = 0)
     {
         if (!_isBuilt)
         {
@@ -246,9 +250,21 @@ public class FeatSelectionUI : MonoBehaviour
         _stats = stats;
         _featsToSelect = featsToSelect;
         _isFighterBonus = fighterBonusOnly;
+        _isMonkBonus = monkBonusLevel > 0;
+        _monkBonusLevel = monkBonusLevel;
+        _monkBonusFeatList = null;
         _selectedFeats.Clear();
         _filterType = "All";
         _searchText = "";
+
+        // Pre-fetch monk bonus feats if in monk bonus mode
+        if (_isMonkBonus)
+        {
+            _monkBonusFeatList = FeatDefinitions.GetMonkBonusFeatsForLevel(monkBonusLevel, stats);
+            Debug.Log($"[FeatSelectionUI] Monk bonus mode: level {monkBonusLevel}, " +
+                      $"{_monkBonusFeatList.Count} feats available: " +
+                      string.Join(", ", _monkBonusFeatList.ConvertAll(f => f.FeatName)));
+        }
 
         // Set title - use custom title if provided, otherwise generate a default
         if (!string.IsNullOrEmpty(title))
@@ -257,13 +273,13 @@ public class FeatSelectionUI : MonoBehaviour
         }
         else
         {
-            string defaultTitle = fighterBonusOnly ? "Select Fighter Bonus Feat" : "Select Feat";
-            if (featsToSelect > 1)
-            {
-                defaultTitle = fighterBonusOnly
-                    ? $"Select {featsToSelect} Fighter Bonus Feats"
-                    : $"Select {featsToSelect} Feats";
-            }
+            string defaultTitle;
+            if (_isMonkBonus)
+                defaultTitle = $"Select Monk Bonus Feat (Level {monkBonusLevel})";
+            else if (fighterBonusOnly)
+                defaultTitle = featsToSelect > 1 ? $"Select {featsToSelect} Fighter Bonus Feats" : "Select Fighter Bonus Feat";
+            else
+                defaultTitle = featsToSelect > 1 ? $"Select {featsToSelect} Feats" : "Select Feat";
             _titleText.text = defaultTitle;
         }
 
@@ -279,9 +295,10 @@ public class FeatSelectionUI : MonoBehaviour
 
         FeatDefinitions.Init();
 
+        string modeStr = _isMonkBonus ? $" (monk bonus level {monkBonusLevel})" :
+                         fighterBonusOnly ? " (fighter bonus only)" : "";
         Debug.Log($"[FeatSelectionUI] Opening for {stats.CharacterName} ({stats.CharacterClass}): " +
-                  $"{featsToSelect} feats to select" +
-                  (fighterBonusOnly ? " (fighter bonus only)" : "") +
+                  $"{featsToSelect} feats to select{modeStr}" +
                   $", total feats in database: {FeatDefinitions.AllFeats.Count}");
 
         PopulateFeatList();
@@ -319,11 +336,22 @@ public class FeatSelectionUI : MonoBehaviour
         }
         _featRows.Clear();
 
-        // Get all feats sorted
-        _allFeats = FeatDefinitions.GetAllFeatsSorted();
+        // In monk bonus mode, use the pre-filtered monk bonus feat list
+        if (_isMonkBonus && _monkBonusFeatList != null)
+        {
+            _allFeats = _monkBonusFeatList;
+            Debug.Log($"[FeatSelectionUI] PopulateFeatList (Monk bonus level {_monkBonusLevel}): " +
+                      $"{_allFeats.Count} feats available");
+        }
+        else
+        {
+            // Get all feats sorted
+            _allFeats = FeatDefinitions.GetAllFeatsSorted();
+        }
 
         Debug.Log($"[FeatSelectionUI] PopulateFeatList: total feats={_allFeats.Count}, " +
-                  $"isFighterBonus={_isFighterBonus}, filter={_filterType}, search='{_searchText}'");
+                  $"isFighterBonus={_isFighterBonus}, isMonkBonus={_isMonkBonus}, " +
+                  $"filter={_filterType}, search='{_searchText}'");
 
         float rowHeight = 30f;
         int visibleIndex = 0;
@@ -335,22 +363,27 @@ public class FeatSelectionUI : MonoBehaviour
         {
             var feat = _allFeats[i];
 
-            // Apply filters
-            if (!PassesFilter(feat))
+            // In monk bonus mode, skip non-monk-bonus feats (already filtered, but be safe)
+            // and skip filter/search since the list is small and specific
+            if (!_isMonkBonus)
             {
-                if (_isFighterBonus && !feat.IsFighterBonus)
-                    filteredOutByBonus++;
-                else
-                    filteredOutByType++;
-                continue;
-            }
+                // Apply filters
+                if (!PassesFilter(feat))
+                {
+                    if (_isFighterBonus && !feat.IsFighterBonus)
+                        filteredOutByBonus++;
+                    else
+                        filteredOutByType++;
+                    continue;
+                }
 
-            // Apply search
-            if (!string.IsNullOrEmpty(_searchText) &&
-                !feat.FeatName.ToLower().Contains(_searchText.ToLower()))
-            {
-                filteredOutBySearch++;
-                continue;
+                // Apply search
+                if (!string.IsNullOrEmpty(_searchText) &&
+                    !feat.FeatName.ToLower().Contains(_searchText.ToLower()))
+                {
+                    filteredOutBySearch++;
+                    continue;
+                }
             }
 
             CreateFeatRow(feat, visibleIndex, rowHeight);
@@ -391,7 +424,8 @@ public class FeatSelectionUI : MonoBehaviour
         var row = new FeatRowUI();
         row.Feat = feat;
 
-        bool meetsPrereqs = feat.MeetsPrerequisites(_stats);
+        // Monk bonus feats bypass ALL prerequisites per D&D 3.5e rules
+        bool meetsPrereqs = _isMonkBonus ? true : feat.MeetsPrerequisites(_stats);
         bool alreadyHas = !feat.CanTakeMultiple && _stats.HasFeat(feat.FeatName);
         bool isSelected = _selectedFeats.Contains(feat.FeatName);
         bool canSelect = meetsPrereqs && !alreadyHas && !isSelected;
@@ -468,12 +502,13 @@ public class FeatSelectionUI : MonoBehaviour
         var feat = FeatDefinitions.GetFeat(featName);
         if (feat == null) return;
 
-        bool meetsPrereqs = feat.MeetsPrerequisites(_stats);
+        bool meetsPrereqs = _isMonkBonus ? true : feat.MeetsPrerequisites(_stats);
         var unmet = feat.GetUnmetPrerequisites(_stats);
 
         string detail = $"<color=#FFD700><b>{feat.FeatName}</b></color>\n";
         detail += $"<color=#88AACC>Type: {feat.Type}</color>";
         if (feat.IsFighterBonus) detail += " <color=#CC9933>[Fighter Bonus]</color>";
+        if (feat.IsMonkBonus) detail += " <color=#66CCAA>[Monk Bonus]</color>";
         if (feat.IsActive) detail += " <color=#CC6633>[Active]</color>";
         detail += "\n\n";
 
@@ -481,7 +516,11 @@ public class FeatSelectionUI : MonoBehaviour
 
         detail += $"<color=#CCCCAA>Prerequisites:</color> {feat.GetPrerequisitesString()}\n";
 
-        if (!meetsPrereqs && unmet.Count > 0)
+        if (_isMonkBonus && unmet.Count > 0)
+        {
+            detail += $"\n<color=#66CCAA>Prerequisites bypassed (Monk bonus feat)</color>";
+        }
+        else if (!meetsPrereqs && unmet.Count > 0)
         {
             detail += $"\n<color=#FF6666>Missing: {string.Join(", ", unmet)}</color>";
         }

@@ -57,6 +57,45 @@ public static class FeatDefinitions
         return available;
     }
 
+    /// <summary>
+    /// Get Monk bonus feats available at a specific monk level.
+    /// Monks bypass prerequisites for these feats.
+    /// Level 1: Improved Grapple, Stunning Fist
+    /// Level 2: Combat Reflexes, Deflect Arrows
+    /// Level 6: Improved Disarm, Improved Trip
+    /// </summary>
+    public static List<FeatDefinition> GetMonkBonusFeats(int monkLevel, CharacterStats stats)
+    {
+        if (!_initialized) Init();
+        var available = new List<FeatDefinition>();
+        foreach (var feat in _feats.Values)
+        {
+            if (!feat.IsMonkBonus) continue;
+            if (feat.MonkBonusLevel > monkLevel) continue;
+            if (!feat.CanTakeMultiple && stats != null && stats.HasFeat(feat.FeatName)) continue;
+            available.Add(feat);
+        }
+        return available;
+    }
+
+    /// <summary>
+    /// Get Monk bonus feats available at a specific monk bonus feat level (exact match).
+    /// Used for sequential selection: level 1 choices, then level 2 choices, etc.
+    /// </summary>
+    public static List<FeatDefinition> GetMonkBonusFeatsForLevel(int monkBonusLevel, CharacterStats stats)
+    {
+        if (!_initialized) Init();
+        var available = new List<FeatDefinition>();
+        foreach (var feat in _feats.Values)
+        {
+            if (!feat.IsMonkBonus) continue;
+            if (feat.MonkBonusLevel != monkBonusLevel) continue;
+            if (!feat.CanTakeMultiple && stats != null && stats.HasFeat(feat.FeatName)) continue;
+            available.Add(feat);
+        }
+        return available;
+    }
+
     /// <summary>Get all feats sorted by type for display.</summary>
     public static List<FeatDefinition> GetAllFeatsSorted()
     {
@@ -268,7 +307,9 @@ public static class FeatDefinitions
             "You do not provoke an attack of opportunity when you attempt to disarm an opponent, and you receive a +4 bonus on the opposed attack roll.",
             FeatType.Combat)
         {
-            IsFighterBonus = true
+            IsFighterBonus = true,
+            IsMonkBonus = true,
+            MonkBonusLevel = 6
         };
         impDisarm.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.AbilityScore, "INT", 13));
         impDisarm.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Feat, "Combat Expertise", 0));
@@ -281,7 +322,9 @@ public static class FeatDefinitions
             "You do not provoke an attack of opportunity when you make a touch attack to start a grapple. You also gain a +4 bonus on all grapple checks.",
             FeatType.Combat)
         {
-            IsFighterBonus = true
+            IsFighterBonus = true,
+            IsMonkBonus = true,
+            MonkBonusLevel = 1
         };
         impGrapple.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.AbilityScore, "DEX", 13));
         impGrapple.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Feat, "Improved Unarmed Strike", 0));
@@ -320,7 +363,9 @@ public static class FeatDefinitions
             "You do not provoke an attack of opportunity when you attempt to trip an opponent. You also gain a +4 bonus on your Strength check. If you trip successfully, you immediately get a melee attack against that opponent as if you hadn't used your attack for the trip attempt.",
             FeatType.Combat)
         {
-            IsFighterBonus = true
+            IsFighterBonus = true,
+            IsMonkBonus = true,
+            MonkBonusLevel = 6
         };
         impTrip.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.AbilityScore, "INT", 13));
         impTrip.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Feat, "Combat Expertise", 0));
@@ -507,7 +552,9 @@ public static class FeatDefinitions
             "You may make a number of additional attacks of opportunity equal to your Dexterity bonus. You can also make attacks of opportunity while flat-footed.",
             FeatType.Defensive)
         {
-            IsFighterBonus = true
+            IsFighterBonus = true,
+            IsMonkBonus = true,
+            MonkBonusLevel = 2
         };
         combatReflexes.Benefit.GrantsExtraAoO = true;
         combatReflexes.Benefit.Description = "Extra attacks of opportunity equal to DEX modifier";
@@ -688,7 +735,9 @@ public static class FeatDefinitions
             "You must have at least one hand free to use this feat. Once per round when you would normally be hit with a ranged weapon, you may deflect it so that you take no damage from it.",
             FeatType.Unarmed)
         {
-            IsFighterBonus = true
+            IsFighterBonus = true,
+            IsMonkBonus = true,
+            MonkBonusLevel = 2
         };
         deflect.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.AbilityScore, "DEX", 13));
         deflect.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Feat, "Improved Unarmed Strike", 0));
@@ -715,7 +764,9 @@ public static class FeatDefinitions
             "You must declare that you are using this feat before you make your attack roll. You can attempt a stunning attack once per day for every four levels you have attained, and no more than once per round. A defender hit must succeed on a Fortitude save (DC 10 + 1/2 your character level + your Wis modifier) or be stunned for 1 round.",
             FeatType.Unarmed)
         {
-            IsFighterBonus = true
+            IsFighterBonus = true,
+            IsMonkBonus = true,
+            MonkBonusLevel = 1
         };
         stunFist.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.AbilityScore, "DEX", 13));
         stunFist.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.AbilityScore, "WIS", 13));

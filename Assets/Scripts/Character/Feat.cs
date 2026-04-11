@@ -208,6 +208,8 @@ public class FeatDefinition
     public FeatBenefit Benefit = new FeatBenefit();
     public bool IsActive;           // Requires player activation (Power Attack, Combat Expertise)
     public bool IsFighterBonus;     // Can be taken as a fighter bonus feat
+    public bool IsMonkBonus;        // Can be taken as a monk bonus feat
+    public int MonkBonusLevel;      // Monk level at which this feat becomes available as a bonus (1, 2, or 6)
     public bool CanTakeMultiple;    // Can be taken more than once (Toughness, Weapon Focus)
     public bool RequiresChoice;     // Requires choosing a weapon/skill
 
