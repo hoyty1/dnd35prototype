@@ -120,12 +120,12 @@ public class SceneBootstrap : MonoBehaviour
     }
 
     // ========== LAYOUT CONSTANTS ==========
-    private const float PartyPanelWidth = 210f;
+    private const float PartyPanelWidth = 220f;
     private const float BottomPanelHeight = 160f;
     private const float NPCPanelWidth = 220f;
-    private const float IconSize = 36f;
-    private const float PartyEntryHeight = 80f;
-    private const float PartyEntrySpacing = 6f;
+    private const float IconSize = 32f;
+    private const float PartyEntryHeight = 140f;
+    private const float PartyEntrySpacing = 8f;
 
     // ========== UI ==========
     private CombatUI CreateUI()
@@ -224,7 +224,7 @@ public class SceneBootstrap : MonoBehaviour
         // Add vertical layout group
         VerticalLayoutGroup vlg = partyPanel.AddComponent<VerticalLayoutGroup>();
         vlg.spacing = PartyEntrySpacing;
-        vlg.padding = new RectOffset(6, 6, 8, 8);
+        vlg.padding = new RectOffset(8, 8, 8, 8);
         vlg.childAlignment = TextAnchor.UpperCenter;
         vlg.childControlWidth = true;
         vlg.childControlHeight = false;
@@ -246,12 +246,18 @@ public class SceneBootstrap : MonoBehaviour
 
     /// <summary>
     /// Creates a single party member entry inside the party panel.
-    /// Shows: active indicator, icon, name, ability scores, HP bar, AC, Atk, Speed.
+    /// Layout (top to bottom, within 140px height):
+    ///   [0-4]   Active indicator bar
+    ///   [6-38]  Icon + Name row (icon 32x32, name beside it)
+    ///   [40-64] Ability scores (two lines: STR/DEX/CON, WIS/INT/CHA)
+    ///   [66-78] HP text label
+    ///   [78-90] HP bar (12px tall)
+    ///   [94-108] AC + Atk row
     /// </summary>
     private void CreatePartyEntry(Transform parent, CombatUI combatUI, int pcIndex,
         Color panelColor, Color nameColor, Color indicatorColor)
     {
-        float entryW = PartyPanelWidth - 12; // account for padding
+        float entryW = PartyPanelWidth - 16; // account for padding
 
         GameObject entry = new GameObject($"PartyEntry_PC{pcIndex}");
         entry.transform.SetParent(parent, false);
@@ -261,57 +267,57 @@ public class SceneBootstrap : MonoBehaviour
         Image entryBg = entry.AddComponent<Image>();
         entryBg.color = panelColor;
 
-        // Active indicator (top bar)
+        // Active indicator (top bar, 4px tall)
         Image indicator = CreateActiveIndicator(entry.transform, $"PC{pcIndex}Active",
             new Vector2(0, PartyEntryHeight - 4), new Vector2(entryW, 4), indicatorColor);
 
-        float y = PartyEntryHeight - 10;
+        // ── Row 1: Icon + Name (y from top: 6px down) ──
+        float y = PartyEntryHeight - 10; // = 130
 
-        // Icon + Name row
         Image icon = CreateIconImage(entry.transform, $"PC{pcIndex}Icon",
-            new Vector2(4, y - IconSize + 14), new Vector2(IconSize, IconSize));
+            new Vector2(6, y - IconSize + 4), new Vector2(IconSize, IconSize));
 
         Text nameText = CreateText(entry.transform, $"PC{pcIndex}Name",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(IconSize + 8, y), new Vector2(entryW - IconSize - 14, 16),
-            $"Hero {pcIndex}", 11, nameColor, TextAnchor.MiddleLeft);
-        y -= 16;
+            new Vector2(IconSize + 12, y), new Vector2(entryW - IconSize - 18, 16),
+            $"Hero {pcIndex}", 12, nameColor, TextAnchor.MiddleLeft);
+        y -= (IconSize + 4); // move past the icon row = 130 - 36 = 94
 
-        // Compact ability scores (single line)
+        // ── Row 2: Ability scores (two lines, 26px total) ──
         Text abilityText = CreateText(entry.transform, $"PC{pcIndex}Abilities",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(4, y - 22), new Vector2(entryW - 8, 24),
-            "STR -- DEX -- CON --\nWIS -- INT -- CHA --", 8,
+            new Vector2(6, y - 26), new Vector2(entryW - 12, 26),
+            "STR -- DEX -- CON --\nWIS -- INT -- CHA --", 9,
             new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
-        y -= 26;
+        y -= 30; // = 64
 
-        // HP text
+        // ── Row 3: HP text ──
         Text hpText = CreateText(entry.transform, $"PC{pcIndex}HP",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(4, y), new Vector2(entryW - 8, 14),
+            new Vector2(6, y), new Vector2(entryW - 12, 14),
             "HP: --/--", 11, Color.white, TextAnchor.MiddleLeft);
-        y -= 12;
+        y -= 14; // = 50
 
-        // HP bar
+        // ── Row 4: HP bar (12px tall) ──
         Image hpBar = CreateHPBar(entry.transform, $"PC{pcIndex}HPBar",
-            new Vector2(4, y), new Vector2(entryW - 8, 8), nameColor);
-        y -= 12;
+            new Vector2(6, y - 12), new Vector2(entryW - 12, 12), nameColor);
+        y -= 18; // = 32 (12px bar + 6px gap)
 
-        // AC + Atk on one line
+        // ── Row 5: AC + Atk on one line ──
         Text acText = CreateText(entry.transform, $"PC{pcIndex}AC",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(4, y), new Vector2(entryW * 0.5f, 12),
-            "AC: --", 9, Color.white, TextAnchor.MiddleLeft);
+            new Vector2(6, y), new Vector2(entryW * 0.5f, 14),
+            "AC: --", 10, Color.white, TextAnchor.MiddleLeft);
 
         Text atkText = CreateText(entry.transform, $"PC{pcIndex}Atk",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(entryW * 0.5f, y), new Vector2(entryW * 0.5f - 4, 12),
-            "Atk: --", 9, Color.white, TextAnchor.MiddleLeft);
+            new Vector2(entryW * 0.45f, y), new Vector2(entryW * 0.55f - 6, 14),
+            "Atk: --", 10, Color.white, TextAnchor.MiddleLeft);
 
         // Speed text (hidden to save space, kept for data)
         Text speedText = CreateText(entry.transform, $"PC{pcIndex}Speed",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(4, -100), new Vector2(entryW - 8, 12),
+            new Vector2(6, -100), new Vector2(entryW - 12, 12),
             "Speed: -- sq", 8, Color.white, TextAnchor.MiddleLeft);
         speedText.gameObject.SetActive(false);
 
