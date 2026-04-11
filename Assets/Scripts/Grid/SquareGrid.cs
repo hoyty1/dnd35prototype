@@ -269,6 +269,43 @@ public class SquareGrid : MonoBehaviour
     }
 
     /// <summary>
+    /// Highlight all cells within a spell's range with the SpellRange color (purple).
+    /// Returns the list of highlighted cells for tracking.
+    /// </summary>
+    public List<SquareCell> HighlightSpellRange(Vector2Int origin, int range)
+    {
+        var highlighted = new List<SquareCell>();
+        foreach (var kvp in _cells)
+        {
+            if (kvp.Key == origin) continue;
+            if (SquareGridUtils.ChebyshevDistance(origin, kvp.Key) > range) continue;
+            if (SquareGridUtils.GetDistance(origin, kvp.Key) <= range)
+            {
+                kvp.Value.SetHighlight(HighlightType.SpellRange);
+                highlighted.Add(kvp.Value);
+            }
+        }
+        return highlighted;
+    }
+
+    /// <summary>
+    /// Clear only spell range highlights (reset SpellRange and SpellTarget cells to None).
+    /// </summary>
+    public void ClearSpellRangeHighlight()
+    {
+        foreach (var kvp in _cells)
+        {
+            var cell = kvp.Value;
+            // Only clear spell-related highlights, preserve other highlights
+            if (cell != null)
+            {
+                // We check the color to see if it's a spell highlight - simpler to just clear all
+                cell.SetHighlight(HighlightType.None);
+            }
+        }
+    }
+
+    /// <summary>
     /// Get the world-space center of the grid for camera positioning.
     /// </summary>
     public Vector3 GetGridCenter()

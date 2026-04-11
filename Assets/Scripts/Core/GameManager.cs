@@ -1307,6 +1307,7 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Highlight valid targets for a spell based on its range and target type.
+    /// Shows the full spell range area (purple) with valid targets highlighted (magenta).
     /// </summary>
     private void ShowSpellTargets(CharacterController caster, SpellData spell)
     {
@@ -1317,38 +1318,62 @@ public class GameManager : MonoBehaviour
         int range = spell.RangeSquares;
         if (range <= 0) range = 1; // Touch spells = adjacent (1 square)
 
+        bool casterIsPC = IsPC(caster);
+
         List<SquareCell> allCells = Grid.GetCellsInRange(caster.GridPosition, range);
         bool hasTarget = false;
 
+        // First pass: highlight all cells in range with spell range color (purple)
+        foreach (var cell in allCells)
+        {
+            int sqDist = SquareGridUtils.GetDistance(caster.GridPosition, cell.Coords);
+            if (sqDist > range) continue;
+            if (cell.Coords == caster.GridPosition) continue;
+            cell.SetHighlight(HighlightType.SpellRange);
+        }
+
+        // Highlight caster's own position
+        SquareCell casterCell = Grid.GetCell(caster.GridPosition);
+        if (casterCell != null)
+            casterCell.SetHighlight(HighlightType.Selected);
+
+        // Second pass: highlight valid targets (magenta) on top of range area
         foreach (var cell in allCells)
         {
             if (!cell.IsOccupied || cell.Occupant.Stats.IsDead) continue;
-            if (cell.Occupant == caster) continue; // Can't target self here (self spells are handled separately)
+            if (cell.Occupant == caster) continue;
 
             int sqDist = SquareGridUtils.GetDistance(caster.GridPosition, cell.Coords);
             if (sqDist > range) continue;
 
             bool validTarget = false;
-            if (spell.TargetType == SpellTargetType.SingleEnemy && cell.Occupant != caster)
+            if (spell.TargetType == SpellTargetType.SingleEnemy)
             {
-                // For enemies: NPC is enemy to PCs, PCs are enemies to NPC
-                bool isEnemy = (caster == PC1 || caster == PC2) ? (cell.Occupant == NPC) : (cell.Occupant == PC1 || cell.Occupant == PC2);
+                // Enemies: NPCs are enemies to PCs, PCs are enemies to NPCs
+                bool isEnemy = casterIsPC ? NPCs.Contains(cell.Occupant) : IsPC(cell.Occupant);
                 validTarget = isEnemy;
             }
             else if (spell.TargetType == SpellTargetType.SingleAlly)
             {
-                // For allies: PCs are allies to each other
-                bool isAlly = (caster == PC1 && cell.Occupant == PC2) || (caster == PC2 && cell.Occupant == PC1);
-                // Also allow targeting self for healing (cell won't match since we skipped self above)
+                // Allies: other PCs are allies to PCs, other NPCs are allies to NPCs
+                bool isAlly = casterIsPC ? (IsPC(cell.Occupant) && cell.Occupant != caster) :
+                                           (NPCs.Contains(cell.Occupant) && cell.Occupant != caster);
                 validTarget = isAlly;
+            }
+            else if (spell.TargetType == SpellTargetType.Touch)
+            {
+                // Touch can target anyone adjacent
+                validTarget = true;
+            }
+            else if (spell.TargetType == SpellTargetType.Area)
+            {
+                // Area spells can target any cell in range (including empty ones)
+                validTarget = true;
             }
 
             if (validTarget)
             {
-                if (spell.EffectType == SpellEffectType.Healing || spell.EffectType == SpellEffectType.Buff)
-                    cell.SetHighlight(HighlightType.Move); // Green for friendly spells
-                else
-                    cell.SetHighlight(HighlightType.Attack); // Red for damage spells
+                cell.SetHighlight(HighlightType.SpellTarget);
                 _highlightedCells.Add(cell);
                 hasTarget = true;
             }
@@ -1357,21 +1382,23 @@ public class GameManager : MonoBehaviour
         // For SingleAlly spells, also allow self-targeting by clicking own tile
         if (spell.TargetType == SpellTargetType.SingleAlly)
         {
-            SquareCell selfCell = Grid.GetCell(caster.GridPosition);
-            if (selfCell != null)
+            if (casterCell != null)
             {
-                selfCell.SetHighlight(HighlightType.Selected);
-                _highlightedCells.Add(selfCell);
+                casterCell.SetHighlight(HighlightType.SpellTarget);
+                _highlightedCells.Add(casterCell);
                 hasTarget = true;
             }
         }
 
         if (hasTarget)
         {
+            string rangeStr = spell.RangeSquares <= 0 ? "Touch" : $"{spell.RangeSquares} sq ({spell.RangeSquares * 5} ft)";
             string targetMsg = spell.TargetType == SpellTargetType.SingleAlly
                 ? "Click an ally (or self) to cast"
-                : "Click an enemy to cast";
-            CombatUI.SetTurnIndicator($"✦ {spell.Name}: {targetMsg} (Range: {spell.RangeSquares} sq)");
+                : spell.TargetType == SpellTargetType.Area
+                    ? "Click a target area to cast"
+                    : "Click an enemy to cast";
+            CombatUI.SetTurnIndicator($"✦ {spell.Name}: {targetMsg} | Range: {rangeStr}");
         }
         else
         {
@@ -1435,13 +1462,10 @@ public class GameManager : MonoBehaviour
         // Resolve the spell with metamagic
         SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic);
 
-        // Apply Mage Armor AC bonus
-        if (_pendingSpell.SpellId == "mage_armor" && result.Success)
+        // Apply buff effects based on spell type
+        if (result.Success && _pendingSpell.EffectType == SpellEffectType.Buff)
         {
-            target.Stats.SpellACBonus = _pendingSpell.BuffACBonus;
-            spellComp.MageArmorActive = true;
-            spellComp.MageArmorACBonus = _pendingSpell.BuffACBonus;
-            Debug.Log($"[GameManager] Mage Armor applied: +{_pendingSpell.BuffACBonus} AC to {target.Stats.CharacterName}");
+            ApplySpellBuff(caster, target, _pendingSpell, spellComp);
         }
 
         // Handle death if target was killed
@@ -1463,17 +1487,31 @@ public class GameManager : MonoBehaviour
             Debug.Log("[Spell] " + _lastCombatLog);
 
         CombatUI.ShowCombatLog(_lastCombatLog);
-        CombatUI.UpdateAllStats(PC1, PC2, NPC);
+        UpdateAllStatsUI();
 
         Grid.ClearAllHighlights();
 
-        // Check for NPC kill
-        if (result.TargetKilled && target == NPC)
+        // Check for victory (all NPCs dead) or defeat (all PCs dead)
+        if (result.TargetKilled)
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! Enemy defeated!");
-            CombatUI.SetActionButtonsVisible(false);
-            return;
+            if (AreAllNPCsDead())
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                CombatUI.SetActionButtonsVisible(false);
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                return;
+            }
+            else if (AreAllPCsDead())
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
+                CombatUI.SetActionButtonsVisible(false);
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                return;
+            }
         }
 
         _pendingSpell = null;
@@ -1481,6 +1519,123 @@ public class GameManager : MonoBehaviour
 
         // After standard action, check for remaining actions
         StartCoroutine(AfterAttackDelay(caster, 1.5f));
+    }
+
+    /// <summary>
+    /// Apply buff effects from a spell to the target character.
+    /// Handles Mage Armor, Shield, stat buffs, combat buffs, and generic buffs.
+    /// </summary>
+    private void ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
+    {
+        // Use the target's SpellcastingComponent if available, otherwise the caster's
+        var targetSpellComp = target.GetComponent<SpellcastingComponent>();
+
+        // Mage Armor: armor AC bonus
+        if (spell.SpellId == "mage_armor")
+        {
+            target.Stats.SpellACBonus = spell.BuffACBonus;
+            if (targetSpellComp != null)
+            {
+                targetSpellComp.MageArmorActive = true;
+                targetSpellComp.MageArmorACBonus = spell.BuffACBonus;
+            }
+            else
+            {
+                SpellcastingComponent.ApplyMageArmor(target, spell);
+            }
+            Debug.Log($"[GameManager] Mage Armor applied: +{spell.BuffACBonus} AC to {target.Stats.CharacterName}");
+        }
+        // Shield spell: shield AC bonus
+        else if (spell.SpellId == "shield" && spell.BuffShieldBonus > 0)
+        {
+            target.Stats.ShieldBonus += spell.BuffShieldBonus;
+            if (targetSpellComp != null)
+                targetSpellComp.ApplyBuff(spell);
+            Debug.Log($"[GameManager] Shield applied: +{spell.BuffShieldBonus} shield AC to {target.Stats.CharacterName}");
+        }
+        // Stat buffs (Bull's Strength, Cat's Grace, etc.)
+        else if (!string.IsNullOrEmpty(spell.BuffStatName) && spell.BuffStatBonus != 0)
+        {
+            ApplyStatBuff(target, spell.BuffStatName, spell.BuffStatBonus);
+            if (targetSpellComp != null)
+                targetSpellComp.ApplyBuff(spell);
+            Debug.Log($"[GameManager] {spell.Name} applied: +{spell.BuffStatBonus} {spell.BuffStatName} to {target.Stats.CharacterName}");
+        }
+        // Deflection AC bonus
+        else if (spell.BuffDeflectionBonus > 0)
+        {
+            target.Stats.DeflectionBonus += spell.BuffDeflectionBonus;
+            if (targetSpellComp != null)
+                targetSpellComp.ApplyBuff(spell);
+            Debug.Log($"[GameManager] {spell.Name} applied: +{spell.BuffDeflectionBonus} deflection AC to {target.Stats.CharacterName}");
+        }
+        // Temp HP
+        else if (spell.BuffTempHP > 0)
+        {
+            target.Stats.TempHP += spell.BuffTempHP;
+            if (targetSpellComp != null)
+                targetSpellComp.ApplyBuff(spell);
+            Debug.Log($"[GameManager] {spell.Name} applied: +{spell.BuffTempHP} temp HP to {target.Stats.CharacterName}");
+        }
+        // Combat buffs (attack/damage/save bonuses)
+        else if (spell.BuffAttackBonus != 0 || spell.BuffDamageBonus != 0 || spell.BuffSaveBonus != 0)
+        {
+            if (spell.BuffAttackBonus != 0)
+                target.Stats.MoraleAttackBonus += spell.BuffAttackBonus;
+            if (spell.BuffDamageBonus != 0)
+                target.Stats.MoraleDamageBonus += spell.BuffDamageBonus;
+            if (spell.BuffSaveBonus != 0)
+            {
+                target.Stats.MoraleSaveBonus += spell.BuffSaveBonus;
+            }
+            if (targetSpellComp != null)
+                targetSpellComp.ApplyBuff(spell);
+            Debug.Log($"[GameManager] {spell.Name} combat buff applied to {target.Stats.CharacterName}");
+        }
+        // Generic buff (track via SpellcastingComponent)
+        else
+        {
+            if (targetSpellComp != null)
+                targetSpellComp.ApplyBuff(spell);
+            else if (spellComp != null)
+                spellComp.ApplyBuff(spell);
+            Debug.Log($"[GameManager] {spell.Name} buff applied to {target.Stats.CharacterName}");
+        }
+    }
+
+    /// <summary>
+    /// Apply a stat buff to a target character (e.g., +4 STR from Bull's Strength).
+    /// </summary>
+    private void ApplyStatBuff(CharacterController target, string statName, int bonus)
+    {
+        switch (statName.ToUpper())
+        {
+            case "STR":
+                target.Stats.STR += bonus;
+                break;
+            case "DEX":
+                target.Stats.DEX += bonus;
+                break;
+            case "CON":
+                target.Stats.CON += bonus;
+                // CON buff also grants retroactive HP
+                int hpBonus = (bonus / 2) * target.Stats.Level;
+                target.Stats.CurrentHP += hpBonus;
+                target.Stats.TotalMaxHP += hpBonus;
+                break;
+            case "INT":
+                target.Stats.INT += bonus;
+                break;
+            case "WIS":
+                target.Stats.WIS += bonus;
+                break;
+            case "CHA":
+                target.Stats.CHA += bonus;
+                break;
+            default:
+                Debug.Log($"[GameManager] Unknown stat buff target: {statName}");
+                break;
+        }
     }
 
     // ========== MOVEMENT ==========

@@ -32,6 +32,9 @@ public class SquareCell : MonoBehaviour
     private static readonly Color HighlightRangeClose = new Color(0.3f, 0.9f, 0.3f, 0.35f);   // Green: 1st increment, no penalty
     private static readonly Color HighlightRangeMedium = new Color(0.9f, 0.9f, 0.2f, 0.35f);  // Yellow: 2nd-5th increments
     private static readonly Color HighlightRangeFar = new Color(0.9f, 0.5f, 0.1f, 0.35f);     // Orange: 6th-10th increments
+    // Spell range colors
+    private static readonly Color HighlightSpellRange = new Color(0.4f, 0.3f, 0.9f, 0.3f);    // Purple: spell range area
+    private static readonly Color HighlightSpellTarget = new Color(0.9f, 0.3f, 0.9f, 0.55f);  // Bright magenta: valid spell target
 
     public void Init(int x, int y)
     {
@@ -76,6 +79,12 @@ public class SquareCell : MonoBehaviour
             case HighlightType.RangeFar:
                 _sr.color = HighlightRangeFar;
                 break;
+            case HighlightType.SpellRange:
+                _sr.color = HighlightSpellRange;
+                break;
+            case HighlightType.SpellTarget:
+                _sr.color = HighlightSpellTarget;
+                break;
         }
     }
 
@@ -92,5 +101,7 @@ public enum HighlightType
     Flanking,
     RangeClose,    // 1st range increment (green) - no penalty
     RangeMedium,   // 2nd-5th range increments (yellow) - moderate penalty
-    RangeFar       // 6th-10th range increments (orange) - heavy penalty
+    RangeFar,      // 6th-10th range increments (orange) - heavy penalty
+    SpellRange,    // Spell range area (purple) - shows all hexes in spell range
+    SpellTarget    // Valid spell target (bright magenta) - clickable target within range
 }

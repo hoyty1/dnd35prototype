@@ -283,14 +283,14 @@ public class CharacterStats
         }
     }
 
-    /// <summary>Total Fortitude save: CON mod + class base + feat bonus.</summary>
-    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus;
+    /// <summary>Total Fortitude save: CON mod + class base + feat bonus + morale bonus.</summary>
+    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus;
 
-    /// <summary>Total Reflex save: DEX mod + class base + feat bonus.</summary>
-    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus;
+    /// <summary>Total Reflex save: DEX mod + class base + feat bonus + morale bonus.</summary>
+    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus;
 
-    /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus.</summary>
-    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus;
+    /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus + morale bonus.</summary>
+    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus;
 
     // ========== FEATS (D&D 3.5) ==========
     /// <summary>Set of feats this character has.</summary>
@@ -471,6 +471,21 @@ public class CharacterStats
     /// </summary>
     public int SpellACBonus;
 
+    /// <summary>Deflection bonus to AC from spells (e.g., Shield of Faith).</summary>
+    public int DeflectionBonus;
+
+    /// <summary>Morale bonus to attack rolls from spells (e.g., Bless).</summary>
+    public int MoraleAttackBonus;
+
+    /// <summary>Morale bonus to damage rolls from spells (e.g., Divine Favor).</summary>
+    public int MoraleDamageBonus;
+
+    /// <summary>Morale bonus to saving throws from spells (e.g., Bless).</summary>
+    public int MoraleSaveBonus;
+
+    /// <summary>Temporary hit points from spells (e.g., False Life).</summary>
+    public int TempHP;
+
     public int ArmorClass
     {
         get
@@ -482,12 +497,12 @@ public class CharacterStats
             // Use the higher of ArmorBonus (from equipment) or SpellACBonus (from spells).
             int effectiveArmorBonus = Mathf.Max(ArmorBonus, SpellACBonus);
             return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + SizeModifier
-                   + MonkACBonus + FeatACBonus + RageACPenalty;
+                   + MonkACBonus + FeatACBonus + RageACPenalty + DeflectionBonus;
         }
     }
 
-    /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier.</summary>
-    public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier;
+    /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier + morale bonus.</summary>
+    public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier + MoraleAttackBonus;
 
     /// <summary>Movement speed in squares per turn (includes class fast movement bonuses).</summary>
     public int MoveRange => BaseSpeed + MonkFastMovementBonus + BarbarianFastMovementBonus;
@@ -684,7 +699,7 @@ public class CharacterStats
         {
             total += Random.Range(1, BaseDamageDice + 1);
         }
-        total += STRMod + BonusDamage;
+        total += STRMod + BonusDamage + MoraleDamageBonus;
         return Mathf.Max(1, total); // Minimum 1 damage on a hit
     }
 
@@ -775,6 +790,20 @@ public class CharacterStats
     /// </summary>
     public void TakeDamage(int amount)
     {
+        // Temp HP absorbs damage first
+        if (TempHP > 0 && amount > 0)
+        {
+            if (amount <= TempHP)
+            {
+                TempHP -= amount;
+                return;
+            }
+            else
+            {
+                amount -= TempHP;
+                TempHP = 0;
+            }
+        }
         CurrentHP = Mathf.Max(0, CurrentHP - amount);
     }
 
