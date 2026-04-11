@@ -61,10 +61,13 @@ public class SpellSelectionUI : MonoBehaviour
     private Dictionary<string, SpellRowUI> _spellRows = new Dictionary<string, SpellRowUI>();
 
     // Layout constants
-    private const float PANEL_W = 880f;
-    private const float PANEL_H = 660f;
-    private const float ROW_H = 52f;
-    private const float LIST_W = 480f;
+    private const float PANEL_W = 1020f;
+    private const float PANEL_H = 720f;
+    private const float ROW_H = 56f;
+    private const float ROW_SPACING = 4f;
+    private const float LIST_W = 460f;
+    private const float DETAIL_W = 460f;
+    private const float GAP = 20f; // gap between list and detail panel
 
     private class SpellRowUI
     {
@@ -86,7 +89,7 @@ public class SpellSelectionUI : MonoBehaviour
         if (_font == null) _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         if (_font == null) _font = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
-        // Dark overlay
+        // Dark overlay — fills entire screen
         _overlayPanel = MakePanel(canvas.transform, "SpellSelOverlay",
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero, new Color(0, 0, 0, 0.85f));
@@ -95,67 +98,82 @@ public class SpellSelectionUI : MonoBehaviour
         overlayRT.offsetMax = Vector2.zero;
         _canvasGroup = _overlayPanel.AddComponent<CanvasGroup>();
 
-        // Main panel
+        // Main panel — centered, generous sizing
         _rootPanel = MakePanel(_overlayPanel.transform, "SpellSelPanel",
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             Vector2.zero, new Vector2(PANEL_W, PANEL_H), new Color(0.12f, 0.12f, 0.18f, 0.98f));
 
+        // ── Header area (top 100px) ──
+        float headerTop = PANEL_H / 2f;
+
         // Title
         _titleText = MakeText(_rootPanel.transform, "Title",
-            new Vector2(0, PANEL_H / 2 - 28), new Vector2(PANEL_W - 40, 36),
+            new Vector2(0, headerTop - 30), new Vector2(PANEL_W - 40, 40),
             "SPELL SELECTION", 24, Color.white, TextAnchor.MiddleCenter);
 
         // Subtitle
         _subtitleText = MakeText(_rootPanel.transform, "Subtitle",
-            new Vector2(0, PANEL_H / 2 - 56), new Vector2(PANEL_W - 40, 22),
+            new Vector2(0, headerTop - 62), new Vector2(PANEL_W - 40, 24),
             "", 14, new Color(0.7f, 0.8f, 1f), TextAnchor.MiddleCenter);
 
-        // Selection count
+        // Selection counts (left-aligned under subtitle)
         _selectionCountText = MakeText(_rootPanel.transform, "Count",
-            new Vector2(-PANEL_W / 4, PANEL_H / 2 - 78), new Vector2(PANEL_W / 2, 22),
+            new Vector2(-PANEL_W / 6, headerTop - 90), new Vector2(PANEL_W * 0.55f, 24),
             "", 14, new Color(0.9f, 0.9f, 0.5f), TextAnchor.MiddleLeft);
+        _selectionCountText.supportRichText = true;
 
-        // Filter buttons
-        float filterY = PANEL_H / 2 - 78;
-        float filterStartX = PANEL_W / 4 - 50;
+        // Filter buttons (right side of header row, well-spaced, taller)
+        float filterY = headerTop - 90;
+        float filterBtnH = 30f;
+        float filterBtnSpacing = 8f;
+        float filterStartX = PANEL_W / 2 - 330; // right-aligned area
+
         _filterAllButton = MakeButton(_rootPanel.transform, "FilterAll",
-            new Vector2(filterStartX, filterY), new Vector2(60, 24),
-            "All", new Color(0.3f, 0.3f, 0.5f), Color.white, 12);
+            new Vector2(filterStartX, filterY), new Vector2(60, filterBtnH),
+            "All", new Color(0.3f, 0.3f, 0.5f), Color.white, 13);
         _filterAllButton.onClick.AddListener(() => SetFilter(-1));
 
         _filter0Button = MakeButton(_rootPanel.transform, "Filter0",
-            new Vector2(filterStartX + 68, filterY), new Vector2(70, 24),
-            "Cantrips", new Color(0.3f, 0.3f, 0.5f), Color.white, 11);
+            new Vector2(filterStartX + 60 + filterBtnSpacing, filterY), new Vector2(80, filterBtnH),
+            "Cantrips", new Color(0.3f, 0.3f, 0.5f), Color.white, 12);
         _filter0Button.onClick.AddListener(() => SetFilter(0));
 
         _filter1Button = MakeButton(_rootPanel.transform, "Filter1",
-            new Vector2(filterStartX + 146, filterY), new Vector2(60, 24),
-            "1st", new Color(0.3f, 0.3f, 0.5f), Color.white, 12);
+            new Vector2(filterStartX + 60 + 80 + filterBtnSpacing * 2, filterY), new Vector2(60, filterBtnH),
+            "1st", new Color(0.3f, 0.3f, 0.5f), Color.white, 13);
         _filter1Button.onClick.AddListener(() => SetFilter(1));
 
         _filter2Button = MakeButton(_rootPanel.transform, "Filter2",
-            new Vector2(filterStartX + 214, filterY), new Vector2(60, 24),
-            "2nd", new Color(0.3f, 0.3f, 0.5f), Color.white, 12);
+            new Vector2(filterStartX + 60 + 80 + 60 + filterBtnSpacing * 3, filterY), new Vector2(60, filterBtnH),
+            "2nd", new Color(0.3f, 0.3f, 0.5f), Color.white, 13);
         _filter2Button.onClick.AddListener(() => SetFilter(2));
 
+        // ── Content area (below header, above confirm button) ──
+        float contentTop = headerTop - 115;             // start below header area
+        float contentBottom = -PANEL_H / 2f + 65;       // leave room for confirm button
+        float contentH = contentTop - contentBottom;
+
+        // Calculate left/right panel positions to avoid overlap
+        float totalContentW = LIST_W + GAP + DETAIL_W;
+        float listCenterX = -totalContentW / 2f + LIST_W / 2f;
+        float detailCenterX = totalContentW / 2f - DETAIL_W / 2f;
+        float contentCenterY = (contentTop + contentBottom) / 2f;
+
         // Scroll area for spell list (left side)
-        float scrollY = -20f;
-        float scrollH = PANEL_H - 180;
         GameObject scrollArea = MakePanel(_rootPanel.transform, "ScrollArea",
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(-PANEL_W / 4 + 20, scrollY), new Vector2(LIST_W, scrollH),
+            new Vector2(listCenterX, contentCenterY), new Vector2(LIST_W, contentH),
             new Color(0.08f, 0.08f, 0.12f, 0.9f));
 
-        // ScrollRect
+        // ScrollRect with proper viewport and mask
         GameObject viewport = new GameObject("Viewport");
         viewport.transform.SetParent(scrollArea.transform, false);
         var vpRT = viewport.AddComponent<RectTransform>();
         vpRT.anchorMin = Vector2.zero;
         vpRT.anchorMax = Vector2.one;
-        vpRT.offsetMin = Vector2.zero;
-        vpRT.offsetMax = Vector2.zero;
+        vpRT.offsetMin = new Vector2(4, 4);   // small inner padding
+        vpRT.offsetMax = new Vector2(-4, -4);
         // Mask image needs non-zero alpha so the stencil buffer is written;
-        // Color.clear (alpha 0) causes all children to be invisible.
         // showMaskGraphic = false hides the image visually while keeping the mask functional.
         viewport.AddComponent<Image>().color = Color.white;
         viewport.AddComponent<Mask>().showMaskGraphic = false;
@@ -174,20 +192,21 @@ public class SpellSelectionUI : MonoBehaviour
         scrollRect.viewport = vpRT;
         scrollRect.vertical = true;
         scrollRect.horizontal = false;
+        scrollRect.scrollSensitivity = 30f;
 
-        // Spell detail panel (right side)
+        // Spell detail panel (right side) — no overlap with list
         GameObject detailPanel = MakePanel(_rootPanel.transform, "DetailPanel",
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(PANEL_W / 4 - 10, scrollY), new Vector2(PANEL_W / 2 - 60, scrollH),
+            new Vector2(detailCenterX, contentCenterY), new Vector2(DETAIL_W, contentH),
             new Color(0.1f, 0.1f, 0.15f, 0.9f));
 
         _spellDetailText = MakeText(detailPanel.transform, "DetailText",
-            new Vector2(0, 0), new Vector2(PANEL_W / 2 - 80, scrollH - 20),
-            "Click a spell to see its details.", 13, new Color(0.85f, 0.85f, 0.8f), TextAnchor.UpperLeft);
+            new Vector2(0, 0), new Vector2(DETAIL_W - 30, contentH - 24),
+            "Click a spell to see its details.", 14, new Color(0.85f, 0.85f, 0.8f), TextAnchor.UpperLeft);
 
-        // Confirm button
+        // Confirm button — clearly at the bottom with space around it
         _confirmButton = MakeButton(_rootPanel.transform, "ConfirmBtn",
-            new Vector2(0, -PANEL_H / 2 + 30), new Vector2(240, 42),
+            new Vector2(0, -PANEL_H / 2 + 32), new Vector2(280, 46),
             "Confirm Spell Selection ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 18);
         _confirmButton.onClick.AddListener(OnConfirm);
 
@@ -289,7 +308,13 @@ public class SpellSelectionUI : MonoBehaviour
         }
         _spellRows.Clear();
 
-        float yPos = 0;
+        // Also destroy any leftover headers
+        foreach (Transform child in _scrollContent.transform)
+        {
+            Destroy(child.gameObject);
+        }
+
+        float yPos = -ROW_SPACING; // start with a small top margin
         int lastLevel = -1;
 
         foreach (var spell in _availableSpells)
@@ -301,6 +326,7 @@ public class SpellSelectionUI : MonoBehaviour
             // Level header
             if (spell.SpellLevel != lastLevel)
             {
+                if (lastLevel >= 0) yPos -= 6; // extra spacing between level groups
                 lastLevel = spell.SpellLevel;
                 string cantripLabel = _className == "Cleric" ? "ORISONS" : "CANTRIPS";
                 string headerLabel = spell.SpellLevel == 0 ? $"═══ {cantripLabel} (Level 0) — Select {_maxCantrips} ═══" :
@@ -312,7 +338,7 @@ public class SpellSelectionUI : MonoBehaviour
                 hRT.anchorMax = new Vector2(1, 1);
                 hRT.pivot = new Vector2(0.5f, 1);
                 hRT.anchoredPosition = new Vector2(0, yPos);
-                hRT.sizeDelta = new Vector2(0, 28);
+                hRT.sizeDelta = new Vector2(0, 30);
                 var hText = headerGO.AddComponent<Text>();
                 hText.text = headerLabel;
                 hText.font = _font;
@@ -320,16 +346,17 @@ public class SpellSelectionUI : MonoBehaviour
                 hText.color = new Color(0.7f, 0.8f, 1f);
                 hText.alignment = TextAnchor.MiddleCenter;
                 hText.supportRichText = true;
-                yPos -= 28;
+                hText.raycastTarget = false; // don't block clicks
+                yPos -= 32;
             }
 
-            // Spell row
+            // Spell row with spacing
             var rowUI = CreateSpellRow(spell, yPos);
             _spellRows[spell.SpellId] = rowUI;
-            yPos -= ROW_H;
+            yPos -= (ROW_H + ROW_SPACING);
         }
 
-        _scrollContentRT.sizeDelta = new Vector2(0, Mathf.Abs(yPos) + 10);
+        _scrollContentRT.sizeDelta = new Vector2(0, Mathf.Abs(yPos) + 12);
     }
 
     private SpellRowUI CreateSpellRow(SpellData spell, float yPos)
@@ -347,52 +374,75 @@ public class SpellSelectionUI : MonoBehaviour
         rt.anchoredPosition = new Vector2(0, yPos);
         rt.sizeDelta = new Vector2(0, ROW_H);
 
-        // Background
+        // Background — acts as the row-click area to show spell details
         row.Background = row.Row.AddComponent<Image>();
         bool isCantrip = spell.SpellLevel == 0;
         row.Background.color = isCantrip ? new Color(0.12f, 0.14f, 0.12f, 0.6f) : new Color(0.1f, 0.1f, 0.15f, 0.6f);
 
+        // Row button for showing detail (on the background).
+        // IMPORTANT: Add this BEFORE child buttons so children are layered on top and
+        // receive clicks first in Unity's event system.
+        var rowButton = row.Row.AddComponent<Button>();
+        rowButton.transition = Selectable.Transition.None;
+        rowButton.targetGraphic = row.Background;
+        string sid = spell.SpellId;
+        rowButton.onClick.AddListener(() => ShowSpellDetail(sid));
+
         // Select button — shown for cantrips (both classes) and higher-level spells (Wizard only)
-        // Clerics don't select 1st/2nd level spells (they know all), but DO select orisons
         bool showSelect = false;
         if (spell.SpellLevel == 0 && _cantripSelectionRequired)
-            showSelect = true; // Both Wizards and Clerics select cantrips/orisons
+            showSelect = true;
         else if (_className == "Wizard" && spell.SpellLevel > 0)
-            showSelect = true; // Wizards select higher-level spells
+            showSelect = true;
+
+        // Layout: [SelectBtn 48px] [8px gap] [Name/Info text fills remaining width]
+        float selectBtnW = 48f;
+        float selectBtnH = 42f;
+        float textLeftPadding = 10f;
+        float textStartX;
 
         if (showSelect)
         {
+            // Select button positioned at the left edge of the row
+            float btnX = -LIST_W / 2f + selectBtnW / 2f + 8f; // 8px left margin
             row.SelectButton = MakeButton(row.Row.transform, "SelBtn",
-                new Vector2(-LIST_W / 2 + 30, 0), new Vector2(42, 36),
-                "○", new Color(0.2f, 0.2f, 0.35f), Color.white, 18);
+                new Vector2(btnX, 0), new Vector2(selectBtnW, selectBtnH),
+                "○", new Color(0.2f, 0.2f, 0.35f), Color.white, 20);
             string spellId = spell.SpellId;
             row.SelectButton.onClick.AddListener(() => ToggleSpell(spellId));
             row.ButtonText = row.SelectButton.GetComponentInChildren<Text>();
+            textStartX = btnX + selectBtnW / 2f + textLeftPadding;
+        }
+        else
+        {
+            textStartX = -LIST_W / 2f + 14f;
         }
 
-        // Spell name
-        float nameX = showSelect ? -LIST_W / 2 + 80 : -LIST_W / 2 + 15;
+        // Available width for text content
+        float textW = LIST_W / 2f + (LIST_W / 2f - (textStartX + LIST_W / 2f)) - 10f;
+        // Simplify: text goes from textStartX to right edge with 10px right padding
+        float textRightEdge = LIST_W / 2f - 10f;
+        float textCenterX = (textStartX + textRightEdge) / 2f;
+        textW = textRightEdge - textStartX;
+
+        // Spell name (upper portion of row)
         string placeholderTag = spell.IsPlaceholder ? " <color=#FF8800>★</color>" : "";
         string levelTag = spell.SpellLevel == 0 ? "<color=#888888>[C]</color>" :
                           $"<color=#AABBFF>[{spell.SpellLevel}]</color>";
 
         row.NameText = MakeText(row.Row.transform, "Name",
-            new Vector2(nameX + 100, 8), new Vector2(LIST_W - 80, 20),
+            new Vector2(textCenterX, 10), new Vector2(textW, 22),
             $"{levelTag} {spell.Name}{placeholderTag}", 14,
             spell.IsPlaceholder ? new Color(0.7f, 0.7f, 0.6f) : Color.white, TextAnchor.MiddleLeft);
+        row.NameText.raycastTarget = false; // don't block row/button clicks
 
-        // Info line (school, effect)
+        // Info line (lower portion of row — school, effect)
         string effectStr = GetEffectString(spell);
         row.InfoText = MakeText(row.Row.transform, "Info",
-            new Vector2(nameX + 100, -10), new Vector2(LIST_W - 80, 18),
+            new Vector2(textCenterX, -10), new Vector2(textW, 18),
             $"<color=#888888>{spell.School}</color> | {effectStr}", 11,
             new Color(0.65f, 0.65f, 0.6f), TextAnchor.MiddleLeft);
-
-        // Click anywhere on row to show details
-        var rowButton = row.Row.AddComponent<Button>();
-        rowButton.transition = Selectable.Transition.None;
-        string sid = spell.SpellId;
-        rowButton.onClick.AddListener(() => ShowSpellDetail(sid));
+        row.InfoText.raycastTarget = false; // don't block row/button clicks
 
         return row;
     }
@@ -741,8 +791,9 @@ public class SpellSelectionUI : MonoBehaviour
         cb.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.5f);
         btn.colors = cb;
 
-        MakeText(go.transform, name + "Label", Vector2.zero, size,
+        var labelText = MakeText(go.transform, name + "Label", Vector2.zero, size,
             label, fontSize, textColor, TextAnchor.MiddleCenter);
+        labelText.raycastTarget = false; // label should not intercept clicks from the button
 
         return btn;
     }
