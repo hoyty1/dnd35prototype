@@ -88,6 +88,24 @@ public class CharacterCreationUI : MonoBehaviour
     private InputField _nameInput;
     private Button _createButton;
 
+    // ========== QUICK START SELECTION STATE ==========
+    private int _qsSelectedPartySize = 0;
+    private string[] _qsSelectedClasses; // class name per slot (null = unselected)
+    private CharacterCreationData[] _qsCharacters; // built quick start characters per slot
+    private Dictionary<string, CharacterCreationData> _qsAvailableCharacters;
+    private int _qsActiveSlot = -1; // which slot is being edited
+
+    // Quick Start UI panels
+    private GameObject _qsOverlayPanel;
+    private GameObject _qsPartySizePanel;
+    private GameObject _qsSlotSelectionPanel;
+    private GameObject _qsClassDropdownPanel;
+    private GameObject _qsPreviewPanel;
+    private Text _qsSlotInfoText;
+    private Button _qsStartGameButton;
+    private Button[] _qsSlotButtons;
+    private Text[] _qsSlotLabels;
+
     // UI Layout constants
     private Font _font;
     private const float PANEL_W = 900f;
@@ -1476,21 +1494,543 @@ public class CharacterCreationUI : MonoBehaviour
         _rollResultsText.text = "";
     }
 
-    // ========== QUICK START ==========
+    // ========== QUICK START SELECTION FLOW ==========
+
+    private void InitializeQuickStartCharacters()
+    {
+        FeatDefinitions.Init();
+        SpellDatabase.Init();
+        _qsAvailableCharacters = new Dictionary<string, CharacterCreationData>
+        {
+            { "Fighter", FighterClass.GetQuickStartCharacter() },
+            { "Rogue", RogueClass.GetQuickStartCharacter() },
+            { "Cleric", ClericClass.GetQuickStartCharacter() },
+            { "Wizard", WizardClass.GetQuickStartCharacter() },
+            { "Monk", MonkClass.GetQuickStartCharacter() },
+            { "Barbarian", BarbarianClass.GetQuickStartCharacter() }
+        };
+        Debug.Log($"[QuickStart] Initialized {_qsAvailableCharacters.Count} quick start characters");
+    }
 
     private void OnQuickStart()
     {
-        Debug.Log("[CharCreation] Quick Start - creating 4 PCs: Lyra (Rogue), Aldric (Fighter), Theron (Cleric), Elara (Wizard)");
+        Debug.Log("[CharCreation] Quick Start selection flow opened");
+        InitializeQuickStartCharacters();
+        ShowQuickStartPartySize();
+    }
 
-        FeatDefinitions.Init();
+    // --- Quick Start Overlay helper ---
+    private void EnsureQSOverlay()
+    {
+        if (_qsOverlayPanel != null)
+        {
+            _qsOverlayPanel.SetActive(true);
+            // Destroy children to rebuild
+            foreach (Transform child in _qsOverlayPanel.transform)
+                GameObject.Destroy(child.gameObject);
+            return;
+        }
 
-        // Delegate character definitions to each class file
-        CreatedCharacters[0] = RogueClass.GetQuickStartCharacter();
-        CreatedCharacters[1] = FighterClass.GetQuickStartCharacter();
-        CreatedCharacters[2] = ClericClass.GetQuickStartCharacter();
-        CreatedCharacters[3] = WizardClass.GetQuickStartCharacter();
+        Canvas canvas = _rootPanel.GetComponentInParent<Canvas>();
+        _qsOverlayPanel = CreatePanel(canvas.transform, "QSOverlay",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, new Color(0, 0, 0, 0.9f));
+        RectTransform oRT = _qsOverlayPanel.GetComponent<RectTransform>();
+        oRT.offsetMin = Vector2.zero;
+        oRT.offsetMax = Vector2.zero;
+        _qsOverlayPanel.AddComponent<CanvasGroup>();
+    }
+
+    private void HideQSOverlay()
+    {
+        if (_qsOverlayPanel != null)
+            _qsOverlayPanel.SetActive(false);
+    }
+
+    // ========== STEP 1: PARTY SIZE SELECTION ==========
+
+    private void ShowQuickStartPartySize()
+    {
+        EnsureQSOverlay();
+
+        GameObject panel = CreatePanel(_qsOverlayPanel.transform, "QSPartySizePanel",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(600, 360), new Color(0.12f, 0.12f, 0.18f, 0.98f));
+
+        MakeText(panel.transform, "QSTitle",
+            new Vector2(0, 130), new Vector2(540, 40),
+            "QUICK START — SELECT PARTY SIZE", 24, new Color(1f, 0.85f, 0.4f), TextAnchor.MiddleCenter);
+
+        MakeText(panel.transform, "QSSubtitle",
+            new Vector2(0, 85), new Vector2(540, 30),
+            "How many characters in your party?", 16, new Color(0.8f, 0.8f, 0.8f), TextAnchor.MiddleCenter);
+
+        // Party size buttons: 1-6
+        float startX = -175f;
+        for (int i = 1; i <= 6; i++)
+        {
+            int size = i; // capture for closure
+            Button btn = MakeButton(panel.transform, $"QSSize{i}",
+                new Vector2(startX + (i - 1) * 70f, 20), new Vector2(56, 56),
+                i.ToString(), new Color(0.2f, 0.35f, 0.55f), Color.white, 24);
+            btn.onClick.AddListener(() => OnPartySizeSelected(size));
+        }
+
+        // Back button
+        Button backBtn = MakeButton(panel.transform, "QSBackBtn",
+            new Vector2(0, -80), new Vector2(120, 40),
+            "← Back", new Color(0.4f, 0.4f, 0.4f), Color.white, 16);
+        backBtn.onClick.AddListener(() =>
+        {
+            HideQSOverlay();
+        });
+    }
+
+    // ========== STEP 2: CHARACTER SLOT SELECTION ==========
+
+    private void OnPartySizeSelected(int size)
+    {
+        _qsSelectedPartySize = size;
+        _qsSelectedClasses = new string[size];
+        _qsCharacters = new CharacterCreationData[size];
+        Debug.Log($"[QuickStart] Party size selected: {size}");
+        ShowQuickStartSlotSelection();
+    }
+
+    private void ShowQuickStartSlotSelection()
+    {
+        EnsureQSOverlay();
+
+        float panelHeight = 260 + _qsSelectedPartySize * 50;
+        if (panelHeight < 360) panelHeight = 360;
+
+        GameObject panel = CreatePanel(_qsOverlayPanel.transform, "QSSlotPanel",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(700, panelHeight), new Color(0.12f, 0.12f, 0.18f, 0.98f));
+
+        float topY = panelHeight / 2 - 30;
+
+        MakeText(panel.transform, "QSSlotTitle",
+            new Vector2(0, topY), new Vector2(640, 40),
+            "QUICK START — SELECT CHARACTERS", 24, new Color(1f, 0.85f, 0.4f), TextAnchor.MiddleCenter);
+
+        MakeText(panel.transform, "QSPartyInfo",
+            new Vector2(0, topY - 35), new Vector2(640, 25),
+            $"Party Size: {_qsSelectedPartySize}", 16, new Color(0.7f, 0.8f, 1f), TextAnchor.MiddleCenter);
+
+        // Slot buttons
+        _qsSlotButtons = new Button[_qsSelectedPartySize];
+        _qsSlotLabels = new Text[_qsSelectedPartySize];
+
+        float slotStartY = topY - 80;
+        for (int i = 0; i < _qsSelectedPartySize; i++)
+        {
+            int slotIdx = i; // capture for closure
+            float y = slotStartY - i * 50;
+
+            MakeText(panel.transform, $"QSSlotLabel{i}",
+                new Vector2(-230, y), new Vector2(100, 36),
+                $"Slot {i + 1}:", 16, Color.white, TextAnchor.MiddleRight);
+
+            Button slotBtn = MakeButton(panel.transform, $"QSSlotBtn{i}",
+                new Vector2(30, y), new Vector2(300, 36),
+                "[ Select Class ▼ ]", new Color(0.2f, 0.2f, 0.3f), new Color(0.7f, 0.7f, 0.7f), 16);
+            slotBtn.onClick.AddListener(() => OnSlotClicked(slotIdx));
+            _qsSlotButtons[i] = slotBtn;
+
+            // Store the text reference so we can update label later
+            _qsSlotLabels[i] = slotBtn.GetComponentInChildren<Text>();
+        }
+
+        // Bottom buttons
+        float bottomY = -panelHeight / 2 + 40;
+
+        Button backBtn = MakeButton(panel.transform, "QSSlotBack",
+            new Vector2(-100, bottomY), new Vector2(120, 40),
+            "← Back", new Color(0.4f, 0.4f, 0.4f), Color.white, 16);
+        backBtn.onClick.AddListener(() => ShowQuickStartPartySize());
+
+        _qsStartGameButton = MakeButton(panel.transform, "QSStartGame",
+            new Vector2(100, bottomY), new Vector2(200, 44),
+            "Start Game ✓", new Color(0.15f, 0.55f, 0.15f), Color.white, 20);
+        _qsStartGameButton.onClick.AddListener(OnQSStartGame);
+        _qsStartGameButton.interactable = false;
+
+        // Refresh slot labels in case we already have selections
+        RefreshSlotLabels();
+    }
+
+    private void RefreshSlotLabels()
+    {
+        if (_qsSlotLabels == null) return;
+        bool allFilled = true;
+        for (int i = 0; i < _qsSelectedPartySize; i++)
+        {
+            if (_qsSlotLabels[i] == null) continue;
+            if (_qsSelectedClasses[i] != null && _qsAvailableCharacters.ContainsKey(_qsSelectedClasses[i]))
+            {
+                var ch = _qsAvailableCharacters[_qsSelectedClasses[i]];
+                _qsSlotLabels[i].text = $"{ch.CharacterName} — {ch.RaceName} {ch.ClassName}";
+                _qsSlotLabels[i].color = Color.white;
+
+                // Recolor the button to class color
+                ClassRegistry.Init();
+                ICharacterClass classDef = ClassRegistry.GetClass(_qsSelectedClasses[i]);
+                if (classDef != null)
+                {
+                    var cb = _qsSlotButtons[i].colors;
+                    cb.normalColor = classDef.ButtonColor;
+                    cb.highlightedColor = classDef.ButtonColor * 1.3f;
+                    cb.pressedColor = classDef.ButtonColor * 0.7f;
+                    _qsSlotButtons[i].colors = cb;
+                }
+            }
+            else
+            {
+                _qsSlotLabels[i].text = "[ Select Class ▼ ]";
+                _qsSlotLabels[i].color = new Color(0.7f, 0.7f, 0.7f);
+                allFilled = false;
+            }
+        }
+        if (_qsStartGameButton != null)
+            _qsStartGameButton.interactable = allFilled;
+    }
+
+    // ========== STEP 3: CLASS SELECTION DROPDOWN ==========
+
+    private void OnSlotClicked(int slotIndex)
+    {
+        _qsActiveSlot = slotIndex;
+        ShowClassSelectionDropdown();
+    }
+
+    private void ShowClassSelectionDropdown()
+    {
+        EnsureQSOverlay();
+
+        string[] classNames = { "Fighter", "Rogue", "Cleric", "Wizard", "Monk", "Barbarian" };
+        float panelHeight = 120 + classNames.Length * 56;
+
+        GameObject panel = CreatePanel(_qsOverlayPanel.transform, "QSClassDropdown",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(500, panelHeight), new Color(0.12f, 0.12f, 0.18f, 0.98f));
+
+        float topY = panelHeight / 2 - 30;
+
+        MakeText(panel.transform, "QSDropTitle",
+            new Vector2(0, topY), new Vector2(460, 35),
+            $"Select Class for Slot {_qsActiveSlot + 1}", 22, new Color(1f, 0.85f, 0.4f), TextAnchor.MiddleCenter);
+
+        float btnStartY = topY - 55;
+        for (int i = 0; i < classNames.Length; i++)
+        {
+            string className = classNames[i];
+            float y = btnStartY - i * 56;
+
+            var ch = _qsAvailableCharacters[className];
+            string label = $"{ch.CharacterName} — {ch.RaceName} {className}";
+
+            ClassRegistry.Init();
+            ICharacterClass classDef = ClassRegistry.GetClass(className);
+            Color btnColor = classDef != null ? classDef.ButtonColor : new Color(0.25f, 0.25f, 0.4f);
+
+            Button classBtn = MakeButton(panel.transform, $"QSClass_{className}",
+                new Vector2(0, y), new Vector2(420, 44),
+                label, btnColor, Color.white, 17);
+            classBtn.onClick.AddListener(() => OnClassSelectedForSlot(className));
+        }
+
+        // Cancel button
+        float bottomY = -panelHeight / 2 + 30;
+        Button cancelBtn = MakeButton(panel.transform, "QSDropCancel",
+            new Vector2(0, bottomY), new Vector2(120, 36),
+            "Cancel", new Color(0.4f, 0.4f, 0.4f), Color.white, 16);
+        cancelBtn.onClick.AddListener(() => ShowQuickStartSlotSelection());
+    }
+
+    // ========== STEP 4: CHARACTER PREVIEW ==========
+
+    private void OnClassSelectedForSlot(string className)
+    {
+        _qsSelectedClasses[_qsActiveSlot] = className;
+        _qsCharacters[_qsActiveSlot] = _qsAvailableCharacters[className];
+        ShowCharacterPreview(_qsActiveSlot);
+    }
+
+    private void ShowCharacterPreview(int slotIndex)
+    {
+        EnsureQSOverlay();
+        var data = _qsCharacters[slotIndex];
+        if (data == null) return;
+
+        data.ComputeFinalStats();
+
+        float previewW = 600f;
+        float previewH = 600f;
+
+        GameObject panel = CreatePanel(_qsOverlayPanel.transform, "QSPreviewPanel",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(previewW, previewH), new Color(0.12f, 0.12f, 0.18f, 0.98f));
+
+        float topY = previewH / 2 - 30;
+
+        MakeText(panel.transform, "QSPreviewTitle",
+            new Vector2(0, topY), new Vector2(previewW - 40, 35),
+            "CHARACTER PREVIEW", 22, new Color(1f, 0.85f, 0.4f), TextAnchor.MiddleCenter);
+
+        // Build character sheet text
+        string sheet = BuildQuickStartCharacterSheet(data);
+
+        // Scroll area for the character sheet
+        float scrollH = previewH - 130;
+        GameObject scrollArea = CreatePanel(panel.transform, "QSPreviewScroll",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0, -10), new Vector2(previewW - 40, scrollH),
+            new Color(0.08f, 0.08f, 0.12f, 0.6f));
+
+        // Viewport
+        GameObject viewport = new GameObject("QSPreviewViewport");
+        viewport.transform.SetParent(scrollArea.transform, false);
+        RectTransform vpRT = viewport.AddComponent<RectTransform>();
+        vpRT.anchorMin = Vector2.zero;
+        vpRT.anchorMax = Vector2.one;
+        vpRT.offsetMin = Vector2.zero;
+        vpRT.offsetMax = Vector2.zero;
+        viewport.AddComponent<Image>().color = Color.white;
+        viewport.AddComponent<Mask>().showMaskGraphic = false;
+
+        // Content
+        GameObject content = new GameObject("QSPreviewContent");
+        content.transform.SetParent(viewport.transform, false);
+        RectTransform cRT = content.AddComponent<RectTransform>();
+        cRT.anchorMin = new Vector2(0, 1);
+        cRT.anchorMax = new Vector2(1, 1);
+        cRT.pivot = new Vector2(0.5f, 1);
+        cRT.anchoredPosition = Vector2.zero;
+
+        // ScrollRect
+        ScrollRect sr = scrollArea.AddComponent<ScrollRect>();
+        sr.content = cRT;
+        sr.viewport = vpRT;
+        sr.vertical = true;
+        sr.horizontal = false;
+        sr.movementType = ScrollRect.MovementType.Clamped;
+        sr.scrollSensitivity = 30f;
+
+        ScrollbarHelper.CreateVerticalScrollbar(sr, scrollArea.transform);
+
+        // Sheet text
+        Text sheetText = MakeText(content.transform, "QSSheetText",
+            Vector2.zero, new Vector2(previewW - 80, 0),
+            sheet, 14, new Color(0.9f, 0.9f, 0.85f), TextAnchor.UpperCenter);
+        RectTransform stRT = sheetText.GetComponent<RectTransform>();
+        stRT.anchorMin = new Vector2(0, 1);
+        stRT.anchorMax = new Vector2(1, 1);
+        stRT.pivot = new Vector2(0.5f, 1);
+        stRT.anchoredPosition = Vector2.zero;
+        stRT.sizeDelta = new Vector2(-20, 0);
+        sheetText.verticalOverflow = VerticalWrapMode.Overflow;
+
+        // Resize content based on text
+        int lineCount = sheet.Split('\n').Length;
+        float estimatedHeight = Mathf.Max(scrollH, lineCount * 18f + 20f);
+        cRT.sizeDelta = new Vector2(0, estimatedHeight);
+
+        // Buttons
+        float bottomY = -previewH / 2 + 35;
+
+        Button confirmBtn = MakeButton(panel.transform, "QSPreviewConfirm",
+            new Vector2(80, bottomY), new Vector2(160, 44),
+            "Confirm ✓", new Color(0.15f, 0.55f, 0.15f), Color.white, 18);
+        confirmBtn.onClick.AddListener(() =>
+        {
+            Debug.Log($"[QuickStart] Slot {slotIndex + 1}: Confirmed {data.CharacterName} ({data.ClassName})");
+            ShowQuickStartSlotSelection();
+        });
+
+        Button cancelBtn = MakeButton(panel.transform, "QSPreviewCancel",
+            new Vector2(-80, bottomY), new Vector2(140, 40),
+            "Cancel", new Color(0.5f, 0.2f, 0.2f), Color.white, 16);
+        cancelBtn.onClick.AddListener(() =>
+        {
+            _qsSelectedClasses[slotIndex] = null;
+            _qsCharacters[slotIndex] = null;
+            ShowQuickStartSlotSelection();
+        });
+    }
+
+    private string BuildQuickStartCharacterSheet(CharacterCreationData data)
+    {
+        string s = "";
+        s += $"══════════ CHARACTER SHEET ══════════\n\n";
+        s += $"{data.CharacterName} — {data.RaceName} {data.ClassName}, Level 3\n\n";
+
+        // Ability scores
+        s += "--- Ability Scores ---\n";
+        s += FormatQSStat("STR", data.STR, data.Race != null ? data.Race.STRModifier : 0, data.FinalSTR) + "\n";
+        s += FormatQSStat("DEX", data.DEX, data.Race != null ? data.Race.DEXModifier : 0, data.FinalDEX) + "\n";
+        s += FormatQSStat("CON", data.CON, data.Race != null ? data.Race.CONModifier : 0, data.FinalCON) + "\n";
+        s += FormatQSStat("INT", data.INT, data.Race != null ? data.Race.INTModifier : 0, data.FinalINT) + "\n";
+        s += FormatQSStat("WIS", data.WIS, data.Race != null ? data.Race.WISModifier : 0, data.FinalWIS) + "\n";
+        s += FormatQSStat("CHA", data.CHA, data.Race != null ? data.Race.CHAModifier : 0, data.FinalCHA) + "\n\n";
+
+        // Combat stats
+        int dexMod = CharacterStats.GetModifier(data.FinalDEX);
+        int strMod = CharacterStats.GetModifier(data.FinalSTR);
+        int conMod = CharacterStats.GetModifier(data.FinalCON);
+        int wisMod = CharacterStats.GetModifier(data.FinalWIS);
+        int sizeMod = data.Race != null ? data.Race.SizeACAndAttackModifier : 0;
+
+        // Compute AC based on class
+        int armorBonus = 0, shieldBonus = 0;
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(data.ClassName);
+        if (classDef != null)
+        {
+            armorBonus = classDef.DefaultArmorBonus;
+            shieldBonus = classDef.DefaultShieldBonus;
+        }
+
+        // For Monk, add WIS to AC if positive
+        int wisACBonus = 0;
+        if (data.ClassName == "Monk" && wisMod > 0)
+            wisACBonus = wisMod;
+
+        int effectiveDex = dexMod;
+        // Max Dex limit for heavier armor
+        if (armorBonus >= 4) effectiveDex = Mathf.Min(dexMod, 3);
+        else if (armorBonus >= 3) effectiveDex = Mathf.Min(dexMod, 4);
+
+        int ac = 10 + effectiveDex + armorBonus + shieldBonus + sizeMod + wisACBonus;
+        int attackBonus = data.BAB + strMod + sizeMod;
+
+        s += "--- Combat Stats ---\n";
+        s += $"HP: {data.HP}   (d{data.HitDie} + CON per level)\n";
+        s += $"AC: {ac}   (10 + {effectiveDex} DEX + {armorBonus} armor";
+        if (shieldBonus > 0) s += $" + {shieldBonus} shield";
+        if (wisACBonus > 0) s += $" + {wisACBonus} WIS";
+        if (sizeMod != 0) s += $" + {sizeMod} size";
+        s += ")\n";
+        s += $"Attack: {CharacterStats.FormatMod(attackBonus)}   (BAB {CharacterStats.FormatMod(data.BAB)} + {CharacterStats.FormatMod(strMod)} STR";
+        if (sizeMod != 0) s += $" + {sizeMod} size";
+        s += ")\n";
+        s += $"Speed: {(data.Race != null ? data.Race.BaseSpeedFeet : 30)} ft ({data.BaseSpeed} squares)\n\n";
+
+        // Saves
+        int baseFort = 0, baseRef = 0, baseWill = 0;
+        if (classDef != null)
+        {
+            // Good save = +3 at level 3, Poor save = +1 at level 3
+            baseFort = classDef.GoodFortitude ? 3 : 1;
+            baseRef = classDef.GoodReflex ? 3 : 1;
+            baseWill = classDef.GoodWill ? 3 : 1;
+        }
+        s += "--- Saving Throws ---\n";
+        s += $"Fortitude: {CharacterStats.FormatMod(baseFort + conMod)}   (base {baseFort} + {CharacterStats.FormatMod(conMod)} CON)\n";
+        s += $"Reflex: {CharacterStats.FormatMod(baseRef + dexMod)}   (base {baseRef} + {CharacterStats.FormatMod(dexMod)} DEX)\n";
+        s += $"Will: {CharacterStats.FormatMod(baseWill + wisMod)}   (base {baseWill} + {CharacterStats.FormatMod(wisMod)} WIS)\n\n";
+
+        // Skills
+        if (data.SkillRanks != null && data.SkillRanks.Count > 0)
+        {
+            s += "--- Skills ---\n";
+            foreach (var kvp in data.SkillRanks)
+                s += $"  {kvp.Key}: {kvp.Value} ranks\n";
+            s += "\n";
+        }
+
+        // Feats
+        if ((data.SelectedFeats != null && data.SelectedFeats.Count > 0) ||
+            (data.BonusFeats != null && data.BonusFeats.Count > 0))
+        {
+            s += "--- Feats ---\n";
+            if (data.SelectedFeats != null)
+                foreach (string feat in data.SelectedFeats)
+                    s += $"  • {feat}\n";
+            if (data.BonusFeats != null && data.BonusFeats.Count > 0)
+            {
+                string bonusLabel = data.ClassName == "Monk" ? "Monk Bonus" :
+                                    data.ClassName == "Fighter" ? "Fighter Bonus" :
+                                    data.ClassName == "Wizard" ? "Wizard Bonus" : "Class Bonus";
+                s += $"  ({bonusLabel} Feats)\n";
+                foreach (string feat in data.BonusFeats)
+                    s += $"  • {feat}\n";
+            }
+            if (!string.IsNullOrEmpty(data.WeaponFocusChoice))
+                s += $"  Weapon Focus: {data.WeaponFocusChoice}\n";
+            if (!string.IsNullOrEmpty(data.SkillFocusChoice))
+                s += $"  Skill Focus: {data.SkillFocusChoice}\n";
+            s += "\n";
+        }
+
+        // Spells (for casters)
+        if (classDef != null && classDef.IsSpellcaster && data.SelectedSpellIds != null && data.SelectedSpellIds.Count > 0)
+        {
+            SpellDatabase.Init();
+            s += "--- Spells ---\n";
+
+            var cantrips = new List<string>();
+            var higherSpells = new List<string>();
+            foreach (string spellId in data.SelectedSpellIds)
+            {
+                SpellData spell = SpellDatabase.GetSpell(spellId);
+                if (spell != null)
+                {
+                    string entry = $"  • {spell.Name} (Lvl {spell.SpellLevel}){(spell.IsPlaceholder ? " [P]" : "")}";
+                    if (spell.SpellLevel == 0) cantrips.Add(entry);
+                    else higherSpells.Add(entry);
+                }
+            }
+            if (cantrips.Count > 0)
+            {
+                s += "  Cantrips:\n";
+                foreach (string c in cantrips) s += c + "\n";
+            }
+            if (higherSpells.Count > 0)
+            {
+                s += "  Spellbook:\n";
+                foreach (string sp in higherSpells) s += sp + "\n";
+            }
+            if (data.ClassName == "Cleric")
+                s += "  Prepares from full 1st & 2nd level spell list each day.\n";
+            s += "\n";
+        }
+
+        return s;
+    }
+
+    private string FormatQSStat(string label, int baseVal, int raceMod, int finalVal)
+    {
+        int mod = CharacterStats.GetModifier(finalVal);
+        string modStr = mod >= 0 ? $"+{mod}" : $"{mod}";
+        string raceStr = raceMod != 0 ? $" ({(raceMod > 0 ? "+" : "")}{raceMod} racial)" : "";
+        return $"{label}: {finalVal} ({modStr}){raceStr}";
+    }
+
+    // ========== STEP 5: START GAME ==========
+
+    private void OnQSStartGame()
+    {
+        // Validate all slots are filled
+        for (int i = 0; i < _qsSelectedPartySize; i++)
+        {
+            if (_qsSelectedClasses[i] == null || _qsCharacters[i] == null)
+            {
+                Debug.LogWarning($"[QuickStart] Slot {i + 1} is empty — cannot start game");
+                return;
+            }
+        }
+
+        Debug.Log($"[QuickStart] Starting game with {_qsSelectedPartySize} characters:");
+        CreatedCharacters = new CharacterCreationData[_qsSelectedPartySize];
+        for (int i = 0; i < _qsSelectedPartySize; i++)
+        {
+            CreatedCharacters[i] = _qsCharacters[i];
+            Debug.Log($"  Slot {i + 1}: {CreatedCharacters[i].CharacterName} ({CreatedCharacters[i].RaceName} {CreatedCharacters[i].ClassName})");
+        }
 
         IsComplete = true;
+        HideQSOverlay();
         HideCreationUI();
 
         if (OnCreationComplete4 != null)
@@ -1499,7 +2039,8 @@ public class CharacterCreationUI : MonoBehaviour
         }
         else if (OnCreationComplete != null)
         {
-            OnCreationComplete.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
+            OnCreationComplete.Invoke(CreatedCharacters[0],
+                CreatedCharacters.Length > 1 ? CreatedCharacters[1] : CreatedCharacters[0]);
         }
     }
 

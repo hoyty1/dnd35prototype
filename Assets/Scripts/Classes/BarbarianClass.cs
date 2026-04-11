@@ -65,4 +65,31 @@ public class BarbarianClass : ICharacterClass
         // No automatic feats for Barbarian — Rage, Fast Movement, etc. are class features.
         Debug.Log($"[Barbarian] {stats.CharacterName}: Barbarian has no automatic feats (Rage, Fast Movement are class features)");
     }
+
+    /// <summary>
+    /// Returns a pre-built level 3 Barbarian quick start character.
+    /// Grok the Half-Orc Barbarian — focuses on STR, CON, DEX.
+    /// </summary>
+    public static CharacterCreationData GetQuickStartCharacter()
+    {
+        RaceDatabase.Init();
+        var data = new CharacterCreationData
+        {
+            CharacterName = "Grok",
+            RaceName = "Half-Orc",
+            Race = RaceDatabase.GetRace("Half-Orc"),
+            ClassName = "Barbarian",
+            STR = 17, DEX = 13, CON = 16,
+            INT = 8, WIS = 10, CHA = 6,
+            SelectedFeats = new List<string> { "Power Attack", "Cleave" },
+            BonusFeats = new List<string>(),
+            SelectedSpellIds = new List<string>() // Barbarians don't cast spells
+        };
+        data.ComputeFinalStats();
+        data.SkillRanks["Intimidate"] = 6;
+        data.SkillRanks["Listen"] = 4;
+        data.SkillRanks["Climb"] = 4;
+        data.SkillRanks["Swim"] = 4;
+        return data;
+    }
 }

@@ -75,4 +75,32 @@ public class MonkClass : ICharacterClass
         // Bonus feat selections are handled by CharacterCreationUI monk bonus feat system.
         Debug.Log($"[Monk] {stats.CharacterName}: Granted automatic monk feat: Improved Unarmed Strike");
     }
+
+    /// <summary>
+    /// Returns a pre-built level 3 Monk quick start character.
+    /// Kira the Human Monk — focuses on DEX, WIS, STR.
+    /// </summary>
+    public static CharacterCreationData GetQuickStartCharacter()
+    {
+        RaceDatabase.Init();
+        var data = new CharacterCreationData
+        {
+            CharacterName = "Kira",
+            RaceName = "Human",
+            Race = RaceDatabase.GetRace("Human"),
+            ClassName = "Monk",
+            STR = 14, DEX = 16, CON = 12,
+            INT = 10, WIS = 15, CHA = 8,
+            SelectedFeats = new List<string> { "Dodge", "Weapon Finesse" },
+            BonusFeats = new List<string> { "Stunning Fist" }, // Monk 1st-level bonus feat choice
+            SelectedSpellIds = new List<string>() // Monks don't cast spells
+        };
+        data.ComputeFinalStats();
+        data.SkillRanks["Tumble"] = 6;
+        data.SkillRanks["Balance"] = 4;
+        data.SkillRanks["Jump"] = 4;
+        data.SkillRanks["Listen"] = 4;
+        data.SkillRanks["Spot"] = 4;
+        return data;
+    }
 }
