@@ -59,20 +59,20 @@ public class MonkClass : ICharacterClass
     public Color ButtonColor => new Color(0.15f, 0.35f, 0.5f);
     public string InfoText => "Hit Die: d8 | BAB: +2 (3/4)\nGood Saves: Fort, Ref, Will\n\u2022 Flurry of Blows, +WIS to AC\nEquipment: Quarterstaff, Sling";
 
-    // Class Features
-    // D&D 3.5e PHB p.40-41: Monks receive the following AUTOMATIC feats at 1st level:
-    //   - Improved Unarmed Strike (PHB p.40, Table 3-10)
-    //   - Stunning Fist (PHB p.40, Table 3-10) — granted automatically, separate from bonus feat
-    // Additionally, Monks get a BONUS FEAT CHOICE at 1st level (Improved Grapple or Stunning Fist),
-    // but since Stunning Fist is already automatic, the choice is typically Improved Grapple.
-    // That bonus feat choice is handled by the character creation UI, NOT here.
+    // Class Features — D&D 3.5e PHB p.40, Table 3-10
+    // AUTOMATIC feat at 1st level:
+    //   - Improved Unarmed Strike (PHB p.40) — the ONLY automatic feat
+    // BONUS FEAT CHOICES (handled by character creation UI, NOT here):
+    //   - 1st level: Choose Improved Grapple OR Stunning Fist
+    //   - 2nd level: Choose Combat Reflexes OR Deflect Arrows
+    //   - 6th level: Choose Improved Disarm OR Improved Trip
+    // Stunning Fist is NOT automatic — it is one of the two choices at 1st level.
     public void InitFeats(CharacterStats stats)
     {
-        // Automatic feats per PHB Table 3-10: Monk class features
+        // Only automatic feat per PHB p.40: Improved Unarmed Strike
         stats.Feats.Add("Improved Unarmed Strike");
-        stats.Feats.Add("Stunning Fist");
-        // Note: Improved Grapple is NOT automatic — it's a bonus feat CHOICE at level 1
-        // handled by CharacterCreationUI monk bonus feat selection.
-        Debug.Log($"[Monk] {stats.CharacterName}: Granted automatic monk feats: Improved Unarmed Strike, Stunning Fist");
+        // Note: Stunning Fist is a BONUS FEAT CHOICE at level 1 (not automatic).
+        // Bonus feat selections are handled by CharacterCreationUI monk bonus feat system.
+        Debug.Log($"[Monk] {stats.CharacterName}: Granted automatic monk feat: Improved Unarmed Strike");
     }
 }
