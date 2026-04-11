@@ -103,6 +103,10 @@ public class CombatUI : MonoBehaviour
     public Button RapidShotToggle;          // Toggle button for Rapid Shot
     public Text RapidShotLabel;             // Shows "Rapid Shot: ON/OFF"
 
+    [Header("Layout Panels")]
+    public GameObject PartyPanelGO;          // Left-side party panel container
+    public GameObject CombatDataPanelGO;     // Bottom combat data panel container
+
     // Active-PC indicator images on the panels
     public Image PC1ActiveIndicator;
     public Image PC2ActiveIndicator;

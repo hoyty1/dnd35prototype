@@ -1,18 +1,27 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections.Generic;
 
 /// <summary>
 /// Bootstraps the entire game scene programmatically.
 /// Attach this to a single empty GameObject in the scene.
 /// Creates all required GameObjects, components, and UI at runtime.
-/// Supports four PC characters (PC1-PC4) and multiple NPC enemies with full D&D 3.5 stats display.
-/// Includes initiative order display panel and character icons.
+///
+/// NEW LAYOUT (reorganized):
+///   ┌──────────────────────────────────────────────────┐
+///   │  [Turn Indicator / Initiative - top center]       │
+///   ├──────┬───────────────────────────────┬────────────┤
+///   │ Party│                               │  NPC Info  │
+///   │ Panel│      HEX GRID AREA            │  (stacked) │
+///   │ (L)  │      (center)                 │  (R)       │
+///   ├──────┴───────────────────────────────┴────────────┤
+///   │  Combat Log (left 60%)  │  Action Buttons (40%)   │
+///   └──────────────────────────────────────────────────┘
 /// </summary>
 public class SceneBootstrap : MonoBehaviour
 {
     private void Awake()
     {
-        // Build the entire scene
         SetupCamera();
         SquareGrid grid = CreateSquareGrid();
         var (pcs, npc, npcList) = CreateCharacters();
@@ -74,17 +83,10 @@ public class SceneBootstrap : MonoBehaviour
     }
 
     // ========== CHARACTERS ==========
-    private (CharacterController[] pcs, CharacterController npc, System.Collections.Generic.List<CharacterController> npcList) CreateCharacters()
+    private (CharacterController[] pcs, CharacterController npc, List<CharacterController> npcList) CreateCharacters()
     {
-        // Create 4 PCs
         CharacterController[] pcs = new CharacterController[4];
         string[] pcNames = { "PC_Hero1", "PC_Hero2", "PC_Hero3", "PC_Hero4" };
-        Color[] pcTints = {
-            Color.white,
-            new Color(0.6f, 0.7f, 1f, 1f),
-            new Color(0.5f, 0.9f, 0.7f, 1f),
-            new Color(1f, 0.6f, 0.5f, 1f)
-        };
 
         for (int i = 0; i < 4; i++)
         {
@@ -94,14 +96,13 @@ public class SceneBootstrap : MonoBehaviour
             pcs[i].IsPlayerControlled = true;
         }
 
-        // Legacy NPC (first enemy — kept for backward compatibility)
+        // Legacy NPC (first enemy)
         GameObject npcGO = new GameObject("NPC_Enemy_0");
         npcGO.AddComponent<SpriteRenderer>();
         CharacterController npc = npcGO.AddComponent<CharacterController>();
         npc.IsPlayerControlled = false;
 
-        // Create additional NPC GameObjects for the encounter
-        var npcList = new System.Collections.Generic.List<CharacterController>();
+        var npcList = new List<CharacterController>();
         npcList.Add(npc);
 
         string[] enemyNames = { "NPC_Enemy_1", "NPC_Enemy_2" };
@@ -118,12 +119,15 @@ public class SceneBootstrap : MonoBehaviour
         return (pcs, npc, npcList);
     }
 
-    // ========== UI ==========
-    // Panel dimensions — compact to fit 4 PCs
-    private const float PanelWidth = 260f;
-    private const float PanelHeight = 200f;
-    private const float IconSize = 40f;
+    // ========== LAYOUT CONSTANTS ==========
+    private const float PartyPanelWidth = 210f;
+    private const float BottomPanelHeight = 160f;
+    private const float NPCPanelWidth = 220f;
+    private const float IconSize = 36f;
+    private const float PartyEntryHeight = 80f;
+    private const float PartyEntrySpacing = 6f;
 
+    // ========== UI ==========
     private CombatUI CreateUI()
     {
         // Create Canvas
@@ -146,12 +150,11 @@ public class SceneBootstrap : MonoBehaviour
             esGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
         }
 
-        // CombatUI component
         CombatUI combatUI = canvasGO.AddComponent<CombatUI>();
 
         // --- Turn Indicator (top center) ---
         combatUI.TurnIndicatorText = CreateText(canvasGO.transform, "TurnIndicator",
-            new Vector2(0, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1),
+            new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1),
             new Vector2(0, -10), new Vector2(800, 50),
             "", 24, Color.white, TextAnchor.MiddleCenter);
 
@@ -160,127 +163,25 @@ public class SceneBootstrap : MonoBehaviour
         // --- Initiative Order Display (below turn indicator) ---
         CreateInitiativePanel(canvasGO.transform, combatUI);
 
-        // --- PC Stats Panels (bottom, 4 panels side by side) ---
-        CreatePC1Panel(canvasGO.transform, combatUI);
-        CreatePC2Panel(canvasGO.transform, combatUI);
-        CreatePC3Panel(canvasGO.transform, combatUI);
-        CreatePC4Panel(canvasGO.transform, combatUI);
+        // --- Party Panel (left side, vertical) ---
+        CreatePartyPanel(canvasGO.transform, combatUI);
 
-        // --- NPC Stats Panels (right side, stacked for each enemy) ---
-        CreateNPCPanel(canvasGO.transform, combatUI); // Legacy single NPC panel (index 0)
-        CreateMultiNPCPanels(canvasGO.transform, combatUI, 3); // 3 enemy panels
+        // --- NPC Panels (right side, stacked from top) ---
+        CreateNPCPanelsRight(canvasGO.transform, combatUI, 3);
 
-        // --- Combat Log (bottom center, raised above panels) ---
-        GameObject logPanel = CreatePanel(canvasGO.transform, "CombatLogPanel",
-            new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
-            new Vector2(0, PanelHeight + 20), new Vector2(540, 140),
-            new Color(0, 0, 0, 0.75f));
+        // --- Combat Data Panel (bottom, full width) ---
+        CreateCombatDataPanel(canvasGO.transform, combatUI);
 
-        combatUI.CombatLogText = CreateText(logPanel.transform, "CombatLog",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, 5), new Vector2(520, 130),
-            "Combat begins! Choose your actions.", 14, Color.yellow, TextAnchor.MiddleCenter);
+        // --- Feat Controls (above bottom panel, right side) ---
+        CreateFeatControls(canvasGO.transform, combatUI);
 
-        // --- Action Panel (right side, middle) - D&D 3.5 Action Economy ---
-        float actionPanelHeight = 310f;
-        float actionPanelWidth = 240f;
-        GameObject actionPanel = CreatePanel(canvasGO.transform, "ActionPanel",
-            new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f),
-            new Vector2(-10, 0), new Vector2(actionPanelWidth, actionPanelHeight),
-            new Color(0.15f, 0.15f, 0.25f, 0.9f));
-        combatUI.ActionPanel = actionPanel;
-
-        float btnW = actionPanelWidth - 20f;
-        float btnH = 35f;
-        float y = actionPanelHeight - 10f;
-
-        // Title
-        CreateText(actionPanel.transform, "ActionsTitle",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y - 25), new Vector2(btnW, 25),
-            "ACTIONS", 18, Color.white, TextAnchor.MiddleCenter);
-        y -= 30f;
-
-        // Action Status text
-        combatUI.ActionStatusText = CreateText(actionPanel.transform, "ActionStatus",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y - 22), new Vector2(btnW, 22),
-            "[Move] [Standard]", 11, new Color(0.7f, 0.9f, 0.7f), TextAnchor.MiddleCenter);
-        y -= 28f;
-
-        // Move Button
-        combatUI.MoveButton = CreateButton(actionPanel.transform, "MoveBtn",
-            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
-            "Move (Move Action)", new Color(0.2f, 0.5f, 0.2f), Color.white);
-        y -= btnH + 5f;
-
-        // Attack Button
-        combatUI.AttackButton = CreateButton(actionPanel.transform, "AttackBtn",
-            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
-            "Attack (Standard)", new Color(0.8f, 0.2f, 0.2f), Color.white);
-        y -= btnH + 5f;
-
-        // Full Attack Button
-        combatUI.FullAttackButton = CreateButton(actionPanel.transform, "FullAttackBtn",
-            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
-            "Full Attack (Full-Round)", new Color(0.7f, 0.15f, 0.15f), Color.white);
-        y -= btnH + 5f;
-
-        // Dual Wield Button
-        combatUI.DualWieldButton = CreateButton(actionPanel.transform, "DualWieldBtn",
-            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
-            "Dual Wield (Full-Round)", new Color(0.6f, 0.3f, 0.6f), Color.white);
-        y -= btnH + 5f;
-
-        // Flurry of Blows Button
-        combatUI.FlurryOfBlowsButton = CreateButton(actionPanel.transform, "FlurryBtn",
-            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
-            "Flurry of Blows", new Color(0.2f, 0.6f, 0.6f), Color.white);
-        y -= btnH + 5f;
-
-        // Rage Button
-        combatUI.RageButton = CreateButton(actionPanel.transform, "RageBtn",
-            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
-            "Rage", new Color(0.7f, 0.2f, 0.1f), Color.white);
-        y -= btnH + 3f;
-
-        // Rage Status Text
-        combatUI.RageStatusText = CreateText(actionPanel.transform, "RageStatus",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y - 18), new Vector2(btnW, 18),
-            "", 10, new Color(1f, 0.6f, 0.3f), TextAnchor.MiddleCenter);
-        combatUI.RageStatusText.gameObject.SetActive(false);
-        y -= 22f;
-
-        // Cast Spell Button (Standard Action, spellcasters only)
-        combatUI.CastSpellButton = CreateButton(actionPanel.transform, "CastSpellBtn",
-            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
-            "Cast Spell", new Color(0.4f, 0.2f, 0.6f), Color.white);
-        y -= btnH + 3f;
-
-        // Spell Slots Text
-        combatUI.SpellSlotsText = CreateText(actionPanel.transform, "SpellSlots",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y - 16), new Vector2(btnW, 16),
-            "", 9, new Color(0.8f, 0.7f, 1f), TextAnchor.MiddleCenter);
-        combatUI.SpellSlotsText.gameObject.SetActive(false);
-        y -= 20f;
-
-        // End Turn Button
-        combatUI.EndTurnButton = CreateButton(actionPanel.transform, "EndTurnBtn",
-            new Vector2(10, y - btnH), new Vector2(btnW, btnH),
-            "End Turn", new Color(0.3f, 0.3f, 0.6f), Color.white);
-        y -= btnH + 10f;
-
-        actionPanel.SetActive(false);
-
-        // --- Feat Controls ---
-        CreateFeatControls(canvasGO.transform, combatUI, actionPanelWidth);
+        // Legacy NPC panel fields (hidden, for backward compatibility)
+        CreateLegacyNPCFields(canvasGO.transform, combatUI);
 
         return combatUI;
     }
 
-    /// <summary>Create the initiative order display panel below the turn indicator.</summary>
+    // ========== INITIATIVE PANEL (top center) ==========
     private void CreateInitiativePanel(Transform parent, CombatUI combatUI)
     {
         GameObject panel = CreatePanel(parent, "InitiativePanel",
@@ -294,108 +195,152 @@ public class SceneBootstrap : MonoBehaviour
             new Vector2(10, 2), new Vector2(880, 26),
             "", 13, new Color(0.9f, 0.9f, 0.8f), TextAnchor.MiddleCenter);
 
-        panel.SetActive(false); // Hidden until combat starts
+        panel.SetActive(false);
     }
 
-    /// <summary>Create a PC stats panel with D&D 3.5 ability scores and icon.</summary>
-    private void CreatePCPanel(Transform parent, CombatUI combatUI, int pcIndex, string panelName,
-        float xOffset, Color panelColor, Color nameColor, Color indicatorColor)
+    // ========== PARTY PANEL (left side) ==========
+    /// <summary>
+    /// Creates the left-side party panel with vertical list of all PC entries.
+    /// Each entry shows name, icon, HP bar, and active-turn indicator.
+    /// Anchored: left edge, from 20% bottom to top (leaving space for bottom panel).
+    /// </summary>
+    private void CreatePartyPanel(Transform parent, CombatUI combatUI)
     {
-        GameObject panel = CreatePanel(parent, panelName,
-            new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
-            new Vector2(xOffset, 10), new Vector2(PanelWidth, PanelHeight),
-            panelColor);
+        // Container panel — left edge, stretches from just above bottom panel to near top
+        GameObject partyPanel = new GameObject("PartyPanel");
+        partyPanel.transform.SetParent(parent, false);
+        RectTransform ppRT = partyPanel.AddComponent<RectTransform>();
+        // anchorMin.y = ratio of bottomPanelHeight to ref height (160/1080 ≈ 0.148)
+        float bottomRatio = BottomPanelHeight / 1080f;
+        ppRT.anchorMin = new Vector2(0, bottomRatio);
+        ppRT.anchorMax = new Vector2(0, 1);
+        ppRT.pivot = new Vector2(0, 1);
+        ppRT.anchoredPosition = new Vector2(8, -100); // 8px from left, 100px from top (below initiative)
+        ppRT.sizeDelta = new Vector2(PartyPanelWidth, 0); // width fixed, height stretches
 
-        // Active indicator
-        Image indicator = CreateActiveIndicator(panel.transform, $"PC{pcIndex}Active",
-            new Vector2(0, PanelHeight - 6), new Vector2(PanelWidth, 6), indicatorColor);
+        Image ppBg = partyPanel.AddComponent<Image>();
+        ppBg.color = new Color(0.08f, 0.08f, 0.14f, 0.88f);
 
-        float y = PanelHeight - 18;
+        // Add vertical layout group
+        VerticalLayoutGroup vlg = partyPanel.AddComponent<VerticalLayoutGroup>();
+        vlg.spacing = PartyEntrySpacing;
+        vlg.padding = new RectOffset(6, 6, 8, 8);
+        vlg.childAlignment = TextAnchor.UpperCenter;
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = false;
+        vlg.childForceExpandWidth = true;
+        vlg.childForceExpandHeight = false;
+
+        // Create 4 PC entries inside the party panel
+        CreatePartyEntry(partyPanel.transform, combatUI, 1,
+            new Color(0.1f, 0.2f, 0.4f, 0.9f), new Color(0.3f, 0.9f, 0.3f), new Color(0f, 1f, 0.3f));
+        CreatePartyEntry(partyPanel.transform, combatUI, 2,
+            new Color(0.1f, 0.15f, 0.35f, 0.9f), new Color(0.5f, 0.7f, 1f), new Color(0.3f, 0.5f, 1f));
+        CreatePartyEntry(partyPanel.transform, combatUI, 3,
+            new Color(0.1f, 0.25f, 0.25f, 0.9f), new Color(0.4f, 0.9f, 0.7f), new Color(0.2f, 0.8f, 0.6f));
+        CreatePartyEntry(partyPanel.transform, combatUI, 4,
+            new Color(0.3f, 0.1f, 0.1f, 0.9f), new Color(1f, 0.6f, 0.4f), new Color(0.9f, 0.3f, 0.2f));
+
+        combatUI.PartyPanelGO = partyPanel;
+    }
+
+    /// <summary>
+    /// Creates a single party member entry inside the party panel.
+    /// Shows: active indicator, icon, name, ability scores, HP bar, AC, Atk, Speed.
+    /// </summary>
+    private void CreatePartyEntry(Transform parent, CombatUI combatUI, int pcIndex,
+        Color panelColor, Color nameColor, Color indicatorColor)
+    {
+        float entryW = PartyPanelWidth - 12; // account for padding
+
+        GameObject entry = new GameObject($"PartyEntry_PC{pcIndex}");
+        entry.transform.SetParent(parent, false);
+        RectTransform entryRT = entry.AddComponent<RectTransform>();
+        entryRT.sizeDelta = new Vector2(entryW, PartyEntryHeight);
+
+        Image entryBg = entry.AddComponent<Image>();
+        entryBg.color = panelColor;
+
+        // Active indicator (top bar)
+        Image indicator = CreateActiveIndicator(entry.transform, $"PC{pcIndex}Active",
+            new Vector2(0, PartyEntryHeight - 4), new Vector2(entryW, 4), indicatorColor);
+
+        float y = PartyEntryHeight - 10;
 
         // Icon + Name row
-        Image icon = CreateIconImage(panel.transform, $"PC{pcIndex}Icon",
-            new Vector2(8, y - IconSize + 18), new Vector2(IconSize, IconSize));
+        Image icon = CreateIconImage(entry.transform, $"PC{pcIndex}Icon",
+            new Vector2(4, y - IconSize + 14), new Vector2(IconSize, IconSize));
 
-        Text nameText = CreateText(panel.transform, $"PC{pcIndex}Name",
+        Text nameText = CreateText(entry.transform, $"PC{pcIndex}Name",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(IconSize + 14, y), new Vector2(PanelWidth - IconSize - 24, 20),
-            $"Hero {pcIndex}", 14, nameColor, TextAnchor.MiddleLeft);
-        y -= 22;
+            new Vector2(IconSize + 8, y), new Vector2(entryW - IconSize - 14, 16),
+            $"Hero {pcIndex}", 11, nameColor, TextAnchor.MiddleLeft);
+        y -= 16;
 
-        // Ability scores
-        Text abilityText = CreateText(panel.transform, $"PC{pcIndex}Abilities",
+        // Compact ability scores (single line)
+        Text abilityText = CreateText(entry.transform, $"PC{pcIndex}Abilities",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y - 24), new Vector2(PanelWidth - 20, 32),
-            "STR -- DEX -- CON --\nWIS -- INT -- CHA --", 10,
+            new Vector2(4, y - 22), new Vector2(entryW - 8, 24),
+            "STR -- DEX -- CON --\nWIS -- INT -- CHA --", 8,
             new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
-        y -= 38;
+        y -= 26;
 
-        // Separator
-        CreatePanel(panel.transform, $"PC{pcIndex}Sep",
+        // HP text
+        Text hpText = CreateText(entry.transform, $"PC{pcIndex}HP",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 1),
-            new Color(1, 1, 1, 0.2f));
-        y -= 5;
+            new Vector2(4, y), new Vector2(entryW - 8, 14),
+            "HP: --/--", 11, Color.white, TextAnchor.MiddleLeft);
+        y -= 12;
 
-        // HP
-        Text hpText = CreateText(panel.transform, $"PC{pcIndex}HP",
+        // HP bar
+        Image hpBar = CreateHPBar(entry.transform, $"PC{pcIndex}HPBar",
+            new Vector2(4, y), new Vector2(entryW - 8, 8), nameColor);
+        y -= 12;
+
+        // AC + Atk on one line
+        Text acText = CreateText(entry.transform, $"PC{pcIndex}AC",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 18),
-            "HP: --/--", 14, Color.white, TextAnchor.MiddleLeft);
-        y -= 16;
+            new Vector2(4, y), new Vector2(entryW * 0.5f, 12),
+            "AC: --", 9, Color.white, TextAnchor.MiddleLeft);
 
-        // HP Bar
-        Image hpBar = CreateHPBar(panel.transform, $"PC{pcIndex}HPBar",
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 10),
-            nameColor);
-        y -= 16;
-
-        // AC
-        Text acText = CreateText(panel.transform, $"PC{pcIndex}AC",
+        Text atkText = CreateText(entry.transform, $"PC{pcIndex}Atk",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 16),
-            "AC: --", 12, Color.white, TextAnchor.MiddleLeft);
-        y -= 18;
+            new Vector2(entryW * 0.5f, y), new Vector2(entryW * 0.5f - 4, 12),
+            "Atk: --", 9, Color.white, TextAnchor.MiddleLeft);
 
-        // Atk
-        Text atkText = CreateText(panel.transform, $"PC{pcIndex}Atk",
+        // Speed text (hidden to save space, kept for data)
+        Text speedText = CreateText(entry.transform, $"PC{pcIndex}Speed",
             Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 16),
-            "Atk: --", 12, Color.white, TextAnchor.MiddleLeft);
-        y -= 18;
-
-        // Speed
-        Text speedText = CreateText(panel.transform, $"PC{pcIndex}Speed",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(PanelWidth - 20, 16),
-            "Speed: -- sq", 11, Color.white, TextAnchor.MiddleLeft);
+            new Vector2(4, -100), new Vector2(entryW - 8, 12),
+            "Speed: -- sq", 8, Color.white, TextAnchor.MiddleLeft);
+        speedText.gameObject.SetActive(false);
 
         // Assign to CombatUI fields
         switch (pcIndex)
         {
             case 1:
-                combatUI.PC1Panel = panel; combatUI.PC1ActiveIndicator = indicator;
+                combatUI.PC1Panel = entry; combatUI.PC1ActiveIndicator = indicator;
                 combatUI.PC1NameText = nameText; combatUI.PC1AbilityText = abilityText;
                 combatUI.PC1HPText = hpText; combatUI.PC1HPBar = hpBar;
                 combatUI.PC1ACText = acText; combatUI.PC1AtkText = atkText;
                 combatUI.PC1SpeedText = speedText; combatUI.PC1Icon = icon;
                 break;
             case 2:
-                combatUI.PC2Panel = panel; combatUI.PC2ActiveIndicator = indicator;
+                combatUI.PC2Panel = entry; combatUI.PC2ActiveIndicator = indicator;
                 combatUI.PC2NameText = nameText; combatUI.PC2AbilityText = abilityText;
                 combatUI.PC2HPText = hpText; combatUI.PC2HPBar = hpBar;
                 combatUI.PC2ACText = acText; combatUI.PC2AtkText = atkText;
                 combatUI.PC2SpeedText = speedText; combatUI.PC2Icon = icon;
                 break;
             case 3:
-                combatUI.PC3Panel = panel; combatUI.PC3ActiveIndicator = indicator;
+                combatUI.PC3Panel = entry; combatUI.PC3ActiveIndicator = indicator;
                 combatUI.PC3NameText = nameText; combatUI.PC3AbilityText = abilityText;
                 combatUI.PC3HPText = hpText; combatUI.PC3HPBar = hpBar;
                 combatUI.PC3ACText = acText; combatUI.PC3AtkText = atkText;
                 combatUI.PC3SpeedText = speedText; combatUI.PC3Icon = icon;
                 break;
             case 4:
-                combatUI.PC4Panel = panel; combatUI.PC4ActiveIndicator = indicator;
+                combatUI.PC4Panel = entry; combatUI.PC4ActiveIndicator = indicator;
                 combatUI.PC4NameText = nameText; combatUI.PC4AbilityText = abilityText;
                 combatUI.PC4HPText = hpText; combatUI.PC4HPBar = hpBar;
                 combatUI.PC4ACText = acText; combatUI.PC4AtkText = atkText;
@@ -404,192 +349,313 @@ public class SceneBootstrap : MonoBehaviour
         }
     }
 
-    private void CreatePC1Panel(Transform parent, CombatUI combatUI)
-    {
-        CreatePCPanel(parent, combatUI, 1, "PC1StatsPanel", 10,
-            new Color(0.1f, 0.2f, 0.4f, 0.85f), new Color(0.3f, 0.9f, 0.3f), new Color(0f, 1f, 0.3f));
-    }
-
-    private void CreatePC2Panel(Transform parent, CombatUI combatUI)
-    {
-        CreatePCPanel(parent, combatUI, 2, "PC2StatsPanel", PanelWidth + 15,
-            new Color(0.1f, 0.15f, 0.35f, 0.85f), new Color(0.5f, 0.7f, 1f), new Color(0.3f, 0.5f, 1f));
-    }
-
-    private void CreatePC3Panel(Transform parent, CombatUI combatUI)
-    {
-        CreatePCPanel(parent, combatUI, 3, "PC3StatsPanel", (PanelWidth + 5) * 2 + 10,
-            new Color(0.1f, 0.25f, 0.25f, 0.85f), new Color(0.4f, 0.9f, 0.7f), new Color(0.2f, 0.8f, 0.6f));
-    }
-
-    private void CreatePC4Panel(Transform parent, CombatUI combatUI)
-    {
-        CreatePCPanel(parent, combatUI, 4, "PC4StatsPanel", (PanelWidth + 5) * 3 + 10,
-            new Color(0.3f, 0.1f, 0.1f, 0.85f), new Color(1f, 0.6f, 0.4f), new Color(0.9f, 0.3f, 0.2f));
-    }
-
-    /// <summary>Create NPC stats panel with D&D 3.5 ability scores (legacy).</summary>
-    private void CreateNPCPanel(Transform parent, CombatUI combatUI)
-    {
-        float legacyW = 280f;
-        GameObject panel = CreatePanel(parent, "NPCStatsPanel",
-            new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
-            new Vector2(-10, 10), new Vector2(legacyW, PanelHeight),
-            new Color(0.4f, 0.1f, 0.1f, 0.85f));
-
-        float y = PanelHeight - 18;
-
-        combatUI.NPCNameText = CreateText(panel.transform, "NPCName",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(legacyW - 20, 22),
-            "Enemy", 16, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
-        y -= 22;
-
-        combatUI.NPCAbilityText = CreateText(panel.transform, "NPCAbilities",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y - 28), new Vector2(legacyW - 20, 38),
-            "STR -- DEX -- CON --\nWIS -- INT -- CHA --", 12,
-            new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
-        y -= 44;
-
-        CreatePanel(panel.transform, "NPCSep",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(legacyW - 20, 1),
-            new Color(1, 1, 1, 0.2f));
-        y -= 6;
-
-        combatUI.NPCHPText = CreateText(panel.transform, "NPCHP",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(legacyW - 20, 20),
-            "HP: --/--", 16, Color.white, TextAnchor.MiddleLeft);
-        y -= 18;
-
-        combatUI.NPCHPBar = CreateHPBar(panel.transform, "NPCHPBar",
-            new Vector2(10, y), new Vector2(legacyW - 20, 12),
-            new Color(0.8f, 0.2f, 0.2f));
-        y -= 20;
-
-        combatUI.NPCACText = CreateText(panel.transform, "NPCAC",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(legacyW - 20, 18),
-            "AC: --", 14, Color.white, TextAnchor.MiddleLeft);
-        y -= 20;
-
-        combatUI.NPCAtkText = CreateText(panel.transform, "NPCAtk",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(legacyW - 20, 18),
-            "Atk: --", 14, Color.white, TextAnchor.MiddleLeft);
-        y -= 20;
-
-        combatUI.NPCSpeedText = CreateText(panel.transform, "NPCSpeed",
-            Vector2.zero, Vector2.zero, Vector2.zero,
-            new Vector2(10, y), new Vector2(legacyW - 20, 18),
-            "Speed: -- sq", 12, Color.white, TextAnchor.MiddleLeft);
-    }
-
+    // ========== NPC PANELS (right side, stacked from top) ==========
     /// <summary>
-    /// Create multiple NPC stat panels stacked vertically on the right side.
-    /// Now includes icon images for each enemy.
+    /// Create NPC stat panels stacked vertically on the right side, from the top down.
+    /// Includes icon images for each enemy.
     /// </summary>
-    private void CreateMultiNPCPanels(Transform parent, CombatUI combatUI, int count)
+    private void CreateNPCPanelsRight(Transform parent, CombatUI combatUI, int count)
     {
-        float compactWidth = 260f;
-        float compactHeight = 130f;
-        float spacing = 5f;
+        float compactHeight = 110f;
+        float spacing = 4f;
 
         for (int i = 0; i < count; i++)
         {
-            float yOffset = 10f + i * (compactHeight + spacing);
+            // Stack from top: first panel starts at y = -100 (below turn indicator + initiative)
+            float yOffset = -(100f + i * (compactHeight + spacing));
 
             NPCPanelUI panelUI = new NPCPanelUI();
 
             Color panelColor = new Color(0.3f, 0.1f, 0.1f, 0.85f);
-            GameObject panel = CreatePanel(parent, $"NPCPanel_{i}",
-                new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
-                new Vector2(-10, yOffset), new Vector2(compactWidth, compactHeight),
-                panelColor);
+
+            GameObject panel = new GameObject($"NPCPanel_{i}");
+            panel.transform.SetParent(parent, false);
+            RectTransform panelRT = panel.AddComponent<RectTransform>();
+            panelRT.anchorMin = new Vector2(1, 1);
+            panelRT.anchorMax = new Vector2(1, 1);
+            panelRT.pivot = new Vector2(1, 1);
+            panelRT.anchoredPosition = new Vector2(-8, yOffset);
+            panelRT.sizeDelta = new Vector2(NPCPanelWidth, compactHeight);
+
+            Image panelImg = panel.AddComponent<Image>();
+            panelImg.color = panelColor;
             panelUI.Panel = panel;
 
-            float y = compactHeight - 14;
+            float y = compactHeight - 10;
 
             // Icon + Name row
             panelUI.IconImage = CreateIconImage(panel.transform, $"NPCIcon_{i}",
-                new Vector2(6, y - 28), new Vector2(32, 32));
+                new Vector2(4, y - 26), new Vector2(28, 28));
 
             panelUI.NameText = CreateText(panel.transform, $"NPCName_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(42, y), new Vector2(compactWidth - 50, 18),
-                $"Enemy {i + 1}", 13, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
-            y -= 18;
+                new Vector2(36, y), new Vector2(NPCPanelWidth - 44, 16),
+                $"Enemy {i + 1}", 11, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
+            y -= 16;
 
-            // Ability scores (compact single line)
+            // Ability scores (compact)
             panelUI.AbilityText = CreateText(panel.transform, $"NPCAbilities_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(8, y - 10), new Vector2(compactWidth - 16, 20),
-                "STR -- DEX -- CON -- WIS -- INT -- CHA --", 9,
+                new Vector2(4, y - 10), new Vector2(NPCPanelWidth - 8, 18),
+                "STR -- DEX -- CON -- WIS -- INT -- CHA --", 8,
                 new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
-            y -= 22;
+            y -= 20;
 
             // Separator
             CreatePanel(panel.transform, $"NPCSep_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(8, y), new Vector2(compactWidth - 16, 1),
+                new Vector2(4, y), new Vector2(NPCPanelWidth - 8, 1),
                 new Color(1, 1, 1, 0.2f));
             y -= 4;
 
             // HP text
             panelUI.HPText = CreateText(panel.transform, $"NPCHP_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(8, y), new Vector2(compactWidth - 16, 16),
-                "HP: --/--", 13, Color.white, TextAnchor.MiddleLeft);
-            y -= 14;
+                new Vector2(4, y), new Vector2(NPCPanelWidth - 8, 14),
+                "HP: --/--", 11, Color.white, TextAnchor.MiddleLeft);
+            y -= 12;
 
             // HP bar
             panelUI.HPBar = CreateHPBar(panel.transform, $"NPCHPBar_{i}",
-                new Vector2(8, y), new Vector2(compactWidth - 16, 8),
+                new Vector2(4, y), new Vector2(NPCPanelWidth - 8, 7),
                 new Color(0.8f, 0.2f, 0.2f));
-            y -= 14;
+            y -= 12;
 
             // AC and Atk on same row
             panelUI.ACText = CreateText(panel.transform, $"NPCAC_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(8, y), new Vector2(120, 16),
-                "AC: --", 12, Color.white, TextAnchor.MiddleLeft);
+                new Vector2(4, y), new Vector2(100, 14),
+                "AC: --", 10, Color.white, TextAnchor.MiddleLeft);
 
             panelUI.AtkText = CreateText(panel.transform, $"NPCAtk_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(130, y), new Vector2(120, 16),
-                "Atk: --", 12, Color.white, TextAnchor.MiddleLeft);
-            y -= 16;
+                new Vector2(106, y), new Vector2(100, 14),
+                "Atk: --", 10, Color.white, TextAnchor.MiddleLeft);
+            y -= 14;
 
             // Speed
             panelUI.SpeedText = CreateText(panel.transform, $"NPCSpeed_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(8, y), new Vector2(compactWidth - 16, 14),
-                "Speed: -- sq", 10, Color.white, TextAnchor.MiddleLeft);
+                new Vector2(4, y), new Vector2(NPCPanelWidth - 8, 12),
+                "Speed: -- sq", 9, Color.white, TextAnchor.MiddleLeft);
 
             combatUI.NPCPanels.Add(panelUI);
         }
 
-        Debug.Log($"[SceneBootstrap] Created {count} NPC stat panels.");
+        Debug.Log($"[SceneBootstrap] Created {count} NPC stat panels (right side, top-down).");
     }
 
-    /// <summary>Create feat control panels (Power Attack slider, Rapid Shot toggle).</summary>
-    private void CreateFeatControls(Transform canvasTransform, CombatUI combatUI, float actionPanelWidth)
+    /// <summary>Create hidden legacy NPC text fields for backward compatibility.</summary>
+    private void CreateLegacyNPCFields(Transform parent, CombatUI combatUI)
     {
-        float featPanelW = actionPanelWidth;
+        // Hidden container for legacy single-NPC fields
+        GameObject legacy = new GameObject("LegacyNPCFields");
+        legacy.transform.SetParent(parent, false);
+        legacy.SetActive(false);
+
+        combatUI.NPCNameText = CreateText(legacy.transform, "NPCName",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            Vector2.zero, new Vector2(100, 20),
+            "Enemy", 12, Color.red, TextAnchor.MiddleLeft);
+        combatUI.NPCHPText = CreateText(legacy.transform, "NPCHP",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            Vector2.zero, new Vector2(100, 20),
+            "HP: --/--", 12, Color.white, TextAnchor.MiddleLeft);
+        combatUI.NPCACText = CreateText(legacy.transform, "NPCAC",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            Vector2.zero, new Vector2(100, 20),
+            "AC: --", 12, Color.white, TextAnchor.MiddleLeft);
+        combatUI.NPCAtkText = CreateText(legacy.transform, "NPCAtk",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            Vector2.zero, new Vector2(100, 20),
+            "Atk: --", 12, Color.white, TextAnchor.MiddleLeft);
+        combatUI.NPCSpeedText = CreateText(legacy.transform, "NPCSpeed",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            Vector2.zero, new Vector2(100, 20),
+            "Speed: --", 12, Color.white, TextAnchor.MiddleLeft);
+        combatUI.NPCAbilityText = CreateText(legacy.transform, "NPCAbility",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            Vector2.zero, new Vector2(100, 20),
+            "", 12, Color.white, TextAnchor.MiddleLeft);
+
+        // Create a dummy HP bar for legacy
+        combatUI.NPCHPBar = CreateHPBar(legacy.transform, "NPCHPBar",
+            Vector2.zero, new Vector2(100, 8), Color.red);
+    }
+
+    // ========== COMBAT DATA PANEL (bottom) ==========
+    /// <summary>
+    /// Creates the bottom combat data panel containing:
+    /// - Combat log (left ~55%)
+    /// - Action buttons (right ~45%)
+    /// Anchored to bottom of screen, full width.
+    /// </summary>
+    private void CreateCombatDataPanel(Transform parent, CombatUI combatUI)
+    {
+        // Main bottom panel
+        GameObject bottomPanel = new GameObject("CombatDataPanel");
+        bottomPanel.transform.SetParent(parent, false);
+        RectTransform bpRT = bottomPanel.AddComponent<RectTransform>();
+        bpRT.anchorMin = new Vector2(0, 0);
+        bpRT.anchorMax = new Vector2(1, 0);
+        bpRT.pivot = new Vector2(0.5f, 0);
+        bpRT.anchoredPosition = Vector2.zero;
+        bpRT.sizeDelta = new Vector2(0, BottomPanelHeight);
+
+        Image bpBg = bottomPanel.AddComponent<Image>();
+        bpBg.color = new Color(0.08f, 0.08f, 0.12f, 0.92f);
+
+        combatUI.CombatDataPanelGO = bottomPanel;
+
+        // === LEFT SECTION: Combat Log (0% to 55%) ===
+        CreateCombatLogSection(bottomPanel.transform, combatUI);
+
+        // === RIGHT SECTION: Action Buttons (55% to 100%) ===
+        CreateActionButtonsSection(bottomPanel.transform, combatUI);
+    }
+
+    /// <summary>Left section of bottom panel: scrollable combat log.</summary>
+    private void CreateCombatLogSection(Transform parent, CombatUI combatUI)
+    {
+        GameObject logSection = new GameObject("CombatLogSection");
+        logSection.transform.SetParent(parent, false);
+        RectTransform lsRT = logSection.AddComponent<RectTransform>();
+        lsRT.anchorMin = new Vector2(0, 0);
+        lsRT.anchorMax = new Vector2(0.55f, 1);
+        lsRT.offsetMin = new Vector2(8, 8);
+        lsRT.offsetMax = new Vector2(-4, -8);
+
+        Image lsBg = logSection.AddComponent<Image>();
+        lsBg.color = new Color(0.05f, 0.05f, 0.1f, 0.8f);
+
+        // Log title
+        CreateText(logSection.transform, "LogTitle",
+            new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
+            new Vector2(0, -2), new Vector2(0, 18),
+            "── COMBAT LOG ──", 10, new Color(0.6f, 0.6f, 0.8f), TextAnchor.MiddleCenter);
+
+        // Combat log text
+        combatUI.CombatLogText = CreateText(logSection.transform, "CombatLog",
+            new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0),
+            new Vector2(8, 4), new Vector2(-16, -22),
+            "Combat begins! Choose your actions.", 12, Color.yellow, TextAnchor.UpperLeft);
+        // Make anchors stretch
+        RectTransform logTextRT = combatUI.CombatLogText.GetComponent<RectTransform>();
+        logTextRT.anchorMin = new Vector2(0, 0);
+        logTextRT.anchorMax = new Vector2(1, 1);
+        logTextRT.offsetMin = new Vector2(8, 4);
+        logTextRT.offsetMax = new Vector2(-8, -22);
+        combatUI.CombatLogText.verticalOverflow = VerticalWrapMode.Overflow;
+        combatUI.CombatLogText.horizontalOverflow = HorizontalWrapMode.Wrap;
+    }
+
+    /// <summary>Right section of bottom panel: action buttons in a grid.</summary>
+    private void CreateActionButtonsSection(Transform parent, CombatUI combatUI)
+    {
+        GameObject actionSection = new GameObject("ActionPanel");
+        actionSection.transform.SetParent(parent, false);
+        RectTransform asRT = actionSection.AddComponent<RectTransform>();
+        asRT.anchorMin = new Vector2(0.55f, 0);
+        asRT.anchorMax = new Vector2(1, 1);
+        asRT.offsetMin = new Vector2(4, 8);
+        asRT.offsetMax = new Vector2(-8, -8);
+
+        Image asBg = actionSection.AddComponent<Image>();
+        asBg.color = new Color(0.12f, 0.12f, 0.2f, 0.85f);
+
+        combatUI.ActionPanel = actionSection;
+
+        // Action Status text (top of action section)
+        combatUI.ActionStatusText = CreateText(actionSection.transform, "ActionStatus",
+            new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
+            new Vector2(0, -2), new Vector2(0, 18),
+            "[Move] [Standard]", 10, new Color(0.7f, 0.9f, 0.7f), TextAnchor.MiddleCenter);
+        RectTransform statusRT = combatUI.ActionStatusText.GetComponent<RectTransform>();
+        statusRT.anchorMin = new Vector2(0, 1);
+        statusRT.anchorMax = new Vector2(1, 1);
+        statusRT.offsetMin = new Vector2(4, -20);
+        statusRT.offsetMax = new Vector2(-4, -2);
+
+        // Button grid container
+        GameObject btnGrid = new GameObject("ButtonGrid");
+        btnGrid.transform.SetParent(actionSection.transform, false);
+        RectTransform gridRT = btnGrid.AddComponent<RectTransform>();
+        gridRT.anchorMin = new Vector2(0, 0);
+        gridRT.anchorMax = new Vector2(1, 1);
+        gridRT.offsetMin = new Vector2(6, 6);
+        gridRT.offsetMax = new Vector2(-6, -24);
+
+        GridLayoutGroup grid = btnGrid.AddComponent<GridLayoutGroup>();
+        grid.cellSize = new Vector2(180, 30);
+        grid.spacing = new Vector2(6, 4);
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = 2;
+        grid.childAlignment = TextAnchor.UpperLeft;
+        grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+        grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+
+        // Create action buttons inside the grid
+        combatUI.MoveButton = CreateGridButton(btnGrid.transform, "MoveBtn",
+            "Move", new Color(0.2f, 0.5f, 0.2f));
+        combatUI.AttackButton = CreateGridButton(btnGrid.transform, "AttackBtn",
+            "Attack", new Color(0.7f, 0.2f, 0.2f));
+        combatUI.FullAttackButton = CreateGridButton(btnGrid.transform, "FullAttackBtn",
+            "Full Attack", new Color(0.6f, 0.15f, 0.15f));
+        combatUI.DualWieldButton = CreateGridButton(btnGrid.transform, "DualWieldBtn",
+            "Dual Wield", new Color(0.5f, 0.25f, 0.5f));
+        combatUI.FlurryOfBlowsButton = CreateGridButton(btnGrid.transform, "FlurryBtn",
+            "Flurry of Blows", new Color(0.2f, 0.5f, 0.5f));
+        combatUI.RageButton = CreateGridButton(btnGrid.transform, "RageBtn",
+            "Rage", new Color(0.6f, 0.2f, 0.1f));
+        combatUI.CastSpellButton = CreateGridButton(btnGrid.transform, "CastSpellBtn",
+            "Cast Spell", new Color(0.4f, 0.2f, 0.6f));
+        combatUI.EndTurnButton = CreateGridButton(btnGrid.transform, "EndTurnBtn",
+            "End Turn", new Color(0.3f, 0.3f, 0.55f));
+
+        // Rage Status Text (below buttons area - create outside grid)
+        combatUI.RageStatusText = CreateText(actionSection.transform, "RageStatus",
+            new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
+            new Vector2(0, 2), new Vector2(0, 16),
+            "", 9, new Color(1f, 0.6f, 0.3f), TextAnchor.MiddleCenter);
+        RectTransform rageRT = combatUI.RageStatusText.GetComponent<RectTransform>();
+        rageRT.anchorMin = new Vector2(0, 0);
+        rageRT.anchorMax = new Vector2(1, 0);
+        rageRT.offsetMin = new Vector2(4, 2);
+        rageRT.offsetMax = new Vector2(-4, 16);
+        combatUI.RageStatusText.gameObject.SetActive(false);
+
+        // Spell Slots Text (next to rage status)
+        combatUI.SpellSlotsText = CreateText(actionSection.transform, "SpellSlots",
+            new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
+            new Vector2(0, 16), new Vector2(0, 14),
+            "", 8, new Color(0.8f, 0.7f, 1f), TextAnchor.MiddleCenter);
+        RectTransform spellRT = combatUI.SpellSlotsText.GetComponent<RectTransform>();
+        spellRT.anchorMin = new Vector2(0, 0);
+        spellRT.anchorMax = new Vector2(1, 0);
+        spellRT.offsetMin = new Vector2(4, 16);
+        spellRT.offsetMax = new Vector2(-4, 30);
+        combatUI.SpellSlotsText.gameObject.SetActive(false);
+
+        actionSection.SetActive(false);
+    }
+
+    // ========== FEAT CONTROLS (above bottom panel, right side) ==========
+    private void CreateFeatControls(Transform canvasTransform, CombatUI combatUI)
+    {
+        float featPanelW = 240f;
         float featPanelH = 50f;
 
+        // Power Attack panel - above bottom panel, right side
         GameObject paPanel = CreatePanel(canvasTransform, "PowerAttackPanel",
-            new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f),
-            new Vector2(-10, 175), new Vector2(featPanelW, featPanelH),
+            new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
+            new Vector2(-8, BottomPanelHeight + 8), new Vector2(featPanelW, featPanelH),
             new Color(0.3f, 0.15f, 0.1f, 0.9f));
         combatUI.PowerAttackPanel = paPanel;
 
         combatUI.PowerAttackLabel = CreateText(paPanel.transform, "PALabel",
             Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(10, featPanelH - 22), new Vector2(featPanelW - 20, 20),
-            "Power Attack: OFF", 13, new Color(1f, 0.8f, 0.5f), TextAnchor.MiddleLeft);
+            "Power Attack: OFF", 12, new Color(1f, 0.8f, 0.5f), TextAnchor.MiddleLeft);
 
         combatUI.PowerAttackSlider = CreateSlider(paPanel.transform, "PASlider",
             new Vector2(10, 5), new Vector2(featPanelW - 20, 20),
@@ -597,15 +663,22 @@ public class SceneBootstrap : MonoBehaviour
 
         paPanel.SetActive(false);
 
+        // Rapid Shot panel - above Power Attack
         GameObject rsPanel = CreatePanel(canvasTransform, "RapidShotPanel",
-            new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(1, 0.5f),
-            new Vector2(-10, 230), new Vector2(featPanelW, 40f),
+            new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
+            new Vector2(-8, BottomPanelHeight + featPanelH + 12), new Vector2(featPanelW, 36f),
             new Color(0.1f, 0.2f, 0.3f, 0.9f));
         combatUI.RapidShotPanel = rsPanel;
 
-        combatUI.RapidShotToggle = CreateButton(rsPanel.transform, "RSToggle",
-            new Vector2(5, 5), new Vector2(featPanelW - 10, 30f),
-            "Rapid Shot: OFF", new Color(0.5f, 0.5f, 0.5f), Color.white);
+        combatUI.RapidShotToggle = CreateGridButton(rsPanel.transform, "RSToggle",
+            "Rapid Shot: OFF", new Color(0.5f, 0.5f, 0.5f));
+        // Override the grid button positioning to fill the panel
+        RectTransform rsToggleRT = combatUI.RapidShotToggle.GetComponent<RectTransform>();
+        rsToggleRT.anchorMin = Vector2.zero;
+        rsToggleRT.anchorMax = Vector2.one;
+        rsToggleRT.offsetMin = new Vector2(4, 3);
+        rsToggleRT.offsetMax = new Vector2(-4, -3);
+        rsToggleRT.sizeDelta = Vector2.zero;
 
         combatUI.RapidShotLabel = combatUI.RapidShotToggle.GetComponentInChildren<Text>();
 
@@ -615,7 +688,7 @@ public class SceneBootstrap : MonoBehaviour
     // ========== GAME MANAGER ==========
     private void SetupGameManager(SquareGrid grid, CharacterController[] pcs,
         CharacterController npc, CombatUI combatUI,
-        System.Collections.Generic.List<CharacterController> npcList = null)
+        List<CharacterController> npcList = null)
     {
         GameManager gm = gameObject.AddComponent<GameManager>();
         gm.Grid = grid;
@@ -626,16 +699,13 @@ public class SceneBootstrap : MonoBehaviour
         gm.NPC = npc;
         gm.CombatUI = combatUI;
 
-        // Set up PCs list
-        gm.PCs = new System.Collections.Generic.List<CharacterController>(pcs);
+        gm.PCs = new List<CharacterController>(pcs);
 
-        // Set up multi-NPC list
         if (npcList != null)
             gm.NPCs = npcList;
         else
-            gm.NPCs = new System.Collections.Generic.List<CharacterController> { npc };
+            gm.NPCs = new List<CharacterController> { npc };
 
-        // Create Inventory UI on the canvas
         Canvas canvas = combatUI.GetComponent<Canvas>();
         if (canvas != null)
         {
@@ -644,7 +714,6 @@ public class SceneBootstrap : MonoBehaviour
             gm.InventoryUI = invUI;
         }
 
-        // Create Character Creation UI on the canvas
         if (canvas != null)
         {
             RaceDatabase.Init();
@@ -670,7 +739,6 @@ public class SceneBootstrap : MonoBehaviour
             ccUI.SpellUI = spellUI;
         }
 
-        // Wire up button events
         StartCoroutine(WireButtons(combatUI));
     }
 
@@ -802,7 +870,6 @@ public class SceneBootstrap : MonoBehaviour
         return img;
     }
 
-    /// <summary>Create an Image element for displaying a character icon.</summary>
     private Image CreateIconImage(Transform parent, string name, Vector2 anchoredPos, Vector2 sizeDelta)
     {
         GameObject go = new GameObject(name);
@@ -818,7 +885,7 @@ public class SceneBootstrap : MonoBehaviour
         Image img = go.AddComponent<Image>();
         img.color = Color.white;
         img.preserveAspect = true;
-        img.enabled = false; // Hidden until icon is assigned
+        img.enabled = false;
 
         return img;
     }
@@ -914,19 +981,14 @@ public class SceneBootstrap : MonoBehaviour
         return slider;
     }
 
-    private Button CreateButton(Transform parent, string name,
-        Vector2 anchoredPos, Vector2 sizeDelta,
-        string label, Color bgColor, Color textColor)
+    /// <summary>Create a button suitable for grid layout (no explicit anchoring needed).</summary>
+    private Button CreateGridButton(Transform parent, string name, string label, Color bgColor)
     {
         GameObject btnGO = new GameObject(name);
         btnGO.transform.SetParent(parent, false);
 
-        RectTransform rt = btnGO.AddComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.zero;
-        rt.pivot = Vector2.zero;
-        rt.anchoredPosition = anchoredPos;
-        rt.sizeDelta = sizeDelta;
+        // RectTransform will be managed by GridLayoutGroup
+        btnGO.AddComponent<RectTransform>();
 
         Image img = btnGO.AddComponent<Image>();
         img.color = bgColor;
@@ -938,10 +1000,24 @@ public class SceneBootstrap : MonoBehaviour
         colors.pressedColor = bgColor * 0.8f;
         btn.colors = colors;
 
-        CreateText(btnGO.transform, name + "Label",
-            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
-            Vector2.zero, Vector2.zero,
-            label, 18, textColor, TextAnchor.MiddleCenter);
+        // Label text child - stretches to fill button
+        GameObject txtGO = new GameObject(name + "Label");
+        txtGO.transform.SetParent(btnGO.transform, false);
+        RectTransform txtRT = txtGO.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = new Vector2(4, 2);
+        txtRT.offsetMax = new Vector2(-4, -2);
+
+        Text txt = txtGO.AddComponent<Text>();
+        txt.text = label;
+        txt.fontSize = 12;
+        txt.color = Color.white;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.fontStyle = FontStyle.Bold;
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 12);
 
         return btn;
     }
