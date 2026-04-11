@@ -66,4 +66,39 @@ public class WizardClass : ICharacterClass
         // are handled by the character creation UI / level-up system.
         Debug.Log($"[Wizard] {stats.CharacterName}: Wizard has no automatic feats (Scribe Scroll and bonus feats handled separately)");
     }
+
+    /// <summary>
+    /// Returns a pre-built Quick Start character: Elara the Elf Wizard.
+    /// Used by CharacterCreationUI for the Quick Start button.
+    /// </summary>
+    public static CharacterCreationData GetQuickStartCharacter()
+    {
+        RaceDatabase.Init();
+        var data = new CharacterCreationData
+        {
+            CharacterName = "Elara",
+            RaceName = "Elf",
+            Race = RaceDatabase.GetRace("Elf"),
+            ClassName = "Wizard",
+            STR = 8, DEX = 14, CON = 12,
+            INT = 17, WIS = 13, CHA = 10,
+            SelectedFeats = new List<string> { "Spell Focus", "Improved Initiative" },
+            BonusFeats = new List<string> { "Scribe Scroll" },
+            // Wizard selects 4 cantrips + higher-level spells (D&D 3.5e PHB)
+            SelectedSpellIds = new List<string>
+            {
+                // 4 cantrips
+                "ray_of_frost", "detect_magic_wiz", "read_magic", "prestidigitation",
+                // 1st and 2nd level spells
+                "magic_missile", "mage_armor", "shield",
+                "burning_hands", "sleep", "charm_person",
+                "scorching_ray", "bulls_strength"
+            }
+        };
+        data.ComputeFinalStats();
+        data.SkillRanks["Concentration"] = 6;
+        data.SkillRanks["Spellcraft"] = 6;
+        data.SkillRanks["Knowledge (Arcana)"] = 6;
+        return data;
+    }
 }

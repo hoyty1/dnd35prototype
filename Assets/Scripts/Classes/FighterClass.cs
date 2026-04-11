@@ -67,4 +67,32 @@ public class FighterClass : ICharacterClass
         // by the character creation UI / level-up system.
         Debug.Log($"[Fighter] {stats.CharacterName}: Fighter has no automatic feats (bonus feat selections handled separately)");
     }
+
+    /// <summary>
+    /// Returns a pre-built Quick Start character: Aldric the Dwarf Fighter.
+    /// Used by CharacterCreationUI for the Quick Start button.
+    /// </summary>
+    public static CharacterCreationData GetQuickStartCharacter()
+    {
+        RaceDatabase.Init();
+        var data = new CharacterCreationData
+        {
+            CharacterName = "Aldric",
+            RaceName = "Dwarf",
+            Race = RaceDatabase.GetRace("Dwarf"),
+            ClassName = "Fighter",
+            STR = 16, DEX = 12, CON = 14,
+            INT = 10, WIS = 10, CHA = 13,
+            SelectedFeats = new List<string> { "Power Attack", "Cleave" },
+            BonusFeats = new List<string> { "Weapon Focus" },
+            WeaponFocusChoice = "Longsword",
+            SelectedSpellIds = new List<string>() // Fighters don't cast spells
+        };
+        data.ComputeFinalStats();
+        data.SkillRanks["Climb"] = 4;
+        data.SkillRanks["Intimidate"] = 4;
+        data.SkillRanks["Jump"] = 3;
+        data.SkillRanks["Swim"] = 3;
+        return data;
+    }
 }

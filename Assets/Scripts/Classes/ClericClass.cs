@@ -63,4 +63,35 @@ public class ClericClass : ICharacterClass
         // No automatic feats for Cleric — Turn Undead and domain powers are class features.
         Debug.Log($"[Cleric] {stats.CharacterName}: Cleric has no automatic feats (Turn Undead is a class feature)");
     }
+
+    /// <summary>
+    /// Returns a pre-built Quick Start character: Theron the Human Cleric.
+    /// Used by CharacterCreationUI for the Quick Start button.
+    /// </summary>
+    public static CharacterCreationData GetQuickStartCharacter()
+    {
+        RaceDatabase.Init();
+        var data = new CharacterCreationData
+        {
+            CharacterName = "Theron",
+            RaceName = "Human",
+            Race = RaceDatabase.GetRace("Human"),
+            ClassName = "Cleric",
+            STR = 14, DEX = 10, CON = 14,
+            INT = 10, WIS = 16, CHA = 12,
+            SelectedFeats = new List<string> { "Combat Casting", "Weapon Focus" },
+            WeaponFocusChoice = "Mace",
+            // Cleric selects 4 orisons (D&D 3.5e PHB)
+            SelectedSpellIds = new List<string>
+            {
+                "cure_minor_wounds", "detect_magic_clr", "guidance", "light_clr"
+            }
+        };
+        data.ComputeFinalStats();
+        data.SkillRanks["Concentration"] = 6;
+        data.SkillRanks["Heal"] = 6;
+        data.SkillRanks["Diplomacy"] = 4;
+        data.SkillRanks["Knowledge (Religion)"] = 4;
+        return data;
+    }
 }

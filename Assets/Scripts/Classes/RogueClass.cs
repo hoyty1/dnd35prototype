@@ -79,4 +79,39 @@ public class RogueClass : ICharacterClass
         // No automatic feats for Rogue — all feats must be selected by the player.
         Debug.Log($"[Rogue] {stats.CharacterName}: Rogue has no automatic feats");
     }
+
+    /// <summary>
+    /// Returns a pre-built Quick Start character: Lyra the Elf Rogue.
+    /// Used by CharacterCreationUI for the Quick Start button.
+    /// </summary>
+    public static CharacterCreationData GetQuickStartCharacter()
+    {
+        RaceDatabase.Init();
+        var data = new CharacterCreationData
+        {
+            CharacterName = "Lyra",
+            RaceName = "Elf",
+            Race = RaceDatabase.GetRace("Elf"),
+            ClassName = "Rogue",
+            STR = 12, DEX = 17, CON = 12,
+            INT = 14, WIS = 13, CHA = 10,
+            SelectedFeats = new List<string> { "Weapon Finesse", "Dodge" },
+            SelectedSpellIds = new List<string>() // Rogues don't cast spells
+        };
+        data.ComputeFinalStats();
+        data.SkillRanks["Hide"] = 6;
+        data.SkillRanks["Move Silently"] = 6;
+        data.SkillRanks["Spot"] = 6;
+        data.SkillRanks["Listen"] = 6;
+        data.SkillRanks["Disable Device"] = 5;
+        data.SkillRanks["Open Lock"] = 5;
+        data.SkillRanks["Search"] = 5;
+        data.SkillRanks["Tumble"] = 4;
+        data.SkillRanks["Bluff"] = 4;
+        data.SkillRanks["Diplomacy"] = 4;
+        data.SkillRanks["Climb"] = 4;
+        data.SkillRanks["Balance"] = 3;
+        data.SkillRanks["Sleight of Hand"] = 2;
+        return data;
+    }
 }
