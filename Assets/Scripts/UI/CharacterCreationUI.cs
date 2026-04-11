@@ -852,18 +852,32 @@ public class CharacterCreationUI : MonoBehaviour
         }
         else if (data.ClassName == "Wizard")
         {
-            // Wizards get a bonus metamagic or item creation feat at level 5+
-            // At level 3 they don't get one yet, but handle it for future-proofing
+            // ================================================================
+            // D&D 3.5e Wizard Bonus Feats:
+            // Wizards gain bonus feats at levels 5, 10, 15, and 20.
+            // They can choose from: Metamagic feats, Item Creation feats, or Spell Mastery.
+            // Unlike Monk bonus feats, Wizards MUST meet all prerequisites
+            // (including caster level minimums for item creation feats).
+            //
+            // Note: Scribe Scroll is a free class feature at Wizard level 1,
+            // not one of the bonus feats. That should be handled separately
+            // during class initialization (not yet implemented).
+            //
+            // At level 3, Wizards don't get any bonus feats yet.
+            // This system is ready for level 5+ when leveling is implemented.
+            // ================================================================
             int wizLevel = 3; // current character level
-            if (wizLevel >= 5)
+            int bonusFeats = FeatDefinitions.GetWizardBonusFeatCount(wizLevel);
+
+            if (bonusFeats > 0)
             {
-                int bonusFeats = 1;
-                Debug.Log($"[CharCreation] Wizard: selecting {bonusFeats} bonus feats");
+                Debug.Log($"[CharCreation] Wizard at level {wizLevel}: selecting {bonusFeats} bonus feat(s)");
 
                 FeatUI.OnFeatsConfirmed = (bonusSelected) => OnBonusFeatsSelected(bonusSelected);
                 FeatUI.OpenForSelection(tempStats, bonusFeats, false,
-                    "Select Wizard Bonus Feat",
-                    "Metamagic or Item Creation feats only — granted by Wizard class");
+                    $"Select Wizard Bonus Feat (Level {wizLevel})",
+                    "Choose: Metamagic, Item Creation, or Spell Mastery — must meet prerequisites",
+                    wizardBonus: true);
             }
             else
             {
@@ -1074,6 +1088,7 @@ public class CharacterCreationUI : MonoBehaviour
             {
                 string bonusLabel = data.ClassName == "Monk" ? "Monk Bonus Feats" :
                                     data.ClassName == "Fighter" ? "Fighter Bonus Feats" :
+                                    data.ClassName == "Wizard" ? "Wizard Bonus Feats" :
                                     "Class Bonus Feats";
                 review += $"  ({bonusLabel})\n";
                 foreach (string feat in data.BonusFeats)

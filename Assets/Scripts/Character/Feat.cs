@@ -18,7 +18,8 @@ public enum FeatType
     TwoWeaponFighting,
     MountedCombat,
     Unarmed,
-    Metamagic
+    Metamagic,
+    ItemCreation  // D&D 3.5 Item Creation feats (Brew Potion, Craft Wand, etc.)
 }
 
 /// <summary>
@@ -31,7 +32,8 @@ public enum PrerequisiteType
     Feat,           // e.g., requires Power Attack
     ClassLevel,     // e.g., Fighter 4+
     SkillRanks,     // e.g., 5 ranks in Ride
-    Proficiency     // e.g., proficient with martial weapons
+    Proficiency,    // e.g., proficient with martial weapons
+    CasterLevel     // e.g., Caster level 3rd (for item creation feats)
 }
 
 /// <summary>
@@ -81,6 +83,20 @@ public class FeatPrerequisite
                     return stats.CharacterClass == "Fighter";
                 return true;
 
+            case PrerequisiteType.CasterLevel:
+                // Caster level check - for spellcasting classes, caster level equals class level
+                // Wizard, Sorcerer, Cleric, Druid, Bard, etc. qualify
+                // Simplified: check if the character is a spellcasting class and level >= required
+                string cls = stats.CharacterClass;
+                bool isCaster = cls == "Wizard" || cls == "Sorcerer" || cls == "Cleric" ||
+                                cls == "Druid" || cls == "Bard" || cls == "Ranger" || cls == "Paladin";
+                if (!isCaster) return false;
+                // Ranger/Paladin get caster levels at half progression (starting at level 4)
+                int casterLevel = stats.Level;
+                if (cls == "Ranger" || cls == "Paladin")
+                    casterLevel = Mathf.Max(0, stats.Level - 3); // half caster, starts at 4th
+                return casterLevel >= ParamValue;
+
             default:
                 return true;
         }
@@ -103,8 +119,23 @@ public class FeatPrerequisite
                 return $"{ParamValue} ranks in {ParamString}";
             case PrerequisiteType.Proficiency:
                 return $"Proficient with {ParamString}";
+            case PrerequisiteType.CasterLevel:
+                return $"Caster level {ParamValue}{GetOrdinalSuffix(ParamValue)}";
             default:
                 return "";
+        }
+    }
+
+    /// <summary>Get ordinal suffix for a number (1st, 2nd, 3rd, etc.)</summary>
+    private static string GetOrdinalSuffix(int number)
+    {
+        if (number % 100 >= 11 && number % 100 <= 13) return "th";
+        switch (number % 10)
+        {
+            case 1: return "st";
+            case 2: return "nd";
+            case 3: return "rd";
+            default: return "th";
         }
     }
 
@@ -210,8 +241,10 @@ public class FeatDefinition
     public bool IsFighterBonus;     // Can be taken as a fighter bonus feat
     public bool IsMonkBonus;        // Can be taken as a monk bonus feat
     public int MonkBonusLevel;      // Monk level at which this feat becomes available as a bonus (1, 2, or 6)
+    public bool IsWizardBonus;      // Can be taken as a Wizard bonus feat (metamagic, item creation, Spell Mastery)
     public bool CanTakeMultiple;    // Can be taken more than once (Toughness, Weapon Focus)
     public bool RequiresChoice;     // Requires choosing a weapon/skill
+    public bool IsPlaceholder;      // True if feat mechanics are not yet implemented (e.g., item creation feats)
 
     public FeatDefinition(string name, string description, FeatType type)
     {

@@ -2,8 +2,9 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // ============================================================================
-// D&D 3.5 Player's Handbook - All General Feats + Metamagic Feats (~76 feats)
-// Excludes: Item Creation feats
+// D&D 3.5 Player's Handbook - All General Feats + Metamagic Feats + Item Creation Feats
+// Includes: Combat, Ranged, Defensive, TWF, Mounted, Unarmed, Skill, General,
+//           Metamagic, Item Creation (placeholder), and Spell Mastery
 // ============================================================================
 
 /// <summary>
@@ -133,6 +134,10 @@ public static class FeatDefinitions
         DefineGeneralFeats();
         // ==================== METAMAGIC FEATS ====================
         DefineMetamagicFeats();
+        // ==================== ITEM CREATION FEATS (PLACEHOLDERS) ====================
+        DefineItemCreationFeats();
+        // ==================== SPELL MASTERY (PLACEHOLDER) ====================
+        DefineSpellMastery();
     }
 
     // ========================================================================
@@ -1029,6 +1034,75 @@ public static class FeatDefinitions
     }
 
     // ========================================================================
+    // WIZARD BONUS FEATS
+    // ========================================================================
+    // D&D 3.5e: Wizards gain bonus feats at levels 5, 10, 15, and 20.
+    // They can choose from: Metamagic feats, Item Creation feats, or Spell Mastery.
+    // Unlike Monk bonus feats, Wizards MUST meet all prerequisites (including caster level).
+    // ========================================================================
+
+    /// <summary>
+    /// Check if a Wizard gets a bonus feat at this level.
+    /// Wizards get bonus feats at levels 5, 10, 15, and 20.
+    /// </summary>
+    public static bool GetsWizardBonusFeatAtLevel(int level)
+    {
+        return level == 5 || level == 10 || level == 15 || level == 20;
+    }
+
+    /// <summary>
+    /// Get the number of Wizard bonus feats at a given level.
+    /// Wizards get bonus feats at levels 5, 10, 15, and 20.
+    /// </summary>
+    public static int GetWizardBonusFeatCount(int level)
+    {
+        int count = 0;
+        if (level >= 5) count++;
+        if (level >= 10) count++;
+        if (level >= 15) count++;
+        if (level >= 20) count++;
+        return count;
+    }
+
+    /// <summary>
+    /// Get all Wizard bonus feats the character qualifies for.
+    /// Includes: all Metamagic feats, all Item Creation feats, and Spell Mastery.
+    /// Wizard bonus feats require meeting all prerequisites (unlike Monk bonus feats).
+    /// </summary>
+    /// <param name="stats">Character stats to check prerequisites against</param>
+    /// <returns>List of eligible Wizard bonus feat definitions</returns>
+    public static List<FeatDefinition> GetWizardBonusFeats(CharacterStats stats)
+    {
+        if (!_initialized) Init();
+        var available = new List<FeatDefinition>();
+        foreach (var feat in _feats.Values)
+        {
+            if (!feat.IsWizardBonus) continue;
+            if (!feat.CanTakeMultiple && stats != null && stats.HasFeat(feat.FeatName)) continue;
+            // Wizard bonus feats still require meeting prerequisites
+            if (stats != null && !feat.MeetsPrerequisites(stats)) continue;
+            available.Add(feat);
+        }
+        return available;
+    }
+
+    /// <summary>
+    /// Get all feats marked as Wizard bonus feats (regardless of prerequisites).
+    /// Useful for displaying the full list with locked/unlocked indicators.
+    /// </summary>
+    public static List<FeatDefinition> GetAllWizardBonusFeats()
+    {
+        if (!_initialized) Init();
+        var list = new List<FeatDefinition>();
+        foreach (var feat in _feats.Values)
+        {
+            if (feat.IsWizardBonus)
+                list.Add(feat);
+        }
+        return list;
+    }
+
+    // ========================================================================
     // METAMAGIC FEATS (D&D 3.5 PHB Chapter 5)
     // ========================================================================
     private static void DefineMetamagicFeats()
@@ -1036,7 +1110,8 @@ public static class FeatDefinitions
         // --- Empower Spell ---
         var empowerSpell = new FeatDefinition("Empower Spell",
             "All variable, numeric effects of an empowered spell are increased by one-half. An empowered spell uses up a spell slot two levels higher than the spell's actual level.",
-            FeatType.Metamagic);
+            FeatType.Metamagic)
+        { IsWizardBonus = true };
         empowerSpell.Benefit = new FeatBenefit
         {
             IsMetamagic = true,
@@ -1048,7 +1123,8 @@ public static class FeatDefinitions
         // --- Enlarge Spell ---
         var enlargeSpell = new FeatDefinition("Enlarge Spell",
             "You can alter a spell with a range of close, medium, or long to increase its range by 100%. An enlarged spell uses up a spell slot one level higher than the spell's actual level.",
-            FeatType.Metamagic);
+            FeatType.Metamagic)
+        { IsWizardBonus = true };
         enlargeSpell.Benefit = new FeatBenefit
         {
             IsMetamagic = true,
@@ -1060,7 +1136,8 @@ public static class FeatDefinitions
         // --- Extend Spell ---
         var extendSpell = new FeatDefinition("Extend Spell",
             "An extended spell lasts twice as long as normal. Spells with a duration of concentration, instantaneous, or permanent are not affected. An extended spell uses up a spell slot one level higher than the spell's actual level.",
-            FeatType.Metamagic);
+            FeatType.Metamagic)
+        { IsWizardBonus = true };
         extendSpell.Benefit = new FeatBenefit
         {
             IsMetamagic = true,
@@ -1072,7 +1149,8 @@ public static class FeatDefinitions
         // --- Heighten Spell ---
         var heightenSpell = new FeatDefinition("Heighten Spell",
             "A heightened spell has a higher spell level than normal (up to 9th level). Unlike other metamagic feats, Heighten Spell actually increases the effective level of the spell that it modifies. All effects dependent on spell level (such as saving throw DCs) are calculated according to the heightened level.",
-            FeatType.Metamagic);
+            FeatType.Metamagic)
+        { IsWizardBonus = true };
         heightenSpell.Benefit = new FeatBenefit
         {
             IsMetamagic = true,
@@ -1084,7 +1162,8 @@ public static class FeatDefinitions
         // --- Maximize Spell ---
         var maximizeSpell = new FeatDefinition("Maximize Spell",
             "All variable, numeric effects of a maximized spell are maximized. A maximized spell uses up a spell slot three levels higher than the spell's actual level.",
-            FeatType.Metamagic);
+            FeatType.Metamagic)
+        { IsWizardBonus = true };
         maximizeSpell.Benefit = new FeatBenefit
         {
             IsMetamagic = true,
@@ -1096,7 +1175,8 @@ public static class FeatDefinitions
         // --- Quicken Spell ---
         var quickenSpell = new FeatDefinition("Quicken Spell",
             "Casting a quickened spell is a free action. You can perform another action, even casting another spell, in the same round as you cast a quickened spell. A quickened spell uses up a spell slot four levels higher than the spell's actual level.",
-            FeatType.Metamagic);
+            FeatType.Metamagic)
+        { IsWizardBonus = true };
         quickenSpell.Benefit = new FeatBenefit
         {
             IsMetamagic = true,
@@ -1108,7 +1188,8 @@ public static class FeatDefinitions
         // --- Silent Spell ---
         var silentSpell = new FeatDefinition("Silent Spell",
             "A silent spell can be cast with no verbal components. A silent spell uses up a spell slot one level higher than the spell's actual level.",
-            FeatType.Metamagic);
+            FeatType.Metamagic)
+        { IsWizardBonus = true };
         silentSpell.Benefit = new FeatBenefit
         {
             IsMetamagic = true,
@@ -1120,7 +1201,8 @@ public static class FeatDefinitions
         // --- Still Spell ---
         var stillSpell = new FeatDefinition("Still Spell",
             "A stilled spell can be cast with no somatic components. A stilled spell uses up a spell slot one level higher than the spell's actual level.",
-            FeatType.Metamagic);
+            FeatType.Metamagic)
+        { IsWizardBonus = true };
         stillSpell.Benefit = new FeatBenefit
         {
             IsMetamagic = true,
@@ -1132,7 +1214,8 @@ public static class FeatDefinitions
         // --- Widen Spell ---
         var widenSpell = new FeatDefinition("Widen Spell",
             "You can alter a burst, emanation, line, or spread shaped spell to increase its area. Any numeric measurements of the spell's area increase by 100%. A widened spell uses up a spell slot three levels higher than the spell's actual level.",
-            FeatType.Metamagic);
+            FeatType.Metamagic)
+        { IsWizardBonus = true };
         widenSpell.Benefit = new FeatBenefit
         {
             IsMetamagic = true,
@@ -1141,6 +1224,140 @@ public static class FeatDefinitions
         };
         Add(widenSpell);
 
-        Debug.Log("[Feats] 9 metamagic feat definitions registered.");
+        Debug.Log("[Feats] 9 metamagic feat definitions registered (all marked as Wizard bonus feats).");
+    }
+
+    // ========================================================================
+    // ITEM CREATION FEATS (D&D 3.5 PHB Chapter 5) - PLACEHOLDERS
+    // ========================================================================
+    // NOTE: These are placeholder definitions. Actual crafting mechanics
+    // (gold costs, XP costs, time requirements, spell prerequisites for items)
+    // are NOT yet implemented. The feat definitions exist so they can be
+    // selected as Wizard bonus feats and show in the feat list.
+    // ========================================================================
+    private static void DefineItemCreationFeats()
+    {
+        // --- Scribe Scroll ---
+        var scribeScroll = new FeatDefinition("Scribe Scroll",
+            "You can create a scroll of any spell that you know. Scribing a scroll takes one day for each 1,000 gp in its base price. The base price of a scroll is its spell level × its caster level × 25 gp. To scribe a scroll, you must spend 1/25 of this base price in XP and use up raw materials costing one-half of this base price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            FeatType.ItemCreation)
+        {
+            IsWizardBonus = true,
+            IsPlaceholder = true
+        };
+        scribeScroll.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 1));
+        scribeScroll.Benefit.Description = "Create spell scrolls from your known spells. [PLACEHOLDER]";
+        Add(scribeScroll);
+
+        // --- Brew Potion ---
+        var brewPotion = new FeatDefinition("Brew Potion",
+            "You can create a potion of any 3rd-level or lower spell that you know and that targets one or more creatures. Brewing a potion takes one day. The base price of a potion is its spell level × its caster level × 50 gp (minimum caster level is always at least high enough to cast the spell). To brew a potion, you must spend 1/25 of this base price in XP and use up raw materials costing one-half this base price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            FeatType.ItemCreation)
+        {
+            IsWizardBonus = true,
+            IsPlaceholder = true
+        };
+        brewPotion.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 3));
+        brewPotion.Benefit.Description = "Brew magic potions from spells of 3rd level or lower. [PLACEHOLDER]";
+        Add(brewPotion);
+
+        // --- Craft Wondrous Item ---
+        var craftWondrous = new FeatDefinition("Craft Wondrous Item",
+            "You can create any wondrous item whose prerequisites you meet. Enchanting a wondrous item takes one day for each 1,000 gp in its price. To enchant a wondrous item, you must spend 1/25 of the item's price in XP and use up raw materials costing half of this price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            FeatType.ItemCreation)
+        {
+            IsWizardBonus = true,
+            IsPlaceholder = true
+        };
+        craftWondrous.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 3));
+        craftWondrous.Benefit.Description = "Create wondrous magic items (cloaks, boots, amulets, etc.). [PLACEHOLDER]";
+        Add(craftWondrous);
+
+        // --- Craft Magic Arms and Armor ---
+        var craftArms = new FeatDefinition("Craft Magic Arms and Armor",
+            "You can create any magic weapon, armor, or shield whose prerequisites you meet. Enhancing a weapon, suit of armor, or shield takes one day for each 1,000 gp in the price of its magical features. To enhance a weapon, suit of armor, or shield, you must spend 1/25 of its features' total price in XP and use up raw materials costing half of this total price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            FeatType.ItemCreation)
+        {
+            IsWizardBonus = true,
+            IsPlaceholder = true
+        };
+        craftArms.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 5));
+        craftArms.Benefit.Description = "Create magic weapons, armor, and shields. [PLACEHOLDER]";
+        Add(craftArms);
+
+        // --- Craft Wand ---
+        var craftWand = new FeatDefinition("Craft Wand",
+            "You can create a wand of any 4th-level or lower spell that you know. Crafting a wand takes one day for each 1,000 gp in its base price. The base price of a wand is its caster level × the spell level × 750 gp. To craft a wand, you must spend 1/25 of this base price in XP and use up raw materials costing half of this base price. A newly created wand has 50 charges. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            FeatType.ItemCreation)
+        {
+            IsWizardBonus = true,
+            IsPlaceholder = true
+        };
+        craftWand.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 5));
+        craftWand.Benefit.Description = "Create magic wands with spells of 4th level or lower. [PLACEHOLDER]";
+        Add(craftWand);
+
+        // --- Craft Rod ---
+        var craftRod = new FeatDefinition("Craft Rod",
+            "You can create any rod whose prerequisites you meet. Crafting a rod takes one day for each 1,000 gp in its base price. To craft a rod, you must spend 1/25 of its base price in XP and use up raw materials costing half of its base price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            FeatType.ItemCreation)
+        {
+            IsWizardBonus = true,
+            IsPlaceholder = true
+        };
+        craftRod.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 9));
+        craftRod.Benefit.Description = "Create magic rods. [PLACEHOLDER]";
+        Add(craftRod);
+
+        // --- Craft Staff ---
+        var craftStaff = new FeatDefinition("Craft Staff",
+            "You can create any staff whose prerequisites you meet. Crafting a staff takes one day for each 1,000 gp in its base price. To craft a staff, you must spend 1/25 of its base price in XP and use up raw materials costing half of its base price. A newly created staff has 50 charges. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            FeatType.ItemCreation)
+        {
+            IsWizardBonus = true,
+            IsPlaceholder = true
+        };
+        craftStaff.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 12));
+        craftStaff.Benefit.Description = "Create magic staves. [PLACEHOLDER]";
+        Add(craftStaff);
+
+        // --- Forge Ring ---
+        var forgeRing = new FeatDefinition("Forge Ring",
+            "You can create any ring whose prerequisites you meet. Crafting a ring takes one day for each 1,000 gp in its base price. To forge a ring, you must spend 1/25 of its base price in XP and use up raw materials costing half of its base price. [PLACEHOLDER - Crafting mechanics not yet implemented]",
+            FeatType.ItemCreation)
+        {
+            IsWizardBonus = true,
+            IsPlaceholder = true
+        };
+        forgeRing.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.CasterLevel, "", 12));
+        forgeRing.Benefit.Description = "Create magic rings. [PLACEHOLDER]";
+        Add(forgeRing);
+
+        Debug.Log("[Feats] 8 item creation feat definitions registered (all PLACEHOLDERS, marked as Wizard bonus feats).");
+    }
+
+    // ========================================================================
+    // SPELL MASTERY (D&D 3.5 PHB) - PLACEHOLDER
+    // ========================================================================
+    // NOTE: Spell Mastery allows a Wizard to prepare selected spells without
+    // a spellbook. The actual mechanics (selecting which spells to master,
+    // tracking mastered spells) are NOT yet implemented.
+    // ========================================================================
+    private static void DefineSpellMastery()
+    {
+        var spellMastery = new FeatDefinition("Spell Mastery",
+            "Each time you take this feat, choose a number of spells equal to your Intelligence modifier that you already know. From that point on, you can prepare these spells without referring to a spellbook. [PLACEHOLDER - Spell Mastery mechanics not yet implemented]",
+            FeatType.General)
+        {
+            IsWizardBonus = true,
+            CanTakeMultiple = true,
+            IsPlaceholder = true
+        };
+        // Prerequisite: Wizard level 1st (any Wizard can take this)
+        spellMastery.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.ClassLevel, "Wizard", 1));
+        spellMastery.Benefit.Description = "Prepare INT modifier spells without spellbook. Can be taken multiple times. [PLACEHOLDER]";
+        Add(spellMastery);
+
+        Debug.Log("[Feats] Spell Mastery feat definition registered (PLACEHOLDER, marked as Wizard bonus feat).");
     }
 }

@@ -21,10 +21,12 @@ public class FeatSelectionUI : MonoBehaviour
     private bool _isFighterBonus = false;
     private bool _isMonkBonus = false;
     private int _monkBonusLevel = 0; // The specific monk level for bonus feat filtering (1, 2, or 6)
+    private bool _isWizardBonus = false; // Wizard bonus feat mode (metamagic + item creation + Spell Mastery)
     private int _featsToSelect = 1;
     private List<string> _selectedFeats = new List<string>();
     private List<FeatDefinition> _allFeats;
     private List<FeatDefinition> _monkBonusFeatList; // Filtered list for monk bonus feats
+    private List<FeatDefinition> _wizardBonusFeatList; // Filtered list for wizard bonus feats
     private string _filterType = "All";
     private string _searchText = "";
 
@@ -116,9 +118,9 @@ public class FeatSelectionUI : MonoBehaviour
 
         // Filter buttons row
         float filterY = 220;
-        string[] filters = { "All", "Combat", "Ranged", "Defensive", "TWF", "Skill", "Metamagic", "General" };
-        float filterStartX = -230;
-        float filterWidth = 64;
+        string[] filters = { "All", "Combat", "Ranged", "Defensive", "TWF", "Skill", "Metamagic", "Crafting", "General" };
+        float filterStartX = -235;
+        float filterWidth = 56;
         for (int i = 0; i < filters.Length; i++)
         {
             float x = filterStartX + i * (filterWidth + 4);
@@ -238,8 +240,9 @@ public class FeatSelectionUI : MonoBehaviour
     /// <param name="title">Custom title for the selection dialog (overrides default)</param>
     /// <param name="subtitle">Optional subtitle describing restrictions or context</param>
     /// <param name="monkBonusLevel">If > 0, only show monk bonus feats for this specific monk level (1, 2, or 6). Prerequisites are bypassed.</param>
+    /// <param name="wizardBonus">If true, only show Wizard bonus feats (metamagic + item creation + Spell Mastery). Prerequisites enforced.</param>
     public void OpenForSelection(CharacterStats stats, int featsToSelect, bool fighterBonusOnly = false,
-        string title = null, string subtitle = null, int monkBonusLevel = 0)
+        string title = null, string subtitle = null, int monkBonusLevel = 0, bool wizardBonus = false)
     {
         if (!_isBuilt)
         {
@@ -252,7 +255,9 @@ public class FeatSelectionUI : MonoBehaviour
         _isFighterBonus = fighterBonusOnly;
         _isMonkBonus = monkBonusLevel > 0;
         _monkBonusLevel = monkBonusLevel;
+        _isWizardBonus = wizardBonus;
         _monkBonusFeatList = null;
+        _wizardBonusFeatList = null;
         _selectedFeats.Clear();
         _filterType = "All";
         _searchText = "";
@@ -266,6 +271,14 @@ public class FeatSelectionUI : MonoBehaviour
                       string.Join(", ", _monkBonusFeatList.ConvertAll(f => f.FeatName)));
         }
 
+        // Pre-fetch Wizard bonus feats if in Wizard bonus mode
+        // Shows ALL wizard bonus feats (qualified and unqualified) for display, filtering happens in CreateFeatRow
+        if (_isWizardBonus)
+        {
+            _wizardBonusFeatList = FeatDefinitions.GetAllWizardBonusFeats();
+            Debug.Log($"[FeatSelectionUI] Wizard bonus mode: {_wizardBonusFeatList.Count} total wizard bonus feats available");
+        }
+
         // Set title - use custom title if provided, otherwise generate a default
         if (!string.IsNullOrEmpty(title))
         {
@@ -276,6 +289,8 @@ public class FeatSelectionUI : MonoBehaviour
             string defaultTitle;
             if (_isMonkBonus)
                 defaultTitle = $"Select Monk Bonus Feat (Level {monkBonusLevel})";
+            else if (_isWizardBonus)
+                defaultTitle = featsToSelect > 1 ? $"Select {featsToSelect} Wizard Bonus Feats" : "Select Wizard Bonus Feat";
             else if (fighterBonusOnly)
                 defaultTitle = featsToSelect > 1 ? $"Select {featsToSelect} Fighter Bonus Feats" : "Select Fighter Bonus Feat";
             else
@@ -296,6 +311,7 @@ public class FeatSelectionUI : MonoBehaviour
         FeatDefinitions.Init();
 
         string modeStr = _isMonkBonus ? $" (monk bonus level {monkBonusLevel})" :
+                         _isWizardBonus ? " (wizard bonus)" :
                          fighterBonusOnly ? " (fighter bonus only)" : "";
         Debug.Log($"[FeatSelectionUI] Opening for {stats.CharacterName} ({stats.CharacterClass}): " +
                   $"{featsToSelect} feats to select{modeStr}" +
@@ -343,6 +359,13 @@ public class FeatSelectionUI : MonoBehaviour
             Debug.Log($"[FeatSelectionUI] PopulateFeatList (Monk bonus level {_monkBonusLevel}): " +
                       $"{_allFeats.Count} feats available");
         }
+        // In wizard bonus mode, use the pre-filtered wizard bonus feat list
+        else if (_isWizardBonus && _wizardBonusFeatList != null)
+        {
+            _allFeats = _wizardBonusFeatList;
+            Debug.Log($"[FeatSelectionUI] PopulateFeatList (Wizard bonus): " +
+                      $"{_allFeats.Count} wizard bonus feats available");
+        }
         else
         {
             // Get all feats sorted
@@ -363,8 +386,8 @@ public class FeatSelectionUI : MonoBehaviour
         {
             var feat = _allFeats[i];
 
-            // In monk bonus mode, skip non-monk-bonus feats (already filtered, but be safe)
-            // and skip filter/search since the list is small and specific
+            // In monk bonus mode, skip filtering/searching (list is small and specific)
+            // In wizard bonus mode, allow type filtering and search within the wizard bonus feats
             if (!_isMonkBonus)
             {
                 // Apply filters
@@ -404,6 +427,9 @@ public class FeatSelectionUI : MonoBehaviour
         // Fighter bonus mode: always filter to fighter bonus feats regardless of type filter
         if (_isFighterBonus && !feat.IsFighterBonus) return false;
 
+        // Wizard bonus mode: already pre-filtered, but respect type filter within wizard feats
+        if (_isWizardBonus && !feat.IsWizardBonus) return false;
+
         if (_filterType == "All") return true;
 
         switch (_filterType)
@@ -415,6 +441,7 @@ public class FeatSelectionUI : MonoBehaviour
             case "Skill": return feat.Type == FeatType.Skill;
             case "General": return feat.Type == FeatType.General || feat.Type == FeatType.Unarmed || feat.Type == FeatType.MountedCombat;
             case "Metamagic": return feat.Type == FeatType.Metamagic;
+            case "Crafting": return feat.Type == FeatType.ItemCreation;
             default: return true;
         }
     }
@@ -470,11 +497,12 @@ public class FeatSelectionUI : MonoBehaviour
             new Vector2(30, 0), new Vector2(70, 26), typeStr, 9,
             GetTypeColor(feat.Type), TextAnchor.MiddleCenter);
 
-        // Fighter bonus indicator
-        string bonusStr = feat.IsFighterBonus ? "F" : "";
+        // Bonus feat indicator (Fighter/Wizard)
+        string bonusStr = feat.IsWizardBonus ? "W" : (feat.IsFighterBonus ? "F" : "");
+        Color bonusColor = feat.IsWizardBonus ? new Color(0.4f, 0.6f, 1f) : new Color(0.8f, 0.6f, 0.2f);
         MakeText(row.RowGO.transform, "FBonus",
             new Vector2(70, 0), new Vector2(20, 26), bonusStr, 9,
-            new Color(0.8f, 0.6f, 0.2f), TextAnchor.MiddleCenter);
+            bonusColor, TextAnchor.MiddleCenter);
 
         // Select/deselect button
         string btnLabel;
@@ -509,7 +537,9 @@ public class FeatSelectionUI : MonoBehaviour
         detail += $"<color=#88AACC>Type: {feat.Type}</color>";
         if (feat.IsFighterBonus) detail += " <color=#CC9933>[Fighter Bonus]</color>";
         if (feat.IsMonkBonus) detail += " <color=#66CCAA>[Monk Bonus]</color>";
+        if (feat.IsWizardBonus) detail += " <color=#6699FF>[Wizard Bonus]</color>";
         if (feat.IsActive) detail += " <color=#CC6633>[Active]</color>";
+        if (feat.IsPlaceholder) detail += "\n<color=#FF9933>[⚠ PLACEHOLDER - Mechanics not yet implemented]</color>";
         detail += "\n\n";
 
         detail += $"<color=#AADDAA>Benefit:</color> {feat.Benefit.Description}\n\n";
@@ -560,7 +590,7 @@ public class FeatSelectionUI : MonoBehaviour
         for (int i = 0; i < _filterButtons.Count; i++)
         {
             var btnImg = _filterButtons[i].GetComponent<Image>();
-            string[] filters = { "All", "Combat", "Ranged", "Defensive", "TWF", "Skill", "Metamagic", "General" };
+            string[] filters = { "All", "Combat", "Ranged", "Defensive", "TWF", "Skill", "Metamagic", "Crafting", "General" };
             btnImg.color = (i < filters.Length && filters[i] == filter) ? COLOR_FILTER_ACTIVE : COLOR_FILTER_INACTIVE;
         }
 
@@ -655,6 +685,7 @@ public class FeatSelectionUI : MonoBehaviour
             case FeatType.Skill: return "Skill";
             case FeatType.Unarmed: return "Unarmed";
             case FeatType.Metamagic: return "Metamagic";
+            case FeatType.ItemCreation: return "Crafting";
             case FeatType.General: return "General";
             default: return "Other";
         }
@@ -672,6 +703,7 @@ public class FeatSelectionUI : MonoBehaviour
             case FeatType.Skill: return new Color(0.7f, 0.7f, 1f);
             case FeatType.Unarmed: return new Color(0.8f, 0.5f, 0.8f);
             case FeatType.Metamagic: return new Color(0.6f, 0.4f, 1f);
+            case FeatType.ItemCreation: return new Color(0.4f, 0.8f, 0.6f);
             case FeatType.General: return new Color(0.7f, 0.7f, 0.7f);
             default: return Color.gray;
         }
