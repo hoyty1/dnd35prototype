@@ -514,9 +514,10 @@ public class SceneBootstrap : MonoBehaviour
         CreateActionButtonsSection(bottomPanel.transform, combatUI);
     }
 
-    /// <summary>Left section of bottom panel: scrollable combat log.</summary>
+    /// <summary>Left section of bottom panel: persistent scrollable combat log with ScrollRect.</summary>
     private void CreateCombatLogSection(Transform parent, CombatUI combatUI)
     {
+        // --- Outer container ---
         GameObject logSection = new GameObject("CombatLogSection");
         logSection.transform.SetParent(parent, false);
         RectTransform lsRT = logSection.AddComponent<RectTransform>();
@@ -528,25 +529,77 @@ public class SceneBootstrap : MonoBehaviour
         Image lsBg = logSection.AddComponent<Image>();
         lsBg.color = new Color(0.05f, 0.05f, 0.1f, 0.8f);
 
-        // Log title
+        // Log title (fixed at top, outside scroll area)
         CreateText(logSection.transform, "LogTitle",
             new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
             new Vector2(0, -2), new Vector2(0, 18),
             "── COMBAT LOG ──", 10, new Color(0.6f, 0.6f, 0.8f), TextAnchor.MiddleCenter);
 
-        // Combat log text
-        combatUI.CombatLogText = CreateText(logSection.transform, "CombatLog",
-            new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0),
-            new Vector2(8, 4), new Vector2(-16, -22),
-            "Combat begins! Choose your actions.", 12, Color.yellow, TextAnchor.UpperLeft);
-        // Make anchors stretch
-        RectTransform logTextRT = combatUI.CombatLogText.GetComponent<RectTransform>();
-        logTextRT.anchorMin = new Vector2(0, 0);
-        logTextRT.anchorMax = new Vector2(1, 1);
-        logTextRT.offsetMin = new Vector2(8, 4);
-        logTextRT.offsetMax = new Vector2(-8, -22);
-        combatUI.CombatLogText.verticalOverflow = VerticalWrapMode.Overflow;
-        combatUI.CombatLogText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        // --- Scroll Area (holds ScrollRect) ---
+        GameObject scrollArea = new GameObject("CombatLogScrollArea");
+        scrollArea.transform.SetParent(logSection.transform, false);
+        RectTransform scrollAreaRT = scrollArea.AddComponent<RectTransform>();
+        scrollAreaRT.anchorMin = new Vector2(0, 0);
+        scrollAreaRT.anchorMax = new Vector2(1, 1);
+        scrollAreaRT.offsetMin = new Vector2(0, 0);
+        scrollAreaRT.offsetMax = new Vector2(0, -20); // Leave room for title
+
+        ScrollRect scrollRect = scrollArea.AddComponent<ScrollRect>();
+        scrollRect.horizontal = false;
+        scrollRect.vertical = true;
+        scrollRect.movementType = ScrollRect.MovementType.Clamped;
+        scrollRect.scrollSensitivity = 20f;
+
+        // --- Viewport (masks content) ---
+        GameObject viewport = new GameObject("Viewport");
+        viewport.transform.SetParent(scrollArea.transform, false);
+        RectTransform viewportRT = viewport.AddComponent<RectTransform>();
+        viewportRT.anchorMin = Vector2.zero;
+        viewportRT.anchorMax = Vector2.one;
+        viewportRT.offsetMin = new Vector2(4, 2);
+        viewportRT.offsetMax = new Vector2(-4, -2);
+
+        // Mask requires an Image - use white but mask hides it
+        Image viewportImg = viewport.AddComponent<Image>();
+        viewportImg.color = Color.white;
+        Mask viewportMask = viewport.AddComponent<Mask>();
+        viewportMask.showMaskGraphic = false;
+
+        // --- Content (grows vertically with messages) ---
+        GameObject content = new GameObject("Content");
+        content.transform.SetParent(viewport.transform, false);
+        RectTransform contentRT = content.AddComponent<RectTransform>();
+        contentRT.anchorMin = new Vector2(0, 1);
+        contentRT.anchorMax = new Vector2(1, 1);
+        contentRT.pivot = new Vector2(0.5f, 1);
+        contentRT.anchoredPosition = Vector2.zero;
+        contentRT.sizeDelta = new Vector2(0, 0); // Will grow via ContentSizeFitter
+
+        VerticalLayoutGroup vlg = content.AddComponent<VerticalLayoutGroup>();
+        vlg.childAlignment = TextAnchor.UpperLeft;
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = true;
+        vlg.childForceExpandWidth = true;
+        vlg.childForceExpandHeight = false;
+        vlg.spacing = 2;
+        vlg.padding = new RectOffset(4, 4, 4, 4);
+
+        ContentSizeFitter csf = content.AddComponent<ContentSizeFitter>();
+        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        // --- Link ScrollRect ---
+        scrollRect.viewport = viewportRT;
+        scrollRect.content = contentRT;
+
+        // --- Scrollbar via helper ---
+        ScrollbarHelper.CreateVerticalScrollbar(scrollRect, scrollArea.transform, 14f);
+
+        // --- Store references in CombatUI ---
+        combatUI.CombatLogContent = content;
+        combatUI.CombatLogScrollRect = scrollRect;
+
+        // Add initial welcome message
+        combatUI.ShowCombatLog("Combat begins! Choose your actions.");
     }
 
     /// <summary>Right section of bottom panel: action buttons in a grid.</summary>

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
@@ -75,7 +76,11 @@ public class CombatUI : MonoBehaviour
     public List<NPCPanelUI> NPCPanels = new List<NPCPanelUI>();
 
     [Header("Combat Log")]
-    public Text CombatLogText;
+    public Text CombatLogText;  // Legacy single-text reference (kept for backward compat)
+    public GameObject CombatLogContent;     // Content container for scrollable log messages
+    public ScrollRect CombatLogScrollRect;  // ScrollRect for auto-scrolling
+    private List<string> _combatLogMessages = new List<string>();
+    private const int MaxLogMessages = 200; // Prevent unbounded growth
 
     [Header("Action Buttons - Action Economy")]
     public GameObject ActionPanel;
@@ -269,13 +274,100 @@ public class CombatUI : MonoBehaviour
             InitiativePanel.SetActive(!string.IsNullOrEmpty(initiativeText));
     }
 
+    /// <summary>
+    /// Adds a message to the persistent scrollable combat log.
+    /// Messages accumulate throughout combat and can be scrolled.
+    /// </summary>
     public void ShowCombatLog(string message)
     {
+        // --- New scrollable log path ---
+        if (CombatLogContent != null)
+        {
+            string formatted = HighlightCriticalHits(message);
+            _combatLogMessages.Add(formatted);
+
+            // Create a new Text element as a child of the content container
+            GameObject msgObj = new GameObject($"LogMsg_{_combatLogMessages.Count}");
+            msgObj.transform.SetParent(CombatLogContent.transform, false);
+
+            Text text = msgObj.AddComponent<Text>();
+            text.supportRichText = true;
+            text.text = formatted;
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (text.font == null) text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            if (text.font == null) text.font = Font.CreateDynamicFontFromOSFont("Arial", 11);
+            text.fontSize = 11;
+            text.color = Color.white;
+            text.alignment = TextAnchor.UpperLeft;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.raycastTarget = false;
+
+            // Let VerticalLayoutGroup + ContentSizeFitter handle sizing
+            LayoutElement le = msgObj.AddComponent<LayoutElement>();
+            le.flexibleWidth = 1;
+
+            // Trim oldest messages if over limit
+            if (_combatLogMessages.Count > MaxLogMessages && CombatLogContent.transform.childCount > MaxLogMessages)
+            {
+                Transform oldest = CombatLogContent.transform.GetChild(0);
+                Destroy(oldest.gameObject);
+                _combatLogMessages.RemoveAt(0);
+            }
+
+            // Auto-scroll to bottom next frame (let layout recalculate)
+            StartCoroutine(ScrollToBottomNextFrame());
+            return;
+        }
+
+        // --- Fallback: legacy single-text field ---
         if (CombatLogText != null)
         {
             CombatLogText.supportRichText = true;
             string formatted = HighlightCriticalHits(message);
             CombatLogText.text = formatted;
+        }
+    }
+
+    /// <summary>
+    /// Adds a visual turn separator line to the combat log.
+    /// </summary>
+    public void AddTurnSeparator(int turnNumber)
+    {
+        ShowCombatLog($"<color=#888888>─────── Turn {turnNumber} ───────</color>");
+    }
+
+    /// <summary>
+    /// Clears all messages from the combat log. Call when combat ends.
+    /// </summary>
+    public void ClearCombatLog()
+    {
+        _combatLogMessages.Clear();
+
+        if (CombatLogContent != null)
+        {
+            foreach (Transform child in CombatLogContent.transform)
+            {
+                Destroy(child.gameObject);
+            }
+        }
+
+        // Also clear legacy text
+        if (CombatLogText != null)
+            CombatLogText.text = "";
+    }
+
+    /// <summary>
+    /// Coroutine that scrolls the combat log to the bottom after one frame,
+    /// giving layout groups time to recalculate content size.
+    /// </summary>
+    private IEnumerator ScrollToBottomNextFrame()
+    {
+        yield return null; // Wait one frame for layout update
+        if (CombatLogScrollRect != null)
+        {
+            Canvas.ForceUpdateCanvases();
+            CombatLogScrollRect.verticalNormalizedPosition = 0f; // 0 = bottom
         }
     }
 

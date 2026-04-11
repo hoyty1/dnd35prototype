@@ -1015,8 +1015,12 @@ public class GameManager : MonoBehaviour
         {
             _currentRound++;
             Debug.Log($"[GameManager] ═══ ROUND {_currentRound} BEGINS ═══");
+            CombatUI.AddTurnSeparator(_currentRound);
             ResetQuickenedSpellTrackingForAllCharacters();
         }
+
+        // Log turn start in combat log
+        CombatUI.ShowCombatLog($"<color=#FFD700>⚔ {pc.Stats.CharacterName}'s turn begins</color>");
 
         // Tick Barbarian Rage at start of turn
         if (pc.Stats.IsBarbarian && pc.Stats.IsRaging)
@@ -2306,6 +2310,7 @@ public class GameManager : MonoBehaviour
     {
         npc.StartNewTurn();
         CombatUI.SetTurnIndicator($"{npc.Stats.CharacterName}'s turn...");
+        CombatUI.ShowCombatLog($"<color=#FF6666>💀 {npc.Stats.CharacterName}'s turn begins</color>");
         yield return new WaitForSeconds(0.6f);
 
         CharacterController targetPC = GetClosestAlivePCTo(npc);
