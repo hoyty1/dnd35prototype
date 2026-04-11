@@ -51,3 +51,4 @@ Thumbs.db
 *.meta
 Assets/Resources/Sprites/npc_enemy_alive.png.meta
 Assets/Resources/Sprites/npc_enemy_dead.png.meta
+ProjectSettings/SceneTemplateSettings.json
