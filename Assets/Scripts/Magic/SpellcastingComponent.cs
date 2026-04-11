@@ -51,8 +51,10 @@ public class SpellcastingComponent : MonoBehaviour
     public bool CanCastSpells => Stats != null && (Stats.IsWizard || Stats.IsCleric);
 
     /// <summary>
-    /// Wizard spellbook: SpellIds selected during character creation.
-    /// If set before Init(), only these spells (plus all cantrips) will be known.
+    /// SpellIds selected during character creation.
+    /// For Wizards: includes cantrips + 1st/2nd level spells.
+    /// For Clerics: includes selected orisons only.
+    /// If set before Init(), only these spells will be known (plus all higher-level Cleric spells).
     /// If null, all available spells are added (backwards compatibility).
     /// </summary>
     public List<string> SelectedSpellIds { get; set; }
@@ -80,8 +82,8 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Initialize Wizard spellcasting.
-    /// D&D 3.5 Wizard Level 3: 4/2+bonus/1+bonus (cantrips/1st/2nd)
-    /// Wizards know all cantrips. 1st/2nd level spells come from spellbook.
+    /// D&D 3.5e PHB Level 3: 4/2+bonus/1+bonus (cantrips/1st/2nd)
+    /// Wizards know only 4 selected cantrips (not all). 1st/2nd level spells come from spellbook.
     /// Bonus spell slots from INT: +1 slot at spell level N if INT mod >= N
     /// </summary>
     private void InitWizard(int level)
@@ -97,25 +99,23 @@ public class SpellcastingComponent : MonoBehaviour
         SlotsMax = new int[] { 4, 2 + bonus1st, 1 + bonus2nd };
         SlotsRemaining = (int[])SlotsMax.Clone();
 
-        // Wizard knows ALL cantrips
-        KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0));
-
-        // For 1st and 2nd level spells, use selected spells if available
+        // Use selected spells for ALL levels (including cantrips)
         if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
         {
             foreach (string spellId in SelectedSpellIds)
             {
                 SpellData spell = SpellDatabase.GetSpell(spellId);
-                if (spell != null && spell.SpellLevel > 0)
+                if (spell != null)
                 {
                     KnownSpells.Add(spell);
                 }
             }
-            Debug.Log($"[Spellcasting] Wizard loaded {SelectedSpellIds.Count} selected spells from spellbook.");
+            Debug.Log($"[Spellcasting] Wizard loaded {SelectedSpellIds.Count} selected spells (including cantrips) from spellbook.");
         }
         else
         {
             // Backwards compatibility: if no selection made, know all spells
+            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0));
             KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1));
             KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2));
             Debug.Log("[Spellcasting] Wizard: no spell selection found, added all available spells.");
@@ -124,8 +124,8 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Initialize Cleric spellcasting.
-    /// D&D 3.5 Cleric Level 3: 4/2+1domain+bonus/1+1domain+bonus
-    /// Clerics have access to entire cleric spell list (prepared caster).
+    /// D&D 3.5e PHB Level 3: 4/2+1domain+bonus/1+1domain+bonus
+    /// Clerics know only 4 selected orisons. Higher-level spells are prepared from full list.
     /// Bonus spell slots from WIS: +1 slot at spell level N if WIS mod >= N
     /// </summary>
     private void InitCleric(int level)
@@ -141,8 +141,28 @@ public class SpellcastingComponent : MonoBehaviour
         SlotsMax = new int[] { 4, 3 + bonus1st, 2 + bonus2nd }; // 2 base + 1 domain + bonus for each
         SlotsRemaining = (int[])SlotsMax.Clone();
 
-        // Cleric knows ALL cleric spells (prepared from full list)
-        KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 0));
+        // For orisons (level 0): only add selected ones if available
+        if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
+        {
+            // Add selected orisons
+            foreach (string spellId in SelectedSpellIds)
+            {
+                SpellData spell = SpellDatabase.GetSpell(spellId);
+                if (spell != null && spell.SpellLevel == 0)
+                {
+                    KnownSpells.Add(spell);
+                }
+            }
+            Debug.Log($"[Spellcasting] Cleric loaded {SelectedSpellIds.Count} selected orisons.");
+        }
+        else
+        {
+            // Backwards compatibility: if no selection made, know all orisons
+            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 0));
+            Debug.Log("[Spellcasting] Cleric: no orison selection found, added all orisons.");
+        }
+
+        // Clerics know ALL 1st and 2nd level spells (prepared caster — full list)
         KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 1));
         KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 2));
     }

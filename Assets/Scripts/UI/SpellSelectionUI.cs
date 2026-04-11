@@ -6,13 +6,14 @@ using UnityEngine.UI;
 /// <summary>
 /// Spell selection UI for character creation.
 /// Wizards select spells for their spellbook from available spell lists.
-/// Clerics see an informational message (they have access to all spells).
+/// Clerics select orisons (cantrips) and see an informational message for higher-level spells.
 ///
-/// D&D 3.5e Wizard Spellbook Rules at Level 3:
-///   - All cantrips (level 0) are automatically known
-///   - 1st level: 3 + INT modifier spells in spellbook (initial)
-///   - 2nd level: 2 spells (gained at level 3)
-///   - Total 1st+2nd level spells to select varies by INT
+/// D&D 3.5e Spell Rules at Level 3:
+///   - Wizards: Select 4 cantrips, 3 + INT mod 1st-level, 2 2nd-level spells
+///   - Clerics: Select 4 orisons, have access to all 1st & 2nd level spells
+///   - Level 0 (cantrips/orisons): 4 known
+///   - Level 1: 3 + ability modifier spells
+///   - Level 2: 2 spells
 ///
 /// Usage: Called from CharacterCreationUI after feat selection for spellcasters.
 /// </summary>
@@ -49,9 +50,11 @@ public class SpellSelectionUI : MonoBehaviour
     // State
     private string _className;
     private int _intMod;
+    private int _maxCantrips;    // Max cantrips/orisons to select (4 at level 3)
     private int _maxSpells1st;
     private int _maxSpells2nd;
     private int _currentFilterLevel = -1; // -1 = all, 0/1/2 = specific level
+    private bool _cantripSelectionRequired; // true if player must select cantrips
 
     private List<SpellData> _availableSpells = new List<SpellData>();
     private HashSet<string> _selectedSpellIds = new HashSet<string>();
@@ -197,12 +200,11 @@ public class SpellSelectionUI : MonoBehaviour
     {
         _className = "Wizard";
         _intMod = intModifier;
-        // D&D 3.5e: Wizard starts with 3 + INT mod spells at 1st level
-        // At level 3, they gain 2 spells per level (so +4 from levels 2-3)
-        // Total 1st level: 3 + INT mod + 2 (level 2) = 5 + INT mod, but split:
-        // Simplification for level 3: select 3 + INT mod 1st level + 2 2nd level
+        // D&D 3.5e PHB: At level 3, Wizards know 4 cantrips, 3+INT mod 1st-level, 2 2nd-level
+        _maxCantrips = 4;
         _maxSpells1st = Mathf.Max(1, 3 + intModifier);
         _maxSpells2nd = 2;
+        _cantripSelectionRequired = true;
 
         _selectedSpellIds.Clear();
 
@@ -220,8 +222,7 @@ public class SpellSelectionUI : MonoBehaviour
         });
 
         _titleText.text = "WIZARD SPELLBOOK SELECTION";
-        _subtitleText.text = $"Select {_maxSpells1st} 1st-level spells and {_maxSpells2nd} 2nd-level spells for your spellbook.\n" +
-                             "All cantrips are automatically known.";
+        _subtitleText.text = $"Select {_maxCantrips} cantrips, {_maxSpells1st} 1st-level, and {_maxSpells2nd} 2nd-level spells for your spellbook.";
 
         _overlayPanel.SetActive(true);
         IsOpen = true;
@@ -232,11 +233,16 @@ public class SpellSelectionUI : MonoBehaviour
     }
 
     /// <summary>
-    /// Open for Cleric (informational only - they have all spells).
+    /// Open for Cleric — select 4 orisons, higher-level spells are all available.
+    /// D&D 3.5e PHB: Clerics prepare from the full list, but only know 4 orisons at level 3.
     /// </summary>
     public void OpenForCleric()
     {
         _className = "Cleric";
+        _maxCantrips = 4;
+        _maxSpells1st = 0; // Clerics don't select higher-level spells (they know all)
+        _maxSpells2nd = 0;
+        _cantripSelectionRequired = true;
         _selectedSpellIds.Clear();
 
         SpellDatabase.Init();
@@ -250,8 +256,8 @@ public class SpellSelectionUI : MonoBehaviour
             return cmp != 0 ? cmp : string.Compare(a.Name, b.Name, StringComparison.Ordinal);
         });
 
-        _titleText.text = "CLERIC SPELL LIST";
-        _subtitleText.text = "Clerics have access to ALL Cleric spells. You prepare spells each day from the full list.\nNo selection needed — review your available spells below.";
+        _titleText.text = "CLERIC SPELL SELECTION";
+        _subtitleText.text = $"Select {_maxCantrips} orisons (cantrips). Higher-level spells are prepared from the full list each day.";
 
         _overlayPanel.SetActive(true);
         IsOpen = true;
@@ -293,7 +299,8 @@ public class SpellSelectionUI : MonoBehaviour
             if (spell.SpellLevel != lastLevel)
             {
                 lastLevel = spell.SpellLevel;
-                string headerLabel = spell.SpellLevel == 0 ? "═══ CANTRIPS (Level 0) — Auto-Known ═══" :
+                string cantripLabel = _className == "Cleric" ? "ORISONS" : "CANTRIPS";
+                string headerLabel = spell.SpellLevel == 0 ? $"═══ {cantripLabel} (Level 0) — Select {_maxCantrips} ═══" :
                                      $"═══ LEVEL {spell.SpellLevel} SPELLS ═══";
                 var headerGO = new GameObject("Header" + spell.SpellLevel);
                 headerGO.transform.SetParent(_scrollContent.transform, false);
@@ -342,8 +349,14 @@ public class SpellSelectionUI : MonoBehaviour
         bool isCantrip = spell.SpellLevel == 0;
         row.Background.color = isCantrip ? new Color(0.12f, 0.14f, 0.12f, 0.6f) : new Color(0.1f, 0.1f, 0.15f, 0.6f);
 
-        // Select button (only for non-cantrips for Wizard)
-        bool showSelect = _className == "Wizard" && spell.SpellLevel > 0;
+        // Select button — shown for cantrips (both classes) and higher-level spells (Wizard only)
+        // Clerics don't select 1st/2nd level spells (they know all), but DO select orisons
+        bool showSelect = false;
+        if (spell.SpellLevel == 0 && _cantripSelectionRequired)
+            showSelect = true; // Both Wizards and Clerics select cantrips/orisons
+        else if (_className == "Wizard" && spell.SpellLevel > 0)
+            showSelect = true; // Wizards select higher-level spells
+
         if (showSelect)
         {
             row.SelectButton = MakeButton(row.Row.transform, "SelBtn",
@@ -427,10 +440,11 @@ public class SpellSelectionUI : MonoBehaviour
 
     private void ToggleSpell(string spellId)
     {
-        if (_className != "Wizard") return;
-
         SpellData spell = SpellDatabase.GetSpell(spellId);
         if (spell == null) return;
+
+        // Clerics can only toggle cantrips/orisons (level 0), not higher-level spells
+        if (_className == "Cleric" && spell.SpellLevel > 0) return;
 
         if (_selectedSpellIds.Contains(spellId))
         {
@@ -440,7 +454,13 @@ public class SpellSelectionUI : MonoBehaviour
         {
             // Check if we can select more at this level
             int currentCount = CountSelectedAtLevel(spell.SpellLevel);
-            int maxCount = spell.SpellLevel == 1 ? _maxSpells1st : _maxSpells2nd;
+            int maxCount;
+            if (spell.SpellLevel == 0)
+                maxCount = _maxCantrips;
+            else if (spell.SpellLevel == 1)
+                maxCount = _maxSpells1st;
+            else
+                maxCount = _maxSpells2nd;
 
             if (currentCount >= maxCount)
             {
@@ -469,24 +489,33 @@ public class SpellSelectionUI : MonoBehaviour
 
     private void RefreshUI()
     {
+        int sel0 = CountSelectedAtLevel(0);
         int sel1 = CountSelectedAtLevel(1);
         int sel2 = CountSelectedAtLevel(2);
 
         if (_className == "Wizard")
         {
-            _selectionCountText.text = $"1st Level: {sel1}/{_maxSpells1st}   |   2nd Level: {sel2}/{_maxSpells2nd}";
-
-            bool allSelected = (sel1 >= _maxSpells1st && sel2 >= _maxSpells2nd);
-            _confirmButton.interactable = allSelected;
-
             // Color the count text
+            string c0 = sel0 >= _maxCantrips ? "#44FF44" : "#FFDD44";
             string c1 = sel1 >= _maxSpells1st ? "#44FF44" : "#FFDD44";
             string c2 = sel2 >= _maxSpells2nd ? "#44FF44" : "#FFDD44";
-            _selectionCountText.text = $"<color={c1}>1st Level: {sel1}/{_maxSpells1st}</color>   |   <color={c2}>2nd Level: {sel2}/{_maxSpells2nd}</color>";
+            _selectionCountText.text = $"<color={c0}>Cantrips: {sel0}/{_maxCantrips}</color>   |   " +
+                                       $"<color={c1}>1st Level: {sel1}/{_maxSpells1st}</color>   |   " +
+                                       $"<color={c2}>2nd Level: {sel2}/{_maxSpells2nd}</color>";
+
+            bool allSelected = (sel0 >= _maxCantrips && sel1 >= _maxSpells1st && sel2 >= _maxSpells2nd);
+            _confirmButton.interactable = allSelected;
+        }
+        else if (_className == "Cleric")
+        {
+            string c0 = sel0 >= _maxCantrips ? "#44FF44" : "#FFDD44";
+            _selectionCountText.text = $"<color={c0}>Orisons: {sel0}/{_maxCantrips}</color>   |   " +
+                                       "1st & 2nd level spells: All available";
+            _confirmButton.interactable = (sel0 >= _maxCantrips);
         }
         else
         {
-            _selectionCountText.text = "All spells available to Clerics";
+            _selectionCountText.text = "All spells available";
             _confirmButton.interactable = true;
         }
 
@@ -510,7 +539,10 @@ public class SpellSelectionUI : MonoBehaviour
                 if (!isSelected)
                 {
                     int lvl = row.Spell.SpellLevel;
-                    int max = lvl == 1 ? _maxSpells1st : _maxSpells2nd;
+                    int max;
+                    if (lvl == 0) max = _maxCantrips;
+                    else if (lvl == 1) max = _maxSpells1st;
+                    else max = _maxSpells2nd;
                     row.SelectButton.interactable = CountSelectedAtLevel(lvl) < max;
                 }
                 else
@@ -520,10 +552,10 @@ public class SpellSelectionUI : MonoBehaviour
             }
 
             // Row background
-            if (isCantrip)
-                row.Background.color = new Color(0.12f, 0.16f, 0.12f, 0.6f);
-            else if (isSelected)
-                row.Background.color = new Color(0.12f, 0.22f, 0.12f, 0.8f);
+            if (isSelected)
+                row.Background.color = isCantrip ? new Color(0.12f, 0.22f, 0.12f, 0.8f) : new Color(0.12f, 0.22f, 0.12f, 0.8f);
+            else if (isCantrip)
+                row.Background.color = new Color(0.12f, 0.14f, 0.12f, 0.6f);
             else
                 row.Background.color = new Color(0.1f, 0.1f, 0.15f, 0.6f);
         }

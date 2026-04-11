@@ -84,6 +84,7 @@ public class CharacterCreationUI : MonoBehaviour
 
     // Step 5: Review
     private Text _reviewText;
+    private RectTransform _reviewScrollContentRT; // Content RT for scroll area sizing
     private InputField _nameInput;
     private Button _createButton;
 
@@ -986,10 +987,11 @@ public class CharacterCreationUI : MonoBehaviour
         }
         else if (data.ClassName == "Cleric")
         {
-            // Clerics don't select — show informational panel
-            SpellUI.OnSpellsConfirmed = (selected) =>
+            // Clerics select 4 orisons; higher-level spells are all available
+            SpellUI.OnSpellsConfirmed = (selectedSpellIds) =>
             {
-                Debug.Log("[CharCreation] Cleric spell review confirmed.");
+                data.SelectedSpellIds = new List<string>(selectedSpellIds);
+                Debug.Log($"[CharCreation] Cleric orisons selected: {selectedSpellIds.Count} spells");
                 ShowStep(Step.Review);
             };
             SpellUI.OpenForCleric();
@@ -1055,10 +1057,58 @@ public class CharacterCreationUI : MonoBehaviour
         phRT.offsetMax = new Vector2(-8, -2);
         _nameInput.placeholder = placeholder;
 
-        // Review text
-        _reviewText = MakeText(_step5Panel.transform, "ReviewText",
-            new Vector2(0, -10), new Vector2(750, 360),
+        // Review scroll area — wraps _reviewText in a ScrollRect for long character sheets
+        float reviewScrollH = 360f;
+        GameObject reviewScrollArea = CreatePanel(_step5Panel.transform, "ReviewScrollArea",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0, -10), new Vector2(760, reviewScrollH),
+            new Color(0.08f, 0.08f, 0.12f, 0.6f));
+
+        // Viewport with mask
+        GameObject reviewViewport = new GameObject("ReviewViewport");
+        reviewViewport.transform.SetParent(reviewScrollArea.transform, false);
+        RectTransform rvpRT = reviewViewport.AddComponent<RectTransform>();
+        rvpRT.anchorMin = Vector2.zero;
+        rvpRT.anchorMax = Vector2.one;
+        rvpRT.offsetMin = Vector2.zero;
+        rvpRT.offsetMax = Vector2.zero;
+        reviewViewport.AddComponent<Image>().color = Color.clear;
+        reviewViewport.AddComponent<Mask>().showMaskGraphic = false;
+
+        // Content container that can grow beyond viewport
+        GameObject reviewContent = new GameObject("ReviewContent");
+        reviewContent.transform.SetParent(reviewViewport.transform, false);
+        RectTransform rcRT = reviewContent.AddComponent<RectTransform>();
+        rcRT.anchorMin = new Vector2(0, 1);
+        rcRT.anchorMax = new Vector2(1, 1);
+        rcRT.pivot = new Vector2(0.5f, 1);
+        rcRT.anchoredPosition = Vector2.zero;
+        rcRT.sizeDelta = new Vector2(0, 0); // Will be set dynamically
+
+        // ScrollRect
+        ScrollRect reviewScrollRect = reviewScrollArea.AddComponent<ScrollRect>();
+        reviewScrollRect.content = rcRT;
+        reviewScrollRect.viewport = rvpRT;
+        reviewScrollRect.vertical = true;
+        reviewScrollRect.horizontal = false;
+        reviewScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        reviewScrollRect.scrollSensitivity = 30f;
+
+        // Review text inside scrollable content
+        _reviewText = MakeText(reviewContent.transform, "ReviewText",
+            new Vector2(0, 0), new Vector2(740, 360),
             "", 14, new Color(0.9f, 0.9f, 0.85f), TextAnchor.UpperCenter);
+        // Anchor the review text to fill the content width, top-aligned
+        RectTransform reviewTextRT = _reviewText.GetComponent<RectTransform>();
+        reviewTextRT.anchorMin = new Vector2(0, 1);
+        reviewTextRT.anchorMax = new Vector2(1, 1);
+        reviewTextRT.pivot = new Vector2(0.5f, 1);
+        reviewTextRT.anchoredPosition = new Vector2(0, 0);
+        reviewTextRT.sizeDelta = new Vector2(-20, 0);
+        _reviewText.verticalOverflow = VerticalWrapMode.Overflow;
+
+        // Store reference to content RT so we can resize in RefreshReview
+        _reviewScrollContentRT = rcRT;
 
         // Create Character button
         _createButton = MakeButton(_step5Panel.transform, "CreateBtn",
@@ -1174,27 +1224,64 @@ public class CharacterCreationUI : MonoBehaviour
                 if (data.SelectedSpellIds != null && data.SelectedSpellIds.Count > 0)
                 {
                     SpellDatabase.Init();
+                    // Separate cantrips from higher-level spells for display
+                    var cantrips = new List<string>();
+                    var higherSpells = new List<string>();
                     foreach (string spellId in data.SelectedSpellIds)
                     {
                         SpellData spell = SpellDatabase.GetSpell(spellId);
                         if (spell != null)
-                            review += $"  • {spell.Name} (Lvl {spell.SpellLevel}){(spell.IsPlaceholder ? " [P]" : "")}\n";
+                        {
+                            string entry = $"  • {spell.Name} (Lvl {spell.SpellLevel}){(spell.IsPlaceholder ? " [P]" : "")}";
+                            if (spell.SpellLevel == 0)
+                                cantrips.Add(entry);
+                            else
+                                higherSpells.Add(entry);
+                        }
+                    }
+                    if (cantrips.Count > 0)
+                    {
+                        review += "  Cantrips:\n";
+                        foreach (string c in cantrips) review += c + "\n";
+                    }
+                    if (higherSpells.Count > 0)
+                    {
+                        review += "  Spellbook:\n";
+                        foreach (string s in higherSpells) review += s + "\n";
                     }
                 }
                 else
                 {
                     review += "  (No spells selected yet)\n";
                 }
-                review += "  + All cantrips in spellbook\n";
             }
             else if (data.ClassName == "Cleric")
             {
-                review += "  Clerics prepare from full spell list each day.\n";
-                review += "  Access to all Cleric cantrips, 1st & 2nd level spells.\n";
+                if (data.SelectedSpellIds != null && data.SelectedSpellIds.Count > 0)
+                {
+                    SpellDatabase.Init();
+                    review += "  Selected Orisons:\n";
+                    foreach (string spellId in data.SelectedSpellIds)
+                    {
+                        SpellData spell = SpellDatabase.GetSpell(spellId);
+                        if (spell != null && spell.SpellLevel == 0)
+                            review += $"  • {spell.Name}\n";
+                    }
+                }
+                review += "  Prepares from full 1st & 2nd level spell list each day.\n";
             }
         }
 
         _reviewText.text = review;
+
+        // Resize scroll content to fit the review text
+        if (_reviewScrollContentRT != null)
+        {
+            // Estimate height based on text: ~18px per line
+            int lineCount = review.Split('\n').Length;
+            float estimatedHeight = Mathf.Max(360f, lineCount * 18f + 20f);
+            _reviewScrollContentRT.sizeDelta = new Vector2(0, estimatedHeight);
+        }
 
         // Default name
         if (string.IsNullOrEmpty(_nameInput.text))
@@ -1327,7 +1414,7 @@ public class CharacterCreationUI : MonoBehaviour
                 break;
 
             case Step.SelectSpells:
-                _stepText.text = "Step 7 of 8: Select Spells";
+                _stepText.text = "Step 7 of 8: Select Spells (incl. Cantrips)";
                 StartSpellSelection();
                 break;
 
@@ -1450,6 +1537,11 @@ public class CharacterCreationUI : MonoBehaviour
         pc3.SkillRanks["Knowledge (Religion)"] = 4;
         pc3.SelectedFeats = new System.Collections.Generic.List<string> { "Combat Casting", "Weapon Focus" };
         pc3.WeaponFocusChoice = "Mace";
+        // Cleric selects 4 orisons (D&D 3.5e PHB)
+        pc3.SelectedSpellIds = new System.Collections.Generic.List<string>
+        {
+            "cure_minor_wounds", "detect_magic_clr", "guidance", "light_clr"
+        };
 
         // PC4: Elara the Elf Wizard
         var pc4 = CreatedCharacters[3];
@@ -1465,8 +1557,12 @@ public class CharacterCreationUI : MonoBehaviour
         pc4.SkillRanks["Knowledge (Arcana)"] = 6;
         pc4.SelectedFeats = new System.Collections.Generic.List<string> { "Spell Focus", "Improved Initiative" };
         pc4.BonusFeats = new System.Collections.Generic.List<string> { "Scribe Scroll" };
+        // Wizard selects 4 cantrips + higher-level spells (D&D 3.5e PHB)
         pc4.SelectedSpellIds = new System.Collections.Generic.List<string>
         {
+            // 4 cantrips
+            "ray_of_frost", "detect_magic_wiz", "read_magic", "prestidigitation",
+            // 1st and 2nd level spells
             "magic_missile", "mage_armor", "shield",
             "burning_hands", "sleep", "charm_person",
             "scorching_ray", "bulls_strength"
