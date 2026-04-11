@@ -194,6 +194,9 @@ public class SpellSelectionUI : MonoBehaviour
         scrollRect.horizontal = false;
         scrollRect.scrollSensitivity = 30f;
 
+        // Vertical scrollbar for the spell list
+        ScrollbarHelper.CreateVerticalScrollbar(scrollRect, scrollArea.transform);
+
         // Spell detail panel (right side) — no overlap with list
         GameObject detailPanel = MakePanel(_rootPanel.transform, "DetailPanel",
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),

@@ -118,14 +118,16 @@ public class SkillsUIPanel : MonoBehaviour
         Mask mask = scrollArea.AddComponent<Mask>();
         mask.showMaskGraphic = true;
 
-        // Scroll rect
-        GameObject scrollView = new GameObject("ScrollView");
+        // Viewport for scrolling (child of scroll area, with mask for clipping)
+        GameObject scrollView = new GameObject("Viewport");
         scrollView.transform.SetParent(scrollArea.transform, false);
         RectTransform svRT = scrollView.AddComponent<RectTransform>();
         svRT.anchorMin = Vector2.zero;
         svRT.anchorMax = Vector2.one;
         svRT.offsetMin = Vector2.zero;
         svRT.offsetMax = Vector2.zero;
+        scrollView.AddComponent<Image>().color = Color.white;
+        scrollView.AddComponent<Mask>().showMaskGraphic = false;
 
         // Scroll content
         _scrollContent = new GameObject("ScrollContent");
@@ -140,10 +142,14 @@ public class SkillsUIPanel : MonoBehaviour
         // ScrollRect component
         ScrollRect scrollRect = scrollArea.AddComponent<ScrollRect>();
         scrollRect.content = contentRT;
+        scrollRect.viewport = svRT;
         scrollRect.horizontal = false;
         scrollRect.vertical = true;
         scrollRect.movementType = ScrollRect.MovementType.Clamped;
         scrollRect.scrollSensitivity = 30f;
+
+        // Vertical scrollbar for the skills list
+        ScrollbarHelper.CreateVerticalScrollbar(scrollRect, scrollArea.transform);
 
         // Log text (for skill check results)
         _logText = MakeText(_rootPanel.transform, "SkillLog",

@@ -1094,6 +1094,9 @@ public class CharacterCreationUI : MonoBehaviour
         reviewScrollRect.movementType = ScrollRect.MovementType.Clamped;
         reviewScrollRect.scrollSensitivity = 30f;
 
+        // Vertical scrollbar for the review panel
+        ScrollbarHelper.CreateVerticalScrollbar(reviewScrollRect, reviewScrollArea.transform);
+
         // Review text inside scrollable content
         _reviewText = MakeText(reviewContent.transform, "ReviewText",
             new Vector2(0, 0), new Vector2(740, 360),

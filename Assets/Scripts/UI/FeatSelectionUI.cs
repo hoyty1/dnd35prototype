@@ -181,8 +181,20 @@ public class FeatSelectionUI : MonoBehaviour
         _scrollRect.movementType = ScrollRect.MovementType.Clamped;
         _scrollRect.scrollSensitivity = 30f;
 
+        // Create a proper viewport child so the scrollbar can sit alongside it
+        GameObject featViewport = new GameObject("Viewport");
+        featViewport.transform.SetParent(scrollGO.transform, false);
+        RectTransform fvpRT = featViewport.AddComponent<RectTransform>();
+        fvpRT.anchorMin = Vector2.zero;
+        fvpRT.anchorMax = Vector2.one;
+        fvpRT.offsetMin = Vector2.zero;
+        fvpRT.offsetMax = Vector2.zero;
+        featViewport.AddComponent<Image>().color = Color.white;
+        featViewport.AddComponent<Mask>().showMaskGraphic = false;
+        _scrollRect.viewport = fvpRT;
+
         _scrollContent = new GameObject("Content");
-        _scrollContent.transform.SetParent(scrollGO.transform, false);
+        _scrollContent.transform.SetParent(featViewport.transform, false);
         var contentRT = _scrollContent.AddComponent<RectTransform>();
         contentRT.anchorMin = new Vector2(0, 1);
         contentRT.anchorMax = new Vector2(1, 1);
@@ -190,6 +202,9 @@ public class FeatSelectionUI : MonoBehaviour
         contentRT.anchoredPosition = Vector2.zero;
         contentRT.sizeDelta = new Vector2(0, 0);
         _scrollRect.content = contentRT;
+
+        // Vertical scrollbar for the feat list
+        ScrollbarHelper.CreateVerticalScrollbar(_scrollRect, scrollGO.transform);
 
         // ===== RIGHT SIDE: Selected feats and details =====
         var rightPanel = CreatePanel(_rootPanel.transform, "RightPanel",
