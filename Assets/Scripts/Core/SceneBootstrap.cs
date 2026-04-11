@@ -663,6 +663,11 @@ public class SceneBootstrap : MonoBehaviour
             FeatSelectionUI featUI = canvas.gameObject.AddComponent<FeatSelectionUI>();
             featUI.BuildUI(canvas);
             ccUI.FeatUI = featUI;
+
+            SpellDatabase.Init();
+            SpellSelectionUI spellUI = canvas.gameObject.AddComponent<SpellSelectionUI>();
+            spellUI.BuildUI(canvas);
+            ccUI.SpellUI = spellUI;
         }
 
         // Wire up button events

@@ -283,6 +283,9 @@ public class GameManager : MonoBehaviour
             {
                 SpellDatabase.Init();
                 var spellComp = pcSlots[i].gameObject.AddComponent<SpellcastingComponent>();
+                // Pass selected spell IDs from character creation (Wizard spellbook choices)
+                if (data.SelectedSpellIds != null && data.SelectedSpellIds.Count > 0)
+                    spellComp.SelectedSpellIds = new System.Collections.Generic.List<string>(data.SelectedSpellIds);
                 spellComp.Init(stats);
                 Debug.Log($"[GameManager] {data.CharacterName}: Spellcasting initialized - {spellComp.GetSlotSummary()}");
             }

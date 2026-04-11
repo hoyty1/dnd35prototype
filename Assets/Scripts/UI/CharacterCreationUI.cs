@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class CharacterCreationUI : MonoBehaviour
 {
     // ========== STATE ==========
-    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, AllocateSkills, SelectFeats, Review }
+    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, AllocateSkills, SelectFeats, SelectSpells, Review }
 
     public Step CurrentStep = Step.RollStats;
     public int CurrentCharacterIndex = 0; // 0 = PC1, 1 = PC2, 2 = PC3, 3 = PC4
@@ -35,6 +35,9 @@ public class CharacterCreationUI : MonoBehaviour
 
     // Reference to feat selection UI for feat selection step
     public FeatSelectionUI FeatUI;
+
+    // Reference to spell selection UI for spell selection step
+    public SpellSelectionUI SpellUI;
 
     // ========== UI REFERENCES ==========
     private GameObject _rootPanel;
@@ -883,12 +886,12 @@ public class CharacterCreationUI : MonoBehaviour
             else
             {
                 Debug.Log($"[CharCreation] Wizard at level {wizLevel}: no bonus feats yet (first at level 5)");
-                ShowStep(Step.Review);
+                ShowStep(Step.SelectSpells);
             }
         }
         else
         {
-            ShowStep(Step.Review);
+            ShowStep(Step.SelectSpells);
         }
     }
 
@@ -898,7 +901,7 @@ public class CharacterCreationUI : MonoBehaviour
         data.BonusFeats = new List<string>(feats);
 
         Debug.Log($"[CharCreation] Bonus feats selected: {string.Join(", ", feats)}");
-        ShowStep(Step.Review);
+        ShowStep(Step.SelectSpells);
     }
 
     /// <summary>Called after selecting the Monk level 1 bonus feat. Proceeds to level 2 selection.</summary>
@@ -937,7 +940,66 @@ public class CharacterCreationUI : MonoBehaviour
 
         // At level 6+, there would be another selection for Improved Disarm or Improved Trip
         // For now (level 3), we're done with monk bonus feats
-        ShowStep(Step.Review);
+        ShowStep(Step.SelectSpells);
+    }
+
+    // ========== STEP 5c: SELECT SPELLS ==========
+
+    private void StartSpellSelection()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+
+        // Only spellcasters need spell selection
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(data.ClassName);
+        bool isSpellcaster = classDef != null && classDef.IsSpellcaster;
+
+        if (!isSpellcaster)
+        {
+            Debug.Log($"[CharCreation] {data.ClassName} is not a spellcaster, skipping spell selection.");
+            ShowStep(Step.Review);
+            return;
+        }
+
+        if (SpellUI == null)
+        {
+            Debug.LogWarning("[CharCreation] SpellUI not available, skipping spell selection.");
+            ShowStep(Step.Review);
+            return;
+        }
+
+        SpellDatabase.Init();
+
+        if (data.ClassName == "Wizard")
+        {
+            data.ComputeFinalStats();
+            int intMod = CharacterStats.GetModifier(data.FinalINT);
+            Debug.Log($"[CharCreation] Wizard spell selection: INT mod = {intMod}");
+
+            SpellUI.OnSpellsConfirmed = (selectedSpellIds) =>
+            {
+                data.SelectedSpellIds = new List<string>(selectedSpellIds);
+                Debug.Log($"[CharCreation] Wizard spells selected: {selectedSpellIds.Count} spells");
+                ShowStep(Step.Review);
+            };
+            SpellUI.OpenForWizard(intMod, 3);
+        }
+        else if (data.ClassName == "Cleric")
+        {
+            // Clerics don't select — show informational panel
+            SpellUI.OnSpellsConfirmed = (selected) =>
+            {
+                Debug.Log("[CharCreation] Cleric spell review confirmed.");
+                ShowStep(Step.Review);
+            };
+            SpellUI.OpenForCleric();
+        }
+        else
+        {
+            // Other spellcaster classes (future: Sorcerer, Druid, etc.)
+            Debug.Log($"[CharCreation] {data.ClassName} spell selection not yet implemented.");
+            ShowStep(Step.Review);
+        }
     }
 
     // ========== STEP 6: REVIEW ==========
@@ -1101,6 +1163,37 @@ public class CharacterCreationUI : MonoBehaviour
                 review += $"  Skill Focus: {data.SkillFocusChoice}\n";
         }
 
+        // Show spells for spellcasters
+        ClassRegistry.Init();
+        ICharacterClass reviewClassDef = ClassRegistry.GetClass(data.ClassName);
+        if (reviewClassDef != null && reviewClassDef.IsSpellcaster)
+        {
+            review += "\n--- Spells ---\n";
+            if (data.ClassName == "Wizard")
+            {
+                if (data.SelectedSpellIds != null && data.SelectedSpellIds.Count > 0)
+                {
+                    SpellDatabase.Init();
+                    foreach (string spellId in data.SelectedSpellIds)
+                    {
+                        SpellData spell = SpellDatabase.GetSpell(spellId);
+                        if (spell != null)
+                            review += $"  • {spell.Name} (Lvl {spell.Level}){(spell.IsPlaceholder ? " [P]" : "")}\n";
+                    }
+                }
+                else
+                {
+                    review += "  (No spells selected yet)\n";
+                }
+                review += "  + All cantrips in spellbook\n";
+            }
+            else if (data.ClassName == "Cleric")
+            {
+                review += "  Clerics prepare from full spell list each day.\n";
+                review += "  Access to all Cleric cantrips, 1st & 2nd level spells.\n";
+            }
+        }
+
         _reviewText.text = review;
 
         // Default name
@@ -1168,7 +1261,7 @@ public class CharacterCreationUI : MonoBehaviour
         {
             case Step.RollStats:
                 _step1Panel.SetActive(true);
-                _stepText.text = "Step 1 of 7: Roll Stats";
+                _stepText.text = "Step 1 of 8: Roll Stats";
                 // Reset roll UI
                 if (_currentRolls == null)
                 {
@@ -1182,7 +1275,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.AssignStats:
                 _step2Panel.SetActive(true);
-                _stepText.text = "Step 2 of 7: Assign Stats";
+                _stepText.text = "Step 2 of 8: Assign Stats";
                 // Reset assignment
                 _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
                 _rollUsed = new bool[6];
@@ -1192,7 +1285,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseRace:
                 _step3Panel.SetActive(true);
-                _stepText.text = "Step 3 of 7: Choose Race";
+                _stepText.text = "Step 3 of 8: Choose Race";
                 _selectedRace = null;
                 _raceInfoText.text = "Select a race to see details.";
                 _racePreviewText.text = "";
@@ -1209,7 +1302,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseClass:
                 _step4Panel.SetActive(true);
-                _stepText.text = "Step 4 of 7: Choose Class";
+                _stepText.text = "Step 4 of 8: Choose Class";
                 _selectedClass = null;
                 _classInfoText.text = "";
                 _confirmClassButton.interactable = false;
@@ -1224,18 +1317,23 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.AllocateSkills:
                 // Skills allocation is handled by the SkillsUIPanel overlay
-                _stepText.text = "Step 5 of 7: Allocate Skills";
+                _stepText.text = "Step 5 of 8: Allocate Skills";
                 StartSkillAllocation();
                 break;
 
             case Step.SelectFeats:
-                _stepText.text = "Step 6 of 7: Select Feats";
+                _stepText.text = "Step 6 of 8: Select Feats";
                 StartFeatSelection();
+                break;
+
+            case Step.SelectSpells:
+                _stepText.text = "Step 7 of 8: Select Spells";
+                StartSpellSelection();
                 break;
 
             case Step.Review:
                 _step5Panel.SetActive(true);
-                _stepText.text = "Step 7 of 7: Review & Name";
+                _stepText.text = "Step 8 of 8: Review & Name";
                 _nameInput.text = "";
                 RefreshReview();
                 break;
@@ -1261,7 +1359,13 @@ public class CharacterCreationUI : MonoBehaviour
                     FeatUI.Close();
                 ShowStep(Step.AllocateSkills);
                 break;
-            case Step.Review: ShowStep(Step.SelectFeats); break;
+            case Step.SelectSpells:
+                // Close spell UI if open
+                if (SpellUI != null && SpellUI.IsOpen)
+                    SpellUI.Close();
+                ShowStep(Step.SelectFeats);
+                break;
+            case Step.Review: ShowStep(Step.SelectSpells); break;
         }
     }
 

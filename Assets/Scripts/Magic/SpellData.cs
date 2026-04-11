@@ -53,6 +53,30 @@ public class SpellData
     /// <summary>Number of missiles for Magic Missile (1 at CL1, +1 per 2 CL above 1).</summary>
     public int MissileCount;
 
+    // ========== PLACEHOLDER & BUFF DETAIL ==========
+    /// <summary>Whether this spell's mechanics are not yet fully implemented.</summary>
+    public bool IsPlaceholder;
+    /// <summary>Reason/description for placeholder status (e.g., "[PLACEHOLDER - Summoning not implemented]").</summary>
+    public string PlaceholderReason;
+
+    // ========== STAT BUFF DETAILS ==========
+    /// <summary>Stat to buff (e.g., "STR", "DEX", "CON", "attack", "saves").</summary>
+    public string BuffStatName;
+    /// <summary>Stat bonus amount (e.g., +4 for Bull's Strength enhancement bonus to STR).</summary>
+    public int BuffStatBonus;
+    /// <summary>Shield bonus to AC (separate from armor for stacking).</summary>
+    public int BuffShieldBonus;
+    /// <summary>Deflection bonus to AC.</summary>
+    public int BuffDeflectionBonus;
+    /// <summary>Temporary HP granted.</summary>
+    public int BuffTempHP;
+    /// <summary>Attack bonus (morale, luck, etc.).</summary>
+    public int BuffAttackBonus;
+    /// <summary>Damage bonus (morale, luck, etc.).</summary>
+    public int BuffDamageBonus;
+    /// <summary>Save bonus (morale, luck, etc.).</summary>
+    public int BuffSaveBonus;
+
     /// <summary>Clone this spell data for independent modification.</summary>
     public SpellData Clone()
     {
@@ -83,7 +107,8 @@ public class SpellData
                 effectStr = $"+{BuffACBonus} AC ({BuffType})";
         }
 
-        return $"[{levelStr}] {Name} ({School})\n{effectStr} | Range: {rangeStr}";
+        string placeholderStr = IsPlaceholder ? " <color=#FF8800>[PLACEHOLDER]</color>" : "";
+        return $"[{levelStr}] {Name} ({School}){placeholderStr}\n{effectStr} | Range: {rangeStr}";
     }
 }
 

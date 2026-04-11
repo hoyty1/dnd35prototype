@@ -6,13 +6,13 @@ using UnityEngine;
 /// Attached to a character GameObject alongside CharacterController and InventoryComponent.
 ///
 /// D&D 3.5e Spell Slots at Level 3:
-/// Wizard: 4/2/1 (cantrips/1st/2nd) - but we only have cantrips and 1st, so 4/2
-/// Cleric: 4/2+1 (cantrips/1st+domain) - simplified to 4/3 (including domain slot)
+/// Wizard: 4/2+bonus/1+bonus (cantrips/1st/2nd)
+/// Cleric: 4/2+1domain+bonus/1+1domain+bonus (cantrips/1st/2nd)
 ///
-/// Cantrips (Level 0): Unlimited uses per day (D&D 3.5 still uses slots, but for simplicity
-/// we make cantrips unlimited as they're very weak).
-/// Actually in D&D 3.5 cantrips use slots, so we'll give the proper number but they're weak enough.
-/// Let's follow RAW: Wizard gets 4 cantrip slots, Cleric gets 4 cantrip slots.
+/// Bonus spell slots from ability score:
+///   Wizard: INT modifier determines bonus slots
+///   Cleric: WIS modifier determines bonus slots
+///   Bonus = 1 extra slot per spell level where (ability mod >= spell level)
 /// </summary>
 public class SpellcastingComponent : MonoBehaviour
 {
@@ -24,7 +24,7 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Spell slots remaining per spell level. Index = spell level.
-    /// [0] = cantrip slots, [1] = 1st level slots, etc.
+    /// [0] = cantrip slots, [1] = 1st level slots, [2] = 2nd level slots, etc.
     /// </summary>
     public int[] SlotsRemaining;
 
@@ -51,6 +51,13 @@ public class SpellcastingComponent : MonoBehaviour
     public bool CanCastSpells => Stats != null && (Stats.IsWizard || Stats.IsCleric);
 
     /// <summary>
+    /// Wizard spellbook: SpellIds selected during character creation.
+    /// If set before Init(), only these spells (plus all cantrips) will be known.
+    /// If null, all available spells are added (backwards compatibility).
+    /// </summary>
+    public List<string> SelectedSpellIds { get; set; }
+
+    /// <summary>
     /// Initialize spellcasting for a character based on their class and level.
     /// </summary>
     public void Init(CharacterStats stats)
@@ -73,44 +80,71 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Initialize Wizard spellcasting.
-    /// D&D 3.5 Wizard Level 3: 4 cantrip slots, 2 1st-level slots (+1 bonus from INT 16+).
-    /// Wizards know all cantrips and prepare from spellbook.
+    /// D&D 3.5 Wizard Level 3: 4/2+bonus/1+bonus (cantrips/1st/2nd)
+    /// Wizards know all cantrips. 1st/2nd level spells come from spellbook.
+    /// Bonus spell slots from INT: +1 slot at spell level N if INT mod >= N
     /// </summary>
     private void InitWizard(int level)
     {
-        // Spell slots: base + bonus from INT
-        // Level 3 Wizard base: 4/2 (cantrips/1st)
-        // Bonus spells from INT: INT 16 (+3 mod) = +1 1st level slot
         int intMod = Mathf.Max(0, Stats.INTMod);
+
+        // D&D 3.5e Wizard spell slots at level 3:
+        // Base: 4 cantrips, 2 first, 1 second
+        // Bonus: +1 per level where intMod >= level
         int bonus1st = intMod >= 1 ? 1 : 0;
+        int bonus2nd = intMod >= 2 ? 1 : 0;
 
-        SlotsMax = new int[] { 4, 2 + bonus1st };
-        SlotsRemaining = new int[] { SlotsMax[0], SlotsMax[1] };
+        SlotsMax = new int[] { 4, 2 + bonus1st, 1 + bonus2nd };
+        SlotsRemaining = (int[])SlotsMax.Clone();
 
-        // Wizard knows all cantrips and selected 1st level spells
+        // Wizard knows ALL cantrips
         KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0));
-        KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1));
+
+        // For 1st and 2nd level spells, use selected spells if available
+        if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
+        {
+            foreach (string spellId in SelectedSpellIds)
+            {
+                SpellData spell = SpellDatabase.GetSpell(spellId);
+                if (spell != null && spell.SpellLevel > 0)
+                {
+                    KnownSpells.Add(spell);
+                }
+            }
+            Debug.Log($"[Spellcasting] Wizard loaded {SelectedSpellIds.Count} selected spells from spellbook.");
+        }
+        else
+        {
+            // Backwards compatibility: if no selection made, know all spells
+            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1));
+            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2));
+            Debug.Log("[Spellcasting] Wizard: no spell selection found, added all available spells.");
+        }
     }
 
     /// <summary>
     /// Initialize Cleric spellcasting.
-    /// D&D 3.5 Cleric Level 3: 4 cantrip slots, 2 1st-level slots (+1 domain + bonus from WIS).
+    /// D&D 3.5 Cleric Level 3: 4/2+1domain+bonus/1+1domain+bonus
     /// Clerics have access to entire cleric spell list (prepared caster).
+    /// Bonus spell slots from WIS: +1 slot at spell level N if WIS mod >= N
     /// </summary>
     private void InitCleric(int level)
     {
-        // Spell slots: base + bonus from WIS + domain
-        // Level 3 Cleric base: 4/2+1domain (cantrips/1st)
-        // Bonus spells from WIS: WIS 16 (+3 mod) = +1 1st level slot
         int wisMod = Mathf.Max(0, Stats.WISMod);
+
+        // D&D 3.5e Cleric spell slots at level 3:
+        // Base: 4 cantrips, 2 first + 1 domain, 1 second + 1 domain
+        // Bonus: +1 per level where wisMod >= level
         int bonus1st = wisMod >= 1 ? 1 : 0;
+        int bonus2nd = wisMod >= 2 ? 1 : 0;
 
-        SlotsMax = new int[] { 4, 3 + bonus1st }; // 2 base + 1 domain + WIS bonus
-        SlotsRemaining = new int[] { SlotsMax[0], SlotsMax[1] };
+        SlotsMax = new int[] { 4, 3 + bonus1st, 2 + bonus2nd }; // 2 base + 1 domain + bonus for each
+        SlotsRemaining = (int[])SlotsMax.Clone();
 
-        // Cleric knows all cleric spells (prepared from full list)
+        // Cleric knows ALL cleric spells (prepared from full list)
         KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 0));
         KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 1));
+        KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 2));
     }
 
     /// <summary>
@@ -234,16 +268,55 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Apply a buff from a spell (e.g., Mage Armor).
+    /// Apply a buff from a spell (e.g., Mage Armor, Shield, stat buffs).
     /// </summary>
     public void ApplyBuff(SpellData spell)
     {
+        int duration = spell.BuffDurationRounds;
+
         if (spell.SpellId == "mage_armor")
         {
             MageArmorACBonus = spell.BuffACBonus;
-            // Duration: -1 means hours/level, effectively whole combat
-            ActiveBuffs["mage_armor"] = -1;
+            ActiveBuffs["mage_armor"] = duration;
             Debug.Log($"[Spellcasting] {Stats.CharacterName}: Mage Armor active, +{spell.BuffACBonus} AC (armor)");
+        }
+        else if (spell.SpellId == "shield")
+        {
+            ActiveBuffs["shield"] = duration;
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Shield active, +{spell.BuffShieldBonus} shield AC");
+        }
+        else if (!string.IsNullOrEmpty(spell.BuffStatName) && spell.BuffStatBonus != 0)
+        {
+            // Stat buff (Bull's Strength, Cat's Grace, etc.)
+            ActiveBuffs[spell.SpellId] = duration;
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: {spell.Name} active, " +
+                      $"+{spell.BuffStatBonus} {spell.BuffStatName} for {duration} rounds");
+        }
+        else if (spell.BuffAttackBonus != 0 || spell.BuffSaveBonus != 0 || spell.BuffDamageBonus != 0)
+        {
+            // Combat buff (Bless, Divine Favor, etc.)
+            ActiveBuffs[spell.SpellId] = duration;
+            string bonuses = "";
+            if (spell.BuffAttackBonus != 0) bonuses += $"attack {spell.BuffAttackBonus:+#;-#} ";
+            if (spell.BuffDamageBonus != 0) bonuses += $"damage {spell.BuffDamageBonus:+#;-#} ";
+            if (spell.BuffSaveBonus != 0) bonuses += $"saves {spell.BuffSaveBonus:+#;-#} ";
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: {spell.Name} active, {bonuses.Trim()}");
+        }
+        else if (spell.BuffDeflectionBonus != 0 || spell.BuffACBonus != 0)
+        {
+            ActiveBuffs[spell.SpellId] = duration;
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: {spell.Name} active");
+        }
+        else if (spell.BuffTempHP > 0)
+        {
+            ActiveBuffs[spell.SpellId] = duration;
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: {spell.Name} active, +{spell.BuffTempHP} temp HP");
+        }
+        else
+        {
+            // Generic buff tracking
+            ActiveBuffs[spell.SpellId] = duration;
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: {spell.Name} active");
         }
     }
 
@@ -303,6 +376,10 @@ public class SpellcastingComponent : MonoBehaviour
         {
             MageArmorACBonus = 0;
             Debug.Log($"[Spellcasting] {Stats.CharacterName}: Mage Armor expired");
+        }
+        else
+        {
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: {spellId} buff expired");
         }
         ActiveBuffs.Remove(spellId);
     }
@@ -400,5 +477,15 @@ public class SpellcastingComponent : MonoBehaviour
         if (SlotsMax == null) return;
         SlotsRemaining = (int[])SlotsMax.Clone();
         Debug.Log($"[Spellcasting] {Stats.CharacterName}: All spell slots restored - {GetSlotSummary()}");
+    }
+
+    /// <summary>
+    /// Calculate the effective spell slot level cost for a spell with metamagic.
+    /// Used by CombatUI for displaying slot cost.
+    /// </summary>
+    public int CalculateSpellSlotCost(SpellData spell, MetamagicData metamagic)
+    {
+        if (metamagic == null || !metamagic.HasAnyMetamagic) return spell.SpellLevel;
+        return metamagic.GetEffectiveSpellLevel(spell.SpellLevel);
     }
 }

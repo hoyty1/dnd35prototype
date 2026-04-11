@@ -29,6 +29,11 @@ public class CharacterCreationData
     public string WeaponFocusChoice = "";
     public string SkillFocusChoice = "";
 
+    // Step 5c: Spells (Wizard spellbook selection)
+    /// <summary>SpellIds selected for Wizard spellbook during character creation.
+    /// Clerics don't select — they have access to all Cleric spells.</summary>
+    public List<string> SelectedSpellIds = new List<string>();
+
     // Step 6: Name
     public string CharacterName = "";
 
