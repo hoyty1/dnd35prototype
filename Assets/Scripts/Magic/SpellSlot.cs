@@ -13,8 +13,9 @@ using UnityEngine;
 /// - Casting consumes a specific slot (marks it as used).
 /// - After rest, all slots are restored (IsUsed = false) but prepared spells remain.
 /// - Wizard can optionally re-prepare different spells after rest.
-/// - Cantrips (level 0) also use slots but are not consumed on cast in some interpretations.
-///   In this implementation, cantrips DO consume slots per strict 3.5e RAW.
+/// - Cantrips (level 0) use slots for preparation but are UNLIMITED use.
+///   Casting a cantrip does not consume (mark as used) the slot.
+///   This applies to both Wizards and Clerics.
 /// </summary>
 [System.Serializable]
 public class SpellSlot

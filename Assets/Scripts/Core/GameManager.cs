@@ -1540,6 +1540,7 @@ public class GameManager : MonoBehaviour
         }
 
         // Consume spell slot using D&D 3.5e slot-based system
+        // Cantrips (level 0) are UNLIMITED — no slot consumed
         int slotLevelToConsume = _pendingSpell.SpellLevel;
         bool hasMetamagicApplied = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic;
 
@@ -1551,25 +1552,17 @@ public class GameManager : MonoBehaviour
         }
 
         // Consume spell slot
-        // For Wizards: use slot-based system (CastWizardSpellFromSlot)
-        // For Clerics: use traditional slot counter
-        if (slotLevelToConsume > 0 || (caster.Stats.IsWizard && slotLevelToConsume == 0))
+        // Cantrips are unlimited — CastSpellFromSlot handles this (no slot consumed)
+        // Both Wizards and Clerics use slot-based system
         {
             bool consumed;
-            if (caster.Stats.IsWizard)
+            if (hasMetamagicApplied && slotLevelToConsume > 0)
             {
-                if (hasMetamagicApplied)
-                {
-                    consumed = spellComp.CastWizardSpellWithMetamagic(_pendingSpell, _pendingMetamagic);
-                }
-                else
-                {
-                    consumed = spellComp.CastWizardSpellFromSlot(_pendingSpell);
-                }
+                consumed = spellComp.CastWizardSpellWithMetamagic(_pendingSpell, _pendingMetamagic);
             }
             else
             {
-                consumed = slotLevelToConsume > 0 ? spellComp.ConsumeSlot(slotLevelToConsume) : true;
+                consumed = spellComp.CastSpellFromSlot(_pendingSpell);
             }
 
             if (!consumed)

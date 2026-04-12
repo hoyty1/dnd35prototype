@@ -1092,7 +1092,9 @@ public class CombatUI : MonoBehaviour
         float yOffset = 0f; // grows downward from top of content
 
         int highestLevel = spellComp.GetHighestSlotLevel();
-        bool isWizard = spellComp.Stats != null && spellComp.Stats.IsWizard;
+        bool usesSlotSystem = spellComp.Stats != null &&
+            (spellComp.Stats.IsWizard || spellComp.Stats.IsCleric) &&
+            spellComp.SpellSlots.Count > 0;
 
         for (int level = 0; level <= highestLevel; level++)
         {
@@ -1108,8 +1110,9 @@ public class CombatUI : MonoBehaviour
             string slotInfo;
             if (level == 0)
             {
+                // Cantrips are unlimited
                 levelName = "Cantrips";
-                slotInfo = $"{slotsRemaining}/{slotsMax} slots";
+                slotInfo = "\u221e unlimited";
             }
             else
             {
@@ -1118,13 +1121,15 @@ public class CombatUI : MonoBehaviour
                 slotInfo = $"{slotsRemaining}/{slotsMax} slots";
             }
 
-            string depletedTag = !hasSlotsAvailable ? " [DEPLETED]" : "";
-            Color headerColor = hasSlotsAvailable ? new Color(0.7f, 0.7f, 0.9f) : new Color(0.6f, 0.3f, 0.3f);
+            // Cantrips never depleted (unlimited); other levels check slots
+            bool isDepleted = (level > 0) && !hasSlotsAvailable;
+            string depletedTag = isDepleted ? " [DEPLETED]" : "";
+            Color headerColor = !isDepleted ? new Color(0.7f, 0.7f, 0.9f) : new Color(0.6f, 0.3f, 0.3f);
 
-            CreateSpellSectionLabel(content, $"── {levelName} ({slotInfo}){depletedTag} ──", yOffset, headerHeight, headerColor);
+            CreateSpellSectionLabel(content, $"\u2500\u2500 {levelName} ({slotInfo}){depletedTag} \u2500\u2500", yOffset, headerHeight, headerColor);
             yOffset += headerHeight + spacing;
 
-            if (!hasSlotsAvailable)
+            if (isDepleted)
             {
                 CreateSpellSectionLabel(content, "  (No slots available)", yOffset, headerHeight, new Color(0.5f, 0.3f, 0.3f));
                 yOffset += headerHeight + spacing;
@@ -1133,9 +1138,9 @@ public class CombatUI : MonoBehaviour
             {
                 foreach (var spell in preparedAtLevel)
                 {
-                    // For Wizards: show count of available prepared slots for this spell
-                    int preparedCount = isWizard ? spellComp.CountAvailablePreparedSpell(spell) : 0;
-                    CreateSpellButton(content, spell, yOffset, buttonHeight, spellComp, hasMetamagic, isWizard, preparedCount);
+                    // Show count of available prepared slots for this spell (both Wizard and Cleric)
+                    int preparedCount = usesSlotSystem ? spellComp.CountAvailablePreparedSpell(spell) : 0;
+                    CreateSpellButton(content, spell, yOffset, buttonHeight, spellComp, hasMetamagic, usesSlotSystem, preparedCount);
                     yOffset += buttonHeight + spacing;
                 }
             }
@@ -1174,11 +1179,11 @@ public class CombatUI : MonoBehaviour
 
     /// <summary>
     /// Creates a spell button inside the scrollable content area at a given pixel offset from top.
-    /// For Wizards: shows prepared count (e.g., "Magic Missile ×2") from slot-based preparation.
+    /// Shows prepared count for slot-based casters (e.g., "Magic Missile ×2" or "∞" for cantrips).
     /// </summary>
     private void CreateSpellButton(GameObject parent, SpellData spell, float yOffset,
         float height, SpellcastingComponent spellComp, bool hasMetamagic,
-        bool isWizard = false, int preparedCount = 0)
+        bool usesSlotSystem = false, int preparedCount = 0)
     {
         // Determine color based on effect type
         Color btnColor;
@@ -1202,8 +1207,15 @@ public class CombatUI : MonoBehaviour
         else if (spell.EffectType == SpellEffectType.Buff)
             effectStr = $" | +{spell.BuffACBonus} AC";
 
-        // For Wizards: show how many times this spell is prepared (×N)
-        string countStr = (isWizard && preparedCount > 1) ? $" ×{preparedCount}" : "";
+        // Show count: ∞ for cantrips, ×N for level 1+ spells with multiple prepared
+        string countStr = "";
+        if (usesSlotSystem)
+        {
+            if (spell.SpellLevel == 0)
+                countStr = " \u221e"; // ∞ for cantrips
+            else if (preparedCount > 1)
+                countStr = $" \u00d7{preparedCount}"; // ×N for multiple
+        }
         string label = $"{spell.Name}{countStr} ({rangeStr}){effectStr}";
 
         // Create button using pixel-based positioning within scroll content

@@ -881,9 +881,9 @@ public class CharacterSheetUI : MonoBehaviour
             return;
         }
 
-        AddLine(content, $"SPELLS — {stats.CharacterName} ({stats.CharacterClass})", 12, GoldText, FontStyle.Bold, 16);
+        AddLine(content, $"SPELLS \u2014 {stats.CharacterName} ({stats.CharacterClass})", 12, GoldText, FontStyle.Bold, 16);
 
-        // Spell slot summary
+        // Spell slot summary (now includes ∞ for cantrips)
         if (spellComp.SlotsMax != null)
         {
             string slotSummary = spellComp.GetSlotSummary();
@@ -892,25 +892,25 @@ public class CharacterSheetUI : MonoBehaviour
 
         AddSeparator(content);
 
-        bool isWizard = stats.IsWizard;
+        bool usesSlotSystem = (stats.IsWizard || stats.IsCleric) && spellComp.SpellSlots.Count > 0;
 
-        if (isWizard)
+        if (usesSlotSystem)
         {
-            // ======== WIZARD: Show slot-based prepared spells ========
-            RefreshWizardSpellsTab(content, spellComp);
+            // ======== WIZARD/CLERIC: Show slot-based prepared spells ========
+            RefreshSlotSpellsTab(content, spellComp);
         }
         else
         {
-            // ======== CLERIC (and others): Show standard spell list ========
+            // ======== OTHER CASTERS: Show standard spell list ========
             RefreshStandardSpellsTab(content, spellComp);
         }
     }
 
     /// <summary>
-    /// Refresh the spells tab for Wizards using the D&D 3.5e slot-based preparation system.
-    /// Shows: Prepared Spells (with slot counts), then Spellbook contents.
+    /// Refresh the spells tab for slot-based casters (Wizards and Clerics).
+    /// Shows: Prepared Spells (with slot counts and ∞ for cantrips), then spell list.
     /// </summary>
-    private void RefreshWizardSpellsTab(Transform content, SpellcastingComponent spellComp)
+    private void RefreshSlotSpellsTab(Transform content, SpellcastingComponent spellComp)
     {
         // --- PREPARED SPELLS SECTION ---
         AddLine(content, "PREPARED SPELLS", 11, new Color(0.9f, 0.8f, 0.4f), FontStyle.Bold, 15);
@@ -921,9 +921,23 @@ public class CharacterSheetUI : MonoBehaviour
             var slotsAtLevel = spellComp.GetSlotsForLevel(lvl);
             if (slotsAtLevel.Count == 0) continue;
 
-            var availableSlots = spellComp.GetAvailableSlotsForLevel(lvl);
-            string levelLabel = lvl == 0 ? "Cantrips (Level 0)" : $"Level {lvl} Spells";
-            string slotCountStr = $"  ({availableSlots.Count}/{slotsAtLevel.Count} available)";
+            string levelLabel;
+            string slotCountStr;
+
+            if (lvl == 0)
+            {
+                // Cantrips are unlimited
+                string cantripName = spellComp.Stats.IsCleric ? "Orisons" : "Cantrips";
+                levelLabel = $"{cantripName} (Level 0)";
+                slotCountStr = $"  (\u221e unlimited)";
+            }
+            else
+            {
+                var availableSlots = spellComp.GetAvailableSlotsForLevel(lvl);
+                levelLabel = $"Level {lvl} Spells";
+                slotCountStr = $"  ({availableSlots.Count}/{slotsAtLevel.Count} available)";
+            }
+
             AddLine(content, levelLabel + slotCountStr, 11, GoldText, FontStyle.Bold, 16);
 
             // Show each individual slot
@@ -939,6 +953,13 @@ public class CharacterSheetUI : MonoBehaviour
                     status = "\u25cb"; // ○
                     spellName = "(empty)";
                     slotColor = DimText;
+                }
+                else if (lvl == 0)
+                {
+                    // Cantrips are unlimited — always show as available
+                    status = "\u221e"; // ∞
+                    spellName = slot.PreparedSpell.Name;
+                    slotColor = new Color(0.5f, 0.9f, 0.5f); // green
                 }
                 else if (slot.IsUsed)
                 {
@@ -961,7 +982,7 @@ public class CharacterSheetUI : MonoBehaviour
                 slotGO.AddComponent<RectTransform>();
 
                 string slotText = $"  {status} Slot {i + 1}: {spellName}";
-                if (slot.IsUsed) slotText += " [USED]";
+                if (lvl > 0 && slot.IsUsed) slotText += " [USED]";
 
                 MakeText(slotGO.transform, "SlotInfo", V2(0, 0), V2(0, 1), V2(0, 0.5f),
                     V2(10, 0), V2(300, 0), slotText, 11, slotColor, TextAnchor.MiddleLeft);
@@ -976,13 +997,15 @@ public class CharacterSheetUI : MonoBehaviour
 
         AddSeparator(content);
 
-        // --- SPELLBOOK SECTION ---
-        AddLine(content, "SPELLBOOK", 11, new Color(0.6f, 0.7f, 0.9f), FontStyle.Bold, 15);
+        // --- SPELL LIST SECTION ---
+        string listHeader = spellComp.Stats.IsWizard ? "SPELLBOOK" :
+                            spellComp.Stats.IsCleric ? "KNOWN SPELLS (Full Cleric List)" : "KNOWN SPELLS";
+        AddLine(content, listHeader, 11, new Color(0.6f, 0.7f, 0.9f), FontStyle.Bold, 15);
 
         var allSpells = spellComp.KnownSpells;
         if (allSpells == null || allSpells.Count == 0)
         {
-            AddLine(content, "No spells in spellbook.", 12, DimText);
+            AddLine(content, "No spells known.", 12, DimText);
             return;
         }
 
@@ -992,13 +1015,13 @@ public class CharacterSheetUI : MonoBehaviour
             var spellsAtLevel = allSpells.Where(s => s.SpellLevel == lvl).OrderBy(s => s.Name).ToList();
             if (spellsAtLevel.Count == 0) continue;
 
-            string levelLabel = lvl == 0 ? "Cantrips" : $"Level {lvl}";
+            string levelLabel = lvl == 0 ? (spellComp.Stats.IsCleric ? "Orisons" : "Cantrips") : $"Level {lvl}";
             AddLine(content, levelLabel, 11, new Color(0.6f, 0.7f, 0.9f), FontStyle.Normal, 14);
 
             foreach (var spell in spellsAtLevel)
             {
                 int prepCount = spellComp.CountTotalPreparedSpell(spell);
-                string prepStr = prepCount > 0 ? $" (×{prepCount} prepared)" : "";
+                string prepStr = prepCount > 0 ? $" (\u00d7{prepCount} prepared)" : "";
                 Color spellColor = prepCount > 0 ? LightText : DimText;
 
                 var spellGO = new GameObject($"Book_{spell.SpellId}");
@@ -1021,6 +1044,12 @@ public class CharacterSheetUI : MonoBehaviour
                 }
             }
         }
+    }
+
+    /// <summary>Backward compat alias.</summary>
+    private void RefreshWizardSpellsTab(Transform content, SpellcastingComponent spellComp)
+    {
+        RefreshSlotSpellsTab(content, spellComp);
     }
 
     /// <summary>

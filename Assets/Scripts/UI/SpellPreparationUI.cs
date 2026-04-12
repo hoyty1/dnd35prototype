@@ -5,18 +5,20 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Spell preparation UI for D&D 3.5e Wizards.
-/// Allows the wizard to assign spells from their spellbook into individual spell slots.
+/// Spell preparation UI for D&D 3.5e Wizards and Clerics.
+/// Allows the caster to assign spells into individual spell slots.
 /// Each slot can hold one spell; the same spell can be prepared in multiple slots.
 ///
 /// D&D 3.5e Rules:
-///   - After rest, wizard can re-prepare spells by filling each slot with a spell from the spellbook.
+///   - After rest, casters can re-prepare spells by filling each slot with a spell.
+///   - Wizards prepare from their spellbook (limited selection).
+///   - Clerics prepare from the FULL list of cleric spells at each level.
 ///   - Each slot holds exactly one spell of that slot's level.
-///   - The same spell can fill multiple slots (e.g., 3 slots of Magic Missile).
-///   - Cantrips also use slots.
-///   - Prepared spells persist between rests unless the wizard re-prepares.
+///   - The same spell can fill multiple slots.
+///   - Cantrips use slots for preparation but are UNLIMITED use (never consumed).
+///   - Prepared spells persist between rests unless re-prepared.
 ///
-/// Usage: Called from GameManager when wizard chooses to re-prepare spells after rest,
+/// Usage: Called from GameManager when caster chooses to re-prepare spells after rest,
 /// or from character creation to set initial preparation.
 /// </summary>
 public class SpellPreparationUI : MonoBehaviour
@@ -147,19 +149,21 @@ public class SpellPreparationUI : MonoBehaviour
     // ========== OPEN / CLOSE ==========
 
     /// <summary>
-    /// Open the spell preparation UI for a wizard character.
-    /// Shows all spell slots with dropdowns to select spells from the spellbook.
+    /// Open the spell preparation UI for a Wizard or Cleric character.
+    /// Shows all spell slots with dropdowns to select spells.
+    /// Wizards select from spellbook; Clerics select from all cleric spells.
     /// </summary>
     public void Open(SpellcastingComponent spellComp)
     {
-        if (spellComp == null || spellComp.Stats == null || !spellComp.Stats.IsWizard)
+        if (spellComp == null || spellComp.Stats == null ||
+            (!spellComp.Stats.IsWizard && !spellComp.Stats.IsCleric))
         {
-            Debug.LogWarning("[SpellPreparationUI] Can only open for Wizard characters!");
+            Debug.LogWarning("[SpellPreparationUI] Can only open for Wizard or Cleric characters!");
             return;
         }
 
         _spellComp = spellComp;
-        _titleText.text = $"SPELL PREPARATION — {spellComp.Stats.CharacterName}";
+        _titleText.text = $"SPELL PREPARATION \u2014 {spellComp.Stats.CharacterName}";
 
         PopulateSlotList();
         RefreshSummary();
@@ -210,8 +214,11 @@ public class SpellPreparationUI : MonoBehaviour
                 if (lastLevel >= 0) yPos -= 8f;
                 lastLevel = slot.Level;
 
-                string levelLabel = slot.Level == 0 ? "═══ CANTRIPS (Level 0) ═══" :
-                                    $"═══ LEVEL {slot.Level} SPELLS ═══";
+                string cantripName = (_spellComp.Stats != null && _spellComp.Stats.IsCleric)
+                    ? "ORISONS" : "CANTRIPS";
+                string levelLabel = slot.Level == 0
+                    ? $"\u2550\u2550\u2550 {cantripName} (Level 0 \u2014 Unlimited) \u2550\u2550\u2550"
+                    : $"\u2550\u2550\u2550 LEVEL {slot.Level} SPELLS \u2550\u2550\u2550";
                 int slotsAtLevel = _spellComp.GetSlotsForLevel(slot.Level).Count;
                 levelLabel += $"  ({slotsAtLevel} slots)";
 
@@ -274,7 +281,8 @@ public class SpellPreparationUI : MonoBehaviour
 
         // Slot label (left side)
         int levelSlotNum = _spellComp.GetSlotsForLevel(slot.Level).IndexOf(slot) + 1;
-        string slotLabel = slot.Level == 0 ? $"Cantrip Slot {levelSlotNum}:" : $"Level {slot.Level} Slot {levelSlotNum}:";
+        string cantripLabel = (_spellComp.Stats != null && _spellComp.Stats.IsCleric) ? "Orison" : "Cantrip";
+        string slotLabel = slot.Level == 0 ? $"{cantripLabel} Slot {levelSlotNum}:" : $"Level {slot.Level} Slot {levelSlotNum}:";
 
         row.LabelText = MakeText(row.Row.transform, "Label",
             new Vector2(-280, 0), new Vector2(180, 30),
@@ -475,7 +483,10 @@ public class SpellPreparationUI : MonoBehaviour
 
     private void OnAutoPrepare()
     {
-        _spellComp.AutoPrepareWizardSlots();
+        if (_spellComp.Stats != null && _spellComp.Stats.IsCleric)
+            _spellComp.AutoPrepareClericSlots();
+        else
+            _spellComp.AutoPrepareWizardSlots();
 
         // Refresh dropdown selections
         foreach (var row in _slotRows)
@@ -502,7 +513,7 @@ public class SpellPreparationUI : MonoBehaviour
         _spellComp.SyncPreparedSpellsFromSlots();
 
         Debug.Log($"[SpellPreparationUI] {_spellComp.Stats.CharacterName} preparation confirmed: " +
-                  _spellComp.GetWizardSlotDetails());
+                  _spellComp.GetSlotDetails());
 
         Close();
         OnPreparationConfirmed?.Invoke();
@@ -520,9 +531,19 @@ public class SpellPreparationUI : MonoBehaviour
             var slotsAtLevel = _spellComp.GetSlotsForLevel(level);
             int filled = slotsAtLevel.Count(s => s.HasSpell);
             int total = slotsAtLevel.Count;
-            string label = level == 0 ? "Cantrips" : $"Lv{level}";
-            string color = filled >= total ? "#44FF44" : "#FFDD44";
-            parts.Add($"<color={color}>{label}: {filled}/{total}</color>");
+
+            if (level == 0)
+            {
+                string cantripLabel = (_spellComp.Stats != null && _spellComp.Stats.IsCleric) ? "Orisons" : "Cantrips";
+                string color = filled >= total ? "#44FF44" : "#FFDD44";
+                parts.Add($"<color={color}>{cantripLabel}: {filled}/{total} (\u221e)</color>");
+            }
+            else
+            {
+                string label = $"Lv{level}";
+                string color = filled >= total ? "#44FF44" : "#FFDD44";
+                parts.Add($"<color={color}>{label}: {filled}/{total}</color>");
+            }
         }
 
         _slotSummaryText.text = string.Join("   |   ", parts);

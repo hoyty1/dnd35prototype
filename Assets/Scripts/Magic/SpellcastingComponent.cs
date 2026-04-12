@@ -7,11 +7,14 @@ using UnityEngine;
 /// Attached to a character GameObject alongside CharacterController and InventoryComponent.
 ///
 /// D&D 3.5e Spell Preparation System:
-///   Wizards have a spellbook containing all spells they know.
-///   Each day after resting, wizards prepare spells by filling individual spell slots.
+///   Both Wizards and Clerics use slot-based preparation.
 ///   Each slot holds ONE specific spell. The same spell can fill multiple slots.
 ///   Example: Level 3 wizard with 3 level-1 slots: [Magic Missile, Magic Missile, Shield]
 ///   Casting consumes a specific prepared slot. After rest, slots are restored.
+///   Cantrips (level 0) are UNLIMITED — they never consume slots when cast.
+///
+///   Wizards prepare from their spellbook (limited selection).
+///   Clerics prepare from the FULL list of cleric spells at each level.
 ///
 /// D&D 3.5e Spell Slots at Level 3:
 ///   Wizard: 4/2+bonus/1+bonus (cantrips/1st/2nd)
@@ -31,23 +34,25 @@ public class SpellcastingComponent : MonoBehaviour
     public List<SpellData> KnownSpells = new List<SpellData>();
 
     /// <summary>
-    /// List of spells currently prepared for casting (Cleric legacy system).
-    /// For Wizards, use SpellSlots instead. This is kept for Cleric backward compatibility.
+    /// List of spells currently prepared for casting (backward compatibility).
+    /// For both Wizards and Clerics, the primary system is SpellSlots.
+    /// This list is synced from SpellSlots for UI and combat system backward compatibility.
     /// </summary>
     public List<SpellData> PreparedSpells { get; private set; } = new List<SpellData>();
 
     /// <summary>
-    /// D&D 3.5e Spell Slots for Wizards.
+    /// D&D 3.5e Spell Slots for both Wizards and Clerics.
     /// Each slot holds a specific spell and tracks whether it's been cast.
-    /// Wizards fill each slot with a spell from their spellbook.
+    /// Wizards fill slots from their spellbook. Clerics fill from the full cleric spell list.
     /// The same spell can be prepared in multiple slots.
+    /// Cantrip (level 0) slots are never marked as used — cantrips are unlimited.
     /// </summary>
     public List<SpellSlot> SpellSlots { get; private set; } = new List<SpellSlot>();
 
     /// <summary>
     /// Spell slots remaining per spell level. Index = spell level.
     /// [0] = cantrip slots, [1] = 1st level slots, [2] = 2nd level slots, etc.
-    /// For Clerics: traditional slot tracking. For Wizards: derived from SpellSlots.
+    /// Derived from SpellSlots for both Wizards and Clerics.
     /// </summary>
     public int[] SlotsRemaining;
 
@@ -76,7 +81,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>
     /// SpellIds selected during character creation.
     /// For Wizards: includes cantrips + 1st/2nd level spells for the spellbook.
-    /// For Clerics: includes selected orisons only.
+    /// For Clerics: includes selected orisons only (higher-level spells are always available).
     /// If set before Init(), only these spells will be known (plus all higher-level Cleric spells).
     /// If null, all available spells are added (backwards compatibility).
     /// </summary>
@@ -99,26 +104,24 @@ public class SpellcastingComponent : MonoBehaviour
             InitCleric(stats.Level);
         }
 
-        // For Clerics: auto-prepare all known spells (simplified)
-        // For Wizards: PreparedSpells is derived from SpellSlots
-        if (stats.IsCleric)
+        // Both Wizards and Clerics use slot-based preparation now
+        if (stats.IsWizard)
         {
-            PrepareSpellsCleric();
-        }
-        else if (stats.IsWizard)
-        {
-            // Auto-prepare wizard spells into slots
             AutoPrepareWizardSlots();
-            // Sync PreparedSpells from SpellSlots for backward compatibility
+            SyncPreparedSpellsFromSlots();
+        }
+        else if (stats.IsCleric)
+        {
+            AutoPrepareClericSlots();
             SyncPreparedSpellsFromSlots();
         }
 
         Debug.Log($"[Spellcasting] {stats.CharacterName} ({stats.CharacterClass}): " +
                   $"{KnownSpells.Count} known, {PreparedSpells.Count} prepared, slots: {GetSlotSummary()}");
 
-        if (stats.IsWizard)
+        if (stats.IsWizard || stats.IsCleric)
         {
-            Debug.Log($"[Spellcasting] {stats.CharacterName} wizard slot details: {GetWizardSlotDetails()}");
+            Debug.Log($"[Spellcasting] {stats.CharacterName} slot details: {GetSlotDetails()}");
         }
     }
 
@@ -178,9 +181,10 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Initialize Cleric spellcasting.
+    /// Initialize Cleric spellcasting with D&D 3.5e slot-based preparation.
+    /// Creates individual SpellSlot objects for each available slot.
     /// D&D 3.5e PHB Level 3: 4/2+1domain+bonus/1+1domain+bonus
-    /// Clerics know only 4 selected orisons. Higher-level spells are prepared from full list.
+    /// Clerics can prepare ANY cleric spell of appropriate level (no spellbook restriction).
     /// Bonus spell slots from WIS: +1 slot at spell level N if WIS mod >= N
     /// </summary>
     private void InitCleric(int level)
@@ -195,6 +199,19 @@ public class SpellcastingComponent : MonoBehaviour
 
         SlotsMax = new int[] { 4, 3 + bonus1st, 2 + bonus2nd }; // 2 base + 1 domain + bonus for each
         SlotsRemaining = (int[])SlotsMax.Clone();
+
+        // Create individual SpellSlot objects (same as wizard system)
+        SpellSlots.Clear();
+        for (int spellLevel = 0; spellLevel < SlotsMax.Length; spellLevel++)
+        {
+            for (int i = 0; i < SlotsMax[spellLevel]; i++)
+            {
+                SpellSlots.Add(new SpellSlot(spellLevel));
+            }
+        }
+
+        Debug.Log($"[Spellcasting] Cleric created {SpellSlots.Count} spell slots: " +
+                  $"L0={SlotsMax[0]}, L1={SlotsMax[1]}, L2={SlotsMax[2]}");
 
         // For orisons (level 0): only add selected ones if available
         if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
@@ -222,7 +239,7 @@ public class SpellcastingComponent : MonoBehaviour
         KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 2));
     }
 
-    // ========== WIZARD SPELL SLOT PREPARATION ==========
+    // ========== SPELL SLOT PREPARATION ==========
 
     /// <summary>
     /// Auto-prepare wizard spells into slots. Distributes known spells across available slots.
@@ -261,8 +278,40 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
+    /// Auto-prepare cleric spells into slots. Distributes known spells across available slots.
+    /// Clerics can prepare ANY cleric spell of appropriate level from the full spell list.
+    /// If there are more slots than unique spells at a level, the same spell fills multiple slots.
+    /// </summary>
+    public void AutoPrepareClericSlots()
+    {
+        if (Stats == null || !Stats.IsCleric) return;
+
+        for (int level = 0; level < SlotsMax.Length; level++)
+        {
+            var slotsAtLevel = GetSlotsForLevel(level);
+            var spellsAtLevel = KnownSpells.Where(s => s.SpellLevel == level).ToList();
+
+            if (spellsAtLevel.Count == 0)
+            {
+                foreach (var slot in slotsAtLevel)
+                    slot.Clear();
+                continue;
+            }
+
+            // Fill each slot with a spell, cycling through available spells
+            for (int i = 0; i < slotsAtLevel.Count; i++)
+            {
+                slotsAtLevel[i].Prepare(spellsAtLevel[i % spellsAtLevel.Count]);
+            }
+        }
+
+        SyncSlotsRemainingFromSpellSlots();
+        Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared cleric spell slots");
+    }
+
+    /// <summary>
     /// Prepare a specific spell into a specific slot.
-    /// The spell must be in the wizard's spellbook and match the slot's level.
+    /// For Wizards: spell must be in the spellbook. For Clerics: any cleric spell of matching level.
     /// </summary>
     public bool PrepareSpellInSlot(int slotIndex, SpellData spell)
     {
@@ -275,9 +324,10 @@ public class SpellcastingComponent : MonoBehaviour
             return false;
         }
 
+        // Wizards must have spell in spellbook; Clerics can prepare any known cleric spell
         if (spell != null && !KnownSpells.Contains(spell))
         {
-            Debug.LogWarning($"[Spellcasting] {spell.Name} is not in the spellbook!");
+            Debug.LogWarning($"[Spellcasting] {spell.Name} is not in the spell list!");
             return false;
         }
 
@@ -315,11 +365,21 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Count how many times a specific spell is prepared and available (not used) in wizard slots.
+    /// Count how many times a specific spell is prepared and available (not used) in spell slots.
+    /// For cantrips (level 0): returns a special value (999) to indicate unlimited use.
     /// </summary>
     public int CountAvailablePreparedSpell(SpellData spell)
     {
         if (spell == null) return 0;
+
+        // Cantrips are unlimited — if prepared, always available
+        if (spell.SpellLevel == 0)
+        {
+            bool isPrepared = SpellSlots.Any(s => s.PreparedSpell != null &&
+                                                   s.PreparedSpell.SpellId == spell.SpellId);
+            return isPrepared ? 999 : 0; // 999 = unlimited
+        }
+
         return SpellSlots.Count(s => s.PreparedSpell != null &&
                                      s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed);
     }
@@ -335,17 +395,24 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Get unique spells that are prepared and available for casting (wizard slot system).
+    /// Get unique spells that are prepared and available for casting (slot-based system).
     /// Each spell appears once with its available count tracked separately.
+    /// For cantrips: includes all prepared cantrips regardless of IsUsed (they're unlimited).
+    /// Works for both Wizards and Clerics.
     /// </summary>
-    public List<SpellData> GetUniqueAvailableWizardSpells(int level)
+    public List<SpellData> GetUniqueAvailableSpells(int level)
     {
         var seen = new HashSet<string>();
         var result = new List<SpellData>();
 
         foreach (var slot in SpellSlots)
         {
-            if (slot.Level == level && slot.CanCast && !seen.Contains(slot.PreparedSpell.SpellId))
+            if (slot.Level != level || !slot.HasSpell) continue;
+
+            // Cantrips are always available if prepared (unlimited use)
+            bool isAvailable = (level == 0) ? true : slot.CanCast;
+
+            if (isAvailable && !seen.Contains(slot.PreparedSpell.SpellId))
             {
                 seen.Add(slot.PreparedSpell.SpellId);
                 result.Add(slot.PreparedSpell);
@@ -355,14 +422,40 @@ public class SpellcastingComponent : MonoBehaviour
         return result;
     }
 
+    /// <summary>Backward compat alias — calls GetUniqueAvailableSpells.</summary>
+    public List<SpellData> GetUniqueAvailableWizardSpells(int level)
+    {
+        return GetUniqueAvailableSpells(level);
+    }
+
     /// <summary>
-    /// Cast a wizard spell by consuming the first available slot with that spell.
+    /// Cast a spell by consuming the first available slot with that spell.
+    /// Cantrips (level 0) are unlimited — the slot is NOT consumed.
+    /// Works for both Wizards and Clerics.
     /// Returns true if successful.
     /// </summary>
-    public bool CastWizardSpellFromSlot(SpellData spell)
+    public bool CastSpellFromSlot(SpellData spell)
     {
         if (spell == null) return false;
 
+        // Cantrips are unlimited — just check if prepared, don't consume
+        if (spell.SpellLevel == 0)
+        {
+            bool isPrepared = SpellSlots.Any(s =>
+                s.PreparedSpell != null &&
+                s.PreparedSpell.SpellId == spell.SpellId);
+
+            if (!isPrepared)
+            {
+                Debug.LogWarning($"[Spellcasting] {spell.Name} is not prepared!");
+                return false;
+            }
+
+            Debug.Log($"[Spellcasting] {Stats.CharacterName} cast cantrip {spell.Name} (unlimited, no slot consumed)");
+            return true;
+        }
+
+        // Level 1+ spells consume a slot
         var slot = SpellSlots.FirstOrDefault(s =>
             s.PreparedSpell != null &&
             s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed);
@@ -382,6 +475,12 @@ public class SpellcastingComponent : MonoBehaviour
                   $"{GetAvailableSlotsForLevel(slot.Level).Count}/{GetSlotsForLevel(slot.Level).Count}");
 
         return true;
+    }
+
+    /// <summary>Backward compat alias — calls CastSpellFromSlot.</summary>
+    public bool CastWizardSpellFromSlot(SpellData spell)
+    {
+        return CastSpellFromSlot(spell);
     }
 
     /// <summary>
@@ -420,6 +519,7 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Sync the SlotsRemaining array from actual SpellSlot states.
+    /// Cantrip slots are always counted as "remaining" (unlimited use).
     /// Called after any slot state change.
     /// </summary>
     private void SyncSlotsRemainingFromSpellSlots()
@@ -427,7 +527,15 @@ public class SpellcastingComponent : MonoBehaviour
         if (SlotsMax == null) return;
         for (int level = 0; level < SlotsMax.Length; level++)
         {
-            SlotsRemaining[level] = SpellSlots.Count(s => s.Level == level && s.CanCast);
+            if (level == 0)
+            {
+                // Cantrips are unlimited — count all prepared (not empty) slots as available
+                SlotsRemaining[level] = SpellSlots.Count(s => s.Level == 0 && s.HasSpell);
+            }
+            else
+            {
+                SlotsRemaining[level] = SpellSlots.Count(s => s.Level == level && s.CanCast);
+            }
         }
     }
 
@@ -445,7 +553,12 @@ public class SpellcastingComponent : MonoBehaviour
 
         foreach (var slot in SpellSlots)
         {
-            if (slot.HasSpell && !slot.IsUsed && !seen.Contains(slot.PreparedSpell.SpellId))
+            if (!slot.HasSpell) continue;
+
+            // Cantrips are always available (unlimited), other spells need unused slot
+            bool isAvailable = (slot.Level == 0) ? true : !slot.IsUsed;
+
+            if (isAvailable && !seen.Contains(slot.PreparedSpell.SpellId))
             {
                 seen.Add(slot.PreparedSpell.SpellId);
                 PreparedSpells.Add(slot.PreparedSpell);
@@ -454,17 +567,22 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Get a detailed string showing wizard spell slot preparation.
+    /// Get a detailed string showing spell slot preparation.
+    /// Works for both Wizards and Clerics.
     /// </summary>
-    public string GetWizardSlotDetails()
+    public string GetSlotDetails()
     {
-        if (SpellSlots == null || SpellSlots.Count == 0) return "No wizard slots";
+        if (SpellSlots == null || SpellSlots.Count == 0) return "No spell slots";
 
         var parts = new List<string>();
         int slotNum = 1;
         foreach (var slot in SpellSlots)
         {
-            string status = slot.IsUsed ? "✗" : "✓";
+            string status;
+            if (slot.Level == 0)
+                status = "∞"; // Cantrips are unlimited
+            else
+                status = slot.IsUsed ? "✗" : "✓";
             string spellName = slot.HasSpell ? slot.PreparedSpell.Name : "(empty)";
             parts.Add($"{status} Slot{slotNum}(L{slot.Level}): {spellName}");
             slotNum++;
@@ -472,24 +590,27 @@ public class SpellcastingComponent : MonoBehaviour
         return string.Join(", ", parts);
     }
 
-    // ========== CLERIC SPELL PREPARATION (LEGACY) ==========
+    /// <summary>Backward compat alias — calls GetSlotDetails.</summary>
+    public string GetWizardSlotDetails()
+    {
+        return GetSlotDetails();
+    }
+
+    // ========== CLERIC SPELL PREPARATION (LEGACY COMPAT) ==========
 
     /// <summary>
-    /// Prepare spells for Cleric casting (legacy system).
-    /// All known spells are auto-prepared.
+    /// Prepare spells for Cleric casting (legacy compat — now routes to slot system).
     /// </summary>
     public void PrepareSpellsCleric()
     {
-        PreparedSpells.Clear();
-        foreach (var spell in KnownSpells)
-        {
-            PreparedSpells.Add(spell);
-        }
-        Debug.Log($"[Spellcasting] {(Stats != null ? Stats.CharacterName : "?")} (Cleric) prepared {PreparedSpells.Count} spells");
+        AutoPrepareClericSlots();
+        SyncPreparedSpellsFromSlots();
+        Debug.Log($"[Spellcasting] {(Stats != null ? Stats.CharacterName : "?")} (Cleric) prepared {PreparedSpells.Count} spells via slot system");
     }
 
     /// <summary>
     /// Prepare spells for casting. Routes to appropriate system based on class.
+    /// Both Wizards and Clerics now use slot-based preparation.
     /// </summary>
     public void PrepareSpells()
     {
@@ -498,30 +619,32 @@ public class SpellcastingComponent : MonoBehaviour
             AutoPrepareWizardSlots();
             SyncPreparedSpellsFromSlots();
         }
-        else
+        else if (Stats != null && Stats.IsCleric)
         {
-            PrepareSpellsCleric();
+            AutoPrepareClericSlots();
+            SyncPreparedSpellsFromSlots();
         }
     }
 
     /// <summary>
     /// Get prepared spells filtered by spell level.
-    /// For Wizards: returns unique spells that have available slots at that level.
-    /// For Clerics: returns all prepared spells at that level.
+    /// Uses slot-based system for both Wizards and Clerics.
+    /// Returns unique spells that have available slots at that level.
+    /// Cantrips are always included if prepared (unlimited use).
     /// </summary>
     public List<SpellData> GetPreparedSpellsByLevel(int level)
     {
-        if (Stats != null && Stats.IsWizard)
+        if (Stats != null && (Stats.IsWizard || Stats.IsCleric) && SpellSlots.Count > 0)
         {
-            return GetUniqueAvailableWizardSpells(level);
+            return GetUniqueAvailableSpells(level);
         }
         return PreparedSpells.Where(s => s.SpellLevel == level).ToList();
     }
 
     /// <summary>
     /// Check if a specific spell can be cast right now.
-    /// For Wizards: checks if there's an available slot with this spell prepared.
-    /// For Clerics: checks PreparedSpells and SlotsRemaining.
+    /// Uses slot-based system for both Wizards and Clerics.
+    /// Cantrips are always castable if prepared (unlimited use).
     /// </summary>
     public bool CanCastSpell(SpellData spell)
     {
@@ -529,7 +652,7 @@ public class SpellcastingComponent : MonoBehaviour
         int level = spell.SpellLevel;
         if (level >= SlotsRemaining.Length) return false;
 
-        if (Stats != null && Stats.IsWizard)
+        if (Stats != null && (Stats.IsWizard || Stats.IsCleric) && SpellSlots.Count > 0)
         {
             return CountAvailablePreparedSpell(spell) > 0;
         }
@@ -540,18 +663,23 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>
     /// Get list of prepared spells that can currently be cast (have slots available).
     /// This is the primary method used by the spell casting UI during combat.
+    /// Cantrips are always included if prepared (unlimited use).
     /// </summary>
     public List<SpellData> GetCastablePreparedSpells()
     {
         var castable = new List<SpellData>();
 
-        if (Stats != null && Stats.IsWizard)
+        if (Stats != null && (Stats.IsWizard || Stats.IsCleric) && SpellSlots.Count > 0)
         {
-            // For wizards, return unique spells that have available slots
             var seen = new HashSet<string>();
             foreach (var slot in SpellSlots)
             {
-                if (slot.CanCast && !seen.Contains(slot.PreparedSpell.SpellId))
+                if (!slot.HasSpell) continue;
+
+                // Cantrips always available if prepared, others need unused slot
+                bool available = (slot.Level == 0) ? true : slot.CanCast;
+
+                if (available && !seen.Contains(slot.PreparedSpell.SpellId))
                 {
                     seen.Add(slot.PreparedSpell.SpellId);
                     castable.Add(slot.PreparedSpell);
@@ -574,9 +702,10 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public bool HasAnyCastablePreparedSpell()
     {
-        if (Stats != null && Stats.IsWizard)
+        if (Stats != null && (Stats.IsWizard || Stats.IsCleric) && SpellSlots.Count > 0)
         {
-            return SpellSlots.Any(s => s.CanCast);
+            // Any cantrip prepared OR any level 1+ slot with spell and not used
+            return SpellSlots.Any(s => s.HasSpell && (s.Level == 0 || s.CanCast));
         }
         return GetCastablePreparedSpells().Count > 0;
     }
@@ -585,13 +714,14 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Check if the character can cast a specific spell (has slots remaining).
+    /// Cantrips are always castable if prepared (unlimited use).
     /// </summary>
     public bool CanCast(SpellData spell)
     {
         if (spell == null || SlotsRemaining == null) return false;
         if (spell.SpellLevel >= SlotsRemaining.Length) return false;
 
-        if (Stats != null && Stats.IsWizard)
+        if (Stats != null && (Stats.IsWizard || Stats.IsCleric) && SpellSlots.Count > 0)
         {
             return CountAvailablePreparedSpell(spell) > 0;
         }
@@ -661,18 +791,21 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Consume a spell slot for the given spell level.
-    /// For Wizards: use CastWizardSpellFromSlot() instead for proper slot tracking.
-    /// For Clerics: decrements SlotsRemaining.
+    /// Cantrips (level 0) are unlimited — this is a no-op that returns true.
+    /// For both Wizards and Clerics: uses slot-based system.
     /// Returns true if successful.
     /// </summary>
     public bool ConsumeSlot(int spellLevel)
     {
+        // Cantrips are unlimited — always succeed without consuming
+        if (spellLevel == 0) return true;
+
         if (spellLevel >= SlotsRemaining.Length || SlotsRemaining[spellLevel] <= 0)
             return false;
 
-        if (Stats != null && Stats.IsWizard)
+        if (SpellSlots.Count > 0)
         {
-            // For wizards, consume any available slot at this level
+            // Use slot-based system for both Wizards and Clerics
             var slot = SpellSlots.FirstOrDefault(s => s.Level == spellLevel && s.CanCast);
             if (slot == null) return false;
             slot.Cast();
@@ -859,7 +992,15 @@ public class SpellcastingComponent : MonoBehaviour
         for (int i = 0; i < SlotsRemaining.Length; i++)
         {
             string label = i == 0 ? "Cantrips" : $"Lv{i}";
-            parts.Add($"{label}: {SlotsRemaining[i]}/{SlotsMax[i]}");
+            if (i == 0)
+            {
+                // Cantrips are unlimited
+                parts.Add($"{label}: \u221e (unlimited)");
+            }
+            else
+            {
+                parts.Add($"{label}: {SlotsRemaining[i]}/{SlotsMax[i]}");
+            }
         }
         return string.Join(", ", parts);
     }
@@ -927,12 +1068,12 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Rest to restore all spell slots to maximum.
-    /// For Wizards: restores all SpellSlot.IsUsed to false (prepared spells stay the same).
-    /// For Clerics: restores SlotsRemaining from SlotsMax.
+    /// For both Wizards and Clerics: restores all SpellSlot.IsUsed to false.
+    /// Prepared spells stay the same unless re-prepared.
     /// </summary>
     public void RestoreAllSlots()
     {
-        if (Stats != null && Stats.IsWizard)
+        if (SpellSlots.Count > 0)
         {
             foreach (var slot in SpellSlots)
             {
@@ -940,8 +1081,8 @@ public class SpellcastingComponent : MonoBehaviour
             }
             SyncSlotsRemainingFromSpellSlots();
             SyncPreparedSpellsFromSlots();
-            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Wizard spell slots restored - {GetSlotSummary()}");
-            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Prepared spells unchanged: {GetWizardSlotDetails()}");
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Spell slots restored - {GetSlotSummary()}");
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Prepared spells unchanged: {GetSlotDetails()}");
         }
         else
         {
