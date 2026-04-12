@@ -1072,6 +1072,7 @@ public class GameManager : MonoBehaviour
 
         int pcIdx = GetPCIndex(pc);
         CombatUI.SetActivePC(pcIdx);
+        CombatUI.SetActiveNPC(-1); // Clear NPC highlights when PC is active
 
         // Update initiative UI to highlight current character
         UpdateInitiativeUI();
@@ -2299,6 +2300,7 @@ public class GameManager : MonoBehaviour
         CurrentPhase = TurnPhase.NPCTurn;
         _activeTurnCharacter = npc;
         CombatUI.SetActivePC(0); // No PC active
+        CombatUI.SetActiveNPC(NPCs.IndexOf(npc)); // Highlight active NPC
         CombatUI.SetActionButtonsVisible(false);
 
         // Update initiative UI to highlight current NPC
@@ -2306,6 +2308,7 @@ public class GameManager : MonoBehaviour
 
         if (npc.Stats.IsDead)
         {
+            CombatUI.SetActiveNPC(-1); // Clear NPC highlight
             NextInitiativeTurn();
             yield break;
         }

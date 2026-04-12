@@ -676,6 +676,26 @@ public class CombatUI : MonoBehaviour
         SetPanelActiveState(PC4Panel, pcNumber == 4, new Color(0.3f, 0.15f, 0.15f, 0.95f), new Color(0.25f, 0.1f, 0.1f, 0.65f));
     }
 
+    /// <summary>
+    /// Highlight which NPC is currently active (0-based index). Pass -1 to clear all.
+    /// </summary>
+    public void SetActiveNPC(int npcIndex)
+    {
+        for (int i = 0; i < NPCPanels.Count; i++)
+        {
+            var p = NPCPanels[i];
+            bool isActive = (i == npcIndex);
+
+            if (p.ActiveIndicator != null)
+                p.ActiveIndicator.enabled = isActive;
+
+            // Dim inactive NPC panels, brighten active
+            SetPanelActiveState(p.Panel, isActive,
+                new Color(0.4f, 0.15f, 0.15f, 0.95f),  // Brighter red when active
+                new Color(0.3f, 0.1f, 0.1f, 0.65f));    // Dimmed when inactive
+        }
+    }
+
     private void SetPanelActiveState(GameObject panel, bool active, Color activeColor, Color inactiveColor)
     {
         if (panel == null) return;
@@ -1619,4 +1639,5 @@ public class NPCPanelUI
     public Text AbilityText;
     public Image HPBar;
     public Image IconImage;
+    public Image ActiveIndicator;
 }

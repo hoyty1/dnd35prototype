@@ -358,17 +358,27 @@ public class SceneBootstrap : MonoBehaviour
     // ========== NPC PANELS (right side, stacked from top) ==========
     /// <summary>
     /// Create NPC stat panels stacked vertically on the right side, from the top down.
-    /// Includes icon images for each enemy.
+    /// Matches the same layout structure as PC party entries (140px height).
+    /// Layout (top to bottom, within 140px height, using bottom-left origin):
+    ///   [136-140] Active indicator bar (top edge, red)
+    ///   [104-134] Icon (32x30, left side)
+    ///   [118-132] Name text (right of icon)
+    ///   [78-102]  Ability scores (two lines: STR/DEX/CON + WIS/INT/CHA)
+    ///   [60-74]   AC line
+    ///   [44-58]   Atk line
+    ///   [28-40]   HP text label
+    ///   [4-24]    HP bar (BOTTOM, 20px tall)
     /// </summary>
     private void CreateNPCPanelsRight(Transform parent, CombatUI combatUI, int count)
     {
-        float compactHeight = 110f;
-        float spacing = 4f;
+        float H = PartyEntryHeight; // 140, same as PC panels
+        float spacing = PartyEntrySpacing; // 8, same as PC panels
+        float entryW = NPCPanelWidth - 16; // account for padding, same approach as PC
 
         for (int i = 0; i < count; i++)
         {
             // Stack from top: first panel starts at y = -100 (below turn indicator + initiative)
-            float yOffset = -(100f + i * (compactHeight + spacing));
+            float yOffset = -(100f + i * (H + spacing));
 
             NPCPanelUI panelUI = new NPCPanelUI();
 
@@ -381,74 +391,69 @@ public class SceneBootstrap : MonoBehaviour
             panelRT.anchorMax = new Vector2(1, 1);
             panelRT.pivot = new Vector2(1, 1);
             panelRT.anchoredPosition = new Vector2(-8, yOffset);
-            panelRT.sizeDelta = new Vector2(NPCPanelWidth, compactHeight);
+            panelRT.sizeDelta = new Vector2(NPCPanelWidth, H);
 
             Image panelImg = panel.AddComponent<Image>();
             panelImg.color = panelColor;
             panelUI.Panel = panel;
 
-            float y = compactHeight - 10;
+            // ── Active indicator bar at top (y=136, h=4) ──
+            // NPC panels don't track active indicator individually but we create a red bar for visual consistency
+            Image npcIndicator = CreateActiveIndicator(panel.transform, $"NPC{i}Active",
+                new Vector2(0, H - 4), new Vector2(NPCPanelWidth, 4), new Color(1f, 0.3f, 0.3f));
+            panelUI.ActiveIndicator = npcIndicator;
 
-            // Icon + Name row
+            // ── Icon (left side, y=104, h=30, 32x30) ── same as PC
             panelUI.IconImage = CreateIconImage(panel.transform, $"NPCIcon_{i}",
-                new Vector2(4, y - 26), new Vector2(28, 28));
+                new Vector2(4, 104), new Vector2(IconSize, 30));
 
+            // ── Name (right of icon, y=118, h=14) ── same as PC
             panelUI.NameText = CreateText(panel.transform, $"NPCName_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(36, y), new Vector2(NPCPanelWidth - 44, 16),
-                $"Enemy {i + 1}", 11, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
-            y -= 16;
+                new Vector2(IconSize + 10, 118), new Vector2(entryW - IconSize - 16, 14),
+                $"Enemy {i + 1}", 12, new Color(1f, 0.4f, 0.4f), TextAnchor.MiddleLeft);
 
-            // Ability scores (compact)
+            // ── Ability scores: 2 lines (y=78, h=24) ── same as PC
+            // Line 1: STR DEX CON | Line 2: WIS INT CHA
             panelUI.AbilityText = CreateText(panel.transform, $"NPCAbilities_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(4, y - 10), new Vector2(NPCPanelWidth - 8, 18),
-                "STR -- DEX -- CON -- WIS -- INT -- CHA --", 8,
+                new Vector2(4, 78), new Vector2(entryW - 8, 24),
+                "STR -- DEX -- CON --\nWIS -- INT -- CHA --", 9,
                 new Color(0.8f, 0.8f, 0.6f), TextAnchor.UpperLeft);
-            y -= 20;
 
-            // Separator
-            CreatePanel(panel.transform, $"NPCSep_{i}",
-                Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(4, y), new Vector2(NPCPanelWidth - 8, 1),
-                new Color(1, 1, 1, 0.2f));
-            y -= 4;
-
-            // HP text
-            panelUI.HPText = CreateText(panel.transform, $"NPCHP_{i}",
-                Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(4, y), new Vector2(NPCPanelWidth - 8, 14),
-                "HP: --/--", 11, Color.white, TextAnchor.MiddleLeft);
-            y -= 12;
-
-            // HP bar
-            panelUI.HPBar = CreateHPBar(panel.transform, $"NPCHPBar_{i}",
-                new Vector2(4, y), new Vector2(NPCPanelWidth - 8, 7),
-                new Color(0.8f, 0.2f, 0.2f));
-            y -= 12;
-
-            // AC and Atk on same row
+            // ── AC line (y=60, h=14) ── same as PC
             panelUI.ACText = CreateText(panel.transform, $"NPCAC_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(4, y), new Vector2(100, 14),
-                "AC: --", 10, Color.white, TextAnchor.MiddleLeft);
+                new Vector2(4, 60), new Vector2(entryW - 8, 14),
+                "AC: --", 10, new Color(1f, 0.9f, 0.7f), TextAnchor.MiddleLeft);
 
+            // ── Atk line (y=44, h=14) ── same as PC
             panelUI.AtkText = CreateText(panel.transform, $"NPCAtk_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(106, y), new Vector2(100, 14),
-                "Atk: --", 10, Color.white, TextAnchor.MiddleLeft);
-            y -= 14;
+                new Vector2(4, 44), new Vector2(entryW - 8, 14),
+                "Atk: --", 10, new Color(1f, 0.9f, 0.7f), TextAnchor.MiddleLeft);
 
-            // Speed
+            // ── HP text (y=28, h=12) ── BOTTOM AREA, same as PC
+            panelUI.HPText = CreateText(panel.transform, $"NPCHP_{i}",
+                Vector2.zero, Vector2.zero, Vector2.zero,
+                new Vector2(4, 28), new Vector2(entryW - 8, 12),
+                "HP: --/--", 11, Color.white, TextAnchor.MiddleLeft);
+
+            // ── HP bar at BOTTOM (y=4, h=20) ── same as PC
+            panelUI.HPBar = CreateHPBar(panel.transform, $"NPCHPBar_{i}",
+                new Vector2(4, 4), new Vector2(entryW - 8, 20), new Color(0.8f, 0.2f, 0.2f));
+
+            // Speed text (hidden, kept for data) ── same as PC
             panelUI.SpeedText = CreateText(panel.transform, $"NPCSpeed_{i}",
                 Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(4, y), new Vector2(NPCPanelWidth - 8, 12),
-                "Speed: -- sq", 9, Color.white, TextAnchor.MiddleLeft);
+                new Vector2(4, -200), new Vector2(entryW - 8, 12),
+                "Speed: -- sq", 8, Color.white, TextAnchor.MiddleLeft);
+            panelUI.SpeedText.gameObject.SetActive(false);
 
             combatUI.NPCPanels.Add(panelUI);
         }
 
-        Debug.Log($"[SceneBootstrap] Created {count} NPC stat panels (right side, top-down).");
+        Debug.Log($"[SceneBootstrap] Created {count} NPC stat panels (right side, top-down, 140px layout matching PC panels).");
     }
 
     /// <summary>Create hidden legacy NPC text fields for backward compatibility.</summary>
