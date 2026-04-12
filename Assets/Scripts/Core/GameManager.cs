@@ -1065,6 +1065,8 @@ public class GameManager : MonoBehaviour
     {
         _currentInitiativeIndex++;
         UpdateInitiativeUI();
+        // Threat map may have changed (NPC moved, character died, etc.)
+        InvalidatePreviewThreats();
         AdvanceToNextTurn();
     }
 
@@ -1757,6 +1759,50 @@ public class GameManager : MonoBehaviour
     /// Called every frame from Update() — detects the cell under the mouse
     /// and shows the A* path from the active PC to that cell.
     /// </summary>
+    /// <summary>
+    /// Cached threatened squares for path preview (rebuilt when hovered cell changes).
+    /// </summary>
+    private HashSet<Vector2Int> _previewThreatenedSquares;
+
+    /// <summary>
+    /// Whether the threatened squares cache needs rebuilding (e.g., after turn change).
+    /// </summary>
+    private bool _previewThreatsDirty = true;
+
+    /// <summary>
+    /// Mark the preview threat cache as dirty so it gets rebuilt on next hover.
+    /// Call this when turn changes, characters move, or combat state changes.
+    /// </summary>
+    public void InvalidatePreviewThreats()
+    {
+        _previewThreatsDirty = true;
+    }
+
+    /// <summary>
+    /// Build the set of all enemy-threatened squares for the given PC.
+    /// Cached until invalidated to avoid per-frame recalculation.
+    /// </summary>
+    private HashSet<Vector2Int> GetPreviewThreatenedSquares(CharacterController pc)
+    {
+        if (!_previewThreatsDirty && _previewThreatenedSquares != null)
+            return _previewThreatenedSquares;
+
+        _previewThreatenedSquares = new HashSet<Vector2Int>();
+        var allChars = GetAllCharacters();
+        foreach (var character in allChars)
+        {
+            if (character == pc) continue;
+            if (character.Stats.IsDead) continue;
+            if (character.IsPlayerControlled == pc.IsPlayerControlled) continue;
+
+            var threats = ThreatSystem.GetThreatenedSquares(character);
+            _previewThreatenedSquares.UnionWith(threats);
+        }
+
+        _previewThreatsDirty = false;
+        return _previewThreatenedSquares;
+    }
+
     private void UpdatePathPreview()
     {
         // Only show preview during movement sub-phase
@@ -1811,12 +1857,26 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // Use the lightweight A* pathfinder (without full AoO analysis for performance)
-        var pathResult = Grid.FindPathAoOAware(pc.GridPosition, gridCoord, null, pc.Stats.MoveRange);
+        // Build threatened squares for AoO-aware pathfinding
+        var threatenedSquares = GetPreviewThreatenedSquares(pc);
+
+        // Use AoO-aware A* pathfinder — routes around threatened squares when possible
+        var pathResult = Grid.FindPathAoOAware(pc.GridPosition, gridCoord, threatenedSquares, pc.Stats.MoveRange);
 
         if (pathResult.Path != null && pathResult.Path.Count > 0)
         {
-            _pathPreview.ShowPath(pc.GridPosition, pathResult.Path);
+            // Build per-segment threat flags for visual feedback
+            var segmentThreatened = new List<bool>();
+            Vector2Int prev = pc.GridPosition;
+            foreach (var step in pathResult.Path)
+            {
+                // A segment is "dangerous" if we're leaving a threatened square
+                bool leaving = threatenedSquares.Contains(prev);
+                segmentThreatened.Add(leaving);
+                prev = step;
+            }
+
+            _pathPreview.ShowPath(pc.GridPosition, pathResult.Path, segmentThreatened);
         }
         else
         {
@@ -2141,6 +2201,9 @@ public class GameManager : MonoBehaviour
 
         pc.MoveToCell(cell);
         UpdateAllStatsUI();
+
+        // Invalidate threat cache since positions changed
+        InvalidatePreviewThreats();
 
         ShowActionChoices();
     }

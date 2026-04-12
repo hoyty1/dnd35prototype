@@ -127,7 +127,10 @@ public class SquareGrid : MonoBehaviour
         var visited = new HashSet<Vector2Int>();
         int tieCounter = 0;
 
-        const int THREAT_COST = 100; // Very high cost for threatened squares (but not infinite)
+        // THREAT_COST = 200: very high penalty for leaving a threatened square.
+        // With ORTH_COST=2, a 1-square detour costs ~4 extra vs 200 for going through threat.
+        // This strongly incentivizes routing around enemies to avoid AoO.
+        const int THREAT_COST = 200;
         // Use weighted costs so A* prefers straight-line paths over zig-zag diagonals.
         // Orthogonal = 2, Diagonal = 3 (approximates √2 ratio and breaks cost ties).
         // This only affects path SELECTION; actual D&D 3.5 movement costs are calculated separately.
