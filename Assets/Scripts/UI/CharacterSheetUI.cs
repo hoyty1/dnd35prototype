@@ -307,8 +307,8 @@ public class CharacterSheetUI : MonoBehaviour
         contentRT.sizeDelta = new Vector2(0, 0); // Will be grown by ContentSizeFitter
 
         var vlg = content.AddComponent<VerticalLayoutGroup>();
-        vlg.spacing = 2;
-        vlg.padding = new RectOffset(10, 10, 8, 8);
+        vlg.spacing = 1;
+        vlg.padding = new RectOffset(8, 8, 4, 4);
         vlg.childAlignment = TextAnchor.UpperLeft;
         vlg.childControlWidth = true;
         vlg.childControlHeight = false;
@@ -603,24 +603,24 @@ public class CharacterSheetUI : MonoBehaviour
         if (stats == null) { AddLine(content, "No character selected.", 14, DimText); return; }
 
         // === Character Header ===
-        AddLine(content, stats.CharacterName, 18, GoldText, FontStyle.Bold, 24);
-        AddLine(content, $"Level {stats.Level}  {stats.RaceName}  {stats.CharacterClass}", 13, LightText, FontStyle.Normal, 18);
+        AddLine(content, stats.CharacterName, 16, GoldText, FontStyle.Bold, 18);
+        AddLine(content, $"Level {stats.Level}  {stats.RaceName}  {stats.CharacterClass}", 11, LightText, FontStyle.Normal, 14);
 
         AddSeparator(content);
 
         // === HP / Movement / Initiative ===
         Color hpColor = stats.CurrentHP > stats.TotalMaxHP / 2 ? HealthGreen : HealthRed;
-        AddColoredLine(content, "\u2764 ", hpColor, $"HP: {stats.CurrentHP}/{stats.TotalMaxHP}", LightText, 14, 20);
+        AddColoredLine(content, "\u2764 ", hpColor, $"HP: {stats.CurrentHP}/{stats.TotalMaxHP}", LightText, 13, 16);
 
         if (stats.TempHP > 0)
-            AddLine(content, $"  Temp HP: {stats.TempHP}", 12, new Color(0.4f, 0.7f, 1f), FontStyle.Normal, 16);
+            AddLine(content, $"  Temp HP: {stats.TempHP}", 11, new Color(0.4f, 0.7f, 1f), FontStyle.Normal, 14);
 
-        AddLine(content, $"\u2694 Initiative: {FormatMod(stats.InitiativeModifier)}     \u27a1 Speed: {stats.SpeedInFeet} ft ({stats.MoveRange} sq)", 12, LightText, FontStyle.Normal, 18);
+        AddLine(content, $"\u2694 Initiative: {FormatMod(stats.InitiativeModifier)}     \u27a1 Speed: {stats.SpeedInFeet} ft ({stats.MoveRange} sq)", 11, LightText, FontStyle.Normal, 14);
 
         AddSeparator(content);
 
         // === Ability Scores ===
-        AddLine(content, "ABILITY SCORES", 13, GoldText, FontStyle.Bold, 20);
+        AddLine(content, "ABILITY SCORES", 12, GoldText, FontStyle.Bold, 16);
         AddAbilityLine(content, "STR", stats.STR, stats.STRMod);
         AddAbilityLine(content, "DEX", stats.DEX, stats.DEXMod);
         AddAbilityLine(content, "CON", stats.CON, stats.CONMod);
@@ -631,42 +631,42 @@ public class CharacterSheetUI : MonoBehaviour
         AddSeparator(content);
 
         // === Armor Class ===
-        AddLine(content, "DEFENSE", 13, GoldText, FontStyle.Bold, 20);
-        AddLine(content, $"\u26e1 AC: {stats.ArmorClass}", 14, LightText, FontStyle.Bold, 20);
+        AddLine(content, "DEFENSE", 12, GoldText, FontStyle.Bold, 16);
+        AddLine(content, $"\u26e1 AC: {stats.ArmorClass}", 13, LightText, FontStyle.Bold, 16);
 
         string acBreakdown = $"  10 + Armor {stats.ArmorBonus} + Shield {stats.ShieldBonus} + DEX {FormatMod(stats.DEXMod)}";
         if (stats.SpellACBonus > 0) acBreakdown += $" + Spell {stats.SpellACBonus}";
         if (stats.DeflectionBonus > 0) acBreakdown += $" + Deflect {stats.DeflectionBonus}";
         if (stats.SizeModifier != 0) acBreakdown += $" + Size {FormatMod(stats.SizeModifier)}";
-        AddLine(content, acBreakdown, 10, DimText, FontStyle.Normal, 16);
+        AddLine(content, acBreakdown, 9, DimText, FontStyle.Normal, 13);
 
         AddSeparator(content);
 
         // === Saving Throws ===
-        AddLine(content, "SAVING THROWS", 13, GoldText, FontStyle.Bold, 20);
-        AddLine(content, $"  Fortitude: {FormatMod(stats.FortitudeSave)}     Reflex: {FormatMod(stats.ReflexSave)}     Will: {FormatMod(stats.WillSave)}", 12, LightText, FontStyle.Normal, 18);
+        AddLine(content, "SAVING THROWS", 12, GoldText, FontStyle.Bold, 16);
+        AddLine(content, $"  Fortitude: {FormatMod(stats.FortitudeSave)}     Reflex: {FormatMod(stats.ReflexSave)}     Will: {FormatMod(stats.WillSave)}", 11, LightText, FontStyle.Normal, 14);
 
         AddSeparator(content);
 
         // === Attack ===
-        AddLine(content, "ATTACK", 13, GoldText, FontStyle.Bold, 20);
-        AddLine(content, $"  Base Attack Bonus: {FormatMod(stats.BaseAttackBonus)}", 12, LightText, FontStyle.Normal, 18);
-        AddLine(content, $"  Melee Attack: {FormatMod(stats.AttackBonus)}", 12, LightText, FontStyle.Normal, 18);
-        AddLine(content, $"  Ranged Attack: {FormatMod(stats.BaseAttackBonus + stats.DEXMod + stats.SizeModifier)}", 12, LightText, FontStyle.Normal, 18);
-        AddLine(content, $"  Damage: {stats.BaseDamageCount}d{stats.BaseDamageDice}{(stats.BonusDamage != 0 ? FormatMod(stats.BonusDamage) : "")}", 12, LightText, FontStyle.Normal, 18);
+        AddLine(content, "ATTACK", 12, GoldText, FontStyle.Bold, 16);
+        AddLine(content, $"  Base Attack Bonus: {FormatMod(stats.BaseAttackBonus)}", 11, LightText, FontStyle.Normal, 14);
+        AddLine(content, $"  Melee Attack: {FormatMod(stats.AttackBonus)}", 11, LightText, FontStyle.Normal, 14);
+        AddLine(content, $"  Ranged Attack: {FormatMod(stats.BaseAttackBonus + stats.DEXMod + stats.SizeModifier)}", 11, LightText, FontStyle.Normal, 14);
+        AddLine(content, $"  Damage: {stats.BaseDamageCount}d{stats.BaseDamageDice}{(stats.BonusDamage != 0 ? FormatMod(stats.BonusDamage) : "")}", 11, LightText, FontStyle.Normal, 14);
 
         // === Active Buffs ===
         var spellComp = SelectedPC?.GetComponent<SpellcastingComponent>();
         if (spellComp != null && spellComp.ActiveBuffs != null && spellComp.ActiveBuffs.Count > 0)
         {
             AddSeparator(content);
-            AddLine(content, "ACTIVE BUFFS", 13, new Color(0.4f, 0.8f, 1f), FontStyle.Bold, 20);
+            AddLine(content, "ACTIVE BUFFS", 12, new Color(0.4f, 0.8f, 1f), FontStyle.Bold, 16);
             foreach (var buff in spellComp.ActiveBuffs)
             {
                 string duration = buff.Value < 0 ? "permanent" : $"{buff.Value} rounds";
                 var spell = SpellDatabase.GetSpell(buff.Key);
                 string displayName = spell != null ? spell.Name : buff.Key;
-                AddLine(content, $"  \u2728 {displayName} ({duration})", 11, new Color(0.6f, 0.85f, 1f), FontStyle.Normal, 16);
+                AddLine(content, $"  \u2728 {displayName} ({duration})", 10, new Color(0.6f, 0.85f, 1f), FontStyle.Normal, 13);
             }
         }
     }
@@ -679,27 +679,27 @@ public class CharacterSheetUI : MonoBehaviour
         var entryGO = new GameObject($"Ability_{name}");
         entryGO.transform.SetParent(content, false);
         var le = entryGO.AddComponent<LayoutElement>();
-        le.preferredHeight = 18;
-        le.minHeight = 18;
+        le.preferredHeight = 15;
+        le.minHeight = 15;
         entryGO.AddComponent<RectTransform>();
 
         // Name label
         var nameText = MakeText(entryGO.transform, "Name",
             new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
             new Vector2(10, 0), new Vector2(40, 0),
-            $"\u2726 {name}", 12, DimText, TextAnchor.MiddleLeft, FontStyle.Bold);
+            $"\u2726 {name}", 11, DimText, TextAnchor.MiddleLeft, FontStyle.Bold);
 
         // Score
         MakeText(entryGO.transform, "Score",
             new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
             new Vector2(60, 0), new Vector2(30, 0),
-            score.ToString(), 13, LightText, TextAnchor.MiddleRight, FontStyle.Bold);
+            score.ToString(), 12, LightText, TextAnchor.MiddleRight, FontStyle.Bold);
 
         // Modifier
         MakeText(entryGO.transform, "Mod",
             new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
             new Vector2(100, 0), new Vector2(40, 0),
-            modStr, 13, modColor, TextAnchor.MiddleLeft);
+            modStr, 12, modColor, TextAnchor.MiddleLeft);
     }
 
     // ----- Skills Tab -----
@@ -713,7 +713,7 @@ public class CharacterSheetUI : MonoBehaviour
         var stats = SelectedStats;
         if (stats == null) { AddLine(content, "No character selected.", 14, DimText); return; }
 
-        AddLine(content, $"SKILLS — {stats.CharacterName}", 13, GoldText, FontStyle.Bold, 20);
+        AddLine(content, $"SKILLS — {stats.CharacterName}", 12, GoldText, FontStyle.Bold, 16);
 
         // Header row
         AddSkillHeader(content);
@@ -741,14 +741,14 @@ public class CharacterSheetUI : MonoBehaviour
 
         // Show remaining (non-class, non-ranked) skills in collapsed form
         AddSeparator(content);
-        AddLine(content, "Other Skills (untrained):", 11, DimText, FontStyle.Italic, 16);
+        AddLine(content, "Other Skills (untrained):", 10, DimText, FontStyle.Italic, 13);
 
         foreach (var skill in sortedSkills)
         {
             if (skill.Ranks == 0 && !skill.IsClassSkill && !skill.TrainedOnly)
             {
                 int totalBonus = stats.GetSkillBonus(skill.SkillName);
-                AddLine(content, $"  {skill.SkillName}: {FormatMod(totalBonus)}", 10, DimText, FontStyle.Normal, 14);
+                AddLine(content, $"  {skill.SkillName}: {FormatMod(totalBonus)}", 9, DimText, FontStyle.Normal, 12);
             }
         }
     }
@@ -758,8 +758,8 @@ public class CharacterSheetUI : MonoBehaviour
         var headerGO = new GameObject("SkillHeader");
         headerGO.transform.SetParent(content, false);
         var le = headerGO.AddComponent<LayoutElement>();
-        le.preferredHeight = 16;
-        le.minHeight = 16;
+        le.preferredHeight = 14;
+        le.minHeight = 14;
         headerGO.AddComponent<RectTransform>();
 
         MakeText(headerGO.transform, "H1", V2(0, 0), V2(0, 1), V2(0, 0.5f),
@@ -777,8 +777,8 @@ public class CharacterSheetUI : MonoBehaviour
         var rowGO = new GameObject($"Skill_{skill.SkillName}");
         rowGO.transform.SetParent(content, false);
         var le = rowGO.AddComponent<LayoutElement>();
-        le.preferredHeight = 16;
-        le.minHeight = 16;
+        le.preferredHeight = 14;
+        le.minHeight = 14;
         rowGO.AddComponent<RectTransform>();
 
         Color nameColor = skill.IsClassSkill ? LightText : DimText;
@@ -809,7 +809,7 @@ public class CharacterSheetUI : MonoBehaviour
         var stats = SelectedStats;
         if (stats == null) { AddLine(content, "No character selected.", 14, DimText); return; }
 
-        AddLine(content, $"FEATS — {stats.CharacterName} ({stats.Feats.Count})", 13, GoldText, FontStyle.Bold, 20);
+        AddLine(content, $"FEATS — {stats.CharacterName} ({stats.Feats.Count})", 12, GoldText, FontStyle.Bold, 16);
         AddSeparator(content);
 
         if (stats.Feats.Count == 0)
@@ -845,8 +845,8 @@ public class CharacterSheetUI : MonoBehaviour
             var featGO = new GameObject($"Feat_{featName}");
             featGO.transform.SetParent(content, false);
             var le = featGO.AddComponent<LayoutElement>();
-            le.preferredHeight = 18;
-            le.minHeight = 18;
+            le.preferredHeight = 15;
+            le.minHeight = 15;
             featGO.AddComponent<RectTransform>();
 
             MakeText(featGO.transform, "Name", V2(0, 0), V2(0, 1), V2(0, 0.5f),
@@ -858,7 +858,7 @@ public class CharacterSheetUI : MonoBehaviour
             // Description on next line if available
             if (def != null && !string.IsNullOrEmpty(def.Description))
             {
-                AddLine(content, $"    {def.Description}", 10, DimText, FontStyle.Italic, 14);
+                AddLine(content, $"    {def.Description}", 9, DimText, FontStyle.Italic, 12);
             }
         }
     }
@@ -881,13 +881,13 @@ public class CharacterSheetUI : MonoBehaviour
             return;
         }
 
-        AddLine(content, $"SPELLS — {stats.CharacterName} ({stats.CharacterClass})", 13, GoldText, FontStyle.Bold, 20);
+        AddLine(content, $"SPELLS — {stats.CharacterName} ({stats.CharacterClass})", 12, GoldText, FontStyle.Bold, 16);
 
         // Spell slot summary
         if (spellComp.SlotsMax != null)
         {
             string slotSummary = spellComp.GetSlotSummary();
-            AddLine(content, slotSummary, 11, new Color(0.6f, 0.8f, 1f), FontStyle.Normal, 16);
+            AddLine(content, slotSummary, 10, new Color(0.6f, 0.8f, 1f), FontStyle.Normal, 14);
         }
 
         AddSeparator(content);
@@ -907,7 +907,7 @@ public class CharacterSheetUI : MonoBehaviour
             if (spellsAtLevel.Count == 0) continue;
 
             string levelLabel = lvl == 0 ? "Cantrips (Level 0)" : $"Level {lvl} Spells";
-            AddLine(content, levelLabel, 12, GoldText, FontStyle.Bold, 20);
+            AddLine(content, levelLabel, 11, GoldText, FontStyle.Bold, 16);
 
             foreach (var spell in spellsAtLevel)
             {
@@ -921,8 +921,8 @@ public class CharacterSheetUI : MonoBehaviour
                 var spellGO = new GameObject($"Spell_{spell.SpellId}");
                 spellGO.transform.SetParent(content, false);
                 var sle = spellGO.AddComponent<LayoutElement>();
-                sle.preferredHeight = 18;
-                sle.minHeight = 18;
+                sle.preferredHeight = 15;
+                sle.minHeight = 15;
                 spellGO.AddComponent<RectTransform>();
 
                 MakeText(spellGO.transform, "Name", V2(0, 0), V2(0, 1), V2(0, 0.5f),
@@ -980,7 +980,7 @@ public class CharacterSheetUI : MonoBehaviour
         txt.fontStyle = style;
         txt.alignment = TextAnchor.MiddleLeft;
         txt.horizontalOverflow = HorizontalWrapMode.Overflow;
-        txt.verticalOverflow = VerticalWrapMode.Overflow;
+        txt.verticalOverflow = VerticalWrapMode.Truncate;
     }
 
     private void AddColoredLine(Transform parent, string prefix, Color prefixColor,
@@ -1003,7 +1003,7 @@ public class CharacterSheetUI : MonoBehaviour
         txt.supportRichText = true;
         txt.alignment = TextAnchor.MiddleLeft;
         txt.horizontalOverflow = HorizontalWrapMode.Overflow;
-        txt.verticalOverflow = VerticalWrapMode.Overflow;
+        txt.verticalOverflow = VerticalWrapMode.Truncate;
     }
 
     private void AddSeparator(Transform parent)
@@ -1011,8 +1011,8 @@ public class CharacterSheetUI : MonoBehaviour
         var go = new GameObject("Separator");
         go.transform.SetParent(parent, false);
         var le = go.AddComponent<LayoutElement>();
-        le.preferredHeight = 6;
-        le.minHeight = 6;
+        le.preferredHeight = 3;
+        le.minHeight = 3;
 
         var img = go.AddComponent<Image>();
         img.color = SeparatorColor;
