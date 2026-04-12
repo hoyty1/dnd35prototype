@@ -780,6 +780,9 @@ public class SceneBootstrap : MonoBehaviour
             CharacterSheetUI csUI = canvas.gameObject.AddComponent<CharacterSheetUI>();
             csUI.BuildUI(canvas);
             gm.CharacterSheetUI = csUI;
+
+            // Embed the InventoryUI into the CharacterSheetUI's right panel
+            csUI.IntegrateInventoryUI(invUI);
         }
 
         if (canvas != null)

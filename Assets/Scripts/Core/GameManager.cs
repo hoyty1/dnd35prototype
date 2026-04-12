@@ -358,7 +358,7 @@ public class GameManager : MonoBehaviour
         if (!IsPlayerTurn) return;
         if (CurrentSubPhase == PlayerSubPhase.Animating) return;
         if (_waitingForAoOConfirmation) return;
-        if (InventoryUI != null && InventoryUI.IsOpen) return;
+        if (InventoryUI != null && InventoryUI.IsOpen && !InventoryUI.IsEmbedded) return;
         if (SkillsUI != null && SkillsUI.IsOpen) return;
         if (CharacterSheetUI != null && CharacterSheetUI.IsOpen) return;
 
@@ -431,7 +431,7 @@ public class GameManager : MonoBehaviour
         }
 #endif
 
-        if (iPressed && InventoryUI != null)
+        if (iPressed && InventoryUI != null && !InventoryUI.IsEmbedded)
         {
             if (InventoryUI.IsOpen)
             {
@@ -516,7 +516,7 @@ public class GameManager : MonoBehaviour
 
     private void CloseInventoryIfOpen()
     {
-        if (InventoryUI != null && InventoryUI.IsOpen)
+        if (InventoryUI != null && InventoryUI.IsOpen && !InventoryUI.IsEmbedded)
             InventoryUI.Close();
         if (CharacterSheetUI != null && CharacterSheetUI.IsOpen)
             CharacterSheetUI.Close();

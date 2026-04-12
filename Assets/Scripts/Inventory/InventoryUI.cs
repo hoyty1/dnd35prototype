@@ -39,6 +39,10 @@ public class InventoryUI : MonoBehaviour
     private Text _charStatsText;
     private Text _instructionText;
 
+    // Standalone-only UI elements (hidden when embedded in CharacterSheetUI)
+    private GameObject _titleBar;
+    private GameObject _closeHint;
+
     // Selection state for click-to-equip
     private int _selectedGeneralSlot = -1;
     private EquipSlot _selectedEquipSlot = EquipSlot.None;
@@ -50,6 +54,13 @@ public class InventoryUI : MonoBehaviour
     private static readonly Color SlotSelected = new Color(0.3f, 0.5f, 0.3f, 0.95f);
     private static readonly Color SlotEquipped = new Color(0.25f, 0.25f, 0.35f, 0.9f);
     private static readonly Color SlotEmpty = new Color(0.15f, 0.15f, 0.2f, 0.8f);
+
+    /// <summary>
+    /// When true, this InventoryUI is embedded inside CharacterSheetUI's right panel.
+    /// In embedded mode, the standalone 'I' key toggle is disabled, and the panel
+    /// visibility is controlled by CharacterSheetUI.
+    /// </summary>
+    public bool IsEmbedded = false;
 
     public bool IsOpen => PanelRoot != null && PanelRoot.activeSelf;
 
@@ -71,7 +82,7 @@ public class InventoryUI : MonoBehaviour
             new Color(0.08f, 0.08f, 0.12f, 0.95f));
 
         // Title bar
-        CreatePanel(PanelRoot.transform, "TitleBar",
+        _titleBar = CreatePanel(PanelRoot.transform, "TitleBar",
             new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
             Vector2.zero, new Vector2(0, 40),
             new Color(0.15f, 0.15f, 0.25f, 1f));
@@ -82,10 +93,10 @@ public class InventoryUI : MonoBehaviour
             "Character Inventory", 20, new Color(0.9f, 0.85f, 0.6f), TextAnchor.MiddleLeft);
 
         // Close hint
-        CreateText(PanelRoot.transform, "CloseHint",
+        _closeHint = CreateText(PanelRoot.transform, "CloseHint",
             new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1),
             new Vector2(-10, -5), new Vector2(120, 30),
-            "[I] Close", 14, new Color(0.6f, 0.6f, 0.6f), TextAnchor.MiddleRight);
+            "[I] Close", 14, new Color(0.6f, 0.6f, 0.6f), TextAnchor.MiddleRight).gameObject;
 
         // Character stats summary
         _charStatsText = CreateText(PanelRoot.transform, "CharStats",
@@ -208,6 +219,16 @@ public class InventoryUI : MonoBehaviour
     }
 
     // ===== PUBLIC API =====
+
+    /// <summary>
+    /// Hides UI elements that are only relevant when InventoryUI is standalone
+    /// (title bar, close hint). Called when embedding into CharacterSheetUI.
+    /// </summary>
+    public void HideStandaloneElements()
+    {
+        if (_titleBar != null) _titleBar.SetActive(false);
+        if (_closeHint != null) _closeHint.SetActive(false);
+    }
 
     public void Open(CharacterController character)
     {

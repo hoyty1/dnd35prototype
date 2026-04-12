@@ -5,12 +5,12 @@ using System.Linq;
 
 /// <summary>
 /// Comprehensive character sheet UI with character selection sidebar, tabbed stats panel,
-/// and equipment overview. Toggle with "C" key during gameplay.
+/// and integrated inventory panel. Toggle with "C" key during gameplay.
 ///
 /// Layout (inspired by classic CRPGs like Baldur's Gate / Pathfinder):
 ///   [Left Sidebar]  Character portraits (clickable to switch)
 ///   [Middle Panel]   Tabbed content: Stats | Skills | Feats | Spells
-///   [Right Panel]    Equipment slots overview + inventory summary
+///   [Right Panel]    Integrated Inventory UI (equipment + general items)
 /// </summary>
 public class CharacterSheetUI : MonoBehaviour
 {
@@ -20,7 +20,10 @@ public class CharacterSheetUI : MonoBehaviour
     // ===== Sub-panels =====
     private GameObject _characterListPanel;
     private GameObject _statsPanel;
-    private GameObject _equipmentPanel;
+    private GameObject _inventoryContainer; // Container for the embedded InventoryUI
+
+    // ===== Inventory integration =====
+    private InventoryUI _inventoryUI; // Reference to the existing InventoryUI
 
     // ===== Tab system =====
     private Dictionary<string, GameObject> _tabContents = new Dictionary<string, GameObject>();
@@ -46,8 +49,6 @@ public class CharacterSheetUI : MonoBehaviour
     private static readonly Color SeparatorColor = new Color(0.5f, 0.4f, 0.25f, 0.4f);
     private static readonly Color PortraitBorderActive = new Color(0.85f, 0.65f, 0.20f, 1f);
     private static readonly Color PortraitBorderInactive = new Color(0.3f, 0.25f, 0.2f, 0.6f);
-    private static readonly Color SlotBg = new Color(0.18f, 0.14f, 0.10f, 1f);
-    private static readonly Color SlotBorder = new Color(0.45f, 0.36f, 0.25f, 1f);
     private static readonly Color HealthRed = new Color(0.9f, 0.25f, 0.2f);
     private static readonly Color HealthGreen = new Color(0.3f, 0.85f, 0.3f);
 
@@ -82,7 +83,7 @@ public class CharacterSheetUI : MonoBehaviour
         BuildTitleBar();
         BuildCharacterSidebar();
         BuildStatsPanel();
-        BuildEquipmentPanel();
+        BuildInventoryContainer();
 
         _panelRoot.SetActive(false);
     }
@@ -323,18 +324,51 @@ public class CharacterSheetUI : MonoBehaviour
     }
 
     // ===================================================================
-    //  RIGHT — EQUIPMENT PANEL
+    //  RIGHT — INVENTORY PANEL (Embedded InventoryUI)
     // ===================================================================
 
-    private void BuildEquipmentPanel()
+    private void BuildInventoryContainer()
     {
         float leftOffset = Padding + SidebarWidth + Padding + MiddleWidth + Padding;
 
-        _equipmentPanel = MakePanel(_panelRoot.transform, "EquipmentPanel",
+        // Container panel that will hold the embedded InventoryUI
+        _inventoryContainer = MakePanel(_panelRoot.transform, "InventoryContainer",
             new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 1),
             new Vector2(leftOffset, -TitleBarHeight - Padding),
             new Vector2(RightWidth, -(TitleBarHeight + Padding * 2)),
             SectionBg);
+    }
+
+    /// <summary>
+    /// Embeds the existing InventoryUI into the character sheet's right panel.
+    /// Called after both CharacterSheetUI and InventoryUI have been built.
+    /// </summary>
+    public void IntegrateInventoryUI(InventoryUI inventoryUI)
+    {
+        if (inventoryUI == null || _inventoryContainer == null) return;
+
+        _inventoryUI = inventoryUI;
+
+        // Reparent InventoryUI's panel root into our container
+        if (_inventoryUI.PanelRoot != null)
+        {
+            _inventoryUI.PanelRoot.transform.SetParent(_inventoryContainer.transform, false);
+
+            // Stretch to fill the container
+            var invRT = _inventoryUI.PanelRoot.GetComponent<RectTransform>();
+            invRT.anchorMin = Vector2.zero;
+            invRT.anchorMax = Vector2.one;
+            invRT.pivot = new Vector2(0.5f, 0.5f);
+            invRT.anchoredPosition = Vector2.zero;
+            invRT.sizeDelta = Vector2.zero;
+
+            // Mark InventoryUI as embedded so it knows not to behave as standalone
+            _inventoryUI.IsEmbedded = true;
+
+            // Hide standalone-only elements (title bar, close hint) since
+            // the CharacterSheetUI already provides its own chrome
+            _inventoryUI.HideStandaloneElements();
+        }
     }
 
     // ===================================================================
@@ -366,12 +400,28 @@ public class CharacterSheetUI : MonoBehaviour
         RebuildSidebarPortraits();
         RefreshAll();
         _panelRoot.SetActive(true);
+
+        // Show embedded inventory for the selected character
+        if (_inventoryUI != null && _inventoryUI.PanelRoot != null)
+        {
+            var selectedPC = SelectedPC;
+            if (selectedPC != null)
+            {
+                _inventoryUI.CurrentCharacter = selectedPC;
+                _inventoryUI.RefreshUI();
+            }
+            _inventoryUI.PanelRoot.SetActive(true);
+        }
     }
 
     public void Close()
     {
         if (_panelRoot != null)
             _panelRoot.SetActive(false);
+
+        // Hide embedded inventory (but don't null out CurrentCharacter since it's embedded)
+        if (_inventoryUI != null && _inventoryUI.IsEmbedded && _inventoryUI.PanelRoot != null)
+            _inventoryUI.PanelRoot.SetActive(false);
     }
 
     public void Toggle(CharacterController character)
@@ -486,6 +536,17 @@ public class CharacterSheetUI : MonoBehaviour
         }
 
         RefreshAll();
+
+        // Update embedded inventory to show selected character's inventory
+        if (_inventoryUI != null)
+        {
+            var selectedPC = SelectedPC;
+            if (selectedPC != null)
+            {
+                _inventoryUI.CurrentCharacter = selectedPC;
+                _inventoryUI.RefreshUI();
+            }
+        }
     }
 
     // ===================================================================
@@ -513,7 +574,10 @@ public class CharacterSheetUI : MonoBehaviour
     private void RefreshAll()
     {
         RefreshCurrentTab();
-        RefreshEquipmentPanel();
+
+        // Refresh embedded inventory if present
+        if (_inventoryUI != null && _inventoryUI.CurrentCharacter != null)
+            _inventoryUI.RefreshUI();
     }
 
     private void RefreshCurrentTab()
@@ -876,154 +940,8 @@ public class CharacterSheetUI : MonoBehaviour
         }
     }
 
-    // ===================================================================
-    //  EQUIPMENT PANEL REFRESH
-    // ===================================================================
 
-    private void RefreshEquipmentPanel()
-    {
-        // Clear existing
-        foreach (Transform child in _equipmentPanel.transform)
-            Destroy(child.gameObject);
-
-        var stats = SelectedStats;
-        if (stats == null) return;
-
-        // Title
-        MakeText(_equipmentPanel.transform, "Title",
-            new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
-            new Vector2(0, -5), new Vector2(0, 22),
-            "EQUIPMENT", 14, GoldText, TextAnchor.MiddleCenter, FontStyle.Bold);
-
-        MakePanel(_equipmentPanel.transform, "Sep",
-            new Vector2(0.05f, 1), new Vector2(0.95f, 1), new Vector2(0.5f, 1),
-            new Vector2(0, -28), new Vector2(0, 1), SeparatorColor);
-
-        // Get inventory
-        InventoryComponent invComp = SelectedPC?.GetComponent<InventoryComponent>();
-        Inventory inv = invComp?.CharacterInventory;
-
-        // Equipment slot definitions
-        var slots = new (string label, EquipSlot slot)[]
-        {
-            ("Main Hand", EquipSlot.RightHand),
-            ("Off Hand",  EquipSlot.LeftHand),
-            ("Armor",     EquipSlot.Armor),
-        };
-
-        float yOffset = -38f;
-        float slotHeight = 52f;
-
-        for (int i = 0; i < slots.Length; i++)
-        {
-            var (label, slot) = slots[i];
-            float y = yOffset - i * (slotHeight + 6);
-
-            // Slot background
-            var slotBg = MakePanel(_equipmentPanel.transform, $"Slot_{label}",
-                new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
-                new Vector2(0, y), new Vector2(-16, slotHeight), SlotBg);
-
-            // Border
-            MakePanel(slotBg.transform, "Border",
-                Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
-                Vector2.zero, new Vector2(2, 2), SlotBorder);
-
-            // Slot label
-            MakeText(slotBg.transform, "Label",
-                new Vector2(0, 1), new Vector2(0.35f, 1), new Vector2(0, 1),
-                new Vector2(8, -4), new Vector2(0, 14),
-                label, 10, DimText, TextAnchor.MiddleLeft);
-
-            // Item info
-            ItemData item = inv?.GetEquipped(slot);
-            if (item != null)
-            {
-                MakeText(slotBg.transform, "ItemName",
-                    new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0.5f),
-                    new Vector2(8, 2), new Vector2(-16, 18),
-                    $"{item.IconChar} {item.Name}", 13, LightText, TextAnchor.MiddleLeft);
-
-                MakeText(slotBg.transform, "ItemStats",
-                    new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 0),
-                    new Vector2(8, 4), new Vector2(-16, 14),
-                    item.GetStatSummary(), 10, new Color(0.4f, 0.85f, 0.4f), TextAnchor.MiddleLeft);
-            }
-            else
-            {
-                MakeText(slotBg.transform, "Empty",
-                    new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 0.5f),
-                    Vector2.zero, Vector2.zero,
-                    "— Empty —", 12, new Color(0.35f, 0.3f, 0.25f), TextAnchor.MiddleCenter);
-            }
-        }
-
-        // ==== Inventory Summary ====
-        float invY = yOffset - slots.Length * (slotHeight + 6) - 12;
-        MakeText(_equipmentPanel.transform, "InvTitle",
-            new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
-            new Vector2(0, invY), new Vector2(0, 18),
-            "INVENTORY", 12, GoldText, TextAnchor.MiddleCenter, FontStyle.Bold);
-
-        MakePanel(_equipmentPanel.transform, "InvSep",
-            new Vector2(0.05f, 1), new Vector2(0.95f, 1), new Vector2(0.5f, 1),
-            new Vector2(0, invY - 20), new Vector2(0, 1), SeparatorColor);
-
-        if (inv != null)
-        {
-            float itemY = invY - 28;
-            int itemCount = 0;
-            for (int i = 0; i < Inventory.GeneralSlotCount; i++)
-            {
-                if (inv.GeneralSlots[i] != null)
-                {
-                    var item = inv.GeneralSlots[i];
-                    MakeText(_equipmentPanel.transform, $"InvItem_{i}",
-                        new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1),
-                        new Vector2(12, itemY), new Vector2(-24, 16),
-                        $"{item.IconChar} {item.Name}", 11, LightText, TextAnchor.MiddleLeft);
-                    itemY -= 18;
-                    itemCount++;
-                    if (itemCount >= 12) break; // Limit displayed items
-                }
-            }
-            if (itemCount == 0)
-                MakeText(_equipmentPanel.transform, "NoItems",
-                    new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
-                    new Vector2(0, itemY), new Vector2(0, 16),
-                    "No items", 11, DimText, TextAnchor.MiddleCenter);
-        }
-        else
-        {
-            MakeText(_equipmentPanel.transform, "NoInv",
-                new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
-                new Vector2(0, invY - 28), new Vector2(0, 16),
-                "No inventory", 11, DimText, TextAnchor.MiddleCenter);
-        }
-
-        // ==== Combat Summary at bottom ====
-        float bottomY = -(_equipmentPanel.GetComponent<RectTransform>().sizeDelta.y > 0
-            ? _equipmentPanel.GetComponent<RectTransform>().sizeDelta.y - 60
-            : 480);
-
-        // This will be at the bottom of the equipment panel
-        MakePanel(_equipmentPanel.transform, "CombatSep",
-            new Vector2(0.05f, 0), new Vector2(0.95f, 0), new Vector2(0.5f, 0),
-            new Vector2(0, 56), new Vector2(0, 1), SeparatorColor);
-
-        MakeText(_equipmentPanel.transform, "CombatSummary",
-            new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
-            new Vector2(0, 30), new Vector2(-12, 24),
-            $"AC: {stats.ArmorClass}  |  Atk: {FormatMod(stats.AttackBonus)}  |  Dmg: {stats.BaseDamageCount}d{stats.BaseDamageDice}{(stats.BonusDamage != 0 ? FormatMod(stats.BonusDamage) : "")}",
-            12, LightText, TextAnchor.MiddleCenter, FontStyle.Bold);
-
-        MakeText(_equipmentPanel.transform, "SavesSummary",
-            new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
-            new Vector2(0, 10), new Vector2(-12, 18),
-            $"Fort: {FormatMod(stats.FortitudeSave)}  |  Ref: {FormatMod(stats.ReflexSave)}  |  Will: {FormatMod(stats.WillSave)}",
-            11, DimText, TextAnchor.MiddleCenter);
-    }
-
+    // (Equipment panel removed — replaced by embedded InventoryUI)
     // ===================================================================
     //  HELPERS
     // ===================================================================
