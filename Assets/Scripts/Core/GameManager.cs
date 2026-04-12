@@ -94,6 +94,9 @@ public class GameManager : MonoBehaviour
     private string _lastCombatLog = "";
     private Camera _mainCam;
 
+    // ========== PATH PREVIEW ==========
+    private PathPreview _pathPreview;
+
     /// <summary>Current combat round number (starts at 1).</summary>
     private int _currentRound = 0;
 
@@ -112,6 +115,10 @@ public class GameManager : MonoBehaviour
         Grid.GenerateGrid();
         CenterCamera();
         _mainCam = Camera.main;
+
+        // Initialize path preview for movement hover
+        var previewGO = new GameObject("PathPreview");
+        _pathPreview = previewGO.AddComponent<PathPreview>();
 
         // Initialize icon system
         IconManager.Init();
@@ -361,6 +368,9 @@ public class GameManager : MonoBehaviour
         if (InventoryUI != null && InventoryUI.IsOpen && !InventoryUI.IsEmbedded) return;
         if (SkillsUI != null && SkillsUI.IsOpen) return;
         if (CharacterSheetUI != null && CharacterSheetUI.IsOpen) return;
+
+        // Update path preview during movement phase (runs every frame, not just on click)
+        UpdatePathPreview();
 
         bool clicked = false;
         Vector3 mouseScreenPos = Vector3.zero;
@@ -1140,6 +1150,9 @@ public class GameManager : MonoBehaviour
 
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
 
+        // Hide movement path preview when leaving movement phase
+        if (_pathPreview != null) _pathPreview.HidePath();
+
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
 
@@ -1737,6 +1750,80 @@ public class GameManager : MonoBehaviour
             current.SetHighlight(HighlightType.Selected);
     }
 
+    // ========== PATH PREVIEW ==========
+
+    /// <summary>
+    /// Update the dotted-line path preview during the movement phase.
+    /// Called every frame from Update() — detects the cell under the mouse
+    /// and shows the A* path from the active PC to that cell.
+    /// </summary>
+    private void UpdatePathPreview()
+    {
+        // Only show preview during movement sub-phase
+        if (_pathPreview == null) return;
+
+        if (CurrentSubPhase != PlayerSubPhase.Moving || ActivePC == null)
+        {
+            if (_pathPreview.IsVisible) _pathPreview.HidePath();
+            return;
+        }
+
+        if (_mainCam == null) return;
+
+        // Get mouse position in world space
+        Vector3 mouseScreenPos = Vector3.zero;
+#if ENABLE_LEGACY_INPUT_MANAGER
+        mouseScreenPos = Input.mousePosition;
+#endif
+#if ENABLE_INPUT_SYSTEM
+        var mouseDev = UnityEngine.InputSystem.Mouse.current;
+        if (mouseDev != null)
+            mouseScreenPos = mouseDev.position.ReadValue();
+#endif
+
+        // Don't show preview if pointer is over UI
+        if (UnityEngine.EventSystems.EventSystem.current != null &&
+            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        {
+            if (_pathPreview.IsVisible) _pathPreview.HidePath();
+            return;
+        }
+
+        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        Vector2Int gridCoord = SquareGridUtils.WorldToGrid(worldPoint);
+
+        // Skip recalculation if hovering over the same cell
+        if (!_pathPreview.HasCoordChanged(gridCoord)) return;
+
+        // Check if the hovered cell is a valid movement destination
+        SquareCell hoveredCell = Grid.GetCell(gridCoord);
+        if (hoveredCell == null || !_highlightedCells.Contains(hoveredCell))
+        {
+            _pathPreview.HidePath();
+            return;
+        }
+
+        // Don't show path to the character's own cell
+        CharacterController pc = ActivePC;
+        if (gridCoord == pc.GridPosition)
+        {
+            _pathPreview.HidePath();
+            return;
+        }
+
+        // Use the lightweight A* pathfinder (without full AoO analysis for performance)
+        var pathResult = Grid.FindPathAoOAware(pc.GridPosition, gridCoord, null, pc.Stats.MoveRange);
+
+        if (pathResult.Path != null && pathResult.Path.Count > 0)
+        {
+            _pathPreview.ShowPath(pc.GridPosition, pathResult.Path);
+        }
+        else
+        {
+            _pathPreview.HidePath();
+        }
+    }
+
     /// <summary>
     /// Get all characters in combat for AoO threat calculations.
     /// </summary>
@@ -2040,6 +2127,9 @@ public class GameManager : MonoBehaviour
 
     private void ExecuteMovement(CharacterController pc, SquareCell cell)
     {
+        // Hide path preview immediately when movement begins
+        if (_pathPreview != null) _pathPreview.HidePath();
+
         if (pc.Actions.HasMoveAction)
         {
             pc.Actions.UseMoveAction();
