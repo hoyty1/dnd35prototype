@@ -178,6 +178,12 @@ public class CharacterCreationUI : MonoBehaviour
             "⚡ Quick Start", new Color(0.5f, 0.35f, 0.1f), Color.white, 16);
         _quickStartButton.onClick.AddListener(OnQuickStart);
 
+        // Very Quick Start button — instant 4-person party (Fighter, Rogue, Cleric, Wizard)
+        Button veryQuickStartBtn = MakeButton(_rootPanel.transform, "VeryQuickStartBtn",
+            new Vector2(PANEL_W / 2 - 100, -PANEL_H / 2 + 70), new Vector2(160, 36),
+            "⚡⚡ Play Now!", new Color(0.1f, 0.5f, 0.2f), Color.white, 16);
+        veryQuickStartBtn.onClick.AddListener(OnVeryQuickStart);
+
         BuildStepRollStats();
         BuildStepAssignStats();
         BuildStepChooseRace();
@@ -1510,6 +1516,47 @@ public class CharacterCreationUI : MonoBehaviour
             { "Barbarian", BarbarianClass.GetQuickStartCharacter() }
         };
         Debug.Log($"[QuickStart] Initialized {_qsAvailableCharacters.Count} quick start characters");
+    }
+
+    /// <summary>
+    /// Very Quick Start — instantly creates a party of 4 (Fighter, Rogue, Cleric, Wizard)
+    /// and starts the game with zero intermediate steps.
+    /// </summary>
+    private void OnVeryQuickStart()
+    {
+        Debug.Log("[VeryQuickStart] Creating instant party: Fighter, Rogue, Cleric, Wizard");
+        InitializeQuickStartCharacters();
+
+        string[] partyClasses = { "Fighter", "Rogue", "Cleric", "Wizard" };
+        CreatedCharacters = new CharacterCreationData[partyClasses.Length];
+
+        for (int i = 0; i < partyClasses.Length; i++)
+        {
+            if (_qsAvailableCharacters.ContainsKey(partyClasses[i]))
+            {
+                CreatedCharacters[i] = _qsAvailableCharacters[partyClasses[i]];
+                Debug.Log($"[VeryQuickStart] Slot {i + 1}: {CreatedCharacters[i].CharacterName} ({CreatedCharacters[i].RaceName} {CreatedCharacters[i].ClassName})");
+            }
+            else
+            {
+                Debug.LogError($"[VeryQuickStart] Missing quick start character for class: {partyClasses[i]}");
+                return;
+            }
+        }
+
+        IsComplete = true;
+        HideCreationUI();
+
+        if (OnCreationComplete4 != null)
+        {
+            OnCreationComplete4.Invoke(CreatedCharacters);
+        }
+        else if (OnCreationComplete != null)
+        {
+            OnCreationComplete.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
+        }
+
+        Debug.Log("[VeryQuickStart] Game started!");
     }
 
     private void OnQuickStart()
