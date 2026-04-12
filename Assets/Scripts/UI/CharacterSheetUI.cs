@@ -53,14 +53,14 @@ public class CharacterSheetUI : MonoBehaviour
     private static readonly Color HealthGreen = new Color(0.3f, 0.85f, 0.3f);
 
     // ===== Layout constants =====
-    private const float PanelWidth = 820f;
-    private const float PanelHeight = 620f;
+    private const float PanelWidth = 1060f;
+    private const float PanelHeight = 700f;
     private const float SidebarWidth = 80f;
     private const float MiddleWidth = 420f;
-    private const float RightWidth = 300f;
+    private const float RightWidth = 500f;
     private const float TitleBarHeight = 38f;
     private const float TabBarHeight = 28f;
-    private const float Padding = 8f;
+    private const float Padding = 10f;
 
     public bool IsOpen => _panelRoot != null && _panelRoot.activeSelf;
 
