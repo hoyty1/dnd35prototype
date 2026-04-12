@@ -311,7 +311,7 @@ public class CharacterSheetUI : MonoBehaviour
         vlg.padding = new RectOffset(8, 8, 4, 4);
         vlg.childAlignment = TextAnchor.UpperLeft;
         vlg.childControlWidth = true;
-        vlg.childControlHeight = false;
+        vlg.childControlHeight = true;
         vlg.childForceExpandWidth = true;
         vlg.childForceExpandHeight = false;
 
