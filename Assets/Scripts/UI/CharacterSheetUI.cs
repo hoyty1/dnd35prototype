@@ -1,0 +1,1172 @@
+using UnityEngine;
+using UnityEngine.UI;
+using System.Collections.Generic;
+using System.Linq;
+
+/// <summary>
+/// Comprehensive character sheet UI with character selection sidebar, tabbed stats panel,
+/// and equipment overview. Toggle with "C" key during gameplay.
+///
+/// Layout (inspired by classic CRPGs like Baldur's Gate / Pathfinder):
+///   [Left Sidebar]  Character portraits (clickable to switch)
+///   [Middle Panel]   Tabbed content: Stats | Skills | Feats | Spells
+///   [Right Panel]    Equipment slots overview + inventory summary
+/// </summary>
+public class CharacterSheetUI : MonoBehaviour
+{
+    // ===== Root panel =====
+    private GameObject _panelRoot;
+
+    // ===== Sub-panels =====
+    private GameObject _characterListPanel;
+    private GameObject _statsPanel;
+    private GameObject _equipmentPanel;
+
+    // ===== Tab system =====
+    private Dictionary<string, GameObject> _tabContents = new Dictionary<string, GameObject>();
+    private string _currentTab = "Stats";
+
+    // ===== Character selection =====
+    private List<CharacterController> _partyCharacters = new List<CharacterController>();
+    private int _selectedCharIndex = 0;
+
+    // ===== References =====
+    private Canvas _parentCanvas;
+    private Font _uiFont;
+
+    // ===== Colors =====
+    private static readonly Color PanelBg = new Color(0.08f, 0.08f, 0.12f, 0.97f);
+    private static readonly Color SectionBg = new Color(0.12f, 0.10f, 0.15f, 1f);
+    private static readonly Color TitleBarBg = new Color(0.18f, 0.14f, 0.22f, 1f);
+    private static readonly Color TabActive = new Color(0.35f, 0.28f, 0.20f, 1f);
+    private static readonly Color TabInactive = new Color(0.20f, 0.16f, 0.12f, 1f);
+    private static readonly Color GoldText = new Color(0.92f, 0.82f, 0.55f);
+    private static readonly Color LightText = new Color(0.85f, 0.78f, 0.65f);
+    private static readonly Color DimText = new Color(0.55f, 0.50f, 0.42f);
+    private static readonly Color SeparatorColor = new Color(0.5f, 0.4f, 0.25f, 0.4f);
+    private static readonly Color PortraitBorderActive = new Color(0.85f, 0.65f, 0.20f, 1f);
+    private static readonly Color PortraitBorderInactive = new Color(0.3f, 0.25f, 0.2f, 0.6f);
+    private static readonly Color SlotBg = new Color(0.18f, 0.14f, 0.10f, 1f);
+    private static readonly Color SlotBorder = new Color(0.45f, 0.36f, 0.25f, 1f);
+    private static readonly Color HealthRed = new Color(0.9f, 0.25f, 0.2f);
+    private static readonly Color HealthGreen = new Color(0.3f, 0.85f, 0.3f);
+
+    // ===== Layout constants =====
+    private const float PanelWidth = 820f;
+    private const float PanelHeight = 620f;
+    private const float SidebarWidth = 80f;
+    private const float MiddleWidth = 420f;
+    private const float RightWidth = 300f;
+    private const float TitleBarHeight = 38f;
+    private const float TabBarHeight = 28f;
+    private const float Padding = 8f;
+
+    public bool IsOpen => _panelRoot != null && _panelRoot.activeSelf;
+
+    // ===================================================================
+    //  BUILD UI
+    // ===================================================================
+
+    public void BuildUI(Canvas canvas)
+    {
+        _parentCanvas = canvas;
+        _uiFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (_uiFont == null) _uiFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (_uiFont == null) _uiFont = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        // Main overlay panel
+        _panelRoot = MakePanel(canvas.transform, "CharacterSheetPanel",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(PanelWidth, PanelHeight), PanelBg);
+
+        BuildTitleBar();
+        BuildCharacterSidebar();
+        BuildStatsPanel();
+        BuildEquipmentPanel();
+
+        _panelRoot.SetActive(false);
+    }
+
+    // ===================================================================
+    //  TITLE BAR
+    // ===================================================================
+
+    private void BuildTitleBar()
+    {
+        var bar = MakePanel(_panelRoot.transform, "TitleBar",
+            new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
+            Vector2.zero, new Vector2(0, TitleBarHeight), TitleBarBg);
+
+        MakeText(bar.transform, "Title",
+            new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero,
+            "Character Sheet", 20, GoldText, TextAnchor.MiddleCenter, FontStyle.Bold);
+
+        // Close hint
+        MakeText(bar.transform, "CloseHint",
+            new Vector2(1, 0), new Vector2(1, 1), new Vector2(1, 0.5f),
+            new Vector2(-10, 0), new Vector2(100, 0),
+            "[C] Close", 12, DimText, TextAnchor.MiddleRight);
+
+        // Info icon / XP bar placeholder
+        MakeText(bar.transform, "InfoHint",
+            new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
+            new Vector2(10, 0), new Vector2(60, 0),
+            "\u2694 \u00d7", 14, DimText, TextAnchor.MiddleLeft);
+    }
+
+    // ===================================================================
+    //  LEFT SIDEBAR — CHARACTER PORTRAITS
+    // ===================================================================
+
+    private void BuildCharacterSidebar()
+    {
+        _characterListPanel = MakePanel(_panelRoot.transform, "CharacterList",
+            new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 1),
+            new Vector2(Padding, -TitleBarHeight - Padding), new Vector2(SidebarWidth, -(TitleBarHeight + Padding * 2)),
+            SectionBg);
+
+        // Vertical layout
+        var vlg = _characterListPanel.AddComponent<VerticalLayoutGroup>();
+        vlg.spacing = 6;
+        vlg.padding = new RectOffset(6, 6, 8, 8);
+        vlg.childAlignment = TextAnchor.UpperCenter;
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = false;
+        vlg.childForceExpandWidth = true;
+        vlg.childForceExpandHeight = false;
+    }
+
+    // ===================================================================
+    //  MIDDLE — STATS PANEL WITH TABS
+    // ===================================================================
+
+    private void BuildStatsPanel()
+    {
+        float leftOffset = Padding + SidebarWidth + Padding;
+
+        _statsPanel = MakePanel(_panelRoot.transform, "StatsPanel",
+            new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 1),
+            new Vector2(leftOffset, -TitleBarHeight - Padding),
+            new Vector2(MiddleWidth, -(TitleBarHeight + Padding * 2)),
+            SectionBg);
+
+        // Tab bar
+        BuildTabBar(_statsPanel.transform);
+
+        // Tab content areas
+        BuildStatsTabContent(_statsPanel.transform);
+        BuildSkillsTabContent(_statsPanel.transform);
+        BuildFeatsTabContent(_statsPanel.transform);
+        BuildSpellsTabContent(_statsPanel.transform);
+
+        ShowTab("Stats");
+    }
+
+    private void BuildTabBar(Transform parent)
+    {
+        var tabBar = MakePanel(parent, "TabBar",
+            new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
+            Vector2.zero, new Vector2(0, TabBarHeight), new Color(0, 0, 0, 0));
+
+        var hlg = tabBar.AddComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 2;
+        hlg.padding = new RectOffset(2, 2, 0, 0);
+        hlg.childAlignment = TextAnchor.MiddleLeft;
+        hlg.childControlWidth = true;
+        hlg.childControlHeight = true;
+        hlg.childForceExpandWidth = true;
+        hlg.childForceExpandHeight = true;
+
+        string[] tabs = { "Stats", "Skills", "Feats", "Spells" };
+        foreach (var t in tabs)
+        {
+            var btn = MakePanel(tabBar.transform, $"Tab_{t}",
+                Vector2.zero, Vector2.zero, Vector2.zero,
+                Vector2.zero, Vector2.zero, TabInactive);
+
+            var button = btn.AddComponent<Button>();
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1, 1, 1, 0.9f);
+            colors.pressedColor = new Color(0.8f, 0.8f, 0.8f);
+            button.colors = colors;
+            button.targetGraphic = btn.GetComponent<Image>();
+
+            string tabName = t;
+            button.onClick.AddListener(() => ShowTab(tabName));
+
+            MakeText(btn.transform, "Label",
+                Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero,
+                t, 13, GoldText, TextAnchor.MiddleCenter, FontStyle.Bold);
+        }
+    }
+
+    private void ShowTab(string tabName)
+    {
+        _currentTab = tabName;
+        foreach (var kvp in _tabContents)
+            kvp.Value.SetActive(kvp.Key == tabName);
+
+        // Update tab button colors
+        var tabBar = _statsPanel.transform.Find("TabBar");
+        if (tabBar != null)
+        {
+            for (int i = 0; i < tabBar.childCount; i++)
+            {
+                var tab = tabBar.GetChild(i);
+                var img = tab.GetComponent<Image>();
+                if (img != null)
+                    img.color = (tab.name == $"Tab_{tabName}") ? TabActive : TabInactive;
+            }
+        }
+
+        RefreshCurrentTab();
+    }
+
+    // ----- Stats Tab -----
+
+    private void BuildStatsTabContent(Transform parent)
+    {
+        var container = MakeTabContainer(parent, "StatsContent");
+        _tabContents["Stats"] = container;
+    }
+
+    // ----- Skills Tab -----
+
+    private void BuildSkillsTabContent(Transform parent)
+    {
+        var container = MakeTabContainer(parent, "SkillsContent");
+        _tabContents["Skills"] = container;
+    }
+
+    // ----- Feats Tab -----
+
+    private void BuildFeatsTabContent(Transform parent)
+    {
+        var container = MakeTabContainer(parent, "FeatsContent");
+        _tabContents["Feats"] = container;
+    }
+
+    // ----- Spells Tab -----
+
+    private void BuildSpellsTabContent(Transform parent)
+    {
+        var container = MakeTabContainer(parent, "SpellsContent");
+        _tabContents["Spells"] = container;
+    }
+
+    /// <summary>Creates a scrollable container for a tab.</summary>
+    private GameObject MakeTabContainer(Transform parent, string name)
+    {
+        // Outer container
+        var outer = MakePanel(parent, name,
+            new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 0.5f),
+            new Vector2(0, -(TabBarHeight / 2)), new Vector2(0, -TabBarHeight),
+            new Color(0, 0, 0, 0));
+
+        // ScrollRect
+        var scrollView = new GameObject("ScrollView");
+        scrollView.transform.SetParent(outer.transform, false);
+        var scrollRT = scrollView.AddComponent<RectTransform>();
+        scrollRT.anchorMin = Vector2.zero;
+        scrollRT.anchorMax = Vector2.one;
+        scrollRT.sizeDelta = Vector2.zero;
+        scrollRT.anchoredPosition = Vector2.zero;
+
+        var scrollRect = scrollView.AddComponent<ScrollRect>();
+        scrollRect.vertical = true;
+        scrollRect.horizontal = false;
+        scrollRect.movementType = ScrollRect.MovementType.Clamped;
+        scrollRect.scrollSensitivity = 20f;
+
+        // Viewport
+        var viewport = new GameObject("Viewport");
+        viewport.transform.SetParent(scrollView.transform, false);
+        var viewportRT = viewport.AddComponent<RectTransform>();
+        viewportRT.anchorMin = Vector2.zero;
+        viewportRT.anchorMax = Vector2.one;
+        viewportRT.sizeDelta = Vector2.zero;
+        viewportRT.anchoredPosition = Vector2.zero;
+        var mask = viewport.AddComponent<Mask>();
+        mask.showMaskGraphic = false;
+        viewport.AddComponent<Image>().color = Color.white;
+
+        scrollRect.viewport = viewportRT;
+
+        // Content
+        var content = new GameObject("Content");
+        content.transform.SetParent(viewport.transform, false);
+        var contentRT = content.AddComponent<RectTransform>();
+        contentRT.anchorMin = new Vector2(0, 1);
+        contentRT.anchorMax = new Vector2(1, 1);
+        contentRT.pivot = new Vector2(0.5f, 1);
+        contentRT.anchoredPosition = Vector2.zero;
+        contentRT.sizeDelta = new Vector2(0, 0); // Will be grown by ContentSizeFitter
+
+        var vlg = content.AddComponent<VerticalLayoutGroup>();
+        vlg.spacing = 2;
+        vlg.padding = new RectOffset(10, 10, 8, 8);
+        vlg.childAlignment = TextAnchor.UpperLeft;
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = false;
+        vlg.childForceExpandWidth = true;
+        vlg.childForceExpandHeight = false;
+
+        var csf = content.AddComponent<ContentSizeFitter>();
+        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        scrollRect.content = contentRT;
+
+        return outer;
+    }
+
+    // ===================================================================
+    //  RIGHT — EQUIPMENT PANEL
+    // ===================================================================
+
+    private void BuildEquipmentPanel()
+    {
+        float leftOffset = Padding + SidebarWidth + Padding + MiddleWidth + Padding;
+
+        _equipmentPanel = MakePanel(_panelRoot.transform, "EquipmentPanel",
+            new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 1),
+            new Vector2(leftOffset, -TitleBarHeight - Padding),
+            new Vector2(RightWidth, -(TitleBarHeight + Padding * 2)),
+            SectionBg);
+    }
+
+    // ===================================================================
+    //  PUBLIC API
+    // ===================================================================
+
+    public void Open(CharacterController character)
+    {
+        if (_panelRoot == null) return;
+
+        // Build party list from GameManager
+        if (GameManager.Instance != null)
+            _partyCharacters = new List<CharacterController>(GameManager.Instance.PCs);
+
+        // Find the index of the requested character
+        _selectedCharIndex = 0;
+        if (character != null)
+        {
+            for (int i = 0; i < _partyCharacters.Count; i++)
+            {
+                if (_partyCharacters[i] == character)
+                {
+                    _selectedCharIndex = i;
+                    break;
+                }
+            }
+        }
+
+        RebuildSidebarPortraits();
+        RefreshAll();
+        _panelRoot.SetActive(true);
+    }
+
+    public void Close()
+    {
+        if (_panelRoot != null)
+            _panelRoot.SetActive(false);
+    }
+
+    public void Toggle(CharacterController character)
+    {
+        if (IsOpen)
+            Close();
+        else
+            Open(character);
+    }
+
+    // ===================================================================
+    //  SIDEBAR REBUILD
+    // ===================================================================
+
+    private void RebuildSidebarPortraits()
+    {
+        // Clear existing children
+        foreach (Transform child in _characterListPanel.transform)
+            Destroy(child.gameObject);
+
+        for (int i = 0; i < _partyCharacters.Count; i++)
+        {
+            var pc = _partyCharacters[i];
+            if (pc == null || pc.Stats == null) continue;
+
+            CreatePortraitButton(i, pc);
+        }
+    }
+
+    private void CreatePortraitButton(int index, CharacterController pc)
+    {
+        var stats = pc.Stats;
+
+        // Container
+        var container = new GameObject($"Portrait_{index}");
+        container.transform.SetParent(_characterListPanel.transform, false);
+        var le = container.AddComponent<LayoutElement>();
+        le.preferredHeight = 78;
+        le.minHeight = 78;
+
+        var rt = container.AddComponent<RectTransform>();
+
+        // Border / background
+        var bg = container.AddComponent<Image>();
+        bg.color = (index == _selectedCharIndex) ? PortraitBorderActive : PortraitBorderInactive;
+
+        // Portrait image
+        var portraitGO = new GameObject("Icon");
+        portraitGO.transform.SetParent(container.transform, false);
+        var prt = portraitGO.AddComponent<RectTransform>();
+        prt.anchorMin = new Vector2(0.5f, 0.5f);
+        prt.anchorMax = new Vector2(0.5f, 0.5f);
+        prt.pivot = new Vector2(0.5f, 0.5f);
+        prt.anchoredPosition = new Vector2(0, 4);
+        prt.sizeDelta = new Vector2(56, 56);
+
+        var portraitImg = portraitGO.AddComponent<Image>();
+        Sprite portrait = IconLoader.GetPortrait(stats.CharacterClass);
+        if (portrait != null)
+        {
+            portraitImg.sprite = portrait;
+            portraitImg.preserveAspect = true;
+        }
+        else
+        {
+            portraitImg.color = GetClassColor(stats.CharacterClass);
+        }
+
+        // Name label below portrait
+        var nameLabel = MakeText(container.transform, "Name",
+            new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
+            new Vector2(0, 2), new Vector2(0, 14),
+            stats.CharacterName, 9, LightText, TextAnchor.MiddleCenter);
+
+        // HP indicator (small bar)
+        var hpBarBg = MakePanel(container.transform, "HPBarBg",
+            new Vector2(0.1f, 0), new Vector2(0.9f, 0), new Vector2(0.5f, 0),
+            new Vector2(0, 0), new Vector2(0, 3),
+            new Color(0.2f, 0.05f, 0.05f));
+
+        float hpPct = stats.TotalMaxHP > 0 ? Mathf.Clamp01((float)stats.CurrentHP / stats.TotalMaxHP) : 0f;
+        var hpBarFill = MakePanel(hpBarBg.transform, "HPFill",
+            new Vector2(0, 0), new Vector2(hpPct, 1), new Vector2(0, 0.5f),
+            Vector2.zero, Vector2.zero,
+            hpPct > 0.5f ? HealthGreen : HealthRed);
+
+        // Click handler
+        var button = container.AddComponent<Button>();
+        var btnColors = button.colors;
+        btnColors.normalColor = Color.white;
+        btnColors.highlightedColor = new Color(1, 1, 1, 0.85f);
+        btnColors.pressedColor = new Color(0.8f, 0.8f, 0.8f);
+        button.colors = btnColors;
+        button.targetGraphic = bg;
+
+        int capturedIndex = index;
+        button.onClick.AddListener(() => SelectCharacter(capturedIndex));
+    }
+
+    private void SelectCharacter(int index)
+    {
+        if (index < 0 || index >= _partyCharacters.Count) return;
+        _selectedCharIndex = index;
+
+        // Update borders
+        for (int i = 0; i < _characterListPanel.transform.childCount; i++)
+        {
+            var child = _characterListPanel.transform.GetChild(i);
+            var bg = child.GetComponent<Image>();
+            if (bg != null)
+                bg.color = (i == index) ? PortraitBorderActive : PortraitBorderInactive;
+        }
+
+        RefreshAll();
+    }
+
+    // ===================================================================
+    //  REFRESH
+    // ===================================================================
+
+    private CharacterStats SelectedStats
+    {
+        get
+        {
+            if (_selectedCharIndex < 0 || _selectedCharIndex >= _partyCharacters.Count) return null;
+            return _partyCharacters[_selectedCharIndex]?.Stats;
+        }
+    }
+
+    private CharacterController SelectedPC
+    {
+        get
+        {
+            if (_selectedCharIndex < 0 || _selectedCharIndex >= _partyCharacters.Count) return null;
+            return _partyCharacters[_selectedCharIndex];
+        }
+    }
+
+    private void RefreshAll()
+    {
+        RefreshCurrentTab();
+        RefreshEquipmentPanel();
+    }
+
+    private void RefreshCurrentTab()
+    {
+        switch (_currentTab)
+        {
+            case "Stats":  RefreshStatsTab(); break;
+            case "Skills": RefreshSkillsTab(); break;
+            case "Feats":  RefreshFeatsTab(); break;
+            case "Spells": RefreshSpellsTab(); break;
+        }
+    }
+
+    // ----- Stats Tab -----
+
+    private void RefreshStatsTab()
+    {
+        var content = GetTabContent("Stats");
+        if (content == null) return;
+        ClearChildren(content);
+
+        var stats = SelectedStats;
+        if (stats == null) { AddLine(content, "No character selected.", 14, DimText); return; }
+
+        // === Character Header ===
+        AddLine(content, stats.CharacterName, 18, GoldText, FontStyle.Bold, 24);
+        AddLine(content, $"Level {stats.Level}  {stats.RaceName}  {stats.CharacterClass}", 13, LightText, FontStyle.Normal, 18);
+
+        AddSeparator(content);
+
+        // === HP / Movement / Initiative ===
+        Color hpColor = stats.CurrentHP > stats.TotalMaxHP / 2 ? HealthGreen : HealthRed;
+        AddColoredLine(content, "\u2764 ", hpColor, $"HP: {stats.CurrentHP}/{stats.TotalMaxHP}", LightText, 14, 20);
+
+        if (stats.TempHP > 0)
+            AddLine(content, $"  Temp HP: {stats.TempHP}", 12, new Color(0.4f, 0.7f, 1f), FontStyle.Normal, 16);
+
+        AddLine(content, $"\u2694 Initiative: {FormatMod(stats.InitiativeModifier)}     \u27a1 Speed: {stats.SpeedInFeet} ft ({stats.MoveRange} sq)", 12, LightText, FontStyle.Normal, 18);
+
+        AddSeparator(content);
+
+        // === Ability Scores ===
+        AddLine(content, "ABILITY SCORES", 13, GoldText, FontStyle.Bold, 20);
+        AddAbilityLine(content, "STR", stats.STR, stats.STRMod);
+        AddAbilityLine(content, "DEX", stats.DEX, stats.DEXMod);
+        AddAbilityLine(content, "CON", stats.CON, stats.CONMod);
+        AddAbilityLine(content, "INT", stats.INT, stats.INTMod);
+        AddAbilityLine(content, "WIS", stats.WIS, stats.WISMod);
+        AddAbilityLine(content, "CHA", stats.CHA, stats.CHAMod);
+
+        AddSeparator(content);
+
+        // === Armor Class ===
+        AddLine(content, "DEFENSE", 13, GoldText, FontStyle.Bold, 20);
+        AddLine(content, $"\u26e1 AC: {stats.ArmorClass}", 14, LightText, FontStyle.Bold, 20);
+
+        string acBreakdown = $"  10 + Armor {stats.ArmorBonus} + Shield {stats.ShieldBonus} + DEX {FormatMod(stats.DEXMod)}";
+        if (stats.SpellACBonus > 0) acBreakdown += $" + Spell {stats.SpellACBonus}";
+        if (stats.DeflectionBonus > 0) acBreakdown += $" + Deflect {stats.DeflectionBonus}";
+        if (stats.SizeModifier != 0) acBreakdown += $" + Size {FormatMod(stats.SizeModifier)}";
+        AddLine(content, acBreakdown, 10, DimText, FontStyle.Normal, 16);
+
+        AddSeparator(content);
+
+        // === Saving Throws ===
+        AddLine(content, "SAVING THROWS", 13, GoldText, FontStyle.Bold, 20);
+        AddLine(content, $"  Fortitude: {FormatMod(stats.FortitudeSave)}     Reflex: {FormatMod(stats.ReflexSave)}     Will: {FormatMod(stats.WillSave)}", 12, LightText, FontStyle.Normal, 18);
+
+        AddSeparator(content);
+
+        // === Attack ===
+        AddLine(content, "ATTACK", 13, GoldText, FontStyle.Bold, 20);
+        AddLine(content, $"  Base Attack Bonus: {FormatMod(stats.BaseAttackBonus)}", 12, LightText, FontStyle.Normal, 18);
+        AddLine(content, $"  Melee Attack: {FormatMod(stats.AttackBonus)}", 12, LightText, FontStyle.Normal, 18);
+        AddLine(content, $"  Ranged Attack: {FormatMod(stats.BaseAttackBonus + stats.DEXMod + stats.SizeModifier)}", 12, LightText, FontStyle.Normal, 18);
+        AddLine(content, $"  Damage: {stats.BaseDamageCount}d{stats.BaseDamageDice}{(stats.BonusDamage != 0 ? FormatMod(stats.BonusDamage) : "")}", 12, LightText, FontStyle.Normal, 18);
+
+        // === Active Buffs ===
+        var spellComp = SelectedPC?.GetComponent<SpellcastingComponent>();
+        if (spellComp != null && spellComp.ActiveBuffs != null && spellComp.ActiveBuffs.Count > 0)
+        {
+            AddSeparator(content);
+            AddLine(content, "ACTIVE BUFFS", 13, new Color(0.4f, 0.8f, 1f), FontStyle.Bold, 20);
+            foreach (var buff in spellComp.ActiveBuffs)
+            {
+                string duration = buff.Value < 0 ? "permanent" : $"{buff.Value} rounds";
+                var spell = SpellDatabase.GetSpell(buff.Key);
+                string displayName = spell != null ? spell.Name : buff.Key;
+                AddLine(content, $"  \u2728 {displayName} ({duration})", 11, new Color(0.6f, 0.85f, 1f), FontStyle.Normal, 16);
+            }
+        }
+    }
+
+    private void AddAbilityLine(Transform content, string name, int score, int mod)
+    {
+        string modStr = FormatMod(mod);
+        Color modColor = mod >= 0 ? new Color(0.5f, 0.9f, 0.5f) : new Color(0.9f, 0.4f, 0.4f);
+
+        var entryGO = new GameObject($"Ability_{name}");
+        entryGO.transform.SetParent(content, false);
+        var le = entryGO.AddComponent<LayoutElement>();
+        le.preferredHeight = 18;
+        le.minHeight = 18;
+        entryGO.AddComponent<RectTransform>();
+
+        // Name label
+        var nameText = MakeText(entryGO.transform, "Name",
+            new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
+            new Vector2(10, 0), new Vector2(40, 0),
+            $"\u2726 {name}", 12, DimText, TextAnchor.MiddleLeft, FontStyle.Bold);
+
+        // Score
+        MakeText(entryGO.transform, "Score",
+            new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
+            new Vector2(60, 0), new Vector2(30, 0),
+            score.ToString(), 13, LightText, TextAnchor.MiddleRight, FontStyle.Bold);
+
+        // Modifier
+        MakeText(entryGO.transform, "Mod",
+            new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
+            new Vector2(100, 0), new Vector2(40, 0),
+            modStr, 13, modColor, TextAnchor.MiddleLeft);
+    }
+
+    // ----- Skills Tab -----
+
+    private void RefreshSkillsTab()
+    {
+        var content = GetTabContent("Skills");
+        if (content == null) return;
+        ClearChildren(content);
+
+        var stats = SelectedStats;
+        if (stats == null) { AddLine(content, "No character selected.", 14, DimText); return; }
+
+        AddLine(content, $"SKILLS — {stats.CharacterName}", 13, GoldText, FontStyle.Bold, 20);
+
+        // Header row
+        AddSkillHeader(content);
+        AddSeparator(content);
+
+        // Sort skills: class skills first, then alphabetically
+        var sortedSkills = stats.Skills.Values
+            .OrderByDescending(s => s.IsClassSkill)
+            .ThenBy(s => s.SkillName)
+            .ToList();
+
+        foreach (var skill in sortedSkills)
+        {
+            int totalBonus = stats.GetSkillBonus(skill.SkillName);
+            int abilityMod = stats.GetAbilityModForSkill(skill);
+            int featBonus = FeatManager.GetSkillFeatBonus(stats, skill.SkillName);
+            int classBonus = (skill.IsClassSkill && skill.Ranks > 0) ? 3 : 0;
+
+            // Only show skills with ranks or class skills
+            if (skill.Ranks > 0 || skill.IsClassSkill)
+            {
+                AddSkillRow(content, skill, totalBonus, abilityMod, featBonus, classBonus);
+            }
+        }
+
+        // Show remaining (non-class, non-ranked) skills in collapsed form
+        AddSeparator(content);
+        AddLine(content, "Other Skills (untrained):", 11, DimText, FontStyle.Italic, 16);
+
+        foreach (var skill in sortedSkills)
+        {
+            if (skill.Ranks == 0 && !skill.IsClassSkill && !skill.TrainedOnly)
+            {
+                int totalBonus = stats.GetSkillBonus(skill.SkillName);
+                AddLine(content, $"  {skill.SkillName}: {FormatMod(totalBonus)}", 10, DimText, FontStyle.Normal, 14);
+            }
+        }
+    }
+
+    private void AddSkillHeader(Transform content)
+    {
+        var headerGO = new GameObject("SkillHeader");
+        headerGO.transform.SetParent(content, false);
+        var le = headerGO.AddComponent<LayoutElement>();
+        le.preferredHeight = 16;
+        le.minHeight = 16;
+        headerGO.AddComponent<RectTransform>();
+
+        MakeText(headerGO.transform, "H1", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+            V2(10, 0), V2(150, 0), "Skill", 10, DimText, TextAnchor.MiddleLeft, FontStyle.Bold);
+        MakeText(headerGO.transform, "H2", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+            V2(170, 0), V2(40, 0), "Total", 10, DimText, TextAnchor.MiddleCenter, FontStyle.Bold);
+        MakeText(headerGO.transform, "H3", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+            V2(215, 0), V2(40, 0), "Ranks", 10, DimText, TextAnchor.MiddleCenter, FontStyle.Bold);
+        MakeText(headerGO.transform, "H4", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+            V2(260, 0), V2(40, 0), "Abil", 10, DimText, TextAnchor.MiddleCenter, FontStyle.Bold);
+    }
+
+    private void AddSkillRow(Transform content, Skill skill, int totalBonus, int abilityMod, int featBonus, int classBonus)
+    {
+        var rowGO = new GameObject($"Skill_{skill.SkillName}");
+        rowGO.transform.SetParent(content, false);
+        var le = rowGO.AddComponent<LayoutElement>();
+        le.preferredHeight = 16;
+        le.minHeight = 16;
+        rowGO.AddComponent<RectTransform>();
+
+        Color nameColor = skill.IsClassSkill ? LightText : DimText;
+        string classMarker = skill.IsClassSkill ? "\u2605 " : "  ";
+
+        MakeText(rowGO.transform, "Name", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+            V2(10, 0), V2(150, 0), $"{classMarker}{skill.SkillName}", 11, nameColor, TextAnchor.MiddleLeft);
+
+        Color bonusColor = totalBonus > 0 ? new Color(0.5f, 0.9f, 0.5f) : (totalBonus < 0 ? HealthRed : LightText);
+        MakeText(rowGO.transform, "Total", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+            V2(170, 0), V2(40, 0), FormatMod(totalBonus), 12, bonusColor, TextAnchor.MiddleCenter, FontStyle.Bold);
+
+        MakeText(rowGO.transform, "Ranks", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+            V2(215, 0), V2(40, 0), skill.Ranks.ToString(), 11, LightText, TextAnchor.MiddleCenter);
+
+        MakeText(rowGO.transform, "Abil", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+            V2(260, 0), V2(40, 0), FormatMod(abilityMod), 11, DimText, TextAnchor.MiddleCenter);
+    }
+
+    // ----- Feats Tab -----
+
+    private void RefreshFeatsTab()
+    {
+        var content = GetTabContent("Feats");
+        if (content == null) return;
+        ClearChildren(content);
+
+        var stats = SelectedStats;
+        if (stats == null) { AddLine(content, "No character selected.", 14, DimText); return; }
+
+        AddLine(content, $"FEATS — {stats.CharacterName} ({stats.Feats.Count})", 13, GoldText, FontStyle.Bold, 20);
+        AddSeparator(content);
+
+        if (stats.Feats.Count == 0)
+        {
+            AddLine(content, "No feats.", 12, DimText);
+            return;
+        }
+
+        // Group feats by type using FeatDefinitions
+        var sortedFeats = stats.Feats.OrderBy(f => f).ToList();
+
+        foreach (var featName in sortedFeats)
+        {
+            FeatDefinition def = null;
+            if (FeatDefinitions.AllFeats != null && FeatDefinitions.AllFeats.ContainsKey(featName))
+                def = FeatDefinitions.AllFeats[featName];
+
+            string typeTag = "";
+            Color typeColor = LightText;
+
+            if (def != null)
+            {
+                switch (def.Type)
+                {
+                    case FeatType.General:    typeTag = "[General]"; typeColor = LightText; break;
+                    case FeatType.Combat:     typeTag = "[Combat]"; typeColor = new Color(0.9f, 0.5f, 0.4f); break;
+                    case FeatType.Metamagic:  typeTag = "[Metamagic]"; typeColor = new Color(0.5f, 0.6f, 1f); break;
+                    case FeatType.ItemCreation: typeTag = "[Item Creation]"; typeColor = new Color(0.6f, 0.9f, 0.6f); break;
+                }
+            }
+
+            // Feat name with type badge
+            var featGO = new GameObject($"Feat_{featName}");
+            featGO.transform.SetParent(content, false);
+            var le = featGO.AddComponent<LayoutElement>();
+            le.preferredHeight = 18;
+            le.minHeight = 18;
+            featGO.AddComponent<RectTransform>();
+
+            MakeText(featGO.transform, "Name", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+                V2(10, 0), V2(200, 0), $"\u2726 {featName}", 12, LightText, TextAnchor.MiddleLeft);
+
+            MakeText(featGO.transform, "Type", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+                V2(220, 0), V2(120, 0), typeTag, 10, typeColor, TextAnchor.MiddleLeft);
+
+            // Description on next line if available
+            if (def != null && !string.IsNullOrEmpty(def.Description))
+            {
+                AddLine(content, $"    {def.Description}", 10, DimText, FontStyle.Italic, 14);
+            }
+        }
+    }
+
+    // ----- Spells Tab -----
+
+    private void RefreshSpellsTab()
+    {
+        var content = GetTabContent("Spells");
+        if (content == null) return;
+        ClearChildren(content);
+
+        var stats = SelectedStats;
+        if (stats == null) { AddLine(content, "No character selected.", 14, DimText); return; }
+
+        var spellComp = SelectedPC?.GetComponent<SpellcastingComponent>();
+        if (spellComp == null)
+        {
+            AddLine(content, $"{stats.CharacterName} is not a spellcaster.", 13, DimText);
+            return;
+        }
+
+        AddLine(content, $"SPELLS — {stats.CharacterName} ({stats.CharacterClass})", 13, GoldText, FontStyle.Bold, 20);
+
+        // Spell slot summary
+        if (spellComp.SlotsMax != null)
+        {
+            string slotSummary = spellComp.GetSlotSummary();
+            AddLine(content, slotSummary, 11, new Color(0.6f, 0.8f, 1f), FontStyle.Normal, 16);
+        }
+
+        AddSeparator(content);
+
+        // Group by spell level
+        var allSpells = spellComp.KnownSpells;
+        if (allSpells == null || allSpells.Count == 0)
+        {
+            AddLine(content, "No spells known.", 12, DimText);
+            return;
+        }
+
+        int maxLevel = allSpells.Max(s => s.SpellLevel);
+        for (int lvl = 0; lvl <= maxLevel; lvl++)
+        {
+            var spellsAtLevel = allSpells.Where(s => s.SpellLevel == lvl).OrderBy(s => s.Name).ToList();
+            if (spellsAtLevel.Count == 0) continue;
+
+            string levelLabel = lvl == 0 ? "Cantrips (Level 0)" : $"Level {lvl} Spells";
+            AddLine(content, levelLabel, 12, GoldText, FontStyle.Bold, 20);
+
+            foreach (var spell in spellsAtLevel)
+            {
+                bool isPrepared = spellComp.PreparedSpells != null && spellComp.PreparedSpells.Contains(spell);
+                bool canCast = spellComp.CanCastSpell(spell);
+
+                string prepMark = isPrepared ? "\u2713 " : "\u25cb ";
+                Color spellColor = canCast ? new Color(0.5f, 0.9f, 0.5f) :
+                                   isPrepared ? LightText : DimText;
+
+                var spellGO = new GameObject($"Spell_{spell.SpellId}");
+                spellGO.transform.SetParent(content, false);
+                var sle = spellGO.AddComponent<LayoutElement>();
+                sle.preferredHeight = 18;
+                sle.minHeight = 18;
+                spellGO.AddComponent<RectTransform>();
+
+                MakeText(spellGO.transform, "Name", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+                    V2(10, 0), V2(200, 0), $"{prepMark}{spell.Name}", 11, spellColor, TextAnchor.MiddleLeft);
+
+                MakeText(spellGO.transform, "School", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+                    V2(215, 0), V2(100, 0), spell.School ?? "", 10, DimText, TextAnchor.MiddleLeft);
+
+                if (spell.IsPlaceholder)
+                {
+                    MakeText(spellGO.transform, "PH", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+                        V2(320, 0), V2(60, 0), "[PH]", 9, new Color(0.9f, 0.7f, 0.2f), TextAnchor.MiddleLeft);
+                }
+            }
+        }
+    }
+
+    // ===================================================================
+    //  EQUIPMENT PANEL REFRESH
+    // ===================================================================
+
+    private void RefreshEquipmentPanel()
+    {
+        // Clear existing
+        foreach (Transform child in _equipmentPanel.transform)
+            Destroy(child.gameObject);
+
+        var stats = SelectedStats;
+        if (stats == null) return;
+
+        // Title
+        MakeText(_equipmentPanel.transform, "Title",
+            new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
+            new Vector2(0, -5), new Vector2(0, 22),
+            "EQUIPMENT", 14, GoldText, TextAnchor.MiddleCenter, FontStyle.Bold);
+
+        MakePanel(_equipmentPanel.transform, "Sep",
+            new Vector2(0.05f, 1), new Vector2(0.95f, 1), new Vector2(0.5f, 1),
+            new Vector2(0, -28), new Vector2(0, 1), SeparatorColor);
+
+        // Get inventory
+        InventoryComponent invComp = SelectedPC?.GetComponent<InventoryComponent>();
+        Inventory inv = invComp?.CharacterInventory;
+
+        // Equipment slot definitions
+        var slots = new (string label, EquipSlot slot)[]
+        {
+            ("Main Hand", EquipSlot.RightHand),
+            ("Off Hand",  EquipSlot.LeftHand),
+            ("Armor",     EquipSlot.Armor),
+        };
+
+        float yOffset = -38f;
+        float slotHeight = 52f;
+
+        for (int i = 0; i < slots.Length; i++)
+        {
+            var (label, slot) = slots[i];
+            float y = yOffset - i * (slotHeight + 6);
+
+            // Slot background
+            var slotBg = MakePanel(_equipmentPanel.transform, $"Slot_{label}",
+                new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
+                new Vector2(0, y), new Vector2(-16, slotHeight), SlotBg);
+
+            // Border
+            MakePanel(slotBg.transform, "Border",
+                Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, new Vector2(2, 2), SlotBorder);
+
+            // Slot label
+            MakeText(slotBg.transform, "Label",
+                new Vector2(0, 1), new Vector2(0.35f, 1), new Vector2(0, 1),
+                new Vector2(8, -4), new Vector2(0, 14),
+                label, 10, DimText, TextAnchor.MiddleLeft);
+
+            // Item info
+            ItemData item = inv?.GetEquipped(slot);
+            if (item != null)
+            {
+                MakeText(slotBg.transform, "ItemName",
+                    new Vector2(0, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0.5f),
+                    new Vector2(8, 2), new Vector2(-16, 18),
+                    $"{item.IconChar} {item.Name}", 13, LightText, TextAnchor.MiddleLeft);
+
+                MakeText(slotBg.transform, "ItemStats",
+                    new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 0),
+                    new Vector2(8, 4), new Vector2(-16, 14),
+                    item.GetStatSummary(), 10, new Color(0.4f, 0.85f, 0.4f), TextAnchor.MiddleLeft);
+            }
+            else
+            {
+                MakeText(slotBg.transform, "Empty",
+                    new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 0.5f),
+                    Vector2.zero, Vector2.zero,
+                    "— Empty —", 12, new Color(0.35f, 0.3f, 0.25f), TextAnchor.MiddleCenter);
+            }
+        }
+
+        // ==== Inventory Summary ====
+        float invY = yOffset - slots.Length * (slotHeight + 6) - 12;
+        MakeText(_equipmentPanel.transform, "InvTitle",
+            new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
+            new Vector2(0, invY), new Vector2(0, 18),
+            "INVENTORY", 12, GoldText, TextAnchor.MiddleCenter, FontStyle.Bold);
+
+        MakePanel(_equipmentPanel.transform, "InvSep",
+            new Vector2(0.05f, 1), new Vector2(0.95f, 1), new Vector2(0.5f, 1),
+            new Vector2(0, invY - 20), new Vector2(0, 1), SeparatorColor);
+
+        if (inv != null)
+        {
+            float itemY = invY - 28;
+            int itemCount = 0;
+            for (int i = 0; i < Inventory.GeneralSlotCount; i++)
+            {
+                if (inv.GeneralSlots[i] != null)
+                {
+                    var item = inv.GeneralSlots[i];
+                    MakeText(_equipmentPanel.transform, $"InvItem_{i}",
+                        new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1),
+                        new Vector2(12, itemY), new Vector2(-24, 16),
+                        $"{item.IconChar} {item.Name}", 11, LightText, TextAnchor.MiddleLeft);
+                    itemY -= 18;
+                    itemCount++;
+                    if (itemCount >= 12) break; // Limit displayed items
+                }
+            }
+            if (itemCount == 0)
+                MakeText(_equipmentPanel.transform, "NoItems",
+                    new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
+                    new Vector2(0, itemY), new Vector2(0, 16),
+                    "No items", 11, DimText, TextAnchor.MiddleCenter);
+        }
+        else
+        {
+            MakeText(_equipmentPanel.transform, "NoInv",
+                new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
+                new Vector2(0, invY - 28), new Vector2(0, 16),
+                "No inventory", 11, DimText, TextAnchor.MiddleCenter);
+        }
+
+        // ==== Combat Summary at bottom ====
+        float bottomY = -(_equipmentPanel.GetComponent<RectTransform>().sizeDelta.y > 0
+            ? _equipmentPanel.GetComponent<RectTransform>().sizeDelta.y - 60
+            : 480);
+
+        // This will be at the bottom of the equipment panel
+        MakePanel(_equipmentPanel.transform, "CombatSep",
+            new Vector2(0.05f, 0), new Vector2(0.95f, 0), new Vector2(0.5f, 0),
+            new Vector2(0, 56), new Vector2(0, 1), SeparatorColor);
+
+        MakeText(_equipmentPanel.transform, "CombatSummary",
+            new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
+            new Vector2(0, 30), new Vector2(-12, 24),
+            $"AC: {stats.ArmorClass}  |  Atk: {FormatMod(stats.AttackBonus)}  |  Dmg: {stats.BaseDamageCount}d{stats.BaseDamageDice}{(stats.BonusDamage != 0 ? FormatMod(stats.BonusDamage) : "")}",
+            12, LightText, TextAnchor.MiddleCenter, FontStyle.Bold);
+
+        MakeText(_equipmentPanel.transform, "SavesSummary",
+            new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
+            new Vector2(0, 10), new Vector2(-12, 18),
+            $"Fort: {FormatMod(stats.FortitudeSave)}  |  Ref: {FormatMod(stats.ReflexSave)}  |  Will: {FormatMod(stats.WillSave)}",
+            11, DimText, TextAnchor.MiddleCenter);
+    }
+
+    // ===================================================================
+    //  HELPERS
+    // ===================================================================
+
+    private Transform GetTabContent(string tabName)
+    {
+        if (!_tabContents.ContainsKey(tabName)) return null;
+        var outer = _tabContents[tabName];
+        var sv = outer.transform.Find("ScrollView");
+        if (sv == null) return null;
+        var vp = sv.Find("Viewport");
+        if (vp == null) return null;
+        return vp.Find("Content");
+    }
+
+    private void ClearChildren(Transform parent)
+    {
+        for (int i = parent.childCount - 1; i >= 0; i--)
+            Destroy(parent.GetChild(i).gameObject);
+    }
+
+    private void AddLine(Transform parent, string text, int fontSize, Color color,
+                         FontStyle style = FontStyle.Normal, float height = 18f)
+    {
+        var go = new GameObject("Line");
+        go.transform.SetParent(parent, false);
+        var le = go.AddComponent<LayoutElement>();
+        le.preferredHeight = height;
+        le.minHeight = height;
+
+        var txt = go.AddComponent<Text>();
+        txt.text = text;
+        txt.font = _uiFont;
+        txt.fontSize = fontSize;
+        txt.color = color;
+        txt.fontStyle = style;
+        txt.alignment = TextAnchor.MiddleLeft;
+        txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+        txt.verticalOverflow = VerticalWrapMode.Overflow;
+    }
+
+    private void AddColoredLine(Transform parent, string prefix, Color prefixColor,
+                                string text, Color textColor, int fontSize, float height)
+    {
+        // Unity UI Text doesn't support multiple colors easily, so use rich text
+        var go = new GameObject("ColorLine");
+        go.transform.SetParent(parent, false);
+        var le = go.AddComponent<LayoutElement>();
+        le.preferredHeight = height;
+        le.minHeight = height;
+
+        var txt = go.AddComponent<Text>();
+        string pHex = ColorUtility.ToHtmlStringRGB(prefixColor);
+        string tHex = ColorUtility.ToHtmlStringRGB(textColor);
+        txt.text = $"<color=#{pHex}>{prefix}</color><color=#{tHex}>{text}</color>";
+        txt.font = _uiFont;
+        txt.fontSize = fontSize;
+        txt.color = Color.white;
+        txt.supportRichText = true;
+        txt.alignment = TextAnchor.MiddleLeft;
+        txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+        txt.verticalOverflow = VerticalWrapMode.Overflow;
+    }
+
+    private void AddSeparator(Transform parent)
+    {
+        var go = new GameObject("Separator");
+        go.transform.SetParent(parent, false);
+        var le = go.AddComponent<LayoutElement>();
+        le.preferredHeight = 6;
+        le.minHeight = 6;
+
+        var img = go.AddComponent<Image>();
+        img.color = SeparatorColor;
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.sizeDelta = new Vector2(0, 1);
+    }
+
+    private string FormatMod(int mod) => mod >= 0 ? $"+{mod}" : mod.ToString();
+
+    private Color GetClassColor(string className)
+    {
+        switch (className)
+        {
+            case "Fighter":   return new Color(0.6f, 0.35f, 0.2f);
+            case "Rogue":     return new Color(0.3f, 0.5f, 0.3f);
+            case "Cleric":    return new Color(0.7f, 0.65f, 0.3f);
+            case "Wizard":    return new Color(0.3f, 0.3f, 0.65f);
+            case "Monk":      return new Color(0.5f, 0.4f, 0.3f);
+            case "Barbarian": return new Color(0.55f, 0.25f, 0.25f);
+            default:          return new Color(0.35f, 0.35f, 0.4f);
+        }
+    }
+
+    // ===================================================================
+    //  UI FACTORY HELPERS
+    // ===================================================================
+
+    private GameObject MakePanel(Transform parent, string name,
+        Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
+        Vector2 anchoredPos, Vector2 sizeDelta, Color bgColor)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        var rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.pivot = pivot;
+        rt.anchoredPosition = anchoredPos;
+        rt.sizeDelta = sizeDelta;
+        var img = go.AddComponent<Image>();
+        img.color = bgColor;
+        return go;
+    }
+
+    private Text MakeText(Transform parent, string name,
+        Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
+        Vector2 anchoredPos, Vector2 sizeDelta,
+        string text, int fontSize, Color color, TextAnchor alignment,
+        FontStyle style = FontStyle.Normal)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        var rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.pivot = pivot;
+        rt.anchoredPosition = anchoredPos;
+        rt.sizeDelta = sizeDelta;
+        var t = go.AddComponent<Text>();
+        t.text = text;
+        t.font = _uiFont;
+        t.fontSize = fontSize;
+        t.color = color;
+        t.alignment = alignment;
+        t.fontStyle = style;
+        t.supportRichText = true;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        return t;
+    }
+
+    // Short-hand for Vector2 in expressions
+    private static Vector2 V2(float x, float y) => new Vector2(x, y);
+}

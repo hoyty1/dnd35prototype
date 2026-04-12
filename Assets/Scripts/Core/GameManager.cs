@@ -46,6 +46,7 @@ public class GameManager : MonoBehaviour
     [Header("UI")]
     public CombatUI CombatUI;
     public InventoryUI InventoryUI;
+    public CharacterSheetUI CharacterSheetUI;
     public CharacterCreationUI CharacterCreationUI;
     public SkillsUIPanel SkillsUI;
 
@@ -352,12 +353,14 @@ public class GameManager : MonoBehaviour
 
         HandleInventoryInput();
         HandleSkillsInput();
+        HandleCharacterSheetInput();
 
         if (!IsPlayerTurn) return;
         if (CurrentSubPhase == PlayerSubPhase.Animating) return;
         if (_waitingForAoOConfirmation) return;
         if (InventoryUI != null && InventoryUI.IsOpen) return;
         if (SkillsUI != null && SkillsUI.IsOpen) return;
+        if (CharacterSheetUI != null && CharacterSheetUI.IsOpen) return;
 
         bool clicked = false;
         Vector3 mouseScreenPos = Vector3.zero;
@@ -476,10 +479,47 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private void HandleCharacterSheetInput()
+    {
+        bool cPressed = false;
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetKeyDown(KeyCode.C))
+            cPressed = true;
+#endif
+
+#if ENABLE_INPUT_SYSTEM
+        if (!cPressed)
+        {
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (keyboard != null && keyboard.cKey.wasPressedThisFrame)
+                cPressed = true;
+        }
+#endif
+
+        if (cPressed && CharacterSheetUI != null)
+        {
+            if (CharacterSheetUI.IsOpen)
+            {
+                Debug.Log("[UI] C pressed - closing Character Sheet");
+                CharacterSheetUI.Close();
+                if (IsPlayerTurn && ActivePC != null && CurrentSubPhase == PlayerSubPhase.ChoosingAction)
+                    ShowActionChoices();
+            }
+            else if (IsPlayerTurn && ActivePC != null)
+            {
+                Debug.Log("[UI] C pressed - opening Character Sheet");
+                CharacterSheetUI.Toggle(ActivePC);
+            }
+        }
+    }
+
     private void CloseInventoryIfOpen()
     {
         if (InventoryUI != null && InventoryUI.IsOpen)
             InventoryUI.Close();
+        if (CharacterSheetUI != null && CharacterSheetUI.IsOpen)
+            CharacterSheetUI.Close();
     }
 
     // ========== DEFAULT CHARACTER SETUP (Quick Start / No Creation UI) ==========
