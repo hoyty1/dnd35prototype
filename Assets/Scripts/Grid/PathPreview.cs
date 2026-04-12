@@ -15,7 +15,7 @@ public class PathPreview : MonoBehaviour
     // Visual settings
     private static readonly Color PathColor = new Color(1f, 0.9f, 0.2f, 0.85f); // Bright yellow
     private const float LineWidth = 0.08f;
-    private const float YOffset = 0f; // 2D game, no Y offset needed
+    private const float ZOffset = -0.5f; // Bring line forward (closer to camera) so it renders above grid
     private const int SortingOrder = 5; // Above grid (0) but below characters
 
     void Awake()
@@ -84,13 +84,13 @@ public class PathPreview : MonoBehaviour
 
         _currentPath.Clear();
 
-        // Start from character position
-        _currentPath.Add(SquareGridUtils.GridToWorld(startPos));
+        // Start from character position (use grid center, not character transform which may vary)
+        _currentPath.Add(NormalizePoint(SquareGridUtils.GridToWorld(startPos)));
 
         // Add each cell in the path
         foreach (var cell in pathCells)
         {
-            _currentPath.Add(SquareGridUtils.GridToWorld(cell));
+            _currentPath.Add(NormalizePoint(SquareGridUtils.GridToWorld(cell)));
         }
 
         // Set line renderer positions
@@ -110,6 +110,15 @@ public class PathPreview : MonoBehaviour
         _lineRenderer.material.mainTextureScale = new Vector2(totalLength * 3f, 1f);
 
         _lineRenderer.enabled = true;
+    }
+
+    /// <summary>
+    /// Normalize a world-space point for the line renderer.
+    /// Ensures all points share a consistent Z depth (no unwanted vertical angles in 2D).
+    /// </summary>
+    private Vector3 NormalizePoint(Vector3 p)
+    {
+        return new Vector3(p.x, p.y, ZOffset);
     }
 
     /// <summary>

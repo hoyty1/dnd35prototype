@@ -127,11 +127,15 @@ public class SquareGrid : MonoBehaviour
         var visited = new HashSet<Vector2Int>();
         int tieCounter = 0;
 
-        const int THREAT_COST = 50; // Very high cost for threatened squares (but not infinite)
-        const int NORMAL_COST = 1;
+        const int THREAT_COST = 100; // Very high cost for threatened squares (but not infinite)
+        // Use weighted costs so A* prefers straight-line paths over zig-zag diagonals.
+        // Orthogonal = 2, Diagonal = 3 (approximates √2 ratio and breaks cost ties).
+        // This only affects path SELECTION; actual D&D 3.5 movement costs are calculated separately.
+        const int ORTH_COST = 2;
+        const int DIAG_COST = 3;
 
         gScore[start] = 0;
-        int hStart = SquareGridUtils.ChebyshevDistance(start, destination);
+        int hStart = AStarHeuristic(start, destination);
         openSet.Add((hStart, tieCounter++, start));
 
         while (openSet.Count > 0)
@@ -173,12 +177,9 @@ public class SquareGrid : MonoBehaviour
                 // Check occupancy (destination is OK even if occupied for pathfinding purposes)
                 if (cell.IsOccupied && neighbor != destination) continue;
 
-                // Calculate step cost
-                int stepCost = NORMAL_COST;
-
-                // Diagonal steps may cost more (D&D 3.5 alternating diagonals)
-                if (SquareGridUtils.IsDiagonalStep(current, neighbor))
-                    stepCost = NORMAL_COST; // Simplified: we use Chebyshev for A* heuristic
+                // Calculate step cost (weighted: orthogonal < diagonal to prefer straight paths)
+                bool isDiag = SquareGridUtils.IsDiagonalStep(current, neighbor);
+                int stepCost = isDiag ? DIAG_COST : ORTH_COST;
 
                 // Add threat penalty for moving into a threatened square
                 if (threatenedSquares != null && threatenedSquares.Contains(current))
@@ -196,7 +197,7 @@ public class SquareGrid : MonoBehaviour
                 {
                     cameFrom[neighbor] = current;
                     gScore[neighbor] = tentativeG;
-                    int h = SquareGridUtils.ChebyshevDistance(neighbor, destination);
+                    int h = AStarHeuristic(neighbor, destination);
                     openSet.Add((tentativeG + h, tieCounter++, neighbor));
                 }
             }
@@ -213,6 +214,20 @@ public class SquareGrid : MonoBehaviour
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Admissible heuristic for the weighted A* (ORTH_COST=2, DIAG_COST=3).
+    /// h(n) = min(dx,dy)*3 + |dx-dy|*2, which equals the optimal weighted cost
+    /// and is therefore both admissible and consistent.
+    /// </summary>
+    private static int AStarHeuristic(Vector2Int a, Vector2Int b)
+    {
+        int dx = Mathf.Abs(b.x - a.x);
+        int dy = Mathf.Abs(b.y - a.y);
+        int diag = Mathf.Min(dx, dy);
+        int orth = Mathf.Abs(dx - dy);
+        return diag * 3 + orth * 2;
     }
 
     /// <summary>
