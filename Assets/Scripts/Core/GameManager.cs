@@ -97,6 +97,10 @@ public class GameManager : MonoBehaviour
     // ========== PATH PREVIEW ==========
     private PathPreview _pathPreview;
 
+    // ========== HOVER MARKER ==========
+    private HoverMarker _hoverMarker;
+    private Vector2Int _lastHoverMarkerCoord = new Vector2Int(-999, -999);
+
     /// <summary>Current combat round number (starts at 1).</summary>
     private int _currentRound = 0;
 
@@ -119,6 +123,10 @@ public class GameManager : MonoBehaviour
         // Initialize path preview for movement hover
         var previewGO = new GameObject("PathPreview");
         _pathPreview = previewGO.AddComponent<PathPreview>();
+
+        // Initialize hover marker (X indicator on hovered square)
+        var markerGO = new GameObject("HoverMarker");
+        _hoverMarker = markerGO.AddComponent<HoverMarker>();
 
         // Initialize icon system
         IconManager.Init();
@@ -371,6 +379,9 @@ public class GameManager : MonoBehaviour
 
         // Update path preview during movement phase (runs every frame, not just on click)
         UpdatePathPreview();
+
+        // Update hover X marker during movement phase
+        UpdateHoverMarker();
 
         bool clicked = false;
         Vector3 mouseScreenPos = Vector3.zero;
@@ -1152,8 +1163,9 @@ public class GameManager : MonoBehaviour
 
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
 
-        // Hide movement path preview when leaving movement phase
+        // Hide movement path preview and hover marker when leaving movement phase
         if (_pathPreview != null) _pathPreview.HidePath();
+        if (_hoverMarker != null) _hoverMarker.Hide();
 
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
@@ -1884,6 +1896,77 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // ========== HOVER MARKER ==========
+
+    /// <summary>
+    /// Updates the X hover marker to show which grid square the mouse is over
+    /// during the movement phase. Only updates when the hovered cell changes.
+    /// </summary>
+    private void UpdateHoverMarker()
+    {
+        if (_hoverMarker == null) return;
+
+        // Only show during movement sub-phase
+        if (CurrentSubPhase != PlayerSubPhase.Moving || ActivePC == null)
+        {
+            if (_hoverMarker.IsVisible)
+            {
+                _hoverMarker.Hide();
+                _lastHoverMarkerCoord = new Vector2Int(-999, -999);
+            }
+            return;
+        }
+
+        if (_mainCam == null) return;
+
+        // Get mouse position in world space
+        Vector3 mouseScreenPos = Vector3.zero;
+#if ENABLE_LEGACY_INPUT_MANAGER
+        mouseScreenPos = Input.mousePosition;
+#endif
+#if ENABLE_INPUT_SYSTEM
+        var mouseDev = UnityEngine.InputSystem.Mouse.current;
+        if (mouseDev != null)
+            mouseScreenPos = mouseDev.position.ReadValue();
+#endif
+
+        // Hide if pointer is over UI
+        if (UnityEngine.EventSystems.EventSystem.current != null &&
+            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        {
+            if (_hoverMarker.IsVisible)
+            {
+                _hoverMarker.Hide();
+                _lastHoverMarkerCoord = new Vector2Int(-999, -999);
+            }
+            return;
+        }
+
+        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        Vector2Int gridCoord = SquareGridUtils.WorldToGrid(worldPoint);
+
+        // Skip if same cell as last frame
+        if (gridCoord == _lastHoverMarkerCoord) return;
+        _lastHoverMarkerCoord = gridCoord;
+
+        // Check if the hovered cell is a valid grid cell
+        SquareCell hoveredCell = Grid.GetCell(gridCoord);
+        if (hoveredCell == null)
+        {
+            _hoverMarker.Hide();
+            return;
+        }
+
+        // Determine color: white for valid movement destinations, red-ish for invalid
+        bool isValidDestination = _highlightedCells.Contains(hoveredCell)
+                                  && gridCoord != ActivePC.GridPosition;
+        Color markerColor = isValidDestination
+            ? Color.white
+            : new Color(1f, 0.3f, 0.3f, 0.6f);
+
+        _hoverMarker.ShowAt(hoveredCell.transform.position, markerColor);
+    }
+
     /// <summary>
     /// Get all characters in combat for AoO threat calculations.
     /// </summary>
@@ -2187,8 +2270,9 @@ public class GameManager : MonoBehaviour
 
     private void ExecuteMovement(CharacterController pc, SquareCell cell)
     {
-        // Hide path preview immediately when movement begins
+        // Hide path preview and hover marker immediately when movement begins
         if (_pathPreview != null) _pathPreview.HidePath();
+        if (_hoverMarker != null) _hoverMarker.Hide();
 
         if (pc.Actions.HasMoveAction)
         {
