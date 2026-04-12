@@ -892,7 +892,142 @@ public class CharacterSheetUI : MonoBehaviour
 
         AddSeparator(content);
 
-        // Group by spell level
+        bool isWizard = stats.IsWizard;
+
+        if (isWizard)
+        {
+            // ======== WIZARD: Show slot-based prepared spells ========
+            RefreshWizardSpellsTab(content, spellComp);
+        }
+        else
+        {
+            // ======== CLERIC (and others): Show standard spell list ========
+            RefreshStandardSpellsTab(content, spellComp);
+        }
+    }
+
+    /// <summary>
+    /// Refresh the spells tab for Wizards using the D&D 3.5e slot-based preparation system.
+    /// Shows: Prepared Spells (with slot counts), then Spellbook contents.
+    /// </summary>
+    private void RefreshWizardSpellsTab(Transform content, SpellcastingComponent spellComp)
+    {
+        // --- PREPARED SPELLS SECTION ---
+        AddLine(content, "PREPARED SPELLS", 11, new Color(0.9f, 0.8f, 0.4f), FontStyle.Bold, 15);
+
+        int maxLevel = spellComp.GetHighestSlotLevel();
+        for (int lvl = 0; lvl <= maxLevel; lvl++)
+        {
+            var slotsAtLevel = spellComp.GetSlotsForLevel(lvl);
+            if (slotsAtLevel.Count == 0) continue;
+
+            var availableSlots = spellComp.GetAvailableSlotsForLevel(lvl);
+            string levelLabel = lvl == 0 ? "Cantrips (Level 0)" : $"Level {lvl} Spells";
+            string slotCountStr = $"  ({availableSlots.Count}/{slotsAtLevel.Count} available)";
+            AddLine(content, levelLabel + slotCountStr, 11, GoldText, FontStyle.Bold, 16);
+
+            // Show each individual slot
+            for (int i = 0; i < slotsAtLevel.Count; i++)
+            {
+                var slot = slotsAtLevel[i];
+                string status;
+                Color slotColor;
+                string spellName;
+
+                if (slot.IsEmpty)
+                {
+                    status = "\u25cb"; // ○
+                    spellName = "(empty)";
+                    slotColor = DimText;
+                }
+                else if (slot.IsUsed)
+                {
+                    status = "\u2717"; // ✗
+                    spellName = slot.PreparedSpell.Name;
+                    slotColor = new Color(0.5f, 0.3f, 0.3f); // dim red
+                }
+                else
+                {
+                    status = "\u2713"; // ✓
+                    spellName = slot.PreparedSpell.Name;
+                    slotColor = new Color(0.5f, 0.9f, 0.5f); // green
+                }
+
+                var slotGO = new GameObject($"Slot_{lvl}_{i}");
+                slotGO.transform.SetParent(content, false);
+                var sle = slotGO.AddComponent<LayoutElement>();
+                sle.preferredHeight = 15;
+                sle.minHeight = 15;
+                slotGO.AddComponent<RectTransform>();
+
+                string slotText = $"  {status} Slot {i + 1}: {spellName}";
+                if (slot.IsUsed) slotText += " [USED]";
+
+                MakeText(slotGO.transform, "SlotInfo", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+                    V2(10, 0), V2(300, 0), slotText, 11, slotColor, TextAnchor.MiddleLeft);
+
+                if (slot.HasSpell && !slot.IsEmpty)
+                {
+                    MakeText(slotGO.transform, "School", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+                        V2(280, 0), V2(100, 0), slot.PreparedSpell.School ?? "", 10, DimText, TextAnchor.MiddleLeft);
+                }
+            }
+        }
+
+        AddSeparator(content);
+
+        // --- SPELLBOOK SECTION ---
+        AddLine(content, "SPELLBOOK", 11, new Color(0.6f, 0.7f, 0.9f), FontStyle.Bold, 15);
+
+        var allSpells = spellComp.KnownSpells;
+        if (allSpells == null || allSpells.Count == 0)
+        {
+            AddLine(content, "No spells in spellbook.", 12, DimText);
+            return;
+        }
+
+        int maxKnownLevel = allSpells.Max(s => s.SpellLevel);
+        for (int lvl = 0; lvl <= maxKnownLevel; lvl++)
+        {
+            var spellsAtLevel = allSpells.Where(s => s.SpellLevel == lvl).OrderBy(s => s.Name).ToList();
+            if (spellsAtLevel.Count == 0) continue;
+
+            string levelLabel = lvl == 0 ? "Cantrips" : $"Level {lvl}";
+            AddLine(content, levelLabel, 11, new Color(0.6f, 0.7f, 0.9f), FontStyle.Normal, 14);
+
+            foreach (var spell in spellsAtLevel)
+            {
+                int prepCount = spellComp.CountTotalPreparedSpell(spell);
+                string prepStr = prepCount > 0 ? $" (×{prepCount} prepared)" : "";
+                Color spellColor = prepCount > 0 ? LightText : DimText;
+
+                var spellGO = new GameObject($"Book_{spell.SpellId}");
+                spellGO.transform.SetParent(content, false);
+                var sle = spellGO.AddComponent<LayoutElement>();
+                sle.preferredHeight = 15;
+                sle.minHeight = 15;
+                spellGO.AddComponent<RectTransform>();
+
+                MakeText(spellGO.transform, "Name", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+                    V2(10, 0), V2(200, 0), $"  \u2022 {spell.Name}{prepStr}", 11, spellColor, TextAnchor.MiddleLeft);
+
+                MakeText(spellGO.transform, "School", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+                    V2(215, 0), V2(100, 0), spell.School ?? "", 10, DimText, TextAnchor.MiddleLeft);
+
+                if (spell.IsPlaceholder)
+                {
+                    MakeText(spellGO.transform, "PH", V2(0, 0), V2(0, 1), V2(0, 0.5f),
+                        V2(320, 0), V2(60, 0), "[PH]", 9, new Color(0.9f, 0.7f, 0.2f), TextAnchor.MiddleLeft);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Refresh spells tab for non-wizard casters (Cleric, etc.) using standard spell list.
+    /// </summary>
+    private void RefreshStandardSpellsTab(Transform content, SpellcastingComponent spellComp)
+    {
         var allSpells = spellComp.KnownSpells;
         if (allSpells == null || allSpells.Count == 0)
         {

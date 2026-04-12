@@ -1092,6 +1092,7 @@ public class CombatUI : MonoBehaviour
         float yOffset = 0f; // grows downward from top of content
 
         int highestLevel = spellComp.GetHighestSlotLevel();
+        bool isWizard = spellComp.Stats != null && spellComp.Stats.IsWizard;
 
         for (int level = 0; level <= highestLevel; level++)
         {
@@ -1132,7 +1133,9 @@ public class CombatUI : MonoBehaviour
             {
                 foreach (var spell in preparedAtLevel)
                 {
-                    CreateSpellButton(content, spell, yOffset, buttonHeight, spellComp, hasMetamagic);
+                    // For Wizards: show count of available prepared slots for this spell
+                    int preparedCount = isWizard ? spellComp.CountAvailablePreparedSpell(spell) : 0;
+                    CreateSpellButton(content, spell, yOffset, buttonHeight, spellComp, hasMetamagic, isWizard, preparedCount);
                     yOffset += buttonHeight + spacing;
                 }
             }
@@ -1171,9 +1174,11 @@ public class CombatUI : MonoBehaviour
 
     /// <summary>
     /// Creates a spell button inside the scrollable content area at a given pixel offset from top.
+    /// For Wizards: shows prepared count (e.g., "Magic Missile ×2") from slot-based preparation.
     /// </summary>
     private void CreateSpellButton(GameObject parent, SpellData spell, float yOffset,
-        float height, SpellcastingComponent spellComp, bool hasMetamagic)
+        float height, SpellcastingComponent spellComp, bool hasMetamagic,
+        bool isWizard = false, int preparedCount = 0)
     {
         // Determine color based on effect type
         Color btnColor;
@@ -1197,7 +1202,9 @@ public class CombatUI : MonoBehaviour
         else if (spell.EffectType == SpellEffectType.Buff)
             effectStr = $" | +{spell.BuffACBonus} AC";
 
-        string label = $"{spell.Name} ({rangeStr}){effectStr}";
+        // For Wizards: show how many times this spell is prepared (×N)
+        string countStr = (isWizard && preparedCount > 1) ? $" ×{preparedCount}" : "";
+        string label = $"{spell.Name}{countStr} ({rangeStr}){effectStr}";
 
         // Create button using pixel-based positioning within scroll content
         string prefix = hasMetamagic ? "⚡ " : "";

@@ -49,6 +49,7 @@ public class GameManager : MonoBehaviour
     public CharacterSheetUI CharacterSheetUI;
     public CharacterCreationUI CharacterCreationUI;
     public SkillsUIPanel SkillsUI;
+    public SpellPreparationUI SpellPreparationUI;
 
     /// <summary>Whether the game is waiting for character creation to complete.</summary>
     public bool WaitingForCharacterCreation { get; private set; }
@@ -1538,19 +1539,40 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // Determine which slot level to consume
+        // Consume spell slot using D&D 3.5e slot-based system
         int slotLevelToConsume = _pendingSpell.SpellLevel;
-        if (_pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic)
+        bool hasMetamagicApplied = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic;
+
+        if (hasMetamagicApplied)
         {
             slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
             Debug.Log($"[GameManager] Metamagic: consuming level {slotLevelToConsume} slot " +
                       $"(base {_pendingSpell.SpellLevel} + {slotLevelToConsume - _pendingSpell.SpellLevel} metamagic)");
         }
 
-        // Consume spell slot (cantrips without metamagic are free)
-        if (slotLevelToConsume > 0)
+        // Consume spell slot
+        // For Wizards: use slot-based system (CastWizardSpellFromSlot)
+        // For Clerics: use traditional slot counter
+        if (slotLevelToConsume > 0 || (caster.Stats.IsWizard && slotLevelToConsume == 0))
         {
-            if (!spellComp.ConsumeSlot(slotLevelToConsume))
+            bool consumed;
+            if (caster.Stats.IsWizard)
+            {
+                if (hasMetamagicApplied)
+                {
+                    consumed = spellComp.CastWizardSpellWithMetamagic(_pendingSpell, _pendingMetamagic);
+                }
+                else
+                {
+                    consumed = spellComp.CastWizardSpellFromSlot(_pendingSpell);
+                }
+            }
+            else
+            {
+                consumed = slotLevelToConsume > 0 ? spellComp.ConsumeSlot(slotLevelToConsume) : true;
+            }
+
+            if (!consumed)
             {
                 Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} spell slot!");
                 ShowActionChoices();

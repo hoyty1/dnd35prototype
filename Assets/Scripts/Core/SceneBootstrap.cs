@@ -808,6 +808,11 @@ public class SceneBootstrap : MonoBehaviour
             SpellSelectionUI spellUI = canvas.gameObject.AddComponent<SpellSelectionUI>();
             spellUI.BuildUI(canvas);
             ccUI.SpellUI = spellUI;
+
+            // Spell preparation UI for Wizards (D&D 3.5e slot-based preparation)
+            SpellPreparationUI spellPrepUI = canvas.gameObject.AddComponent<SpellPreparationUI>();
+            spellPrepUI.BuildUI(canvas);
+            gm.SpellPreparationUI = spellPrepUI;
         }
 
         StartCoroutine(WireButtons(combatUI));

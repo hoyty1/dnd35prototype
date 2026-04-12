@@ -1,0 +1,91 @@
+using UnityEngine;
+
+/// <summary>
+/// Represents a single spell slot in D&D 3.5e spell preparation.
+/// Each slot holds a specific level and can be filled with one spell from the spellbook.
+/// Wizards prepare spells by assigning them to individual slots.
+/// The same spell can be prepared in multiple slots.
+///
+/// D&D 3.5e Rules:
+/// - Wizards prepare spells from their spellbook into slots each day after rest.
+/// - Each slot holds exactly one spell of that slot's level.
+/// - The same spell can fill multiple slots (e.g., Magic Missile in 3 slots).
+/// - Casting consumes a specific slot (marks it as used).
+/// - After rest, all slots are restored (IsUsed = false) but prepared spells remain.
+/// - Wizard can optionally re-prepare different spells after rest.
+/// - Cantrips (level 0) also use slots but are not consumed on cast in some interpretations.
+///   In this implementation, cantrips DO consume slots per strict 3.5e RAW.
+/// </summary>
+[System.Serializable]
+public class SpellSlot
+{
+    /// <summary>Spell level this slot is for (0 = cantrip, 1 = 1st, 2 = 2nd, etc.)</summary>
+    public int Level;
+
+    /// <summary>The spell prepared in this slot. Null if the slot is empty.</summary>
+    public SpellData PreparedSpell;
+
+    /// <summary>Whether this slot has been used (spell cast) today.</summary>
+    public bool IsUsed;
+
+    /// <summary>Create a new empty spell slot at the given level.</summary>
+    public SpellSlot(int level)
+    {
+        Level = level;
+        PreparedSpell = null;
+        IsUsed = false;
+    }
+
+    /// <summary>Create a spell slot with a specific spell already prepared.</summary>
+    public SpellSlot(int level, SpellData spell)
+    {
+        Level = level;
+        PreparedSpell = spell;
+        IsUsed = false;
+    }
+
+    /// <summary>Whether this slot can be cast (has a spell and hasn't been used).</summary>
+    public bool CanCast => PreparedSpell != null && !IsUsed;
+
+    /// <summary>Whether this slot has a spell prepared (regardless of used status).</summary>
+    public bool HasSpell => PreparedSpell != null;
+
+    /// <summary>Whether this slot is empty (no spell prepared).</summary>
+    public bool IsEmpty => PreparedSpell == null;
+
+    /// <summary>Mark this slot as used (spell has been cast).</summary>
+    public void Cast()
+    {
+        IsUsed = true;
+    }
+
+    /// <summary>
+    /// Restore this slot after rest. Marks as not used.
+    /// The prepared spell stays the same unless the wizard re-prepares.
+    /// </summary>
+    public void Rest()
+    {
+        IsUsed = false;
+    }
+
+    /// <summary>Clear this slot (remove prepared spell and reset used status).</summary>
+    public void Clear()
+    {
+        PreparedSpell = null;
+        IsUsed = false;
+    }
+
+    /// <summary>Prepare a spell in this slot (replaces any existing spell).</summary>
+    public void Prepare(SpellData spell)
+    {
+        PreparedSpell = spell;
+        IsUsed = false;
+    }
+
+    public override string ToString()
+    {
+        string spellName = PreparedSpell != null ? PreparedSpell.Name : "(empty)";
+        string status = IsUsed ? "USED" : "ready";
+        return $"Lv{Level} [{spellName}] ({status})";
+    }
+}
