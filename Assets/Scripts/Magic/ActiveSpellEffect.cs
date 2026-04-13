@@ -44,8 +44,11 @@ public class ActiveSpellEffect
     public string AppliedStatName;     // e.g., "STR", "DEX"
     public int AppliedStatBonus;
 
-    /// <summary>The bonus type for stacking rules (e.g., "morale", "armor", "deflection").</summary>
-    public string BonusType;
+    /// <summary>LEGACY: The bonus type string for backward compatibility.</summary>
+    public string BonusTypeLegacy;
+
+    /// <summary>D&D 3.5e bonus type enum for proper stacking rule enforcement.</summary>
+    public BonusType BonusTypeEnum;
 
     /// <summary>Whether this effect has been fully applied to the character's stats.</summary>
     public bool IsApplied;
@@ -59,7 +62,8 @@ public class ActiveSpellEffect
         CasterLevel = casterLevel;
         AffectedCharacterName = affectedName;
         DurationType = spell.DurationType;
-        BonusType = spell.BuffType ?? "";
+        BonusTypeLegacy = spell.BuffType ?? "";
+        BonusTypeEnum = spell.GetEffectiveBonusType();
         RemainingRounds = CalculateDurationRounds(spell, casterLevel);
     }
 
@@ -182,7 +186,8 @@ public class ActiveSpellEffect
         if (AppliedTempHP != 0) mods += $" TempHP:{AppliedTempHP}";
         if (!string.IsNullOrEmpty(AppliedStatName)) mods += $" {AppliedStatName}:{AppliedStatBonus:+#;-#}";
 
-        return $"{spellName} [{GetDurationDisplayString()}] from {CasterName}{mods}";
+        string typeStr = BonusTypeEnum != BonusType.Untyped ? $" ({BonusTypeHelper.GetDisplayName(BonusTypeEnum)})" : "";
+        return $"{spellName}{typeStr} [{GetDurationDisplayString()}] from {CasterName}{mods}";
     }
 }
 

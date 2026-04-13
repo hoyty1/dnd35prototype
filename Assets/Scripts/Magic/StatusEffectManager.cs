@@ -7,9 +7,12 @@ using UnityEngine;
 /// Tracks durations, handles effect application/removal, and enforces D&D 3.5e stacking rules.
 ///
 /// D&D 3.5e Stacking Rules (PHB p.177):
-///   - Most bonuses of the same TYPE do not stack (only the highest applies).
-///   - Dodge bonuses stack. Circumstance bonuses stack.
-///   - Untyped bonuses stack.
+///   - Most bonuses of the same TYPE to the same statistic do NOT stack (only the highest applies).
+///   - Dodge bonuses always stack.
+///   - Circumstance bonuses always stack.
+///   - Untyped bonuses always stack.
+///   - House Rule: Luck bonuses stack (per user request).
+///   - Different bonus types to the same stat DO stack.
 ///   - Penalties always stack.
 ///   - Same spell from multiple casters: only the best applies (no stacking).
 ///
@@ -35,8 +38,11 @@ public class StatusEffectManager : MonoBehaviour
 
     /// <summary>
     /// Add a new spell effect to this character.
-    /// Handles D&D 3.5e stacking rules: same spell doesn't stack (replaces with longer duration),
-    /// same bonus type doesn't stack (only highest applies).
+    /// Handles D&D 3.5e stacking rules:
+    ///   1. Same spell doesn't stack (replaces with longer duration).
+    ///   2. Same bonus type to same stat doesn't stack (highest only) — unless stackable type.
+    ///   3. Different bonus types to same stat DO stack.
+    ///   4. Stackable types: Dodge, Untyped, Circumstance, Luck (house rule).
     /// Returns the created ActiveSpellEffect, or null if the effect was suppressed.
     /// </summary>
     public ActiveSpellEffect AddEffect(SpellData spell, string casterName, int casterLevel)
@@ -44,12 +50,12 @@ public class StatusEffectManager : MonoBehaviour
         if (spell == null || _stats == null) return null;
 
         var effect = new ActiveSpellEffect(spell, casterName, casterLevel, _stats.CharacterName);
+        BonusType bonusType = spell.GetEffectiveBonusType();
 
-        // Check for same spell already active (D&D 3.5e: same spell doesn't stack, use longer duration)
+        // === RULE 1: Same spell doesn't stack (D&D 3.5e: use longer duration) ===
         var existingSameSpell = ActiveEffects.FirstOrDefault(e => e.Spell.SpellId == spell.SpellId);
         if (existingSameSpell != null)
         {
-            // If new duration is longer, replace; otherwise ignore
             if (effect.RemainingRounds > existingSameSpell.RemainingRounds ||
                 (effect.RemainingRounds == -1 && existingSameSpell.RemainingRounds != -1))
             {
@@ -64,34 +70,52 @@ public class StatusEffectManager : MonoBehaviour
             }
         }
 
-        // Check for same bonus type stacking (D&D 3.5e: most typed bonuses don't stack)
-        if (!string.IsNullOrEmpty(spell.BuffType) && spell.BuffType != "untyped" && spell.BuffType != "dodge")
+        // === RULE 2: Same bonus type stacking check ===
+        // Only applies to "core" D&D bonus types that have standard stacking rules.
+        // Spell-specific types (MirrorImage, Invisibility, etc.) only check same-spell (handled above).
+        if (BonusTypeHelper.IsCoreType(bonusType) && !BonusTypeHelper.DoesStack(bonusType))
         {
+            // Non-stackable type — check if another effect of the same bonus type exists
+            // We need to check per-stat: same bonus type to the same stat doesn't stack.
+            // For simplicity, we compare effects with the same BonusTypeEnum.
             var existingSameType = ActiveEffects.Where(e =>
-                e.BonusType == spell.BuffType && e.Spell.SpellId != spell.SpellId).ToList();
+                e.BonusTypeEnum == bonusType && e.Spell.SpellId != spell.SpellId).ToList();
 
-            foreach (var existing in existingSameType)
+            if (existingSameType.Count > 0)
             {
-                // For same bonus type, check if the new effect is stronger
-                // Compare the primary bonus value
-                int existingPower = GetEffectPower(existing);
-                int newPower = GetEffectPowerFromSpell(spell);
+                // Check if bonuses overlap on the same stats
+                foreach (var existing in existingSameType)
+                {
+                    bool overlaps = DoBonusesOverlap(spell, existing);
+                    if (!overlaps) continue; // Different stats, both apply
 
-                if (newPower <= existingPower)
-                {
-                    Debug.Log($"[StatusEffect] {_stats.CharacterName}: {spell.Name} ({spell.BuffType} +{newPower}) " +
-                              $"suppressed by {existing.Spell.Name} ({existing.BonusType} +{existingPower})");
-                    return null; // Don't apply, existing is equal or better
-                }
-                else
-                {
-                    // New is stronger, remove old
-                    Debug.Log($"[StatusEffect] {_stats.CharacterName}: {spell.Name} ({spell.BuffType} +{newPower}) " +
-                              $"replaces {existing.Spell.Name} ({existing.BonusType} +{existingPower})");
-                    RemoveEffect(existing);
+                    int existingPower = GetEffectPower(existing);
+                    int newPower = GetEffectPowerFromSpell(spell);
+
+                    string bonusTypeName = BonusTypeHelper.GetDisplayName(bonusType);
+
+                    if (newPower <= existingPower)
+                    {
+                        // New effect is weaker or equal — suppressed
+                        string logMsg = $"⚠ {spell.Name} doesn't stack with existing {bonusTypeName} bonus " +
+                                        $"from {existing.Spell.Name} (+{existingPower} vs +{newPower})";
+                        Debug.Log($"[StatusEffect] {_stats.CharacterName}: {logMsg}");
+                        LogCombatMessage($"{_stats.CharacterName}: {logMsg}");
+                        return null;
+                    }
+                    else
+                    {
+                        // New effect is stronger — replace the old one
+                        string logMsg = $"⚠ {spell.Name} ({bonusTypeName} +{newPower}) replaces " +
+                                        $"{existing.Spell.Name} ({bonusTypeName} +{existingPower})";
+                        Debug.Log($"[StatusEffect] {_stats.CharacterName}: {logMsg}");
+                        LogCombatMessage($"{_stats.CharacterName}: {logMsg}");
+                        RemoveEffect(existing);
+                    }
                 }
             }
         }
+        // Stackable types (Dodge, Untyped, Circumstance, Luck): no stacking check needed, all apply
 
         // Store the stat modifications that will be applied
         effect.AppliedAttackBonus = spell.BuffAttackBonus;
@@ -110,7 +134,9 @@ public class StatusEffectManager : MonoBehaviour
 
         ActiveEffects.Add(effect);
 
-        Debug.Log($"[StatusEffect] {_stats.CharacterName}: {effect.GetDetailedString()}");
+        // Log with bonus type info
+        string typeStr = bonusType != BonusType.Untyped ? $" [{BonusTypeHelper.GetDisplayName(bonusType)}]" : "";
+        Debug.Log($"[StatusEffect] {_stats.CharacterName}: Applied{typeStr} — {effect.GetDetailedString()}");
         return effect;
     }
 
@@ -205,6 +231,34 @@ public class StatusEffectManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Check if the character has an active effect of a specific bonus type.
+    /// </summary>
+    public bool HasBonusType(BonusType type)
+    {
+        return ActiveEffects.Any(e => e.BonusTypeEnum == type);
+    }
+
+    /// <summary>
+    /// Get the total bonus of a specific type currently active on the character.
+    /// For non-stackable types, returns the highest value.
+    /// For stackable types (Dodge, Untyped, Circumstance, Luck), returns the sum.
+    /// </summary>
+    public int GetTotalBonusOfType(BonusType type)
+    {
+        var matching = ActiveEffects.Where(e => e.BonusTypeEnum == type).ToList();
+        if (matching.Count == 0) return 0;
+
+        if (BonusTypeHelper.DoesStack(type))
+        {
+            return matching.Sum(e => GetEffectPower(e));
+        }
+        else
+        {
+            return matching.Max(e => GetEffectPower(e));
+        }
+    }
+
+    /// <summary>
     /// Get all active effects as display strings for UI.
     /// </summary>
     public List<string> GetActiveEffectDisplayStrings()
@@ -236,6 +290,49 @@ public class StatusEffectManager : MonoBehaviour
     public int ActiveEffectCount => ActiveEffects.Count;
 
     // ========== PRIVATE HELPERS ==========
+
+    /// <summary>
+    /// Check if two effects' bonuses overlap on the same stats.
+    /// Used to determine if same-type stacking rules apply.
+    /// E.g., two enhancement bonuses to STR overlap, but enhancement to STR and enhancement to DEX don't.
+    /// For general bonuses (attack, damage, saves, AC), they overlap if both modify the same category.
+    /// </summary>
+    private bool DoBonusesOverlap(SpellData newSpell, ActiveSpellEffect existing)
+    {
+        // If both modify the same ability score
+        if (!string.IsNullOrEmpty(newSpell.BuffStatName) && !string.IsNullOrEmpty(existing.AppliedStatName))
+        {
+            if (newSpell.BuffStatName.ToUpper() == existing.AppliedStatName.ToUpper())
+                return true;
+            // Different stats with same bonus type — both can apply
+            // BUT if either also has attack/damage/save/AC bonuses, check those too
+        }
+
+        // If both modify attack bonus
+        if (newSpell.BuffAttackBonus != 0 && existing.AppliedAttackBonus != 0) return true;
+        // If both modify damage bonus
+        if (newSpell.BuffDamageBonus != 0 && existing.AppliedDamageBonus != 0) return true;
+        // If both modify save bonus
+        if (newSpell.BuffSaveBonus != 0 && existing.AppliedSaveBonus != 0) return true;
+        // If both modify AC (armor type)
+        if (newSpell.BuffACBonus != 0 && existing.AppliedACBonus != 0) return true;
+        // If both modify shield bonus
+        if (newSpell.BuffShieldBonus != 0 && existing.AppliedShieldBonus != 0) return true;
+        // If both modify deflection bonus
+        if (newSpell.BuffDeflectionBonus != 0 && existing.AppliedDeflectionBonus != 0) return true;
+
+        // For stat bonuses to DIFFERENT stats with same bonus type, don't count as overlap
+        if (!string.IsNullOrEmpty(newSpell.BuffStatName) && !string.IsNullOrEmpty(existing.AppliedStatName))
+        {
+            if (newSpell.BuffStatName.ToUpper() != existing.AppliedStatName.ToUpper())
+                return false;
+        }
+
+        // If both have stat bonuses and at least one doesn't have a stat name, assume overlap
+        if (newSpell.BuffStatBonus != 0 && existing.AppliedStatBonus != 0) return true;
+
+        return false;
+    }
 
     /// <summary>Apply stat modifications from an effect to the character.</summary>
     private void ApplyStatModifications(ActiveSpellEffect effect)
@@ -375,6 +472,16 @@ public class StatusEffectManager : MonoBehaviour
         power += Mathf.Abs(spell.BuffDeflectionBonus);
         power += Mathf.Abs(spell.BuffStatBonus);
         return power;
+    }
+
+    /// <summary>
+    /// Log a combat message that will be visible to the player.
+    /// Uses the static CombatLog if available.
+    /// </summary>
+    private void LogCombatMessage(string message)
+    {
+        // CombatLog integration: broadcast the stacking message
+        Debug.Log($"[COMBAT LOG] {message}");
     }
 
     /// <summary>Get abbreviated spell name for compact UI display.</summary>

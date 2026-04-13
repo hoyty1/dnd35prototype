@@ -120,6 +120,8 @@ public static partial class SpellDatabase
             BuffACBonus = 4,
             BuffDurationRounds = -1, // Legacy
             BuffType = "armor",
+            BuffBonusType = BonusType.Armor,
+            BonusTypeExplicitlySet = true,
             DurationType = DurationType.Hours,
             DurationValue = 1,
             DurationScalesWithLevel = true,
@@ -140,6 +142,8 @@ public static partial class SpellDatabase
             BuffShieldBonus = 4,
             BuffDurationRounds = 30,
             BuffType = "shield",
+            BuffBonusType = BonusType.Shield,
+            BonusTypeExplicitlySet = true,
             DurationType = DurationType.Minutes,
             DurationValue = 1,
             DurationScalesWithLevel = true,
@@ -161,6 +165,8 @@ public static partial class SpellDatabase
             BuffStatBonus = 2, // +2 size bonus to STR
             BuffDurationRounds = 30,
             BuffType = "enlarge",
+            BuffBonusType = BonusType.Size,
+            BonusTypeExplicitlySet = true,
             AllowsSavingThrow = true, // Fortitude negates (unwilling)
             SavingThrowType = "Fortitude",
             ActionType = SpellActionType.FullRound,
@@ -198,6 +204,8 @@ public static partial class SpellDatabase
             BuffAttackBonus = 20,
             BuffDurationRounds = 1, // Until next attack or end of next round
             BuffType = "insight",
+            BuffBonusType = BonusType.Insight,
+            BonusTypeExplicitlySet = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
@@ -500,6 +508,8 @@ public static partial class SpellDatabase
             BuffDamageBonus = 1,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            BuffBonusType = BonusType.Enhancement,
+            BonusTypeExplicitlySet = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });

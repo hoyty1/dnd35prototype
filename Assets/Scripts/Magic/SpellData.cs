@@ -48,7 +48,27 @@ public class SpellData
     // ========== BUFF/DEBUFF ==========
     public int BuffACBonus;             // AC bonus (Mage Armor = +4)
     public int BuffDurationRounds;      // Duration in rounds (0 = instantaneous, -1 = hours/level) [LEGACY - prefer DurationType system]
-    public string BuffType;             // "armor", "shield", "morale", "deflection", etc. (for stacking rules)
+    public string BuffType;             // LEGACY: "armor", "shield", "morale", etc. — use BuffBonusType enum instead
+
+    /// <summary>
+    /// D&D 3.5e bonus type enum for proper stacking rule enforcement.
+    /// Preferred over the legacy string BuffType field.
+    /// If not explicitly set (Untyped), falls back to parsing BuffType string.
+    /// </summary>
+    public BonusType BuffBonusType;
+
+    /// <summary>Whether BuffBonusType was explicitly set (vs. defaulting to Untyped).</summary>
+    public bool BonusTypeExplicitlySet;
+
+    /// <summary>
+    /// Get the effective BonusType for this spell. If BuffBonusType was explicitly set, use it.
+    /// Otherwise, parse the legacy BuffType string for backward compatibility.
+    /// </summary>
+    public BonusType GetEffectiveBonusType()
+    {
+        if (BonusTypeExplicitlySet) return BuffBonusType;
+        return BonusTypeHelper.FromString(BuffType);
+    }
 
     // ========== DURATION SYSTEM (D&D 3.5e) ==========
     /// <summary>How the spell's duration is measured (Instantaneous, Rounds, Minutes, Hours, Permanent, Concentration).</summary>

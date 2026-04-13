@@ -119,6 +119,8 @@ public static partial class SpellDatabase
             BuffTempHP = 5, // ~average of 1d8
             BuffDurationRounds = 30,
             BuffType = "morale",
+            BuffBonusType = BonusType.Morale,
+            BonusTypeExplicitlySet = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
@@ -137,6 +139,8 @@ public static partial class SpellDatabase
             BuffStatBonus = 4,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            BuffBonusType = BonusType.Enhancement,
+            BonusTypeExplicitlySet = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
@@ -155,6 +159,8 @@ public static partial class SpellDatabase
             BuffStatBonus = 4,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            BuffBonusType = BonusType.Enhancement,
+            BonusTypeExplicitlySet = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
@@ -173,6 +179,8 @@ public static partial class SpellDatabase
             BuffStatBonus = 4,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            BuffBonusType = BonusType.Enhancement,
+            BonusTypeExplicitlySet = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
@@ -191,6 +199,8 @@ public static partial class SpellDatabase
             BuffStatBonus = 4,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            BuffBonusType = BonusType.Enhancement,
+            BonusTypeExplicitlySet = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });

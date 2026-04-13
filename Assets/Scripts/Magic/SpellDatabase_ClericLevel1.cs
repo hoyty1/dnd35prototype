@@ -69,6 +69,8 @@ public static partial class SpellDatabase
             BuffSaveBonus = 1, // vs fear, simplified to all saves
             BuffDurationRounds = 30, // Legacy: 30 rounds at CL3
             BuffType = "morale",
+            BuffBonusType = BonusType.Morale,
+            BonusTypeExplicitlySet = true,
             // Duration system: 1 min/level (D&D 3.5e PHB p.205)
             DurationType = DurationType.Minutes,
             DurationValue = 1,
@@ -90,6 +92,8 @@ public static partial class SpellDatabase
             BuffDeflectionBonus = 2,
             BuffDurationRounds = 30,
             BuffType = "deflection",
+            BuffBonusType = BonusType.Deflection,
+            BonusTypeExplicitlySet = true,
             DurationType = DurationType.Minutes,
             DurationValue = 1,
             DurationScalesWithLevel = true,
@@ -111,6 +115,8 @@ public static partial class SpellDatabase
             BuffDamageBonus = 1,
             BuffDurationRounds = 10,
             BuffType = "luck",
+            BuffBonusType = BonusType.Luck,
+            BonusTypeExplicitlySet = true,
             DurationType = DurationType.Minutes,
             DurationValue = 1,
             DurationScalesWithLevel = false, // Fixed 1 minute
@@ -150,6 +156,8 @@ public static partial class SpellDatabase
             BuffDamageBonus = 1,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            BuffBonusType = BonusType.Enhancement,
+            BonusTypeExplicitlySet = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
