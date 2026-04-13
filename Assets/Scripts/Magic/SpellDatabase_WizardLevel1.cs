@@ -36,9 +36,14 @@ public static partial class SpellDatabase
             Description = "1d4/level fire damage (max 5d4) in 15-ft cone. Reflex half. PHB p.207",
             SpellLevel = 1, School = "Evocation",
             ClassList = new[] { "Wizard" },
-            TargetType = SpellTargetType.SingleEnemy, // Simplified from cone
+            TargetType = SpellTargetType.Area, // Cone AoE from caster
             RangeSquares = 3, // 15-ft cone ~3 squares
             AreaRadius = 3,
+            // AoE properties
+            AoEShapeType = AoEShape.Cone,
+            AoESizeSquares = 3, // 15 ft = 3 squares length
+            AoERangeSquares = 0, // Cone originates from caster (no placement range)
+            AoEFilter = AoETargetFilter.All, // Hits all creatures in cone
             EffectType = SpellEffectType.Damage,
             DamageDice = 4, DamageCount = 3, // 3d4 at CL3
             DamageType = "fire",

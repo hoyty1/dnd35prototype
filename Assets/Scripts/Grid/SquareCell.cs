@@ -35,6 +35,10 @@ public class SquareCell : MonoBehaviour
     // Spell range colors
     private static readonly Color HighlightSpellRange = new Color(0.4f, 0.3f, 0.9f, 0.3f);    // Purple: spell range area
     private static readonly Color HighlightSpellTarget = new Color(0.9f, 0.3f, 0.9f, 0.55f);  // Bright magenta: valid spell target
+    // AoE preview colors
+    private static readonly Color HighlightAoEPreview = new Color(1.0f, 0.5f, 0.0f, 0.45f);   // Orange: AoE shape preview
+    private static readonly Color HighlightAoETarget = new Color(1.0f, 0.2f, 0.2f, 0.6f);     // Bright red: creature in AoE
+    private static readonly Color HighlightAoEAlly = new Color(0.2f, 0.9f, 0.4f, 0.55f);      // Green: ally in AoE (Bless-type)
 
     public void Init(int x, int y)
     {
@@ -85,6 +89,15 @@ public class SquareCell : MonoBehaviour
             case HighlightType.SpellTarget:
                 _sr.color = HighlightSpellTarget;
                 break;
+            case HighlightType.AoEPreview:
+                _sr.color = HighlightAoEPreview;
+                break;
+            case HighlightType.AoETarget:
+                _sr.color = HighlightAoETarget;
+                break;
+            case HighlightType.AoEAlly:
+                _sr.color = HighlightAoEAlly;
+                break;
         }
     }
 
@@ -103,5 +116,8 @@ public enum HighlightType
     RangeMedium,   // 2nd-5th range increments (yellow) - moderate penalty
     RangeFar,      // 6th-10th range increments (orange) - heavy penalty
     SpellRange,    // Spell range area (purple) - shows all hexes in spell range
-    SpellTarget    // Valid spell target (bright magenta) - clickable target within range
+    SpellTarget,   // Valid spell target (bright magenta) - clickable target within range
+    AoEPreview,    // AoE shape preview (orange) - shows affected area before confirming
+    AoETarget,     // Creature in AoE (bright red) - enemy that will be hit
+    AoEAlly        // Ally in AoE (green) - ally that will be buffed
 }

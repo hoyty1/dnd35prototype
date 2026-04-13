@@ -58,7 +58,7 @@ public class GameManager : MonoBehaviour
     public enum TurnPhase { PCTurn, NPCTurn, CombatOver }
 
     // Sub-states for player turns
-    public enum PlayerSubPhase { ChoosingAction, Moving, SelectingAttackTarget, Animating }
+    public enum PlayerSubPhase { ChoosingAction, Moving, SelectingAttackTarget, SelectingAoETarget, Animating }
 
     public TurnPhase CurrentPhase { get; private set; }
     public PlayerSubPhase CurrentSubPhase { get; private set; }
@@ -90,6 +90,11 @@ public class GameManager : MonoBehaviour
     private PendingAttackMode _pendingAttackMode;
     private SpellData _pendingSpell; // Spell selected for casting
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
+
+    // ========== AOE TARGETING STATE ==========
+    private bool _isAoETargeting;                          // Currently in AoE targeting mode
+    private HashSet<Vector2Int> _currentAoECells;          // Cells currently highlighted for AoE preview
+    private Vector2Int _lastAoEHoverPos = new Vector2Int(-1, -1); // Last hovered grid pos for AoE preview
 
     private List<SquareCell> _highlightedCells = new List<SquareCell>();
     private string _lastCombatLog = "";
@@ -398,6 +403,46 @@ public class GameManager : MonoBehaviour
 
         // Update hover X marker during movement phase
         UpdateHoverMarker();
+
+        // Update AoE preview during AoE targeting phase (runs every frame)
+        if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget)
+            UpdateAoEPreview();
+
+        // Right-click to cancel AoE targeting
+        if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget && _isAoETargeting)
+        {
+            bool rightClicked = false;
+#if ENABLE_LEGACY_INPUT_MANAGER
+            if (Input.GetMouseButtonDown(1))
+                rightClicked = true;
+#endif
+#if ENABLE_INPUT_SYSTEM
+            if (!rightClicked)
+            {
+                var rmouse = UnityEngine.InputSystem.Mouse.current;
+                if (rmouse != null && rmouse.rightButton.wasPressedThisFrame)
+                    rightClicked = true;
+            }
+#endif
+            // Also cancel with Escape key
+#if ENABLE_LEGACY_INPUT_MANAGER
+            if (Input.GetKeyDown(KeyCode.Escape))
+                rightClicked = true;
+#endif
+#if ENABLE_INPUT_SYSTEM
+            if (!rightClicked)
+            {
+                var kbd = UnityEngine.InputSystem.Keyboard.current;
+                if (kbd != null && kbd.escapeKey.wasPressedThisFrame)
+                    rightClicked = true;
+            }
+#endif
+            if (rightClicked)
+            {
+                CancelAoETargeting();
+                return;
+            }
+        }
 
         bool clicked = false;
         Vector3 mouseScreenPos = Vector3.zero;
@@ -1387,6 +1432,13 @@ public class GameManager : MonoBehaviour
             Debug.Log($"[GameManager] Metamagic applied: {metamagic.GetSummary(spell.SpellLevel)}");
         }
 
+        // ===== AoE SPELLS: Enter AoE targeting mode =====
+        if (_pendingSpell.AoEShapeType != AoEShape.None)
+        {
+            EnterAoETargetingMode(pc, _pendingSpell);
+            return;
+        }
+
         // Determine targeting based on spell type
         if (_pendingSpell.TargetType == SpellTargetType.Self)
         {
@@ -1694,6 +1746,473 @@ public class GameManager : MonoBehaviour
         _pendingMetamagic = null;
 
         // After standard action, check for remaining actions
+        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+    }
+
+    // ========================================================================
+    // AREA OF EFFECT (AoE) TARGETING AND RESOLUTION
+    // ========================================================================
+
+    /// <summary>
+    /// Enter AoE targeting mode for the given spell.
+    /// Shows the spell's placement range and lets the player aim the AoE.
+    /// </summary>
+    private void EnterAoETargetingMode(CharacterController caster, SpellData spell)
+    {
+        _isAoETargeting = true;
+        _currentAoECells = null;
+        _lastAoEHoverPos = new Vector2Int(-1, -1);
+        _pendingAttackMode = PendingAttackMode.CastSpell;
+        CurrentSubPhase = PlayerSubPhase.SelectingAoETarget;
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI.SetActionButtonsVisible(false);
+
+        // For burst spells, show the valid placement range (where the center can be placed)
+        if (spell.AoEShapeType == AoEShape.Burst)
+        {
+            int range = spell.AoERangeSquares > 0 ? spell.AoERangeSquares : spell.RangeSquares;
+            if (range <= 0) range = 1;
+
+            List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, range);
+            foreach (var cell in rangeCells)
+            {
+                cell.SetHighlight(HighlightType.SpellRange);
+            }
+            // Also highlight caster's position as valid
+            SquareCell casterCell = Grid.GetCell(caster.GridPosition);
+            if (casterCell != null)
+                casterCell.SetHighlight(HighlightType.SpellRange);
+
+            string rangeStr = $"{range * 5} ft";
+            string sizeStr = $"{spell.AoESizeSquares * 5}-ft radius burst";
+            CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} | Range: {rangeStr} | Move mouse to preview, click to cast | Right-click to cancel");
+        }
+        // For cone spells, just show the caster's position - direction is determined by mouse
+        else if (spell.AoEShapeType == AoEShape.Cone)
+        {
+            SquareCell casterCell = Grid.GetCell(caster.GridPosition);
+            if (casterCell != null)
+                casterCell.SetHighlight(HighlightType.Selected);
+
+            string sizeStr = $"{spell.AoESizeSquares * 5}-ft cone";
+            CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} from caster | Move mouse to aim, click to cast | Right-click to cancel");
+        }
+        else if (spell.AoEShapeType == AoEShape.Line)
+        {
+            SquareCell casterCell = Grid.GetCell(caster.GridPosition);
+            if (casterCell != null)
+                casterCell.SetHighlight(HighlightType.Selected);
+
+            string sizeStr = $"{spell.AoESizeSquares * 5}-ft line";
+            CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} from caster | Move mouse to aim, click to cast | Right-click to cancel");
+        }
+
+        Debug.Log($"[AoE] Entered AoE targeting mode: {spell.Name} ({spell.AoEShapeType}, {spell.AoESizeSquares} sq)");
+    }
+
+    /// <summary>
+    /// Called every frame during AoE targeting to update the preview overlay
+    /// based on the current mouse position.
+    /// </summary>
+    private void UpdateAoEPreview()
+    {
+        if (!_isAoETargeting || _pendingSpell == null) return;
+
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        // Get mouse position in grid coordinates
+        Vector3 mouseScreenPos = Vector3.zero;
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        mouseScreenPos = Input.mousePosition;
+#endif
+
+#if ENABLE_INPUT_SYSTEM
+        var mouse = UnityEngine.InputSystem.Mouse.current;
+        if (mouse != null)
+            mouseScreenPos = (Vector3)(Vector2)mouse.position.ReadValue();
+#endif
+
+        if (_mainCam == null) return;
+
+        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        Vector2Int gridPos = SquareGridUtils.WorldToGrid(worldPoint);
+
+        // Only update if hover position changed
+        if (gridPos == _lastAoEHoverPos) return;
+        _lastAoEHoverPos = gridPos;
+
+        // Clear previous AoE preview (but keep range highlights)
+        ClearAoEPreviewHighlights();
+
+        HashSet<Vector2Int> aoeCells = null;
+
+        if (_pendingSpell.AoEShapeType == AoEShape.Burst)
+        {
+            // Check if the hover position is within casting range
+            int range = _pendingSpell.AoERangeSquares > 0 ? _pendingSpell.AoERangeSquares : _pendingSpell.RangeSquares;
+            if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, range))
+                return; // Out of range, don't show preview
+
+            aoeCells = AoESystem.GetBurstCells(gridPos, _pendingSpell.AoESizeSquares, Grid);
+        }
+        else if (_pendingSpell.AoEShapeType == AoEShape.Cone)
+        {
+            aoeCells = AoESystem.GetConeCells(pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares, Grid);
+        }
+        else if (_pendingSpell.AoEShapeType == AoEShape.Line)
+        {
+            aoeCells = AoESystem.GetLineCells(pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares, Grid);
+        }
+
+        if (aoeCells == null || aoeCells.Count == 0) return;
+
+        _currentAoECells = aoeCells;
+
+        bool casterIsPC = IsPC(pc);
+
+        // Highlight the AoE cells
+        foreach (Vector2Int cellPos in aoeCells)
+        {
+            SquareCell cell = Grid.GetCell(cellPos);
+            if (cell == null) continue;
+
+            if (cell.IsOccupied && cell.Occupant != null && !cell.Occupant.Stats.IsDead)
+            {
+                // Determine highlight based on target filter and faction
+                CharacterController occupant = cell.Occupant;
+                bool isAlly = casterIsPC ? PCs.Contains(occupant) : NPCs.Contains(occupant);
+                bool isEnemy = casterIsPC ? NPCs.Contains(occupant) : PCs.Contains(occupant);
+
+                if (_pendingSpell.AoEFilter == AoETargetFilter.AlliesOnly && isAlly)
+                    cell.SetHighlight(HighlightType.AoEAlly);
+                else if (_pendingSpell.AoEFilter == AoETargetFilter.EnemiesOnly && isEnemy)
+                    cell.SetHighlight(HighlightType.AoETarget);
+                else if (_pendingSpell.AoEFilter == AoETargetFilter.All)
+                {
+                    cell.SetHighlight(isEnemy ? HighlightType.AoETarget : HighlightType.AoEAlly);
+                }
+                else
+                    cell.SetHighlight(HighlightType.AoEPreview);
+            }
+            else
+            {
+                cell.SetHighlight(HighlightType.AoEPreview);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Clear only the AoE preview highlights, keeping the spell range highlights intact.
+    /// </summary>
+    private void ClearAoEPreviewHighlights()
+    {
+        if (_currentAoECells == null) return;
+
+        CharacterController pc = ActivePC;
+        Vector2Int casterPos = pc != null ? pc.GridPosition : Vector2Int.zero;
+
+        foreach (Vector2Int cellPos in _currentAoECells)
+        {
+            SquareCell cell = Grid.GetCell(cellPos);
+            if (cell == null) continue;
+
+            // Restore to range highlight if within burst placement range, otherwise clear
+            if (_pendingSpell != null && _pendingSpell.AoEShapeType == AoEShape.Burst)
+            {
+                int range = _pendingSpell.AoERangeSquares > 0 ? _pendingSpell.AoERangeSquares : _pendingSpell.RangeSquares;
+                int dist = SquareGridUtils.GetDistance(casterPos, cellPos);
+                if (dist <= range)
+                    cell.SetHighlight(HighlightType.SpellRange);
+                else
+                    cell.SetHighlight(HighlightType.None);
+            }
+            else
+            {
+                cell.SetHighlight(HighlightType.None);
+            }
+        }
+
+        _currentAoECells = null;
+    }
+
+    /// <summary>
+    /// Handle a click during AoE targeting mode.
+    /// Confirms the AoE placement and resolves the spell.
+    /// </summary>
+    private void HandleAoETargetClick(CharacterController caster, SquareCell clickedCell)
+    {
+        if (_pendingSpell == null || !_isAoETargeting) return;
+
+        Vector2Int targetPos = clickedCell.Coords;
+
+        // Validate range for burst spells
+        if (_pendingSpell.AoEShapeType == AoEShape.Burst)
+        {
+            int range = _pendingSpell.AoERangeSquares > 0 ? _pendingSpell.AoERangeSquares : _pendingSpell.RangeSquares;
+            if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, range))
+            {
+                Debug.Log($"[AoE] Target position ({targetPos.x},{targetPos.y}) is out of range for burst");
+                return; // Don't cancel, just ignore out-of-range clicks
+            }
+        }
+
+        // Calculate the final AoE cells
+        HashSet<Vector2Int> aoeCells = null;
+
+        if (_pendingSpell.AoEShapeType == AoEShape.Burst)
+        {
+            aoeCells = AoESystem.GetBurstCells(targetPos, _pendingSpell.AoESizeSquares, Grid);
+        }
+        else if (_pendingSpell.AoEShapeType == AoEShape.Cone)
+        {
+            aoeCells = AoESystem.GetConeCells(caster.GridPosition, targetPos, _pendingSpell.AoESizeSquares, Grid);
+        }
+        else if (_pendingSpell.AoEShapeType == AoEShape.Line)
+        {
+            aoeCells = AoESystem.GetLineCells(caster.GridPosition, targetPos, _pendingSpell.AoESizeSquares, Grid);
+        }
+
+        if (aoeCells == null || aoeCells.Count == 0)
+        {
+            Debug.Log("[AoE] No cells in AoE area");
+            return;
+        }
+
+        // Get all valid targets in the AoE
+        bool casterIsPC = IsPC(caster);
+        List<CharacterController> targets = AoESystem.GetTargetsInArea(
+            aoeCells, caster, PCs, NPCs,
+            _pendingSpell.AoEFilter, casterIsPC, Grid);
+
+        Debug.Log($"[AoE] {_pendingSpell.Name}: {aoeCells.Count} cells, {targets.Count} targets");
+
+        // Exit AoE targeting mode
+        _isAoETargeting = false;
+        _currentAoECells = null;
+        _lastAoEHoverPos = new Vector2Int(-1, -1);
+
+        // Execute the AoE spell
+        PerformAoESpellCast(caster, targets, aoeCells);
+    }
+
+    /// <summary>
+    /// Cancel AoE targeting and return to action choices.
+    /// </summary>
+    private void CancelAoETargeting()
+    {
+        _isAoETargeting = false;
+        _currentAoECells = null;
+        _lastAoEHoverPos = new Vector2Int(-1, -1);
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+
+        Grid.ClearAllHighlights();
+        ShowActionChoices();
+        Debug.Log("[AoE] AoE targeting cancelled");
+    }
+
+    /// <summary>
+    /// Execute an AoE spell against all valid targets in the area.
+    /// Handles spell slot consumption, then resolves the spell for each target.
+    /// </summary>
+    private void PerformAoESpellCast(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    {
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        // Quickened spells don't consume standard action
+        bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
+        if (!isQuickened)
+        {
+            caster.Actions.UseStandardAction();
+        }
+        else
+        {
+            var casterSpellComp = caster.GetComponent<SpellcastingComponent>();
+            if (casterSpellComp != null)
+                casterSpellComp.MarkQuickenedSpellCast();
+        }
+
+        // Get spellcasting component
+        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        if (spellComp == null)
+        {
+            Debug.LogError("[GameManager] PerformAoESpellCast: No SpellcastingComponent!");
+            ShowActionChoices();
+            return;
+        }
+
+        // Check spontaneous casting state
+        bool isSpontaneous = CombatUI != null && CombatUI.IsSpontaneousCast;
+        int spontaneousLevel = isSpontaneous ? CombatUI.SpontaneousCastLevel : -1;
+        string spontaneousSacrificedSpellId = isSpontaneous ? CombatUI.SpontaneousSacrificedSpellId : null;
+
+        if (CombatUI != null)
+            CombatUI.ClearSpontaneousCastState();
+
+        // Consume spell slot (same logic as PerformSpellCast)
+        int slotLevelToConsume = _pendingSpell.SpellLevel;
+        bool hasMetamagicApplied = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic;
+
+        if (hasMetamagicApplied)
+        {
+            slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
+        }
+
+        {
+            bool consumed;
+            if (isSpontaneous)
+            {
+                if (!string.IsNullOrEmpty(spontaneousSacrificedSpellId))
+                    consumed = spellComp.SpontaneousCastFromSpecificSpell(spontaneousSacrificedSpellId);
+                else
+                    consumed = spellComp.SpontaneousCastFromSlot(spontaneousLevel);
+            }
+            else if (hasMetamagicApplied && slotLevelToConsume > 0)
+            {
+                consumed = spellComp.CastWizardSpellWithMetamagic(_pendingSpell, _pendingMetamagic);
+            }
+            else
+            {
+                consumed = spellComp.CastSpellFromSlot(_pendingSpell);
+            }
+
+            if (!consumed)
+            {
+                Debug.LogError($"[GameManager] AoE: Failed to consume level {slotLevelToConsume} spell slot!");
+                ShowActionChoices();
+                return;
+            }
+        }
+
+        // Build the combat log header
+        var logBuilder = new System.Text.StringBuilder();
+        string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
+                          _pendingSpell.AoEShapeType == AoEShape.Burst ? "burst" : "line";
+        logBuilder.AppendLine($"═══════════════════════════════════");
+        logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name}! ({_pendingSpell.AoESizeSquares * 5}-ft {shapeStr})");
+        logBuilder.AppendLine($"  [{(_pendingSpell.SpellLevel == 0 ? "Cantrip" : $"Level {_pendingSpell.SpellLevel}")}] {_pendingSpell.School}");
+        logBuilder.AppendLine($"  Targets: {targets.Count} creature(s) in {aoeCells.Count} squares");
+        logBuilder.AppendLine();
+
+        if (targets.Count == 0)
+        {
+            logBuilder.AppendLine($"  No valid targets in area!");
+            logBuilder.Append($"═══════════════════════════════════");
+        }
+        else
+        {
+            // Resolve spell for each target
+            int targetIndex = 0;
+            foreach (CharacterController target in targets)
+            {
+                targetIndex++;
+                logBuilder.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
+
+                // For buff spells, apply the buff
+                if (_pendingSpell.EffectType == SpellEffectType.Buff)
+                {
+                    // Create a simple result for buff
+                    var buffResult = new SpellResult();
+                    buffResult.Spell = _pendingSpell;
+                    buffResult.CasterName = caster.Stats.CharacterName;
+                    buffResult.TargetName = target.Stats.CharacterName;
+                    buffResult.Success = true;
+                    buffResult.BuffApplied = true;
+                    buffResult.BuffDescription = _pendingSpell.Description;
+
+                    ApplySpellBuff(caster, target, _pendingSpell, spellComp);
+
+                    logBuilder.AppendLine($"  BUFF APPLIED! {_pendingSpell.Description}");
+                    Debug.Log($"[AoE] Buff applied to {target.Stats.CharacterName}");
+                }
+                // For damage spells, resolve with save and damage
+                else if (_pendingSpell.EffectType == SpellEffectType.Damage)
+                {
+                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic);
+
+                    if (result.RequiredSave)
+                    {
+                        string saveResult = result.SaveSucceeded ? "SAVED" : "FAILED";
+                        logBuilder.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - {saveResult}!");
+                    }
+
+                    if (result.DamageDealt > 0)
+                    {
+                        logBuilder.AppendLine($"  Damage: {result.DamageDealt} {result.DamageType}");
+                        logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
+                    }
+
+                    if (result.TargetKilled)
+                    {
+                        target.OnDeath();
+                        logBuilder.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
+                    }
+                }
+                // For healing spells
+                else if (_pendingSpell.EffectType == SpellEffectType.Healing)
+                {
+                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic);
+
+                    logBuilder.AppendLine($"  Healed: {result.HealingDone} HP");
+                    logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
+                }
+
+                logBuilder.AppendLine();
+            }
+
+            logBuilder.Append($"═══════════════════════════════════");
+        }
+
+        _lastCombatLog = logBuilder.ToString();
+
+        if (isSpontaneous)
+        {
+            string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                : "Converted prepared spell";
+            _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+        }
+
+        if (isQuickened)
+        {
+            _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+        }
+
+        if (GameManager.LogAttacksToConsole)
+            Debug.Log("[AoE Spell] " + _lastCombatLog);
+
+        CombatUI.ShowCombatLog(_lastCombatLog);
+        UpdateAllStatsUI();
+
+        Grid.ClearAllHighlights();
+
+        // Check for victory/defeat
+        if (AreAllNPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+        else if (AreAllPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
+            CombatUI.SetActionButtonsVisible(false);
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+
         StartCoroutine(AfterAttackDelay(caster, 1.5f));
     }
 
@@ -2214,6 +2733,10 @@ public class GameManager : MonoBehaviour
 
             case PlayerSubPhase.SelectingAttackTarget:
                 HandleAttackTargetClick(pc, cell);
+                break;
+
+            case PlayerSubPhase.SelectingAoETarget:
+                HandleAoETargetClick(pc, cell);
                 break;
 
             case PlayerSubPhase.ChoosingAction:

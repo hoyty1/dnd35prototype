@@ -53,12 +53,17 @@ public static partial class SpellDatabase
         {
             SpellId = "bless",
             Name = "Bless",
-            Description = "Allies gain +1 morale bonus on attack rolls and saves vs fear. 1 min/level. PHB p.205",
+            Description = "Allies in 50-ft burst gain +1 morale bonus on attack rolls and saves vs fear. 1 min/level. PHB p.205",
             SpellLevel = 1, School = "Enchantment",
             ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.Self, // Area: 50-ft burst centered on caster (simplified to self/party)
-            RangeSquares = -1,
+            TargetType = SpellTargetType.Area, // 50-ft burst centered on chosen point
+            RangeSquares = 10, // Can place burst center within 50 ft
             AreaRadius = 10,
+            // AoE properties
+            AoEShapeType = AoEShape.Burst,
+            AoESizeSquares = 10, // 50 ft radius = 10 squares
+            AoERangeSquares = 10, // Can place center up to 50 ft away
+            AoEFilter = AoETargetFilter.AlliesOnly,
             EffectType = SpellEffectType.Buff,
             BuffAttackBonus = 1,
             BuffSaveBonus = 1, // vs fear, simplified to all saves

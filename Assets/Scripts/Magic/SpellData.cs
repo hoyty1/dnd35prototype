@@ -23,6 +23,16 @@ public class SpellData
     public int RangeSquares;            // Range in squares (0 = touch, -1 = self)
     public int AreaRadius;              // For area spells, radius in squares (0 = single target)
 
+    // ========== AREA OF EFFECT ==========
+    /// <summary>Shape of the AoE (None = single target, Burst = radius, Cone = emanation from caster).</summary>
+    public AoEShape AoEShapeType;
+    /// <summary>Size of the AoE in grid squares. For Burst: radius. For Cone: length.</summary>
+    public int AoESizeSquares;
+    /// <summary>How far the AoE origin can be placed from the caster (in squares). For cones, this is 0 (originates from caster).</summary>
+    public int AoERangeSquares;
+    /// <summary>Who is affected by the AoE (All, AlliesOnly, EnemiesOnly).</summary>
+    public AoETargetFilter AoEFilter;
+
     // ========== EFFECTS ==========
     public SpellEffectType EffectType;  // Damage, Healing, Buff, Debuff
     public int DamageDice;              // Sides of damage die (e.g., 6 for d6)
@@ -107,8 +117,17 @@ public class SpellData
                 effectStr = $"+{BuffACBonus} AC ({BuffType})";
         }
 
+        // AoE info
+        string aoeStr = "";
+        if (AoEShapeType == AoEShape.Burst)
+            aoeStr = $" | AoE: {AoESizeSquares * 5}-ft burst";
+        else if (AoEShapeType == AoEShape.Cone)
+            aoeStr = $" | AoE: {AoESizeSquares * 5}-ft cone";
+        else if (AoEShapeType == AoEShape.Line)
+            aoeStr = $" | AoE: {AoESizeSquares * 5}-ft line";
+
         string placeholderStr = IsPlaceholder ? " <color=#FF8800>[PLACEHOLDER]</color>" : "";
-        return $"[{levelStr}] {Name} ({School}){placeholderStr}\n{effectStr} | Range: {rangeStr}";
+        return $"[{levelStr}] {Name} ({School}){placeholderStr}\n{effectStr} | Range: {rangeStr}{aoeStr}";
     }
 }
 
