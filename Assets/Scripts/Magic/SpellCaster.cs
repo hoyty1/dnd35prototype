@@ -46,8 +46,12 @@ public static class SpellCaster
             effectiveSpellLevel = metamagic.HeightenToLevel;
         }
 
-        // ========== ATTACK ROLL (touch attacks for damage spells) ==========
-        if (spell.EffectType == SpellEffectType.Damage && !spell.AutoHit)
+        // ========== ATTACK ROLL (touch attacks for single-target damage spells) ==========
+        // AoE spells with saving throws (Burning Hands, Fireball, etc.) do NOT require attack rolls.
+        // They auto-hit all targets in the area; targets then make saving throws.
+        // Only single-target touch spells (Shocking Grasp, Scorching Ray) need attack rolls.
+        bool isAoESpell = spell.TargetType == SpellTargetType.Area;
+        if (spell.EffectType == SpellEffectType.Damage && !spell.AutoHit && !isAoESpell)
         {
             result.RequiredAttackRoll = true;
             bool isRanged = spell.RangeSquares > 1;

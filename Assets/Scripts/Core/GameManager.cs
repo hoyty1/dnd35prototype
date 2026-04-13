@@ -1759,6 +1759,45 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void EnterAoETargetingMode(CharacterController caster, SpellData spell)
     {
+        // ===== SELF-CENTERED BURST: Skip targeting, auto-cast on caster =====
+        if (spell.AoEShapeType == AoEShape.Burst && spell.AoERangeSquares <= 0)
+        {
+            Debug.Log($"[AoE] Self-centered burst: {spell.Name} — auto-casting on caster at ({caster.GridPosition.x},{caster.GridPosition.y})");
+
+            // Calculate AoE cells centered on caster
+            HashSet<Vector2Int> aoeCells = AoESystem.GetBurstCells(caster.GridPosition, spell.AoESizeSquares, Grid);
+
+            // Brief visual preview
+            Grid.ClearAllHighlights();
+            foreach (Vector2Int cellPos in aoeCells)
+            {
+                SquareCell cell = Grid.GetCell(cellPos);
+                if (cell == null) continue;
+
+                if (cell.IsOccupied && cell.Occupant != null && !cell.Occupant.Stats.IsDead)
+                {
+                    bool isAlly = IsPC(caster) ? PCs.Contains(cell.Occupant) : NPCs.Contains(cell.Occupant);
+                    cell.SetHighlight(isAlly ? HighlightType.AoEAlly : HighlightType.AoETarget);
+                }
+                else
+                {
+                    cell.SetHighlight(HighlightType.AoEPreview);
+                }
+            }
+
+            // Get all valid targets
+            bool casterIsPC = IsPC(caster);
+            List<CharacterController> targets = AoESystem.GetTargetsInArea(
+                aoeCells, caster, PCs, NPCs,
+                spell.AoEFilter, casterIsPC, Grid);
+
+            Debug.Log($"[AoE] Self-centered {spell.Name}: {aoeCells.Count} cells, {targets.Count} targets");
+
+            // Execute immediately
+            PerformAoESpellCast(caster, targets, aoeCells);
+            return;
+        }
+
         _isAoETargeting = true;
         _currentAoECells = null;
         _lastAoEHoverPos = new Vector2Int(-1, -1);
@@ -1769,7 +1808,7 @@ public class GameManager : MonoBehaviour
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        // For burst spells, show the valid placement range (where the center can be placed)
+        // For burst spells with range > 0, show the valid placement range
         if (spell.AoEShapeType == AoEShape.Burst)
         {
             int range = spell.AoERangeSquares > 0 ? spell.AoERangeSquares : spell.RangeSquares;
