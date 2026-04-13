@@ -346,27 +346,19 @@ public class SpellPreparationUI : MonoBehaviour
             }
         }
 
-        // Mark domain slot indices: last slot at each level 1+
-        // Domain slot is the last regular slot before bonus at each level
-        // For L1: slots [4..6] (3 regular = 2 base + 1 domain), slot index 6 = domain
-        // For L2: slots [7..8] (2 regular = 1 base + 1 domain), slot index 8 = domain
+        // Mark domain slot indices: LAST slot at each level 1+
+        // Domain slot is placed at the bottom of each spell level section
+        // so regular slots appear first, then the domain slot below them.
+        // For L1: if total=4 (2 base + 1 bonus + 1 domain), domain = last slot (index 3 within level)
+        // For L2: if total=3 (1 base + 1 bonus + 1 domain), domain = last slot (index 2 within level)
         int slotIdx = 0;
         for (int spellLevel = 0; spellLevel < _creationSlotsMax.Length; spellLevel++)
         {
             int count = _creationSlotsMax[spellLevel];
-            if (spellLevel >= 1 && _clericDomains.Count > 0)
+            if (spellLevel >= 1 && _clericDomains.Count > 0 && count > 0)
             {
-                // The 3rd slot at level 1 (index 2 within level) is domain
-                // The 2nd slot at level 2 (index 1 within level) is domain
-                // Domain slot = base slots count (without domain), i.e., slot at position "base+0"
-                // For L1: base=2, so slot index within level = 2 (3rd slot)
-                // For L2: base=1, so slot index within level = 1 (2nd slot)
-                int baseSlots = spellLevel == 1 ? 2 : 1;
-                int domainSlotWithinLevel = baseSlots; // 0-indexed
-                if (domainSlotWithinLevel < count)
-                {
-                    _domainSlotIndices.Add(slotIdx + domainSlotWithinLevel);
-                }
+                // Domain slot = last slot within this level (bottom of the list)
+                _domainSlotIndices.Add(slotIdx + count - 1);
             }
             slotIdx += count;
         }
