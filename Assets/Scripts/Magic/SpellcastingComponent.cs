@@ -89,8 +89,9 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Spell IDs prepared in each slot during character creation (in slot order).
-    /// If set before Init(), these will override auto-preparation for wizards.
+    /// If set before Init(), these will override auto-preparation for both Wizards and Clerics.
     /// Empty strings indicate empty slots.
+    /// Order: [cantrip slots, then level 1 slots, then level 2 slots, ...]
     /// </summary>
     public List<string> PreparedSpellSlotIds { get; set; }
 
@@ -128,7 +129,16 @@ public class SpellcastingComponent : MonoBehaviour
         }
         else if (stats.IsCleric)
         {
-            AutoPrepareClericSlots();
+            // Use creation preparation data if available, otherwise auto-prepare
+            if (PreparedSpellSlotIds != null && PreparedSpellSlotIds.Count > 0)
+            {
+                ApplyPreparedSpellSlotIds();
+                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied {PreparedSpellSlotIds.Count} preparation choices from character creation.");
+            }
+            else
+            {
+                AutoPrepareClericSlots();
+            }
             SyncPreparedSpellsFromSlots();
         }
 
@@ -317,9 +327,11 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Auto-prepare cleric spells into slots. Distributes known spells across available slots.
+    /// Auto-prepare cleric spells into slots. Fills only as many slots as available,
+    /// selecting from known spells at each level. Prioritizes functional (non-placeholder) spells.
     /// Clerics can prepare ANY cleric spell of appropriate level from the full spell list.
-    /// If there are more slots than unique spells at a level, the same spell fills multiple slots.
+    /// If there are more slots than unique functional spells at a level, fills remaining
+    /// slots by cycling through available spells.
     /// </summary>
     public void AutoPrepareClericSlots()
     {
@@ -337,11 +349,18 @@ public class SpellcastingComponent : MonoBehaviour
                 continue;
             }
 
-            // Fill each slot with a spell, cycling through available spells
+            // Prioritize functional spells over placeholders for auto-preparation
+            var functional = spellsAtLevel.Where(s => !s.IsPlaceholder).ToList();
+            var candidates = functional.Count > 0 ? functional : spellsAtLevel;
+
+            // Only fill as many slots as we have — each slot gets one spell
             for (int i = 0; i < slotsAtLevel.Count; i++)
             {
-                slotsAtLevel[i].Prepare(spellsAtLevel[i % spellsAtLevel.Count]);
+                slotsAtLevel[i].Prepare(candidates[i % candidates.Count]);
             }
+
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared {slotsAtLevel.Count} level-{level} cleric slots " +
+                      $"(from {spellsAtLevel.Count} known, {functional.Count} functional)");
         }
 
         SyncSlotsRemainingFromSpellSlots();

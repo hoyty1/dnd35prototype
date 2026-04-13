@@ -67,6 +67,13 @@ public class ClericClass : ICharacterClass
     /// <summary>
     /// Returns a pre-built Quick Start character: Theron the Human Cleric.
     /// Used by CharacterCreationUI for the Quick Start button.
+    ///
+    /// D&D 3.5e Level 3 Cleric with WIS 16 (+3) spell slots:
+    ///   Level 0 (Orisons): 4 slots (unlimited use)
+    ///   Level 1: 2 base + 1 domain + 1 WIS bonus = 4 slots
+    ///   Level 2: 1 base + 1 domain + 1 WIS bonus = 3 slots
+    ///
+    /// PreparedSpellSlotIds order: [4 orisons, 4 level-1, 3 level-2]
     /// </summary>
     public static CharacterCreationData GetQuickStartCharacter()
     {
@@ -85,6 +92,17 @@ public class ClericClass : ICharacterClass
             SelectedSpellIds = new List<string>
             {
                 "cure_minor_wounds", "detect_magic_clr", "guidance", "light_clr"
+            },
+            // Pre-prepared spell slots: 4 orisons + 4 level-1 + 3 level-2 = 11 total
+            // Curated for a combat-ready healer/support cleric
+            PreparedSpellSlotIds = new List<string>
+            {
+                // Level 0 orisons (4 slots — unlimited use)
+                "cure_minor_wounds", "detect_magic_clr", "guidance", "light_clr",
+                // Level 1 spells (4 slots: 2 base + 1 domain + 1 WIS bonus)
+                "cure_light_wounds", "cure_light_wounds", "bless", "shield_of_faith",
+                // Level 2 spells (3 slots: 1 base + 1 domain + 1 WIS bonus)
+                "cure_moderate_wounds", "spiritual_weapon", "bulls_strength_clr"
             }
         };
         data.ComputeFinalStats();
