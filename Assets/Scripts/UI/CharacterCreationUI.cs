@@ -1037,12 +1037,32 @@ public class CharacterCreationUI : MonoBehaviour
         }
         else if (data.ClassName == "Cleric")
         {
-            // Clerics select 4 orisons; higher-level spells are all available
+            data.ComputeFinalStats();
+            int wisMod = CharacterStats.GetModifier(data.FinalWIS);
+            Debug.Log($"[CharCreation] Cleric spell selection: WIS mod = {wisMod}, FinalWIS = {data.FinalWIS}");
+
+            // STEP 1: Select Orisons (level 0 spells — clerics choose which ones to prepare)
             SpellUI.OnSpellsConfirmed = (selectedSpellIds) =>
             {
                 data.SelectedSpellIds = new List<string>(selectedSpellIds);
                 Debug.Log($"[CharCreation] Cleric orisons selected: {selectedSpellIds.Count} spells");
-                ShowStep(Step.Review);
+
+                // STEP 2: Prepare Spells (assign spells from full cleric list to slots)
+                if (SpellPrepUI != null)
+                {
+                    SpellPrepUI.OnCreationPreparationConfirmed = (preparedSlotIds) =>
+                    {
+                        data.PreparedSpellSlotIds = new List<string>(preparedSlotIds);
+                        Debug.Log($"[CharCreation] Cleric spell preparation complete: {preparedSlotIds.Count} slots");
+                        ShowStep(Step.Review);
+                    };
+                    SpellPrepUI.OpenForClericCreation(wisMod, 3, data.CharacterName);
+                }
+                else
+                {
+                    Debug.LogWarning("[CharCreation] SpellPrepUI not available, skipping preparation step.");
+                    ShowStep(Step.Review);
+                }
             };
             SpellUI.OpenForCleric();
         }

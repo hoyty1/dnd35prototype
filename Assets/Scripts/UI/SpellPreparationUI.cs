@@ -49,6 +49,7 @@ public class SpellPreparationUI : MonoBehaviour
 
     // Creation mode state
     private bool _isCreationMode;
+    private bool _isClericCreationMode; // true when creating a cleric (affects labels)
     private List<SpellSlot> _creationSlots = new List<SpellSlot>();
     private List<SpellData> _creationKnownSpells = new List<SpellData>();
     private int[] _creationSlotsMax;
@@ -196,6 +197,7 @@ public class SpellPreparationUI : MonoBehaviour
     public void OpenForCreation(List<string> spellbookIds, int intModifier, int characterLevel, string characterName)
     {
         _isCreationMode = true;
+        _isClericCreationMode = false;
         _spellComp = null;
 
         SpellDatabase.Init();
@@ -242,6 +244,66 @@ public class SpellPreparationUI : MonoBehaviour
                   $"(INT mod {intModifier}, bonus 1st={bonus1st}, bonus 2nd={bonus2nd})");
     }
 
+    /// <summary>
+    /// Open the spell preparation UI during character creation for a Cleric.
+    /// Clerics prepare from the FULL list of cleric spells at each level.
+    /// D&D 3.5e Cleric Spell Slots (PHB Table 3-6):
+    ///   Level 3 base: 4 orisons, 2 first-level, 1 second-level
+    ///   + 1 domain slot at each level 1+ (so +1 at 1st, +1 at 2nd)
+    ///   + bonus slots from WIS modifier (PHB p.8):
+    ///     WIS mod >= spell level → +1 bonus slot at that level
+    ///   Example: WIS 16 (+3 mod) → L0=4, L1=2+1domain+1bonus=4, L2=1+1domain+1bonus=3
+    /// </summary>
+    /// <param name="wisModifier">The cleric's WIS modifier (for bonus slots)</param>
+    /// <param name="characterLevel">The character's cleric level (for base slots)</param>
+    /// <param name="characterName">Character name for display</param>
+    public void OpenForClericCreation(int wisModifier, int characterLevel, string characterName)
+    {
+        _isCreationMode = true;
+        _isClericCreationMode = true;
+        _spellComp = null;
+
+        SpellDatabase.Init();
+
+        // Build known spells: ALL cleric spells at each level
+        _creationKnownSpells.Clear();
+        _creationKnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 0));
+        _creationKnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 1));
+        _creationKnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 2));
+
+        // Calculate spell slots per D&D 3.5e PHB Table 3-6 (Cleric)
+        // Level 3: Base 4/2/1 + domain 0/1/1 + bonus from WIS modifier
+        int wisMod = Mathf.Max(0, wisModifier);
+        int bonus1st = wisMod >= 1 ? 1 : 0;
+        int bonus2nd = wisMod >= 2 ? 1 : 0;
+        _creationSlotsMax = new int[] { 4, 3 + bonus1st, 2 + bonus2nd }; // base + domain + bonus
+
+        // Create temporary spell slots
+        _creationSlots.Clear();
+        for (int spellLevel = 0; spellLevel < _creationSlotsMax.Length; spellLevel++)
+        {
+            for (int i = 0; i < _creationSlotsMax[spellLevel]; i++)
+            {
+                _creationSlots.Add(new SpellSlot(spellLevel));
+            }
+        }
+
+        // Auto-prepare: distribute spells across slots
+        AutoPrepareCreationSlots();
+
+        _titleText.text = $"CLERIC SPELL PREPARATION — {characterName}";
+
+        PopulateCreationSlotList();
+        RefreshCreationSummary();
+
+        _overlayPanel.SetActive(true);
+        IsOpen = true;
+
+        Debug.Log($"[SpellPreparationUI] Cleric creation mode: {_creationKnownSpells.Count} total cleric spells, " +
+                  $"slots: L0={_creationSlotsMax[0]}, L1={_creationSlotsMax[1]}, L2={_creationSlotsMax[2]} " +
+                  $"(WIS mod {wisModifier}, bonus 1st={bonus1st}, bonus 2nd={bonus2nd})");
+    }
+
     /// <summary>Close the preparation UI.</summary>
     public void Close()
     {
@@ -249,6 +311,7 @@ public class SpellPreparationUI : MonoBehaviour
             _overlayPanel.SetActive(false);
         IsOpen = false;
         _isCreationMode = false;
+        _isClericCreationMode = false;
     }
 
     // ========== POPULATE ==========
@@ -562,8 +625,9 @@ public class SpellPreparationUI : MonoBehaviour
                 lastLevel = slot.Level;
 
                 int slotsAtLevel = _creationSlotsMax[slot.Level];
+                string l0Label = _isClericCreationMode ? "ORISONS" : "CANTRIPS";
                 string levelLabel = slot.Level == 0
-                    ? $"═══ CANTRIPS (Level 0 — Unlimited) ═══  ({slotsAtLevel} slots)"
+                    ? $"═══ {l0Label} (Level 0 — Unlimited) ═══  ({slotsAtLevel} slots)"
                     : $"═══ LEVEL {slot.Level} SPELLS ═══  ({slotsAtLevel} slots)";
 
                 var headerGO = new GameObject("Header" + slot.Level);
@@ -633,7 +697,8 @@ public class SpellPreparationUI : MonoBehaviour
                 if (s == slot) break;
             }
         }
-        string slotLabel = slot.Level == 0 ? $"Cantrip Slot {levelSlotNum}:" : $"Level {slot.Level} Slot {levelSlotNum}:";
+        string l0SlotLabel = _isClericCreationMode ? "Orison" : "Cantrip";
+        string slotLabel = slot.Level == 0 ? $"{l0SlotLabel} Slot {levelSlotNum}:" : $"Level {slot.Level} Slot {levelSlotNum}:";
 
         row.LabelText = MakeText(row.Row.transform, "Label",
             new Vector2(-280, 0), new Vector2(180, 30),
@@ -854,8 +919,9 @@ public class SpellPreparationUI : MonoBehaviour
 
             if (level == 0)
             {
+                string l0Name = _isClericCreationMode ? "Orisons" : "Cantrips";
                 string color = filled >= total ? "#44FF44" : "#FFDD44";
-                parts.Add($"<color={color}>Cantrips: {filled}/{total} (∞)</color>");
+                parts.Add($"<color={color}>{l0Name}: {filled}/{total} (∞)</color>");
             }
             else
             {
