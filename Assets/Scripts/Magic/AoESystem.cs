@@ -143,27 +143,37 @@ public static class AoESystem
         return cells;
     }
 
-    // ---- Cardinal Cone Pattern (Right-Triangle Staircase) ----
+    // ---- Cardinal Cone Pattern (Symmetric Spread) ----
 
     /// <summary>
     /// Generate offsets for a cardinal direction cone (N, E, S, W).
-    /// The pattern is a right-triangle staircase: at distance d from origin,
-    /// the cone is d cells wide, expanding to one side of the axis.
-    /// This matches the official D&D 3.5e PHB quarter-circle template
-    /// for cardinal directions.
+    /// Uses the D&D 3.5e PHB cone template pattern:
+    ///   - Distance 1: 1 cell (center of the cone axis)
+    ///   - Distance 2+: symmetric spread, width = 2 * floor(length/2) + 1
+    /// For a 15-ft cone (length=3): 1 + 3 + 3 = 7 cells
+    /// For a 30-ft cone (length=6): 1 + 5*5 = 26 cells
     /// </summary>
     private static List<Vector2Int> GetCardinalConeOffsets(int dirIndex, int length)
     {
         var offsets = new List<Vector2Int>();
 
-        // Build the base East pattern (expanding North/+y):
-        //   dx = 1..length, dy = 0..(dx-1)
-        // Then rotate the offsets to match the actual direction.
+        // The maximum half-width (spread to each side) for rows beyond the first
+        int halfWidth = length / 2; // integer division: 3→1, 6→3, 12→6
+
         for (int primary = 1; primary <= length; primary++)
         {
-            for (int lateral = 0; lateral < primary; lateral++)
+            if (primary == 1)
             {
-                offsets.Add(RotateCardinalOffset(dirIndex, primary, lateral));
+                // First row: just the center cell (lateral = 0)
+                offsets.Add(RotateCardinalOffset(dirIndex, primary, 0));
+            }
+            else
+            {
+                // Subsequent rows: symmetric spread from -halfWidth to +halfWidth
+                for (int lateral = -halfWidth; lateral <= halfWidth; lateral++)
+                {
+                    offsets.Add(RotateCardinalOffset(dirIndex, primary, lateral));
+                }
             }
         }
 
@@ -172,11 +182,12 @@ public static class AoESystem
 
     /// <summary>
     /// Rotate a base-East cone offset (primary=along axis, lateral=perpendicular)
-    /// to match the specified cardinal direction.
-    ///   East  (dir 2): primary → +x, lateral → +y  (expands North)
-    ///   North (dir 0): primary → +y, lateral → −x  (expands West)
-    ///   West  (dir 6): primary → −x, lateral → −y  (expands South)
-    ///   South (dir 4): primary → −y, lateral → +x  (expands East)
+    /// to match the specified cardinal direction. Lateral can be negative for
+    /// symmetric spread.
+    ///   East  (dir 2): primary → +x, lateral → +y
+    ///   North (dir 0): primary → +y, lateral → −x
+    ///   West  (dir 6): primary → −x, lateral → −y
+    ///   South (dir 4): primary → −y, lateral → +x
     /// </summary>
     private static Vector2Int RotateCardinalOffset(int dirIndex, int primary, int lateral)
     {
