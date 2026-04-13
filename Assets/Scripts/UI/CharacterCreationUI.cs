@@ -56,6 +56,8 @@ public class CharacterCreationUI : MonoBehaviour
     private Button _rollButton;
     private Button _rerollButton;
     private Button _acceptStatsButton;
+    private Button _premadeButton; // "Choose Pre-made Character" button on roll stats screen
+    private GameObject _premadeOverlayPanel; // Overlay for pre-made character selection
     private int[] _currentRolls;
     private int[][] _currentRollDetails; // 4 dice per roll
 
@@ -238,6 +240,12 @@ public class CharacterCreationUI : MonoBehaviour
             "Accept These Stats ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 18);
         _acceptStatsButton.onClick.AddListener(OnAcceptStats);
         _acceptStatsButton.gameObject.SetActive(false);
+
+        // "Choose Pre-made Character" button — allows picking a quick start character for this slot
+        _premadeButton = MakeButton(_step1Panel.transform, "PremadeBtn",
+            new Vector2(0, -200), new Vector2(300, 42),
+            "🧙 Choose Pre-made Character", new Color(0.4f, 0.25f, 0.55f), Color.white, 16);
+        _premadeButton.onClick.AddListener(OnChoosePremadeCharacter);
     }
 
     private void DoRollStats()
@@ -1520,6 +1528,167 @@ public class CharacterCreationUI : MonoBehaviour
         _rollResultsText.text = "";
     }
 
+    // ========== PRE-MADE CHARACTER SELECTION (from Roll Stats screen) ==========
+
+    /// <summary>
+    /// Opens the pre-made character selection overlay from the Roll Stats step.
+    /// Allows picking a quick start character for the current slot without going through
+    /// all the creation steps.
+    /// </summary>
+    private void OnChoosePremadeCharacter()
+    {
+        Debug.Log($"[CharCreation] Opening pre-made character selection for slot {CurrentCharacterIndex + 1}");
+        InitializeQuickStartCharacters();
+        ShowPremadeSelectionPanel();
+    }
+
+    private void ShowPremadeSelectionPanel()
+    {
+        // Create or reuse the overlay
+        if (_premadeOverlayPanel != null)
+        {
+            _premadeOverlayPanel.SetActive(true);
+            foreach (Transform child in _premadeOverlayPanel.transform)
+                GameObject.Destroy(child.gameObject);
+        }
+        else
+        {
+            Canvas canvas = _rootPanel.GetComponentInParent<Canvas>();
+            _premadeOverlayPanel = CreatePanel(canvas.transform, "PremadeOverlay",
+                Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero, new Color(0, 0, 0, 0.9f));
+            RectTransform oRT = _premadeOverlayPanel.GetComponent<RectTransform>();
+            oRT.offsetMin = Vector2.zero;
+            oRT.offsetMax = Vector2.zero;
+            _premadeOverlayPanel.AddComponent<CanvasGroup>();
+        }
+
+        string[] classKeys = { "Fighter", "Rogue", "Cleric", "Wizard", "Monk", "Barbarian" };
+        float panelH = 560f;
+        float panelW = 520f;
+
+        GameObject panel = CreatePanel(_premadeOverlayPanel.transform, "PremadePanel",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(panelW, panelH), new Color(0.12f, 0.12f, 0.18f, 0.98f));
+
+        float topY = panelH / 2 - 30;
+
+        MakeText(panel.transform, "PremadeTitle",
+            new Vector2(0, topY), new Vector2(panelW - 40, 35),
+            "CHOOSE PRE-MADE CHARACTER", 22, new Color(1f, 0.85f, 0.4f), TextAnchor.MiddleCenter);
+
+        MakeText(panel.transform, "PremadeSubtitle",
+            new Vector2(0, topY - 30), new Vector2(panelW - 40, 25),
+            $"Select a character for Hero {CurrentCharacterIndex + 1}", 14, new Color(0.7f, 0.8f, 1f), TextAnchor.MiddleCenter);
+
+        float btnStartY = topY - 75;
+        float btnH = 60f;
+        float btnSpacing = 6f;
+
+        for (int i = 0; i < classKeys.Length; i++)
+        {
+            string className = classKeys[i];
+            if (!_qsAvailableCharacters.ContainsKey(className)) continue;
+
+            var ch = _qsAvailableCharacters[className];
+            ch.ComputeFinalStats();
+
+            float y = btnStartY - i * (btnH + btnSpacing);
+
+            // Background button for the character
+            ClassRegistry.Init();
+            ICharacterClass classDef = ClassRegistry.GetClass(className);
+            Color btnColor = classDef != null ? classDef.ButtonColor : new Color(0.25f, 0.25f, 0.4f);
+
+            // Character entry: name, race, class + stat preview
+            int strMod = CharacterStats.GetModifier(ch.FinalSTR);
+            int dexMod = CharacterStats.GetModifier(ch.FinalDEX);
+            int conMod = CharacterStats.GetModifier(ch.FinalCON);
+            int intMod = CharacterStats.GetModifier(ch.FinalINT);
+            int wisMod = CharacterStats.GetModifier(ch.FinalWIS);
+            int chaMod = CharacterStats.GetModifier(ch.FinalCHA);
+
+            string statLine = $"STR {ch.FinalSTR}({CharacterStats.FormatMod(strMod)})  DEX {ch.FinalDEX}({CharacterStats.FormatMod(dexMod)})  CON {ch.FinalCON}({CharacterStats.FormatMod(conMod)})  INT {ch.FinalINT}({CharacterStats.FormatMod(intMod)})  WIS {ch.FinalWIS}({CharacterStats.FormatMod(wisMod)})  CHA {ch.FinalCHA}({CharacterStats.FormatMod(chaMod)})";
+            string label = $"{ch.CharacterName} — {ch.RaceName} {ch.ClassName}   HP: {ch.HP}\n<size=10>{statLine}</size>";
+
+            Button charBtn = MakeButton(panel.transform, $"Premade_{className}",
+                new Vector2(0, y), new Vector2(panelW - 50, btnH),
+                "", btnColor, Color.white, 15);
+
+            // Replace the auto-created label with a rich text one
+            Text btnLabel = charBtn.GetComponentInChildren<Text>();
+            if (btnLabel != null)
+            {
+                btnLabel.text = label;
+                btnLabel.supportRichText = true;
+                btnLabel.fontSize = 14;
+            }
+
+            string capturedClass = className;
+            charBtn.onClick.AddListener(() => OnPremadeCharacterSelected(capturedClass));
+        }
+
+        // Cancel button
+        float bottomY = -panelH / 2 + 35;
+        Button cancelBtn = MakeButton(panel.transform, "PremadeCancel",
+            new Vector2(0, bottomY), new Vector2(140, 40),
+            "Cancel", new Color(0.5f, 0.2f, 0.2f), Color.white, 16);
+        cancelBtn.onClick.AddListener(HidePremadeSelectionPanel);
+    }
+
+    private void HidePremadeSelectionPanel()
+    {
+        if (_premadeOverlayPanel != null)
+            _premadeOverlayPanel.SetActive(false);
+    }
+
+    /// <summary>
+    /// Called when a pre-made character is selected from the selection panel.
+    /// Fills the current character slot and advances to the next character or finishes.
+    /// </summary>
+    private void OnPremadeCharacterSelected(string className)
+    {
+        if (!_qsAvailableCharacters.ContainsKey(className))
+        {
+            Debug.LogError($"[CharCreation] Pre-made character not found for class: {className}");
+            return;
+        }
+
+        var premadeData = _qsAvailableCharacters[className];
+        premadeData.ComputeFinalStats();
+        CreatedCharacters[CurrentCharacterIndex] = premadeData;
+
+        Debug.Log($"[CharCreation] Pre-made character selected for slot {CurrentCharacterIndex + 1}: " +
+                  $"{premadeData.CharacterName} ({premadeData.RaceName} {premadeData.ClassName})");
+
+        HidePremadeSelectionPanel();
+
+        // Advance to next character or finish
+        if (CurrentCharacterIndex < TotalPCs - 1)
+        {
+            CurrentCharacterIndex++;
+            ResetForNewCharacter();
+            ShowStep(Step.RollStats);
+        }
+        else
+        {
+            // All character slots filled — finish creation
+            IsComplete = true;
+            HideCreationUI();
+
+            if (OnCreationComplete4 != null)
+            {
+                OnCreationComplete4.Invoke(CreatedCharacters);
+            }
+            else if (OnCreationComplete != null)
+            {
+                OnCreationComplete.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
+            }
+
+            Debug.Log("[CharCreation] All characters created (mix of custom and pre-made). Starting game!");
+        }
+    }
+
     // ========== QUICK START SELECTION FLOW ==========
 
     private void InitializeQuickStartCharacters()
@@ -2120,6 +2289,9 @@ public class CharacterCreationUI : MonoBehaviour
     {
         if (_overlayPanel != null)
             _overlayPanel.SetActive(false);
+
+        if (_premadeOverlayPanel != null)
+            _premadeOverlayPanel.SetActive(false);
 
         if (_canvasGroup != null)
         {
