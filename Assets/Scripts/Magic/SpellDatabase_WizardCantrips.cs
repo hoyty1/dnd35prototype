@@ -81,13 +81,15 @@ public static partial class SpellDatabase
         {
             SpellId = "detect_magic_wiz",
             Name = "Detect Magic",
-            Description = "Detects spells and magic items within 60 ft cone for up to 1 min/level.",
+            Description = "Detects spells and magic items within 60 ft cone. Concentration, up to 1 min/level.",
             SpellLevel = 0, School = "Divination",
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.Self,
             RangeSquares = -1,
             EffectType = SpellEffectType.Buff,
-            BuffDurationRounds = 10, // 1 min/level, ~10 rounds at CL3
+            DurationType = DurationType.Concentration,
+            DurationValue = 1,
+            DurationScalesWithLevel = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true,
             IsPlaceholder = true,

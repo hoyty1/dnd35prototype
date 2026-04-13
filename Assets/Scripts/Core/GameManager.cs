@@ -340,6 +340,12 @@ public class GameManager : MonoBehaviour
                 statusMgr = pcSlots[i].gameObject.AddComponent<StatusEffectManager>();
             statusMgr.Init(stats);
 
+            // Initialize ConcentrationManager for spell concentration tracking
+            var concMgr = pcSlots[i].gameObject.GetComponent<ConcentrationManager>();
+            if (concMgr == null)
+                concMgr = pcSlots[i].gameObject.AddComponent<ConcentrationManager>();
+            concMgr.Init(stats, PCs[i]);
+
             // Set PC icon
             Sprite classIcon = IconManager.GetClassIcon(data.ClassName);
             if (classIcon != null && CombatUI != null)
@@ -1043,6 +1049,12 @@ public class GameManager : MonoBehaviour
             statusMgr = npc.gameObject.AddComponent<StatusEffectManager>();
         statusMgr.Init(stats);
 
+        // Initialize ConcentrationManager for NPC concentration tracking
+        var concMgr = npc.gameObject.GetComponent<ConcentrationManager>();
+        if (concMgr == null)
+            concMgr = npc.gameObject.AddComponent<ConcentrationManager>();
+        concMgr.Init(stats, npc);
+
         Debug.Log($"[GameManager] {def.Name}: HP {stats.MaxHP} AC {stats.ArmorClass} " +
                   $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq");
     }
@@ -1735,13 +1747,28 @@ public class GameManager : MonoBehaviour
             }
         }
 
+        // Check if caster is concentrating on another spell — casting requires a concentration check
+        HandleConcentrationOnCasting(caster, _pendingSpell);
+
         // Resolve the spell with metamagic
         SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic);
 
         // Apply buff effects based on spell type
         if (result.Success && _pendingSpell.EffectType == SpellEffectType.Buff)
         {
-            ApplySpellBuff(caster, target, _pendingSpell, spellComp);
+            var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
+
+            // If this is a concentration spell, begin tracking concentration on the caster
+            if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration)
+            {
+                BeginConcentrationTracking(caster, appliedEffect, _pendingSpell);
+            }
+        }
+
+        // Check concentration for spell damage on the target
+        if (result.DamageDealt > 0 && target != null)
+        {
+            CheckConcentrationOnDamage(target, result.DamageDealt);
         }
 
         // Handle death if target was killed
@@ -2267,6 +2294,9 @@ public class GameManager : MonoBehaviour
             }
         }
 
+        // Check if caster is concentrating on another spell — casting requires a concentration check
+        HandleConcentrationOnCasting(caster, _pendingSpell);
+
         // Build the combat log header
         var logBuilder = new System.Text.StringBuilder();
         string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
@@ -2303,7 +2333,13 @@ public class GameManager : MonoBehaviour
                     buffResult.BuffApplied = true;
                     buffResult.BuffDescription = _pendingSpell.Description;
 
-                    ApplySpellBuff(caster, target, _pendingSpell, spellComp);
+                    var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
+
+                    // Track concentration for the first target of a concentration AoE buff
+                    if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration && targetIndex == 1)
+                    {
+                        BeginConcentrationTracking(caster, appliedEffect, _pendingSpell);
+                    }
 
                     logBuilder.AppendLine($"  BUFF APPLIED! {_pendingSpell.Description}");
                     Debug.Log($"[AoE] Buff applied to {target.Stats.CharacterName}");
@@ -2323,6 +2359,9 @@ public class GameManager : MonoBehaviour
                     {
                         logBuilder.AppendLine($"  Damage: {result.DamageDealt} {result.DamageType}");
                         logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
+
+                        // Check concentration for AoE spell damage
+                        CheckConcentrationOnDamage(target, result.DamageDealt);
                     }
 
                     if (result.TargetKilled)
@@ -2400,7 +2439,7 @@ public class GameManager : MonoBehaviour
     /// Uses StatusEffectManager for proper duration tracking and stat modification reversal.
     /// Falls back to legacy system if StatusEffectManager is not available.
     /// </summary>
-    private void ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
+    private ActiveSpellEffect ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
     {
         // Use StatusEffectManager for tracked buff application
         var statusMgr = target.GetComponent<StatusEffectManager>();
@@ -2428,7 +2467,7 @@ public class GameManager : MonoBehaviour
             }
 
             UpdateAllStatsUI();
-            return;
+            return effect;
         }
 
         // ===== LEGACY FALLBACK (no StatusEffectManager) =====
@@ -2481,6 +2520,7 @@ public class GameManager : MonoBehaviour
         }
 
         Debug.Log($"[GameManager] {spell.Name} buff applied to {target.Stats.CharacterName} (legacy path)");
+        return null; // Legacy path doesn't return tracked effects
     }
 
     /// <summary>
@@ -2568,6 +2608,129 @@ public class GameManager : MonoBehaviour
                 Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
             }
         }
+    }
+
+    // ========== CONCENTRATION MECHANICS (D&D 3.5e PHB) ==========
+
+    /// <summary>
+    /// Check if a character needs to make a concentration check after taking damage.
+    /// Called after any damage is applied to a character (melee, ranged, spell, AoO).
+    /// DC = 10 + damage dealt + spell level of concentration spell.
+    /// </summary>
+    /// <param name="character">The character who took damage.</param>
+    /// <param name="damageTaken">Amount of damage dealt.</param>
+    private void CheckConcentrationOnDamage(CharacterController character, int damageTaken)
+    {
+        if (character == null || damageTaken <= 0) return;
+
+        var concMgr = character.GetComponent<ConcentrationManager>();
+        if (concMgr == null || !concMgr.IsConcentrating) return;
+
+        // If the character is dead, break concentration automatically
+        if (character.Stats.IsDead)
+        {
+            string breakLog = concMgr.ForceBreakConcentration("killed");
+            if (!string.IsNullOrEmpty(breakLog))
+            {
+                CombatUI?.ShowCombatLog($"<color=#FF6644>{breakLog}</color>");
+            }
+            UpdateAllStatsUI();
+            return;
+        }
+
+        // Perform the concentration check
+        var result = concMgr.CheckConcentrationOnDamage(damageTaken);
+        if (!string.IsNullOrEmpty(result.LogMessage))
+        {
+            string color = result.Success ? "#88CCFF" : "#FF6644";
+            CombatUI?.ShowCombatLog($"<color={color}>{result.LogMessage}</color>");
+        }
+
+        if (!result.Success)
+        {
+            UpdateAllStatsUI();
+        }
+    }
+
+    /// <summary>
+    /// Check concentration when a character casts a spell while already concentrating.
+    /// If the new spell is also a concentration spell, the old one ends automatically.
+    /// If the new spell is NOT a concentration spell, requires a check (DC 15 + new spell level).
+    /// </summary>
+    /// <param name="caster">The caster.</param>
+    /// <param name="newSpell">The spell being cast.</param>
+    /// <returns>True if casting can proceed, false if concentration check failed and casting should be aborted.</returns>
+    private bool HandleConcentrationOnCasting(CharacterController caster, SpellData newSpell)
+    {
+        if (caster == null || newSpell == null) return true;
+
+        var concMgr = caster.GetComponent<ConcentrationManager>();
+        if (concMgr == null || !concMgr.IsConcentrating) return true;
+
+        // If the new spell is a concentration spell, the old one ends automatically
+        // (handled in BeginConcentration). No check needed, casting proceeds.
+        if (newSpell.DurationType == DurationType.Concentration)
+        {
+            return true;
+        }
+
+        // Casting a non-concentration spell while concentrating requires a check
+        // DC = 15 + spell level of the NEW spell
+        var result = concMgr.CheckConcentrationOnCasting(newSpell.SpellLevel);
+        if (!string.IsNullOrEmpty(result.LogMessage))
+        {
+            string color = result.Success ? "#88CCFF" : "#FF6644";
+            CombatUI?.ShowCombatLog($"<color={color}>{result.LogMessage}</color>");
+        }
+
+        if (!result.Success)
+        {
+            UpdateAllStatsUI();
+        }
+
+        // Casting always proceeds — the check only affects the existing concentration spell
+        return true;
+    }
+
+    /// <summary>
+    /// After a concentration spell is successfully cast and its effect applied,
+    /// begin tracking concentration for the caster.
+    /// </summary>
+    /// <param name="caster">The caster of the concentration spell.</param>
+    /// <param name="effect">The ActiveSpellEffect that was created.</param>
+    /// <param name="spell">The concentration spell that was cast.</param>
+    private void BeginConcentrationTracking(CharacterController caster, ActiveSpellEffect effect, SpellData spell)
+    {
+        if (caster == null || effect == null || spell == null) return;
+        if (spell.DurationType != DurationType.Concentration) return;
+
+        var concMgr = caster.GetComponent<ConcentrationManager>();
+        if (concMgr == null) return;
+
+        string log = concMgr.BeginConcentration(effect);
+        if (!string.IsNullOrEmpty(log))
+        {
+            CombatUI?.ShowCombatLog($"<color=#44AAFF>{log}</color>");
+        }
+    }
+
+    /// <summary>
+    /// Voluntarily end concentration for a character (free action).
+    /// Called from UI "End Concentration" button.
+    /// </summary>
+    public void EndConcentrationVoluntarily(CharacterController character)
+    {
+        if (character == null) return;
+
+        var concMgr = character.GetComponent<ConcentrationManager>();
+        if (concMgr == null || !concMgr.IsConcentrating) return;
+
+        string log = concMgr.EndConcentration();
+        if (!string.IsNullOrEmpty(log))
+        {
+            CombatUI?.ShowCombatLog($"<color=#FFAA44>{log}</color>");
+        }
+        UpdateAllStatsUI();
     }
 
     // ========== MOVEMENT ==========
@@ -3078,6 +3241,12 @@ public class GameManager : MonoBehaviour
                 if (LogAttacksToConsole)
                     Debug.Log("[Combat] " + aooLog);
 
+                // Check concentration for AoO damage
+                if (aooResult.Hit && aooResult.TotalDamage > 0)
+                {
+                    CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
+                }
+
                 yield return new WaitForSeconds(1.0f);
             }
         }
@@ -3242,6 +3411,12 @@ public class GameManager : MonoBehaviour
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
 
+        // Check concentration for the target if they took damage
+        if (result.Hit && result.TotalDamage > 0)
+        {
+            CheckConcentrationOnDamage(target, result.TotalDamage);
+        }
+
         if (result.TargetKilled && !target.IsPlayerControlled)
         {
             UpdateAllStatsUI();
@@ -3275,6 +3450,12 @@ public class GameManager : MonoBehaviour
         CombatUI.ShowCombatLog(_lastCombatLog);
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
+
+        // Check concentration for total damage from full attack
+        if (result.TotalDamageDealt > 0)
+        {
+            CheckConcentrationOnDamage(target, result.TotalDamageDealt);
+        }
 
         if (result.TargetKilled && !target.IsPlayerControlled)
         {
@@ -3310,6 +3491,12 @@ public class GameManager : MonoBehaviour
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
 
+        // Check concentration for total damage from dual-wield attack
+        if (result.TotalDamageDealt > 0)
+        {
+            CheckConcentrationOnDamage(target, result.TotalDamageDealt);
+        }
+
         if (result.TargetKilled && !target.IsPlayerControlled)
         {
             UpdateAllStatsUI();
@@ -3343,6 +3530,12 @@ public class GameManager : MonoBehaviour
         CombatUI.ShowCombatLog(_lastCombatLog);
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
+
+        // Check concentration for total damage from flurry of blows
+        if (result.TotalDamageDealt > 0)
+        {
+            CheckConcentrationOnDamage(target, result.TotalDamageDealt);
+        }
 
         if (result.TargetKilled && !target.IsPlayerControlled)
         {
@@ -3607,6 +3800,12 @@ public class GameManager : MonoBehaviour
 
         CombatUI.ShowCombatLog(_lastCombatLog);
         UpdateAllStatsUI();
+
+        // Check concentration for NPC attack damage on target (usually a PC)
+        if (result.Hit && result.TotalDamage > 0)
+        {
+            CheckConcentrationOnDamage(target, result.TotalDamage);
+        }
 
         if (result.TargetKilled)
         {

@@ -873,6 +873,13 @@ public class CharacterController : MonoBehaviour
     {
         if (_sr != null && DeadSprite != null)
             _sr.sprite = DeadSprite;
+
+        // Break concentration on death (D&D 3.5e: concentration ends if killed/unconscious)
+        var concMgr = GetComponent<ConcentrationManager>();
+        if (concMgr != null && concMgr.IsConcentrating)
+        {
+            concMgr.OnCharacterIncapacitated();
+        }
     }
 
     /// <summary>

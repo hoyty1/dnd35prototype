@@ -287,7 +287,14 @@ public class CombatUI : MonoBehaviour
         }
 
         var statusMgr = ch.GetComponent<StatusEffectManager>();
-        if (statusMgr == null || statusMgr.ActiveEffectCount == 0)
+        var concMgr = ch.GetComponent<ConcentrationManager>();
+
+        string buffStr = (statusMgr != null && statusMgr.ActiveEffectCount > 0)
+            ? statusMgr.GetBuffSummaryString() : "";
+        string concStr = (concMgr != null && concMgr.IsConcentrating)
+            ? concMgr.GetConcentrationDisplayString() : "";
+
+        if (string.IsNullOrEmpty(buffStr) && string.IsNullOrEmpty(concStr))
         {
             buffText.text = "";
             buffText.gameObject.SetActive(false);
@@ -296,7 +303,14 @@ public class CombatUI : MonoBehaviour
 
         buffText.gameObject.SetActive(true);
         buffText.supportRichText = true;
-        buffText.text = statusMgr.GetBuffSummaryString();
+
+        // Combine concentration indicator with buff summary
+        if (!string.IsNullOrEmpty(concStr) && !string.IsNullOrEmpty(buffStr))
+            buffText.text = concStr + " " + buffStr;
+        else if (!string.IsNullOrEmpty(concStr))
+            buffText.text = concStr;
+        else
+            buffText.text = buffStr;
     }
 
     private string FormatBonusDetail(int value, string label)
