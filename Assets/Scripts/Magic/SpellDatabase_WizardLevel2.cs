@@ -857,6 +857,58 @@ public static partial class SpellDatabase
             IsPlaceholder = true,
             PlaceholderReason = "[PLACEHOLDER - Swarm summoning not implemented]"
         });
+
+        // --- TEST SPELLS: Cone AoE Testing ---
+        // These test spells exist to verify 30-ft and 60-ft cone AoE patterns.
+        // They are simple damage cones at level 2 for quick-start testing convenience.
+
+        Register(new SpellData
+        {
+            SpellId = "test_cone_30",
+            Name = "Flame Jet (30-ft Cone)",
+            Description = "TEST SPELL: 5d6 fire damage in a 30-ft cone. Reflex half. For testing 30-ft cone AoE pattern.",
+            SpellLevel = 2, School = "Evocation",
+            ClassList = new[] { "Wizard" },
+            TargetType = SpellTargetType.Area,
+            RangeSquares = 6,
+            AreaRadius = 6,
+            AoEShapeType = AoEShape.Cone,
+            AoESizeSquares = 6, // 30 ft = 6 squares length
+            AoERangeSquares = 0, // Cone originates from caster
+            AoEFilter = AoETargetFilter.All,
+            EffectType = SpellEffectType.Damage,
+            DamageDice = 6, DamageCount = 5, // 5d6 fire
+            DamageType = "fire",
+            AllowsSavingThrow = true,
+            SavingThrowType = "Reflex",
+            SaveHalves = true,
+            ActionType = SpellActionType.Standard,
+            ProvokesAoO = true
+        });
+
+        Register(new SpellData
+        {
+            SpellId = "test_cone_60",
+            Name = "Glacial Blast (60-ft Cone)",
+            Description = "TEST SPELL: 10d6 cold damage in a 60-ft cone. Reflex half. For testing 60-ft cone AoE pattern.",
+            SpellLevel = 2, School = "Evocation",
+            ClassList = new[] { "Wizard" },
+            TargetType = SpellTargetType.Area,
+            RangeSquares = 12,
+            AreaRadius = 12,
+            AoEShapeType = AoEShape.Cone,
+            AoESizeSquares = 12, // 60 ft = 12 squares length
+            AoERangeSquares = 0, // Cone originates from caster
+            AoEFilter = AoETargetFilter.All,
+            EffectType = SpellEffectType.Damage,
+            DamageDice = 6, DamageCount = 10, // 10d6 cold
+            DamageType = "cold",
+            AllowsSavingThrow = true,
+            SavingThrowType = "Reflex",
+            SaveHalves = true,
+            ActionType = SpellActionType.Standard,
+            ProvokesAoO = true
+        });
     }
 
     // ====================================================================

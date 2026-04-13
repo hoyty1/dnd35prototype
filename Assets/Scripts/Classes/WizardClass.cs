@@ -72,8 +72,9 @@ public class WizardClass : ICharacterClass
     /// Used by CharacterCreationUI for the Quick Start button.
     /// D&D 3.5e PHB: All cantrips auto-added to spellbook + 3+INT mod 1st-level + 2 2nd-level.
     /// Elara has INT 17 (base) + 0 (Elf racial) = 17, INT mod = +3
-    /// Spellbook: All 20 cantrips + 6 (3+3) 1st-level + 2 2nd-level
+    /// Spellbook: All 20 cantrips + 6 (3+3) 1st-level + 4 2nd-level (incl. 2 test cone spells)
     /// Slots: 4 cantrips, 3 (2 base + 1 bonus) 1st, 2 (1 base + 1 bonus) 2nd
+    /// Prepared 2nd-level: test_cone_30 (30-ft cone) + test_cone_60 (60-ft cone) for AoE testing
     /// </summary>
     public static CharacterCreationData GetQuickStartCharacter()
     {
@@ -108,23 +109,25 @@ public class WizardClass : ICharacterClass
             "burning_hands", "sleep", "charm_person"
         });
 
-        // 2nd-level spells for spellbook: 2 spells
+        // 2nd-level spells for spellbook: 4 spells (2 standard + 2 test cone spells)
         data.SelectedSpellIds.AddRange(new List<string>
         {
-            "scorching_ray", "bulls_strength"
+            "scorching_ray", "bulls_strength",
+            "test_cone_30", "test_cone_60"
         });
 
         data.ComputeFinalStats();
 
         // Pre-set spell preparation (slot order: 4 cantrips, 3 1st-level, 2 2nd-level)
+        // 2nd-level slots use test cone spells for AoE cone pattern testing
         data.PreparedSpellSlotIds = new List<string>
         {
             // 4 cantrip slots (unlimited use)
             "ray_of_frost", "detect_magic_wiz", "acid_splash", "prestidigitation",
             // 3 1st-level slots (2 base + 1 INT bonus)
             "magic_missile", "mage_armor", "burning_hands",
-            // 2 2nd-level slots (1 base + 1 INT bonus)
-            "scorching_ray", "bulls_strength"
+            // 2 2nd-level slots (1 base + 1 INT bonus) — cone test spells
+            "test_cone_30", "test_cone_60"
         };
 
         data.SkillRanks["Concentration"] = 6;
