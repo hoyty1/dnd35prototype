@@ -63,6 +63,12 @@ public class CombatUI : MonoBehaviour
     public GameObject PC4Panel;
     public Image PC4Icon;
 
+    [Header("Buff Display")]
+    public Text PC1BuffText;
+    public Text PC2BuffText;
+    public Text PC3BuffText;
+    public Text PC4BuffText;
+
     [Header("NPC Stats")]
     public Text NPCNameText;
     public Text NPCHPText;
@@ -145,6 +151,12 @@ public class CombatUI : MonoBehaviour
         if (pcs.Count > 1) UpdateCharacterStats(pcs[1], PC2NameText, PC2HPText, PC2ACText, PC2AtkText, PC2SpeedText, PC2AbilityText, PC2HPBar);
         if (pcs.Count > 2) UpdateCharacterStats(pcs[2], PC3NameText, PC3HPText, PC3ACText, PC3AtkText, PC3SpeedText, PC3AbilityText, PC3HPBar);
         if (pcs.Count > 3) UpdateCharacterStats(pcs[3], PC4NameText, PC4HPText, PC4ACText, PC4AtkText, PC4SpeedText, PC4AbilityText, PC4HPBar);
+
+        // Update buff displays for PCs
+        if (pcs.Count > 0) UpdateBuffDisplay(pcs[0], PC1BuffText);
+        if (pcs.Count > 1) UpdateBuffDisplay(pcs[1], PC2BuffText);
+        if (pcs.Count > 2) UpdateBuffDisplay(pcs[2], PC3BuffText);
+        if (pcs.Count > 3) UpdateBuffDisplay(pcs[3], PC4BuffText);
 
         // Update each NPC panel
         for (int i = 0; i < NPCPanels.Count && i < npcs.Count; i++)
@@ -260,6 +272,31 @@ public class CombatUI : MonoBehaviour
 
             hpBar.color = hpColor;
         }
+    }
+
+    /// <summary>
+    /// Update the buff display text for a character, showing active spell effects.
+    /// </summary>
+    private void UpdateBuffDisplay(CharacterController ch, Text buffText)
+    {
+        if (buffText == null) return;
+        if (ch == null || ch.Stats == null)
+        {
+            buffText.text = "";
+            return;
+        }
+
+        var statusMgr = ch.GetComponent<StatusEffectManager>();
+        if (statusMgr == null || statusMgr.ActiveEffectCount == 0)
+        {
+            buffText.text = "";
+            buffText.gameObject.SetActive(false);
+            return;
+        }
+
+        buffText.gameObject.SetActive(true);
+        buffText.supportRichText = true;
+        buffText.text = statusMgr.GetBuffSummaryString();
     }
 
     private string FormatBonusDetail(int value, string label)

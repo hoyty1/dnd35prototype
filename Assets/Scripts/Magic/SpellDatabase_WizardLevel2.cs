@@ -115,6 +115,9 @@ public static partial class SpellDatabase
             BuffStatBonus = 4,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            DurationType = DurationType.Minutes,
+            DurationValue = 1,
+            DurationScalesWithLevel = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
@@ -133,6 +136,9 @@ public static partial class SpellDatabase
             BuffStatBonus = 4,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            DurationType = DurationType.Minutes,
+            DurationValue = 1,
+            DurationScalesWithLevel = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
@@ -151,6 +157,9 @@ public static partial class SpellDatabase
             BuffStatBonus = 4,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            DurationType = DurationType.Minutes,
+            DurationValue = 1,
+            DurationScalesWithLevel = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
@@ -169,6 +178,9 @@ public static partial class SpellDatabase
             BuffStatBonus = 4,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            DurationType = DurationType.Minutes,
+            DurationValue = 1,
+            DurationScalesWithLevel = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
@@ -187,6 +199,9 @@ public static partial class SpellDatabase
             BuffStatBonus = 4,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            DurationType = DurationType.Minutes,
+            DurationValue = 1,
+            DurationScalesWithLevel = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
@@ -205,6 +220,9 @@ public static partial class SpellDatabase
             BuffStatBonus = 4,
             BuffDurationRounds = 30,
             BuffType = "enhancement",
+            DurationType = DurationType.Minutes,
+            DurationValue = 1,
+            DurationScalesWithLevel = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });

@@ -47,8 +47,16 @@ public class SpellData
 
     // ========== BUFF/DEBUFF ==========
     public int BuffACBonus;             // AC bonus (Mage Armor = +4)
-    public int BuffDurationRounds;      // Duration in rounds (0 = instantaneous, -1 = hours/level)
-    public string BuffType;             // "armor", "shield", etc. (for stacking rules)
+    public int BuffDurationRounds;      // Duration in rounds (0 = instantaneous, -1 = hours/level) [LEGACY - prefer DurationType system]
+    public string BuffType;             // "armor", "shield", "morale", "deflection", etc. (for stacking rules)
+
+    // ========== DURATION SYSTEM (D&D 3.5e) ==========
+    /// <summary>How the spell's duration is measured (Instantaneous, Rounds, Minutes, Hours, Permanent, Concentration).</summary>
+    public DurationType DurationType;
+    /// <summary>Base duration value (e.g., 1 for "1 min/level", 3 for "3 rounds").</summary>
+    public int DurationValue;
+    /// <summary>Whether duration scales with caster level (e.g., "1 min/level" = true, "3 rounds" = false).</summary>
+    public bool DurationScalesWithLevel;
 
     // ========== HEALING ==========
     public int HealDice;                // Sides of healing die
@@ -126,8 +134,27 @@ public class SpellData
         else if (AoEShapeType == AoEShape.Line)
             aoeStr = $" | AoE: {AoESizeSquares * 5}-ft line";
 
+        // Duration info
+        string durStr = "";
+        if (DurationType != DurationType.Instantaneous && DurationValue > 0)
+        {
+            string unit = DurationType == DurationType.Rounds ? "rd" :
+                          DurationType == DurationType.Minutes ? "min" :
+                          DurationType == DurationType.Hours ? "hr" : "";
+            durStr = $" | Dur: {DurationValue}{unit}";
+            if (DurationScalesWithLevel) durStr += "/lvl";
+        }
+        else if (DurationType == DurationType.Permanent)
+        {
+            durStr = " | Dur: Permanent";
+        }
+        else if (DurationType == DurationType.Concentration)
+        {
+            durStr = " | Dur: Concentration";
+        }
+
         string placeholderStr = IsPlaceholder ? " <color=#FF8800>[PLACEHOLDER]</color>" : "";
-        return $"[{levelStr}] {Name} ({School}){placeholderStr}\n{effectStr} | Range: {rangeStr}{aoeStr}";
+        return $"[{levelStr}] {Name} ({School}){placeholderStr}\n{effectStr} | Range: {rangeStr}{aoeStr}{durStr}";
     }
 }
 

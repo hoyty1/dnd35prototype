@@ -314,6 +314,14 @@ public class SceneBootstrap : MonoBehaviour
         Image hpBar = CreateHPBar(entry.transform, $"PC{pcIndex}HPBar",
             new Vector2(4, 4), new Vector2(entryW - 8, 20), nameColor);
 
+        // ── Buff display text (overlaid on HP bar, right-aligned, small) ──
+        Text buffText = CreateText(entry.transform, $"PC{pcIndex}Buffs",
+            Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(4, 4), new Vector2(entryW - 8, 20),
+            "", 7, new Color(0.5f, 1f, 0.5f, 0.9f), TextAnchor.MiddleRight);
+        buffText.supportRichText = true;
+        buffText.gameObject.SetActive(false); // Hidden until buffs are active
+
         // Speed text (hidden, kept for data)
         Text speedText = CreateText(entry.transform, $"PC{pcIndex}Speed",
             Vector2.zero, Vector2.zero, Vector2.zero,
@@ -330,6 +338,7 @@ public class SceneBootstrap : MonoBehaviour
                 combatUI.PC1HPText = hpText; combatUI.PC1HPBar = hpBar;
                 combatUI.PC1ACText = acText; combatUI.PC1AtkText = atkText;
                 combatUI.PC1SpeedText = speedText; combatUI.PC1Icon = icon;
+                combatUI.PC1BuffText = buffText;
                 break;
             case 2:
                 combatUI.PC2Panel = entry; combatUI.PC2ActiveIndicator = indicator;
@@ -337,6 +346,7 @@ public class SceneBootstrap : MonoBehaviour
                 combatUI.PC2HPText = hpText; combatUI.PC2HPBar = hpBar;
                 combatUI.PC2ACText = acText; combatUI.PC2AtkText = atkText;
                 combatUI.PC2SpeedText = speedText; combatUI.PC2Icon = icon;
+                combatUI.PC2BuffText = buffText;
                 break;
             case 3:
                 combatUI.PC3Panel = entry; combatUI.PC3ActiveIndicator = indicator;
@@ -344,6 +354,7 @@ public class SceneBootstrap : MonoBehaviour
                 combatUI.PC3HPText = hpText; combatUI.PC3HPBar = hpBar;
                 combatUI.PC3ACText = acText; combatUI.PC3AtkText = atkText;
                 combatUI.PC3SpeedText = speedText; combatUI.PC3Icon = icon;
+                combatUI.PC3BuffText = buffText;
                 break;
             case 4:
                 combatUI.PC4Panel = entry; combatUI.PC4ActiveIndicator = indicator;
@@ -351,6 +362,7 @@ public class SceneBootstrap : MonoBehaviour
                 combatUI.PC4HPText = hpText; combatUI.PC4HPBar = hpBar;
                 combatUI.PC4ACText = acText; combatUI.PC4AtkText = atkText;
                 combatUI.PC4SpeedText = speedText; combatUI.PC4Icon = icon;
+                combatUI.PC4BuffText = buffText;
                 break;
         }
     }

@@ -329,6 +329,12 @@ public class GameManager : MonoBehaviour
                 Debug.Log($"[GameManager] {data.CharacterName}: Spellcasting initialized - {spellComp.GetSlotSummary()}");
             }
 
+            // Initialize StatusEffectManager for duration tracking
+            var statusMgr = pcSlots[i].gameObject.GetComponent<StatusEffectManager>();
+            if (statusMgr == null)
+                statusMgr = pcSlots[i].gameObject.AddComponent<StatusEffectManager>();
+            statusMgr.Init(stats);
+
             // Set PC icon
             Sprite classIcon = IconManager.GetClassIcon(data.ClassName);
             if (classIcon != null && CombatUI != null)
@@ -989,6 +995,12 @@ public class GameManager : MonoBehaviour
 
         inv.CharacterInventory.RecalculateStats();
 
+        // Initialize StatusEffectManager for NPC duration tracking
+        var statusMgr = npc.gameObject.GetComponent<StatusEffectManager>();
+        if (statusMgr == null)
+            statusMgr = npc.gameObject.AddComponent<StatusEffectManager>();
+        statusMgr.Init(stats);
+
         Debug.Log($"[GameManager] {def.Name}: HP {stats.MaxHP} AC {stats.ArmorClass} " +
                   $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq");
     }
@@ -1176,6 +1188,9 @@ public class GameManager : MonoBehaviour
             Debug.Log($"[GameManager] ═══ ROUND {_currentRound} BEGINS ═══");
             CombatUI.AddTurnSeparator(_currentRound);
             ResetQuickenedSpellTrackingForAllCharacters();
+
+            // Tick all spell effect durations at the start of each new round
+            TickAllSpellDurations();
         }
 
         // Log turn start in combat log
@@ -2257,84 +2272,90 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Apply buff effects from a spell to the target character.
-    /// Handles Mage Armor, Shield, stat buffs, combat buffs, and generic buffs.
+    /// Uses StatusEffectManager for proper duration tracking and stat modification reversal.
+    /// Falls back to legacy system if StatusEffectManager is not available.
     /// </summary>
     private void ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
     {
-        // Use the target's SpellcastingComponent if available, otherwise the caster's
-        var targetSpellComp = target.GetComponent<SpellcastingComponent>();
+        // Use StatusEffectManager for tracked buff application
+        var statusMgr = target.GetComponent<StatusEffectManager>();
+        if (statusMgr != null)
+        {
+            int casterLevel = caster.Stats != null ? caster.Stats.Level : 1;
+            var effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
 
-        // Mage Armor: armor AC bonus
+            if (effect != null)
+            {
+                // Also track in SpellcastingComponent's ActiveBuffs for backward compat
+                var targetSpellComp = target.GetComponent<SpellcastingComponent>();
+                if (targetSpellComp != null)
+                {
+                    targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+                }
+
+                string durStr = effect.GetDurationDisplayString();
+                CombatUI?.ShowCombatLog($"<color=#88FF88>✨ {spell.Name} applied to {target.Stats.CharacterName} [{durStr}]</color>");
+                Debug.Log($"[GameManager] {spell.Name} buff applied to {target.Stats.CharacterName} via StatusEffectManager: {effect.GetDetailedString()}");
+            }
+            else
+            {
+                Debug.Log($"[GameManager] {spell.Name} buff NOT applied to {target.Stats.CharacterName} (stacking rules prevented it)");
+            }
+
+            UpdateAllStatsUI();
+            return;
+        }
+
+        // ===== LEGACY FALLBACK (no StatusEffectManager) =====
+        var legacySpellComp = target.GetComponent<SpellcastingComponent>();
+
         if (spell.SpellId == "mage_armor")
         {
             target.Stats.SpellACBonus = spell.BuffACBonus;
-            if (targetSpellComp != null)
+            if (legacySpellComp != null)
             {
-                targetSpellComp.MageArmorActive = true;
-                targetSpellComp.MageArmorACBonus = spell.BuffACBonus;
+                legacySpellComp.MageArmorActive = true;
+                legacySpellComp.MageArmorACBonus = spell.BuffACBonus;
             }
             else
             {
                 SpellcastingComponent.ApplyMageArmor(target, spell);
             }
-            Debug.Log($"[GameManager] Mage Armor applied: +{spell.BuffACBonus} AC to {target.Stats.CharacterName}");
         }
-        // Shield spell: shield AC bonus
-        else if (spell.SpellId == "shield" && spell.BuffShieldBonus > 0)
+        else if (spell.BuffAttackBonus != 0 || spell.BuffDamageBonus != 0 || spell.BuffSaveBonus != 0)
         {
-            target.Stats.ShieldBonus += spell.BuffShieldBonus;
-            if (targetSpellComp != null)
-                targetSpellComp.ApplyBuff(spell);
-            Debug.Log($"[GameManager] Shield applied: +{spell.BuffShieldBonus} shield AC to {target.Stats.CharacterName}");
+            if (spell.BuffAttackBonus != 0) target.Stats.MoraleAttackBonus += spell.BuffAttackBonus;
+            if (spell.BuffDamageBonus != 0) target.Stats.MoraleDamageBonus += spell.BuffDamageBonus;
+            if (spell.BuffSaveBonus != 0) target.Stats.MoraleSaveBonus += spell.BuffSaveBonus;
+            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
         }
-        // Stat buffs (Bull's Strength, Cat's Grace, etc.)
-        else if (!string.IsNullOrEmpty(spell.BuffStatName) && spell.BuffStatBonus != 0)
-        {
-            ApplyStatBuff(target, spell.BuffStatName, spell.BuffStatBonus);
-            if (targetSpellComp != null)
-                targetSpellComp.ApplyBuff(spell);
-            Debug.Log($"[GameManager] {spell.Name} applied: +{spell.BuffStatBonus} {spell.BuffStatName} to {target.Stats.CharacterName}");
-        }
-        // Deflection AC bonus
         else if (spell.BuffDeflectionBonus > 0)
         {
             target.Stats.DeflectionBonus += spell.BuffDeflectionBonus;
-            if (targetSpellComp != null)
-                targetSpellComp.ApplyBuff(spell);
-            Debug.Log($"[GameManager] {spell.Name} applied: +{spell.BuffDeflectionBonus} deflection AC to {target.Stats.CharacterName}");
+            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
         }
-        // Temp HP
+        else if (spell.BuffShieldBonus > 0)
+        {
+            target.Stats.ShieldBonus += spell.BuffShieldBonus;
+            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
+        }
+        else if (!string.IsNullOrEmpty(spell.BuffStatName) && spell.BuffStatBonus != 0)
+        {
+            ApplyStatBuff(target, spell.BuffStatName, spell.BuffStatBonus);
+            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
+        }
         else if (spell.BuffTempHP > 0)
         {
             target.Stats.TempHP += spell.BuffTempHP;
-            if (targetSpellComp != null)
-                targetSpellComp.ApplyBuff(spell);
-            Debug.Log($"[GameManager] {spell.Name} applied: +{spell.BuffTempHP} temp HP to {target.Stats.CharacterName}");
+            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
         }
-        // Combat buffs (attack/damage/save bonuses)
-        else if (spell.BuffAttackBonus != 0 || spell.BuffDamageBonus != 0 || spell.BuffSaveBonus != 0)
-        {
-            if (spell.BuffAttackBonus != 0)
-                target.Stats.MoraleAttackBonus += spell.BuffAttackBonus;
-            if (spell.BuffDamageBonus != 0)
-                target.Stats.MoraleDamageBonus += spell.BuffDamageBonus;
-            if (spell.BuffSaveBonus != 0)
-            {
-                target.Stats.MoraleSaveBonus += spell.BuffSaveBonus;
-            }
-            if (targetSpellComp != null)
-                targetSpellComp.ApplyBuff(spell);
-            Debug.Log($"[GameManager] {spell.Name} combat buff applied to {target.Stats.CharacterName}");
-        }
-        // Generic buff (track via SpellcastingComponent)
         else
         {
-            if (targetSpellComp != null)
-                targetSpellComp.ApplyBuff(spell);
-            else if (spellComp != null)
-                spellComp.ApplyBuff(spell);
-            Debug.Log($"[GameManager] {spell.Name} buff applied to {target.Stats.CharacterName}");
+            if (legacySpellComp != null) legacySpellComp.ApplyBuff(spell);
+            else if (spellComp != null) spellComp.ApplyBuff(spell);
         }
+
+        Debug.Log($"[GameManager] {spell.Name} buff applied to {target.Stats.CharacterName} (legacy path)");
     }
 
     /// <summary>
@@ -2352,7 +2373,6 @@ public class GameManager : MonoBehaviour
                 break;
             case "CON":
                 target.Stats.CON += bonus;
-                // CON buff also grants retroactive HP
                 int hpBonus = (bonus / 2) * target.Stats.Level;
                 target.Stats.CurrentHP += hpBonus;
                 target.Stats.BonusMaxHP += hpBonus;
@@ -2369,6 +2389,59 @@ public class GameManager : MonoBehaviour
             default:
                 Debug.Log($"[GameManager] Unknown stat buff target: {statName}");
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Tick all spell effect durations for all characters (PCs and NPCs).
+    /// Called at the start of each new combat round.
+    /// Removes expired effects and reverses their stat modifications.
+    /// </summary>
+    private void TickAllSpellDurations()
+    {
+        Debug.Log($"[SpellDuration] Ticking spell durations for round {_currentRound}...");
+
+        // Tick PCs
+        foreach (var pc in PCs)
+        {
+            if (pc == null || pc.Stats.IsDead) continue;
+            TickCharacterSpellDurations(pc);
+        }
+
+        // Tick NPCs
+        foreach (var npc in NPCs)
+        {
+            if (npc == null || npc.Stats.IsDead) continue;
+            TickCharacterSpellDurations(npc);
+        }
+
+        UpdateAllStatsUI();
+    }
+
+    /// <summary>
+    /// Tick spell durations for a single character.
+    /// </summary>
+    private void TickCharacterSpellDurations(CharacterController character)
+    {
+        var statusMgr = character.GetComponent<StatusEffectManager>();
+        if (statusMgr == null || statusMgr.ActiveEffectCount == 0) return;
+
+        var expired = statusMgr.TickAllEffects();
+
+        foreach (var effect in expired)
+        {
+            string msg = $"⏱ {effect.Spell?.Name ?? "Unknown"} has expired on {character.Stats.CharacterName}!";
+            Debug.Log($"[SpellDuration] {msg}");
+            CombatUI?.ShowCombatLog($"<color=#FFAA44>{msg}</color>");
+        }
+
+        // Log remaining active effects
+        if (statusMgr.ActiveEffectCount > 0)
+        {
+            foreach (var effect in statusMgr.ActiveEffects)
+            {
+                Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
+            }
         }
     }
 

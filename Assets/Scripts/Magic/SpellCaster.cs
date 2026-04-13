@@ -249,12 +249,20 @@ public static class SpellCaster
         }
 
         // Extend Spell: double duration
-        if (metamagic.Has(MetamagicFeatId.ExtendSpell) && spell.BuffDurationRounds != 0)
+        if (metamagic.Has(MetamagicFeatId.ExtendSpell))
         {
+            // New duration system: double the DurationValue
+            if (spell.DurationValue > 0)
+            {
+                spell.DurationValue *= 2;
+                Debug.Log($"[Metamagic] Extend Spell: duration value doubled to {spell.DurationValue}");
+            }
+            // Legacy: also double BuffDurationRounds
             if (spell.BuffDurationRounds > 0)
+            {
                 spell.BuffDurationRounds *= 2;
-            // -1 (hours/level) stays as -1 but could be tracked separately
-            Debug.Log($"[Metamagic] Extend Spell: duration doubled to {spell.BuffDurationRounds} rounds");
+                Debug.Log($"[Metamagic] Extend Spell: legacy duration doubled to {spell.BuffDurationRounds} rounds");
+            }
         }
 
         // Widen Spell: double area radius

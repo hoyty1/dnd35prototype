@@ -118,8 +118,11 @@ public static partial class SpellDatabase
             RangeSquares = -1,
             EffectType = SpellEffectType.Buff,
             BuffACBonus = 4,
-            BuffDurationRounds = -1, // 1 hour/level
+            BuffDurationRounds = -1, // Legacy
             BuffType = "armor",
+            DurationType = DurationType.Hours,
+            DurationValue = 1,
+            DurationScalesWithLevel = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
@@ -135,8 +138,11 @@ public static partial class SpellDatabase
             RangeSquares = -1,
             EffectType = SpellEffectType.Buff,
             BuffShieldBonus = 4,
-            BuffDurationRounds = 30, // 1 min/level = 30 rounds at CL3
+            BuffDurationRounds = 30,
             BuffType = "shield",
+            DurationType = DurationType.Minutes,
+            DurationValue = 1,
+            DurationScalesWithLevel = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
