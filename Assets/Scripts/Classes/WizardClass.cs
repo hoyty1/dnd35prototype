@@ -122,7 +122,7 @@ public class WizardClass : ICharacterClass
             // 4 cantrip slots (unlimited use)
             "ray_of_frost", "detect_magic_wiz", "acid_splash", "prestidigitation",
             // 3 1st-level slots (2 base + 1 INT bonus)
-            "magic_missile", "mage_armor", "shield",
+            "magic_missile", "mage_armor", "burning_hands",
             // 2 2nd-level slots (1 base + 1 INT bonus)
             "scorching_ray", "bulls_strength"
         };
