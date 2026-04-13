@@ -669,16 +669,19 @@ public class CharacterSheetUI : MonoBehaviour
         AddLine(content, $"  Damage: {stats.BaseDamageCount}d{stats.BaseDamageDice}{(stats.BonusDamage != 0 ? FormatMod(stats.BonusDamage) : "")}", 11, LightText, FontStyle.Normal, 14);
 
         // === Active Buffs ===
-        var spellComp = SelectedPC?.GetComponent<SpellcastingComponent>();
-        if (spellComp != null && spellComp.ActiveBuffs != null && spellComp.ActiveBuffs.Count > 0)
+        // Use StatusEffectManager (present on ALL characters) for buff display,
+        // not SpellcastingComponent.ActiveBuffs (only on spellcasters).
+        // This ensures non-spellcasters (Fighter, Rogue, etc.) also show active buffs
+        // like Bless, Shield of Faith, etc. that were applied to them by party spellcasters.
+        var statusMgr = SelectedPC?.GetComponent<StatusEffectManager>();
+        if (statusMgr != null && statusMgr.ActiveEffectCount > 0)
         {
             AddSeparator(content);
             AddLine(content, "ACTIVE BUFFS", 12, new Color(0.4f, 0.8f, 1f), FontStyle.Bold, 16);
-            foreach (var buff in spellComp.ActiveBuffs)
+            foreach (var effect in statusMgr.ActiveEffects)
             {
-                string duration = buff.Value < 0 ? "permanent" : $"{buff.Value} rounds";
-                var spell = SpellDatabase.GetSpell(buff.Key);
-                string displayName = spell != null ? spell.Name : buff.Key;
+                string displayName = effect.Spell != null ? effect.Spell.Name : "Unknown";
+                string duration = effect.RemainingRounds < 0 ? "permanent" : $"{effect.RemainingRounds} rounds";
                 AddLine(content, $"  \u2728 {displayName} ({duration})", 10, new Color(0.6f, 0.85f, 1f), FontStyle.Normal, 13);
             }
         }
