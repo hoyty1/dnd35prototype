@@ -916,6 +916,177 @@ public class CombatUI : MonoBehaviour
     }
 
     // ========================================================================
+    // SPELL AOE CONFIRMATION PANEL
+    // ========================================================================
+
+    private GameObject _spellAoEConfirmPanel;
+    private Text _spellAoEConfirmText;
+    private Button _spellAoEConfirmButton;
+    private Button _spellAoECancelButton;
+    private System.Action _onSpellAoEConfirm;
+    private System.Action _onSpellAoECancel;
+
+    /// <summary>
+    /// Show a confirmation dialog for a self-centered AoE spell, listing affected targets
+    /// and allowing the player to confirm or cancel before consuming the spell slot.
+    /// </summary>
+    public void ShowSpellAoEConfirmation(SpellData spell, List<string> targetNames, int cellCount,
+        System.Action onConfirm, System.Action onCancel)
+    {
+        _onSpellAoEConfirm = onConfirm;
+        _onSpellAoECancel = onCancel;
+
+        if (_spellAoEConfirmPanel == null)
+            BuildSpellAoEConfirmPanel();
+
+        // Build target list string
+        string targetList;
+        if (targetNames.Count == 0)
+            targetList = "<color=#AAAAAA>(no creatures in area)</color>";
+        else
+            targetList = string.Join(", ", targetNames);
+
+        string aoeSize = $"{spell.AoESizeSquares * 5}-ft radius";
+
+        _spellAoEConfirmText.text =
+            $"✦ <color=#FFD700><b>{spell.Name.ToUpper()}</b></color> ✦\n\n" +
+            $"<color=#CCCCCC>Self-centered {aoeSize} burst</color>\n" +
+            $"<color=#CCCCCC>Area: {cellCount} squares</color>\n\n" +
+            $"<b>Affected Targets ({targetNames.Count}):</b>\n" +
+            $"<color=#66FF66>{targetList}</color>\n\n" +
+            $"<color=#AAAAAA>Cast this spell? Spell slot will be consumed.</color>\n" +
+            $"<color=#888888>(Right-click or Escape to cancel)</color>";
+
+        _spellAoEConfirmPanel.SetActive(true);
+        Debug.Log($"[CombatUI] Spell AoE confirmation shown: {spell.Name} — {targetNames.Count} targets");
+    }
+
+    public void HideSpellAoEConfirmation()
+    {
+        if (_spellAoEConfirmPanel != null)
+            _spellAoEConfirmPanel.SetActive(false);
+    }
+
+    private void BuildSpellAoEConfirmPanel()
+    {
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+        if (canvas == null) return;
+
+        // Full-screen semi-transparent overlay
+        _spellAoEConfirmPanel = new GameObject("SpellAoEConfirmPanel");
+        _spellAoEConfirmPanel.transform.SetParent(canvas.transform, false);
+        RectTransform panelRT = _spellAoEConfirmPanel.AddComponent<RectTransform>();
+        panelRT.anchorMin = Vector2.zero;
+        panelRT.anchorMax = Vector2.one;
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        Image bgImage = _spellAoEConfirmPanel.AddComponent<Image>();
+        bgImage.color = new Color(0f, 0f, 0f, 0.6f);
+
+        CanvasGroup cg = _spellAoEConfirmPanel.AddComponent<CanvasGroup>();
+        cg.blocksRaycasts = true;
+        cg.interactable = true;
+
+        // Dialog box
+        GameObject dialogBox = new GameObject("DialogBox");
+        dialogBox.transform.SetParent(_spellAoEConfirmPanel.transform, false);
+        RectTransform dialogRT = dialogBox.AddComponent<RectTransform>();
+        dialogRT.anchorMin = new Vector2(0.2f, 0.2f);
+        dialogRT.anchorMax = new Vector2(0.8f, 0.8f);
+        dialogRT.offsetMin = Vector2.zero;
+        dialogRT.offsetMax = Vector2.zero;
+
+        Image dialogBg = dialogBox.AddComponent<Image>();
+        dialogBg.color = new Color(0.1f, 0.1f, 0.2f, 0.95f);
+
+        Outline dialogOutline = dialogBox.AddComponent<Outline>();
+        dialogOutline.effectColor = new Color(0.3f, 0.5f, 0.9f, 1f);
+        dialogOutline.effectDistance = new Vector2(2, 2);
+
+        // Text area
+        GameObject textObj = new GameObject("ConfirmText");
+        textObj.transform.SetParent(dialogBox.transform, false);
+        RectTransform textRT = textObj.AddComponent<RectTransform>();
+        textRT.anchorMin = new Vector2(0.05f, 0.28f);
+        textRT.anchorMax = new Vector2(0.95f, 0.95f);
+        textRT.offsetMin = Vector2.zero;
+        textRT.offsetMax = Vector2.zero;
+
+        _spellAoEConfirmText = textObj.AddComponent<Text>();
+        _spellAoEConfirmText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (_spellAoEConfirmText.font == null)
+            _spellAoEConfirmText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        _spellAoEConfirmText.fontSize = 15;
+        _spellAoEConfirmText.color = Color.white;
+        _spellAoEConfirmText.alignment = TextAnchor.MiddleCenter;
+        _spellAoEConfirmText.supportRichText = true;
+
+        // Confirm button
+        _spellAoEConfirmButton = CreateSpellConfirmButton(dialogBox, "ConfirmBtn",
+            "✦ CAST SPELL", new Vector2(0.1f, 0.04f), new Vector2(0.48f, 0.2f),
+            new Color(0.2f, 0.4f, 0.7f, 1f));
+        _spellAoEConfirmButton.onClick.AddListener(() =>
+        {
+            HideSpellAoEConfirmation();
+            _onSpellAoEConfirm?.Invoke();
+        });
+
+        // Cancel button
+        _spellAoECancelButton = CreateSpellConfirmButton(dialogBox, "CancelBtn",
+            "✋ CANCEL", new Vector2(0.52f, 0.04f), new Vector2(0.9f, 0.2f),
+            new Color(0.5f, 0.2f, 0.2f, 1f));
+        _spellAoECancelButton.onClick.AddListener(() =>
+        {
+            HideSpellAoEConfirmation();
+            _onSpellAoECancel?.Invoke();
+        });
+
+        _spellAoEConfirmPanel.SetActive(false);
+    }
+
+    private Button CreateSpellConfirmButton(GameObject parent, string name, string label,
+        Vector2 anchorMin, Vector2 anchorMax, Color bgColor)
+    {
+        GameObject btnObj = new GameObject(name);
+        btnObj.transform.SetParent(parent.transform, false);
+        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
+        btnRT.anchorMin = anchorMin;
+        btnRT.anchorMax = anchorMax;
+        btnRT.offsetMin = Vector2.zero;
+        btnRT.offsetMax = Vector2.zero;
+
+        Image btnImg = btnObj.AddComponent<Image>();
+        btnImg.color = bgColor;
+
+        Button btn = btnObj.AddComponent<Button>();
+        var colors = btn.colors;
+        colors.highlightedColor = new Color(bgColor.r + 0.15f, bgColor.g + 0.15f, bgColor.b + 0.15f, 1f);
+        colors.pressedColor = new Color(bgColor.r - 0.1f, bgColor.g - 0.1f, bgColor.b - 0.1f, 1f);
+        btn.colors = colors;
+
+        GameObject txtObj = new GameObject("Text");
+        txtObj.transform.SetParent(btnObj.transform, false);
+        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = new Vector2(5, 2);
+        txtRT.offsetMax = new Vector2(-5, -2);
+
+        Text txt = txtObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        txt.fontSize = 14;
+        txt.color = Color.white;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.text = label;
+        txt.fontStyle = FontStyle.Bold;
+
+        return btn;
+    }
+
+    // ========================================================================
     // SPELL SELECTION PANEL (with Metamagic Support)
     // ========================================================================
 

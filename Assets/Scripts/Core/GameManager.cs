@@ -58,7 +58,7 @@ public class GameManager : MonoBehaviour
     public enum TurnPhase { PCTurn, NPCTurn, CombatOver }
 
     // Sub-states for player turns
-    public enum PlayerSubPhase { ChoosingAction, Moving, SelectingAttackTarget, SelectingAoETarget, Animating }
+    public enum PlayerSubPhase { ChoosingAction, Moving, SelectingAttackTarget, SelectingAoETarget, ConfirmingSelfAoE, Animating }
 
     public TurnPhase CurrentPhase { get; private set; }
     public PlayerSubPhase CurrentSubPhase { get; private set; }
@@ -95,6 +95,11 @@ public class GameManager : MonoBehaviour
     private bool _isAoETargeting;                          // Currently in AoE targeting mode
     private HashSet<Vector2Int> _currentAoECells;          // Cells currently highlighted for AoE preview
     private Vector2Int _lastAoEHoverPos = new Vector2Int(-1, -1); // Last hovered grid pos for AoE preview
+
+    // ========== SELF-CENTERED AOE CONFIRMATION STATE ==========
+    private bool _isConfirmingSelfAoE;                     // Waiting for user to confirm self-centered AoE
+    private HashSet<Vector2Int> _pendingSelfAoECells;      // AoE cells for preview
+    private List<CharacterController> _pendingSelfAoETargets; // Targets that will be affected
 
     private List<SquareCell> _highlightedCells = new List<SquareCell>();
     private string _lastCombatLog = "";
@@ -414,8 +419,10 @@ public class GameManager : MonoBehaviour
         if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget)
             UpdateAoEPreview();
 
-        // Right-click to cancel AoE targeting
-        if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget && _isAoETargeting)
+        // Right-click / Escape to cancel targeting in various states
+        if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget
+            || CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE
+            || (CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget && _pendingAttackMode == PendingAttackMode.CastSpell))
         {
             bool rightClicked = false;
 #if ENABLE_LEGACY_INPUT_MANAGER
@@ -445,7 +452,18 @@ public class GameManager : MonoBehaviour
 #endif
             if (rightClicked)
             {
-                CancelAoETargeting();
+                if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
+                {
+                    OnSelfAoECancelled();
+                }
+                else if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget && _isAoETargeting)
+                {
+                    CancelAoETargeting();
+                }
+                else if (CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget && _pendingAttackMode == PendingAttackMode.CastSpell)
+                {
+                    CancelSpellTargeting();
+                }
                 return;
             }
         }
@@ -1588,11 +1606,11 @@ public class GameManager : MonoBehaviour
                 : spell.TargetType == SpellTargetType.Area
                     ? "Click a target area to cast"
                     : "Click an enemy to cast";
-            CombatUI.SetTurnIndicator($"✦ {spell.Name}: {targetMsg} | Range: {rangeStr}");
+            CombatUI.SetTurnIndicator($"✦ {spell.Name}: {targetMsg} | Range: {rangeStr} | Right-click to cancel");
         }
         else
         {
-            CombatUI.SetTurnIndicator($"No valid targets for {spell.Name}!");
+            CombatUI.SetTurnIndicator($"No valid targets for {spell.Name}! | Right-click to cancel");
             StartCoroutine(ReturnToActionChoicesAfterDelay(1.5f));
         }
     }
@@ -1774,15 +1792,15 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void EnterAoETargetingMode(CharacterController caster, SpellData spell)
     {
-        // ===== SELF-CENTERED BURST: Skip targeting, auto-cast on caster =====
+        // ===== SELF-CENTERED BURST: Show preview with confirmation =====
         if (spell.AoEShapeType == AoEShape.Burst && spell.AoERangeSquares <= 0)
         {
-            Debug.Log($"[AoE] Self-centered burst: {spell.Name} — auto-casting on caster at ({caster.GridPosition.x},{caster.GridPosition.y})");
+            Debug.Log($"[AoE] Self-centered burst: {spell.Name} — showing preview at ({caster.GridPosition.x},{caster.GridPosition.y})");
 
             // Calculate AoE cells centered on caster
             HashSet<Vector2Int> aoeCells = AoESystem.GetBurstCells(caster.GridPosition, spell.AoESizeSquares, Grid);
 
-            // Brief visual preview
+            // Visual preview — highlight affected area
             Grid.ClearAllHighlights();
             foreach (Vector2Int cellPos in aoeCells)
             {
@@ -1806,10 +1824,26 @@ public class GameManager : MonoBehaviour
                 aoeCells, caster, PCs, NPCs,
                 spell.AoEFilter, casterIsPC, Grid);
 
-            Debug.Log($"[AoE] Self-centered {spell.Name}: {aoeCells.Count} cells, {targets.Count} targets");
+            Debug.Log($"[AoE] Self-centered {spell.Name}: {aoeCells.Count} cells, {targets.Count} targets — awaiting confirmation");
 
-            // Execute immediately
-            PerformAoESpellCast(caster, targets, aoeCells);
+            // Store state for confirmation
+            _isConfirmingSelfAoE = true;
+            _pendingSelfAoECells = aoeCells;
+            _pendingSelfAoETargets = targets;
+            CurrentSubPhase = PlayerSubPhase.ConfirmingSelfAoE;
+            CombatUI.SetActionButtonsVisible(false);
+
+            // Build target name list for the confirmation dialog
+            List<string> targetNames = new List<string>();
+            foreach (var t in targets)
+            {
+                string name = t.Stats != null ? t.Stats.CharacterName : t.name;
+                targetNames.Add(name);
+            }
+
+            // Show confirmation UI
+            CombatUI.ShowSpellAoEConfirmation(spell, targetNames, aoeCells.Count,
+                OnSelfAoEConfirmed, OnSelfAoECancelled);
             return;
         }
 
@@ -2067,6 +2101,84 @@ public class GameManager : MonoBehaviour
         Grid.ClearAllHighlights();
         ShowActionChoices();
         Debug.Log("[AoE] AoE targeting cancelled");
+    }
+
+    /// <summary>
+    /// Cancel single-target spell targeting and return to action choices.
+    /// Called when right-click or Escape is pressed during SelectingAttackTarget
+    /// while a spell is pending.
+    /// </summary>
+    private void CancelSpellTargeting()
+    {
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+        _pendingAttackMode = PendingAttackMode.Single;
+
+        Grid.ClearAllHighlights();
+        ShowActionChoices();
+        Debug.Log("[Spell] Spell targeting cancelled via right-click/Escape");
+    }
+
+    // ========== SELF-CENTERED AOE CONFIRMATION CALLBACKS ==========
+
+    /// <summary>
+    /// Called when the player confirms a self-centered AoE spell via the confirmation dialog.
+    /// Proceeds with the actual spell cast.
+    /// </summary>
+    private void OnSelfAoEConfirmed()
+    {
+        if (!_isConfirmingSelfAoE || _pendingSpell == null)
+        {
+            Debug.LogWarning("[AoE] OnSelfAoEConfirmed called but no pending self-AoE!");
+            ShowActionChoices();
+            return;
+        }
+
+        CharacterController caster = ActivePC;
+        if (caster == null)
+        {
+            ClearSelfAoEState();
+            ShowActionChoices();
+            return;
+        }
+
+        Debug.Log($"[AoE] Self-centered {_pendingSpell.Name} CONFIRMED — casting on {_pendingSelfAoETargets.Count} targets");
+
+        // Cache before clearing state
+        var targets = _pendingSelfAoETargets;
+        var cells = _pendingSelfAoECells;
+
+        ClearSelfAoEState();
+        CombatUI.HideSpellAoEConfirmation();
+
+        // Now execute the spell
+        PerformAoESpellCast(caster, targets, cells);
+    }
+
+    /// <summary>
+    /// Called when the player cancels a self-centered AoE spell via the confirmation dialog
+    /// or right-click/Escape. Returns to action choices without consuming the spell slot.
+    /// </summary>
+    private void OnSelfAoECancelled()
+    {
+        Debug.Log($"[AoE] Self-centered AoE spell CANCELLED — no spell slot consumed");
+
+        ClearSelfAoEState();
+        CombatUI.HideSpellAoEConfirmation();
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+
+        Grid.ClearAllHighlights();
+        ShowActionChoices();
+    }
+
+    /// <summary>Clear the self-centered AoE confirmation state.</summary>
+    private void ClearSelfAoEState()
+    {
+        _isConfirmingSelfAoE = false;
+        _pendingSelfAoECells = null;
+        _pendingSelfAoETargets = null;
     }
 
     /// <summary>
