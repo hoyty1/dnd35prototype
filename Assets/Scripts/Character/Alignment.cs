@@ -113,6 +113,54 @@ public static class AlignmentHelper
         return a == Alignment.LawfulEvil || a == Alignment.NeutralEvil || a == Alignment.ChaoticEvil;
     }
 
+    /// <summary>Whether this alignment is Neutral on the Law/Chaos axis.</summary>
+    public static bool IsNeutralLC(Alignment a)
+    {
+        return a == Alignment.NeutralGood || a == Alignment.TrueNeutral || a == Alignment.NeutralEvil;
+    }
+
+    /// <summary>Whether this alignment is Neutral on the Good/Evil axis.</summary>
+    public static bool IsNeutralGE(Alignment a)
+    {
+        return a == Alignment.LawfulNeutral || a == Alignment.TrueNeutral || a == Alignment.ChaoticNeutral;
+    }
+
+    /// <summary>
+    /// Check if two alignments are within one step of each other.
+    /// D&D 3.5e rule: a cleric's alignment must be within one step of their deity's alignment.
+    /// One step means they can differ on one axis but not both.
+    /// </summary>
+    public static bool IsWithinOneStep(Alignment a, Alignment b)
+    {
+        if (a == Alignment.None || b == Alignment.None) return false;
+        int axisA_LC = GetLCAxis(a); // -1=chaotic, 0=neutral, 1=lawful
+        int axisA_GE = GetGEAxis(a); // -1=evil, 0=neutral, 1=good
+        int axisB_LC = GetLCAxis(b);
+        int axisB_GE = GetGEAxis(b);
+
+        int diffLC = System.Math.Abs(axisA_LC - axisB_LC);
+        int diffGE = System.Math.Abs(axisA_GE - axisB_GE);
+
+        // Within one step: each axis can differ by at most 1
+        return diffLC <= 1 && diffGE <= 1;
+    }
+
+    /// <summary>Get Law/Chaos axis value: 1=Lawful, 0=Neutral, -1=Chaotic.</summary>
+    private static int GetLCAxis(Alignment a)
+    {
+        if (IsLawful(a)) return 1;
+        if (IsChaotic(a)) return -1;
+        return 0;
+    }
+
+    /// <summary>Get Good/Evil axis value: 1=Good, 0=Neutral, -1=Evil.</summary>
+    private static int GetGEAxis(Alignment a)
+    {
+        if (IsGood(a)) return 1;
+        if (IsEvil(a)) return -1;
+        return 0;
+    }
+
     /// <summary>
     /// Check if a given alignment is valid for a character class per D&D 3.5e rules.
     /// Returns true if the alignment is allowed, false otherwise.

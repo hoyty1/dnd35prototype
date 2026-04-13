@@ -54,6 +54,12 @@ public class SpellPreparationUI : MonoBehaviour
     private List<SpellData> _creationKnownSpells = new List<SpellData>();
     private int[] _creationSlotsMax;
 
+    // Domain slot tracking for clerics
+    private List<string> _clericDomains = new List<string>(); // chosen domain names
+    private List<SpellData> _domainSpellsLevel1 = new List<SpellData>();
+    private List<SpellData> _domainSpellsLevel2 = new List<SpellData>();
+    private HashSet<int> _domainSlotIndices = new HashSet<int>(); // which slot indices are domain slots
+
     // Layout
     private const float PANEL_W = 800f;
     private const float PANEL_H = 650f;
@@ -259,17 +265,69 @@ public class SpellPreparationUI : MonoBehaviour
     /// <param name="characterName">Character name for display</param>
     public void OpenForClericCreation(int wisModifier, int characterLevel, string characterName)
     {
+        OpenForClericCreation(wisModifier, characterLevel, characterName, null);
+    }
+
+    /// <summary>
+    /// Open cleric spell preparation with domain awareness.
+    /// Domain slots are the last slot at each spell level 1+.
+    /// Domain slots can only be filled with domain spells from the cleric's chosen domains.
+    /// </summary>
+    public void OpenForClericCreation(int wisModifier, int characterLevel, string characterName, List<string> domainNames)
+    {
         _isCreationMode = true;
         _isClericCreationMode = true;
         _spellComp = null;
 
         SpellDatabase.Init();
+        DomainDatabase.Init();
 
-        // Build known spells: ALL cleric spells at each level
+        // Store domain info
+        _clericDomains = domainNames ?? new List<string>();
+        _domainSpellsLevel1.Clear();
+        _domainSpellsLevel2.Clear();
+        _domainSlotIndices.Clear();
+
+        // Gather domain spells
+        foreach (string domName in _clericDomains)
+        {
+            DomainData domain = DomainDatabase.GetDomain(domName);
+            if (domain == null) continue;
+
+            string s1Id = domain.GetDomainSpellId(1);
+            if (s1Id != null)
+            {
+                SpellData s1 = SpellDatabase.GetSpell(s1Id);
+                if (s1 != null && !_domainSpellsLevel1.Contains(s1))
+                    _domainSpellsLevel1.Add(s1);
+            }
+
+            string s2Id = domain.GetDomainSpellId(2);
+            if (s2Id != null)
+            {
+                SpellData s2 = SpellDatabase.GetSpell(s2Id);
+                if (s2 != null && !_domainSpellsLevel2.Contains(s2))
+                    _domainSpellsLevel2.Add(s2);
+            }
+        }
+
+        // Build known spells: ALL cleric spells at each level + domain spells
         _creationKnownSpells.Clear();
         _creationKnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 0));
         _creationKnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 1));
         _creationKnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 2));
+
+        // Add domain spells that aren't already in the cleric spell list
+        foreach (var ds in _domainSpellsLevel1)
+        {
+            if (!_creationKnownSpells.Exists(s => s.SpellId == ds.SpellId))
+                _creationKnownSpells.Add(ds);
+        }
+        foreach (var ds in _domainSpellsLevel2)
+        {
+            if (!_creationKnownSpells.Exists(s => s.SpellId == ds.SpellId))
+                _creationKnownSpells.Add(ds);
+        }
 
         // Calculate spell slots per D&D 3.5e PHB Table 3-6 (Cleric)
         // Level 3: Base 4/2/1 + domain 0/1/1 + bonus from WIS modifier
@@ -288,10 +346,53 @@ public class SpellPreparationUI : MonoBehaviour
             }
         }
 
+        // Mark domain slot indices: last slot at each level 1+
+        // Domain slot is the last regular slot before bonus at each level
+        // For L1: slots [4..6] (3 regular = 2 base + 1 domain), slot index 6 = domain
+        // For L2: slots [7..8] (2 regular = 1 base + 1 domain), slot index 8 = domain
+        int slotIdx = 0;
+        for (int spellLevel = 0; spellLevel < _creationSlotsMax.Length; spellLevel++)
+        {
+            int count = _creationSlotsMax[spellLevel];
+            if (spellLevel >= 1 && _clericDomains.Count > 0)
+            {
+                // The 3rd slot at level 1 (index 2 within level) is domain
+                // The 2nd slot at level 2 (index 1 within level) is domain
+                // Domain slot = base slots count (without domain), i.e., slot at position "base+0"
+                // For L1: base=2, so slot index within level = 2 (3rd slot)
+                // For L2: base=1, so slot index within level = 1 (2nd slot)
+                int baseSlots = spellLevel == 1 ? 2 : 1;
+                int domainSlotWithinLevel = baseSlots; // 0-indexed
+                if (domainSlotWithinLevel < count)
+                {
+                    _domainSlotIndices.Add(slotIdx + domainSlotWithinLevel);
+                }
+            }
+            slotIdx += count;
+        }
+
         // Auto-prepare: distribute spells across slots
         AutoPrepareCreationSlots();
 
-        _titleText.text = $"CLERIC SPELL PREPARATION — {characterName}";
+        // Auto-prepare domain slots with domain spells
+        if (_clericDomains.Count > 0)
+        {
+            foreach (int di in _domainSlotIndices)
+            {
+                if (di < _creationSlots.Count)
+                {
+                    SpellSlot domSlot = _creationSlots[di];
+                    List<SpellData> domSpells = domSlot.Level == 1 ? _domainSpellsLevel1 : _domainSpellsLevel2;
+                    if (domSpells.Count > 0)
+                    {
+                        domSlot.Prepare(domSpells[0]);
+                    }
+                }
+            }
+        }
+
+        string domainStr = _clericDomains.Count > 0 ? $" — Domains: {string.Join(", ", _clericDomains)}" : "";
+        _titleText.text = $"CLERIC SPELL PREPARATION — {characterName}{domainStr}";
 
         PopulateCreationSlotList();
         RefreshCreationSummary();
@@ -301,7 +402,8 @@ public class SpellPreparationUI : MonoBehaviour
 
         Debug.Log($"[SpellPreparationUI] Cleric creation mode: {_creationKnownSpells.Count} total cleric spells, " +
                   $"slots: L0={_creationSlotsMax[0]}, L1={_creationSlotsMax[1]}, L2={_creationSlotsMax[2]} " +
-                  $"(WIS mod {wisModifier}, bonus 1st={bonus1st}, bonus 2nd={bonus2nd})");
+                  $"(WIS mod {wisModifier}, bonus 1st={bonus1st}, bonus 2nd={bonus2nd}), " +
+                  $"domains: [{string.Join(", ", _clericDomains)}], domain slots: {_domainSlotIndices.Count}");
     }
 
     /// <summary>Close the preparation UI.</summary>
@@ -668,10 +770,20 @@ public class SpellPreparationUI : MonoBehaviour
         row.SlotIndex = index;
 
         // Get available spells at this level from spellbook
-        row.AvailableSpells = _creationKnownSpells
-            .Where(s => s.SpellLevel == slot.Level)
-            .OrderBy(s => s.Name)
-            .ToList();
+        // For domain slots, restrict to domain spells only
+        bool isDomainSlotForFilter = _domainSlotIndices.Contains(index);
+        if (isDomainSlotForFilter && slot.Level >= 1)
+        {
+            List<SpellData> domSpells = slot.Level == 1 ? _domainSpellsLevel1 : _domainSpellsLevel2;
+            row.AvailableSpells = domSpells.OrderBy(s => s.Name).ToList();
+        }
+        else
+        {
+            row.AvailableSpells = _creationKnownSpells
+                .Where(s => s.SpellLevel == slot.Level)
+                .OrderBy(s => s.Name)
+                .ToList();
+        }
 
         // Row container
         row.Row = new GameObject($"SlotRow_{index}");
@@ -698,11 +810,25 @@ public class SpellPreparationUI : MonoBehaviour
             }
         }
         string l0SlotLabel = _isClericCreationMode ? "Orison" : "Cantrip";
-        string slotLabel = slot.Level == 0 ? $"{l0SlotLabel} Slot {levelSlotNum}:" : $"Level {slot.Level} Slot {levelSlotNum}:";
+        bool isDomainSlot = _domainSlotIndices.Contains(index);
+        string slotLabel;
+        if (slot.Level == 0)
+            slotLabel = $"{l0SlotLabel} Slot {levelSlotNum}:";
+        else if (isDomainSlot)
+            slotLabel = $"Lv{slot.Level} DOMAIN Slot:";
+        else
+            slotLabel = $"Level {slot.Level} Slot {levelSlotNum}:";
 
+        Color labelColor = isDomainSlot ? new Color(1f, 0.85f, 0.3f) : new Color(0.8f, 0.8f, 0.7f);
         row.LabelText = MakeText(row.Row.transform, "Label",
             new Vector2(-280, 0), new Vector2(180, 30),
-            slotLabel, 13, new Color(0.8f, 0.8f, 0.7f), TextAnchor.MiddleRight);
+            slotLabel, 13, labelColor, TextAnchor.MiddleRight);
+
+        // Domain slot background tint
+        if (isDomainSlot)
+        {
+            bg.color = new Color(0.15f, 0.12f, 0.05f, 0.7f);
+        }
 
         // Dropdown for spell selection
         GameObject dropdownObj = new GameObject("Dropdown");

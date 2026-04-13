@@ -104,7 +104,9 @@ public class ClericClass : ICharacterClass
                 // Level 2 spells (3 slots: 1 base + 1 domain + 1 WIS bonus)
                 "cure_moderate_wounds", "spiritual_weapon", "bulls_strength_clr"
             },
-            ChosenAlignment = Alignment.NeutralGood
+            ChosenAlignment = Alignment.NeutralGood,
+            ChosenDeityId = "pelor",
+            ChosenDomains = new List<string> { "Healing", "Good" }
         };
         data.ComputeFinalStats();
         data.SkillRanks["Concentration"] = 6;

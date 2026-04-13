@@ -23,6 +23,14 @@ public class CharacterCreationData
     // Step 4b: Alignment
     public Alignment ChosenAlignment = Alignment.None;
 
+    // Step 4c: Deity (all classes, especially important for clerics)
+    /// <summary>The deity ID chosen during character creation (e.g., "pelor").</summary>
+    public string ChosenDeityId = "";
+
+    // Step 4d: Domains (clerics only — choose 2 from deity's domain list)
+    /// <summary>Domain names selected for a cleric (e.g., "Healing", "Good"). Max 2.</summary>
+    public List<string> ChosenDomains = new List<string>();
+
     // Step 5: Skills
     public Dictionary<string, int> SkillRanks = new Dictionary<string, int>();
 

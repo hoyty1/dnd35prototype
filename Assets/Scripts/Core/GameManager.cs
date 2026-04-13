@@ -250,6 +250,12 @@ public class GameManager : MonoBehaviour
             // Set alignment from character creation data
             stats.CharacterAlignment = data.ChosenAlignment;
 
+            // Set deity and domains from character creation data
+            stats.DeityId = data.ChosenDeityId ?? "";
+            stats.ChosenDomains = data.ChosenDomains != null
+                ? new System.Collections.Generic.List<string>(data.ChosenDomains)
+                : new System.Collections.Generic.List<string>();
+
             // Use class-specific token sprite for grid display; fallback to generic
             Sprite pcAlive = IconLoader.GetToken(data.ClassName) ?? pcAliveFallback;
             Vector2Int startPos = (i < pcPositions.Length) ? pcPositions[i] : new Vector2Int(3, 6 + i * 3);

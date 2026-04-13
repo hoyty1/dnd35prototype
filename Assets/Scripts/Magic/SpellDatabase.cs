@@ -67,6 +67,11 @@ public static partial class SpellDatabase
         // ================================================================
         RegisterCleric2ndLevel();
 
+        // ================================================================
+        //  DOMAIN-SPECIFIC SPELLS  — spells that only appear on domain lists
+        // ================================================================
+        RegisterDomainSpells();
+
         int total = _spells.Count;
         int functional = 0;
         int placeholder = 0;

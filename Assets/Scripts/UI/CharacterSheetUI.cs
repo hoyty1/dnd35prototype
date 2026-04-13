@@ -608,6 +608,17 @@ public class CharacterSheetUI : MonoBehaviour
             ? $"  {stats.AlignmentName}" : "";
         AddLine(content, $"Level {stats.Level}  {stats.RaceName}  {stats.CharacterClass}{alignDisplay}", 11, LightText, FontStyle.Normal, 14);
 
+        // Deity display
+        if (!string.IsNullOrEmpty(stats.DeityId))
+        {
+            AddLine(content, $"\u2726 Deity: {stats.DeityName}", 11, new Color(0.9f, 0.85f, 0.5f), FontStyle.Normal, 14);
+        }
+        // Domain display (Clerics)
+        if (stats.ChosenDomains != null && stats.ChosenDomains.Count > 0)
+        {
+            AddLine(content, $"\u2726 Domains: {stats.DomainsDisplay}", 11, new Color(0.7f, 0.85f, 1f), FontStyle.Normal, 14);
+        }
+
         AddSeparator(content);
 
         // === HP / Movement / Initiative ===

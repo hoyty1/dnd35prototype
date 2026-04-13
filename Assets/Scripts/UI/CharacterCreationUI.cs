@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class CharacterCreationUI : MonoBehaviour
 {
     // ========== STATE ==========
-    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, ChooseAlignment, AllocateSkills, SelectFeats, SelectSpells, Review }
+    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, ChooseAlignment, ChooseDeity, ChooseDomains, AllocateSkills, SelectFeats, SelectSpells, Review }
 
     public Step CurrentStep = Step.RollStats;
     public int CurrentCharacterIndex = 0; // 0 = PC1, 1 = PC2, 2 = PC3, 3 = PC4
@@ -92,6 +92,25 @@ public class CharacterCreationUI : MonoBehaviour
     private Text _alignInfoText;
     private Text _alignRestrictionText;
     private Button _confirmAlignButton;
+
+    // Step 4c: Choose Deity
+    private GameObject _stepDeityPanel;
+    private string _selectedDeityId = "";
+    private Button[] _deityButtons;
+    private Text _deityInfoText;
+    private Text _deityRestrictionText;
+    private Button _confirmDeityButton;
+    private Button _skipDeityButton;
+    private List<DeityData> _currentDeityList = new List<DeityData>();
+
+    // Step 4d: Choose Domains (Cleric only)
+    private GameObject _stepDomainPanel;
+    private List<string> _selectedDomains = new List<string>();
+    private Button[] _domainButtons;
+    private Text _domainInfoText;
+    private Text _domainSummaryText;
+    private Button _confirmDomainButton;
+    private List<string> _availableDomainNames = new List<string>();
 
     // Step 5: Review
     private Text _reviewText;
@@ -200,6 +219,8 @@ public class CharacterCreationUI : MonoBehaviour
         BuildStepChooseRace();
         BuildStepChooseClass();
         BuildStepChooseAlignment();
+        BuildStepChooseDeity();
+        BuildStepChooseDomains();
         BuildStepReview();
 
         ShowStep(Step.RollStats);
@@ -863,6 +884,340 @@ public class CharacterCreationUI : MonoBehaviour
     {
         if (_selectedAlignment == Alignment.None) return;
         CreatedCharacters[CurrentCharacterIndex].ChosenAlignment = _selectedAlignment;
+        ShowStep(Step.ChooseDeity);
+    }
+
+    // ========== STEP 4c: CHOOSE DEITY ==========
+
+    private void BuildStepChooseDeity()
+    {
+        DeityDatabase.Init();
+
+        _stepDeityPanel = CreatePanel(_contentArea.transform, "StepDeity",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(PANEL_W - 60, PANEL_H - 150),
+            new Color(0, 0, 0, 0));
+        _stepDeityPanel.SetActive(false);
+
+        MakeText(_stepDeityPanel.transform, "DeityTooltip",
+            new Vector2(0, 230), new Vector2(700, 30),
+            "Choose a deity for your character. Clerics must worship a deity within one step of their alignment.",
+            12, new Color(0.7f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
+
+        _deityRestrictionText = MakeText(_stepDeityPanel.transform, "DeityRestriction",
+            new Vector2(0, 210), new Vector2(700, 20),
+            "", 11, new Color(1f, 0.7f, 0.3f), TextAnchor.MiddleCenter);
+
+        // Scrollable deity list area
+        GameObject scrollArea = CreatePanel(_stepDeityPanel.transform, "DeityScrollArea",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(-140, -20), new Vector2(480, 370),
+            new Color(0.08f, 0.08f, 0.14f, 0.9f));
+
+        // Add mask + ScrollRect
+        var scrollMask = scrollArea.AddComponent<Mask>();
+        scrollMask.showMaskGraphic = true;
+        var scrollRect = scrollArea.AddComponent<ScrollRect>();
+        scrollRect.horizontal = false;
+
+        // Content container
+        GameObject content = new GameObject("Content");
+        content.transform.SetParent(scrollArea.transform, false);
+        RectTransform contentRT = content.AddComponent<RectTransform>();
+        contentRT.anchorMin = new Vector2(0, 1);
+        contentRT.anchorMax = new Vector2(1, 1);
+        contentRT.pivot = new Vector2(0.5f, 1);
+        contentRT.anchoredPosition = Vector2.zero;
+        contentRT.sizeDelta = new Vector2(0, 800);
+        scrollRect.content = contentRT;
+
+        // Create deity buttons (will be populated dynamically)
+        _deityButtons = new Button[16];
+        List<DeityData> allDeities = DeityDatabase.GetAllDeities();
+        float yPos = -5f;
+        float btnH = 44f;
+        float spacing = 4f;
+
+        for (int i = 0; i < allDeities.Count && i < 16; i++)
+        {
+            int idx = i;
+            DeityData deity = allDeities[i];
+            _deityButtons[i] = MakeButton(content.transform, $"Deity{i}",
+                new Vector2(0, yPos - btnH / 2), new Vector2(460, btnH),
+                $"{deity.Name} ({deity.AlignmentAbbr})", new Color(0.2f, 0.2f, 0.35f), Color.white, 13);
+
+            // Position using anchors
+            RectTransform btnRT = _deityButtons[i].GetComponent<RectTransform>();
+            btnRT.anchorMin = new Vector2(0, 1);
+            btnRT.anchorMax = new Vector2(1, 1);
+            btnRT.pivot = new Vector2(0.5f, 1);
+            btnRT.anchoredPosition = new Vector2(0, yPos);
+            btnRT.sizeDelta = new Vector2(-10, btnH);
+
+            _deityButtons[i].onClick.AddListener(() => OnDeitySelected(idx));
+            yPos -= (btnH + spacing);
+        }
+        contentRT.sizeDelta = new Vector2(0, Mathf.Abs(yPos) + 10);
+
+        // Info panel on right side
+        _deityInfoText = MakeText(_stepDeityPanel.transform, "DeityInfo",
+            new Vector2(250, -20), new Vector2(260, 370),
+            "Select a deity to see details.", 12, new Color(0.8f, 0.8f, 0.9f), TextAnchor.UpperLeft);
+
+        // Confirm and Skip buttons
+        _confirmDeityButton = MakeButton(_stepDeityPanel.transform, "ConfirmDeity",
+            new Vector2(-80, -220), new Vector2(200, 40),
+            "Confirm Deity ✓", new Color(0.15f, 0.4f, 0.15f), Color.white, 16);
+        _confirmDeityButton.onClick.AddListener(OnConfirmDeity);
+        _confirmDeityButton.interactable = false;
+
+        _skipDeityButton = MakeButton(_stepDeityPanel.transform, "SkipDeity",
+            new Vector2(130, -220), new Vector2(160, 40),
+            "No Deity", new Color(0.4f, 0.35f, 0.15f), Color.white, 14);
+        _skipDeityButton.onClick.AddListener(OnSkipDeity);
+    }
+
+    private void OnDeitySelected(int index)
+    {
+        List<DeityData> allDeities = DeityDatabase.GetAllDeities();
+        if (index < 0 || index >= allDeities.Count) return;
+
+        DeityData deity = allDeities[index];
+        _selectedDeityId = deity.DeityId;
+
+        // Update info display
+        string info = $"<b>{deity.Name}</b>\n";
+        info += $"{deity.Title}\n";
+        info += $"Alignment: {AlignmentHelper.GetFullName(deity.DeityAlignment)} ({deity.AlignmentAbbr})\n\n";
+        info += $"<b>Domains:</b>\n{deity.DomainsString}\n\n";
+        info += $"<b>Favored Weapon:</b>\n{deity.FavoredWeapon}\n\n";
+        info += $"<b>Portfolio:</b>\n{deity.Portfolio}";
+        _deityInfoText.text = info;
+
+        _confirmDeityButton.interactable = true;
+        RefreshDeityButtons();
+    }
+
+    private void RefreshDeityButtons()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        List<DeityData> allDeities = DeityDatabase.GetAllDeities();
+        bool isCleric = data.ClassName == "Cleric";
+
+        for (int i = 0; i < allDeities.Count && i < _deityButtons.Length; i++)
+        {
+            if (_deityButtons[i] == null) continue;
+            DeityData deity = allDeities[i];
+
+            bool compatible = deity.IsAlignmentCompatible(data.ChosenAlignment);
+
+            var colors = _deityButtons[i].colors;
+            if (deity.DeityId == _selectedDeityId)
+            {
+                colors.normalColor = new Color(0.6f, 0.55f, 0.1f); // Gold for selected
+            }
+            else if (!compatible && isCleric)
+            {
+                colors.normalColor = new Color(0.15f, 0.15f, 0.2f, 0.5f); // Dimmed
+            }
+            else
+            {
+                colors.normalColor = new Color(0.2f, 0.2f, 0.35f);
+            }
+            colors.highlightedColor = colors.normalColor * 1.3f;
+            _deityButtons[i].colors = colors;
+
+            // Disable incompatible deities for clerics
+            _deityButtons[i].interactable = !isCleric || compatible;
+        }
+
+        // Clerics MUST choose a deity; hide skip for clerics
+        if (_skipDeityButton != null)
+            _skipDeityButton.gameObject.SetActive(!isCleric);
+    }
+
+    private void OnConfirmDeity()
+    {
+        if (string.IsNullOrEmpty(_selectedDeityId)) return;
+        CreatedCharacters[CurrentCharacterIndex].ChosenDeityId = _selectedDeityId;
+
+        // If cleric, go to domain selection; otherwise skip to skills
+        if (CreatedCharacters[CurrentCharacterIndex].ClassName == "Cleric")
+        {
+            ShowStep(Step.ChooseDomains);
+        }
+        else
+        {
+            ShowStep(Step.AllocateSkills);
+        }
+    }
+
+    private void OnSkipDeity()
+    {
+        CreatedCharacters[CurrentCharacterIndex].ChosenDeityId = "";
+        ShowStep(Step.AllocateSkills);
+    }
+
+    // ========== STEP 4d: CHOOSE DOMAINS (Cleric only) ==========
+
+    private void BuildStepChooseDomains()
+    {
+        DomainDatabase.Init();
+
+        _stepDomainPanel = CreatePanel(_contentArea.transform, "StepDomain",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(PANEL_W - 60, PANEL_H - 150),
+            new Color(0, 0, 0, 0));
+        _stepDomainPanel.SetActive(false);
+
+        MakeText(_stepDomainPanel.transform, "DomainTooltip",
+            new Vector2(0, 230), new Vector2(700, 30),
+            "Choose 2 domains from your deity's list. Each domain grants a special power and bonus spells.",
+            12, new Color(0.7f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
+
+        _domainSummaryText = MakeText(_stepDomainPanel.transform, "DomainSummary",
+            new Vector2(0, 205), new Vector2(700, 25),
+            "Selected: 0/2", 13, new Color(1f, 0.85f, 0.3f), TextAnchor.MiddleCenter);
+
+        // Domain buttons area (will be dynamically populated)
+        _domainButtons = new Button[8]; // max 6 domains per deity, 8 for safety
+
+        // Info panel
+        _domainInfoText = MakeText(_stepDomainPanel.transform, "DomainInfo",
+            new Vector2(180, -20), new Vector2(340, 340),
+            "Select a domain to see details.", 12, new Color(0.8f, 0.8f, 0.9f), TextAnchor.UpperLeft);
+
+        // Confirm button
+        _confirmDomainButton = MakeButton(_stepDomainPanel.transform, "ConfirmDomain",
+            new Vector2(0, -220), new Vector2(250, 40),
+            "Confirm Domains ✓", new Color(0.15f, 0.4f, 0.15f), Color.white, 16);
+        _confirmDomainButton.onClick.AddListener(OnConfirmDomains);
+        _confirmDomainButton.interactable = false;
+    }
+
+    private void PopulateDomainButtons()
+    {
+        // Clear existing buttons
+        for (int i = 0; i < _domainButtons.Length; i++)
+        {
+            if (_domainButtons[i] != null)
+            {
+                Destroy(_domainButtons[i].gameObject);
+                _domainButtons[i] = null;
+            }
+        }
+
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        DeityData deity = DeityDatabase.GetDeity(data.ChosenDeityId);
+        if (deity == null) return;
+
+        _availableDomainNames = new List<string>(deity.Domains);
+        _selectedDomains.Clear();
+
+        float yStart = 170f;
+        float btnH = 50f;
+        float spacing = 8f;
+        float xPos = -180f;
+
+        for (int i = 0; i < _availableDomainNames.Count && i < _domainButtons.Length; i++)
+        {
+            int idx = i;
+            string domainName = _availableDomainNames[i];
+            DomainData domain = DomainDatabase.GetDomain(domainName);
+
+            string label = domainName;
+            if (domain != null)
+            {
+                // Show domain spell names for levels 1-2
+                SpellDatabase.Init();
+                string spell1Name = "";
+                string spell2Name = "";
+                string s1Id = domain.GetDomainSpellId(1);
+                string s2Id = domain.GetDomainSpellId(2);
+                if (s1Id != null) { var s = SpellDatabase.GetSpell(s1Id); spell1Name = s != null ? s.Name : s1Id; }
+                if (s2Id != null) { var s = SpellDatabase.GetSpell(s2Id); spell2Name = s != null ? s.Name : s2Id; }
+                label = $"{domainName}\n<size=10>1st: {spell1Name}  |  2nd: {spell2Name}</size>";
+            }
+
+            float yPos = yStart - i * (btnH + spacing);
+            _domainButtons[i] = MakeButton(_stepDomainPanel.transform, $"Domain{i}",
+                new Vector2(xPos, yPos), new Vector2(280, btnH),
+                label, new Color(0.2f, 0.2f, 0.35f), Color.white, 13);
+
+            _domainButtons[i].onClick.AddListener(() => OnDomainToggled(idx));
+        }
+
+        RefreshDomainButtons();
+    }
+
+    private void OnDomainToggled(int index)
+    {
+        if (index < 0 || index >= _availableDomainNames.Count) return;
+        string domainName = _availableDomainNames[index];
+
+        if (_selectedDomains.Contains(domainName))
+        {
+            _selectedDomains.Remove(domainName);
+        }
+        else if (_selectedDomains.Count < 2)
+        {
+            _selectedDomains.Add(domainName);
+        }
+
+        // Show domain info
+        DomainData domain = DomainDatabase.GetDomain(domainName);
+        if (domain != null)
+        {
+            string info = $"<b>{domain.Name} Domain</b>\n\n";
+            info += $"<b>Granted Power:</b>\n{domain.GrantedPower}\n\n";
+            info += $"<b>Domain Spells:</b>\n";
+
+            SpellDatabase.Init();
+            foreach (var kvp in domain.DomainSpells)
+            {
+                SpellData spell = SpellDatabase.GetSpell(kvp.Value);
+                string spellName = spell != null ? spell.Name : kvp.Value;
+                info += $"  {kvp.Key}st Level: {spellName}\n";
+            }
+            _domainInfoText.text = info;
+        }
+
+        RefreshDomainButtons();
+    }
+
+    private void RefreshDomainButtons()
+    {
+        _domainSummaryText.text = $"Selected: {_selectedDomains.Count}/2";
+        _confirmDomainButton.interactable = _selectedDomains.Count == 2;
+
+        for (int i = 0; i < _availableDomainNames.Count && i < _domainButtons.Length; i++)
+        {
+            if (_domainButtons[i] == null) continue;
+            string domainName = _availableDomainNames[i];
+            bool isSelected = _selectedDomains.Contains(domainName);
+
+            var colors = _domainButtons[i].colors;
+            if (isSelected)
+            {
+                colors.normalColor = new Color(0.15f, 0.5f, 0.15f); // Green for selected
+            }
+            else if (_selectedDomains.Count >= 2)
+            {
+                colors.normalColor = new Color(0.15f, 0.15f, 0.2f, 0.5f); // Dimmed when 2 selected
+            }
+            else
+            {
+                colors.normalColor = new Color(0.2f, 0.2f, 0.35f);
+            }
+            colors.highlightedColor = colors.normalColor * 1.3f;
+            _domainButtons[i].colors = colors;
+        }
+    }
+
+    private void OnConfirmDomains()
+    {
+        if (_selectedDomains.Count != 2) return;
+        CreatedCharacters[CurrentCharacterIndex].ChosenDomains = new List<string>(_selectedDomains);
         ShowStep(Step.AllocateSkills);
     }
 
@@ -1206,7 +1561,7 @@ public class CharacterCreationUI : MonoBehaviour
                         Debug.Log($"[CharCreation] Cleric spell preparation complete: {preparedSlotIds.Count} slots");
                         ShowStep(Step.Review);
                     };
-                    SpellPrepUI.OpenForClericCreation(wisMod, 3, data.CharacterName);
+                    SpellPrepUI.OpenForClericCreation(wisMod, 3, data.CharacterName, data.ChosenDomains);
                 }
                 else
                 {
@@ -1377,9 +1732,29 @@ public class CharacterCreationUI : MonoBehaviour
             ? AlignmentHelper.GetFullName(data.ChosenAlignment)
             : "None";
 
+        // Deity and domain info
+        DeityDatabase.Init();
+        DomainDatabase.Init();
+        DeityData reviewDeity = !string.IsNullOrEmpty(data.ChosenDeityId)
+            ? DeityDatabase.GetDeity(data.ChosenDeityId) : null;
+        string deityStr = reviewDeity != null ? $"{reviewDeity.Name} ({reviewDeity.Title})" : "None";
+        string domainsStr = data.ChosenDomains.Count > 0 ? string.Join(", ", data.ChosenDomains) : "None";
+
         string review = $"══════════ CHARACTER SHEET ══════════\n\n";
         review += $"Race: {data.RaceName}   Class: {data.ClassName}   Level: 3{sizeStr}\n";
-        review += $"Alignment: {alignStr}\n\n";
+        review += $"Alignment: {alignStr}\n";
+        review += $"Deity: {deityStr}\n";
+        if (data.ClassName == "Cleric" && data.ChosenDomains.Count > 0)
+        {
+            review += $"Domains: {domainsStr}\n";
+            foreach (string domName in data.ChosenDomains)
+            {
+                DomainData dom = DomainDatabase.GetDomain(domName);
+                if (dom != null)
+                    review += $"  • {domName}: {dom.GrantedPower}\n";
+            }
+        }
+        review += "\n";
 
         review += "--- Ability Scores ---\n";
         review += data.GetFinalStatString("STR", data.STR, data.Race != null ? data.Race.STRModifier : 0) + "\n";
@@ -1567,6 +1942,8 @@ public class CharacterCreationUI : MonoBehaviour
         _step3Panel.SetActive(false);
         _step4Panel.SetActive(false);
         _stepAlignPanel.SetActive(false);
+        _stepDeityPanel.SetActive(false);
+        _stepDomainPanel.SetActive(false);
         _step5Panel.SetActive(false);
 
         string heroLabel = $"Hero {CurrentCharacterIndex + 1} of {TotalPCs}";
@@ -1577,7 +1954,7 @@ public class CharacterCreationUI : MonoBehaviour
         {
             case Step.RollStats:
                 _step1Panel.SetActive(true);
-                _stepText.text = "Step 1 of 9: Roll Stats";
+                _stepText.text = "Step 1 of 11: Roll Stats";
                 // Reset roll UI
                 if (_currentRolls == null)
                 {
@@ -1591,7 +1968,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.AssignStats:
                 _step2Panel.SetActive(true);
-                _stepText.text = "Step 2 of 9: Assign Stats";
+                _stepText.text = "Step 2 of 11: Assign Stats";
                 // Reset assignment
                 _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
                 _rollUsed = new bool[6];
@@ -1601,7 +1978,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseRace:
                 _step3Panel.SetActive(true);
-                _stepText.text = "Step 3 of 9: Choose Race";
+                _stepText.text = "Step 3 of 11: Choose Race";
                 _selectedRace = null;
                 _raceInfoText.text = "Select a race to see details.";
                 _racePreviewText.text = "";
@@ -1618,7 +1995,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseClass:
                 _step4Panel.SetActive(true);
-                _stepText.text = "Step 4 of 9: Choose Class";
+                _stepText.text = "Step 4 of 11: Choose Class";
                 _selectedClass = null;
                 _classInfoText.text = "";
                 _confirmClassButton.interactable = false;
@@ -1633,7 +2010,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseAlignment:
                 _stepAlignPanel.SetActive(true);
-                _stepText.text = "Step 5 of 9: Choose Alignment";
+                _stepText.text = "Step 5 of 11: Choose Alignment";
                 _selectedAlignment = Alignment.None;
                 _alignInfoText.text = "Select an alignment to see its description.";
                 _confirmAlignButton.interactable = false;
@@ -1644,25 +2021,47 @@ public class CharacterCreationUI : MonoBehaviour
                 RefreshAlignmentButtons();
                 break;
 
+            case Step.ChooseDeity:
+                _stepDeityPanel.SetActive(true);
+                _stepText.text = "Step 6 of 11: Choose Deity";
+                _selectedDeityId = "";
+                _deityInfoText.text = "Select a deity to see details.";
+                _confirmDeityButton.interactable = false;
+                string deityNote = CreatedCharacters[CurrentCharacterIndex].ClassName == "Cleric"
+                    ? "Clerics must choose a deity within one step of their alignment."
+                    : "Deity is optional for non-cleric characters.";
+                _deityRestrictionText.text = deityNote;
+                RefreshDeityButtons();
+                break;
+
+            case Step.ChooseDomains:
+                _stepDomainPanel.SetActive(true);
+                _stepText.text = "Step 7 of 11: Choose Domains";
+                _selectedDomains.Clear();
+                _domainInfoText.text = "Select a domain to see details.";
+                _confirmDomainButton.interactable = false;
+                PopulateDomainButtons();
+                break;
+
             case Step.AllocateSkills:
                 // Skills allocation is handled by the SkillsUIPanel overlay
-                _stepText.text = "Step 6 of 9: Allocate Skills";
+                _stepText.text = "Step 8 of 11: Allocate Skills";
                 StartSkillAllocation();
                 break;
 
             case Step.SelectFeats:
-                _stepText.text = "Step 7 of 9: Select Feats";
+                _stepText.text = "Step 9 of 11: Select Feats";
                 StartFeatSelection();
                 break;
 
             case Step.SelectSpells:
-                _stepText.text = "Step 8 of 9: Select Spells (incl. Cantrips)";
+                _stepText.text = "Step 10 of 11: Select Spells (incl. Cantrips)";
                 StartSpellSelection();
                 break;
 
             case Step.Review:
                 _step5Panel.SetActive(true);
-                _stepText.text = "Step 9 of 9: Review & Name";
+                _stepText.text = "Step 11 of 11: Review & Name";
                 _nameInput.text = "";
                 RefreshReview();
                 break;
@@ -1677,11 +2076,18 @@ public class CharacterCreationUI : MonoBehaviour
             case Step.ChooseRace: ShowStep(Step.AssignStats); break;
             case Step.ChooseClass: ShowStep(Step.ChooseRace); break;
             case Step.ChooseAlignment: ShowStep(Step.ChooseClass); break;
+            case Step.ChooseDeity: ShowStep(Step.ChooseAlignment); break;
+            case Step.ChooseDomains: ShowStep(Step.ChooseDeity); break;
             case Step.AllocateSkills:
                 // Close skills UI if open
                 if (SkillsUI != null && SkillsUI.IsOpen)
                     SkillsUI.Close();
-                ShowStep(Step.ChooseAlignment);
+                // Go back to deity or domains depending on class
+                var backData = CreatedCharacters[CurrentCharacterIndex];
+                if (backData.ClassName == "Cleric" && !string.IsNullOrEmpty(backData.ChosenDeityId))
+                    ShowStep(Step.ChooseDomains);
+                else
+                    ShowStep(Step.ChooseDeity);
                 break;
             case Step.SelectFeats:
                 // Close feat UI if open
@@ -1708,6 +2114,8 @@ public class CharacterCreationUI : MonoBehaviour
         _selectedRace = null;
         _selectedClass = null;
         _selectedAlignment = Alignment.None;
+        _selectedDeityId = "";
+        _selectedDomains.Clear();
         _selectedRollIndex = -1;
         _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
         _rollUsed = new bool[6];

@@ -21,6 +21,38 @@ public class CharacterStats
     /// <summary>Alignment abbreviation (e.g., "LG").</summary>
     public string AlignmentAbbr => AlignmentHelper.GetAbbreviation(CharacterAlignment);
 
+    // ========== DEITY & DOMAINS ==========
+
+    /// <summary>ID of the character's chosen deity (e.g., "pelor"). Empty if none.</summary>
+    public string DeityId = "";
+
+    /// <summary>Names of the cleric's chosen domains (e.g., ["Healing", "Good"]). Empty for non-clerics.</summary>
+    public System.Collections.Generic.List<string> ChosenDomains = new System.Collections.Generic.List<string>();
+
+    /// <summary>Get the DeityData for this character's deity, or null.</summary>
+    public DeityData Deity
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(DeityId)) return null;
+            DeityDatabase.Init();
+            return DeityDatabase.GetDeity(DeityId);
+        }
+    }
+
+    /// <summary>Display name of the deity, or "None".</summary>
+    public string DeityName
+    {
+        get
+        {
+            var d = Deity;
+            return d != null ? d.Name : "None";
+        }
+    }
+
+    /// <summary>Domains display string (e.g., "Healing, Good").</summary>
+    public string DomainsDisplay => ChosenDomains.Count > 0 ? string.Join(", ", ChosenDomains) : "None";
+
     /// <summary>Whether this character is a Rogue (eligible for sneak attack).</summary>
     public bool IsRogue => CharacterClass == "Rogue";
 
