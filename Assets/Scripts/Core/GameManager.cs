@@ -468,6 +468,30 @@ public class GameManager : MonoBehaviour
             }
         }
 
+        // Left-click to confirm self-centered AoE spell
+        if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
+        {
+            bool leftClicked = false;
+#if ENABLE_LEGACY_INPUT_MANAGER
+            if (Input.GetMouseButtonDown(0))
+                leftClicked = true;
+#endif
+#if ENABLE_INPUT_SYSTEM
+            if (!leftClicked)
+            {
+                var mouse = UnityEngine.InputSystem.Mouse.current;
+                if (mouse != null && mouse.leftButton.wasPressedThisFrame)
+                    leftClicked = true;
+            }
+#endif
+            if (leftClicked)
+            {
+                OnSelfAoEConfirmed();
+                return;
+            }
+            return; // Block all other input while confirming
+        }
+
         bool clicked = false;
         Vector3 mouseScreenPos = Vector3.zero;
 
@@ -1833,17 +1857,8 @@ public class GameManager : MonoBehaviour
             CurrentSubPhase = PlayerSubPhase.ConfirmingSelfAoE;
             CombatUI.SetActionButtonsVisible(false);
 
-            // Build target name list for the confirmation dialog
-            List<string> targetNames = new List<string>();
-            foreach (var t in targets)
-            {
-                string name = t.Stats != null ? t.Stats.CharacterName : t.name;
-                targetNames.Add(name);
-            }
-
-            // Show confirmation UI
-            CombatUI.ShowSpellAoEConfirmation(spell, targetNames, aoeCells.Count,
-                OnSelfAoEConfirmed, OnSelfAoECancelled);
+            // Show turn indicator with confirm/cancel instructions
+            CombatUI.SetTurnIndicator($"Casting {spell.Name} — Left-click to confirm, Right-click to cancel");
             return;
         }
 
@@ -2122,7 +2137,7 @@ public class GameManager : MonoBehaviour
     // ========== SELF-CENTERED AOE CONFIRMATION CALLBACKS ==========
 
     /// <summary>
-    /// Called when the player confirms a self-centered AoE spell via the confirmation dialog.
+    /// Called when the player confirms a self-centered AoE spell via left-click.
     /// Proceeds with the actual spell cast.
     /// </summary>
     private void OnSelfAoEConfirmed()
@@ -2149,22 +2164,20 @@ public class GameManager : MonoBehaviour
         var cells = _pendingSelfAoECells;
 
         ClearSelfAoEState();
-        CombatUI.HideSpellAoEConfirmation();
 
         // Now execute the spell
         PerformAoESpellCast(caster, targets, cells);
     }
 
     /// <summary>
-    /// Called when the player cancels a self-centered AoE spell via the confirmation dialog
-    /// or right-click/Escape. Returns to action choices without consuming the spell slot.
+    /// Called when the player cancels a self-centered AoE spell via right-click/Escape.
+    /// Returns to action choices without consuming the spell slot.
     /// </summary>
     private void OnSelfAoECancelled()
     {
         Debug.Log($"[AoE] Self-centered AoE spell CANCELLED — no spell slot consumed");
 
         ClearSelfAoEState();
-        CombatUI.HideSpellAoEConfirmation();
 
         _pendingSpell = null;
         _pendingMetamagic = null;
