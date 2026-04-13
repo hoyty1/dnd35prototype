@@ -158,9 +158,26 @@ public class SquareGrid : MonoBehaviour
                     node = cameFrom[node];
                 }
                 path.Reverse();
+
+                // Validate actual D&D 3.5e path cost (the path might cost more than
+                // straight-line distance if it detours around obstacles/threats).
+                // Trim the path to fit within maxRange.
+                int pathCost = SquareGridUtils.CalculatePathCost(start, path);
+                if (pathCost > maxRange && path.Count > 0)
+                {
+                    Debug.Log($"[SquareGrid] A* path cost {pathCost} exceeds maxRange {maxRange}, trimming...");
+                    // Trim from the end until path fits within movement budget
+                    while (path.Count > 0)
+                    {
+                        pathCost = SquareGridUtils.CalculatePathCost(start, path);
+                        if (pathCost <= maxRange) break;
+                        path.RemoveAt(path.Count - 1);
+                    }
+                }
+
                 result.Path = path;
 
-                Debug.Log($"[SquareGrid] A* path found: {path.Count} steps from ({start.x},{start.y}) to ({destination.x},{destination.y})");
+                Debug.Log($"[SquareGrid] A* path found: {path.Count} steps, cost {SquareGridUtils.CalculatePathCost(start, path)} from ({start.x},{start.y}) to ({destination.x},{destination.y})");
                 return result;
             }
 

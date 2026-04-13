@@ -71,14 +71,19 @@ public static class AoESystem
 
     /// <summary>
     /// Get all grid cells within a cone AoE emanating from the caster.
-    /// D&D 3.5e cone: starts at caster's square, extends outward.
-    /// The cone's width at any distance equals the distance from the origin.
-    /// We use 8 primary directions (N, NE, E, SE, S, SW, W, NW) snapped from mouse direction.
-    /// 
-    /// For a 15-ft (3 square) cone:
-    /// - Row 1 (adjacent): 1 cell wide
-    /// - Row 2: 3 cells wide
-    /// - Row 3: 5 cells wide (but constrained by cone angle)
+    /// D&D 3.5e PHB: "A cone shoots away from you in a quarter-circle in the
+    /// direction you designate." This means a 90° arc centered on the chosen direction.
+    ///
+    /// We snap the target direction to one of 8 primary directions (N, NE, E, SE, S, SW, W, NW).
+    /// The cone includes all cells that:
+    ///   1. Fall within 45° of the primary direction (quarter-circle / 90° arc)
+    ///   2. Are within the cone's length measured in D&D 3.5e grid distance
+    ///      (using the alternating diagonal cost rule)
+    ///   3. Are not the origin cell
+    ///
+    /// This produces correct cone shapes for ALL 8 directions, including diagonals.
+    /// A 15-ft cone (3 squares) aimed North yields a classic triangle, and aimed
+    /// NE yields a filled quarter-arc in the NE quadrant.
     /// </summary>
     /// <param name="origin">Caster's grid position (cone emanates from here)</param>
     /// <param name="targetPos">Target position (determines cone direction)</param>
@@ -96,53 +101,41 @@ public static class AoESystem
         int dirIndex = GetClosestDirectionIndex(rawDir);
         Vector2Int primaryDir = SquareGridUtils.Directions[dirIndex];
 
-        // Get the two perpendicular spread directions for the cone
-        // For cardinal directions, spread is the two adjacent diagonals
-        // For diagonal directions, spread is the two adjacent cardinals
-        Vector2Int spreadLeft, spreadRight;
-        GetConeSpreadDirections(dirIndex, out spreadLeft, out spreadRight);
+        // Pre-compute the normalized primary direction for angle checks
+        Vector2 primaryDirF = new Vector2(primaryDir.x, primaryDir.y).normalized;
 
-        // Build cone row by row from the caster
-        for (int dist = 1; dist <= lengthSquares; dist++)
+        // cos(45°) ≈ 0.7071 — the half-angle of the 90° cone.
+        // Cells whose direction from origin has a dot product ≥ this threshold
+        // fall within the cone's arc. A small epsilon avoids floating-point
+        // exclusion of cells exactly on the boundary.
+        float cosHalfAngle = Mathf.Cos(45f * Mathf.Deg2Rad) - 0.001f;
+
+        // Scan a bounding box large enough to contain all cells within range.
+        // Chebyshev distance is always ≤ D&D 3.5 distance, so using
+        // lengthSquares as the Chebyshev bound is safe (won't miss cells).
+        for (int dx = -lengthSquares; dx <= lengthSquares; dx++)
         {
-            // Center of this row
-            Vector2Int rowCenter = origin + primaryDir * dist;
-
-            // Add center cell
-            if (grid.GetCell(rowCenter) != null)
-                cells.Add(rowCenter);
-
-            // Spread width: at distance d, the cone is (2*d - 1) cells wide
-            // which means (d-1) cells to each side of center
-            int spreadAmount = dist - 1;
-
-            // Add cells to the left and right of center
-            for (int s = 1; s <= spreadAmount; s++)
+            for (int dy = -lengthSquares; dy <= lengthSquares; dy++)
             {
-                Vector2Int leftCell = rowCenter + spreadLeft * s;
-                Vector2Int rightCell = rowCenter + spreadRight * s;
+                if (dx == 0 && dy == 0) continue; // skip origin
 
-                if (grid.GetCell(leftCell) != null)
-                    cells.Add(leftCell);
-                if (grid.GetCell(rightCell) != null)
-                    cells.Add(rightCell);
-            }
+                Vector2Int candidate = new Vector2Int(origin.x + dx, origin.y + dy);
 
-            // For diagonal primary directions, we also need to fill in
-            // intermediate cells between rows to avoid gaps
-            if (IsDiagonalDirection(dirIndex) && dist > 1)
-            {
-                // Fill cells along the cardinal components
-                Vector2Int cardA = new Vector2Int(primaryDir.x, 0);
-                Vector2Int cardB = new Vector2Int(0, primaryDir.y);
+                // Check grid bounds
+                if (grid.GetCell(candidate) == null) continue;
 
-                Vector2Int fillA = origin + cardA * dist + cardB * (dist - 1);
-                Vector2Int fillB = origin + cardA * (dist - 1) + cardB * dist;
+                // Check D&D 3.5e distance (with alternating diagonal cost)
+                int dist = SquareGridUtils.GetDistance(origin, candidate);
+                if (dist < 1 || dist > lengthSquares) continue;
 
-                if (grid.GetCell(fillA) != null)
-                    cells.Add(fillA);
-                if (grid.GetCell(fillB) != null)
-                    cells.Add(fillB);
+                // Check angle: is this cell within the 90° cone arc?
+                Vector2 toCellDir = new Vector2(dx, dy).normalized;
+                float dot = Vector2.Dot(toCellDir, primaryDirF);
+
+                if (dot >= cosHalfAngle)
+                {
+                    cells.Add(candidate);
+                }
             }
         }
 
@@ -175,56 +168,8 @@ public static class AoESystem
     }
 
     /// <summary>
-    /// Get the spread directions perpendicular to the cone's primary direction.
-    /// These determine how the cone widens as distance increases.
-    /// </summary>
-    private static void GetConeSpreadDirections(int dirIndex, out Vector2Int spreadLeft, out Vector2Int spreadRight)
-    {
-        // Directions: 0=N, 1=NE, 2=E, 3=SE, 4=S, 5=SW, 6=W, 7=NW
-        // For each primary direction, the perpendicular spread directions:
-        switch (dirIndex)
-        {
-            case 0: // N (0,+1): spread is W(-1,0) and E(+1,0)
-                spreadLeft = new Vector2Int(-1, 0);
-                spreadRight = new Vector2Int(1, 0);
-                break;
-            case 1: // NE (+1,+1): spread is NW(-1,+1) and SE(+1,-1) ... actually perpendicular
-                spreadLeft = new Vector2Int(-1, 0);  // W component
-                spreadRight = new Vector2Int(0, -1);  // S component
-                break;
-            case 2: // E (+1,0): spread is N(0,+1) and S(0,-1)
-                spreadLeft = new Vector2Int(0, 1);
-                spreadRight = new Vector2Int(0, -1);
-                break;
-            case 3: // SE (+1,-1): spread
-                spreadLeft = new Vector2Int(0, 1);   // N component
-                spreadRight = new Vector2Int(-1, 0);  // W component
-                break;
-            case 4: // S (0,-1): spread is E(+1,0) and W(-1,0)
-                spreadLeft = new Vector2Int(1, 0);
-                spreadRight = new Vector2Int(-1, 0);
-                break;
-            case 5: // SW (-1,-1): spread
-                spreadLeft = new Vector2Int(1, 0);   // E component
-                spreadRight = new Vector2Int(0, 1);   // N component
-                break;
-            case 6: // W (-1,0): spread is S(0,-1) and N(0,+1)
-                spreadLeft = new Vector2Int(0, -1);
-                spreadRight = new Vector2Int(0, 1);
-                break;
-            case 7: // NW (-1,+1): spread
-                spreadLeft = new Vector2Int(0, -1);  // S component
-                spreadRight = new Vector2Int(1, 0);   // E component
-                break;
-            default:
-                spreadLeft = new Vector2Int(-1, 0);
-                spreadRight = new Vector2Int(1, 0);
-                break;
-        }
-    }
-
-    /// <summary>
     /// Check if a direction index represents a diagonal direction.
+    /// Diagonal directions are at odd indices: NE(1), SE(3), SW(5), NW(7).
     /// </summary>
     private static bool IsDiagonalDirection(int dirIndex)
     {

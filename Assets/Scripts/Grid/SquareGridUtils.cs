@@ -175,4 +175,45 @@ public static class SquareGridUtils
             return diff;
         return Vector2Int.zero;
     }
+
+    /// <summary>
+    /// Calculate the actual D&D 3.5e movement cost along a specific path.
+    /// Counts each step's cost: orthogonal = 1, diagonal = alternating 1/2.
+    /// The diagonal counter persists across the entire path.
+    /// 
+    /// This differs from GetDistance() which calculates the MINIMUM cost
+    /// (straight-line). This method calculates the cost of the ACTUAL path taken.
+    /// </summary>
+    /// <param name="start">Starting position (not included in path list)</param>
+    /// <param name="path">List of positions visited in order (each must be adjacent to previous)</param>
+    /// <returns>Total movement cost in D&D 3.5e squares</returns>
+    public static int CalculatePathCost(Vector2Int start, System.Collections.Generic.List<Vector2Int> path)
+    {
+        if (path == null || path.Count == 0) return 0;
+
+        int cost = 0;
+        int diagonalCount = 0;
+        Vector2Int prev = start;
+
+        for (int i = 0; i < path.Count; i++)
+        {
+            Vector2Int current = path[i];
+            bool isDiag = IsDiagonalStep(prev, current);
+
+            if (isDiag)
+            {
+                diagonalCount++;
+                // Odd diagonals (1st, 3rd, 5th) cost 1; even (2nd, 4th, 6th) cost 2
+                cost += (diagonalCount % 2 == 0) ? 2 : 1;
+            }
+            else
+            {
+                cost += 1;
+            }
+
+            prev = current;
+        }
+
+        return cost;
+    }
 }
