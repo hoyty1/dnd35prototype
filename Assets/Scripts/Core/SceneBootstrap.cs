@@ -813,6 +813,7 @@ public class SceneBootstrap : MonoBehaviour
             SpellPreparationUI spellPrepUI = canvas.gameObject.AddComponent<SpellPreparationUI>();
             spellPrepUI.BuildUI(canvas);
             gm.SpellPreparationUI = spellPrepUI;
+            ccUI.SpellPrepUI = spellPrepUI;
         }
 
         StartCoroutine(WireButtons(combatUI));

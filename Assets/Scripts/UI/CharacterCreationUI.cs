@@ -38,6 +38,7 @@ public class CharacterCreationUI : MonoBehaviour
 
     // Reference to spell selection UI for spell selection step
     public SpellSelectionUI SpellUI;
+    public SpellPreparationUI SpellPrepUI;
 
     // ========== UI REFERENCES ==========
     private GameObject _rootPanel;
@@ -999,13 +1000,30 @@ public class CharacterCreationUI : MonoBehaviour
         {
             data.ComputeFinalStats();
             int intMod = CharacterStats.GetModifier(data.FinalINT);
-            Debug.Log($"[CharCreation] Wizard spell selection: INT mod = {intMod}");
+            Debug.Log($"[CharCreation] Wizard spell selection: INT mod = {intMod}, FinalINT = {data.FinalINT}");
 
+            // STEP 1: Build Spellbook (all cantrips auto-added, select higher-level spells)
             SpellUI.OnSpellsConfirmed = (selectedSpellIds) =>
             {
                 data.SelectedSpellIds = new List<string>(selectedSpellIds);
-                Debug.Log($"[CharCreation] Wizard spells selected: {selectedSpellIds.Count} spells");
-                ShowStep(Step.Review);
+                Debug.Log($"[CharCreation] Wizard spellbook built: {selectedSpellIds.Count} spells total");
+
+                // STEP 2: Prepare Spells (assign spells from spellbook to slots)
+                if (SpellPrepUI != null)
+                {
+                    SpellPrepUI.OnCreationPreparationConfirmed = (preparedSlotIds) =>
+                    {
+                        data.PreparedSpellSlotIds = new List<string>(preparedSlotIds);
+                        Debug.Log($"[CharCreation] Wizard spell preparation complete: {preparedSlotIds.Count} slots");
+                        ShowStep(Step.Review);
+                    };
+                    SpellPrepUI.OpenForCreation(data.SelectedSpellIds, intMod, 3, data.CharacterName);
+                }
+                else
+                {
+                    Debug.LogWarning("[CharCreation] SpellPrepUI not available, skipping preparation step.");
+                    ShowStep(Step.Review);
+                }
             };
             SpellUI.OpenForWizard(intMod, 3);
         }
@@ -1474,9 +1492,11 @@ public class CharacterCreationUI : MonoBehaviour
                 ShowStep(Step.AllocateSkills);
                 break;
             case Step.SelectSpells:
-                // Close spell UI if open
+                // Close spell UI and preparation UI if open
                 if (SpellUI != null && SpellUI.IsOpen)
                     SpellUI.Close();
+                if (SpellPrepUI != null && SpellPrepUI.IsOpen)
+                    SpellPrepUI.Close();
                 ShowStep(Step.SelectFeats);
                 break;
             case Step.Review: ShowStep(Step.SelectSpells); break;

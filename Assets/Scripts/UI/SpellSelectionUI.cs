@@ -4,16 +4,14 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Spell selection UI for character creation.
-/// Wizards select spells for their spellbook from available spell lists.
-/// Clerics select orisons (cantrips) and see an informational message for higher-level spells.
+/// Spell selection UI for character creation (Step 1: Build Spellbook).
+/// Wizards: All cantrips auto-added to spellbook, then select higher-level spells.
+/// Clerics: Select orisons (cantrips), higher-level spells are all available.
 ///
-/// D&D 3.5e Spell Rules at Level 3:
-///   - Wizards: Select 4 cantrips, 3 + INT mod 1st-level, 2 2nd-level spells
-///   - Clerics: Select 4 orisons, have access to all 1st & 2nd level spells
-///   - Level 0 (cantrips/orisons): 4 known
-///   - Level 1: 3 + ability modifier spells
-///   - Level 2: 2 spells
+/// D&D 3.5e Spell Rules (PHB p.57):
+///   - Wizards: All cantrips automatic, 3 + INT mod 1st-level, 2 2nd-level spells
+///   - Clerics: Select 4 orisons, have access to all 1st &amp; 2nd level spells
+///   - After spellbook is built, Step 2 (SpellPreparationUI) lets wizard prepare spells into slots.
 ///
 /// Usage: Called from CharacterCreationUI after feat selection for spellcasters.
 /// </summary>
@@ -55,6 +53,7 @@ public class SpellSelectionUI : MonoBehaviour
     private int _maxSpells2nd;
     private int _currentFilterLevel = -1; // -1 = all, 0/1/2 = specific level
     private bool _cantripSelectionRequired; // true if player must select cantrips
+    private int _autoAddedCantripCount;    // number of cantrips auto-added (wizard mode)
 
     private List<SpellData> _availableSpells = new List<SpellData>();
     private HashSet<string> _selectedSpellIds = new HashSet<string>();
@@ -220,22 +219,38 @@ public class SpellSelectionUI : MonoBehaviour
 
     /// <summary>
     /// Open spell selection for Wizard (select spells for spellbook).
+    /// D&D 3.5e PHB: All cantrips are automatically added to the spellbook.
+    /// At 1st level: 3 + INT modifier 1st-level spells chosen.
+    /// Each level after 1st: 2 additional spells of any level the wizard can cast.
+    /// At level 3: All cantrips (auto) + (3 + INT mod) 1st-level + 2 2nd-level.
     /// </summary>
     public void OpenForWizard(int intModifier, int characterLevel)
     {
         _className = "Wizard";
         _intMod = intModifier;
-        // D&D 3.5e PHB: At level 3, Wizards know 4 cantrips, 3+INT mod 1st-level, 2 2nd-level
-        _maxCantrips = 4;
+
+        // D&D 3.5e PHB p.57: All cantrips are automatically in the spellbook (no selection needed)
+        // At level 1: 3 + INT mod 1st-level spells
+        // Levels 2-3: +2 spells each of any castable level → at level 3: 2 extra for 2nd-level
+        _maxCantrips = 0; // Cantrips are auto-added, no selection needed
         _maxSpells1st = Mathf.Max(1, 3 + intModifier);
         _maxSpells2nd = 2;
-        _cantripSelectionRequired = true;
+        _cantripSelectionRequired = false; // Cantrips auto-added
 
         _selectedSpellIds.Clear();
 
         SpellDatabase.Init();
         _availableSpells.Clear();
-        _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0));
+
+        // Auto-add ALL wizard cantrips to the spellbook
+        var allCantrips = SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0);
+        foreach (var cantrip in allCantrips)
+        {
+            _selectedSpellIds.Add(cantrip.SpellId);
+        }
+        _autoAddedCantripCount = allCantrips.Count;
+
+        // Only show higher-level spells for selection
         _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1));
         _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2));
 
@@ -247,12 +262,17 @@ public class SpellSelectionUI : MonoBehaviour
         });
 
         _titleText.text = "WIZARD SPELLBOOK SELECTION";
-        _subtitleText.text = $"Select {_maxCantrips} cantrips, {_maxSpells1st} 1st-level, and {_maxSpells2nd} 2nd-level spells for your spellbook.";
+        _subtitleText.text = $"All {_autoAddedCantripCount} cantrips auto-added. Select {_maxSpells1st} 1st-level and {_maxSpells2nd} 2nd-level spells.";
 
         _overlayPanel.SetActive(true);
         IsOpen = true;
 
         _currentFilterLevel = -1;
+
+        // Hide cantrip filter button when cantrips are auto-added
+        if (_filter0Button != null)
+            _filter0Button.gameObject.SetActive(false);
+
         PopulateSpellList();
         RefreshUI();
     }
@@ -288,6 +308,12 @@ public class SpellSelectionUI : MonoBehaviour
         IsOpen = true;
 
         _currentFilterLevel = -1;
+        _autoAddedCantripCount = 0;
+
+        // Show cantrip filter button for cleric
+        if (_filter0Button != null)
+            _filter0Button.gameObject.SetActive(true);
+
         PopulateSpellList();
         RefreshUI();
     }
@@ -332,8 +358,18 @@ public class SpellSelectionUI : MonoBehaviour
                 if (lastLevel >= 0) yPos -= 6; // extra spacing between level groups
                 lastLevel = spell.SpellLevel;
                 string cantripLabel = _className == "Cleric" ? "ORISONS" : "CANTRIPS";
-                string headerLabel = spell.SpellLevel == 0 ? $"═══ {cantripLabel} (Level 0) — Select {_maxCantrips} ═══" :
-                                     $"═══ LEVEL {spell.SpellLevel} SPELLS ═══";
+                string headerLabel;
+                if (spell.SpellLevel == 0)
+                {
+                    int selectCount = _cantripSelectionRequired ? _maxCantrips : 0;
+                    headerLabel = selectCount > 0 ? $"═══ {cantripLabel} (Level 0) — Select {selectCount} ═══" :
+                                                    $"═══ {cantripLabel} (Level 0) — All auto-added ═══";
+                }
+                else
+                {
+                    int maxAtLevel = spell.SpellLevel == 1 ? _maxSpells1st : _maxSpells2nd;
+                    headerLabel = $"═══ LEVEL {spell.SpellLevel} SPELLS — Select {maxAtLevel} ═══";
+                }
                 var headerGO = new GameObject("Header" + spell.SpellLevel);
                 headerGO.transform.SetParent(_scrollContent.transform, false);
                 var hRT = headerGO.AddComponent<RectTransform>();
@@ -551,16 +587,31 @@ public class SpellSelectionUI : MonoBehaviour
 
         if (_className == "Wizard")
         {
-            // Color the count text
-            string c0 = sel0 >= _maxCantrips ? "#44FF44" : "#FFDD44";
-            string c1 = sel1 >= _maxSpells1st ? "#44FF44" : "#FFDD44";
-            string c2 = sel2 >= _maxSpells2nd ? "#44FF44" : "#FFDD44";
-            _selectionCountText.text = $"<color={c0}>Cantrips: {sel0}/{_maxCantrips}</color>   |   " +
-                                       $"<color={c1}>1st Level: {sel1}/{_maxSpells1st}</color>   |   " +
-                                       $"<color={c2}>2nd Level: {sel2}/{_maxSpells2nd}</color>";
+            if (_autoAddedCantripCount > 0)
+            {
+                // New mode: cantrips auto-added, only selecting higher-level spells
+                string c1 = sel1 >= _maxSpells1st ? "#44FF44" : "#FFDD44";
+                string c2 = sel2 >= _maxSpells2nd ? "#44FF44" : "#FFDD44";
+                _selectionCountText.text = $"<color=#44FF44>Cantrips: {_autoAddedCantripCount} (all auto-added)</color>   |   " +
+                                           $"<color={c1}>1st Level: {sel1}/{_maxSpells1st}</color>   |   " +
+                                           $"<color={c2}>2nd Level: {sel2}/{_maxSpells2nd}</color>";
 
-            bool allSelected = (sel0 >= _maxCantrips && sel1 >= _maxSpells1st && sel2 >= _maxSpells2nd);
-            _confirmButton.interactable = allSelected;
+                bool allSelected = (sel1 >= _maxSpells1st && sel2 >= _maxSpells2nd);
+                _confirmButton.interactable = allSelected;
+            }
+            else
+            {
+                // Legacy mode: selecting cantrips too
+                string c0 = sel0 >= _maxCantrips ? "#44FF44" : "#FFDD44";
+                string c1 = sel1 >= _maxSpells1st ? "#44FF44" : "#FFDD44";
+                string c2 = sel2 >= _maxSpells2nd ? "#44FF44" : "#FFDD44";
+                _selectionCountText.text = $"<color={c0}>Cantrips: {sel0}/{_maxCantrips}</color>   |   " +
+                                           $"<color={c1}>1st Level: {sel1}/{_maxSpells1st}</color>   |   " +
+                                           $"<color={c2}>2nd Level: {sel2}/{_maxSpells2nd}</color>";
+
+                bool allSelected = (sel0 >= _maxCantrips && sel1 >= _maxSpells1st && sel2 >= _maxSpells2nd);
+                _confirmButton.interactable = allSelected;
+            }
         }
         else if (_className == "Cleric")
         {
@@ -739,7 +790,20 @@ public class SpellSelectionUI : MonoBehaviour
     {
         List<string> result = new List<string>(_selectedSpellIds);
 
-        Debug.Log($"[SpellSelectionUI] Confirmed {result.Count} spells for {_className}: {string.Join(", ", result)}");
+        int cantripCount = 0;
+        int spell1Count = 0;
+        int spell2Count = 0;
+        foreach (string id in result)
+        {
+            SpellData s = SpellDatabase.GetSpell(id);
+            if (s == null) continue;
+            if (s.SpellLevel == 0) cantripCount++;
+            else if (s.SpellLevel == 1) spell1Count++;
+            else if (s.SpellLevel == 2) spell2Count++;
+        }
+
+        Debug.Log($"[SpellSelectionUI] Confirmed {result.Count} spells for {_className}: " +
+                  $"{cantripCount} cantrips, {spell1Count} 1st-level, {spell2Count} 2nd-level");
 
         Close();
 

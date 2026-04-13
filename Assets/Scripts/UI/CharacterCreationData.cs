@@ -34,6 +34,11 @@ public class CharacterCreationData
     /// Clerics don't select — they have access to all Cleric spells.</summary>
     public List<string> SelectedSpellIds = new List<string>();
 
+    // Step 5d: Spell Preparation (Wizard spell slot assignments)
+    /// <summary>SpellIds prepared in each spell slot (in slot order: cantrip slots, then 1st, then 2nd).
+    /// Empty string means the slot is empty. Used to initialize SpellcastingComponent slots.</summary>
+    public List<string> PreparedSpellSlotIds = new List<string>();
+
     // Step 6: Name
     public string CharacterName = "";
 

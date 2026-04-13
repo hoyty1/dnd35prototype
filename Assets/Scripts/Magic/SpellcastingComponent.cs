@@ -88,6 +88,13 @@ public class SpellcastingComponent : MonoBehaviour
     public List<string> SelectedSpellIds { get; set; }
 
     /// <summary>
+    /// Spell IDs prepared in each slot during character creation (in slot order).
+    /// If set before Init(), these will override auto-preparation for wizards.
+    /// Empty strings indicate empty slots.
+    /// </summary>
+    public List<string> PreparedSpellSlotIds { get; set; }
+
+    /// <summary>
     /// Initialize spellcasting for a character based on their class and level.
     /// </summary>
     public void Init(CharacterStats stats)
@@ -107,7 +114,16 @@ public class SpellcastingComponent : MonoBehaviour
         // Both Wizards and Clerics use slot-based preparation now
         if (stats.IsWizard)
         {
-            AutoPrepareWizardSlots();
+            // Use creation preparation data if available, otherwise auto-prepare
+            if (PreparedSpellSlotIds != null && PreparedSpellSlotIds.Count > 0)
+            {
+                ApplyPreparedSpellSlotIds();
+                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied {PreparedSpellSlotIds.Count} preparation choices from character creation.");
+            }
+            else
+            {
+                AutoPrepareWizardSlots();
+            }
             SyncPreparedSpellsFromSlots();
         }
         else if (stats.IsCleric)
@@ -247,6 +263,29 @@ public class SpellcastingComponent : MonoBehaviour
     /// If there are more slots than unique spells at a level, the same spell fills multiple slots.
     /// This is the default auto-preparation used at initialization.
     /// </summary>
+
+    /// <summary>
+    /// Apply prepared spell slot IDs from character creation data.
+    /// Maps spell IDs from PreparedSpellSlotIds to SpellSlots in order.
+    /// </summary>
+    private void ApplyPreparedSpellSlotIds()
+    {
+        if (PreparedSpellSlotIds == null) return;
+
+        for (int i = 0; i < SpellSlots.Count && i < PreparedSpellSlotIds.Count; i++)
+        {
+            string spellId = PreparedSpellSlotIds[i];
+            if (!string.IsNullOrEmpty(spellId))
+            {
+                SpellData spell = SpellDatabase.GetSpell(spellId);
+                if (spell != null)
+                {
+                    SpellSlots[i].Prepare(spell);
+                }
+            }
+        }
+    }
+
     public void AutoPrepareWizardSlots()
     {
         if (Stats == null || !Stats.IsWizard) return;

@@ -305,6 +305,9 @@ public class GameManager : MonoBehaviour
                 // Pass selected spell IDs from character creation (Wizard spellbook choices)
                 if (data.SelectedSpellIds != null && data.SelectedSpellIds.Count > 0)
                     spellComp.SelectedSpellIds = new System.Collections.Generic.List<string>(data.SelectedSpellIds);
+                // Pass prepared spell slot IDs from character creation (Wizard spell preparation choices)
+                if (data.PreparedSpellSlotIds != null && data.PreparedSpellSlotIds.Count > 0)
+                    spellComp.PreparedSpellSlotIds = new System.Collections.Generic.List<string>(data.PreparedSpellSlotIds);
                 spellComp.Init(stats);
                 Debug.Log($"[GameManager] {data.CharacterName}: Spellcasting initialized - {spellComp.GetSlotSummary()}");
             }

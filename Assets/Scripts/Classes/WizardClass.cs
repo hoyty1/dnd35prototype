@@ -70,10 +70,16 @@ public class WizardClass : ICharacterClass
     /// <summary>
     /// Returns a pre-built Quick Start character: Elara the Elf Wizard.
     /// Used by CharacterCreationUI for the Quick Start button.
+    /// D&D 3.5e PHB: All cantrips auto-added to spellbook + 3+INT mod 1st-level + 2 2nd-level.
+    /// Elara has INT 17 (base) + 0 (Elf racial) = 17, INT mod = +3
+    /// Spellbook: All 20 cantrips + 6 (3+3) 1st-level + 2 2nd-level
+    /// Slots: 4 cantrips, 3 (2 base + 1 bonus) 1st, 2 (1 base + 1 bonus) 2nd
     /// </summary>
     public static CharacterCreationData GetQuickStartCharacter()
     {
         RaceDatabase.Init();
+        SpellDatabase.Init();
+
         var data = new CharacterCreationData
         {
             CharacterName = "Elara",
@@ -84,18 +90,42 @@ public class WizardClass : ICharacterClass
             INT = 17, WIS = 13, CHA = 10,
             SelectedFeats = new List<string> { "Spell Focus", "Improved Initiative" },
             BonusFeats = new List<string> { "Scribe Scroll" },
-            // Wizard selects 4 cantrips + higher-level spells (D&D 3.5e PHB)
-            SelectedSpellIds = new List<string>
-            {
-                // 4 cantrips
-                "ray_of_frost", "detect_magic_wiz", "read_magic", "prestidigitation",
-                // 1st and 2nd level spells
-                "magic_missile", "mage_armor", "shield",
-                "burning_hands", "sleep", "charm_person",
-                "scorching_ray", "bulls_strength"
-            }
+            SelectedSpellIds = new List<string>()
         };
+
+        // All cantrips automatically added to spellbook (D&D 3.5e PHB p.57)
+        var allCantrips = SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0);
+        foreach (var cantrip in allCantrips)
+        {
+            data.SelectedSpellIds.Add(cantrip.SpellId);
+        }
+
+        // 1st-level spells for spellbook: 3 + INT mod(+3) = 6 spells
+        data.SelectedSpellIds.AddRange(new List<string>
+        {
+            "magic_missile", "mage_armor", "shield",
+            "burning_hands", "sleep", "charm_person"
+        });
+
+        // 2nd-level spells for spellbook: 2 spells
+        data.SelectedSpellIds.AddRange(new List<string>
+        {
+            "scorching_ray", "bulls_strength"
+        });
+
         data.ComputeFinalStats();
+
+        // Pre-set spell preparation (slot order: 4 cantrips, 3 1st-level, 2 2nd-level)
+        data.PreparedSpellSlotIds = new List<string>
+        {
+            // 4 cantrip slots (unlimited use)
+            "ray_of_frost", "detect_magic_wiz", "acid_splash", "prestidigitation",
+            // 3 1st-level slots (2 base + 1 INT bonus)
+            "magic_missile", "mage_armor", "shield",
+            // 2 2nd-level slots (1 base + 1 INT bonus)
+            "scorching_ray", "bulls_strength"
+        };
+
         data.SkillRanks["Concentration"] = 6;
         data.SkillRanks["Spellcraft"] = 6;
         data.SkillRanks["Knowledge (Arcana)"] = 6;
