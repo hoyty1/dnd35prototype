@@ -1562,9 +1562,10 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // Check if this is a spontaneous cast (cleric converting a prepared spell)
+        // Check if this is a spontaneous cast (cleric converting a specific prepared spell)
         bool isSpontaneous = CombatUI != null && CombatUI.IsSpontaneousCast;
         int spontaneousLevel = isSpontaneous ? CombatUI.SpontaneousCastLevel : -1;
+        string spontaneousSacrificedSpellId = isSpontaneous ? CombatUI.SpontaneousSacrificedSpellId : null;
 
         // Clear spontaneous casting state
         if (CombatUI != null)
@@ -1589,11 +1590,23 @@ public class GameManager : MonoBehaviour
             bool consumed;
             if (isSpontaneous)
             {
-                // Spontaneous casting: consume any slot at the spontaneous level
-                consumed = spellComp.SpontaneousCastFromSlot(spontaneousLevel);
-                if (consumed)
+                // Spontaneous casting: consume the specific prepared spell slot
+                if (!string.IsNullOrEmpty(spontaneousSacrificedSpellId))
                 {
-                    Debug.Log($"[GameManager] Spontaneous cast: {caster.Stats.CharacterName} converted a level {spontaneousLevel} slot → {_pendingSpell.Name}");
+                    consumed = spellComp.SpontaneousCastFromSpecificSpell(spontaneousSacrificedSpellId);
+                    if (consumed)
+                    {
+                        Debug.Log($"[GameManager] Spontaneous cast: {caster.Stats.CharacterName} sacrificed '{spontaneousSacrificedSpellId}' → {_pendingSpell.Name}");
+                    }
+                }
+                else
+                {
+                    // Fallback: consume any slot at the spontaneous level (legacy path)
+                    consumed = spellComp.SpontaneousCastFromSlot(spontaneousLevel);
+                    if (consumed)
+                    {
+                        Debug.Log($"[GameManager] Spontaneous cast (level-based): {caster.Stats.CharacterName} converted a level {spontaneousLevel} slot → {_pendingSpell.Name}");
+                    }
                 }
             }
             else if (hasMetamagicApplied && slotLevelToConsume > 0)
@@ -1633,7 +1646,10 @@ public class GameManager : MonoBehaviour
 
         if (isSpontaneous)
         {
-            string spontPrefix = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! (Converted prepared spell)\n";
+            string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                : "Converted prepared spell";
+            string spontPrefix = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n";
             _lastCombatLog = spontPrefix + _lastCombatLog;
         }
 

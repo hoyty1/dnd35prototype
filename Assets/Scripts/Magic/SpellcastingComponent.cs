@@ -622,6 +622,84 @@ public class SpellcastingComponent : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Perform a spontaneous cast by sacrificing a SPECIFIC prepared spell slot.
+    /// D&D 3.5e: Clerics can convert a specific prepared spell (except domain spells)
+    /// into a cure/inflict spell of the same level.
+    /// Finds a slot with the given spell ID and consumes it.
+    /// Returns true if successful.
+    /// </summary>
+    public bool SpontaneousCastFromSpecificSpell(string sacrificedSpellId)
+    {
+        if (Stats == null || !Stats.IsCleric) return false;
+        if (Stats.SpontaneousCasting == SpontaneousCastingType.None) return false;
+        if (string.IsNullOrEmpty(sacrificedSpellId)) return false;
+
+        // Find the specific slot with this spell that is unused
+        var slot = SpellSlots.FirstOrDefault(s =>
+            s.HasSpell && !s.IsUsed &&
+            s.PreparedSpell.SpellId == sacrificedSpellId);
+
+        if (slot == null)
+        {
+            Debug.LogWarning($"[Spellcasting] No available slot with spell '{sacrificedSpellId}' for spontaneous conversion!");
+            return false;
+        }
+
+        int spellLevel = slot.Level;
+
+        // Cantrips are unlimited — just verify, don't consume
+        if (spellLevel == 0)
+        {
+            SpellData spontSpell = GetSpontaneousSpell(spellLevel);
+            Debug.Log($"[Spellcasting] {Stats.CharacterName} spontaneously cast cantrip {spontSpell?.Name} " +
+                      $"(unlimited, no slot consumed, sacrificed {slot.PreparedSpell.Name})");
+            return true;
+        }
+
+        SpellData spontSpell2 = GetSpontaneousSpell(spellLevel);
+        string replacedSpell = slot.PreparedSpell?.Name ?? "empty";
+        slot.Cast();
+        SyncSlotsRemainingFromSpellSlots();
+        SyncPreparedSpellsFromSlots();
+
+        Debug.Log($"[Spellcasting] {Stats.CharacterName} sacrificed {replacedSpell} → {spontSpell2?.Name} " +
+                  $"(Lv{spellLevel}). Remaining at Lv{spellLevel}: " +
+                  $"{GetAvailableSlotsForLevel(spellLevel).Count}/{GetSlotsForLevel(spellLevel).Count}");
+
+        return true;
+    }
+
+    /// <summary>
+    /// Check if a specific prepared spell can be spontaneously converted.
+    /// Domain spells (SpellId starting with "domain_") cannot be converted.
+    /// The spell must have an available (unused) slot.
+    /// </summary>
+    public bool CanConvertSpellToSpontaneous(SpellData spell)
+    {
+        if (spell == null) return false;
+        if (Stats == null || !Stats.IsCleric) return false;
+        if (Stats.SpontaneousCasting == SpontaneousCastingType.None) return false;
+
+        // Domain spells cannot be spontaneously converted (D&D 3.5e rule)
+        if (spell.SpellId.StartsWith("domain_")) return false;
+
+        // Check that a spontaneous spell exists at this level
+        SpellData spontSpell = GetSpontaneousSpell(spell.SpellLevel);
+        if (spontSpell == null) return false;
+
+        // For cantrips: always available if prepared (unlimited)
+        if (spell.SpellLevel == 0)
+        {
+            return SpellSlots.Any(s => s.Level == 0 && s.HasSpell && s.PreparedSpell.SpellId == spell.SpellId);
+        }
+
+        // For level 1+: need at least one unused slot with this specific spell
+        return SpellSlots.Any(s =>
+            s.Level == spell.SpellLevel && !s.IsUsed && s.HasSpell &&
+            s.PreparedSpell.SpellId == spell.SpellId);
+    }
+
     /// <summary>Backward compat alias — calls CastSpellFromSlot.</summary>
     public bool CastWizardSpellFromSlot(SpellData spell)
     {

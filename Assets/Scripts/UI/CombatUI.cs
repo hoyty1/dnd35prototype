@@ -1133,21 +1133,8 @@ public class CombatUI : MonoBehaviour
 
             if (isDepleted)
             {
-                // Even when depleted, show spontaneous casting option for clerics
-                if (spellComp.CanSpontaneousCast(level) && level > 0)
-                {
-                    SpellData spontSpell = spellComp.GetSpontaneousSpell(level);
-                    if (spontSpell != null)
-                    {
-                        CreateSpontaneousCastButton(content, spontSpell, level, yOffset, buttonHeight, spellComp, hasMetamagic);
-                        yOffset += buttonHeight + spacing;
-                    }
-                }
-                else
-                {
-                    CreateSpellSectionLabel(content, "  (No slots available)", yOffset, headerHeight, new Color(0.5f, 0.3f, 0.3f));
-                    yOffset += headerHeight + spacing;
-                }
+                CreateSpellSectionLabel(content, "  (No slots available)", yOffset, headerHeight, new Color(0.5f, 0.3f, 0.3f));
+                yOffset += headerHeight + spacing;
             }
             else
             {
@@ -1155,21 +1142,21 @@ public class CombatUI : MonoBehaviour
                 {
                     // Show count of available prepared slots for this spell (both Wizard and Cleric)
                     int preparedCount = usesSlotSystem ? spellComp.CountAvailablePreparedSpell(spell) : 0;
-                    CreateSpellButton(content, spell, yOffset, buttonHeight, spellComp, hasMetamagic, usesSlotSystem, preparedCount);
-                    yOffset += buttonHeight + spacing;
-                }
 
-                // Add spontaneous casting button for clerics at levels with available slots
-                if (spellComp.CanSpontaneousCast(level) && level > 0)
-                {
-                    SpellData spontSpell = spellComp.GetSpontaneousSpell(level);
-                    if (spontSpell != null)
+                    // Check if this spell can be spontaneously converted (clerics only, non-domain)
+                    bool canConvert = spellComp.CanConvertSpellToSpontaneous(spell);
+
+                    if (canConvert)
                     {
-                        // Only show if the spontaneous spell isn't already in the prepared list
-                        bool alreadyPrepared = preparedAtLevel.Exists(s => s.SpellId == spontSpell.SpellId);
-                        CreateSpontaneousCastButton(content, spontSpell, level, yOffset, buttonHeight, spellComp, hasMetamagic);
-                        yOffset += buttonHeight + spacing;
+                        // Create a row with the spell button and a Convert button side by side
+                        CreateSpellButtonWithConvert(content, spell, yOffset, buttonHeight, spellComp, hasMetamagic, usesSlotSystem, preparedCount);
                     }
+                    else
+                    {
+                        // Standard spell button (full width) — domain spells, non-cleric, etc.
+                        CreateSpellButton(content, spell, yOffset, buttonHeight, spellComp, hasMetamagic, usesSlotSystem, preparedCount);
+                    }
+                    yOffset += buttonHeight + spacing;
                 }
             }
         }
@@ -1308,79 +1295,171 @@ public class CombatUI : MonoBehaviour
     }
 
     /// <summary>
-    /// Creates a spontaneous casting button for clerics.
-    /// D&D 3.5e: Clerics can convert any prepared spell slot into a cure/inflict spell.
-    /// This button consumes a slot at the given level and casts the spontaneous spell.
-    /// Visually distinguished with a ⟳ icon and unique color.
+    /// Creates a spell button with an adjacent "Convert to Cure/Inflict" button for clerics.
+    /// D&D 3.5e: Clerics can convert a specific prepared spell (except domain spells)
+    /// into a cure/inflict spell of the same level.
+    /// The spell button takes ~72% width; the convert button takes ~28% width.
     /// </summary>
-    private void CreateSpontaneousCastButton(GameObject parent, SpellData spontSpell, int spellLevel,
-        float yOffset, float height, SpellcastingComponent spellComp, bool hasMetamagic)
+    private void CreateSpellButtonWithConvert(GameObject parent, SpellData spell, float yOffset,
+        float height, SpellcastingComponent spellComp, bool hasMetamagic,
+        bool usesSlotSystem = false, int preparedCount = 0)
     {
-        // Use distinctive color: golden for cure, dark purple for inflict
-        bool isCure = spellComp.Stats.SpontaneousCasting == SpontaneousCastingType.Cure;
-        Color btnColor = isCure
-            ? new Color(0.35f, 0.5f, 0.15f, 1f)   // green-gold for cure
-            : new Color(0.45f, 0.15f, 0.35f, 1f);  // dark purple for inflict
+        // Create a container row for both buttons
+        GameObject rowObj = new GameObject($"SpellRow_{spell.SpellId}");
+        rowObj.transform.SetParent(parent.transform, false);
+        RectTransform rowRT = rowObj.AddComponent<RectTransform>();
+        rowRT.anchorMin = new Vector2(0, 1);
+        rowRT.anchorMax = new Vector2(1, 1);
+        rowRT.pivot = new Vector2(0.5f, 1);
+        rowRT.anchoredPosition = new Vector2(0, -yOffset);
+        rowRT.sizeDelta = new Vector2(-16, height);
 
-        // Build label
-        string typeLabel = isCure ? "☀" : "💀";
+        // === SPELL BUTTON (left side, ~72% width) ===
+        Color btnColor;
+        switch (spell.EffectType)
+        {
+            case SpellEffectType.Damage: btnColor = new Color(0.5f, 0.2f, 0.2f, 1f); break;
+            case SpellEffectType.Healing: btnColor = new Color(0.2f, 0.5f, 0.2f, 1f); break;
+            case SpellEffectType.Buff: btnColor = new Color(0.2f, 0.3f, 0.6f, 1f); break;
+            default: btnColor = new Color(0.3f, 0.3f, 0.4f, 1f); break;
+        }
+
+        string rangeStr = spell.RangeSquares == 0 ? "Touch" :
+                          spell.RangeSquares < 0 ? "Self" :
+                          $"{spell.RangeSquares} sq";
         string effectStr = "";
-        if (spontSpell.EffectType == SpellEffectType.Healing)
-            effectStr = $" | {spontSpell.HealCount}d{spontSpell.HealDice}+{spontSpell.BonusHealing} HP";
-        else if (spontSpell.EffectType == SpellEffectType.Damage)
-            effectStr = $" | {spontSpell.DamageCount}d{spontSpell.DamageDice}+{spontSpell.BonusDamage} {spontSpell.DamageType}";
+        if (spell.EffectType == SpellEffectType.Damage)
+            effectStr = $" | {spell.DamageCount}d{spell.DamageDice}{(spell.BonusDamage > 0 ? $"+{spell.BonusDamage}" : "")} {spell.DamageType}";
+        else if (spell.EffectType == SpellEffectType.Healing)
+            effectStr = $" | {spell.HealCount}d{spell.HealDice}+{spell.BonusHealing} HP";
+        else if (spell.EffectType == SpellEffectType.Buff)
+            effectStr = $" | +{spell.BuffACBonus} AC";
 
-        string label = $"{typeLabel} ⟳ {spontSpell.Name} (Spontaneous){effectStr}";
+        string countStr = "";
+        if (usesSlotSystem)
+        {
+            if (spell.SpellLevel == 0)
+                countStr = " \u221e";
+            else if (preparedCount > 1)
+                countStr = $" \u00d7{preparedCount}";
+        }
+        string spellLabel = $"{spell.Name}{countStr} ({rangeStr}){effectStr}";
+        string prefix = hasMetamagic ? "⚡ " : "";
 
-        // Create button
-        GameObject btnObj = new GameObject($"Spontaneous_{spontSpell.SpellId}");
-        btnObj.transform.SetParent(parent.transform, false);
-        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
-        btnRT.anchorMin = new Vector2(0, 1);
-        btnRT.anchorMax = new Vector2(1, 1);
-        btnRT.pivot = new Vector2(0.5f, 1);
-        btnRT.anchoredPosition = new Vector2(0, -yOffset);
-        btnRT.sizeDelta = new Vector2(-16, height);
+        GameObject spellBtnObj = new GameObject($"SpellBtn_{spell.SpellId}");
+        spellBtnObj.transform.SetParent(rowObj.transform, false);
+        RectTransform spellBtnRT = spellBtnObj.AddComponent<RectTransform>();
+        spellBtnRT.anchorMin = new Vector2(0, 0);
+        spellBtnRT.anchorMax = new Vector2(0.72f, 1);
+        spellBtnRT.offsetMin = Vector2.zero;
+        spellBtnRT.offsetMax = new Vector2(-1, 0);
 
-        Image btnImg = btnObj.AddComponent<Image>();
-        btnImg.color = btnColor;
+        Image spellBtnImg = spellBtnObj.AddComponent<Image>();
+        spellBtnImg.color = btnColor;
 
-        Button btn = btnObj.AddComponent<Button>();
-        var colors = btn.colors;
-        colors.highlightedColor = new Color(btnColor.r + 0.15f, btnColor.g + 0.15f, btnColor.b + 0.15f, 1f);
-        colors.pressedColor = new Color(btnColor.r - 0.1f, btnColor.g - 0.1f, btnColor.b - 0.1f, 1f);
-        btn.colors = colors;
+        Button spellBtn = spellBtnObj.AddComponent<Button>();
+        var spellColors = spellBtn.colors;
+        spellColors.highlightedColor = new Color(btnColor.r + 0.15f, btnColor.g + 0.15f, btnColor.b + 0.15f, 1f);
+        spellColors.pressedColor = new Color(btnColor.r - 0.1f, btnColor.g - 0.1f, btnColor.b - 0.1f, 1f);
+        spellBtn.colors = spellColors;
 
-        GameObject txtObj = new GameObject("Text");
-        txtObj.transform.SetParent(btnObj.transform, false);
-        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
-        txtRT.anchorMin = Vector2.zero;
-        txtRT.anchorMax = Vector2.one;
-        txtRT.offsetMin = new Vector2(8, 2);
-        txtRT.offsetMax = new Vector2(-8, -2);
+        GameObject spellTxtObj = new GameObject("Text");
+        spellTxtObj.transform.SetParent(spellBtnObj.transform, false);
+        RectTransform spellTxtRT = spellTxtObj.AddComponent<RectTransform>();
+        spellTxtRT.anchorMin = Vector2.zero;
+        spellTxtRT.anchorMax = Vector2.one;
+        spellTxtRT.offsetMin = new Vector2(6, 2);
+        spellTxtRT.offsetMax = new Vector2(-4, -2);
 
-        Text txt = txtObj.AddComponent<Text>();
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        txt.fontSize = 13;
-        txt.color = Color.white;
-        txt.alignment = TextAnchor.MiddleCenter;
-        txt.text = label;
-        txt.fontStyle = FontStyle.BoldAndItalic;
+        Text spellTxt = spellTxtObj.AddComponent<Text>();
+        spellTxt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (spellTxt.font == null) spellTxt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        spellTxt.fontSize = 13;
+        spellTxt.color = Color.white;
+        spellTxt.alignment = TextAnchor.MiddleLeft;
+        spellTxt.text = $"{prefix}{spellLabel}";
+        spellTxt.fontStyle = FontStyle.Bold;
 
-        // Wire click handler — this triggers spontaneous casting
-        SpellData capturedSpell = spontSpell;
-        int capturedLevel = spellLevel;
-        btn.onClick.AddListener(() =>
+        // Wire spell button click handler (same as normal spell button)
+        if (hasMetamagic)
+        {
+            SpellData capturedSpell = spell;
+            spellBtn.onClick.AddListener(() =>
+            {
+                ShowMetamagicPanel(capturedSpell, spellComp);
+            });
+        }
+        else
+        {
+            SpellData capturedSpell = spell;
+            spellBtn.onClick.AddListener(() =>
+            {
+                HideSpellSelection();
+                if (_onSpellSelectedWithMetamagic != null)
+                    _onSpellSelectedWithMetamagic.Invoke(capturedSpell, null);
+                else
+                    _onSpellSelected?.Invoke(capturedSpell);
+            });
+        }
+
+        // === CONVERT BUTTON (right side, ~28% width) ===
+        bool isCure = spellComp.Stats.SpontaneousCasting == SpontaneousCastingType.Cure;
+        Color convertColor = isCure
+            ? new Color(0.2f, 0.45f, 0.25f, 1f)    // green for cure
+            : new Color(0.45f, 0.15f, 0.35f, 1f);   // dark purple for inflict
+
+        SpellData spontSpell = spellComp.GetSpontaneousSpell(spell.SpellLevel);
+        string convertLabel = isCure ? "⟳ Convert\nto Cure" : "⟳ Convert\nto Inflict";
+
+        GameObject convertBtnObj = new GameObject($"ConvertBtn_{spell.SpellId}");
+        convertBtnObj.transform.SetParent(rowObj.transform, false);
+        RectTransform convertBtnRT = convertBtnObj.AddComponent<RectTransform>();
+        convertBtnRT.anchorMin = new Vector2(0.72f, 0);
+        convertBtnRT.anchorMax = new Vector2(1, 1);
+        convertBtnRT.offsetMin = new Vector2(1, 0);
+        convertBtnRT.offsetMax = Vector2.zero;
+
+        Image convertBtnImg = convertBtnObj.AddComponent<Image>();
+        convertBtnImg.color = convertColor;
+
+        Button convertBtn = convertBtnObj.AddComponent<Button>();
+        var convertColors = convertBtn.colors;
+        convertColors.highlightedColor = new Color(convertColor.r + 0.15f, convertColor.g + 0.15f, convertColor.b + 0.15f, 1f);
+        convertColors.pressedColor = new Color(convertColor.r - 0.1f, convertColor.g - 0.1f, convertColor.b - 0.1f, 1f);
+        convertBtn.colors = convertColors;
+
+        GameObject convertTxtObj = new GameObject("Text");
+        convertTxtObj.transform.SetParent(convertBtnObj.transform, false);
+        RectTransform convertTxtRT = convertTxtObj.AddComponent<RectTransform>();
+        convertTxtRT.anchorMin = Vector2.zero;
+        convertTxtRT.anchorMax = Vector2.one;
+        convertTxtRT.offsetMin = new Vector2(2, 1);
+        convertTxtRT.offsetMax = new Vector2(-2, -1);
+
+        Text convertTxt = convertTxtObj.AddComponent<Text>();
+        convertTxt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (convertTxt.font == null) convertTxt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        convertTxt.fontSize = 10;
+        convertTxt.color = Color.white;
+        convertTxt.alignment = TextAnchor.MiddleCenter;
+        convertTxt.text = convertLabel;
+        convertTxt.fontStyle = FontStyle.BoldAndItalic;
+
+        // Wire convert button click handler — sacrifices this specific spell
+        SpellData capturedSpontSpell = spontSpell;
+        string capturedSacrificeId = spell.SpellId;
+        int capturedLevel = spell.SpellLevel;
+        convertBtn.onClick.AddListener(() =>
         {
             HideSpellSelection();
-            // Mark this as a spontaneous cast by setting a flag
+            // Mark as spontaneous cast with the specific spell being sacrificed
             _isSpontaneousCast = true;
             _spontaneousCastLevel = capturedLevel;
+            _spontaneousSacrificedSpellId = capturedSacrificeId;
             if (_onSpellSelectedWithMetamagic != null)
-                _onSpellSelectedWithMetamagic.Invoke(capturedSpell, null);
+                _onSpellSelectedWithMetamagic.Invoke(capturedSpontSpell, null);
             else
-                _onSpellSelected?.Invoke(capturedSpell);
+                _onSpellSelected?.Invoke(capturedSpontSpell);
         });
     }
 
@@ -1392,11 +1471,16 @@ public class CombatUI : MonoBehaviour
     public int SpontaneousCastLevel => _spontaneousCastLevel;
     private int _spontaneousCastLevel;
 
+    /// <summary>The SpellId of the specific prepared spell being sacrificed for spontaneous conversion.</summary>
+    public string SpontaneousSacrificedSpellId => _spontaneousSacrificedSpellId;
+    private string _spontaneousSacrificedSpellId;
+
     /// <summary>Reset spontaneous casting state (called after spell is cast).</summary>
     public void ClearSpontaneousCastState()
     {
         _isSpontaneousCast = false;
         _spontaneousCastLevel = -1;
+        _spontaneousSacrificedSpellId = null;
     }
 
     // ========================================================================
