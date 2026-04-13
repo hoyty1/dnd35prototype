@@ -68,26 +68,45 @@ public static class AoESystem
     }
 
     // ========== CONE ==========
+    // 
+    // D&D 3.5e PHB p.304 / DMG p.69: "A cone-shaped spell shoots away from
+    // you in a quarter-circle in the direction you designate."
+    //
+    // Implementation uses the official D&D 3.5e grid templates:
+    //
+    // CARDINAL CONES (N, E, S, W):
+    //   Right-triangle staircase pattern emanating from a grid intersection.
+    //   Row n (at distance n squares) contains n cells, all expanding to one
+    //   side of the cone axis. Width at any distance = that distance.
+    //   Example 15-ft East cone (3 squares):
+    //                     (3,2)
+    //            (2,1)    (3,1)
+    //   (1,0)   (2,0)    (3,0)
+    //   [caster]
+    //   Total: 1+2+3 = 6 cells.
+    //
+    // DIAGONAL CONES (NE, SE, SW, NW):
+    //   All cells in the diagonal quadrant whose D&D 3.5e distance
+    //   (alternating diagonal cost rule) is ≤ cone length.
+    //   Example 15-ft NE cone (3 squares):
+    //          (1,3)
+    //   (1,2)  (2,2)
+    //   (1,1)  (2,1)  (3,1)
+    //   [caster]
+    //   Total: 6 cells.
+    //
+    // Both patterns produce the official PHB/DMG quarter-circle templates.
+    // ========================================================================
 
     /// <summary>
-    /// Get all grid cells within a cone AoE emanating from the caster.
-    /// D&D 3.5e PHB: "A cone shoots away from you in a quarter-circle in the
-    /// direction you designate." This means a 90° arc centered on the chosen direction.
-    ///
-    /// We snap the target direction to one of 8 primary directions (N, NE, E, SE, S, SW, W, NW).
-    /// The cone includes all cells that:
-    ///   1. Fall within 45° of the primary direction (quarter-circle / 90° arc)
-    ///   2. Are within the cone's length measured in D&D 3.5e grid distance
-    ///      (using the alternating diagonal cost rule)
-    ///   3. Are not the origin cell
-    ///
-    /// This produces correct cone shapes for ALL 8 directions, including diagonals.
-    /// A 15-ft cone (3 squares) aimed North yields a classic triangle, and aimed
-    /// NE yields a filled quarter-arc in the NE quadrant.
+    /// Get all grid cells within a cone AoE emanating from the caster,
+    /// using the official D&D 3.5e quarter-circle grid templates.
+    /// Snaps direction to one of 8 compass directions and generates the
+    /// appropriate pattern (cardinal staircase or diagonal quadrant fill).
     /// </summary>
     /// <param name="origin">Caster's grid position (cone emanates from here)</param>
     /// <param name="targetPos">Target position (determines cone direction)</param>
-    /// <param name="lengthSquares">Length of the cone in squares</param>
+    /// <param name="lengthSquares">Length of the cone in grid squares (e.g., 3 for 15 ft)</param>
     /// <param name="grid">Reference to the game grid</param>
     /// <returns>Set of grid coordinates within the cone (excludes origin)</returns>
     public static HashSet<Vector2Int> GetConeCells(Vector2Int origin, Vector2Int targetPos, int lengthSquares, SquareGrid grid)
@@ -99,48 +118,148 @@ public static class AoESystem
         // Determine the primary direction (snap to 8 directions)
         Vector2 rawDir = new Vector2(targetPos.x - origin.x, targetPos.y - origin.y).normalized;
         int dirIndex = GetClosestDirectionIndex(rawDir);
-        Vector2Int primaryDir = SquareGridUtils.Directions[dirIndex];
 
-        // Pre-compute the normalized primary direction for angle checks
-        Vector2 primaryDirF = new Vector2(primaryDir.x, primaryDir.y).normalized;
-
-        // cos(45°) ≈ 0.7071 — the half-angle of the 90° cone.
-        // Cells whose direction from origin has a dot product ≥ this threshold
-        // fall within the cone's arc. A small epsilon avoids floating-point
-        // exclusion of cells exactly on the boundary.
-        float cosHalfAngle = Mathf.Cos(45f * Mathf.Deg2Rad) - 0.001f;
-
-        // Scan a bounding box large enough to contain all cells within range.
-        // Chebyshev distance is always ≤ D&D 3.5 distance, so using
-        // lengthSquares as the Chebyshev bound is safe (won't miss cells).
-        for (int dx = -lengthSquares; dx <= lengthSquares; dx++)
+        // Generate cone offsets based on cardinal vs diagonal direction
+        List<Vector2Int> offsets;
+        if (IsDiagonalDirection(dirIndex))
         {
-            for (int dy = -lengthSquares; dy <= lengthSquares; dy++)
+            offsets = GetDiagonalConeOffsets(dirIndex, lengthSquares);
+        }
+        else
+        {
+            offsets = GetCardinalConeOffsets(dirIndex, lengthSquares);
+        }
+
+        // Apply offsets to origin and filter by grid bounds
+        foreach (var offset in offsets)
+        {
+            Vector2Int pos = origin + offset;
+            if (grid.GetCell(pos) != null)
             {
-                if (dx == 0 && dy == 0) continue; // skip origin
-
-                Vector2Int candidate = new Vector2Int(origin.x + dx, origin.y + dy);
-
-                // Check grid bounds
-                if (grid.GetCell(candidate) == null) continue;
-
-                // Check D&D 3.5e distance (with alternating diagonal cost)
-                int dist = SquareGridUtils.GetDistance(origin, candidate);
-                if (dist < 1 || dist > lengthSquares) continue;
-
-                // Check angle: is this cell within the 90° cone arc?
-                Vector2 toCellDir = new Vector2(dx, dy).normalized;
-                float dot = Vector2.Dot(toCellDir, primaryDirF);
-
-                if (dot >= cosHalfAngle)
-                {
-                    cells.Add(candidate);
-                }
+                cells.Add(pos);
             }
         }
 
         return cells;
     }
+
+    // ---- Cardinal Cone Pattern (Right-Triangle Staircase) ----
+
+    /// <summary>
+    /// Generate offsets for a cardinal direction cone (N, E, S, W).
+    /// The pattern is a right-triangle staircase: at distance d from origin,
+    /// the cone is d cells wide, expanding to one side of the axis.
+    /// This matches the official D&D 3.5e PHB quarter-circle template
+    /// for cardinal directions.
+    /// </summary>
+    private static List<Vector2Int> GetCardinalConeOffsets(int dirIndex, int length)
+    {
+        var offsets = new List<Vector2Int>();
+
+        // Build the base East pattern (expanding North/+y):
+        //   dx = 1..length, dy = 0..(dx-1)
+        // Then rotate the offsets to match the actual direction.
+        for (int primary = 1; primary <= length; primary++)
+        {
+            for (int lateral = 0; lateral < primary; lateral++)
+            {
+                offsets.Add(RotateCardinalOffset(dirIndex, primary, lateral));
+            }
+        }
+
+        return offsets;
+    }
+
+    /// <summary>
+    /// Rotate a base-East cone offset (primary=along axis, lateral=perpendicular)
+    /// to match the specified cardinal direction.
+    ///   East  (dir 2): primary → +x, lateral → +y  (expands North)
+    ///   North (dir 0): primary → +y, lateral → −x  (expands West)
+    ///   West  (dir 6): primary → −x, lateral → −y  (expands South)
+    ///   South (dir 4): primary → −y, lateral → +x  (expands East)
+    /// </summary>
+    private static Vector2Int RotateCardinalOffset(int dirIndex, int primary, int lateral)
+    {
+        switch (dirIndex)
+        {
+            case 2: // East → primary=+x, lateral=+y
+                return new Vector2Int(primary, lateral);
+            case 0: // North → primary=+y, lateral=−x
+                return new Vector2Int(-lateral, primary);
+            case 6: // West → primary=−x, lateral=−y
+                return new Vector2Int(-primary, -lateral);
+            case 4: // South → primary=−y, lateral=+x
+                return new Vector2Int(lateral, -primary);
+            default:
+                return Vector2Int.zero;
+        }
+    }
+
+    // ---- Diagonal Cone Pattern (Quadrant Fill) ----
+
+    /// <summary>
+    /// Generate offsets for a diagonal direction cone (NE, SE, SW, NW).
+    /// Fills all cells in the diagonal quadrant whose D&D 3.5e distance
+    /// (using alternating diagonal cost) is ≤ the cone length.
+    /// This matches the official D&D 3.5e PHB quarter-circle template
+    /// for diagonal directions.
+    /// </summary>
+    private static List<Vector2Int> GetDiagonalConeOffsets(int dirIndex, int length)
+    {
+        var offsets = new List<Vector2Int>();
+
+        // Build the base NE pattern: all (dx, dy) where dx ≥ 1, dy ≥ 1,
+        // and D&D 3.5e distance ≤ length.
+        // Then mirror the offsets to match the actual diagonal direction.
+        for (int dx = 1; dx <= length; dx++)
+        {
+            for (int dy = 1; dy <= length; dy++)
+            {
+                if (GetDnD35Distance(dx, dy) <= length)
+                {
+                    offsets.Add(MirrorDiagonalOffset(dirIndex, dx, dy));
+                }
+            }
+        }
+
+        return offsets;
+    }
+
+    /// <summary>
+    /// Mirror a base-NE cone offset to match the specified diagonal direction.
+    ///   NE (dir 1): (+dx, +dy)
+    ///   SE (dir 3): (+dx, −dy)
+    ///   SW (dir 5): (−dx, −dy)
+    ///   NW (dir 7): (−dx, +dy)
+    /// </summary>
+    private static Vector2Int MirrorDiagonalOffset(int dirIndex, int dx, int dy)
+    {
+        switch (dirIndex)
+        {
+            case 1: return new Vector2Int(dx, dy);    // NE
+            case 3: return new Vector2Int(dx, -dy);   // SE
+            case 5: return new Vector2Int(-dx, -dy);  // SW
+            case 7: return new Vector2Int(-dx, dy);   // NW
+            default: return Vector2Int.zero;
+        }
+    }
+
+    /// <summary>
+    /// Calculate D&D 3.5e grid distance between origin and offset (dx, dy).
+    /// Uses the alternating diagonal cost rule: odd diagonals cost 1, even cost 2.
+    /// Formula: straight_steps + diagonal_steps + floor(diagonal_steps / 2)
+    /// This is equivalent to SquareGridUtils.GetDistance but works with raw offsets.
+    /// </summary>
+    private static int GetDnD35Distance(int dx, int dy)
+    {
+        int absDx = Mathf.Abs(dx);
+        int absDy = Mathf.Abs(dy);
+        int diag = Mathf.Min(absDx, absDy);
+        int straight = Mathf.Abs(absDx - absDy);
+        return straight + diag + (diag / 2);
+    }
+
+    // ---- Direction Utilities ----
 
     /// <summary>
     /// Snap a continuous direction vector to one of 8 grid directions.
