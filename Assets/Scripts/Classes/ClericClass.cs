@@ -103,7 +103,8 @@ public class ClericClass : ICharacterClass
                 "cure_light_wounds", "cure_light_wounds", "bless", "shield_of_faith",
                 // Level 2 spells (3 slots: 1 base + 1 domain + 1 WIS bonus)
                 "cure_moderate_wounds", "spiritual_weapon", "bulls_strength_clr"
-            }
+            },
+            ChosenAlignment = Alignment.NeutralGood
         };
         data.ComputeFinalStats();
         data.SkillRanks["Concentration"] = 6;

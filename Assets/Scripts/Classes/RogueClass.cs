@@ -96,7 +96,8 @@ public class RogueClass : ICharacterClass
             STR = 12, DEX = 17, CON = 12,
             INT = 14, WIS = 13, CHA = 10,
             SelectedFeats = new List<string> { "Weapon Finesse", "Dodge" },
-            SelectedSpellIds = new List<string>() // Rogues don't cast spells
+            SelectedSpellIds = new List<string>(), // Rogues don't cast spells
+            ChosenAlignment = Alignment.ChaoticGood
         };
         data.ComputeFinalStats();
         data.SkillRanks["Hide"] = 6;

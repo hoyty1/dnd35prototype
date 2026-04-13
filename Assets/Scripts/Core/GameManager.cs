@@ -247,6 +247,9 @@ public class GameManager : MonoBehaviour
                 raceName: data.RaceName
             );
 
+            // Set alignment from character creation data
+            stats.CharacterAlignment = data.ChosenAlignment;
+
             // Use class-specific token sprite for grid display; fallback to generic
             Sprite pcAlive = IconLoader.GetToken(data.ClassName) ?? pcAliveFallback;
             Vector2Int startPos = (i < pcPositions.Length) ? pcPositions[i] : new Vector2Int(3, 6 + i * 3);
@@ -577,6 +580,8 @@ public class GameManager : MonoBehaviour
             raceName: "Dwarf"
         );
 
+        pc1Stats.CharacterAlignment = Alignment.LawfulGood;
+
         Debug.Log($"[GameManager] Aldric (Dwarf Fighter): STR {pc1Stats.STR} DEX {pc1Stats.DEX} CON {pc1Stats.CON} " +
                   $"WIS {pc1Stats.WIS} INT {pc1Stats.INT} CHA {pc1Stats.CHA} | " +
                   $"HP {pc1Stats.MaxHP} | Speed {pc1Stats.MoveRange} squares ({pc1Stats.SpeedInFeet} ft)");
@@ -614,6 +619,8 @@ public class GameManager : MonoBehaviour
             baseHitDieHP: 15,
             raceName: "Elf"
         );
+
+        pc2Stats.CharacterAlignment = Alignment.ChaoticGood;
 
         Debug.Log($"[GameManager] Lyra (Elf Rogue): STR {pc2Stats.STR} DEX {pc2Stats.DEX} CON {pc2Stats.CON} " +
                   $"WIS {pc2Stats.WIS} INT {pc2Stats.INT} CHA {pc2Stats.CHA} | " +
@@ -670,6 +677,8 @@ public class GameManager : MonoBehaviour
             raceName: "Human"
         );
 
+        pc3Stats.CharacterAlignment = Alignment.LawfulNeutral;
+
         Debug.Log($"[GameManager] Kael (Human Monk): STR {pc3Stats.STR} DEX {pc3Stats.DEX} CON {pc3Stats.CON} " +
                   $"WIS {pc3Stats.WIS} INT {pc3Stats.INT} CHA {pc3Stats.CHA} | " +
                   $"HP {pc3Stats.MaxHP} | Speed {pc3Stats.MoveRange} squares ({pc3Stats.SpeedInFeet} ft)");
@@ -718,6 +727,8 @@ public class GameManager : MonoBehaviour
             baseHitDieHP: 28,
             raceName: "Half-Orc"
         );
+
+        pc4Stats.CharacterAlignment = Alignment.ChaoticNeutral;
 
         Debug.Log($"[GameManager] Grunk (Half-Orc Barbarian): STR {pc4Stats.STR} DEX {pc4Stats.DEX} CON {pc4Stats.CON} " +
                   $"WIS {pc4Stats.WIS} INT {pc4Stats.INT} CHA {pc4Stats.CHA} | " +

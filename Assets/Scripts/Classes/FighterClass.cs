@@ -86,7 +86,8 @@ public class FighterClass : ICharacterClass
             SelectedFeats = new List<string> { "Power Attack", "Cleave" },
             BonusFeats = new List<string> { "Weapon Focus" },
             WeaponFocusChoice = "Longsword",
-            SelectedSpellIds = new List<string>() // Fighters don't cast spells
+            SelectedSpellIds = new List<string>(), // Fighters don't cast spells
+            ChosenAlignment = Alignment.LawfulGood
         };
         data.ComputeFinalStats();
         data.SkillRanks["Climb"] = 4;

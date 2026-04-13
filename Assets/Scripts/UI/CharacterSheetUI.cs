@@ -604,7 +604,9 @@ public class CharacterSheetUI : MonoBehaviour
 
         // === Character Header ===
         AddLine(content, stats.CharacterName, 16, GoldText, FontStyle.Bold, 18);
-        AddLine(content, $"Level {stats.Level}  {stats.RaceName}  {stats.CharacterClass}", 11, LightText, FontStyle.Normal, 14);
+        string alignDisplay = stats.CharacterAlignment != Alignment.None
+            ? $"  {stats.AlignmentName}" : "";
+        AddLine(content, $"Level {stats.Level}  {stats.RaceName}  {stats.CharacterClass}{alignDisplay}", 11, LightText, FontStyle.Normal, 14);
 
         AddSeparator(content);
 

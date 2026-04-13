@@ -90,7 +90,8 @@ public class WizardClass : ICharacterClass
             INT = 17, WIS = 13, CHA = 10,
             SelectedFeats = new List<string> { "Spell Focus", "Improved Initiative" },
             BonusFeats = new List<string> { "Scribe Scroll" },
-            SelectedSpellIds = new List<string>()
+            SelectedSpellIds = new List<string>(),
+            ChosenAlignment = Alignment.NeutralGood
         };
 
         // All cantrips automatically added to spellbook (D&D 3.5e PHB p.57)

@@ -93,7 +93,8 @@ public class MonkClass : ICharacterClass
             INT = 10, WIS = 15, CHA = 8,
             SelectedFeats = new List<string> { "Dodge", "Weapon Finesse" },
             BonusFeats = new List<string> { "Stunning Fist" }, // Monk 1st-level bonus feat choice
-            SelectedSpellIds = new List<string>() // Monks don't cast spells
+            SelectedSpellIds = new List<string>(), // Monks don't cast spells
+            ChosenAlignment = Alignment.LawfulNeutral
         };
         data.ComputeFinalStats();
         data.SkillRanks["Tumble"] = 6;

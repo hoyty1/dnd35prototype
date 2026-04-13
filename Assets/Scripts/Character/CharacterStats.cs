@@ -13,6 +13,13 @@ public class CharacterStats
     public string CharacterName;
     public int Level;
     public string CharacterClass; // e.g., "Fighter", "Rogue", "Warrior"
+    public Alignment CharacterAlignment = Alignment.None;
+
+    /// <summary>Full alignment name for display (e.g., "Lawful Good").</summary>
+    public string AlignmentName => AlignmentHelper.GetFullName(CharacterAlignment);
+
+    /// <summary>Alignment abbreviation (e.g., "LG").</summary>
+    public string AlignmentAbbr => AlignmentHelper.GetAbbreviation(CharacterAlignment);
 
     /// <summary>Whether this character is a Rogue (eligible for sneak attack).</summary>
     public bool IsRogue => CharacterClass == "Rogue";

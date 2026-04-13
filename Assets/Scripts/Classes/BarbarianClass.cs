@@ -83,7 +83,8 @@ public class BarbarianClass : ICharacterClass
             INT = 8, WIS = 10, CHA = 6,
             SelectedFeats = new List<string> { "Power Attack", "Cleave" },
             BonusFeats = new List<string>(),
-            SelectedSpellIds = new List<string>() // Barbarians don't cast spells
+            SelectedSpellIds = new List<string>(), // Barbarians don't cast spells
+            ChosenAlignment = Alignment.ChaoticNeutral
         };
         data.ComputeFinalStats();
         data.SkillRanks["Intimidate"] = 6;

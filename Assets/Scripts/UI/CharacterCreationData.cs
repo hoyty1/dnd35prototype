@@ -20,6 +20,9 @@ public class CharacterCreationData
     // Step 4: Class
     public string ClassName; // "Fighter" or "Rogue"
 
+    // Step 4b: Alignment
+    public Alignment ChosenAlignment = Alignment.None;
+
     // Step 5: Skills
     public Dictionary<string, int> SkillRanks = new Dictionary<string, int>();
 

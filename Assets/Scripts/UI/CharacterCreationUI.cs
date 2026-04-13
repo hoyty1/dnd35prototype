@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class CharacterCreationUI : MonoBehaviour
 {
     // ========== STATE ==========
-    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, AllocateSkills, SelectFeats, SelectSpells, Review }
+    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, ChooseAlignment, AllocateSkills, SelectFeats, SelectSpells, Review }
 
     public Step CurrentStep = Step.RollStats;
     public int CurrentCharacterIndex = 0; // 0 = PC1, 1 = PC2, 2 = PC3, 3 = PC4
@@ -84,6 +84,14 @@ public class CharacterCreationUI : MonoBehaviour
     private Button[] _classButtons;
     private Text _classInfoText;
     private Button _confirmClassButton;
+
+    // Step 4b: Choose Alignment
+    private GameObject _stepAlignPanel;
+    private Alignment _selectedAlignment = Alignment.None;
+    private Button[] _alignmentButtons;
+    private Text _alignInfoText;
+    private Text _alignRestrictionText;
+    private Button _confirmAlignButton;
 
     // Step 5: Review
     private Text _reviewText;
@@ -191,6 +199,7 @@ public class CharacterCreationUI : MonoBehaviour
         BuildStepAssignStats();
         BuildStepChooseRace();
         BuildStepChooseClass();
+        BuildStepChooseAlignment();
         BuildStepReview();
 
         ShowStep(Step.RollStats);
@@ -713,6 +722,147 @@ public class CharacterCreationUI : MonoBehaviour
     {
         if (_selectedClass == null) return;
         CreatedCharacters[CurrentCharacterIndex].ClassName = _selectedClass;
+        ShowStep(Step.ChooseAlignment);
+    }
+
+    // ========== STEP 4b: CHOOSE ALIGNMENT ==========
+
+    private void BuildStepChooseAlignment()
+    {
+        _stepAlignPanel = CreatePanel(_contentArea.transform, "StepAlign",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(PANEL_W - 60, PANEL_H - 150),
+            new Color(0, 0, 0, 0));
+
+        MakeText(_stepAlignPanel.transform, "AlignTooltip",
+            new Vector2(0, 230), new Vector2(700, 30),
+            "Choose your character's alignment. This defines their moral and ethical outlook.",
+            14, new Color(0.7f, 0.8f, 1f), TextAnchor.MiddleCenter);
+
+        // Restriction text (shown when class has alignment restrictions)
+        _alignRestrictionText = MakeText(_stepAlignPanel.transform, "AlignRestriction",
+            new Vector2(0, 205), new Vector2(700, 24),
+            "", 13, new Color(1f, 0.7f, 0.3f), TextAnchor.MiddleCenter);
+
+        // 3x3 grid of alignment buttons
+        // Column headers
+        string[] colHeaders = { "Lawful", "Neutral", "Chaotic" };
+        for (int c = 0; c < 3; c++)
+        {
+            MakeText(_stepAlignPanel.transform, $"ColHeader{c}",
+                new Vector2(-180 + c * 180, 175), new Vector2(160, 22),
+                colHeaders[c], 13, new Color(0.6f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
+        }
+
+        // Row headers
+        string[] rowHeaders = { "Good", "Neutral", "Evil" };
+        for (int r = 0; r < 3; r++)
+        {
+            MakeText(_stepAlignPanel.transform, $"RowHeader{r}",
+                new Vector2(-320, 130 - r * 80), new Vector2(80, 22),
+                rowHeaders[r], 13, new Color(0.6f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
+        }
+
+        _alignmentButtons = new Button[9];
+        for (int i = 0; i < 9; i++)
+        {
+            int row = i / 3;
+            int col = i % 3;
+            Alignment alignment = AlignmentHelper.GridOrder[i];
+            string label = AlignmentHelper.GetAbbreviation(alignment) + "\n" + AlignmentHelper.GetFullName(alignment);
+
+            float x = -180 + col * 180;
+            float y = 130 - row * 80;
+
+            Color btnColor;
+            if (AlignmentHelper.IsGood(alignment))
+                btnColor = new Color(0.15f, 0.35f, 0.2f);
+            else if (AlignmentHelper.IsEvil(alignment))
+                btnColor = new Color(0.4f, 0.15f, 0.15f);
+            else
+                btnColor = new Color(0.25f, 0.25f, 0.35f);
+
+            _alignmentButtons[i] = MakeButton(_stepAlignPanel.transform, $"Align{i}",
+                new Vector2(x, y), new Vector2(160, 65),
+                label, btnColor, Color.white, 13);
+
+            int idx = i; // Capture for closure
+            _alignmentButtons[i].onClick.AddListener(() => OnAlignmentSelected(idx));
+        }
+
+        // Info text for selected alignment description
+        _alignInfoText = MakeText(_stepAlignPanel.transform, "AlignInfo",
+            new Vector2(0, -120), new Vector2(700, 60),
+            "Select an alignment to see its description.", 14, new Color(0.85f, 0.85f, 0.8f), TextAnchor.MiddleCenter);
+
+        // Confirm button
+        _confirmAlignButton = MakeButton(_stepAlignPanel.transform, "ConfirmAlign",
+            new Vector2(0, -190), new Vector2(220, 45),
+            "Confirm Alignment ✓", new Color(0.2f, 0.5f, 0.2f), Color.white, 18);
+        _confirmAlignButton.onClick.AddListener(OnConfirmAlignment);
+        _confirmAlignButton.interactable = false;
+    }
+
+    private void RefreshAlignmentButtons()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        string className = data.ClassName;
+
+        for (int i = 0; i < 9; i++)
+        {
+            Alignment alignment = AlignmentHelper.GridOrder[i];
+            bool isValid = AlignmentHelper.IsAlignmentValidForClass(alignment, className);
+            bool isSelected = (alignment == _selectedAlignment);
+
+            Color btnColor;
+            if (!isValid)
+            {
+                btnColor = new Color(0.2f, 0.2f, 0.2f, 0.5f); // Dimmed / disabled look
+            }
+            else if (isSelected)
+            {
+                btnColor = new Color(0.5f, 0.5f, 0.15f); // Gold highlight for selected
+            }
+            else if (AlignmentHelper.IsGood(alignment))
+            {
+                btnColor = new Color(0.15f, 0.35f, 0.2f);
+            }
+            else if (AlignmentHelper.IsEvil(alignment))
+            {
+                btnColor = new Color(0.4f, 0.15f, 0.15f);
+            }
+            else
+            {
+                btnColor = new Color(0.25f, 0.25f, 0.35f);
+            }
+
+            var colors = _alignmentButtons[i].colors;
+            colors.normalColor = btnColor;
+            colors.highlightedColor = btnColor * 1.2f;
+            colors.disabledColor = btnColor;
+            _alignmentButtons[i].colors = colors;
+            _alignmentButtons[i].interactable = isValid;
+        }
+    }
+
+    private void OnAlignmentSelected(int index)
+    {
+        Alignment alignment = AlignmentHelper.GridOrder[index];
+        var data = CreatedCharacters[CurrentCharacterIndex];
+
+        if (!AlignmentHelper.IsAlignmentValidForClass(alignment, data.ClassName))
+            return;
+
+        _selectedAlignment = alignment;
+        _alignInfoText.text = $"<b>{AlignmentHelper.GetFullName(alignment)}</b> ({AlignmentHelper.GetAbbreviation(alignment)})\n{AlignmentHelper.GetDescription(alignment)}";
+        _confirmAlignButton.interactable = true;
+        RefreshAlignmentButtons();
+    }
+
+    private void OnConfirmAlignment()
+    {
+        if (_selectedAlignment == Alignment.None) return;
+        CreatedCharacters[CurrentCharacterIndex].ChosenAlignment = _selectedAlignment;
         ShowStep(Step.AllocateSkills);
     }
 
@@ -1223,8 +1373,13 @@ public class CharacterCreationUI : MonoBehaviour
         string sizeStr = data.Race != null && data.Race.SizeACAndAttackModifier != 0 ?
             $" ({data.Race.SizeName}: {CharacterStats.FormatMod(sizeMod)} AC/Atk)" : "";
 
+        string alignStr = data.ChosenAlignment != Alignment.None
+            ? AlignmentHelper.GetFullName(data.ChosenAlignment)
+            : "None";
+
         string review = $"══════════ CHARACTER SHEET ══════════\n\n";
-        review += $"Race: {data.RaceName}   Class: {data.ClassName}   Level: 3{sizeStr}\n\n";
+        review += $"Race: {data.RaceName}   Class: {data.ClassName}   Level: 3{sizeStr}\n";
+        review += $"Alignment: {alignStr}\n\n";
 
         review += "--- Ability Scores ---\n";
         review += data.GetFinalStatString("STR", data.STR, data.Race != null ? data.Race.STRModifier : 0) + "\n";
@@ -1411,6 +1566,7 @@ public class CharacterCreationUI : MonoBehaviour
         _step2Panel.SetActive(false);
         _step3Panel.SetActive(false);
         _step4Panel.SetActive(false);
+        _stepAlignPanel.SetActive(false);
         _step5Panel.SetActive(false);
 
         string heroLabel = $"Hero {CurrentCharacterIndex + 1} of {TotalPCs}";
@@ -1421,7 +1577,7 @@ public class CharacterCreationUI : MonoBehaviour
         {
             case Step.RollStats:
                 _step1Panel.SetActive(true);
-                _stepText.text = "Step 1 of 8: Roll Stats";
+                _stepText.text = "Step 1 of 9: Roll Stats";
                 // Reset roll UI
                 if (_currentRolls == null)
                 {
@@ -1435,7 +1591,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.AssignStats:
                 _step2Panel.SetActive(true);
-                _stepText.text = "Step 2 of 8: Assign Stats";
+                _stepText.text = "Step 2 of 9: Assign Stats";
                 // Reset assignment
                 _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
                 _rollUsed = new bool[6];
@@ -1445,7 +1601,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseRace:
                 _step3Panel.SetActive(true);
-                _stepText.text = "Step 3 of 8: Choose Race";
+                _stepText.text = "Step 3 of 9: Choose Race";
                 _selectedRace = null;
                 _raceInfoText.text = "Select a race to see details.";
                 _racePreviewText.text = "";
@@ -1462,7 +1618,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseClass:
                 _step4Panel.SetActive(true);
-                _stepText.text = "Step 4 of 8: Choose Class";
+                _stepText.text = "Step 4 of 9: Choose Class";
                 _selectedClass = null;
                 _classInfoText.text = "";
                 _confirmClassButton.interactable = false;
@@ -1475,25 +1631,38 @@ public class CharacterCreationUI : MonoBehaviour
                 }
                 break;
 
+            case Step.ChooseAlignment:
+                _stepAlignPanel.SetActive(true);
+                _stepText.text = "Step 5 of 9: Choose Alignment";
+                _selectedAlignment = Alignment.None;
+                _alignInfoText.text = "Select an alignment to see its description.";
+                _confirmAlignButton.interactable = false;
+                // Show class restriction if any
+                string restriction = AlignmentHelper.GetClassRestrictionText(
+                    CreatedCharacters[CurrentCharacterIndex].ClassName);
+                _alignRestrictionText.text = restriction;
+                RefreshAlignmentButtons();
+                break;
+
             case Step.AllocateSkills:
                 // Skills allocation is handled by the SkillsUIPanel overlay
-                _stepText.text = "Step 5 of 8: Allocate Skills";
+                _stepText.text = "Step 6 of 9: Allocate Skills";
                 StartSkillAllocation();
                 break;
 
             case Step.SelectFeats:
-                _stepText.text = "Step 6 of 8: Select Feats";
+                _stepText.text = "Step 7 of 9: Select Feats";
                 StartFeatSelection();
                 break;
 
             case Step.SelectSpells:
-                _stepText.text = "Step 7 of 8: Select Spells (incl. Cantrips)";
+                _stepText.text = "Step 8 of 9: Select Spells (incl. Cantrips)";
                 StartSpellSelection();
                 break;
 
             case Step.Review:
                 _step5Panel.SetActive(true);
-                _stepText.text = "Step 8 of 8: Review & Name";
+                _stepText.text = "Step 9 of 9: Review & Name";
                 _nameInput.text = "";
                 RefreshReview();
                 break;
@@ -1507,11 +1676,12 @@ public class CharacterCreationUI : MonoBehaviour
             case Step.AssignStats: ShowStep(Step.RollStats); break;
             case Step.ChooseRace: ShowStep(Step.AssignStats); break;
             case Step.ChooseClass: ShowStep(Step.ChooseRace); break;
+            case Step.ChooseAlignment: ShowStep(Step.ChooseClass); break;
             case Step.AllocateSkills:
                 // Close skills UI if open
                 if (SkillsUI != null && SkillsUI.IsOpen)
                     SkillsUI.Close();
-                ShowStep(Step.ChooseClass);
+                ShowStep(Step.ChooseAlignment);
                 break;
             case Step.SelectFeats:
                 // Close feat UI if open
@@ -1537,6 +1707,7 @@ public class CharacterCreationUI : MonoBehaviour
         _currentRollDetails = null;
         _selectedRace = null;
         _selectedClass = null;
+        _selectedAlignment = Alignment.None;
         _selectedRollIndex = -1;
         _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
         _rollUsed = new bool[6];
