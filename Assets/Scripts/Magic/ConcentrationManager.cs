@@ -285,13 +285,13 @@ public class ConcentrationManager : MonoBehaviour
             if (skill.Ranks > 0)
             {
                 // Ranks + CON modifier (+ class skill bonus if applicable)
-                int conMod = _stats.GetModifier(_stats.CON);
+                int conMod = CharacterStats.GetModifier(_stats.CON);
                 return skill.Ranks + conMod + skill.ClassSkillBonus;
             }
         }
 
         // Fallback: CON modifier + half caster level (untrained skill use)
-        int fallbackConMod = _stats.GetModifier(_stats.CON);
+        int fallbackConMod = CharacterStats.GetModifier(_stats.CON);
         return fallbackConMod;
     }
 
@@ -303,14 +303,14 @@ public class ConcentrationManager : MonoBehaviour
         if (_stats.Skills.ContainsKey("Concentration") && _stats.Skills["Concentration"].Ranks > 0)
         {
             var skill = _stats.Skills["Concentration"];
-            int conMod = _stats.GetModifier(_stats.CON);
+            int conMod = CharacterStats.GetModifier(_stats.CON);
             if (skill.Ranks > 0) parts.Add($"+ {skill.Ranks}(ranks)");
             if (conMod != 0) parts.Add($"+ {conMod}(CON)");
             if (skill.ClassSkillBonus > 0) parts.Add($"+ {skill.ClassSkillBonus}(class)");
         }
         else
         {
-            int conMod = _stats.GetModifier(_stats.CON);
+            int conMod = CharacterStats.GetModifier(_stats.CON);
             if (conMod != 0) parts.Add($"+ {conMod}(CON)");
         }
 
