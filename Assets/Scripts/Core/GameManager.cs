@@ -256,6 +256,9 @@ public class GameManager : MonoBehaviour
                 ? new System.Collections.Generic.List<string>(data.ChosenDomains)
                 : new System.Collections.Generic.List<string>();
 
+            // Set spontaneous casting type for clerics
+            stats.SpontaneousCasting = data.SpontaneousCasting;
+
             // Use class-specific token sprite for grid display; fallback to generic
             Sprite pcAlive = IconLoader.GetToken(data.ClassName) ?? pcAliveFallback;
             Vector2Int startPos = (i < pcPositions.Length) ? pcPositions[i] : new Vector2Int(3, 6 + i * 3);
@@ -1559,6 +1562,14 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        // Check if this is a spontaneous cast (cleric converting a prepared spell)
+        bool isSpontaneous = CombatUI != null && CombatUI.IsSpontaneousCast;
+        int spontaneousLevel = isSpontaneous ? CombatUI.SpontaneousCastLevel : -1;
+
+        // Clear spontaneous casting state
+        if (CombatUI != null)
+            CombatUI.ClearSpontaneousCastState();
+
         // Consume spell slot using D&D 3.5e slot-based system
         // Cantrips (level 0) are UNLIMITED — no slot consumed
         int slotLevelToConsume = _pendingSpell.SpellLevel;
@@ -1576,7 +1587,16 @@ public class GameManager : MonoBehaviour
         // Both Wizards and Clerics use slot-based system
         {
             bool consumed;
-            if (hasMetamagicApplied && slotLevelToConsume > 0)
+            if (isSpontaneous)
+            {
+                // Spontaneous casting: consume any slot at the spontaneous level
+                consumed = spellComp.SpontaneousCastFromSlot(spontaneousLevel);
+                if (consumed)
+                {
+                    Debug.Log($"[GameManager] Spontaneous cast: {caster.Stats.CharacterName} converted a level {spontaneousLevel} slot → {_pendingSpell.Name}");
+                }
+            }
+            else if (hasMetamagicApplied && slotLevelToConsume > 0)
             {
                 consumed = spellComp.CastWizardSpellWithMetamagic(_pendingSpell, _pendingMetamagic);
             }
@@ -1608,8 +1628,14 @@ public class GameManager : MonoBehaviour
             target.OnDeath();
         }
 
-        // Build combat log with quickened spell indicator
+        // Build combat log with quickened spell / spontaneous cast indicators
         _lastCombatLog = result.GetFormattedLog();
+
+        if (isSpontaneous)
+        {
+            string spontPrefix = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! (Converted prepared spell)\n";
+            _lastCombatLog = spontPrefix + _lastCombatLog;
+        }
 
         if (isQuickened)
         {

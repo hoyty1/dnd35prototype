@@ -31,6 +31,14 @@ public class CharacterCreationData
     /// <summary>Domain names selected for a cleric (e.g., "Healing", "Good"). Max 2.</summary>
     public List<string> ChosenDomains = new List<string>();
 
+    // Step 4e: Spontaneous Casting (clerics only)
+    /// <summary>
+    /// D&D 3.5e Spontaneous Casting type for clerics.
+    /// Good clerics automatically get Cure, Evil clerics get Inflict.
+    /// Neutral clerics (on Good/Evil axis) must choose during character creation.
+    /// </summary>
+    public SpontaneousCastingType SpontaneousCasting = SpontaneousCastingType.None;
+
     // Step 5: Skills
     public Dictionary<string, int> SkillRanks = new Dictionary<string, int>();
 

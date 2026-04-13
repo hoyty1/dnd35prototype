@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class CharacterCreationUI : MonoBehaviour
 {
     // ========== STATE ==========
-    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, ChooseAlignment, ChooseDeity, ChooseDomains, AllocateSkills, SelectFeats, SelectSpells, Review }
+    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, ChooseAlignment, ChooseDeity, ChooseDomains, ChooseSpontaneousCasting, AllocateSkills, SelectFeats, SelectSpells, Review }
 
     public Step CurrentStep = Step.RollStats;
     public int CurrentCharacterIndex = 0; // 0 = PC1, 1 = PC2, 2 = PC3, 3 = PC4
@@ -111,6 +111,14 @@ public class CharacterCreationUI : MonoBehaviour
     private Text _domainSummaryText;
     private Button _confirmDomainButton;
     private List<string> _availableDomainNames = new List<string>();
+
+    // Step 4e: Choose Spontaneous Casting (Neutral clerics only)
+    private GameObject _stepSpontCastPanel;
+    private SpontaneousCastingType _selectedSpontCasting = SpontaneousCastingType.None;
+    private Button _cureButton;
+    private Button _inflictButton;
+    private Text _spontCastInfoText;
+    private Button _confirmSpontCastButton;
 
     // Step 5: Review
     private Text _reviewText;
@@ -221,6 +229,7 @@ public class CharacterCreationUI : MonoBehaviour
         BuildStepChooseAlignment();
         BuildStepChooseDeity();
         BuildStepChooseDomains();
+        BuildStepChooseSpontaneousCasting();
         BuildStepReview();
 
         ShowStep(Step.RollStats);
@@ -1218,6 +1227,115 @@ public class CharacterCreationUI : MonoBehaviour
     {
         if (_selectedDomains.Count != 2) return;
         CreatedCharacters[CurrentCharacterIndex].ChosenDomains = new List<string>(_selectedDomains);
+
+        // D&D 3.5e: Determine spontaneous casting based on alignment
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        var defaultType = SpontaneousCastingHelper.GetDefaultForAlignment(data.ChosenAlignment);
+
+        if (defaultType != SpontaneousCastingType.None)
+        {
+            // Good or Evil cleric — auto-assign and skip to skills
+            data.SpontaneousCasting = defaultType;
+            Debug.Log($"[CharCreation] {data.CharacterName}: Auto-assigned spontaneous casting = {defaultType} (alignment: {AlignmentHelper.GetFullName(data.ChosenAlignment)})");
+            ShowStep(Step.AllocateSkills);
+        }
+        else
+        {
+            // Neutral on Good/Evil axis — must choose
+            Debug.Log($"[CharCreation] {data.CharacterName}: Neutral cleric — showing spontaneous casting choice");
+            ShowStep(Step.ChooseSpontaneousCasting);
+        }
+    }
+
+    // ========== STEP 4e: CHOOSE SPONTANEOUS CASTING (Neutral Clerics only) ==========
+
+    private void BuildStepChooseSpontaneousCasting()
+    {
+        _stepSpontCastPanel = CreatePanel(_contentArea.transform, "StepSpontCast",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(PANEL_W - 60, PANEL_H - 150), new Color(0, 0, 0, 0));
+        _stepSpontCastPanel.SetActive(false);
+
+        MakeText(_stepSpontCastPanel.transform, "SpontCastTitle",
+            new Vector2(0, 170), new Vector2(500, 40),
+            "SPONTANEOUS CASTING", 22, new Color(0.9f, 0.85f, 0.3f), TextAnchor.MiddleCenter);
+
+        MakeText(_stepSpontCastPanel.transform, "SpontCastDesc",
+            new Vector2(0, 130), new Vector2(500, 60),
+            "As a neutral cleric, you must choose whether to channel\npositive energy (Cure spells) or negative energy (Inflict spells).\nThis choice is permanent and cannot be changed later.",
+            14, new Color(0.8f, 0.8f, 0.9f), TextAnchor.MiddleCenter);
+
+        MakeText(_stepSpontCastPanel.transform, "SpontCastRule",
+            new Vector2(0, 85), new Vector2(500, 40),
+            "You can spontaneously convert any prepared spell into a cure/inflict spell of the same level.",
+            12, new Color(0.6f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
+
+        // Cure button
+        _cureButton = MakeButton(_stepSpontCastPanel.transform, "CureBtn",
+            new Vector2(-120, 20), new Vector2(200, 60),
+            "☀ Cure Spells\n(Positive Energy)", new Color(0.2f, 0.5f, 0.2f), Color.white, 14);
+        _cureButton.onClick.AddListener(() => OnSelectSpontaneousCasting(SpontaneousCastingType.Cure));
+
+        // Inflict button
+        _inflictButton = MakeButton(_stepSpontCastPanel.transform, "InflictBtn",
+            new Vector2(120, 20), new Vector2(200, 60),
+            "💀 Inflict Spells\n(Negative Energy)", new Color(0.5f, 0.2f, 0.2f), Color.white, 14);
+        _inflictButton.onClick.AddListener(() => OnSelectSpontaneousCasting(SpontaneousCastingType.Inflict));
+
+        // Info text — updated when selection changes
+        _spontCastInfoText = MakeText(_stepSpontCastPanel.transform, "SpontCastInfo",
+            new Vector2(0, -70), new Vector2(500, 80),
+            "Select Cure or Inflict spells above.", 13, new Color(0.7f, 0.7f, 0.8f), TextAnchor.UpperCenter);
+
+        // Confirm button
+        _confirmSpontCastButton = MakeButton(_stepSpontCastPanel.transform, "ConfirmSpontCast",
+            new Vector2(0, -150), new Vector2(200, 40),
+            "Confirm ✓", new Color(0.2f, 0.45f, 0.25f), Color.white, 16);
+        _confirmSpontCastButton.interactable = false;
+        _confirmSpontCastButton.onClick.AddListener(OnConfirmSpontaneousCasting);
+    }
+
+    private void OnSelectSpontaneousCasting(SpontaneousCastingType type)
+    {
+        _selectedSpontCasting = type;
+        _confirmSpontCastButton.interactable = true;
+
+        // Update button colors to show selection
+        var cureColors = _cureButton.colors;
+        var inflictColors = _inflictButton.colors;
+
+        if (type == SpontaneousCastingType.Cure)
+        {
+            cureColors.normalColor = new Color(0.15f, 0.6f, 0.15f);
+            inflictColors.normalColor = new Color(0.3f, 0.2f, 0.2f);
+            _spontCastInfoText.text = "☀ CURE SPELLS (Positive Energy)\n\n" +
+                "You can convert any prepared spell into a Cure spell of the same level:\n" +
+                "  • Level 0: Cure Minor Wounds (heal 1 HP)\n" +
+                "  • Level 1: Cure Light Wounds (1d8+CL HP)\n" +
+                "  • Level 2: Cure Moderate Wounds (2d8+CL HP)";
+        }
+        else
+        {
+            cureColors.normalColor = new Color(0.2f, 0.3f, 0.2f);
+            inflictColors.normalColor = new Color(0.6f, 0.15f, 0.15f);
+            _spontCastInfoText.text = "💀 INFLICT SPELLS (Negative Energy)\n\n" +
+                "You can convert any prepared spell into an Inflict spell of the same level:\n" +
+                "  • Level 0: Inflict Minor Wounds (1 negative damage)\n" +
+                "  • Level 1: Inflict Light Wounds (1d8+CL negative)\n" +
+                "  • Level 2: Inflict Moderate Wounds (2d8+CL negative)";
+        }
+
+        cureColors.highlightedColor = cureColors.normalColor * 1.2f;
+        inflictColors.highlightedColor = inflictColors.normalColor * 1.2f;
+        _cureButton.colors = cureColors;
+        _inflictButton.colors = inflictColors;
+    }
+
+    private void OnConfirmSpontaneousCasting()
+    {
+        if (_selectedSpontCasting == SpontaneousCastingType.None) return;
+        CreatedCharacters[CurrentCharacterIndex].SpontaneousCasting = _selectedSpontCasting;
+        Debug.Log($"[CharCreation] Neutral cleric chose spontaneous casting: {_selectedSpontCasting}");
         ShowStep(Step.AllocateSkills);
     }
 
@@ -1754,6 +1872,13 @@ public class CharacterCreationUI : MonoBehaviour
                     review += $"  • {domName}: {dom.GrantedPower}\n";
             }
         }
+        if (data.ClassName == "Cleric" && data.SpontaneousCasting != SpontaneousCastingType.None)
+        {
+            string spontStr = data.SpontaneousCasting == SpontaneousCastingType.Cure
+                ? "☀ Cure Spells (Positive Energy)"
+                : "💀 Inflict Spells (Negative Energy)";
+            review += $"Spontaneous Casting: {spontStr}\n";
+        }
         review += "\n";
 
         review += "--- Ability Scores ---\n";
@@ -1944,6 +2069,7 @@ public class CharacterCreationUI : MonoBehaviour
         _stepAlignPanel.SetActive(false);
         _stepDeityPanel.SetActive(false);
         _stepDomainPanel.SetActive(false);
+        _stepSpontCastPanel.SetActive(false);
         _step5Panel.SetActive(false);
 
         string heroLabel = $"Hero {CurrentCharacterIndex + 1} of {TotalPCs}";
@@ -1954,7 +2080,7 @@ public class CharacterCreationUI : MonoBehaviour
         {
             case Step.RollStats:
                 _step1Panel.SetActive(true);
-                _stepText.text = "Step 1 of 11: Roll Stats";
+                _stepText.text = "Step 1 of 12: Roll Stats";
                 // Reset roll UI
                 if (_currentRolls == null)
                 {
@@ -1968,7 +2094,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.AssignStats:
                 _step2Panel.SetActive(true);
-                _stepText.text = "Step 2 of 11: Assign Stats";
+                _stepText.text = "Step 2 of 12: Assign Stats";
                 // Reset assignment
                 _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
                 _rollUsed = new bool[6];
@@ -1978,7 +2104,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseRace:
                 _step3Panel.SetActive(true);
-                _stepText.text = "Step 3 of 11: Choose Race";
+                _stepText.text = "Step 3 of 12: Choose Race";
                 _selectedRace = null;
                 _raceInfoText.text = "Select a race to see details.";
                 _racePreviewText.text = "";
@@ -1995,7 +2121,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseClass:
                 _step4Panel.SetActive(true);
-                _stepText.text = "Step 4 of 11: Choose Class";
+                _stepText.text = "Step 4 of 12: Choose Class";
                 _selectedClass = null;
                 _classInfoText.text = "";
                 _confirmClassButton.interactable = false;
@@ -2010,7 +2136,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseAlignment:
                 _stepAlignPanel.SetActive(true);
-                _stepText.text = "Step 5 of 11: Choose Alignment";
+                _stepText.text = "Step 5 of 12: Choose Alignment";
                 _selectedAlignment = Alignment.None;
                 _alignInfoText.text = "Select an alignment to see its description.";
                 _confirmAlignButton.interactable = false;
@@ -2023,7 +2149,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseDeity:
                 _stepDeityPanel.SetActive(true);
-                _stepText.text = "Step 6 of 11: Choose Deity";
+                _stepText.text = "Step 6 of 12: Choose Deity";
                 _selectedDeityId = "";
                 _deityInfoText.text = "Select a deity to see details.";
                 _confirmDeityButton.interactable = false;
@@ -2036,32 +2162,49 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.ChooseDomains:
                 _stepDomainPanel.SetActive(true);
-                _stepText.text = "Step 7 of 11: Choose Domains";
+                _stepText.text = "Step 7 of 12: Choose Domains";
                 _selectedDomains.Clear();
                 _domainInfoText.text = "Select a domain to see details.";
                 _confirmDomainButton.interactable = false;
                 PopulateDomainButtons();
                 break;
 
+            case Step.ChooseSpontaneousCasting:
+                _stepSpontCastPanel.SetActive(true);
+                _stepText.text = "Step 8 of 12: Spontaneous Casting";
+                _selectedSpontCasting = SpontaneousCastingType.None;
+                _spontCastInfoText.text = "Select Cure or Inflict spells above.";
+                _confirmSpontCastButton.interactable = false;
+                // Reset button colors
+                var cureC = _cureButton.colors;
+                cureC.normalColor = new Color(0.2f, 0.5f, 0.2f);
+                cureC.highlightedColor = cureC.normalColor * 1.2f;
+                _cureButton.colors = cureC;
+                var inflC = _inflictButton.colors;
+                inflC.normalColor = new Color(0.5f, 0.2f, 0.2f);
+                inflC.highlightedColor = inflC.normalColor * 1.2f;
+                _inflictButton.colors = inflC;
+                break;
+
             case Step.AllocateSkills:
                 // Skills allocation is handled by the SkillsUIPanel overlay
-                _stepText.text = "Step 8 of 11: Allocate Skills";
+                _stepText.text = "Step 9 of 12: Allocate Skills";
                 StartSkillAllocation();
                 break;
 
             case Step.SelectFeats:
-                _stepText.text = "Step 9 of 11: Select Feats";
+                _stepText.text = "Step 10 of 12: Select Feats";
                 StartFeatSelection();
                 break;
 
             case Step.SelectSpells:
-                _stepText.text = "Step 10 of 11: Select Spells (incl. Cantrips)";
+                _stepText.text = "Step 11 of 12: Select Spells (incl. Cantrips)";
                 StartSpellSelection();
                 break;
 
             case Step.Review:
                 _step5Panel.SetActive(true);
-                _stepText.text = "Step 11 of 11: Review & Name";
+                _stepText.text = "Step 12 of 12: Review & Name";
                 _nameInput.text = "";
                 RefreshReview();
                 break;
@@ -2078,14 +2221,21 @@ public class CharacterCreationUI : MonoBehaviour
             case Step.ChooseAlignment: ShowStep(Step.ChooseClass); break;
             case Step.ChooseDeity: ShowStep(Step.ChooseAlignment); break;
             case Step.ChooseDomains: ShowStep(Step.ChooseDeity); break;
+            case Step.ChooseSpontaneousCasting: ShowStep(Step.ChooseDomains); break;
             case Step.AllocateSkills:
                 // Close skills UI if open
                 if (SkillsUI != null && SkillsUI.IsOpen)
                     SkillsUI.Close();
-                // Go back to deity or domains depending on class
+                // Go back to correct step depending on class/alignment
                 var backData = CreatedCharacters[CurrentCharacterIndex];
                 if (backData.ClassName == "Cleric" && !string.IsNullOrEmpty(backData.ChosenDeityId))
-                    ShowStep(Step.ChooseDomains);
+                {
+                    // If neutral cleric, go back to spontaneous casting choice
+                    if (AlignmentHelper.IsNeutralGE(backData.ChosenAlignment))
+                        ShowStep(Step.ChooseSpontaneousCasting);
+                    else
+                        ShowStep(Step.ChooseDomains);
+                }
                 else
                     ShowStep(Step.ChooseDeity);
                 break;
@@ -2116,6 +2266,7 @@ public class CharacterCreationUI : MonoBehaviour
         _selectedAlignment = Alignment.None;
         _selectedDeityId = "";
         _selectedDomains.Clear();
+        _selectedSpontCasting = SpontaneousCastingType.None;
         _selectedRollIndex = -1;
         _assignedValues = new int[] { -1, -1, -1, -1, -1, -1 };
         _rollUsed = new bool[6];

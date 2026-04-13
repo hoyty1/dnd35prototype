@@ -106,7 +106,8 @@ public class ClericClass : ICharacterClass
             },
             ChosenAlignment = Alignment.NeutralGood,
             ChosenDeityId = "pelor",
-            ChosenDomains = new List<string> { "Healing", "Good" }
+            ChosenDomains = new List<string> { "Healing", "Good" },
+            SpontaneousCasting = SpontaneousCastingType.Cure // NG cleric → cure spells
         };
         data.ComputeFinalStats();
         data.SkillRanks["Concentration"] = 6;

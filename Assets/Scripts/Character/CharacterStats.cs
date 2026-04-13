@@ -29,6 +29,14 @@ public class CharacterStats
     /// <summary>Names of the cleric's chosen domains (e.g., ["Healing", "Good"]). Empty for non-clerics.</summary>
     public System.Collections.Generic.List<string> ChosenDomains = new System.Collections.Generic.List<string>();
 
+    /// <summary>
+    /// D&D 3.5e Spontaneous Casting type for clerics.
+    /// Cure = can convert prepared spells to cure spells.
+    /// Inflict = can convert prepared spells to inflict spells.
+    /// None = not a cleric or not set.
+    /// </summary>
+    public SpontaneousCastingType SpontaneousCasting = SpontaneousCastingType.None;
+
     /// <summary>Get the DeityData for this character's deity, or null.</summary>
     public DeityData Deity
     {

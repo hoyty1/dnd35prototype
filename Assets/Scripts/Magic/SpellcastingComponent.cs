@@ -535,6 +535,93 @@ public class SpellcastingComponent : MonoBehaviour
         return true;
     }
 
+    // ========== SPONTANEOUS CASTING (Cleric D&D 3.5e PHB p.32) ==========
+
+    /// <summary>
+    /// Whether this cleric can spontaneously cast at the given spell level.
+    /// Requires: is a cleric, has spontaneous casting type set, has an unused slot at that level,
+    /// and a valid spontaneous spell exists at that level.
+    /// Cantrips (level 0) can always be spontaneously cast if prepared (unlimited use).
+    /// </summary>
+    public bool CanSpontaneousCast(int spellLevel)
+    {
+        if (Stats == null || !Stats.IsCleric) return false;
+        if (Stats.SpontaneousCasting == SpontaneousCastingType.None) return false;
+
+        string spontSpellId = SpontaneousCastingHelper.GetSpontaneousSpellId(Stats.SpontaneousCasting, spellLevel);
+        if (string.IsNullOrEmpty(spontSpellId)) return false;
+
+        SpellData spontSpell = SpellDatabase.GetSpell(spontSpellId);
+        if (spontSpell == null) return false;
+
+        // For cantrips: always available if there are any cantrip slots (cantrips are unlimited)
+        if (spellLevel == 0)
+        {
+            return SpellSlots.Any(s => s.Level == 0 && s.HasSpell);
+        }
+
+        // For level 1+: need at least one unused slot at this level
+        return SpellSlots.Any(s => s.Level == spellLevel && !s.IsUsed && s.HasSpell);
+    }
+
+    /// <summary>
+    /// Get the SpellData for the spontaneous spell at a given level.
+    /// Returns null if spontaneous casting is not available.
+    /// </summary>
+    public SpellData GetSpontaneousSpell(int spellLevel)
+    {
+        if (Stats == null || !Stats.IsCleric) return null;
+        if (Stats.SpontaneousCasting == SpontaneousCastingType.None) return null;
+
+        string spontSpellId = SpontaneousCastingHelper.GetSpontaneousSpellId(Stats.SpontaneousCasting, spellLevel);
+        if (string.IsNullOrEmpty(spontSpellId)) return null;
+
+        return SpellDatabase.GetSpell(spontSpellId);
+    }
+
+    /// <summary>
+    /// Perform a spontaneous cast: consume any unused slot at the given level and
+    /// cast the corresponding cure/inflict spell instead.
+    /// Returns true if successful.
+    /// </summary>
+    public bool SpontaneousCastFromSlot(int spellLevel)
+    {
+        if (!CanSpontaneousCast(spellLevel))
+        {
+            Debug.LogWarning($"[Spellcasting] Cannot spontaneously cast at level {spellLevel}!");
+            return false;
+        }
+
+        // Cantrips are unlimited — just verify a slot exists, don't consume
+        if (spellLevel == 0)
+        {
+            SpellData spontSpell = GetSpontaneousSpell(spellLevel);
+            Debug.Log($"[Spellcasting] {Stats.CharacterName} spontaneously cast cantrip {spontSpell?.Name} (unlimited, no slot consumed)");
+            return true;
+        }
+
+        // Level 1+: consume any unused slot at this level (prefer non-domain slots first,
+        // but in our slot system all slots are equivalent)
+        var slot = SpellSlots.FirstOrDefault(s => s.Level == spellLevel && !s.IsUsed && s.HasSpell);
+        if (slot == null)
+        {
+            Debug.LogWarning($"[Spellcasting] No available slot at level {spellLevel} for spontaneous casting!");
+            return false;
+        }
+
+        SpellData spontSpell2 = GetSpontaneousSpell(spellLevel);
+        string replacedSpell = slot.PreparedSpell?.Name ?? "empty";
+        slot.Cast();
+        SyncSlotsRemainingFromSpellSlots();
+        SyncPreparedSpellsFromSlots();
+
+        Debug.Log($"[Spellcasting] {Stats.CharacterName} spontaneously converted {replacedSpell} → {spontSpell2?.Name} " +
+                  $"(Lv{spellLevel}). Remaining at Lv{spellLevel}: " +
+                  $"{GetAvailableSlotsForLevel(spellLevel).Count}/{GetSlotsForLevel(spellLevel).Count}");
+
+        return true;
+    }
+
     /// <summary>Backward compat alias — calls CastSpellFromSlot.</summary>
     public bool CastWizardSpellFromSlot(SpellData spell)
     {

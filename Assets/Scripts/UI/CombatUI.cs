@@ -905,6 +905,7 @@ public class CombatUI : MonoBehaviour
         _onSpellCancelled = onCancel;
         _currentSpellComp = spellComp;
         PendingMetamagic = new MetamagicData();
+        ClearSpontaneousCastState();
 
         if (_spellSelectionPanel != null)
             Destroy(_spellSelectionPanel);
@@ -924,6 +925,7 @@ public class CombatUI : MonoBehaviour
         _onSpellCancelled = onCancel;
         _currentSpellComp = spellComp;
         PendingMetamagic = new MetamagicData();
+        ClearSpontaneousCastState();
 
         if (_spellSelectionPanel != null)
             Destroy(_spellSelectionPanel);
@@ -1131,8 +1133,21 @@ public class CombatUI : MonoBehaviour
 
             if (isDepleted)
             {
-                CreateSpellSectionLabel(content, "  (No slots available)", yOffset, headerHeight, new Color(0.5f, 0.3f, 0.3f));
-                yOffset += headerHeight + spacing;
+                // Even when depleted, show spontaneous casting option for clerics
+                if (spellComp.CanSpontaneousCast(level) && level > 0)
+                {
+                    SpellData spontSpell = spellComp.GetSpontaneousSpell(level);
+                    if (spontSpell != null)
+                    {
+                        CreateSpontaneousCastButton(content, spontSpell, level, yOffset, buttonHeight, spellComp, hasMetamagic);
+                        yOffset += buttonHeight + spacing;
+                    }
+                }
+                else
+                {
+                    CreateSpellSectionLabel(content, "  (No slots available)", yOffset, headerHeight, new Color(0.5f, 0.3f, 0.3f));
+                    yOffset += headerHeight + spacing;
+                }
             }
             else
             {
@@ -1142,6 +1157,19 @@ public class CombatUI : MonoBehaviour
                     int preparedCount = usesSlotSystem ? spellComp.CountAvailablePreparedSpell(spell) : 0;
                     CreateSpellButton(content, spell, yOffset, buttonHeight, spellComp, hasMetamagic, usesSlotSystem, preparedCount);
                     yOffset += buttonHeight + spacing;
+                }
+
+                // Add spontaneous casting button for clerics at levels with available slots
+                if (spellComp.CanSpontaneousCast(level) && level > 0)
+                {
+                    SpellData spontSpell = spellComp.GetSpontaneousSpell(level);
+                    if (spontSpell != null)
+                    {
+                        // Only show if the spontaneous spell isn't already in the prepared list
+                        bool alreadyPrepared = preparedAtLevel.Exists(s => s.SpellId == spontSpell.SpellId);
+                        CreateSpontaneousCastButton(content, spontSpell, level, yOffset, buttonHeight, spellComp, hasMetamagic);
+                        yOffset += buttonHeight + spacing;
+                    }
                 }
             }
         }
@@ -1277,6 +1305,98 @@ public class CombatUI : MonoBehaviour
                     _onSpellSelected?.Invoke(capturedSpell);
             });
         }
+    }
+
+    /// <summary>
+    /// Creates a spontaneous casting button for clerics.
+    /// D&D 3.5e: Clerics can convert any prepared spell slot into a cure/inflict spell.
+    /// This button consumes a slot at the given level and casts the spontaneous spell.
+    /// Visually distinguished with a ⟳ icon and unique color.
+    /// </summary>
+    private void CreateSpontaneousCastButton(GameObject parent, SpellData spontSpell, int spellLevel,
+        float yOffset, float height, SpellcastingComponent spellComp, bool hasMetamagic)
+    {
+        // Use distinctive color: golden for cure, dark purple for inflict
+        bool isCure = spellComp.Stats.SpontaneousCasting == SpontaneousCastingType.Cure;
+        Color btnColor = isCure
+            ? new Color(0.35f, 0.5f, 0.15f, 1f)   // green-gold for cure
+            : new Color(0.45f, 0.15f, 0.35f, 1f);  // dark purple for inflict
+
+        // Build label
+        string typeLabel = isCure ? "☀" : "💀";
+        string effectStr = "";
+        if (spontSpell.EffectType == SpellEffectType.Healing)
+            effectStr = $" | {spontSpell.HealCount}d{spontSpell.HealDice}+{spontSpell.BonusHealing} HP";
+        else if (spontSpell.EffectType == SpellEffectType.Damage)
+            effectStr = $" | {spontSpell.DamageCount}d{spontSpell.DamageDice}+{spontSpell.BonusDamage} {spontSpell.DamageType}";
+
+        string label = $"{typeLabel} ⟳ {spontSpell.Name} (Spontaneous){effectStr}";
+
+        // Create button
+        GameObject btnObj = new GameObject($"Spontaneous_{spontSpell.SpellId}");
+        btnObj.transform.SetParent(parent.transform, false);
+        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
+        btnRT.anchorMin = new Vector2(0, 1);
+        btnRT.anchorMax = new Vector2(1, 1);
+        btnRT.pivot = new Vector2(0.5f, 1);
+        btnRT.anchoredPosition = new Vector2(0, -yOffset);
+        btnRT.sizeDelta = new Vector2(-16, height);
+
+        Image btnImg = btnObj.AddComponent<Image>();
+        btnImg.color = btnColor;
+
+        Button btn = btnObj.AddComponent<Button>();
+        var colors = btn.colors;
+        colors.highlightedColor = new Color(btnColor.r + 0.15f, btnColor.g + 0.15f, btnColor.b + 0.15f, 1f);
+        colors.pressedColor = new Color(btnColor.r - 0.1f, btnColor.g - 0.1f, btnColor.b - 0.1f, 1f);
+        btn.colors = colors;
+
+        GameObject txtObj = new GameObject("Text");
+        txtObj.transform.SetParent(btnObj.transform, false);
+        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = new Vector2(8, 2);
+        txtRT.offsetMax = new Vector2(-8, -2);
+
+        Text txt = txtObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        txt.fontSize = 13;
+        txt.color = Color.white;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.text = label;
+        txt.fontStyle = FontStyle.BoldAndItalic;
+
+        // Wire click handler — this triggers spontaneous casting
+        SpellData capturedSpell = spontSpell;
+        int capturedLevel = spellLevel;
+        btn.onClick.AddListener(() =>
+        {
+            HideSpellSelection();
+            // Mark this as a spontaneous cast by setting a flag
+            _isSpontaneousCast = true;
+            _spontaneousCastLevel = capturedLevel;
+            if (_onSpellSelectedWithMetamagic != null)
+                _onSpellSelectedWithMetamagic.Invoke(capturedSpell, null);
+            else
+                _onSpellSelected?.Invoke(capturedSpell);
+        });
+    }
+
+    /// <summary>Whether the last spell selection was a spontaneous cast.</summary>
+    public bool IsSpontaneousCast => _isSpontaneousCast;
+    private bool _isSpontaneousCast;
+
+    /// <summary>The spell level being consumed for spontaneous casting.</summary>
+    public int SpontaneousCastLevel => _spontaneousCastLevel;
+    private int _spontaneousCastLevel;
+
+    /// <summary>Reset spontaneous casting state (called after spell is cast).</summary>
+    public void ClearSpontaneousCastState()
+    {
+        _isSpontaneousCast = false;
+        _spontaneousCastLevel = -1;
     }
 
     // ========================================================================
