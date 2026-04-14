@@ -182,13 +182,17 @@ public static class SpellCaster
             if (result.DamageDealt > 0)
                 result.DamageDealt = Mathf.Max(1, result.DamageDealt);
 
+            bool isRangedSpellDamage = result.RequiredAttackRoll
+                ? result.IsRangedTouch
+                : (spell.RangeSquares > 1 || spell.TargetType == SpellTargetType.Area);
+
             var packet = new DamagePacket
             {
                 RawDamage = result.DamageDealt,
                 Types = parsedSpellDamageTypes,
                 AttackTags = DamageBypassTag.None,
-                IsWeaponDamage = false,
-                IsRangedWeaponDamage = false,
+                IsRanged = isRangedSpellDamage,
+                Source = AttackSource.Spell,
                 SourceName = spell.Name
             };
 

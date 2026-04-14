@@ -862,7 +862,13 @@ public class CharacterStats
             return result;
 
         if (packet == null)
-            packet = new DamagePacket { RawDamage = result.RawDamage };
+            packet = new DamagePacket
+            {
+                RawDamage = result.RawDamage,
+                Source = AttackSource.Other,
+                IsRanged = false,
+                SourceName = "damage"
+            };
 
         if (packet.Types == null || packet.Types.Count == 0)
             packet.Types = new HashSet<DamageType> { DamageType.Untyped };
@@ -897,23 +903,51 @@ public class CharacterStats
         result.ResistanceApplied = Mathf.Min(result.RawDamage, Mathf.Max(0, resistance));
         result.DamageAfterResistance = Mathf.Max(0, result.RawDamage - result.ResistanceApplied);
 
-        // 3) DR check: applies only to weapon/physical attacks
+        // 3) DR check: applies only to physical weapon-like attacks (weapon or natural)
         int drApplied = 0;
-        if (packet.IsWeaponDamage && result.DamageAfterResistance > 0)
+        bool sourceCountsAsWeapon = packet.Source == AttackSource.Weapon || packet.Source == AttackSource.Natural;
+        bool hasRangedOnlyDr = false;
+        bool bestDrWasRangedOnly = false;
+
+        if (result.DamageAfterResistance > 0)
         {
             int bestApplicableDr = 0;
             for (int i = 0; i < DamageReductions.Count; i++)
             {
                 var dr = DamageReductions[i];
                 if (dr == null || dr.Amount <= 0) continue;
-                if (dr.AppliesToRangedOnly && !packet.IsRangedWeaponDamage) continue;
+
+                if (dr.AppliesToRangedOnly)
+                {
+                    hasRangedOnlyDr = true;
+                    if (!(packet.IsRanged && sourceCountsAsWeapon))
+                        continue;
+                }
+                else if (!sourceCountsAsWeapon)
+                {
+                    continue;
+                }
 
                 bool bypassed = (dr.BypassAnyTag != DamageBypassTag.None) && ((packet.AttackTags & dr.BypassAnyTag) != 0);
-                if (!bypassed)
-                    bestApplicableDr = Mathf.Max(bestApplicableDr, dr.Amount);
+                if (!bypassed && dr.Amount > bestApplicableDr)
+                {
+                    bestApplicableDr = dr.Amount;
+                    bestDrWasRangedOnly = dr.AppliesToRangedOnly;
+                }
             }
 
             drApplied = Mathf.Min(result.DamageAfterResistance, bestApplicableDr);
+        }
+
+        if (hasRangedOnlyDr && packet.IsRanged && packet.Source == AttackSource.Spell)
+        {
+            string sourceName = string.IsNullOrWhiteSpace(packet.SourceName) ? "Spell attack" : packet.SourceName;
+            result.Notes.Add($"{sourceName} bypasses Protection from Arrows (spell attack)");
+        }
+        else if (drApplied > 0 && bestDrWasRangedOnly)
+        {
+            string sourceName = string.IsNullOrWhiteSpace(packet.SourceName) ? "ranged attack" : packet.SourceName;
+            result.Notes.Add($"Protection from Arrows blocked {drApplied} damage from {sourceName}!");
         }
 
         result.DamageReductionApplied = drApplied;
