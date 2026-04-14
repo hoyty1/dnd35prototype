@@ -104,7 +104,7 @@ public class CombatUI : MonoBehaviour
 
     [Header("Spellcasting")]
     public Button CastSpellButton;         // Cast Spell (Standard Action)
-    public Button DischargeTouchButton;    // Deliver currently held touch charge (Standard Action)
+    public Button DischargeTouchButton;    // Deliver currently held touch charge (Free Action)
     public Text SpellSlotsText;            // Shows remaining spell slots
     [Header("Feat Controls")]
     public GameObject PowerAttackPanel;     // Panel containing Power Attack slider
@@ -663,18 +663,17 @@ public class CombatUI : MonoBehaviour
         {
             var spellComp = pc.GetComponent<SpellcastingComponent>();
             bool hasHeldTouchCharge = pc.Stats.IsSpellcaster && spellComp != null && spellComp.HasHeldTouchCharge && spellComp.HeldTouchSpell != null;
-            bool canDischarge = actions.HasStandardAction && hasHeldTouchCharge;
 
+            // D&D 3.5e: discharging a held touch spell is a free action.
+            // Keep this button usable even when no standard/move actions remain.
             DischargeTouchButton.gameObject.SetActive(hasHeldTouchCharge);
-            DischargeTouchButton.interactable = canDischarge;
+            DischargeTouchButton.interactable = hasHeldTouchCharge;
 
             Text dischargeLabel = DischargeTouchButton.GetComponentInChildren<Text>();
             if (dischargeLabel != null)
             {
                 string heldName = hasHeldTouchCharge ? spellComp.HeldTouchSpell.Name : "Touch";
-                dischargeLabel.text = canDischarge
-                    ? $"Discharge {heldName}"
-                    : $"Discharge {heldName} (N/A)";
+                dischargeLabel.text = $"Discharge {heldName}";
             }
         }
 

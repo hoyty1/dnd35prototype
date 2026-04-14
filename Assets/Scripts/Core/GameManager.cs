@@ -118,6 +118,12 @@ public class GameManager : MonoBehaviour
     /// <summary>Current combat round number (starts at 1).</summary>
     private int _currentRound = 0;
 
+    /// <summary>
+    /// Tracks whether we've already logged the "no actions but holding charge" reminder this turn.
+    /// Prevents duplicate log spam while still informing the player.
+    /// </summary>
+    private bool _loggedHeldChargeNoActionsReminder;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -1288,6 +1294,7 @@ public class GameManager : MonoBehaviour
         }
 
         pc.StartNewTurn();
+        _loggedHeldChargeNoActionsReminder = false;
 
         CurrentPhase = TurnPhase.PCTurn;
         _activeTurnCharacter = pc;
@@ -1362,8 +1369,22 @@ public class GameManager : MonoBehaviour
 
         if (!pc.Actions.HasAnyActionLeft)
         {
-            CombatUI.SetTurnIndicator($"{pcName}'s Turn - No actions remaining");
-            StartCoroutine(DelayedEndActivePCTurn(1.0f));
+            if (IsHoldingTouchCharge(pc))
+            {
+                string heldSpellName = GetHeldTouchSpellName(pc);
+                CombatUI.SetTurnIndicator($"{pcName}'s Turn - No main actions left. You may still discharge {heldSpellName} (free action) or End Turn.");
+
+                if (!_loggedHeldChargeNoActionsReminder)
+                {
+                    CombatUI.ShowCombatLog($"✋ {pcName} has no main actions left but is still holding {heldSpellName}. Discharging is a free action.");
+                    _loggedHeldChargeNoActionsReminder = true;
+                }
+            }
+            else
+            {
+                CombatUI.SetTurnIndicator($"{pcName}'s Turn - No actions remaining");
+                StartCoroutine(DelayedEndActivePCTurn(1.0f));
+            }
         }
     }
 
@@ -1422,6 +1443,13 @@ public class GameManager : MonoBehaviour
     public void OnEndTurnButtonPressed()
     {
         if (!IsPlayerTurn) return;
+
+        CharacterController pc = ActivePC;
+        if (IsHoldingTouchCharge(pc))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} ends turn while holding {GetHeldTouchSpellName(pc)}. The charge persists.");
+        }
+
         EndActivePCTurn();
     }
 
@@ -1513,7 +1541,7 @@ public class GameManager : MonoBehaviour
     public void OnDischargeHeldTouchButtonPressed()
     {
         CharacterController pc = ActivePC;
-        if (pc == null || !pc.Actions.HasStandardAction) return;
+        if (pc == null) return;
 
         var spellComp = pc.GetComponent<SpellcastingComponent>();
         if (spellComp == null || !spellComp.HasHeldTouchCharge || spellComp.HeldTouchSpell == null)
@@ -1820,7 +1848,13 @@ public class GameManager : MonoBehaviour
 
         // Quickened applies when CASTING the spell, not when delivering a previously held charge.
         bool isQuickened = !isDeliveringHeldCharge && _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
-        if (!isQuickened)
+        if (isDeliveringHeldCharge)
+        {
+            // D&D 3.5e: discharging a held touch spell is a free action.
+            // Do not consume standard/move actions here.
+            Debug.Log($"[GameManager] {caster.Stats.CharacterName} discharging held touch spell as a free action.");
+        }
+        else if (!isQuickened)
         {
             caster.Actions.UseStandardAction();
         }
@@ -3822,19 +3856,42 @@ public class GameManager : MonoBehaviour
         StartCoroutine(DelayedEndActivePCTurn(2.0f));
     }
 
+    private bool IsHoldingTouchCharge(CharacterController character)
+    {
+        if (character == null || !character.Stats.IsSpellcaster)
+            return false;
+
+        var spellComp = character.GetComponent<SpellcastingComponent>();
+        return spellComp != null && spellComp.HasHeldTouchCharge && spellComp.HeldTouchSpell != null;
+    }
+
+    private string GetHeldTouchSpellName(CharacterController character)
+    {
+        var spellComp = character != null ? character.GetComponent<SpellcastingComponent>() : null;
+        if (spellComp != null && spellComp.HeldTouchSpell != null)
+            return spellComp.HeldTouchSpell.Name;
+        return "held touch spell";
+    }
+
+    private bool ShouldAutoEndTurn(CharacterController character)
+    {
+        if (character == null) return true;
+        return !character.Actions.HasAnyActionLeft && !IsHoldingTouchCharge(character);
+    }
+
     private IEnumerator AfterAttackDelay(CharacterController pc, float delay)
     {
         yield return new WaitForSeconds(delay);
 
         if (CurrentPhase == TurnPhase.CombatOver) yield break;
 
-        if (pc.Actions.HasAnyActionLeft)
+        if (ShouldAutoEndTurn(pc))
         {
-            ShowActionChoices();
+            EndActivePCTurn();
         }
         else
         {
-            EndActivePCTurn();
+            ShowActionChoices();
         }
     }
 
@@ -3859,8 +3916,15 @@ public class GameManager : MonoBehaviour
     private IEnumerator DelayedEndActivePCTurn(float delay)
     {
         yield return new WaitForSeconds(delay);
-        if (CurrentPhase != TurnPhase.CombatOver)
+
+        if (CurrentPhase == TurnPhase.CombatOver)
+            yield break;
+
+        CharacterController pc = ActivePC;
+        if (ShouldAutoEndTurn(pc))
             EndActivePCTurn();
+        else
+            ShowActionChoices();
     }
 
     // ========== NPC AI TURN (Initiative-Based) ==========
