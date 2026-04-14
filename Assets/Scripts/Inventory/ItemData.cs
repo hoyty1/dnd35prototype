@@ -168,9 +168,9 @@ public class ItemData
         DamageBypassTag tags = DamageBypassTag.None;
         var dmgTypes = GetDamageTypes();
 
-        if (dmgTypes.Contains(DamageType.Bludgeoning)) tags |= DamageBypassTag.Bludgeoning;
-        if (dmgTypes.Contains(DamageType.Piercing)) tags |= DamageBypassTag.Piercing;
-        if (dmgTypes.Contains(DamageType.Slashing)) tags |= DamageBypassTag.Slashing;
+        if (dmgTypes.Contains(global::DamageType.Bludgeoning)) tags |= DamageBypassTag.Bludgeoning;
+        if (dmgTypes.Contains(global::DamageType.Piercing)) tags |= DamageBypassTag.Piercing;
+        if (dmgTypes.Contains(global::DamageType.Slashing)) tags |= DamageBypassTag.Slashing;
 
         if (CountsAsMagicForBypass) tags |= DamageBypassTag.Magic;
         if (IsSilvered) tags |= DamageBypassTag.Silver;
