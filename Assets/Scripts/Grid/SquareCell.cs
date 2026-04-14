@@ -25,6 +25,7 @@ public class SquareCell : MonoBehaviour
 
     // Highlight colors
     private static readonly Color HighlightMove = new Color(0.3f, 0.8f, 1f, 0.5f);
+    private static readonly Color HighlightFiveFootStep = new Color(0.2f, 0.65f, 1f, 0.55f);
     private static readonly Color HighlightAttack = new Color(1f, 0.3f, 0.3f, 0.5f);
     private static readonly Color HighlightSelected = new Color(1f, 1f, 0.3f, 0.6f);
     private static readonly Color HighlightFlanking = new Color(1f, 0.6f, 0.0f, 0.6f); // Orange for flanking
@@ -64,6 +65,9 @@ public class SquareCell : MonoBehaviour
                 break;
             case HighlightType.Move:
                 _sr.color = HighlightMove;
+                break;
+            case HighlightType.FiveFootStep:
+                _sr.color = HighlightFiveFootStep;
                 break;
             case HighlightType.Attack:
                 _sr.color = HighlightAttack;
@@ -109,6 +113,7 @@ public enum HighlightType
 {
     None,
     Move,
+    FiveFootStep,
     Attack,
     Selected,
     Flanking,

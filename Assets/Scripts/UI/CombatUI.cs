@@ -7,7 +7,7 @@ using System.Collections.Generic;
 /// Manages all combat UI elements with D&D 3.5 ability score display.
 /// Shows 6 ability scores with modifiers and derived stats for each character.
 /// Supports 4 PC panels, multiple NPC panels, initiative order display, and character icons.
-/// Includes action economy buttons (Move, Attack, Full Attack, Dual Wield, End Turn).
+/// Includes action economy buttons (Move, 5-Foot Step, Attack, Full Attack, Dual Wield, End Turn).
 /// Includes AoO warning confirmation dialog.
 /// </summary>
 public class CombatUI : MonoBehaviour
@@ -91,6 +91,7 @@ public class CombatUI : MonoBehaviour
     [Header("Action Buttons - Action Economy")]
     public GameObject ActionPanel;
     public Button MoveButton;
+    public Button FiveFootStepButton;   // 5-foot step (Free Action, no AoO)
     public Button AttackButton;         // Single attack (Standard Action)
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
@@ -559,15 +560,38 @@ public class CombatUI : MonoBehaviour
 
         if (MoveButton != null)
         {
-            bool canMove = actions.HasMoveAction || actions.CanConvertStandardToMove;
+            bool canMoveByActions = actions.HasMoveAction || actions.CanConvertStandardToMove;
+            bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
+            bool canMove = canMoveByActions && !blockedByFiveFootStep;
+
             MoveButton.gameObject.SetActive(true);
             MoveButton.interactable = canMove;
             Text moveLabel = MoveButton.GetComponentInChildren<Text>();
             if (moveLabel != null)
             {
-                if (actions.HasMoveAction) moveLabel.text = "Move (Move Action)";
+                if (blockedByFiveFootStep) moveLabel.text = "Move (After 5-ft step: no)";
+                else if (actions.HasMoveAction) moveLabel.text = "Move (Move Action)";
                 else if (actions.CanConvertStandardToMove) moveLabel.text = "Move (Std→Move)";
                 else moveLabel.text = "Move (Used)";
+            }
+        }
+
+        if (FiveFootStepButton != null)
+        {
+            string disabledReason = GameManager.Instance != null
+                ? GameManager.Instance.GetFiveFootStepDisabledReason(pc)
+                : "Unavailable";
+            bool canFiveFootStep = string.IsNullOrEmpty(disabledReason);
+
+            FiveFootStepButton.gameObject.SetActive(true);
+            FiveFootStepButton.interactable = canFiveFootStep;
+
+            Text fiveFootLabel = FiveFootStepButton.GetComponentInChildren<Text>();
+            if (fiveFootLabel != null)
+            {
+                fiveFootLabel.text = canFiveFootStep
+                    ? "5-Foot Step (Free)"
+                    : $"5-Foot Step ({disabledReason})";
             }
         }
 
@@ -594,10 +618,11 @@ public class CombatUI : MonoBehaviour
             bool hasFullRound = actions.HasFullRoundAction;
             bool hasMeleeThreat = pc.HasMeleeWeaponEquipped();
             bool fatigued = pc.Stats != null && pc.Stats.IsFatigued;
-            bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigued
-                && GameManager.Instance != null && GameManager.Instance.HasAnyValidChargeTarget(pc);
+            bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
+            bool hasAnyChargeTarget = GameManager.Instance != null && GameManager.Instance.HasAnyValidChargeTarget(pc);
+            bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigued && !blockedByFiveFootStep && hasAnyChargeTarget;
 
-            ChargeButton.gameObject.SetActive(hasMeleeThreat || fatigued);
+            ChargeButton.gameObject.SetActive(hasMeleeThreat || fatigued || blockedByFiveFootStep);
             ChargeButton.interactable = canChargeTarget;
 
             Text chargeLabel = ChargeButton.GetComponentInChildren<Text>();
@@ -605,8 +630,9 @@ public class CombatUI : MonoBehaviour
             {
                 if (!hasMeleeThreat) chargeLabel.text = "Charge (Need melee)";
                 else if (fatigued) chargeLabel.text = "Charge (Fatigued)";
+                else if (blockedByFiveFootStep) chargeLabel.text = "Charge (After 5-ft step: no)";
                 else if (!hasFullRound) chargeLabel.text = "Charge (Used)";
-                else if (!canChargeTarget) chargeLabel.text = "Charge (No lane)";
+                else if (!hasAnyChargeTarget) chargeLabel.text = "Charge (No lane)";
                 else chargeLabel.text = "Charge (Full-Round)";
             }
         }

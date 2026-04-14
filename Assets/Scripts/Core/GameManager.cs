@@ -62,6 +62,7 @@ public class GameManager : MonoBehaviour
     {
         ChoosingAction,
         Moving,
+        TakingFiveFootStep,
         SelectingAttackTarget,
         SelectingSpecialTarget,
         SelectingChargeTarget,
@@ -458,6 +459,7 @@ public class GameManager : MonoBehaviour
 
         // Right-click / Escape to cancel targeting in various states
         if (CurrentSubPhase == PlayerSubPhase.Moving
+            || CurrentSubPhase == PlayerSubPhase.TakingFiveFootStep
             || CurrentSubPhase == PlayerSubPhase.SelectingAoETarget
             || CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE
             || CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget
@@ -496,6 +498,10 @@ public class GameManager : MonoBehaviour
                 if (CurrentSubPhase == PlayerSubPhase.Moving)
                 {
                     CancelMovementSelection();
+                }
+                else if (CurrentSubPhase == PlayerSubPhase.TakingFiveFootStep)
+                {
+                    CancelFiveFootStepSelection();
                 }
                 else if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
                 {
@@ -1493,6 +1499,12 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        if (pc.HasTakenFiveFootStep)
+        {
+            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} already used a 5-foot step this turn and cannot take normal movement.");
+            return;
+        }
+
         if (pc.Actions.HasMoveAction) { /* Normal move */ }
         else if (pc.Actions.CanConvertStandardToMove) { /* Will convert */ }
         else return;
@@ -1501,6 +1513,156 @@ public class GameManager : MonoBehaviour
         ShowMovementRange(pc);
         CombatUI.SetActionButtonsVisible(false);
         CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)");
+    }
+
+    public bool CanTakeFiveFootStep(CharacterController character)
+    {
+        return string.IsNullOrEmpty(GetFiveFootStepDisabledReason(character));
+    }
+
+    public string GetFiveFootStepDisabledReason(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return "No active character";
+
+        if (character.HasMovedThisTurn)
+            return "Already moved this turn";
+
+        if (character.HasTakenFiveFootStep)
+            return "Already used 5-foot step this turn";
+
+        if (character.HasCondition(CombatConditionType.Prone))
+            return "Cannot 5-foot step while prone";
+
+        if (character.HasCondition(CombatConditionType.Grappled))
+            return "Cannot 5-foot step while grappled";
+
+        // Must have at least one legal adjacent destination.
+        foreach (var neighbor in SquareGridUtils.GetNeighbors(character.GridPosition))
+        {
+            if (IsValidFiveFootStepDestination(character, neighbor))
+                return string.Empty;
+        }
+
+        return "No valid adjacent square";
+    }
+
+    public void OnFiveFootStepButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        string reason = GetFiveFootStepDisabledReason(pc);
+        if (!string.IsNullOrEmpty(reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot take a 5-foot step: {reason}.");
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.TakingFiveFootStep;
+        ShowFiveFootStepOptions(pc);
+        CombatUI.SetActionButtonsVisible(false);
+        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Select 5-foot step destination (right-click/ESC to cancel)");
+        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} prepares a 5-foot step.");
+    }
+
+    private void ShowFiveFootStepOptions(CharacterController pc)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        foreach (Vector2Int neighbor in SquareGridUtils.GetNeighbors(pc.GridPosition))
+        {
+            if (!IsValidFiveFootStepDestination(pc, neighbor))
+                continue;
+
+            SquareCell cell = Grid.GetCell(neighbor);
+            if (cell == null) continue;
+
+            cell.SetHighlight(HighlightType.FiveFootStep);
+            _highlightedCells.Add(cell);
+        }
+
+        SquareCell current = Grid.GetCell(pc.GridPosition);
+        if (current != null)
+            current.SetHighlight(HighlightType.Selected);
+    }
+
+    private bool IsValidFiveFootStepDestination(CharacterController pc, Vector2Int destination)
+    {
+        if (!SquareGridUtils.IsAdjacent(pc.GridPosition, destination))
+            return false;
+
+        SquareCell cell = Grid.GetCell(destination);
+        if (cell == null)
+            return false;
+
+        if (cell.IsOccupied)
+            return false;
+
+        if (IsDifficultTerrain(destination))
+            return false;
+
+        return true;
+    }
+
+    private void HandleFiveFootStepClick(CharacterController pc, SquareCell cell)
+    {
+        if (cell == null) return;
+
+        if (cell.Coords == pc.GridPosition)
+        {
+            CancelFiveFootStepSelection();
+            return;
+        }
+
+        if (!_highlightedCells.Contains(cell))
+            return;
+
+        ExecuteFiveFootStep(pc, cell);
+    }
+
+    private void ExecuteFiveFootStep(CharacterController pc, SquareCell destination)
+    {
+        if (pc == null || destination == null)
+            return;
+
+        if (!IsValidFiveFootStepDestination(pc, destination.Coords))
+        {
+            CombatUI?.ShowCombatLog("⚠ Invalid 5-foot step destination.");
+            return;
+        }
+
+        Vector2Int oldPos = pc.GridPosition;
+
+        // 5-foot step does NOT consume move/standard/full-round actions and does NOT provoke AoO.
+        if (!pc.FiveFootStep(destination))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} failed to take a 5-foot step.");
+            return;
+        }
+
+        RefreshFlankedConditions();
+        UpdateAllStatsUI();
+        InvalidatePreviewThreats();
+
+        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} takes a 5-foot step ({oldPos.x},{oldPos.y} → {destination.Coords.x},{destination.Coords.y}).");
+        CombatUI?.ShowCombatLog("(No attacks of opportunity provoked)");
+
+        ShowActionChoices();
+    }
+
+    private void CancelFiveFootStepSelection()
+    {
+        CharacterController pc = ActivePC;
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        if (pc != null)
+            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels 5-foot step.");
+
+        ShowActionChoices();
     }
 
     public void OnAttackButtonPressed()
@@ -3581,6 +3743,10 @@ public class GameManager : MonoBehaviour
                 HandleMovementClick(pc, cell);
                 break;
 
+            case PlayerSubPhase.TakingFiveFootStep:
+                HandleFiveFootStepClick(pc, cell);
+                break;
+
             case PlayerSubPhase.SelectingAttackTarget:
                 HandleAttackTargetClick(pc, cell);
                 break;
@@ -3990,6 +4156,12 @@ public class GameManager : MonoBehaviour
     {
         if (charger == null) return;
 
+        if (charger.HasTakenFiveFootStep)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {charger.Stats.CharacterName} cannot charge after taking a 5-foot step.");
+            return;
+        }
+
         if (!charger.Actions.HasFullRoundAction)
         {
             CombatUI?.ShowCombatLog($"⚠ {charger.Stats.CharacterName} needs a full-round action to charge.");
@@ -4071,6 +4243,12 @@ public class GameManager : MonoBehaviour
         if (!charger.Actions.HasFullRoundAction)
         {
             if (logFailures) CombatUI?.ShowCombatLog("⚠ Need full-round action to charge.");
+            return false;
+        }
+
+        if (charger.HasTakenFiveFootStep)
+        {
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ Cannot charge after taking a 5-foot step.");
             return false;
         }
 

@@ -28,6 +28,7 @@ public class CharacterController : MonoBehaviour
     [HideInInspector] public CharacterStats Stats;
     [HideInInspector] public Vector2Int GridPosition;
     [HideInInspector] public bool HasMovedThisTurn;
+    [HideInInspector] public bool HasTakenFiveFootStep;
     [HideInInspector] public bool HasAttackedThisTurn;
 
     /// <summary>Action economy tracker for the current turn.</summary>
@@ -115,7 +116,9 @@ public class CharacterController : MonoBehaviour
     /// <summary>
     /// Move the character to a new square cell.
     /// </summary>
-    public void MoveToCell(SquareCell targetCell)
+    /// <param name="targetCell">Destination grid cell.</param>
+    /// <param name="markAsMoved">Whether this movement should count as normal movement for turn tracking.</param>
+    public void MoveToCell(SquareCell targetCell, bool markAsMoved = true)
     {
         // Clear old cell
         SquareCell oldCell = GameManager.Instance.Grid.GetCell(GridPosition);
@@ -133,7 +136,8 @@ public class CharacterController : MonoBehaviour
         targetCell.IsOccupied = true;
         targetCell.Occupant = this;
 
-        HasMovedThisTurn = true;
+        if (markAsMoved)
+            HasMovedThisTurn = true;
     }
 
     /// <summary>
@@ -960,6 +964,7 @@ public class CharacterController : MonoBehaviour
     public void StartNewTurn()
     {
         HasMovedThisTurn = false;
+        HasTakenFiveFootStep = false;
         HasAttackedThisTurn = false;
         Actions.Reset();
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
@@ -1305,6 +1310,19 @@ public class CharacterController : MonoBehaviour
             return false;
         }
 
+        // Can only take one 5-foot step per turn
+        if (HasTakenFiveFootStep)
+        {
+            Debug.Log($"[5ftStep] {Stats.CharacterName}: Already used 5-foot step this turn");
+            return false;
+        }
+
+        if (HasCondition(CombatConditionType.Prone) || HasCondition(CombatConditionType.Grappled))
+        {
+            Debug.Log($"[5ftStep] {Stats.CharacterName}: Invalid condition for 5-foot step");
+            return false;
+        }
+
         if (targetCell.IsOccupied)
         {
             Debug.Log($"[5ftStep] {Stats.CharacterName}: Target cell occupied, cannot 5-foot step");
@@ -1313,8 +1331,9 @@ public class CharacterController : MonoBehaviour
 
         Debug.Log($"[5ftStep] {Stats.CharacterName} takes a 5-foot step to ({targetCell.Coords.x},{targetCell.Coords.y}) - NO AoO provoked");
 
-        // Move without provoking AoOs
-        MoveToCell(targetCell);
+        // Move without consuming normal movement/action economy.
+        MoveToCell(targetCell, markAsMoved: false);
+        HasTakenFiveFootStep = true;
         return true;
     }
 
