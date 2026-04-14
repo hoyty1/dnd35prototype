@@ -178,12 +178,15 @@ public class CharacterStats
     public bool IsProne => ActiveConditions.Any(c => c.Type == CombatConditionType.Prone);
     public bool IsGrappled => ActiveConditions.Any(c => c.Type == CombatConditionType.Grappled);
     public bool IsDisarmed => ActiveConditions.Any(c => c.Type == CombatConditionType.Disarmed);
+    public bool HasChargePenalty => ActiveConditions.Any(c => c.Type == CombatConditionType.ChargePenalty);
 
     /// <summary>Penalty to attack rolls from conditions.</summary>
     public int ConditionAttackPenalty => (IsProne ? -4 : 0) + (IsGrappled ? -2 : 0) + (IsDisarmed ? -4 : 0);
 
     /// <summary>Penalty to AC from conditions.</summary>
-    public int ConditionACPenalty => (IsProne ? -4 : 0) + (ActiveConditions.Any(c => c.Type == CombatConditionType.Feinted) ? -2 : 0);
+    public int ConditionACPenalty => (IsProne ? -4 : 0)
+        + (ActiveConditions.Any(c => c.Type == CombatConditionType.Feinted) ? -2 : 0)
+        + (HasChargePenalty ? -2 : 0);
 
     /// <summary>Movement override from conditions (grappled cannot move normally).</summary>
     public bool MovementBlockedByCondition => IsGrappled;
@@ -346,6 +349,7 @@ public class CharacterStats
             string color = c.Type == CombatConditionType.Grappled ? "#FFAA44"
                 : c.Type == CombatConditionType.Prone ? "#FF7777"
                 : c.Type == CombatConditionType.Feinted ? "#66CCFF"
+                : c.Type == CombatConditionType.ChargePenalty ? "#FF9966"
                 : "#FFFF66";
             parts.Add($"<color={color}>{c.Type}</color>({c.GetDurationLabel()})");
         }

@@ -94,6 +94,7 @@ public class CombatUI : MonoBehaviour
     public Button AttackButton;         // Single attack (Standard Action)
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
+    public Button ChargeButton;         // Charge (Full-Round Action)
     public Button DualWieldButton;      // Dual Wield (Full-Round Action)
     public Button EndTurnButton;
     public Text ActionStatusText;       // Shows current action economy status
@@ -586,6 +587,28 @@ public class CombatUI : MonoBehaviour
             Text spLabel = SpecialAttackButton.GetComponentInChildren<Text>();
             if (spLabel != null)
                 spLabel.text = actions.HasStandardAction ? "Special Attack (Standard)" : "Special Attack (Used)";
+        }
+
+        if (ChargeButton != null)
+        {
+            bool hasFullRound = actions.HasFullRoundAction;
+            bool hasMeleeThreat = pc.HasMeleeWeaponEquipped();
+            bool fatigued = pc.Stats != null && pc.Stats.IsFatigued;
+            bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigued
+                && GameManager.Instance != null && GameManager.Instance.HasAnyValidChargeTarget(pc);
+
+            ChargeButton.gameObject.SetActive(hasMeleeThreat || fatigued);
+            ChargeButton.interactable = canChargeTarget;
+
+            Text chargeLabel = ChargeButton.GetComponentInChildren<Text>();
+            if (chargeLabel != null)
+            {
+                if (!hasMeleeThreat) chargeLabel.text = "Charge (Need melee)";
+                else if (fatigued) chargeLabel.text = "Charge (Fatigued)";
+                else if (!hasFullRound) chargeLabel.text = "Charge (Used)";
+                else if (!canChargeTarget) chargeLabel.text = "Charge (No lane)";
+                else chargeLabel.text = "Charge (Full-Round)";
+            }
         }
 
         if (FullAttackButton != null)

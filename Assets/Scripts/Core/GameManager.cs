@@ -58,7 +58,18 @@ public class GameManager : MonoBehaviour
     public enum TurnPhase { PCTurn, NPCTurn, CombatOver }
 
     // Sub-states for player turns
-    public enum PlayerSubPhase { ChoosingAction, Moving, SelectingAttackTarget, SelectingSpecialTarget, SelectingAoETarget, ConfirmingSelfAoE, Animating }
+    public enum PlayerSubPhase
+    {
+        ChoosingAction,
+        Moving,
+        SelectingAttackTarget,
+        SelectingSpecialTarget,
+        SelectingChargeTarget,
+        ConfirmingChargePath,
+        SelectingAoETarget,
+        ConfirmingSelfAoE,
+        Animating
+    }
 
     public TurnPhase CurrentPhase { get; private set; }
     public PlayerSubPhase CurrentSubPhase { get; private set; }
@@ -95,6 +106,10 @@ public class GameManager : MonoBehaviour
     // Pending special attack state
     private SpecialAttackType _pendingSpecialAttackType;
     private bool _isSelectingSpecialAttack;
+
+    // Pending charge state
+    private CharacterController _chargeTarget;
+    private List<Vector2Int> _pendingChargePath = new List<Vector2Int>();
 
     // ========== AOE TARGETING STATE ==========
     private bool _isAoETargeting;                          // Currently in AoE targeting mode
@@ -438,11 +453,16 @@ public class GameManager : MonoBehaviour
         if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget)
             UpdateAoEPreview();
 
+        if (CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
+            UpdateChargeHoverPreview();
+
         // Right-click / Escape to cancel targeting in various states
         if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget
             || CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE
             || CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget
-            || CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget)
+            || CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget
+            || CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget
+            || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
         {
             bool rightClicked = false;
 #if ENABLE_LEGACY_INPUT_MANAGER
@@ -483,6 +503,10 @@ public class GameManager : MonoBehaviour
                 else if (CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget)
                 {
                     CancelSpecialAttackTargeting();
+                }
+                else if (CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
+                {
+                    CancelChargeTargeting();
                 }
                 else if (CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget)
                 {
@@ -1346,6 +1370,10 @@ public class GameManager : MonoBehaviour
         if (_pathPreview != null) _pathPreview.HidePath();
         if (_hoverMarker != null) _hoverMarker.Hide();
 
+        // Reset transient charge state whenever we return to action menu
+        _chargeTarget = null;
+        _pendingChargePath.Clear();
+
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
 
@@ -1454,6 +1482,14 @@ public class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.SelectingSpecialTarget;
         ShowSpecialAttackTargets(pc, type);
     }
+
+    public void OnChargeButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+        EnterChargeMode(pc);
+    }
+
     public void OnFullAttackButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -3493,6 +3529,15 @@ public class GameManager : MonoBehaviour
             case PlayerSubPhase.SelectingSpecialTarget:
                 HandleSpecialAttackTargetClick(pc, cell);
                 break;
+
+            case PlayerSubPhase.SelectingChargeTarget:
+                HandleChargeTargetClick(pc, cell);
+                break;
+
+            case PlayerSubPhase.ConfirmingChargePath:
+                HandleChargeConfirmationClick(pc, cell);
+                break;
+
             case PlayerSubPhase.SelectingAoETarget:
                 HandleAoETargetClick(pc, cell);
                 break;
@@ -3838,6 +3883,481 @@ public class GameManager : MonoBehaviour
         _highlightedCells.Clear();
         ShowActionChoices();
     }
+
+    // ========== CHARGE ACTION (D&D 3.5e PHB p.154) ==========
+
+    private void UpdateChargeHoverPreview()
+    {
+        if (_mainCam == null || ActivePC == null) return;
+        if (CurrentSubPhase != PlayerSubPhase.SelectingChargeTarget) return;
+
+        if (UnityEngine.EventSystems.EventSystem.current != null &&
+            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+            return;
+
+        Vector3 mouseScreenPos = Vector3.zero;
+#if ENABLE_LEGACY_INPUT_MANAGER
+        mouseScreenPos = Input.mousePosition;
+#endif
+#if ENABLE_INPUT_SYSTEM
+        var mouseDev = UnityEngine.InputSystem.Mouse.current;
+        if (mouseDev != null)
+            mouseScreenPos = mouseDev.position.ReadValue();
+#endif
+
+        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        Vector2Int gridCoord = SquareGridUtils.WorldToGrid(worldPoint);
+        SquareCell hovered = Grid.GetCell(gridCoord);
+        if (hovered == null || !hovered.IsOccupied || hovered.Occupant == null || hovered.Occupant == ActivePC)
+            return;
+
+        CharacterController target = hovered.Occupant;
+        if (!CanChargeTarget(ActivePC, target, logFailures: false))
+            return;
+
+        var previewPath = GetChargePath(ActivePC.GridPosition, target.GridPosition, Mathf.Max(1, ActivePC.Stats.AttackRange));
+        int pathCost = SquareGridUtils.CalculatePathCost(ActivePC.GridPosition, previewPath);
+        CombatUI.SetTurnIndicator($"CHARGE ready: {target.Stats.CharacterName} ({pathCost * 5} ft). Click target to preview and confirm.");
+    }
+
+    public bool HasAnyValidChargeTarget(CharacterController charger)
+    {
+        if (charger == null) return false;
+        var validTargets = GetValidChargeTargets(charger, false);
+        return validTargets.Count > 0;
+    }
+
+    public void EnterChargeMode(CharacterController charger)
+    {
+        if (charger == null) return;
+
+        if (!charger.Actions.HasFullRoundAction)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {charger.Stats.CharacterName} needs a full-round action to charge.");
+            return;
+        }
+
+        if (!charger.HasMeleeWeaponEquipped())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {charger.Stats.CharacterName} needs a melee weapon (or natural/unarmed attack) to charge.");
+            return;
+        }
+
+        var validTargets = GetValidChargeTargets(charger, true);
+        if (validTargets.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ No valid charge targets for {charger.Stats.CharacterName}.");
+            return;
+        }
+
+        _chargeTarget = null;
+        _pendingChargePath.Clear();
+
+        CurrentSubPhase = PlayerSubPhase.SelectingChargeTarget;
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI.SetActionButtonsVisible(false);
+
+        foreach (var t in validTargets)
+        {
+            SquareCell c = Grid.GetCell(t.GridPosition);
+            if (c != null)
+            {
+                c.SetHighlight(HighlightType.Attack);
+                _highlightedCells.Add(c);
+            }
+        }
+
+        SquareCell self = Grid.GetCell(charger.GridPosition);
+        if (self != null) self.SetHighlight(HighlightType.Selected);
+
+        CombatUI.SetTurnIndicator("CHARGE: Select a target. Right-click/Esc to cancel.");
+    }
+
+    private List<CharacterController> GetValidChargeTargets(CharacterController charger, bool logFailures)
+    {
+        var list = new List<CharacterController>();
+        if (charger == null) return list;
+
+        foreach (var candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate == charger || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+
+            bool isEnemy = IsPC(charger) ? NPCs.Contains(candidate) : IsPC(candidate);
+            if (!isEnemy) continue;
+
+            if (CanChargeTarget(charger, candidate, logFailures: false))
+                list.Add(candidate);
+        }
+
+        if (logFailures && list.Count == 0)
+            CombatUI?.ShowCombatLog("⚠ No enemies meet charge requirements (distance, straight path, clear lane, line of sight).");
+
+        return list;
+    }
+
+    public bool CanChargeTarget(CharacterController charger, CharacterController target, bool logFailures = true)
+    {
+        if (charger == null || target == null || charger == target) return false;
+        if (charger.Stats == null || target.Stats == null || target.Stats.IsDead) return false;
+
+        bool isEnemy = IsPC(charger) ? NPCs.Contains(target) : IsPC(target);
+        if (!isEnemy)
+        {
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ You can only charge an enemy target.");
+            return false;
+        }
+
+        if (!charger.Actions.HasFullRoundAction)
+        {
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ Need full-round action to charge.");
+            return false;
+        }
+
+        if (!charger.HasMeleeWeaponEquipped())
+        {
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ Need a melee weapon (or natural/unarmed attack) to charge.");
+            return false;
+        }
+
+        if (charger.Stats.IsFatigued)
+        {
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ Fatigued creatures cannot charge.");
+            return false;
+        }
+
+        if (!IsStraightLinePath(charger.GridPosition, target.GridPosition))
+        {
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ Must charge in a straight cardinal or diagonal line.");
+            return false;
+        }
+
+        List<Vector2Int> path = GetChargePath(charger.GridPosition, target.GridPosition, Mathf.Max(1, charger.Stats.AttackRange));
+        if (path == null || path.Count == 0)
+        {
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ Cannot find a legal endpoint for this charge.");
+            return false;
+        }
+
+        int minDistance = 2; // 10 ft
+        int maxDistance = Mathf.Max(minDistance, charger.Stats.MoveRange * 2);
+        int pathCost = SquareGridUtils.CalculatePathCost(charger.GridPosition, path);
+
+        if (pathCost < minDistance)
+        {
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ Target is too close to charge (minimum 10 ft / 2 squares). ");
+            return false;
+        }
+
+        if (pathCost > maxDistance)
+        {
+            if (logFailures) CombatUI?.ShowCombatLog($"⚠ Target is too far to charge (max {maxDistance * 5} ft).");
+            return false;
+        }
+
+        if (!HasChargeLineOfSight(charger, target, path))
+        {
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ No line of sight to charge target.");
+            return false;
+        }
+
+        if (!IsPathClear(path, charger, target))
+        {
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ Charge path is blocked.");
+            return false;
+        }
+
+        foreach (Vector2Int p in path)
+        {
+            if (IsDifficultTerrain(p))
+            {
+                if (logFailures) CombatUI?.ShowCombatLog("⚠ Cannot charge through difficult terrain.");
+                return false;
+            }
+        }
+
+        Vector2Int finalPos = path[path.Count - 1];
+        int distToTarget = SquareGridUtils.GetDistance(finalPos, target.GridPosition);
+        if (distToTarget < 1 || distToTarget > Mathf.Max(1, charger.Stats.AttackRange))
+        {
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ Charge must end in legal melee reach of the target.");
+            return false;
+        }
+
+        return true;
+    }
+
+    public List<Vector2Int> GetChargePath(Vector2Int start, Vector2Int targetPos, int attackRange = 1)
+    {
+        var path = new List<Vector2Int>();
+        if (!IsStraightLinePath(start, targetPos)) return path;
+
+        Vector2Int delta = targetPos - start;
+        Vector2Int direction = new Vector2Int(Mathf.Clamp(delta.x, -1, 1), Mathf.Clamp(delta.y, -1, 1));
+        if (direction == Vector2Int.zero) return path;
+
+        Vector2Int current = start;
+        int safety = 0;
+        while (safety++ < 100)
+        {
+            current += direction;
+            SquareCell cell = Grid.GetCell(current);
+            if (cell == null) break;
+
+            path.Add(current);
+
+            int distToTarget = SquareGridUtils.GetDistance(current, targetPos);
+            if (distToTarget <= Mathf.Max(1, attackRange) && distToTarget > 0)
+                break;
+
+            if (current == targetPos)
+                break;
+        }
+
+        if (path.Count == 0) return path;
+
+        Vector2Int end = path[path.Count - 1];
+        int endDist = SquareGridUtils.GetDistance(end, targetPos);
+        if (endDist < 1 || endDist > Mathf.Max(1, attackRange))
+            path.Clear();
+
+        return path;
+    }
+
+    public bool IsStraightLinePath(Vector2Int start, Vector2Int end)
+    {
+        Vector2Int delta = end - start;
+        if (delta == Vector2Int.zero) return false;
+
+        if (delta.x == 0 || delta.y == 0) return true; // cardinal
+        return Mathf.Abs(delta.x) == Mathf.Abs(delta.y); // diagonal
+    }
+
+    public bool IsPathClear(List<Vector2Int> path, CharacterController charger, CharacterController target)
+    {
+        if (path == null || charger == null) return false;
+
+        foreach (Vector2Int pos in path)
+        {
+            SquareCell cell = Grid.GetCell(pos);
+            if (cell == null) return false;
+
+            CharacterController occupant = GetCharacterAtPosition(pos);
+            if (occupant != null && occupant != charger)
+            {
+                if (target == null || occupant != target)
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool HasChargeLineOfSight(CharacterController charger, CharacterController target, List<Vector2Int> path)
+    {
+        if (charger == null || target == null) return false;
+        if (Grid.GetCell(target.GridPosition) == null) return false;
+        if (path == null || path.Count == 0) return false;
+
+        // Prototype LOS: no wall/cover system yet, so straight unobstructed charge lane is treated as LOS.
+        return IsStraightLinePath(charger.GridPosition, target.GridPosition);
+    }
+
+    private bool IsDifficultTerrain(Vector2Int pos)
+    {
+        // Difficult terrain is not data-driven in this prototype yet.
+        // Keep hook for future implementation.
+        return false;
+    }
+
+    private CharacterController GetCharacterAtPosition(Vector2Int pos)
+    {
+        foreach (var c in GetAllCharacters())
+        {
+            if (c != null && c.GridPosition == pos && c.Stats != null && !c.Stats.IsDead)
+                return c;
+        }
+        return null;
+    }
+
+    private void HandleChargeTargetClick(CharacterController charger, SquareCell cell)
+    {
+        if (charger == null || cell == null) return;
+
+        if (!cell.IsOccupied || cell.Occupant == charger || cell.Occupant.Stats.IsDead)
+            return;
+
+        CharacterController target = cell.Occupant;
+        if (!CanChargeTarget(charger, target, logFailures: true))
+            return;
+
+        _chargeTarget = target;
+        _pendingChargePath = GetChargePath(charger.GridPosition, target.GridPosition, Mathf.Max(1, charger.Stats.AttackRange));
+
+        CurrentSubPhase = PlayerSubPhase.ConfirmingChargePath;
+        ShowChargePathPreview(charger, target);
+    }
+
+    private void HandleChargeConfirmationClick(CharacterController charger, SquareCell cell)
+    {
+        if (charger == null || _chargeTarget == null || _pendingChargePath == null || _pendingChargePath.Count == 0)
+        {
+            CancelChargeTargeting();
+            return;
+        }
+
+        bool clickedTarget = cell != null && cell.IsOccupied && cell.Occupant == _chargeTarget;
+        bool clickedFinal = cell != null && cell.Coords == _pendingChargePath[_pendingChargePath.Count - 1];
+
+        if (!clickedTarget && !clickedFinal)
+        {
+            // Allow switching target during confirm step.
+            if (cell != null && cell.IsOccupied && cell.Occupant != charger)
+            {
+                HandleChargeTargetClick(charger, cell);
+            }
+            return;
+        }
+
+        StartCoroutine(ExecuteCharge(charger, _chargeTarget));
+    }
+
+    private void ShowChargePathPreview(CharacterController charger, CharacterController target)
+    {
+        if (charger == null || target == null) return;
+        if (!CanChargeTarget(charger, target, logFailures: false)) return;
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        foreach (Vector2Int pos in _pendingChargePath)
+        {
+            SquareCell c = Grid.GetCell(pos);
+            if (c != null)
+            {
+                c.SetHighlight(HighlightType.Move);
+                _highlightedCells.Add(c);
+            }
+        }
+
+        SquareCell self = Grid.GetCell(charger.GridPosition);
+        if (self != null) self.SetHighlight(HighlightType.Selected);
+        SquareCell tcell = Grid.GetCell(target.GridPosition);
+        if (tcell != null) tcell.SetHighlight(HighlightType.Attack);
+
+        CombatUI.SetTurnIndicator($"CHARGE: {target.Stats.CharacterName} | +2 attack, -2 AC until next turn. Click target/endpoint to confirm.");
+    }
+
+    private IEnumerator ExecuteCharge(CharacterController charger, CharacterController target)
+    {
+        if (!CanChargeTarget(charger, target, logFailures: true))
+        {
+            ShowActionChoices();
+            yield break;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        List<Vector2Int> path = GetChargePath(charger.GridPosition, target.GridPosition, Mathf.Max(1, charger.Stats.AttackRange));
+        if (path == null || path.Count == 0)
+        {
+            CombatUI?.ShowCombatLog("⚠ Charge aborted: invalid path.");
+            ShowActionChoices();
+            yield break;
+        }
+
+        CombatUI?.ShowCombatLog($"🏇 {charger.Stats.CharacterName} charges {target.Stats.CharacterName}!");
+
+        // Resolve provoked AoOs during charge movement.
+        var provokedAoOs = ThreatSystem.AnalyzePathForAoOs(charger, path, GetAllCharacters());
+        foreach (var aooInfo in provokedAoOs)
+        {
+            if (charger.Stats.IsDead) break;
+            if (aooInfo == null || aooInfo.Threatener == null || aooInfo.Threatener.Stats.IsDead) continue;
+
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(aooInfo.Threatener, charger);
+            if (aooResult == null) continue;
+
+            CombatUI.ShowCombatLog($"⚔ AoO during charge: {aooResult.GetDetailedSummary()}");
+            UpdateAllStatsUI();
+
+            if (aooResult.Hit && aooResult.TotalDamage > 0)
+                CheckConcentrationOnDamage(charger, aooResult.TotalDamage);
+
+            yield return new WaitForSeconds(0.8f);
+        }
+
+        if (charger.Stats.IsDead)
+        {
+            CombatUI?.ShowCombatLog($"{charger.Stats.CharacterName} falls before completing the charge.");
+            UpdateAllStatsUI();
+            if (IsPlayerTurn) EndActivePCTurn();
+            yield break;
+        }
+
+        foreach (Vector2Int step in path)
+        {
+            SquareCell dest = Grid.GetCell(step);
+            if (dest == null || dest.IsOccupied) continue;
+            charger.MoveToCell(dest);
+            yield return new WaitForSeconds(0.08f);
+        }
+
+        InvalidatePreviewThreats();
+
+        // Apply +2 charge attack bonus to this attack only.
+        charger.Stats.MoraleAttackBonus += 2;
+        CombatResult result;
+        try
+        {
+            result = charger.Attack(target, false, 0, null, null);
+        }
+        finally
+        {
+            charger.Stats.MoraleAttackBonus -= 2;
+        }
+
+        if (result != null)
+        {
+            CombatUI.ShowCombatLog($"⚡ Charge Attack (+2): {result.GetDetailedSummary()}");
+            if (result.Hit && result.TotalDamage > 0)
+                CheckConcentrationOnDamage(target, result.TotalDamage);
+        }
+
+        // Apply AC penalty until next turn.
+        charger.Stats.ApplyCondition(CombatConditionType.ChargePenalty, 1, charger.Stats.CharacterName);
+        CombatUI.ShowCombatLog($"🛡 {charger.Stats.CharacterName} is charging: -2 AC until next turn.");
+
+        charger.Actions.UseFullRoundAction();
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        _chargeTarget = null;
+        _pendingChargePath.Clear();
+
+        UpdateAllStatsUI();
+
+        if (target.Stats.IsDead && !target.IsPlayerControlled && AreAllNPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            yield break;
+        }
+
+        StartCoroutine(AfterAttackDelay(charger, 1.0f));
+    }
+
+    private void CancelChargeTargeting()
+    {
+        _chargeTarget = null;
+        _pendingChargePath.Clear();
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        ShowActionChoices();
+    }
+
     // ========== ATTACK EXECUTION ==========
 
     private void PerformPlayerAttack(CharacterController attacker, CharacterController target)
@@ -4193,6 +4713,12 @@ public class GameManager : MonoBehaviour
     {
         int distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
 
+        if (ShouldNPCUseCharge(npc, targetPC))
+        {
+            yield return StartCoroutine(NPCExecuteCharge(npc, targetPC));
+            yield break;
+        }
+
         if (distToTarget > npc.Stats.AttackRange)
         {
             SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
@@ -4200,7 +4726,7 @@ public class GameManager : MonoBehaviour
             {
                 npc.MoveToCell(bestCell);
                 npc.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} charges toward {targetPC.Stats.CharacterName}!");
+                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances toward {targetPC.Stats.CharacterName}!");
                 yield return new WaitForSeconds(0.5f);
             }
         }
@@ -4285,6 +4811,12 @@ public class GameManager : MonoBehaviour
 
         int distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
 
+        if (ShouldNPCUseCharge(npc, targetPC))
+        {
+            yield return StartCoroutine(NPCExecuteCharge(npc, targetPC));
+            yield break;
+        }
+
         if (distToTarget > npc.Stats.AttackRange)
         {
             SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
@@ -4313,6 +4845,85 @@ public class GameManager : MonoBehaviour
         {
             yield return new WaitForSeconds(0.3f);
         }
+    }
+
+    private bool ShouldNPCUseCharge(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || target == null) return false;
+        if (!npc.Actions.HasFullRoundAction) return false;
+        if (!npc.HasMeleeWeaponEquipped()) return false;
+        if (target.Stats == null || target.Stats.IsDead) return false;
+
+        int dist = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+        // Prefer charge when out of melee reach but still reachable in a charge lane.
+        if (dist <= npc.Stats.AttackRange) return false;
+
+        return CanChargeTarget(npc, target, logFailures: false);
+    }
+
+    private IEnumerator NPCExecuteCharge(CharacterController npc, CharacterController target)
+    {
+        if (!CanChargeTarget(npc, target, logFailures: false))
+            yield break;
+
+        List<Vector2Int> path = GetChargePath(npc.GridPosition, target.GridPosition, Mathf.Max(1, npc.Stats.AttackRange));
+        if (path == null || path.Count == 0)
+            yield break;
+
+        CombatUI.ShowCombatLog($"🏇 {npc.Stats.CharacterName} charges {target.Stats.CharacterName}!");
+
+        var provokedAoOs = ThreatSystem.AnalyzePathForAoOs(npc, path, GetAllCharacters());
+        foreach (var aooInfo in provokedAoOs)
+        {
+            if (npc.Stats.IsDead) break;
+            if (aooInfo == null || aooInfo.Threatener == null || aooInfo.Threatener.Stats.IsDead) continue;
+
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(aooInfo.Threatener, npc);
+            if (aooResult == null) continue;
+
+            CombatUI.ShowCombatLog($"⚔ AoO vs {npc.Stats.CharacterName}: {aooResult.GetDetailedSummary()}");
+            UpdateAllStatsUI();
+
+            if (aooResult.Hit && aooResult.TotalDamage > 0)
+                CheckConcentrationOnDamage(npc, aooResult.TotalDamage);
+
+            yield return new WaitForSeconds(0.5f);
+        }
+
+        if (npc.Stats.IsDead)
+            yield break;
+
+        foreach (Vector2Int step in path)
+        {
+            SquareCell dest = Grid.GetCell(step);
+            if (dest == null || dest.IsOccupied) continue;
+            npc.MoveToCell(dest);
+            yield return new WaitForSeconds(0.06f);
+        }
+
+        npc.Stats.MoraleAttackBonus += 2;
+        CombatResult result;
+        try
+        {
+            result = npc.Attack(target, false, 0, null, null);
+        }
+        finally
+        {
+            npc.Stats.MoraleAttackBonus -= 2;
+        }
+
+        if (result != null)
+        {
+            CombatUI.ShowCombatLog($"☠ Charge Attack (+2): {result.GetDetailedSummary()}");
+            if (result.Hit && result.TotalDamage > 0)
+                CheckConcentrationOnDamage(target, result.TotalDamage);
+        }
+
+        npc.Stats.ApplyCondition(CombatConditionType.ChargePenalty, 1, npc.Stats.CharacterName);
+        npc.Actions.UseFullRoundAction();
+        UpdateAllStatsUI();
+
+        yield return new WaitForSeconds(0.8f);
     }
 
     private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target)

@@ -677,6 +677,8 @@ public class SceneBootstrap : MonoBehaviour
             "Attack", new Color(0.7f, 0.2f, 0.2f));
         combatUI.SpecialAttackButton = CreateGridButton(btnGrid.transform, "SpecialAttackBtn",
             "Special Attack", new Color(0.55f, 0.35f, 0.15f));
+        combatUI.ChargeButton = CreateGridButton(btnGrid.transform, "ChargeBtn",
+            "Charge", new Color(0.78f, 0.45f, 0.15f));
         combatUI.FullAttackButton = CreateGridButton(btnGrid.transform, "FullAttackBtn",
             "Full Attack", new Color(0.6f, 0.15f, 0.15f));
         combatUI.DualWieldButton = CreateGridButton(btnGrid.transform, "DualWieldBtn",
@@ -843,6 +845,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.AttackButton.onClick.AddListener(() => GameManager.Instance.OnAttackButtonPressed());
         if (ui.SpecialAttackButton != null)
             ui.SpecialAttackButton.onClick.AddListener(() => GameManager.Instance.OnSpecialAttackButtonPressed());
+        if (ui.ChargeButton != null)
+            ui.ChargeButton.onClick.AddListener(() => GameManager.Instance.OnChargeButtonPressed());
         if (ui.FullAttackButton != null)
             ui.FullAttackButton.onClick.AddListener(() => GameManager.Instance.OnFullAttackButtonPressed());
         if (ui.DualWieldButton != null)
