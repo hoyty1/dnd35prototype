@@ -75,6 +75,16 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public bool HasCastQuickenedSpellThisRound { get; set; }
 
+
+    // ========== HELD TOUCH SPELL CHARGE ==========
+    /// <summary>Currently held melee touch spell charge (if any).</summary>
+    public SpellData HeldTouchSpell { get; private set; }
+
+    /// <summary>Metamagic data that was applied when the held touch spell was cast.</summary>
+    public MetamagicData HeldTouchMetamagic { get; private set; }
+
+    /// <summary>Whether this character is currently holding a melee touch spell charge.</summary>
+    public bool HasHeldTouchCharge => HeldTouchSpell != null;
     /// <summary>Whether this character has any spellcasting ability.</summary>
     public bool CanCastSpells => Stats != null && (Stats.IsWizard || Stats.IsCleric);
 
@@ -1071,12 +1081,18 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Get touch AC of a target (10 + DEX + size + deflection, NO armor/shield/natural).
-    /// Simplified: 10 + DEX mod + size modifier.
+    /// Get touch AC of a target.
+    /// Touch AC excludes armor/shield bonuses but keeps DEX, size, deflection,
+    /// dodge-style feat AC, monk AC bonus, and rage AC modifiers.
     /// </summary>
     public static int GetTouchAC(CharacterStats target)
     {
-        return 10 + target.DEXMod + target.SizeModifier;
+        int dexToAC = target.DEXMod;
+        if (target.MaxDexBonus >= 0 && dexToAC > target.MaxDexBonus)
+            dexToAC = target.MaxDexBonus;
+
+        return 10 + dexToAC + target.SizeModifier + target.DeflectionBonus
+               + target.FeatACBonus + target.MonkACBonus + target.RageACPenalty;
     }
 
     /// <summary>
@@ -1194,6 +1210,33 @@ public class SpellcastingComponent : MonoBehaviour
             Debug.Log($"[Spellcasting] {Stats.CharacterName}: {spellId} buff expired");
         }
         ActiveBuffs.Remove(spellId);
+    }
+
+    /// <summary>
+    /// Store a held melee touch spell charge on this caster.
+    /// </summary>
+    public void SetHeldTouchCharge(SpellData spell, MetamagicData metamagic)
+    {
+        HeldTouchSpell = spell;
+        HeldTouchMetamagic = metamagic;
+
+        if (HeldTouchSpell != null)
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: holding touch charge ({HeldTouchSpell.Name})");
+    }
+
+    /// <summary>
+    /// Clear any held melee touch charge.
+    /// </summary>
+    public void ClearHeldTouchCharge(string reason = null)
+    {
+        if (HeldTouchSpell != null)
+        {
+            string reasonText = string.IsNullOrEmpty(reason) ? "" : $" ({reason})";
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: held touch charge cleared{reasonText}");
+        }
+
+        HeldTouchSpell = null;
+        HeldTouchMetamagic = null;
     }
 
     /// <summary>

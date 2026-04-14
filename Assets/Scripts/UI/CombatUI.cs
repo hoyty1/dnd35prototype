@@ -288,13 +288,16 @@ public class CombatUI : MonoBehaviour
 
         var statusMgr = ch.GetComponent<StatusEffectManager>();
         var concMgr = ch.GetComponent<ConcentrationManager>();
+        var spellComp = ch.GetComponent<SpellcastingComponent>();
 
         string buffStr = (statusMgr != null && statusMgr.ActiveEffectCount > 0)
             ? statusMgr.GetBuffSummaryString() : "";
         string concStr = (concMgr != null && concMgr.IsConcentrating)
             ? concMgr.GetConcentrationDisplayString() : "";
+        string heldStr = (spellComp != null && spellComp.HasHeldTouchCharge && spellComp.HeldTouchSpell != null)
+            ? $"✋ Holding: {spellComp.HeldTouchSpell.Name}" : "";
 
-        if (string.IsNullOrEmpty(buffStr) && string.IsNullOrEmpty(concStr))
+        if (string.IsNullOrEmpty(buffStr) && string.IsNullOrEmpty(concStr) && string.IsNullOrEmpty(heldStr))
         {
             buffText.text = "";
             buffText.gameObject.SetActive(false);
@@ -304,13 +307,11 @@ public class CombatUI : MonoBehaviour
         buffText.gameObject.SetActive(true);
         buffText.supportRichText = true;
 
-        // Combine concentration indicator with buff summary
-        if (!string.IsNullOrEmpty(concStr) && !string.IsNullOrEmpty(buffStr))
-            buffText.text = concStr + " " + buffStr;
-        else if (!string.IsNullOrEmpty(concStr))
-            buffText.text = concStr;
-        else
-            buffText.text = buffStr;
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(concStr)) parts.Add(concStr);
+        if (!string.IsNullOrEmpty(heldStr)) parts.Add(heldStr);
+        if (!string.IsNullOrEmpty(buffStr)) parts.Add(buffStr);
+        buffText.text = string.Join(" ", parts);
     }
 
     private string FormatBonusDetail(int value, string label)
@@ -605,20 +606,28 @@ public class CombatUI : MonoBehaviour
                 else rageLabel.text = "Rage (Used)";
             }
         }
-
-        // Cast Spell button: only visible for spellcasters with castable prepared spells
+        // Cast Spell button: visible if caster can cast now OR is already holding a touch charge.
         if (CastSpellButton != null)
         {
             bool isSpellcaster = pc.Stats.IsSpellcaster;
             var spellComp = pc.GetComponent<SpellcastingComponent>();
             bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnyCastablePreparedSpell();
-            bool canCast = hasCastableSpells && actions.HasStandardAction;
+            bool hasHeldTouchCharge = isSpellcaster && spellComp != null && spellComp.HasHeldTouchCharge;
 
-            CastSpellButton.gameObject.SetActive(hasCastableSpells);
+            bool showCastButton = hasCastableSpells || hasHeldTouchCharge;
+            bool canCast = actions.HasStandardAction && showCastButton;
+
+            CastSpellButton.gameObject.SetActive(showCastButton);
             CastSpellButton.interactable = canCast;
             Text castLabel = CastSpellButton.GetComponentInChildren<Text>();
             if (castLabel != null)
-                castLabel.text = canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)";
+            {
+                if (hasHeldTouchCharge && spellComp.HeldTouchSpell != null)
+                    castLabel.text = canCast ? $"Deliver Touch: {spellComp.HeldTouchSpell.Name}" : "Deliver Touch (N/A)";
+                else
+                    castLabel.text = canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)";
+            }
+        }
         }
 
         if (RageStatusText != null)

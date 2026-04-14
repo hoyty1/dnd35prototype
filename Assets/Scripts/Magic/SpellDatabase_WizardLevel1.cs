@@ -63,6 +63,8 @@ public static partial class SpellDatabase
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
             RangeSquares = 1, // Touch
+            IsTouch = true,
+            IsMeleeTouch = true,
             EffectType = SpellEffectType.Damage,
             DamageDice = 6, DamageCount = 3, // 3d6 at CL3
             DamageType = "electricity",
@@ -79,6 +81,8 @@ public static partial class SpellDatabase
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
             RangeSquares = 5,
+            IsTouch = true,
+            IsRangedTouch = true,
             EffectType = SpellEffectType.Damage,
             DamageDice = 8, DamageCount = 1,
             DamageType = "fire",
@@ -95,6 +99,8 @@ public static partial class SpellDatabase
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
             RangeSquares = 1, // Touch
+            IsTouch = true,
+            IsMeleeTouch = true,
             EffectType = SpellEffectType.Damage,
             DamageDice = 6, DamageCount = 1,
             DamageType = "negative",
@@ -325,6 +331,8 @@ public static partial class SpellDatabase
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
             RangeSquares = 5,
+            IsTouch = true,
+            IsRangedTouch = true,
             EffectType = SpellEffectType.Debuff,
             DamageDice = 6, DamageCount = 1, BonusDamage = 1, // 1d6+1 STR penalty at CL3
             DamageType = "str_penalty",

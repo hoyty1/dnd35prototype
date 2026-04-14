@@ -20,6 +20,8 @@ public static partial class SpellDatabase
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
             RangeSquares = 5,
+            IsTouch = true,
+            IsRangedTouch = true,
             EffectType = SpellEffectType.Damage,
             DamageDice = 6, DamageCount = 4, // 4d6 per ray
             DamageType = "fire",
@@ -36,6 +38,8 @@ public static partial class SpellDatabase
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
             RangeSquares = 8, // Long range
+            IsTouch = true,
+            IsRangedTouch = true,
             EffectType = SpellEffectType.Damage,
             DamageDice = 4, DamageCount = 2, // Initial 2d4
             DamageType = "acid",
@@ -374,6 +378,8 @@ public static partial class SpellDatabase
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
             RangeSquares = 1, // Touch
+            IsTouch = true,
+            IsMeleeTouch = true,
             EffectType = SpellEffectType.Debuff,
             DamageDice = 6, DamageCount = 1, // 1d6 to each mental stat
             DamageType = "mental_drain",
@@ -776,6 +782,8 @@ public static partial class SpellDatabase
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
             RangeSquares = 1,
+            IsTouch = true,
+            IsMeleeTouch = true,
             EffectType = SpellEffectType.Debuff,
             AllowsSavingThrow = true,
             SavingThrowType = "Fortitude",

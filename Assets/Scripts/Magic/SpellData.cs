@@ -23,6 +23,46 @@ public class SpellData
     public int RangeSquares;            // Range in squares (0 = touch, -1 = self)
     public int AreaRadius;              // For area spells, radius in squares (0 = single target)
 
+
+    // ========== TOUCH ATTACK METADATA ==========
+    /// <summary>Whether this spell is a touch spell (used for held charge and targeting UX).</summary>
+    public bool IsTouch;
+    /// <summary>Whether this spell uses a melee touch attack (vs touch AC) when applicable.</summary>
+    public bool IsMeleeTouch;
+    /// <summary>Whether this spell uses a ranged touch attack (vs touch AC) when applicable.</summary>
+    public bool IsRangedTouch;
+
+    /// <summary>
+    /// Returns true if this spell should be treated as a touch spell.
+    /// Falls back to range/target heuristics for backward compatibility.
+    /// </summary>
+    public bool IsTouchSpell()
+    {
+        if (IsTouch || IsMeleeTouch || IsRangedTouch) return true;
+        return TargetType == SpellTargetType.Touch || RangeSquares == 1;
+    }
+
+    /// <summary>
+    /// Returns true if this spell should use a melee touch attack roll.
+    /// Falls back to simple range heuristic for backward compatibility.
+    /// </summary>
+    public bool IsMeleeTouchSpell()
+    {
+        if (IsMeleeTouch) return true;
+        if (IsRangedTouch) return false;
+        return IsTouchSpell() && RangeSquares <= 1;
+    }
+
+    /// <summary>
+    /// Returns true if this spell should use a ranged touch attack roll.
+    /// Falls back to simple range heuristic for backward compatibility.
+    /// </summary>
+    public bool IsRangedTouchSpell()
+    {
+        if (IsRangedTouch) return true;
+        if (IsMeleeTouch) return false;
+        return IsTouchSpell() && RangeSquares > 1;
+    }
     // ========== AREA OF EFFECT ==========
     /// <summary>Shape of the AoE (None = single target, Burst = radius, Cone = emanation from caster).</summary>
     public AoEShape AoEShapeType;

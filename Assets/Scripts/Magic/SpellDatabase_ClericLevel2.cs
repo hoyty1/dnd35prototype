@@ -20,6 +20,8 @@ public static partial class SpellDatabase
             ClassList = new[] { "Cleric" },
             TargetType = SpellTargetType.SingleAlly,
             RangeSquares = 1,
+            IsTouch = true,
+            IsMeleeTouch = true,
             EffectType = SpellEffectType.Healing,
             HealDice = 8, HealCount = 2, BonusHealing = 3, // +CL
             ActionType = SpellActionType.Standard,
@@ -54,6 +56,8 @@ public static partial class SpellDatabase
             ClassList = new[] { "Cleric" },
             TargetType = SpellTargetType.SingleEnemy,
             RangeSquares = 1,
+            IsTouch = true,
+            IsMeleeTouch = true,
             EffectType = SpellEffectType.Damage,
             DamageDice = 8, DamageCount = 2, BonusDamage = 3,
             DamageType = "negative",

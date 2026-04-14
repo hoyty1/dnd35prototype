@@ -17,7 +17,7 @@ public static class SpellCaster
     /// </summary>
     public static SpellResult Cast(SpellData spell, CharacterStats casterStats, CharacterStats targetStats)
     {
-        return Cast(spell, casterStats, targetStats, null);
+        return Cast(spell, casterStats, targetStats, null, false);
     }
 
     /// <summary>
@@ -25,7 +25,7 @@ public static class SpellCaster
     /// Slot consumption is handled by the caller (GameManager).
     /// Mage Armor AC application is also handled externally.
     /// </summary>
-    public static SpellResult Cast(SpellData spell, CharacterStats casterStats, CharacterStats targetStats, MetamagicData metamagic)
+    public static SpellResult Cast(SpellData spell, CharacterStats casterStats, CharacterStats targetStats, MetamagicData metamagic, bool forceFriendlyTouchNoRoll = false)
     {
         var result = new SpellResult();
         result.Spell = spell;
@@ -48,15 +48,22 @@ public static class SpellCaster
             effectiveSpellLevel = metamagic.HeightenToLevel;
         }
 
-        // ========== ATTACK ROLL (touch attacks for single-target damage spells) ==========
-        // AoE spells with saving throws (Burning Hands, Fireball, etc.) do NOT require attack rolls.
-        // They auto-hit all targets in the area; targets then make saving throws.
-        // Only single-target touch spells (Shocking Grasp, Scorching Ray) need attack rolls.
+        // ========== ATTACK ROLL (touch attacks) ==========
+        // AoE spells do not use touch attack rolls.
         bool isAoESpell = spell.TargetType == SpellTargetType.Area;
-        if (spell.EffectType == SpellEffectType.Damage && !spell.AutoHit && !isAoESpell)
+        bool usesTouchAttack = spell.IsMeleeTouchSpell() || spell.IsRangedTouchSpell();
+
+        if (usesTouchAttack && forceFriendlyTouchNoRoll)
+        {
+            // Friendly touch delivery (heals/buffs) should not require attack roll.
+            result.RequiredAttackRoll = false;
+            result.AttackHit = true;
+            result.IsRangedTouch = false;
+        }
+        else if (usesTouchAttack && !spell.AutoHit && !isAoESpell)
         {
             result.RequiredAttackRoll = true;
-            bool isRanged = spell.RangeSquares > 1;
+            bool isRanged = spell.IsRangedTouchSpell();
             result.IsRangedTouch = isRanged;
 
             int atkBonus = isRanged

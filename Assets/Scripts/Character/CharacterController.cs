@@ -908,6 +908,13 @@ public class CharacterController : MonoBehaviour
         {
             concMgr.OnCharacterIncapacitated();
         }
+
+        // Held touch charges are lost if the caster dies/unconscious.
+        var spellComp = GetComponent<SpellcastingComponent>();
+        if (spellComp != null && spellComp.HasHeldTouchCharge)
+        {
+            spellComp.ClearHeldTouchCharge("caster incapacitated");
+        }
     }
 
     /// <summary>

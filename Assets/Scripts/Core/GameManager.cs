@@ -90,6 +90,7 @@ public class GameManager : MonoBehaviour
     private PendingAttackMode _pendingAttackMode;
     private SpellData _pendingSpell; // Spell selected for casting
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
+    private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
 
     // ========== AOE TARGETING STATE ==========
     private bool _isAoETargeting;                          // Currently in AoE targeting mode
@@ -1493,6 +1494,18 @@ public class GameManager : MonoBehaviour
         var spellComp = pc.GetComponent<SpellcastingComponent>();
         if (spellComp == null) return;
 
+        // If caster is holding a touch charge, Cast Spell button switches to delivery mode.
+        if (spellComp.HasHeldTouchCharge)
+        {
+            _pendingSpell = spellComp.HeldTouchSpell;
+            _pendingMetamagic = spellComp.HeldTouchMetamagic;
+            _pendingSpellFromHeldCharge = true;
+            _pendingAttackMode = PendingAttackMode.CastSpell;
+            CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+            ShowSpellTargets(pc, _pendingSpell);
+            return;
+        }
+
         // Only allow casting if there are prepared spells with available slots
         if (!spellComp.HasAnyCastablePreparedSpell())
         {
@@ -1513,6 +1526,15 @@ public class GameManager : MonoBehaviour
 
         _pendingSpell = spell;
         _pendingMetamagic = metamagic;
+        _pendingSpellFromHeldCharge = false;
+
+        // Casting another spell while holding a touch charge ends the held charge.
+        var spellComp = pc.GetComponent<SpellcastingComponent>();
+        if (spellComp != null && spellComp.HasHeldTouchCharge)
+        {
+            spellComp.ClearHeldTouchCharge("cast another spell");
+            CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName}'s held touch charge dissipates as they begin another spell.");
+        }
 
         // If metamagic modifies the spell data (range, action type), clone and apply
         if (metamagic != null && metamagic.HasAnyMetamagic)
@@ -1532,26 +1554,11 @@ public class GameManager : MonoBehaviour
         // Determine targeting based on spell type
         if (_pendingSpell.TargetType == SpellTargetType.Self)
         {
-            // Self-targeting spells (Mage Armor) cast immediately
+            // Self-targeting spells cast immediately
             PerformSpellCast(pc, pc);
-        }
-        else if (_pendingSpell.TargetType == SpellTargetType.SingleAlly)
-        {
-            // Ally targeting (Cure Light Wounds) - show ally targets
-            _pendingAttackMode = PendingAttackMode.CastSpell;
-            CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
-            ShowSpellTargets(pc, _pendingSpell);
-        }
-        else if (_pendingSpell.TargetType == SpellTargetType.SingleEnemy)
-        {
-            // Enemy targeting (damage spells) - show enemy targets in range
-            _pendingAttackMode = PendingAttackMode.CastSpell;
-            CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
-            ShowSpellTargets(pc, _pendingSpell);
         }
         else
         {
-            // Default: show targets
             _pendingAttackMode = PendingAttackMode.CastSpell;
             CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
             ShowSpellTargets(pc, _pendingSpell);
@@ -1570,6 +1577,22 @@ public class GameManager : MonoBehaviour
         ShowActionChoices();
     }
 
+    private bool IsHoldableMeleeTouchSpell(SpellData spell)
+    {
+        if (spell == null) return false;
+        if (spell.AoEShapeType != AoEShape.None) return false;
+        if (!spell.IsMeleeTouchSpell()) return false;
+        if (spell.TargetType == SpellTargetType.Self) return false;
+        if (spell.TargetType == SpellTargetType.SingleAlly) return false;
+        return true;
+    }
+
+    private bool IsFriendlyTarget(CharacterController caster, CharacterController target)
+    {
+        if (caster == null || target == null) return false;
+        bool casterIsPC = IsPC(caster);
+        return casterIsPC ? IsPC(target) : NPCs.Contains(target);
+    }
     /// <summary>
     /// Highlight valid targets for a spell based on its range and target type.
     /// Shows the full spell range area (purple) with valid targets highlighted (magenta).
@@ -1644,8 +1667,9 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // For SingleAlly spells, also allow self-targeting by clicking own tile
-        if (spell.TargetType == SpellTargetType.SingleAlly)
+        // For SingleAlly spells, also allow self-targeting by clicking own tile.
+        // For melee touch spells, clicking self can also choose HOLD CHARGE.
+        if (spell.TargetType == SpellTargetType.SingleAlly || IsHoldableMeleeTouchSpell(spell))
         {
             if (casterCell != null)
             {
@@ -1658,11 +1682,25 @@ public class GameManager : MonoBehaviour
         if (hasTarget)
         {
             string rangeStr = spell.RangeSquares <= 0 ? "Touch" : $"{spell.RangeSquares} sq ({spell.RangeSquares * 5} ft)";
-            string targetMsg = spell.TargetType == SpellTargetType.SingleAlly
-                ? "Click an ally (or self) to cast"
-                : spell.TargetType == SpellTargetType.Area
-                    ? "Click a target area to cast"
-                    : "Click an enemy to cast";
+            string targetMsg;
+            if (_pendingSpellFromHeldCharge)
+            {
+                targetMsg = "Click a target to deliver held touch charge";
+            }
+            else if (IsHoldableMeleeTouchSpell(spell))
+            {
+                targetMsg = spell.TargetType == SpellTargetType.SingleAlly
+                    ? "Click ally to deliver now, or click self to HOLD CHARGE"
+                    : "Click target to deliver now, or click self to HOLD CHARGE";
+            }
+            else
+            {
+                targetMsg = spell.TargetType == SpellTargetType.SingleAlly
+                    ? "Click an ally (or self) to cast"
+                    : spell.TargetType == SpellTargetType.Area
+                        ? "Click a target area to cast"
+                        : "Click an enemy to cast";
+            }
             CombatUI.SetTurnIndicator($"✦ {spell.Name}: {targetMsg} | Range: {rangeStr} | Right-click to cancel");
         }
         else
@@ -1673,14 +1711,78 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Convert the currently selected melee touch spell into a held charge.
+    /// The slot is consumed now; delivery can happen on a later action.
+    /// </summary>
+    private void HoldPendingMeleeTouchCharge(CharacterController caster)
+    {
+        if (caster == null || _pendingSpell == null) { ShowActionChoices(); return; }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        if (spellComp == null)
+        {
+            Debug.LogError("[GameManager] HoldPendingMeleeTouchCharge: No SpellcastingComponent!");
+            ShowActionChoices();
+            return;
+        }
+
+        bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
+        if (!isQuickened)
+        {
+            caster.Actions.UseStandardAction();
+        }
+        else
+        {
+            spellComp.MarkQuickenedSpellCast();
+        }
+
+        bool consumed = true;
+        if (!_pendingSpellFromHeldCharge)
+        {
+            bool hasMetamagicApplied = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic;
+            int slotLevelToConsume = _pendingSpell.SpellLevel;
+            if (hasMetamagicApplied)
+                slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
+
+            if (hasMetamagicApplied && slotLevelToConsume > 0)
+                consumed = spellComp.CastWizardSpellWithMetamagic(_pendingSpell, _pendingMetamagic);
+            else
+                consumed = spellComp.CastSpellFromSlot(_pendingSpell);
+
+            if (!consumed)
+            {
+                Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} spell slot for held charge!");
+                ShowActionChoices();
+                return;
+            }
+        }
+
+        HandleConcentrationOnCasting(caster, _pendingSpell);
+        spellComp.SetHeldTouchCharge(_pendingSpell, _pendingMetamagic);
+
+        CombatUI.ShowCombatLog($"✋ {caster.Stats.CharacterName} holds the charge of {_pendingSpell.Name}.");
+        UpdateAllStatsUI();
+        Grid.ClearAllHighlights();
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+        _pendingSpellFromHeldCharge = false;
+
+        StartCoroutine(AfterAttackDelay(caster, 1.0f));
+    }
+    /// <summary>
     /// Execute a spell cast from caster to target.
     /// </summary>
     private void PerformSpellCast(CharacterController caster, CharacterController target)
     {
         CurrentSubPhase = PlayerSubPhase.Animating;
 
-        // Quickened spells don't consume standard action (they're free actions)
-        bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
+        bool isDeliveringHeldCharge = _pendingSpellFromHeldCharge;
+
+        // Quickened applies when CASTING the spell, not when delivering a previously held charge.
+        bool isQuickened = !isDeliveringHeldCharge && _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
         if (!isQuickened)
         {
             caster.Actions.UseStandardAction();
@@ -1705,7 +1807,7 @@ public class GameManager : MonoBehaviour
         }
 
         // Check if this is a spontaneous cast (cleric converting a specific prepared spell)
-        bool isSpontaneous = CombatUI != null && CombatUI.IsSpontaneousCast;
+        bool isSpontaneous = !isDeliveringHeldCharge && CombatUI != null && CombatUI.IsSpontaneousCast;
         int spontaneousLevel = isSpontaneous ? CombatUI.SpontaneousCastLevel : -1;
         string spontaneousSacrificedSpellId = isSpontaneous ? CombatUI.SpontaneousSacrificedSpellId : null;
 
@@ -1725,10 +1827,11 @@ public class GameManager : MonoBehaviour
                       $"(base {_pendingSpell.SpellLevel} + {slotLevelToConsume - _pendingSpell.SpellLevel} metamagic)");
         }
 
-        // Consume spell slot
-        // Cantrips are unlimited — CastSpellFromSlot handles this (no slot consumed)
-        // Both Wizards and Clerics use slot-based system
+        if (!isDeliveringHeldCharge)
         {
+            // Consume spell slot
+            // Cantrips are unlimited — CastSpellFromSlot handles this (no slot consumed)
+            // Both Wizards and Clerics use slot-based system
             bool consumed;
             if (isSpontaneous)
             {
@@ -1767,12 +1870,12 @@ public class GameManager : MonoBehaviour
                 return;
             }
         }
-
         // Check if caster is concentrating on another spell — casting requires a concentration check
         HandleConcentrationOnCasting(caster, _pendingSpell);
 
         // Resolve the spell with metamagic
-        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic);
+        bool skipFriendlyTouchAttackRoll = _pendingSpell.IsMeleeTouchSpell() && IsFriendlyTarget(caster, target);
+        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll);
 
         // Apply buff effects based on spell type
         if (result.Success && _pendingSpell.EffectType == SpellEffectType.Buff)
@@ -1790,6 +1893,19 @@ public class GameManager : MonoBehaviour
         if (result.DamageDealt > 0 && target != null)
         {
             CheckConcentrationOnDamage(target, result.DamageDealt);
+        }
+
+        // Delivering a held charge consumes the held charge only on successful touch.
+        if (isDeliveringHeldCharge)
+        {
+            if (result.Success)
+            {
+                spellComp.ClearHeldTouchCharge("touch delivered");
+            }
+            else
+            {
+                CombatUI.ShowCombatLog($"✋ {caster.Stats.CharacterName} misses with held {_pendingSpell.Name} and keeps the charge.");
+            }
         }
 
         // Handle death if target was killed
@@ -1834,6 +1950,7 @@ public class GameManager : MonoBehaviour
                 CombatUI.SetActionButtonsVisible(false);
                 _pendingSpell = null;
                 _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
                 return;
             }
             else if (AreAllPCsDead())
@@ -1843,11 +1960,13 @@ public class GameManager : MonoBehaviour
                 CombatUI.SetActionButtonsVisible(false);
                 _pendingSpell = null;
                 _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
                 return;
             }
         }
 
         _pendingSpell = null;
+        _pendingSpellFromHeldCharge = false;
         _pendingMetamagic = null;
 
         // After standard action, check for remaining actions
@@ -2212,6 +2331,7 @@ public class GameManager : MonoBehaviour
         _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
         _pendingSpell = null;
         _pendingMetamagic = null;
+        _pendingSpellFromHeldCharge = false;
 
         Grid.ClearAllHighlights();
         ShowActionChoices();
@@ -2226,6 +2346,7 @@ public class GameManager : MonoBehaviour
     private void CancelSpellTargeting()
     {
         _pendingSpell = null;
+        _pendingSpellFromHeldCharge = false;
         _pendingMetamagic = null;
         _pendingAttackMode = PendingAttackMode.Single;
 
@@ -2281,6 +2402,7 @@ public class GameManager : MonoBehaviour
 
         _pendingSpell = null;
         _pendingMetamagic = null;
+        _pendingSpellFromHeldCharge = false;
 
         Grid.ClearAllHighlights();
         ShowActionChoices();
@@ -3376,6 +3498,13 @@ public class GameManager : MonoBehaviour
         // ===== SPELL CASTING MODE =====
         if (_pendingAttackMode == PendingAttackMode.CastSpell && _pendingSpell != null)
         {
+            // For holdable melee touch spells, clicking self holds the charge instead of delivering now.
+            if (cell.Coords == pc.GridPosition && IsHoldableMeleeTouchSpell(_pendingSpell) && !_pendingSpellFromHeldCharge)
+            {
+                HoldPendingMeleeTouchCharge(pc);
+                return;
+            }
+
             // For ally spells, clicking own tile = self-target
             if (cell.Coords == pc.GridPosition && _pendingSpell.TargetType == SpellTargetType.SingleAlly)
             {
@@ -3388,6 +3517,7 @@ public class GameManager : MonoBehaviour
             {
                 _pendingSpell = null;
                 _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
                 ShowActionChoices();
                 return;
             }
@@ -3402,6 +3532,7 @@ public class GameManager : MonoBehaviour
             // Fallback cancel
             _pendingSpell = null;
             _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
             ShowActionChoices();
             return;
         }
