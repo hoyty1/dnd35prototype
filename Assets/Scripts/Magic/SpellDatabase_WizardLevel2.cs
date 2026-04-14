@@ -909,6 +909,35 @@ public static partial class SpellDatabase
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
+
+        // --- TEST SPELLS: Line AoE Testing ---
+        // Test spell to verify 60-ft line AoE pattern visualization.
+        // Line is 5 ft wide (1 square) and 60 ft long (12 squares) from the caster.
+        // Works in all 8 directions (N, NE, E, SE, S, SW, W, NW).
+
+        Register(new SpellData
+        {
+            SpellId = "test_line_60",
+            Name = "Lightning Lance (60-ft Line)",
+            Description = "TEST SPELL: 1d6/CL electricity damage (max 10d6) in a 60-ft line. Reflex half. For testing 60-ft line AoE pattern.",
+            SpellLevel = 2, School = "Evocation [Electricity]",
+            ClassList = new[] { "Wizard" },
+            TargetType = SpellTargetType.Area,
+            RangeSquares = 12,          // 60 ft = 12 squares
+            AreaRadius = 12,
+            AoEShapeType = AoEShape.Line,
+            AoESizeSquares = 12,        // 60 ft = 12 squares length
+            AoERangeSquares = 0,        // Line originates from caster
+            AoEFilter = AoETargetFilter.All,
+            EffectType = SpellEffectType.Damage,
+            DamageDice = 6, DamageCount = 3, // 3d6 electricity at CL3 (scales 1d6/CL, max 10d6)
+            DamageType = "electricity",
+            AllowsSavingThrow = true,
+            SavingThrowType = "Reflex",
+            SaveHalves = true,
+            ActionType = SpellActionType.Standard,
+            ProvokesAoO = true
+        });
     }
 
     // ====================================================================
