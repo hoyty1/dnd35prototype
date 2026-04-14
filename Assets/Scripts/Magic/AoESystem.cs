@@ -108,8 +108,17 @@ public static class AoESystem
     /// <param name="targetPos">Target position (determines cone direction)</param>
     /// <param name="lengthSquares">Length of the cone in grid squares (e.g., 3 for 15 ft)</param>
     /// <param name="grid">Reference to the game grid</param>
+    /// <param name="mouseWorldPos">
+    /// Optional current mouse world position used for cardinal first-row tilt
+    /// on larger cones (30-ft/60-ft). If null, legacy fixed placement is used.
+    /// </param>
     /// <returns>Set of grid coordinates within the cone (excludes origin)</returns>
-    public static HashSet<Vector2Int> GetConeCells(Vector2Int origin, Vector2Int targetPos, int lengthSquares, SquareGrid grid)
+    public static HashSet<Vector2Int> GetConeCells(
+        Vector2Int origin,
+        Vector2Int targetPos,
+        int lengthSquares,
+        SquareGrid grid,
+        Vector2? mouseWorldPos = null)
     {
         var cells = new HashSet<Vector2Int>();
 
@@ -127,7 +136,7 @@ public static class AoESystem
         }
         else
         {
-            offsets = GetCardinalConeOffsets(dirIndex, lengthSquares);
+            offsets = GetCardinalConeOffsets(dirIndex, lengthSquares, origin, mouseWorldPos);
         }
 
         // Apply offsets to origin and filter by grid bounds
@@ -157,7 +166,11 @@ public static class AoESystem
     ///   Example 30-ft (length=6): widths = 2, 4, 6, 8, 4, 2
     ///   Example 60-ft (length=12): widths = 2, 4, 6, 8, 10, 12, 14, 16, 12, 8, 4, 2
     /// </summary>
-    private static List<Vector2Int> GetCardinalConeOffsets(int dirIndex, int length)
+    private static List<Vector2Int> GetCardinalConeOffsets(
+        int dirIndex,
+        int length,
+        Vector2Int origin,
+        Vector2? mouseWorldPos)
     {
         var offsets = new List<Vector2Int>();
 
@@ -189,6 +202,12 @@ public static class AoESystem
             // First 2/3 of the range is expansion, last 1/3 is dissipation
             int expansionLength = (length * 2) / 3; // 6→4, 12→8
 
+            // First row (distance 1, width 2) can tilt based on mouse side.
+            // Uses lateral start 0 (legacy) or -1 (shift to opposite side).
+            int firstRowLateralStart = mouseWorldPos.HasValue
+                ? GetTiltedFirstRowLateralStart(dirIndex, origin, mouseWorldPos.Value)
+                : 0;
+
             for (int primary = 1; primary <= length; primary++)
             {
                 int width;
@@ -206,13 +225,19 @@ public static class AoESystem
                     if (width < 2) width = 2; // minimum width of 2
                 }
 
+                // For the first row of larger cardinal cones (width=2), use
+                // mouse-based tilt. Keep all remaining rows unchanged/centered.
+                if (primary == 1 && width == 2)
+                {
+                    for (int lateral = firstRowLateralStart; lateral <= firstRowLateralStart + 1; lateral++)
+                    {
+                        offsets.Add(RotateCardinalOffset(dirIndex, primary, lateral));
+                    }
+                    continue;
+                }
+
                 // Width is always even; half-width for symmetric spread
                 int halfW = width / 2;
-                // Lateral offsets: centered, from -(halfW-1) to +(halfW-1) then shift
-                // For width=2: cells at lateral -0.5 and +0.5 → use lateral 0 and -1 (offset by 1)
-                // Actually, for even widths centered on the axis:
-                // width 2: laterals = 0, -1  (or equivalently 0 and 1 centered)
-                // We center symmetrically: for width W (even), laterals from -(halfW) to (halfW-1)
                 for (int lateral = -(halfW - 1); lateral <= halfW; lateral++)
                 {
                     offsets.Add(RotateCardinalOffset(dirIndex, primary, lateral));
@@ -221,6 +246,36 @@ public static class AoESystem
         }
 
         return offsets;
+    }
+
+    /// <summary>
+    /// For larger cardinal cones (30-ft/60-ft), choose the first-row (width=2)
+    /// lateral placement based on mouse position:
+    /// - North/South: mouse.x <= caster.x => west tilt (default on center line)
+    /// - East/West:   mouse.y <= caster.y => south tilt (default on center line)
+    ///
+    /// Returns the lateral start for the 2-wide row:
+    ///   0  => laterals [0, 1]
+    ///  -1  => laterals [-1, 0]
+    /// </summary>
+    private static int GetTiltedFirstRowLateralStart(int dirIndex, Vector2Int origin, Vector2 mouseWorldPos)
+    {
+        bool preferWest = mouseWorldPos.x <= origin.x;
+        bool preferSouth = mouseWorldPos.y <= origin.y;
+
+        switch (dirIndex)
+        {
+            case 0: // North: west -> [0,1], east -> [-1,0]
+                return preferWest ? 0 : -1;
+            case 4: // South: west -> [-1,0], east -> [0,1]
+                return preferWest ? -1 : 0;
+            case 2: // East: south -> [-1,0], north -> [0,1]
+                return preferSouth ? -1 : 0;
+            case 6: // West: south -> [0,1], north -> [-1,0]
+                return preferSouth ? 0 : -1;
+            default:
+                return 0;
+        }
     }
 
     /// <summary>

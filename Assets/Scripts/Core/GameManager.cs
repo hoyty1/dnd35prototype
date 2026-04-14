@@ -96,6 +96,7 @@ public class GameManager : MonoBehaviour
     private HashSet<Vector2Int> _currentAoECells;          // Cells currently highlighted for AoE preview
     private Vector2Int _lastAoEHoverPos = new Vector2Int(-1, -1); // Last hovered grid pos for AoE preview
     private Vector2Int _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue); // Line direction hover key
+    private Vector2Int _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue); // Cone mouse tilt hover key
 
     // ========== SELF-CENTERED AOE CONFIRMATION STATE ==========
     private bool _isConfirmingSelfAoE;                     // Waiting for user to confirm self-centered AoE
@@ -1894,6 +1895,7 @@ public class GameManager : MonoBehaviour
         _currentAoECells = null;
         _lastAoEHoverPos = new Vector2Int(-1, -1);
         _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+        _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
         _pendingAttackMode = PendingAttackMode.CastSpell;
         CurrentSubPhase = PlayerSubPhase.SelectingAoETarget;
 
@@ -1999,17 +2001,16 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            // ===== BURST / CONE: existing grid-cell-based targeting =====
             Vector2Int gridPos = SquareGridUtils.WorldToGrid(worldPoint);
-
-            // Only update if hover position changed
-            if (gridPos == _lastAoEHoverPos) return;
-            _lastAoEHoverPos = gridPos;
-
-            ClearAoEPreviewHighlights();
 
             if (_pendingSpell.AoEShapeType == AoEShape.Burst)
             {
+                // Burst preview only depends on hovered grid cell center.
+                if (gridPos == _lastAoEHoverPos) return;
+                _lastAoEHoverPos = gridPos;
+
+                ClearAoEPreviewHighlights();
+
                 int range = _pendingSpell.AoERangeSquares > 0 ? _pendingSpell.AoERangeSquares : _pendingSpell.RangeSquares;
                 if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, range))
                     return;
@@ -2017,7 +2018,24 @@ public class GameManager : MonoBehaviour
             }
             else if (_pendingSpell.AoEShapeType == AoEShape.Cone)
             {
-                aoeCells = AoESystem.GetConeCells(pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares, Grid);
+                // Cone preview depends on both target cell (direction snap) and
+                // precise mouse position (cardinal first-row tilt), so track both.
+                Vector2Int coneHoverKey = new Vector2Int(
+                    Mathf.RoundToInt(worldPoint.x * 4f),
+                    Mathf.RoundToInt(worldPoint.y * 4f));
+
+                if (gridPos == _lastAoEHoverPos && coneHoverKey == _lastConeHoverKey) return;
+
+                _lastAoEHoverPos = gridPos;
+                _lastConeHoverKey = coneHoverKey;
+
+                ClearAoEPreviewHighlights();
+                aoeCells = AoESystem.GetConeCells(
+                    pc.GridPosition,
+                    gridPos,
+                    _pendingSpell.AoESizeSquares,
+                    Grid,
+                    worldPoint);
             }
         }
 
@@ -2114,6 +2132,7 @@ public class GameManager : MonoBehaviour
 
         // Calculate the final AoE cells
         HashSet<Vector2Int> aoeCells = null;
+        Vector2 worldPoint = GetMouseWorldPosition();
 
         if (_pendingSpell.AoEShapeType == AoEShape.Burst)
         {
@@ -2121,13 +2140,17 @@ public class GameManager : MonoBehaviour
         }
         else if (_pendingSpell.AoEShapeType == AoEShape.Cone)
         {
-            aoeCells = AoESystem.GetConeCells(caster.GridPosition, targetPos, _pendingSpell.AoESizeSquares, Grid);
+            aoeCells = AoESystem.GetConeCells(
+                caster.GridPosition,
+                targetPos,
+                _pendingSpell.AoESizeSquares,
+                Grid,
+                worldPoint);
         }
         else if (_pendingSpell.AoEShapeType == AoEShape.Line)
         {
             // Line spells: mouse-direction targeting — line extends from caster
             // center in direction of mouse, always to full spell range
-            Vector2 worldPoint = GetMouseWorldPosition();
             aoeCells = AoESystem.GetLineCellsFromDirection(
                 caster.GridPosition, worldPoint, _pendingSpell.AoESizeSquares, Grid);
             Debug.Log($"[AoE] Line direction → {aoeCells.Count} cells");
@@ -2151,6 +2174,7 @@ public class GameManager : MonoBehaviour
         _isAoETargeting = false;
         _currentAoECells = null;
         _lastAoEHoverPos = new Vector2Int(-1, -1);
+        _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
         _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
 
         // Execute the AoE spell
@@ -2166,6 +2190,7 @@ public class GameManager : MonoBehaviour
         _currentAoECells = null;
         _lastAoEHoverPos = new Vector2Int(-1, -1);
         _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+        _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
         _pendingSpell = null;
         _pendingMetamagic = null;
 
