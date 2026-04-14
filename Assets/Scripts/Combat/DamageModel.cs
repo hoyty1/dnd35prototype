@@ -40,6 +40,14 @@ public enum DamageType
     Negative,
 }
 
+public enum AttackSource
+{
+    Weapon,
+    Spell,
+    Natural,
+    Other,
+}
+
 [Serializable]
 public class DamageReductionEntry
 {
@@ -69,8 +77,8 @@ public class DamagePacket
     public int RawDamage;
     public HashSet<DamageType> Types = new HashSet<DamageType>();
     public DamageBypassTag AttackTags = DamageBypassTag.None;
-    public bool IsWeaponDamage;
-    public bool IsRangedWeaponDamage;
+    public bool IsRanged;
+    public AttackSource Source = AttackSource.Other;
     public string SourceName;
 }
 
@@ -84,18 +92,32 @@ public class DamageResolutionResult
     public int FinalDamage;
     public bool ImmunityTriggered;
     public DamageType ImmunityType = DamageType.Untyped;
+    public List<string> Notes = new List<string>();
 
     public int TotalPrevented => Math.Max(0, RawDamage - FinalDamage);
 
     public string GetMitigationSummary()
     {
         if (RawDamage <= 0) return "";
-        if (ImmunityTriggered)
-            return $"Immune to {DamageTextUtils.GetDamageTypeDisplay(ImmunityType)} (blocked {RawDamage})";
-
         var parts = new List<string>();
-        if (ResistanceApplied > 0) parts.Add($"Resist {ResistanceApplied}");
-        if (DamageReductionApplied > 0) parts.Add($"DR {DamageReductionApplied}");
+
+        if (ImmunityTriggered)
+            parts.Add($"Immune to {DamageTextUtils.GetDamageTypeDisplay(ImmunityType)} (blocked {RawDamage})");
+        else
+        {
+            if (ResistanceApplied > 0) parts.Add($"Resist {ResistanceApplied}");
+            if (DamageReductionApplied > 0) parts.Add($"DR {DamageReductionApplied}");
+        }
+
+        if (Notes != null)
+        {
+            for (int i = 0; i < Notes.Count; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(Notes[i]))
+                    parts.Add(Notes[i]);
+            }
+        }
+
         if (parts.Count == 0) return "";
         return string.Join(" + ", parts);
     }

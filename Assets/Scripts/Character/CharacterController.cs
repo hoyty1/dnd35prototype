@@ -792,8 +792,8 @@ public class CharacterController : MonoBehaviour
                 RawDamage = rawTotalDamage,
                 Types = damageTypes,
                 AttackTags = attackTags,
-                IsWeaponDamage = true,
-                IsRangedWeaponDamage = result.IsRangedAttack,
+                IsRanged = result.IsRangedAttack,
+                Source = AttackSource.Weapon,
                 SourceName = string.IsNullOrEmpty(result.WeaponName) ? "attack" : result.WeaponName,
             };
 
