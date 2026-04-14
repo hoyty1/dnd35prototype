@@ -66,18 +66,6 @@ public static class SquareGridUtils
     }
 
     /// <summary>
-    /// Convert a world position to the nearest grid intersection point.
-    /// Grid intersections are at (n+0.5, m+0.5) for integer n, m — the corners
-    /// where 4 grid squares meet. Used for intersection-based line spell targeting.
-    /// </summary>
-    public static Vector2 WorldToNearestIntersection(Vector2 worldPos)
-    {
-        float x = Mathf.Round(worldPos.x / CellSize - 0.5f) * CellSize + 0.5f * CellSize;
-        float y = Mathf.Round(worldPos.y / CellSize - 0.5f) * CellSize + 0.5f * CellSize;
-        return new Vector2(x, y);
-    }
-
-    /// <summary>
     /// Calculate the D&D 3.5 distance between two grid positions using
     /// the alternating diagonal cost rule.
     /// 

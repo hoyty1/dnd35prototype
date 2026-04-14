@@ -14,7 +14,7 @@ public enum AoEShape
     None,       // Single target (no AoE)
     Burst,      // Circular burst centered on a point (e.g., Bless, Fireball)
     Cone,       // Cone emanating from caster (e.g., Burning Hands, Cone of Cold)
-    Line        // Line from caster (e.g., Lightning Bolt) — future use
+    Line        // Line from caster (e.g., Lightning Bolt) — mouse-direction targeting
 }
 
 /// <summary>
@@ -352,132 +352,66 @@ public static class AoESystem
     // ========== LINE ==========
     //
     // D&D 3.5e PHB p.176: "A line-shaped spell shoots away from you in a line
-    // in the direction you designate. It starts from any corner of your square
-    // and extends to the limit of its range or until it strikes a barrier."
+    // in the direction you designate."
     //
-    // Implementation supports two modes:
+    // Implementation uses mouse-direction targeting:
+    //   - Line origin: center of the caster's square
+    //   - Line direction: from caster center toward current mouse position
+    //   - Line length: always extends to the full spell range (e.g., 60 ft = 12 sq)
+    //     using D&D 3.5e distance (alternating 1-2-1-2 diagonal cost)
+    //   - Affected squares: all squares the line passes through
     //
-    // CARDINAL LINES (N, E, S, W):
-    //   Simple 1-cell-wide line extending straight along the axis for
-    //   lengthSquares distance. Uses 8-direction snapping.
-    //
-    // NON-CARDINAL LINES (all other angles — full 360° targeting):
-    //   Intersection-based targeting per D&D 3.5e grid rules.
-    //   The player targets a grid intersection (corner where 4 squares meet).
-    //   The line is drawn from the nearest outside corner of the caster's square
-    //   to the target intersection. Any square the line passes through is affected.
-    //   Uses a DDA-style grid traversal algorithm to find affected squares.
+    // The line always extends to maximum range regardless of mouse distance.
+    // Mouse position only determines direction; it acts like a laser pointer.
     // ========================================================================
 
     /// <summary>
-    /// Get all grid cells along a line from origin in an 8-direction snapped direction.
-    /// Used for cardinal (and legacy diagonal) line targeting.
-    /// The line is 1 cell wide and extends for the given length.
-    /// </summary>
-    public static HashSet<Vector2Int> GetLineCells(Vector2Int origin, Vector2Int targetPos, int lengthSquares, SquareGrid grid)
-    {
-        var cells = new HashSet<Vector2Int>();
-
-        if (targetPos == origin) return cells;
-
-        Vector2 rawDir = new Vector2(targetPos.x - origin.x, targetPos.y - origin.y).normalized;
-        int dirIndex = GetClosestDirectionIndex(rawDir);
-        Vector2Int dir = SquareGridUtils.Directions[dirIndex];
-
-        for (int i = 1; i <= lengthSquares; i++)
-        {
-            Vector2Int pos = origin + dir * i;
-            if (grid.GetCell(pos) != null)
-                cells.Add(pos);
-        }
-
-        return cells;
-    }
-
-    /// <summary>
-    /// Get all grid cells along a line from origin to a target grid intersection.
-    /// Uses intersection-based targeting for full 360-degree line casting.
-    /// The line is drawn from the nearest corner of the caster's square to
-    /// the target intersection, and all squares the line passes through are affected.
+    /// Get all grid cells along a line from the caster's center in the direction
+    /// of the mouse position, extending to the full spell range.
+    ///
+    /// The line always extends to maximum range (lengthFeet) using D&D 3.5e
+    /// distance rules (alternating 1-2 diagonal cost). Mouse position only
+    /// determines direction — the line continues past the mouse if it's closer
+    /// than max range.
     /// </summary>
     /// <param name="origin">Caster's grid position</param>
-    /// <param name="targetIntersection">Target grid intersection (half-integer coords, e.g., 5.5, 3.5)</param>
-    /// <param name="lengthSquares">Maximum line length in grid squares</param>
+    /// <param name="mouseWorldPos">Current mouse position in world coordinates</param>
+    /// <param name="lengthSquares">Maximum line length in grid squares (D&D distance, e.g. 12 for 60 ft)</param>
     /// <param name="grid">Reference to the game grid</param>
     /// <returns>Set of grid coordinates the line passes through (excludes caster's cell)</returns>
-    public static HashSet<Vector2Int> GetLineCellsFromIntersection(
-        Vector2Int origin, Vector2 targetIntersection, int lengthSquares, SquareGrid grid)
+    public static HashSet<Vector2Int> GetLineCellsFromDirection(
+        Vector2Int origin, Vector2 mouseWorldPos, int lengthSquares, SquareGrid grid)
     {
         var cells = new HashSet<Vector2Int>();
 
         Vector2 casterCenter = new Vector2(origin.x, origin.y);
-        Vector2 toTarget = targetIntersection - casterCenter;
+        Vector2 toMouse = mouseWorldPos - casterCenter;
 
-        if (toTarget.sqrMagnitude < 0.01f) return cells;
+        if (toMouse.sqrMagnitude < 0.01f) return cells;
 
-        // Validate range: intersection must be within reach of the line
-        // Use generous range check (Euclidean distance from caster center)
-        float maxReach = lengthSquares + 1.0f;
-        if (toTarget.magnitude > maxReach) return cells;
+        Vector2 direction = toMouse.normalized;
 
-        // Select the closest corner of the caster's square to the target intersection
-        Vector2 startCorner = GetClosestCorner(origin, targetIntersection);
+        // Extend the line far enough to cover the max range in any direction.
+        // Pure diagonal costs more per square (1-2-1-2), so the actual Euclidean
+        // distance needed is at most lengthSquares * 1.0 (cardinal) but we trace
+        // generously and then filter by D&D distance.
+        // Use lengthSquares + 1 as the Euclidean reach to be safe.
+        float euclideanReach = lengthSquares + 1.0f;
+        Vector2 endPoint = casterCenter + direction * euclideanReach;
 
-        // Trace the line from the start corner to the target intersection
-        // and collect all grid cells the line passes through
-        cells = TraceLineThroughGrid(startCorner, targetIntersection, origin, grid);
+        // Trace the line from caster center to the endpoint through the grid
+        cells = TraceLineThroughGrid(casterCenter, endPoint, origin, grid);
 
-        // Filter cells by D&D 3.5e distance to enforce the line length limit
+        // Filter cells by D&D 3.5e distance to enforce the spell's range
         var result = new HashSet<Vector2Int>();
         foreach (var cell in cells)
         {
-            // Use Chebyshev distance as a generous upper bound for line length
-            // (actual D&D distance is always >= Chebyshev, so this is permissive)
-            int chebyDist = SquareGridUtils.ChebyshevDistance(origin, cell);
-            if (chebyDist <= lengthSquares)
+            int dndDist = SquareGridUtils.GetDistance(origin, cell);
+            if (dndDist <= lengthSquares)
                 result.Add(cell);
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Check if a direction vector points along a cardinal axis (N, E, S, W).
-    /// Returns true if the closest 8-direction snap would be a cardinal direction.
-    /// Used to decide between cardinal line mode and intersection-based line mode.
-    /// </summary>
-    public static bool IsCardinalLineDirection(Vector2 direction)
-    {
-        if (direction.sqrMagnitude < 1e-6f) return true; // Default to cardinal
-        int dirIndex = GetClosestDirectionIndex(direction.normalized);
-        return dirIndex % 2 == 0; // 0=N, 2=E, 4=S, 6=W are even indices
-    }
-
-    /// <summary>
-    /// Select the corner of a grid cell that is closest to a target point.
-    /// A cell at (cx, cy) has corners at (cx±0.5, cy±0.5).
-    /// Used to determine the starting point of a line spell.
-    /// </summary>
-    private static Vector2 GetClosestCorner(Vector2Int cellPos, Vector2 target)
-    {
-        float bestDist = float.MaxValue;
-        Vector2 bestCorner = Vector2.zero;
-
-        for (int dx = -1; dx <= 1; dx += 2)
-        {
-            for (int dy = -1; dy <= 1; dy += 2)
-            {
-                Vector2 corner = new Vector2(cellPos.x + dx * 0.5f, cellPos.y + dy * 0.5f);
-                float dist = (corner - target).sqrMagnitude;
-                if (dist < bestDist)
-                {
-                    bestDist = dist;
-                    bestCorner = corner;
-                }
-            }
-        }
-
-        return bestCorner;
     }
 
     /// <summary>
@@ -487,8 +421,8 @@ public static class AoESystem
     /// horizontal (y = m+0.5) grid boundaries, then samples the midpoint of
     /// each segment to determine which cell the line is in.
     /// </summary>
-    /// <param name="start">Start point of the line (corner of caster's square)</param>
-    /// <param name="end">End point of the line (target intersection)</param>
+    /// <param name="start">Start point of the line (center of caster's square)</param>
+    /// <param name="end">End point of the line (extended endpoint)</param>
     /// <param name="casterCell">Caster's cell position (excluded from results)</param>
     /// <param name="grid">Reference to the game grid for bounds checking</param>
     /// <returns>Set of grid cells the line passes through</returns>
