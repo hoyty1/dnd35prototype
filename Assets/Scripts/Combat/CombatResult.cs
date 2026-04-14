@@ -3,131 +3,109 @@ using System.Text;
 
 /// <summary>
 /// Holds the result of a single attack action using D&D 3.5 mechanics.
-/// Attack roll: d20 + BAB + STR mod + flanking bonus vs AC (10 + DEX mod + armor + shield)
-/// Damage roll: weapon dice + STR mod + bonus damage + sneak attack (if applicable)
-/// Now includes full critical hit tracking per D&D 3.5 rules.
-/// Enhanced with detailed breakdown fields for comprehensive combat logging.
 /// </summary>
 public class CombatResult
 {
     public CharacterController Attacker;
     public CharacterController Defender;
-    public int DieRoll;       // Raw d20 roll
-    public int TotalRoll;     // Roll + total attack bonus (BAB + STR mod + flanking)
-    public int TargetAC;      // Defender's AC (10 + DEX mod + armor + shield)
-    public bool Hit;          // Whether the attack hit
-    public int Damage;        // Base weapon damage dealt (0 if miss)
-    public bool TargetKilled; // Whether the target died
-    public bool IsAttackOfOpportunity; // Whether this was an AoO
+    public int DieRoll;
+    public int TotalRoll;
+    public int TargetAC;
+    public bool Hit;
+    public int Damage;
+    public bool TargetKilled;
+    public bool IsAttackOfOpportunity;
 
-    public bool NaturalTwenty;  // Natural 20 (auto-hit)
-    public bool NaturalOne;     // Natural 1 (auto-miss)
+    public bool NaturalTwenty;
+    public bool NaturalOne;
 
-    // Flanking fields
-    public bool IsFlanking;               // Whether the attacker is flanking
-    public int FlankingBonus;             // +2 if flanking, 0 otherwise
-    public string FlankingPartnerName;    // Name of the flanking ally
+    public bool IsFlanking;
+    public int FlankingBonus;
+    public string FlankingPartnerName;
 
-    // Sneak Attack fields
-    public bool SneakAttackApplied;       // Whether sneak attack damage was added
-    public int SneakAttackDice;           // Number of d6 rolled (e.g., 2 for 2d6)
-    public int SneakAttackDamage;         // Total sneak attack damage rolled
+    public bool SneakAttackApplied;
+    public int SneakAttackDice;
+    public int SneakAttackDamage;
 
-    // Critical Hit fields (D&D 3.5)
-    public bool IsCritThreat;             // Whether the natural roll was in the weapon's threat range
-    public bool CritConfirmed;            // Whether the confirmation roll succeeded
-    public int ConfirmationRoll;          // Natural d20 of the confirmation roll
-    public int ConfirmationTotal;         // Total of confirmation roll (roll + attack mod)
-    public int CritMultiplier;            // Weapon's crit multiplier (×2, ×3, etc.)
-    public int CritThreatMin;             // Weapon's threat range minimum (e.g. 19 for 19-20)
-    public string CritDamageDice;         // Description of crit damage dice (e.g. "2d8+3")
+    public bool IsCritThreat;
+    public bool CritConfirmed;
+    public int ConfirmationRoll;
+    public int ConfirmationTotal;
+    public int CritMultiplier;
+    public int CritThreatMin;
+    public string CritDamageDice;
 
-    // Racial bonus fields
-    public int RacialAttackBonus;         // Racial attack bonus applied (e.g., Dwarf +1 vs Goblinoids)
+    public int RacialAttackBonus;
+    public int SizeAttackBonus;
 
-    // Size bonus fields
-    public int SizeAttackBonus;           // Size modifier to attack (Small = +1, Medium = 0)
+    public int DamageModifier;
+    public string DamageModifierDesc;
 
-    // Damage modifier fields (D&D 3.5 weapon damage modifiers)
-    public int DamageModifier;            // The actual STR-based damage bonus applied (e.g., +6 for 1.5× STR)
-    public string DamageModifierDesc;     // Description for combat log (e.g., "1.5× STR", "composite +2")
+    public bool IsRangedAttack;
+    public int RangeDistanceFeet;
+    public int RangeDistanceSquares;
+    public int RangeIncrementNumber;
+    public int RangePenalty;
+    public string WeaponName;
 
-    // Range increment fields (D&D 3.5 ranged attack rules)
-    public bool IsRangedAttack;           // Whether this was a ranged attack
-    public int RangeDistanceFeet;         // Distance to target in feet
-    public int RangeDistanceSquares;      // Distance to target in squares
-    public int RangeIncrementNumber;      // Which range increment (1 = first, no penalty)
-    public int RangePenalty;              // Attack penalty from range (-2 per increment beyond first)
-    public string WeaponName;             // Name of weapon used (for combat log)
+    public int PowerAttackValue;
+    public int PowerAttackDamageBonus;
+    public bool RapidShotActive;
+    public bool PointBlankShotActive;
+    public int WeaponFocusBonus;
+    public int WeaponSpecBonus;
+    public int CombatExpertisePenalty;
 
-    // Feat fields (D&D 3.5)
-    public int PowerAttackValue;          // Power Attack penalty/bonus value (0 = not active)
-    public int PowerAttackDamageBonus;    // Actual damage bonus from Power Attack (may be 2× for two-handed)
-    public bool RapidShotActive;          // Whether Rapid Shot was active for this attack
-    public bool PointBlankShotActive;     // Whether Point Blank Shot bonus was applied
-    public int WeaponFocusBonus;          // Attack bonus from Weapon Focus/Greater Weapon Focus
-    public int WeaponSpecBonus;           // Damage bonus from Weapon Specialization/Greater
-    public int CombatExpertisePenalty;    // Attack penalty from Combat Expertise (for AC bonus)
+    public int BreakdownBAB;
+    public int BreakdownAbilityMod;
+    public string BreakdownAbilityName;
+    public int BreakdownDualWieldPenalty;
+    public bool IsDualWieldAttack;
+    public bool IsOffHandAttack;
 
-    // ===== DETAILED BREAKDOWN FIELDS (for enhanced combat log) =====
-    public int BreakdownBAB;              // Base Attack Bonus used for this attack
-    public int BreakdownAbilityMod;       // STR or DEX modifier used for attack
-    public string BreakdownAbilityName;   // "STR" or "DEX"
-    public int BreakdownDualWieldPenalty;  // Dual wield penalty (0 if not dual wielding)
-    public bool IsDualWieldAttack;        // Whether this is part of a dual wield sequence
-    public bool IsOffHandAttack;          // Whether this is the off-hand attack
+    public int BaseDamageRoll;
+    public string BaseDamageDiceStr;
+    public int FeatDamageBonus;
 
-    // Damage breakdown
-    public int BaseDamageRoll;            // The raw weapon dice roll (before modifiers)
-    public string BaseDamageDiceStr;      // e.g. "1d8", "2d6"
-    public int FeatDamageBonus;           // Total feat bonus to damage (Power Attack + PBS)
+    public string DamageTypeSummary = "";
+    public int RawTotalDamage;
+    public int FinalDamageDealt;
+    public int ResistancePrevented;
+    public int DRPrevented;
+    public bool ImmunityPrevented;
+    public string MitigationSummary = "";
 
-    // HP tracking
-    public int DefenderHPBefore;          // Defender HP before this attack
-    public int DefenderHPAfter;           // Defender HP after this attack
+    public int DefenderHPBefore;
+    public int DefenderHPAfter;
 
-    /// <summary>Total damage dealt including sneak attack and feat bonuses.</summary>
-    public int TotalDamage => Damage + SneakAttackDamage;
+    public int TotalDamage => FinalDamageDealt > 0 || ImmunityPrevented || ResistancePrevented > 0 || DRPrevented > 0
+        ? FinalDamageDealt
+        : Damage + SneakAttackDamage;
 
-    public string GetSummary()
-    {
-        // Delegate to the detailed summary
-        return GetDetailedSummary();
-    }
+    public string GetSummary() => GetDetailedSummary();
 
-    /// <summary>
-    /// Generate a fully detailed combat log for this single attack with complete breakdown
-    /// of all modifiers, rolls, and results.
-    /// </summary>
     public string GetDetailedSummary()
     {
         var sb = new StringBuilder();
         string attackerName = Attacker.Stats.CharacterName;
         string defenderName = Defender.Stats.CharacterName;
 
-        // === HEADER LINE ===
         string weaponNote = !string.IsNullOrEmpty(WeaponName) ? $" with {WeaponName}" : "";
         string attackType = IsRangedAttack ? "ranged" : "melee";
         string aooNote = IsAttackOfOpportunity ? " [ATTACK OF OPPORTUNITY]" : "";
 
-        sb.AppendLine($"═══════════════════════════════════");
+        sb.AppendLine("═══════════════════════════════════");
         sb.AppendLine($"{attackerName} attacks {defenderName}{weaponNote} ({attackType}){aooNote}");
 
-        // === WEAPON INFO ===
         if (!string.IsNullOrEmpty(WeaponName))
-        {
-            string wpnType = IsRangedAttack ? "ranged" : "melee";
-            sb.AppendLine($"  Weapon: {WeaponName} ({wpnType})");
-        }
+            sb.AppendLine($"  Weapon: {WeaponName} ({attackType})");
 
-        // === RANGE INFO ===
         if (IsRangedAttack)
         {
             string penaltyStr = RangePenalty == 0 ? "no penalty" : $"{RangePenalty} penalty";
             sb.AppendLine($"  Range: {RangeDistanceFeet} ft ({RangeDistanceSquares} squares) - Increment {RangeIncrementNumber}, {penaltyStr}");
         }
 
-        // === ACTIVE FEATS ===
         var activeFeats = new List<string>();
         if (PowerAttackValue > 0) activeFeats.Add($"Power Attack (-{PowerAttackValue} atk/+{PowerAttackDamageBonus} dmg)");
         if (RapidShotActive) activeFeats.Add("Rapid Shot (-2 all attacks)");
@@ -138,250 +116,121 @@ public class CombatResult
         if (activeFeats.Count > 0)
             sb.AppendLine($"  Active Feats: {string.Join(", ", activeFeats)}");
 
-        // === FLANKING ===
         if (IsFlanking)
             sb.AppendLine($"  Flanking: Yes (with {FlankingPartnerName}, +{FlankingBonus})");
 
         sb.AppendLine();
-
-        // === ATTACK ROLL BREAKDOWN ===
-        sb.AppendLine($"  Attack Roll:");
+        sb.AppendLine("  Attack Roll:");
         sb.AppendLine($"    Roll: d20 = {DieRoll}");
 
-        // BAB
-        string babLabel = BreakdownBAB != 0 ? $"    {FormatModLine(BreakdownBAB, "base attack bonus")}" : "";
-        if (!string.IsNullOrEmpty(babLabel)) sb.AppendLine(babLabel);
-
-        // Ability modifier (STR/DEX)
         string abilityName = !string.IsNullOrEmpty(BreakdownAbilityName) ? BreakdownAbilityName : "STR";
-        if (BreakdownAbilityMod != 0)
-            sb.AppendLine($"    {FormatModLine(BreakdownAbilityMod, abilityName)}");
-
-        // Size modifier
-        if (SizeAttackBonus != 0)
-            sb.AppendLine($"    {FormatModLine(SizeAttackBonus, "size")}");
-
-        // Flanking bonus
-        if (IsFlanking && FlankingBonus != 0)
-            sb.AppendLine($"    {FormatModLine(FlankingBonus, "flanking")}");
-
-        // Racial attack bonus
-        if (RacialAttackBonus != 0)
-            sb.AppendLine($"    {FormatModLine(RacialAttackBonus, "racial")}");
-
-        // Power Attack penalty
-        if (PowerAttackValue > 0)
-            sb.AppendLine($"    {FormatModLine(-PowerAttackValue, "Power Attack")}");
-
-        // Rapid Shot penalty
-        if (RapidShotActive)
-            sb.AppendLine($"    {FormatModLine(-2, "Rapid Shot")}");
-
-        // Point Blank Shot attack bonus
-        if (PointBlankShotActive)
-            sb.AppendLine($"    {FormatModLine(1, "Point Blank Shot")}");
-
-        // Weapon Focus bonus
-        if (WeaponFocusBonus > 0)
-            sb.AppendLine($"    {FormatModLine(WeaponFocusBonus, "Weapon Focus")}");
-
-        // Combat Expertise penalty
-        if (CombatExpertisePenalty != 0)
-            sb.AppendLine($"    {FormatModLine(CombatExpertisePenalty, "Combat Expertise")}");
-
-        // Range penalty
-        if (IsRangedAttack && RangePenalty != 0)
-            sb.AppendLine($"    {FormatModLine(RangePenalty, "range")}");
-
-        // Dual wield penalty
+        if (BreakdownBAB != 0) sb.AppendLine($"    {FormatModLine(BreakdownBAB, "base attack bonus")}");
+        if (BreakdownAbilityMod != 0) sb.AppendLine($"    {FormatModLine(BreakdownAbilityMod, abilityName)}");
+        if (SizeAttackBonus != 0) sb.AppendLine($"    {FormatModLine(SizeAttackBonus, "size")}");
+        if (IsFlanking && FlankingBonus != 0) sb.AppendLine($"    {FormatModLine(FlankingBonus, "flanking")}");
+        if (RacialAttackBonus != 0) sb.AppendLine($"    {FormatModLine(RacialAttackBonus, "racial")}");
+        if (PowerAttackValue > 0) sb.AppendLine($"    {FormatModLine(-PowerAttackValue, "Power Attack")}");
+        if (RapidShotActive) sb.AppendLine($"    {FormatModLine(-2, "Rapid Shot")}");
+        if (PointBlankShotActive) sb.AppendLine($"    {FormatModLine(1, "Point Blank Shot")}");
+        if (WeaponFocusBonus > 0) sb.AppendLine($"    {FormatModLine(WeaponFocusBonus, "Weapon Focus")}");
+        if (CombatExpertisePenalty != 0) sb.AppendLine($"    {FormatModLine(CombatExpertisePenalty, "Combat Expertise")}");
+        if (IsRangedAttack && RangePenalty != 0) sb.AppendLine($"    {FormatModLine(RangePenalty, "range")}");
         if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)
             sb.AppendLine($"    {FormatModLine(BreakdownDualWieldPenalty, IsOffHandAttack ? "off-hand penalty" : "dual wield penalty")}");
 
-        // === RESULT LINE ===
-        string critNote = "";
-        if (NaturalTwenty) critNote = " (NATURAL 20!)";
-        else if (NaturalOne) critNote = " (NATURAL 1!)";
+        string critNote = NaturalTwenty ? " (NATURAL 20!)" : NaturalOne ? " (NATURAL 1!)" : "";
+        sb.AppendLine($"    = {TotalRoll} vs AC {TargetAC} - {(Hit ? "HIT!" : "MISS!")}{critNote}");
 
-        string hitMiss = Hit ? "HIT!" : "MISS!";
-        sb.AppendLine($"    = {TotalRoll} vs AC {TargetAC} - {hitMiss}{critNote}");
-
-        // === CRITICAL THREAT ===
         if (IsCritThreat)
         {
             string threatRange = CritThreatMin < 20 ? $"{CritThreatMin}-20" : "20";
-            sb.AppendLine($"  *** Critical Threat! (threat range {threatRange}) ***");
             string confModStr = CharacterStats.FormatMod(ConfirmationTotal - ConfirmationRoll);
             if (CritConfirmed)
                 sb.AppendLine($"  Confirmation: d20 = {ConfirmationRoll} {confModStr} = {ConfirmationTotal} vs AC {TargetAC} - CONFIRMED! (×{CritMultiplier})");
             else
-                sb.AppendLine($"  Confirmation: d20 = {ConfirmationRoll} {confModStr} = {ConfirmationTotal} vs AC {TargetAC} - Not confirmed, normal hit");
+                sb.AppendLine($"  Confirmation: d20 = {ConfirmationRoll} {confModStr} = {ConfirmationTotal} vs AC {TargetAC} - Not confirmed");
         }
 
-        // === DAMAGE BREAKDOWN (only if hit) ===
         if (Hit)
         {
             sb.AppendLine();
-            sb.AppendLine($"  Damage:");
-
-            // Base damage dice
+            sb.AppendLine("  Damage:");
             string diceStr = !string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?";
+
             if (CritConfirmed)
-            {
-                sb.AppendLine($"  CRITICAL HIT! (×{CritMultiplier})");
                 sb.AppendLine($"    {CritDamageDice} = {Damage - FeatDamageBonus} (weapon + mods)");
-            }
             else
             {
                 sb.AppendLine($"    {diceStr} = {BaseDamageRoll}");
-
-                // STR/DEX damage modifier
                 if (DamageModifier != 0)
-                {
-                    string dmgModLabel = !string.IsNullOrEmpty(DamageModifierDesc) ? DamageModifierDesc : abilityName;
-                    sb.AppendLine($"    {FormatModLine(DamageModifier, dmgModLabel)}");
-                }
+                    sb.AppendLine($"    {FormatModLine(DamageModifier, string.IsNullOrEmpty(DamageModifierDesc) ? abilityName : DamageModifierDesc)}");
             }
 
-            // Power Attack damage bonus
-            if (PowerAttackDamageBonus > 0)
-                sb.AppendLine($"    {FormatModLine(PowerAttackDamageBonus, "Power Attack")}");
+            if (PowerAttackDamageBonus > 0) sb.AppendLine($"    {FormatModLine(PowerAttackDamageBonus, "Power Attack")}");
+            if (PointBlankShotActive) sb.AppendLine($"    {FormatModLine(1, "Point Blank Shot")}");
+            if (WeaponSpecBonus > 0) sb.AppendLine($"    {FormatModLine(WeaponSpecBonus, "Weapon Spec")}");
 
-            // Point Blank Shot damage bonus
-            if (PointBlankShotActive)
-                sb.AppendLine($"    {FormatModLine(1, "Point Blank Shot")}");
-
-            // Weapon Specialization damage bonus
-            if (WeaponSpecBonus > 0)
-                sb.AppendLine($"    {FormatModLine(WeaponSpecBonus, "Weapon Spec")}");
-
-            // Total damage line
-            sb.AppendLine($"    = {Damage} damage");
-
-            // Sneak attack
             if (SneakAttackApplied)
-            {
-                sb.AppendLine($"    + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6)");
-                sb.AppendLine($"    = {TotalDamage} total damage");
-            }
+                sb.AppendLine($"    Includes sneak attack: +{SneakAttackDamage} ({SneakAttackDice}d6)");
+            int rawSubtotal = RawTotalDamage > 0 ? RawTotalDamage : (Damage + SneakAttackDamage);
+            sb.AppendLine($"    = {rawSubtotal} raw damage{(string.IsNullOrEmpty(DamageTypeSummary) ? "" : $" ({DamageTypeSummary})")}");
+            if (!string.IsNullOrEmpty(MitigationSummary)) sb.AppendLine($"    Mitigation: {MitigationSummary}");
+            sb.AppendLine($"    = {TotalDamage} final damage");
 
-            // HP Change
             if (DefenderHPBefore > 0 || DefenderHPAfter >= 0)
-            {
                 sb.AppendLine($"  {Defender.Stats.CharacterName}: {DefenderHPBefore} → {DefenderHPAfter} HP");
-            }
-
             if (TargetKilled)
                 sb.AppendLine($"  {Defender.Stats.CharacterName} has been slain!");
         }
 
-        sb.Append($"═══════════════════════════════════");
+        sb.Append("═══════════════════════════════════");
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Generate a compact per-attack summary for use inside FullAttackResult.
-    /// Shows the full breakdown indented under an attack label.
-    /// </summary>
     public string GetAttackBreakdown(string label)
     {
         var sb = new StringBuilder();
-
         sb.AppendLine($"  {label}:");
-
-        // Attack roll
         sb.AppendLine($"    Roll: d20 = {DieRoll}");
 
-        if (BreakdownBAB != 0)
-            sb.AppendLine($"      {FormatModLine(BreakdownBAB, "BAB")}");
-        if (BreakdownAbilityMod != 0)
-        {
-            string abilName = !string.IsNullOrEmpty(BreakdownAbilityName) ? BreakdownAbilityName : "STR";
-            sb.AppendLine($"      {FormatModLine(BreakdownAbilityMod, abilName)}");
-        }
-        if (SizeAttackBonus != 0)
-            sb.AppendLine($"      {FormatModLine(SizeAttackBonus, "size")}");
-        if (IsFlanking && FlankingBonus != 0)
-            sb.AppendLine($"      {FormatModLine(FlankingBonus, "flanking")}");
-        if (RacialAttackBonus != 0)
-            sb.AppendLine($"      {FormatModLine(RacialAttackBonus, "racial")}");
-        if (PowerAttackValue > 0)
-            sb.AppendLine($"      {FormatModLine(-PowerAttackValue, "Power Attack")}");
-        if (RapidShotActive)
-            sb.AppendLine($"      {FormatModLine(-2, "Rapid Shot")}");
-        if (PointBlankShotActive)
-            sb.AppendLine($"      {FormatModLine(1, "Point Blank Shot")}");
-        if (WeaponFocusBonus > 0)
-            sb.AppendLine($"      {FormatModLine(WeaponFocusBonus, "Weapon Focus")}");
-        if (CombatExpertisePenalty != 0)
-            sb.AppendLine($"      {FormatModLine(CombatExpertisePenalty, "Combat Expertise")}");
-        if (IsRangedAttack && RangePenalty != 0)
-            sb.AppendLine($"      {FormatModLine(RangePenalty, "range")}");
+        if (BreakdownBAB != 0) sb.AppendLine($"      {FormatModLine(BreakdownBAB, "BAB")}");
+        if (BreakdownAbilityMod != 0) sb.AppendLine($"      {FormatModLine(BreakdownAbilityMod, string.IsNullOrEmpty(BreakdownAbilityName) ? "STR" : BreakdownAbilityName)}");
+        if (SizeAttackBonus != 0) sb.AppendLine($"      {FormatModLine(SizeAttackBonus, "size")}");
+        if (IsFlanking && FlankingBonus != 0) sb.AppendLine($"      {FormatModLine(FlankingBonus, "flanking")}");
+        if (RacialAttackBonus != 0) sb.AppendLine($"      {FormatModLine(RacialAttackBonus, "racial")}");
+        if (PowerAttackValue > 0) sb.AppendLine($"      {FormatModLine(-PowerAttackValue, "Power Attack")}");
+        if (RapidShotActive) sb.AppendLine($"      {FormatModLine(-2, "Rapid Shot")}");
+        if (PointBlankShotActive) sb.AppendLine($"      {FormatModLine(1, "Point Blank Shot")}");
+        if (WeaponFocusBonus > 0) sb.AppendLine($"      {FormatModLine(WeaponFocusBonus, "Weapon Focus")}");
+        if (CombatExpertisePenalty != 0) sb.AppendLine($"      {FormatModLine(CombatExpertisePenalty, "Combat Expertise")}");
+        if (IsRangedAttack && RangePenalty != 0) sb.AppendLine($"      {FormatModLine(RangePenalty, "range")}");
         if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)
             sb.AppendLine($"      {FormatModLine(BreakdownDualWieldPenalty, IsOffHandAttack ? "off-hand penalty" : "dual wield penalty")}");
 
-        // Result
-        string critNote = "";
-        if (NaturalTwenty) critNote = " (NATURAL 20!)";
-        else if (NaturalOne) critNote = " (NATURAL 1!)";
+        string critNote = NaturalTwenty ? " (NATURAL 20!)" : NaturalOne ? " (NATURAL 1!)" : "";
+        sb.AppendLine($"      = {TotalRoll} vs AC {TargetAC} - {(Hit ? "HIT!" : "MISS!")}{critNote}");
 
-        string hitMiss = Hit ? "HIT!" : "MISS!";
-        sb.AppendLine($"      = {TotalRoll} vs AC {TargetAC} - {hitMiss}{critNote}");
-
-        // Critical threat
-        if (IsCritThreat)
-        {
-            string threatRange = CritThreatMin < 20 ? $"{CritThreatMin}-20" : "20";
-            string confModStr = CharacterStats.FormatMod(ConfirmationTotal - ConfirmationRoll);
-            if (CritConfirmed)
-                sb.AppendLine($"    *** Critical Threat ({threatRange})! Confirm: {ConfirmationRoll} {confModStr} = {ConfirmationTotal} vs AC {TargetAC} - CONFIRMED! (×{CritMultiplier}) ***");
-            else
-                sb.AppendLine($"    *** Critical Threat ({threatRange})! Confirm: {ConfirmationRoll} {confModStr} = {ConfirmationTotal} vs AC {TargetAC} - Not confirmed ***");
-        }
-
-        // Damage
         if (Hit)
         {
             sb.AppendLine();
-            string diceStr = !string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?";
-
             if (CritConfirmed)
-            {
-                sb.AppendLine($"    CRITICAL HIT! (×{CritMultiplier})");
                 sb.AppendLine($"    Damage: {CritDamageDice} = {Damage - FeatDamageBonus} (crit)");
-            }
             else
-            {
-                sb.AppendLine($"    Damage: {diceStr} = {BaseDamageRoll}");
-            }
-
-            if (!CritConfirmed && DamageModifier != 0)
-            {
-                string dmgModLabel = !string.IsNullOrEmpty(DamageModifierDesc) ? DamageModifierDesc : "STR";
-                sb.AppendLine($"      {FormatModLine(DamageModifier, dmgModLabel)}");
-            }
-            if (PowerAttackDamageBonus > 0)
-                sb.AppendLine($"      {FormatModLine(PowerAttackDamageBonus, "Power Attack")}");
-            if (PointBlankShotActive)
-                sb.AppendLine($"      {FormatModLine(1, "Point Blank Shot")}");
-
-            sb.AppendLine($"      = {Damage} damage");
-
+                sb.AppendLine($"    Damage: {!string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?"} = {BaseDamageRoll}");
             if (SneakAttackApplied)
-            {
-                sb.AppendLine($"      + {SneakAttackDamage} sneak attack ({SneakAttackDice}d6)");
-                sb.AppendLine($"      = {TotalDamage} total damage");
-            }
+                sb.AppendLine($"      Includes sneak attack: +{SneakAttackDamage} ({SneakAttackDice}d6)");
+
+            int rawSubtotal = RawTotalDamage > 0 ? RawTotalDamage : (Damage + SneakAttackDamage);
+            sb.AppendLine($"      = {rawSubtotal} raw damage{(string.IsNullOrEmpty(DamageTypeSummary) ? "" : $" ({DamageTypeSummary})")}");
+            if (!string.IsNullOrEmpty(MitigationSummary)) sb.AppendLine($"      Mitigation: {MitigationSummary}");
+            sb.AppendLine($"      = {TotalDamage} final damage");
         }
 
         return sb.ToString().TrimEnd();
     }
 
-    /// <summary>Format a modifier line like "+ 3 (STR)" or "- 2 (Rapid Shot)".</summary>
     private static string FormatModLine(int value, string label)
     {
-        if (value >= 0)
-            return $"+ {value} ({label})";
-        else
-            return $"- {-value} ({label})";
+        return value >= 0 ? $"+ {value} ({label})" : $"- {-value} ({label})";
     }
 }

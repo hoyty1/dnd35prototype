@@ -127,6 +127,12 @@ public class StatusEffectManager : MonoBehaviour
         effect.AppliedTempHP = spell.BuffTempHP;
         effect.AppliedStatName = spell.BuffStatName;
         effect.AppliedStatBonus = spell.BuffStatBonus;
+        effect.AppliedDamageResistanceAmount = spell.BuffDamageResistanceAmount;
+        effect.AppliedDamageResistanceType = spell.BuffDamageResistanceType;
+        effect.AppliedDamageImmunityType = spell.BuffDamageImmunityType;
+        effect.AppliedDamageReductionAmount = spell.BuffDamageReductionAmount;
+        effect.AppliedDamageReductionBypass = spell.BuffDamageReductionBypass;
+        effect.AppliedDamageReductionRangedOnly = spell.BuffDamageReductionRangedOnly;
 
         // Apply stat modifications
         ApplyStatModifications(effect);
@@ -314,6 +320,16 @@ public class StatusEffectManager : MonoBehaviour
         if (newSpell.BuffDamageBonus != 0 && existing.AppliedDamageBonus != 0) return true;
         // If both modify save bonus
         if (newSpell.BuffSaveBonus != 0 && existing.AppliedSaveBonus != 0) return true;
+        // If both grant same typed resistance
+        if (newSpell.BuffDamageResistanceAmount > 0 && existing.AppliedDamageResistanceAmount > 0 &&
+            newSpell.BuffDamageResistanceType == existing.AppliedDamageResistanceType) return true;
+
+        // If both grant same immunity type
+        if (newSpell.BuffDamageImmunityType != DamageType.Untyped &&
+            newSpell.BuffDamageImmunityType == existing.AppliedDamageImmunityType) return true;
+
+        // If both grant DR, treat as overlapping mitigation category
+        if (newSpell.BuffDamageReductionAmount > 0 && existing.AppliedDamageReductionAmount > 0) return true;
         // If both modify AC (armor type)
         if (newSpell.BuffACBonus != 0 && existing.AppliedACBonus != 0) return true;
         // If both modify shield bonus
@@ -374,6 +390,18 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.AppliedTempHP != 0)
             _stats.TempHP += effect.AppliedTempHP;
 
+        // Typed resistance
+        if (effect.AppliedDamageResistanceAmount > 0 && effect.AppliedDamageResistanceType != DamageType.Untyped)
+            _stats.AddDamageResistance(effect.AppliedDamageResistanceType, effect.AppliedDamageResistanceAmount);
+
+        // Typed immunity
+        if (effect.AppliedDamageImmunityType != DamageType.Untyped)
+            _stats.AddDamageImmunity(effect.AppliedDamageImmunityType);
+
+        // Damage reduction
+        if (effect.AppliedDamageReductionAmount > 0)
+            _stats.AddDamageReduction(effect.AppliedDamageReductionAmount, effect.AppliedDamageReductionBypass, effect.AppliedDamageReductionRangedOnly);
+
         // Stat buff (STR, DEX, CON, etc.)
         if (!string.IsNullOrEmpty(effect.AppliedStatName) && effect.AppliedStatBonus != 0)
         {
@@ -416,6 +444,15 @@ public class StatusEffectManager : MonoBehaviour
             _stats.TempHP = Mathf.Max(0, _stats.TempHP - effect.AppliedTempHP);
         }
 
+
+        if (effect.AppliedDamageResistanceAmount > 0 && effect.AppliedDamageResistanceType != DamageType.Untyped)
+            _stats.RemoveDamageResistance(effect.AppliedDamageResistanceType, effect.AppliedDamageResistanceAmount);
+
+        if (effect.AppliedDamageImmunityType != DamageType.Untyped)
+            _stats.RemoveDamageImmunity(effect.AppliedDamageImmunityType);
+
+        if (effect.AppliedDamageReductionAmount > 0)
+            _stats.RemoveDamageReduction(effect.AppliedDamageReductionAmount, effect.AppliedDamageReductionBypass, effect.AppliedDamageReductionRangedOnly);
         if (!string.IsNullOrEmpty(effect.AppliedStatName) && effect.AppliedStatBonus != 0)
         {
             ApplyStatBonus(effect.AppliedStatName, -effect.AppliedStatBonus);
@@ -457,6 +494,9 @@ public class StatusEffectManager : MonoBehaviour
         power += Mathf.Abs(effect.AppliedShieldBonus);
         power += Mathf.Abs(effect.AppliedDeflectionBonus);
         power += Mathf.Abs(effect.AppliedStatBonus);
+        power += Mathf.Abs(effect.AppliedDamageResistanceAmount);
+        power += Mathf.Abs(effect.AppliedDamageReductionAmount);
+        if (effect.AppliedDamageImmunityType != DamageType.Untyped) power += 999; // immunity is always strongest
         return power;
     }
 
@@ -471,6 +511,9 @@ public class StatusEffectManager : MonoBehaviour
         power += Mathf.Abs(spell.BuffShieldBonus);
         power += Mathf.Abs(spell.BuffDeflectionBonus);
         power += Mathf.Abs(spell.BuffStatBonus);
+        power += Mathf.Abs(spell.BuffDamageResistanceAmount);
+        power += Mathf.Abs(spell.BuffDamageReductionAmount);
+        if (spell.BuffDamageImmunityType != DamageType.Untyped) power += 999;
         return power;
     }
 

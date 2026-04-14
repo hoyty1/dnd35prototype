@@ -1021,6 +1021,25 @@ public class GameManager : MonoBehaviour
 
         FeatManager.ApplyPassiveFeats(stats);
 
+        // Apply innate mitigation profile from enemy definition
+        if (def.DamageReductionAmount > 0)
+            stats.AddDamageReduction(def.DamageReductionAmount, def.DamageReductionBypass, def.DamageReductionRangedOnly);
+
+        if (def.DamageResistances != null)
+        {
+            foreach (var res in def.DamageResistances)
+            {
+                if (res != null && res.Amount > 0)
+                    stats.AddDamageResistance(res.Type, res.Amount);
+            }
+        }
+
+        if (def.DamageImmunities != null)
+        {
+            foreach (var imm in def.DamageImmunities)
+                stats.AddDamageImmunity(imm);
+        }
+
         npc.Init(stats, pos, alive, dead);
 
         InventoryComponent inv = npc.gameObject.GetComponent<InventoryComponent>();

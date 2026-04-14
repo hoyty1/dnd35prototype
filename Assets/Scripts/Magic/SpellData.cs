@@ -115,6 +115,22 @@ public class SpellData
     /// <summary>Save bonus (morale, luck, etc.).</summary>
     public int BuffSaveBonus;
 
+
+    // ========== ADVANCED MITIGATION BUFFS ==========
+    /// <summary>Typed damage resistance amount granted by this spell (e.g., Resist Fire 10).</summary>
+    public int BuffDamageResistanceAmount;
+    /// <summary>Damage type for BuffDamageResistanceAmount.</summary>
+    public DamageType BuffDamageResistanceType = DamageType.Untyped;
+
+    /// <summary>Typed immunity granted by this spell.</summary>
+    public DamageType BuffDamageImmunityType = DamageType.Untyped;
+
+    /// <summary>Damage reduction amount granted by this spell (e.g., DR 10/magic).</summary>
+    public int BuffDamageReductionAmount;
+    /// <summary>Bypass tags for the granted DR.</summary>
+    public DamageBypassTag BuffDamageReductionBypass = DamageBypassTag.None;
+    /// <summary>If true, granted DR applies only against ranged weapon attacks.</summary>
+    public bool BuffDamageReductionRangedOnly;
     /// <summary>Clone this spell data for independent modification.</summary>
     public SpellData Clone()
     {

@@ -32,6 +32,8 @@ public static class SpellCaster
         result.CasterName = casterStats.CharacterName;
         result.TargetName = targetStats.CharacterName;
         result.DamageType = spell.DamageType ?? "";
+        var parsedSpellDamageTypes = DamageTextUtils.ParseDamageTypes(spell.DamageType);
+        result.DamageTypeSummary = DamageTextUtils.FormatDamageTypes(parsedSpellDamageTypes);
         result.Success = true;
         result.Metamagic = metamagic;
 
@@ -180,7 +182,23 @@ public static class SpellCaster
             if (result.DamageDealt > 0)
                 result.DamageDealt = Mathf.Max(1, result.DamageDealt);
 
-            targetStats.TakeDamage(result.DamageDealt);
+            var packet = new DamagePacket
+            {
+                RawDamage = result.DamageDealt,
+                Types = parsedSpellDamageTypes,
+                AttackTags = DamageBypassTag.None,
+                IsWeaponDamage = false,
+                IsRangedWeaponDamage = false,
+                SourceName = spell.Name
+            };
+
+            DamageResolutionResult mitigation = targetStats.ApplyIncomingDamage(result.DamageDealt, packet);
+            result.ResistancePrevented = mitigation.ResistanceApplied;
+            result.DRPrevented = mitigation.DamageReductionApplied;
+            result.ImmunityPrevented = mitigation.ImmunityTriggered;
+            result.MitigationSummary = mitigation.GetMitigationSummary();
+            result.DamageDealt = mitigation.FinalDamage;
+
             result.TargetHPAfter = targetStats.CurrentHP;
             result.TargetKilled = targetStats.IsDead;
         }

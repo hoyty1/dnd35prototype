@@ -451,6 +451,16 @@ public class CharacterStats
     /// <summary>Creature type tags for this character (e.g., "Goblinoid", "Orc"). Used for racial attack bonuses.</summary>
     public List<string> CreatureTags = new List<string>();
 
+
+    // ========== DAMAGE MITIGATION ==========
+    /// <summary>Damage Reduction entries (e.g., DR 5/bludgeoning, DR 10/magic).</summary>
+    public List<DamageReductionEntry> DamageReductions = new List<DamageReductionEntry>();
+
+    /// <summary>Typed damage resistances (e.g., Resist Fire 10).</summary>
+    public List<DamageResistanceEntry> DamageResistances = new List<DamageResistanceEntry>();
+
+    /// <summary>Typed immunities (e.g., Immune Cold).</summary>
+    public List<DamageType> DamageImmunities = new List<DamageType>();
     // ========== BASE ABILITY SCORES (before racial modifiers) ==========
     /// <summary>Base ability scores BEFORE racial modifiers are applied.</summary>
     public int BaseSTR, BaseDEX, BaseCON, BaseWIS, BaseINT, BaseCHA;
@@ -834,9 +844,87 @@ public class CharacterStats
         int total = diceTotal + strBonus + bonusDamage;
         return Mathf.Max(1, total);
     }
+    /// <summary>
+    /// Apply incoming damage through the full mitigation pipeline:
+    /// immunity -> typed resistance -> DR (weapon damage only) -> HP/Temp HP.
+    /// </summary>
+    public DamageResolutionResult ApplyIncomingDamage(int amount, DamagePacket packet)
+    {
+        var result = new DamageResolutionResult
+        {
+            RawDamage = Mathf.Max(0, amount),
+            DamageAfterImmunity = Mathf.Max(0, amount),
+            DamageAfterResistance = Mathf.Max(0, amount),
+            FinalDamage = Mathf.Max(0, amount)
+        };
+
+        if (result.RawDamage <= 0)
+            return result;
+
+        if (packet == null)
+            packet = new DamagePacket { RawDamage = result.RawDamage };
+
+        if (packet.Types == null || packet.Types.Count == 0)
+            packet.Types = new HashSet<DamageType> { DamageType.Untyped };
+
+        // 1) Immunity check: any matching type negates all damage
+        foreach (var type in packet.Types)
+        {
+            if (DamageImmunities.Contains(type))
+            {
+                result.ImmunityTriggered = true;
+                result.ImmunityType = type;
+                result.DamageAfterImmunity = 0;
+                result.DamageAfterResistance = 0;
+                result.FinalDamage = 0;
+                TakeDamage(0);
+                return result;
+            }
+        }
+
+        // 2) Resistance check: use highest resistance among matching damage types
+        int resistance = 0;
+        foreach (var type in packet.Types)
+        {
+            for (int i = 0; i < DamageResistances.Count; i++)
+            {
+                var entry = DamageResistances[i];
+                if (entry != null && entry.Type == type)
+                    resistance = Mathf.Max(resistance, entry.Amount);
+            }
+        }
+
+        result.ResistanceApplied = Mathf.Min(result.RawDamage, Mathf.Max(0, resistance));
+        result.DamageAfterResistance = Mathf.Max(0, result.RawDamage - result.ResistanceApplied);
+
+        // 3) DR check: applies only to weapon/physical attacks
+        int drApplied = 0;
+        if (packet.IsWeaponDamage && result.DamageAfterResistance > 0)
+        {
+            int bestApplicableDr = 0;
+            for (int i = 0; i < DamageReductions.Count; i++)
+            {
+                var dr = DamageReductions[i];
+                if (dr == null || dr.Amount <= 0) continue;
+                if (dr.AppliesToRangedOnly && !packet.IsRangedWeaponDamage) continue;
+
+                bool bypassed = (dr.BypassAnyTag != DamageBypassTag.None) && ((packet.AttackTags & dr.BypassAnyTag) != 0);
+                if (!bypassed)
+                    bestApplicableDr = Mathf.Max(bestApplicableDr, dr.Amount);
+            }
+
+            drApplied = Mathf.Min(result.DamageAfterResistance, bestApplicableDr);
+        }
+
+        result.DamageReductionApplied = drApplied;
+        result.FinalDamage = Mathf.Max(0, result.DamageAfterResistance - drApplied);
+
+        TakeDamage(result.FinalDamage);
+        return result;
+    }
 
     /// <summary>
-    /// Apply damage, clamping HP to 0.
+    /// Apply raw HP damage (already mitigated), clamping HP to 0.
     /// </summary>
     public void TakeDamage(int amount)
     {
@@ -855,6 +943,95 @@ public class CharacterStats
             }
         }
         CurrentHP = Mathf.Max(0, CurrentHP - amount);
+    }
+
+    public void AddDamageResistance(DamageType type, int amount)
+    {
+        if (amount <= 0) return;
+        DamageResistances.Add(new DamageResistanceEntry { Type = type, Amount = amount });
+    }
+
+    public void RemoveDamageResistance(DamageType type, int amount)
+    {
+        for (int i = 0; i < DamageResistances.Count; i++)
+        {
+            var entry = DamageResistances[i];
+            if (entry != null && entry.Type == type && entry.Amount == amount)
+            {
+                DamageResistances.RemoveAt(i);
+                return;
+            }
+        }
+    }
+
+    public void AddDamageImmunity(DamageType type)
+    {
+        if (type == DamageType.Untyped) return;
+        if (!DamageImmunities.Contains(type))
+            DamageImmunities.Add(type);
+    }
+
+    public void RemoveDamageImmunity(DamageType type)
+    {
+        DamageImmunities.Remove(type);
+    }
+
+    public void AddDamageReduction(int amount, DamageBypassTag bypassTags, bool rangedOnly = false)
+    {
+        if (amount <= 0) return;
+        DamageReductions.Add(new DamageReductionEntry
+        {
+            Amount = amount,
+            BypassAnyTag = bypassTags,
+            AppliesToRangedOnly = rangedOnly
+        });
+    }
+
+    public void RemoveDamageReduction(int amount, DamageBypassTag bypassTags, bool rangedOnly = false)
+    {
+        for (int i = 0; i < DamageReductions.Count; i++)
+        {
+            var dr = DamageReductions[i];
+            if (dr == null) continue;
+            if (dr.Amount == amount && dr.BypassAnyTag == bypassTags && dr.AppliesToRangedOnly == rangedOnly)
+            {
+                DamageReductions.RemoveAt(i);
+                return;
+            }
+        }
+    }
+
+    public string GetMitigationSummaryString()
+    {
+        var parts = new List<string>();
+
+        if (DamageReductions.Count > 0)
+        {
+            for (int i = 0; i < DamageReductions.Count; i++)
+            {
+                var dr = DamageReductions[i];
+                if (dr != null && dr.Amount > 0)
+                    parts.Add(dr.GetDisplayString());
+            }
+        }
+
+        if (DamageResistances.Count > 0)
+        {
+            for (int i = 0; i < DamageResistances.Count; i++)
+            {
+                var r = DamageResistances[i];
+                if (r != null && r.Amount > 0)
+                    parts.Add(r.GetDisplayString());
+            }
+        }
+
+        if (DamageImmunities.Count > 0)
+        {
+            for (int i = 0; i < DamageImmunities.Count; i++)
+                parts.Add($"Immune {DamageTextUtils.GetDamageTypeDisplay(DamageImmunities[i])}");
+        }
+
+        return string.Join(", ", parts);
     }
 
     // ========== DISPLAY HELPERS ==========

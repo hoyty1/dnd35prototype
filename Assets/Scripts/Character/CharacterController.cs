@@ -741,41 +741,69 @@ public class CharacterController : MonoBehaviour
                 result.ConfirmationTotal = confirmTotal;
             }
 
-            // Step 3: Roll damage (feat bonus added as flat bonus, not multiplied on crit)
-            int damage;
+            // Step 3: Roll weapon damage (feat bonus added as flat bonus, not multiplied on crit)
+            int rawWeaponDamage;
             int baseDmgRoll;
             if (critConfirmed)
             {
                 // Critical damage: multiply weapon dice, add static bonuses (STR + bonus) once
                 int totalCritDice = damageCount * critMultiplier;
                 baseDmgRoll = Stats.RollBaseDamage(damageDice, totalCritDice);
-                damage = baseDmgRoll + damageModifier + bonusDamage;
-                damage += featDamageBonus; // Feat bonus added after crit multiplication
+                rawWeaponDamage = baseDmgRoll + damageModifier + bonusDamage;
+                rawWeaponDamage += featDamageBonus; // Feat bonus added after crit multiplication
                 result.CritDamageDice = $"{totalCritDice}d{damageDice}+{damageModifier + bonusDamage}";
             }
             else
             {
                 // Normal damage - roll weapon dice separately for breakdown
                 baseDmgRoll = Stats.RollBaseDamage(damageDice, damageCount);
-                damage = baseDmgRoll + damageModifier + bonusDamage + featDamageBonus;
+                rawWeaponDamage = baseDmgRoll + damageModifier + bonusDamage + featDamageBonus;
             }
-            damage = Mathf.Max(1, damage); // Ensure minimum 1 damage
-            result.Damage = damage;
+            rawWeaponDamage = Mathf.Max(1, rawWeaponDamage); // Weapon hit always deals at least 1 before mitigation
+            result.Damage = rawWeaponDamage;
             result.BaseDamageRoll = baseDmgRoll;
 
             // Sneak attack: applies if attacker is Rogue and is flanking
             // Sneak attack is NOT multiplied on critical hits (D&D 3.5 rule)
+            int rawSneakDamage = 0;
             if (Stats.IsRogue && isFlanking)
             {
                 int sneakDice = CombatUtils.GetSneakAttackDice(Stats.Level);
-                int sneakDmg = CombatUtils.RollSneakAttackDamage(Stats.Level);
+                rawSneakDamage = CombatUtils.RollSneakAttackDamage(Stats.Level);
                 result.SneakAttackApplied = true;
                 result.SneakAttackDice = sneakDice;
-                result.SneakAttackDamage = sneakDmg;
+                result.SneakAttackDamage = rawSneakDamage;
             }
 
-            // Apply total damage to target
-            target.Stats.TakeDamage(result.TotalDamage);
+            int rawTotalDamage = rawWeaponDamage + rawSneakDamage;
+            result.RawTotalDamage = rawTotalDamage;
+
+            // Build damage packet for DR/resistance/immunity resolution
+            var damageTypes = weapon != null
+                ? weapon.GetDamageTypes()
+                : new System.Collections.Generic.HashSet<DamageType> { DamageType.Bludgeoning };
+
+            DamageBypassTag attackTags = weapon != null ? weapon.GetBypassTags() : DamageBypassTag.Bludgeoning;
+            if (weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0))
+                attackTags |= DamageBypassTag.Ranged;
+
+            var packet = new DamagePacket
+            {
+                RawDamage = rawTotalDamage,
+                Types = damageTypes,
+                AttackTags = attackTags,
+                IsWeaponDamage = true,
+                IsRangedWeaponDamage = result.IsRangedAttack,
+                SourceName = string.IsNullOrEmpty(result.WeaponName) ? "attack" : result.WeaponName,
+            };
+
+            DamageResolutionResult mitigation = target.Stats.ApplyIncomingDamage(rawTotalDamage, packet);
+            result.FinalDamageDealt = mitigation.FinalDamage;
+            result.ResistancePrevented = mitigation.ResistanceApplied;
+            result.DRPrevented = mitigation.DamageReductionApplied;
+            result.ImmunityPrevented = mitigation.ImmunityTriggered;
+            result.MitigationSummary = mitigation.GetMitigationSummary();
+            result.DamageTypeSummary = DamageTextUtils.FormatDamageTypes(damageTypes);
 
             if (target.Stats.IsDead)
             {

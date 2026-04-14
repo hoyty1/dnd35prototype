@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -92,7 +93,17 @@ public class ItemData
     public bool IsLightWeapon;  // Light weapon (dagger, short sword) - reduces TWF penalties
     public bool IsTwoHanded;    // Two-handed weapon - can't be dual-wielded, 1.5x STR to damage
     public bool HasReach;       // Reach weapon - can attack at 2 squares
-    public string DamageType;   // "slashing", "piercing", "bludgeoning", or combinations
+    public string DamageType;   // Legacy display/source string ("slashing", "piercing", etc.)
+
+    // --- Damage bypass/material/alignment properties (for DR interactions) ---
+    public bool CountsAsMagicForBypass;    // Bypasses DR/magic
+    public bool IsSilvered;                // Bypasses DR/silver
+    public bool IsColdIron;                // Bypasses DR/cold iron
+    public bool IsAdamantine;              // Bypasses DR/adamantine
+    public bool IsAlignedGood;             // Bypasses DR/good
+    public bool IsAlignedEvil;             // Bypasses DR/evil
+    public bool IsAlignedLawful;           // Bypasses DR/lawful
+    public bool IsAlignedChaotic;          // Bypasses DR/chaotic
 
     // --- Damage Modifier Properties (D&D 3.5) ---
     public DamageModifierType DmgModType;  // How STR (or other) applies to damage
@@ -142,6 +153,39 @@ public class ItemData
         return false;
     }
 
+    /// <summary>Get parsed canonical damage types for this weapon.</summary>
+    public HashSet<DamageType> GetDamageTypes()
+    {
+        return DamageTextUtils.ParseDamageTypes(DamageType);
+    }
+
+    /// <summary>
+    /// Build bypass tags granted by this weapon (material/alignment and physical forms).
+    /// Physical damage forms are included so DR/slashing, DR/piercing, etc. can be bypassed.
+    /// </summary>
+    public DamageBypassTag GetBypassTags()
+    {
+        DamageBypassTag tags = DamageBypassTag.None;
+        var dmgTypes = GetDamageTypes();
+
+        if (dmgTypes.Contains(DamageType.Bludgeoning)) tags |= DamageBypassTag.Bludgeoning;
+        if (dmgTypes.Contains(DamageType.Piercing)) tags |= DamageBypassTag.Piercing;
+        if (dmgTypes.Contains(DamageType.Slashing)) tags |= DamageBypassTag.Slashing;
+
+        if (CountsAsMagicForBypass) tags |= DamageBypassTag.Magic;
+        if (IsSilvered) tags |= DamageBypassTag.Silver;
+        if (IsColdIron) tags |= DamageBypassTag.ColdIron;
+        if (IsAdamantine) tags |= DamageBypassTag.Adamantine;
+        if (IsAlignedGood) tags |= DamageBypassTag.Good;
+        if (IsAlignedEvil) tags |= DamageBypassTag.Evil;
+        if (IsAlignedLawful) tags |= DamageBypassTag.Lawful;
+        if (IsAlignedChaotic) tags |= DamageBypassTag.Chaotic;
+
+        if (WeaponCat == WeaponCategory.Ranged || RangeIncrement > 0)
+            tags |= DamageBypassTag.Ranged;
+
+        return tags;
+    }
     /// <summary>Get a formatted critical hit range string (e.g., "19-20/×2").</summary>
     public string GetCritRangeString()
     {

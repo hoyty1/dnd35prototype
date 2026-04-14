@@ -285,10 +285,11 @@ public static partial class SpellDatabase
             EffectType = SpellEffectType.Buff,
             BuffDurationRounds = -1,
             BuffType = "DR_arrows",
+            BuffDamageReductionAmount = 10,
+            BuffDamageReductionBypass = DamageBypassTag.Magic,
+            BuffDamageReductionRangedOnly = true,
             ActionType = SpellActionType.Standard,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Damage reduction not implemented]"
+            ProvokesAoO = true
         });
 
         Register(new SpellData
@@ -303,10 +304,10 @@ public static partial class SpellDatabase
             EffectType = SpellEffectType.Buff,
             BuffDurationRounds = -1,
             BuffType = "energy_resistance",
+            BuffDamageResistanceAmount = 10,
+            BuffDamageResistanceType = DamageType.Fire, // TODO: replace with player-selected energy type
             ActionType = SpellActionType.Standard,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Energy resistance not implemented]"
+            ProvokesAoO = true
         });
 
         Register(new SpellData

@@ -44,6 +44,14 @@ public class ActiveSpellEffect
     public string AppliedStatName;     // e.g., "STR", "DEX"
     public int AppliedStatBonus;
 
+
+    // Damage mitigation buffs
+    public int AppliedDamageResistanceAmount;
+    public DamageType AppliedDamageResistanceType = DamageType.Untyped;
+    public DamageType AppliedDamageImmunityType = DamageType.Untyped;
+    public int AppliedDamageReductionAmount;
+    public DamageBypassTag AppliedDamageReductionBypass = DamageBypassTag.None;
+    public bool AppliedDamageReductionRangedOnly;
     /// <summary>LEGACY: The bonus type string for backward compatibility.</summary>
     public string BonusTypeLegacy;
 
@@ -185,6 +193,12 @@ public class ActiveSpellEffect
         if (AppliedDeflectionBonus != 0) mods += $" Defl:{AppliedDeflectionBonus:+#;-#}";
         if (AppliedTempHP != 0) mods += $" TempHP:{AppliedTempHP}";
         if (!string.IsNullOrEmpty(AppliedStatName)) mods += $" {AppliedStatName}:{AppliedStatBonus:+#;-#}";
+        if (AppliedDamageResistanceAmount > 0 && AppliedDamageResistanceType != DamageType.Untyped)
+            mods += $" Resist:{AppliedDamageResistanceAmount} {DamageTextUtils.GetDamageTypeDisplay(AppliedDamageResistanceType)}";
+        if (AppliedDamageImmunityType != DamageType.Untyped)
+            mods += $" Immune:{DamageTextUtils.GetDamageTypeDisplay(AppliedDamageImmunityType)}";
+        if (AppliedDamageReductionAmount > 0)
+            mods += $" DR:{AppliedDamageReductionAmount}/{DamageTextUtils.FormatBypassTags(AppliedDamageReductionBypass)}";
 
         string typeStr = BonusTypeEnum != BonusType.Untyped ? $" ({BonusTypeHelper.GetDisplayName(BonusTypeEnum)})" : "";
         return $"{spellName}{typeStr} [{GetDurationDisplayString()}] from {CasterName}{mods}";

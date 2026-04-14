@@ -34,10 +34,14 @@ public class SpellResult
     public bool SaveSucceeded;
 
     // ========== DAMAGE ==========
-    public int DamageDealt;             // Total damage (after save reduction if applicable)
+    public int DamageDealt;             // Final damage applied after save and mitigation
     public int DamageRolled;            // Raw damage before save reduction
-    public string DamageType;           // "cold", "acid", "force", etc.
-
+    public string DamageType;           // Legacy display string ("cold", "acid", "force", etc.)
+    public string DamageTypeSummary;    // Canonical typed summary used by mitigation model
+    public int ResistancePrevented;
+    public int DRPrevented;
+    public bool ImmunityPrevented;
+    public string MitigationSummary;
     // ========== HEALING ==========
     public int HealingDone;
     public int HealRolled;              // Raw healing dice roll
@@ -130,7 +134,11 @@ public class SpellResult
                     sb.AppendLine($"    Missile {i + 1}: 1d{Spell.DamageDice}+{Spell.BonusDamage} = {MissileDamages[i]} {DamageType}");
                 if (EmpowerBonus > 0)
                     sb.AppendLine($"    Empower: +{EmpowerBonus} (×1.5)");
-                sb.AppendLine($"    = {DamageDealt} total {DamageType} damage");
+                string dmgType = !string.IsNullOrEmpty(DamageTypeSummary) ? DamageTypeSummary : DamageType;
+                sb.AppendLine($"    = {DamageRolled} raw {dmgType} damage");
+                if (!string.IsNullOrEmpty(MitigationSummary))
+                    sb.AppendLine($"    Mitigation: {MitigationSummary}");
+                sb.AppendLine($"    = {DamageDealt} final damage");
             }
             else if (DamageDealt > 0 || DamageRolled > 0)
             {
@@ -142,13 +150,25 @@ public class SpellResult
 
                 if (EmpowerBonus > 0)
                     sb.AppendLine($"    Empower: +{EmpowerBonus} (×1.5)");
+                int postSaveDamage = DamageRolled;
                 if (RequiredSave && SaveSucceeded && Spell.SaveHalves)
-                    sb.AppendLine($"    Save halves: {DamageRolled} → {DamageDealt}");
-                sb.AppendLine($"    = {DamageDealt} {DamageType} damage");
+                {
+                    postSaveDamage = Mathf.Max(0, DamageRolled / 2);
+                    sb.AppendLine($"    Save halves: {DamageRolled} → {postSaveDamage}");
+                }
+                string dmgType = !string.IsNullOrEmpty(DamageTypeSummary) ? DamageTypeSummary : DamageType;
+                sb.AppendLine($"    = {postSaveDamage} raw {dmgType} damage");
+                if (!string.IsNullOrEmpty(MitigationSummary))
+                    sb.AppendLine($"    Mitigation: {MitigationSummary}");
+                sb.AppendLine($"    = {DamageDealt} final damage");
             }
             else if (Spell.BonusDamage > 0 && Spell.DamageCount == 0)
             {
-                sb.AppendLine($"  Damage: {DamageDealt} {DamageType}");
+                string dmgType = !string.IsNullOrEmpty(DamageTypeSummary) ? DamageTypeSummary : DamageType;
+                sb.AppendLine($"  Damage: {DamageRolled} raw {dmgType}");
+                if (!string.IsNullOrEmpty(MitigationSummary))
+                    sb.AppendLine($"    Mitigation: {MitigationSummary}");
+                sb.AppendLine($"    = {DamageDealt} final damage");
             }
 
             sb.AppendLine($"  {TargetName}: {TargetHPBefore} → {TargetHPAfter} HP");

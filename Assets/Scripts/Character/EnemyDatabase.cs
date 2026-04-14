@@ -124,6 +124,9 @@ public static class EnemyDatabase
                 new EquipmentSlotPair("shortbow", EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string> { "short_sword" },
+            DamageReductionAmount = 5,
+            DamageReductionBypass = DamageBypassTag.Bludgeoning,
+            DamageImmunities = new List<DamageType> { DamageType.Cold },
             AIBehavior = EnemyAIBehavior.RangedKiter,
             SpriteColor = new Color(0.85f, 0.85f, 0.75f, 1f),  // bone white
             PanelColor = new Color(0.2f, 0.2f, 0.3f, 0.85f),   // dark grey-blue
@@ -245,6 +248,13 @@ public class EnemyDefinition
     public int DamageCount;
     public int BonusDamage;
     public int BaseSpeed;
+
+    // Built-in mitigation profile
+    public int DamageReductionAmount;
+    public DamageBypassTag DamageReductionBypass = DamageBypassTag.None;
+    public bool DamageReductionRangedOnly;
+    public List<DamageResistanceEntry> DamageResistances = new List<DamageResistanceEntry>();
+    public List<DamageType> DamageImmunities = new List<DamageType>();
     public int AttackRange;
     public int BaseHitDieHP;
 
