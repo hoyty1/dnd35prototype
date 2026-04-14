@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// D&D 3.5 edition character stats system.
@@ -168,6 +169,25 @@ public class CharacterStats
     /// <summary>Whether the barbarian is fatigued (after rage ends).</summary>
     public bool IsFatigued;
 
+    // ========== SPECIAL COMBAT CONDITIONS ==========
+
+    /// <summary>Active special maneuver conditions (prone, grappled, disarmed).</summary>
+    public List<StatusEffect> ActiveConditions = new List<StatusEffect>();
+
+    /// <summary>Quick flags for common conditions.</summary>
+    public bool IsProne => ActiveConditions.Any(c => c.Type == CombatConditionType.Prone);
+    public bool IsGrappled => ActiveConditions.Any(c => c.Type == CombatConditionType.Grappled);
+    public bool IsDisarmed => ActiveConditions.Any(c => c.Type == CombatConditionType.Disarmed);
+
+    /// <summary>Penalty to attack rolls from conditions.</summary>
+    public int ConditionAttackPenalty => (IsProne ? -4 : 0) + (IsGrappled ? -2 : 0) + (IsDisarmed ? -4 : 0);
+
+    /// <summary>Penalty to AC from conditions.</summary>
+    public int ConditionACPenalty => (IsProne ? -4 : 0) + (ActiveConditions.Any(c => c.Type == CombatConditionType.Feinted) ? -2 : 0);
+
+    /// <summary>Movement override from conditions (grappled cannot move normally).</summary>
+    public bool MovementBlockedByCondition => IsGrappled;
+
     /// <summary>
     /// Barbarian Fast Movement: +10 ft speed in medium or lighter armor.
     /// Always active (not lost when raging).
@@ -262,6 +282,78 @@ public class CharacterStats
 
     /// <summary>
     /// Tick rage duration at start of barbarian's turn. Deactivates if expired.
+    /// </summary>
+
+    // ========== CONDITION MANAGEMENT ==========
+
+    /// <summary>
+    /// Apply (or refresh) a combat condition.
+    /// If same condition exists, longer duration wins.
+    /// </summary>
+    public void ApplyCondition(CombatConditionType type, int rounds, string sourceName)
+    {
+        var existing = ActiveConditions.FirstOrDefault(c => c.Type == type);
+        if (existing == null)
+        {
+            ActiveConditions.Add(new StatusEffect(type, sourceName, rounds));
+            return;
+        }
+
+        if (existing.RemainingRounds < 0) return; // existing indefinite stays
+        if (rounds < 0 || rounds > existing.RemainingRounds)
+            existing.RemainingRounds = rounds;
+    }
+
+    /// <summary>
+    /// Remove a specific combat condition.
+    /// </summary>
+    public bool RemoveCondition(CombatConditionType type)
+    {
+        int idx = ActiveConditions.FindIndex(c => c.Type == type);
+        if (idx < 0) return false;
+        ActiveConditions.RemoveAt(idx);
+        return true;
+    }
+
+    /// <summary>
+    /// Tick all condition durations and return expired effects.
+    /// </summary>
+    public List<StatusEffect> TickConditions()
+    {
+        var expired = new List<StatusEffect>();
+        for (int i = ActiveConditions.Count - 1; i >= 0; i--)
+        {
+            var cond = ActiveConditions[i];
+            if (cond.Tick())
+            {
+                expired.Add(cond);
+                ActiveConditions.RemoveAt(i);
+            }
+        }
+        return expired;
+    }
+
+    /// <summary>
+    /// Get compact condition display for UI.
+    /// </summary>
+    public string GetConditionSummary()
+    {
+        if (ActiveConditions.Count == 0) return "";
+
+        var parts = new List<string>();
+        foreach (var c in ActiveConditions)
+        {
+            string color = c.Type == CombatConditionType.Grappled ? "#FFAA44"
+                : c.Type == CombatConditionType.Prone ? "#FF7777"
+                : c.Type == CombatConditionType.Feinted ? "#66CCFF"
+                : "#FFFF66";
+            parts.Add($"<color={color}>{c.Type}</color>({c.GetDurationLabel()})");
+        }
+        return string.Join(" ", parts);
+    }
+
+    /// <summary>
+    /// Tick rage duration each round; auto-ends rage at 0 rounds.
     /// </summary>
     public void TickRage()
     {
@@ -557,15 +649,15 @@ public class CharacterStats
             // Use the higher of ArmorBonus (from equipment) or SpellACBonus (from spells).
             int effectiveArmorBonus = Mathf.Max(ArmorBonus, SpellACBonus);
             return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + SizeModifier
-                   + MonkACBonus + FeatACBonus + RageACPenalty + DeflectionBonus;
+                   + MonkACBonus + FeatACBonus + RageACPenalty + DeflectionBonus + ConditionACPenalty;
         }
     }
 
-    /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier + morale bonus.</summary>
-    public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier + MoraleAttackBonus;
+    /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier + morale bonus + condition penalties.</summary>
+    public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier + MoraleAttackBonus + ConditionAttackPenalty;
 
     /// <summary>Movement speed in squares per turn (includes class fast movement bonuses).</summary>
-    public int MoveRange => BaseSpeed + MonkFastMovementBonus + BarbarianFastMovementBonus;
+    public int MoveRange => MovementBlockedByCondition ? 0 : BaseSpeed + MonkFastMovementBonus + BarbarianFastMovementBonus;
 
     public bool IsDead => CurrentHP <= 0;
 

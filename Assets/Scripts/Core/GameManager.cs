@@ -58,7 +58,7 @@ public class GameManager : MonoBehaviour
     public enum TurnPhase { PCTurn, NPCTurn, CombatOver }
 
     // Sub-states for player turns
-    public enum PlayerSubPhase { ChoosingAction, Moving, SelectingAttackTarget, SelectingAoETarget, ConfirmingSelfAoE, Animating }
+    public enum PlayerSubPhase { ChoosingAction, Moving, SelectingAttackTarget, SelectingSpecialTarget, SelectingAoETarget, ConfirmingSelfAoE, Animating }
 
     public TurnPhase CurrentPhase { get; private set; }
     public PlayerSubPhase CurrentSubPhase { get; private set; }
@@ -91,6 +91,10 @@ public class GameManager : MonoBehaviour
     private SpellData _pendingSpell; // Spell selected for casting
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
     private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
+
+    // Pending special attack state
+    private SpecialAttackType _pendingSpecialAttackType;
+    private bool _isSelectingSpecialAttack;
 
     // ========== AOE TARGETING STATE ==========
     private bool _isAoETargeting;                          // Currently in AoE targeting mode
@@ -437,7 +441,8 @@ public class GameManager : MonoBehaviour
         // Right-click / Escape to cancel targeting in various states
         if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget
             || CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE
-            || (CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget && _pendingAttackMode == PendingAttackMode.CastSpell))
+            || CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget
+            || CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget)
         {
             bool rightClicked = false;
 #if ENABLE_LEGACY_INPUT_MANAGER
@@ -475,9 +480,16 @@ public class GameManager : MonoBehaviour
                 {
                     CancelAoETargeting();
                 }
-                else if (CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget && _pendingAttackMode == PendingAttackMode.CastSpell)
+                else if (CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget)
                 {
-                    CancelSpellTargeting();
+                    CancelSpecialAttackTargeting();
+                }
+                else if (CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget)
+                {
+                    if (_pendingAttackMode == PendingAttackMode.CastSpell)
+                        CancelSpellTargeting();
+                    else
+                        ShowActionChoices();
                 }
                 return;
             }
@@ -1342,6 +1354,7 @@ public class GameManager : MonoBehaviour
             current.SetHighlight(HighlightType.Selected);
 
         CombatUI.SetActionButtonsVisible(true);
+        CombatUI.HideSpecialAttackMenu();
         CombatUI.UpdateActionButtons(pc);
         CombatUI.UpdateFeatControls(pc);
 
@@ -1395,6 +1408,12 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null) return;
 
+        if (pc.Stats.MovementBlockedByCondition)
+        {
+            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is grappled and cannot move.");
+            return;
+        }
+
         if (pc.Actions.HasMoveAction) { /* Normal move */ }
         else if (pc.Actions.CanConvertStandardToMove) { /* Will convert */ }
         else return;
@@ -1415,6 +1434,26 @@ public class GameManager : MonoBehaviour
         ShowAttackTargets(pc);
     }
 
+    public void OnSpecialAttackButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Actions.HasStandardAction) return;
+
+        _isSelectingSpecialAttack = true;
+        CombatUI.ShowSpecialAttackMenu(pc, OnSpecialAttackSelected, ShowActionChoices);
+    }
+
+    private void OnSpecialAttackSelected(SpecialAttackType type)
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) { ShowActionChoices(); return; }
+
+        _pendingSpecialAttackType = type;
+        _isSelectingSpecialAttack = true;
+        CombatUI.HideSpecialAttackMenu();
+        CurrentSubPhase = PlayerSubPhase.SelectingSpecialTarget;
+        ShowSpecialAttackTargets(pc, type);
+    }
     public void OnFullAttackButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -2865,24 +2904,32 @@ public class GameManager : MonoBehaviour
     private void TickCharacterSpellDurations(CharacterController character)
     {
         var statusMgr = character.GetComponent<StatusEffectManager>();
-        if (statusMgr == null || statusMgr.ActiveEffectCount == 0) return;
-
-        var expired = statusMgr.TickAllEffects();
-
-        foreach (var effect in expired)
+        if (statusMgr != null && statusMgr.ActiveEffectCount > 0)
         {
-            string msg = $"⏱ {effect.Spell?.Name ?? "Unknown"} has expired on {character.Stats.CharacterName}!";
-            Debug.Log($"[SpellDuration] {msg}");
-            CombatUI?.ShowCombatLog($"<color=#FFAA44>{msg}</color>");
+            var expired = statusMgr.TickAllEffects();
+
+            foreach (var effect in expired)
+            {
+                string msg = $"⏱ {effect.Spell?.Name ?? "Unknown"} has expired on {character.Stats.CharacterName}!";
+                Debug.Log($"[SpellDuration] {msg}");
+                CombatUI?.ShowCombatLog($"<color=#FFAA44>{msg}</color>");
+            }
+
+            if (statusMgr.ActiveEffectCount > 0)
+            {
+                foreach (var effect in statusMgr.ActiveEffects)
+                {
+                    Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
+                }
+            }
         }
 
-        // Log remaining active effects
-        if (statusMgr.ActiveEffectCount > 0)
+        var expiredConditions = character.Stats.TickConditions();
+        foreach (var cond in expiredConditions)
         {
-            foreach (var effect in statusMgr.ActiveEffects)
-            {
-                Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
-            }
+            string msg = $"⏱ {character.Stats.CharacterName} is no longer {cond.Type}.";
+            Debug.Log($"[Condition] {msg}");
+            CombatUI?.ShowCombatLog($"<color=#99CCFF>{msg}</color>");
         }
     }
 
@@ -3443,6 +3490,9 @@ public class GameManager : MonoBehaviour
                 HandleAttackTargetClick(pc, cell);
                 break;
 
+            case PlayerSubPhase.SelectingSpecialTarget:
+                HandleSpecialAttackTargetClick(pc, cell);
+                break;
             case PlayerSubPhase.SelectingAoETarget:
                 HandleAoETargetClick(pc, cell);
                 break;
@@ -3659,6 +3709,135 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private void ShowSpecialAttackTargets(CharacterController attacker, SpecialAttackType type)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI.SetActionButtonsVisible(false);
+
+        int range = (type == SpecialAttackType.Feint) ? 1 : attacker.Stats.AttackRange;
+        if (range < 1) range = 1;
+
+        List<SquareCell> allCells = Grid.GetCellsInRange(attacker.GridPosition, range);
+        bool hasTarget = false;
+
+        foreach (var c in allCells)
+        {
+            if (!c.IsOccupied || c.Occupant == attacker || c.Occupant.Stats.IsDead) continue;
+            if (IsPC(attacker) && !NPCs.Contains(c.Occupant)) continue;
+            if (!IsPC(attacker) && !IsPC(c.Occupant)) continue;
+
+            if (SquareGridUtils.GetDistance(attacker.GridPosition, c.Coords) <= range)
+            {
+                c.SetHighlight(HighlightType.Attack);
+                _highlightedCells.Add(c);
+                hasTarget = true;
+            }
+        }
+
+        SquareCell selfCell = Grid.GetCell(attacker.GridPosition);
+        if (selfCell != null) selfCell.SetHighlight(HighlightType.Selected);
+
+        if (hasTarget)
+            CombatUI.SetTurnIndicator($"SPECIAL: {type} - select target (Right-click/Esc to cancel)");
+        else
+        {
+            CombatUI.SetTurnIndicator($"No targets in range for {type}.");
+            StartCoroutine(ReturnToActionChoicesAfterDelay(1.0f));
+        }
+    }
+
+    private void HandleSpecialAttackTargetClick(CharacterController attacker, SquareCell cell)
+    {
+        if (!_highlightedCells.Contains(cell) || !cell.IsOccupied || cell.Occupant == attacker)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        ExecuteSpecialAttack(attacker, cell.Occupant, _pendingSpecialAttackType);
+    }
+
+    private void ExecuteSpecialAttack(CharacterController attacker, CharacterController target, SpecialAttackType type)
+    {
+        if (attacker == null || target == null) { ShowActionChoices(); return; }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        attacker.Actions.UseStandardAction();
+
+        SpecialAttackResult result = attacker.ExecuteSpecialAttack(type, target);
+        CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}]: {result.Log}");
+
+        if (result.Success)
+        {
+            if (type == SpecialAttackType.BullRush)
+                TryPushTargetAway(attacker, target, 1, allowAttackerFollow: true);
+            else if (type == SpecialAttackType.Overrun)
+                TryPushTargetAway(attacker, target, 1, allowAttackerFollow: false);
+        }
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        _isSelectingSpecialAttack = false;
+
+        UpdateAllStatsUI();
+
+        if (target.Stats.IsDead && !target.IsPlayerControlled && AreAllNPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            return;
+        }
+
+        StartCoroutine(AfterAttackDelay(attacker, 1.0f));
+    }
+
+    private void TryPushTargetAway(CharacterController attacker, CharacterController target, int squares, bool allowAttackerFollow)
+    {
+        Vector2Int dir = target.GridPosition - attacker.GridPosition;
+        dir.x = Mathf.Clamp(dir.x, -1, 1);
+        dir.y = Mathf.Clamp(dir.y, -1, 1);
+        if (dir == Vector2Int.zero) dir = Vector2Int.right;
+
+        Vector2Int destination = target.GridPosition;
+        for (int i = 0; i < squares; i++)
+        {
+            Vector2Int next = destination + dir;
+            SquareCell nextCell = Grid.GetCell(next);
+            if (nextCell == null || nextCell.IsOccupied) break;
+            destination = next;
+        }
+
+        if (destination != target.GridPosition)
+        {
+            SquareCell destCell = Grid.GetCell(destination);
+            if (destCell != null)
+            {
+                Vector2Int oldTargetPos = target.GridPosition;
+                target.MoveToCell(destCell);
+                CombatUI.ShowCombatLog($"↗ {target.Stats.CharacterName} is pushed to ({destination.x},{destination.y}).");
+
+                if (allowAttackerFollow)
+                {
+                    SquareCell followCell = Grid.GetCell(oldTargetPos);
+                    if (followCell != null && !followCell.IsOccupied)
+                    {
+                        attacker.MoveToCell(followCell);
+                        CombatUI.ShowCombatLog($"{attacker.Stats.CharacterName} follows through into ({oldTargetPos.x},{oldTargetPos.y}).");
+                    }
+                }
+            }
+        }
+    }
+
+    private void CancelSpecialAttackTargeting()
+    {
+        _isSelectingSpecialAttack = false;
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        ShowActionChoices();
+    }
     // ========== ATTACK EXECUTION ==========
 
     private void PerformPlayerAttack(CharacterController attacker, CharacterController target)
@@ -4033,7 +4212,10 @@ public class GameManager : MonoBehaviour
 
         if (distToTarget <= npc.Stats.AttackRange && !targetPC.Stats.IsDead)
         {
-            yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
+            if (!TryNPCSpecialAttackIfBeneficial(npc, targetPC))
+                yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
+            else
+                yield return new WaitForSeconds(0.8f);
         }
         else
         {
@@ -4072,10 +4254,12 @@ public class GameManager : MonoBehaviour
         }
 
         int distToRangedTarget = SquareGridUtils.GetDistance(npc.GridPosition, rangedTarget.GridPosition);
-
         if (distToRangedTarget <= maxRange && !rangedTarget.Stats.IsDead)
         {
-            yield return StartCoroutine(NPCPerformAttack(npc, rangedTarget));
+            if (!TryNPCSpecialAttackIfBeneficial(npc, rangedTarget))
+                yield return StartCoroutine(NPCPerformAttack(npc, rangedTarget));
+            else
+                yield return new WaitForSeconds(0.8f);
         }
         else if (distToRangedTarget > maxRange && npc.Actions.HasMoveAction)
         {
@@ -4120,7 +4304,10 @@ public class GameManager : MonoBehaviour
 
         if (distToTarget <= npc.Stats.AttackRange && !targetPC.Stats.IsDead)
         {
-            yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
+            if (!TryNPCSpecialAttackIfBeneficial(npc, targetPC))
+                yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
+            else
+                yield return new WaitForSeconds(0.8f);
         }
         else
         {
@@ -4128,6 +4315,39 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || target == null) return false;
+        if (!npc.Actions.HasStandardAction) return false;
+
+        SpecialAttackType? choice = null;
+
+        if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped())
+            choice = SpecialAttackType.Trip;
+
+        if (choice == null && target.GetEquippedMainWeapon() != null && npc.Stats.STRMod >= 3)
+            choice = SpecialAttackType.Disarm;
+
+        if (choice == null && npc.Stats.STRMod >= 4)
+            choice = SpecialAttackType.Grapple;
+
+        if (choice == null) return false;
+
+        var result = npc.ExecuteSpecialAttack(choice.Value, target);
+        CombatUI.ShowCombatLog($"☠ {npc.Stats.CharacterName} uses SPECIAL [{choice.Value}]! {result.Log}");
+
+        if (result.Success)
+        {
+            if (choice.Value == SpecialAttackType.BullRush)
+                TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);
+            else if (choice.Value == SpecialAttackType.Overrun)
+                TryPushTargetAway(npc, target, 1, allowAttackerFollow: false);
+        }
+
+        npc.Actions.UseStandardAction();
+        UpdateAllStatsUI();
+        return true;
+    }
     private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
     {
         npc.Actions.UseStandardAction();

@@ -93,6 +93,7 @@ public class CombatUI : MonoBehaviour
     public Button MoveButton;
     public Button AttackButton;         // Single attack (Standard Action)
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
+    public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
     public Button DualWieldButton;      // Dual Wield (Full-Round Action)
     public Button EndTurnButton;
     public Text ActionStatusText;       // Shows current action economy status
@@ -296,8 +297,9 @@ public class CombatUI : MonoBehaviour
             ? concMgr.GetConcentrationDisplayString() : "";
         string heldStr = (spellComp != null && spellComp.HasHeldTouchCharge && spellComp.HeldTouchSpell != null)
             ? $"✋ Holding: {spellComp.HeldTouchSpell.Name}" : "";
+        string condStr = ch.Stats.GetConditionSummary();
 
-        if (string.IsNullOrEmpty(buffStr) && string.IsNullOrEmpty(concStr) && string.IsNullOrEmpty(heldStr))
+        if (string.IsNullOrEmpty(buffStr) && string.IsNullOrEmpty(concStr) && string.IsNullOrEmpty(heldStr) && string.IsNullOrEmpty(condStr))
         {
             buffText.text = "";
             buffText.gameObject.SetActive(false);
@@ -310,6 +312,7 @@ public class CombatUI : MonoBehaviour
         var parts = new List<string>();
         if (!string.IsNullOrEmpty(concStr)) parts.Add(concStr);
         if (!string.IsNullOrEmpty(heldStr)) parts.Add(heldStr);
+        if (!string.IsNullOrEmpty(condStr)) parts.Add(condStr);
         if (!string.IsNullOrEmpty(buffStr)) parts.Add(buffStr);
         buffText.text = string.Join(" ", parts);
     }
@@ -499,10 +502,12 @@ public class CombatUI : MonoBehaviour
             if (RapidShotPanel != null) RapidShotPanel.SetActive(false);
             if (RageStatusText != null) RageStatusText.gameObject.SetActive(false);
             if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
+            HideSpecialAttackMenu();
         }
     }
 
     private GameObject _touchSpellPromptPanel;
+    private GameObject _specialAttackPanel;
     private bool _dischargeTouchHooked;
 
     private void EnsureDischargeTouchButtonExists()
@@ -572,6 +577,15 @@ public class CombatUI : MonoBehaviour
             Text atkLabel = AttackButton.GetComponentInChildren<Text>();
             if (atkLabel != null)
                 atkLabel.text = actions.HasStandardAction ? "Attack (Standard)" : "Attack (Used)";
+        }
+
+        if (SpecialAttackButton != null)
+        {
+            SpecialAttackButton.gameObject.SetActive(true);
+            SpecialAttackButton.interactable = actions.HasStandardAction;
+            Text spLabel = SpecialAttackButton.GetComponentInChildren<Text>();
+            if (spLabel != null)
+                spLabel.text = actions.HasStandardAction ? "Special Attack (Standard)" : "Special Attack (Used)";
         }
 
         if (FullAttackButton != null)
@@ -764,6 +778,154 @@ public class CombatUI : MonoBehaviour
                 RapidShotToggle.colors = colors;
             }
         }
+    }
+
+    public void ShowSpecialAttackMenu(CharacterController pc, System.Action<SpecialAttackType> onSelect, System.Action onCancel)
+    {
+        if (_specialAttackPanel == null)
+            BuildSpecialAttackPanel();
+
+        if (_specialAttackPanel == null) return;
+
+        _specialAttackPanel.SetActive(true);
+
+        var buttons = _specialAttackPanel.GetComponentsInChildren<Button>(true);
+        foreach (var btn in buttons)
+        {
+            if (btn.name == "Cancel") continue;
+            bool enabled = pc != null && pc.Actions.HasStandardAction;
+
+            if (pc != null)
+            {
+                if (btn.name == "Disarm" || btn.name == "Sunder")
+                    enabled &= pc.HasMeleeWeaponEquipped();
+                if (btn.name == "Grapple" || btn.name == "Bull Rush" || btn.name == "Overrun" || btn.name == "Trip")
+                    enabled &= pc.HasMeleeWeaponEquipped();
+            }
+
+            btn.interactable = enabled;
+        }
+
+        WireSpecialAttackMenu(onSelect, onCancel);
+    }
+
+    public void HideSpecialAttackMenu()
+    {
+        if (_specialAttackPanel != null)
+            _specialAttackPanel.SetActive(false);
+    }
+
+    private void BuildSpecialAttackPanel()
+    {
+        if (ActionPanel == null) return;
+
+        _specialAttackPanel = new GameObject("SpecialAttackPanel");
+        _specialAttackPanel.transform.SetParent(ActionPanel.transform, false);
+
+        var rt = _specialAttackPanel.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.02f, 0.35f);
+        rt.anchorMax = new Vector2(0.52f, 0.98f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        var bg = _specialAttackPanel.AddComponent<Image>();
+        bg.color = new Color(0.08f, 0.08f, 0.1f, 0.95f);
+
+        var layout = _specialAttackPanel.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 4f;
+        layout.padding = new RectOffset(8, 8, 8, 8);
+        layout.childControlHeight = true;
+        layout.childControlWidth = true;
+
+        _specialAttackPanel.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        CreateSpecialButton("Trip", "Trip");
+        CreateSpecialButton("Disarm", "Disarm");
+        CreateSpecialButton("Grapple", "Grapple");
+        CreateSpecialButton("Sunder", "Sunder");
+        CreateSpecialButton("Bull Rush", "Bull Rush");
+        CreateSpecialButton("Overrun", "Overrun");
+        CreateSpecialButton("Feint", "Feint");
+        CreateSpecialCancelButton();
+
+        _specialAttackPanel.SetActive(false);
+    }
+
+    private void WireSpecialAttackMenu(System.Action<SpecialAttackType> onSelect, System.Action onCancel)
+    {
+        if (_specialAttackPanel == null) return;
+
+        foreach (var btn in _specialAttackPanel.GetComponentsInChildren<Button>(true))
+        {
+            btn.onClick.RemoveAllListeners();
+            switch (btn.name)
+            {
+                case "Trip": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Trip)); break;
+                case "Disarm": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Disarm)); break;
+                case "Grapple": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Grapple)); break;
+                case "Sunder": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Sunder)); break;
+                case "Bull Rush": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.BullRush)); break;
+                case "Overrun": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Overrun)); break;
+                case "Feint": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Feint)); break;
+                case "Cancel": btn.onClick.AddListener(() => { HideSpecialAttackMenu(); onCancel?.Invoke(); }); break;
+            }
+        }
+    }
+
+    private void CreateSpecialButton(string name, string label)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(_specialAttackPanel.transform, false);
+        var img = go.AddComponent<Image>();
+        img.color = new Color(0.22f, 0.22f, 0.28f, 1f);
+        go.AddComponent<Button>();
+
+        GameObject txtGo = new GameObject("Text");
+        txtGo.transform.SetParent(go.transform, false);
+        var txtRt = txtGo.AddComponent<RectTransform>();
+        txtRt.anchorMin = Vector2.zero;
+        txtRt.anchorMax = Vector2.one;
+        txtRt.offsetMin = Vector2.zero;
+        txtRt.offsetMax = Vector2.zero;
+
+        var txt = txtGo.AddComponent<Text>();
+        txt.text = label;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.fontSize = 12;
+        txt.color = Color.white;
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 12);
+
+        var le = go.AddComponent<LayoutElement>();
+        le.minHeight = 24;
+    }
+
+    private void CreateSpecialCancelButton()
+    {
+        GameObject go = new GameObject("Cancel");
+        go.transform.SetParent(_specialAttackPanel.transform, false);
+        var img = go.AddComponent<Image>();
+        img.color = new Color(0.35f, 0.16f, 0.16f, 1f);
+        go.AddComponent<Button>();
+
+        GameObject txtGo = new GameObject("Text");
+        txtGo.transform.SetParent(go.transform, false);
+        var txtRt = txtGo.AddComponent<RectTransform>();
+        txtRt.anchorMin = Vector2.zero;
+        txtRt.anchorMax = Vector2.one;
+        txtRt.offsetMin = Vector2.zero;
+        txtRt.offsetMax = Vector2.zero;
+
+        var txt = txtGo.AddComponent<Text>();
+        txt.text = "Cancel";
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.fontSize = 12;
+        txt.color = Color.white;
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 12);
+
+        var le = go.AddComponent<LayoutElement>();
+        le.minHeight = 24;
     }
 
     /// <summary>

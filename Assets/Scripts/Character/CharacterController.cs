@@ -1,6 +1,16 @@
 using UnityEngine;
 using System.Collections.Generic;
 
+public enum SpecialAttackType
+{
+    Trip,
+    Disarm,
+    Grapple,
+    Sunder,
+    BullRush,
+    Overrun,
+    Feint
+}
 /// <summary>
 /// Controls a character on the square grid (both PC and NPC).
 /// Supports D&D 3.5 action economy, full attacks, dual wielding, and critical hits.
@@ -932,6 +942,316 @@ public class CharacterController : MonoBehaviour
 
         // Reset AoO counters for the new round
         ThreatSystem.ResetAoOForTurn(this);
+    }
+
+    // ========== SPECIAL ATTACK MANEUVERS ==========
+
+    public SpecialAttackResult ExecuteSpecialAttack(SpecialAttackType type, CharacterController target)
+    {
+        if (target == null || target.Stats == null)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = type.ToString(),
+                Success = false,
+                Log = $"{Stats.CharacterName} cannot perform {type}: no valid target."
+            };
+        }
+
+        switch (type)
+        {
+            case SpecialAttackType.Trip: return ResolveTrip(target);
+            case SpecialAttackType.Disarm: return ResolveDisarm(target);
+            case SpecialAttackType.Grapple: return ResolveGrapple(target);
+            case SpecialAttackType.Sunder: return ResolveSunder(target);
+            case SpecialAttackType.BullRush: return ResolveBullRush(target);
+            case SpecialAttackType.Overrun: return ResolveOverrun(target);
+            case SpecialAttackType.Feint: return ResolveFeint(target);
+            default:
+                return new SpecialAttackResult
+                {
+                    ManeuverName = type.ToString(),
+                    Success = false,
+                    Log = $"{Stats.CharacterName} tries an unknown maneuver."
+                };
+        }
+    }
+
+    private SpecialAttackResult ResolveTrip(CharacterController target)
+    {
+        int atkRoll = Random.Range(1, 21);
+        int defRoll = Random.Range(1, 21);
+        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + (Stats.HasFeat("Improved Trip") ? 4 : 0);
+        int defAbility = Mathf.Max(target.Stats.STRMod, target.Stats.DEXMod);
+        int defTotal = defRoll + target.Stats.BaseAttackBonus + defAbility + target.Stats.SizeModifier + (target.Stats.HasFeat("Improved Trip") ? 4 : 0);
+
+        bool success = atkTotal >= defTotal;
+        if (success)
+            target.Stats.ApplyCondition(CombatConditionType.Prone, 2, Stats.CharacterName);
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Trip",
+            Success = success,
+            CheckRoll = atkRoll,
+            CheckTotal = atkTotal,
+            OpposedRoll = defRoll,
+            OpposedTotal = defTotal,
+            Log = success
+                ? $"{Stats.CharacterName} trips {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) → PRONE (2 rounds)."
+                : $"{Stats.CharacterName} fails to trip {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
+        };
+    }
+
+    private SpecialAttackResult ResolveDisarm(CharacterController target)
+    {
+        ItemData targetWeapon = target.GetEquippedMainWeapon();
+        if (targetWeapon == null)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Disarm",
+                Success = false,
+                Log = $"{target.Stats.CharacterName} has no weapon to disarm."
+            };
+        }
+
+        int atkWeaponMod = GetDisarmWeaponModifier(this);
+        int defWeaponMod = GetDisarmWeaponModifier(target);
+
+        int atkRoll = Random.Range(1, 21);
+        int defRoll = Random.Range(1, 21);
+        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + atkWeaponMod + (Stats.HasFeat("Improved Disarm") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + defWeaponMod + (target.Stats.HasFeat("Improved Disarm") ? 4 : 0);
+
+        bool success = atkTotal >= defTotal;
+        if (success)
+        {
+            DestroyEquippedMainWeapon(target);
+            target.Stats.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
+        }
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Disarm",
+            Success = success,
+            CheckRoll = atkRoll,
+            CheckTotal = atkTotal,
+            OpposedRoll = defRoll,
+            OpposedTotal = defTotal,
+            Log = success
+                ? $"{Stats.CharacterName} disarms {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) {targetWeapon.Name} knocked away."
+                : $"{Stats.CharacterName} fails to disarm {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
+        };
+    }
+
+    private SpecialAttackResult ResolveGrapple(CharacterController target)
+    {
+        int touchRoll = Random.Range(1, 21);
+        int touchTotal = touchRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier;
+        int touchAC = 10 + target.Stats.DEXMod + target.Stats.SizeModifier;
+        if (touchTotal < touchAC)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Grapple",
+                Success = false,
+                CheckRoll = touchRoll,
+                CheckTotal = touchTotal,
+                OpposedTotal = touchAC,
+                Log = $"{Stats.CharacterName} misses grapple touch attack ({touchTotal} vs touch AC {touchAC})."
+            };
+        }
+
+        int atkRoll = Random.Range(1, 21);
+        int defRoll = Random.Range(1, 21);
+        int atkTotal = atkRoll + GetGrappleModifier();
+        int defTotal = defRoll + target.GetGrappleModifier();
+
+        bool success = atkTotal >= defTotal;
+        if (success)
+        {
+            Stats.ApplyCondition(CombatConditionType.Grappled, 2, target.Stats.CharacterName);
+            target.Stats.ApplyCondition(CombatConditionType.Grappled, 2, Stats.CharacterName);
+        }
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Grapple",
+            Success = success,
+            CheckRoll = atkRoll,
+            CheckTotal = atkTotal,
+            OpposedRoll = defRoll,
+            OpposedTotal = defTotal,
+            Log = success
+                ? $"{Stats.CharacterName} grapples {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) Both are GRAPPLED (2 rounds)."
+                : $"{Stats.CharacterName} fails to secure grapple on {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
+        };
+    }
+
+    private SpecialAttackResult ResolveSunder(CharacterController target)
+    {
+        ItemData targetWeapon = target.GetEquippedMainWeapon();
+        if (targetWeapon == null)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Sunder",
+                Success = false,
+                Log = $"{target.Stats.CharacterName} has no weapon to sunder."
+            };
+        }
+
+        int atkRoll = Random.Range(1, 21);
+        int defRoll = Random.Range(1, 21);
+        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + GetDisarmWeaponModifier(this) + (Stats.HasFeat("Improved Sunder") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + GetDisarmWeaponModifier(target);
+
+        bool success = atkTotal >= defTotal;
+        int damage = 0;
+        if (success)
+        {
+            int dmgRoll = 0;
+            for (int i = 0; i < Mathf.Max(1, Stats.BaseDamageCount); i++)
+                dmgRoll += Random.Range(1, Stats.BaseDamageDice + 1);
+            damage = dmgRoll + Mathf.Max(0, Stats.STRMod) + Stats.BonusDamage;
+
+            // Simplified object HP threshold for wielded weapons.
+            int breakThreshold = targetWeapon.IsTwoHanded ? 12 : 8;
+            if (damage >= breakThreshold)
+            {
+                DestroyEquippedMainWeapon(target);
+                target.Stats.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Sunder",
+                    Success = true,
+                    CheckRoll = atkRoll,
+                    CheckTotal = atkTotal,
+                    OpposedRoll = defRoll,
+                    OpposedTotal = defTotal,
+                    DamageDealt = damage,
+                    Log = $"{Stats.CharacterName} sunders {target.Stats.CharacterName}'s {targetWeapon.Name}! ({atkTotal} vs {defTotal}, {damage} object dmg)"
+                };
+            }
+        }
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Sunder",
+            Success = false,
+            CheckRoll = atkRoll,
+            CheckTotal = atkTotal,
+            OpposedRoll = defRoll,
+            OpposedTotal = defTotal,
+            DamageDealt = damage,
+            Log = success
+                ? $"{Stats.CharacterName} hits {target.Stats.CharacterName}'s {targetWeapon.Name} but fails to break it ({damage} dmg)."
+                : $"{Stats.CharacterName} fails to sunder {target.Stats.CharacterName}'s weapon. ({atkTotal} vs {defTotal})"
+        };
+    }
+
+    private SpecialAttackResult ResolveBullRush(CharacterController target)
+    {
+        int atkRoll = Random.Range(1, 21);
+        int defRoll = Random.Range(1, 21);
+        int atkTotal = atkRoll + Stats.STRMod + Stats.SizeModifier + (Stats.HasFeat("Improved Bull Rush") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.STRMod + target.Stats.SizeModifier;
+        bool success = atkTotal >= defTotal;
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Bull Rush",
+            Success = success,
+            CheckRoll = atkRoll,
+            CheckTotal = atkTotal,
+            OpposedRoll = defRoll,
+            OpposedTotal = defTotal,
+            Log = success
+                ? $"{Stats.CharacterName} wins Bull Rush against {target.Stats.CharacterName} ({atkTotal} vs {defTotal})."
+                : $"{Stats.CharacterName} fails Bull Rush against {target.Stats.CharacterName} ({atkTotal} vs {defTotal})."
+        };
+    }
+
+    private SpecialAttackResult ResolveOverrun(CharacterController target)
+    {
+        int atkRoll = Random.Range(1, 21);
+        int defRoll = Random.Range(1, 21);
+        int atkTotal = atkRoll + Stats.STRMod + Stats.SizeModifier + (Stats.HasFeat("Improved Overrun") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.STRMod + target.Stats.SizeModifier;
+        bool success = atkTotal >= defTotal;
+
+        if (success)
+            target.Stats.ApplyCondition(CombatConditionType.Prone, 1, Stats.CharacterName);
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Overrun",
+            Success = success,
+            CheckRoll = atkRoll,
+            CheckTotal = atkTotal,
+            OpposedRoll = defRoll,
+            OpposedTotal = defTotal,
+            Log = success
+                ? $"{Stats.CharacterName} overruns {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) Target knocked PRONE."
+                : $"{Stats.CharacterName} fails to overrun {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
+        };
+    }
+
+    private SpecialAttackResult ResolveFeint(CharacterController target)
+    {
+        int bluffRoll = Random.Range(1, 21);
+        int senseRoll = Random.Range(1, 21);
+        int bluffBonus = Stats.GetSkillBonus("Bluff") + (Stats.HasFeat("Improved Feint") ? 4 : 0);
+        int senseBonus = target.Stats.GetSkillBonus("Sense Motive");
+
+        int bluffTotal = bluffRoll + bluffBonus;
+        int senseTotal = senseRoll + senseBonus;
+        bool success = bluffTotal >= senseTotal;
+
+        if (success)
+            target.Stats.ApplyCondition(CombatConditionType.Feinted, 1, Stats.CharacterName);
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Feint",
+            Success = success,
+            CheckRoll = bluffRoll,
+            CheckTotal = bluffTotal,
+            OpposedRoll = senseRoll,
+            OpposedTotal = senseTotal,
+            Log = success
+                ? $"{Stats.CharacterName} feints {target.Stats.CharacterName} ({bluffTotal} vs {senseTotal}). Target is off-balance (-2 AC, 1 round)."
+                : $"{Stats.CharacterName}'s feint fails against {target.Stats.CharacterName} ({bluffTotal} vs {senseTotal})."
+        };
+    }
+
+    public int GetGrappleModifier()
+    {
+        return Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + (Stats.HasFeat("Improved Grapple") ? 4 : 0);
+    }
+
+    private static int GetDisarmWeaponModifier(CharacterController character)
+    {
+        ItemData weapon = character.GetEquippedMainWeapon();
+        if (weapon == null) return 0;
+        if (weapon.IsTwoHanded) return 4;
+        if (weapon.IsLightWeapon) return -4;
+        return 0;
+    }
+
+    private static void DestroyEquippedMainWeapon(CharacterController target)
+    {
+        var invComp = target.GetComponent<InventoryComponent>();
+        if (invComp == null || invComp.CharacterInventory == null) return;
+
+        var inv = invComp.CharacterInventory;
+        if (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon)
+            inv.RightHandSlot = null;
+        else if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon)
+            inv.LeftHandSlot = null;
+
+        inv.RecalculateStats();
     }
 
     // ========== 5-FOOT STEP ==========
