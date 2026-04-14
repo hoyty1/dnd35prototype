@@ -109,8 +109,8 @@ public static class AoESystem
     /// <param name="lengthSquares">Length of the cone in grid squares (e.g., 3 for 15 ft)</param>
     /// <param name="grid">Reference to the game grid</param>
     /// <param name="mouseWorldPos">
-    /// Optional current mouse world position used for cardinal first-row tilt
-    /// on larger cones (30-ft/60-ft). If null, legacy fixed placement is used.
+    /// Optional current mouse world position used for cardinal cone orientation
+    /// on larger cones (30-ft/60-ft). If null, legacy centered placement is used.
     /// </param>
     /// <returns>Set of grid coordinates within the cone (excludes origin)</returns>
     public static HashSet<Vector2Int> GetConeCells(
@@ -202,11 +202,14 @@ public static class AoESystem
             // First 2/3 of the range is expansion, last 1/3 is dissipation
             int expansionLength = (length * 2) / 3; // 6→4, 12→8
 
-            // First row (distance 1, width 2) can tilt based on mouse side.
-            // Uses lateral start 0 (legacy) or -1 (shift to opposite side).
+            // First-row tilt can be -1..0 or 0..1. Convert that into a single
+            // lateral shift and apply it to EVERY row so the whole cone orients
+            // consistently toward the mouse side.
+            const int centeredFirstRowLateralStart = 0; // [0,1]
             int firstRowLateralStart = mouseWorldPos.HasValue
                 ? GetTiltedFirstRowLateralStart(dirIndex, origin, mouseWorldPos.Value)
-                : 0;
+                : centeredFirstRowLateralStart;
+            int lateralShift = firstRowLateralStart - centeredFirstRowLateralStart;
 
             for (int primary = 1; primary <= length; primary++)
             {
@@ -225,20 +228,13 @@ public static class AoESystem
                     if (width < 2) width = 2; // minimum width of 2
                 }
 
-                // For the first row of larger cardinal cones (width=2), use
-                // mouse-based tilt. Keep all remaining rows unchanged/centered.
-                if (primary == 1 && width == 2)
-                {
-                    for (int lateral = firstRowLateralStart; lateral <= firstRowLateralStart + 1; lateral++)
-                    {
-                        offsets.Add(RotateCardinalOffset(dirIndex, primary, lateral));
-                    }
-                    continue;
-                }
-
-                // Width is always even; half-width for symmetric spread
+                // Width is always even; base centered spread is [-(halfW-1), halfW].
+                // Apply the same lateral shift to all rows for consistent tilt.
                 int halfW = width / 2;
-                for (int lateral = -(halfW - 1); lateral <= halfW; lateral++)
+                int lateralStart = -(halfW - 1) + lateralShift;
+                int lateralEnd = halfW + lateralShift;
+
+                for (int lateral = lateralStart; lateral <= lateralEnd; lateral++)
                 {
                     offsets.Add(RotateCardinalOffset(dirIndex, primary, lateral));
                 }
