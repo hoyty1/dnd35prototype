@@ -216,7 +216,7 @@ public class CombatResult
             if (CritConfirmed)
                 sb.AppendLine($"    Damage: {CritDamageDice} = {Damage - FeatDamageBonus} (crit)");
             else
-                sb.AppendLine($"    Damage: {!string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?"} = {BaseDamageRoll}");
+                sb.AppendLine($"    Damage: {(!string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?")} = {BaseDamageRoll}");
             if (SneakAttackApplied)
                 sb.AppendLine($"      Includes sneak attack: +{SneakAttackDamage} ({SneakAttackDice}d6)");
 
