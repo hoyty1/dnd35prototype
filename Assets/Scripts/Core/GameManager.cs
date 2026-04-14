@@ -95,6 +95,7 @@ public class GameManager : MonoBehaviour
     private bool _isAoETargeting;                          // Currently in AoE targeting mode
     private HashSet<Vector2Int> _currentAoECells;          // Cells currently highlighted for AoE preview
     private Vector2Int _lastAoEHoverPos = new Vector2Int(-1, -1); // Last hovered grid pos for AoE preview
+    private Vector2Int _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue); // Line intersection hover key
 
     // ========== SELF-CENTERED AOE CONFIRMATION STATE ==========
     private bool _isConfirmingSelfAoE;                     // Waiting for user to confirm self-centered AoE
@@ -1892,6 +1893,7 @@ public class GameManager : MonoBehaviour
         _isAoETargeting = true;
         _currentAoECells = null;
         _lastAoEHoverPos = new Vector2Int(-1, -1);
+        _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
         _pendingAttackMode = PendingAttackMode.CastSpell;
         CurrentSubPhase = PlayerSubPhase.SelectingAoETarget;
 
@@ -1936,10 +1938,29 @@ public class GameManager : MonoBehaviour
                 casterCell.SetHighlight(HighlightType.Selected);
 
             string sizeStr = $"{spell.AoESizeSquares * 5}-ft line";
-            CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} from caster | Move mouse to aim, click to cast | Right-click to cancel");
+            CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} — 360° targeting | Move mouse to aim at any angle, click to cast | Right-click to cancel");
         }
 
         Debug.Log($"[AoE] Entered AoE targeting mode: {spell.Name} ({spell.AoEShapeType}, {spell.AoESizeSquares} sq)");
+    }
+
+    /// <summary>
+    /// Get the current mouse position in world coordinates.
+    /// Used by AoE targeting for intersection-based line spell targeting.
+    /// </summary>
+    private Vector2 GetMouseWorldPosition()
+    {
+        Vector3 mouseScreenPos = Vector3.zero;
+#if ENABLE_LEGACY_INPUT_MANAGER
+        mouseScreenPos = Input.mousePosition;
+#endif
+#if ENABLE_INPUT_SYSTEM
+        var mouse = UnityEngine.InputSystem.Mouse.current;
+        if (mouse != null)
+            mouseScreenPos = (Vector3)(Vector2)mouse.position.ReadValue();
+#endif
+        if (_mainCam == null) return Vector2.zero;
+        return _mainCam.ScreenToWorldPoint(mouseScreenPos);
     }
 
     /// <summary>
@@ -1953,49 +1974,67 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null) return;
 
-        // Get mouse position in grid coordinates
-        Vector3 mouseScreenPos = Vector3.zero;
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        mouseScreenPos = Input.mousePosition;
-#endif
-
-#if ENABLE_INPUT_SYSTEM
-        var mouse = UnityEngine.InputSystem.Mouse.current;
-        if (mouse != null)
-            mouseScreenPos = (Vector3)(Vector2)mouse.position.ReadValue();
-#endif
-
-        if (_mainCam == null) return;
-
-        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
-        Vector2Int gridPos = SquareGridUtils.WorldToGrid(worldPoint);
-
-        // Only update if hover position changed
-        if (gridPos == _lastAoEHoverPos) return;
-        _lastAoEHoverPos = gridPos;
-
-        // Clear previous AoE preview (but keep range highlights)
-        ClearAoEPreviewHighlights();
+        // Get mouse position in world coordinates
+        Vector2 worldPoint = GetMouseWorldPosition();
+        if (worldPoint == Vector2.zero && _mainCam == null) return;
 
         HashSet<Vector2Int> aoeCells = null;
 
-        if (_pendingSpell.AoEShapeType == AoEShape.Burst)
+        // ===== LINE SPELLS: Intersection-based 360° targeting =====
+        if (_pendingSpell.AoEShapeType == AoEShape.Line)
         {
-            // Check if the hover position is within casting range
-            int range = _pendingSpell.AoERangeSquares > 0 ? _pendingSpell.AoERangeSquares : _pendingSpell.RangeSquares;
-            if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, range))
-                return; // Out of range, don't show preview
+            Vector2 rawDir = worldPoint - new Vector2(pc.GridPosition.x, pc.GridPosition.y);
 
-            aoeCells = AoESystem.GetBurstCells(gridPos, _pendingSpell.AoESizeSquares, Grid);
+            if (AoESystem.IsCardinalLineDirection(rawDir))
+            {
+                // Cardinal direction (N, E, S, W): use existing 8-direction snapped line
+                Vector2Int gridPos = SquareGridUtils.WorldToGrid(worldPoint);
+                // Encode as even key to distinguish from intersection keys
+                Vector2Int hoverKey = new Vector2Int(gridPos.x * 2, gridPos.y * 2);
+                if (hoverKey == _lastLineHoverKey) return;
+                _lastLineHoverKey = hoverKey;
+
+                ClearAoEPreviewHighlights();
+                aoeCells = AoESystem.GetLineCells(pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares, Grid);
+            }
+            else
+            {
+                // Non-cardinal direction: snap to nearest grid intersection
+                Vector2 intersection = SquareGridUtils.WorldToNearestIntersection(worldPoint);
+                // Encode intersection as odd key (2*n+1 values) to distinguish from cell keys
+                Vector2Int hoverKey = new Vector2Int(
+                    Mathf.RoundToInt(intersection.x * 2f),
+                    Mathf.RoundToInt(intersection.y * 2f));
+                if (hoverKey == _lastLineHoverKey) return;
+                _lastLineHoverKey = hoverKey;
+
+                ClearAoEPreviewHighlights();
+                aoeCells = AoESystem.GetLineCellsFromIntersection(
+                    pc.GridPosition, intersection, _pendingSpell.AoESizeSquares, Grid);
+            }
         }
-        else if (_pendingSpell.AoEShapeType == AoEShape.Cone)
+        else
         {
-            aoeCells = AoESystem.GetConeCells(pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares, Grid);
-        }
-        else if (_pendingSpell.AoEShapeType == AoEShape.Line)
-        {
-            aoeCells = AoESystem.GetLineCells(pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares, Grid);
+            // ===== BURST / CONE: existing grid-cell-based targeting =====
+            Vector2Int gridPos = SquareGridUtils.WorldToGrid(worldPoint);
+
+            // Only update if hover position changed
+            if (gridPos == _lastAoEHoverPos) return;
+            _lastAoEHoverPos = gridPos;
+
+            ClearAoEPreviewHighlights();
+
+            if (_pendingSpell.AoEShapeType == AoEShape.Burst)
+            {
+                int range = _pendingSpell.AoERangeSquares > 0 ? _pendingSpell.AoERangeSquares : _pendingSpell.RangeSquares;
+                if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, range))
+                    return;
+                aoeCells = AoESystem.GetBurstCells(gridPos, _pendingSpell.AoESizeSquares, Grid);
+            }
+            else if (_pendingSpell.AoEShapeType == AoEShape.Cone)
+            {
+                aoeCells = AoESystem.GetConeCells(pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares, Grid);
+            }
         }
 
         if (aoeCells == null || aoeCells.Count == 0) return;
@@ -2004,7 +2043,7 @@ public class GameManager : MonoBehaviour
 
         bool casterIsPC = IsPC(pc);
 
-        // Highlight the AoE cells
+        // Highlight the AoE cells with color-coded feedback
         foreach (Vector2Int cellPos in aoeCells)
         {
             SquareCell cell = Grid.GetCell(cellPos);
@@ -2012,7 +2051,6 @@ public class GameManager : MonoBehaviour
 
             if (cell.IsOccupied && cell.Occupant != null && !cell.Occupant.Stats.IsDead)
             {
-                // Determine highlight based on target filter and faction
                 CharacterController occupant = cell.Occupant;
                 bool isAlly = casterIsPC ? PCs.Contains(occupant) : NPCs.Contains(occupant);
                 bool isEnemy = casterIsPC ? NPCs.Contains(occupant) : PCs.Contains(occupant);
@@ -2103,7 +2141,24 @@ public class GameManager : MonoBehaviour
         }
         else if (_pendingSpell.AoEShapeType == AoEShape.Line)
         {
-            aoeCells = AoESystem.GetLineCells(caster.GridPosition, targetPos, _pendingSpell.AoESizeSquares, Grid);
+            // Line spells: use intersection-based targeting for 360° casting
+            Vector2 worldPoint = GetMouseWorldPosition();
+            Vector2 rawDir = worldPoint - new Vector2(caster.GridPosition.x, caster.GridPosition.y);
+
+            if (AoESystem.IsCardinalLineDirection(rawDir))
+            {
+                // Cardinal direction: use existing snapped line
+                aoeCells = AoESystem.GetLineCells(caster.GridPosition, targetPos, _pendingSpell.AoESizeSquares, Grid);
+                Debug.Log($"[AoE] Line cardinal direction → {aoeCells.Count} cells");
+            }
+            else
+            {
+                // Non-cardinal: snap to nearest intersection and trace line
+                Vector2 intersection = SquareGridUtils.WorldToNearestIntersection(worldPoint);
+                aoeCells = AoESystem.GetLineCellsFromIntersection(
+                    caster.GridPosition, intersection, _pendingSpell.AoESizeSquares, Grid);
+                Debug.Log($"[AoE] Line intersection ({intersection.x:F1},{intersection.y:F1}) → {aoeCells.Count} cells");
+            }
         }
 
         if (aoeCells == null || aoeCells.Count == 0)
@@ -2124,6 +2179,7 @@ public class GameManager : MonoBehaviour
         _isAoETargeting = false;
         _currentAoECells = null;
         _lastAoEHoverPos = new Vector2Int(-1, -1);
+        _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
 
         // Execute the AoE spell
         PerformAoESpellCast(caster, targets, aoeCells);
@@ -2137,6 +2193,7 @@ public class GameManager : MonoBehaviour
         _isAoETargeting = false;
         _currentAoECells = null;
         _lastAoEHoverPos = new Vector2Int(-1, -1);
+        _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
         _pendingSpell = null;
         _pendingMetamagic = null;
 

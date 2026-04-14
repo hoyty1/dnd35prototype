@@ -349,10 +349,29 @@ public static class AoESystem
         return dirIndex == 1 || dirIndex == 3 || dirIndex == 5 || dirIndex == 7;
     }
 
-    // ========== LINE (future use) ==========
+    // ========== LINE ==========
+    //
+    // D&D 3.5e PHB p.176: "A line-shaped spell shoots away from you in a line
+    // in the direction you designate. It starts from any corner of your square
+    // and extends to the limit of its range or until it strikes a barrier."
+    //
+    // Implementation supports two modes:
+    //
+    // CARDINAL LINES (N, E, S, W):
+    //   Simple 1-cell-wide line extending straight along the axis for
+    //   lengthSquares distance. Uses 8-direction snapping.
+    //
+    // NON-CARDINAL LINES (all other angles — full 360° targeting):
+    //   Intersection-based targeting per D&D 3.5e grid rules.
+    //   The player targets a grid intersection (corner where 4 squares meet).
+    //   The line is drawn from the nearest outside corner of the caster's square
+    //   to the target intersection. Any square the line passes through is affected.
+    //   Uses a DDA-style grid traversal algorithm to find affected squares.
+    // ========================================================================
 
     /// <summary>
-    /// Get all grid cells along a line from origin in a direction.
+    /// Get all grid cells along a line from origin in an 8-direction snapped direction.
+    /// Used for cardinal (and legacy diagonal) line targeting.
     /// The line is 1 cell wide and extends for the given length.
     /// </summary>
     public static HashSet<Vector2Int> GetLineCells(Vector2Int origin, Vector2Int targetPos, int lengthSquares, SquareGrid grid)
@@ -370,6 +389,183 @@ public static class AoESystem
             Vector2Int pos = origin + dir * i;
             if (grid.GetCell(pos) != null)
                 cells.Add(pos);
+        }
+
+        return cells;
+    }
+
+    /// <summary>
+    /// Get all grid cells along a line from origin to a target grid intersection.
+    /// Uses intersection-based targeting for full 360-degree line casting.
+    /// The line is drawn from the nearest corner of the caster's square to
+    /// the target intersection, and all squares the line passes through are affected.
+    /// </summary>
+    /// <param name="origin">Caster's grid position</param>
+    /// <param name="targetIntersection">Target grid intersection (half-integer coords, e.g., 5.5, 3.5)</param>
+    /// <param name="lengthSquares">Maximum line length in grid squares</param>
+    /// <param name="grid">Reference to the game grid</param>
+    /// <returns>Set of grid coordinates the line passes through (excludes caster's cell)</returns>
+    public static HashSet<Vector2Int> GetLineCellsFromIntersection(
+        Vector2Int origin, Vector2 targetIntersection, int lengthSquares, SquareGrid grid)
+    {
+        var cells = new HashSet<Vector2Int>();
+
+        Vector2 casterCenter = new Vector2(origin.x, origin.y);
+        Vector2 toTarget = targetIntersection - casterCenter;
+
+        if (toTarget.sqrMagnitude < 0.01f) return cells;
+
+        // Validate range: intersection must be within reach of the line
+        // Use generous range check (Euclidean distance from caster center)
+        float maxReach = lengthSquares + 1.0f;
+        if (toTarget.magnitude > maxReach) return cells;
+
+        // Select the closest corner of the caster's square to the target intersection
+        Vector2 startCorner = GetClosestCorner(origin, targetIntersection);
+
+        // Trace the line from the start corner to the target intersection
+        // and collect all grid cells the line passes through
+        cells = TraceLineThroughGrid(startCorner, targetIntersection, origin, grid);
+
+        // Filter cells by D&D 3.5e distance to enforce the line length limit
+        var result = new HashSet<Vector2Int>();
+        foreach (var cell in cells)
+        {
+            // Use Chebyshev distance as a generous upper bound for line length
+            // (actual D&D distance is always >= Chebyshev, so this is permissive)
+            int chebyDist = SquareGridUtils.ChebyshevDistance(origin, cell);
+            if (chebyDist <= lengthSquares)
+                result.Add(cell);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Check if a direction vector points along a cardinal axis (N, E, S, W).
+    /// Returns true if the closest 8-direction snap would be a cardinal direction.
+    /// Used to decide between cardinal line mode and intersection-based line mode.
+    /// </summary>
+    public static bool IsCardinalLineDirection(Vector2 direction)
+    {
+        if (direction.sqrMagnitude < 1e-6f) return true; // Default to cardinal
+        int dirIndex = GetClosestDirectionIndex(direction.normalized);
+        return dirIndex % 2 == 0; // 0=N, 2=E, 4=S, 6=W are even indices
+    }
+
+    /// <summary>
+    /// Select the corner of a grid cell that is closest to a target point.
+    /// A cell at (cx, cy) has corners at (cx±0.5, cy±0.5).
+    /// Used to determine the starting point of a line spell.
+    /// </summary>
+    private static Vector2 GetClosestCorner(Vector2Int cellPos, Vector2 target)
+    {
+        float bestDist = float.MaxValue;
+        Vector2 bestCorner = Vector2.zero;
+
+        for (int dx = -1; dx <= 1; dx += 2)
+        {
+            for (int dy = -1; dy <= 1; dy += 2)
+            {
+                Vector2 corner = new Vector2(cellPos.x + dx * 0.5f, cellPos.y + dy * 0.5f);
+                float dist = (corner - target).sqrMagnitude;
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    bestCorner = corner;
+                }
+            }
+        }
+
+        return bestCorner;
+    }
+
+    /// <summary>
+    /// Trace a line segment from start to end through the grid and collect
+    /// all cells the line passes through. Uses a boundary-crossing algorithm:
+    /// finds all t-values where the line crosses vertical (x = n+0.5) or
+    /// horizontal (y = m+0.5) grid boundaries, then samples the midpoint of
+    /// each segment to determine which cell the line is in.
+    /// </summary>
+    /// <param name="start">Start point of the line (corner of caster's square)</param>
+    /// <param name="end">End point of the line (target intersection)</param>
+    /// <param name="casterCell">Caster's cell position (excluded from results)</param>
+    /// <param name="grid">Reference to the game grid for bounds checking</param>
+    /// <returns>Set of grid cells the line passes through</returns>
+    private static HashSet<Vector2Int> TraceLineThroughGrid(
+        Vector2 start, Vector2 end, Vector2Int casterCell, SquareGrid grid)
+    {
+        var cells = new HashSet<Vector2Int>();
+
+        float dx = end.x - start.x;
+        float dy = end.y - start.y;
+
+        if (Mathf.Abs(dx) < 1e-6f && Mathf.Abs(dy) < 1e-6f) return cells;
+
+        // Collect all t-values where the line crosses grid boundaries.
+        // Cell (cx, cy) occupies [cx-0.5, cx+0.5] × [cy-0.5, cy+0.5],
+        // so boundaries are at x = n+0.5 and y = m+0.5 for integer n, m.
+        var tList = new List<float>();
+        tList.Add(0f);
+
+        // Vertical boundaries: x = n + 0.5
+        if (Mathf.Abs(dx) > 1e-6f)
+        {
+            float xLo = Mathf.Min(start.x, end.x);
+            float xHi = Mathf.Max(start.x, end.x);
+            int nLo = Mathf.CeilToInt(xLo - 0.5f);
+            int nHi = Mathf.FloorToInt(xHi - 0.5f);
+            for (int n = nLo; n <= nHi; n++)
+            {
+                float t = (n + 0.5f - start.x) / dx;
+                if (t > 1e-6f && t < 1f - 1e-6f)
+                    tList.Add(t);
+            }
+        }
+
+        // Horizontal boundaries: y = m + 0.5
+        if (Mathf.Abs(dy) > 1e-6f)
+        {
+            float yLo = Mathf.Min(start.y, end.y);
+            float yHi = Mathf.Max(start.y, end.y);
+            int mLo = Mathf.CeilToInt(yLo - 0.5f);
+            int mHi = Mathf.FloorToInt(yHi - 0.5f);
+            for (int m = mLo; m <= mHi; m++)
+            {
+                float t = (m + 0.5f - start.y) / dy;
+                if (t > 1e-6f && t < 1f - 1e-6f)
+                    tList.Add(t);
+            }
+        }
+
+        tList.Add(1f);
+        tList.Sort();
+
+        // Remove near-duplicate t-values (occurs when line passes through a
+        // grid intersection, where vertical and horizontal crossings coincide)
+        var segments = new List<float> { tList[0] };
+        for (int i = 1; i < tList.Count; i++)
+        {
+            if (tList[i] - segments[segments.Count - 1] > 1e-5f)
+                segments.Add(tList[i]);
+        }
+
+        // Sample the midpoint of each segment to determine which cell
+        // the line is passing through during that interval
+        for (int i = 0; i < segments.Count - 1; i++)
+        {
+            float midT = (segments[i] + segments[i + 1]) / 2f;
+            float mx = start.x + midT * dx;
+            float my = start.y + midT * dy;
+
+            // Cell (cx, cy) contains point (mx, my) when
+            // cx - 0.5 <= mx < cx + 0.5, so cx = Floor(mx + 0.5)
+            int cx = Mathf.FloorToInt(mx + 0.5f);
+            int cy = Mathf.FloorToInt(my + 0.5f);
+            Vector2Int cellPos = new Vector2Int(cx, cy);
+
+            if (cellPos != casterCell && grid.GetCell(cellPos) != null)
+                cells.Add(cellPos);
         }
 
         return cells;
