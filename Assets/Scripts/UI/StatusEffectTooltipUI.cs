@@ -65,7 +65,7 @@ public class StatusEffectTooltipUI : MonoBehaviour
         textGO.transform.SetParent(panelGO.transform, false);
         RectTransform textRT = textGO.AddComponent<RectTransform>();
         _text = textGO.AddComponent<Text>();
-        _text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        _text.font = LoadBuiltinTooltipFont();
         _text.fontSize = 14;
         _text.color = new Color(1f, 0.95f, 0.8f, 1f);
         _text.alignment = TextAnchor.UpperLeft;
@@ -108,6 +108,33 @@ public class StatusEffectTooltipUI : MonoBehaviour
         _panel.gameObject.SetActive(true);
     }
 
+    private static Font LoadBuiltinTooltipFont()
+    {
+        try
+        {
+            Font legacyRuntime = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (legacyRuntime != null)
+                return legacyRuntime;
+        }
+        catch
+        {
+            // Ignored - we'll try the legacy Arial fallback below.
+        }
+
+        try
+        {
+            Font arial = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            if (arial != null)
+                return arial;
+        }
+        catch
+        {
+            // Ignored - final fallback will be the dynamic built-in font.
+        }
+
+        Debug.LogWarning("StatusEffectTooltipUI: Could not load LegacyRuntime.ttf or Arial.ttf. Falling back to Arial dynamic font.");
+        return Font.CreateDynamicFontFromOSFont("Arial", 14);
+    }
     public void HideTooltip()
     {
         if (_panel != null)
