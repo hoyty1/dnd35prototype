@@ -104,8 +104,8 @@ public class CombatUI : MonoBehaviour
 
     [Header("Spellcasting")]
     public Button CastSpellButton;         // Cast Spell (Standard Action)
+    public Button DischargeTouchButton;    // Deliver currently held touch charge (Standard Action)
     public Text SpellSlotsText;            // Shows remaining spell slots
-
     [Header("Feat Controls")]
     public GameObject PowerAttackPanel;     // Panel containing Power Attack slider
     public Slider PowerAttackSlider;        // Slider for Power Attack value (0 to BAB)
@@ -498,9 +498,44 @@ public class CombatUI : MonoBehaviour
             if (PowerAttackPanel != null) PowerAttackPanel.SetActive(false);
             if (RapidShotPanel != null) RapidShotPanel.SetActive(false);
             if (RageStatusText != null) RageStatusText.gameObject.SetActive(false);
+            if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
         }
     }
 
+    private GameObject _touchSpellPromptPanel;
+    private bool _dischargeTouchHooked;
+
+    private void EnsureDischargeTouchButtonExists()
+    {
+        if (DischargeTouchButton == null)
+        {
+            if (ActionPanel == null || CastSpellButton == null) return;
+
+            GameObject cloned = Instantiate(CastSpellButton.gameObject, CastSpellButton.transform.parent);
+            cloned.name = "DischargeTouchButton";
+            DischargeTouchButton = cloned.GetComponent<Button>();
+
+            if (DischargeTouchButton == null) return;
+
+            Text txt = DischargeTouchButton.GetComponentInChildren<Text>();
+            if (txt != null) txt.text = "Discharge Touch";
+
+            var img = DischargeTouchButton.GetComponent<Image>();
+            if (img != null)
+                img.color = new Color(0.35f, 0.2f, 0.55f, 1f);
+        }
+
+        if (!_dischargeTouchHooked && DischargeTouchButton != null)
+        {
+            DischargeTouchButton.onClick.RemoveAllListeners();
+            DischargeTouchButton.onClick.AddListener(() =>
+            {
+                if (GameManager.Instance != null)
+                    GameManager.Instance.OnDischargeHeldTouchButtonPressed();
+            });
+            _dischargeTouchHooked = true;
+        }
+    }
     // ========== ACTION ECONOMY UI ==========
 
     /// <summary>
@@ -606,26 +641,40 @@ public class CombatUI : MonoBehaviour
                 else rageLabel.text = "Rage (Used)";
             }
         }
-        // Cast Spell button: visible if caster can cast now OR is already holding a touch charge.
+        // Cast Spell button: only for casting NEW spells (not discharging held charges)
         if (CastSpellButton != null)
         {
             bool isSpellcaster = pc.Stats.IsSpellcaster;
             var spellComp = pc.GetComponent<SpellcastingComponent>();
             bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnyCastablePreparedSpell();
-            bool hasHeldTouchCharge = isSpellcaster && spellComp != null && spellComp.HasHeldTouchCharge;
 
-            bool showCastButton = hasCastableSpells || hasHeldTouchCharge;
-            bool canCast = actions.HasStandardAction && showCastButton;
+            bool canCast = actions.HasStandardAction && hasCastableSpells;
 
-            CastSpellButton.gameObject.SetActive(showCastButton);
+            CastSpellButton.gameObject.SetActive(hasCastableSpells);
             CastSpellButton.interactable = canCast;
             Text castLabel = CastSpellButton.GetComponentInChildren<Text>();
             if (castLabel != null)
+                castLabel.text = canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)";
+        }
+
+        // Dedicated held-charge discharge button
+        EnsureDischargeTouchButtonExists();
+        if (DischargeTouchButton != null)
+        {
+            var spellComp = pc.GetComponent<SpellcastingComponent>();
+            bool hasHeldTouchCharge = pc.Stats.IsSpellcaster && spellComp != null && spellComp.HasHeldTouchCharge && spellComp.HeldTouchSpell != null;
+            bool canDischarge = actions.HasStandardAction && hasHeldTouchCharge;
+
+            DischargeTouchButton.gameObject.SetActive(hasHeldTouchCharge);
+            DischargeTouchButton.interactable = canDischarge;
+
+            Text dischargeLabel = DischargeTouchButton.GetComponentInChildren<Text>();
+            if (dischargeLabel != null)
             {
-                if (hasHeldTouchCharge && spellComp.HeldTouchSpell != null)
-                    castLabel.text = canCast ? $"Deliver Touch: {spellComp.HeldTouchSpell.Name}" : "Deliver Touch (N/A)";
-                else
-                    castLabel.text = canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)";
+                string heldName = hasHeldTouchCharge ? spellComp.HeldTouchSpell.Name : "Touch";
+                dischargeLabel.text = canDischarge
+                    ? $"Discharge {heldName}"
+                    : $"Discharge {heldName} (N/A)";
             }
         }
 
@@ -1859,6 +1908,157 @@ public class CombatUI : MonoBehaviour
             _metamagicInfoText.supportRichText = true;
             _metamagicInfoText.color = hasSlot ? new Color(0.9f, 0.9f, 0.7f) : new Color(1f, 0.5f, 0.5f);
         }
+    }
+
+    // ========================================================================
+    // TOUCH SPELL PROMPT (Cast Now vs Discharge Later)
+    // ========================================================================
+
+    public void ShowTouchSpellPrompt(SpellData spell, System.Action onCastNow, System.Action onDischargeLater, System.Action onCancel)
+    {
+        HideTouchSpellPrompt();
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            onCastNow?.Invoke();
+            return;
+        }
+
+        _touchSpellPromptPanel = new GameObject("TouchSpellPromptPanel");
+        _touchSpellPromptPanel.transform.SetParent(canvas.transform, false);
+
+        RectTransform panelRT = _touchSpellPromptPanel.AddComponent<RectTransform>();
+        panelRT.anchorMin = Vector2.zero;
+        panelRT.anchorMax = Vector2.one;
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        Image overlay = _touchSpellPromptPanel.AddComponent<Image>();
+        overlay.color = new Color(0f, 0f, 0f, 0.72f);
+
+        CanvasGroup cg = _touchSpellPromptPanel.AddComponent<CanvasGroup>();
+        cg.blocksRaycasts = true;
+        cg.interactable = true;
+
+        GameObject dialog = new GameObject("Dialog");
+        dialog.transform.SetParent(_touchSpellPromptPanel.transform, false);
+        RectTransform dialogRT = dialog.AddComponent<RectTransform>();
+        dialogRT.anchorMin = new Vector2(0.28f, 0.36f);
+        dialogRT.anchorMax = new Vector2(0.72f, 0.68f);
+        dialogRT.offsetMin = Vector2.zero;
+        dialogRT.offsetMax = Vector2.zero;
+
+        Image dialogBg = dialog.AddComponent<Image>();
+        dialogBg.color = new Color(0.1f, 0.1f, 0.18f, 0.97f);
+        Outline outline = dialog.AddComponent<Outline>();
+        outline.effectColor = new Color(0.65f, 0.55f, 0.95f, 1f);
+        outline.effectDistance = new Vector2(2f, 2f);
+
+        GameObject titleObj = new GameObject("Title");
+        titleObj.transform.SetParent(dialog.transform, false);
+        RectTransform titleRT = titleObj.AddComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0.05f, 0.8f);
+        titleRT.anchorMax = new Vector2(0.95f, 0.96f);
+        titleRT.offsetMin = Vector2.zero;
+        titleRT.offsetMax = Vector2.zero;
+
+        Text titleText = titleObj.AddComponent<Text>();
+        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (titleText.font == null) titleText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        titleText.fontSize = 18;
+        titleText.fontStyle = FontStyle.Bold;
+        titleText.color = new Color(0.9f, 0.85f, 1f);
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.text = "TOUCH SPELL OPTIONS";
+
+        GameObject bodyObj = new GameObject("BodyText");
+        bodyObj.transform.SetParent(dialog.transform, false);
+        RectTransform bodyRT = bodyObj.AddComponent<RectTransform>();
+        bodyRT.anchorMin = new Vector2(0.08f, 0.36f);
+        bodyRT.anchorMax = new Vector2(0.92f, 0.78f);
+        bodyRT.offsetMin = Vector2.zero;
+        bodyRT.offsetMax = Vector2.zero;
+
+        Text bodyText = bodyObj.AddComponent<Text>();
+        bodyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (bodyText.font == null) bodyText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        bodyText.fontSize = 15;
+        bodyText.alignment = TextAnchor.MiddleCenter;
+        bodyText.color = Color.white;
+        bodyText.text = $"You are casting: {spell.Name}\n\nHow do you want to cast this spell?";
+
+        Button castNowBtn = CreateTouchPromptButton(dialog, "CastNow", "Cast Now", new Vector2(0.08f, 0.08f), new Vector2(0.46f, 0.28f), new Color(0.2f, 0.45f, 0.25f, 1f));
+        castNowBtn.onClick.AddListener(() =>
+        {
+            HideTouchSpellPrompt();
+            onCastNow?.Invoke();
+        });
+
+        Button dischargeBtn = CreateTouchPromptButton(dialog, "DischargeLater", "Discharge Later", new Vector2(0.54f, 0.08f), new Vector2(0.92f, 0.28f), new Color(0.35f, 0.2f, 0.55f, 1f));
+        dischargeBtn.onClick.AddListener(() =>
+        {
+            HideTouchSpellPrompt();
+            onDischargeLater?.Invoke();
+        });
+
+        Button cancelBtn = CreateTouchPromptButton(dialog, "Cancel", "Cancel", new Vector2(0.38f, 0.01f), new Vector2(0.62f, 0.08f), new Color(0.45f, 0.2f, 0.2f, 1f));
+        cancelBtn.onClick.AddListener(() =>
+        {
+            HideTouchSpellPrompt();
+            onCancel?.Invoke();
+        });
+    }
+
+    public void HideTouchSpellPrompt()
+    {
+        if (_touchSpellPromptPanel != null)
+        {
+            Destroy(_touchSpellPromptPanel);
+            _touchSpellPromptPanel = null;
+        }
+    }
+
+    private Button CreateTouchPromptButton(GameObject parent, string name, string label, Vector2 anchorMin, Vector2 anchorMax, Color bgColor)
+    {
+        GameObject btnObj = new GameObject(name);
+        btnObj.transform.SetParent(parent.transform, false);
+
+        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
+        btnRT.anchorMin = anchorMin;
+        btnRT.anchorMax = anchorMax;
+        btnRT.offsetMin = Vector2.zero;
+        btnRT.offsetMax = Vector2.zero;
+
+        Image btnImg = btnObj.AddComponent<Image>();
+        btnImg.color = bgColor;
+
+        Button btn = btnObj.AddComponent<Button>();
+        var colors = btn.colors;
+        colors.highlightedColor = new Color(Mathf.Min(bgColor.r + 0.15f, 1f), Mathf.Min(bgColor.g + 0.15f, 1f), Mathf.Min(bgColor.b + 0.15f, 1f), 1f);
+        colors.pressedColor = new Color(Mathf.Max(bgColor.r - 0.1f, 0f), Mathf.Max(bgColor.g - 0.1f, 0f), Mathf.Max(bgColor.b - 0.1f, 0f), 1f);
+        btn.colors = colors;
+
+        GameObject txtObj = new GameObject("Text");
+        txtObj.transform.SetParent(btnObj.transform, false);
+
+        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = new Vector2(4, 2);
+        txtRT.offsetMax = new Vector2(-4, -2);
+
+        Text txt = txtObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        txt.fontSize = 13;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.fontStyle = FontStyle.Bold;
+        txt.color = Color.white;
+        txt.text = label;
+
+        return btn;
     }
 
     private Button CreateSpellDialogButton(GameObject parent, string name, string label,

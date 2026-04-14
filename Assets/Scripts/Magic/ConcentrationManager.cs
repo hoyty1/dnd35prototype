@@ -7,18 +7,18 @@ using System.Collections.Generic;
 /// Core Rules:
 ///   - A character can only concentrate on one spell at a time.
 ///   - Casting a new concentration spell ends the previous one.
-///   - Casting ANY spell while concentrating requires a Concentration check
-///     (DC 15 + spell level of the NEW spell) or the concentration spell ends.
-///   - Taking damage requires a Concentration check:
-///     DC = 10 + damage dealt + spell level of concentration spell.
+///   - Taking damage while concentrating requires a Concentration check:
+///     DC = 10 + damage dealt + spell level.
+///   - Holding a charged melee touch spell and taking damage also uses
+///     the same injury formula (DC = 10 + damage dealt + held spell level).
 ///   - Concentration can be voluntarily ended (free action).
 ///   - If the check fails or the character is killed/knocked unconscious,
-///     the concentration spell ends immediately.
+///     concentration ends immediately (held touch charges also dissipate).
 ///
-/// Concentration Check:
-///   Roll = d20 + caster level + primary casting stat modifier
-///   (WIS for Cleric/Druid, INT for Wizard, CHA for Sorcerer/Bard)
-///
+/// Concentration Check (D&D 3.5 PHB):
+///   Roll = d20 + Concentration skill modifier
+///   (Concentration ranks + CON modifier + misc bonuses)
+///   Note: Combat Casting applies only to casting defensively / grapple scenarios.
 /// This component is attached to each character alongside StatusEffectManager.
 /// </summary>
 public class ConcentrationManager : MonoBehaviour
@@ -37,9 +37,6 @@ public class ConcentrationManager : MonoBehaviour
     /// <summary>Reference to the StatusEffectManager on this character.</summary>
     private StatusEffectManager _statusEffectMgr;
 
-    /// <summary>Whether this character has the Combat Casting feat (+4 to concentration checks).</summary>
-    private bool _hasCombatCasting;
-
     // ========== INITIALIZATION ==========
 
     /// <summary>Initialize with character references.</summary>
@@ -48,14 +45,9 @@ public class ConcentrationManager : MonoBehaviour
         _stats = stats;
         Caster = caster;
         _statusEffectMgr = GetComponent<StatusEffectManager>();
-
-        // Check for Combat Casting feat
-        _hasCombatCasting = stats.HasFeat("Combat Casting");
     }
 
-    /// <summary>Whether this character is currently concentrating on a spell.</summary>
     public bool IsConcentrating => ConcentratingOn != null;
-
     /// <summary>Get the name of the spell being concentrated on.</summary>
     public string ConcentrationSpellName => ConcentratingOn?.Spell?.Name ?? "";
 
@@ -138,6 +130,43 @@ public class ConcentrationManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Perform a concentration check to maintain a held melee touch spell charge after taking damage.
+    /// Uses PHB injury formula: DC = 10 + damage dealt + held spell level.
+    /// </summary>
+    public ConcentrationCheckResult CheckHeldChargeOnDamage(SpellData heldSpell, int damageTaken)
+    {
+        if (heldSpell == null)
+            return new ConcentrationCheckResult { Success = true, LogMessage = "" };
+
+        int dc = 10 + damageTaken + Mathf.Max(0, heldSpell.SpellLevel);
+
+        int concentrationBonus = GetConcentrationBonus();
+        int d20 = Random.Range(1, 21);
+        int totalRoll = d20 + concentrationBonus;
+        bool success = totalRoll >= dc;
+
+        string bonusBreakdown = GetBonusBreakdown();
+        string resultStr = success ? "<color=#88FF88>Success!</color>" : "<color=#FF4444>Failed!</color>";
+
+        var result = new ConcentrationCheckResult
+        {
+            Success = success,
+            D20Roll = d20,
+            TotalBonus = concentrationBonus,
+            TotalRoll = totalRoll,
+            DC = dc,
+            SpellName = heldSpell.Name,
+            LogMessage = $"⚡ Concentration check (held {heldSpell.Name}) — DC {dc} (taking {damageTaken} damage)\n" +
+                        $"  Rolls d20({d20}) {bonusBreakdown} = {totalRoll}. {resultStr}\n" +
+                        (success
+                            ? $"  ✅ Held charge maintained ({heldSpell.Name})."
+                            : $"  ❌ Held charge lost ({heldSpell.Name}).")
+        };
+
+        return result;
+    }
+
+    /// <summary>
     /// Perform a concentration check when casting another spell while concentrating.
     /// DC = 15 + spell level of the NEW spell being cast.
     /// Note: In D&D 3.5e, casting a new concentration spell automatically ends
@@ -153,7 +182,7 @@ public class ConcentrationManager : MonoBehaviour
 
         int dc = 15 + newSpellLevel;
 
-        return PerformConcentrationCheck(dc, $"casting a spell");
+        return PerformConcentrationCheck(dc, "casting a spell");
     }
 
     /// <summary>
@@ -216,40 +245,32 @@ public class ConcentrationManager : MonoBehaviour
 
     /// <summary>
     /// Perform the actual concentration check roll.
-    /// Roll = d20 + caster level + primary casting stat modifier.
-    /// Combat Casting feat adds +4.
+    /// D&D 3.5 PHB: d20 + concentration modifier (ranks + CON + misc).
     /// </summary>
     private ConcentrationCheckResult PerformConcentrationCheck(int dc, string reason)
     {
         string spellName = ConcentrationSpellName;
-        int spellLevel = ConcentrationSpellLevel;
 
-        // Get the Concentration skill bonus
-        // In D&D 3.5e, Concentration is a skill (CON-based), not caster level + casting stat
-        // But since our skill system may not have Concentration fully ranked,
-        // we use: d20 + Concentration skill ranks + CON modifier
-        // If no ranks, fallback to: d20 + caster level + primary casting stat mod
+        // D&D 3.5 PHB concentration check: d20 + concentration modifier
+        // (ranks + CON modifier + misc).
         int concentrationBonus = GetConcentrationBonus();
-        int combatCastingBonus = _hasCombatCasting ? 4 : 0;
 
         int d20 = Random.Range(1, 21);
-        int totalRoll = d20 + concentrationBonus + combatCastingBonus;
+        int totalRoll = d20 + concentrationBonus;
         bool success = totalRoll >= dc;
 
         // Build detailed log message
-        string bonusBreakdown = GetBonusBreakdown(concentrationBonus, combatCastingBonus);
+        string bonusBreakdown = GetBonusBreakdown();
         string resultStr = success ? "<color=#88FF88>Success!</color>" : "<color=#FF4444>Failed!</color>";
 
         var result = new ConcentrationCheckResult();
         result.Success = success;
         result.D20Roll = d20;
-        result.TotalBonus = concentrationBonus + combatCastingBonus;
+        result.TotalBonus = concentrationBonus;
         result.TotalRoll = totalRoll;
         result.DC = dc;
         result.SpellName = spellName;
 
-        // Format: "Aldric takes 8 damage! Concentration check (Bless): DC 19"
-        //         "Rolls 15 + 3 (CON) + 1 (ranks) = 19. Success! Concentration maintained."
         string logLine1 = $"⚡ Concentration check ({spellName}) — DC {dc} ({reason})";
         string logLine2 = $"  Rolls d20({d20}) {bonusBreakdown} = {totalRoll}. {resultStr}";
 
@@ -271,50 +292,33 @@ public class ConcentrationManager : MonoBehaviour
 
     /// <summary>
     /// Get the total Concentration skill bonus.
-    /// D&D 3.5e: Concentration is CON-based.
-    /// Uses skill ranks if available, otherwise falls back to CON modifier + caster level.
+    /// D&D 3.5e PHB: Concentration modifier = ranks + CON modifier (+misc).
     /// </summary>
     private int GetConcentrationBonus()
     {
         if (_stats == null) return 0;
 
-        // Try to use the Concentration skill if it has ranks
+        int ranks = 0;
         if (_stats.Skills.ContainsKey("Concentration"))
-        {
-            var skill = _stats.Skills["Concentration"];
-            if (skill.Ranks > 0)
-            {
-                // Ranks + CON modifier (+ class skill bonus if applicable)
-                int conMod = CharacterStats.GetModifier(_stats.CON);
-                return skill.Ranks + conMod + skill.ClassSkillBonus;
-            }
-        }
+            ranks = _stats.Skills["Concentration"].Ranks;
 
-        // Fallback: CON modifier + half caster level (untrained skill use)
-        int fallbackConMod = CharacterStats.GetModifier(_stats.CON);
-        return fallbackConMod;
+        int conMod = CharacterStats.GetModifier(_stats.CON);
+        return ranks + conMod;
     }
 
     /// <summary>Build a human-readable breakdown of the concentration bonus.</summary>
-    private string GetBonusBreakdown(int concentrationBonus, int combatCastingBonus)
+    private string GetBonusBreakdown()
     {
         var parts = new List<string>();
 
-        if (_stats.Skills.ContainsKey("Concentration") && _stats.Skills["Concentration"].Ranks > 0)
-        {
-            var skill = _stats.Skills["Concentration"];
-            int conMod = CharacterStats.GetModifier(_stats.CON);
-            if (skill.Ranks > 0) parts.Add($"+ {skill.Ranks}(ranks)");
-            if (conMod != 0) parts.Add($"+ {conMod}(CON)");
-            if (skill.ClassSkillBonus > 0) parts.Add($"+ {skill.ClassSkillBonus}(class)");
-        }
-        else
-        {
-            int conMod = CharacterStats.GetModifier(_stats.CON);
-            if (conMod != 0) parts.Add($"+ {conMod}(CON)");
-        }
+        int ranks = 0;
+        if (_stats != null && _stats.Skills.ContainsKey("Concentration"))
+            ranks = _stats.Skills["Concentration"].Ranks;
 
-        if (combatCastingBonus > 0) parts.Add($"+ {combatCastingBonus}(Combat Casting)");
+        int conMod = _stats != null ? CharacterStats.GetModifier(_stats.CON) : 0;
+
+        if (ranks > 0) parts.Add($"+ {ranks}(ranks)");
+        if (conMod != 0) parts.Add($"+ {conMod}(CON)");
 
         return parts.Count > 0 ? string.Join(" ", parts) : "";
     }
