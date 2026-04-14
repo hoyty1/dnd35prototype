@@ -1944,7 +1944,8 @@ public class GameManager : MonoBehaviour
         // Check if caster is concentrating on another spell — casting requires a concentration check
         HandleConcentrationOnCasting(caster, _pendingSpell);
 
-        // Resolve the spell with metamagic
+        // Resolve the spell with metamagic.
+        // D&D 3.5e: willing friendly targets for melee touch delivery should auto-succeed.
         bool skipFriendlyTouchAttackRoll = _pendingSpell.IsMeleeTouchSpell() && IsFriendlyTarget(caster, target);
         SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll);
 
@@ -1966,16 +1967,20 @@ public class GameManager : MonoBehaviour
             CheckConcentrationOnDamage(target, result.DamageDealt);
         }
 
-        // Delivering a held charge consumes the held charge only on successful touch.
+        bool retainedHeldChargeOnMiss = false;
+
+        // Delivering a held charge clears it only if the touch actually lands.
+        // If the touch attack misses, keep the held charge (PHB 3.5e p.141).
         if (isDeliveringHeldCharge)
         {
-            if (result.Success)
+            bool touchDeliverySucceeded = !result.RequiredAttackRoll || result.AttackHit;
+            if (touchDeliverySucceeded)
             {
                 spellComp.ClearHeldTouchCharge("touch delivered");
             }
             else
             {
-                CombatUI.ShowCombatLog($"✋ {caster.Stats.CharacterName} misses with held {_pendingSpell.Name} and keeps the charge.");
+                retainedHeldChargeOnMiss = true;
             }
         }
 
@@ -2001,6 +2006,11 @@ public class GameManager : MonoBehaviour
         {
             string quickenedPrefix = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n";
             _lastCombatLog = quickenedPrefix + _lastCombatLog;
+        }
+
+        if (retainedHeldChargeOnMiss)
+        {
+            _lastCombatLog += $"\n✋ Touch attack missed — {caster.Stats.CharacterName} retains {_pendingSpell.Name} charge.";
         }
 
         if (GameManager.LogAttacksToConsole)
