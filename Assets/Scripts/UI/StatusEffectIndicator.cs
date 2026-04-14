@@ -244,6 +244,7 @@ public class StatusEffectIndicator : MonoBehaviour
             case CombatConditionType.Feinted: return "FE";
             case CombatConditionType.ChargePenalty: return "CH";
             case CombatConditionType.Disarmed: return "DS";
+            case CombatConditionType.Flanked: return "FL";
             default: return "ST";
         }
     }
@@ -259,6 +260,8 @@ public class StatusEffectIndicator : MonoBehaviour
             case CombatConditionType.ChargePenalty:
             case CombatConditionType.Disarmed:
                 return new Color(0.9f, 0.35f, 0.35f, 0.88f);
+            case CombatConditionType.Flanked:
+                return new Color(1f, 0.55f, 0.2f, 0.9f);
             default:
                 return new Color(0.95f, 0.82f, 0.35f, 0.88f);
         }
@@ -280,6 +283,8 @@ public class StatusEffectIndicator : MonoBehaviour
                 return $"Charge Penalty\n-2 AC\nDuration: {duration}";
             case CombatConditionType.Disarmed:
                 return $"Disarmed\nWeapon unavailable\nDuration: {duration}";
+            case CombatConditionType.Flanked:
+                return "Flanked\nEnemies gain +2 attack bonus\nRogues can Sneak Attack";
             default:
                 return $"{condition.Type}\nDuration: {duration}";
         }

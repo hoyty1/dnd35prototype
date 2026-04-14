@@ -15,36 +15,54 @@ public static class CombatUtils
     /// <summary>
     /// Check if two allies are flanking a target on the square grid.
     /// In D&D 3.5, flanking occurs when two allies are on opposite sides of an enemy.
-    /// For square grids, we check if the two allies are roughly 180 degrees apart
-    /// relative to the target (within a tolerance for grid geometry).
-    /// Both allies must be adjacent (within attack range 1) to the target.
+    /// Both allies must be adjacent to the target.
     /// </summary>
     public static bool IsFlanking(Vector2Int ally1Pos, Vector2Int ally2Pos, Vector2Int targetPos)
     {
-        // Both allies must be adjacent to the target (distance 1 in Chebyshev)
         if (!SquareGridUtils.IsAdjacent(ally1Pos, targetPos)) return false;
         if (!SquareGridUtils.IsAdjacent(ally2Pos, targetPos)) return false;
 
-        // Convert grid positions to world positions to calculate angle
         Vector3 targetWorld = SquareGridUtils.GridToWorld(targetPos);
         Vector3 ally1World = SquareGridUtils.GridToWorld(ally1Pos);
         Vector3 ally2World = SquareGridUtils.GridToWorld(ally2Pos);
 
-        // Calculate vectors from target to each ally
         Vector2 dir1 = new Vector2(ally1World.x - targetWorld.x, ally1World.y - targetWorld.y).normalized;
         Vector2 dir2 = new Vector2(ally2World.x - targetWorld.x, ally2World.y - targetWorld.y).normalized;
 
-        // Calculate the angle between the two directions
         float angle = Vector2.Angle(dir1, dir2);
 
-        // For square grids, opposite squares are 180 degrees apart.
-        // We use a tolerance of 45 degrees (square neighbors are 45 degrees apart,
-        // so 135+ degrees means opposite side).
+        // 135+ degrees is effectively opposite side on an 8-neighbor square grid.
         return angle >= 135f;
     }
 
     /// <summary>
-    /// Check if a specific attacker is flanking the target with any ally.
+    /// True if attacker and ally are on the same team.
+    /// </summary>
+    public static bool AreAllies(CharacterController attacker, CharacterController ally)
+    {
+        if (attacker == null || ally == null) return false;
+        return attacker.IsPlayerControlled == ally.IsPlayerControlled;
+    }
+
+    /// <summary>
+    /// True if this character currently threatens the target for melee purposes.
+    /// </summary>
+    public static bool IsThreatening(CharacterController character, CharacterController target)
+    {
+        if (character == null || target == null) return false;
+        if (character == target) return false;
+        if (character.Stats == null || target.Stats == null) return false;
+        if (character.Stats.IsDead || target.Stats.IsDead) return false;
+        if (!SquareGridUtils.IsAdjacent(character.GridPosition, target.GridPosition)) return false;
+
+        // D&D 3.5: ranged-only wielders do not threaten for flanking.
+        if (!character.HasMeleeWeaponEquipped()) return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Check if a specific attacker is flanking the target with any ally from the provided pool.
     /// Returns true if flanking is detected, and outputs the flanking partner.
     /// </summary>
     public static bool IsAttackerFlanking(CharacterController attacker, CharacterController target,
@@ -52,11 +70,18 @@ public static class CombatUtils
     {
         flankingPartner = null;
 
+        if (!IsThreatening(attacker, target))
+            return false;
+
+        if (potentialAllies == null || potentialAllies.Count == 0)
+            return false;
+
         foreach (var ally in potentialAllies)
         {
-            if (ally == attacker) continue;
-            if (ally == target) continue;
-            if (ally.Stats.IsDead) continue;
+            if (ally == null) continue;
+            if (ally == attacker || ally == target) continue;
+            if (!AreAllies(attacker, ally)) continue;
+            if (!IsThreatening(ally, target)) continue;
 
             if (IsFlanking(attacker.GridPosition, ally.GridPosition, target.GridPosition))
             {

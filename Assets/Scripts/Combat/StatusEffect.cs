@@ -49,7 +49,8 @@ public enum CombatConditionType
     Grappled,
     Disarmed,
     Feinted,
-    ChargePenalty
+    ChargePenalty,
+    Flanked
 }
 
 /// <summary>

@@ -179,6 +179,7 @@ public class CharacterStats
     public bool IsGrappled => ActiveConditions.Any(c => c.Type == CombatConditionType.Grappled);
     public bool IsDisarmed => ActiveConditions.Any(c => c.Type == CombatConditionType.Disarmed);
     public bool HasChargePenalty => ActiveConditions.Any(c => c.Type == CombatConditionType.ChargePenalty);
+    public bool IsFlanked => ActiveConditions.Any(c => c.Type == CombatConditionType.Flanked);
 
     /// <summary>Penalty to attack rolls from conditions.</summary>
     public int ConditionAttackPenalty => (IsProne ? -4 : 0) + (IsGrappled ? -2 : 0) + (IsDisarmed ? -4 : 0);
@@ -350,6 +351,7 @@ public class CharacterStats
                 : c.Type == CombatConditionType.Prone ? "#FF7777"
                 : c.Type == CombatConditionType.Feinted ? "#66CCFF"
                 : c.Type == CombatConditionType.ChargePenalty ? "#FF9966"
+                : c.Type == CombatConditionType.Flanked ? "#FFB347"
                 : "#FFFF66";
             parts.Add($"<color={color}>{c.Type}</color>({c.GetDurationLabel()})");
         }

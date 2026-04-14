@@ -457,7 +457,8 @@ public class GameManager : MonoBehaviour
             UpdateChargeHoverPreview();
 
         // Right-click / Escape to cancel targeting in various states
-        if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget
+        if (CurrentSubPhase == PlayerSubPhase.Moving
+            || CurrentSubPhase == PlayerSubPhase.SelectingAoETarget
             || CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE
             || CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget
             || CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget
@@ -492,7 +493,11 @@ public class GameManager : MonoBehaviour
 #endif
             if (rightClicked)
             {
-                if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
+                if (CurrentSubPhase == PlayerSubPhase.Moving)
+                {
+                    CancelMovementSelection();
+                }
+                else if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
                 {
                     OnSelfAoECancelled();
                 }
@@ -1126,8 +1131,54 @@ public class GameManager : MonoBehaviour
     /// <summary>Helper to update all stat UI panels using 4-PC multi-NPC system.</summary>
     private void UpdateAllStatsUI()
     {
+        RefreshFlankedConditions();
+
         if (CombatUI == null) return;
         CombatUI.UpdateAllStats4PC(PCs, NPCs);
+    }
+
+    /// <summary>
+    /// Keep Flanked condition badges in sync with current battlefield positions.
+    /// </summary>
+    private void RefreshFlankedConditions()
+    {
+        var allCharacters = GetAllCharacters();
+
+        foreach (var character in allCharacters)
+        {
+            if (character == null || character.Stats == null)
+                continue;
+
+            bool hasFlanked = character.HasCondition(CombatConditionType.Flanked);
+
+            // Dead units should not retain tactical flanking condition badges.
+            if (character.Stats.IsDead)
+            {
+                if (hasFlanked)
+                    character.Stats.RemoveCondition(CombatConditionType.Flanked);
+                continue;
+            }
+
+            bool shouldBeFlanked = false;
+            foreach (var enemy in allCharacters)
+            {
+                if (enemy == null || enemy == character || enemy.Stats == null) continue;
+                if (enemy.Stats.IsDead) continue;
+                if (enemy.IsPlayerControlled == character.IsPlayerControlled) continue;
+
+                CharacterController partner;
+                if (CombatUtils.IsAttackerFlanking(enemy, character, allCharacters, out partner))
+                {
+                    shouldBeFlanked = true;
+                    break;
+                }
+            }
+
+            if (shouldBeFlanked && !hasFlanked)
+                character.Stats.ApplyCondition(CombatConditionType.Flanked, -1, "Flanking");
+            else if (!shouldBeFlanked && hasFlanked)
+                character.Stats.RemoveCondition(CombatConditionType.Flanked);
+        }
     }
 
     /// <summary>Check if all NPCs in the encounter are dead.</summary>
@@ -1449,7 +1500,7 @@ public class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.Moving;
         ShowMovementRange(pc);
         CombatUI.SetActionButtonsVisible(false);
-        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (or own tile to cancel)");
+        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)");
     }
 
     public void OnAttackButtonPressed()
@@ -3151,6 +3202,26 @@ public class GameManager : MonoBehaviour
             current.SetHighlight(HighlightType.Selected);
     }
 
+    private void CancelMovementSelection()
+    {
+        CharacterController pc = ActivePC;
+
+        if (_pathPreview != null) _pathPreview.HidePath();
+        if (_hoverMarker != null) _hoverMarker.Hide();
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        _waitingForAoOConfirmation = false;
+        _pendingAoOPath = null;
+        _pendingMoveTarget = null;
+
+        if (pc != null)
+            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels movement.");
+
+        ShowActionChoices();
+    }
+
     // ========== PATH PREVIEW ==========
 
     /// <summary>
@@ -3379,13 +3450,8 @@ public class GameManager : MonoBehaviour
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        // Get all ally PCs for flanking calculation (all alive PCs except the attacker)
-        List<CharacterController> allyPCs = new List<CharacterController>();
-        foreach (var ally in PCs)
-        {
-            if (ally != null && ally != pc && !ally.Stats.IsDead)
-                allyPCs.Add(ally);
-        }
+        // All combatants are considered for flanking checks (team and threat filtering happens in CombatUtils).
+        List<CharacterController> allCombatants = GetAllCharacters();
 
         // Determine the equipped weapon's range increment
         ItemData weapon = pc.GetEquippedMainWeapon();
@@ -3424,16 +3490,9 @@ public class GameManager : MonoBehaviour
                         continue;
                 }
 
-                // Check flanking with any ally
-                bool flanking = false;
-                foreach (var ally in allyPCs)
-                {
-                    if (CombatUtils.IsFlanking(pc.GridPosition, ally.GridPosition, cell.Occupant.GridPosition))
-                    {
-                        flanking = true;
-                        break;
-                    }
-                }
+                // Check whether attacker can flank this target with any ally who actually threatens.
+                CharacterController flankPartner;
+                bool flanking = CombatUtils.IsAttackerFlanking(pc, cell.Occupant, allCombatants, out flankPartner);
 
                 if (flanking)
                 {
@@ -3553,7 +3612,7 @@ public class GameManager : MonoBehaviour
 
         if (cell.Coords == pc.GridPosition)
         {
-            ShowActionChoices();
+            CancelMovementSelection();
             return;
         }
 
@@ -3619,7 +3678,7 @@ public class GameManager : MonoBehaviour
             CurrentSubPhase = PlayerSubPhase.Moving;
             ShowMovementRange(pc);
             CombatUI.SetActionButtonsVisible(false);
-            CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (or own tile to cancel)");
+            CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)");
         }
     }
 
@@ -4364,16 +4423,11 @@ public class GameManager : MonoBehaviour
     {
         CurrentSubPhase = PlayerSubPhase.Animating;
 
-        // Check for flanking with ALL allies (not just one specific PC)
-        var allies = new List<CharacterController>();
-        foreach (var pc in PCs)
-        {
-            if (pc != null && pc != attacker && !pc.Stats.IsDead)
-                allies.Add(pc);
-        }
+        // Check flanking against all combatants (team/threat rules applied by CombatUtils).
+        var allCombatants = GetAllCharacters();
 
         CharacterController flankPartner;
-        bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allies, out flankPartner);
+        bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out flankPartner);
         int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
         string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
 
@@ -4411,7 +4465,10 @@ public class GameManager : MonoBehaviour
         attacker.Actions.UseStandardAction();
 
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        _lastCombatLog = result.GetDetailedSummary();
+        string flankLogPrefix = isFlanking
+            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
+            : string.Empty;
+        _lastCombatLog = flankLogPrefix + result.GetDetailedSummary();
 
         if (LogAttacksToConsole)
             Debug.Log("[Combat] " + _lastCombatLog);
@@ -4451,7 +4508,10 @@ public class GameManager : MonoBehaviour
         attacker.Actions.UseFullRoundAction();
 
         FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        _lastCombatLog = result.GetFullSummary();
+        string flankLogPrefix = isFlanking
+            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
+            : string.Empty;
+        _lastCombatLog = flankLogPrefix + result.GetFullSummary();
 
         if (LogAttacksToConsole)
             LogFullAttackToConsole(result);
@@ -4491,7 +4551,10 @@ public class GameManager : MonoBehaviour
         attacker.Actions.UseFullRoundAction();
 
         FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        _lastCombatLog = result.GetFullSummary();
+        string flankLogPrefix = isFlanking
+            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
+            : string.Empty;
+        _lastCombatLog = flankLogPrefix + result.GetFullSummary();
 
         if (LogAttacksToConsole)
             LogFullAttackToConsole(result);
@@ -4531,7 +4594,10 @@ public class GameManager : MonoBehaviour
         attacker.Actions.UseFullRoundAction();
 
         FullAttackResult result = attacker.FlurryOfBlows(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        _lastCombatLog = result.GetFullSummary();
+        string flankLogPrefix = isFlanking
+            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
+            : string.Empty;
+        _lastCombatLog = flankLogPrefix + result.GetFullSummary();
 
         if (LogAttacksToConsole)
             LogFullAttackToConsole(result);
@@ -4901,11 +4967,16 @@ public class GameManager : MonoBehaviour
             yield return new WaitForSeconds(0.06f);
         }
 
+        CharacterController flankPartner;
+        bool isFlankingCharge = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
+        int flankingBonus = isFlankingCharge ? CombatUtils.FlankingAttackBonus : 0;
+
         npc.Stats.MoraleAttackBonus += 2;
         CombatResult result;
         try
         {
-            result = npc.Attack(target, false, 0, null, null);
+            result = npc.Attack(target, isFlankingCharge, flankingBonus,
+                flankPartner != null ? flankPartner.Stats.CharacterName : null, null);
         }
         finally
         {
@@ -4914,7 +4985,8 @@ public class GameManager : MonoBehaviour
 
         if (result != null)
         {
-            CombatUI.ShowCombatLog($"☠ Charge Attack (+2): {result.GetDetailedSummary()}");
+            string flankText = isFlankingCharge ? " + Flanking" : "";
+            CombatUI.ShowCombatLog($"☠ Charge Attack (+2{flankText}): {result.GetDetailedSummary()}");
             if (result.Hit && result.TotalDamage > 0)
                 CheckConcentrationOnDamage(target, result.TotalDamage);
         }
@@ -4963,8 +5035,18 @@ public class GameManager : MonoBehaviour
     {
         npc.Actions.UseStandardAction();
         RangeInfo npcRangeInfo = CalculateRangeInfo(npc, target);
-        CombatResult result = npc.Attack(target, false, 0, null, npcRangeInfo);
-        _lastCombatLog = result.GetDetailedSummary();
+
+        CharacterController flankPartner;
+        bool isFlanking = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
+        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+
+        CombatResult result = npc.Attack(target, isFlanking, flankBonus,
+            flankPartner != null ? flankPartner.Stats.CharacterName : null, npcRangeInfo);
+
+        string flankLogPrefix = isFlanking
+            ? $"⚔ {npc.Stats.CharacterName} gains +2 flanking bonus{(flankPartner != null ? $" (with {flankPartner.Stats.CharacterName})" : "")}.\n"
+            : string.Empty;
+        _lastCombatLog = flankLogPrefix + result.GetDetailedSummary();
 
         if (LogAttacksToConsole)
             Debug.Log("[Combat] " + _lastCombatLog);
