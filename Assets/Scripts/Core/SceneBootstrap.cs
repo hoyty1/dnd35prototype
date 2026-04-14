@@ -43,6 +43,16 @@ public class SceneBootstrap : MonoBehaviour
         cam.orthographicSize = 10f;
         cam.backgroundColor = new Color(0.15f, 0.15f, 0.2f);
         cam.clearFlags = CameraClearFlags.SolidColor;
+
+        // Add camera zoom controller for battlefield navigation.
+        CameraController cameraController = cam.GetComponent<CameraController>();
+        if (cameraController == null)
+            cameraController = cam.gameObject.AddComponent<CameraController>();
+
+        cameraController.minZoom = 0.5f;
+        cameraController.maxZoom = 2.0f;
+        cameraController.zoomSpeed = 0.1f;
+        cameraController.zoomSmoothness = 5f;
     }
 
     // ========== SQUARE GRID ==========

@@ -81,6 +81,10 @@ public class CharacterController : MonoBehaviour
         _sr = GetComponent<SpriteRenderer>();
         if (_sr == null)
             _sr = gameObject.AddComponent<SpriteRenderer>();
+
+        // Battlefield status indicators (condition badges above token).
+        if (GetComponent<StatusEffectIndicator>() == null)
+            gameObject.AddComponent<StatusEffectIndicator>();
     }
 
     /// <summary>
@@ -130,6 +134,27 @@ public class CharacterController : MonoBehaviour
         targetCell.Occupant = this;
 
         HasMovedThisTurn = true;
+    }
+
+    /// <summary>
+    /// Returns a snapshot list of currently active combat conditions on this character.
+    /// </summary>
+    public List<StatusEffect> GetActiveConditions()
+    {
+        if (Stats == null || Stats.ActiveConditions == null)
+            return new List<StatusEffect>();
+
+        return new List<StatusEffect>(Stats.ActiveConditions);
+    }
+
+    /// <summary>
+    /// True if this character currently has the specified combat condition.
+    /// </summary>
+    public bool HasCondition(CombatConditionType type)
+    {
+        return Stats != null
+            && Stats.ActiveConditions != null
+            && Stats.ActiveConditions.Exists(c => c.Type == type);
     }
 
     // ========== SINGLE ATTACK (Standard Action) ==========
