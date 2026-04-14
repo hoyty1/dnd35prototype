@@ -628,7 +628,6 @@ public class CombatUI : MonoBehaviour
                     castLabel.text = canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)";
             }
         }
-        }
 
         if (RageStatusText != null)
         {
