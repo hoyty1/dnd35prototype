@@ -143,34 +143,77 @@ public static class AoESystem
         return cells;
     }
 
-    // ---- Cardinal Cone Pattern (Symmetric Spread) ----
+    // ---- Cardinal Cone Pattern ----
 
     /// <summary>
     /// Generate offsets for a cardinal direction cone (N, E, S, W).
-    /// Uses the D&D 3.5e PHB cone template pattern:
-    ///   - Distance 1: 1 cell (center of the cone axis)
-    ///   - Distance 2+: symmetric spread, width = 2 * floor(length/2) + 1
-    /// For a 15-ft cone (length=3): 1 + 3 + 3 = 7 cells
-    /// For a 30-ft cone (length=6): 1 + 5*5 = 26 cells
+    /// 
+    /// For 15-ft cones (length ≤ 3): Uses the classic 1-3-3 symmetric pattern (7 cells).
+    /// 
+    /// For larger cones (length > 3): Uses expansion/dissipation pattern:
+    ///   - Starting width: 2 squares at distance 1
+    ///   - First 2/3 (expansion): width increases by 2 each row (1 on each side)
+    ///   - Last 1/3 (dissipation): width decreases by 4 each row
+    ///   Example 30-ft (length=6): widths = 2, 4, 6, 8, 4, 2
+    ///   Example 60-ft (length=12): widths = 2, 4, 6, 8, 10, 12, 14, 16, 12, 8, 4, 2
     /// </summary>
     private static List<Vector2Int> GetCardinalConeOffsets(int dirIndex, int length)
     {
         var offsets = new List<Vector2Int>();
 
-        // The maximum half-width (spread to each side) for rows beyond the first
-        int halfWidth = length / 2; // integer division: 3→1, 6→3, 12→6
-
-        for (int primary = 1; primary <= length; primary++)
+        if (length <= 3)
         {
-            if (primary == 1)
+            // === 15-ft cone: existing 1-3-3 pattern ===
+            int halfWidth = length / 2; // 3→1
+
+            for (int primary = 1; primary <= length; primary++)
             {
-                // First row: just the center cell (lateral = 0)
-                offsets.Add(RotateCardinalOffset(dirIndex, primary, 0));
+                if (primary == 1)
+                {
+                    // First row: just the center cell (lateral = 0)
+                    offsets.Add(RotateCardinalOffset(dirIndex, primary, 0));
+                }
+                else
+                {
+                    // Subsequent rows: symmetric spread from -halfWidth to +halfWidth
+                    for (int lateral = -halfWidth; lateral <= halfWidth; lateral++)
+                    {
+                        offsets.Add(RotateCardinalOffset(dirIndex, primary, lateral));
+                    }
+                }
             }
-            else
+        }
+        else
+        {
+            // === Larger cones: expansion/dissipation pattern ===
+            // First 2/3 of the range is expansion, last 1/3 is dissipation
+            int expansionLength = (length * 2) / 3; // 6→4, 12→8
+
+            for (int primary = 1; primary <= length; primary++)
             {
-                // Subsequent rows: symmetric spread from -halfWidth to +halfWidth
-                for (int lateral = -halfWidth; lateral <= halfWidth; lateral++)
+                int width;
+                if (primary <= expansionLength)
+                {
+                    // Expansion phase: width = 2 * primary
+                    width = 2 * primary;
+                }
+                else
+                {
+                    // Dissipation phase: decrease by 4 each row from peak
+                    int peakWidth = 2 * expansionLength;
+                    int rowsPastPeak = primary - expansionLength;
+                    width = peakWidth - (4 * rowsPastPeak);
+                    if (width < 2) width = 2; // minimum width of 2
+                }
+
+                // Width is always even; half-width for symmetric spread
+                int halfW = width / 2;
+                // Lateral offsets: centered, from -(halfW-1) to +(halfW-1) then shift
+                // For width=2: cells at lateral -0.5 and +0.5 → use lateral 0 and -1 (offset by 1)
+                // Actually, for even widths centered on the axis:
+                // width 2: laterals = 0, -1  (or equivalently 0 and 1 centered)
+                // We center symmetrically: for width W (even), laterals from -(halfW) to (halfW-1)
+                for (int lateral = -(halfW - 1); lateral <= halfW; lateral++)
                 {
                     offsets.Add(RotateCardinalOffset(dirIndex, primary, lateral));
                 }
