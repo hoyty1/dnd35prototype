@@ -149,9 +149,28 @@ public class GameManager : MonoBehaviour
     {
         public CharacterController Controller;
         public CharacterController Caster;
+        public SummonTemplate Template;
         public int RemainingRounds;
+        public int TotalDurationRounds;
         public string SourceSpellId;
         public bool IsAlliedToPCs;
+        public bool SmiteUsed;
+    }
+
+    public class SummonSnapshot
+    {
+        public CharacterController Controller;
+        public CharacterController Caster;
+        public string DisplayName;
+        public string SubTitle;
+        public int RemainingRounds;
+        public int TotalDurationRounds;
+        public int CurrentHP;
+        public int MaxHP;
+        public int AC;
+        public bool IsCelestial;
+        public bool IsFiendish;
+        public string TooltipText;
     }
 
     private class SummonTemplate
@@ -172,6 +191,14 @@ public class GameManager : MonoBehaviour
         public int BaseSpeed;
         public int AttackRange;
         public int BaseHitDieHP;
+        public string CreatureTypeLine;
+        public string AttackLabel;
+        public bool IsCelestial;
+        public bool IsFiendish;
+        public bool HasTrip;
+        public bool HasDisease;
+        public bool HasMultiAttack;
+        public List<string> SpecialTraits = new List<string>();
         public List<string> CreatureTags = new List<string>();
     }
 
@@ -187,6 +214,10 @@ public class GameManager : MonoBehaviour
                     CharacterClass = "Warrior",
                     TokenType = "wolf",
                     TintColor = new Color(0.95f, 0.95f, 0.8f, 1f),
+                    CreatureTypeLine = "Small Magical Beast (Good)",
+                    AttackLabel = "Bite",
+                    IsCelestial = true,
+                    HasTrip = false,
                     Level = 1,
                     STR = 13, DEX = 14, CON = 13, WIS = 12, INT = 2, CHA = 6,
                     BAB = 1,
@@ -198,6 +229,7 @@ public class GameManager : MonoBehaviour
                     BaseSpeed = 8,
                     AttackRange = 1,
                     BaseHitDieHP = 8,
+                    SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (acid, cold, electricity)", "Scent", "Smite Evil 1/day" },
                     CreatureTags = new List<string> { "Animal", "Summoned", "Good" }
                 },
                 new SummonTemplate
@@ -207,6 +239,10 @@ public class GameManager : MonoBehaviour
                     CharacterClass = "Warrior",
                     TokenType = "wolf",
                     TintColor = new Color(0.6f, 0.2f, 0.2f, 1f),
+                    CreatureTypeLine = "Medium Magical Beast (Evil)",
+                    AttackLabel = "Bite",
+                    IsFiendish = true,
+                    HasTrip = true,
                     Level = 1,
                     STR = 13, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
                     BAB = 1,
@@ -218,6 +254,7 @@ public class GameManager : MonoBehaviour
                     BaseSpeed = 8,
                     AttackRange = 1,
                     BaseHitDieHP = 10,
+                    SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (cold, fire)", "Trip", "Smite Good 1/day" },
                     CreatureTags = new List<string> { "Animal", "Summoned", "Evil" }
                 },
                 new SummonTemplate
@@ -227,6 +264,9 @@ public class GameManager : MonoBehaviour
                     CharacterClass = "Warrior",
                     TokenType = "wizard",
                     TintColor = new Color(0.65f, 0.85f, 1f, 1f),
+                    CreatureTypeLine = "Small Elemental (Air)",
+                    AttackLabel = "Slam",
+                    HasTrip = false,
                     Level = 1,
                     STR = 10, DEX = 17, CON = 12, WIS = 11, INT = 4, CHA = 11,
                     BAB = 1,
@@ -238,6 +278,7 @@ public class GameManager : MonoBehaviour
                     BaseSpeed = 10,
                     AttackRange = 1,
                     BaseHitDieHP = 8,
+                    SpecialTraits = new List<string> { "Darkvision 60 ft", "Elemental traits", "Whirlwind (prototype)" },
                     CreatureTags = new List<string> { "Elemental", "Summoned" }
                 }
             }
@@ -252,6 +293,10 @@ public class GameManager : MonoBehaviour
                     CharacterClass = "Warrior",
                     TokenType = "wolf",
                     TintColor = new Color(0.92f, 0.92f, 0.75f, 1f),
+                    CreatureTypeLine = "Medium Magical Beast (Good)",
+                    AttackLabel = "Bite",
+                    IsCelestial = true,
+                    HasTrip = true,
                     Level = 2,
                     STR = 15, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
                     BAB = 2,
@@ -263,6 +308,7 @@ public class GameManager : MonoBehaviour
                     BaseSpeed = 8,
                     AttackRange = 1,
                     BaseHitDieHP = 14,
+                    SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (acid, cold, electricity)", "Trip", "Smite Evil 1/day" },
                     CreatureTags = new List<string> { "Animal", "Summoned", "Good" }
                 },
                 new SummonTemplate
@@ -272,6 +318,10 @@ public class GameManager : MonoBehaviour
                     CharacterClass = "Warrior",
                     TokenType = "orc",
                     TintColor = new Color(0.45f, 0.25f, 0.2f, 1f),
+                    CreatureTypeLine = "Medium Magical Beast (Evil)",
+                    AttackLabel = "Gore",
+                    IsFiendish = true,
+                    HasTrip = false,
                     Level = 2,
                     STR = 17, DEX = 10, CON = 17, WIS = 13, INT = 2, CHA = 4,
                     BAB = 2,
@@ -283,6 +333,7 @@ public class GameManager : MonoBehaviour
                     BaseSpeed = 8,
                     AttackRange = 1,
                     BaseHitDieHP = 16,
+                    SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (cold, fire)", "Ferocity", "Smite Good 1/day" },
                     CreatureTags = new List<string> { "Animal", "Summoned", "Evil" }
                 },
                 new SummonTemplate
@@ -292,6 +343,9 @@ public class GameManager : MonoBehaviour
                     CharacterClass = "Warrior",
                     TokenType = "wizard",
                     TintColor = new Color(1f, 0.55f, 0.25f, 1f),
+                    CreatureTypeLine = "Small Elemental (Fire)",
+                    AttackLabel = "Slam",
+                    HasTrip = false,
                     Level = 2,
                     STR = 12, DEX = 17, CON = 12, WIS = 11, INT = 4, CHA = 11,
                     BAB = 2,
@@ -303,6 +357,7 @@ public class GameManager : MonoBehaviour
                     BaseSpeed = 10,
                     AttackRange = 1,
                     BaseHitDieHP = 12,
+                    SpecialTraits = new List<string> { "Darkvision 60 ft", "Elemental traits", "Fire aura (prototype)" },
                     CreatureTags = new List<string> { "Elemental", "Summoned", "Fire" }
                 }
             }
@@ -1366,6 +1421,7 @@ public class GameManager : MonoBehaviour
 
         if (CombatUI == null) return;
         CombatUI.UpdateAllStats4PC(PCs, NPCs);
+        CombatUI.RefreshActiveSummonsPanel(GetActiveSummonSnapshots(), SelectSummonFromUI, RequestDismissSummon);
     }
 
     /// <summary>
@@ -2521,6 +2577,147 @@ public class GameManager : MonoBehaviour
         return null;
     }
 
+    private ActiveSummonInstance GetActiveSummon(CharacterController character)
+    {
+        if (character == null) return null;
+        for (int i = 0; i < _activeSummons.Count; i++)
+        {
+            var summon = _activeSummons[i];
+            if (summon != null && summon.Controller == character)
+                return summon;
+        }
+        return null;
+    }
+
+    public bool IsSummonedCreature(CharacterController character)
+    {
+        return GetActiveSummon(character) != null;
+    }
+
+    public bool TryGetSummonRemainingRounds(CharacterController character, out int remaining, out int total)
+    {
+        remaining = 0;
+        total = 1;
+        var summon = GetActiveSummon(character);
+        if (summon == null) return false;
+
+        remaining = Mathf.Max(0, summon.RemainingRounds);
+        total = Mathf.Max(1, summon.TotalDurationRounds);
+        return true;
+    }
+
+    public string GetSummonDisplayName(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return "";
+
+        if (!TryGetSummonRemainingRounds(character, out int remaining, out _))
+            return character.Stats.CharacterName;
+
+        string roundsWord = remaining == 1 ? "round" : "rounds";
+        return $"{character.Stats.CharacterName} [S] ({remaining} {roundsWord})";
+    }
+
+    public string GetSummonTooltip(CharacterController character)
+    {
+        var summon = GetActiveSummon(character);
+        if (summon == null || character == null || character.Stats == null)
+            return null;
+
+        CharacterStats s = character.Stats;
+        string typeLine = summon.Template != null && !string.IsNullOrEmpty(summon.Template.CreatureTypeLine)
+            ? summon.Template.CreatureTypeLine
+            : "Summoned Creature";
+
+        string attackName = summon.Template != null && !string.IsNullOrEmpty(summon.Template.AttackLabel)
+            ? summon.Template.AttackLabel
+            : "Attack";
+
+        string special = "None";
+        if (summon.Template != null && summon.Template.SpecialTraits != null && summon.Template.SpecialTraits.Count > 0)
+            special = string.Join("\n• ", summon.Template.SpecialTraits);
+
+        string casterName = summon.Caster != null && summon.Caster.Stats != null
+            ? summon.Caster.Stats.CharacterName
+            : "Unknown";
+
+        string roundsWord = summon.RemainingRounds == 1 ? "round" : "rounds";
+
+        return $"{GetSummonDisplayName(character)}\n{typeLine}\n\nHP: {s.CurrentHP}/{Mathf.Max(1, s.TotalMaxHP)}   AC: {s.ArmorClass}   Speed: {s.SpeedInFeet} ft\n" +
+               $"STR {s.STR}  DEX {s.DEX}  CON {s.CON}\nINT {s.INT}  WIS {s.WIS}  CHA {s.CHA}\n\n" +
+               $"Attack: {attackName} {CharacterStats.FormatMod(s.AttackBonus)} ({s.BaseDamageCount}d{s.BaseDamageDice}{CharacterStats.FormatMod(s.BonusDamage)})\n\n" +
+               $"Special:\n• {special}\n\nDuration: {summon.RemainingRounds} {roundsWord} remaining\nSummoned by: {casterName}";
+    }
+
+    public List<SummonSnapshot> GetActiveSummonSnapshots()
+    {
+        var snapshots = new List<SummonSnapshot>();
+        for (int i = 0; i < _activeSummons.Count; i++)
+        {
+            var summon = _activeSummons[i];
+            if (summon == null || summon.Controller == null || summon.Controller.Stats == null)
+                continue;
+
+            var stats = summon.Controller.Stats;
+            snapshots.Add(new SummonSnapshot
+            {
+                Controller = summon.Controller,
+                Caster = summon.Caster,
+                DisplayName = GetSummonDisplayName(summon.Controller),
+                SubTitle = summon.Template != null ? summon.Template.CreatureTypeLine : "Summoned Creature",
+                RemainingRounds = Mathf.Max(0, summon.RemainingRounds),
+                TotalDurationRounds = Mathf.Max(1, summon.TotalDurationRounds),
+                CurrentHP = stats.CurrentHP,
+                MaxHP = Mathf.Max(1, stats.TotalMaxHP),
+                AC = stats.ArmorClass,
+                IsCelestial = summon.Template != null && summon.Template.IsCelestial,
+                IsFiendish = summon.Template != null && summon.Template.IsFiendish,
+                TooltipText = GetSummonTooltip(summon.Controller)
+            });
+        }
+        return snapshots;
+    }
+
+    public void SelectSummonFromUI(CharacterController summon)
+    {
+        if (summon == null || summon.Stats == null || summon.Stats.IsDead)
+            return;
+
+        SquareCell cell = Grid.GetCell(summon.GridPosition);
+        if (cell != null)
+        {
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+            cell.SetHighlight(HighlightType.Selected);
+        }
+
+        CombatUI?.SetTurnIndicator($"Selected summon: {GetSummonDisplayName(summon)}");
+        CombatUI?.ShowCombatLog($"<color=#66E8FF>🔹 Selected summon: {GetSummonDisplayName(summon)}</color>");
+    }
+
+    public void RequestDismissSummon(CharacterController summon)
+    {
+        var active = GetActiveSummon(summon);
+        if (active == null || CombatUI == null) return;
+
+        string summonName = active.Controller != null && active.Controller.Stats != null
+            ? active.Controller.Stats.CharacterName
+            : "this summon";
+
+        CombatUI.ShowConfirmationDialog(
+            title: "Dismiss Summon",
+            message: $"Dismiss {summonName}?",
+            confirmLabel: "Yes",
+            cancelLabel: "No",
+            onConfirm: () =>
+            {
+                StartCoroutine(DespawnSummonWithEffect(active, "dismissed"));
+                _activeSummons.Remove(active);
+                UpdateAllStatsUI();
+            },
+            onCancel: null);
+    }
+
     private void ShowSummonPlacementTargets(CharacterController caster, SpellData spell)
     {
         Grid.ClearAllHighlights();
@@ -2593,20 +2790,48 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
-    private void InsertIntoInitiative(CharacterController combatant)
+    private void InsertIntoInitiative(CharacterController combatant, CharacterController summoner)
     {
         if (combatant == null || combatant.Stats == null) return;
 
         bool isPCTeam = IsPC(combatant);
         var entry = new InitiativeSystem.InitiativeEntry(combatant, isPCTeam);
 
-        int insertIdx = 0;
-        while (insertIdx < _initiativeOrder.Count)
+        int insertIdx = -1;
+        if (summoner != null)
         {
-            var cur = _initiativeOrder[insertIdx];
-            if (entry.Total > cur.Total) break;
-            if (entry.Total == cur.Total && entry.Modifier > cur.Modifier) break;
-            insertIdx++;
+            int summonerIdx = _initiativeOrder.FindIndex(e => e.Character == summoner);
+            if (summonerIdx >= 0)
+            {
+                entry.Roll = _initiativeOrder[summonerIdx].Roll;
+                entry.Modifier = _initiativeOrder[summonerIdx].Modifier;
+                entry.Total = _initiativeOrder[summonerIdx].Total;
+
+                insertIdx = summonerIdx + 1;
+                while (insertIdx < _initiativeOrder.Count)
+                {
+                    var e = _initiativeOrder[insertIdx];
+                    if (e.Total != entry.Total || e.Character == summoner)
+                        break;
+
+                    if (!IsSummonedCreature(e.Character))
+                        break;
+
+                    insertIdx++;
+                }
+            }
+        }
+
+        if (insertIdx < 0)
+        {
+            insertIdx = 0;
+            while (insertIdx < _initiativeOrder.Count)
+            {
+                var cur = _initiativeOrder[insertIdx];
+                if (entry.Total > cur.Total) break;
+                if (entry.Total == cur.Total && entry.Modifier > cur.Modifier) break;
+                insertIdx++;
+            }
         }
 
         _initiativeOrder.Insert(insertIdx, entry);
@@ -2650,6 +2875,13 @@ public class GameManager : MonoBehaviour
                 stats.CreatureTags.Add(tag);
         }
 
+        if (template.IsCelestial)
+            stats.CharacterAlignment = Alignment.NeutralGood;
+        else if (template.IsFiendish)
+            stats.CharacterAlignment = Alignment.NeutralEvil;
+        else
+            stats.CharacterAlignment = Alignment.TrueNeutral;
+
         Sprite alive = IconLoader.GetToken(template.TokenType);
         if (alive == null)
             alive = LoadSprite("Sprites/npc_enemy_alive");
@@ -2679,14 +2911,24 @@ public class GameManager : MonoBehaviour
         else
             _summonedEnemies.Add(summon);
 
+        var summonVisual = summon.gameObject.GetComponent<SummonedCreatureVisual>();
+        if (summonVisual == null)
+            summonVisual = summon.gameObject.AddComponent<SummonedCreatureVisual>();
+        summonVisual.Init(summon, template.IsCelestial, template.IsFiendish);
+
         return summon;
     }
 
-    private void DespawnSummon(ActiveSummonInstance summon, string reason)
+    private IEnumerator DespawnSummonWithEffect(ActiveSummonInstance summon, string reason)
     {
-        if (summon == null || summon.Controller == null) return;
+        if (summon == null || summon.Controller == null)
+            yield break;
 
         CharacterController cc = summon.Controller;
+
+        var summonVisual = cc.GetComponent<SummonedCreatureVisual>();
+        if (summonVisual != null)
+            yield return StartCoroutine(summonVisual.PlayDespawnEffect());
 
         SquareCell currentCell = Grid.GetCell(cc.GridPosition);
         if (currentCell != null && currentCell.Occupant == cc)
@@ -2719,7 +2961,15 @@ public class GameManager : MonoBehaviour
         if (cc == _activeTurnCharacter)
             _activeTurnCharacter = null;
 
-        CombatUI?.ShowCombatLog($"<color=#E6C676>⏱ {cc.Stats.CharacterName} fades away ({reason}).</color>");
+        string despawnMessage;
+        if (reason == "duration expired")
+            despawnMessage = $"<color=#66E8FF>{cc.Stats.CharacterName} disappears as the summoning ends.</color>";
+        else if (reason == "dismissed")
+            despawnMessage = $"<color=#66E8FF>{cc.Stats.CharacterName} returns to its home plane.</color>";
+        else
+            despawnMessage = $"<color=#FF8F8F>{cc.Stats.CharacterName} is slain! (Summoning ended early)</color>";
+
+        CombatUI?.ShowCombatLog(despawnMessage);
         Debug.Log($"[Summon] Despawned {cc.Stats.CharacterName}: {reason}");
 
         Destroy(cc.gameObject);
@@ -2731,12 +2981,13 @@ public class GameManager : MonoBehaviour
     {
         if (maybeSummon == null) return;
 
-        ActiveSummonInstance summon = _activeSummons.Find(s => s != null && s.Controller == maybeSummon);
+        ActiveSummonInstance summon = GetActiveSummon(maybeSummon);
         if (summon == null) return;
 
-        DespawnSummon(summon, "destroyed");
         _activeSummons.Remove(summon);
+        StartCoroutine(DespawnSummonWithEffect(summon, "destroyed"));
     }
+
     private void TickSummonDurations()
     {
         if (_activeSummons.Count == 0) return;
@@ -2757,14 +3008,24 @@ public class GameManager : MonoBehaviour
             }
 
             summon.RemainingRounds--;
+
+            var visual = summon.Controller.GetComponent<SummonedCreatureVisual>();
+            if (visual != null)
+                visual.SetDuration(summon.RemainingRounds, summon.TotalDurationRounds);
+
+            if (summon.RemainingRounds == 2)
+                CombatUI?.ShowCombatLog($"<color=#66E8FF>{summon.Controller.Stats.CharacterName}: 2 rounds remaining.</color>");
+            else if (summon.RemainingRounds == 1)
+                CombatUI?.ShowCombatLog($"<color=#FFCC66>{summon.Controller.Stats.CharacterName}: 1 round remaining!</color>");
+
             if (summon.RemainingRounds <= 0)
                 expired.Add(summon);
         }
 
         foreach (var ex in expired)
         {
-            DespawnSummon(ex, ex != null && ex.RemainingRounds <= 0 ? "duration expired" : "destroyed");
             _activeSummons.Remove(ex);
+            StartCoroutine(DespawnSummonWithEffect(ex, ex != null && ex.RemainingRounds <= 0 ? "duration expired" : "destroyed"));
         }
     }
 
@@ -2798,19 +3059,27 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        InsertIntoInitiative(summonCC);
+        InsertIntoInitiative(summonCC, caster);
 
         int durationRounds = Mathf.Max(1, caster.Stats.Level);
-        _activeSummons.Add(new ActiveSummonInstance
+        var activeSummon = new ActiveSummonInstance
         {
             Controller = summonCC,
             Caster = caster,
+            Template = template,
             RemainingRounds = durationRounds,
+            TotalDurationRounds = durationRounds,
             SourceSpellId = _pendingSpell.SpellId,
-            IsAlliedToPCs = summonCC.IsPlayerControlled
-        });
+            IsAlliedToPCs = summonCC.IsPlayerControlled,
+            SmiteUsed = false
+        };
+        _activeSummons.Add(activeSummon);
 
-        CombatUI.ShowCombatLog($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name} and summons {template.DisplayName} for {durationRounds} rounds!");
+        var visual = summonCC.GetComponent<SummonedCreatureVisual>();
+        if (visual != null)
+            visual.SetDuration(durationRounds, durationRounds);
+
+        CombatUI.ShowCombatLog($"<color=#66E8FF>✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name} and summons {template.DisplayName} for {durationRounds} rounds!</color>");
 
         _pendingSpell = null;
         _pendingMetamagic = null;
@@ -5969,12 +6238,23 @@ public class GameManager : MonoBehaviour
     private IEnumerator SingleNPCTurn(CharacterController npc, EnemyAIBehavior behavior)
     {
         npc.StartNewTurn();
-        CombatUI.SetTurnIndicator($"{npc.Stats.CharacterName}'s turn...");
-        CombatUI.ShowCombatLog($"<color=#FF6666>💀 {npc.Stats.CharacterName}'s turn begins</color>");
+
+        bool isSummon = IsSummonedCreature(npc);
+        string turnColor = isSummon ? "#66E8FF" : "#FF6666";
+        string turnIcon = isSummon ? "✶" : "💀";
+
+        CombatUI.SetTurnIndicator($"{GetSummonDisplayName(npc)}'s turn...");
+        CombatUI.ShowCombatLog($"<color={turnColor}>{turnIcon} {GetSummonDisplayName(npc)}'s turn begins</color>");
         yield return new WaitForSeconds(0.6f);
 
         CharacterController targetPC = GetClosestAlivePCTo(npc);
         if (targetPC == null) yield break;
+
+        if (isSummon)
+        {
+            yield return StartCoroutine(AI_SummonedCreature(npc));
+            yield break;
+        }
 
         switch (behavior)
         {
@@ -6131,6 +6411,162 @@ public class GameManager : MonoBehaviour
         }
     }
 
+
+    private IEnumerator AI_SummonedCreature(CharacterController summon)
+    {
+        ActiveSummonInstance data = GetActiveSummon(summon);
+        if (data == null)
+            yield break;
+
+        CharacterController target = ChooseBestSummonTarget(summon, data);
+        if (target == null)
+            yield break;
+
+        bool lowHP = summon.Stats != null && summon.Stats.TotalMaxHP > 0 && summon.Stats.CurrentHP <= Mathf.CeilToInt(summon.Stats.TotalMaxHP * 0.30f);
+
+        if (lowHP)
+        {
+            SquareCell retreat = FindBestMoveAwayFrom(summon, target.GridPosition);
+            if (retreat != null && retreat.Coords != summon.GridPosition)
+            {
+                summon.MoveToCell(retreat);
+                if (summon.Actions.HasMoveAction)
+                    summon.Actions.UseMoveAction();
+                CombatUI.ShowCombatLog($"<color=#FFCC66>{GetSummonDisplayName(summon)} withdraws to survive.</color>");
+                yield return new WaitForSeconds(0.45f);
+            }
+        }
+
+        int dist = SquareGridUtils.GetDistance(summon.GridPosition, target.GridPosition);
+        if (dist > summon.Stats.AttackRange && summon.Actions.HasMoveAction)
+        {
+            SquareCell bestCell = FindBestMoveToward(summon, target.GridPosition);
+            if (bestCell != null)
+            {
+                summon.MoveToCell(bestCell);
+                summon.Actions.UseMoveAction();
+                CombatUI.ShowCombatLog($"<color=#66E8FF>{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}.</color>");
+                yield return new WaitForSeconds(0.4f);
+            }
+        }
+
+        target = ChooseBestSummonTarget(summon, data);
+        if (target == null)
+            yield break;
+
+        dist = SquareGridUtils.GetDistance(summon.GridPosition, target.GridPosition);
+        if (dist > summon.Stats.AttackRange || target.Stats.IsDead)
+            yield break;
+
+        if (data.Template != null && data.Template.HasTrip && !target.Stats.IsProne && summon.Actions.HasStandardAction)
+        {
+            var trip = summon.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
+            CombatUI.ShowCombatLog($"<color=#66E8FF>✦ {GetSummonDisplayName(summon)} attempts Trip: {trip.Log}</color>");
+            summon.Actions.UseStandardAction();
+            UpdateAllStatsUI();
+            yield return new WaitForSeconds(0.65f);
+            yield break;
+        }
+
+        if (TryExecuteSummonSmiteAttack(summon, target, data))
+        {
+            UpdateAllStatsUI();
+            yield return new WaitForSeconds(0.8f);
+            yield break;
+        }
+
+        yield return StartCoroutine(NPCPerformAttack(summon, target));
+    }
+
+    private CharacterController ChooseBestSummonTarget(CharacterController summon, ActiveSummonInstance summonData)
+    {
+        CharacterController best = null;
+        int bestScore = int.MinValue;
+
+        foreach (var candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate == summon || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!IsEnemyTeam(summon, candidate))
+                continue;
+
+            int score = 0;
+            int dist = SquareGridUtils.GetDistance(summon.GridPosition, candidate.GridPosition);
+            score += Mathf.Max(0, 40 - dist * 5);
+            score += Mathf.Max(0, 24 - candidate.Stats.CurrentHP);
+
+            if (candidate.Stats.IsProne)
+                score += 7;
+
+            if (summonData != null && summonData.Template != null)
+            {
+                if (!summonData.SmiteUsed)
+                {
+                    bool goodTarget = summonData.Template.IsFiendish && AlignmentHelper.IsGood(candidate.Stats.CharacterAlignment);
+                    bool evilTarget = summonData.Template.IsCelestial && AlignmentHelper.IsEvil(candidate.Stats.CharacterAlignment);
+                    if (goodTarget || evilTarget)
+                        score += 35;
+                }
+
+                if (summonData.Template.HasTrip && !candidate.Stats.IsProne)
+                    score += 9;
+            }
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    private bool TryExecuteSummonSmiteAttack(CharacterController summon, CharacterController target, ActiveSummonInstance summonData)
+    {
+        if (summon == null || target == null || summonData == null || summonData.Template == null)
+            return false;
+        if (summonData.SmiteUsed)
+            return false;
+        if (!summon.Actions.HasStandardAction)
+            return false;
+
+        bool smiteEvil = summonData.Template.IsCelestial && AlignmentHelper.IsEvil(target.Stats.CharacterAlignment);
+        bool smiteGood = summonData.Template.IsFiendish && AlignmentHelper.IsGood(target.Stats.CharacterAlignment);
+        if (!smiteEvil && !smiteGood)
+            return false;
+
+        int attackBonus = Mathf.Max(1, summon.Stats.CHAMod + 2);
+        int damageBonus = Mathf.Max(1, summon.Stats.Level + 2);
+
+        summon.Stats.MoraleAttackBonus += attackBonus;
+        summon.Stats.MoraleDamageBonus += damageBonus;
+
+        CombatResult result;
+        try
+        {
+            CharacterController flankPartner;
+            bool isFlanking = CombatUtils.IsAttackerFlanking(summon, target, GetAllCharacters(), out flankPartner);
+            int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+            result = summon.Attack(target, isFlanking, flankBonus, flankPartner != null ? flankPartner.Stats.CharacterName : null, null);
+        }
+        finally
+        {
+            summon.Stats.MoraleAttackBonus -= attackBonus;
+            summon.Stats.MoraleDamageBonus -= damageBonus;
+        }
+
+        summon.Actions.UseStandardAction();
+        summonData.SmiteUsed = true;
+
+        string targetAxis = smiteEvil ? "Evil" : "Good";
+        CombatUI.ShowCombatLog($"<color=#FFD280>✦ {GetSummonDisplayName(summon)} uses Smite {targetAxis}! {result.GetDetailedSummary()}</color>");
+
+        if (result.TargetKilled)
+            HandleSummonDeathCleanup(target);
+
+        return true;
+    }
     private bool ShouldNPCUseCharge(CharacterController npc, CharacterController target)
     {
         if (npc == null || target == null) return false;

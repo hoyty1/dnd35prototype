@@ -209,7 +209,11 @@ public class CombatUI : MonoBehaviour
         {
             string raceStr = !string.IsNullOrEmpty(s.RaceName) ? $"{s.RaceName} " : "";
             string sizeStr = (s.SizeCategory != "Medium") ? $" [{s.SizeCategory}]" : "";
-            nameText.text = $"{s.CharacterName} (Lv {s.Level} {raceStr}{s.CharacterClass}){sizeStr}";
+            string displayName = s.CharacterName;
+            if (GameManager.Instance != null)
+                displayName = GameManager.Instance.GetSummonDisplayName(ch);
+
+            nameText.text = $"{displayName} (Lv {s.Level} {raceStr}{s.CharacterClass}){sizeStr}";
             if (s.IsDead) nameText.text += " (DEAD)";
         }
 
@@ -521,6 +525,11 @@ public class CombatUI : MonoBehaviour
     private GameObject _specialAttackPanel;
     private GameObject _summonSelectionPanel;
     private bool _dischargeTouchHooked;
+    private GameObject _activeSummonsPanel;
+    private GameObject _activeSummonsContent;
+    private readonly List<GameObject> _activeSummonEntryObjects = new List<GameObject>();
+
+    private GameObject _confirmationPanel;
 
     private void EnsureDischargeTouchButtonExists()
     {
@@ -2450,6 +2459,277 @@ public class CombatUI : MonoBehaviour
         cancelBtn.onClick.AddListener(() =>
         {
             HideSummonCreatureSelection();
+            onCancel?.Invoke();
+        });
+    }
+
+
+    // ========================================================================
+    // ACTIVE SUMMONS PANEL
+    // ========================================================================
+
+    private void EnsureActiveSummonsPanel()
+    {
+        if (_activeSummonsPanel != null)
+            return;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+            return;
+
+        _activeSummonsPanel = new GameObject("ActiveSummonsPanel");
+        _activeSummonsPanel.transform.SetParent(canvas.transform, false);
+
+        RectTransform panelRT = _activeSummonsPanel.AddComponent<RectTransform>();
+        panelRT.anchorMin = new Vector2(0.72f, 0.2f);
+        panelRT.anchorMax = new Vector2(0.98f, 0.62f);
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        Image bg = _activeSummonsPanel.AddComponent<Image>();
+        bg.color = new Color(0.08f, 0.1f, 0.2f, 0.88f);
+
+        Outline outline = _activeSummonsPanel.AddComponent<Outline>();
+        outline.effectColor = new Color(0.38f, 0.72f, 1f, 0.9f);
+        outline.effectDistance = new Vector2(1.5f, 1.5f);
+
+        GameObject titleObj = new GameObject("Title");
+        titleObj.transform.SetParent(_activeSummonsPanel.transform, false);
+        RectTransform titleRT = titleObj.AddComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0.04f, 0.88f);
+        titleRT.anchorMax = new Vector2(0.96f, 0.98f);
+        titleRT.offsetMin = Vector2.zero;
+        titleRT.offsetMax = Vector2.zero;
+
+        Text titleText = titleObj.AddComponent<Text>();
+        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (titleText.font == null) titleText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        titleText.fontSize = 14;
+        titleText.fontStyle = FontStyle.Bold;
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.color = new Color(0.78f, 0.92f, 1f, 1f);
+        titleText.text = "ACTIVE SUMMONS";
+
+        GameObject contentObj = new GameObject("Content");
+        contentObj.transform.SetParent(_activeSummonsPanel.transform, false);
+        RectTransform contentRT = contentObj.AddComponent<RectTransform>();
+        contentRT.anchorMin = new Vector2(0.03f, 0.04f);
+        contentRT.anchorMax = new Vector2(0.97f, 0.86f);
+        contentRT.offsetMin = Vector2.zero;
+        contentRT.offsetMax = Vector2.zero;
+
+        VerticalLayoutGroup vlg = contentObj.AddComponent<VerticalLayoutGroup>();
+        vlg.spacing = 4f;
+        vlg.childForceExpandHeight = false;
+        vlg.childForceExpandWidth = true;
+        vlg.childAlignment = TextAnchor.UpperCenter;
+        vlg.padding = new RectOffset(2, 2, 2, 2);
+
+        ContentSizeFitter fitter = contentObj.AddComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+        _activeSummonsContent = contentObj;
+        _activeSummonsPanel.SetActive(false);
+    }
+
+    public void RefreshActiveSummonsPanel(List<GameManager.SummonSnapshot> summons,
+        System.Action<CharacterController> onSelect,
+        System.Action<CharacterController> onDismiss)
+    {
+        EnsureActiveSummonsPanel();
+        if (_activeSummonsPanel == null || _activeSummonsContent == null)
+            return;
+
+        foreach (var entry in _activeSummonEntryObjects)
+        {
+            if (entry != null)
+                Destroy(entry);
+        }
+        _activeSummonEntryObjects.Clear();
+
+        if (summons == null || summons.Count == 0)
+        {
+            _activeSummonsPanel.SetActive(false);
+            return;
+        }
+
+        _activeSummonsPanel.SetActive(true);
+
+        for (int i = 0; i < summons.Count; i++)
+        {
+            var snapshot = summons[i];
+            if (snapshot == null || snapshot.Controller == null)
+                continue;
+
+            GameObject row = CreateActiveSummonEntry(snapshot, onSelect, onDismiss);
+            row.transform.SetParent(_activeSummonsContent.transform, false);
+            _activeSummonEntryObjects.Add(row);
+        }
+    }
+
+    private GameObject CreateActiveSummonEntry(GameManager.SummonSnapshot snapshot,
+        System.Action<CharacterController> onSelect,
+        System.Action<CharacterController> onDismiss)
+    {
+        GameObject row = new GameObject($"SummonEntry_{snapshot.DisplayName}");
+        RectTransform rowRT = row.AddComponent<RectTransform>();
+        rowRT.sizeDelta = new Vector2(0f, 54f);
+
+        Image rowBg = row.AddComponent<Image>();
+        rowBg.color = snapshot.IsCelestial
+            ? new Color(0.38f, 0.34f, 0.15f, 0.88f)
+            : snapshot.IsFiendish
+                ? new Color(0.35f, 0.14f, 0.14f, 0.88f)
+                : new Color(0.14f, 0.25f, 0.35f, 0.88f);
+
+        HorizontalLayoutGroup hlg = row.AddComponent<HorizontalLayoutGroup>();
+        hlg.childAlignment = TextAnchor.MiddleLeft;
+        hlg.spacing = 4f;
+        hlg.padding = new RectOffset(6, 6, 4, 4);
+        hlg.childControlHeight = true;
+        hlg.childControlWidth = true;
+        hlg.childForceExpandWidth = false;
+
+        GameObject infoObj = new GameObject("Info");
+        infoObj.transform.SetParent(row.transform, false);
+        LayoutElement infoLE = infoObj.AddComponent<LayoutElement>();
+        infoLE.flexibleWidth = 1f;
+        infoLE.minWidth = 110f;
+
+        VerticalLayoutGroup infoVLG = infoObj.AddComponent<VerticalLayoutGroup>();
+        infoVLG.childAlignment = TextAnchor.MiddleLeft;
+        infoVLG.childForceExpandHeight = false;
+        infoVLG.childForceExpandWidth = true;
+        infoVLG.spacing = 1f;
+
+        GameObject nameObj = new GameObject("Name");
+        nameObj.transform.SetParent(infoObj.transform, false);
+        Text nameText = nameObj.AddComponent<Text>();
+        nameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (nameText.font == null) nameText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        nameText.fontSize = 12;
+        nameText.fontStyle = FontStyle.Bold;
+        nameText.color = new Color(0.95f, 0.98f, 1f, 1f);
+        nameText.alignment = TextAnchor.MiddleLeft;
+        nameText.text = snapshot.DisplayName;
+
+        GameObject statObj = new GameObject("Stats");
+        statObj.transform.SetParent(infoObj.transform, false);
+        Text statText = statObj.AddComponent<Text>();
+        statText.font = nameText.font;
+        statText.fontSize = 11;
+        statText.color = new Color(0.82f, 0.92f, 1f, 1f);
+        statText.alignment = TextAnchor.MiddleLeft;
+        statText.text = $"HP {snapshot.CurrentHP}/{snapshot.MaxHP}  AC {snapshot.AC}  Rnds {snapshot.RemainingRounds}";
+
+        Button selectBtn = CreateTouchPromptButton(row, "Select", "Select",
+            new Vector2(0f, 0f), new Vector2(1f, 1f), new Color(0.2f, 0.35f, 0.6f, 1f));
+        LayoutElement selectLE = selectBtn.gameObject.AddComponent<LayoutElement>();
+        selectLE.minWidth = 58f;
+        selectLE.preferredWidth = 62f;
+        selectLE.flexibleWidth = 0f;
+        selectBtn.onClick.AddListener(() => onSelect?.Invoke(snapshot.Controller));
+
+        Button dismissBtn = CreateTouchPromptButton(row, "Dismiss", "Dismiss",
+            new Vector2(0f, 0f), new Vector2(1f, 1f), new Color(0.52f, 0.22f, 0.22f, 1f));
+        LayoutElement dismissLE = dismissBtn.gameObject.AddComponent<LayoutElement>();
+        dismissLE.minWidth = 66f;
+        dismissLE.preferredWidth = 70f;
+        dismissLE.flexibleWidth = 0f;
+        dismissBtn.onClick.AddListener(() => onDismiss?.Invoke(snapshot.Controller));
+
+        return row;
+    }
+
+    public void ShowConfirmationDialog(string title, string message,
+        string confirmLabel, string cancelLabel,
+        System.Action onConfirm, System.Action onCancel)
+    {
+        if (_confirmationPanel != null)
+            Destroy(_confirmationPanel);
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            onCancel?.Invoke();
+            return;
+        }
+
+        _confirmationPanel = new GameObject("ConfirmationPanel");
+        _confirmationPanel.transform.SetParent(canvas.transform, false);
+        RectTransform panelRT = _confirmationPanel.AddComponent<RectTransform>();
+        panelRT.anchorMin = Vector2.zero;
+        panelRT.anchorMax = Vector2.one;
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        Image overlay = _confirmationPanel.AddComponent<Image>();
+        overlay.color = new Color(0f, 0f, 0f, 0.72f);
+
+        GameObject dialog = new GameObject("Dialog");
+        dialog.transform.SetParent(_confirmationPanel.transform, false);
+        RectTransform dialogRT = dialog.AddComponent<RectTransform>();
+        dialogRT.anchorMin = new Vector2(0.33f, 0.37f);
+        dialogRT.anchorMax = new Vector2(0.67f, 0.63f);
+        dialogRT.offsetMin = Vector2.zero;
+        dialogRT.offsetMax = Vector2.zero;
+
+        Image dialogBg = dialog.AddComponent<Image>();
+        dialogBg.color = new Color(0.15f, 0.14f, 0.2f, 0.96f);
+        Outline dialogOutline = dialog.AddComponent<Outline>();
+        dialogOutline.effectColor = new Color(0.7f, 0.7f, 0.95f, 1f);
+        dialogOutline.effectDistance = new Vector2(2f, 2f);
+
+        GameObject titleObj = new GameObject("Title");
+        titleObj.transform.SetParent(dialog.transform, false);
+        RectTransform titleRT = titleObj.AddComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0.06f, 0.72f);
+        titleRT.anchorMax = new Vector2(0.94f, 0.95f);
+        titleRT.offsetMin = Vector2.zero;
+        titleRT.offsetMax = Vector2.zero;
+
+        Text titleText = titleObj.AddComponent<Text>();
+        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (titleText.font == null) titleText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        titleText.fontSize = 16;
+        titleText.fontStyle = FontStyle.Bold;
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.color = new Color(0.94f, 0.92f, 1f, 1f);
+        titleText.text = title;
+
+        GameObject bodyObj = new GameObject("Body");
+        bodyObj.transform.SetParent(dialog.transform, false);
+        RectTransform bodyRT = bodyObj.AddComponent<RectTransform>();
+        bodyRT.anchorMin = new Vector2(0.08f, 0.4f);
+        bodyRT.anchorMax = new Vector2(0.92f, 0.72f);
+        bodyRT.offsetMin = Vector2.zero;
+        bodyRT.offsetMax = Vector2.zero;
+
+        Text bodyText = bodyObj.AddComponent<Text>();
+        bodyText.font = titleText.font;
+        bodyText.fontSize = 13;
+        bodyText.alignment = TextAnchor.MiddleCenter;
+        bodyText.color = new Color(0.9f, 0.95f, 1f, 1f);
+        bodyText.text = message;
+
+        Button confirmBtn = CreateTouchPromptButton(dialog, "Confirm", string.IsNullOrEmpty(confirmLabel) ? "Confirm" : confirmLabel,
+            new Vector2(0.1f, 0.1f), new Vector2(0.45f, 0.28f), new Color(0.2f, 0.45f, 0.25f, 1f));
+        confirmBtn.onClick.AddListener(() =>
+        {
+            if (_confirmationPanel != null) Destroy(_confirmationPanel);
+            _confirmationPanel = null;
+            onConfirm?.Invoke();
+        });
+
+        Button cancelBtn = CreateTouchPromptButton(dialog, "Cancel", string.IsNullOrEmpty(cancelLabel) ? "Cancel" : cancelLabel,
+            new Vector2(0.55f, 0.1f), new Vector2(0.9f, 0.28f), new Color(0.45f, 0.2f, 0.2f, 1f));
+        cancelBtn.onClick.AddListener(() =>
+        {
+            if (_confirmationPanel != null) Destroy(_confirmationPanel);
+            _confirmationPanel = null;
             onCancel?.Invoke();
         });
     }
