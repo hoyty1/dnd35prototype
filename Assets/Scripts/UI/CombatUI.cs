@@ -2472,7 +2472,6 @@ public class CombatUI : MonoBehaviour
         int remainingRounds,
         int totalRounds,
         SummonCommand currentCommand,
-        Vector2 screenPosition,
         System.Action onAttackNearest,
         System.Action onProtectCaster,
         System.Action onDismiss)
@@ -2508,18 +2507,56 @@ public class CombatUI : MonoBehaviour
 
         RectTransform panelRT = panel.AddComponent<RectTransform>();
         panelRT.pivot = new Vector2(0f, 1f);
-        panelRT.anchorMin = new Vector2(0f, 0f);
-        panelRT.anchorMax = new Vector2(0f, 0f);
-        panelRT.sizeDelta = new Vector2(300f, 260f);
+        panelRT.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRT.anchorMax = new Vector2(0.5f, 0.5f);
 
-        Vector2 localPoint;
+        const float menuWidth = 300f;
+        const float menuHeight = 260f;
+        const float edgeMargin = 10f;
+        panelRT.sizeDelta = new Vector2(menuWidth, menuHeight);
+
         RectTransform canvasRect = canvas.transform as RectTransform;
-        Camera cam = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, screenPosition, cam, out localPoint);
+        Camera uiCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+        Camera worldCamera = uiCamera != null ? uiCamera : Camera.main;
 
-        float clampedX = Mathf.Clamp(localPoint.x, 0f, canvasRect.rect.width - panelRT.sizeDelta.x - 8f);
-        float clampedY = Mathf.Clamp(localPoint.y + panelRT.sizeDelta.y, panelRT.sizeDelta.y + 8f, canvasRect.rect.height - 8f);
-        panelRT.anchoredPosition = new Vector2(clampedX, clampedY);
+        Vector3 summonWorldPos = summon.transform.position;
+        Vector3 summonScreenPos = worldCamera != null
+            ? worldCamera.WorldToScreenPoint(summonWorldPos)
+            : new Vector3(Screen.width * 0.5f, Screen.height * 0.5f, 0f);
+
+        if (summonScreenPos.z < 0f)
+        {
+            summonScreenPos = new Vector3(Screen.width * 0.5f, Screen.height * 0.5f, 0f);
+        }
+
+        Vector2 offset = new Vector2(100f, 50f);
+
+        if (summonScreenPos.x + menuWidth + offset.x > Screen.width - edgeMargin)
+            offset.x = -menuWidth - 20f;
+
+        if (summonScreenPos.y + menuHeight + offset.y > Screen.height - edgeMargin)
+            offset.y = -menuHeight - 20f;
+
+        if (summonScreenPos.x + offset.x < edgeMargin)
+            offset.x = 20f;
+
+        if (summonScreenPos.y + offset.y < edgeMargin)
+            offset.y = 20f;
+
+        Vector2 menuScreenPos = new Vector2(summonScreenPos.x + offset.x, summonScreenPos.y + offset.y);
+        menuScreenPos.x = Mathf.Clamp(menuScreenPos.x, edgeMargin, Screen.width - menuWidth - edgeMargin);
+        menuScreenPos.y = Mathf.Clamp(menuScreenPos.y, edgeMargin, Screen.height - edgeMargin);
+
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, menuScreenPos, uiCamera, out Vector2 localPoint);
+
+        float minX = canvasRect.rect.xMin + edgeMargin;
+        float maxX = canvasRect.rect.xMax - menuWidth - edgeMargin;
+        float minY = canvasRect.rect.yMin + menuHeight + edgeMargin;
+        float maxY = canvasRect.rect.yMax - edgeMargin;
+
+        panelRT.anchoredPosition = new Vector2(
+            Mathf.Clamp(localPoint.x, minX, maxX),
+            Mathf.Clamp(localPoint.y, minY, maxY));
 
         Image panelBg = panel.AddComponent<Image>();
         panelBg.color = new Color(0.08f, 0.1f, 0.16f, 0.96f);

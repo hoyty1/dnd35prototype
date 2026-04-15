@@ -939,7 +939,6 @@ public class GameManager : MonoBehaviour
             active.RemainingRounds,
             active.TotalDurationRounds,
             active.CurrentCommand,
-            mouseScreenPos,
             () => SetSummonCommand(summon, SummonCommand.AttackNearest()),
             () => SetSummonCommand(summon, SummonCommand.ProtectCaster()),
             () => RequestDismissSummon(summon));
