@@ -630,6 +630,24 @@ public class CharacterSheetUI : MonoBehaviour
 
         AddLine(content, $"\u2694 Initiative: {FormatMod(stats.InitiativeModifier)}     \u27a1 Speed: {stats.SpeedInFeet} ft ({stats.MoveRange} sq)", 11, LightText, FontStyle.Normal, 14);
 
+        var activeConditions = new List<string>();
+        if (stats.IsProne)
+            activeConditions.Add("Prone (-4 melee attacks, +4 AC vs ranged, -4 AC vs melee)");
+        if (stats.IsGrappled)
+            activeConditions.Add("Grappled (-2 attack, -4 DEX, no movement)");
+        if (stats.IsDisarmed)
+            activeConditions.Add("Disarmed (-4 attack while unarmed)");
+        if (stats.IsFlanked)
+            activeConditions.Add("Flanked (-2 AC)");
+
+        if (activeConditions.Count > 0)
+        {
+            AddLine(content, "CONDITIONS", 12, GoldText, FontStyle.Bold, 16);
+            foreach (string cond in activeConditions)
+                AddLine(content, $"  • {cond}", 10, new Color(1f, 0.78f, 0.52f), FontStyle.Normal, 13);
+
+            AddSeparator(content);
+        }
         AddSeparator(content);
 
         // === Ability Scores ===

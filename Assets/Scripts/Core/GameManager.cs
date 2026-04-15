@@ -1786,6 +1786,9 @@ public class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
         CombatUI.HideSummonContextMenu();
 
+        _waitingForAoOConfirmation = false;
+        _pendingAoOAction = null;
+        CombatUI.HideAoOConfirmationPrompt();
         // Hide movement path preview and hover marker when leaving movement phase
         if (_pathPreview != null) _pathPreview.HidePath();
         if (_hoverMarker != null) _hoverMarker.Hide();
@@ -2167,7 +2170,25 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        StartCoroutine(ResolveStandUp(pc));
+        List<CharacterController> threateners = ThreatSystem.GetThreateningEnemies(pc.GridPosition, pc, GetAllCharacters());
+        threateners.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+
+        if (threateners.Count == 0)
+        {
+            StartCoroutine(ResolveStandUp(pc, threateners));
+            return;
+        }
+
+        ShowAoOActionConfirmation(new AoOProvokingActionInfo
+        {
+            ActionType = AoOProvokingAction.StandFromProne,
+            ActionName = "STAND UP",
+            ActionDescription = "Stand from prone",
+            Actor = pc,
+            ThreateningEnemies = threateners,
+            OnProceed = () => StartCoroutine(ResolveStandUp(pc, threateners)),
+            OnCancel = ShowActionChoices
+        });
     }
 
     public void OnCrawlButtonPressed()
@@ -2189,7 +2210,7 @@ public class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} prepares to crawl (5 ft, provokes AoO).");
     }
 
-    private IEnumerator ResolveStandUp(CharacterController pc)
+    private IEnumerator ResolveStandUp(CharacterController pc, List<CharacterController> threateners = null)
     {
         if (pc == null || pc.Stats == null)
             yield break;
@@ -2197,8 +2218,11 @@ public class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.Animating;
         CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} attempts to stand up...");
 
-        List<CharacterController> threateners = ThreatSystem.GetThreateningEnemies(pc.GridPosition, pc, GetAllCharacters());
-        threateners.RemoveAll(enemy => !ThreatSystem.CanMakeAoO(enemy));
+        if (threateners == null)
+        {
+            threateners = ThreatSystem.GetThreateningEnemies(pc.GridPosition, pc, GetAllCharacters());
+            threateners.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+        }
 
         if (threateners.Count > 0)
         {
@@ -4903,23 +4927,26 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} is casting {spell.Name} while threatened ({threateningEnemies.Count} adjacent)." );
+        CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} is casting {spell.Name} while threatened ({threateningEnemies.Count} adjacent).");
 
-        if (CombatUI == null)
+        int defensiveDC = 15 + spell.SpellLevel;
+        int concentrationBonus = caster.Stats.GetSpellcastingConcentrationBonus(includeCombatCasting: true);
+        float successChance = CalculateDefensiveCastSuccessChancePercent(concentrationBonus, defensiveDC);
+
+        ShowAoOActionConfirmation(new AoOProvokingActionInfo
         {
-            ResolveSpellcastAoOs(caster, spell, threateningEnemies, onResolved);
-            return;
-        }
-
-        CombatUI.ShowCastDefensivelyPrompt(caster, spell, threateningEnemies, castDefensively =>
-        {
-            if (castDefensively)
-            {
-                onResolved?.Invoke(AttemptCastDefensively(caster, spell));
-                return;
-            }
-
-            ResolveSpellcastAoOs(caster, spell, threateningEnemies, onResolved);
+            ActionType = AoOProvokingAction.CastSpell,
+            ActionName = $"CAST {spell.Name.ToUpper()}",
+            ActionDescription = $"Cast {spell.Name}",
+            Actor = caster,
+            ThreateningEnemies = threateningEnemies,
+            Spell = spell,
+            CastDefensivelyDC = defensiveDC,
+            ConcentrationBonus = concentrationBonus,
+            SuccessChance = successChance,
+            OnCastDefensively = () => onResolved?.Invoke(AttemptCastDefensively(caster, spell)),
+            OnProceed = () => ResolveSpellcastAoOs(caster, spell, threateningEnemies, onResolved),
+            OnCancel = () => onResolved?.Invoke(false)
         });
     }
 
@@ -5171,11 +5198,9 @@ public class GameManager : MonoBehaviour
 
     // ========== MOVEMENT ==========
 
-    // AoO confirmation state
+    // AoO confirmation state (shared by movement, spellcasting, standing from prone, etc.)
     private bool _waitingForAoOConfirmation;
-    private AoOPathResult _pendingAoOPath;
-    private SquareCell _pendingMoveTarget;
-    private List<Vector2Int> _pendingMovePath;
+    private AoOProvokingActionInfo _pendingAoOAction;
 
     private void ShowMovementRange(CharacterController pc)
     {
@@ -5208,9 +5233,8 @@ public class GameManager : MonoBehaviour
         _highlightedCells.Clear();
 
         _waitingForAoOConfirmation = false;
-        _pendingAoOPath = null;
-        _pendingMoveTarget = null;
-        _pendingMovePath = null;
+        _pendingAoOAction = null;
+        CombatUI?.HideAoOConfirmationPrompt();
         if (pc != null)
             CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels movement.");
 
@@ -5435,6 +5459,68 @@ public class GameManager : MonoBehaviour
             if (npc != null) all.Add(npc);
         }
         return all;
+    }
+
+    private static float CalculateDefensiveCastSuccessChancePercent(int concentrationBonus, int defensiveDC)
+    {
+        int requiredRoll = defensiveDC - concentrationBonus;
+        float successChance = (21 - requiredRoll) / 20f * 100f;
+        return Mathf.Clamp(successChance, 5f, 95f);
+    }
+
+    private void ShowAoOActionConfirmation(AoOProvokingActionInfo actionInfo)
+    {
+        if (actionInfo == null)
+            return;
+
+        if (actionInfo.ThreateningEnemies == null)
+            actionInfo.ThreateningEnemies = new List<CharacterController>();
+
+        actionInfo.ThreateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+
+        if (actionInfo.ThreateningEnemies.Count == 0)
+        {
+            actionInfo.OnProceed?.Invoke();
+            return;
+        }
+
+        if (CombatUI == null)
+        {
+            actionInfo.OnProceed?.Invoke();
+            return;
+        }
+
+        if (_waitingForAoOConfirmation)
+            return;
+
+        System.Action proceed = actionInfo.OnProceed;
+        System.Action castDefensively = actionInfo.OnCastDefensively;
+        System.Action cancel = actionInfo.OnCancel;
+
+        actionInfo.OnProceed = () =>
+        {
+            _waitingForAoOConfirmation = false;
+            _pendingAoOAction = null;
+            proceed?.Invoke();
+        };
+
+        actionInfo.OnCastDefensively = () =>
+        {
+            _waitingForAoOConfirmation = false;
+            _pendingAoOAction = null;
+            castDefensively?.Invoke();
+        };
+
+        actionInfo.OnCancel = () =>
+        {
+            _waitingForAoOConfirmation = false;
+            _pendingAoOAction = null;
+            cancel?.Invoke();
+        };
+
+        _waitingForAoOConfirmation = true;
+        _pendingAoOAction = actionInfo;
+        CombatUI.ShowAoOConfirmationPrompt(actionInfo);
     }
 
     // ========== ATTACK TARGET SELECTION ==========
@@ -5943,80 +6029,52 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (_highlightedCells.Contains(cell) && !cell.IsOccupied)
+        if (!_highlightedCells.Contains(cell) || cell.IsOccupied)
+            return;
+
+        var allCharacters = GetAllCharacters();
+        var pathResult = Grid.FindSafePath(pc.GridPosition, cell.Coords, pc, allCharacters);
+
+        if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
         {
-            var allCharacters = GetAllCharacters();
-            var pathResult = Grid.FindSafePath(pc.GridPosition, cell.Coords, pc, allCharacters);
-
-            if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
-            {
-                CombatUI?.ShowCombatLog("⚠ No valid movement path to that tile.");
-                return;
-            }
-
-            _pendingMovePath = new List<Vector2Int>(pathResult.Path);
-
-            if (pathResult.ProvokesAoOs)
-            {
-                Debug.Log($"[GameManager] Movement to ({cell.Coords.x},{cell.Coords.y}) would provoke {pathResult.ProvokedAoOs.Count} AoO(s)!");
-                _pendingAoOPath = pathResult;
-                _pendingMoveTarget = cell;
-                _waitingForAoOConfirmation = true;
-
-                var enemyNames = pathResult.GetThreateningEnemyNames();
-                CombatUI.ShowAoOWarning(enemyNames, OnAoOConfirmed, OnAoOCancelled);
-            }
-            else
-            {
-                StartCoroutine(ExecuteMovement(pc, _pendingMovePath));
-            }
-        }
-    }
-
-    private void OnAoOConfirmed()
-    {
-        _waitingForAoOConfirmation = false;
-
-        CharacterController pc = ActivePC;
-        if (pc == null || _pendingMoveTarget == null)
-        {
-            ShowActionChoices();
+            CombatUI?.ShowCombatLog("⚠ No valid movement path to that tile.");
             return;
         }
 
-        Debug.Log($"[GameManager] Player confirmed movement - resolving AoOs");
-
-        if (_pendingAoOPath != null && _pendingAoOPath.ProvokesAoOs)
+        if (!pathResult.ProvokesAoOs)
         {
-            StartCoroutine(ResolveAoOsAndMove(pc, _pendingAoOPath));
-        }
-        else
-        {
-            StartCoroutine(ExecuteMovement(pc, _pendingMovePath));
+            StartCoroutine(ExecuteMovement(pc, new List<Vector2Int>(pathResult.Path)));
+            return;
         }
 
-        _pendingAoOPath = null;
-        _pendingMoveTarget = null;
-        _pendingMovePath = null;
-    }
+        Debug.Log($"[GameManager] Movement to ({cell.Coords.x},{cell.Coords.y}) would provoke {pathResult.ProvokedAoOs.Count} AoO(s)!");
 
-    private void OnAoOCancelled()
-    {
-        _waitingForAoOConfirmation = false;
-        _pendingAoOPath = null;
-        _pendingMoveTarget = null;
-        _pendingMovePath = null;
-
-        Debug.Log("[GameManager] Player cancelled movement to avoid AoOs");
-
-        CharacterController pc = ActivePC;
-        if (pc != null)
+        var uniqueThreateners = new List<CharacterController>();
+        var seen = new HashSet<CharacterController>();
+        foreach (var aooInfo in pathResult.ProvokedAoOs)
         {
-            CurrentSubPhase = PlayerSubPhase.Moving;
-            ShowMovementRange(pc);
-            CombatUI.SetActionButtonsVisible(false);
-            CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)");
+            CharacterController threatener = aooInfo != null ? aooInfo.Threatener : null;
+            if (threatener == null || !seen.Add(threatener))
+                continue;
+            uniqueThreateners.Add(threatener);
         }
+
+        ShowAoOActionConfirmation(new AoOProvokingActionInfo
+        {
+            ActionType = AoOProvokingAction.Movement,
+            ActionName = "MOVE",
+            ActionDescription = $"Move to ({cell.Coords.x},{cell.Coords.y})",
+            Actor = pc,
+            ThreateningEnemies = uniqueThreateners,
+            OnProceed = () => StartCoroutine(ResolveAoOsAndMove(pc, pathResult)),
+            OnCancel = () =>
+            {
+                CurrentSubPhase = PlayerSubPhase.Moving;
+                ShowMovementRange(pc);
+                CombatUI.SetActionButtonsVisible(false);
+                CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)");
+            }
+        });
     }
 
     private IEnumerator ResolveAoOsAndMove(CharacterController pc, AoOPathResult pathResult)
@@ -6054,7 +6112,7 @@ public class GameManager : MonoBehaviour
         {
             List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
                 ? pathResult.Path
-                : _pendingMovePath;
+                : new List<Vector2Int>();
 
             yield return StartCoroutine(ExecuteMovement(pc, path));
         }

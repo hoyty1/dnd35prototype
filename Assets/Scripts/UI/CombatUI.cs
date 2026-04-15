@@ -1193,109 +1193,204 @@ public class CombatUI : MonoBehaviour
     }
 
     // ========================================================================
-    // AoO WARNING DIALOG
+    // UNIFIED AOO CONFIRMATION DIALOG
     // ========================================================================
 
-    private GameObject _aooWarningPanel;
-    private Text _aooWarningText;
-    private Button _aooConfirmButton;
+    private GameObject _aooConfirmationPanel;
+    private Text _aooConfirmationTitleText;
+    private Text _aooConfirmationActionText;
+    private Text _aooConfirmationThreatsText;
+
+    private Button _aooProceedButton;
+    private Text _aooProceedButtonText;
+
+    private GameObject _aooCastDefensivelyButtonObject;
+    private Button _aooCastDefensivelyButton;
+    private Text _aooCastDefensivelyButtonText;
+
     private Button _aooCancelButton;
-    private System.Action _onAoOConfirm;
-    private System.Action _onAoOCancel;
+    private Text _aooCancelButtonText;
 
-    public void ShowAoOWarning(List<string> enemyNames, System.Action onConfirm, System.Action onCancel)
+    public void ShowAoOConfirmationPrompt(AoOProvokingActionInfo actionInfo)
     {
-        _onAoOConfirm = onConfirm;
-        _onAoOCancel = onCancel;
+        if (actionInfo == null)
+        {
+            Debug.LogWarning("[CombatUI] ShowAoOConfirmationPrompt called with null actionInfo");
+            return;
+        }
 
-        if (_aooWarningPanel == null)
-            BuildAoOWarningPanel();
+        if (_aooConfirmationPanel == null)
+            BuildAoOConfirmationPanel();
 
-        string enemyList = string.Join(", ", enemyNames);
-        _aooWarningText.text = $"⚠ ATTACK OF OPPORTUNITY WARNING ⚠\n\n" +
-                               $"This movement will provoke Attacks of Opportunity from:\n" +
-                               $"<color=#FF6666><b>{enemyList}</b></color>\n\n" +
-                               $"Each enemy will get a free melee attack against you.\n" +
-                               $"Continue moving?";
+        if (_aooConfirmationPanel == null)
+        {
+            actionInfo.OnCancel?.Invoke();
+            return;
+        }
 
-        _aooWarningPanel.SetActive(true);
-        Debug.Log($"[CombatUI] AoO warning shown: {enemyList}");
+        _aooConfirmationTitleText.text = "ACTION PROVOKES ATTACK";
+        _aooConfirmationActionText.text = $"Action: {actionInfo.ActionName}";
+
+        var threatsText = new StringBuilder();
+        int threatCount = actionInfo.ThreateningEnemies != null ? actionInfo.ThreateningEnemies.Count : 0;
+        string enemyWord = threatCount == 1 ? "enemy" : "enemies";
+        threatsText.AppendLine();
+        threatsText.AppendLine($"This will provoke attacks of opportunity from {threatCount} {enemyWord}:");
+
+        if (actionInfo.ThreateningEnemies != null)
+        {
+            for (int i = 0; i < actionInfo.ThreateningEnemies.Count; i++)
+            {
+                CharacterController enemy = actionInfo.ThreateningEnemies[i];
+                if (enemy == null || enemy.Stats == null) continue;
+
+                Vector2Int actorPos = actionInfo.Actor != null ? actionInfo.Actor.GridPosition : Vector2Int.zero;
+                Vector2Int enemyPos = enemy.GridPosition;
+                string direction = GetDirectionString(actorPos, enemyPos);
+                threatsText.AppendLine($"• {enemy.Stats.CharacterName} ({direction})");
+            }
+        }
+
+        _aooConfirmationThreatsText.text = threatsText.ToString();
+
+        bool isSpellcast = actionInfo.ActionType == AoOProvokingAction.CastSpell;
+        _aooCastDefensivelyButtonObject.SetActive(isSpellcast);
+
+        if (isSpellcast)
+        {
+            var defensiveText = new StringBuilder();
+            defensiveText.AppendLine("CAST DEFENSIVELY");
+            defensiveText.AppendLine();
+            defensiveText.AppendLine($"Concentration DC: {actionInfo.CastDefensivelyDC}");
+            defensiveText.AppendLine($"Your Bonus: +{actionInfo.ConcentrationBonus}");
+            defensiveText.AppendLine($"Success Chance: {Mathf.RoundToInt(actionInfo.SuccessChance)}%");
+            defensiveText.AppendLine();
+            defensiveText.AppendLine("✓ No AoO if successful");
+            defensiveText.AppendLine("⚠ Spell lost if failed");
+            _aooCastDefensivelyButtonText.text = defensiveText.ToString();
+
+            _aooCastDefensivelyButton.onClick.RemoveAllListeners();
+            _aooCastDefensivelyButton.onClick.AddListener(() =>
+            {
+                HideAoOConfirmationPrompt();
+                actionInfo.OnCastDefensively?.Invoke();
+            });
+
+            var proceedText = new StringBuilder();
+            proceedText.AppendLine("CAST NORMALLY");
+            proceedText.AppendLine();
+            proceedText.AppendLine($"Provokes {threatCount} {(threatCount == 1 ? "attack" : "attacks")}");
+            proceedText.AppendLine();
+            proceedText.AppendLine("⚠ May be interrupted if hit");
+            _aooProceedButtonText.text = proceedText.ToString();
+        }
+        else
+        {
+            var proceedText = new StringBuilder();
+            proceedText.AppendLine("PROCEED");
+            proceedText.AppendLine();
+            proceedText.AppendLine($"Provokes {threatCount} {(threatCount == 1 ? "attack" : "attacks")}");
+
+            if (actionInfo.ActionType == AoOProvokingAction.StandFromProne)
+            {
+                proceedText.AppendLine();
+                proceedText.AppendLine("Stand up (move action)");
+            }
+
+            _aooProceedButtonText.text = proceedText.ToString();
+        }
+
+        _aooProceedButton.onClick.RemoveAllListeners();
+        _aooProceedButton.onClick.AddListener(() =>
+        {
+            HideAoOConfirmationPrompt();
+            actionInfo.OnProceed?.Invoke();
+        });
+
+        _aooCancelButtonText.text = "CANCEL\n\nReturn to action selection";
+        _aooCancelButton.onClick.RemoveAllListeners();
+        _aooCancelButton.onClick.AddListener(() =>
+        {
+            HideAoOConfirmationPrompt();
+            actionInfo.OnCancel?.Invoke();
+        });
+
+        _aooConfirmationPanel.SetActive(true);
     }
 
-    public void HideAoOWarning()
+    public void HideAoOConfirmationPrompt()
     {
-        if (_aooWarningPanel != null)
-            _aooWarningPanel.SetActive(false);
+        if (_aooConfirmationPanel != null)
+            _aooConfirmationPanel.SetActive(false);
     }
 
-    private void BuildAoOWarningPanel()
+    private void BuildAoOConfirmationPanel()
     {
         Canvas canvas = GetComponentInParent<Canvas>();
         if (canvas == null) canvas = FindObjectOfType<Canvas>();
         if (canvas == null) return;
 
-        _aooWarningPanel = new GameObject("AoOWarningPanel");
-        _aooWarningPanel.transform.SetParent(canvas.transform, false);
-        RectTransform panelRT = _aooWarningPanel.AddComponent<RectTransform>();
+        _aooConfirmationPanel = new GameObject("AoOConfirmationPanel");
+        _aooConfirmationPanel.transform.SetParent(canvas.transform, false);
+        RectTransform panelRT = _aooConfirmationPanel.AddComponent<RectTransform>();
         panelRT.anchorMin = Vector2.zero;
         panelRT.anchorMax = Vector2.one;
         panelRT.offsetMin = Vector2.zero;
         panelRT.offsetMax = Vector2.zero;
 
-        Image bgImage = _aooWarningPanel.AddComponent<Image>();
-        bgImage.color = new Color(0f, 0f, 0f, 0.7f);
-
-        CanvasGroup cg = _aooWarningPanel.AddComponent<CanvasGroup>();
-        cg.blocksRaycasts = true;
-        cg.interactable = true;
+        Image bgImage = _aooConfirmationPanel.AddComponent<Image>();
+        bgImage.color = new Color(0f, 0f, 0f, 0.76f);
 
         GameObject dialogBox = new GameObject("DialogBox");
-        dialogBox.transform.SetParent(_aooWarningPanel.transform, false);
+        dialogBox.transform.SetParent(_aooConfirmationPanel.transform, false);
         RectTransform dialogRT = dialogBox.AddComponent<RectTransform>();
-        dialogRT.anchorMin = new Vector2(0.25f, 0.25f);
-        dialogRT.anchorMax = new Vector2(0.75f, 0.75f);
+        dialogRT.anchorMin = new Vector2(0.28f, 0.17f);
+        dialogRT.anchorMax = new Vector2(0.72f, 0.83f);
         dialogRT.offsetMin = Vector2.zero;
         dialogRT.offsetMax = Vector2.zero;
 
         Image dialogBg = dialogBox.AddComponent<Image>();
-        dialogBg.color = new Color(0.15f, 0.1f, 0.1f, 0.95f);
+        dialogBg.color = new Color(0.12f, 0.1f, 0.16f, 0.98f);
 
         Outline dialogOutline = dialogBox.AddComponent<Outline>();
-        dialogOutline.effectColor = new Color(0.8f, 0.2f, 0.2f, 1f);
-        dialogOutline.effectDistance = new Vector2(2, 2);
+        dialogOutline.effectColor = new Color(0.75f, 0.7f, 0.95f, 1f);
+        dialogOutline.effectDistance = new Vector2(2f, 2f);
 
-        GameObject textObj = new GameObject("WarningText");
-        textObj.transform.SetParent(dialogBox.transform, false);
+        _aooConfirmationTitleText = CreatePanelText(dialogBox, "Title", new Vector2(0.05f, 0.9f), new Vector2(0.95f, 0.98f), 16, TextAnchor.MiddleCenter, FontStyle.Bold);
+        _aooConfirmationActionText = CreatePanelText(dialogBox, "Action", new Vector2(0.06f, 0.82f), new Vector2(0.94f, 0.89f), 13, TextAnchor.MiddleCenter, FontStyle.Bold);
+        _aooConfirmationThreatsText = CreatePanelText(dialogBox, "Threats", new Vector2(0.07f, 0.54f), new Vector2(0.93f, 0.81f), 12, TextAnchor.UpperLeft, FontStyle.Normal);
+
+        _aooCastDefensivelyButtonObject = CreatePromptButtonObject(dialogBox, "CastDefensivelyBtn", new Vector2(0.08f, 0.31f), new Vector2(0.92f, 0.53f), new Color(0.2f, 0.35f, 0.2f, 1f), out _aooCastDefensivelyButton, out _aooCastDefensivelyButtonText);
+        _aooProceedButton = CreatePromptButton(dialogBox, "ProceedBtn", new Vector2(0.08f, 0.14f), new Vector2(0.92f, 0.3f), new Color(0.45f, 0.26f, 0.18f, 1f), out _aooProceedButtonText);
+        _aooCancelButton = CreatePromptButton(dialogBox, "CancelBtn", new Vector2(0.08f, 0.03f), new Vector2(0.92f, 0.12f), new Color(0.45f, 0.2f, 0.2f, 1f), out _aooCancelButtonText);
+
+        _aooConfirmationPanel.SetActive(false);
+    }
+
+    private Text CreatePanelText(GameObject parent, string name, Vector2 anchorMin, Vector2 anchorMax, int fontSize, TextAnchor alignment, FontStyle style)
+    {
+        GameObject textObj = new GameObject(name);
+        textObj.transform.SetParent(parent.transform, false);
         RectTransform textRT = textObj.AddComponent<RectTransform>();
-        textRT.anchorMin = new Vector2(0.05f, 0.3f);
-        textRT.anchorMax = new Vector2(0.95f, 0.95f);
+        textRT.anchorMin = anchorMin;
+        textRT.anchorMax = anchorMax;
         textRT.offsetMin = Vector2.zero;
         textRT.offsetMax = Vector2.zero;
 
-        _aooWarningText = textObj.AddComponent<Text>();
-        _aooWarningText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (_aooWarningText.font == null)
-            _aooWarningText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        _aooWarningText.fontSize = 16;
-        _aooWarningText.color = Color.white;
-        _aooWarningText.alignment = TextAnchor.MiddleCenter;
-        _aooWarningText.supportRichText = true;
-
-        _aooConfirmButton = CreateAoOButton(dialogBox, "ConfirmBtn",
-            "⚔ CONFIRM (Provoke AoO)", new Vector2(0.1f, 0.05f), new Vector2(0.48f, 0.22f),
-            new Color(0.6f, 0.2f, 0.2f, 1f));
-        _aooConfirmButton.onClick.AddListener(() => { HideAoOWarning(); _onAoOConfirm?.Invoke(); });
-
-        _aooCancelButton = CreateAoOButton(dialogBox, "CancelBtn",
-            "✋ CANCEL (Stay Safe)", new Vector2(0.52f, 0.05f), new Vector2(0.9f, 0.22f),
-            new Color(0.2f, 0.4f, 0.2f, 1f));
-        _aooCancelButton.onClick.AddListener(() => { HideAoOWarning(); _onAoOCancel?.Invoke(); });
-
-        _aooWarningPanel.SetActive(false);
+        Text txt = textObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
+        txt.fontSize = fontSize;
+        txt.color = new Color(0.95f, 0.95f, 1f, 1f);
+        txt.alignment = alignment;
+        txt.fontStyle = style;
+        txt.supportRichText = true;
+        txt.horizontalOverflow = HorizontalWrapMode.Wrap;
+        txt.verticalOverflow = VerticalWrapMode.Overflow;
+        return txt;
     }
 
-    private Button CreateAoOButton(GameObject parent, string name, string label,
-        Vector2 anchorMin, Vector2 anchorMax, Color bgColor)
+    private GameObject CreatePromptButtonObject(GameObject parent, string name, Vector2 anchorMin, Vector2 anchorMax, Color bgColor, out Button button, out Text text)
     {
         GameObject btnObj = new GameObject(name);
         btnObj.transform.SetParent(parent.transform, false);
@@ -1308,30 +1403,48 @@ public class CombatUI : MonoBehaviour
         Image btnImg = btnObj.AddComponent<Image>();
         btnImg.color = bgColor;
 
-        Button btn = btnObj.AddComponent<Button>();
-        var colors = btn.colors;
-        colors.highlightedColor = new Color(bgColor.r + 0.15f, bgColor.g + 0.15f, bgColor.b + 0.15f, 1f);
-        colors.pressedColor = new Color(bgColor.r - 0.1f, bgColor.g - 0.1f, bgColor.b - 0.1f, 1f);
-        btn.colors = colors;
+        button = btnObj.AddComponent<Button>();
 
         GameObject txtObj = new GameObject("Text");
         txtObj.transform.SetParent(btnObj.transform, false);
         RectTransform txtRT = txtObj.AddComponent<RectTransform>();
-        txtRT.anchorMin = Vector2.zero;
-        txtRT.anchorMax = Vector2.one;
-        txtRT.offsetMin = new Vector2(5, 2);
-        txtRT.offsetMax = new Vector2(-5, -2);
+        txtRT.anchorMin = new Vector2(0.04f, 0.08f);
+        txtRT.anchorMax = new Vector2(0.96f, 0.92f);
+        txtRT.offsetMin = Vector2.zero;
+        txtRT.offsetMax = Vector2.zero;
 
-        Text txt = txtObj.AddComponent<Text>();
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        txt.fontSize = 14;
-        txt.color = Color.white;
-        txt.alignment = TextAnchor.MiddleCenter;
-        txt.text = label;
-        txt.fontStyle = FontStyle.Bold;
+        text = txtObj.AddComponent<Text>();
+        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (text.font == null) text.font = Font.CreateDynamicFontFromOSFont("Arial", 13);
+        text.fontSize = 12;
+        text.color = Color.white;
+        text.alignment = TextAnchor.UpperLeft;
+        text.supportRichText = true;
 
+        return btnObj;
+    }
+
+    private Button CreatePromptButton(GameObject parent, string name, Vector2 anchorMin, Vector2 anchorMax, Color bgColor, out Text text)
+    {
+        GameObject btnObj = CreatePromptButtonObject(parent, name, anchorMin, anchorMax, bgColor, out Button btn, out text);
+        text.alignment = TextAnchor.UpperLeft;
         return btn;
+    }
+
+    private string GetDirectionString(Vector2Int from, Vector2Int to)
+    {
+        Vector2Int delta = to - from;
+
+        if (delta.x == 0 && delta.y > 0) return "north";
+        if (delta.x == 0 && delta.y < 0) return "south";
+        if (delta.x > 0 && delta.y == 0) return "east";
+        if (delta.x < 0 && delta.y == 0) return "west";
+        if (delta.x > 0 && delta.y > 0) return "northeast";
+        if (delta.x > 0 && delta.y < 0) return "southeast";
+        if (delta.x < 0 && delta.y > 0) return "northwest";
+        if (delta.x < 0 && delta.y < 0) return "southwest";
+
+        return "adjacent";
     }
 
     // ========================================================================
@@ -2720,8 +2833,8 @@ public class CombatUI : MonoBehaviour
     }
 
     /// <summary>
-    /// Show D&D 3.5e cast defensively prompt when a spellcaster is threatened in melee.
-    /// callback(true) = cast defensively, callback(false) = cast normally (provokes AoOs).
+    /// Backward-compatible helper that now routes through the unified AoO prompt.
+    /// callback(true) = cast defensively, callback(false) = cast normally.
     /// </summary>
     public void ShowCastDefensivelyPrompt(
         CharacterController caster,
@@ -2729,35 +2842,31 @@ public class CombatUI : MonoBehaviour
         List<CharacterController> threateningEnemies,
         System.Action<bool> callback)
     {
-        int enemyCount = threateningEnemies != null ? threateningEnemies.Count : 0;
         int defensiveDC = 15 + (spell != null ? spell.SpellLevel : 0);
-
-        string casterName = (caster != null && caster.Stats != null) ? caster.Stats.CharacterName : "Caster";
         int concentrationBonus = (caster != null && caster.Stats != null)
             ? caster.Stats.GetSpellcastingConcentrationBonus(includeCombatCasting: true)
             : 0;
-        string concentrationBreakdown = (caster != null && caster.Stats != null)
-            ? caster.Stats.GetSpellcastingConcentrationBreakdown(includeCombatCasting: true)
-            : "Caster Level + CON";
+        int requiredRoll = defensiveDC - concentrationBonus;
+        float successChance = Mathf.Clamp((21 - requiredRoll) / 20f * 100f, 5f, 95f);
 
-        var body = new StringBuilder();
-        body.AppendLine($"{casterName} is threatened by {enemyCount} {(enemyCount == 1 ? "enemy" : "enemies")}.\n");
-        body.AppendLine("Cast defensively to avoid attacks of opportunity?");
-        body.AppendLine($"Defensive Concentration DC: {defensiveDC} (15 + spell level)");
-        body.AppendLine($"Concentration Bonus: +{concentrationBonus} ({concentrationBreakdown})");
+        var info = new AoOProvokingActionInfo
+        {
+            ActionType = AoOProvokingAction.CastSpell,
+            ActionName = spell != null ? $"CAST {spell.Name.ToUpper()}" : "CAST SPELL",
+            ActionDescription = spell != null ? $"Casting {spell.Name}" : "Casting spell",
+            Actor = caster,
+            ThreateningEnemies = threateningEnemies ?? new List<CharacterController>(),
+            Spell = spell,
+            CastDefensivelyDC = defensiveDC,
+            ConcentrationBonus = concentrationBonus,
+            SuccessChance = successChance,
+            OnCastDefensively = () => callback?.Invoke(true),
+            OnProceed = () => callback?.Invoke(false),
+            OnCancel = () => callback?.Invoke(false)
+        };
 
-        string yesLabel = $"YES - Cast Defensively\nDC {defensiveDC}, no AoO";
-        string noLabel = $"NO - Cast Normally\nProvokes {enemyCount} AoO";
-
-        ShowConfirmationDialog(
-            "CASTING WHILE THREATENED",
-            body.ToString(),
-            yesLabel,
-            noLabel,
-            onConfirm: () => callback?.Invoke(true),
-            onCancel: () => callback?.Invoke(false));
+        ShowAoOConfirmationPrompt(info);
     }
-
     public void ShowConfirmationDialog(string title, string message,
         string confirmLabel, string cancelLabel,
         System.Action onConfirm, System.Action onCancel)
