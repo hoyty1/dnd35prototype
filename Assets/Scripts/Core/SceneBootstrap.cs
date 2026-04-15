@@ -672,10 +672,12 @@ public class SceneBootstrap : MonoBehaviour
         gridRT.offsetMax = new Vector2(-6, -24);
 
         GridLayoutGroup grid = btnGrid.AddComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(180, 30);
-        grid.spacing = new Vector2(6, 4);
+        // 3-column layout to reduce vertical overflow in the action panel,
+        // keeping End Turn visible even when many contextual buttons are active.
+        grid.cellSize = new Vector2(170, 26);
+        grid.spacing = new Vector2(6, 3);
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        grid.constraintCount = 2;
+        grid.constraintCount = 3;
         grid.childAlignment = TextAnchor.UpperLeft;
         grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
         grid.startAxis = GridLayoutGroup.Axis.Horizontal;
