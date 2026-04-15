@@ -140,6 +140,174 @@ public class GameManager : MonoBehaviour
     /// <summary>Current combat round number (starts at 1).</summary>
     private int _currentRound = 0;
 
+    // ========== SUMMONING STATE ==========
+    private readonly HashSet<CharacterController> _summonedAllies = new HashSet<CharacterController>();
+    private readonly HashSet<CharacterController> _summonedEnemies = new HashSet<CharacterController>();
+    private readonly List<ActiveSummonInstance> _activeSummons = new List<ActiveSummonInstance>();
+
+    private class ActiveSummonInstance
+    {
+        public CharacterController Controller;
+        public CharacterController Caster;
+        public int RemainingRounds;
+        public string SourceSpellId;
+        public bool IsAlliedToPCs;
+    }
+
+    private class SummonTemplate
+    {
+        public string TemplateId;
+        public string DisplayName;
+        public string CharacterClass;
+        public string TokenType;
+        public Color TintColor;
+        public int Level;
+        public int STR, DEX, CON, WIS, INT, CHA;
+        public int BAB;
+        public int ArmorBonus;
+        public int ShieldBonus;
+        public int DamageDice;
+        public int DamageCount;
+        public int BonusDamage;
+        public int BaseSpeed;
+        public int AttackRange;
+        public int BaseHitDieHP;
+        public List<string> CreatureTags = new List<string>();
+    }
+
+    private static readonly Dictionary<string, List<SummonTemplate>> SummonMonsterOptions = new Dictionary<string, List<SummonTemplate>>
+    {
+        {
+            "summon_monster_1", new List<SummonTemplate>
+            {
+                new SummonTemplate
+                {
+                    TemplateId = "sm1_celestial_dog",
+                    DisplayName = "Celestial Dog",
+                    CharacterClass = "Warrior",
+                    TokenType = "wolf",
+                    TintColor = new Color(0.95f, 0.95f, 0.8f, 1f),
+                    Level = 1,
+                    STR = 13, DEX = 14, CON = 13, WIS = 12, INT = 2, CHA = 6,
+                    BAB = 1,
+                    ArmorBonus = 1,
+                    ShieldBonus = 0,
+                    DamageDice = 6,
+                    DamageCount = 1,
+                    BonusDamage = 1,
+                    BaseSpeed = 8,
+                    AttackRange = 1,
+                    BaseHitDieHP = 8,
+                    CreatureTags = new List<string> { "Animal", "Summoned", "Good" }
+                },
+                new SummonTemplate
+                {
+                    TemplateId = "sm1_fiendish_wolf",
+                    DisplayName = "Fiendish Wolf",
+                    CharacterClass = "Warrior",
+                    TokenType = "wolf",
+                    TintColor = new Color(0.6f, 0.2f, 0.2f, 1f),
+                    Level = 1,
+                    STR = 13, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
+                    BAB = 1,
+                    ArmorBonus = 2,
+                    ShieldBonus = 0,
+                    DamageDice = 6,
+                    DamageCount = 1,
+                    BonusDamage = 2,
+                    BaseSpeed = 8,
+                    AttackRange = 1,
+                    BaseHitDieHP = 10,
+                    CreatureTags = new List<string> { "Animal", "Summoned", "Evil" }
+                },
+                new SummonTemplate
+                {
+                    TemplateId = "sm1_small_air_elemental",
+                    DisplayName = "Small Air Elemental",
+                    CharacterClass = "Warrior",
+                    TokenType = "wizard",
+                    TintColor = new Color(0.65f, 0.85f, 1f, 1f),
+                    Level = 1,
+                    STR = 10, DEX = 17, CON = 12, WIS = 11, INT = 4, CHA = 11,
+                    BAB = 1,
+                    ArmorBonus = 2,
+                    ShieldBonus = 0,
+                    DamageDice = 6,
+                    DamageCount = 1,
+                    BonusDamage = 1,
+                    BaseSpeed = 10,
+                    AttackRange = 1,
+                    BaseHitDieHP = 8,
+                    CreatureTags = new List<string> { "Elemental", "Summoned" }
+                }
+            }
+        },
+        {
+            "summon_monster_2", new List<SummonTemplate>
+            {
+                new SummonTemplate
+                {
+                    TemplateId = "sm2_celestial_wolf",
+                    DisplayName = "Celestial Wolf",
+                    CharacterClass = "Warrior",
+                    TokenType = "wolf",
+                    TintColor = new Color(0.92f, 0.92f, 0.75f, 1f),
+                    Level = 2,
+                    STR = 15, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
+                    BAB = 2,
+                    ArmorBonus = 3,
+                    ShieldBonus = 0,
+                    DamageDice = 8,
+                    DamageCount = 1,
+                    BonusDamage = 2,
+                    BaseSpeed = 8,
+                    AttackRange = 1,
+                    BaseHitDieHP = 14,
+                    CreatureTags = new List<string> { "Animal", "Summoned", "Good" }
+                },
+                new SummonTemplate
+                {
+                    TemplateId = "sm2_fiendish_boar",
+                    DisplayName = "Fiendish Boar",
+                    CharacterClass = "Warrior",
+                    TokenType = "orc",
+                    TintColor = new Color(0.45f, 0.25f, 0.2f, 1f),
+                    Level = 2,
+                    STR = 17, DEX = 10, CON = 17, WIS = 13, INT = 2, CHA = 4,
+                    BAB = 2,
+                    ArmorBonus = 4,
+                    ShieldBonus = 0,
+                    DamageDice = 8,
+                    DamageCount = 1,
+                    BonusDamage = 3,
+                    BaseSpeed = 8,
+                    AttackRange = 1,
+                    BaseHitDieHP = 16,
+                    CreatureTags = new List<string> { "Animal", "Summoned", "Evil" }
+                },
+                new SummonTemplate
+                {
+                    TemplateId = "sm2_small_fire_elemental",
+                    DisplayName = "Small Fire Elemental",
+                    CharacterClass = "Warrior",
+                    TokenType = "wizard",
+                    TintColor = new Color(1f, 0.55f, 0.25f, 1f),
+                    Level = 2,
+                    STR = 12, DEX = 17, CON = 12, WIS = 11, INT = 4, CHA = 11,
+                    BAB = 2,
+                    ArmorBonus = 3,
+                    ShieldBonus = 0,
+                    DamageDice = 8,
+                    DamageCount = 1,
+                    BonusDamage = 1,
+                    BaseSpeed = 10,
+                    AttackRange = 1,
+                    BaseHitDieHP = 12,
+                    CreatureTags = new List<string> { "Elemental", "Summoned", "Fire" }
+                }
+            }
+        }
+    };
     /// <summary>
     /// Tracks whether we've already logged the "no actions but holding charge" reminder this turn.
     /// Prevents duplicate log spam while still informing the player.
@@ -190,10 +358,60 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // ========== HELPER: Check if a character is a PC ==========
+    // ========== HELPER: Team/side queries ==========
     private bool IsPC(CharacterController c)
     {
-        return PCs.Contains(c);
+        if (c == null) return false;
+        return PCs.Contains(c) || _summonedAllies.Contains(c);
+    }
+
+    private bool IsEnemyTeam(CharacterController source, CharacterController target)
+    {
+        if (source == null || target == null) return false;
+        return source.IsPlayerControlled != target.IsPlayerControlled;
+    }
+
+    private bool IsAllyTeam(CharacterController source, CharacterController target)
+    {
+        if (source == null || target == null) return false;
+        return source.IsPlayerControlled == target.IsPlayerControlled;
+    }
+
+    private List<CharacterController> GetTeamMembers(bool isPlayerControlled)
+    {
+        var team = new List<CharacterController>();
+        foreach (var c in GetAllCharacters())
+        {
+            if (c == null || c.Stats == null || c.Stats.IsDead) continue;
+            if (c.IsPlayerControlled == isPlayerControlled)
+                team.Add(c);
+        }
+        return team;
+    }
+
+    private CharacterController GetClosestAliveEnemyTo(CharacterController source)
+    {
+        if (source == null) return null;
+
+        CharacterController closest = null;
+        int closestDist = int.MaxValue;
+
+        foreach (var candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate == source || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!IsEnemyTeam(source, candidate))
+                continue;
+
+            int dist = SquareGridUtils.GetDistance(source.GridPosition, candidate.GridPosition);
+            if (dist < closestDist)
+            {
+                closestDist = dist;
+                closest = candidate;
+            }
+        }
+
+        return closest;
     }
 
     /// <summary>Get the 1-based PC index (1-4) for a given character, or 0 if not a PC.</summary>
@@ -1194,12 +1412,14 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>Check if all NPCs in the encounter are dead.</summary>
+    /// <summary>Check if all hostile (enemy-team) combatants are dead.</summary>
     private bool AreAllNPCsDead()
     {
         foreach (var npc in NPCs)
         {
-            if (npc != null && !npc.Stats.IsDead) return false;
+            if (npc == null || npc.Stats == null) continue;
+            if (npc.IsPlayerControlled) continue; // allied summons should not block victory
+            if (!npc.Stats.IsDead) return false;
         }
         return true;
     }
@@ -1214,23 +1434,27 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>Count remaining alive NPCs.</summary>
+    /// <summary>Count remaining alive hostile (enemy-team) NPCs.</summary>
     private int GetAliveNPCCount()
     {
         int count = 0;
         foreach (var npc in NPCs)
         {
-            if (npc != null && !npc.Stats.IsDead) count++;
+            if (npc == null || npc.Stats == null) continue;
+            if (npc.IsPlayerControlled) continue;
+            if (!npc.Stats.IsDead) count++;
         }
         return count;
     }
 
-    /// <summary>Get first alive NPC (for backward compat in single-target scenarios).</summary>
+    /// <summary>Get first alive hostile NPC (for backward compat in single-target scenarios).</summary>
     private CharacterController GetFirstAliveNPC()
     {
         foreach (var npc in NPCs)
         {
-            if (npc != null && !npc.Stats.IsDead) return npc;
+            if (npc == null || npc.Stats == null || npc.Stats.IsDead) continue;
+            if (npc.IsPlayerControlled) continue;
+            return npc;
         }
         return null;
     }
@@ -1373,6 +1597,9 @@ public class GameManager : MonoBehaviour
 
             // Tick all spell effect durations at the start of each new round
             TickAllSpellDurations();
+
+            // Tick summon durations (Summon Monster: 1 round/level)
+            TickSummonDurations();
         }
 
         // Log turn start in combat log
@@ -2271,6 +2498,329 @@ public class GameManager : MonoBehaviour
         BeginPendingSpellTargeting(pc);
     }
 
+    private bool IsSummonMonsterSpell(SpellData spell)
+    {
+        if (spell == null || string.IsNullOrEmpty(spell.SpellId)) return false;
+        string normalized = NormalizeSummonSpellId(spell.SpellId);
+        return normalized == "summon_monster_1" || normalized == "summon_monster_2";
+    }
+
+    private string NormalizeSummonSpellId(string spellId)
+    {
+        if (string.IsNullOrEmpty(spellId)) return "";
+        if (spellId == "summon_monster_1" || spellId == "summon_monster_1_clr") return "summon_monster_1";
+        if (spellId == "summon_monster_2" || spellId == "summon_monster_2_clr") return "summon_monster_2";
+        return spellId;
+    }
+
+    private List<SummonTemplate> GetSummonOptionsForSpell(SpellData spell)
+    {
+        if (spell == null) return null;
+        string normalized = NormalizeSummonSpellId(spell.SpellId);
+        if (SummonMonsterOptions.TryGetValue(normalized, out var options)) return options;
+        return null;
+    }
+
+    private void ShowSummonPlacementTargets(CharacterController caster, SpellData spell)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI.SetActionButtonsVisible(false);
+
+        int range = spell != null && spell.RangeSquares > 0 ? spell.RangeSquares : 1;
+        List<SquareCell> cells = Grid.GetCellsInRange(caster.GridPosition, range);
+
+        foreach (var cell in cells)
+        {
+            int dist = SquareGridUtils.GetDistance(caster.GridPosition, cell.Coords);
+            if (dist > range) continue;
+
+            cell.SetHighlight(HighlightType.SpellRange);
+
+            if (!cell.IsOccupied)
+            {
+                cell.SetHighlight(HighlightType.SpellTarget);
+                _highlightedCells.Add(cell);
+            }
+        }
+
+        SquareCell casterCell = Grid.GetCell(caster.GridPosition);
+        if (casterCell != null)
+            casterCell.SetHighlight(HighlightType.Selected);
+
+        CombatUI.SetTurnIndicator($"✦ {_pendingSpell.Name}: Click an empty tile to place summon | Range: {range * 5} ft | Right-click to cancel");
+    }
+
+    private bool TryConsumePendingSpellCast(CharacterController caster)
+    {
+        if (caster == null || _pendingSpell == null) return false;
+
+        bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
+        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        if (spellComp == null)
+        {
+            Debug.LogError("[GameManager] TryConsumePendingSpellCast: No SpellcastingComponent!");
+            return false;
+        }
+
+        if (!isQuickened)
+        {
+            caster.Actions.UseStandardAction();
+        }
+        else
+        {
+            spellComp.MarkQuickenedSpellCast();
+        }
+
+        int slotLevelToConsume = _pendingSpell.SpellLevel;
+        bool hasMetamagicApplied = _pendingMetamagic != null && _pendingMetamagic.HasAnyMetamagic;
+        if (hasMetamagicApplied)
+            slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
+
+        bool consumed;
+        if (hasMetamagicApplied && slotLevelToConsume > 0)
+            consumed = spellComp.CastWizardSpellWithMetamagic(_pendingSpell, _pendingMetamagic);
+        else
+            consumed = spellComp.CastSpellFromSlot(_pendingSpell);
+
+        if (!consumed)
+        {
+            Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} slot for summon spell {_pendingSpell.Name}");
+            return false;
+        }
+
+        HandleConcentrationOnCasting(caster, _pendingSpell);
+        return true;
+    }
+
+    private void InsertIntoInitiative(CharacterController combatant)
+    {
+        if (combatant == null || combatant.Stats == null) return;
+
+        bool isPCTeam = IsPC(combatant);
+        var entry = new InitiativeSystem.InitiativeEntry(combatant, isPCTeam);
+
+        int insertIdx = 0;
+        while (insertIdx < _initiativeOrder.Count)
+        {
+            var cur = _initiativeOrder[insertIdx];
+            if (entry.Total > cur.Total) break;
+            if (entry.Total == cur.Total && entry.Modifier > cur.Modifier) break;
+            insertIdx++;
+        }
+
+        _initiativeOrder.Insert(insertIdx, entry);
+
+        if (insertIdx <= _currentInitiativeIndex)
+            _currentInitiativeIndex++;
+
+        Debug.Log($"[Initiative] Added {combatant.Stats.CharacterName} to initiative at position {insertIdx + 1}: {entry.Total}");
+        UpdateInitiativeUI();
+    }
+
+    private CharacterController SpawnSummonedCreature(CharacterController caster, Vector2Int cell, SummonTemplate template)
+    {
+        if (caster == null || template == null) return null;
+
+        GameObject summonGO = new GameObject($"Summon_{template.TemplateId}_{Random.Range(1000, 9999)}");
+        summonGO.AddComponent<SpriteRenderer>();
+        CharacterController summon = summonGO.AddComponent<CharacterController>();
+        summon.IsPlayerControlled = caster.IsPlayerControlled;
+
+        CharacterStats stats = new CharacterStats(
+            name: template.DisplayName,
+            level: template.Level,
+            characterClass: template.CharacterClass,
+            str: template.STR, dex: template.DEX, con: template.CON,
+            wis: template.WIS, intelligence: template.INT, cha: template.CHA,
+            bab: template.BAB,
+            armorBonus: template.ArmorBonus,
+            shieldBonus: template.ShieldBonus,
+            damageDice: template.DamageDice,
+            damageCount: template.DamageCount,
+            bonusDamage: template.BonusDamage,
+            baseSpeed: template.BaseSpeed,
+            atkRange: template.AttackRange,
+            baseHitDieHP: template.BaseHitDieHP
+        );
+
+        foreach (string tag in template.CreatureTags)
+        {
+            if (!stats.CreatureTags.Contains(tag))
+                stats.CreatureTags.Add(tag);
+        }
+
+        Sprite alive = IconLoader.GetToken(template.TokenType);
+        if (alive == null)
+            alive = LoadSprite("Sprites/npc_enemy_alive");
+        Sprite dead = LoadSprite("Sprites/npc_enemy_dead");
+
+        summon.Init(stats, cell, alive, dead);
+
+        var sr = summon.GetComponent<SpriteRenderer>();
+        if (sr != null && alive == null)
+            sr.color = template.TintColor;
+
+        var inv = summon.gameObject.AddComponent<InventoryComponent>();
+        inv.Init(stats);
+        inv.CharacterInventory.RecalculateStats();
+
+        var statusMgr = summon.gameObject.AddComponent<StatusEffectManager>();
+        statusMgr.Init(stats);
+
+        var concMgr = summon.gameObject.AddComponent<ConcentrationManager>();
+        concMgr.Init(stats, summon);
+
+        NPCs.Add(summon);
+        _npcAIBehaviors.Add(EnemyAIBehavior.AggressiveMelee);
+
+        if (summon.IsPlayerControlled)
+            _summonedAllies.Add(summon);
+        else
+            _summonedEnemies.Add(summon);
+
+        return summon;
+    }
+
+    private void DespawnSummon(ActiveSummonInstance summon, string reason)
+    {
+        if (summon == null || summon.Controller == null) return;
+
+        CharacterController cc = summon.Controller;
+
+        SquareCell currentCell = Grid.GetCell(cc.GridPosition);
+        if (currentCell != null && currentCell.Occupant == cc)
+        {
+            currentCell.IsOccupied = false;
+            currentCell.Occupant = null;
+        }
+
+        int npcIdx = NPCs.IndexOf(cc);
+        if (npcIdx >= 0)
+        {
+            NPCs.RemoveAt(npcIdx);
+            if (npcIdx < _npcAIBehaviors.Count)
+                _npcAIBehaviors.RemoveAt(npcIdx);
+        }
+
+        _summonedAllies.Remove(cc);
+        _summonedEnemies.Remove(cc);
+
+        int initIdx = _initiativeOrder.FindIndex(e => e.Character == cc);
+        if (initIdx >= 0)
+        {
+            _initiativeOrder.RemoveAt(initIdx);
+            if (initIdx < _currentInitiativeIndex)
+                _currentInitiativeIndex = Mathf.Max(0, _currentInitiativeIndex - 1);
+            else if (_currentInitiativeIndex >= _initiativeOrder.Count)
+                _currentInitiativeIndex = 0;
+        }
+
+        if (cc == _activeTurnCharacter)
+            _activeTurnCharacter = null;
+
+        CombatUI?.ShowCombatLog($"<color=#E6C676>⏱ {cc.Stats.CharacterName} fades away ({reason}).</color>");
+        Debug.Log($"[Summon] Despawned {cc.Stats.CharacterName}: {reason}");
+
+        Destroy(cc.gameObject);
+        UpdateInitiativeUI();
+        UpdateAllStatsUI();
+    }
+
+    private void HandleSummonDeathCleanup(CharacterController maybeSummon)
+    {
+        if (maybeSummon == null) return;
+
+        ActiveSummonInstance summon = _activeSummons.Find(s => s != null && s.Controller == maybeSummon);
+        if (summon == null) return;
+
+        DespawnSummon(summon, "destroyed");
+        _activeSummons.Remove(summon);
+    }
+    private void TickSummonDurations()
+    {
+        if (_activeSummons.Count == 0) return;
+
+        var expired = new List<ActiveSummonInstance>();
+        foreach (var summon in _activeSummons)
+        {
+            if (summon == null || summon.Controller == null || summon.Controller.Stats == null)
+            {
+                expired.Add(summon);
+                continue;
+            }
+
+            if (summon.Controller.Stats.IsDead)
+            {
+                expired.Add(summon);
+                continue;
+            }
+
+            summon.RemainingRounds--;
+            if (summon.RemainingRounds <= 0)
+                expired.Add(summon);
+        }
+
+        foreach (var ex in expired)
+        {
+            DespawnSummon(ex, ex != null && ex.RemainingRounds <= 0 ? "duration expired" : "destroyed");
+            _activeSummons.Remove(ex);
+        }
+    }
+
+    private void PerformSummonMonsterCast(CharacterController caster, SquareCell targetCell, SummonTemplate template)
+    {
+        if (caster == null || targetCell == null || template == null || _pendingSpell == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (targetCell.IsOccupied)
+        {
+            CombatUI.ShowCombatLog("Cannot summon there: tile is occupied.");
+            ShowSummonPlacementTargets(caster, _pendingSpell);
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        if (!TryConsumePendingSpellCast(caster))
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        CharacterController summonCC = SpawnSummonedCreature(caster, targetCell.Coords, template);
+        if (summonCC == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        InsertIntoInitiative(summonCC);
+
+        int durationRounds = Mathf.Max(1, caster.Stats.Level);
+        _activeSummons.Add(new ActiveSummonInstance
+        {
+            Controller = summonCC,
+            Caster = caster,
+            RemainingRounds = durationRounds,
+            SourceSpellId = _pendingSpell.SpellId,
+            IsAlliedToPCs = summonCC.IsPlayerControlled
+        });
+
+        CombatUI.ShowCombatLog($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name} and summons {template.DisplayName} for {durationRounds} rounds!");
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+        _pendingSpellFromHeldCharge = false;
+
+        Grid.ClearAllHighlights();
+        UpdateAllStatsUI();
+        StartCoroutine(AfterAttackDelay(caster, 1.0f));
+    }
+
     private void BeginPendingSpellTargeting(CharacterController caster)
     {
         if (caster == null || _pendingSpell == null)
@@ -2283,6 +2833,15 @@ public class GameManager : MonoBehaviour
         if (_pendingSpell.AoEShapeType != AoEShape.None)
         {
             EnterAoETargetingMode(caster, _pendingSpell);
+            return;
+        }
+
+        // Summon Monster spells: select an empty destination tile in range.
+        if (IsSummonMonsterSpell(_pendingSpell))
+        {
+            _pendingAttackMode = PendingAttackMode.CastSpell;
+            CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+            ShowSummonPlacementTargets(caster, _pendingSpell);
             return;
         }
 
@@ -2331,9 +2890,7 @@ public class GameManager : MonoBehaviour
 
     private bool IsFriendlyTarget(CharacterController caster, CharacterController target)
     {
-        if (caster == null || target == null) return false;
-        bool casterIsPC = IsPC(caster);
-        return casterIsPC ? IsPC(target) : NPCs.Contains(target);
+        return IsAllyTeam(caster, target);
     }
     /// <summary>
     /// Highlight valid targets for a spell based on its range and target type.
@@ -2348,7 +2905,6 @@ public class GameManager : MonoBehaviour
         int range = spell.RangeSquares;
         if (range <= 0) range = 1; // Touch spells = adjacent (1 square)
 
-        bool casterIsPC = IsPC(caster);
 
         List<SquareCell> allCells = Grid.GetCellsInRange(caster.GridPosition, range);
         bool hasTarget = false;
@@ -2379,16 +2935,11 @@ public class GameManager : MonoBehaviour
             bool validTarget = false;
             if (spell.TargetType == SpellTargetType.SingleEnemy)
             {
-                // Enemies: NPCs are enemies to PCs, PCs are enemies to NPCs
-                bool isEnemy = casterIsPC ? NPCs.Contains(cell.Occupant) : IsPC(cell.Occupant);
-                validTarget = isEnemy;
+                validTarget = IsEnemyTeam(caster, cell.Occupant);
             }
             else if (spell.TargetType == SpellTargetType.SingleAlly)
             {
-                // Allies: other PCs are allies to PCs, other NPCs are allies to NPCs
-                bool isAlly = casterIsPC ? (IsPC(cell.Occupant) && cell.Occupant != caster) :
-                                           (NPCs.Contains(cell.Occupant) && cell.Occupant != caster);
-                validTarget = isAlly;
+                validTarget = cell.Occupant != caster && IsAllyTeam(caster, cell.Occupant);
             }
             else if (spell.TargetType == SpellTargetType.Touch)
             {
@@ -2660,6 +3211,7 @@ public class GameManager : MonoBehaviour
         if (result.TargetKilled && target != null)
         {
             target.OnDeath();
+            HandleSummonDeathCleanup(target);
         }
 
         // Build combat log with quickened spell / spontaneous cast indicators
@@ -2753,7 +3305,7 @@ public class GameManager : MonoBehaviour
 
                 if (cell.IsOccupied && cell.Occupant != null && !cell.Occupant.Stats.IsDead)
                 {
-                    bool isAlly = IsPC(caster) ? PCs.Contains(cell.Occupant) : NPCs.Contains(cell.Occupant);
+                    bool isAlly = IsAllyTeam(caster, cell.Occupant);
                     cell.SetHighlight(isAlly ? HighlightType.AoEAlly : HighlightType.AoETarget);
                 }
                 else
@@ -2763,9 +3315,11 @@ public class GameManager : MonoBehaviour
             }
 
             // Get all valid targets
-            bool casterIsPC = IsPC(caster);
+            bool casterIsPC = caster.IsPlayerControlled;
+            List<CharacterController> allyTeam = GetTeamMembers(caster.IsPlayerControlled);
+            List<CharacterController> enemyTeam = GetTeamMembers(!caster.IsPlayerControlled);
             List<CharacterController> targets = AoESystem.GetTargetsInArea(
-                aoeCells, caster, PCs, NPCs,
+                aoeCells, caster, allyTeam, enemyTeam,
                 spell.AoEFilter, casterIsPC, Grid);
 
             Debug.Log($"[AoE] Self-centered {spell.Name}: {aoeCells.Count} cells, {targets.Count} targets — awaiting confirmation");
@@ -2934,7 +3488,6 @@ public class GameManager : MonoBehaviour
 
         _currentAoECells = aoeCells;
 
-        bool casterIsPC = IsPC(pc);
 
         // Highlight the AoE cells with color-coded feedback
         foreach (Vector2Int cellPos in aoeCells)
@@ -2945,8 +3498,8 @@ public class GameManager : MonoBehaviour
             if (cell.IsOccupied && cell.Occupant != null && !cell.Occupant.Stats.IsDead)
             {
                 CharacterController occupant = cell.Occupant;
-                bool isAlly = casterIsPC ? PCs.Contains(occupant) : NPCs.Contains(occupant);
-                bool isEnemy = casterIsPC ? NPCs.Contains(occupant) : PCs.Contains(occupant);
+                bool isAlly = IsAllyTeam(pc, occupant);
+                bool isEnemy = IsEnemyTeam(pc, occupant);
 
                 if (_pendingSpell.AoEFilter == AoETargetFilter.AlliesOnly && isAlly)
                     cell.SetHighlight(HighlightType.AoEAlly);
@@ -3054,9 +3607,11 @@ public class GameManager : MonoBehaviour
         }
 
         // Get all valid targets in the AoE
-        bool casterIsPC = IsPC(caster);
+        bool casterIsPC = caster.IsPlayerControlled;
+        List<CharacterController> allyTeam = GetTeamMembers(caster.IsPlayerControlled);
+        List<CharacterController> enemyTeam = GetTeamMembers(!caster.IsPlayerControlled);
         List<CharacterController> targets = AoESystem.GetTargetsInArea(
-            aoeCells, caster, PCs, NPCs,
+            aoeCells, caster, allyTeam, enemyTeam,
             _pendingSpell.AoEFilter, casterIsPC, Grid);
 
         Debug.Log($"[AoE] {_pendingSpell.Name}: {aoeCells.Count} cells, {targets.Count} targets");
@@ -3327,6 +3882,7 @@ public class GameManager : MonoBehaviour
                     if (result.TargetKilled)
                     {
                         target.OnDeath();
+                        HandleSummonDeathCleanup(target);
                         logBuilder.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
                     }
                 }
@@ -4037,6 +4593,9 @@ public class GameManager : MonoBehaviour
         {
             if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead)
             {
+                if (!IsEnemyTeam(pc, cell.Occupant))
+                    continue;
+
                 int sqDist = SquareGridUtils.GetDistance(pc.GridPosition, cell.Coords);
 
                 if (isRangedWeapon && rangeIncrement > 0)
@@ -4344,6 +4903,54 @@ public class GameManager : MonoBehaviour
         // ===== SPELL CASTING MODE =====
         if (_pendingAttackMode == PendingAttackMode.CastSpell && _pendingSpell != null)
         {
+            // Summon Monster spells: pick an empty highlighted destination, then choose creature.
+            if (IsSummonMonsterSpell(_pendingSpell))
+            {
+                if (!_highlightedCells.Contains(cell))
+                {
+                    CombatUI.ShowCombatLog("Choose a highlighted empty tile in range for the summon.");
+                    return;
+                }
+
+                if (cell.IsOccupied)
+                {
+                    CombatUI.ShowCombatLog("Choose an empty tile to place your summon.");
+                    return;
+                }
+
+                List<SummonTemplate> options = GetSummonOptionsForSpell(_pendingSpell);
+                if (options == null || options.Count == 0)
+                {
+                    CombatUI.ShowCombatLog($"No summon options configured for {_pendingSpell.Name}.");
+                    _pendingSpell = null;
+                    _pendingMetamagic = null;
+                    _pendingSpellFromHeldCharge = false;
+                    ShowActionChoices();
+                    return;
+                }
+
+                var selectedCell = cell;
+                CombatUI.ShowSummonCreatureSelection(_pendingSpell.Name,
+                    options.ConvertAll(o => o.DisplayName),
+                    onSelect: (idx) =>
+                    {
+                        if (idx < 0 || idx >= options.Count)
+                        {
+                            ShowActionChoices();
+                            return;
+                        }
+                        PerformSummonMonsterCast(pc, selectedCell, options[idx]);
+                    },
+                    onCancel: () =>
+                    {
+                        _pendingSpell = null;
+                        _pendingMetamagic = null;
+                        _pendingSpellFromHeldCharge = false;
+                        ShowActionChoices();
+                    });
+                return;
+            }
+
             // For ally spells, clicking own tile = self-target
             if (cell.Coords == pc.GridPosition && _pendingSpell.TargetType == SpellTargetType.SingleAlly)
             {
@@ -4386,7 +4993,8 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead && _highlightedCells.Contains(cell))
+        if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead && _highlightedCells.Contains(cell)
+            && IsEnemyTeam(pc, cell.Occupant))
         {
             PerformPlayerAttack(pc, cell.Occupant);
         }
@@ -4407,8 +5015,7 @@ public class GameManager : MonoBehaviour
         foreach (var c in allCells)
         {
             if (!c.IsOccupied || c.Occupant == attacker || c.Occupant.Stats.IsDead) continue;
-            if (IsPC(attacker) && !NPCs.Contains(c.Occupant)) continue;
-            if (!IsPC(attacker) && !IsPC(c.Occupant)) continue;
+            if (!IsEnemyTeam(attacker, c.Occupant)) continue;
 
             if (SquareGridUtils.GetDistance(attacker.GridPosition, c.Coords) <= range)
             {
@@ -4628,8 +5235,7 @@ public class GameManager : MonoBehaviour
             if (candidate == null || candidate == charger || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
 
-            bool isEnemy = IsPC(charger) ? NPCs.Contains(candidate) : IsPC(candidate);
-            if (!isEnemy) continue;
+            if (!IsEnemyTeam(charger, candidate)) continue;
 
             if (CanChargeTarget(charger, candidate, logFailures: false))
                 list.Add(candidate);
@@ -4646,8 +5252,7 @@ public class GameManager : MonoBehaviour
         if (charger == null || target == null || charger == target) return false;
         if (charger.Stats == null || target.Stats == null || target.Stats.IsDead) return false;
 
-        bool isEnemy = IsPC(charger) ? NPCs.Contains(target) : IsPC(target);
-        if (!isEnemy)
+        if (!IsEnemyTeam(charger, target))
         {
             if (logFailures) CombatUI?.ShowCombatLog("⚠ You can only charge an enemy target.");
             return false;
@@ -5076,19 +5681,24 @@ public class GameManager : MonoBehaviour
             CheckConcentrationOnDamage(target, result.TotalDamage);
         }
 
-        if (result.TargetKilled && !target.IsPlayerControlled)
+        if (result.TargetKilled)
         {
-            UpdateAllStatsUI();
-            if (AreAllNPCsDead())
+            HandleSummonDeathCleanup(target);
+
+            if (!target.IsPlayerControlled)
             {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                CombatUI.SetActionButtonsVisible(false);
-                return;
-            }
-            else
-            {
-                CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+                UpdateAllStatsUI();
+                if (AreAllNPCsDead())
+                {
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                    CombatUI.SetActionButtonsVisible(false);
+                    return;
+                }
+                else
+                {
+                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+                }
             }
         }
 
@@ -5119,19 +5729,24 @@ public class GameManager : MonoBehaviour
             CheckConcentrationOnDamage(target, result.TotalDamageDealt);
         }
 
-        if (result.TargetKilled && !target.IsPlayerControlled)
+        if (result.TargetKilled)
         {
-            UpdateAllStatsUI();
-            if (AreAllNPCsDead())
+            HandleSummonDeathCleanup(target);
+
+            if (!target.IsPlayerControlled)
             {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                CombatUI.SetActionButtonsVisible(false);
-                return;
-            }
-            else
-            {
-                CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+                UpdateAllStatsUI();
+                if (AreAllNPCsDead())
+                {
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                    CombatUI.SetActionButtonsVisible(false);
+                    return;
+                }
+                else
+                {
+                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+                }
             }
         }
 
@@ -5162,19 +5777,24 @@ public class GameManager : MonoBehaviour
             CheckConcentrationOnDamage(target, result.TotalDamageDealt);
         }
 
-        if (result.TargetKilled && !target.IsPlayerControlled)
+        if (result.TargetKilled)
         {
-            UpdateAllStatsUI();
-            if (AreAllNPCsDead())
+            HandleSummonDeathCleanup(target);
+
+            if (!target.IsPlayerControlled)
             {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                CombatUI.SetActionButtonsVisible(false);
-                return;
-            }
-            else
-            {
-                CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+                UpdateAllStatsUI();
+                if (AreAllNPCsDead())
+                {
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                    CombatUI.SetActionButtonsVisible(false);
+                    return;
+                }
+                else
+                {
+                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+                }
             }
         }
 
@@ -5205,19 +5825,24 @@ public class GameManager : MonoBehaviour
             CheckConcentrationOnDamage(target, result.TotalDamageDealt);
         }
 
-        if (result.TargetKilled && !target.IsPlayerControlled)
+        if (result.TargetKilled)
         {
-            UpdateAllStatsUI();
-            if (AreAllNPCsDead())
+            HandleSummonDeathCleanup(target);
+
+            if (!target.IsPlayerControlled)
             {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                CombatUI.SetActionButtonsVisible(false);
-                return;
-            }
-            else
-            {
-                CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+                UpdateAllStatsUI();
+                if (AreAllNPCsDead())
+                {
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                    CombatUI.SetActionButtonsVisible(false);
+                    return;
+                }
+                else
+                {
+                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+                }
             }
         }
 
@@ -5465,7 +6090,7 @@ public class GameManager : MonoBehaviour
 
     private IEnumerator AI_DefensiveMelee(CharacterController npc, CharacterController targetPC)
     {
-        CharacterController weakerPC = GetWeakerAlivePC();
+        CharacterController weakerPC = GetWeakerAlivePC(npc);
         if (weakerPC != null) targetPC = weakerPC;
 
         int distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
@@ -5655,6 +6280,8 @@ public class GameManager : MonoBehaviour
 
         if (result.TargetKilled)
         {
+            HandleSummonDeathCleanup(target);
+
             if (AreAllPCsDead())
             {
                 CurrentPhase = TurnPhase.CombatOver;
@@ -5671,23 +6298,10 @@ public class GameManager : MonoBehaviour
         yield return new WaitForSeconds(1.0f);
     }
 
-    /// <summary>Find closest alive PC relative to a specific NPC (checks all 4 PCs).</summary>
+    /// <summary>Find closest alive enemy to a specific combatant.</summary>
     private CharacterController GetClosestAlivePCTo(CharacterController npc)
     {
-        CharacterController closest = null;
-        int closestDist = int.MaxValue;
-
-        foreach (var pc in PCs)
-        {
-            if (pc == null || pc.Stats.IsDead) continue;
-            int dist = SquareGridUtils.GetDistance(npc.GridPosition, pc.GridPosition);
-            if (dist < closestDist)
-            {
-                closestDist = dist;
-                closest = pc;
-            }
-        }
-        return closest;
+        return GetClosestAliveEnemyTo(npc);
     }
 
     /// <summary>Legacy wrapper for backward compat.</summary>
@@ -5696,19 +6310,23 @@ public class GameManager : MonoBehaviour
         return (NPC != null) ? GetClosestAlivePCTo(NPC) : null;
     }
 
-    /// <summary>Get the alive PC with the lowest current HP (for defensive AI targeting).</summary>
-    private CharacterController GetWeakerAlivePC()
+    /// <summary>Get the alive enemy with the lowest current HP (for defensive AI targeting).</summary>
+    private CharacterController GetWeakerAlivePC(CharacterController npc)
     {
         CharacterController weakest = null;
         int lowestHP = int.MaxValue;
 
-        foreach (var pc in PCs)
+        foreach (var candidate in GetAllCharacters())
         {
-            if (pc == null || pc.Stats.IsDead) continue;
-            if (pc.Stats.CurrentHP < lowestHP)
+            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!IsEnemyTeam(npc, candidate))
+                continue;
+
+            if (candidate.Stats.CurrentHP < lowestHP)
             {
-                lowestHP = pc.Stats.CurrentHP;
-                weakest = pc;
+                lowestHP = candidate.Stats.CurrentHP;
+                weakest = candidate;
             }
         }
         return weakest;
