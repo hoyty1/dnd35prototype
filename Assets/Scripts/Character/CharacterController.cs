@@ -93,6 +93,20 @@ public class CharacterController : MonoBehaviour
     }
 
     private SpriteRenderer _sr;
+    private Coroutine _currentScaleAnimation;
+
+    [Header("Visual Animation Settings")]
+    [SerializeField, Min(0f)] private float _sizeChangeDuration = 0.4f;
+    [SerializeField] private AnimationEasing _sizeChangeEasing = AnimationEasing.EaseOutCubic;
+
+    public enum AnimationEasing
+    {
+        Linear,
+        EaseOutCubic,
+        EaseInOutCubic,
+        EaseOutBack,
+        EaseOutElastic
+    }
 
     private void Awake()
     {
@@ -103,6 +117,15 @@ public class CharacterController : MonoBehaviour
         // Battlefield status indicators (condition badges above token).
         if (GetComponent<StatusEffectIndicator>() == null)
             gameObject.AddComponent<StatusEffectIndicator>();
+    }
+
+    private void OnDisable()
+    {
+        if (_currentScaleAnimation != null)
+        {
+            StopCoroutine(_currentScaleAnimation);
+            _currentScaleAnimation = null;
+        }
     }
 
     /// <summary>
@@ -119,7 +142,7 @@ public class CharacterController : MonoBehaviour
         _sr.sortingOrder = 10;
 
         RefreshGridOccupancy();
-        UpdateVisualSize();
+        UpdateVisualSize(false);
     }
 
     private SquareGrid CurrentGrid => GameManager.Instance != null ? GameManager.Instance.Grid : SquareGrid.Instance;
@@ -1444,7 +1467,7 @@ public class CharacterController : MonoBehaviour
         {
             Stats.CurrentSizeCategory = oldSize;
             Debug.LogWarning($"[Size] {Stats.CharacterName}: size change blocked - insufficient room at ({GridPosition.x},{GridPosition.y}).");
-            UpdateVisualSize();
+            UpdateVisualSize(false);
             RefreshGridOccupancy();
             return false;
         }
@@ -1455,18 +1478,128 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Updates token scale and position to match current size category and occupied footprint.
+    /// Updates visual token size to match current size category.
     /// </summary>
     public void UpdateVisualSize()
+    {
+        UpdateVisualSize(true);
+    }
+
+    /// <summary>
+    /// Updates visual token size to match current size category.
+    /// </summary>
+    public void UpdateVisualSize(bool animate)
     {
         SizeCategory currentSize = GetCurrentSizeCategory();
         int squaresOccupied = GetVisualSquaresOccupied();
         float targetScale = currentSize.GetVisualTokenScale();
 
+        if (!animate)
+        {
+            UpdateVisualSizeInstant();
+        }
+        else
+        {
+            if (_currentScaleAnimation != null)
+            {
+                StopCoroutine(_currentScaleAnimation);
+                _currentScaleAnimation = null;
+            }
+
+            _currentScaleAnimation = StartCoroutine(SmoothScaleCoroutine(targetScale));
+            UpdatePositionForSize();
+        }
+
+        Debug.Log($"[Size] {Stats?.CharacterName ?? gameObject.name}: UpdateVisualSize -> {currentSize}, footprint {squaresOccupied}x{squaresOccupied}, scale {targetScale:0.##}, animate={animate}");
+    }
+
+    /// <summary>
+    /// Instantly updates token scale and position to match current size category.
+    /// </summary>
+    public void UpdateVisualSizeInstant()
+    {
+        if (_currentScaleAnimation != null)
+        {
+            StopCoroutine(_currentScaleAnimation);
+            _currentScaleAnimation = null;
+        }
+
+        float targetScale = GetCurrentSizeCategory().GetVisualTokenScale();
         transform.localScale = new Vector3(targetScale, targetScale, 1f);
         UpdatePositionForSize();
+    }
 
-        Debug.Log($"[Size] {Stats?.CharacterName ?? gameObject.name}: UpdateVisualSize -> {currentSize}, footprint {squaresOccupied}x{squaresOccupied}, scale {targetScale:0.##}");
+    private IEnumerator SmoothScaleCoroutine(float targetScale)
+    {
+        float duration = Mathf.Max(0f, _sizeChangeDuration);
+        if (duration <= 0f)
+        {
+            transform.localScale = new Vector3(targetScale, targetScale, 1f);
+            _currentScaleAnimation = null;
+            yield break;
+        }
+
+        float startScale = transform.localScale.x;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float easedT = ApplyEasing(t, _sizeChangeEasing);
+            float currentScale = Mathf.Lerp(startScale, targetScale, easedT);
+            transform.localScale = new Vector3(currentScale, currentScale, 1f);
+            yield return null;
+        }
+
+        transform.localScale = new Vector3(targetScale, targetScale, 1f);
+        _currentScaleAnimation = null;
+    }
+
+    private float ApplyEasing(float t, AnimationEasing easing)
+    {
+        switch (easing)
+        {
+            case AnimationEasing.Linear:
+                return t;
+            case AnimationEasing.EaseOutCubic:
+                return EaseOutCubic(t);
+            case AnimationEasing.EaseInOutCubic:
+                return EaseInOutCubic(t);
+            case AnimationEasing.EaseOutBack:
+                return EaseOutBack(t);
+            case AnimationEasing.EaseOutElastic:
+                return EaseOutElastic(t);
+            default:
+                return t;
+        }
+    }
+
+    private float EaseOutCubic(float t)
+    {
+        return 1f - Mathf.Pow(1f - t, 3f);
+    }
+
+    private float EaseInOutCubic(float t)
+    {
+        return t < 0.5f
+            ? 4f * t * t * t
+            : 1f - Mathf.Pow(-2f * t + 2f, 3f) / 2f;
+    }
+
+    private float EaseOutBack(float t)
+    {
+        const float c1 = 1.70158f;
+        const float c3 = c1 + 1f;
+        return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
+    }
+
+    private float EaseOutElastic(float t)
+    {
+        const float c4 = (2f * Mathf.PI) / 3f;
+        return t == 0f ? 0f
+            : t == 1f ? 1f
+            : Mathf.Pow(2f, -10f * t) * Mathf.Sin((t * 10f - 0.75f) * c4) + 1f;
     }
 
     /// <summary>
