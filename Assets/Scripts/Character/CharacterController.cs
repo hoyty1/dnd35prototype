@@ -117,6 +117,7 @@ public class CharacterController : MonoBehaviour
 
         _sr.sprite = AliveSprite;
         _sr.sortingOrder = 10;
+        UpdateSizeVisuals();
 
         // Position in world
         transform.position = SquareGridUtils.GridToWorld(startPos);
@@ -1394,6 +1395,45 @@ public class CharacterController : MonoBehaviour
     public int GetCurrentNaturalReachSquares()
     {
         return Stats != null ? Stats.NaturalReachSquares : 1;
+    }
+
+    /// <summary>
+    /// Apply a temporary size shift (e.g., Enlarge/Reduce) and refresh visuals.
+    /// </summary>
+    public bool ChangeSize(int categoryDelta)
+    {
+        if (Stats == null) return false;
+
+        bool changed = Stats.ChangeSize(categoryDelta);
+        if (changed)
+            UpdateSizeVisuals();
+
+        return changed;
+    }
+
+    /// <summary>
+    /// Updates token scale to provide quick visual feedback for current size category.
+    /// This is cosmetic only and does not enforce multi-tile occupancy.
+    /// </summary>
+    public void UpdateSizeVisuals()
+    {
+        if (Stats == null) return;
+
+        float scale = 1f;
+        switch (Stats.CurrentSizeCategory)
+        {
+            case SizeCategory.Fine: scale = 0.55f; break;
+            case SizeCategory.Diminutive: scale = 0.65f; break;
+            case SizeCategory.Tiny: scale = 0.75f; break;
+            case SizeCategory.Small: scale = 0.88f; break;
+            case SizeCategory.Medium: scale = 1f; break;
+            case SizeCategory.Large: scale = 1.2f; break;
+            case SizeCategory.Huge: scale = 1.35f; break;
+            case SizeCategory.Gargantuan: scale = 1.5f; break;
+            case SizeCategory.Colossal: scale = 1.7f; break;
+        }
+
+        transform.localScale = new Vector3(scale, scale, 1f);
     }
 
 

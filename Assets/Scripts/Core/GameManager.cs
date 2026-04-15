@@ -523,6 +523,10 @@ public class GameManager : MonoBehaviour
         WaitingForEncounterSelection = true;
         var presets = EnemyDatabase.ListEncounterPresets();
 
+        // Keep the pre-combat picker compact: show exactly three curated options.
+        if (presets.Count > 3)
+            presets = presets.GetRange(0, 3);
+
         EncounterSelectionUI.Open(presets,
             onSelect: presetId =>
             {
@@ -1514,6 +1518,7 @@ public class GameManager : MonoBehaviour
         FeatManager.ApplyPassiveFeats(stats);
         stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Humanoid" : def.CreatureType;
         stats.SetBaseSizeCategory(def.SizeCategory);
+        stats.IsTallCreature = def.IsTallCreature;
         stats.NaturalArmorBonus = def.NaturalArmorBonus;
         stats.HasTripAttack = def.HasTripAttack;
 

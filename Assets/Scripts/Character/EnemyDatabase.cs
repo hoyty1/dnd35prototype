@@ -24,6 +24,7 @@ public static class EnemyDatabase
         RegisterOrcBerserker();
         RegisterHobgoblinSergeant();
         RegisterOgreBrute();
+        RegisterDireWolf();
         RegisterWolfPackHunter();
 
         Debug.Log($"[EnemyDatabase] Initialized with {_enemies.Count} enemy types.");
@@ -50,7 +51,7 @@ public static class EnemyDatabase
         {
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
-            new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "wolf_pack_hunter", "wolf_pack_hunter", "wolf_pack_hunter" }),
+            new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
             new EncounterPreset("ogre_bodyguard", "Ogre Bodyguard", "A dangerous large brute protected by disciplined infantry.", new List<string> { "ogre_brute", "hobgoblin_sergeant", "goblin_warchief" }),
             new EncounterPreset("mixed_patrol", "Mixed Patrol", "Varied enemies showcasing melee, ranged, and size differences.", new List<string> { "wolf_pack_hunter", "skeleton_archer", "orc_berserker", "goblin_warchief" })
         };
@@ -275,6 +276,7 @@ public static class EnemyDatabase
             CharacterClass = "Warrior",
             CreatureType = "Giant",
             SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
             STR = 21, DEX = 8, CON = 15, WIS = 10, INT = 6, CHA = 7,
             BAB = 4,
             ArmorBonus = 2,   // hide scraps
@@ -302,6 +304,44 @@ public static class EnemyDatabase
     }
 
     /// <summary>
+    /// Dire Wolf (CR 3) — Large long quadruped with trip attack.
+    /// Reach is intentionally short for size because wolves are long creatures.
+    /// </summary>
+    private static void RegisterDireWolf()
+    {
+        Register(new EnemyDefinition
+        {
+            Id = "dire_wolf",
+            Name = "Dire Wolf",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 25, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 10,
+            BAB = 4,
+            ArmorBonus = 0,
+            NaturalArmorBonus = 5,
+            ShieldBonus = 0,
+            DamageDice = 8,   // bite 1d8
+            DamageCount = 1,
+            BonusDamage = 0,
+            BaseSpeed = 10,   // 50 ft
+            AttackRange = 1,  // long Large creature => 5-ft reach
+            BaseHitDieHP = 45,
+            CreatureTags = new List<string> { "Animal" },
+            HasTripAttack = true,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            SpriteColor = new Color(0.62f, 0.62f, 0.62f, 1f),
+            PanelColor = new Color(0.18f, 0.18f, 0.18f, 0.85f),
+            NameColor = new Color(0.95f, 0.95f, 1f),
+            Description = "A massive wolf with crushing jaws and pack-hunting instincts. It can drag prey down with vicious trip attacks."
+        });
+    }
+
+    /// <summary>
     /// Wolf Pack Hunter (CR 1) — Fast quadruped striker with trip tendency.
     /// </summary>
     private static void RegisterWolfPackHunter()
@@ -314,6 +354,7 @@ public static class EnemyDatabase
             CharacterClass = "Warrior",
             CreatureType = "Animal",
             SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
             STR = 13, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
             BAB = 2,
             ArmorBonus = 0,
@@ -354,6 +395,7 @@ public class EnemyDefinition
     public string CharacterClass;
     public string CreatureType = "Humanoid";
     public SizeCategory SizeCategory = SizeCategory.Medium;
+    public bool IsTallCreature = true;
     public int NaturalArmorBonus;
     public bool HasTripAttack;
     public int STR, DEX, CON, WIS, INT, CHA;

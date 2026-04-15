@@ -630,6 +630,12 @@ public class CharacterStats
     /// <summary>Current effective size after temporary effects (Enlarge/Reduce, etc.).</summary>
     public global::SizeCategory CurrentSizeCategory = global::SizeCategory.Medium;
 
+    /// <summary>
+    /// True for tall anatomies (humanoids/giants), false for long anatomies (quadrupeds/serpentine).
+    /// Used to compute natural reach rules for Large+ creatures.
+    /// </summary>
+    public bool IsTallCreature = true;
+
     /// <summary>Broad creature type used by some spells (e.g., Humanoid-only effects).</summary>
     public string CreatureType = "Humanoid";
 
@@ -713,10 +719,10 @@ public class CharacterStats
     public int SizeModifier => CurrentSizeCategory.GetAttackAndAcModifier();
 
     /// <summary>Natural reach in feet from effective current size category.</summary>
-    public int NaturalReachFeet => CurrentSizeCategory.GetNaturalReachFeet();
+    public int NaturalReachFeet => CurrentSizeCategory.GetNaturalReachFeet(IsTallCreature);
 
     /// <summary>Natural reach in squares from effective current size category.</summary>
-    public int NaturalReachSquares => CurrentSizeCategory.GetNaturalReachSquares();
+    public int NaturalReachSquares => CurrentSizeCategory.GetNaturalReachSquares(IsTallCreature);
 
     /// <summary>Simplified occupied footprint in squares (for UI/future multi-tile support).</summary>
     public int SpaceSquares => CurrentSizeCategory.GetSpaceSquares();
@@ -1711,6 +1717,27 @@ public class CharacterStats
 
     /// <summary>Size hide modifier from effective size category.</summary>
     public int SizeHideModifier => CurrentSizeCategory.GetHideModifier();
+
+    /// <summary>Legacy helper for AC size modifier lookup.</summary>
+    public int GetSizeACModifier() => SizeModifier;
+
+    /// <summary>Legacy helper for attack size modifier lookup.</summary>
+    public int GetSizeAttackModifier() => SizeModifier;
+
+    /// <summary>Legacy helper for grapple size modifier lookup.</summary>
+    public int GetSizeGrappleModifier() => SizeGrappleModifier;
+
+    /// <summary>Legacy helper for Hide skill size modifier lookup.</summary>
+    public int GetSizeHideModifier() => SizeHideModifier;
+
+    /// <summary>Legacy helper for occupied space lookup.</summary>
+    public int GetSpaceSquares() => SpaceSquares;
+
+    /// <summary>Legacy helper for natural reach in squares lookup.</summary>
+    public int GetNaturalReachSquares() => NaturalReachSquares;
+
+    /// <summary>Legacy helper to apply a temporary size delta.</summary>
+    public bool ChangeSize(int categoryDelta) => TryShiftCurrentSize(categoryDelta);
 
     /// <summary>Speed in feet for display purposes (includes fast movement bonuses).</summary>
     public int SpeedInFeet => (Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5) + (MonkFastMovementBonus + BarbarianFastMovementBonus) * 5;

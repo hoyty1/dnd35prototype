@@ -81,6 +81,8 @@ public static class IconManager
         { "Wolf", "wolf_token" },
         { "wolf_pack_hunter", "wolf_token" },
         { "Wolf Pack Hunter", "wolf_token" },
+        { "dire_wolf", "wolf_token" },
+        { "Dire Wolf", "wolf_token" },
         { "ogre_brute", "ogre_token" },
         { "Ogre Brute", "ogre_token" },
     };

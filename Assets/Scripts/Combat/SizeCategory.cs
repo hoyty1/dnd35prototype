@@ -73,10 +73,11 @@ public static class SizeCategoryExtensions
     }
 
     /// <summary>
-    /// D&D 3.5 natural reach in feet for typical tall creatures.
-    /// Simplified for this prototype: Small/Medium 5 ft, Large 10 ft, then +5 ft per step.
+    /// D&D 3.5 natural reach in feet.
+    /// Tall creatures (humanoids/giants) have longer natural reach at Large+.
+    /// Long creatures (quadrupeds/serpentine) have shorter reach at the same size.
     /// </summary>
-    public static int GetNaturalReachFeet(this SizeCategory size)
+    public static int GetNaturalReachFeet(this SizeCategory size, bool isTallCreature = true)
     {
         switch (size)
         {
@@ -86,14 +87,19 @@ public static class SizeCategoryExtensions
             case SizeCategory.Small:
             case SizeCategory.Medium:
                 return 5;
+
             case SizeCategory.Large:
-                return 10;
+                return isTallCreature ? 10 : 5;
+
             case SizeCategory.Huge:
-                return 15;
+                return isTallCreature ? 15 : 10;
+
             case SizeCategory.Gargantuan:
-                return 20;
+                return isTallCreature ? 20 : 15;
+
             case SizeCategory.Colossal:
-                return 30;
+                return isTallCreature ? 30 : 20;
+
             default:
                 return 5;
         }
@@ -102,9 +108,9 @@ public static class SizeCategoryExtensions
     /// <summary>
     /// Grid-square approximation of natural reach (5 ft per square, minimum 1).
     /// </summary>
-    public static int GetNaturalReachSquares(this SizeCategory size)
+    public static int GetNaturalReachSquares(this SizeCategory size, bool isTallCreature = true)
     {
-        return Mathf.Max(1, GetNaturalReachFeet(size) / 5);
+        return Mathf.Max(1, GetNaturalReachFeet(size, isTallCreature) / 5);
     }
 
     /// <summary>
