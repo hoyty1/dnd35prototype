@@ -100,10 +100,18 @@ public class ItemData
     public int DamageDice;      // Sides on damage die (e.g., 8 for d8)
     public int DamageCount;     // Number of damage dice (usually 1)
     public int BonusDamage;     // Flat bonus damage
-    public int AttackRange;     // 1 = melee, >1 = ranged (in feet for ranged weapons, squares for melee)
+    public int AttackRange;     // Legacy max range field: melee in squares, ranged in feet. Use ReachSquares for melee semantics.
     public bool IsLightWeapon;  // Light weapon (dagger, short sword) - reduces TWF penalties
     public bool IsTwoHanded;    // Two-handed weapon - can't be dual-wielded, 1.5x STR to damage
-    public bool HasReach;       // Reach weapon - can attack at 2 squares
+    public bool HasReach;       // Legacy reach flag (kept for backward compatibility)
+
+    // --- D&D 3.5 Reach Mechanics ---
+    public int ReachSquares;          // Melee reach in squares (1 = 5 ft, 2 = 10 ft, 3 = 15 ft)
+    public bool CanAttackAdjacent;    // Whether this melee weapon can attack adjacent (distance 1)
+    public bool IsReachWeapon;        // True for reach weapons (typically ReachSquares > 1)
+    public bool DealsNonlethalDamage; // Whip and similar weapons can deal nonlethal damage
+    public bool WhipLikeArmorRestriction; // Cannot harm targets with armor/natural armor bonus +1 or higher
+
     public string DamageType;   // Legacy display/source string ("slashing", "piercing", etc.)
 
     // --- Damage bypass/material/alignment properties (for DR interactions) ---
@@ -259,6 +267,13 @@ public class ItemData
         return $"{range}/×{mult}";
     }
 
+    /// <summary>Get formatted melee reach description (e.g., "5 ft", "10 ft").</summary>
+    public string GetReachDescription()
+    {
+        int reach = ReachSquares > 0 ? ReachSquares : Mathf.Max(1, AttackRange);
+        return $"{reach * 5} ft";
+    }
+
     /// <summary>Get a short stat summary for tooltips.</summary>
     public string GetStatSummary()
     {
@@ -279,9 +294,13 @@ public class ItemData
                 string weaponType = IsThrown ? "thrown" : "projectile";
                 stats += $"\nRange: {RangeIncrement} ft increment ({incSquares} sq), max {maxRange} ft ({maxSquares} sq) [{weaponType}]";
             }
-            else if (AttackRange > 1)
+            else if (WeaponCat == WeaponCategory.Melee)
             {
-                stats += $" | Range: {AttackRange} ft";
+                int minReach = CanAttackAdjacent ? 1 : Mathf.Min(2, Mathf.Max(1, ReachSquares));
+                int maxReach = ReachSquares > 0 ? ReachSquares : Mathf.Max(1, AttackRange);
+                stats += $"\nReach: {GetReachDescription()} ({minReach}-{maxReach} sq)";
+                if (!CanAttackAdjacent)
+                    stats += " | Cannot attack adjacent";
             }
 
             if (RequiresReload)
@@ -296,7 +315,9 @@ public class ItemData
             string props = "";
             if (IsLightWeapon) props += "Light, ";
             if (IsTwoHanded) props += "Two-handed, ";
-            if (HasReach) props += "Reach, ";
+            if (IsReachWeapon) props += "Reach, ";
+            if (DealsNonlethalDamage) props += "Nonlethal, ";
+            if (WhipLikeArmorRestriction) props += "Cannot harm armor/natural armor +1+, ";
             if (IsThrown) props += "Thrown, ";
             if (DmgModType == DamageModifierType.Composite) props += $"Composite (+{CompositeRating} STR), ";
             else if (DmgModType == DamageModifierType.StrengthOneAndHalf) props += "1.5× STR dmg, ";

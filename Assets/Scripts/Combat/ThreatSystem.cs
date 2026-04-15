@@ -98,28 +98,29 @@ public static class ThreatSystem
             return threatened;
         }
 
-        int reach = character.Stats.AttackRange; // Default 1 for Medium melee
+        int minThreatDistance = character.GetMeleeMinAttackDistance();
+        int maxThreatDistance = character.GetMeleeMaxAttackDistance();
         Vector2Int pos = character.GridPosition;
 
-        // Check all squares within reach using D&D 3.5 distance
-        // For reach 1, this is the 8 adjacent squares (including diagonals)
-        for (int dx = -reach; dx <= reach; dx++)
+        // Strict D&D 3.5 threat ring(s):
+        // - normal melee weapon: distance 1
+        // - reach weapon: usually distance 2 only
+        // - special (spiked chain): distance 1-2
+        // - whip: distance 2-3
+        for (int dx = -maxThreatDistance; dx <= maxThreatDistance; dx++)
         {
-            for (int dy = -reach; dy <= reach; dy++)
+            for (int dy = -maxThreatDistance; dy <= maxThreatDistance; dy++)
             {
                 if (dx == 0 && dy == 0) continue;
 
                 Vector2Int target = new Vector2Int(pos.x + dx, pos.y + dy);
-
-                // Use D&D 3.5 distance to validate reach
-                if (SquareGridUtils.GetDistance(pos, target) <= reach)
-                {
+                int distance = SquareGridUtils.GetDistance(pos, target);
+                if (distance >= minThreatDistance && distance <= maxThreatDistance)
                     threatened.Add(target);
-                }
             }
         }
 
-        Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} threatens {threatened.Count} squares from ({pos.x},{pos.y}) with reach {reach} (melee weapon equipped)");
+        Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} threatens {threatened.Count} squares from ({pos.x},{pos.y}) at distances {minThreatDistance}-{maxThreatDistance} (melee weapon equipped)");
         return threatened;
     }
 

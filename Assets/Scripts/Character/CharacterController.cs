@@ -220,6 +220,23 @@ public class CharacterController : MonoBehaviour
             };
         }
 
+        if (!IsTargetInCurrentWeaponRange(target))
+        {
+            Debug.LogWarning($"[Combat] {Stats.CharacterName} cannot attack {target?.Stats?.CharacterName}: target out of weapon range.");
+            return new CombatResult
+            {
+                Attacker = this,
+                Defender = target,
+                WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed",
+                Hit = false,
+                DieRoll = 0,
+                TotalRoll = 0,
+                TargetAC = target != null && target.Stats != null ? target.Stats.ArmorClass : 0,
+                DefenderHPBefore = target != null && target.Stats != null ? target.Stats.CurrentHP : 0,
+                DefenderHPAfter = target != null && target.Stats != null ? target.Stats.CurrentHP : 0
+            };
+        }
+
         bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || equippedWeapon.RangeIncrement > 0))
                         && rangeInfo != null && !rangeInfo.IsMelee;
         bool isMelee = !isRanged;
@@ -993,6 +1010,21 @@ public class CharacterController : MonoBehaviour
 
         if (hit)
         {
+            bool whipArmorBlocked = IsTargetImmuneToWhipDamage(target, weapon);
+            if (whipArmorBlocked)
+            {
+                result.IsCritThreat = false;
+                result.CritConfirmed = false;
+                result.Damage = 0;
+                result.BaseDamageRoll = 0;
+                result.RawTotalDamage = 0;
+                result.FinalDamageDealt = 0;
+                result.ImmunityPrevented = true;
+                result.MitigationSummary = "Whip cannot harm targets with armor/natural armor bonus +1 or higher.";
+                result.DamageTypeSummary = "nonlethal slashing";
+                return result;
+            }
+
             isThreat = CharacterStats.IsCritThreat(roll, critThreatMin);
             result.IsCritThreat = isThreat;
 
@@ -1071,6 +1103,16 @@ public class CharacterController : MonoBehaviour
             result.ImmunityPrevented = mitigation.ImmunityTriggered;
             result.MitigationSummary = mitigation.GetMitigationSummary();
             result.DamageTypeSummary = DamageTextUtils.FormatDamageTypes(damageTypes);
+
+            if (weapon != null && weapon.DealsNonlethalDamage)
+            {
+                result.DamageTypeSummary = string.IsNullOrEmpty(result.DamageTypeSummary)
+                    ? "nonlethal"
+                    : $"{result.DamageTypeSummary}, nonlethal";
+
+                if (string.IsNullOrEmpty(result.MitigationSummary))
+                    result.MitigationSummary = "Nonlethal damage is tracked as normal HP damage in this prototype.";
+            }
 
             if (target.Stats.IsDead)
             {
@@ -1237,6 +1279,91 @@ public class CharacterController : MonoBehaviour
         return true; // Default to melee if unclear
     }
 
+
+    /// <summary>
+    /// Get minimum melee distance (in squares) this character can attack with current weapon.
+    /// Most melee weapons: 1. Reach-only weapons: 2. Whip: 2 (with max 3).
+    /// </summary>
+    public int GetMeleeMinAttackDistance(ItemData weapon = null)
+    {
+        weapon ??= GetEquippedMainWeapon();
+
+        // Unarmed attack is always adjacent.
+        if (weapon == null || weapon.WeaponCat != WeaponCategory.Melee)
+            return 1;
+
+        bool canAttackAdjacent = weapon.CanAttackAdjacent;
+        int maxReach = GetMeleeMaxAttackDistance(weapon);
+
+        if (canAttackAdjacent) return 1;
+        return maxReach >= 2 ? 2 : 1;
+    }
+
+    /// <summary>
+    /// Get maximum melee distance (in squares) this character can attack with current weapon.
+    /// </summary>
+    public int GetMeleeMaxAttackDistance(ItemData weapon = null)
+    {
+        weapon ??= GetEquippedMainWeapon();
+
+        if (weapon == null || weapon.WeaponCat != WeaponCategory.Melee)
+            return 1;
+
+        int reach = weapon.ReachSquares > 0 ? weapon.ReachSquares : weapon.AttackRange;
+        return Mathf.Max(1, reach);
+    }
+
+    /// <summary>
+    /// Returns true if the specified square distance is legal for this character's current melee weapon.
+    /// </summary>
+    public bool CanMeleeAttackDistance(int squareDistance, ItemData weapon = null)
+    {
+        if (squareDistance <= 0) return false;
+        int minDist = GetMeleeMinAttackDistance(weapon);
+        int maxDist = GetMeleeMaxAttackDistance(weapon);
+        return squareDistance >= minDist && squareDistance <= maxDist;
+    }
+
+    /// <summary>
+    /// Check if this target is in range of the currently equipped weapon.
+    /// </summary>
+    public bool IsTargetInCurrentWeaponRange(CharacterController target)
+    {
+        if (target == null || target.Stats == null || Stats == null) return false;
+
+        ItemData weapon = GetEquippedMainWeapon();
+        int distance = SquareGridUtils.GetDistance(GridPosition, target.GridPosition);
+
+        bool isRanged = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
+        if (isRanged)
+        {
+            int rangeIncrement = weapon.RangeIncrement;
+            bool isThrownWeapon = weapon.IsThrown;
+
+            if (rangeIncrement > 0)
+            {
+                int distFeet = RangeCalculator.SquaresToFeet(distance);
+                return RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement, isThrownWeapon);
+            }
+
+            return distance <= Mathf.Max(1, Stats.AttackRange);
+        }
+
+        return CanMeleeAttackDistance(distance, weapon);
+    }
+
+    /// <summary>
+    /// D&D 3.5 whip rule: standard whip cannot harm creatures with armor bonus +1 or natural armor +1.
+    /// In this prototype, ArmorBonus is used as the tracked armor/natural armor bucket.
+    /// </summary>
+    public bool IsTargetImmuneToWhipDamage(CharacterController target, ItemData weapon)
+    {
+        if (target == null || target.Stats == null || weapon == null) return false;
+        if (!weapon.WhipLikeArmorRestriction) return false;
+
+        int armorLikeBonus = Mathf.Max(0, target.Stats.ArmorBonus);
+        return armorLikeBonus >= 1;
+    }
     /// <summary>
     /// Get the equipped main-hand weapon (right hand first, then left hand).
     /// Returns null if no weapon equipped (unarmed).

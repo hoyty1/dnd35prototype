@@ -235,7 +235,12 @@ public class Inventory
         OwnerStats.BaseDamageDice = weapon.DamageDice;
         OwnerStats.BaseDamageCount = weapon.DamageCount;
         OwnerStats.BonusDamage = weapon.BonusDamage;
-        OwnerStats.AttackRange = weapon.AttackRange;
+
+        if (weapon.WeaponCat == WeaponCategory.Melee)
+            OwnerStats.AttackRange = Mathf.Max(1, weapon.ReachSquares > 0 ? weapon.ReachSquares : weapon.AttackRange);
+        else
+            OwnerStats.AttackRange = weapon.AttackRange;
+
         OwnerStats.CritThreatMin = weapon.CritThreatMin > 0 ? weapon.CritThreatMin : 20;
         OwnerStats.CritMultiplier = weapon.CritMultiplier > 0 ? weapon.CritMultiplier : 2;
     }

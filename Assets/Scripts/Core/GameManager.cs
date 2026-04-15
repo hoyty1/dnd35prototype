@@ -5124,7 +5124,7 @@ public class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    if (sqDist > pc.Stats.AttackRange)
+                    if (!pc.CanMeleeAttackDistance(sqDist))
                         continue;
                 }
 
@@ -5229,7 +5229,6 @@ public class GameManager : MonoBehaviour
         if (attacker == null)
             return valid;
 
-        int meleeReach = Mathf.Max(1, attacker.Stats != null ? attacker.Stats.AttackRange : 1);
         foreach (CharacterController candidate in GetAllCharacters())
         {
             if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
@@ -5238,7 +5237,7 @@ public class GameManager : MonoBehaviour
                 continue;
 
             int distance = SquareGridUtils.GetDistance(attacker.GridPosition, candidate.GridPosition);
-            if (distance <= meleeReach)
+            if (attacker.CanMeleeAttackDistance(distance))
                 valid.Add(candidate);
         }
 
@@ -5278,7 +5277,7 @@ public class GameManager : MonoBehaviour
             return sqDist <= attacker.Stats.AttackRange;
         }
 
-        return sqDist <= Mathf.Max(1, attacker.Stats.AttackRange);
+        return attacker.CanMeleeAttackDistance(sqDist);
     }
 
     private bool HasAnyValidTargetFromPosition(CharacterController attacker, Vector2Int attackerPosition, bool rangedMode)
@@ -5289,8 +5288,6 @@ public class GameManager : MonoBehaviour
         ItemData weapon = attacker.GetEquippedMainWeapon();
         int rangeIncrement = weapon != null ? weapon.RangeIncrement : 0;
         bool isThrownWeapon = weapon != null && weapon.IsThrown;
-        int meleeReach = Mathf.Max(1, attacker.Stats.AttackRange);
-
         foreach (CharacterController candidate in GetAllCharacters())
         {
             if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
@@ -5312,7 +5309,7 @@ public class GameManager : MonoBehaviour
                     return true;
                 }
             }
-            else if (sqDist <= meleeReach)
+            else if (attacker.CanMeleeAttackDistance(sqDist))
             {
                 return true;
             }
@@ -5765,10 +5762,12 @@ public class GameManager : MonoBehaviour
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        int range = (type == SpecialAttackType.Feint) ? 1 : attacker.Stats.AttackRange;
-        if (range < 1) range = 1;
+        int maxRange = (type == SpecialAttackType.Feint)
+            ? 1
+            : attacker.GetMeleeMaxAttackDistance();
+        if (maxRange < 1) maxRange = 1;
 
-        List<SquareCell> allCells = Grid.GetCellsInRange(attacker.GridPosition, range);
+        List<SquareCell> allCells = Grid.GetCellsInRange(attacker.GridPosition, maxRange);
         bool hasTarget = false;
 
         foreach (var c in allCells)
@@ -5776,7 +5775,12 @@ public class GameManager : MonoBehaviour
             if (!c.IsOccupied || c.Occupant == attacker || c.Occupant.Stats.IsDead) continue;
             if (!IsEnemyTeam(attacker, c.Occupant)) continue;
 
-            if (SquareGridUtils.GetDistance(attacker.GridPosition, c.Coords) <= range)
+            int distance = SquareGridUtils.GetDistance(attacker.GridPosition, c.Coords);
+            bool inRange = (type == SpecialAttackType.Feint)
+                ? distance == 1
+                : attacker.CanMeleeAttackDistance(distance);
+
+            if (inRange)
             {
                 c.SetHighlight(HighlightType.Attack);
                 _highlightedCells.Add(c);
@@ -6093,9 +6097,9 @@ public class GameManager : MonoBehaviour
 
         Vector2Int finalPos = path[path.Count - 1];
         int distToTarget = SquareGridUtils.GetDistance(finalPos, target.GridPosition);
-        if (distToTarget < 1 || distToTarget > Mathf.Max(1, charger.Stats.AttackRange))
+        if (!charger.CanMeleeAttackDistance(distToTarget))
         {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ Charge must end in legal melee reach of the target.");
+            if (logFailures) CombatUI?.ShowCombatLog("⚠ Charge must end in legal melee reach ring of the target.");
             return false;
         }
 
@@ -6952,7 +6956,8 @@ public class GameManager : MonoBehaviour
 
     private IEnumerator AI_AggressiveMelee(CharacterController npc, CharacterController targetPC)
     {
-        int distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
+        if (npc == null || targetPC == null || targetPC.Stats == null || targetPC.Stats.IsDead)
+            yield break;
 
         if (ShouldNPCUseCharge(npc, targetPC))
         {
@@ -6960,7 +6965,7 @@ public class GameManager : MonoBehaviour
             yield break;
         }
 
-        if (distToTarget > npc.Stats.AttackRange)
+        if (!npc.IsTargetInCurrentWeaponRange(targetPC))
         {
             SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
             if (bestCell != null)
@@ -6975,9 +6980,7 @@ public class GameManager : MonoBehaviour
         targetPC = GetClosestAlivePCTo(npc);
         if (targetPC == null) yield break;
 
-        distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
-
-        if (distToTarget <= npc.Stats.AttackRange && !targetPC.Stats.IsDead)
+        if (npc.IsTargetInCurrentWeaponRange(targetPC) && !targetPC.Stats.IsDead)
         {
             if (!TryNPCSpecialAttackIfBeneficial(npc, targetPC))
                 yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
@@ -7049,8 +7052,8 @@ public class GameManager : MonoBehaviour
     {
         CharacterController weakerPC = GetWeakerAlivePC(npc);
         if (weakerPC != null) targetPC = weakerPC;
-
-        int distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
+        if (npc == null || targetPC == null || targetPC.Stats == null || targetPC.Stats.IsDead)
+            yield break;
 
         if (ShouldNPCUseCharge(npc, targetPC))
         {
@@ -7058,7 +7061,7 @@ public class GameManager : MonoBehaviour
             yield break;
         }
 
-        if (distToTarget > npc.Stats.AttackRange)
+        if (!npc.IsTargetInCurrentWeaponRange(targetPC))
         {
             SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
             if (bestCell != null)
@@ -7073,9 +7076,7 @@ public class GameManager : MonoBehaviour
         targetPC = GetClosestAlivePCTo(npc);
         if (targetPC == null) yield break;
 
-        distToTarget = SquareGridUtils.GetDistance(npc.GridPosition, targetPC.GridPosition);
-
-        if (distToTarget <= npc.Stats.AttackRange && !targetPC.Stats.IsDead)
+        if (npc.IsTargetInCurrentWeaponRange(targetPC) && !targetPC.Stats.IsDead)
         {
             if (!TryNPCSpecialAttackIfBeneficial(npc, targetPC))
                 yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
@@ -7087,7 +7088,6 @@ public class GameManager : MonoBehaviour
             yield return new WaitForSeconds(0.3f);
         }
     }
-
 
     private IEnumerator AI_SummonedCreature(CharacterController summon)
     {
@@ -7119,8 +7119,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        int dist = SquareGridUtils.GetDistance(summon.GridPosition, target.GridPosition);
-        if (dist > summon.Stats.AttackRange && summon.Actions.HasMoveAction)
+        if (!summon.IsTargetInCurrentWeaponRange(target) && summon.Actions.HasMoveAction)
         {
             SquareCell bestCell = FindBestMoveToward(summon, target.GridPosition);
             if (bestCell != null)
@@ -7136,8 +7135,7 @@ public class GameManager : MonoBehaviour
         if (target == null)
             yield break;
 
-        dist = SquareGridUtils.GetDistance(summon.GridPosition, target.GridPosition);
-        if (dist > summon.Stats.AttackRange || target.Stats.IsDead)
+        if (!summon.IsTargetInCurrentWeaponRange(target) || target.Stats.IsDead)
             yield break;
 
         if (data.Template != null && data.Template.HasTrip && !target.Stats.IsProne && summon.Actions.HasStandardAction)
@@ -7159,7 +7157,6 @@ public class GameManager : MonoBehaviour
 
         yield return StartCoroutine(NPCPerformAttack(summon, target));
     }
-
     private CharacterController SelectSummonTargetByCommand(CharacterController summon, ActiveSummonInstance summonData)
     {
         if (summon == null)
@@ -7287,7 +7284,7 @@ public class GameManager : MonoBehaviour
 
         int dist = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
         // Prefer charge when out of melee reach but still reachable in a charge lane.
-        if (dist <= npc.Stats.AttackRange) return false;
+        if (npc.CanMeleeAttackDistance(dist)) return false;
 
         return CanChargeTarget(npc, target, logFailures: false);
     }

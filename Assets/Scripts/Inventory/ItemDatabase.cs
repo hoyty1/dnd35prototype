@@ -210,6 +210,23 @@ public static class ItemDatabase
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.6f, 0.5f)
         });
 
+        // Longspear: 1d8, 20/×3, piercing, two-handed, reach (cannot attack adjacent)
+        Register(new ItemData
+        {
+            Id = "longspear", Name = "Longspear", Type = ItemType.Weapon,
+            Slot = EquipSlot.EitherHand,
+            Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
+            Description = "A long spear with 10-ft reach. Cannot attack adjacent creatures.",
+            DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 2,
+            IsTwoHanded = true, HasReach = true,
+            ReachSquares = 2, CanAttackAdjacent = false, IsReachWeapon = true,
+            DamageType = "piercing",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
+            CritThreatMin = 20, CritMultiplier = 3,
+            WeightLbs = 9f,
+            IconChar = "\u2191", IconColor = new Color(0.65f, 0.55f, 0.4f)
+        });
+
         // Legacy alias: "mace" -> "mace_heavy" for backward compatibility
         Register(new ItemData
         {
@@ -582,6 +599,91 @@ public static class ItemDatabase
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 10f,
             IconChar = "\u2692", IconColor = new Color(0.5f, 0.5f, 0.5f)
+        });
+
+        // Guisarme: 2d4, 20/×3, slashing, two-handed, reach (cannot attack adjacent)
+        Register(new ItemData
+        {
+            Id = "guisarme", Name = "Guisarme", Type = ItemType.Weapon,
+            Slot = EquipSlot.EitherHand,
+            Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
+            Description = "A hooked polearm with reach. Cannot attack adjacent creatures.",
+            DamageDice = 4, DamageCount = 2, BonusDamage = 0, AttackRange = 2,
+            IsTwoHanded = true, HasReach = true,
+            ReachSquares = 2, CanAttackAdjacent = false, IsReachWeapon = true,
+            DamageType = "slashing",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
+            CritThreatMin = 20, CritMultiplier = 3,
+            WeightLbs = 12f,
+            IconChar = "\u2191", IconColor = new Color(0.6f, 0.6f, 0.65f)
+        });
+
+        // Halberd: 1d10, 20/×3, piercing/slashing, two-handed, reach (cannot attack adjacent)
+        Register(new ItemData
+        {
+            Id = "halberd", Name = "Halberd", Type = ItemType.Weapon,
+            Slot = EquipSlot.EitherHand,
+            Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
+            Description = "A polearm with axe and spear head. Reach weapon; cannot attack adjacent creatures.",
+            DamageDice = 10, DamageCount = 1, BonusDamage = 0, AttackRange = 2,
+            IsTwoHanded = true, HasReach = true,
+            ReachSquares = 2, CanAttackAdjacent = false, IsReachWeapon = true,
+            DamageType = "piercing/slashing",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
+            CritThreatMin = 20, CritMultiplier = 3,
+            WeightLbs = 12f,
+            IconChar = "\u2191", IconColor = new Color(0.65f, 0.6f, 0.55f)
+        });
+
+        // Ranseur: 2d4, 20/×3, piercing, two-handed, reach (cannot attack adjacent)
+        Register(new ItemData
+        {
+            Id = "ranseur", Name = "Ranseur", Type = ItemType.Weapon,
+            Slot = EquipSlot.EitherHand,
+            Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
+            Description = "A long polearm with side spikes. Reach weapon; cannot attack adjacent creatures.",
+            DamageDice = 4, DamageCount = 2, BonusDamage = 0, AttackRange = 2,
+            IsTwoHanded = true, HasReach = true,
+            ReachSquares = 2, CanAttackAdjacent = false, IsReachWeapon = true,
+            DamageType = "piercing",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
+            CritThreatMin = 20, CritMultiplier = 3,
+            WeightLbs = 12f,
+            IconChar = "\u2191", IconColor = new Color(0.6f, 0.6f, 0.55f)
+        });
+
+        // Spiked Chain: 2d4, 20/×2, piercing, reach weapon that CAN attack adjacent
+        Register(new ItemData
+        {
+            Id = "spiked_chain", Name = "Spiked Chain", Type = ItemType.Weapon,
+            Slot = EquipSlot.EitherHand,
+            Proficiency = WeaponProficiency.Exotic, WeaponCat = WeaponCategory.Melee,
+            Description = "A chain with spikes. Reach weapon that can attack adjacent and 10-ft targets.",
+            DamageDice = 4, DamageCount = 2, BonusDamage = 0, AttackRange = 2,
+            IsTwoHanded = true, HasReach = true,
+            ReachSquares = 2, CanAttackAdjacent = true, IsReachWeapon = true,
+            DamageType = "piercing",
+            DmgModType = DamageModifierType.StrengthOneAndHalf,
+            CritThreatMin = 20, CritMultiplier = 2,
+            WeightLbs = 10f,
+            IconChar = "\u223E", IconColor = new Color(0.6f, 0.6f, 0.6f)
+        });
+
+        // Whip: 1d3, 20/×2, slashing, 15-ft reach, nonlethal, cannot attack adjacent, cannot harm armored/naturally armored +1+
+        Register(new ItemData
+        {
+            Id = "whip", Name = "Whip", Type = ItemType.Weapon,
+            Slot = EquipSlot.EitherHand,
+            Proficiency = WeaponProficiency.Exotic, WeaponCat = WeaponCategory.Melee,
+            Description = "A flexible lash. 15-ft reach; cannot attack adjacent. Deals nonlethal damage and cannot harm armor/natural armor +1+.",
+            DamageDice = 3, DamageCount = 1, BonusDamage = 0, AttackRange = 3,
+            ReachSquares = 3, CanAttackAdjacent = false, IsReachWeapon = true,
+            DealsNonlethalDamage = true, WhipLikeArmorRestriction = true,
+            DamageType = "slashing",
+            DmgModType = DamageModifierType.Strength,
+            CritThreatMin = 20, CritMultiplier = 2,
+            WeightLbs = 2f,
+            IconChar = "\u224B", IconColor = new Color(0.7f, 0.55f, 0.35f)
         });
 
         // Glaive: 1d10, 20/×3, slashing, two-handed, reach
@@ -1008,7 +1110,39 @@ public static class ItemDatabase
 
     private static void Register(ItemData item)
     {
+        ApplyReachDefaults(item);
         _items[item.Id] = item;
+    }
+
+    /// <summary>
+    /// Normalize D&D 3.5 reach semantics for melee weapons.
+    /// ReachSquares is the max melee reach in squares (1=5ft, 2=10ft, 3=15ft).
+    /// CanAttackAdjacent controls whether distance-1 attacks/threat are allowed.
+    /// </summary>
+    private static void ApplyReachDefaults(ItemData item)
+    {
+        if (item == null || item.Type != ItemType.Weapon || item.WeaponCat != WeaponCategory.Melee)
+            return;
+
+        int normalizedReach = item.ReachSquares > 0 ? item.ReachSquares : Mathf.Max(1, item.AttackRange);
+        item.ReachSquares = Mathf.Max(1, normalizedReach);
+
+        // If flagged as legacy reach or has >1 reach, mark as reach weapon.
+        item.IsReachWeapon = item.IsReachWeapon || item.HasReach || item.ReachSquares > 1;
+
+        // D&D baseline: melee weapons can attack adjacent unless they are reach-only.
+        if (item.IsReachWeapon && !item.CanAttackAdjacent)
+        {
+            // Reach-only by default (longspear/glaive/halberd etc.).
+            item.CanAttackAdjacent = false;
+        }
+        else if (!item.IsReachWeapon)
+        {
+            item.CanAttackAdjacent = true;
+        }
+
+        // Keep AttackRange synced as the max melee reach used by legacy systems.
+        item.AttackRange = item.ReachSquares;
     }
 
     /// <summary>Get an item by ID. Returns null if not found.</summary>
@@ -1032,7 +1166,10 @@ public static class ItemDatabase
             DamageDice = src.DamageDice, DamageCount = src.DamageCount,
             BonusDamage = src.BonusDamage, AttackRange = src.AttackRange,
             IsLightWeapon = src.IsLightWeapon, IsTwoHanded = src.IsTwoHanded,
-            HasReach = src.HasReach, DamageType = src.DamageType,
+            HasReach = src.HasReach, ReachSquares = src.ReachSquares,
+            CanAttackAdjacent = src.CanAttackAdjacent, IsReachWeapon = src.IsReachWeapon,
+            DealsNonlethalDamage = src.DealsNonlethalDamage, WhipLikeArmorRestriction = src.WhipLikeArmorRestriction,
+            DamageType = src.DamageType,
             CountsAsMagicForBypass = src.CountsAsMagicForBypass,
             IsSilvered = src.IsSilvered, IsColdIron = src.IsColdIron,
             IsAdamantine = src.IsAdamantine,
