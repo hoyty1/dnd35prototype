@@ -197,6 +197,7 @@ public class GameManager : MonoBehaviour
         public int BonusDamage;
         public int BaseSpeed;
         public int AttackRange;
+        public global::SizeCategory SizeCategory;
         public int BaseHitDieHP;
         public string CreatureTypeLine;
         public string AttackLabel;
@@ -235,6 +236,7 @@ public class GameManager : MonoBehaviour
                     BonusDamage = 1,
                     BaseSpeed = 8,
                     AttackRange = 1,
+                    SizeCategory = global::SizeCategory.Small,
                     BaseHitDieHP = 8,
                     SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (acid, cold, electricity)", "Scent", "Smite Evil 1/day" },
                     CreatureTags = new List<string> { "Animal", "Summoned", "Good" }
@@ -260,6 +262,7 @@ public class GameManager : MonoBehaviour
                     BonusDamage = 2,
                     BaseSpeed = 8,
                     AttackRange = 1,
+                    SizeCategory = global::SizeCategory.Medium,
                     BaseHitDieHP = 10,
                     SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (cold, fire)", "Trip", "Smite Good 1/day" },
                     CreatureTags = new List<string> { "Animal", "Summoned", "Evil" }
@@ -284,6 +287,7 @@ public class GameManager : MonoBehaviour
                     BonusDamage = 1,
                     BaseSpeed = 10,
                     AttackRange = 1,
+                    SizeCategory = global::SizeCategory.Small,
                     BaseHitDieHP = 8,
                     SpecialTraits = new List<string> { "Darkvision 60 ft", "Elemental traits", "Whirlwind (prototype)" },
                     CreatureTags = new List<string> { "Elemental", "Summoned" }
@@ -314,6 +318,7 @@ public class GameManager : MonoBehaviour
                     BonusDamage = 2,
                     BaseSpeed = 8,
                     AttackRange = 1,
+                    SizeCategory = global::SizeCategory.Medium,
                     BaseHitDieHP = 14,
                     SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (acid, cold, electricity)", "Trip", "Smite Evil 1/day" },
                     CreatureTags = new List<string> { "Animal", "Summoned", "Good" }
@@ -339,6 +344,7 @@ public class GameManager : MonoBehaviour
                     BonusDamage = 3,
                     BaseSpeed = 8,
                     AttackRange = 1,
+                    SizeCategory = global::SizeCategory.Medium,
                     BaseHitDieHP = 16,
                     SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (cold, fire)", "Ferocity", "Smite Good 1/day" },
                     CreatureTags = new List<string> { "Animal", "Summoned", "Evil" }
@@ -363,6 +369,7 @@ public class GameManager : MonoBehaviour
                     BonusDamage = 1,
                     BaseSpeed = 10,
                     AttackRange = 1,
+                    SizeCategory = global::SizeCategory.Small,
                     BaseHitDieHP = 12,
                     SpecialTraits = new List<string> { "Darkvision 60 ft", "Elemental traits", "Fire aura (prototype)" },
                     CreatureTags = new List<string> { "Elemental", "Summoned", "Fire" }
