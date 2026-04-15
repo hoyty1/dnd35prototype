@@ -106,10 +106,18 @@ public class GameManager : MonoBehaviour
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
     private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
 
-    // Mid-sequence ranged full-attack retargeting state
+    // Mid-sequence full-attack retargeting state (ranged + melee)
     private bool _isAwaitingRangedRetargetSelection;
     private bool _rangedRetargetSelectionCancelled;
     private CharacterController _selectedRangedRetarget;
+
+    // Mid-sequence full-attack 5-foot-step state
+    private bool _isAwaitingFullAttackFiveFootStepSelection;
+    private bool _fullAttackFiveFootStepSelectionCancelled;
+    private bool _fullAttackFiveFootStepWasTaken;
+    private bool _fullAttackFiveFootStepRequireReachableTarget;
+    private bool _fullAttackFiveFootStepRangedMode;
+
     // Pending special attack state
     private SpecialAttackType _pendingSpecialAttackType;
     private bool _isSelectingSpecialAttack;
@@ -1987,18 +1995,28 @@ public class GameManager : MonoBehaviour
         if (!_highlightedCells.Contains(cell))
             return;
 
-        ExecuteFiveFootStep(pc, cell);
+        bool success = ExecuteFiveFootStep(pc, cell, returnToActionChoices: !_isAwaitingFullAttackFiveFootStepSelection);
+
+        if (_isAwaitingFullAttackFiveFootStepSelection)
+        {
+            if (success)
+                _fullAttackFiveFootStepWasTaken = true;
+
+            _fullAttackFiveFootStepSelectionCancelled = !success;
+            _isAwaitingFullAttackFiveFootStepSelection = false;
+            CurrentSubPhase = PlayerSubPhase.Animating;
+        }
     }
 
-    private void ExecuteFiveFootStep(CharacterController pc, SquareCell destination)
+    private bool ExecuteFiveFootStep(CharacterController pc, SquareCell destination, bool returnToActionChoices = true)
     {
         if (pc == null || destination == null)
-            return;
+            return false;
 
         if (!IsValidFiveFootStepDestination(pc, destination.Coords))
         {
             CombatUI?.ShowCombatLog("⚠ Invalid 5-foot step destination.");
-            return;
+            return false;
         }
 
         Vector2Int oldPos = pc.GridPosition;
@@ -2007,7 +2025,7 @@ public class GameManager : MonoBehaviour
         if (!pc.FiveFootStep(destination))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} failed to take a 5-foot step.");
-            return;
+            return false;
         }
 
         RefreshFlankedConditions();
@@ -2017,7 +2035,10 @@ public class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} takes a 5-foot step ({oldPos.x},{oldPos.y} → {destination.Coords.x},{destination.Coords.y}).");
         CombatUI?.ShowCombatLog("(No attacks of opportunity provoked)");
 
-        ShowActionChoices();
+        if (returnToActionChoices)
+            ShowActionChoices();
+
+        return true;
     }
 
     private void CancelFiveFootStepSelection()
@@ -2026,6 +2047,18 @@ public class GameManager : MonoBehaviour
 
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
+
+        if (_isAwaitingFullAttackFiveFootStepSelection)
+        {
+            _fullAttackFiveFootStepSelectionCancelled = true;
+            _fullAttackFiveFootStepWasTaken = false;
+            _isAwaitingFullAttackFiveFootStepSelection = false;
+            CurrentSubPhase = PlayerSubPhase.Animating;
+
+            if (pc != null)
+                CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} skips 5-foot step.");
+            return;
+        }
 
         if (pc != null)
             CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels 5-foot step.");
@@ -4149,7 +4182,7 @@ public class GameManager : MonoBehaviour
             Grid.ClearAllHighlights();
             _highlightedCells.Clear();
             CurrentSubPhase = PlayerSubPhase.Animating;
-            CombatUI?.ShowCombatLog("↩ Remaining ranged attacks cancelled.");
+            CombatUI?.ShowCombatLog("↩ Remaining full-attack swings/shots cancelled.");
             return;
         }
 
@@ -5190,18 +5223,184 @@ public class GameManager : MonoBehaviour
         return valid;
     }
 
-    private IEnumerator WaitForRangedRetargetSelection(CharacterController attacker, int remainingAttacks)
+    private List<CharacterController> GetValidMeleeTargets(CharacterController attacker)
     {
+        var valid = new List<CharacterController>();
+        if (attacker == null)
+            return valid;
+
+        int meleeReach = Mathf.Max(1, attacker.Stats != null ? attacker.Stats.AttackRange : 1);
+        foreach (CharacterController candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!IsEnemyTeam(attacker, candidate))
+                continue;
+
+            int distance = SquareGridUtils.GetDistance(attacker.GridPosition, candidate.GridPosition);
+            if (distance <= meleeReach)
+                valid.Add(candidate);
+        }
+
+        return valid;
+    }
+
+    private List<CharacterController> GetValidTargetsForCurrentWeapon(CharacterController attacker)
+    {
+        if (attacker == null)
+            return new List<CharacterController>();
+
+        return attacker.IsEquippedWeaponRanged()
+            ? GetValidRangedTargets(attacker)
+            : GetValidMeleeTargets(attacker);
+    }
+
+    private bool IsTargetInCurrentWeaponRange(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null || target.Stats.IsDead)
+            return false;
+
+        bool isRanged = attacker.IsEquippedWeaponRanged();
+        int sqDist = SquareGridUtils.GetDistance(attacker.GridPosition, target.GridPosition);
+
+        if (isRanged)
+        {
+            ItemData weapon = attacker.GetEquippedMainWeapon();
+            int rangeIncrement = weapon != null ? weapon.RangeIncrement : 0;
+            bool isThrownWeapon = weapon != null && weapon.IsThrown;
+
+            if (rangeIncrement > 0)
+            {
+                int distFeet = RangeCalculator.SquaresToFeet(sqDist);
+                return RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement, isThrownWeapon);
+            }
+
+            return sqDist <= attacker.Stats.AttackRange;
+        }
+
+        return sqDist <= Mathf.Max(1, attacker.Stats.AttackRange);
+    }
+
+    private bool HasAnyValidTargetFromPosition(CharacterController attacker, Vector2Int attackerPosition, bool rangedMode)
+    {
+        if (attacker == null || attacker.Stats == null)
+            return false;
+
+        ItemData weapon = attacker.GetEquippedMainWeapon();
+        int rangeIncrement = weapon != null ? weapon.RangeIncrement : 0;
+        bool isThrownWeapon = weapon != null && weapon.IsThrown;
+        int meleeReach = Mathf.Max(1, attacker.Stats.AttackRange);
+
+        foreach (CharacterController candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!IsEnemyTeam(attacker, candidate))
+                continue;
+
+            int sqDist = SquareGridUtils.GetDistance(attackerPosition, candidate.GridPosition);
+            if (rangedMode)
+            {
+                if (rangeIncrement > 0)
+                {
+                    int distFeet = RangeCalculator.SquaresToFeet(sqDist);
+                    if (RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement, isThrownWeapon))
+                        return true;
+                }
+                else if (sqDist <= attacker.Stats.AttackRange)
+                {
+                    return true;
+                }
+            }
+            else if (sqDist <= meleeReach)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private IEnumerator WaitForFullAttackRetargetSelection(CharacterController attacker, int remainingAttacks)
+    {
+        bool rangedMode = attacker != null && attacker.IsEquippedWeaponRanged();
+        string modeLabel = rangedMode ? "ranged" : "melee";
+
         _isAwaitingRangedRetargetSelection = true;
         _rangedRetargetSelectionCancelled = false;
         _selectedRangedRetarget = null;
 
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
         ShowAttackTargets(attacker);
-        CombatUI?.ShowCombatLog($"🎯 Target defeated! Select a new ranged target for {remainingAttacks} remaining attack(s), or right-click/ESC to cancel.");
-        CombatUI?.SetTurnIndicator($"TARGET SWITCH: Select target for {remainingAttacks} remaining attack(s) | Right-click/ESC to cancel");
+        CombatUI?.ShowCombatLog($"🎯 Select a new {modeLabel} target for {remainingAttacks} remaining attack(s), or right-click/ESC to cancel.");
+        CombatUI?.SetTurnIndicator($"TARGET SWITCH: Select {modeLabel} target ({remainingAttacks} attack(s) remain) | Right-click/ESC to cancel");
 
         while (_isAwaitingRangedRetargetSelection)
+            yield return null;
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+    }
+
+    private void ShowFullAttackFiveFootStepOptions(CharacterController pc)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        foreach (Vector2Int neighbor in SquareGridUtils.GetNeighbors(pc.GridPosition))
+        {
+            if (!IsValidFiveFootStepDestination(pc, neighbor))
+                continue;
+
+            if (_fullAttackFiveFootStepRequireReachableTarget
+                && !HasAnyValidTargetFromPosition(pc, neighbor, _fullAttackFiveFootStepRangedMode))
+            {
+                continue;
+            }
+
+            SquareCell cell = Grid.GetCell(neighbor);
+            if (cell == null) continue;
+
+            cell.SetHighlight(HighlightType.FiveFootStep);
+            _highlightedCells.Add(cell);
+        }
+
+        SquareCell current = Grid.GetCell(pc.GridPosition);
+        if (current != null)
+            current.SetHighlight(HighlightType.Selected);
+    }
+
+    private IEnumerator WaitForOptionalFiveFootStepDuringFullAttack(
+        CharacterController attacker,
+        string prompt,
+        bool requireReachableTargetAfterStep,
+        bool rangedMode)
+    {
+        if (attacker == null || !CanTakeFiveFootStep(attacker))
+            yield break;
+
+        _isAwaitingFullAttackFiveFootStepSelection = true;
+        _fullAttackFiveFootStepSelectionCancelled = false;
+        _fullAttackFiveFootStepWasTaken = false;
+        _fullAttackFiveFootStepRequireReachableTarget = requireReachableTargetAfterStep;
+        _fullAttackFiveFootStepRangedMode = rangedMode;
+
+        CurrentSubPhase = PlayerSubPhase.TakingFiveFootStep;
+        ShowFullAttackFiveFootStepOptions(attacker);
+
+        if (_highlightedCells.Count == 0)
+        {
+            _isAwaitingFullAttackFiveFootStepSelection = false;
+            _fullAttackFiveFootStepSelectionCancelled = true;
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+            CurrentSubPhase = PlayerSubPhase.Animating;
+            yield break;
+        }
+
+        CombatUI?.ShowCombatLog($"↔ {prompt} Select a highlighted square for a 5-foot step, or right-click/ESC to skip.");
+        CombatUI?.SetTurnIndicator($"5-FOOT STEP: {prompt} Click destination or right-click/ESC to skip");
+
+        while (_isAwaitingFullAttackFiveFootStepSelection)
             yield return null;
 
         CurrentSubPhase = PlayerSubPhase.Animating;
@@ -6197,10 +6396,7 @@ public class GameManager : MonoBehaviour
                 PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
             case PendingAttackMode.FullAttack:
-                if (attacker.IsEquippedWeaponRanged())
-                    StartCoroutine(PerformRangedFullAttackWithRetargeting(attacker, target));
-                else
-                    PerformFullAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+                StartCoroutine(PerformFullAttackWithRetargetingAndFiveFootStep(attacker, target));
                 break;
             case PendingAttackMode.DualWield:
                 PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
@@ -6268,7 +6464,7 @@ public class GameManager : MonoBehaviour
         StartCoroutine(AfterAttackDelay(attacker, 1.5f));
     }
 
-    private IEnumerator PerformRangedFullAttackWithRetargeting(CharacterController attacker, CharacterController initialTarget)
+    private IEnumerator PerformFullAttackWithRetargetingAndFiveFootStep(CharacterController attacker, CharacterController initialTarget)
     {
         if (attacker == null || initialTarget == null)
         {
@@ -6277,6 +6473,9 @@ public class GameManager : MonoBehaviour
         }
 
         attacker.Actions.UseFullRoundAction();
+
+        bool rangedMode = attacker.IsEquippedWeaponRanged();
+        string modeLabel = rangedMode ? "ranged" : "melee";
 
         RangeInfo initialRangeInfo = CalculateRangeInfo(attacker, initialTarget);
         int plannedAttackCount = attacker.GetPlannedFullAttackCount(initialRangeInfo);
@@ -6290,19 +6489,62 @@ public class GameManager : MonoBehaviour
         CharacterController currentTarget = initialTarget;
         int attacksMade = 0;
 
+        // D&D 3.5: You can take a 5-foot step before a full attack.
+        if (CanTakeFiveFootStep(attacker))
+        {
+            yield return StartCoroutine(WaitForOptionalFiveFootStepDuringFullAttack(
+                attacker,
+                "Before attacks:",
+                requireReachableTargetAfterStep: false,
+                rangedMode: rangedMode));
+        }
+
         for (int attackIndex = 0; attackIndex < plannedAttackCount; attackIndex++)
         {
-            if (currentTarget == null || currentTarget.Stats == null || currentTarget.Stats.IsDead)
+            if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
+                break;
+
+            int remainingAttacks = plannedAttackCount - attackIndex;
+            bool needsRetarget = currentTarget == null
+                || currentTarget.Stats == null
+                || currentTarget.Stats.IsDead
+                || !IsTargetInCurrentWeaponRange(attacker, currentTarget);
+
+            if (needsRetarget)
             {
-                int remainingAttacks = plannedAttackCount - attackIndex;
-                List<CharacterController> validTargets = GetValidRangedTargets(attacker);
-                if (remainingAttacks <= 0 || validTargets.Count == 0)
+                if (currentTarget != null && currentTarget.Stats != null && !currentTarget.Stats.IsDead)
                 {
-                    CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no valid ranged targets for {remainingAttacks} remaining attack(s).");
+                    CombatUI?.ShowCombatLog($"⚠ {currentTarget.Stats.CharacterName} is no longer in {modeLabel} reach.");
+                }
+
+                List<CharacterController> validTargets = GetValidTargetsForCurrentWeapon(attacker);
+
+                if (validTargets.Count == 0 && CanTakeFiveFootStep(attacker))
+                {
+                    CombatUI?.ShowCombatLog($"No valid {modeLabel} targets right now. You may take a 5-foot step to continue.");
+
+                    yield return StartCoroutine(WaitForOptionalFiveFootStepDuringFullAttack(
+                        attacker,
+                        "Step to reach another target:",
+                        requireReachableTargetAfterStep: true,
+                        rangedMode: rangedMode));
+
+                    if (_fullAttackFiveFootStepSelectionCancelled || !_fullAttackFiveFootStepWasTaken)
+                    {
+                        CombatUI?.ShowCombatLog($"↩ {attacker.Stats.CharacterName} ends full attack early. {remainingAttacks} attack(s) unused.");
+                        break;
+                    }
+
+                    validTargets = GetValidTargetsForCurrentWeapon(attacker);
+                }
+
+                if (validTargets.Count == 0)
+                {
+                    CombatUI?.ShowCombatLog($"⚠ No valid {modeLabel} targets for {remainingAttacks} remaining attack(s).");
                     break;
                 }
 
-                yield return StartCoroutine(WaitForRangedRetargetSelection(attacker, remainingAttacks));
+                yield return StartCoroutine(WaitForFullAttackRetargetSelection(attacker, remainingAttacks));
 
                 if (_rangedRetargetSelectionCancelled || _selectedRangedRetarget == null)
                 {
@@ -6314,10 +6556,10 @@ public class GameManager : MonoBehaviour
                 _selectedRangedRetarget = null;
                 _rangedRetargetSelectionCancelled = false;
 
-                CombatUI?.ShowCombatLog($"🎯 {attacker.Stats.CharacterName} switches target to {currentTarget.Stats.CharacterName}.");
+                CombatUI?.ShowCombatLog($"🎯 {attacker.Stats.CharacterName} switches to {currentTarget.Stats.CharacterName}.");
             }
 
-            // Recompute flanking/range context each attack in case target changed.
+            // Recompute flanking/range context each attack in case target/position changed.
             var allCombatants = GetAllCharacters();
             CharacterController flankPartner;
             bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, currentTarget, allCombatants, out flankPartner);
@@ -6363,22 +6605,45 @@ public class GameManager : MonoBehaviour
                     yield break;
                 }
 
-                int remainingAttacks = plannedAttackCount - (attackIndex + 1);
-                if (remainingAttacks > 0)
+                int attacksRemainingAfterKill = plannedAttackCount - (attackIndex + 1);
+                if (attacksRemainingAfterKill > 0)
                 {
-                    CombatUI?.ShowCombatLog($"💀 {currentTarget.Stats.CharacterName} is defeated! {remainingAttacks} attack(s) remaining.");
+                    CombatUI?.ShowCombatLog($"💀 {currentTarget.Stats.CharacterName} is defeated! {attacksRemainingAfterKill} attack(s) remaining.");
                     currentTarget = null;
                 }
+            }
+
+            // D&D 3.5: You can 5-foot step between attacks during a full attack.
+            if (attackIndex < plannedAttackCount - 1 && CanTakeFiveFootStep(attacker))
+            {
+                yield return StartCoroutine(WaitForOptionalFiveFootStepDuringFullAttack(
+                    attacker,
+                    "Between attacks:",
+                    requireReachableTargetAfterStep: false,
+                    rangedMode: rangedMode));
             }
 
             yield return new WaitForSeconds(0.35f);
         }
 
+        // D&D 3.5: You can also 5-foot step after attacks.
+        if (CanTakeFiveFootStep(attacker) && CurrentPhase != TurnPhase.CombatOver)
+        {
+            yield return StartCoroutine(WaitForOptionalFiveFootStepDuringFullAttack(
+                attacker,
+                "After attacks:",
+                requireReachableTargetAfterStep: false,
+                rangedMode: rangedMode));
+        }
+
         _isAwaitingRangedRetargetSelection = false;
         _selectedRangedRetarget = null;
         _rangedRetargetSelectionCancelled = false;
+        _isAwaitingFullAttackFiveFootStepSelection = false;
+        _fullAttackFiveFootStepSelectionCancelled = false;
+        _fullAttackFiveFootStepWasTaken = false;
 
-        CombatUI?.ShowCombatLog($"✅ {attacker.Stats.CharacterName} completes ranged full attack ({attacksMade}/{plannedAttackCount} attacks used).");
+        CombatUI?.ShowCombatLog($"✅ {attacker.Stats.CharacterName} completes {modeLabel} full attack ({attacksMade}/{plannedAttackCount} attacks used).");
         UpdateAllStatsUI();
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
