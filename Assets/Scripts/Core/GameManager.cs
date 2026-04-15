@@ -1788,6 +1788,8 @@ public class GameManager : MonoBehaviour
 
         _waitingForAoOConfirmation = false;
         _pendingAoOAction = null;
+        _spellcastProvocationCancelled = false;
+        ClearSpellcastResourceSnapshot();
         CombatUI.HideAoOConfirmationPrompt();
         // Hide movement path preview and hover marker when leaving movement phase
         if (_pathPreview != null) _pathPreview.HidePath();
@@ -3396,8 +3398,11 @@ public class GameManager : MonoBehaviour
 
         CurrentSubPhase = PlayerSubPhase.Animating;
 
+        CaptureSpellcastResourceSnapshot(caster);
+
         if (!TryConsumePendingSpellCast(caster))
         {
+            ClearSpellcastResourceSnapshot();
             ShowActionChoices();
             return;
         }
@@ -3406,9 +3411,18 @@ public class GameManager : MonoBehaviour
         {
             if (!canProceed)
             {
+                if (_spellcastProvocationCancelled)
+                {
+                    HandleSpellcastCancelledFromAoOPrompt(caster);
+                    return;
+                }
+
+                ClearSpellcastResourceSnapshot();
                 HandleInterruptedSpellCast(caster, 1.0f);
                 return;
             }
+
+            ClearSpellcastResourceSnapshot();
 
             CharacterController summonCC = SpawnSummonedCreature(caster, targetCell.Coords, template);
             if (summonCC == null)
@@ -3635,9 +3649,12 @@ public class GameManager : MonoBehaviour
 
         CurrentSubPhase = PlayerSubPhase.Animating;
 
+        CaptureSpellcastResourceSnapshot(caster);
+
         var spellComp = caster.GetComponent<SpellcastingComponent>();
         if (spellComp == null)
         {
+            ClearSpellcastResourceSnapshot();
             Debug.LogError("[GameManager] HoldPendingMeleeTouchCharge: No SpellcastingComponent!");
             ShowActionChoices();
             return;
@@ -3675,6 +3692,7 @@ public class GameManager : MonoBehaviour
 
                 if (!consumed)
                 {
+                    ClearSpellcastResourceSnapshot();
                     Debug.LogError($"[GameManager] ASF failure path: could not consume level {slotLevelToConsume} spell slot for held charge!");
                     ShowActionChoices();
                     return;
@@ -3689,6 +3707,7 @@ public class GameManager : MonoBehaviour
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
 
+                ClearSpellcastResourceSnapshot();
                 StartCoroutine(AfterAttackDelay(caster, 1.0f));
                 return;
             }
@@ -3705,6 +3724,7 @@ public class GameManager : MonoBehaviour
 
             if (!consumed)
             {
+                ClearSpellcastResourceSnapshot();
                 Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} spell slot for held charge!");
                 ShowActionChoices();
                 return;
@@ -3717,10 +3737,18 @@ public class GameManager : MonoBehaviour
         {
             if (!canProceed)
             {
+                if (_spellcastProvocationCancelled)
+                {
+                    HandleSpellcastCancelledFromAoOPrompt(caster);
+                    return;
+                }
+
+                ClearSpellcastResourceSnapshot();
                 HandleInterruptedSpellCast(caster, 1.0f);
                 return;
             }
 
+            ClearSpellcastResourceSnapshot();
             spellComp.SetHeldTouchCharge(_pendingSpell, _pendingMetamagic);
 
             CombatUI.ShowCombatLog($"✋ {caster.Stats.CharacterName} chooses Discharge Later and holds the charge of {_pendingSpell.Name}.");
@@ -3740,6 +3768,8 @@ public class GameManager : MonoBehaviour
     private void PerformSpellCast(CharacterController caster, CharacterController target)
     {
         CurrentSubPhase = PlayerSubPhase.Animating;
+
+        CaptureSpellcastResourceSnapshot(caster);
 
         bool isDeliveringHeldCharge = _pendingSpellFromHeldCharge;
 
@@ -3769,6 +3799,7 @@ public class GameManager : MonoBehaviour
         var spellComp = caster.GetComponent<SpellcastingComponent>();
         if (spellComp == null)
         {
+            ClearSpellcastResourceSnapshot();
             Debug.LogError("[GameManager] PerformSpellCast: No SpellcastingComponent!");
             ShowActionChoices();
             return;
@@ -3811,6 +3842,7 @@ public class GameManager : MonoBehaviour
 
                 if (!consumedOnFailure)
                 {
+                    ClearSpellcastResourceSnapshot();
                     Debug.LogError($"[GameManager] ASF failure path: failed to consume level {slotLevelToConsume} spell slot!");
                     ShowActionChoices();
                     return;
@@ -3825,6 +3857,7 @@ public class GameManager : MonoBehaviour
                 _pendingSpellFromHeldCharge = false;
                 _pendingMetamagic = null;
 
+                ClearSpellcastResourceSnapshot();
                 StartCoroutine(AfterAttackDelay(caster, 1.0f));
                 return;
             }
@@ -3844,6 +3877,7 @@ public class GameManager : MonoBehaviour
 
             if (!consumed)
             {
+                ClearSpellcastResourceSnapshot();
                 Debug.LogError($"[GameManager] Failed to consume level {slotLevelToConsume} spell slot!");
                 ShowActionChoices();
                 return;
@@ -3861,9 +3895,18 @@ public class GameManager : MonoBehaviour
         {
             if (!canProceed)
             {
+                if (_spellcastProvocationCancelled)
+                {
+                    HandleSpellcastCancelledFromAoOPrompt(caster);
+                    return;
+                }
+
+                ClearSpellcastResourceSnapshot();
                 HandleInterruptedSpellCast(caster, 1.0f);
                 return;
             }
+
+            ClearSpellcastResourceSnapshot();
 
             // Resolve the spell with metamagic.
             // D&D 3.5e: willing friendly targets for melee touch delivery should auto-succeed.
@@ -4465,6 +4508,8 @@ public class GameManager : MonoBehaviour
     {
         CurrentSubPhase = PlayerSubPhase.Animating;
 
+        CaptureSpellcastResourceSnapshot(caster);
+
         // Quickened spells don't consume standard action
         bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
         if (!isQuickened)
@@ -4482,6 +4527,7 @@ public class GameManager : MonoBehaviour
         var spellComp = caster.GetComponent<SpellcastingComponent>();
         if (spellComp == null)
         {
+            ClearSpellcastResourceSnapshot();
             Debug.LogError("[GameManager] PerformAoESpellCast: No SpellcastingComponent!");
             ShowActionChoices();
             return;
@@ -4518,6 +4564,7 @@ public class GameManager : MonoBehaviour
 
             if (!consumedOnFailure)
             {
+                ClearSpellcastResourceSnapshot();
                 Debug.LogError($"[GameManager] AoE ASF failure path: failed to consume level {slotLevelToConsume} spell slot!");
                 ShowActionChoices();
                 return;
@@ -4531,6 +4578,7 @@ public class GameManager : MonoBehaviour
             _pendingSpell = null;
             _pendingMetamagic = null;
 
+            ClearSpellcastResourceSnapshot();
             StartCoroutine(AfterAttackDelay(caster, 1.0f));
             return;
         }
@@ -4547,6 +4595,7 @@ public class GameManager : MonoBehaviour
 
         if (!consumed)
         {
+            ClearSpellcastResourceSnapshot();
             Debug.LogError($"[GameManager] AoE: Failed to consume level {slotLevelToConsume} spell slot!");
             ShowActionChoices();
             return;
@@ -4559,9 +4608,18 @@ public class GameManager : MonoBehaviour
         {
             if (!canProceed)
             {
+                if (_spellcastProvocationCancelled)
+                {
+                    HandleSpellcastCancelledFromAoOPrompt(caster);
+                    return;
+                }
+
+                ClearSpellcastResourceSnapshot();
                 HandleInterruptedSpellCast(caster, 1.0f);
                 return;
             }
+
+            ClearSpellcastResourceSnapshot();
 
             // Build the combat log header
             var logBuilder = new System.Text.StringBuilder();
@@ -4914,6 +4972,8 @@ public class GameManager : MonoBehaviour
 
     private void ResolveSpellcastProvocation(CharacterController caster, SpellData spell, bool isDeliveringHeldCharge, System.Action<bool> onResolved)
     {
+        _spellcastProvocationCancelled = false;
+
         if (caster == null || spell == null || isDeliveringHeldCharge)
         {
             onResolved?.Invoke(true);
@@ -4946,7 +5006,11 @@ public class GameManager : MonoBehaviour
             SuccessChance = successChance,
             OnCastDefensively = () => onResolved?.Invoke(AttemptCastDefensively(caster, spell)),
             OnProceed = () => ResolveSpellcastAoOs(caster, spell, threateningEnemies, onResolved),
-            OnCancel = () => onResolved?.Invoke(false)
+            OnCancel = () =>
+            {
+                _spellcastProvocationCancelled = true;
+                onResolved?.Invoke(false);
+            }
         });
     }
 
@@ -5025,6 +5089,96 @@ public class GameManager : MonoBehaviour
         string color = check.Success ? "#88CCFF" : "#FF6644";
 
         CombatUI?.ShowCombatLog($"<color={color}>Concentration [{reason}] {caster.Stats.CharacterName}: d20 {check.Roll} + {check.Bonus} = {check.Total} vs DC {check.DC} — {status}</color>");
+    }
+
+    private void CaptureSpellcastResourceSnapshot(CharacterController caster)
+    {
+        _pendingSpellcastSnapshot = null;
+
+        if (caster == null)
+            return;
+
+        var snapshot = new SpellcastResourceSnapshot
+        {
+            Caster = caster,
+            MoveActionUsed = caster.Actions.MoveActionUsed,
+            StandardActionUsed = caster.Actions.StandardActionUsed,
+            FullRoundActionUsed = caster.Actions.FullRoundActionUsed,
+            SwiftActionUsed = caster.Actions.SwiftActionUsed,
+            StandardConvertedToMove = caster.Actions.StandardConvertedToMove,
+            SlotUsedStates = null,
+            QuickenedSpellUsed = false
+        };
+
+        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        if (spellComp != null)
+        {
+            snapshot.QuickenedSpellUsed = spellComp.HasCastQuickenedSpellThisRound;
+
+            if (spellComp.SpellSlots != null && spellComp.SpellSlots.Count > 0)
+            {
+                snapshot.SlotUsedStates = new List<bool>(spellComp.SpellSlots.Count);
+                foreach (var slot in spellComp.SpellSlots)
+                    snapshot.SlotUsedStates.Add(slot != null && slot.IsUsed);
+            }
+        }
+
+        _pendingSpellcastSnapshot = snapshot;
+    }
+
+    private void ClearSpellcastResourceSnapshot()
+    {
+        _pendingSpellcastSnapshot = null;
+    }
+
+    private void RestoreSpellcastResourceSnapshot(CharacterController caster)
+    {
+        if (_pendingSpellcastSnapshot == null || caster == null || _pendingSpellcastSnapshot.Caster != caster)
+            return;
+
+        caster.Actions.MoveActionUsed = _pendingSpellcastSnapshot.MoveActionUsed;
+        caster.Actions.StandardActionUsed = _pendingSpellcastSnapshot.StandardActionUsed;
+        caster.Actions.FullRoundActionUsed = _pendingSpellcastSnapshot.FullRoundActionUsed;
+        caster.Actions.SwiftActionUsed = _pendingSpellcastSnapshot.SwiftActionUsed;
+        caster.Actions.StandardConvertedToMove = _pendingSpellcastSnapshot.StandardConvertedToMove;
+
+        var spellComp = caster.GetComponent<SpellcastingComponent>();
+        if (spellComp != null)
+        {
+            spellComp.HasCastQuickenedSpellThisRound = _pendingSpellcastSnapshot.QuickenedSpellUsed;
+
+            if (_pendingSpellcastSnapshot.SlotUsedStates != null && spellComp.SpellSlots != null)
+            {
+                int count = Mathf.Min(_pendingSpellcastSnapshot.SlotUsedStates.Count, spellComp.SpellSlots.Count);
+                for (int i = 0; i < count; i++)
+                {
+                    if (spellComp.SpellSlots[i] != null)
+                        spellComp.SpellSlots[i].IsUsed = _pendingSpellcastSnapshot.SlotUsedStates[i];
+                }
+
+                spellComp.SyncPreparedSpellsFromSlots();
+            }
+        }
+
+        _pendingSpellcastSnapshot = null;
+    }
+
+    private void HandleSpellcastCancelledFromAoOPrompt(CharacterController caster)
+    {
+        RestoreSpellcastResourceSnapshot(caster);
+        _spellcastProvocationCancelled = false;
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+        _pendingSpellFromHeldCharge = false;
+
+        Grid.ClearAllHighlights();
+        UpdateAllStatsUI();
+
+        if (caster != null && caster.Stats != null)
+            CombatUI?.ShowCombatLog($"↩ {caster.Stats.CharacterName} cancels spell cast.");
+
+        ShowActionChoices();
     }
 
     private void HandleInterruptedSpellCast(CharacterController caster, float delaySeconds = 1.0f)
@@ -5201,6 +5355,22 @@ public class GameManager : MonoBehaviour
     // AoO confirmation state (shared by movement, spellcasting, standing from prone, etc.)
     private bool _waitingForAoOConfirmation;
     private AoOProvokingActionInfo _pendingAoOAction;
+
+    // Spellcast cancellation recovery (AoO prompt cancel should not spend actions/slots).
+    private bool _spellcastProvocationCancelled;
+    private SpellcastResourceSnapshot _pendingSpellcastSnapshot;
+
+    private sealed class SpellcastResourceSnapshot
+    {
+        public CharacterController Caster;
+        public bool MoveActionUsed;
+        public bool StandardActionUsed;
+        public bool FullRoundActionUsed;
+        public bool SwiftActionUsed;
+        public bool StandardConvertedToMove;
+        public bool QuickenedSpellUsed;
+        public List<bool> SlotUsedStates;
+    }
 
     private void ShowMovementRange(CharacterController pc)
     {
