@@ -625,10 +625,10 @@ public class CharacterStats
     public RaceData Race;
 
     /// <summary>Base size (normally from race, but can be overridden for monsters/templates).</summary>
-    public SizeCategory BaseSizeCategory = SizeCategory.Medium;
+    public global::SizeCategory BaseSizeCategory = global::SizeCategory.Medium;
 
     /// <summary>Current effective size after temporary effects (Enlarge/Reduce, etc.).</summary>
-    public SizeCategory CurrentSizeCategory = SizeCategory.Medium;
+    public global::SizeCategory CurrentSizeCategory = global::SizeCategory.Medium;
 
     /// <summary>Broad creature type used by some spells (e.g., Humanoid-only effects).</summary>
     public string CreatureType = "Humanoid";
@@ -845,7 +845,7 @@ public class CharacterStats
             INT = intelligence;
             CHA = cha;
             BaseSpeed = baseSpeed;
-            BaseSizeCategory = SizeCategory.Medium;
+            BaseSizeCategory = global::SizeCategory.Medium;
         }
 
         CurrentSizeCategory = BaseSizeCategory;

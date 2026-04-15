@@ -3237,7 +3237,7 @@ public class GameManager : MonoBehaviour
         if (asfChance <= 0)
             return false;
 
-        roll = Random.Range(1, 101);
+        roll = UnityEngine.Random.Range(1, 101);
 
         CombatUI?.ShowCombatLog($"ASF Check ({caster.Stats.CharacterName}, {spell.Name}): roll {roll}% vs {asfChance}%");
         return roll <= asfChance;
@@ -3311,7 +3311,7 @@ public class GameManager : MonoBehaviour
     {
         if (caster == null || template == null) return null;
 
-        GameObject summonGO = new GameObject($"Summon_{template.TemplateId}_{Random.Range(1000, 9999)}");
+        GameObject summonGO = new GameObject($"Summon_{template.TemplateId}_{UnityEngine.Random.Range(1000, 9999)}");
         summonGO.AddComponent<SpriteRenderer>();
         CharacterController summon = summonGO.AddComponent<CharacterController>();
         summon.IsPlayerControlled = caster.IsPlayerControlled;
