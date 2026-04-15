@@ -162,37 +162,23 @@ public class Inventory
         // --- Armor Bonus & Properties ---
         OwnerStats.ArmorBonus = ArmorSlot != null ? ArmorSlot.ArmorBonus : 0;
 
-        // Max Dex Bonus: use the most restrictive (lowest non-negative) from armor
-        // -1 means no limit; armor sets a cap; shield doesn't usually limit max dex (except tower shield)
+        // Max Dex Bonus: only armor limits DEX-to-AC in this prototype's D&D 3.5 implementation.
+        // -1 means no limit (no armor equipped).
         int armorMaxDex = -1;
-        int shieldMaxDex = -1;
-
         if (ArmorSlot != null)
-        {
-            armorMaxDex = ArmorSlot.MaxDexBonus; // already -1 if no limit
-        }
+            armorMaxDex = ArmorSlot.MaxDexBonus;
 
         // --- Shield Bonus & Properties ---
         OwnerStats.ShieldBonus = 0;
         if (LeftHandSlot != null && LeftHandSlot.IsShield)
-        {
             OwnerStats.ShieldBonus = LeftHandSlot.ShieldBonus;
-            shieldMaxDex = LeftHandSlot.MaxDexBonus;
-        }
 
         // Runtime equipped-item references for proficiency/ACP calculations
         OwnerStats.EquippedArmorItem = ArmorSlot;
         OwnerStats.EquippedShieldItem = (LeftHandSlot != null && LeftHandSlot.IsShield) ? LeftHandSlot : null;
 
-        // Compute effective Max Dex Bonus (most restrictive / lowest non-negative)
-        if (armorMaxDex >= 0 && shieldMaxDex >= 0)
-            OwnerStats.MaxDexBonus = Mathf.Min(armorMaxDex, shieldMaxDex);
-        else if (armorMaxDex >= 0)
-            OwnerStats.MaxDexBonus = armorMaxDex;
-        else if (shieldMaxDex >= 0)
-            OwnerStats.MaxDexBonus = shieldMaxDex;
-        else
-            OwnerStats.MaxDexBonus = -1; // No limit
+        // Effective Max Dex cap comes from armor only.
+        OwnerStats.MaxDexBonus = armorMaxDex >= 0 ? armorMaxDex : -1;
 
         // --- Armor Check Penalty (sum of armor + shield) ---
         int totalACP = 0;

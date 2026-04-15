@@ -24,7 +24,10 @@ public static class ProficiencyAndAcpTests
         TestShieldProficiencyPenalty();
         TestSkillAcpWithNonProficientShield();
         TestSwimDoublesFinalAcp();
+        TestEscapeArtistReceivesAcp();
         TestNonAcpSkillUnaffected();
+        TestMaxDexLimitedByArmorOnly();
+        TestShieldDoesNotCapDexWhenUnarmored();
         TestWeaponProficiencyLookupByName();
 
         Debug.Log($"====== Results: {_passed} passed, {_failed} failed ======");
@@ -125,6 +128,58 @@ public static class ProficiencyAndAcpTests
         Assert(swimPenalty == -8,
             "Swim doubles the final ACP (non-proficient shield: -4 -> -8)",
             $"got {swimPenalty}");
+    }
+
+    private static void TestEscapeArtistReceivesAcp()
+    {
+        var fighter = MakeChar("Fighter");
+        var chainShirt = ItemDatabase.Get("chain_shirt"); // ACP 2
+
+        fighter.EquippedArmorItem = chainShirt;
+
+        int escapeArtistPenalty = fighter.GetArmorCheckPenaltyForSkill("Escape Artist");
+        Assert(escapeArtistPenalty == -2,
+            "Escape Artist is treated as an ACP-affected skill",
+            $"got {escapeArtistPenalty}");
+    }
+
+    private static void TestMaxDexLimitedByArmorOnly()
+    {
+        var fighter = MakeChar("Fighter");
+        fighter.DEX = 20; // +5
+
+        var fullPlate = ItemDatabase.Get("full_plate"); // Max Dex +1
+        var heavyShield = ItemDatabase.Get("shield_heavy_steel");
+
+        var inv = new Inventory { OwnerStats = fighter, ArmorSlot = fullPlate, LeftHandSlot = heavyShield };
+        inv.RecalculateStats();
+
+        Assert(fighter.MaxDexBonus == 1,
+            "Max Dex cap is sourced from armor (full plate +1)",
+            $"got {fighter.MaxDexBonus}");
+
+        Assert(fighter.ArmorClass == 21,
+            "AC applies capped DEX with armor and shield (10 + 8 armor + 1 dex cap + 2 shield)",
+            $"got {fighter.ArmorClass}");
+    }
+
+    private static void TestShieldDoesNotCapDexWhenUnarmored()
+    {
+        var rogue = MakeChar("Rogue");
+        rogue.DEX = 20; // +5
+
+        var towerShield = ItemDatabase.Get("tower_shield");
+
+        var inv = new Inventory { OwnerStats = rogue, ArmorSlot = null, LeftHandSlot = towerShield };
+        inv.RecalculateStats();
+
+        Assert(rogue.MaxDexBonus == -1,
+            "Shield alone does not impose a Max Dex cap",
+            $"got {rogue.MaxDexBonus}");
+
+        Assert(rogue.ArmorClass == 19,
+            "Unarmored AC keeps full DEX while using shield (10 + 5 DEX + 4 shield)",
+            $"got {rogue.ArmorClass}");
     }
 
     private static void TestNonAcpSkillUnaffected()

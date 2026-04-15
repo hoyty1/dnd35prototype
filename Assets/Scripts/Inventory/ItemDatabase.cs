@@ -1031,13 +1031,13 @@ public static class ItemDatabase
             IconChar = "\u26E1", IconColor = new Color(0.6f, 0.6f, 0.7f)
         });
 
-        // Tower Shield: +4 AC, Max Dex +2, Check -10, Spell Failure 50%, 45 lbs
+        // Tower Shield: +4 AC, Max Dex -, Check -10, Spell Failure 50%, 45 lbs
         Register(new ItemData
         {
             Id = "tower_shield", Name = "Tower Shield", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A massive shield providing cover. Severe penalties to skills and attacks.",
-            ShieldBonus = 4, MaxDexBonus = 2, ArmorCheckPenalty = 10,
+            ShieldBonus = 4, MaxDexBonus = -1, ArmorCheckPenalty = 10,
             ArcaneSpellFailure = 50, WeightLbs = 45f,
             IconChar = "\u26E1", IconColor = new Color(0.5f, 0.5f, 0.5f)
         });

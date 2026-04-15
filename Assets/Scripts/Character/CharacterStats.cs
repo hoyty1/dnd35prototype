@@ -1260,7 +1260,7 @@ public class CharacterStats
 
     private static readonly HashSet<string> DnDArmorCheckPenaltySkills = new HashSet<string>
     {
-        "balance", "climb", "hide", "jump", "move_silently", "sleight_of_hand", "swim", "tumble"
+        "balance", "climb", "escape_artist", "hide", "jump", "move_silently", "sleight_of_hand", "swim", "tumble"
     };
 
     /// <summary>Whether this class has broad simple weapon proficiency (all simple weapons).</summary>
