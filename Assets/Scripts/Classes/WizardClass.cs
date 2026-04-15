@@ -103,11 +103,11 @@ public class WizardClass : ICharacterClass
             data.SelectedSpellIds.Add(cantrip.SpellId);
         }
 
-        // 1st-level spells for spellbook: 3 + INT mod(+3) = 6 spells
+        // 1st-level spells for spellbook: include core damage + size magic testing spells.
         data.SelectedSpellIds.AddRange(new List<string>
         {
-            "magic_missile", "mage_armor", "shield",
-            "summon_monster_1", "sleep", "charm_person"
+            "magic_missile", "burning_hands", "enlarge_person", "reduce_person",
+            "mage_armor", "shield", "sleep", "charm_person"
         });
 
         // 2nd-level spells for spellbook: includes combat staples + summon test/debug options
@@ -126,7 +126,7 @@ public class WizardClass : ICharacterClass
             // 4 cantrip slots (unlimited use)
             "ray_of_frost", "detect_magic_wiz", "acid_splash", "prestidigitation",
             // 3 1st-level slots (2 base + 1 INT bonus)
-            "magic_missile", "shield", "summon_monster_1",
+            "magic_missile", "enlarge_person", "reduce_person",
             // 2 2nd-level slots (1 base + 1 INT bonus)
             "scorching_ray", "summon_monster_2"
         };
