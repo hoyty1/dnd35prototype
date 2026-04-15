@@ -625,10 +625,10 @@ public class CharacterStats
     public RaceData Race;
 
     /// <summary>Base size (normally from race, but can be overridden for monsters/templates).</summary>
-    public global::SizeCategory BaseSizeCategory = global::SizeCategory.Medium;
+    public global::SizeCategory BaseSizeCategory;
 
     /// <summary>Current effective size after temporary effects (Enlarge/Reduce, etc.).</summary>
-    public global::SizeCategory CurrentSizeCategory = global::SizeCategory.Medium;
+    public global::SizeCategory CurrentSizeCategory;
 
     /// <summary>
     /// True for tall anatomies (humanoids/giants), false for long anatomies (quadrupeds/serpentine).
@@ -816,6 +816,10 @@ public class CharacterStats
         CharacterName = name;
         Level = level;
         CharacterClass = characterClass;
+
+        // Explicit defaults before race/template overrides.
+        BaseSizeCategory = global::SizeCategory.Medium;
+        CurrentSizeCategory = global::SizeCategory.Medium;
 
         // Store base ability scores (before racial modifiers)
         BaseSTR = str;
@@ -1707,7 +1711,7 @@ public class CharacterStats
     public string RaceName => Race != null ? Race.RaceName : "";
 
     /// <summary>Size category string for display (effective current size).</summary>
-    public string SizeCategory => CurrentSizeCategory.ToString();
+    public string SizeCategoryName => CurrentSizeCategory.ToString();
 
     /// <summary>Whether this character is currently Small size.</summary>
     public bool IsSmallSize => CurrentSizeCategory == global::SizeCategory.Small;

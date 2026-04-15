@@ -210,7 +210,7 @@ public class CombatUI : MonoBehaviour
         if (nameText != null)
         {
             string raceStr = !string.IsNullOrEmpty(s.RaceName) ? $"{s.RaceName} " : "";
-            string sizeStr = (s.SizeCategory != "Medium") ? $" [{s.SizeCategory}]" : "";
+            string sizeStr = (s.SizeCategoryName != "Medium") ? $" [{s.SizeCategoryName}]" : "";
             string displayName = s.CharacterName;
             if (GameManager.Instance != null)
                 displayName = GameManager.Instance.GetSummonDisplayName(ch);

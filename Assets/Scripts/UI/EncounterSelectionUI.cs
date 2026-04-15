@@ -185,7 +185,7 @@ public class EncounterSelectionUI : MonoBehaviour
 
         text = go.GetComponent<Text>();
         text.text = value;
-        text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         text.fontSize = fontSize;
         text.fontStyle = style;
         text.alignment = alignment;
