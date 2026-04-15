@@ -3378,43 +3378,52 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        CharacterController summonCC = SpawnSummonedCreature(caster, targetCell.Coords, template);
-        if (summonCC == null)
+        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
         {
-            ShowActionChoices();
-            return;
-        }
+            if (!canProceed)
+            {
+                HandleInterruptedSpellCast(caster, 1.0f);
+                return;
+            }
 
-        InsertIntoInitiative(summonCC, caster);
+            CharacterController summonCC = SpawnSummonedCreature(caster, targetCell.Coords, template);
+            if (summonCC == null)
+            {
+                ShowActionChoices();
+                return;
+            }
 
-        int durationRounds = Mathf.Max(1, caster.Stats.Level);
-        var activeSummon = new ActiveSummonInstance
-        {
-            Controller = summonCC,
-            Caster = caster,
-            Template = template,
-            RemainingRounds = durationRounds,
-            TotalDurationRounds = durationRounds,
-            SourceSpellId = _pendingSpell.SpellId,
-            IsAlliedToPCs = summonCC.IsPlayerControlled,
-            SmiteUsed = false,
-            CurrentCommand = SummonCommand.AttackNearest()
-        };
-        _activeSummons.Add(activeSummon);
+            InsertIntoInitiative(summonCC, caster);
 
-        var visual = summonCC.GetComponent<SummonedCreatureVisual>();
-        if (visual != null)
-            visual.SetDuration(durationRounds, durationRounds);
+            int durationRounds = Mathf.Max(1, caster.Stats.Level);
+            var activeSummon = new ActiveSummonInstance
+            {
+                Controller = summonCC,
+                Caster = caster,
+                Template = template,
+                RemainingRounds = durationRounds,
+                TotalDurationRounds = durationRounds,
+                SourceSpellId = _pendingSpell.SpellId,
+                IsAlliedToPCs = summonCC.IsPlayerControlled,
+                SmiteUsed = false,
+                CurrentCommand = SummonCommand.AttackNearest()
+            };
+            _activeSummons.Add(activeSummon);
 
-        CombatUI.ShowCombatLog($"<color=#66E8FF>✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name} and summons {template.DisplayName} for {durationRounds} rounds!</color>");
+            var visual = summonCC.GetComponent<SummonedCreatureVisual>();
+            if (visual != null)
+                visual.SetDuration(durationRounds, durationRounds);
 
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        _pendingSpellFromHeldCharge = false;
+            CombatUI.ShowCombatLog($"<color=#66E8FF>✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name} and summons {template.DisplayName} for {durationRounds} rounds!</color>");
 
-        Grid.ClearAllHighlights();
-        UpdateAllStatsUI();
-        StartCoroutine(AfterAttackDelay(caster, 1.0f));
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+
+            Grid.ClearAllHighlights();
+            UpdateAllStatsUI();
+            StartCoroutine(AfterAttackDelay(caster, 1.0f));
+        });
     }
 
     private void BeginPendingSpellTargeting(CharacterController caster)
@@ -3679,17 +3688,27 @@ public class GameManager : MonoBehaviour
         }
 
         HandleConcentrationOnCasting(caster, _pendingSpell);
-        spellComp.SetHeldTouchCharge(_pendingSpell, _pendingMetamagic);
 
-        CombatUI.ShowCombatLog($"✋ {caster.Stats.CharacterName} chooses Discharge Later and holds the charge of {_pendingSpell.Name}.");
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
+        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
+        {
+            if (!canProceed)
+            {
+                HandleInterruptedSpellCast(caster, 1.0f);
+                return;
+            }
 
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-        _pendingSpellFromHeldCharge = false;
+            spellComp.SetHeldTouchCharge(_pendingSpell, _pendingMetamagic);
 
-        StartCoroutine(AfterAttackDelay(caster, 1.0f));
+            CombatUI.ShowCombatLog($"✋ {caster.Stats.CharacterName} chooses Discharge Later and holds the charge of {_pendingSpell.Name}.");
+            UpdateAllStatsUI();
+            Grid.ClearAllHighlights();
+
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+
+            StartCoroutine(AfterAttackDelay(caster, 1.0f));
+        });
     }
     /// <summary>
     /// Execute a spell cast from caster to target.
@@ -3814,117 +3833,126 @@ public class GameManager : MonoBehaviour
         // Check if caster is concentrating on another spell — casting requires a concentration check
         HandleConcentrationOnCasting(caster, _pendingSpell);
 
-        // Resolve the spell with metamagic.
-        // D&D 3.5e: willing friendly targets for melee touch delivery should auto-succeed.
-        bool skipFriendlyTouchAttackRoll = _pendingSpell.IsMeleeTouchSpell() && IsFriendlyTarget(caster, target);
-        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, caster, target);
-
-        // Apply tracked buff/debuff effects based on spell type
-        bool appliesTrackedEffect = _pendingSpell.EffectType == SpellEffectType.Buff ||
-                                    _pendingSpell.EffectType == SpellEffectType.Debuff;
-        if (result.Success && appliesTrackedEffect)
+        ResolveSpellcastProvocation(caster, _pendingSpell, isDeliveringHeldCharge, canProceed =>
         {
-            var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
-
-            // If this is a concentration spell, begin tracking concentration on the caster
-            if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration)
+            if (!canProceed)
             {
-                BeginConcentrationTracking(caster, appliedEffect, _pendingSpell);
-            }
-        }
-
-        // Check concentration for spell damage on the target
-        if (result.DamageDealt > 0 && target != null)
-        {
-            CheckConcentrationOnDamage(target, result.DamageDealt);
-        }
-
-        bool retainedHeldChargeOnMiss = false;
-
-        // Delivering a held charge clears it only if the touch actually lands.
-        // If the touch attack misses, keep the held charge (PHB 3.5e p.141).
-        if (isDeliveringHeldCharge)
-        {
-            bool touchDeliverySucceeded = !result.RequiredAttackRoll || result.AttackHit;
-            if (touchDeliverySucceeded)
-            {
-                spellComp.ClearHeldTouchCharge("touch delivered");
-            }
-            else
-            {
-                retainedHeldChargeOnMiss = true;
-            }
-        }
-
-        // Handle death if target was killed
-        if (result.TargetKilled && target != null)
-        {
-            target.OnDeath();
-            HandleSummonDeathCleanup(target);
-        }
-
-        // Build combat log with quickened spell / spontaneous cast indicators
-        _lastCombatLog = result.GetFormattedLog();
-
-        if (isSpontaneous)
-        {
-            string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                : "Converted prepared spell";
-            string spontPrefix = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n";
-            _lastCombatLog = spontPrefix + _lastCombatLog;
-        }
-
-        if (isQuickened)
-        {
-            string quickenedPrefix = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n";
-            _lastCombatLog = quickenedPrefix + _lastCombatLog;
-        }
-
-        if (retainedHeldChargeOnMiss)
-        {
-            _lastCombatLog += $"\n✋ Touch attack missed — {caster.Stats.CharacterName} retains {_pendingSpell.Name} charge.";
-        }
-
-        if (GameManager.LogAttacksToConsole)
-            Debug.Log("[Spell] " + _lastCombatLog);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-
-        Grid.ClearAllHighlights();
-
-        // Check for victory (all NPCs dead) or defeat (all PCs dead)
-        if (result.TargetKilled)
-        {
-            if (AreAllNPCsDead())
-            {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                CombatUI.SetActionButtonsVisible(false);
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
+                HandleInterruptedSpellCast(caster, 1.0f);
                 return;
             }
-            else if (AreAllPCsDead())
+
+            // Resolve the spell with metamagic.
+            // D&D 3.5e: willing friendly targets for melee touch delivery should auto-succeed.
+            bool skipFriendlyTouchAttackRoll = _pendingSpell.IsMeleeTouchSpell() && IsFriendlyTarget(caster, target);
+            SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, caster, target);
+
+            // Apply tracked buff/debuff effects based on spell type
+            bool appliesTrackedEffect = _pendingSpell.EffectType == SpellEffectType.Buff ||
+                                        _pendingSpell.EffectType == SpellEffectType.Debuff;
+            if (result.Success && appliesTrackedEffect)
             {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
-                CombatUI.SetActionButtonsVisible(false);
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                return;
+                var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
+
+                // If this is a concentration spell, begin tracking concentration on the caster
+                if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration)
+                {
+                    BeginConcentrationTracking(caster, appliedEffect, _pendingSpell);
+                }
             }
-        }
 
-        _pendingSpell = null;
-        _pendingSpellFromHeldCharge = false;
-        _pendingMetamagic = null;
+            // Check concentration for spell damage on the target
+            if (result.DamageDealt > 0 && target != null)
+            {
+                CheckConcentrationOnDamage(target, result.DamageDealt);
+            }
 
-        // After standard action, check for remaining actions
-        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+            bool retainedHeldChargeOnMiss = false;
+
+            // Delivering a held charge clears it only if the touch actually lands.
+            // If the touch attack misses, keep the held charge (PHB 3.5e p.141).
+            if (isDeliveringHeldCharge)
+            {
+                bool touchDeliverySucceeded = !result.RequiredAttackRoll || result.AttackHit;
+                if (touchDeliverySucceeded)
+                {
+                    spellComp.ClearHeldTouchCharge("touch delivered");
+                }
+                else
+                {
+                    retainedHeldChargeOnMiss = true;
+                }
+            }
+
+            // Handle death if target was killed
+            if (result.TargetKilled && target != null)
+            {
+                target.OnDeath();
+                HandleSummonDeathCleanup(target);
+            }
+
+            // Build combat log with quickened spell / spontaneous cast indicators
+            _lastCombatLog = result.GetFormattedLog();
+
+            if (isSpontaneous)
+            {
+                string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                    ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                    : "Converted prepared spell";
+                string spontPrefix = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n";
+                _lastCombatLog = spontPrefix + _lastCombatLog;
+            }
+
+            if (isQuickened)
+            {
+                string quickenedPrefix = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n";
+                _lastCombatLog = quickenedPrefix + _lastCombatLog;
+            }
+
+            if (retainedHeldChargeOnMiss)
+            {
+                _lastCombatLog += $"\n✋ Touch attack missed — {caster.Stats.CharacterName} retains {_pendingSpell.Name} charge.";
+            }
+
+            if (GameManager.LogAttacksToConsole)
+                Debug.Log("[Spell] " + _lastCombatLog);
+
+            CombatUI.ShowCombatLog(_lastCombatLog);
+            UpdateAllStatsUI();
+
+            Grid.ClearAllHighlights();
+
+            // Check for victory (all NPCs dead) or defeat (all PCs dead)
+            if (result.TargetKilled)
+            {
+                if (AreAllNPCsDead())
+                {
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                    CombatUI.SetActionButtonsVisible(false);
+                    _pendingSpell = null;
+                    _pendingMetamagic = null;
+                    _pendingSpellFromHeldCharge = false;
+                    return;
+                }
+                else if (AreAllPCsDead())
+                {
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
+                    CombatUI.SetActionButtonsVisible(false);
+                    _pendingSpell = null;
+                    _pendingMetamagic = null;
+                    _pendingSpellFromHeldCharge = false;
+                    return;
+                }
+            }
+
+            _pendingSpell = null;
+            _pendingSpellFromHeldCharge = false;
+            _pendingMetamagic = null;
+
+            // After standard action, check for remaining actions
+            StartCoroutine(AfterAttackDelay(caster, 1.5f));
+        });
     }
 
     // ========================================================================
@@ -4503,134 +4531,143 @@ public class GameManager : MonoBehaviour
         // Check if caster is concentrating on another spell — casting requires a concentration check
         HandleConcentrationOnCasting(caster, _pendingSpell);
 
-        // Build the combat log header
-        var logBuilder = new System.Text.StringBuilder();
-        string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
-                          _pendingSpell.AoEShapeType == AoEShape.Burst ? "burst" : "line";
-        logBuilder.AppendLine($"═══════════════════════════════════");
-        logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name}! ({_pendingSpell.AoESizeSquares * 5}-ft {shapeStr})");
-        logBuilder.AppendLine($"  [{(_pendingSpell.SpellLevel == 0 ? "Cantrip" : $"Level {_pendingSpell.SpellLevel}")}] {_pendingSpell.School}");
-        logBuilder.AppendLine($"  Targets: {targets.Count} creature(s) in {aoeCells.Count} squares");
-        logBuilder.AppendLine();
-
-        if (targets.Count == 0)
+        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
         {
-            logBuilder.AppendLine($"  No valid targets in area!");
-            logBuilder.Append($"═══════════════════════════════════");
-        }
-        else
-        {
-            // Resolve spell for each target
-            int targetIndex = 0;
-            foreach (CharacterController target in targets)
+            if (!canProceed)
             {
-                targetIndex++;
-                logBuilder.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
-
-                // For buff/debuff spells, apply tracked effects
-                if (_pendingSpell.EffectType == SpellEffectType.Buff || _pendingSpell.EffectType == SpellEffectType.Debuff)
-                {
-                    var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
-
-                    // Track concentration for the first target of a concentration AoE effect
-                    if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration && targetIndex == 1)
-                    {
-                        BeginConcentrationTracking(caster, appliedEffect, _pendingSpell);
-                    }
-
-                    string effectLabel = _pendingSpell.EffectType == SpellEffectType.Debuff ? "DEBUFF APPLIED" : "BUFF APPLIED";
-                    logBuilder.AppendLine($"  {effectLabel}! {_pendingSpell.Description}");
-                    Debug.Log($"[AoE] {_pendingSpell.EffectType} applied to {target.Stats.CharacterName}");
-                }
-                // For damage spells, resolve with save and damage
-                else if (_pendingSpell.EffectType == SpellEffectType.Damage)
-                {
-                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, caster, target);
-
-                    if (result.RequiredSave)
-                    {
-                        string saveResult = result.SaveSucceeded ? "SAVED" : "FAILED";
-                        logBuilder.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - {saveResult}!");
-                    }
-
-                    if (result.DamageDealt > 0)
-                    {
-                        logBuilder.AppendLine($"  Damage: {result.DamageDealt} {result.DamageType}");
-                        logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
-
-                        // Check concentration for AoE spell damage
-                        CheckConcentrationOnDamage(target, result.DamageDealt);
-                    }
-
-                    if (result.TargetKilled)
-                    {
-                        target.OnDeath();
-                        HandleSummonDeathCleanup(target);
-                        logBuilder.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
-                    }
-                }
-                // For healing spells
-                else if (_pendingSpell.EffectType == SpellEffectType.Healing)
-                {
-                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, caster, target);
-
-                    logBuilder.AppendLine($"  Healed: {result.HealingDone} HP");
-                    logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
-                }
-
-                logBuilder.AppendLine();
+                HandleInterruptedSpellCast(caster, 1.0f);
+                return;
             }
 
-            logBuilder.Append($"═══════════════════════════════════");
-        }
+            // Build the combat log header
+            var logBuilder = new System.Text.StringBuilder();
+            string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
+                              _pendingSpell.AoEShapeType == AoEShape.Burst ? "burst" : "line";
+            logBuilder.AppendLine($"═══════════════════════════════════");
+            logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name}! ({_pendingSpell.AoESizeSquares * 5}-ft {shapeStr})");
+            logBuilder.AppendLine($"  [{(_pendingSpell.SpellLevel == 0 ? "Cantrip" : $"Level {_pendingSpell.SpellLevel}")}] {_pendingSpell.School}");
+            logBuilder.AppendLine($"  Targets: {targets.Count} creature(s) in {aoeCells.Count} squares");
+            logBuilder.AppendLine();
 
-        _lastCombatLog = logBuilder.ToString();
+            if (targets.Count == 0)
+            {
+                logBuilder.AppendLine($"  No valid targets in area!");
+                logBuilder.Append($"═══════════════════════════════════");
+            }
+            else
+            {
+                // Resolve spell for each target
+                int targetIndex = 0;
+                foreach (CharacterController target in targets)
+                {
+                    targetIndex++;
+                    logBuilder.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
 
-        if (isSpontaneous)
-        {
-            string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
-                ? $"Sacrificed: {spontaneousSacrificedSpellId}"
-                : "Converted prepared spell";
-            _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
-        }
+                    // For buff/debuff spells, apply tracked effects
+                    if (_pendingSpell.EffectType == SpellEffectType.Buff || _pendingSpell.EffectType == SpellEffectType.Debuff)
+                    {
+                        var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
-        if (isQuickened)
-        {
-            _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
-        }
+                        // Track concentration for the first target of a concentration AoE effect
+                        if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration && targetIndex == 1)
+                        {
+                            BeginConcentrationTracking(caster, appliedEffect, _pendingSpell);
+                        }
 
-        if (GameManager.LogAttacksToConsole)
-            Debug.Log("[AoE Spell] " + _lastCombatLog);
+                        string effectLabel = _pendingSpell.EffectType == SpellEffectType.Debuff ? "DEBUFF APPLIED" : "BUFF APPLIED";
+                        logBuilder.AppendLine($"  {effectLabel}! {_pendingSpell.Description}");
+                        Debug.Log($"[AoE] {_pendingSpell.EffectType} applied to {target.Stats.CharacterName}");
+                    }
+                    // For damage spells, resolve with save and damage
+                    else if (_pendingSpell.EffectType == SpellEffectType.Damage)
+                    {
+                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, caster, target);
 
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
+                        if (result.RequiredSave)
+                        {
+                            string saveResult = result.SaveSucceeded ? "SAVED" : "FAILED";
+                            logBuilder.AppendLine($"  {result.SaveType} save DC {result.SaveDC}: d20={result.SaveRoll}+{result.SaveMod}={result.SaveTotal} - {saveResult}!");
+                        }
 
-        Grid.ClearAllHighlights();
+                        if (result.DamageDealt > 0)
+                        {
+                            logBuilder.AppendLine($"  Damage: {result.DamageDealt} {result.DamageType}");
+                            logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
 
-        // Check for victory/defeat
-        if (AreAllNPCsDead())
-        {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-            CombatUI.SetActionButtonsVisible(false);
+                            // Check concentration for AoE spell damage
+                            CheckConcentrationOnDamage(target, result.DamageDealt);
+                        }
+
+                        if (result.TargetKilled)
+                        {
+                            target.OnDeath();
+                            HandleSummonDeathCleanup(target);
+                            logBuilder.AppendLine($"  💀 {target.Stats.CharacterName} has been slain!");
+                        }
+                    }
+                    // For healing spells
+                    else if (_pendingSpell.EffectType == SpellEffectType.Healing)
+                    {
+                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, caster, target);
+
+                        logBuilder.AppendLine($"  Healed: {result.HealingDone} HP");
+                        logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
+                    }
+
+                    logBuilder.AppendLine();
+                }
+
+                logBuilder.Append($"═══════════════════════════════════");
+            }
+
+            _lastCombatLog = logBuilder.ToString();
+
+            if (isSpontaneous)
+            {
+                string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                    ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                    : "Converted prepared spell";
+                _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+            }
+
+            if (isQuickened)
+            {
+                _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+            }
+
+            if (GameManager.LogAttacksToConsole)
+                Debug.Log("[AoE Spell] " + _lastCombatLog);
+
+            CombatUI.ShowCombatLog(_lastCombatLog);
+            UpdateAllStatsUI();
+
+            Grid.ClearAllHighlights();
+
+            // Check for victory/defeat
+            if (AreAllNPCsDead())
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                CombatUI.SetActionButtonsVisible(false);
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                return;
+            }
+            else if (AreAllPCsDead())
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
+                CombatUI.SetActionButtonsVisible(false);
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                return;
+            }
+
             _pendingSpell = null;
             _pendingMetamagic = null;
-            return;
-        }
-        else if (AreAllPCsDead())
-        {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
-            CombatUI.SetActionButtonsVisible(false);
-            _pendingSpell = null;
-            _pendingMetamagic = null;
-            return;
-        }
 
-        _pendingSpell = null;
-        _pendingMetamagic = null;
-
-        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+            StartCoroutine(AfterAttackDelay(caster, 1.5f));
+        });
     }
 
     /// <summary>
@@ -4820,6 +4857,163 @@ public class GameManager : MonoBehaviour
         }
     }
 
+
+    private List<CharacterController> GetThreateningEnemiesForSpellcasting(CharacterController caster)
+    {
+        var threatening = ThreatSystem.GetThreateningEnemies(caster.GridPosition, caster, GetAllCharacters());
+        threatening.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+        return threatening;
+    }
+
+    private bool AttemptCastDefensively(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || spell == null) return false;
+
+        int dc = 15 + spell.SpellLevel;
+        var check = ConcentrationManager.MakeSpellcastingConcentrationCheck(
+            caster,
+            dc,
+            ConcentrationCheckType.CastingDefensively,
+            spell);
+
+        LogSpellcastingConcentrationCheck(caster, spell, check);
+
+        if (!check.Success)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FF6644>💥 {caster.Stats.CharacterName} fails to cast defensively. {spell.Name} is lost!</color>");
+            return false;
+        }
+
+        CombatUI?.ShowCombatLog($"<color=#88CCFF>🛡 {caster.Stats.CharacterName} casts defensively and avoids attacks of opportunity.</color>");
+        return true;
+    }
+
+    private void ResolveSpellcastProvocation(CharacterController caster, SpellData spell, bool isDeliveringHeldCharge, System.Action<bool> onResolved)
+    {
+        if (caster == null || spell == null || isDeliveringHeldCharge)
+        {
+            onResolved?.Invoke(true);
+            return;
+        }
+
+        var threateningEnemies = GetThreateningEnemiesForSpellcasting(caster);
+        if (threateningEnemies == null || threateningEnemies.Count == 0)
+        {
+            onResolved?.Invoke(true);
+            return;
+        }
+
+        CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} is casting {spell.Name} while threatened ({threateningEnemies.Count} adjacent)." );
+
+        if (CombatUI == null)
+        {
+            ResolveSpellcastAoOs(caster, spell, threateningEnemies, onResolved);
+            return;
+        }
+
+        CombatUI.ShowCastDefensivelyPrompt(caster, spell, threateningEnemies, castDefensively =>
+        {
+            if (castDefensively)
+            {
+                onResolved?.Invoke(AttemptCastDefensively(caster, spell));
+                return;
+            }
+
+            ResolveSpellcastAoOs(caster, spell, threateningEnemies, onResolved);
+        });
+    }
+
+    private void ResolveSpellcastAoOs(CharacterController caster, SpellData spell, List<CharacterController> threateningEnemies, System.Action<bool> onResolved)
+    {
+        if (caster == null || spell == null)
+        {
+            onResolved?.Invoke(false);
+            return;
+        }
+
+        if (threateningEnemies == null || threateningEnemies.Count == 0)
+        {
+            onResolved?.Invoke(true);
+            return;
+        }
+
+        CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} casts normally and provokes {threateningEnemies.Count} attack(s) of opportunity.");
+
+        foreach (var enemy in threateningEnemies)
+        {
+            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy))
+                continue;
+
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, caster);
+            if (aooResult == null)
+                continue;
+
+            CombatUI?.ShowCombatLog($"⚔ AoO vs spellcasting: {aooResult.GetDetailedSummary()}");
+
+            if (aooResult.Hit && aooResult.TotalDamage > 0)
+            {
+                // Existing concentration effects / held charges can also be disrupted by this damage.
+                CheckConcentrationOnDamage(caster, aooResult.TotalDamage);
+
+                int dc = 10 + aooResult.TotalDamage + spell.SpellLevel;
+                var check = ConcentrationManager.MakeSpellcastingConcentrationCheck(
+                    caster,
+                    dc,
+                    ConcentrationCheckType.DamagedWhileCasting,
+                    spell,
+                    aooResult.TotalDamage);
+
+                LogSpellcastingConcentrationCheck(caster, spell, check);
+
+                if (!check.Success)
+                {
+                    CombatUI?.ShowCombatLog($"<color=#FF6644>💥 {caster.Stats.CharacterName}'s casting is interrupted by damage. {spell.Name} is lost!</color>");
+                    onResolved?.Invoke(false);
+                    return;
+                }
+            }
+
+            if (caster.Stats.IsDead)
+            {
+                CombatUI?.ShowCombatLog($"<color=#FF6644>💀 {caster.Stats.CharacterName} is slain while casting {spell.Name}!</color>");
+                onResolved?.Invoke(false);
+                return;
+            }
+        }
+
+        onResolved?.Invoke(true);
+    }
+
+    private void LogSpellcastingConcentrationCheck(CharacterController caster, SpellData spell, ConcentrationCheckResult check)
+    {
+        if (caster == null || caster.Stats == null || spell == null || check == null) return;
+
+        string reason = check.CheckType == ConcentrationCheckType.CastingDefensively
+            ? "Cast Defensively"
+            : check.CheckType == ConcentrationCheckType.DamagedWhileCasting
+                ? $"Damaged While Casting ({check.DamageDealt} dmg)"
+                : check.CheckType.ToString();
+
+        string status = check.Success ? "SUCCESS" : "FAIL";
+        string color = check.Success ? "#88CCFF" : "#FF6644";
+
+        CombatUI?.ShowCombatLog($"<color={color}>Concentration [{reason}] {caster.Stats.CharacterName}: d20 {check.Roll} + {check.Bonus} = {check.Total} vs DC {check.DC} — {status}</color>");
+    }
+
+    private void HandleInterruptedSpellCast(CharacterController caster, float delaySeconds = 1.0f)
+    {
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+        _pendingSpellFromHeldCharge = false;
+
+        Grid.ClearAllHighlights();
+        UpdateAllStatsUI();
+
+        if (caster != null)
+            StartCoroutine(AfterAttackDelay(caster, delaySeconds));
+        else
+            ShowActionChoices();
+    }
     // ========== CONCENTRATION MECHANICS (D&D 3.5e PHB) ==========
 
     /// <summary>

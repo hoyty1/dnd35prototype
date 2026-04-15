@@ -1,6 +1,15 @@
 using UnityEngine;
 using System.Collections.Generic;
 
+public enum ConcentrationCheckType
+{
+    DamagedWhileCasting,
+    CastingDefensively,
+    Grappled,
+    ViolentMotion,
+    OngoingConcentration,
+    HeldCharge
+}
 /// <summary>
 /// Manages spell concentration mechanics per D&D 3.5e PHB rules.
 ///
@@ -45,6 +54,40 @@ public class ConcentrationManager : MonoBehaviour
         _stats = stats;
         Caster = caster;
         _statusEffectMgr = GetComponent<StatusEffectManager>();
+    }
+
+    /// <summary>
+    /// Shared concentration check utility for in-combat spellcasting interruption checks.
+    /// D&D 3.5e flow used by spellcasting AoO handling:
+    ///   Roll = d20 + caster level + CON modifier (+4 Combat Casting when applicable).
+    /// </summary>
+    public static ConcentrationCheckResult MakeSpellcastingConcentrationCheck(
+        CharacterController caster,
+        int dc,
+        ConcentrationCheckType checkType,
+        SpellData spell,
+        int damageDealt = 0)
+    {
+        int roll = Random.Range(1, 21);
+        int bonus = 0;
+
+        if (caster != null && caster.Stats != null)
+            bonus = caster.Stats.GetSpellcastingConcentrationBonus(includeCombatCasting: true);
+
+        int total = roll + bonus;
+        bool success = total >= dc;
+
+        return new ConcentrationCheckResult
+        {
+            Success = success,
+            D20Roll = roll,
+            TotalBonus = bonus,
+            TotalRoll = total,
+            DC = dc,
+            SpellName = spell != null ? spell.Name : "",
+            CheckType = checkType,
+            DamageDealt = damageDealt
+        };
     }
 
     public bool IsConcentrating => ConcentratingOn != null;
@@ -400,4 +443,15 @@ public class ConcentrationCheckResult
 
     /// <summary>Formatted log message for the combat log.</summary>
     public string LogMessage;
+
+    /// <summary>Spellcasting interruption check category.</summary>
+    public ConcentrationCheckType CheckType = ConcentrationCheckType.OngoingConcentration;
+
+    /// <summary>Damage dealt that contributed to DC (if any).</summary>
+    public int DamageDealt;
+
+    // Compatibility aliases for newer call sites.
+    public int Roll => D20Roll;
+    public int Bonus => TotalBonus;
+    public int Total => TotalRoll;
 }

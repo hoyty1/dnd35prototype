@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 
 /// <summary>
 /// Manages all combat UI elements with D&D 3.5 ability score display.
@@ -2717,6 +2718,46 @@ public class CombatUI : MonoBehaviour
 
         return btn;
     }
+
+    /// <summary>
+    /// Show D&D 3.5e cast defensively prompt when a spellcaster is threatened in melee.
+    /// callback(true) = cast defensively, callback(false) = cast normally (provokes AoOs).
+    /// </summary>
+    public void ShowCastDefensivelyPrompt(
+        CharacterController caster,
+        SpellData spell,
+        List<CharacterController> threateningEnemies,
+        System.Action<bool> callback)
+    {
+        int enemyCount = threateningEnemies != null ? threateningEnemies.Count : 0;
+        int defensiveDC = 15 + (spell != null ? spell.SpellLevel : 0);
+
+        string casterName = (caster != null && caster.Stats != null) ? caster.Stats.CharacterName : "Caster";
+        int concentrationBonus = (caster != null && caster.Stats != null)
+            ? caster.Stats.GetSpellcastingConcentrationBonus(includeCombatCasting: true)
+            : 0;
+        string concentrationBreakdown = (caster != null && caster.Stats != null)
+            ? caster.Stats.GetSpellcastingConcentrationBreakdown(includeCombatCasting: true)
+            : "Caster Level + CON";
+
+        var body = new StringBuilder();
+        body.AppendLine($"{casterName} is threatened by {enemyCount} {(enemyCount == 1 ? "enemy" : "enemies")}.\n");
+        body.AppendLine("Cast defensively to avoid attacks of opportunity?");
+        body.AppendLine($"Defensive Concentration DC: {defensiveDC} (15 + spell level)");
+        body.AppendLine($"Concentration Bonus: +{concentrationBonus} ({concentrationBreakdown})");
+
+        string yesLabel = $"YES - Cast Defensively\nDC {defensiveDC}, no AoO";
+        string noLabel = $"NO - Cast Normally\nProvokes {enemyCount} AoO";
+
+        ShowConfirmationDialog(
+            "CASTING WHILE THREATENED",
+            body.ToString(),
+            yesLabel,
+            noLabel,
+            onConfirm: () => callback?.Invoke(true),
+            onCancel: () => callback?.Invoke(false));
+    }
+
     public void ShowConfirmationDialog(string title, string message,
         string confirmLabel, string cancelLabel,
         System.Action onConfirm, System.Action onCancel)

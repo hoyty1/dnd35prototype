@@ -668,6 +668,25 @@ public class CharacterSheetUI : MonoBehaviour
             AddLine(content, $"  Arcane Spell Failure: ignored ({stats.SpellcastingKind} caster)", 10, DimText, FontStyle.Normal, 13);
         }
 
+        if (stats.IsSpellcaster)
+        {
+            AddSeparator(content);
+            AddLine(content, "SPELLCASTING CONCENTRATION", 12, GoldText, FontStyle.Bold, 16);
+
+            int concentrationBonus = stats.GetSpellcastingConcentrationBonus(includeCombatCasting: true);
+            AddLine(content, $"  Concentration Bonus: {FormatMod(concentrationBonus)}", 11, LightText, FontStyle.Bold, 14);
+            AddLine(content, $"  Breakdown: {stats.GetSpellcastingConcentrationBreakdown(includeCombatCasting: true)}", 10, DimText, FontStyle.Normal, 13);
+
+            bool hasCombatCasting = stats.HasFeat("Combat Casting");
+            AddLine(content,
+                hasCombatCasting
+                    ? "  Combat Casting: active (+4 on concentration checks while casting in melee)"
+                    : "  Combat Casting: not known",
+                10,
+                hasCombatCasting ? new Color(0.55f, 0.86f, 1f) : DimText,
+                FontStyle.Normal,
+                13);
+        }
         AddSeparator(content);
 
         // === Saving Throws ===
@@ -843,6 +862,17 @@ public class CharacterSheetUI : MonoBehaviour
         AddLine(content, $"FEATS — {stats.CharacterName} ({stats.Feats.Count})", 12, GoldText, FontStyle.Bold, 16);
         AddSeparator(content);
 
+        if (stats.IsSpellcaster)
+        {
+            bool hasCombatCastingFeat = stats.HasFeat("Combat Casting");
+            int concentrationBonus = stats.GetSpellcastingConcentrationBonus(includeCombatCasting: true);
+            string ccLine = hasCombatCastingFeat
+                ? $"Combat Casting: YES (+4) | Total concentration bonus while casting in melee: {FormatMod(concentrationBonus)}"
+                : $"Combat Casting: NO | Total concentration bonus while casting in melee: {FormatMod(concentrationBonus)}";
+            AddLine(content, ccLine, 10, hasCombatCastingFeat ? new Color(0.55f, 0.86f, 1f) : DimText, FontStyle.Normal, 13);
+            AddSeparator(content);
+        }
+
         if (stats.Feats.Count == 0)
         {
             AddLine(content, "No feats.", 12, DimText);
@@ -851,7 +881,6 @@ public class CharacterSheetUI : MonoBehaviour
 
         // Group feats by type using FeatDefinitions
         var sortedFeats = stats.Feats.OrderBy(f => f).ToList();
-
         foreach (var featName in sortedFeats)
         {
             FeatDefinition def = null;

@@ -975,10 +975,10 @@ public static class FeatDefinitions
 
         // --- Combat Casting ---
         var combatCasting = new FeatDefinition("Combat Casting",
-            "You get a +4 bonus on Concentration checks made to cast a spell or use a spell-like ability while on the defensive or while you are grappling or pinned.",
+            "You get a +4 bonus on concentration checks made while casting in combat, including casting defensively and maintaining the spell after taking damage during casting.",
             FeatType.General);
         combatCasting.Benefit.GrantsCombatCasting = true;
-        combatCasting.Benefit.Description = "+4 on Concentration checks to cast defensively";
+        combatCasting.Benefit.Description = "+4 on concentration checks while casting in melee";
         Add(combatCasting);
 
         // --- Augment Summoning ---

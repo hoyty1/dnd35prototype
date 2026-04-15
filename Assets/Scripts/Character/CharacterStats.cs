@@ -490,6 +490,38 @@ public class CharacterStats
     /// <summary>Check if this character has a specific feat.</summary>
     public bool HasFeat(string featName) => Feats.Contains(featName);
 
+
+    /// <summary>
+    /// Effective caster level for spellcasting concentration checks.
+    /// In this prototype, caster level tracks character level for spellcasting classes.
+    /// </summary>
+    public int GetCasterLevel()
+    {
+        return IsSpellcaster ? Mathf.Max(1, Level) : 0;
+    }
+
+    /// <summary>
+    /// D&D 3.5e spellcasting concentration bonus used when casting in combat:
+    /// caster level + CON modifier (+4 Combat Casting when applicable).
+    /// </summary>
+    public int GetSpellcastingConcentrationBonus(bool includeCombatCasting = true)
+    {
+        int bonus = GetCasterLevel() + CONMod;
+        if (includeCombatCasting && HasFeat("Combat Casting"))
+            bonus += 4;
+        return bonus;
+    }
+
+    /// <summary>
+    /// Human-readable concentration breakdown for combat spellcasting checks.
+    /// </summary>
+    public string GetSpellcastingConcentrationBreakdown(bool includeCombatCasting = true)
+    {
+        string breakdown = $"Caster Level {GetCasterLevel()} + CON {FormatMod(CONMod)}";
+        if (includeCombatCasting && HasFeat("Combat Casting"))
+            breakdown += " + Combat Casting +4";
+        return breakdown;
+    }
     /// <summary>Chosen weapon for Weapon Focus/Specialization/Improved Critical.</summary>
     public string WeaponFocusChoice;
 
