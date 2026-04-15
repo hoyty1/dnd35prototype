@@ -350,6 +350,26 @@ public class CharacterController : MonoBehaviour
         return result;
     }
 
+    /// <summary>
+    /// Returns how many attacks this character can make during a full attack right now,
+    /// including Rapid Shot when active with a ranged weapon.
+    /// </summary>
+    public int GetPlannedFullAttackCount(RangeInfo rangeInfo = null)
+    {
+        int[] attackBonuses = Stats.GetIterativeAttackBonuses();
+        int count = attackBonuses != null ? attackBonuses.Length : 0;
+
+        ItemData equippedWeapon = GetEquippedMainWeapon();
+        bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || equippedWeapon.RangeIncrement > 0))
+                        && rangeInfo != null && !rangeInfo.IsMelee;
+
+        bool hasRapidShotFeat = Stats.HasFeat("Rapid Shot");
+        bool rapidShotActive = isRanged && hasRapidShotFeat && RapidShotEnabled;
+        if (rapidShotActive)
+            count += 1;
+
+        return Mathf.Max(0, count);
+    }
     // ========== FULL ATTACK (Full-Round Action) ==========
 
     /// <summary>
@@ -360,7 +380,7 @@ public class CharacterController : MonoBehaviour
     /// Power Attack: penalty to melee attack, bonus to melee damage.
     /// Point Blank Shot: +1 atk/dmg for ranged within 30 ft.
     /// </summary>
-    public FullAttackResult FullAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
+    public FullAttackResult FullAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null, int startAttackIndex = 0, int maxAttacks = int.MaxValue)
     {
         var result = new FullAttackResult();
         result.Type = FullAttackResult.AttackType.FullAttack;
@@ -475,8 +495,15 @@ public class CharacterController : MonoBehaviour
             Debug.LogWarning($"[FullAttack] {Stats.CharacterName}: Rapid Shot ON but weapon is not ranged");
         }
 
-        for (int i = 0; i < allAttackBonuses.Count; i++)
+        if (startAttackIndex < 0)
+            startAttackIndex = 0;
+
+        int attacksExecuted = 0;
+        for (int i = startAttackIndex; i < allAttackBonuses.Count; i++)
         {
+            if (attacksExecuted >= maxAttacks)
+                break;
+
             if (target.Stats.IsDead)
             {
                 Debug.Log($"[FullAttack] Target is dead, stopping at attack {i + 1}");
@@ -554,6 +581,7 @@ public class CharacterController : MonoBehaviour
 
             result.Attacks.Add(atk);
             result.AttackLabels.Add(label);
+            attacksExecuted++;
         }
 
         result.DefenderHPAfter = target.Stats.CurrentHP;

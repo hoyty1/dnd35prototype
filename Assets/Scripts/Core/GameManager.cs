@@ -106,6 +106,10 @@ public class GameManager : MonoBehaviour
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
     private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
 
+    // Mid-sequence ranged full-attack retargeting state
+    private bool _isAwaitingRangedRetargetSelection;
+    private bool _rangedRetargetSelectionCancelled;
+    private CharacterController _selectedRangedRetarget;
     // Pending special attack state
     private SpecialAttackType _pendingSpecialAttackType;
     private bool _isSelectingSpecialAttack;
@@ -4137,6 +4141,18 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void CancelPendingAttackTargeting()
     {
+        if (_isAwaitingRangedRetargetSelection)
+        {
+            _rangedRetargetSelectionCancelled = true;
+            _selectedRangedRetarget = null;
+            _isAwaitingRangedRetargetSelection = false;
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+            CurrentSubPhase = PlayerSubPhase.Animating;
+            CombatUI?.ShowCombatLog("↩ Remaining ranged attacks cancelled.");
+            return;
+        }
+
         CharacterController pc = ActivePC;
         if (pc != null && _pendingDefensiveAttackSelection)
         {
@@ -5129,6 +5145,68 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private List<CharacterController> GetValidRangedTargets(CharacterController attacker)
+    {
+        var valid = new List<CharacterController>();
+        if (attacker == null || !attacker.IsEquippedWeaponRanged())
+            return valid;
+
+        ItemData weapon = attacker.GetEquippedMainWeapon();
+        int rangeIncrement = weapon != null ? weapon.RangeIncrement : 0;
+        bool isThrownWeapon = weapon != null && weapon.IsThrown;
+
+        int maxRangeSquares = (rangeIncrement > 0)
+            ? RangeCalculator.GetMaxRangeSquares(rangeIncrement, isThrownWeapon)
+            : attacker.Stats.AttackRange;
+
+        List<SquareCell> allCells = Grid.GetCellsInRange(attacker.GridPosition, maxRangeSquares);
+        foreach (SquareCell cell in allCells)
+        {
+            if (cell == null || !cell.IsOccupied || cell.Occupant == null || cell.Occupant == attacker)
+                continue;
+
+            CharacterController candidate = cell.Occupant;
+            if (candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!IsEnemyTeam(attacker, candidate))
+                continue;
+
+            int sqDist = SquareGridUtils.GetDistance(attacker.GridPosition, candidate.GridPosition);
+            bool inRange;
+            if (rangeIncrement > 0)
+            {
+                int distFeet = RangeCalculator.SquaresToFeet(sqDist);
+                inRange = RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement, isThrownWeapon);
+            }
+            else
+            {
+                inRange = sqDist <= attacker.Stats.AttackRange;
+            }
+
+            if (inRange)
+                valid.Add(candidate);
+        }
+
+        return valid;
+    }
+
+    private IEnumerator WaitForRangedRetargetSelection(CharacterController attacker, int remainingAttacks)
+    {
+        _isAwaitingRangedRetargetSelection = true;
+        _rangedRetargetSelectionCancelled = false;
+        _selectedRangedRetarget = null;
+
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+        ShowAttackTargets(attacker);
+        CombatUI?.ShowCombatLog($"🎯 Target defeated! Select a new ranged target for {remainingAttacks} remaining attack(s), or right-click/ESC to cancel.");
+        CombatUI?.SetTurnIndicator($"TARGET SWITCH: Select target for {remainingAttacks} remaining attack(s) | Right-click/ESC to cancel");
+
+        while (_isAwaitingRangedRetargetSelection)
+            yield return null;
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+    }
+
     private void ShowRangeZoneHighlights(CharacterController pc, int rangeIncrement, int maxRangeSquares, bool isThrownWeapon = false)
     {
         List<SquareCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares);
@@ -5453,6 +5531,19 @@ public class GameManager : MonoBehaviour
         }
 
         // ===== NORMAL ATTACK MODE =====
+        if (_isAwaitingRangedRetargetSelection)
+        {
+            if (cell.IsOccupied && cell.Occupant != null && cell.Occupant != pc && !cell.Occupant.Stats.IsDead
+                && _highlightedCells.Contains(cell) && IsEnemyTeam(pc, cell.Occupant))
+            {
+                _selectedRangedRetarget = cell.Occupant;
+                _isAwaitingRangedRetargetSelection = false;
+                return;
+            }
+
+            CombatUI?.ShowCombatLog("Select a highlighted valid target, or right-click/ESC to cancel remaining attacks.");
+            return;
+        }
         if (!cell.IsOccupied || cell.Occupant == pc || cell.Occupant.Stats.IsDead)
         {
             if (cell.Coords == pc.GridPosition || !_highlightedCells.Contains(cell))
@@ -6106,7 +6197,10 @@ public class GameManager : MonoBehaviour
                 PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
             case PendingAttackMode.FullAttack:
-                PerformFullAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+                if (attacker.IsEquippedWeaponRanged())
+                    StartCoroutine(PerformRangedFullAttackWithRetargeting(attacker, target));
+                else
+                    PerformFullAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 break;
             case PendingAttackMode.DualWield:
                 PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
@@ -6174,6 +6268,123 @@ public class GameManager : MonoBehaviour
         StartCoroutine(AfterAttackDelay(attacker, 1.5f));
     }
 
+    private IEnumerator PerformRangedFullAttackWithRetargeting(CharacterController attacker, CharacterController initialTarget)
+    {
+        if (attacker == null || initialTarget == null)
+        {
+            ShowActionChoices();
+            yield break;
+        }
+
+        attacker.Actions.UseFullRoundAction();
+
+        RangeInfo initialRangeInfo = CalculateRangeInfo(attacker, initialTarget);
+        int plannedAttackCount = attacker.GetPlannedFullAttackCount(initialRangeInfo);
+        if (plannedAttackCount <= 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no available attacks.");
+            StartCoroutine(DelayedEndActivePCTurn(0.8f));
+            yield break;
+        }
+
+        CharacterController currentTarget = initialTarget;
+        int attacksMade = 0;
+
+        for (int attackIndex = 0; attackIndex < plannedAttackCount; attackIndex++)
+        {
+            if (currentTarget == null || currentTarget.Stats == null || currentTarget.Stats.IsDead)
+            {
+                int remainingAttacks = plannedAttackCount - attackIndex;
+                List<CharacterController> validTargets = GetValidRangedTargets(attacker);
+                if (remainingAttacks <= 0 || validTargets.Count == 0)
+                {
+                    CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no valid ranged targets for {remainingAttacks} remaining attack(s).");
+                    break;
+                }
+
+                yield return StartCoroutine(WaitForRangedRetargetSelection(attacker, remainingAttacks));
+
+                if (_rangedRetargetSelectionCancelled || _selectedRangedRetarget == null)
+                {
+                    CombatUI?.ShowCombatLog($"↩ {attacker.Stats.CharacterName} ends full attack early. {remainingAttacks} attack(s) unused.");
+                    break;
+                }
+
+                currentTarget = _selectedRangedRetarget;
+                _selectedRangedRetarget = null;
+                _rangedRetargetSelectionCancelled = false;
+
+                CombatUI?.ShowCombatLog($"🎯 {attacker.Stats.CharacterName} switches target to {currentTarget.Stats.CharacterName}.");
+            }
+
+            // Recompute flanking/range context each attack in case target changed.
+            var allCombatants = GetAllCharacters();
+            CharacterController flankPartner;
+            bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, currentTarget, allCombatants, out flankPartner);
+            int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+            string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
+            RangeInfo rangeInfo = CalculateRangeInfo(attacker, currentTarget);
+
+            FullAttackResult stepResult = attacker.FullAttack(
+                currentTarget,
+                isFlanking,
+                flankBonus,
+                partnerName,
+                rangeInfo,
+                startAttackIndex: attackIndex,
+                maxAttacks: 1);
+
+            if (stepResult == null || stepResult.Attacks.Count == 0)
+                break;
+
+            attacksMade++;
+            CombatResult attack = stepResult.Attacks[0];
+            string label = (stepResult.AttackLabels != null && stepResult.AttackLabels.Count > 0)
+                ? stepResult.AttackLabels[0]
+                : $"Attack {attackIndex + 1}";
+
+            CombatUI?.ShowCombatLog(attack.GetAttackBreakdown(label));
+            UpdateAllStatsUI();
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+
+            if (attack.Hit && attack.TotalDamage > 0)
+                CheckConcentrationOnDamage(currentTarget, attack.TotalDamage);
+
+            if (attack.TargetKilled)
+            {
+                HandleSummonDeathCleanup(currentTarget);
+
+                if (!currentTarget.IsPlayerControlled && AreAllNPCsDead())
+                {
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                    CombatUI.SetActionButtonsVisible(false);
+                    yield break;
+                }
+
+                int remainingAttacks = plannedAttackCount - (attackIndex + 1);
+                if (remainingAttacks > 0)
+                {
+                    CombatUI?.ShowCombatLog($"💀 {currentTarget.Stats.CharacterName} is defeated! {remainingAttacks} attack(s) remaining.");
+                    currentTarget = null;
+                }
+            }
+
+            yield return new WaitForSeconds(0.35f);
+        }
+
+        _isAwaitingRangedRetargetSelection = false;
+        _selectedRangedRetarget = null;
+        _rangedRetargetSelectionCancelled = false;
+
+        CombatUI?.ShowCombatLog($"✅ {attacker.Stats.CharacterName} completes ranged full attack ({attacksMade}/{plannedAttackCount} attacks used).");
+        UpdateAllStatsUI();
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        StartCoroutine(DelayedEndActivePCTurn(1.0f));
+    }
     private void PerformFullAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
