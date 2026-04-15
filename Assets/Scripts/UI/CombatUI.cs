@@ -351,6 +351,22 @@ public class CombatUI : MonoBehaviour
     }
 
     /// <summary>
+    /// Build a standardized short flanking indicator for turn/targeting text.
+    /// </summary>
+    public string BuildFlankingIndicator(bool isFlanking, CharacterController flankingAlly)
+    {
+        if (!isFlanking) return string.Empty;
+
+        string allyName = flankingAlly != null && flankingAlly.Stats != null
+            ? flankingAlly.Stats.CharacterName
+            : string.Empty;
+
+        return string.IsNullOrEmpty(allyName)
+            ? " (FLANKING +2)"
+            : $" (FLANKING +2 with {allyName})";
+    }
+
+    /// <summary>
     /// Update the initiative order display text.
     /// </summary>
     public void UpdateInitiativeDisplay(string initiativeText)

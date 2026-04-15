@@ -1341,6 +1341,15 @@ public class CharacterController : MonoBehaviour
         return true; // Default to melee if unclear
     }
 
+    /// <summary>
+    /// Get all currently threatened squares for this character based on equipped melee weapon reach.
+    /// Convenience wrapper over ThreatSystem for flanking/AI/UI queries.
+    /// </summary>
+    public List<Vector2Int> GetThreatenedSquares()
+    {
+        return new List<Vector2Int>(ThreatSystem.GetThreatenedSquares(this));
+    }
+
 
     /// <summary>
     /// Get minimum melee distance (in squares) this character can attack with current weapon.

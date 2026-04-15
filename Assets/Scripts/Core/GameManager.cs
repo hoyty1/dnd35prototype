@@ -6507,6 +6507,11 @@ public class GameManager : MonoBehaviour
         int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
         string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
 
+        if (CombatUI != null)
+        {
+            string flankIndicator = CombatUI.BuildFlankingIndicator(isFlanking, flankPartner);
+            CombatUI.SetTurnIndicator($"{attacker.Stats.CharacterName} attacks {target.Stats.CharacterName}{flankIndicator}");
+        }
         RangeInfo rangeInfo = CalculateRangeInfo(attacker, target);
         // Targeting is resolved; clear pending declaration marker.
         _pendingDefensiveAttackSelection = false;
@@ -7084,7 +7089,7 @@ public class GameManager : MonoBehaviour
 
         if (!npc.IsTargetInCurrentWeaponRange(targetPC))
         {
-            SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
+            SquareCell bestCell = FindBestMoveToward(npc, targetPC);
             if (bestCell != null)
             {
                 yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, bestCell.Coords, PlayerMoveSecondsPerStep));
@@ -7180,7 +7185,7 @@ public class GameManager : MonoBehaviour
 
         if (!npc.IsTargetInCurrentWeaponRange(targetPC))
         {
-            SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
+            SquareCell bestCell = FindBestMoveToward(npc, targetPC);
             if (bestCell != null)
             {
                 yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, bestCell.Coords, PlayerMoveSecondsPerStep));
@@ -7238,7 +7243,7 @@ public class GameManager : MonoBehaviour
 
         if (!summon.IsTargetInCurrentWeaponRange(target) && summon.Actions.HasMoveAction)
         {
-            SquareCell bestCell = FindBestMoveToward(summon, target.GridPosition);
+            SquareCell bestCell = FindBestMoveToward(summon, target);
             if (bestCell != null)
             {
                 yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, bestCell.Coords, PlayerMoveSecondsPerStep));
@@ -7623,21 +7628,72 @@ public class GameManager : MonoBehaviour
         return bestCell;
     }
 
+    private SquareCell FindBestMoveToward(CharacterController mover, CharacterController target)
+    {
+        if (target == null)
+            return null;
+
+        return FindBestMoveToward(mover, target.GridPosition, target);
+    }
+
     private SquareCell FindBestMoveToward(CharacterController mover, Vector2Int targetPos)
+    {
+        return FindBestMoveToward(mover, targetPos, null);
+    }
+
+    private SquareCell FindBestMoveToward(CharacterController mover, Vector2Int targetPos, CharacterController targetCharacter)
     {
         List<SquareCell> moveCells = Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);
         SquareCell bestCell = null;
         int bestDist = int.MaxValue;
+        bool bestCanThreaten = false;
+        bool bestWouldFlank = false;
+
+        List<CharacterController> allCombatants = null;
+        if (targetCharacter != null)
+            allCombatants = GetAllCharacters();
 
         foreach (var cell in moveCells)
         {
             if (cell.IsOccupied) continue;
 
             int dist = SquareGridUtils.GetDistance(cell.Coords, targetPos);
-            if (dist < bestDist)
+
+            bool canThreatenFromCell = false;
+            bool wouldFlankFromCell = false;
+
+            if (targetCharacter != null)
+            {
+                canThreatenFromCell = CombatUtils.CanThreatenTargetFromPosition(mover, cell.Coords, targetCharacter);
+                if (canThreatenFromCell)
+                {
+                    CharacterController flankPartner;
+                    wouldFlankFromCell = CombatUtils.IsAttackerFlankingFromPosition(
+                        mover,
+                        cell.Coords,
+                        targetCharacter,
+                        allCombatants,
+                        out flankPartner);
+                }
+            }
+
+            bool better = false;
+
+            // Tactical priority: prefer valid flanking setups first, then threatening squares,
+            // then shortest approach distance.
+            if (wouldFlankFromCell != bestWouldFlank)
+                better = wouldFlankFromCell;
+            else if (canThreatenFromCell != bestCanThreaten)
+                better = canThreatenFromCell;
+            else if (dist < bestDist)
+                better = true;
+
+            if (better)
             {
                 bestDist = dist;
                 bestCell = cell;
+                bestCanThreaten = canThreatenFromCell;
+                bestWouldFlank = wouldFlankFromCell;
             }
         }
 
