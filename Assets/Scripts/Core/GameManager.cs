@@ -2351,7 +2351,7 @@ public class GameManager : MonoBehaviour
 
         Vector2Int oldPos = pc.GridPosition;
         ConsumeMoveAction(pc);
-        pc.MoveToCell(destination);
+        yield return StartCoroutine(pc.MoveAlongPath(new List<Vector2Int> { destination.Coords }, PlayerMoveSecondsPerStep, markAsMoved: true));
 
         RefreshFlankedConditions();
         UpdateAllStatsUI();
@@ -4816,6 +4816,7 @@ public class GameManager : MonoBehaviour
     private bool _waitingForAoOConfirmation;
     private AoOPathResult _pendingAoOPath;
     private SquareCell _pendingMoveTarget;
+    private List<Vector2Int> _pendingMovePath;
 
     private void ShowMovementRange(CharacterController pc)
     {
@@ -4850,7 +4851,7 @@ public class GameManager : MonoBehaviour
         _waitingForAoOConfirmation = false;
         _pendingAoOPath = null;
         _pendingMoveTarget = null;
-
+        _pendingMovePath = null;
         if (pc != null)
             CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels movement.");
 
@@ -5487,6 +5488,9 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private const float PlayerMoveSecondsPerStep = 0.08f;
+    private const float NpcChargeMoveSecondsPerStep = 0.06f;
+
     private void HandleMovementClick(CharacterController pc, SquareCell cell)
     {
         if (_waitingForAoOConfirmation) return;
@@ -5502,6 +5506,14 @@ public class GameManager : MonoBehaviour
             var allCharacters = GetAllCharacters();
             var pathResult = Grid.FindSafePath(pc.GridPosition, cell.Coords, pc, allCharacters);
 
+            if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
+            {
+                CombatUI?.ShowCombatLog("⚠ No valid movement path to that tile.");
+                return;
+            }
+
+            _pendingMovePath = new List<Vector2Int>(pathResult.Path);
+
             if (pathResult.ProvokesAoOs)
             {
                 Debug.Log($"[GameManager] Movement to ({cell.Coords.x},{cell.Coords.y}) would provoke {pathResult.ProvokedAoOs.Count} AoO(s)!");
@@ -5514,7 +5526,7 @@ public class GameManager : MonoBehaviour
             }
             else
             {
-                ExecuteMovement(pc, cell);
+                StartCoroutine(ExecuteMovement(pc, _pendingMovePath));
             }
         }
     }
@@ -5534,15 +5546,16 @@ public class GameManager : MonoBehaviour
 
         if (_pendingAoOPath != null && _pendingAoOPath.ProvokesAoOs)
         {
-            StartCoroutine(ResolveAoOsAndMove(pc, _pendingMoveTarget, _pendingAoOPath));
+            StartCoroutine(ResolveAoOsAndMove(pc, _pendingAoOPath));
         }
         else
         {
-            ExecuteMovement(pc, _pendingMoveTarget);
+            StartCoroutine(ExecuteMovement(pc, _pendingMovePath));
         }
 
         _pendingAoOPath = null;
         _pendingMoveTarget = null;
+        _pendingMovePath = null;
     }
 
     private void OnAoOCancelled()
@@ -5550,6 +5563,7 @@ public class GameManager : MonoBehaviour
         _waitingForAoOConfirmation = false;
         _pendingAoOPath = null;
         _pendingMoveTarget = null;
+        _pendingMovePath = null;
 
         Debug.Log("[GameManager] Player cancelled movement to avoid AoOs");
 
@@ -5563,7 +5577,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private IEnumerator ResolveAoOsAndMove(CharacterController pc, SquareCell targetCell, AoOPathResult pathResult)
+    private IEnumerator ResolveAoOsAndMove(CharacterController pc, AoOPathResult pathResult)
     {
         CurrentSubPhase = PlayerSubPhase.Animating;
 
@@ -5596,7 +5610,11 @@ public class GameManager : MonoBehaviour
 
         if (!pc.Stats.IsDead)
         {
-            ExecuteMovement(pc, targetCell);
+            List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
+                ? pathResult.Path
+                : _pendingMovePath;
+
+            yield return StartCoroutine(ExecuteMovement(pc, path));
         }
         else
         {
@@ -5617,8 +5635,13 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void ExecuteMovement(CharacterController pc, SquareCell cell)
+    private IEnumerator ExecuteMovement(CharacterController pc, List<Vector2Int> path)
     {
+        if (pc == null || path == null || path.Count == 0)
+            yield break;
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
         // Hide path preview and hover marker immediately when movement begins
         if (_pathPreview != null) _pathPreview.HidePath();
         if (_hoverMarker != null) _hoverMarker.Hide();
@@ -5632,13 +5655,30 @@ public class GameManager : MonoBehaviour
             pc.Actions.ConvertStandardToMove();
         }
 
-        pc.MoveToCell(cell);
+        yield return StartCoroutine(pc.MoveAlongPath(path, PlayerMoveSecondsPerStep, markAsMoved: true));
         UpdateAllStatsUI();
 
         // Invalidate threat cache since positions changed
         InvalidatePreviewThreats();
 
         ShowActionChoices();
+    }
+
+    private IEnumerator MoveCharacterAlongComputedPath(CharacterController mover, Vector2Int destination, float secondsPerStep)
+    {
+        if (mover == null || mover.Stats == null || Grid == null)
+            yield break;
+
+        if (destination == mover.GridPosition)
+            yield break;
+
+        int maxRange = Mathf.Max(1, mover.Stats.MoveRange);
+        AoOPathResult pathResult = Grid.FindPathAoOAware(mover.GridPosition, destination, null, maxRange);
+        List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
+            ? pathResult.Path
+            : new List<Vector2Int> { destination };
+
+        yield return StartCoroutine(mover.MoveAlongPath(path, secondsPerStep, markAsMoved: true));
     }
 
     private void HandleAttackTargetClick(CharacterController pc, SquareCell cell)
@@ -6314,13 +6354,7 @@ public class GameManager : MonoBehaviour
             yield break;
         }
 
-        foreach (Vector2Int step in path)
-        {
-            SquareCell dest = Grid.GetCell(step);
-            if (dest == null || dest.IsOccupied) continue;
-            charger.MoveToCell(dest);
-            yield return new WaitForSeconds(0.08f);
-        }
+        yield return StartCoroutine(charger.MoveAlongPath(path, PlayerMoveSecondsPerStep, markAsMoved: true));
 
         InvalidatePreviewThreats();
 
@@ -6970,7 +7004,7 @@ public class GameManager : MonoBehaviour
             SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
             if (bestCell != null)
             {
-                npc.MoveToCell(bestCell);
+                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, bestCell.Coords, PlayerMoveSecondsPerStep));
                 npc.Actions.UseMoveAction();
                 CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances toward {targetPC.Stats.CharacterName}!");
                 yield return new WaitForSeconds(0.5f);
@@ -7005,7 +7039,7 @@ public class GameManager : MonoBehaviour
             SquareCell retreatCell = FindBestMoveAwayFrom(npc, closestPC.GridPosition);
             if (retreatCell != null)
             {
-                npc.MoveToCell(retreatCell);
+                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, retreatCell.Coords, PlayerMoveSecondsPerStep));
                 npc.Actions.UseMoveAction();
                 CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} retreats to maintain distance!");
                 yield return new WaitForSeconds(0.5f);
@@ -7036,7 +7070,7 @@ public class GameManager : MonoBehaviour
             SquareCell approachCell = FindBestMoveToward(npc, rangedTarget.GridPosition);
             if (approachCell != null)
             {
-                npc.MoveToCell(approachCell);
+                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, approachCell.Coords, PlayerMoveSecondsPerStep));
                 npc.Actions.UseMoveAction();
                 CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} moves to get a better shot.");
                 yield return new WaitForSeconds(0.5f);
@@ -7066,7 +7100,7 @@ public class GameManager : MonoBehaviour
             SquareCell bestCell = FindBestMoveToward(npc, targetPC.GridPosition);
             if (bestCell != null)
             {
-                npc.MoveToCell(bestCell);
+                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, bestCell.Coords, PlayerMoveSecondsPerStep));
                 npc.Actions.UseMoveAction();
                 CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances methodically toward {targetPC.Stats.CharacterName}.");
                 yield return new WaitForSeconds(0.5f);
@@ -7111,7 +7145,7 @@ public class GameManager : MonoBehaviour
             SquareCell retreat = FindBestMoveAwayFrom(summon, target.GridPosition);
             if (retreat != null && retreat.Coords != summon.GridPosition)
             {
-                summon.MoveToCell(retreat);
+                yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, retreat.Coords, PlayerMoveSecondsPerStep));
                 if (summon.Actions.HasMoveAction)
                     summon.Actions.UseMoveAction();
                 CombatUI.ShowCombatLog($"<color=#FFCC66>{GetSummonDisplayName(summon)} withdraws to survive.</color>");
@@ -7124,7 +7158,7 @@ public class GameManager : MonoBehaviour
             SquareCell bestCell = FindBestMoveToward(summon, target.GridPosition);
             if (bestCell != null)
             {
-                summon.MoveToCell(bestCell);
+                yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, bestCell.Coords, PlayerMoveSecondsPerStep));
                 summon.Actions.UseMoveAction();
                 CombatUI.ShowCombatLog($"<color=#66E8FF>{GetSummonDisplayName(summon)} closes in on {target.Stats.CharacterName}.</color>");
                 yield return new WaitForSeconds(0.4f);
@@ -7321,13 +7355,7 @@ public class GameManager : MonoBehaviour
         if (npc.Stats.IsDead)
             yield break;
 
-        foreach (Vector2Int step in path)
-        {
-            SquareCell dest = Grid.GetCell(step);
-            if (dest == null || dest.IsOccupied) continue;
-            npc.MoveToCell(dest);
-            yield return new WaitForSeconds(0.06f);
-        }
+        yield return StartCoroutine(npc.MoveAlongPath(path, NpcChargeMoveSecondsPerStep, markAsMoved: true));
 
         CharacterController flankPartner;
         bool isFlankingCharge = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);

@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 public enum SpecialAttackType
@@ -129,13 +130,18 @@ public class CharacterController : MonoBehaviour
         }
     }
 
+    private const float DefaultMoveSecondsPerStep = 0.08f;
+
     /// <summary>
-    /// Move the character to a new square cell.
+    /// Move the character to a new square cell instantly.
     /// </summary>
     /// <param name="targetCell">Destination grid cell.</param>
     /// <param name="markAsMoved">Whether this movement should count as normal movement for turn tracking.</param>
     public void MoveToCell(SquareCell targetCell, bool markAsMoved = true)
     {
+        if (targetCell == null || GameManager.Instance == null || GameManager.Instance.Grid == null)
+            return;
+
         // Clear old cell
         SquareCell oldCell = GameManager.Instance.Grid.GetCell(GridPosition);
         if (oldCell != null)
@@ -151,6 +157,62 @@ public class CharacterController : MonoBehaviour
         // Register on new cell
         targetCell.IsOccupied = true;
         targetCell.Occupant = this;
+
+        if (markAsMoved)
+            HasMovedThisTurn = true;
+    }
+
+    /// <summary>
+    /// Smoothly animate movement along a path of grid coordinates.
+    /// The path must be ordered and should exclude the current starting square.
+    /// </summary>
+    public IEnumerator MoveAlongPath(List<Vector2Int> path, float secondsPerStep = DefaultMoveSecondsPerStep, bool markAsMoved = true)
+    {
+        if (path == null || path.Count == 0)
+            yield break;
+
+        if (GameManager.Instance == null || GameManager.Instance.Grid == null)
+            yield break;
+
+        float clampedStepDuration = Mathf.Max(0.01f, secondsPerStep);
+
+        for (int i = 0; i < path.Count; i++)
+        {
+            SquareCell nextCell = GameManager.Instance.Grid.GetCell(path[i]);
+            if (nextCell == null)
+                continue;
+
+            // Ignore blocked cells unless it's the character's current occupied square.
+            if (nextCell.IsOccupied && nextCell.Occupant != this)
+                break;
+
+            SquareCell oldCell = GameManager.Instance.Grid.GetCell(GridPosition);
+            if (oldCell != null && oldCell != nextCell)
+            {
+                oldCell.IsOccupied = false;
+                oldCell.Occupant = null;
+            }
+
+            Vector3 startPos = transform.position;
+            Vector3 endPos = SquareGridUtils.GridToWorld(nextCell.X, nextCell.Y);
+
+            // Reserve destination immediately so path occupancy remains consistent while animating.
+            GridPosition = nextCell.Coords;
+            nextCell.IsOccupied = true;
+            nextCell.Occupant = this;
+
+            float elapsed = 0f;
+            while (elapsed < clampedStepDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / clampedStepDuration);
+                float smoothT = Mathf.SmoothStep(0f, 1f, t);
+                transform.position = Vector3.Lerp(startPos, endPos, smoothT);
+                yield return null;
+            }
+
+            transform.position = endPos;
+        }
 
         if (markAsMoved)
             HasMovedThisTurn = true;
