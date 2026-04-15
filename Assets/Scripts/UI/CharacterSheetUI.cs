@@ -653,6 +653,21 @@ public class CharacterSheetUI : MonoBehaviour
         if (stats.SizeModifier != 0) acBreakdown += $" + Size {FormatMod(stats.SizeModifier)}";
         AddLine(content, acBreakdown, 9, DimText, FontStyle.Normal, 13);
 
+        string maxDexDisplay = stats.MaxDexBonus < 0 ? "No limit" : $"+{stats.MaxDexBonus}";
+        string acpDisplay = stats.ArmorCheckPenalty > 0 ? $"-{stats.ArmorCheckPenalty}" : "0";
+        AddLine(content, $"  Max Dex: {maxDexDisplay}    ACP: {acpDisplay}", 10, DimText, FontStyle.Normal, 13);
+
+        if (stats.IsAffectedByArcaneSpellFailure)
+        {
+            int asfChance = Mathf.Clamp(stats.ArcaneSpellFailure, 0, 100);
+            Color asfColor = asfChance > 0 ? new Color(1f, 0.7f, 0.4f) : DimText;
+            AddLine(content, $"  Arcane Spell Failure: {asfChance}%", 10, asfColor, FontStyle.Bold, 13);
+        }
+        else if (stats.IsSpellcaster)
+        {
+            AddLine(content, $"  Arcane Spell Failure: ignored ({stats.SpellcastingKind} caster)", 10, DimText, FontStyle.Normal, 13);
+        }
+
         AddSeparator(content);
 
         // === Saving Throws ===

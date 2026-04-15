@@ -436,7 +436,17 @@ public class InventoryUI : MonoBehaviour
             _charNameText.text = $"{stats.CharacterName}'s Inventory ({stats.CharacterClass} Lv {stats.Level})";
 
         if (_charStatsText != null)
-            _charStatsText.text = $"HP: {stats.CurrentHP}/{stats.MaxHP}  AC: {stats.ArmorClass}  Atk: {CharacterStats.FormatMod(stats.AttackBonus)}  Dmg: {stats.BaseDamageCount}d{stats.BaseDamageDice}";
+        {
+            string baseSummary = $"HP: {stats.CurrentHP}/{stats.MaxHP}  AC: {stats.ArmorClass}  Atk: {CharacterStats.FormatMod(stats.AttackBonus)}  Dmg: {stats.BaseDamageCount}d{stats.BaseDamageDice}";
+            string armorSummary = stats.ArmorCheckPenalty > 0 ? $"  ACP: -{stats.ArmorCheckPenalty}" : "";
+
+            int asfChance = (stats.IsAffectedByArcaneSpellFailure)
+                ? Mathf.Clamp(stats.ArcaneSpellFailure, 0, 100)
+                : 0;
+            string asfSummary = asfChance > 0 ? $"  ASF: {asfChance}%" : "";
+
+            _charStatsText.text = baseSummary + armorSummary + asfSummary;
+        }
 
         // Equipment slots
         RefreshEquipSlot(_armorSlotBg, _armorSlotText, inv.ArmorSlot, "Empty");

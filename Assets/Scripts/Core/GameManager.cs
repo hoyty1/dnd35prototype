@@ -3010,11 +3010,43 @@ public class GameManager : MonoBehaviour
         if (hasMetamagicApplied)
             slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
 
-        bool consumed;
-        if (hasMetamagicApplied && slotLevelToConsume > 0)
-            consumed = spellComp.CastWizardSpellWithMetamagic(_pendingSpell, _pendingMetamagic);
-        else
-            consumed = spellComp.CastSpellFromSlot(_pendingSpell);
+        if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
+        {
+            bool consumedOnFailure = ConsumePendingSpellSlot(
+                spellComp,
+                _pendingSpell,
+                _pendingMetamagic,
+                hasMetamagicApplied,
+                slotLevelToConsume,
+                false,
+                -1,
+                null);
+
+            if (!consumedOnFailure)
+            {
+                Debug.LogError($"[GameManager] ASF failure path: could not consume level {slotLevelToConsume} slot for {_pendingSpell.Name}");
+                return false;
+            }
+
+            HandleConcentrationOnCasting(caster, _pendingSpell);
+            LogArcaneSpellFailure(caster, _pendingSpell, asfRoll, asfChance);
+
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+
+            return false;
+        }
+
+        bool consumed = ConsumePendingSpellSlot(
+            spellComp,
+            _pendingSpell,
+            _pendingMetamagic,
+            hasMetamagicApplied,
+            slotLevelToConsume,
+            false,
+            -1,
+            null);
 
         if (!consumed)
         {
@@ -3024,6 +3056,64 @@ public class GameManager : MonoBehaviour
 
         HandleConcentrationOnCasting(caster, _pendingSpell);
         return true;
+    }
+
+    private bool ConsumePendingSpellSlot(
+        SpellcastingComponent spellComp,
+        SpellData spell,
+        MetamagicData metamagic,
+        bool hasMetamagicApplied,
+        int slotLevelToConsume,
+        bool isSpontaneous,
+        int spontaneousLevel,
+        string spontaneousSacrificedSpellId)
+    {
+        if (spellComp == null || spell == null) return false;
+
+        if (isSpontaneous)
+        {
+            if (!string.IsNullOrEmpty(spontaneousSacrificedSpellId))
+                return spellComp.SpontaneousCastFromSpecificSpell(spontaneousSacrificedSpellId);
+
+            return spellComp.SpontaneousCastFromSlot(spontaneousLevel);
+        }
+
+        if (hasMetamagicApplied && slotLevelToConsume > 0)
+            return spellComp.CastWizardSpellWithMetamagic(spell, metamagic);
+
+        return spellComp.CastSpellFromSlot(spell);
+    }
+
+    private bool TryRollArcaneSpellFailure(CharacterController caster, SpellData spell, bool isDeliveringHeldCharge, out int roll, out int asfChance)
+    {
+        roll = 0;
+        asfChance = 0;
+
+        if (isDeliveringHeldCharge || caster == null || caster.Stats == null || spell == null)
+            return false;
+
+        if (!caster.Stats.IsAffectedByArcaneSpellFailure)
+            return false;
+
+        asfChance = Mathf.Clamp(caster.Stats.ArcaneSpellFailure, 0, 100);
+        if (asfChance <= 0)
+            return false;
+
+        roll = Random.Range(1, 101);
+
+        CombatUI?.ShowCombatLog($"ASF Check ({caster.Stats.CharacterName}, {spell.Name}): roll {roll}% vs {asfChance}%");
+        return roll <= asfChance;
+    }
+
+    private void LogArcaneSpellFailure(CharacterController caster, SpellData spell, int roll, int asfChance)
+    {
+        if (caster == null || caster.Stats == null || spell == null) return;
+
+        CombatUI?.ShowCombatLog("═══════════════════════════════");
+        CombatUI?.ShowCombatLog($"{caster.Stats.CharacterName} attempts to cast {spell.Name}");
+        CombatUI?.ShowCombatLog($"Arcane Spell Failure: {roll}% ≤ {asfChance}%");
+        CombatUI?.ShowCombatLog("⚠️ SPELL FAILS! Spell slot consumed, no effect.");
+        CombatUI?.ShowCombatLog("═══════════════════════════════");
     }
 
     private void InsertIntoInitiative(CharacterController combatant, CharacterController summoner)
@@ -3538,10 +3628,47 @@ public class GameManager : MonoBehaviour
             if (hasMetamagicApplied)
                 slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
 
-            if (hasMetamagicApplied && slotLevelToConsume > 0)
-                consumed = spellComp.CastWizardSpellWithMetamagic(_pendingSpell, _pendingMetamagic);
-            else
-                consumed = spellComp.CastSpellFromSlot(_pendingSpell);
+            if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
+            {
+                consumed = ConsumePendingSpellSlot(
+                    spellComp,
+                    _pendingSpell,
+                    _pendingMetamagic,
+                    hasMetamagicApplied,
+                    slotLevelToConsume,
+                    false,
+                    -1,
+                    null);
+
+                if (!consumed)
+                {
+                    Debug.LogError($"[GameManager] ASF failure path: could not consume level {slotLevelToConsume} spell slot for held charge!");
+                    ShowActionChoices();
+                    return;
+                }
+
+                HandleConcentrationOnCasting(caster, _pendingSpell);
+                LogArcaneSpellFailure(caster, _pendingSpell, asfRoll, asfChance);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
+
+                StartCoroutine(AfterAttackDelay(caster, 1.0f));
+                return;
+            }
+
+            consumed = ConsumePendingSpellSlot(
+                spellComp,
+                _pendingSpell,
+                _pendingMetamagic,
+                hasMetamagicApplied,
+                slotLevelToConsume,
+                false,
+                -1,
+                null);
 
             if (!consumed)
             {
@@ -3627,39 +3754,50 @@ public class GameManager : MonoBehaviour
 
         if (!isDeliveringHeldCharge)
         {
+            if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
+            {
+                bool consumedOnFailure = ConsumePendingSpellSlot(
+                    spellComp,
+                    _pendingSpell,
+                    _pendingMetamagic,
+                    hasMetamagicApplied,
+                    slotLevelToConsume,
+                    isSpontaneous,
+                    spontaneousLevel,
+                    spontaneousSacrificedSpellId);
+
+                if (!consumedOnFailure)
+                {
+                    Debug.LogError($"[GameManager] ASF failure path: failed to consume level {slotLevelToConsume} spell slot!");
+                    ShowActionChoices();
+                    return;
+                }
+
+                HandleConcentrationOnCasting(caster, _pendingSpell);
+                LogArcaneSpellFailure(caster, _pendingSpell, asfRoll, asfChance);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingMetamagic = null;
+
+                StartCoroutine(AfterAttackDelay(caster, 1.0f));
+                return;
+            }
+
             // Consume spell slot
             // Cantrips are unlimited — CastSpellFromSlot handles this (no slot consumed)
             // Both Wizards and Clerics use slot-based system
-            bool consumed;
-            if (isSpontaneous)
-            {
-                // Spontaneous casting: consume the specific prepared spell slot
-                if (!string.IsNullOrEmpty(spontaneousSacrificedSpellId))
-                {
-                    consumed = spellComp.SpontaneousCastFromSpecificSpell(spontaneousSacrificedSpellId);
-                    if (consumed)
-                    {
-                        Debug.Log($"[GameManager] Spontaneous cast: {caster.Stats.CharacterName} sacrificed '{spontaneousSacrificedSpellId}' → {_pendingSpell.Name}");
-                    }
-                }
-                else
-                {
-                    // Fallback: consume any slot at the spontaneous level (legacy path)
-                    consumed = spellComp.SpontaneousCastFromSlot(spontaneousLevel);
-                    if (consumed)
-                    {
-                        Debug.Log($"[GameManager] Spontaneous cast (level-based): {caster.Stats.CharacterName} converted a level {spontaneousLevel} slot → {_pendingSpell.Name}");
-                    }
-                }
-            }
-            else if (hasMetamagicApplied && slotLevelToConsume > 0)
-            {
-                consumed = spellComp.CastWizardSpellWithMetamagic(_pendingSpell, _pendingMetamagic);
-            }
-            else
-            {
-                consumed = spellComp.CastSpellFromSlot(_pendingSpell);
-            }
+            bool consumed = ConsumePendingSpellSlot(
+                spellComp,
+                _pendingSpell,
+                _pendingMetamagic,
+                hasMetamagicApplied,
+                slotLevelToConsume,
+                isSpontaneous,
+                spontaneousLevel,
+                spontaneousSacrificedSpellId);
 
             if (!consumed)
             {
@@ -3667,6 +3805,11 @@ public class GameManager : MonoBehaviour
                 ShowActionChoices();
                 return;
             }
+
+            if (isSpontaneous && !string.IsNullOrEmpty(spontaneousSacrificedSpellId))
+                Debug.Log($"[GameManager] Spontaneous cast: {caster.Stats.CharacterName} sacrificed '{spontaneousSacrificedSpellId}' → {_pendingSpell.Name}");
+            else if (isSpontaneous)
+                Debug.Log($"[GameManager] Spontaneous cast (level-based): {caster.Stats.CharacterName} converted a level {spontaneousLevel} slot → {_pendingSpell.Name}");
         }
         // Check if caster is concentrating on another spell — casting requires a concentration check
         HandleConcentrationOnCasting(caster, _pendingSpell);
@@ -4309,30 +4452,52 @@ public class GameManager : MonoBehaviour
             slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
         }
 
+        if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
         {
-            bool consumed;
-            if (isSpontaneous)
-            {
-                if (!string.IsNullOrEmpty(spontaneousSacrificedSpellId))
-                    consumed = spellComp.SpontaneousCastFromSpecificSpell(spontaneousSacrificedSpellId);
-                else
-                    consumed = spellComp.SpontaneousCastFromSlot(spontaneousLevel);
-            }
-            else if (hasMetamagicApplied && slotLevelToConsume > 0)
-            {
-                consumed = spellComp.CastWizardSpellWithMetamagic(_pendingSpell, _pendingMetamagic);
-            }
-            else
-            {
-                consumed = spellComp.CastSpellFromSlot(_pendingSpell);
-            }
+            bool consumedOnFailure = ConsumePendingSpellSlot(
+                spellComp,
+                _pendingSpell,
+                _pendingMetamagic,
+                hasMetamagicApplied,
+                slotLevelToConsume,
+                isSpontaneous,
+                spontaneousLevel,
+                spontaneousSacrificedSpellId);
 
-            if (!consumed)
+            if (!consumedOnFailure)
             {
-                Debug.LogError($"[GameManager] AoE: Failed to consume level {slotLevelToConsume} spell slot!");
+                Debug.LogError($"[GameManager] AoE ASF failure path: failed to consume level {slotLevelToConsume} spell slot!");
                 ShowActionChoices();
                 return;
             }
+
+            HandleConcentrationOnCasting(caster, _pendingSpell);
+            LogArcaneSpellFailure(caster, _pendingSpell, asfRoll, asfChance);
+            UpdateAllStatsUI();
+            Grid.ClearAllHighlights();
+
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+
+            StartCoroutine(AfterAttackDelay(caster, 1.0f));
+            return;
+        }
+
+        bool consumed = ConsumePendingSpellSlot(
+            spellComp,
+            _pendingSpell,
+            _pendingMetamagic,
+            hasMetamagicApplied,
+            slotLevelToConsume,
+            isSpontaneous,
+            spontaneousLevel,
+            spontaneousSacrificedSpellId);
+
+        if (!consumed)
+        {
+            Debug.LogError($"[GameManager] AoE: Failed to consume level {slotLevelToConsume} spell slot!");
+            ShowActionChoices();
+            return;
         }
 
         // Check if caster is concentrating on another spell — casting requires a concentration check

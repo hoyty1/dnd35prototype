@@ -7,6 +7,13 @@ using System.Linq;
 /// Holds the six core ability scores and derives all combat stats from them.
 /// Now supports racial modifiers applied to base ability scores.
 /// </summary>
+public enum SpellcastingType
+{
+    None,
+    Arcane,
+    Divine
+}
+
 [System.Serializable]
 public class CharacterStats
 {
@@ -77,6 +84,16 @@ public class CharacterStats
     /// <summary>Whether this character is a Cleric.</summary>
     public bool IsCleric => CharacterClass == "Cleric";
 
+    private static readonly HashSet<string> ArcaneSpellcastingClasses = new HashSet<string>
+    {
+        "Wizard", "Sorcerer", "Bard"
+    };
+
+    private static readonly HashSet<string> DivineSpellcastingClasses = new HashSet<string>
+    {
+        "Cleric", "Druid", "Paladin", "Ranger"
+    };
+
     /// <summary>Whether this character is a spellcaster. Delegates to ClassRegistry.</summary>
     public bool IsSpellcaster
     {
@@ -87,6 +104,36 @@ public class CharacterStats
             return classDef != null && classDef.IsSpellcaster;
         }
     }
+
+    /// <summary>
+    /// D&D 3.5e spellcasting type used for Arcane Spell Failure handling.
+    /// Future-proof policy:
+    /// - Known divine classes => Divine
+    /// - Known arcane classes => Arcane
+    /// - Any other spellcasting class defaults to Arcane unless explicitly mapped to Divine
+    /// - Non-spellcasters => None
+    /// </summary>
+    public SpellcastingType SpellcastingKind
+    {
+        get
+        {
+            if (!IsSpellcaster)
+                return SpellcastingType.None;
+
+            if (DivineSpellcastingClasses.Contains(CharacterClass))
+                return SpellcastingType.Divine;
+
+            if (ArcaneSpellcastingClasses.Contains(CharacterClass))
+                return SpellcastingType.Arcane;
+
+            // Default unknown spellcasting classes to Arcane so ASF still applies unless
+            // explicitly identified as divine by new class rules.
+            return SpellcastingType.Arcane;
+        }
+    }
+
+    /// <summary>True when this character's spells are subject to Arcane Spell Failure from armor/shields.</summary>
+    public bool IsAffectedByArcaneSpellFailure => SpellcastingKind == SpellcastingType.Arcane;
 
     // ========== MONK CLASS FEATURES (D&D 3.5) ==========
 

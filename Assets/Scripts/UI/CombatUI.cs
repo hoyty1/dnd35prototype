@@ -824,7 +824,17 @@ public class CombatUI : MonoBehaviour
             CastSpellButton.gameObject.SetActive(hasCastableSpells);
             CastSpellButton.interactable = canCast;
             Text castLabel = CastSpellButton.GetComponentInChildren<Text>();
-            if (castLabel != null) castLabel.text = canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)";
+            if (castLabel != null)
+            {
+                string baseLabel = canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)";
+                int asfChance = (pc.Stats != null && pc.Stats.IsAffectedByArcaneSpellFailure)
+                    ? Mathf.Clamp(pc.Stats.ArcaneSpellFailure, 0, 100)
+                    : 0;
+
+                castLabel.text = asfChance > 0
+                    ? $"{baseLabel}\n⚠ ASF {asfChance}%"
+                    : baseLabel;
+            }
         }
 
         EnsureDischargeTouchButtonExists();
@@ -1447,7 +1457,11 @@ public class CombatUI : MonoBehaviour
 
         bool hasMetamagic = spellComp.HasAnyMetamagicFeat();
         string mmNote = hasMetamagic ? " | ⚡ Metamagic Available" : "";
-        titleText.text = $"✦ CAST SPELL ✦ — {spellComp.GetSlotSummary()}{mmNote}";
+        int asfChance = (spellComp.Stats != null && spellComp.Stats.IsAffectedByArcaneSpellFailure)
+            ? Mathf.Clamp(spellComp.Stats.ArcaneSpellFailure, 0, 100)
+            : 0;
+        string asfNote = asfChance > 0 ? $" | ⚠ ASF {asfChance}%" : "";
+        titleText.text = $"✦ CAST SPELL ✦ — {spellComp.GetSlotSummary()}{mmNote}{asfNote}";
 
         // Cancel button — anchored to bottom of dialog
         GameObject cancelObj = new GameObject("CancelBtn");
@@ -1677,7 +1691,12 @@ public class CombatUI : MonoBehaviour
             else if (preparedCount > 1)
                 countStr = $" \u00d7{preparedCount}"; // ×N for multiple
         }
-        string label = $"{spell.Name}{countStr} ({rangeStr}){effectStr}";
+        int asfChance = (spellComp != null && spellComp.Stats != null && spellComp.Stats.IsAffectedByArcaneSpellFailure)
+            ? Mathf.Clamp(spellComp.Stats.ArcaneSpellFailure, 0, 100)
+            : 0;
+        string asfWarn = asfChance > 0 ? $" ⚠ASF {asfChance}%" : "";
+
+        string label = $"{spell.Name}{countStr}{asfWarn} ({rangeStr}){effectStr}";
 
         // Create button using pixel-based positioning within scroll content
         string prefix = hasMetamagic ? "⚡ " : "";
@@ -1789,7 +1808,12 @@ public class CombatUI : MonoBehaviour
             else if (preparedCount > 1)
                 countStr = $" \u00d7{preparedCount}";
         }
-        string spellLabel = $"{spell.Name}{countStr} ({rangeStr}){effectStr}";
+        int asfChance = (spellComp != null && spellComp.Stats != null && spellComp.Stats.IsAffectedByArcaneSpellFailure)
+            ? Mathf.Clamp(spellComp.Stats.ArcaneSpellFailure, 0, 100)
+            : 0;
+        string asfWarn = asfChance > 0 ? $" ⚠ASF {asfChance}%" : "";
+
+        string spellLabel = $"{spell.Name}{countStr}{asfWarn} ({rangeStr}){effectStr}";
         string prefix = hasMetamagic ? "⚡ " : "";
 
         GameObject spellBtnObj = new GameObject($"SpellBtn_{spell.SpellId}");
