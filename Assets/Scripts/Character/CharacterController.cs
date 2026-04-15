@@ -361,10 +361,14 @@ public class CharacterController : MonoBehaviour
         bool preciseShotNegated = false;
         int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
 
+        int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
+        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
+
         int totalAtkMod = Stats.BaseAttackBonus + abilityMod + Stats.SizeModifier
                           + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                           + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
-                          + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
+                          + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
+                          + weaponNonProfPenalty + armorNonProfPenalty;
 
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         // === FEAT: Improved Critical (double threat range) ===
@@ -398,6 +402,8 @@ public class CharacterController : MonoBehaviour
         result.BreakdownBAB = Stats.BaseAttackBonus;
         result.BreakdownAbilityMod = abilityMod;
         result.BreakdownAbilityName = abilityName;
+        result.WeaponNonProficiencyPenalty = weaponNonProfPenalty;
+        result.ArmorNonProficiencyPenalty = armorNonProfPenalty;
 
         // Store range info on result
         if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
@@ -486,6 +492,8 @@ public class CharacterController : MonoBehaviour
         bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || equippedWeapon.RangeIncrement > 0))
                         && rangeInfo != null && !rangeInfo.IsMelee;
         bool isMelee = !isRanged;
+        int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
+        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
 
         // === FEAT: Power Attack (melee only) ===
         int powerAtkPenalty = 0;
@@ -592,14 +600,16 @@ public class CharacterController : MonoBehaviour
             int baseBonus = allAttackBonuses[i];
             int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
-                         + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
+                         + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
+                         + weaponNonProfPenalty + armorNonProfPenalty;
 
             // Recalculate with correct ability mod (iterative uses BAB-based bonus, not STRMod again)
             // The baseBonus from GetIterativeAttackBonuses already includes STRMod+SizeModifier
             // So we need to add other feat/situational modifiers
             atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                      + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
-                     + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
+                     + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
+                     + weaponNonProfPenalty + armorNonProfPenalty;
             // Note: Weapon Finesse already handled in GetIterativeAttackBonuses if needed
             // For now, the base bonus includes STRMod; if Finesse, we adjust
             if (!isRanged && FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
@@ -639,6 +649,8 @@ public class CharacterController : MonoBehaviour
             atk.BreakdownBAB = baseBonus;
             atk.BreakdownAbilityMod = baseAbilityMod;
             atk.BreakdownAbilityName = baseAbilityName;
+            atk.WeaponNonProficiencyPenalty = weaponNonProfPenalty;
+            atk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
 
             // Store range info on each attack result
             if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
@@ -734,6 +746,9 @@ public class CharacterController : MonoBehaviour
         result.OffWeaponName = offWeapon.Name;
 
         var (mainPenalty, offPenalty, lightOff) = GetDualWieldPenalties();
+        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
+        int mainWeaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(mainWeapon);
+        int offWeaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(offWeapon);
 
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
         int rangePenalty = (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange) ? rangeInfo.Penalty : 0;
@@ -791,7 +806,8 @@ public class CharacterController : MonoBehaviour
         {
             int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                              + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty
-                             + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
+                             + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
+                             + mainWeaponNonProfPenalty + armorNonProfPenalty;
             string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
 
             int mainCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20);
@@ -824,6 +840,8 @@ public class CharacterController : MonoBehaviour
             mainAtk.BreakdownAbilityMod = abilityMod;
             mainAtk.BreakdownAbilityName = abilityName;
             mainAtk.BreakdownDualWieldPenalty = mainPenalty;
+            mainAtk.WeaponNonProficiencyPenalty = mainWeaponNonProfPenalty;
+            mainAtk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
             mainAtk.DefenderHPBefore = hpBeforeMain;
             mainAtk.DefenderHPAfter = target.Stats.CurrentHP;
 
@@ -856,7 +874,8 @@ public class CharacterController : MonoBehaviour
         {
             int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                             + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty
-                            + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
+                            + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
+                            + offWeaponNonProfPenalty + armorNonProfPenalty;
             string offLabel = $"Attack 2 - Off Hand ({offWeapon.Name})";
 
             int offCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20);
@@ -889,6 +908,8 @@ public class CharacterController : MonoBehaviour
             offAtk.BreakdownAbilityMod = abilityMod;
             offAtk.BreakdownAbilityName = abilityName;
             offAtk.BreakdownDualWieldPenalty = offPenalty;
+            offAtk.WeaponNonProficiencyPenalty = offWeaponNonProfPenalty;
+            offAtk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
             offAtk.DefenderHPBefore = hpBeforeOff;
             offAtk.DefenderHPAfter = target.Stats.CurrentHP;
 
@@ -1936,6 +1957,8 @@ public class CharacterController : MonoBehaviour
 
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
         int proneAttackPenalty = GetProneAttackModifier(isMeleeAttack: true);
+        int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
+        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
 
         for (int i = 0; i < flurryBonuses.Length; i++)
         {
@@ -1945,7 +1968,8 @@ public class CharacterController : MonoBehaviour
                 break;
             }
 
-            int atkMod = flurryBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus + proneAttackPenalty;
+            int atkMod = flurryBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus + proneAttackPenalty
+                       + weaponNonProfPenalty + armorNonProfPenalty;
 
             string label = $"Flurry {i + 1} ({CharacterStats.FormatMod(flurryBonuses[i])})";
             int hpBefore = target.Stats.CurrentHP;
@@ -1966,6 +1990,8 @@ public class CharacterController : MonoBehaviour
                 atk.WeaponName = "Unarmed Strike";
                 atk.BaseDamageDiceStr = $"1d{damageDice}";
             }
+            atk.WeaponNonProficiencyPenalty = weaponNonProfPenalty;
+            atk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
             atk.DefenderHPBefore = hpBefore;
             atk.DefenderHPAfter = target.Stats.CurrentHP;
 

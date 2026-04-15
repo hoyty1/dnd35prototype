@@ -587,6 +587,11 @@ public class CharacterStats
     public int ArmorCheckPenalty;   // Total armor check penalty (armor + shield, stored positive)
     public int ArcaneSpellFailure;  // Total arcane spell failure % (armor + shield)
 
+
+    // Runtime references to currently equipped items (set by Inventory.RecalculateStats)
+    public ItemData EquippedArmorItem;
+    public ItemData EquippedShieldItem;
+    public ItemData EquippedMainWeaponItem;
     // ========== DERIVED STATS (calculated) ==========
 
     /// <summary>D&D 3.5 modifier: (score - 10) / 2, rounded down.</summary>
@@ -1223,35 +1228,60 @@ public class CharacterStats
     /// </summary>
     public bool HasRacialWeaponProficiency(string weaponId)
     {
-        if (Race == null) return false;
-        return Race.HasRacialProficiency(weaponId);
+        if (Race == null || string.IsNullOrEmpty(weaponId)) return false;
+        return Race.HasRacialProficiency(NormalizeItemKey(weaponId));
     }
 
-    /// <summary>Whether this class has broad simple weapon proficiency.</summary>
+    private static readonly HashSet<string> BardSpecificWeaponProficiencies = new HashSet<string>
+    {
+        "crossbow_hand", "longsword", "rapier", "sap", "short_sword", "shortbow", "whip"
+    };
+
+    private static readonly HashSet<string> DruidSpecificWeaponProficiencies = new HashSet<string>
+    {
+        "club", "dagger", "dart", "quarterstaff", "scimitar", "sickle", "shortspear", "sling", "spear"
+    };
+
+    private static readonly HashSet<string> MonkSpecificWeaponProficiencies = new HashSet<string>
+    {
+        "club", "crossbow_light", "crossbow_heavy", "dagger", "handaxe", "javelin",
+        "kama", "nunchaku", "quarterstaff", "sai", "shuriken", "siangham", "sling"
+    };
+
+    private static readonly HashSet<string> RogueSpecificWeaponProficiencies = new HashSet<string>
+    {
+        "crossbow_hand", "rapier", "sap", "shortbow", "short_sword"
+    };
+
+    private static readonly HashSet<string> WizardSpecificWeaponProficiencies = new HashSet<string>
+    {
+        "club", "dagger", "crossbow_light", "crossbow_heavy", "quarterstaff"
+    };
+
+    private static readonly HashSet<string> DnDArmorCheckPenaltySkills = new HashSet<string>
+    {
+        "balance", "climb", "hide", "jump", "move_silently", "sleight_of_hand", "swim", "tumble"
+    };
+
+    /// <summary>Whether this class has broad simple weapon proficiency (all simple weapons).</summary>
     public bool HasSimpleWeaponProficiency()
     {
-        // All currently implemented PHB classes in this project have simple weapon proficiency.
-        // Unknown classes default to false.
         switch (CharacterClass)
         {
             case "Barbarian":
             case "Bard":
             case "Cleric":
-            case "Druid":
             case "Fighter":
-            case "Monk":
             case "Paladin":
             case "Ranger":
             case "Rogue":
-            case "Sorcerer":
-            case "Wizard":
                 return true;
             default:
                 return false;
         }
     }
 
-    /// <summary>Whether this class has broad martial weapon proficiency.</summary>
+    /// <summary>Whether this class has broad martial weapon proficiency (all martial weapons).</summary>
     public bool HasMartialWeaponProficiency()
     {
         switch (CharacterClass)
@@ -1266,37 +1296,294 @@ public class CharacterStats
         }
     }
 
+    /// <summary>Armor proficiency: light armor.</summary>
+    public bool HasLightArmorProficiency()
+    {
+        switch (CharacterClass)
+        {
+            case "Barbarian":
+            case "Bard":
+            case "Cleric":
+            case "Druid":
+            case "Fighter":
+            case "Paladin":
+            case "Ranger":
+            case "Rogue":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Armor proficiency: medium armor.</summary>
+    public bool HasMediumArmorProficiency()
+    {
+        switch (CharacterClass)
+        {
+            case "Barbarian":
+            case "Cleric":
+            case "Druid":
+            case "Fighter":
+            case "Paladin":
+            case "Ranger":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Armor proficiency: heavy armor.</summary>
+    public bool HasHeavyArmorProficiency()
+    {
+        switch (CharacterClass)
+        {
+            case "Cleric":
+            case "Fighter":
+            case "Paladin":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Armor proficiency: shields (excluding tower shield).</summary>
+    public bool HasShieldProficiency()
+    {
+        switch (CharacterClass)
+        {
+            case "Barbarian":
+            case "Bard":
+            case "Cleric":
+            case "Druid":
+            case "Fighter":
+            case "Paladin":
+            case "Ranger":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Armor proficiency: tower shield.</summary>
+    public bool HasTowerShieldProficiency()
+    {
+        switch (CharacterClass)
+        {
+            case "Fighter":
+            case "Paladin":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Check if this character is proficient with a specific weapon item.
+    /// </summary>
+    public bool IsProficientWithWeapon(ItemData weapon)
+    {
+        if (weapon == null) return true; // unarmed or no weapon selected
+        if (weapon.Type != ItemType.Weapon) return true;
+
+        string weaponId = NormalizeItemKey(weapon.Id);
+        if (HasRacialWeaponProficiency(weaponId))
+            return true;
+
+        if (HasClassSpecificWeaponProficiency(weaponId))
+            return true;
+
+        if (weapon.Proficiency == WeaponProficiency.Simple)
+            return HasSimpleWeaponProficiency();
+
+        if (weapon.Proficiency == WeaponProficiency.Martial)
+            return HasMartialWeaponProficiency();
+
+        if (weapon.Proficiency == WeaponProficiency.Exotic)
+        {
+            // Weapon familiarity lets some races treat specific exotic weapons as martial.
+            bool hasFamiliarity = Race != null && Race.WeaponFamiliarity != null
+                && Race.WeaponFamiliarity.Contains(weaponId);
+            if (hasFamiliarity)
+                return HasMartialWeaponProficiency();
+        }
+
+        return false;
+    }
+
+    private bool HasClassSpecificWeaponProficiency(string weaponId)
+    {
+        if (string.IsNullOrEmpty(weaponId)) return false;
+
+        switch (CharacterClass)
+        {
+            case "Bard": return BardSpecificWeaponProficiencies.Contains(weaponId);
+            case "Druid": return DruidSpecificWeaponProficiencies.Contains(weaponId);
+            case "Monk": return MonkSpecificWeaponProficiencies.Contains(weaponId);
+            case "Rogue": return RogueSpecificWeaponProficiencies.Contains(weaponId);
+            case "Wizard": return WizardSpecificWeaponProficiencies.Contains(weaponId);
+            case "Sorcerer": return WizardSpecificWeaponProficiencies.Contains(weaponId);
+            default: return false;
+        }
+    }
+
+    /// <summary>
+    /// Check armor/shield proficiency for an equipped item.
+    /// </summary>
+    public bool IsProficientWithArmor(ItemData equippedItem)
+    {
+        if (equippedItem == null) return true;
+
+        if (equippedItem.Type == ItemType.Shield)
+        {
+            bool isTowerShield = NormalizeItemKey(equippedItem.Id).Contains("tower_shield")
+                || (equippedItem.Name != null && equippedItem.Name.ToLowerInvariant().Contains("tower shield"));
+            return isTowerShield ? HasTowerShieldProficiency() : HasShieldProficiency();
+        }
+
+        if (equippedItem.Type != ItemType.Armor)
+            return true;
+
+        switch (equippedItem.ArmorCat)
+        {
+            case ArmorCategory.Light: return HasLightArmorProficiency();
+            case ArmorCategory.Medium: return HasMediumArmorProficiency();
+            case ArmorCategory.Heavy: return HasHeavyArmorProficiency();
+            default: return true;
+        }
+    }
+
+    /// <summary>Attack penalty from non-proficient weapon use (D&D 3.5: -4).</summary>
+    public int GetWeaponNonProficiencyPenalty(ItemData weapon)
+    {
+        return IsProficientWithWeapon(weapon) ? 0 : -4;
+    }
+
+    /// <summary>
+    /// Attack penalty from wearing non-proficient armor and/or shield.
+    /// Uses each non-proficient item's ACP as an attack penalty.
+    /// </summary>
+    public int GetArmorNonProficiencyAttackPenalty()
+    {
+        int totalPenalty = 0;
+
+        if (EquippedArmorItem != null && !IsProficientWithArmor(EquippedArmorItem))
+            totalPenalty -= Mathf.Abs(EquippedArmorItem.ArmorCheckPenalty);
+
+        if (EquippedShieldItem != null && !IsProficientWithArmor(EquippedShieldItem))
+            totalPenalty -= Mathf.Abs(EquippedShieldItem.ArmorCheckPenalty);
+
+        return totalPenalty;
+    }
+
+    /// <summary>
+    /// Returns true if this skill receives Armor Check Penalty in D&D 3.5.
+    /// </summary>
+    public bool IsArmorCheckPenaltySkill(string skillName)
+    {
+        if (string.IsNullOrEmpty(skillName)) return false;
+        return DnDArmorCheckPenaltySkills.Contains(NormalizeItemKey(skillName));
+    }
+
+    /// <summary>
+    /// Effective ACP applied to a skill (negative value).
+    /// If armor/shield is not proficient, that item's ACP is doubled for skills.
+    /// Swim then doubles the final ACP again per D&D 3.5.
+    /// </summary>
+    public int GetArmorCheckPenaltyForSkill(string skillName)
+    {
+        if (!IsArmorCheckPenaltySkill(skillName)) return 0;
+
+        int totalAcp = 0;
+
+        // Preferred path: use concrete equipped item refs (supports proficiency-aware doubling).
+        if (EquippedArmorItem != null || EquippedShieldItem != null)
+        {
+            totalAcp += GetSkillAcpContributionForItem(EquippedArmorItem);
+            totalAcp += GetSkillAcpContributionForItem(EquippedShieldItem);
+        }
+        else if (ArmorCheckPenalty > 0)
+        {
+            // Fallback for non-inventory test contexts.
+            totalAcp += ArmorCheckPenalty;
+        }
+
+        if (NormalizeItemKey(skillName) == "swim")
+            totalAcp *= 2;
+
+        return -Mathf.Abs(totalAcp);
+    }
+
+    private int GetSkillAcpContributionForItem(ItemData item)
+    {
+        if (item == null) return 0;
+
+        int acp = Mathf.Abs(item.ArmorCheckPenalty);
+        if (acp <= 0) return 0;
+
+        if (!IsProficientWithArmor(item))
+            acp *= 2;
+
+        return acp;
+    }
+
     /// <summary>
     /// Check weapon proficiency by display name/id for feat prerequisites.
-    /// Supports broad simple/martial checks and crossbow-specific checks needed by Rapid Reload.
+    /// Supports broad simple/martial checks and specific named weapons.
     /// </summary>
     public bool IsProficientWithWeaponByName(string weaponNameOrId)
     {
         if (string.IsNullOrEmpty(weaponNameOrId)) return false;
 
-        string key = weaponNameOrId.ToLowerInvariant();
+        string key = NormalizeItemKey(weaponNameOrId);
 
-        if (key.Contains("martial"))
+        if (key.Contains("martial_weapon") || key == "martial")
             return HasMartialWeaponProficiency();
 
-        if (key.Contains("simple"))
+        if (key.Contains("simple_weapon") || key == "simple")
             return HasSimpleWeaponProficiency();
 
-        // Light and heavy crossbows are simple weapons.
-        if (key.Contains("crossbow, light") || key.Contains("crossbow_light")
-            || key.Contains("crossbow, heavy") || key.Contains("crossbow_heavy"))
-            return HasSimpleWeaponProficiency();
+        ItemDatabase.Init();
 
-        // Hand/repeating crossbows are exotic in core rules.
-        // We currently only honor explicit racial proficiency for these.
-        if (key.Contains("crossbow, hand") || key.Contains("crossbow_hand")
-            || key.Contains("crossbow, repeating") || key.Contains("crossbow_repeating"))
+        // Try direct ID lookup first.
+        ItemData weapon = ItemDatabase.Get(key);
+
+        // Try to resolve by display name.
+        if (weapon == null)
         {
-            return HasRacialWeaponProficiency("crossbow_hand") || HasRacialWeaponProficiency("crossbow_repeating");
+            foreach (var item in ItemDatabase.AllItems)
+            {
+                if (item == null || item.Type != ItemType.Weapon) continue;
+                if (NormalizeItemKey(item.Name) == key)
+                {
+                    weapon = item;
+                    break;
+                }
+            }
         }
 
-        // Fallback: if we don't recognize the specific weapon, treat martial classes as broadly proficient.
-        return HasMartialWeaponProficiency();
+        if (weapon != null)
+            return IsProficientWithWeapon(weapon);
+
+        // Unknown weapon key: only class-specific/racial explicit checks can satisfy it.
+        return HasClassSpecificWeaponProficiency(key) || HasRacialWeaponProficiency(key);
+    }
+
+    private static string NormalizeItemKey(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+
+        string normalized = value.ToLowerInvariant();
+        normalized = normalized.Replace(",", "_")
+                               .Replace("-", "_")
+                               .Replace(" ", "_")
+                               .Replace("(", "")
+                               .Replace(")", "")
+                               .Replace("/", "_");
+
+        while (normalized.Contains("__"))
+            normalized = normalized.Replace("__", "_");
+
+        return normalized.Trim('_');
     }
     /// <summary>
     /// Whether this character's race prevents armor from reducing speed.
@@ -1431,7 +1718,8 @@ public class CharacterStats
         Skill skill = Skills[skillName];
         int baseBonus = skill.GetTotalBonus(GetAbilityModForSkill(skill));
         int featBonus = GetFeatSkillBonus(skillName);
-        return baseBonus + featBonus;
+        int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
+        return baseBonus + featBonus + acpPenalty;
     }
 
     /// <summary>
@@ -1459,10 +1747,12 @@ public class CharacterStats
         int d20 = Random.Range(1, 21);
         int totalBonus = skill.GetTotalBonus(abilityMod);
         int featBonus = GetFeatSkillBonus(skillName);
-        int total = d20 + totalBonus + featBonus;
+        int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
+        int total = d20 + totalBonus + featBonus + acpPenalty;
 
         string featStr = featBonus > 0 ? $" + {featBonus}(feat)" : "";
-        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr} = {total}");
+        string acpStr = acpPenalty < 0 ? $" {acpPenalty}(ACP)" : "";
+        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr} = {total}");
 
         return total;
     }

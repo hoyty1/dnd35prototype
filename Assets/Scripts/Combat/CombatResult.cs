@@ -66,6 +66,8 @@ public class CombatResult
     public int BreakdownDualWieldPenalty;
     public bool IsDualWieldAttack;
     public bool IsOffHandAttack;
+    public int WeaponNonProficiencyPenalty;
+    public int ArmorNonProficiencyPenalty;
 
     public int BaseDamageRoll;
     public string BaseDamageDiceStr;
@@ -149,6 +151,10 @@ public class CombatResult
         if (IsRangedAttack && RangePenalty != 0) sb.AppendLine($"    {FormatModLine(RangePenalty, "range")}");
         if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)
             sb.AppendLine($"    {FormatModLine(BreakdownDualWieldPenalty, IsOffHandAttack ? "off-hand penalty" : "dual wield penalty")}");
+        if (WeaponNonProficiencyPenalty != 0)
+            sb.AppendLine($"    {FormatModLine(WeaponNonProficiencyPenalty, "weapon non-proficiency")}");
+        if (ArmorNonProficiencyPenalty != 0)
+            sb.AppendLine($"    {FormatModLine(ArmorNonProficiencyPenalty, "armor/shield non-proficiency")}");
 
         string critNote = NaturalTwenty ? " (NATURAL 20!)" : NaturalOne ? " (NATURAL 1!)" : "";
         sb.AppendLine($"    = {TotalRoll} vs AC {TargetAC} - {(Hit ? "HIT!" : "MISS!")}{critNote}");
@@ -221,6 +227,10 @@ public class CombatResult
         if (IsRangedAttack && RangePenalty != 0) sb.AppendLine($"      {FormatModLine(RangePenalty, "range")}");
         if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)
             sb.AppendLine($"      {FormatModLine(BreakdownDualWieldPenalty, IsOffHandAttack ? "off-hand penalty" : "dual wield penalty")}");
+        if (WeaponNonProficiencyPenalty != 0)
+            sb.AppendLine($"      {FormatModLine(WeaponNonProficiencyPenalty, "weapon non-proficiency")}");
+        if (ArmorNonProficiencyPenalty != 0)
+            sb.AppendLine($"      {FormatModLine(ArmorNonProficiencyPenalty, "armor/shield non-proficiency")}");
 
         string critNote = NaturalTwenty ? " (NATURAL 20!)" : NaturalOne ? " (NATURAL 1!)" : "";
         sb.AppendLine($"      = {TotalRoll} vs AC {TargetAC} - {(Hit ? "HIT!" : "MISS!")}{critNote}");

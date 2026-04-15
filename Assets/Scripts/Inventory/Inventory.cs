@@ -180,6 +180,10 @@ public class Inventory
             shieldMaxDex = LeftHandSlot.MaxDexBonus;
         }
 
+        // Runtime equipped-item references for proficiency/ACP calculations
+        OwnerStats.EquippedArmorItem = ArmorSlot;
+        OwnerStats.EquippedShieldItem = (LeftHandSlot != null && LeftHandSlot.IsShield) ? LeftHandSlot : null;
+
         // Compute effective Max Dex Bonus (most restrictive / lowest non-negative)
         if (armorMaxDex >= 0 && shieldMaxDex >= 0)
             OwnerStats.MaxDexBonus = Mathf.Min(armorMaxDex, shieldMaxDex);
@@ -210,15 +214,18 @@ public class Inventory
         // Primary weapon from right hand
         if (RightHandSlot != null && RightHandSlot.IsWeapon)
         {
+            OwnerStats.EquippedMainWeaponItem = RightHandSlot;
             ApplyWeaponStats(RightHandSlot);
         }
         else if (LeftHandSlot != null && LeftHandSlot.IsWeapon)
         {
             // Fallback: weapon in left hand only
+            OwnerStats.EquippedMainWeaponItem = LeftHandSlot;
             ApplyWeaponStats(LeftHandSlot);
         }
         else
         {
+            OwnerStats.EquippedMainWeaponItem = null;
             // Unarmed: 1d3, 20/×2, bludgeoning
             OwnerStats.BaseDamageDice = 3;
             OwnerStats.BaseDamageCount = 1;
