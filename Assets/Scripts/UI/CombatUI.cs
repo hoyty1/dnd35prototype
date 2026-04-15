@@ -525,9 +525,7 @@ public class CombatUI : MonoBehaviour
     private GameObject _specialAttackPanel;
     private GameObject _summonSelectionPanel;
     private bool _dischargeTouchHooked;
-    private GameObject _activeSummonsPanel;
-    private GameObject _activeSummonsContent;
-    private readonly List<GameObject> _activeSummonEntryObjects = new List<GameObject>();
+    private GameObject _summonContextMenuRoot;
 
     private GameObject _confirmationPanel;
 
@@ -2465,12 +2463,23 @@ public class CombatUI : MonoBehaviour
 
 
     // ========================================================================
-    // ACTIVE SUMMONS PANEL
+    // ========================================================================
+    // SUMMON CONTEXT MENU
     // ========================================================================
 
-    private void EnsureActiveSummonsPanel()
+    public void ShowSummonContextMenu(
+        CharacterController summon,
+        int remainingRounds,
+        int totalRounds,
+        SummonCommand currentCommand,
+        Vector2 screenPosition,
+        System.Action onAttackNearest,
+        System.Action onProtectCaster,
+        System.Action onDismiss)
     {
-        if (_activeSummonsPanel != null)
+        HideSummonContextMenu();
+
+        if (summon == null || summon.Stats == null)
             return;
 
         Canvas canvas = GetComponentInParent<Canvas>();
@@ -2478,171 +2487,161 @@ public class CombatUI : MonoBehaviour
         if (canvas == null)
             return;
 
-        _activeSummonsPanel = new GameObject("ActiveSummonsPanel");
-        _activeSummonsPanel.transform.SetParent(canvas.transform, false);
+        _summonContextMenuRoot = new GameObject("SummonContextMenuRoot");
+        _summonContextMenuRoot.transform.SetParent(canvas.transform, false);
 
-        RectTransform panelRT = _activeSummonsPanel.AddComponent<RectTransform>();
-        panelRT.anchorMin = new Vector2(0.72f, 0.2f);
-        panelRT.anchorMax = new Vector2(0.98f, 0.62f);
-        panelRT.offsetMin = Vector2.zero;
-        panelRT.offsetMax = Vector2.zero;
+        RectTransform rootRT = _summonContextMenuRoot.AddComponent<RectTransform>();
+        rootRT.anchorMin = Vector2.zero;
+        rootRT.anchorMax = Vector2.one;
+        rootRT.offsetMin = Vector2.zero;
+        rootRT.offsetMax = Vector2.zero;
 
-        Image bg = _activeSummonsPanel.AddComponent<Image>();
-        bg.color = new Color(0.08f, 0.1f, 0.2f, 0.88f);
+        Image rootBg = _summonContextMenuRoot.AddComponent<Image>();
+        rootBg.color = new Color(0f, 0f, 0f, 0.02f);
 
-        Outline outline = _activeSummonsPanel.AddComponent<Outline>();
+        Button clickOutsideBtn = _summonContextMenuRoot.AddComponent<Button>();
+        clickOutsideBtn.transition = Selectable.Transition.None;
+        clickOutsideBtn.onClick.AddListener(HideSummonContextMenu);
+
+        GameObject panel = new GameObject("SummonContextMenuPanel");
+        panel.transform.SetParent(_summonContextMenuRoot.transform, false);
+
+        RectTransform panelRT = panel.AddComponent<RectTransform>();
+        panelRT.pivot = new Vector2(0f, 1f);
+        panelRT.anchorMin = new Vector2(0f, 0f);
+        panelRT.anchorMax = new Vector2(0f, 0f);
+        panelRT.sizeDelta = new Vector2(300f, 260f);
+
+        Vector2 localPoint;
+        RectTransform canvasRect = canvas.transform as RectTransform;
+        Camera cam = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, screenPosition, cam, out localPoint);
+
+        float clampedX = Mathf.Clamp(localPoint.x, 0f, canvasRect.rect.width - panelRT.sizeDelta.x - 8f);
+        float clampedY = Mathf.Clamp(localPoint.y + panelRT.sizeDelta.y, panelRT.sizeDelta.y + 8f, canvasRect.rect.height - 8f);
+        panelRT.anchoredPosition = new Vector2(clampedX, clampedY);
+
+        Image panelBg = panel.AddComponent<Image>();
+        panelBg.color = new Color(0.08f, 0.1f, 0.16f, 0.96f);
+        Outline outline = panel.AddComponent<Outline>();
         outline.effectColor = new Color(0.38f, 0.72f, 1f, 0.9f);
         outline.effectDistance = new Vector2(1.5f, 1.5f);
 
-        GameObject titleObj = new GameObject("Title");
-        titleObj.transform.SetParent(_activeSummonsPanel.transform, false);
-        RectTransform titleRT = titleObj.AddComponent<RectTransform>();
-        titleRT.anchorMin = new Vector2(0.04f, 0.88f);
-        titleRT.anchorMax = new Vector2(0.96f, 0.98f);
-        titleRT.offsetMin = Vector2.zero;
-        titleRT.offsetMax = Vector2.zero;
-
-        Text titleText = titleObj.AddComponent<Text>();
-        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (titleText.font == null) titleText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        titleText.fontSize = 14;
-        titleText.fontStyle = FontStyle.Bold;
-        titleText.alignment = TextAnchor.MiddleCenter;
-        titleText.color = new Color(0.78f, 0.92f, 1f, 1f);
-        titleText.text = "ACTIVE SUMMONS";
-
-        GameObject contentObj = new GameObject("Content");
-        contentObj.transform.SetParent(_activeSummonsPanel.transform, false);
-        RectTransform contentRT = contentObj.AddComponent<RectTransform>();
-        contentRT.anchorMin = new Vector2(0.03f, 0.04f);
-        contentRT.anchorMax = new Vector2(0.97f, 0.86f);
-        contentRT.offsetMin = Vector2.zero;
-        contentRT.offsetMax = Vector2.zero;
-
-        VerticalLayoutGroup vlg = contentObj.AddComponent<VerticalLayoutGroup>();
-        vlg.spacing = 4f;
-        vlg.childForceExpandHeight = false;
+        VerticalLayoutGroup vlg = panel.AddComponent<VerticalLayoutGroup>();
+        vlg.padding = new RectOffset(10, 10, 10, 10);
+        vlg.spacing = 6f;
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = false;
         vlg.childForceExpandWidth = true;
-        vlg.childAlignment = TextAnchor.UpperCenter;
-        vlg.padding = new RectOffset(2, 2, 2, 2);
+        vlg.childForceExpandHeight = false;
 
-        ContentSizeFitter fitter = contentObj.AddComponent<ContentSizeFitter>();
-        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        string roundsWord = remainingRounds == 1 ? "round" : "rounds";
+        string cmdDesc = currentCommand != null ? currentCommand.Description : SummonCommand.AttackNearest().Description;
 
-        _activeSummonsContent = contentObj;
-        _activeSummonsPanel.SetActive(false);
+        Text header = CreateMenuText(panel, "Header",
+            $"{summon.Stats.CharacterName} [S]\nHP: {summon.Stats.CurrentHP}/{Mathf.Max(1, summon.Stats.TotalMaxHP)}  AC: {summon.Stats.ArmorClass}\nDuration: {remainingRounds}/{Mathf.Max(1, totalRounds)} {roundsWord}\nCurrent: {cmdDesc}",
+            12,
+            FontStyle.Bold,
+            new Color(0.92f, 0.97f, 1f, 1f),
+            TextAnchor.MiddleLeft);
+        var headerLE = header.gameObject.AddComponent<LayoutElement>();
+        headerLE.preferredHeight = 78f;
+
+        Text cmdLabel = CreateMenuText(panel, "CommandLabel", "COMMANDS", 11, FontStyle.Bold,
+            new Color(0.7f, 0.88f, 1f, 1f), TextAnchor.MiddleLeft);
+        var cmdLE = cmdLabel.gameObject.AddComponent<LayoutElement>();
+        cmdLE.preferredHeight = 16f;
+
+        string attackLabel = currentCommand != null && currentCommand.Type == SummonCommandType.AttackNearest
+            ? "Attack Nearest Enemy ✓"
+            : "Attack Nearest Enemy";
+        Button attackBtn = CreateContextMenuButton(panel, attackLabel, new Color(0.18f, 0.33f, 0.5f, 1f));
+        attackBtn.onClick.AddListener(() =>
+        {
+            HideSummonContextMenu();
+            onAttackNearest?.Invoke();
+        });
+
+        string protectLabel = currentCommand != null && currentCommand.Type == SummonCommandType.ProtectCaster
+            ? "Protect Me ✓"
+            : "Protect Me";
+        Button protectBtn = CreateContextMenuButton(panel, protectLabel, new Color(0.18f, 0.4f, 0.32f, 1f));
+        protectBtn.onClick.AddListener(() =>
+        {
+            HideSummonContextMenu();
+            onProtectCaster?.Invoke();
+        });
+
+        Button dismissBtn = CreateContextMenuButton(panel, "Dismiss Summon", new Color(0.45f, 0.2f, 0.2f, 1f));
+        dismissBtn.onClick.AddListener(() =>
+        {
+            HideSummonContextMenu();
+            onDismiss?.Invoke();
+        });
+
+        Button cancelBtn = CreateContextMenuButton(panel, "Cancel", new Color(0.22f, 0.22f, 0.28f, 1f));
+        cancelBtn.onClick.AddListener(HideSummonContextMenu);
     }
 
-    public void RefreshActiveSummonsPanel(List<GameManager.SummonSnapshot> summons,
-        System.Action<CharacterController> onSelect,
-        System.Action<CharacterController> onDismiss)
+    public void HideSummonContextMenu()
     {
-        EnsureActiveSummonsPanel();
-        if (_activeSummonsPanel == null || _activeSummonsContent == null)
-            return;
-
-        foreach (var entry in _activeSummonEntryObjects)
+        if (_summonContextMenuRoot != null)
         {
-            if (entry != null)
-                Destroy(entry);
-        }
-        _activeSummonEntryObjects.Clear();
-
-        if (summons == null || summons.Count == 0)
-        {
-            _activeSummonsPanel.SetActive(false);
-            return;
-        }
-
-        _activeSummonsPanel.SetActive(true);
-
-        for (int i = 0; i < summons.Count; i++)
-        {
-            var snapshot = summons[i];
-            if (snapshot == null || snapshot.Controller == null)
-                continue;
-
-            GameObject row = CreateActiveSummonEntry(snapshot, onSelect, onDismiss);
-            row.transform.SetParent(_activeSummonsContent.transform, false);
-            _activeSummonEntryObjects.Add(row);
+            Destroy(_summonContextMenuRoot);
+            _summonContextMenuRoot = null;
         }
     }
 
-    private GameObject CreateActiveSummonEntry(GameManager.SummonSnapshot snapshot,
-        System.Action<CharacterController> onSelect,
-        System.Action<CharacterController> onDismiss)
+    private Text CreateMenuText(GameObject parent, string name, string textValue, int fontSize, FontStyle fontStyle, Color color, TextAnchor align)
     {
-        GameObject row = new GameObject($"SummonEntry_{snapshot.DisplayName}");
-        RectTransform rowRT = row.AddComponent<RectTransform>();
-        rowRT.sizeDelta = new Vector2(0f, 54f);
+        GameObject textObj = new GameObject(name);
+        textObj.transform.SetParent(parent.transform, false);
 
-        Image rowBg = row.AddComponent<Image>();
-        rowBg.color = snapshot.IsCelestial
-            ? new Color(0.38f, 0.34f, 0.15f, 0.88f)
-            : snapshot.IsFiendish
-                ? new Color(0.35f, 0.14f, 0.14f, 0.88f)
-                : new Color(0.14f, 0.25f, 0.35f, 0.88f);
+        Text txt = textObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
+        txt.fontSize = fontSize;
+        txt.fontStyle = fontStyle;
+        txt.color = color;
+        txt.alignment = align;
+        txt.horizontalOverflow = HorizontalWrapMode.Wrap;
+        txt.verticalOverflow = VerticalWrapMode.Overflow;
+        txt.text = textValue;
 
-        HorizontalLayoutGroup hlg = row.AddComponent<HorizontalLayoutGroup>();
-        hlg.childAlignment = TextAnchor.MiddleLeft;
-        hlg.spacing = 4f;
-        hlg.padding = new RectOffset(6, 6, 4, 4);
-        hlg.childControlHeight = true;
-        hlg.childControlWidth = true;
-        hlg.childForceExpandWidth = false;
-
-        GameObject infoObj = new GameObject("Info");
-        infoObj.transform.SetParent(row.transform, false);
-        LayoutElement infoLE = infoObj.AddComponent<LayoutElement>();
-        infoLE.flexibleWidth = 1f;
-        infoLE.minWidth = 110f;
-
-        VerticalLayoutGroup infoVLG = infoObj.AddComponent<VerticalLayoutGroup>();
-        infoVLG.childAlignment = TextAnchor.MiddleLeft;
-        infoVLG.childForceExpandHeight = false;
-        infoVLG.childForceExpandWidth = true;
-        infoVLG.spacing = 1f;
-
-        GameObject nameObj = new GameObject("Name");
-        nameObj.transform.SetParent(infoObj.transform, false);
-        Text nameText = nameObj.AddComponent<Text>();
-        nameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (nameText.font == null) nameText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        nameText.fontSize = 12;
-        nameText.fontStyle = FontStyle.Bold;
-        nameText.color = new Color(0.95f, 0.98f, 1f, 1f);
-        nameText.alignment = TextAnchor.MiddleLeft;
-        nameText.text = snapshot.DisplayName;
-
-        GameObject statObj = new GameObject("Stats");
-        statObj.transform.SetParent(infoObj.transform, false);
-        Text statText = statObj.AddComponent<Text>();
-        statText.font = nameText.font;
-        statText.fontSize = 11;
-        statText.color = new Color(0.82f, 0.92f, 1f, 1f);
-        statText.alignment = TextAnchor.MiddleLeft;
-        statText.text = $"HP {snapshot.CurrentHP}/{snapshot.MaxHP}  AC {snapshot.AC}  Rnds {snapshot.RemainingRounds}";
-
-        Button selectBtn = CreateTouchPromptButton(row, "Select", "Select",
-            new Vector2(0f, 0f), new Vector2(1f, 1f), new Color(0.2f, 0.35f, 0.6f, 1f));
-        LayoutElement selectLE = selectBtn.gameObject.AddComponent<LayoutElement>();
-        selectLE.minWidth = 58f;
-        selectLE.preferredWidth = 62f;
-        selectLE.flexibleWidth = 0f;
-        selectBtn.onClick.AddListener(() => onSelect?.Invoke(snapshot.Controller));
-
-        Button dismissBtn = CreateTouchPromptButton(row, "Dismiss", "Dismiss",
-            new Vector2(0f, 0f), new Vector2(1f, 1f), new Color(0.52f, 0.22f, 0.22f, 1f));
-        LayoutElement dismissLE = dismissBtn.gameObject.AddComponent<LayoutElement>();
-        dismissLE.minWidth = 66f;
-        dismissLE.preferredWidth = 70f;
-        dismissLE.flexibleWidth = 0f;
-        dismissBtn.onClick.AddListener(() => onDismiss?.Invoke(snapshot.Controller));
-
-        return row;
+        return txt;
     }
 
+    private Button CreateContextMenuButton(GameObject parent, string label, Color bgColor)
+    {
+        GameObject btnObj = new GameObject($"CtxBtn_{label}");
+        btnObj.transform.SetParent(parent.transform, false);
+
+        Image img = btnObj.AddComponent<Image>();
+        img.color = bgColor;
+
+        Button btn = btnObj.AddComponent<Button>();
+
+        LayoutElement le = btnObj.AddComponent<LayoutElement>();
+        le.preferredHeight = 30f;
+
+        GameObject txtObj = new GameObject("Text");
+        txtObj.transform.SetParent(btnObj.transform, false);
+        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        txtRT.anchorMin = Vector2.zero;
+        txtRT.anchorMax = Vector2.one;
+        txtRT.offsetMin = new Vector2(8f, 0f);
+        txtRT.offsetMax = new Vector2(-8f, 0f);
+
+        Text txt = txtObj.AddComponent<Text>();
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        txt.fontSize = 13;
+        txt.alignment = TextAnchor.MiddleLeft;
+        txt.color = new Color(0.94f, 0.97f, 1f, 1f);
+        txt.text = label;
+
+        return btn;
+    }
     public void ShowConfirmationDialog(string title, string message,
         string confirmLabel, string cancelLabel,
         System.Action onConfirm, System.Action onCancel)

@@ -155,23 +155,9 @@ public class GameManager : MonoBehaviour
         public string SourceSpellId;
         public bool IsAlliedToPCs;
         public bool SmiteUsed;
+        public SummonCommand CurrentCommand;
     }
 
-    public class SummonSnapshot
-    {
-        public CharacterController Controller;
-        public CharacterController Caster;
-        public string DisplayName;
-        public string SubTitle;
-        public int RemainingRounds;
-        public int TotalDurationRounds;
-        public int CurrentHP;
-        public int MaxHP;
-        public int AC;
-        public bool IsCelestial;
-        public bool IsFiendish;
-        public string TooltipText;
-    }
 
     private class SummonTemplate
     {
@@ -417,7 +403,8 @@ public class GameManager : MonoBehaviour
     private bool IsPC(CharacterController c)
     {
         if (c == null) return false;
-        return PCs.Contains(c) || _summonedAllies.Contains(c);
+        // Summons are always autonomous NPC turns (even if allied to the party).
+        return PCs.Contains(c);
     }
 
     private bool IsEnemyTeam(CharacterController source, CharacterController target)
@@ -810,6 +797,13 @@ public class GameManager : MonoBehaviour
             }
         }
 
+        // Right-click summon command menu (player-owned summons only, during player action phase).
+        if (CurrentSubPhase == PlayerSubPhase.ChoosingAction)
+        {
+            if (TryHandleSummonRightClick())
+                return;
+        }
+
         // Left-click to confirm self-centered AoE spell
         if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
         {
@@ -883,6 +877,74 @@ public class GameManager : MonoBehaviour
         {
             Debug.Log("[Grid] Click detected but no cell hit by raycast");
         }
+    }
+
+    private bool TryHandleSummonRightClick()
+    {
+        bool rightClicked = false;
+        Vector3 mouseScreenPos = Vector3.zero;
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetMouseButtonDown(1))
+        {
+            rightClicked = true;
+            mouseScreenPos = Input.mousePosition;
+        }
+#endif
+
+#if ENABLE_INPUT_SYSTEM
+        if (!rightClicked)
+        {
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse != null && mouse.rightButton.wasPressedThisFrame)
+            {
+                rightClicked = true;
+                mouseScreenPos = mouse.position.ReadValue();
+            }
+        }
+#endif
+
+        if (!rightClicked || _mainCam == null)
+            return false;
+
+        if (UnityEngine.EventSystems.EventSystem.current != null &&
+            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        {
+            return false;
+        }
+
+        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        RaycastHit2D hit = Physics2D.Raycast(worldPoint, Vector2.zero);
+        if (hit.collider == null)
+            return false;
+
+        SquareCell cell = hit.collider.GetComponent<SquareCell>();
+        if (cell == null || !cell.IsOccupied || cell.Occupant == null)
+            return false;
+
+        CharacterController summon = cell.Occupant;
+        if (!IsSummonedCreature(summon))
+            return false;
+
+        // Only allow player-owned summon commands during player turns.
+        if (!summon.IsPlayerControlled)
+            return false;
+
+        ActiveSummonInstance active = GetActiveSummon(summon);
+        if (active == null)
+            return false;
+
+        CombatUI?.ShowSummonContextMenu(
+            summon,
+            active.RemainingRounds,
+            active.TotalDurationRounds,
+            active.CurrentCommand,
+            mouseScreenPos,
+            () => SetSummonCommand(summon, SummonCommand.AttackNearest()),
+            () => SetSummonCommand(summon, SummonCommand.ProtectCaster()),
+            () => RequestDismissSummon(summon));
+
+        return true;
     }
 
     private void HandleInventoryInput()
@@ -1421,7 +1483,6 @@ public class GameManager : MonoBehaviour
 
         if (CombatUI == null) return;
         CombatUI.UpdateAllStats4PC(PCs, NPCs);
-        CombatUI.RefreshActiveSummonsPanel(GetActiveSummonSnapshots(), SelectSummonFromUI, RequestDismissSummon);
     }
 
     /// <summary>
@@ -1712,6 +1773,7 @@ public class GameManager : MonoBehaviour
         if (pc == null) return;
 
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
+        CombatUI.HideSummonContextMenu();
 
         // Hide movement path preview and hover marker when leaving movement phase
         if (_pathPreview != null) _pathPreview.HidePath();
@@ -2577,6 +2639,32 @@ public class GameManager : MonoBehaviour
         return null;
     }
 
+    public bool TryGetSummonCommand(CharacterController character, out SummonCommand command)
+    {
+        command = null;
+        var summon = GetActiveSummon(character);
+        if (summon == null)
+            return false;
+
+        command = summon.CurrentCommand ?? SummonCommand.AttackNearest();
+        return true;
+    }
+
+    public void SetSummonCommand(CharacterController summon, SummonCommand command)
+    {
+        if (summon == null || command == null)
+            return;
+
+        var active = GetActiveSummon(summon);
+        if (active == null)
+            return;
+
+        active.CurrentCommand = command;
+
+        string summonName = GetSummonDisplayName(summon);
+        CombatUI?.ShowCombatLog($"<color=#66E8FF>{summonName}: {command.Description}.</color>");
+    }
+
     private ActiveSummonInstance GetActiveSummon(CharacterController character)
     {
         if (character == null) return null;
@@ -2642,61 +2730,22 @@ public class GameManager : MonoBehaviour
             : "Unknown";
 
         string roundsWord = summon.RemainingRounds == 1 ? "round" : "rounds";
+        string commandText = summon.CurrentCommand != null
+            ? summon.CurrentCommand.Description
+            : SummonCommand.AttackNearest().Description;
 
         return $"{GetSummonDisplayName(character)}\n{typeLine}\n\nHP: {s.CurrentHP}/{Mathf.Max(1, s.TotalMaxHP)}   AC: {s.ArmorClass}   Speed: {s.SpeedInFeet} ft\n" +
                $"STR {s.STR}  DEX {s.DEX}  CON {s.CON}\nINT {s.INT}  WIS {s.WIS}  CHA {s.CHA}\n\n" +
                $"Attack: {attackName} {CharacterStats.FormatMod(s.AttackBonus)} ({s.BaseDamageCount}d{s.BaseDamageDice}{CharacterStats.FormatMod(s.BonusDamage)})\n\n" +
-               $"Special:\n• {special}\n\nDuration: {summon.RemainingRounds} {roundsWord} remaining\nSummoned by: {casterName}";
+               $"Special:\n• {special}\n\nCommand: {commandText}\nDuration: {summon.RemainingRounds} {roundsWord} remaining\nSummoned by: {casterName}";
     }
 
-    public List<SummonSnapshot> GetActiveSummonSnapshots()
-    {
-        var snapshots = new List<SummonSnapshot>();
-        for (int i = 0; i < _activeSummons.Count; i++)
-        {
-            var summon = _activeSummons[i];
-            if (summon == null || summon.Controller == null || summon.Controller.Stats == null)
-                continue;
-
-            var stats = summon.Controller.Stats;
-            snapshots.Add(new SummonSnapshot
-            {
-                Controller = summon.Controller,
-                Caster = summon.Caster,
-                DisplayName = GetSummonDisplayName(summon.Controller),
-                SubTitle = summon.Template != null ? summon.Template.CreatureTypeLine : "Summoned Creature",
-                RemainingRounds = Mathf.Max(0, summon.RemainingRounds),
-                TotalDurationRounds = Mathf.Max(1, summon.TotalDurationRounds),
-                CurrentHP = stats.CurrentHP,
-                MaxHP = Mathf.Max(1, stats.TotalMaxHP),
-                AC = stats.ArmorClass,
-                IsCelestial = summon.Template != null && summon.Template.IsCelestial,
-                IsFiendish = summon.Template != null && summon.Template.IsFiendish,
-                TooltipText = GetSummonTooltip(summon.Controller)
-            });
-        }
-        return snapshots;
-    }
-
-    public void SelectSummonFromUI(CharacterController summon)
-    {
-        if (summon == null || summon.Stats == null || summon.Stats.IsDead)
-            return;
-
-        SquareCell cell = Grid.GetCell(summon.GridPosition);
-        if (cell != null)
-        {
-            Grid.ClearAllHighlights();
-            _highlightedCells.Clear();
-            cell.SetHighlight(HighlightType.Selected);
-        }
-
-        CombatUI?.SetTurnIndicator($"Selected summon: {GetSummonDisplayName(summon)}");
-        CombatUI?.ShowCombatLog($"<color=#66E8FF>🔹 Selected summon: {GetSummonDisplayName(summon)}</color>");
-    }
 
     public void RequestDismissSummon(CharacterController summon)
     {
+        if (!IsPlayerTurn || summon == null || !summon.IsPlayerControlled)
+            return;
+
         var active = GetActiveSummon(summon);
         if (active == null || CombatUI == null) return;
 
@@ -3071,7 +3120,8 @@ public class GameManager : MonoBehaviour
             TotalDurationRounds = durationRounds,
             SourceSpellId = _pendingSpell.SpellId,
             IsAlliedToPCs = summonCC.IsPlayerControlled,
-            SmiteUsed = false
+            SmiteUsed = false,
+            CurrentCommand = SummonCommand.AttackNearest()
         };
         _activeSummons.Add(activeSummon);
 
@@ -6201,6 +6251,7 @@ public class GameManager : MonoBehaviour
         CombatUI.SetActivePC(0); // No PC active
         CombatUI.SetActiveNPC(NPCs.IndexOf(npc)); // Highlight active NPC
         CombatUI.SetActionButtonsVisible(false);
+        CombatUI.HideSummonContextMenu();
 
         // Update initiative UI to highlight current NPC
         UpdateInitiativeUI();
@@ -6418,7 +6469,12 @@ public class GameManager : MonoBehaviour
         if (data == null)
             yield break;
 
-        CharacterController target = ChooseBestSummonTarget(summon, data);
+        if (data.CurrentCommand != null && data.CurrentCommand.Type == SummonCommandType.ProtectCaster && data.Caster != null && data.Caster.Stats != null)
+        {
+            CombatUI.ShowCombatLog($"<color=#66E8FF>{GetSummonDisplayName(summon)} protects {data.Caster.Stats.CharacterName}.</color>");
+        }
+
+        CharacterController target = SelectSummonTargetByCommand(summon, data);
         if (target == null)
             yield break;
 
@@ -6450,7 +6506,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        target = ChooseBestSummonTarget(summon, data);
+        target = SelectSummonTargetByCommand(summon, data);
         if (target == null)
             yield break;
 
@@ -6478,48 +6534,77 @@ public class GameManager : MonoBehaviour
         yield return StartCoroutine(NPCPerformAttack(summon, target));
     }
 
-    private CharacterController ChooseBestSummonTarget(CharacterController summon, ActiveSummonInstance summonData)
+    private CharacterController SelectSummonTargetByCommand(CharacterController summon, ActiveSummonInstance summonData)
     {
-        CharacterController best = null;
-        int bestScore = int.MinValue;
+        if (summon == null)
+            return null;
 
+        List<CharacterController> enemies = new List<CharacterController>();
         foreach (var candidate in GetAllCharacters())
         {
             if (candidate == null || candidate == summon || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
             if (!IsEnemyTeam(summon, candidate))
                 continue;
+            enemies.Add(candidate);
+        }
 
-            int score = 0;
-            int dist = SquareGridUtils.GetDistance(summon.GridPosition, candidate.GridPosition);
-            score += Mathf.Max(0, 40 - dist * 5);
-            score += Mathf.Max(0, 24 - candidate.Stats.CurrentHP);
+        if (enemies.Count == 0)
+            return null;
 
-            if (candidate.Stats.IsProne)
-                score += 7;
+        SummonCommandType cmd = summonData != null && summonData.CurrentCommand != null
+            ? summonData.CurrentCommand.Type
+            : SummonCommandType.AttackNearest;
 
-            if (summonData != null && summonData.Template != null)
+        switch (cmd)
+        {
+            case SummonCommandType.ProtectCaster:
+                return FindEnemyNearestToSummoner(enemies, summonData != null ? summonData.Caster : null, summon);
+            case SummonCommandType.AttackNearest:
+            default:
+                return FindNearestEnemyToSummon(enemies, summon);
+        }
+    }
+
+    private CharacterController FindNearestEnemyToSummon(List<CharacterController> enemies, CharacterController summon)
+    {
+        CharacterController nearest = null;
+        int nearestDist = int.MaxValue;
+
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            CharacterController enemy = enemies[i];
+            int dist = SquareGridUtils.GetDistance(summon.GridPosition, enemy.GridPosition);
+            if (dist < nearestDist)
             {
-                if (!summonData.SmiteUsed)
-                {
-                    bool goodTarget = summonData.Template.IsFiendish && AlignmentHelper.IsGood(candidate.Stats.CharacterAlignment);
-                    bool evilTarget = summonData.Template.IsCelestial && AlignmentHelper.IsEvil(candidate.Stats.CharacterAlignment);
-                    if (goodTarget || evilTarget)
-                        score += 35;
-                }
-
-                if (summonData.Template.HasTrip && !candidate.Stats.IsProne)
-                    score += 9;
-            }
-
-            if (score > bestScore)
-            {
-                bestScore = score;
-                best = candidate;
+                nearestDist = dist;
+                nearest = enemy;
             }
         }
 
-        return best;
+        return nearest;
+    }
+
+    private CharacterController FindEnemyNearestToSummoner(List<CharacterController> enemies, CharacterController summoner, CharacterController summon)
+    {
+        if (summoner == null)
+            return FindNearestEnemyToSummon(enemies, summon);
+
+        CharacterController nearest = null;
+        int nearestDist = int.MaxValue;
+
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            CharacterController enemy = enemies[i];
+            int dist = SquareGridUtils.GetDistance(summoner.GridPosition, enemy.GridPosition);
+            if (dist < nearestDist)
+            {
+                nearestDist = dist;
+                nearest = enemy;
+            }
+        }
+
+        return nearest;
     }
 
     private bool TryExecuteSummonSmiteAttack(CharacterController summon, CharacterController target, ActiveSummonInstance summonData)
