@@ -102,7 +102,7 @@ public static class ThreatSystem
         int maxThreatDistance = character.GetMeleeMaxAttackDistance();
         Vector2Int pos = character.GridPosition;
 
-        // Strict D&D 3.5 threat ring(s):
+        // Threat ring(s) are measured with Chebyshev distance (diagonals = 1):
         // - normal melee weapon: distance 1
         // - reach weapon: usually distance 2 only
         // - special (spiked chain): distance 1-2
@@ -114,13 +114,13 @@ public static class ThreatSystem
                 if (dx == 0 && dy == 0) continue;
 
                 Vector2Int target = new Vector2Int(pos.x + dx, pos.y + dy);
-                int distance = SquareGridUtils.GetDistance(pos, target);
+                int distance = SquareGridUtils.GetChebyshevDistance(pos, target);
                 if (distance >= minThreatDistance && distance <= maxThreatDistance)
                     threatened.Add(target);
             }
         }
 
-        Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} threatens {threatened.Count} squares from ({pos.x},{pos.y}) at distances {minThreatDistance}-{maxThreatDistance} (melee weapon equipped)");
+        Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} threatens {threatened.Count} squares from ({pos.x},{pos.y}) at Chebyshev distances {minThreatDistance}-{maxThreatDistance} (melee weapon equipped)");
         return threatened;
     }
 

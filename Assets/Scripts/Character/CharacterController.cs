@@ -1394,11 +1394,12 @@ public class CharacterController : MonoBehaviour
         if (target == null || target.Stats == null || Stats == null) return false;
 
         ItemData weapon = GetEquippedMainWeapon();
-        int distance = SquareGridUtils.GetDistance(GridPosition, target.GridPosition);
 
         bool isRanged = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
         if (isRanged)
         {
+            // Keep existing ranged distance behavior (D&D 3.5 square distance rules).
+            int distance = SquareGridUtils.GetDistance(GridPosition, target.GridPosition);
             int rangeIncrement = weapon.RangeIncrement;
             bool isThrownWeapon = weapon.IsThrown;
 
@@ -1411,7 +1412,9 @@ public class CharacterController : MonoBehaviour
             return distance <= Mathf.Max(1, Stats.AttackRange);
         }
 
-        return CanMeleeAttackDistance(distance, weapon);
+        // Reach/threat uses Chebyshev distance so diagonals count the same as orthogonal squares.
+        int meleeDistance = SquareGridUtils.GetChebyshevDistance(GridPosition, target.GridPosition);
+        return CanMeleeAttackDistance(meleeDistance, weapon);
     }
 
     /// <summary>

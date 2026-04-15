@@ -156,12 +156,23 @@ public static class SquareGridUtils
     }
 
     /// <summary>
-    /// Simple Chebyshev distance (max of dx, dy) - used for quick adjacency checks.
-    /// Note: This is NOT the D&D 3.5 distance which uses alternating diagonal costs.
+    /// Chebyshev (chessboard) distance where all adjacent squares, including diagonals,
+    /// count as 1. Used for reach/threat calculations that intentionally ignore
+    /// D&D 3.5 movement diagonal cost alternation.
+    /// </summary>
+    public static int GetChebyshevDistance(Vector2Int from, Vector2Int to)
+    {
+        int dx = Mathf.Abs(to.x - from.x);
+        int dy = Mathf.Abs(to.y - from.y);
+        return Mathf.Max(dx, dy);
+    }
+
+    /// <summary>
+    /// Backward-compatible alias for GetChebyshevDistance.
     /// </summary>
     public static int ChebyshevDistance(Vector2Int a, Vector2Int b)
     {
-        return Mathf.Max(Mathf.Abs(a.x - b.x), Mathf.Abs(a.y - b.y));
+        return GetChebyshevDistance(a, b);
     }
 
     /// <summary>

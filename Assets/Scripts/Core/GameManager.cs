@@ -5128,7 +5128,9 @@ public class GameManager : MonoBehaviour
                 if (!IsEnemyTeam(pc, cell.Occupant))
                     continue;
 
-                int sqDist = SquareGridUtils.GetDistance(pc.GridPosition, cell.Coords);
+                int sqDist = isRangedWeapon
+                    ? SquareGridUtils.GetDistance(pc.GridPosition, cell.Coords)
+                    : SquareGridUtils.GetChebyshevDistance(pc.GridPosition, cell.Coords);
 
                 if (isRangedWeapon && rangeIncrement > 0)
                 {
@@ -5251,7 +5253,7 @@ public class GameManager : MonoBehaviour
             if (!IsEnemyTeam(attacker, candidate))
                 continue;
 
-            int distance = SquareGridUtils.GetDistance(attacker.GridPosition, candidate.GridPosition);
+            int distance = SquareGridUtils.GetChebyshevDistance(attacker.GridPosition, candidate.GridPosition);
             if (attacker.CanMeleeAttackDistance(distance))
                 valid.Add(candidate);
         }
@@ -5275,10 +5277,10 @@ public class GameManager : MonoBehaviour
             return false;
 
         bool isRanged = attacker.IsEquippedWeaponRanged();
-        int sqDist = SquareGridUtils.GetDistance(attacker.GridPosition, target.GridPosition);
 
         if (isRanged)
         {
+            int sqDist = SquareGridUtils.GetDistance(attacker.GridPosition, target.GridPosition);
             ItemData weapon = attacker.GetEquippedMainWeapon();
             int rangeIncrement = weapon != null ? weapon.RangeIncrement : 0;
             bool isThrownWeapon = weapon != null && weapon.IsThrown;
@@ -5292,7 +5294,8 @@ public class GameManager : MonoBehaviour
             return sqDist <= attacker.Stats.AttackRange;
         }
 
-        return attacker.CanMeleeAttackDistance(sqDist);
+        int meleeDistance = SquareGridUtils.GetChebyshevDistance(attacker.GridPosition, target.GridPosition);
+        return attacker.CanMeleeAttackDistance(meleeDistance);
     }
 
     private bool HasAnyValidTargetFromPosition(CharacterController attacker, Vector2Int attackerPosition, bool rangedMode)
@@ -5310,7 +5313,9 @@ public class GameManager : MonoBehaviour
             if (!IsEnemyTeam(attacker, candidate))
                 continue;
 
-            int sqDist = SquareGridUtils.GetDistance(attackerPosition, candidate.GridPosition);
+            int sqDist = rangedMode
+                ? SquareGridUtils.GetDistance(attackerPosition, candidate.GridPosition)
+                : SquareGridUtils.GetChebyshevDistance(attackerPosition, candidate.GridPosition);
             if (rangedMode)
             {
                 if (rangeIncrement > 0)
@@ -5432,7 +5437,7 @@ public class GameManager : MonoBehaviour
             if (cell == null || cell.Coords == attacker.GridPosition)
                 continue;
 
-            int sqDist = SquareGridUtils.GetDistance(attacker.GridPosition, cell.Coords);
+            int sqDist = SquareGridUtils.GetChebyshevDistance(attacker.GridPosition, cell.Coords);
             if (sqDist <= 0 || sqDist > max)
                 continue;
 
@@ -5860,7 +5865,7 @@ public class GameManager : MonoBehaviour
             if (!c.IsOccupied || c.Occupant == attacker || c.Occupant.Stats.IsDead) continue;
             if (!IsEnemyTeam(attacker, c.Occupant)) continue;
 
-            int distance = SquareGridUtils.GetDistance(attacker.GridPosition, c.Coords);
+            int distance = SquareGridUtils.GetChebyshevDistance(attacker.GridPosition, c.Coords);
             bool inRange = (type == SpecialAttackType.Feint)
                 ? distance == 1
                 : attacker.CanMeleeAttackDistance(distance);
@@ -6181,7 +6186,7 @@ public class GameManager : MonoBehaviour
         }
 
         Vector2Int finalPos = path[path.Count - 1];
-        int distToTarget = SquareGridUtils.GetDistance(finalPos, target.GridPosition);
+        int distToTarget = SquareGridUtils.GetChebyshevDistance(finalPos, target.GridPosition);
         if (!charger.CanMeleeAttackDistance(distToTarget))
         {
             if (logFailures) CombatUI?.ShowCombatLog("⚠ Charge must end in legal melee reach ring of the target.");
@@ -6210,7 +6215,7 @@ public class GameManager : MonoBehaviour
 
             path.Add(current);
 
-            int distToTarget = SquareGridUtils.GetDistance(current, targetPos);
+            int distToTarget = SquareGridUtils.GetChebyshevDistance(current, targetPos);
             if (distToTarget <= Mathf.Max(1, attackRange) && distToTarget > 0)
                 break;
 
@@ -6221,7 +6226,7 @@ public class GameManager : MonoBehaviour
         if (path.Count == 0) return path;
 
         Vector2Int end = path[path.Count - 1];
-        int endDist = SquareGridUtils.GetDistance(end, targetPos);
+        int endDist = SquareGridUtils.GetChebyshevDistance(end, targetPos);
         if (endDist < 1 || endDist > Mathf.Max(1, attackRange))
             path.Clear();
 
@@ -7361,7 +7366,7 @@ public class GameManager : MonoBehaviour
         if (!npc.HasMeleeWeaponEquipped()) return false;
         if (target.Stats == null || target.Stats.IsDead) return false;
 
-        int dist = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+        int dist = SquareGridUtils.GetChebyshevDistance(npc.GridPosition, target.GridPosition);
         // Prefer charge when out of melee reach but still reachable in a charge lane.
         if (npc.CanMeleeAttackDistance(dist)) return false;
 
