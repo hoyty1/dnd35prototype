@@ -5117,7 +5117,9 @@ public class GameManager : MonoBehaviour
             maxRangeSquares = pc.Stats.AttackRange;
         }
 
-        List<SquareCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares);
+        List<SquareCell> allCells = isRangedWeapon
+            ? Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares)
+            : GetCellsInChebyshevRange(pc.GridPosition, maxRangeSquares);
         bool hasTarget = false;
         bool anyFlanking = false;
 
@@ -5423,6 +5425,37 @@ public class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.Animating;
     }
 
+    /// <summary>
+    /// Returns all valid grid cells in a Chebyshev square radius (diagonals count as 1).
+    /// This is used for melee/reach previews so corner cells are never dropped by
+    /// D&D 3.5 movement-distance filtering.
+    /// </summary>
+    private List<SquareCell> GetCellsInChebyshevRange(Vector2Int center, int range, bool includeCenter = false)
+    {
+        var cells = new List<SquareCell>();
+        if (Grid == null || range < 0)
+            return cells;
+
+        for (int x = center.x - range; x <= center.x + range; x++)
+        {
+            for (int y = center.y - range; y <= center.y + range; y++)
+            {
+                var coords = new Vector2Int(x, y);
+                if (!includeCenter && coords == center)
+                    continue;
+
+                if (SquareGridUtils.GetChebyshevDistance(center, coords) > range)
+                    continue;
+
+                SquareCell cell = Grid.GetCell(coords);
+                if (cell != null)
+                    cells.Add(cell);
+            }
+        }
+
+        return cells;
+    }
+
     private void ShowMeleeRangeZoneHighlights(CharacterController attacker, int minDistance, int maxDistance)
     {
         if (attacker == null || Grid == null)
@@ -5431,7 +5464,7 @@ public class GameManager : MonoBehaviour
         int min = Mathf.Max(1, minDistance);
         int max = Mathf.Max(min, maxDistance);
 
-        List<SquareCell> allCells = Grid.GetCellsInRange(attacker.GridPosition, max);
+        List<SquareCell> allCells = GetCellsInChebyshevRange(attacker.GridPosition, max);
         foreach (SquareCell cell in allCells)
         {
             if (cell == null || cell.Coords == attacker.GridPosition)
@@ -5857,7 +5890,7 @@ public class GameManager : MonoBehaviour
             : attacker.GetMeleeMaxAttackDistance();
         if (maxRange < 1) maxRange = 1;
 
-        List<SquareCell> allCells = Grid.GetCellsInRange(attacker.GridPosition, maxRange);
+        List<SquareCell> allCells = GetCellsInChebyshevRange(attacker.GridPosition, maxRange);
         bool hasTarget = false;
 
         foreach (var c in allCells)
