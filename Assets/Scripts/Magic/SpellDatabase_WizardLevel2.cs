@@ -353,6 +353,33 @@ public static partial class SpellDatabase
 
         Register(new SpellData
         {
+            SpellId = "acid_fog",
+            Name = "Acid Fog",
+            Description = "Acidic vapors fill a 20-ft-radius spread. Creatures inside take a -2 attack penalty from obscuring fumes and corrosive air. No save. 1 round/level (prototype simplified).",
+            SpellLevel = 2, School = "Conjuration",
+            ClassList = new[] { "Wizard" },
+            TargetType = SpellTargetType.Area,
+            RangeSquares = 22,
+            AreaRadius = 4,
+            AoEShapeType = AoEShape.Burst,
+            AoESizeSquares = 4, // 20-ft radius
+            AoERangeSquares = 22,
+            AoEFilter = AoETargetFilter.EnemiesOnly,
+            EffectType = SpellEffectType.Debuff,
+            BuffAttackBonus = -2,
+            BuffDurationRounds = 3, // 1 round/level at CL3
+            BuffType = "acid_fog",
+            BuffBonusType = BonusType.Circumstance,
+            BonusTypeExplicitlySet = true,
+            DurationType = DurationType.Rounds,
+            DurationValue = 1,
+            DurationScalesWithLevel = true,
+            AllowsSavingThrow = false,
+            ActionType = SpellActionType.Standard,
+            ProvokesAoO = true
+        });
+        Register(new SpellData
+        {
             SpellId = "glitterdust",
             Name = "Glitterdust",
             Description = "Blinds creatures in area and outlines invisible creatures. Will save negates blindness. 1 round/level. PHB p.236",

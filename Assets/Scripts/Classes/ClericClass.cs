@@ -102,7 +102,7 @@ public class ClericClass : ICharacterClass
                 // Level 1 spells (4 slots: 2 base + 1 domain + 1 WIS bonus)
                 "cure_light_wounds", "cure_light_wounds", "bless", "shield_of_faith",
                 // Level 2 spells (3 slots: 1 base + 1 domain + 1 WIS bonus)
-                "cure_moderate_wounds", "spiritual_weapon", "bulls_strength_clr"
+                "cure_moderate_wounds", "spiritual_weapon", "flame_strike"
             },
             ChosenAlignment = Alignment.NeutralGood,
             ChosenDeityId = "pelor",

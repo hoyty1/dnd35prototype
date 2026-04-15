@@ -2619,8 +2619,10 @@ public class GameManager : MonoBehaviour
         bool skipFriendlyTouchAttackRoll = _pendingSpell.IsMeleeTouchSpell() && IsFriendlyTarget(caster, target);
         SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, caster, target);
 
-        // Apply buff effects based on spell type
-        if (result.Success && _pendingSpell.EffectType == SpellEffectType.Buff)
+        // Apply tracked buff/debuff effects based on spell type
+        bool appliesTrackedEffect = _pendingSpell.EffectType == SpellEffectType.Buff ||
+                                    _pendingSpell.EffectType == SpellEffectType.Debuff;
+        if (result.Success && appliesTrackedEffect)
         {
             var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -3287,28 +3289,20 @@ public class GameManager : MonoBehaviour
                 targetIndex++;
                 logBuilder.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
 
-                // For buff spells, apply the buff
-                if (_pendingSpell.EffectType == SpellEffectType.Buff)
+                // For buff/debuff spells, apply tracked effects
+                if (_pendingSpell.EffectType == SpellEffectType.Buff || _pendingSpell.EffectType == SpellEffectType.Debuff)
                 {
-                    // Create a simple result for buff
-                    var buffResult = new SpellResult();
-                    buffResult.Spell = _pendingSpell;
-                    buffResult.CasterName = caster.Stats.CharacterName;
-                    buffResult.TargetName = target.Stats.CharacterName;
-                    buffResult.Success = true;
-                    buffResult.BuffApplied = true;
-                    buffResult.BuffDescription = _pendingSpell.Description;
-
                     var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
-                    // Track concentration for the first target of a concentration AoE buff
+                    // Track concentration for the first target of a concentration AoE effect
                     if (appliedEffect != null && _pendingSpell.DurationType == DurationType.Concentration && targetIndex == 1)
                     {
                         BeginConcentrationTracking(caster, appliedEffect, _pendingSpell);
                     }
 
-                    logBuilder.AppendLine($"  BUFF APPLIED! {_pendingSpell.Description}");
-                    Debug.Log($"[AoE] Buff applied to {target.Stats.CharacterName}");
+                    string effectLabel = _pendingSpell.EffectType == SpellEffectType.Debuff ? "DEBUFF APPLIED" : "BUFF APPLIED";
+                    logBuilder.AppendLine($"  {effectLabel}! {_pendingSpell.Description}");
+                    Debug.Log($"[AoE] {_pendingSpell.EffectType} applied to {target.Stats.CharacterName}");
                 }
                 // For damage spells, resolve with save and damage
                 else if (_pendingSpell.EffectType == SpellEffectType.Damage)
@@ -3424,12 +3418,15 @@ public class GameManager : MonoBehaviour
                 }
 
                 string durStr = effect.GetDurationDisplayString();
-                CombatUI?.ShowCombatLog($"<color=#88FF88>✨ {spell.Name} applied to {target.Stats.CharacterName} [{durStr}]</color>");
-                Debug.Log($"[GameManager] {spell.Name} buff applied to {target.Stats.CharacterName} via StatusEffectManager: {effect.GetDetailedString()}");
+                bool isDebuff = spell.EffectType == SpellEffectType.Debuff;
+                string color = isDebuff ? "#FF8888" : "#88FF88";
+                string effectLabel = isDebuff ? "debuff" : "buff";
+                CombatUI?.ShowCombatLog($"<color={color}>✨ {spell.Name} {effectLabel} applied to {target.Stats.CharacterName} [{durStr}]</color>");
+                Debug.Log($"[GameManager] {spell.Name} {effectLabel} applied to {target.Stats.CharacterName} via StatusEffectManager: {effect.GetDetailedString()}");
             }
             else
             {
-                Debug.Log($"[GameManager] {spell.Name} buff NOT applied to {target.Stats.CharacterName} (stacking rules prevented it)");
+                Debug.Log($"[GameManager] {spell.Name} effect NOT applied to {target.Stats.CharacterName} (stacking rules prevented it)");
             }
 
             UpdateAllStatsUI();

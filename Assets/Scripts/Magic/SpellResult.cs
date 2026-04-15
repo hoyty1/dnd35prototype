@@ -205,7 +205,9 @@ public class SpellResult
         // ========== BUFF ==========
         if (BuffApplied)
         {
-            sb.AppendLine($"  BUFF APPLIED! {BuffDescription}");
+            bool isDebuffLog = !string.IsNullOrEmpty(BuffDescription) && BuffDescription.StartsWith("Debuff:");
+            string label = isDebuffLog ? "DEBUFF APPLIED" : "BUFF APPLIED";
+            sb.AppendLine($"  {label}! {BuffDescription}");
         }
 
         sb.Append($"═══════════════════════════════════");

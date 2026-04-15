@@ -279,12 +279,14 @@ public static class SpellCaster
             result.TargetHPAfter = targetStats.CurrentHP;
         }
 
-        // ========== BUFF ==========
-        if (spell.EffectType == SpellEffectType.Buff)
+        // ========== BUFF / DEBUFF ==========
+        if (spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Debuff)
         {
             result.BuffApplied = true;
             if (spell.SpellId == "mage_armor")
                 result.BuffDescription = $"+{spell.BuffACBonus} armor AC bonus (Mage Armor)";
+            else if (spell.EffectType == SpellEffectType.Debuff)
+                result.BuffDescription = $"Debuff: {spell.Description}";
             else
                 result.BuffDescription = spell.Description;
         }

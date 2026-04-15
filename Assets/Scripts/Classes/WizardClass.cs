@@ -111,25 +111,25 @@ public class WizardClass : ICharacterClass
             "burning_hands", "sleep", "charm_person"
         });
 
-        // 2nd-level spells for spellbook: 5 spells (2 standard + 2 test cone + 1 test line)
+        // 2nd-level spells for spellbook: includes combat staples + AoE test/debug options
         data.SelectedSpellIds.AddRange(new List<string>
         {
-            "scorching_ray", "bulls_strength",
+            "scorching_ray", "bulls_strength", "acid_fog",
             "test_cone_30", "test_cone_60", "test_line_60"
         });
 
         data.ComputeFinalStats();
 
         // Pre-set spell preparation (slot order: 4 cantrips, 3 1st-level, 2 2nd-level)
-        // 2nd-level slots use test AoE spells: one cone + one line for shape testing
+        // 2nd-level slots include Acid Fog for debuff testing + one line AoE test spell
         data.PreparedSpellSlotIds = new List<string>
         {
             // 4 cantrip slots (unlimited use)
             "ray_of_frost", "detect_magic_wiz", "acid_splash", "prestidigitation",
             // 3 1st-level slots (2 base + 1 INT bonus)
             "magic_missile", "mage_armor", "burning_hands",
-            // 2 2nd-level slots (1 base + 1 INT bonus) — AoE test spells
-            "test_cone_30", "test_line_60"
+            // 2 2nd-level slots (1 base + 1 INT bonus)
+            "acid_fog", "test_line_60"
         };
 
         data.SkillRanks["Concentration"] = 6;

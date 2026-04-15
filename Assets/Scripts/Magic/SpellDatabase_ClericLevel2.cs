@@ -106,6 +106,29 @@ public static partial class SpellDatabase
             ProvokesAoO = true
         });
 
+        Register(new SpellData
+        {
+            SpellId = "flame_strike",
+            Name = "Flame Strike",
+            Description = "A vertical column of divine fire deals 1d6/level damage (max 15d6). Reflex half. Damage is split between fire and divine power (prototype: fire/positive).",
+            SpellLevel = 2, School = "Evocation",
+            ClassList = new[] { "Cleric" },
+            TargetType = SpellTargetType.Area,
+            RangeSquares = 22,
+            AreaRadius = 2,
+            AoEShapeType = AoEShape.Burst,
+            AoESizeSquares = 2, // 10-ft radius
+            AoERangeSquares = 22,
+            AoEFilter = AoETargetFilter.EnemiesOnly,
+            EffectType = SpellEffectType.Damage,
+            DamageDice = 6, DamageCount = 3, // 1d6/level at CL3
+            DamageType = "fire/positive",
+            AllowsSavingThrow = true,
+            SavingThrowType = "Reflex",
+            SaveHalves = true,
+            ActionType = SpellActionType.Standard,
+            ProvokesAoO = true
+        });
         // --- FUNCTIONAL: Buff Spells ---
 
         Register(new SpellData
