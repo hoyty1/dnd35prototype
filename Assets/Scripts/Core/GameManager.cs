@@ -151,6 +151,28 @@ public class GameManager : MonoBehaviour
     private string _lastCombatLog = "";
     private Camera _mainCam;
 
+    private void HighlightCharacterFootprint(CharacterController character, HighlightType type, bool addToSelectableCells = false)
+    {
+        if (character == null || Grid == null)
+            return;
+
+        List<Vector2Int> occupiedSquares = character.GetOccupiedSquares();
+        if (occupiedSquares == null || occupiedSquares.Count == 0)
+            occupiedSquares = new List<Vector2Int> { character.GridPosition };
+
+        for (int i = 0; i < occupiedSquares.Count; i++)
+        {
+            SquareCell cell = Grid.GetCell(occupiedSquares[i]);
+            if (cell == null)
+                continue;
+
+            cell.SetHighlight(type);
+
+            if (addToSelectableCells && !_highlightedCells.Contains(cell))
+                _highlightedCells.Add(cell);
+        }
+    }
+
     // ========== PATH PREVIEW ==========
     private PathPreview _pathPreview;
 
@@ -1926,9 +1948,7 @@ public class GameManager : MonoBehaviour
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
 
-        SquareCell current = Grid.GetCell(pc.GridPosition);
-        if (current != null)
-            current.SetHighlight(HighlightType.Selected);
+        HighlightCharacterFootprint(pc, HighlightType.Selected);
 
         CombatUI.SetActionButtonsVisible(true);
         CombatUI.HideSpecialAttackMenu();
@@ -2088,9 +2108,7 @@ public class GameManager : MonoBehaviour
             _highlightedCells.Add(cell);
         }
 
-        SquareCell current = Grid.GetCell(pc.GridPosition);
-        if (current != null)
-            current.SetHighlight(HighlightType.Selected);
+        HighlightCharacterFootprint(pc, HighlightType.Selected);
     }
 
     private bool IsValidFiveFootStepDestination(CharacterController pc, Vector2Int destination)
@@ -2414,9 +2432,7 @@ public class GameManager : MonoBehaviour
             _highlightedCells.Add(cell);
         }
 
-        SquareCell current = Grid.GetCell(pc.GridPosition);
-        if (current != null)
-            current.SetHighlight(HighlightType.Selected);
+        HighlightCharacterFootprint(pc, HighlightType.Selected);
     }
 
     private bool IsValidCrawlDestination(CharacterController pc, Vector2Int destination)
@@ -3130,13 +3146,11 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        SquareCell casterCell = Grid.GetCell(caster.GridPosition);
-        if (casterCell != null)
-            casterCell.SetHighlight(HighlightType.Selected);
+        HighlightCharacterFootprint(caster, HighlightType.Selected);
 
         CombatUI.SetTurnIndicator($"✦ {_pendingSpell.Name}: Click an empty tile to place summon | Range: {range * 5} ft | Right-click to cancel");
-    }
 
+    }
     private bool TryConsumePendingSpellCast(CharacterController caster)
     {
         if (caster == null || _pendingSpell == null) return false;
@@ -3730,10 +3744,8 @@ public class GameManager : MonoBehaviour
             cell.SetHighlight(HighlightType.SpellRange);
         }
 
-        // Highlight caster's own position
-        SquareCell casterCell = Grid.GetCell(caster.GridPosition);
-        if (casterCell != null)
-            casterCell.SetHighlight(HighlightType.Selected);
+        // Highlight caster's full occupied footprint.
+        HighlightCharacterFootprint(caster, HighlightType.Selected);
 
         // Second pass: highlight valid targets (magenta) on top of range area
         foreach (var cell in allCells)
@@ -3758,12 +3770,8 @@ public class GameManager : MonoBehaviour
         // For SingleAlly spells, also allow self-targeting by clicking own tile.
         if (spell.TargetType == SpellTargetType.SingleAlly && IsValidTargetForSpell(caster, caster, spell))
         {
-            if (casterCell != null)
-            {
-                casterCell.SetHighlight(HighlightType.SpellTarget);
-                _highlightedCells.Add(casterCell);
-                hasTarget = true;
-            }
+            HighlightCharacterFootprint(caster, HighlightType.SpellTarget, addToSelectableCells: true);
+            hasTarget = true;
         }
 
         if (hasTarget)
@@ -4266,30 +4274,24 @@ public class GameManager : MonoBehaviour
             {
                 cell.SetHighlight(HighlightType.SpellRange);
             }
-            // Also highlight caster's position as valid
-            SquareCell casterCell = Grid.GetCell(caster.GridPosition);
-            if (casterCell != null)
-                casterCell.SetHighlight(HighlightType.SpellRange);
+            // Also highlight the caster's full occupied footprint as valid.
+            HighlightCharacterFootprint(caster, HighlightType.SpellRange);
 
             string rangeStr = $"{range * 5} ft";
             string sizeStr = $"{spell.AoESizeSquares * 5}-ft radius burst";
             CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} | Range: {rangeStr} | Move mouse to preview, click to cast | Right-click to cancel");
         }
-        // For cone spells, just show the caster's position - direction is determined by mouse
+        // For cone spells, highlight the caster footprint; direction is determined by mouse.
         else if (spell.AoEShapeType == AoEShape.Cone)
         {
-            SquareCell casterCell = Grid.GetCell(caster.GridPosition);
-            if (casterCell != null)
-                casterCell.SetHighlight(HighlightType.Selected);
+            HighlightCharacterFootprint(caster, HighlightType.Selected);
 
             string sizeStr = $"{spell.AoESizeSquares * 5}-ft cone";
             CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} from caster | Move mouse to aim, click to cast | Right-click to cancel");
         }
         else if (spell.AoEShapeType == AoEShape.Line)
         {
-            SquareCell casterCell = Grid.GetCell(caster.GridPosition);
-            if (casterCell != null)
-                casterCell.SetHighlight(HighlightType.Selected);
+            HighlightCharacterFootprint(caster, HighlightType.Selected);
 
             string sizeStr = $"{spell.AoESizeSquares * 5}-ft line";
             CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} | Move mouse to aim, click to cast | Right-click to cancel");
@@ -5551,9 +5553,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        SquareCell current = Grid.GetCell(pc.GridPosition);
-        if (current != null)
-            current.SetHighlight(HighlightType.Selected);
+        HighlightCharacterFootprint(pc, HighlightType.Selected);
     }
 
     private void CancelMovementSelection()
@@ -6131,9 +6131,7 @@ public class GameManager : MonoBehaviour
             _highlightedCells.Add(cell);
         }
 
-        SquareCell current = Grid.GetCell(pc.GridPosition);
-        if (current != null)
-            current.SetHighlight(HighlightType.Selected);
+        HighlightCharacterFootprint(pc, HighlightType.Selected);
     }
 
     private IEnumerator WaitForOptionalFiveFootStepDuringFullAttack(
@@ -6656,8 +6654,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        SquareCell selfCell = Grid.GetCell(attacker.GridPosition);
-        if (selfCell != null) selfCell.SetHighlight(HighlightType.Selected);
+        HighlightCharacterFootprint(attacker, HighlightType.Selected);
 
         if (hasTarget)
             CombatUI.SetTurnIndicator($"SPECIAL: {type} - select target (Right-click/Esc to cancel)");
@@ -6842,16 +6839,10 @@ public class GameManager : MonoBehaviour
 
         foreach (var t in validTargets)
         {
-            SquareCell c = Grid.GetCell(t.GridPosition);
-            if (c != null)
-            {
-                c.SetHighlight(HighlightType.Attack);
-                _highlightedCells.Add(c);
-            }
+            HighlightCharacterFootprint(t, HighlightType.Attack, addToSelectableCells: true);
         }
 
-        SquareCell self = Grid.GetCell(charger.GridPosition);
-        if (self != null) self.SetHighlight(HighlightType.Selected);
+        HighlightCharacterFootprint(charger, HighlightType.Selected);
 
         CombatUI.SetTurnIndicator("CHARGE: Select a target. Right-click/Esc to cancel.");
     }
@@ -7126,10 +7117,8 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        SquareCell self = Grid.GetCell(charger.GridPosition);
-        if (self != null) self.SetHighlight(HighlightType.Selected);
-        SquareCell tcell = Grid.GetCell(target.GridPosition);
-        if (tcell != null) tcell.SetHighlight(HighlightType.Attack);
+        HighlightCharacterFootprint(charger, HighlightType.Selected);
+        HighlightCharacterFootprint(target, HighlightType.Attack);
 
         CombatUI.SetTurnIndicator($"CHARGE: {target.Stats.CharacterName} | +2 attack, -2 AC until next turn. Click target/endpoint to confirm.");
     }
@@ -7143,7 +7132,6 @@ public class GameManager : MonoBehaviour
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-
         List<Vector2Int> path = GetChargePath(charger.GridPosition, target.GridPosition, Mathf.Max(1, charger.Stats.AttackRange));
         if (path == null || path.Count == 0)
         {
