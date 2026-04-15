@@ -4,9 +4,9 @@ using UnityEngine;
 /// Represents a single D&D 3.5 skill with ranks, key ability, and class skill status.
 /// 
 /// D&D 3.5 Skill Rules:
-/// - Max ranks = character level + 3
-/// - Class skill bonus: +3 if you have at least 1 rank AND it's a class skill
-/// - Total bonus = ranks + ability modifier + class skill bonus
+/// - Class skills: max ranks = character level + 3
+/// - Cross-class skills: max ranks = (character level + 3) / 2
+/// - Total bonus = ranks + ability modifier
 /// - Skill check = d20 + total bonus
 /// - Trained only skills can't be used with 0 ranks
 /// </summary>
@@ -45,19 +45,14 @@ public class Skill
     }
 
     /// <summary>
-    /// Get the class skill bonus (+3 if class skill with at least 1 rank, 0 otherwise).
-    /// D&D 3.5 Pathfinder-style: +3 bonus for trained class skills.
-    /// </summary>
-    public int ClassSkillBonus => (IsClassSkill && Ranks > 0) ? 3 : 0;
-
-    /// <summary>
-    /// Get the total skill bonus: ranks + ability modifier + class skill bonus.
+    /// Get the total skill bonus: ranks + ability modifier.
+    /// (Class skills do not get a flat +3 bonus in D&D 3.5.)
     /// </summary>
     /// <param name="abilityModifier">The ability modifier for the key ability</param>
     /// <returns>Total skill bonus</returns>
     public int GetTotalBonus(int abilityModifier)
     {
-        return Ranks + abilityModifier + ClassSkillBonus;
+        return Ranks + abilityModifier;
     }
 
     /// <summary>
@@ -77,8 +72,7 @@ public class Skill
         int d20 = Random.Range(1, 21);
         int total = d20 + GetTotalBonus(abilityModifier);
 
-        string classStr = ClassSkillBonus > 0 ? $" + {ClassSkillBonus}(class)" : "";
-        Debug.Log($"[Skills] {SkillName} check: d20({d20}) + {Ranks}(ranks) + {abilityModifier}({KeyAbility}){classStr} = {total}");
+        Debug.Log($"[Skills] {SkillName} check: d20({d20}) + {Ranks}(ranks) + {abilityModifier}({KeyAbility}) = {total}");
 
         return total;
     }
@@ -113,7 +107,7 @@ public class Skill
 
     /// <summary>
     /// Get a display string for this skill.
-    /// Example: "Hide (DEX)*: Ranks 4, Total +10 (4 ranks + 3 DEX + 3 class)"
+    /// Example: "Hide (DEX)*: Ranks 4, Total +7 (4 ranks + 3 DEX)"
     /// </summary>
     /// <param name="abilityModifier">The ability modifier for the key ability</param>
     public string GetDisplayString(int abilityModifier)
@@ -123,8 +117,6 @@ public class Skill
         string totalStr = totalBonus >= 0 ? $"+{totalBonus}" : $"{totalBonus}";
 
         string breakdown = $"{Ranks} ranks + {abilityModifier} {KeyAbility}";
-        if (ClassSkillBonus > 0)
-            breakdown += $" + {ClassSkillBonus} class";
 
         string trainedTag = (TrainedOnly && Ranks == 0) ? " [untrained]" : "";
 

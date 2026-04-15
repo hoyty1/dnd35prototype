@@ -242,6 +242,9 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.None,
             RangeIncrement = 80,
+            RequiresReload = true,
+            IsLoaded = true,
+            ReloadAction = ReloadActionType.MoveAction,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 4f,
             IconChar = "\u2732", IconColor = new Color(0.6f, 0.5f, 0.3f)
@@ -258,6 +261,9 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.None,
             RangeIncrement = 120,
+            RequiresReload = true,
+            IsLoaded = true,
+            ReloadAction = ReloadActionType.FullRound,
             CritThreatMin = 19, CritMultiplier = 2,
             WeightLbs = 8f,
             IconChar = "\u2732", IconColor = new Color(0.5f, 0.5f, 0.5f)
@@ -1034,6 +1040,7 @@ public static class ItemDatabase
             IsAlignedLawful = src.IsAlignedLawful, IsAlignedChaotic = src.IsAlignedChaotic,
             DmgModType = src.DmgModType, CompositeRating = src.CompositeRating,
             IsThrown = src.IsThrown, RangeIncrement = src.RangeIncrement,
+            RequiresReload = src.RequiresReload, IsLoaded = src.IsLoaded, ReloadAction = src.ReloadAction,
             CritThreatMin = src.CritThreatMin, CritMultiplier = src.CritMultiplier,
             // Armor/Shield properties
             ArmorBonus = src.ArmorBonus, ShieldBonus = src.ShieldBonus,

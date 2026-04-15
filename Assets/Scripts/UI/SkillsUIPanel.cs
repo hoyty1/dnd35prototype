@@ -406,8 +406,6 @@ public class SkillsUIPanel : MonoBehaviour
         string breakdown = $"{skill.Ranks}r";
         string modStr = abilityMod >= 0 ? $"+{abilityMod}" : $"{abilityMod}";
         breakdown += $" {modStr}{skill.KeyAbility}";
-        if (skill.ClassSkillBonus > 0)
-            breakdown += $" +3cls";
         if (skill.TrainedOnly && skill.Ranks == 0)
             breakdown += " [need training]";
         if (!skill.IsClassSkill)
@@ -460,9 +458,8 @@ public class SkillsUIPanel : MonoBehaviour
         else
         {
             int abilityMod = _stats.GetAbilityModForSkill(skill);
-            string classStr = skill.ClassSkillBonus > 0 ? $" + {skill.ClassSkillBonus}(class)" : "";
             _logText.text = $"<color=#88FF88>{skill.SkillName} check = {result}</color>  " +
-                           $"(ranks:{skill.Ranks} + {skill.KeyAbility}:{abilityMod}{classStr})";
+                           $"(ranks:{skill.Ranks} + {skill.KeyAbility}:{abilityMod})";
         }
     }
 
@@ -583,3 +580,4 @@ public class SkillsUIPanel : MonoBehaviour
         public Button RemoveButton;
     }
 }
+

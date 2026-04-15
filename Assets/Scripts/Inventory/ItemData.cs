@@ -71,6 +71,17 @@ public enum ArmorCategory
 }
 
 /// <summary>
+/// D&D 3.5 reload action required for crossbows.
+/// </summary>
+public enum ReloadActionType
+{
+    None,
+    FreeAction,
+    MoveAction,
+    FullRound
+}
+
+/// <summary>
 /// Represents a single item with its properties and stats.
 /// Items are value types copied around; use ItemDatabase IDs for identity.
 /// </summary>
@@ -103,6 +114,11 @@ public class ItemData
     public bool IsAlignedGood;             // Bypasses DR/good
     public bool IsAlignedEvil;             // Bypasses DR/evil
     public bool IsAlignedLawful;           // Bypasses DR/lawful
+
+    // --- Reloading (D&D 3.5 crossbows) ---
+    public bool RequiresReload;              // True for crossbows that must be reloaded after firing
+    public bool IsLoaded = true;             // Runtime state: starts loaded
+    public ReloadActionType ReloadAction;    // Base reload action without Rapid Reload
     public bool IsAlignedChaotic;          // Bypasses DR/chaotic
 
     // --- Damage Modifier Properties (D&D 3.5) ---
@@ -137,6 +153,54 @@ public class ItemData
     /// <summary>Create an empty/null item.</summary>
     public static ItemData Empty => null;
 
+
+    /// <summary>True if this item is one of the supported crossbow weapon types.</summary>
+    public bool IsCrossbowWeapon => IsWeapon && RequiresReload;
+
+    /// <summary>
+    /// Returns true if this weapon has a Rapid Reload feat variant keyed by this weapon type.
+    /// </summary>
+    public bool IsRapidReloadSupportedCrossbow
+    {
+        get
+        {
+            if (!IsCrossbowWeapon) return false;
+            string id = (Id ?? string.Empty).ToLowerInvariant();
+            return id.Contains("crossbow_light")
+                || id.Contains("crossbow_heavy")
+                || id.Contains("crossbow_hand")
+                || id.Contains("crossbow_repeating");
+        }
+    }
+
+    /// <summary>
+    /// Get the feat name that applies Rapid Reload to this crossbow.
+    /// Returns empty for non-crossbows or unsupported crossbow variants.
+    /// </summary>
+    public string GetRapidReloadFeatName()
+    {
+        if (!IsCrossbowWeapon) return string.Empty;
+
+        string id = (Id ?? string.Empty).ToLowerInvariant();
+        if (id.Contains("crossbow_light")) return "Rapid Reload (Light Crossbow)";
+        if (id.Contains("crossbow_heavy")) return "Rapid Reload (Heavy Crossbow)";
+        if (id.Contains("crossbow_hand")) return "Rapid Reload (Hand Crossbow)";
+        if (id.Contains("crossbow_repeating")) return "Rapid Reload (Repeating Crossbow)";
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// Get the effective reload action after applying Rapid Reload if the character has it for this weapon.
+    /// </summary>
+    public ReloadActionType GetEffectiveReloadAction(bool hasRapidReload)
+    {
+        ReloadActionType action = ReloadAction;
+        if (!hasRapidReload) return action;
+
+        if (action == ReloadActionType.FullRound) return ReloadActionType.MoveAction;
+        if (action == ReloadActionType.MoveAction) return ReloadActionType.FreeAction;
+        return action;
+    }
     public bool IsWeapon => Type == ItemType.Weapon;
     public bool IsArmor => Type == ItemType.Armor;
     public bool IsShield => Type == ItemType.Shield;
@@ -215,7 +279,20 @@ public class ItemData
                 string weaponType = IsThrown ? "thrown" : "projectile";
                 stats += $"\nRange: {RangeIncrement} ft increment ({incSquares} sq), max {maxRange} ft ({maxSquares} sq) [{weaponType}]";
             }
-            else if (AttackRange > 1) stats += $" | Range: {AttackRange} ft";
+            else if (AttackRange > 1)
+            {
+                stats += $" | Range: {AttackRange} ft";
+            }
+
+            if (RequiresReload)
+            {
+                string reloadLabel = ReloadAction == ReloadActionType.FullRound ? "Full-round"
+                    : ReloadAction == ReloadActionType.MoveAction ? "Move"
+                    : ReloadAction == ReloadActionType.FreeAction ? "Free"
+                    : "None";
+                string loadedLabel = IsLoaded ? "Loaded" : "Unloaded";
+                stats += $"\nReload: {reloadLabel} | {loadedLabel}";
+            }
             string props = "";
             if (IsLightWeapon) props += "Light, ";
             if (IsTwoHanded) props += "Two-handed, ";

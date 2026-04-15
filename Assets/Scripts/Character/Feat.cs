@@ -78,11 +78,8 @@ public class FeatPrerequisite
                 return false;
 
             case PrerequisiteType.Proficiency:
-                // Simplified: fighters are proficient with all martial weapons
-                if (ParamString == "Martial Weapons")
-                    return stats.CharacterClass == "Fighter";
-                return true;
-
+                // Supports broad categories (Simple/Martial) and specific weapon names used by Rapid Reload.
+                return stats.IsProficientWithWeaponByName(ParamString);
             case PrerequisiteType.CasterLevel:
                 // Caster level check - for spellcasting classes, caster level equals class level
                 // Wizard, Sorcerer, Cleric, Druid, Bard, etc. qualify

@@ -203,10 +203,26 @@ public class CharacterController : MonoBehaviour
 
         // Get equipped weapon for damage modifier and feat calculations
         ItemData equippedWeapon = GetEquippedMainWeapon();
+        if (!CanAttackWithWeapon(equippedWeapon, out string cannotAttackReason))
+        {
+            Debug.LogWarning($"[Combat] {Stats.CharacterName} cannot attack: {cannotAttackReason}");
+            return new CombatResult
+            {
+                Attacker = this,
+                Defender = target,
+                WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed",
+                Hit = false,
+                DieRoll = 0,
+                TotalRoll = 0,
+                TargetAC = target != null && target.Stats != null ? target.Stats.ArmorClass : 0,
+                DefenderHPBefore = target != null && target.Stats != null ? target.Stats.CurrentHP : 0,
+                DefenderHPAfter = target != null && target.Stats != null ? target.Stats.CurrentHP : 0
+            };
+        }
+
         bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || equippedWeapon.RangeIncrement > 0))
                         && rangeInfo != null && !rangeInfo.IsMelee;
         bool isMelee = !isRanged;
-
         // === FEAT: Power Attack (melee only) ===
         int powerAtkPenalty = 0;
         int powerAtkDmgBonus = 0;
@@ -323,6 +339,13 @@ public class CharacterController : MonoBehaviour
         result.DefenderHPBefore = hpBefore;
         result.DefenderHPAfter = target.Stats.CurrentHP;
 
+        if (equippedWeapon != null && equippedWeapon.RequiresReload)
+        {
+            string reloadStateMessage = OnWeaponFired(equippedWeapon);
+            if (!string.IsNullOrEmpty(reloadStateMessage))
+                Debug.Log($"[Reload] {Stats.CharacterName}: {reloadStateMessage}");
+        }
+
         HasAttackedThisTurn = true;
         return result;
     }
@@ -353,13 +376,17 @@ public class CharacterController : MonoBehaviour
 
         // Get equipped weapon for damage modifier and feat calculations
         ItemData equippedWeapon = GetEquippedMainWeapon();
+        if (!CanAttackWithWeapon(equippedWeapon, out string cannotAttackReason))
+        {
+            Debug.LogWarning($"[FullAttack] {Stats.CharacterName}: {cannotAttackReason}");
+            result.DefenderHPAfter = target.Stats.CurrentHP;
+            result.TargetKilled = target.Stats.IsDead;
+            return result;
+        }
+
         bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || equippedWeapon.RangeIncrement > 0))
                         && rangeInfo != null && !rangeInfo.IsMelee;
         bool isMelee = !isRanged;
-
-        // Store weapon name on result
-        if (equippedWeapon != null)
-            result.MainWeaponName = equippedWeapon.Name;
 
         // === FEAT: Power Attack (melee only) ===
         int powerAtkPenalty = 0;
@@ -531,7 +558,15 @@ public class CharacterController : MonoBehaviour
 
         result.DefenderHPAfter = target.Stats.CurrentHP;
         result.TargetKilled = target.Stats.IsDead;
-        HasAttackedThisTurn = true;
+
+        if (equippedWeapon != null && equippedWeapon.RequiresReload && result.Attacks.Count > 0)
+        {
+            string reloadStateMessage = OnWeaponFired(equippedWeapon);
+            if (!string.IsNullOrEmpty(reloadStateMessage))
+                Debug.Log($"[Reload] {Stats.CharacterName}: {reloadStateMessage}");
+        }
+
+        HasAttackedThisTurn = result.Attacks.Count > 0;
         return result;
     }
 
@@ -570,11 +605,6 @@ public class CharacterController : MonoBehaviour
         return (mainPen, offPen, lightOffHand);
     }
 
-    /// <summary>
-    /// Perform a Dual Wield attack - main hand and off-hand attacks.
-    /// Each hand uses its own weapon's critical hit properties.
-    /// Includes feat effects (Power Attack for melee, Point Blank Shot for ranged).
-    /// </summary>
     public FullAttackResult DualWieldAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
     {
         var result = new FullAttackResult();
@@ -588,33 +618,30 @@ public class CharacterController : MonoBehaviour
 
         var mainWeapon = inv.CharacterInventory.RightHandSlot;
         var offWeapon = inv.CharacterInventory.LeftHandSlot;
-
         if (mainWeapon == null || offWeapon == null) return result;
 
-        // Store weapon names on result
+        bool canMainAttack = CanAttackWithWeapon(mainWeapon, out string mainBlockedReason);
+        bool canOffAttack = CanAttackWithWeapon(offWeapon, out string offBlockedReason);
+
         result.MainWeaponName = mainWeapon.Name;
         result.OffWeaponName = offWeapon.Name;
 
         var (mainPenalty, offPenalty, lightOff) = GetDualWieldPenalties();
 
-        // Racial attack bonus and range penalty
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
         int rangePenalty = (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange) ? rangeInfo.Penalty : 0;
 
         bool isRanged = rangeInfo != null && !rangeInfo.IsMelee;
         bool isMelee = !isRanged;
 
-        // === FEAT: Power Attack (melee only) ===
         int powerAtkPenalty = 0;
         int powerAtkDmgBonus = 0;
         if (isMelee && Stats.HasFeat("Power Attack") && PowerAttackValue > 0)
         {
             powerAtkPenalty = -PowerAttackValue;
-            // Dual wielding is one-handed, no 2× bonus
-            powerAtkDmgBonus = PowerAttackValue;
+            powerAtkDmgBonus = PowerAttackValue; // one-handed while dual-wielding
         }
 
-        // === FEAT: Point Blank Shot (ranged, within 30 ft) ===
         bool pointBlankActive = false;
         int pbsAtkBonus = 0;
         int pbsDmgBonus = 0;
@@ -625,15 +652,11 @@ public class CharacterController : MonoBehaviour
             pbsDmgBonus = 1;
         }
 
-        // === FEAT: Weapon Focus (+1 attack with chosen weapon) ===
         int mainWFBonus = FeatManager.GetWeaponFocusBonus(Stats, mainWeapon?.Name ?? "Unarmed");
         int offWFBonus = FeatManager.GetWeaponFocusBonus(Stats, offWeapon?.Name ?? "Unarmed");
-
-        // === FEAT: Weapon Specialization (+2 damage with chosen weapon) ===
         int mainWSBonus = FeatManager.GetWeaponSpecializationBonus(Stats, mainWeapon?.Name ?? "Unarmed");
         int offWSBonus = FeatManager.GetWeaponSpecializationBonus(Stats, offWeapon?.Name ?? "Unarmed");
 
-        // === FEAT: Weapon Finesse (use DEX instead of STR for light/finesse melee) ===
         int finesseAtkAdjust = 0;
         string abilityName = isRanged ? "DEX" : "STR";
         int abilityMod = isRanged ? Stats.DEXMod : Stats.STRMod;
@@ -644,7 +667,6 @@ public class CharacterController : MonoBehaviour
             abilityMod = Stats.DEXMod;
         }
 
-        // === FEAT: Combat Expertise (trade attack for AC) ===
         int combatExpertisePenalty = 0;
         if (isMelee && Stats.HasFeat("Combat Expertise") && Stats.CombatExpertiseValue > 0)
         {
@@ -652,89 +674,93 @@ public class CharacterController : MonoBehaviour
             combatExpertisePenalty = -Mathf.Min(Stats.CombatExpertiseValue, maxCE);
         }
 
-        // Prone: melee attacks take -4.
         int proneAttackPenalty = GetProneAttackModifier(isMelee);
-
-        // Fighting Defensively: -4 attack while active.
         int fightingDefensivelyPenalty = IsFightingDefensively ? -4 : 0;
-
-        // Shooting into melee for ranged attacks.
         bool preciseShotNegated = false;
         int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
 
-        // Main hand attack
-        int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                         + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty
-                         + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
-        string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
-
-        int mainCritMin = mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20;
-        int mainCritMult = mainWeapon.CritMultiplier > 0 ? mainWeapon.CritMultiplier : 2;
-
-        // === FEAT: Improved Critical (double threat range) ===
-        mainCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, mainCritMin);
-
-        int totalMainFeatDmg = powerAtkDmgBonus + (pointBlankActive ? 1 : 0) + mainWSBonus;
-
-        int hpBeforeMain = target.Stats.CurrentHP;
-        CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-            mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, mainCritMin, mainCritMult,
-            mainWeapon, false, totalMainFeatDmg);
-        mainAtk.RacialAttackBonus = racialAtkBonus;
-        mainAtk.SizeAttackBonus = Stats.SizeModifier;
-        mainAtk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
-        mainAtk.PowerAttackDamageBonus = powerAtkDmgBonus;
-        mainAtk.PointBlankShotActive = pointBlankActive;
-        mainAtk.FeatDamageBonus = totalMainFeatDmg;
-        mainAtk.WeaponFocusBonus = mainWFBonus;
-        mainAtk.WeaponSpecBonus = mainWSBonus;
-        mainAtk.CombatExpertisePenalty = combatExpertisePenalty;
-        mainAtk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
-        mainAtk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
-        mainAtk.PreciseShotNegated = preciseShotNegated;
-        mainAtk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
-        mainAtk.WeaponName = mainWeapon.Name;
-        mainAtk.BaseDamageDiceStr = $"{mainWeapon.DamageCount}d{mainWeapon.DamageDice}";
-        mainAtk.IsDualWieldAttack = true;
-        mainAtk.IsOffHandAttack = false;
-        mainAtk.BreakdownBAB = Stats.BaseAttackBonus;
-        mainAtk.BreakdownAbilityMod = abilityMod;
-        mainAtk.BreakdownAbilityName = abilityName;
-        mainAtk.BreakdownDualWieldPenalty = mainPenalty;
-        mainAtk.DefenderHPBefore = hpBeforeMain;
-        mainAtk.DefenderHPAfter = target.Stats.CurrentHP;
-
-        if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
+        // Main-hand attack
+        if (canMainAttack)
         {
-            mainAtk.IsRangedAttack = true;
-            mainAtk.RangeDistanceFeet = rangeInfo.DistanceFeet;
-            mainAtk.RangeDistanceSquares = rangeInfo.SquareDistance;
-            mainAtk.RangeIncrementNumber = rangeInfo.IncrementNumber;
-            mainAtk.RangePenalty = rangeInfo.Penalty;
-        }
-        result.Attacks.Add(mainAtk);
-        result.AttackLabels.Add(mainLabel);
+            int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
+                             + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty
+                             + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
+            string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
 
-        // Off-hand attack (only if target still alive)
-        if (!target.Stats.IsDead)
+            int mainCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20);
+            int mainCritMult = mainWeapon.CritMultiplier > 0 ? mainWeapon.CritMultiplier : 2;
+            int totalMainFeatDmg = powerAtkDmgBonus + pbsDmgBonus + mainWSBonus;
+
+            int hpBeforeMain = target.Stats.CurrentHP;
+            CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
+                mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, mainCritMin, mainCritMult,
+                mainWeapon, false, totalMainFeatDmg);
+
+            mainAtk.RacialAttackBonus = racialAtkBonus;
+            mainAtk.SizeAttackBonus = Stats.SizeModifier;
+            mainAtk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
+            mainAtk.PowerAttackDamageBonus = powerAtkDmgBonus;
+            mainAtk.PointBlankShotActive = pointBlankActive;
+            mainAtk.FeatDamageBonus = totalMainFeatDmg;
+            mainAtk.WeaponFocusBonus = mainWFBonus;
+            mainAtk.WeaponSpecBonus = mainWSBonus;
+            mainAtk.CombatExpertisePenalty = combatExpertisePenalty;
+            mainAtk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
+            mainAtk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
+            mainAtk.PreciseShotNegated = preciseShotNegated;
+            mainAtk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
+            mainAtk.WeaponName = mainWeapon.Name;
+            mainAtk.BaseDamageDiceStr = $"{mainWeapon.DamageCount}d{mainWeapon.DamageDice}";
+            mainAtk.IsDualWieldAttack = true;
+            mainAtk.IsOffHandAttack = false;
+            mainAtk.BreakdownBAB = Stats.BaseAttackBonus;
+            mainAtk.BreakdownAbilityMod = abilityMod;
+            mainAtk.BreakdownAbilityName = abilityName;
+            mainAtk.BreakdownDualWieldPenalty = mainPenalty;
+            mainAtk.DefenderHPBefore = hpBeforeMain;
+            mainAtk.DefenderHPAfter = target.Stats.CurrentHP;
+
+            if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)
+            {
+                mainAtk.IsRangedAttack = true;
+                mainAtk.RangeDistanceFeet = rangeInfo.DistanceFeet;
+                mainAtk.RangeDistanceSquares = rangeInfo.SquareDistance;
+                mainAtk.RangeIncrementNumber = rangeInfo.IncrementNumber;
+                mainAtk.RangePenalty = rangeInfo.Penalty;
+            }
+
+            result.Attacks.Add(mainAtk);
+            result.AttackLabels.Add(mainLabel);
+
+            if (mainWeapon.RequiresReload)
+            {
+                string reloadStateMessage = OnWeaponFired(mainWeapon);
+                if (!string.IsNullOrEmpty(reloadStateMessage))
+                    Debug.Log($"[Reload] {Stats.CharacterName}: {reloadStateMessage}");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"[DualWield] {Stats.CharacterName} main-hand attack skipped: {mainBlockedReason}");
+        }
+
+        // Off-hand attack
+        if (!target.Stats.IsDead && canOffAttack)
         {
             int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                             + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty
                             + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
             string offLabel = $"Attack 2 - Off Hand ({offWeapon.Name})";
 
-            int offCritMin = offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20;
+            int offCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20);
             int offCritMult = offWeapon.CritMultiplier > 0 ? offWeapon.CritMultiplier : 2;
-
-            // === FEAT: Improved Critical (double threat range) ===
-            offCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, offCritMin);
-
-            int totalOffFeatDmg = powerAtkDmgBonus + (pointBlankActive ? 1 : 0) + offWSBonus;
+            int totalOffFeatDmg = powerAtkDmgBonus + pbsDmgBonus + offWSBonus;
 
             int hpBeforeOff = target.Stats.CurrentHP;
             CombatResult offAtk = PerformSingleAttackWithCrit(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
                 offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, offCritMin, offCritMult,
                 offWeapon, true, totalOffFeatDmg);
+
             offAtk.RacialAttackBonus = racialAtkBonus;
             offAtk.SizeAttackBonus = Stats.SizeModifier;
             offAtk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
@@ -767,13 +793,25 @@ public class CharacterController : MonoBehaviour
                 offAtk.RangeIncrementNumber = rangeInfo.IncrementNumber;
                 offAtk.RangePenalty = rangeInfo.Penalty;
             }
+
             result.Attacks.Add(offAtk);
             result.AttackLabels.Add(offLabel);
+
+            if (offWeapon.RequiresReload)
+            {
+                string reloadStateMessage = OnWeaponFired(offWeapon);
+                if (!string.IsNullOrEmpty(reloadStateMessage))
+                    Debug.Log($"[Reload] {Stats.CharacterName}: {reloadStateMessage}");
+            }
+        }
+        else if (!canOffAttack)
+        {
+            Debug.LogWarning($"[DualWield] {Stats.CharacterName} off-hand attack skipped: {offBlockedReason}");
         }
 
         result.DefenderHPAfter = target.Stats.CurrentHP;
         result.TargetKilled = target.Stats.IsDead;
-        HasAttackedThisTurn = true;
+        HasAttackedThisTurn = result.Attacks.Count > 0;
         return result;
     }
 
@@ -1018,6 +1056,121 @@ public class CharacterController : MonoBehaviour
 
     // ========== WEAPON HELPERS ==========
 
+    /// <summary>
+    /// Returns true if the provided weapon (or current main weapon) is a reload-based crossbow and currently unloaded.
+    /// </summary>
+    public bool IsCrossbowUnloaded(ItemData weapon = null)
+    {
+        weapon ??= GetEquippedMainWeapon();
+        return weapon != null && weapon.RequiresReload && !weapon.IsLoaded;
+    }
+
+    /// <summary>
+    /// Check whether this character can currently attack with the equipped main weapon.
+    /// </summary>
+    public bool CanAttackWithEquippedWeapon(out string reason)
+    {
+        return CanAttackWithWeapon(GetEquippedMainWeapon(), out reason);
+    }
+
+    /// <summary>
+    /// Check whether this character can currently attack with the specified weapon.
+    /// </summary>
+    public bool CanAttackWithWeapon(ItemData weapon, out string reason)
+    {
+        reason = string.Empty;
+        if (weapon == null) return true;
+
+        if (weapon.RequiresReload && !weapon.IsLoaded)
+        {
+            reason = $"{weapon.Name} is unloaded and must be reloaded.";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Returns true if the character has the matching Rapid Reload feat for the given crossbow.
+    /// </summary>
+    public bool HasRapidReloadForWeapon(ItemData weapon)
+    {
+        if (Stats == null || weapon == null || !weapon.RequiresReload) return false;
+
+        string featName = weapon.GetRapidReloadFeatName();
+        if (string.IsNullOrEmpty(featName)) return false;
+        return Stats.HasFeat(featName);
+    }
+
+    /// <summary>
+    /// Get effective reload action for a weapon after applying Rapid Reload, if present.
+    /// </summary>
+    public ReloadActionType GetEffectiveReloadAction(ItemData weapon)
+    {
+        if (weapon == null || !weapon.RequiresReload) return ReloadActionType.None;
+        bool hasRapidReload = HasRapidReloadForWeapon(weapon);
+        return weapon.GetEffectiveReloadAction(hasRapidReload);
+    }
+
+    /// <summary>
+    /// Mark weapon as fired and apply automatic free-action reload if available.
+    /// Returns a short status string for combat log purposes.
+    /// </summary>
+    public string OnWeaponFired(ItemData weapon)
+    {
+        if (weapon == null || !weapon.RequiresReload)
+            return string.Empty;
+
+        weapon.IsLoaded = false;
+
+        ReloadActionType effectiveReload = GetEffectiveReloadAction(weapon);
+        if (effectiveReload == ReloadActionType.FreeAction)
+        {
+            weapon.IsLoaded = true;
+            return $"{weapon.Name} is reloaded (free action via Rapid Reload).";
+        }
+
+        return $"{weapon.Name} is now unloaded and must be reloaded.";
+    }
+
+    /// <summary>
+    /// Reload weapon state immediately (action-economy checks are handled by GameManager/UI).
+    /// </summary>
+    public bool ReloadWeapon(ItemData weapon)
+    {
+        if (weapon == null || !weapon.RequiresReload) return false;
+        if (weapon.IsLoaded) return false;
+        weapon.IsLoaded = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Human-readable label for reload action type.
+    /// </summary>
+    public static string GetReloadActionLabel(ReloadActionType action)
+    {
+        switch (action)
+        {
+            case ReloadActionType.FreeAction: return "Free";
+            case ReloadActionType.MoveAction: return "Move";
+            case ReloadActionType.FullRound: return "Full-round";
+            default: return "None";
+        }
+    }
+
+    /// <summary>
+    /// Build a short weapon load-state label for UI.
+    /// </summary>
+    public string GetWeaponLoadStateLabel(ItemData weapon = null)
+    {
+        weapon ??= GetEquippedMainWeapon();
+        if (weapon == null || !weapon.RequiresReload) return string.Empty;
+
+        string state = weapon.IsLoaded ? "LOADED" : "UNLOADED";
+        ReloadActionType action = GetEffectiveReloadAction(weapon);
+        string actionLabel = GetReloadActionLabel(action);
+        return $"{weapon.Name}: {state} (Reload: {actionLabel})";
+    }
     /// <summary>
     /// Check if the equipped main weapon is a ranged weapon.
     /// Used by UI to determine if Rapid Shot can actually apply.

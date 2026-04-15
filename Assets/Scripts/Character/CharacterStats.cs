@@ -1227,6 +1227,77 @@ public class CharacterStats
         return Race.HasRacialProficiency(weaponId);
     }
 
+    /// <summary>Whether this class has broad simple weapon proficiency.</summary>
+    public bool HasSimpleWeaponProficiency()
+    {
+        // All currently implemented PHB classes in this project have simple weapon proficiency.
+        // Unknown classes default to false.
+        switch (CharacterClass)
+        {
+            case "Barbarian":
+            case "Bard":
+            case "Cleric":
+            case "Druid":
+            case "Fighter":
+            case "Monk":
+            case "Paladin":
+            case "Ranger":
+            case "Rogue":
+            case "Sorcerer":
+            case "Wizard":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Whether this class has broad martial weapon proficiency.</summary>
+    public bool HasMartialWeaponProficiency()
+    {
+        switch (CharacterClass)
+        {
+            case "Barbarian":
+            case "Fighter":
+            case "Paladin":
+            case "Ranger":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Check weapon proficiency by display name/id for feat prerequisites.
+    /// Supports broad simple/martial checks and crossbow-specific checks needed by Rapid Reload.
+    /// </summary>
+    public bool IsProficientWithWeaponByName(string weaponNameOrId)
+    {
+        if (string.IsNullOrEmpty(weaponNameOrId)) return false;
+
+        string key = weaponNameOrId.ToLowerInvariant();
+
+        if (key.Contains("martial"))
+            return HasMartialWeaponProficiency();
+
+        if (key.Contains("simple"))
+            return HasSimpleWeaponProficiency();
+
+        // Light and heavy crossbows are simple weapons.
+        if (key.Contains("crossbow, light") || key.Contains("crossbow_light")
+            || key.Contains("crossbow, heavy") || key.Contains("crossbow_heavy"))
+            return HasSimpleWeaponProficiency();
+
+        // Hand/repeating crossbows are exotic in core rules.
+        // We currently only honor explicit racial proficiency for these.
+        if (key.Contains("crossbow, hand") || key.Contains("crossbow_hand")
+            || key.Contains("crossbow, repeating") || key.Contains("crossbow_repeating"))
+        {
+            return HasRacialWeaponProficiency("crossbow_hand") || HasRacialWeaponProficiency("crossbow_repeating");
+        }
+
+        // Fallback: if we don't recognize the specific weapon, treat martial classes as broadly proficient.
+        return HasMartialWeaponProficiency();
+    }
     /// <summary>
     /// Whether this character's race prevents armor from reducing speed.
     /// </summary>
@@ -1351,7 +1422,7 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Get the total bonus for a skill (ranks + ability mod + class skill bonus + feat bonuses).
+    /// Get the total bonus for a skill (ranks + ability mod + feat bonuses).
     /// Returns 0 if skill not found.
     /// </summary>
     public int GetSkillBonus(string skillName)
@@ -1390,9 +1461,8 @@ public class CharacterStats
         int featBonus = GetFeatSkillBonus(skillName);
         int total = d20 + totalBonus + featBonus;
 
-        string classStr = skill.ClassSkillBonus > 0 ? $" + {skill.ClassSkillBonus}(class)" : "";
         string featStr = featBonus > 0 ? $" + {featBonus}(feat)" : "";
-        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){classStr}{featStr} = {total}");
+        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr} = {total}");
 
         return total;
     }

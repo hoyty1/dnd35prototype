@@ -476,6 +476,38 @@ public static class FeatDefinitions
         rapidShot.Benefit.Description = "Extra ranged attack at highest BAB, -2 penalty to all attacks";
         Add(rapidShot);
 
+
+        // --- Rapid Reload (Light Crossbow) ---
+        var rapidReloadLight = new FeatDefinition("Rapid Reload (Light Crossbow)",
+            "Choose Light Crossbow. Time required to reload your chosen crossbow is reduced from a move action to a free action.",
+            FeatType.Ranged);
+        rapidReloadLight.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Proficiency, "Crossbow, Light", 0));
+        rapidReloadLight.Benefit.Description = "Reload light crossbow one step faster";
+        Add(rapidReloadLight);
+
+        // --- Rapid Reload (Heavy Crossbow) ---
+        var rapidReloadHeavy = new FeatDefinition("Rapid Reload (Heavy Crossbow)",
+            "Choose Heavy Crossbow. Time required to reload your chosen crossbow is reduced from a full-round action to a move action.",
+            FeatType.Ranged);
+        rapidReloadHeavy.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Proficiency, "Crossbow, Heavy", 0));
+        rapidReloadHeavy.Benefit.Description = "Reload heavy crossbow one step faster";
+        Add(rapidReloadHeavy);
+
+        // --- Rapid Reload (Hand Crossbow) ---
+        var rapidReloadHand = new FeatDefinition("Rapid Reload (Hand Crossbow)",
+            "Choose Hand Crossbow. Time required to reload your chosen crossbow is reduced by one action step.",
+            FeatType.Ranged);
+        rapidReloadHand.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Proficiency, "Crossbow, Hand", 0));
+        rapidReloadHand.Benefit.Description = "Reload hand crossbow one step faster";
+        Add(rapidReloadHand);
+
+        // --- Rapid Reload (Repeating Crossbow) ---
+        var rapidReloadRepeating = new FeatDefinition("Rapid Reload (Repeating Crossbow)",
+            "Choose Repeating Crossbow. Time required to reload your chosen crossbow is reduced by one action step.",
+            FeatType.Ranged);
+        rapidReloadRepeating.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Proficiency, "Crossbow, Repeating", 0));
+        rapidReloadRepeating.Benefit.Description = "Reload repeating crossbow one step faster";
+        Add(rapidReloadRepeating);
         // --- Shot on the Run ---
         var shotOnRun = new FeatDefinition("Shot on the Run",
             "When using the attack action with a ranged weapon, you can move both before and after the attack, provided that your total distance moved is not greater than your speed.",

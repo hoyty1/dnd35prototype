@@ -1797,6 +1797,13 @@ public class GameManager : MonoBehaviour
         string pcName = pc.Stats.CharacterName;
         string actionInfo = pc.Actions.GetStatusString();
 
+        string weaponStateInfo = string.Empty;
+        ItemData currentWeapon = pc.GetEquippedMainWeapon();
+        if (currentWeapon != null && currentWeapon.RequiresReload)
+        {
+            weaponStateInfo = $"\n{pc.GetWeaponLoadStateLabel(currentWeapon)}";
+        }
+
         string dwInfo = "";
         if (pc.CanDualWield())
             dwInfo = "\n" + pc.GetDualWieldDescription();
@@ -1814,7 +1821,7 @@ public class GameManager : MonoBehaviour
                 spellInfo = $"\n✦ Spells: {spellComp.GetSlotSummary()}";
         }
 
-        CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory  [K] Skills\n{actionInfo}{dwInfo}{featInfo}{spellInfo}");
+        CombatUI.SetTurnIndicator($"{pcName}'s Turn - Choose an action  [I] Inventory  [K] Skills\n{actionInfo}{weaponStateInfo}{dwInfo}{featInfo}{spellInfo}");
 
         if (!pc.Actions.HasAnyActionLeft)
         {
@@ -2341,10 +2348,121 @@ public class GameManager : MonoBehaviour
             character.Actions.ConvertStandardToMove();
     }
 
+    public bool CanReloadEquippedWeapon(CharacterController character, out string reason, out ReloadActionType reloadAction)
+    {
+        reason = string.Empty;
+        reloadAction = ReloadActionType.None;
+
+        if (character == null)
+        {
+            reason = "No active character";
+            return false;
+        }
+
+        ItemData weapon = character.GetEquippedMainWeapon();
+        if (weapon == null || !weapon.RequiresReload)
+        {
+            reason = "No reloadable weapon equipped";
+            return false;
+        }
+
+        if (weapon.IsLoaded)
+        {
+            reason = "Weapon already loaded";
+            return false;
+        }
+
+        reloadAction = character.GetEffectiveReloadAction(weapon);
+        switch (reloadAction)
+        {
+            case ReloadActionType.FreeAction:
+                return true;
+
+            case ReloadActionType.MoveAction:
+                if (character.Actions.HasMoveAction || character.Actions.CanConvertStandardToMove)
+                    return true;
+                reason = "Need move action";
+                return false;
+
+            case ReloadActionType.FullRound:
+                if (character.Actions.HasFullRoundAction)
+                    return true;
+                reason = "Need full-round action";
+                return false;
+
+            default:
+                reason = "Cannot reload";
+                return false;
+        }
+    }
+
+    private bool ExecuteReload(CharacterController character, out string reloadLog)
+    {
+        reloadLog = string.Empty;
+        if (character == null) return false;
+
+        ItemData weapon = character.GetEquippedMainWeapon();
+        if (weapon == null || !weapon.RequiresReload) return false;
+        if (weapon.IsLoaded) return false;
+
+        if (!CanReloadEquippedWeapon(character, out string reason, out ReloadActionType reloadAction))
+        {
+            reloadLog = string.IsNullOrEmpty(reason) ? $"Cannot reload {weapon.Name}." : $"Cannot reload {weapon.Name}: {reason}.";
+            return false;
+        }
+
+        switch (reloadAction)
+        {
+            case ReloadActionType.FreeAction:
+                break;
+            case ReloadActionType.MoveAction:
+                ConsumeMoveAction(character);
+                break;
+            case ReloadActionType.FullRound:
+                character.Actions.UseFullRoundAction();
+                break;
+        }
+
+        bool reloaded = character.ReloadWeapon(weapon);
+        if (!reloaded)
+        {
+            reloadLog = $"{weapon.Name} could not be reloaded.";
+            return false;
+        }
+
+        string actionLabel = CharacterController.GetReloadActionLabel(reloadAction);
+        reloadLog = $"🔄 {character.Stats.CharacterName} reloads {weapon.Name} ({actionLabel} action).";
+        return true;
+    }
+
+    public void OnReloadButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        if (ExecuteReload(pc, out string reloadLog))
+        {
+            CombatUI?.ShowCombatLog(reloadLog);
+            UpdateAllStatsUI();
+            ShowActionChoices();
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(reloadLog))
+            CombatUI?.ShowCombatLog($"⚠ {reloadLog}");
+    }
+
     public void OnAttackButtonPressed()
     {
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Actions.HasStandardAction) return;
+
+        if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot attack: {cannotAttackReason}");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
@@ -2387,6 +2505,13 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Actions.HasFullRoundAction) return;
 
+        if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot full attack: {cannotAttackReason}");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
 
@@ -2399,6 +2524,13 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null || pc.Stats == null || !pc.Actions.HasStandardAction) return;
+
+        if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot attack: {cannotAttackReason}");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
         if (pc.Stats.BaseAttackBonus < 1)
         {
@@ -2422,6 +2554,13 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || pc.Stats == null || !pc.Actions.HasFullRoundAction) return;
 
+        if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot full attack: {cannotAttackReason}");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
         if (pc.Stats.BaseAttackBonus < 1)
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} needs BAB +1 to fight defensively.");
@@ -2443,6 +2582,18 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Actions.HasFullRoundAction || !pc.CanDualWield()) return;
+
+        var inv = pc.GetComponent<InventoryComponent>();
+        ItemData main = inv != null ? inv.CharacterInventory.RightHandSlot : null;
+        ItemData off = inv != null ? inv.CharacterInventory.LeftHandSlot : null;
+        bool canMain = pc.CanAttackWithWeapon(main, out string mainReason);
+        bool canOff = pc.CanAttackWithWeapon(off, out string offReason);
+        if (!canMain && !canOff)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot dual-wield attack: {mainReason}");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
         _pendingAttackMode = PendingAttackMode.DualWield;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
@@ -6771,6 +6922,21 @@ public class GameManager : MonoBehaviour
     }
     private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
     {
+        if (!npc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
+        {
+            if (ExecuteReload(npc, out string reloadLog))
+            {
+                CombatUI.ShowCombatLog(reloadLog);
+                UpdateAllStatsUI();
+                yield return new WaitForSeconds(0.8f);
+                yield break;
+            }
+
+            CombatUI.ShowCombatLog($"⚠ {npc.Stats.CharacterName} cannot attack: {cannotAttackReason}");
+            yield return new WaitForSeconds(0.6f);
+            yield break;
+        }
+
         npc.Actions.UseStandardAction();
         RangeInfo npcRangeInfo = CalculateRangeInfo(npc, target);
 

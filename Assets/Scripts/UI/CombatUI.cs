@@ -101,6 +101,7 @@ public class CombatUI : MonoBehaviour
     public Button ChargeButton;         // Charge (Full-Round Action)
     public Button DualWieldButton;      // Dual Wield (Full-Round Action)
     public Button EndTurnButton;
+    public Button ReloadButton;         // Reload equipped crossbow (action varies by weapon/feat)
     public Text ActionStatusText;       // Shows current action economy status
 
     [Header("Monk/Barbarian Buttons")]
@@ -574,8 +575,8 @@ public class CombatUI : MonoBehaviour
         bool hasIterativeAttacks = pc.Stats.IterativeAttackCount > 1;
         bool hasRapidShot = pc.Stats.HasFeat("Rapid Shot");
         bool fullAttackRelevant = hasIterativeAttacks || hasRapidShot;
-
         bool isProne = pc.HasCondition(CombatConditionType.Prone);
+        bool canAttackWithWeapon = pc.CanAttackWithEquippedWeapon(out _);
 
         if (MoveButton != null)
         {
@@ -598,102 +599,75 @@ public class CombatUI : MonoBehaviour
 
         if (FiveFootStepButton != null)
         {
-            string disabledReason = GameManager.Instance != null
-                ? GameManager.Instance.GetFiveFootStepDisabledReason(pc)
-                : "Unavailable";
+            string disabledReason = GameManager.Instance != null ? GameManager.Instance.GetFiveFootStepDisabledReason(pc) : "Unavailable";
             bool canFiveFootStep = string.IsNullOrEmpty(disabledReason);
-
             FiveFootStepButton.gameObject.SetActive(true);
             FiveFootStepButton.interactable = canFiveFootStep;
-
             Text fiveFootLabel = FiveFootStepButton.GetComponentInChildren<Text>();
             if (fiveFootLabel != null)
-            {
-                fiveFootLabel.text = canFiveFootStep
-                    ? "5-Foot Step (Free)"
-                    : $"5-Foot Step ({disabledReason})";
-            }
+                fiveFootLabel.text = canFiveFootStep ? "5-Foot Step (Free)" : $"5-Foot Step ({disabledReason})";
         }
 
         if (DropProneButton != null)
         {
-            string disabledReason = GameManager.Instance != null
-                ? GameManager.Instance.GetDropProneDisabledReason(pc)
-                : "Unavailable";
+            string disabledReason = GameManager.Instance != null ? GameManager.Instance.GetDropProneDisabledReason(pc) : "Unavailable";
             bool canDropProne = string.IsNullOrEmpty(disabledReason);
-
             DropProneButton.gameObject.SetActive(!isProne);
             DropProneButton.interactable = canDropProne;
-
             Text dropProneLabel = DropProneButton.GetComponentInChildren<Text>();
             if (dropProneLabel != null)
-            {
-                dropProneLabel.text = canDropProne
-                    ? "Drop Prone (Free)"
-                    : $"Drop Prone ({disabledReason})";
-            }
+                dropProneLabel.text = canDropProne ? "Drop Prone (Free)" : $"Drop Prone ({disabledReason})";
         }
 
         if (StandUpButton != null)
         {
-            string disabledReason = GameManager.Instance != null
-                ? GameManager.Instance.GetStandUpDisabledReason(pc)
-                : "Unavailable";
+            string disabledReason = GameManager.Instance != null ? GameManager.Instance.GetStandUpDisabledReason(pc) : "Unavailable";
             bool canStandUp = string.IsNullOrEmpty(disabledReason);
-
             StandUpButton.gameObject.SetActive(isProne);
             StandUpButton.interactable = canStandUp;
-
             Text standUpLabel = StandUpButton.GetComponentInChildren<Text>();
             if (standUpLabel != null)
-            {
-                standUpLabel.text = canStandUp
-                    ? "Stand Up (Move, AoO)"
-                    : $"Stand Up ({disabledReason})";
-            }
+                standUpLabel.text = canStandUp ? "Stand Up (Move, AoO)" : $"Stand Up ({disabledReason})";
         }
 
         if (CrawlButton != null)
         {
-            string disabledReason = GameManager.Instance != null
-                ? GameManager.Instance.GetCrawlDisabledReason(pc)
-                : "Unavailable";
+            string disabledReason = GameManager.Instance != null ? GameManager.Instance.GetCrawlDisabledReason(pc) : "Unavailable";
             bool canCrawl = string.IsNullOrEmpty(disabledReason);
-
             CrawlButton.gameObject.SetActive(isProne);
             CrawlButton.interactable = canCrawl;
-
             Text crawlLabel = CrawlButton.GetComponentInChildren<Text>();
             if (crawlLabel != null)
-            {
-                crawlLabel.text = canCrawl
-                    ? "Crawl 5 ft (Move, AoO)"
-                    : $"Crawl ({disabledReason})";
-            }
+                crawlLabel.text = canCrawl ? "Crawl 5 ft (Move, AoO)" : $"Crawl ({disabledReason})";
         }
 
         bool canFightDefensively = pc.Stats.BaseAttackBonus >= 1;
 
         if (AttackButton != null)
         {
+            bool canSingleAttack = actions.HasStandardAction && canAttackWithWeapon;
             AttackButton.gameObject.SetActive(true);
-            AttackButton.interactable = actions.HasStandardAction;
+            AttackButton.interactable = canSingleAttack;
             Text atkLabel = AttackButton.GetComponentInChildren<Text>();
             if (atkLabel != null)
-                atkLabel.text = actions.HasStandardAction ? "Attack (Standard)" : "Attack (Used)";
+            {
+                if (!actions.HasStandardAction) atkLabel.text = "Attack (Used)";
+                else if (!canAttackWithWeapon) atkLabel.text = "Attack (Reload first)";
+                else atkLabel.text = "Attack (Standard)";
+            }
         }
 
         if (AttackDefensivelyButton != null)
         {
+            bool canAttackDefensively = actions.HasStandardAction && canFightDefensively && canAttackWithWeapon;
             AttackDefensivelyButton.gameObject.SetActive(true);
-            bool canAttackDefensively = actions.HasStandardAction && canFightDefensively;
             AttackDefensivelyButton.interactable = canAttackDefensively;
-
             Text atkDefLabel = AttackDefensivelyButton.GetComponentInChildren<Text>();
             if (atkDefLabel != null)
             {
                 if (!canFightDefensively) atkDefLabel.text = "Fighting Defensively (Std) [BAB +1]";
                 else if (!actions.HasStandardAction) atkDefLabel.text = "Fighting Defensively (Std) [Used]";
+                else if (!canAttackWithWeapon) atkDefLabel.text = "Fighting Defensively (Std) [Reload first]";
                 else atkDefLabel.text = "Fighting Defensively (Std)";
             }
         }
@@ -719,7 +693,6 @@ public class CombatUI : MonoBehaviour
 
             ChargeButton.gameObject.SetActive(hasMeleeThreat || fatigued || blockedByFiveFootStep || blockedByProne);
             ChargeButton.interactable = canChargeTarget;
-
             Text chargeLabel = ChargeButton.GetComponentInChildren<Text>();
             if (chargeLabel != null)
             {
@@ -733,7 +706,7 @@ public class CombatUI : MonoBehaviour
             }
         }
 
-        bool canTakeFullRoundAttack = fullAttackRelevant && actions.HasFullRoundAction;
+        bool canTakeFullRoundAttack = fullAttackRelevant && actions.HasFullRoundAction && canAttackWithWeapon;
         if (FullAttackButton != null)
         {
             FullAttackButton.gameObject.SetActive(fullAttackRelevant);
@@ -744,13 +717,13 @@ public class CombatUI : MonoBehaviour
                 int atkCount = pc.Stats.IterativeAttackCount;
                 bool weaponIsRanged = pc.IsEquippedWeaponRanged();
                 bool rapidShotWillApply = hasRapidShot && pc.RapidShotEnabled && weaponIsRanged;
-                string label;
-                if (!canTakeFullRoundAttack) label = "Full Attack (N/A)";
-                else if (rapidShotWillApply) label = $"Full Attack x{atkCount + 1} (Rapid Shot)";
-                else if (hasRapidShot && pc.RapidShotEnabled && !weaponIsRanged) label = $"Full Attack x{atkCount} (RS: need ranged wpn)";
-                else if (hasIterativeAttacks) label = $"Full Attack x{atkCount} (Full-Round)";
-                else label = "Full Attack (Full-Round)";
-                faLabel.text = label;
+
+                if (!canAttackWithWeapon) faLabel.text = "Full Attack (Reload first)";
+                else if (!canTakeFullRoundAttack) faLabel.text = "Full Attack (N/A)";
+                else if (rapidShotWillApply) faLabel.text = $"Full Attack x{atkCount + 1} (Rapid Shot)";
+                else if (hasRapidShot && pc.RapidShotEnabled && !weaponIsRanged) faLabel.text = $"Full Attack x{atkCount} (RS: need ranged wpn)";
+                else if (hasIterativeAttacks) faLabel.text = $"Full Attack x{atkCount} (Full-Round)";
+                else faLabel.text = "Full Attack (Full-Round)";
             }
         }
 
@@ -759,11 +732,11 @@ public class CombatUI : MonoBehaviour
             FullAttackDefensivelyButton.gameObject.SetActive(fullAttackRelevant);
             bool canFullAttackDefensively = canTakeFullRoundAttack && canFightDefensively;
             FullAttackDefensivelyButton.interactable = canFullAttackDefensively;
-
             Text fullDefLabel = FullAttackDefensivelyButton.GetComponentInChildren<Text>();
             if (fullDefLabel != null)
             {
                 if (!canFightDefensively) fullDefLabel.text = "Full Attack (Def) [BAB +1]";
+                else if (!canAttackWithWeapon) fullDefLabel.text = "Full Attack (Def) [Reload first]";
                 else if (!canTakeFullRoundAttack) fullDefLabel.text = "Full Attack (Def) [N/A]";
                 else fullDefLabel.text = "Full Attack (Def)";
             }
@@ -771,13 +744,23 @@ public class CombatUI : MonoBehaviour
 
         if (DualWieldButton != null)
         {
-            bool showDW = canDualWield;
             bool canDW = canDualWield && actions.HasFullRoundAction;
-            DualWieldButton.gameObject.SetActive(showDW);
-            DualWieldButton.interactable = canDW;
+            bool canDualWieldAttack = true;
+            if (canDualWield)
+            {
+                var inv = pc.GetComponent<InventoryComponent>();
+                ItemData mainWeapon = inv != null ? inv.CharacterInventory.RightHandSlot : null;
+                ItemData offWeapon = inv != null ? inv.CharacterInventory.LeftHandSlot : null;
+                bool canMainAttack = pc.CanAttackWithWeapon(mainWeapon, out _);
+                bool canOffAttack = pc.CanAttackWithWeapon(offWeapon, out _);
+                canDualWieldAttack = canMainAttack || canOffAttack;
+            }
+
+            DualWieldButton.gameObject.SetActive(canDualWield);
+            DualWieldButton.interactable = canDW && canDualWieldAttack;
             Text dwLabel = DualWieldButton.GetComponentInChildren<Text>();
             if (dwLabel != null)
-                dwLabel.text = canDW ? "Dual Wield (Full-Round)" : "Dual Wield (N/A)";
+                dwLabel.text = !canDualWieldAttack ? "Dual Wield (Reload first)" : (canDW ? "Dual Wield (Full-Round)" : "Dual Wield (N/A)");
         }
 
         if (FlurryOfBlowsButton != null)
@@ -802,8 +785,7 @@ public class CombatUI : MonoBehaviour
         if (RageButton != null)
         {
             bool isBarbarian = pc.Stats.IsBarbarian;
-            bool canRage = isBarbarian && !pc.Stats.IsRaging && !pc.Stats.IsFatigued
-                           && pc.Stats.RagesUsedToday < pc.Stats.MaxRagesPerDay;
+            bool canRage = isBarbarian && !pc.Stats.IsRaging && !pc.Stats.IsFatigued && pc.Stats.RagesUsedToday < pc.Stats.MaxRagesPerDay;
             RageButton.gameObject.SetActive(isBarbarian);
             RageButton.interactable = canRage;
             Text rageLabel = RageButton.GetComponentInChildren<Text>();
@@ -815,31 +797,25 @@ public class CombatUI : MonoBehaviour
                 else rageLabel.text = "Rage (Used)";
             }
         }
-        // Cast Spell button: only for casting NEW spells (not discharging held charges)
+
         if (CastSpellButton != null)
         {
             bool isSpellcaster = pc.Stats.IsSpellcaster;
             var spellComp = pc.GetComponent<SpellcastingComponent>();
             bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnyCastablePreparedSpell();
-
             bool canCast = actions.HasStandardAction && hasCastableSpells;
 
             CastSpellButton.gameObject.SetActive(hasCastableSpells);
             CastSpellButton.interactable = canCast;
             Text castLabel = CastSpellButton.GetComponentInChildren<Text>();
-            if (castLabel != null)
-                castLabel.text = canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)";
+            if (castLabel != null) castLabel.text = canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)";
         }
 
-        // Dedicated held-charge discharge button
         EnsureDischargeTouchButtonExists();
         if (DischargeTouchButton != null)
         {
             var spellComp = pc.GetComponent<SpellcastingComponent>();
             bool hasHeldTouchCharge = pc.Stats.IsSpellcaster && spellComp != null && spellComp.HasHeldTouchCharge && spellComp.HeldTouchSpell != null;
-
-            // D&D 3.5e: discharging a held touch spell is a free action.
-            // Keep this button usable even when no standard/move actions remain.
             DischargeTouchButton.gameObject.SetActive(hasHeldTouchCharge);
             DischargeTouchButton.interactable = hasHeldTouchCharge;
 
@@ -848,6 +824,29 @@ public class CombatUI : MonoBehaviour
             {
                 string heldName = hasHeldTouchCharge ? spellComp.HeldTouchSpell.Name : "Touch";
                 dischargeLabel.text = $"Discharge {heldName}";
+            }
+        }
+
+        if (ReloadButton != null)
+        {
+            ItemData weapon = pc.GetEquippedMainWeapon();
+            bool hasReloadableWeaponEquipped = weapon != null && weapon.RequiresReload;
+            bool isWeaponLoaded = !hasReloadableWeaponEquipped || weapon.IsLoaded;
+            string reloadDisabledReason = "Unavailable";
+            ReloadActionType reloadAction = ReloadActionType.None;
+            bool canReload = hasReloadableWeaponEquipped && GameManager.Instance != null
+                             && GameManager.Instance.CanReloadEquippedWeapon(pc, out reloadDisabledReason, out reloadAction);
+
+            ReloadButton.gameObject.SetActive(hasReloadableWeaponEquipped);
+            ReloadButton.interactable = canReload;
+
+            Text reloadLabel = ReloadButton.GetComponentInChildren<Text>();
+            if (reloadLabel != null)
+            {
+                string actionLabel = hasReloadableWeaponEquipped ? CharacterController.GetReloadActionLabel(pc.GetEffectiveReloadAction(weapon)) : "Move";
+                if (isWeaponLoaded) reloadLabel.text = $"Reload ({actionLabel}) [Loaded]";
+                else if (canReload) reloadLabel.text = $"Reload ({actionLabel})";
+                else reloadLabel.text = $"Reload ({actionLabel}) [{reloadDisabledReason}]";
             }
         }
 
@@ -869,7 +868,6 @@ public class CombatUI : MonoBehaviour
 
         if (ActionStatusText != null)
             ActionStatusText.text = actions.GetStatusString();
-
     }
 
     // ========== FEAT UI ==========

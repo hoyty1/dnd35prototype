@@ -713,6 +713,8 @@ public class SceneBootstrap : MonoBehaviour
             "Rage", new Color(0.6f, 0.2f, 0.1f));
         combatUI.CastSpellButton = CreateGridButton(btnGrid.transform, "CastSpellBtn",
             "Cast Spell", new Color(0.4f, 0.2f, 0.6f));
+        combatUI.ReloadButton = CreateGridButton(btnGrid.transform, "ReloadBtn",
+            "Reload", new Color(0.38f, 0.44f, 0.16f));
         combatUI.EndTurnButton = CreateGridButton(btnGrid.transform, "EndTurnBtn",
             "End Turn", new Color(0.3f, 0.3f, 0.55f));
 
@@ -892,6 +894,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.RageButton.onClick.AddListener(() => GameManager.Instance.OnRageButtonPressed());
         if (ui.CastSpellButton != null)
             ui.CastSpellButton.onClick.AddListener(() => GameManager.Instance.OnCastSpellButtonPressed());
+        if (ui.ReloadButton != null)
+            ui.ReloadButton.onClick.AddListener(() => GameManager.Instance.OnReloadButtonPressed());
         if (ui.EndTurnButton != null)
             ui.EndTurnButton.onClick.AddListener(() => GameManager.Instance.OnEndTurnButtonPressed());
 
