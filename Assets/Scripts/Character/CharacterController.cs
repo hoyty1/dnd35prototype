@@ -1438,6 +1438,8 @@ public class CharacterController : MonoBehaviour
         if (!changed)
             return false;
 
+        Debug.Log($"[Size] {Stats.CharacterName}: ChangeSize {oldSize} -> {Stats.CurrentSizeCategory} (delta {categoryDelta:+#;-#;0})");
+
         if (!CanOccupyAtCurrentSize(GridPosition))
         {
             Stats.CurrentSizeCategory = oldSize;
@@ -1453,15 +1455,18 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Updates token scale and position to match the exact number of occupied grid squares.
+    /// Updates token scale and position to match current size category and occupied footprint.
     /// </summary>
     public void UpdateVisualSize()
     {
+        SizeCategory currentSize = GetCurrentSizeCategory();
         int squaresOccupied = GetVisualSquaresOccupied();
-        float targetScale = squaresOccupied;
+        float targetScale = currentSize.GetVisualTokenScale();
 
         transform.localScale = new Vector3(targetScale, targetScale, 1f);
         UpdatePositionForSize();
+
+        Debug.Log($"[Size] {Stats?.CharacterName ?? gameObject.name}: UpdateVisualSize -> {currentSize}, footprint {squaresOccupied}x{squaresOccupied}, scale {targetScale:0.##}");
     }
 
     /// <summary>
@@ -1470,6 +1475,12 @@ public class CharacterController : MonoBehaviour
     public void UpdateSizeVisuals()
     {
         UpdateVisualSize();
+    }
+
+    [ContextMenu("Test Visual Scaling")]
+    public void TestVisualScaling()
+    {
+        Debug.Log($"[SizeTest] {Stats?.CharacterName ?? gameObject.name}: Tiny={SizeCategory.Tiny.GetVisualTokenScale()}, Small={SizeCategory.Small.GetVisualTokenScale()}, Medium={SizeCategory.Medium.GetVisualTokenScale()}, Large={SizeCategory.Large.GetVisualTokenScale()}");
     }
 
     private void UpdatePositionForSize()

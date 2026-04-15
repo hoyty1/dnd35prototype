@@ -29,11 +29,15 @@ public class StatusEffectManager : MonoBehaviour
     /// <summary>Reference to the character's spellcasting component (may be null for non-casters).</summary>
     private SpellcastingComponent _spellComp;
 
+    /// <summary>Reference to the character controller for occupancy + visual size updates.</summary>
+    private CharacterController _controller;
+
     /// <summary>Initialize with character references.</summary>
     public void Init(CharacterStats stats)
     {
         _stats = stats;
         _spellComp = GetComponent<SpellcastingComponent>();
+        _controller = GetComponent<CharacterController>();
     }
 
     /// <summary>
@@ -501,10 +505,8 @@ public class StatusEffectManager : MonoBehaviour
 
             if (applying)
             {
-                if (_stats.TryShiftCurrentSize(shift))
-                    effect.AppliedSizeCategoryShift = shift;
-                else
-                    effect.AppliedSizeCategoryShift = 0;
+                bool sizeChanged = TryApplySizeShift(shift);
+                effect.AppliedSizeCategoryShift = sizeChanged ? shift : 0;
 
                 if (spellId == "enlarge_person")
                 {
@@ -520,12 +522,37 @@ public class StatusEffectManager : MonoBehaviour
                     effect.AppliedSecondaryStatName = "DEX";
                     effect.AppliedSecondaryStatBonus = 2;
                 }
+
+                Debug.Log($"[StatusEffect] {_stats.CharacterName}: {spellId} apply size shift {(sizeChanged ? "succeeded" : "failed")} (delta {shift:+#;-#;0})");
+                ForceSizeVisualRefresh();
             }
             else if (effect.AppliedSizeCategoryShift != 0)
             {
-                _stats.TryShiftCurrentSize(-effect.AppliedSizeCategoryShift);
+                bool reverted = TryApplySizeShift(-effect.AppliedSizeCategoryShift);
+                Debug.Log($"[StatusEffect] {_stats.CharacterName}: {spellId} expire size shift revert {(reverted ? "succeeded" : "failed")} (delta {-effect.AppliedSizeCategoryShift:+#;-#;0})");
+                ForceSizeVisualRefresh();
             }
         }
+    }
+
+    private bool TryApplySizeShift(int shift)
+    {
+        if (_controller == null)
+            _controller = GetComponent<CharacterController>();
+
+        if (_controller != null)
+            return _controller.ChangeSize(shift);
+
+        return _stats.TryShiftCurrentSize(shift);
+    }
+
+    private void ForceSizeVisualRefresh()
+    {
+        if (_controller == null)
+            _controller = GetComponent<CharacterController>();
+
+        if (_controller != null)
+            _controller.UpdateVisualSize();
     }
 
     /// <summary>Apply a bonus to a specific ability score.</summary>

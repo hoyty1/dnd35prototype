@@ -140,6 +140,27 @@ public static class SizeCategoryExtensions
     }
 
     /// <summary>
+    /// Visual token scale multiplier relative to a Medium token.
+    /// Keeps Small creatures visibly smaller while preserving 1x1 footprint occupancy.
+    /// </summary>
+    public static float GetVisualTokenScale(this SizeCategory size)
+    {
+        switch (size)
+        {
+            case SizeCategory.Fine: return 0.25f;
+            case SizeCategory.Diminutive: return 0.4f;
+            case SizeCategory.Tiny: return 0.6f;
+            case SizeCategory.Small: return 0.75f;
+            case SizeCategory.Medium: return 1f;
+            case SizeCategory.Large: return 2f;
+            case SizeCategory.Huge: return 3f;
+            case SizeCategory.Gargantuan: return 4f;
+            case SizeCategory.Colossal: return 6f;
+            default: return 1f;
+        }
+    }
+
+    /// <summary>
     /// Total occupied squares in the creature footprint.
     /// </summary>
     public static int GetSpaceSquares(this SizeCategory size)
