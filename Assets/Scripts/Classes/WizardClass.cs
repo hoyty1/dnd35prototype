@@ -72,11 +72,10 @@ public class WizardClass : ICharacterClass
     /// Used by CharacterCreationUI for the Quick Start button.
     /// D&D 3.5e PHB: All cantrips auto-added to spellbook + 3+INT mod 1st-level + 2 2nd-level.
     /// Elara has INT 17 (base) + 0 (Elf racial) = 17, INT mod = +3
-    /// Spellbook: All 20 cantrips + 6 (3+3) 1st-level + 5 2nd-level (incl. 2 test cone + 1 test line spells)
-    /// Slots: 4 cantrips, 3 (2 base + 1 bonus) 1st, 2 (1 base + 1 bonus) 2nd
-    /// Prepared 2nd-level: test_cone_30 (30-ft cone) + test_line_60 (60-ft line) for AoE testing
-    /// Full AoE test suite: burning_hands (15-ft cone L1), test_cone_30 (30-ft cone),
-    ///   test_cone_60 (60-ft cone), test_line_60 (60-ft line) — all in spellbook
+    /// Spellbook: All 20 cantrips + 6 (3+3) 1st-level + 6 2nd-level spells.
+    /// Slots: 4 cantrips, 3 (2 base + 1 bonus) 1st, 2 (1 base + 1 bonus) 2nd.
+    /// Prepared for quick testing: includes Summon Monster I and Summon Monster II,
+    /// plus core damage staples (Magic Missile, Scorching Ray).
     /// </summary>
     public static CharacterCreationData GetQuickStartCharacter()
     {
@@ -108,28 +107,28 @@ public class WizardClass : ICharacterClass
         data.SelectedSpellIds.AddRange(new List<string>
         {
             "magic_missile", "mage_armor", "shield",
-            "burning_hands", "sleep", "charm_person"
+            "summon_monster_1", "sleep", "charm_person"
         });
 
-        // 2nd-level spells for spellbook: includes combat staples + AoE test/debug options
+        // 2nd-level spells for spellbook: includes combat staples + summon test/debug options
         data.SelectedSpellIds.AddRange(new List<string>
         {
-            "scorching_ray", "bulls_strength", "acid_fog",
+            "scorching_ray", "summon_monster_2", "acid_fog",
             "test_cone_30", "test_cone_60", "test_line_60"
         });
 
         data.ComputeFinalStats();
 
         // Pre-set spell preparation (slot order: 4 cantrips, 3 1st-level, 2 2nd-level)
-        // 2nd-level slots include Acid Fog for debuff testing + one line AoE test spell
+        // Includes Summon Monster I/II for quick summon-system testing.
         data.PreparedSpellSlotIds = new List<string>
         {
             // 4 cantrip slots (unlimited use)
             "ray_of_frost", "detect_magic_wiz", "acid_splash", "prestidigitation",
             // 3 1st-level slots (2 base + 1 INT bonus)
-            "magic_missile", "mage_armor", "burning_hands",
+            "magic_missile", "shield", "summon_monster_1",
             // 2 2nd-level slots (1 base + 1 INT bonus)
-            "acid_fog", "test_line_60"
+            "scorching_ray", "summon_monster_2"
         };
 
         data.SkillRanks["Concentration"] = 6;
