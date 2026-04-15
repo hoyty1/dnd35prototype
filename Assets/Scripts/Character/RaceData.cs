@@ -301,3 +301,23 @@ public class RaceData
         return bonus;
     }
 }
+
+public static class RaceSizeExtensions
+{
+    public static SizeCategory ToSizeCategory(this RaceData.Size raceSize)
+    {
+        switch (raceSize)
+        {
+            case RaceData.Size.Fine: return SizeCategory.Fine;
+            case RaceData.Size.Diminutive: return SizeCategory.Diminutive;
+            case RaceData.Size.Tiny: return SizeCategory.Tiny;
+            case RaceData.Size.Small: return SizeCategory.Small;
+            case RaceData.Size.Medium: return SizeCategory.Medium;
+            case RaceData.Size.Large: return SizeCategory.Large;
+            case RaceData.Size.Huge: return SizeCategory.Huge;
+            case RaceData.Size.Gargantuan: return SizeCategory.Gargantuan;
+            case RaceData.Size.Colossal: return SizeCategory.Colossal;
+            default: return SizeCategory.Medium;
+        }
+    }
+}

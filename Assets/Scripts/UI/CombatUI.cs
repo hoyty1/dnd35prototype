@@ -1185,10 +1185,10 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void SetNPCIcon(int npcIndex, Sprite icon)
     {
-        if (npcIndex < NPCPanels.Count && NPCPanels[npcIndex].IconImage != null && icon != null)
+        if (npcIndex < NPCPanels.Count && NPCPanels[npcIndex].IconImage != null)
         {
             NPCPanels[npcIndex].IconImage.sprite = icon;
-            NPCPanels[npcIndex].IconImage.enabled = true;
+            NPCPanels[npcIndex].IconImage.enabled = icon != null;
         }
     }
 

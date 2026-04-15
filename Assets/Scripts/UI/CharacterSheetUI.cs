@@ -629,6 +629,8 @@ public class CharacterSheetUI : MonoBehaviour
             AddLine(content, $"  Temp HP: {stats.TempHP}", 11, new Color(0.4f, 0.7f, 1f), FontStyle.Normal, 14);
 
         AddLine(content, $"\u2694 Initiative: {FormatMod(stats.InitiativeModifier)}     \u27a1 Speed: {stats.SpeedInFeet} ft ({stats.MoveRange} sq)", 11, LightText, FontStyle.Normal, 14);
+        AddLine(content, $"📏 Size: {stats.SizeCategory}    Reach: {stats.NaturalReachFeet} ft ({stats.NaturalReachSquares} sq)    Space: {stats.SpaceSquares} sq", 10, DimText, FontStyle.Normal, 13);
+        AddLine(content, $"🧬 Creature Type: {stats.CreatureType}    Natural Armor: {stats.NaturalArmorBonus}", 10, DimText, FontStyle.Normal, 13);
 
         var activeConditions = new List<string>();
         if (stats.IsProne)

@@ -18,7 +18,7 @@ public static class SpellCaster
     /// </summary>
     public static SpellResult Cast(SpellData spell, CharacterStats casterStats, CharacterStats targetStats)
     {
-        return Cast(spell, casterStats, targetStats, null, false, null, null);
+        return Cast(spell, casterStats, targetStats, null, false, false, null, null);
     }
 
     /// <summary>
@@ -26,9 +26,9 @@ public static class SpellCaster
     /// Slot consumption is handled by the caller (GameManager).
     /// Mage Armor AC application is also handled externally.
     /// </summary>
-    public static SpellResult Cast(SpellData spell, CharacterStats casterStats, CharacterStats targetStats, MetamagicData metamagic, bool forceFriendlyTouchNoRoll = false)
+    public static SpellResult Cast(SpellData spell, CharacterStats casterStats, CharacterStats targetStats, MetamagicData metamagic, bool forceFriendlyTouchNoRoll = false, bool forceTargetToFailSave = false)
     {
-        return Cast(spell, casterStats, targetStats, metamagic, forceFriendlyTouchNoRoll, null, null);
+        return Cast(spell, casterStats, targetStats, metamagic, forceFriendlyTouchNoRoll, forceTargetToFailSave, null, null);
     }
 
     /// <summary>
@@ -41,6 +41,7 @@ public static class SpellCaster
         CharacterStats targetStats,
         MetamagicData metamagic,
         bool forceFriendlyTouchNoRoll,
+        bool forceTargetToFailSave,
         CharacterController casterController,
         CharacterController targetController)
     {
@@ -143,12 +144,22 @@ public static class SpellCaster
             // Heighten Spell increases save DC by using the heightened spell level
             result.SaveDC = 10 + effectiveSpellLevel + castingMod;
 
-            int saveRoll = Random.Range(1, 21);
-            int saveMod = GetSaveModifier(targetStats, spell.SavingThrowType);
-            result.SaveRoll = saveRoll;
-            result.SaveMod = saveMod;
-            result.SaveTotal = saveRoll + saveMod;
-            result.SaveSucceeded = result.SaveTotal >= result.SaveDC;
+            if (forceTargetToFailSave)
+            {
+                result.SaveRoll = 1;
+                result.SaveMod = 0;
+                result.SaveTotal = 1;
+                result.SaveSucceeded = false;
+            }
+            else
+            {
+                int saveRoll = Random.Range(1, 21);
+                int saveMod = GetSaveModifier(targetStats, spell.SavingThrowType);
+                result.SaveRoll = saveRoll;
+                result.SaveMod = saveMod;
+                result.SaveTotal = saveRoll + saveMod;
+                result.SaveSucceeded = result.SaveTotal >= result.SaveDC;
+            }
         }
 
         // ========== DAMAGE ==========

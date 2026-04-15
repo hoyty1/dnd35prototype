@@ -624,6 +624,21 @@ public class CharacterStats
     /// <summary>The character's race data (Dwarf, Elf, Human, etc.).</summary>
     public RaceData Race;
 
+    /// <summary>Base size (normally from race, but can be overridden for monsters/templates).</summary>
+    public SizeCategory BaseSizeCategory = SizeCategory.Medium;
+
+    /// <summary>Current effective size after temporary effects (Enlarge/Reduce, etc.).</summary>
+    public SizeCategory CurrentSizeCategory = SizeCategory.Medium;
+
+    /// <summary>Broad creature type used by some spells (e.g., Humanoid-only effects).</summary>
+    public string CreatureType = "Humanoid";
+
+    /// <summary>Innate natural armor bonus separate from worn armor.</summary>
+    public int NaturalArmorBonus;
+
+    /// <summary>Whether this creature has a built-in trip-capable natural attack profile.</summary>
+    public bool HasTripAttack;
+
     /// <summary>Creature type tags for this character (e.g., "Goblinoid", "Orc"). Used for racial attack bonuses.</summary>
     public List<string> CreatureTags = new List<string>();
 
@@ -693,9 +708,18 @@ public class CharacterStats
     public int CurrentHP;
 
     /// <summary>
-    /// Size modifier to AC and attack rolls from race (Small = +1, Medium = 0, etc.)
+    /// Size modifier to AC and attack rolls from effective current size.
     /// </summary>
-    public int SizeModifier => Race != null ? Race.SizeACAndAttackModifier : 0;
+    public int SizeModifier => CurrentSizeCategory.GetAttackAndAcModifier();
+
+    /// <summary>Natural reach in feet from effective current size category.</summary>
+    public int NaturalReachFeet => CurrentSizeCategory.GetNaturalReachFeet();
+
+    /// <summary>Natural reach in squares from effective current size category.</summary>
+    public int NaturalReachSquares => CurrentSizeCategory.GetNaturalReachSquares();
+
+    /// <summary>Simplified occupied footprint in squares (for UI/future multi-tile support).</summary>
+    public int SpaceSquares => CurrentSizeCategory.GetSpaceSquares();
 
     /// <summary>
     /// AC = 10 + effective DEX modifier (capped by armor's Max Dex Bonus) + armor bonus + shield bonus + size modifier.
@@ -737,7 +761,7 @@ public class CharacterStats
             // Mage Armor is an armor bonus — it doesn't stack with worn armor.
             // Use the higher of ArmorBonus (from equipment) or SpellACBonus (from spells).
             int effectiveArmorBonus = Mathf.Max(ArmorBonus, SpellACBonus);
-            return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + SizeModifier
+            return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + SizeModifier
                    + MonkACBonus + FeatACBonus + RageACPenalty + DeflectionBonus + ConditionACPenalty;
         }
     }
@@ -810,6 +834,7 @@ public class CharacterStats
 
             // Use racial speed (in squares)
             BaseSpeed = Race.BaseSpeedSquares;
+            BaseSizeCategory = Race.RaceSize.ToSizeCategory();
         }
         else
         {
@@ -820,7 +845,10 @@ public class CharacterStats
             INT = intelligence;
             CHA = cha;
             BaseSpeed = baseSpeed;
+            BaseSizeCategory = SizeCategory.Medium;
         }
+
+        CurrentSizeCategory = BaseSizeCategory;
 
         BaseAttackBonus = bab;
         ArmorBonus = armorBonus;
@@ -1672,20 +1700,72 @@ public class CharacterStats
     /// <summary>Race name string for display (or "" if no race set).</summary>
     public string RaceName => Race != null ? Race.RaceName : "";
 
-    /// <summary>Size category string for display (e.g., "Small", "Medium").</summary>
-    public string SizeCategory => Race != null ? Race.SizeName : "Medium";
+    /// <summary>Size category string for display (effective current size).</summary>
+    public string SizeCategory => CurrentSizeCategory.ToString();
 
-    /// <summary>Whether this character is Small size.</summary>
-    public bool IsSmallSize => Race != null && Race.IsSmall;
+    /// <summary>Whether this character is currently Small size.</summary>
+    public bool IsSmallSize => CurrentSizeCategory == global::SizeCategory.Small;
 
-    /// <summary>Size grapple modifier (for future grapple system).</summary>
-    public int SizeGrappleModifier => Race != null ? Race.SizeGrappleModifier : 0;
+    /// <summary>Size grapple modifier from effective size category.</summary>
+    public int SizeGrappleModifier => CurrentSizeCategory.GetGrappleModifier();
 
-    /// <summary>Size hide modifier (for future skill system).</summary>
-    public int SizeHideModifier => Race != null ? Race.SizeHideModifier : 0;
+    /// <summary>Size hide modifier from effective size category.</summary>
+    public int SizeHideModifier => CurrentSizeCategory.GetHideModifier();
 
     /// <summary>Speed in feet for display purposes (includes fast movement bonuses).</summary>
     public int SpeedInFeet => (Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5) + (MonkFastMovementBonus + BarbarianFastMovementBonus) * 5;
+
+
+    /// <summary>
+    /// Sets both base and current size category (used by monster definitions and initialization overrides).
+    /// </summary>
+    public void SetBaseSizeCategory(global::SizeCategory newBaseSize)
+    {
+        BaseSizeCategory = newBaseSize;
+        CurrentSizeCategory = newBaseSize;
+    }
+
+    /// <summary>
+    /// Applies a temporary size shift by category steps.
+    /// Returns false if size is already at limit and cannot shift.
+    /// </summary>
+    public bool TryShiftCurrentSize(int categoryDelta)
+    {
+        if (categoryDelta == 0) return true;
+
+        var size = CurrentSizeCategory;
+        bool changed = false;
+
+        if (categoryDelta > 0)
+        {
+            for (int i = 0; i < categoryDelta; i++)
+            {
+                if (!size.TryIncrease(out size))
+                    return changed;
+                changed = true;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < Mathf.Abs(categoryDelta); i++)
+            {
+                if (!size.TryDecrease(out size))
+                    return changed;
+                changed = true;
+            }
+        }
+
+        CurrentSizeCategory = size;
+        return changed;
+    }
+
+    /// <summary>
+    /// Restores temporary size changes back to the base size.
+    /// </summary>
+    public void ResetCurrentSizeToBase()
+    {
+        CurrentSizeCategory = BaseSizeCategory;
+    }
 
     // ========== SKILLS SYSTEM (D&D 3.5) ==========
 

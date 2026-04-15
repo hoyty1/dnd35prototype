@@ -23,6 +23,8 @@ public static class EnemyDatabase
         RegisterSkeletonArcher();
         RegisterOrcBerserker();
         RegisterHobgoblinSergeant();
+        RegisterOgreBrute();
+        RegisterWolfPackHunter();
 
         Debug.Log($"[EnemyDatabase] Initialized with {_enemies.Count} enemy types.");
     }
@@ -38,6 +40,31 @@ public static class EnemyDatabase
 
     /// <summary>Get all registered enemy definitions.</summary>
     public static IEnumerable<EnemyDefinition> AllEnemies => _enemies.Values;
+
+    /// <summary>
+    /// Prebuilt encounter presets selectable before combat starts.
+    /// </summary>
+    public static List<EncounterPreset> ListEncounterPresets()
+    {
+        return new List<EncounterPreset>
+        {
+            new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
+            new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
+            new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "wolf_pack_hunter", "wolf_pack_hunter", "wolf_pack_hunter" }),
+            new EncounterPreset("ogre_bodyguard", "Ogre Bodyguard", "A dangerous large brute protected by disciplined infantry.", new List<string> { "ogre_brute", "hobgoblin_sergeant", "goblin_warchief" }),
+            new EncounterPreset("mixed_patrol", "Mixed Patrol", "Varied enemies showcasing melee, ranged, and size differences.", new List<string> { "wolf_pack_hunter", "skeleton_archer", "orc_berserker", "goblin_warchief" })
+        };
+    }
+
+    public static EncounterPreset GetEncounterPreset(string presetId)
+    {
+        var all = ListEncounterPresets();
+        for (int i = 0; i < all.Count; i++)
+        {
+            if (all[i].Id == presetId) return all[i];
+        }
+        return all.Count > 0 ? all[0] : null;
+    }
 
     private static void Register(EnemyDefinition def)
     {
@@ -62,6 +89,8 @@ public static class EnemyDatabase
             Name = "Goblin Warchief",
             Level = 2,
             CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            SizeCategory = SizeCategory.Small,
             STR = 14, DEX = 15, CON = 13, WIS = 10, INT = 10, CHA = 8,
             BAB = 2,
             ArmorBonus = 3,   // studded leather
@@ -105,6 +134,9 @@ public static class EnemyDatabase
             Name = "Skeleton Archer",
             Level = 1,
             CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            SizeCategory = SizeCategory.Medium,
+            NaturalArmorBonus = 2,
             // Skeleton: STR 13 (was a human), DEX 15 (undead agility), CON 10 (undead placeholder)
             // WIS 10, INT 6 (mindless but can aim), CHA 1 (undead husk)
             STR = 13, DEX = 15, CON = 10, WIS = 10, INT = 6, CHA = 1,
@@ -152,6 +184,8 @@ public static class EnemyDatabase
             Name = "Orc Berserker",
             Level = 3,
             CharacterClass = "Barbarian",
+            CreatureType = "Humanoid",
+            SizeCategory = SizeCategory.Medium,
             // Orc: base STR 17 + racial = effective 17 (already includes orc bonus)
             STR = 17, DEX = 11, CON = 14, WIS = 8, INT = 8, CHA = 6,
             BAB = 3,
@@ -196,6 +230,8 @@ public static class EnemyDatabase
             Name = "Hobgoblin Sergeant",
             Level = 3,
             CharacterClass = "Fighter",
+            CreatureType = "Humanoid",
+            SizeCategory = SizeCategory.Medium,
             // Hobgoblin: DEX +2, CON +2 already factored in
             STR = 15, DEX = 14, CON = 14, WIS = 12, INT = 10, CHA = 10,
             BAB = 3,
@@ -224,6 +260,82 @@ public static class EnemyDatabase
             Description = "A disciplined hobgoblin officer in gleaming chainmail. Commands lesser troops and fights with precision swordplay."
         });
     }
+
+    /// <summary>
+    /// Ogre Brute (CR 3) — Large giant with high STR and natural armor.
+    /// Uses a massive club and has extended natural reach from size.
+    /// </summary>
+    private static void RegisterOgreBrute()
+    {
+        Register(new EnemyDefinition
+        {
+            Id = "ogre_brute",
+            Name = "Ogre Brute",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Giant",
+            SizeCategory = SizeCategory.Large,
+            STR = 21, DEX = 8, CON = 15, WIS = 10, INT = 6, CHA = 7,
+            BAB = 4,
+            ArmorBonus = 2,   // hide scraps
+            NaturalArmorBonus = 5,
+            ShieldBonus = 0,
+            DamageDice = 10,   // greatclub 1d10 in this prototype
+            DamageCount = 1,
+            BonusDamage = 0,
+            BaseSpeed = 8,     // 40 ft
+            AttackRange = 2,
+            BaseHitDieHP = 38,
+            CreatureTags = new List<string> { "Giant" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("greatclub", EquipSlot.RightHand),
+                new EquipmentSlotPair("hide_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string> { "javelin", "javelin" },
+            AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            SpriteColor = new Color(0.65f, 0.55f, 0.45f, 1f),
+            PanelColor = new Color(0.25f, 0.12f, 0.08f, 0.85f),
+            NameColor = new Color(1f, 0.78f, 0.52f),
+            Description = "A hulking ogre that smashes foes with brutal overhead swings. Its long reach threatens nearby squares."
+        });
+    }
+
+    /// <summary>
+    /// Wolf Pack Hunter (CR 1) — Fast quadruped striker with trip tendency.
+    /// </summary>
+    private static void RegisterWolfPackHunter()
+    {
+        Register(new EnemyDefinition
+        {
+            Id = "wolf_pack_hunter",
+            Name = "Wolf Pack Hunter",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            SizeCategory = SizeCategory.Medium,
+            STR = 13, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
+            BAB = 2,
+            ArmorBonus = 0,
+            NaturalArmorBonus = 2,
+            ShieldBonus = 0,
+            DamageDice = 6,   // bite 1d6
+            DamageCount = 1,
+            BonusDamage = 0,
+            BaseSpeed = 10,   // 50 ft
+            AttackRange = 1,
+            BaseHitDieHP = 18,
+            CreatureTags = new List<string> { "Animal" },
+            HasTripAttack = true,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            SpriteColor = new Color(0.72f, 0.72f, 0.72f, 1f),
+            PanelColor = new Color(0.2f, 0.2f, 0.2f, 0.85f),
+            NameColor = new Color(0.9f, 0.9f, 0.95f),
+            Description = "A lean predator that circles for openings and drags enemies to the ground with vicious bites."
+        });
+    }
 }
 
 /// <summary>
@@ -240,6 +352,10 @@ public class EnemyDefinition
     // Core D&D 3.5 stats
     public int Level;
     public string CharacterClass;
+    public string CreatureType = "Humanoid";
+    public SizeCategory SizeCategory = SizeCategory.Medium;
+    public int NaturalArmorBonus;
+    public bool HasTripAttack;
     public int STR, DEX, CON, WIS, INT, CHA;
     public int BAB;
     public int ArmorBonus;
@@ -276,6 +392,22 @@ public class EnemyDefinition
     public Color NameColor = new Color(1f, 0.4f, 0.4f);
 }
 
+[System.Serializable]
+public class EncounterPreset
+{
+    public string Id;
+    public string DisplayName;
+    public string Description;
+    public List<string> EnemyIds = new List<string>();
+
+    public EncounterPreset(string id, string displayName, string description, List<string> enemyIds)
+    {
+        Id = id;
+        DisplayName = displayName;
+        Description = description;
+        EnemyIds = enemyIds ?? new List<string>();
+    }
+}
 /// <summary>
 /// Pairs an item ID with the slot it should be equipped to.
 /// </summary>

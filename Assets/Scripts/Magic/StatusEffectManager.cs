@@ -127,6 +127,9 @@ public class StatusEffectManager : MonoBehaviour
         effect.AppliedTempHP = spell.BuffTempHP;
         effect.AppliedStatName = spell.BuffStatName;
         effect.AppliedStatBonus = spell.BuffStatBonus;
+        effect.AppliedSecondaryStatName = null;
+        effect.AppliedSecondaryStatBonus = 0;
+        effect.AppliedSizeCategoryShift = 0;
         effect.AppliedDamageResistanceAmount = spell.BuffDamageResistanceAmount;
         effect.AppliedDamageResistanceType = spell.BuffDamageResistanceType;
         effect.AppliedDamageImmunityType = spell.BuffDamageImmunityType;
@@ -305,6 +308,12 @@ public class StatusEffectManager : MonoBehaviour
     /// </summary>
     private bool DoBonusesOverlap(SpellData newSpell, ActiveSpellEffect existing)
     {
+        // Size-changing transmutations overlap each other by definition.
+        string newId = newSpell?.SpellId ?? string.Empty;
+        string existingId = existing?.Spell?.SpellId ?? string.Empty;
+        bool newIsSizeShift = newId == "enlarge_person" || newId == "reduce_person";
+        bool existingIsSizeShift = existingId == "enlarge_person" || existingId == "reduce_person";
+        if (newIsSizeShift && existingIsSizeShift) return true;
         // If both modify the same ability score
         if (!string.IsNullOrEmpty(newSpell.BuffStatName) && !string.IsNullOrEmpty(existing.AppliedStatName))
         {
@@ -402,10 +411,18 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.AppliedDamageReductionAmount > 0)
             _stats.AddDamageReduction(effect.AppliedDamageReductionAmount, effect.AppliedDamageReductionBypass, effect.AppliedDamageReductionRangedOnly);
 
-        // Stat buff (STR, DEX, CON, etc.)
+
+        ApplySpellSpecificAdjustments(effect, applying: true);
+
+        // Stat buff(s) (STR, DEX, CON, etc.)
         if (!string.IsNullOrEmpty(effect.AppliedStatName) && effect.AppliedStatBonus != 0)
         {
             ApplyStatBonus(effect.AppliedStatName, effect.AppliedStatBonus);
+        }
+
+        if (!string.IsNullOrEmpty(effect.AppliedSecondaryStatName) && effect.AppliedSecondaryStatBonus != 0)
+        {
+            ApplyStatBonus(effect.AppliedSecondaryStatName, effect.AppliedSecondaryStatBonus);
         }
     }
 
@@ -453,9 +470,61 @@ public class StatusEffectManager : MonoBehaviour
 
         if (effect.AppliedDamageReductionAmount > 0)
             _stats.RemoveDamageReduction(effect.AppliedDamageReductionAmount, effect.AppliedDamageReductionBypass, effect.AppliedDamageReductionRangedOnly);
+
+        ApplySpellSpecificAdjustments(effect, applying: false);
+
         if (!string.IsNullOrEmpty(effect.AppliedStatName) && effect.AppliedStatBonus != 0)
         {
             ApplyStatBonus(effect.AppliedStatName, -effect.AppliedStatBonus);
+        }
+
+        if (!string.IsNullOrEmpty(effect.AppliedSecondaryStatName) && effect.AppliedSecondaryStatBonus != 0)
+        {
+            ApplyStatBonus(effect.AppliedSecondaryStatName, -effect.AppliedSecondaryStatBonus);
+        }
+    }
+
+    /// <summary>
+    /// Handles spell-specific mechanics that are not represented by generic bonus fields.
+    /// Currently used for Enlarge Person / Reduce Person size-shift behavior.
+    /// </summary>
+    private void ApplySpellSpecificAdjustments(ActiveSpellEffect effect, bool applying)
+    {
+        if (_stats == null || effect?.Spell == null) return;
+
+        string spellId = effect.Spell.SpellId;
+        if (string.IsNullOrEmpty(spellId)) return;
+
+        if (spellId == "enlarge_person" || spellId == "reduce_person")
+        {
+            int shift = (spellId == "enlarge_person") ? 1 : -1;
+
+            if (applying)
+            {
+                if (_stats.TryShiftCurrentSize(shift))
+                    effect.AppliedSizeCategoryShift = shift;
+                else
+                    effect.AppliedSizeCategoryShift = 0;
+
+                if (spellId == "enlarge_person")
+                {
+                    effect.AppliedStatName = "STR";
+                    effect.AppliedStatBonus = 2;
+                    effect.AppliedSecondaryStatName = "DEX";
+                    effect.AppliedSecondaryStatBonus = -2;
+                }
+                else
+                {
+                    effect.AppliedStatName = "STR";
+                    effect.AppliedStatBonus = -2;
+                    effect.AppliedSecondaryStatName = "DEX";
+                    effect.AppliedSecondaryStatBonus = 2;
+                }
+            }
+            else if (effect.AppliedSizeCategoryShift != 0)
+            {
+                _stats.TryShiftCurrentSize(-effect.AppliedSizeCategoryShift);
+            }
         }
     }
 
@@ -494,6 +563,8 @@ public class StatusEffectManager : MonoBehaviour
         power += Mathf.Abs(effect.AppliedShieldBonus);
         power += Mathf.Abs(effect.AppliedDeflectionBonus);
         power += Mathf.Abs(effect.AppliedStatBonus);
+        power += Mathf.Abs(effect.AppliedSecondaryStatBonus);
+        power += Mathf.Abs(effect.AppliedSizeCategoryShift) * 2;
         power += Mathf.Abs(effect.AppliedDamageResistanceAmount);
         power += Mathf.Abs(effect.AppliedDamageReductionAmount);
         if (effect.AppliedDamageImmunityType != DamageType.Untyped) power += 999; // immunity is always strongest

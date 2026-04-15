@@ -1373,6 +1373,31 @@ public class CharacterController : MonoBehaviour
 
 
     /// <summary>
+    /// Current effective creature size.
+    /// </summary>
+    public SizeCategory GetCurrentSizeCategory()
+    {
+        return Stats != null ? Stats.CurrentSizeCategory : SizeCategory.Medium;
+    }
+
+    /// <summary>
+    /// Current occupied footprint (in grid squares). Multi-tile occupancy is not yet enforced.
+    /// </summary>
+    public int GetCurrentSpaceSquares()
+    {
+        return Stats != null ? Stats.SpaceSquares : 1;
+    }
+
+    /// <summary>
+    /// Current natural reach in squares from size (before weapon-specific adjustments).
+    /// </summary>
+    public int GetCurrentNaturalReachSquares()
+    {
+        return Stats != null ? Stats.NaturalReachSquares : 1;
+    }
+
+
+    /// <summary>
     /// Get minimum melee distance (in squares) this character can attack with current weapon.
     /// Most melee weapons: 1. Reach-only weapons: 2. Whip: 2 (with max 3).
     /// </summary>
@@ -1398,11 +1423,20 @@ public class CharacterController : MonoBehaviour
     {
         weapon ??= GetEquippedMainWeapon();
 
-        if (weapon == null || weapon.WeaponCat != WeaponCategory.Melee)
-            return 1;
+        int naturalReach = Stats != null ? Mathf.Max(1, Stats.NaturalReachSquares) : 1;
 
-        int reach = weapon.ReachSquares > 0 ? weapon.ReachSquares : weapon.AttackRange;
-        return Mathf.Max(1, reach);
+        if (weapon == null || weapon.WeaponCat != WeaponCategory.Melee)
+            return naturalReach;
+
+        int weaponReach = weapon.ReachSquares > 0 ? weapon.ReachSquares : weapon.AttackRange;
+        weaponReach = Mathf.Max(1, weaponReach);
+
+        // Reach weapons stack with larger creature natural reach in this prototype.
+        // Example: Large creature (natural 2) + longspear (reach 2) => 3 squares.
+        if (weapon.IsReachWeapon && naturalReach > 1)
+            return weaponReach + (naturalReach - 1);
+
+        return Mathf.Max(weaponReach, naturalReach);
     }
 
     /// <summary>

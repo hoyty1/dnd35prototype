@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -54,6 +55,14 @@ public class GameManager : MonoBehaviour
     /// <summary>Whether the game is waiting for character creation to complete.</summary>
     public bool WaitingForCharacterCreation { get; private set; }
 
+    /// <summary>Encounter preset selection overlay shown before combat starts.</summary>
+    public EncounterSelectionUI EncounterSelectionUI;
+
+    /// <summary>Whether combat setup is waiting on encounter selection.</summary>
+    public bool WaitingForEncounterSelection { get; private set; }
+
+    private string _selectedEncounterPresetId = "goblin_raiders";
+    private readonly List<string> _activeEncounterEnemyIds = new List<string>();
     // Game state
     public enum TurnPhase { PCTurn, NPCTurn, CombatOver }
 
@@ -406,8 +415,8 @@ public class GameManager : MonoBehaviour
         {
             // No creation UI - use default characters
             SetupCharacters();
-            StartCombat();
-            Debug.Log("[GameManager] Initialization complete (default characters).");
+            PromptEncounterSelection();
+            Debug.Log("[GameManager] Initialization complete (default characters, waiting for encounter selection).");
         }
     }
 
@@ -486,7 +495,7 @@ public class GameManager : MonoBehaviour
         Debug.Log($"[GameManager] Character creation complete (2 PCs): {pc1Data.CharacterName}, {pc2Data.CharacterName}");
         SetupCreatedCharacters(new CharacterCreationData[] { pc1Data, pc2Data });
         UpdateAllStatsUI();
-        StartCombat();
+        PromptEncounterSelection();
     }
 
     /// <summary>
@@ -498,9 +507,61 @@ public class GameManager : MonoBehaviour
         Debug.Log($"[GameManager] Character creation complete ({pcDataArray.Length} PCs)");
         SetupCreatedCharacters(pcDataArray);
         UpdateAllStatsUI();
-        StartCombat();
+        PromptEncounterSelection();
     }
 
+
+    private void PromptEncounterSelection()
+    {
+        EnemyDatabase.Init();
+
+        if (EncounterSelectionUI == null)
+            EncounterSelectionUI = FindObjectOfType<EncounterSelectionUI>();
+        if (EncounterSelectionUI == null)
+            EncounterSelectionUI = gameObject.AddComponent<EncounterSelectionUI>();
+
+        WaitingForEncounterSelection = true;
+        var presets = EnemyDatabase.ListEncounterPresets();
+
+        EncounterSelectionUI.Open(presets,
+            onSelect: presetId =>
+            {
+                WaitingForEncounterSelection = false;
+                _selectedEncounterPresetId = string.IsNullOrEmpty(presetId) ? "goblin_raiders" : presetId;
+                ApplyEncounterPreset(_selectedEncounterPresetId);
+                StartCombat();
+            },
+            onCancel: () =>
+            {
+                WaitingForEncounterSelection = false;
+                _selectedEncounterPresetId = "goblin_raiders";
+                ApplyEncounterPreset(_selectedEncounterPresetId);
+                StartCombat();
+            });
+    }
+
+    private void ApplyEncounterPreset(string presetId)
+    {
+        EncounterPreset preset = EnemyDatabase.GetEncounterPreset(presetId);
+        _activeEncounterEnemyIds.Clear();
+
+        if (preset != null && preset.EnemyIds != null && preset.EnemyIds.Count > 0)
+        {
+            _activeEncounterEnemyIds.AddRange(preset.EnemyIds);
+            CombatUI?.ShowCombatLog($"🧭 Encounter selected: {preset.DisplayName}");
+        }
+        else
+        {
+            _activeEncounterEnemyIds.Add("goblin_warchief");
+            _activeEncounterEnemyIds.Add("hobgoblin_sergeant");
+            _activeEncounterEnemyIds.Add("skeleton_archer");
+            CombatUI?.ShowCombatLog("🧭 Encounter fallback selected: Goblin Raiders");
+        }
+
+        SetupEnemyEncounter(_activeEncounterEnemyIds);
+        SetupNPCIcons();
+        UpdateAllStatsUI();
+    }
     /// <summary>
     /// Set up characters from character creation data (supports 2-4 PCs).
     /// </summary>
@@ -647,7 +708,7 @@ public class GameManager : MonoBehaviour
             var concMgr = pcSlots[i].gameObject.GetComponent<ConcentrationManager>();
             if (concMgr == null)
                 concMgr = pcSlots[i].gameObject.AddComponent<ConcentrationManager>();
-            concMgr.Init(stats, PCs[i]);
+            concMgr.Init(stats, pcSlots[i]);
 
             // Set PC icon
             Sprite classIcon = IconManager.GetClassIcon(data.ClassName);
@@ -656,7 +717,7 @@ public class GameManager : MonoBehaviour
         }
 
         // ===== NPCs (Multiple Enemies) =====
-        SetupEnemyEncounter();
+        // Enemy encounter setup is deferred until the player selects a preset.
     }
 
     /// <summary>
@@ -704,8 +765,8 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void Update()
     {
-        // Skip all game input during character creation
-        if (WaitingForCharacterCreation) return;
+        // Skip all game input during character creation / encounter selection.
+        if (WaitingForCharacterCreation || WaitingForEncounterSelection) return;
 
         HandleInventoryInput();
         HandleSkillsInput();
@@ -1279,7 +1340,7 @@ public class GameManager : MonoBehaviour
         // ==========================================
         // NPCs: Multiple enemies from EnemyDatabase
         // ==========================================
-        SetupEnemyEncounter();
+        // Enemy encounter setup is deferred until the player selects a preset.
 
         // Set PC icons
         SetupPCIcons();
@@ -1302,33 +1363,37 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>Set enemy icons for all NPCs based on their enemy type.</summary>
+    /// <summary>Set enemy icons for all active NPC slots based on encounter definitions.</summary>
     private void SetupNPCIcons()
     {
         if (CombatUI == null) return;
-        for (int i = 0; i < NPCs.Count && i < DefaultEncounterEnemyIds.Length; i++)
+
+        for (int i = 0; i < NPCs.Count; i++)
         {
-            Sprite icon = IconManager.GetEnemyIcon(DefaultEncounterEnemyIds[i]);
-            if (icon != null)
-                CombatUI.SetNPCIcon(i, icon);
+            if (i < _activeEncounterEnemyIds.Count)
+            {
+                Sprite icon = IconManager.GetEnemyIcon(_activeEncounterEnemyIds[i]);
+                if (icon != null)
+                    CombatUI.SetNPCIcon(i, icon);
+            }
+            else
+            {
+                CombatUI.SetNPCIcon(i, null);
+            }
         }
     }
 
     // ========== ENEMY ENCOUNTER SETUP ==========
 
-    private static readonly string[] DefaultEncounterEnemyIds = {
-        "skeleton_archer",
-        "orc_berserker",
-        "hobgoblin_sergeant"
-    };
-
-    private static readonly Vector2Int[] DefaultEncounterPositions = {
+    private static readonly Vector2Int[] EncounterSpawnPositions = {
         new Vector2Int(16, 6),
         new Vector2Int(14, 10),
         new Vector2Int(16, 14),
+        new Vector2Int(13, 8),
+        new Vector2Int(13, 12),
     };
 
-    private void SetupEnemyEncounter()
+    private void SetupEnemyEncounter(List<string> enemyIds)
     {
         EnemyDatabase.Init();
         ItemDatabase.Init();
@@ -1338,19 +1403,36 @@ public class GameManager : MonoBehaviour
         Sprite npcAliveFallback = LoadSprite("Sprites/npc_enemy_alive");
         Sprite npcDead = LoadSprite("Sprites/npc_enemy_dead");
 
-        for (int i = 0; i < NPCs.Count && i < DefaultEncounterEnemyIds.Length; i++)
+        int spawnCount = enemyIds != null ? Mathf.Min(enemyIds.Count, NPCs.Count) : 0;
+
+        for (int i = 0; i < NPCs.Count; i++)
         {
-            string enemyId = DefaultEncounterEnemyIds[i];
+            CharacterController npc = NPCs[i];
+            if (npc == null) continue;
+
+            if (i >= spawnCount)
+            {
+                npc.gameObject.SetActive(false);
+                if (CombatUI != null && i < CombatUI.NPCPanels.Count && CombatUI.NPCPanels[i].Panel != null)
+                    CombatUI.NPCPanels[i].Panel.SetActive(false);
+                continue;
+            }
+
+            string enemyId = enemyIds[i];
             EnemyDefinition def = EnemyDatabase.Get(enemyId);
             if (def == null)
             {
                 Debug.LogError($"[GameManager] Unknown enemy ID: {enemyId}");
+                npc.gameObject.SetActive(false);
                 continue;
             }
 
-            CharacterController npc = NPCs[i];
-            Vector2Int pos = (i < DefaultEncounterPositions.Length)
-                ? DefaultEncounterPositions[i]
+            npc.gameObject.SetActive(true);
+            if (CombatUI != null && i < CombatUI.NPCPanels.Count && CombatUI.NPCPanels[i].Panel != null)
+                CombatUI.NPCPanels[i].Panel.SetActive(true);
+
+            Vector2Int pos = (i < EncounterSpawnPositions.Length)
+                ? EncounterSpawnPositions[i]
                 : new Vector2Int(15 + i, 10);
 
             // Try class-specific monster token; fallback to generic NPC sprite
@@ -1379,20 +1461,23 @@ public class GameManager : MonoBehaviour
                 if (panelUI.NameText != null) panelUI.NameText.color = def.NameColor;
             }
 
-            Debug.Log($"[GameManager] Spawned NPC {i}: {def.Name} (Lv {def.Level} {def.CharacterClass}) " +
-                      $"at ({pos.x},{pos.y}) — AI: {def.AIBehavior}");
+            Debug.Log($"[GameManager] Spawned NPC {i}: {def.Name} (Lv {def.Level} {def.CharacterClass}) at ({pos.x},{pos.y}) — AI: {def.AIBehavior}");
         }
 
-        // Legacy NPC field points to first enemy
-        if (NPCs.Count > 0)
-            NPC = NPCs[0];
+        // Legacy NPC field points to first active enemy
+        NPC = null;
+        for (int i = 0; i < NPCs.Count; i++)
+        {
+            if (NPCs[i] != null && NPCs[i].gameObject.activeSelf)
+            {
+                NPC = NPCs[i];
+                break;
+            }
+        }
 
         // Hide legacy single-NPC panel since we're using multi-panels
         if (CombatUI.NPCNameText != null)
             CombatUI.NPCNameText.transform.parent.gameObject.SetActive(false);
-
-        // Set NPC icons
-        SetupNPCIcons();
     }
 
     private void InitializeNPCFromDefinition(CharacterController npc, EnemyDefinition def,
@@ -1427,6 +1512,14 @@ public class GameManager : MonoBehaviour
             stats.WeaponFocusChoice = def.WeaponFocusChoice;
 
         FeatManager.ApplyPassiveFeats(stats);
+        stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Humanoid" : def.CreatureType;
+        stats.SetBaseSizeCategory(def.SizeCategory);
+        stats.NaturalArmorBonus = def.NaturalArmorBonus;
+        stats.HasTripAttack = def.HasTripAttack;
+
+        // Ensure size-derived natural reach is respected for creatures larger than Medium.
+        if (stats.AttackRange < stats.NaturalReachSquares)
+            stats.AttackRange = stats.NaturalReachSquares;
 
         // Apply innate mitigation profile from enemy definition
         if (def.DamageReductionAmount > 0)
@@ -1540,12 +1633,17 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private bool IsActiveCombatant(CharacterController c)
+    {
+        return c != null && c.gameObject != null && c.gameObject.activeInHierarchy && c.Stats != null;
+    }
+
     /// <summary>Check if all hostile (enemy-team) combatants are dead.</summary>
     private bool AreAllNPCsDead()
     {
         foreach (var npc in NPCs)
         {
-            if (npc == null || npc.Stats == null) continue;
+            if (!IsActiveCombatant(npc)) continue;
             if (npc.IsPlayerControlled) continue; // allied summons should not block victory
             if (!npc.Stats.IsDead) return false;
         }
@@ -1568,7 +1666,7 @@ public class GameManager : MonoBehaviour
         int count = 0;
         foreach (var npc in NPCs)
         {
-            if (npc == null || npc.Stats == null) continue;
+            if (!IsActiveCombatant(npc)) continue;
             if (npc.IsPlayerControlled) continue;
             if (!npc.Stats.IsDead) count++;
         }
@@ -1580,7 +1678,7 @@ public class GameManager : MonoBehaviour
     {
         foreach (var npc in NPCs)
         {
-            if (npc == null || npc.Stats == null || npc.Stats.IsDead) continue;
+            if (!IsActiveCombatant(npc) || npc.Stats.IsDead) continue;
             if (npc.IsPlayerControlled) continue;
             return npc;
         }
@@ -1621,7 +1719,21 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void StartCombat()
     {
-        _initiativeOrder = InitiativeSystem.RollInitiative(PCs, NPCs);
+        var activePCs = new List<CharacterController>();
+        foreach (var pc in PCs)
+        {
+            if (IsActiveCombatant(pc) && !pc.Stats.IsDead)
+                activePCs.Add(pc);
+        }
+
+        var activeNPCs = new List<CharacterController>();
+        foreach (var npc in NPCs)
+        {
+            if (IsActiveCombatant(npc) && !npc.Stats.IsDead)
+                activeNPCs.Add(npc);
+        }
+
+        _initiativeOrder = InitiativeSystem.RollInitiative(activePCs, activeNPCs);
         _currentInitiativeIndex = 0;
 
         // Log initiative order
@@ -3535,6 +3647,52 @@ public class GameManager : MonoBehaviour
     {
         return IsAllyTeam(caster, target);
     }
+
+    private bool IsHumanoid(CharacterController target)
+    {
+        if (target?.Stats == null) return false;
+        return string.Equals(target.Stats.CreatureType, "Humanoid", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsValidTargetForSpell(CharacterController caster, CharacterController target, SpellData spell)
+    {
+        if (caster == null || target == null || spell == null || target.Stats == null || target.Stats.IsDead)
+            return false;
+
+        bool isPersonTransmutation = spell.SpellId == "enlarge_person" || spell.SpellId == "reduce_person";
+        if (isPersonTransmutation)
+        {
+            // Person transmutations can target any humanoid creature (ally or enemy).
+            return IsHumanoid(target);
+        }
+
+        switch (spell.TargetType)
+        {
+            case SpellTargetType.SingleEnemy:
+                return IsEnemyTeam(caster, target);
+            case SpellTargetType.SingleAlly:
+                return target == caster || IsAllyTeam(caster, target);
+            case SpellTargetType.Touch:
+                return true;
+            case SpellTargetType.Area:
+                return true;
+            case SpellTargetType.Self:
+                return target == caster;
+            default:
+                return false;
+        }
+    }
+
+    private bool ShouldForceTargetToAcceptSave(CharacterController caster, CharacterController target, SpellData spell)
+    {
+        if (caster == null || target == null || spell == null) return false;
+
+        // Willing creatures can choose to fail saves. Enlarge/Reduce are the current key use-case.
+        if (spell.SpellId == "enlarge_person" || spell.SpellId == "reduce_person")
+            return IsAllyTeam(caster, target);
+
+        return false;
+    }
     /// <summary>
     /// Highlight valid targets for a spell based on its range and target type.
     /// Shows the full spell range area (purple) with valid targets highlighted (magenta).
@@ -3575,36 +3733,19 @@ public class GameManager : MonoBehaviour
             int sqDist = SquareGridUtils.GetDistance(caster.GridPosition, cell.Coords);
             if (sqDist > range) continue;
 
-            bool validTarget = false;
-            if (spell.TargetType == SpellTargetType.SingleEnemy)
-            {
-                validTarget = IsEnemyTeam(caster, cell.Occupant);
-            }
-            else if (spell.TargetType == SpellTargetType.SingleAlly)
-            {
-                validTarget = cell.Occupant != caster && IsAllyTeam(caster, cell.Occupant);
-            }
-            else if (spell.TargetType == SpellTargetType.Touch)
-            {
-                // Touch can target anyone adjacent
-                validTarget = true;
-            }
-            else if (spell.TargetType == SpellTargetType.Area)
-            {
-                // Area spells can target any cell in range (including empty ones)
-                validTarget = true;
-            }
+            bool validTarget = IsValidTargetForSpell(caster, cell.Occupant, spell);
 
             if (validTarget)
             {
                 cell.SetHighlight(HighlightType.SpellTarget);
+
                 _highlightedCells.Add(cell);
                 hasTarget = true;
             }
         }
 
         // For SingleAlly spells, also allow self-targeting by clicking own tile.
-        if (spell.TargetType == SpellTargetType.SingleAlly)
+        if (spell.TargetType == SpellTargetType.SingleAlly && IsValidTargetForSpell(caster, caster, spell))
         {
             if (casterCell != null)
             {
@@ -3769,6 +3910,16 @@ public class GameManager : MonoBehaviour
     {
         CurrentSubPhase = PlayerSubPhase.Animating;
 
+        if (!IsValidTargetForSpell(caster, target, _pendingSpell))
+        {
+            CombatUI?.ShowCombatLog($"{_pendingSpell.Name} has invalid target (requires humanoid ally/enemy constraints).");
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            ShowActionChoices();
+            return;
+        }
+
         CaptureSpellcastResourceSnapshot(caster);
 
         bool isDeliveringHeldCharge = _pendingSpellFromHeldCharge;
@@ -3911,7 +4062,8 @@ public class GameManager : MonoBehaviour
             // Resolve the spell with metamagic.
             // D&D 3.5e: willing friendly targets for melee touch delivery should auto-succeed.
             bool skipFriendlyTouchAttackRoll = _pendingSpell.IsMeleeTouchSpell() && IsFriendlyTarget(caster, target);
-            SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, caster, target);
+            bool forceTargetToFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
+            SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, forceTargetToFailSave, caster, target);
 
             // Apply tracked buff/debuff effects based on spell type
             bool appliesTrackedEffect = _pendingSpell.EffectType == SpellEffectType.Buff ||
@@ -4663,7 +4815,7 @@ public class GameManager : MonoBehaviour
                     // For damage spells, resolve with save and damage
                     else if (_pendingSpell.EffectType == SpellEffectType.Damage)
                     {
-                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, caster, target);
+                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, false, caster, target);
 
                         if (result.RequiredSave)
                         {
@@ -4690,7 +4842,7 @@ public class GameManager : MonoBehaviour
                     // For healing spells
                     else if (_pendingSpell.EffectType == SpellEffectType.Healing)
                     {
-                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, caster, target);
+                        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, false, caster, target);
 
                         logBuilder.AppendLine($"  Healed: {result.HealingDone} HP");
                         logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
@@ -5615,18 +5767,18 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Get all characters in combat for AoO threat calculations.
+    /// Get all active characters in combat for AoO threat calculations.
     /// </summary>
     private List<CharacterController> GetAllCharacters()
     {
         var all = new List<CharacterController>();
         foreach (var pc in PCs)
         {
-            if (pc != null) all.Add(pc);
+            if (IsActiveCombatant(pc)) all.Add(pc);
         }
         foreach (var npc in NPCs)
         {
-            if (npc != null) all.Add(npc);
+            if (IsActiveCombatant(npc)) all.Add(npc);
         }
         return all;
     }
@@ -6407,7 +6559,14 @@ public class GameManager : MonoBehaviour
             // For ally spells, clicking own tile = self-target
             if (cell.Coords == pc.GridPosition && _pendingSpell.TargetType == SpellTargetType.SingleAlly)
             {
-                PerformSpellCast(pc, pc);
+                if (IsValidTargetForSpell(pc, pc, _pendingSpell))
+                {
+                    PerformSpellCast(pc, pc);
+                }
+                else
+                {
+                    CombatUI.ShowCombatLog($"{_pendingSpell.Name} can only target humanoids.");
+                }
                 return;
             }
 

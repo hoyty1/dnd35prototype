@@ -52,6 +52,7 @@ public static class IconManager
         { "skeleton", "skeleton_token" },
         { "zombie", "zombie_token" },
         { "wolf", "wolf_token" },
+        { "ogre", "ogre_token" },
     };
 
     /// <summary>
@@ -78,6 +79,10 @@ public static class IconManager
         { "Zombie", "zombie_token" },
         { "wolf", "wolf_token" },
         { "Wolf", "wolf_token" },
+        { "wolf_pack_hunter", "wolf_token" },
+        { "Wolf Pack Hunter", "wolf_token" },
+        { "ogre_brute", "ogre_token" },
+        { "Ogre Brute", "ogre_token" },
     };
 
     /// <summary>

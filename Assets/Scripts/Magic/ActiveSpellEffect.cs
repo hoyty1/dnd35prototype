@@ -43,7 +43,11 @@ public class ActiveSpellEffect
     public int AppliedTempHP;
     public string AppliedStatName;     // e.g., "STR", "DEX"
     public int AppliedStatBonus;
+    public string AppliedSecondaryStatName;
+    public int AppliedSecondaryStatBonus;
 
+    /// <summary>Temporary size-category shift applied by this effect (e.g., Enlarge +1, Reduce -1).</summary>
+    public int AppliedSizeCategoryShift;
 
     // Damage mitigation buffs
     public int AppliedDamageResistanceAmount;
@@ -193,6 +197,12 @@ public class ActiveSpellEffect
         if (AppliedDeflectionBonus != 0) mods += $" Defl:{AppliedDeflectionBonus:+#;-#}";
         if (AppliedTempHP != 0) mods += $" TempHP:{AppliedTempHP}";
         if (!string.IsNullOrEmpty(AppliedStatName)) mods += $" {AppliedStatName}:{AppliedStatBonus:+#;-#}";
+        if (!string.IsNullOrEmpty(AppliedSecondaryStatName)) mods += $" {AppliedSecondaryStatName}:{AppliedSecondaryStatBonus:+#;-#}";
+        if (AppliedSizeCategoryShift != 0)
+        {
+            string sign = AppliedSizeCategoryShift > 0 ? "+" : "";
+            mods += $" Size:{sign}{AppliedSizeCategoryShift}";
+        }
         if (AppliedDamageResistanceAmount > 0 && AppliedDamageResistanceType != DamageType.Untyped)
             mods += $" Resist:{AppliedDamageResistanceAmount} {DamageTextUtils.GetDamageTypeDisplay(AppliedDamageResistanceType)}";
         if (AppliedDamageImmunityType != DamageType.Untyped)
