@@ -240,9 +240,12 @@ public class CharacterController : MonoBehaviour
             Debug.Log($"[Feats] {Stats.CharacterName}: Combat Expertise -{Stats.CombatExpertiseValue} attack, +{Stats.CombatExpertiseValue} AC");
         }
 
+        // Prone: melee attacks take -4.
+        int proneAttackPenalty = GetProneAttackModifier(isMelee);
+
         int totalAtkMod = Stats.BaseAttackBonus + abilityMod + Stats.SizeModifier
                           + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty;
+                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty + proneAttackPenalty;
 
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         // === FEAT: Improved Critical (double threat range) ===
@@ -377,6 +380,9 @@ public class CharacterController : MonoBehaviour
             combatExpertisePenalty = -Stats.CombatExpertiseValue;
         }
 
+        // Prone: melee attacks take -4.
+        int proneAttackPenalty = GetProneAttackModifier(isMelee);
+
         // === FEAT: Improved Critical ===
         critThreatMin = FeatManager.GetAdjustedCritThreatMin(Stats, critThreatMin);
 
@@ -417,13 +423,13 @@ public class CharacterController : MonoBehaviour
 
             int baseBonus = allAttackBonuses[i];
             int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                         + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty + rapidShotPenalty;
+                         + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty + rapidShotPenalty + proneAttackPenalty;
 
             // Recalculate with correct ability mod (iterative uses BAB-based bonus, not STRMod again)
             // The baseBonus from GetIterativeAttackBonuses already includes STRMod+SizeModifier
             // So we need to add other feat/situational modifiers
             atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                     + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty + rapidShotPenalty;
+                     + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty + rapidShotPenalty + proneAttackPenalty;
             // Note: Weapon Finesse already handled in GetIterativeAttackBonuses if needed
             // For now, the base bonus includes STRMod; if Finesse, we adjust
             if (!isRanged && FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
@@ -605,9 +611,12 @@ public class CharacterController : MonoBehaviour
             combatExpertisePenalty = -Mathf.Min(Stats.CombatExpertiseValue, maxCE);
         }
 
+        // Prone: melee attacks take -4.
+        int proneAttackPenalty = GetProneAttackModifier(isMelee);
+
         // Main hand attack
         int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                         + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty;
+                         + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty + proneAttackPenalty;
         string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
 
         int mainCritMin = mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20;
@@ -657,7 +666,7 @@ public class CharacterController : MonoBehaviour
         if (!target.Stats.IsDead)
         {
             int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                            + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty;
+                            + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty + proneAttackPenalty;
             string offLabel = $"Attack 2 - Off Hand ({offWeapon.Name})";
 
             int offCritMin = offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20;
@@ -710,6 +719,24 @@ public class CharacterController : MonoBehaviour
         return result;
     }
 
+    private int GetProneAttackModifier(bool isMeleeAttack)
+    {
+        if (!HasCondition(CombatConditionType.Prone)) return 0;
+        return isMeleeAttack ? -4 : 0;
+    }
+
+    private static int GetSituationalTargetArmorClass(CharacterController target, bool isRangedAttack)
+    {
+        if (target == null || target.Stats == null)
+            return 10;
+
+        int targetAC = target.Stats.ArmorClass;
+        if (target.HasCondition(CombatConditionType.Prone))
+            targetAC += isRangedAttack ? 4 : -4;
+
+        return targetAC;
+    }
+
     // ========== INTERNAL: Single attack with critical hit support ==========
 
     /// <summary>
@@ -748,12 +775,16 @@ public class CharacterController : MonoBehaviour
         result.DamageModifier = damageModifier;
         result.DamageModifierDesc = damageModDesc;
 
+        bool isRangedAttack = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
+        int targetAC = GetSituationalTargetArmorClass(target, isRangedAttack);
+
         // Step 1: Roll to hit
-        var (hit, roll, total) = Stats.RollToHitWithMod(totalAtkMod, target.Stats.ArmorClass);
+        var (hit, roll, total) = Stats.RollToHitWithMod(totalAtkMod, targetAC);
         result.DieRoll = roll;
         result.TotalRoll = total;
-        result.TargetAC = target.Stats.ArmorClass;
+        result.TargetAC = targetAC;
         result.Hit = hit;
+        result.IsRangedAttack = isRangedAttack;
         result.NaturalTwenty = (roll == 20);
         result.NaturalOne = (roll == 1);
 
@@ -771,7 +802,7 @@ public class CharacterController : MonoBehaviour
             if (isThreat)
             {
                 // Roll confirmation with the same attack modifier
-                var (confirmed, confRoll, confTotal) = Stats.RollCritConfirmation(totalAtkMod, target.Stats.ArmorClass);
+                var (confirmed, confRoll, confTotal) = Stats.RollCritConfirmation(totalAtkMod, targetAC);
                 critConfirmed = confirmed;
                 confirmRoll = confRoll;
                 confirmTotal = confTotal;
@@ -1390,6 +1421,7 @@ public class CharacterController : MonoBehaviour
         }
 
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
+        int proneAttackPenalty = GetProneAttackModifier(isMeleeAttack: true);
 
         for (int i = 0; i < flurryBonuses.Length; i++)
         {
@@ -1399,7 +1431,7 @@ public class CharacterController : MonoBehaviour
                 break;
             }
 
-            int atkMod = flurryBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus;
+            int atkMod = flurryBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus + proneAttackPenalty;
 
             string label = $"Flurry {i + 1} ({CharacterStats.FormatMod(flurryBonuses[i])})";
             int hpBefore = target.Stats.CurrentHP;

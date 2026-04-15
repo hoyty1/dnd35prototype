@@ -181,12 +181,11 @@ public class CharacterStats
     public bool HasChargePenalty => ActiveConditions.Any(c => c.Type == CombatConditionType.ChargePenalty);
     public bool IsFlanked => ActiveConditions.Any(c => c.Type == CombatConditionType.Flanked);
 
-    /// <summary>Penalty to attack rolls from conditions.</summary>
-    public int ConditionAttackPenalty => (IsProne ? -4 : 0) + (IsGrappled ? -2 : 0) + (IsDisarmed ? -4 : 0);
+    /// <summary>Penalty to attack rolls from persistent conditions (situational prone penalties handled at attack resolution time).</summary>
+    public int ConditionAttackPenalty => (IsGrappled ? -2 : 0) + (IsDisarmed ? -4 : 0);
 
-    /// <summary>Penalty to AC from conditions.</summary>
-    public int ConditionACPenalty => (IsProne ? -4 : 0)
-        + (ActiveConditions.Any(c => c.Type == CombatConditionType.Feinted) ? -2 : 0)
+    /// <summary>Penalty to AC from persistent conditions (situational prone AC handled at attack resolution time).</summary>
+    public int ConditionACPenalty => (ActiveConditions.Any(c => c.Type == CombatConditionType.Feinted) ? -2 : 0)
         + (HasChargePenalty ? -2 : 0);
 
     /// <summary>Movement override from conditions (grappled cannot move normally).</summary>

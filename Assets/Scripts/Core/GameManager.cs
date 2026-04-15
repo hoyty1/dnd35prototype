@@ -63,6 +63,7 @@ public class GameManager : MonoBehaviour
         ChoosingAction,
         Moving,
         TakingFiveFootStep,
+        Crawling,
         SelectingAttackTarget,
         SelectingSpecialTarget,
         SelectingChargeTarget,
@@ -460,6 +461,7 @@ public class GameManager : MonoBehaviour
         // Right-click / Escape to cancel targeting in various states
         if (CurrentSubPhase == PlayerSubPhase.Moving
             || CurrentSubPhase == PlayerSubPhase.TakingFiveFootStep
+            || CurrentSubPhase == PlayerSubPhase.Crawling
             || CurrentSubPhase == PlayerSubPhase.SelectingAoETarget
             || CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE
             || CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget
@@ -502,6 +504,10 @@ public class GameManager : MonoBehaviour
                 else if (CurrentSubPhase == PlayerSubPhase.TakingFiveFootStep)
                 {
                     CancelFiveFootStepSelection();
+                }
+                else if (CurrentSubPhase == PlayerSubPhase.Crawling)
+                {
+                    CancelCrawlSelection();
                 }
                 else if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
                 {
@@ -1505,6 +1511,12 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        if (pc.HasCondition(CombatConditionType.Prone))
+        {
+            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is prone and must stand up or crawl.");
+            return;
+        }
+
         if (pc.Actions.HasMoveAction) { /* Normal move */ }
         else if (pc.Actions.CanConvertStandardToMove) { /* Will convert */ }
         else return;
@@ -1663,6 +1675,325 @@ public class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels 5-foot step.");
 
         ShowActionChoices();
+    }
+
+    public string GetDropProneDisabledReason(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return "No active character";
+
+        if (character.HasCondition(CombatConditionType.Prone))
+            return "Already prone";
+
+        if (character.HasCondition(CombatConditionType.Grappled))
+            return "Cannot drop prone while grappled";
+
+        return string.Empty;
+    }
+
+    public string GetStandUpDisabledReason(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return "No active character";
+
+        if (!character.HasCondition(CombatConditionType.Prone))
+            return "Not prone";
+
+        if (character.HasCondition(CombatConditionType.Grappled))
+            return "Cannot stand up while grappled";
+
+        if (character.HasTakenFiveFootStep)
+            return "Cannot stand after taking a 5-foot step";
+
+        if (!character.Actions.HasMoveAction && !character.Actions.CanConvertStandardToMove)
+            return "No move action available";
+
+        return string.Empty;
+    }
+
+    public string GetCrawlDisabledReason(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return "No active character";
+
+        if (!character.HasCondition(CombatConditionType.Prone))
+            return "Must be prone";
+
+        if (character.HasCondition(CombatConditionType.Grappled))
+            return "Cannot crawl while grappled";
+
+        if (character.HasTakenFiveFootStep)
+            return "Cannot crawl after taking a 5-foot step";
+
+        if (!character.Actions.HasMoveAction && !character.Actions.CanConvertStandardToMove)
+            return "No move action available";
+
+        bool hasDestination = false;
+        foreach (var neighbor in SquareGridUtils.GetNeighbors(character.GridPosition))
+        {
+            if (IsValidCrawlDestination(character, neighbor))
+            {
+                hasDestination = true;
+                break;
+            }
+        }
+
+        if (!hasDestination)
+            return "No valid adjacent square";
+
+        return string.Empty;
+    }
+
+    public void OnDropProneButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        string reason = GetDropProneDisabledReason(pc);
+        if (!string.IsNullOrEmpty(reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot drop prone: {reason}.");
+            return;
+        }
+
+        pc.Stats.ApplyCondition(CombatConditionType.Prone, -1, pc.Stats.CharacterName);
+        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} drops prone.");
+        CombatUI?.ShowCombatLog("(Free action - no attacks of opportunity provoked)");
+
+        RefreshFlankedConditions();
+        UpdateAllStatsUI();
+        InvalidatePreviewThreats();
+        ShowActionChoices();
+    }
+
+    public void OnStandUpButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        string reason = GetStandUpDisabledReason(pc);
+        if (!string.IsNullOrEmpty(reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot stand up: {reason}.");
+            return;
+        }
+
+        StartCoroutine(ResolveStandUp(pc));
+    }
+
+    public void OnCrawlButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        string reason = GetCrawlDisabledReason(pc);
+        if (!string.IsNullOrEmpty(reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot crawl: {reason}.");
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Crawling;
+        ShowCrawlOptions(pc);
+        CombatUI.SetActionButtonsVisible(false);
+        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Select crawl destination (right-click/ESC to cancel)");
+        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} prepares to crawl (5 ft, provokes AoO).");
+    }
+
+    private IEnumerator ResolveStandUp(CharacterController pc)
+    {
+        if (pc == null || pc.Stats == null)
+            yield break;
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} attempts to stand up...");
+
+        List<CharacterController> threateners = ThreatSystem.GetThreateningEnemies(pc.GridPosition, pc, GetAllCharacters());
+        threateners.RemoveAll(enemy => !ThreatSystem.CanMakeAoO(enemy));
+
+        if (threateners.Count > 0)
+        {
+            CombatUI?.ShowCombatLog("Standing up provokes attacks of opportunity!");
+
+            foreach (var enemy in threateners)
+            {
+                if (pc.Stats.IsDead) break;
+                if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead) continue;
+
+                CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, pc);
+                if (aooResult != null)
+                {
+                    CombatUI?.ShowCombatLog($"⚔ AoO (standing up): {aooResult.GetDetailedSummary()}");
+                    UpdateAllStatsUI();
+
+                    if (aooResult.Hit && aooResult.TotalDamage > 0)
+                        CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
+
+                    yield return new WaitForSeconds(0.8f);
+                }
+            }
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog("(No enemies threaten - no attacks of opportunity)");
+        }
+
+        if (pc.Stats.IsDead)
+        {
+            CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} was slain while trying to stand up!");
+            UpdateAllStatsUI();
+            EndActivePCTurn();
+            yield break;
+        }
+
+        bool removed = pc.Stats.RemoveCondition(CombatConditionType.Prone);
+        if (removed)
+            CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} stands up.");
+
+        ConsumeMoveAction(pc);
+
+        RefreshFlankedConditions();
+        UpdateAllStatsUI();
+        InvalidatePreviewThreats();
+        ShowActionChoices();
+    }
+
+    private void ShowCrawlOptions(CharacterController pc)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        foreach (Vector2Int neighbor in SquareGridUtils.GetNeighbors(pc.GridPosition))
+        {
+            if (!IsValidCrawlDestination(pc, neighbor))
+                continue;
+
+            SquareCell cell = Grid.GetCell(neighbor);
+            if (cell == null) continue;
+
+            cell.SetHighlight(HighlightType.Move);
+            _highlightedCells.Add(cell);
+        }
+
+        SquareCell current = Grid.GetCell(pc.GridPosition);
+        if (current != null)
+            current.SetHighlight(HighlightType.Selected);
+    }
+
+    private bool IsValidCrawlDestination(CharacterController pc, Vector2Int destination)
+    {
+        if (pc == null) return false;
+        if (!SquareGridUtils.IsAdjacent(pc.GridPosition, destination))
+            return false;
+
+        SquareCell cell = Grid.GetCell(destination);
+        if (cell == null || cell.IsOccupied)
+            return false;
+
+        if (IsDifficultTerrain(destination))
+            return false;
+
+        return true;
+    }
+
+    private void HandleCrawlClick(CharacterController pc, SquareCell cell)
+    {
+        if (pc == null || cell == null) return;
+
+        if (cell.Coords == pc.GridPosition)
+        {
+            CancelCrawlSelection();
+            return;
+        }
+
+        if (!_highlightedCells.Contains(cell))
+            return;
+
+        StartCoroutine(ExecuteCrawl(pc, cell));
+    }
+
+    private IEnumerator ExecuteCrawl(CharacterController pc, SquareCell destination)
+    {
+        if (pc == null || destination == null)
+            yield break;
+
+        if (!IsValidCrawlDestination(pc, destination.Coords))
+        {
+            CombatUI?.ShowCombatLog("⚠ Invalid crawl destination.");
+            yield break;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        var crawlPath = new List<Vector2Int> { destination.Coords };
+        var provokedAoOs = ThreatSystem.AnalyzePathForAoOs(pc, crawlPath, GetAllCharacters());
+
+        if (provokedAoOs.Count > 0)
+        {
+            CombatUI?.ShowCombatLog("Crawling provokes attacks of opportunity!");
+            foreach (var aooInfo in provokedAoOs)
+            {
+                if (pc.Stats.IsDead) break;
+
+                CharacterController threatener = aooInfo.Threatener;
+                if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead) continue;
+
+                CombatResult aooResult = ThreatSystem.ExecuteAoO(threatener, pc);
+                if (aooResult != null)
+                {
+                    CombatUI?.ShowCombatLog($"⚔ AoO (crawling): {aooResult.GetDetailedSummary()}");
+                    UpdateAllStatsUI();
+
+                    if (aooResult.Hit && aooResult.TotalDamage > 0)
+                        CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
+
+                    yield return new WaitForSeconds(0.8f);
+                }
+            }
+        }
+
+        if (pc.Stats.IsDead)
+        {
+            CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} was slain while crawling!");
+            UpdateAllStatsUI();
+            EndActivePCTurn();
+            yield break;
+        }
+
+        Vector2Int oldPos = pc.GridPosition;
+        ConsumeMoveAction(pc);
+        pc.MoveToCell(destination);
+
+        RefreshFlankedConditions();
+        UpdateAllStatsUI();
+        InvalidatePreviewThreats();
+
+        CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} crawls ({oldPos.x},{oldPos.y} → {destination.Coords.x},{destination.Coords.y}).");
+
+        ShowActionChoices();
+    }
+
+    private void CancelCrawlSelection()
+    {
+        CharacterController pc = ActivePC;
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        if (pc != null)
+            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels crawl.");
+
+        ShowActionChoices();
+    }
+
+    private static void ConsumeMoveAction(CharacterController character)
+    {
+        if (character == null) return;
+
+        if (character.Actions.HasMoveAction)
+            character.Actions.UseMoveAction();
+        else if (character.Actions.CanConvertStandardToMove)
+            character.Actions.ConvertStandardToMove();
     }
 
     public void OnAttackButtonPressed()
@@ -3745,6 +4076,10 @@ public class GameManager : MonoBehaviour
 
             case PlayerSubPhase.TakingFiveFootStep:
                 HandleFiveFootStepClick(pc, cell);
+                break;
+
+            case PlayerSubPhase.Crawling:
+                HandleCrawlClick(pc, cell);
                 break;
 
             case PlayerSubPhase.SelectingAttackTarget:

@@ -685,6 +685,12 @@ public class SceneBootstrap : MonoBehaviour
             "Move", new Color(0.2f, 0.5f, 0.2f));
         combatUI.FiveFootStepButton = CreateGridButton(btnGrid.transform, "FiveFootStepBtn",
             "5-Foot Step", new Color(0.2f, 0.45f, 0.72f));
+        combatUI.DropProneButton = CreateGridButton(btnGrid.transform, "DropProneBtn",
+            "Drop Prone", new Color(0.52f, 0.46f, 0.12f));
+        combatUI.StandUpButton = CreateGridButton(btnGrid.transform, "StandUpBtn",
+            "Stand Up", new Color(0.48f, 0.33f, 0.12f));
+        combatUI.CrawlButton = CreateGridButton(btnGrid.transform, "CrawlBtn",
+            "Crawl", new Color(0.22f, 0.38f, 0.65f));
         combatUI.AttackButton = CreateGridButton(btnGrid.transform, "AttackBtn",
             "Attack", new Color(0.7f, 0.2f, 0.2f));
         combatUI.SpecialAttackButton = CreateGridButton(btnGrid.transform, "SpecialAttackBtn",
@@ -855,6 +861,12 @@ public class SceneBootstrap : MonoBehaviour
             ui.MoveButton.onClick.AddListener(() => GameManager.Instance.OnMoveButtonPressed());
         if (ui.FiveFootStepButton != null)
             ui.FiveFootStepButton.onClick.AddListener(() => GameManager.Instance.OnFiveFootStepButtonPressed());
+        if (ui.DropProneButton != null)
+            ui.DropProneButton.onClick.AddListener(() => GameManager.Instance.OnDropProneButtonPressed());
+        if (ui.StandUpButton != null)
+            ui.StandUpButton.onClick.AddListener(() => GameManager.Instance.OnStandUpButtonPressed());
+        if (ui.CrawlButton != null)
+            ui.CrawlButton.onClick.AddListener(() => GameManager.Instance.OnCrawlButtonPressed());
         if (ui.AttackButton != null)
             ui.AttackButton.onClick.AddListener(() => GameManager.Instance.OnAttackButtonPressed());
         if (ui.SpecialAttackButton != null)

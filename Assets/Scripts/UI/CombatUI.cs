@@ -7,7 +7,7 @@ using System.Collections.Generic;
 /// Manages all combat UI elements with D&D 3.5 ability score display.
 /// Shows 6 ability scores with modifiers and derived stats for each character.
 /// Supports 4 PC panels, multiple NPC panels, initiative order display, and character icons.
-/// Includes action economy buttons (Move, 5-Foot Step, Attack, Full Attack, Dual Wield, End Turn).
+/// Includes action economy buttons (Move, 5-Foot Step, Drop Prone, Stand Up, Crawl, Attack, Full Attack, Dual Wield, End Turn).
 /// Includes AoO warning confirmation dialog.
 /// </summary>
 public class CombatUI : MonoBehaviour
@@ -92,6 +92,9 @@ public class CombatUI : MonoBehaviour
     public GameObject ActionPanel;
     public Button MoveButton;
     public Button FiveFootStepButton;   // 5-foot step (Free Action, no AoO)
+    public Button DropProneButton;      // Drop prone (Free Action)
+    public Button StandUpButton;        // Stand up (Move Action, provokes AoO)
+    public Button CrawlButton;          // Crawl 5 ft (Move Action, provokes AoO)
     public Button AttackButton;         // Single attack (Standard Action)
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
@@ -558,18 +561,21 @@ public class CombatUI : MonoBehaviour
         bool hasRapidShot = pc.Stats.HasFeat("Rapid Shot");
         bool fullAttackRelevant = hasIterativeAttacks || hasRapidShot;
 
+        bool isProne = pc.HasCondition(CombatConditionType.Prone);
+
         if (MoveButton != null)
         {
             bool canMoveByActions = actions.HasMoveAction || actions.CanConvertStandardToMove;
             bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
-            bool canMove = canMoveByActions && !blockedByFiveFootStep;
+            bool canMove = canMoveByActions && !blockedByFiveFootStep && !isProne;
 
             MoveButton.gameObject.SetActive(true);
             MoveButton.interactable = canMove;
             Text moveLabel = MoveButton.GetComponentInChildren<Text>();
             if (moveLabel != null)
             {
-                if (blockedByFiveFootStep) moveLabel.text = "Move (After 5-ft step: no)";
+                if (isProne) moveLabel.text = "Move (Stand up first)";
+                else if (blockedByFiveFootStep) moveLabel.text = "Move (After 5-ft step: no)";
                 else if (actions.HasMoveAction) moveLabel.text = "Move (Move Action)";
                 else if (actions.CanConvertStandardToMove) moveLabel.text = "Move (Std→Move)";
                 else moveLabel.text = "Move (Used)";
@@ -592,6 +598,63 @@ public class CombatUI : MonoBehaviour
                 fiveFootLabel.text = canFiveFootStep
                     ? "5-Foot Step (Free)"
                     : $"5-Foot Step ({disabledReason})";
+            }
+        }
+
+        if (DropProneButton != null)
+        {
+            string disabledReason = GameManager.Instance != null
+                ? GameManager.Instance.GetDropProneDisabledReason(pc)
+                : "Unavailable";
+            bool canDropProne = string.IsNullOrEmpty(disabledReason);
+
+            DropProneButton.gameObject.SetActive(!isProne);
+            DropProneButton.interactable = canDropProne;
+
+            Text dropProneLabel = DropProneButton.GetComponentInChildren<Text>();
+            if (dropProneLabel != null)
+            {
+                dropProneLabel.text = canDropProne
+                    ? "Drop Prone (Free)"
+                    : $"Drop Prone ({disabledReason})";
+            }
+        }
+
+        if (StandUpButton != null)
+        {
+            string disabledReason = GameManager.Instance != null
+                ? GameManager.Instance.GetStandUpDisabledReason(pc)
+                : "Unavailable";
+            bool canStandUp = string.IsNullOrEmpty(disabledReason);
+
+            StandUpButton.gameObject.SetActive(isProne);
+            StandUpButton.interactable = canStandUp;
+
+            Text standUpLabel = StandUpButton.GetComponentInChildren<Text>();
+            if (standUpLabel != null)
+            {
+                standUpLabel.text = canStandUp
+                    ? "Stand Up (Move, AoO)"
+                    : $"Stand Up ({disabledReason})";
+            }
+        }
+
+        if (CrawlButton != null)
+        {
+            string disabledReason = GameManager.Instance != null
+                ? GameManager.Instance.GetCrawlDisabledReason(pc)
+                : "Unavailable";
+            bool canCrawl = string.IsNullOrEmpty(disabledReason);
+
+            CrawlButton.gameObject.SetActive(isProne);
+            CrawlButton.interactable = canCrawl;
+
+            Text crawlLabel = CrawlButton.GetComponentInChildren<Text>();
+            if (crawlLabel != null)
+            {
+                crawlLabel.text = canCrawl
+                    ? "Crawl 5 ft (Move, AoO)"
+                    : $"Crawl ({disabledReason})";
             }
         }
 
@@ -619,10 +682,11 @@ public class CombatUI : MonoBehaviour
             bool hasMeleeThreat = pc.HasMeleeWeaponEquipped();
             bool fatigued = pc.Stats != null && pc.Stats.IsFatigued;
             bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
+            bool blockedByProne = isProne;
             bool hasAnyChargeTarget = GameManager.Instance != null && GameManager.Instance.HasAnyValidChargeTarget(pc);
-            bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigued && !blockedByFiveFootStep && hasAnyChargeTarget;
+            bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigued && !blockedByFiveFootStep && !blockedByProne && hasAnyChargeTarget;
 
-            ChargeButton.gameObject.SetActive(hasMeleeThreat || fatigued || blockedByFiveFootStep);
+            ChargeButton.gameObject.SetActive(hasMeleeThreat || fatigued || blockedByFiveFootStep || blockedByProne);
             ChargeButton.interactable = canChargeTarget;
 
             Text chargeLabel = ChargeButton.GetComponentInChildren<Text>();
@@ -630,6 +694,7 @@ public class CombatUI : MonoBehaviour
             {
                 if (!hasMeleeThreat) chargeLabel.text = "Charge (Need melee)";
                 else if (fatigued) chargeLabel.text = "Charge (Fatigued)";
+                else if (blockedByProne) chargeLabel.text = "Charge (Prone)";
                 else if (blockedByFiveFootStep) chargeLabel.text = "Charge (After 5-ft step: no)";
                 else if (!hasFullRound) chargeLabel.text = "Charge (Used)";
                 else if (!hasAnyChargeTarget) chargeLabel.text = "Charge (No lane)";
