@@ -42,10 +42,11 @@ public class FighterClass : ICharacterClass
         inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
 
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("longspear"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("torch"));
-        Debug.Log("[Fighter] Equipment: Scale Mail, Heavy Shield, Longsword, Shortbow");
+        Debug.Log("[Fighter] Equipment: Scale Mail, Heavy Shield, Longsword, Shortbow, Longspear");
     }
 
     // Spellcasting
@@ -97,3 +98,4 @@ public class FighterClass : ICharacterClass
         return data;
     }
 }
+
