@@ -2091,6 +2091,30 @@ public class GameManager : MonoBehaviour
         CombatUI.UpdateActionButtons(pc);
     }
 
+    public void OnFightingDefensivelyTogglePressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || pc.Stats == null) return;
+
+        if (pc.Stats.BaseAttackBonus < 1)
+        {
+            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} needs BAB +1 to fight defensively.");
+            return;
+        }
+
+        bool newValue = !pc.IsFightingDefensively;
+        pc.SetFightingDefensively(newValue);
+
+        if (newValue)
+            CombatUI.ShowCombatLog($"🛡 {pc.Stats.CharacterName} fights defensively: -4 attack, +2 AC until next turn.");
+        else
+            CombatUI.ShowCombatLog($"🛡 {pc.Stats.CharacterName} stops fighting defensively.");
+
+        CombatUI.UpdateFightingDefensivelyLabel(pc);
+        CombatUI.UpdateActionButtons(pc);
+        UpdateAllStatsUI();
+    }
+
     public void OnFlurryOfBlowsButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -2566,7 +2590,7 @@ public class GameManager : MonoBehaviour
         // Resolve the spell with metamagic.
         // D&D 3.5e: willing friendly targets for melee touch delivery should auto-succeed.
         bool skipFriendlyTouchAttackRoll = _pendingSpell.IsMeleeTouchSpell() && IsFriendlyTarget(caster, target);
-        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll);
+        SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, caster, target);
 
         // Apply buff effects based on spell type
         if (result.Success && _pendingSpell.EffectType == SpellEffectType.Buff)
@@ -3242,7 +3266,7 @@ public class GameManager : MonoBehaviour
                 // For damage spells, resolve with save and damage
                 else if (_pendingSpell.EffectType == SpellEffectType.Damage)
                 {
-                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic);
+                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, caster, target);
 
                     if (result.RequiredSave)
                     {
@@ -3268,7 +3292,7 @@ public class GameManager : MonoBehaviour
                 // For healing spells
                 else if (_pendingSpell.EffectType == SpellEffectType.Healing)
                 {
-                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic);
+                    SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, false, caster, target);
 
                     logBuilder.AppendLine($"  Healed: {result.HealingDone} HP");
                     logBuilder.AppendLine($"  {target.Stats.CharacterName}: {result.TargetHPBefore} → {result.TargetHPAfter} HP");
@@ -5713,6 +5737,9 @@ public class GameManager : MonoBehaviour
             if (first.PowerAttackValue > 0) feats.Add($"Power Attack (-{first.PowerAttackValue} atk/+{first.PowerAttackDamageBonus} dmg)");
             if (first.RapidShotActive) feats.Add("Rapid Shot");
             if (first.PointBlankShotActive) feats.Add("Point Blank Shot");
+            if (first.FightingDefensivelyAttackPenalty != 0) feats.Add("Fighting Defensively");
+            if (first.ShootingIntoMeleePenalty != 0) feats.Add("Shooting into melee");
+            if (first.PreciseShotNegated) feats.Add("Precise Shot");
             if (feats.Count > 0)
                 Debug.Log($"[Combat] Active Feats: {string.Join(", ", feats)}");
 
@@ -5764,6 +5791,14 @@ public class GameManager : MonoBehaviour
 
             if (atk.PointBlankShotActive)
                 Debug.Log($"[Combat]     {FormatConsoleModLine(1, "Point Blank Shot")}");
+
+            if (atk.FightingDefensivelyAttackPenalty != 0)
+                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.FightingDefensivelyAttackPenalty, "Fighting Defensively")}");
+
+            if (atk.ShootingIntoMeleePenalty != 0)
+                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.ShootingIntoMeleePenalty, "shooting into melee")}");
+            else if (atk.PreciseShotNegated)
+                Debug.Log("[Combat]     + 0 (Precise Shot negates shooting into melee penalty)");
 
             if (atk.IsRangedAttack && atk.RangePenalty != 0)
                 Debug.Log($"[Combat]     {FormatConsoleModLine(atk.RangePenalty, "range")}");

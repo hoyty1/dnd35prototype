@@ -23,6 +23,10 @@ public class SpellResult
     public int AttackTotal;             // d20 + modifier
     public int TouchAC;                 // Target's touch AC
     public bool AttackHit;              // Whether the touch attack hit
+    public int FightingDefensivelyAttackPenalty; // -4 while caster fights defensively
+    public int ShootingIntoMeleePenalty;         // -4 when shooting into melee (unless negated)
+    public bool PreciseShotNegated;
+    public int TargetFightingDefensivelyACBonus; // +2 dodge AC on touch AC if active
 
     // ========== SAVING THROW ==========
     public bool RequiredSave;
@@ -106,6 +110,14 @@ public class SpellResult
             sb.AppendLine($"    Roll: d20 = {AttackRoll}");
             if (AttackBonus != 0)
                 sb.AppendLine($"    {FormatModLine(AttackBonus, "attack modifier")}");
+            if (FightingDefensivelyAttackPenalty != 0)
+                sb.AppendLine($"    {FormatModLine(FightingDefensivelyAttackPenalty, "Fighting Defensively")}");
+            if (ShootingIntoMeleePenalty != 0)
+                sb.AppendLine($"    {FormatModLine(ShootingIntoMeleePenalty, "shooting into melee")}");
+            else if (PreciseShotNegated)
+                sb.AppendLine("    + 0 (Precise Shot negates shooting into melee penalty)");
+            if (TargetFightingDefensivelyACBonus > 0)
+                sb.AppendLine($"    Defender stance: +{TargetFightingDefensivelyACBonus} Touch AC (Fighting Defensively)");
             string hitMiss = AttackHit ? "HIT!" : "MISS!";
             string natNote = AttackRoll == 20 ? " (NATURAL 20!)" : AttackRoll == 1 ? " (NATURAL 1!)" : "";
             sb.AppendLine($"    = {AttackTotal} vs Touch AC {TouchAC} - {hitMiss}{natNote}");

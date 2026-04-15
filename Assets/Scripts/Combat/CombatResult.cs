@@ -55,6 +55,10 @@ public class CombatResult
     public int WeaponFocusBonus;
     public int WeaponSpecBonus;
     public int CombatExpertisePenalty;
+    public int FightingDefensivelyAttackPenalty;
+    public int ShootingIntoMeleePenalty;
+    public bool PreciseShotNegated;
+    public int FightingDefensivelyACBonus;
 
     public int BreakdownBAB;
     public int BreakdownAbilityMod;
@@ -113,11 +117,16 @@ public class CombatResult
         if (WeaponFocusBonus > 0) activeFeats.Add($"Weapon Focus (+{WeaponFocusBonus} atk)");
         if (WeaponSpecBonus > 0) activeFeats.Add($"Weapon Spec (+{WeaponSpecBonus} dmg)");
         if (CombatExpertisePenalty != 0) activeFeats.Add($"Combat Expertise ({CombatExpertisePenalty} atk/+{-CombatExpertisePenalty} AC)");
+        if (FightingDefensivelyAttackPenalty != 0) activeFeats.Add($"Fighting Defensively ({FightingDefensivelyAttackPenalty} atk/+2 AC)");
+        if (ShootingIntoMeleePenalty != 0) activeFeats.Add($"Shooting into melee ({ShootingIntoMeleePenalty} atk)");
+        if (PreciseShotNegated) activeFeats.Add("Precise Shot (no shooting-into-melee penalty)");
         if (activeFeats.Count > 0)
             sb.AppendLine($"  Active Feats: {string.Join(", ", activeFeats)}");
 
         if (IsFlanking)
             sb.AppendLine($"  Flanking: Yes (with {FlankingPartnerName}, +{FlankingBonus})");
+        if (FightingDefensivelyACBonus != 0)
+            sb.AppendLine($"  Defender stance: Fighting Defensively (+{FightingDefensivelyACBonus} AC)");
 
         sb.AppendLine();
         sb.AppendLine("  Attack Roll:");
@@ -134,6 +143,9 @@ public class CombatResult
         if (PointBlankShotActive) sb.AppendLine($"    {FormatModLine(1, "Point Blank Shot")}");
         if (WeaponFocusBonus > 0) sb.AppendLine($"    {FormatModLine(WeaponFocusBonus, "Weapon Focus")}");
         if (CombatExpertisePenalty != 0) sb.AppendLine($"    {FormatModLine(CombatExpertisePenalty, "Combat Expertise")}");
+        if (FightingDefensivelyAttackPenalty != 0) sb.AppendLine($"    {FormatModLine(FightingDefensivelyAttackPenalty, "Fighting Defensively")}");
+        if (ShootingIntoMeleePenalty != 0) sb.AppendLine($"    {FormatModLine(ShootingIntoMeleePenalty, "shooting into melee")}");
+        if (PreciseShotNegated) sb.AppendLine("    + 0 (Precise Shot negates shooting into melee penalty)");
         if (IsRangedAttack && RangePenalty != 0) sb.AppendLine($"    {FormatModLine(RangePenalty, "range")}");
         if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)
             sb.AppendLine($"    {FormatModLine(BreakdownDualWieldPenalty, IsOffHandAttack ? "off-hand penalty" : "dual wield penalty")}");
@@ -203,6 +215,9 @@ public class CombatResult
         if (PointBlankShotActive) sb.AppendLine($"      {FormatModLine(1, "Point Blank Shot")}");
         if (WeaponFocusBonus > 0) sb.AppendLine($"      {FormatModLine(WeaponFocusBonus, "Weapon Focus")}");
         if (CombatExpertisePenalty != 0) sb.AppendLine($"      {FormatModLine(CombatExpertisePenalty, "Combat Expertise")}");
+        if (FightingDefensivelyAttackPenalty != 0) sb.AppendLine($"      {FormatModLine(FightingDefensivelyAttackPenalty, "Fighting Defensively")}");
+        if (ShootingIntoMeleePenalty != 0) sb.AppendLine($"      {FormatModLine(ShootingIntoMeleePenalty, "shooting into melee")}");
+        if (PreciseShotNegated) sb.AppendLine("      + 0 (Precise Shot negates shooting into melee penalty)");
         if (IsRangedAttack && RangePenalty != 0) sb.AppendLine($"      {FormatModLine(RangePenalty, "range")}");
         if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)
             sb.AppendLine($"      {FormatModLine(BreakdownDualWieldPenalty, IsOffHandAttack ? "off-hand penalty" : "dual wield penalty")}");

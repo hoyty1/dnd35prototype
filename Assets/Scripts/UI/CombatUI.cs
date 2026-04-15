@@ -119,6 +119,9 @@ public class CombatUI : MonoBehaviour
     public GameObject RapidShotPanel;       // Panel containing Rapid Shot toggle
     public Button RapidShotToggle;          // Toggle button for Rapid Shot
     public Text RapidShotLabel;             // Shows "Rapid Shot: ON/OFF"
+    public GameObject FightingDefensivelyPanel; // Panel containing Fighting Defensively toggle
+    public Button FightingDefensivelyToggle;    // Toggle button for Fighting Defensively
+    public Text FightingDefensivelyLabel;       // Shows "Fighting Defensively: ON/OFF"
 
     [Header("Layout Panels")]
     public GameObject PartyPanelGO;          // Left-side party panel container
@@ -226,7 +229,8 @@ public class CombatUI : MonoBehaviour
             string dexLabel = (s.MaxDexBonus >= 0 && s.DEXMod > s.MaxDexBonus)
                 ? $"DEX*" : "DEX";
             string sizeDetail = FormatBonusDetail(s.SizeModifier, "Size");
-            string acDetails = $"AC: {s.ArmorClass} (10{FormatBonusDetail(effectiveDex, dexLabel)}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")}{sizeDetail})";
+            string defensiveDetail = ch.IsFightingDefensively ? " +2 Fighting Defensively" : "";
+            string acDetails = $"AC: {s.ArmorClass + (ch.IsFightingDefensively ? 2 : 0)} (10{FormatBonusDetail(effectiveDex, dexLabel)}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")}{sizeDetail}{defensiveDetail})";
             if (s.ArmorCheckPenalty > 0)
                 acDetails += $" ACP:-{s.ArmorCheckPenalty}";
             acText.text = acDetails;
@@ -475,6 +479,9 @@ public class CombatUI : MonoBehaviour
         text = text.Replace("Power Attack", "<color=#FF9933>Power Attack</color>");
         text = text.Replace("Rapid Shot", "<color=#66CCFF>Rapid Shot</color>");
         text = text.Replace("Point Blank Shot", "<color=#66FF66>Point Blank Shot</color>");
+        text = text.Replace("Fighting Defensively", "<color=#99CCFF>Fighting Defensively</color>");
+        text = text.Replace("Shooting into melee", "<color=#FFCC66>Shooting into melee</color>");
+        text = text.Replace("Precise Shot", "<color=#99FF99>Precise Shot</color>");
 
         // Highlight spellcasting and metamagic
         text = text.Replace("SPELL CAST!", "<color=#BB88FF><b>SPELL CAST!</b></color>");
@@ -505,6 +512,7 @@ public class CombatUI : MonoBehaviour
         {
             if (PowerAttackPanel != null) PowerAttackPanel.SetActive(false);
             if (RapidShotPanel != null) RapidShotPanel.SetActive(false);
+            if (FightingDefensivelyPanel != null) FightingDefensivelyPanel.SetActive(false);
             if (RageStatusText != null) RageStatusText.gameObject.SetActive(false);
             if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
             HideSpecialAttackMenu();
@@ -823,6 +831,9 @@ public class CombatUI : MonoBehaviour
 
         if (ActionStatusText != null)
             ActionStatusText.text = actions.GetStatusString();
+
+        if (FightingDefensivelyPanel != null && FightingDefensivelyPanel.activeSelf)
+            UpdateFightingDefensivelyLabel(pc);
     }
 
     // ========== FEAT UI ==========
@@ -851,6 +862,13 @@ public class CombatUI : MonoBehaviour
         {
             RapidShotPanel.SetActive(hasRapidShot);
             if (hasRapidShot) UpdateRapidShotLabel(pc);
+        }
+
+        bool canFightDefensively = pc.Stats.BaseAttackBonus >= 1;
+        if (FightingDefensivelyPanel != null)
+        {
+            FightingDefensivelyPanel.SetActive(canFightDefensively);
+            if (canFightDefensively) UpdateFightingDefensivelyLabel(pc);
         }
     }
 
@@ -890,6 +908,32 @@ public class CombatUI : MonoBehaviour
                 var colors = RapidShotToggle.colors;
                 colors.normalColor = new Color(0.5f, 0.5f, 0.5f, 1f);
                 RapidShotToggle.colors = colors;
+            }
+        }
+    }
+
+    public void UpdateFightingDefensivelyLabel(CharacterController pc)
+    {
+        if (FightingDefensivelyLabel == null || pc == null) return;
+
+        if (pc.IsFightingDefensively)
+        {
+            FightingDefensivelyLabel.text = "Fighting Defensively: ON (-4 atk, +2 AC)";
+            if (FightingDefensivelyToggle != null)
+            {
+                var colors = FightingDefensivelyToggle.colors;
+                colors.normalColor = new Color(0.2f, 0.45f, 0.78f, 1f);
+                FightingDefensivelyToggle.colors = colors;
+            }
+        }
+        else
+        {
+            FightingDefensivelyLabel.text = "Fighting Defensively: OFF";
+            if (FightingDefensivelyToggle != null)
+            {
+                var colors = FightingDefensivelyToggle.colors;
+                colors.normalColor = new Color(0.45f, 0.45f, 0.5f, 1f);
+                FightingDefensivelyToggle.colors = colors;
             }
         }
     }

@@ -48,6 +48,12 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool RapidShotEnabled { get; private set; }
 
+    /// <summary>
+    /// D&D 3.5: Fighting Defensively stance.
+    /// While active: -4 attack rolls, +2 dodge AC until start of next turn.
+    /// </summary>
+    public bool IsFightingDefensively { get; private set; }
+
     /// <summary>Set Power Attack value, clamped to 0..BAB.</summary>
     public void SetPowerAttack(int value)
     {
@@ -60,6 +66,16 @@ public class CharacterController : MonoBehaviour
     {
         RapidShotEnabled = enabled;
         Debug.Log($"[RapidShot] {(Stats != null ? Stats.CharacterName : "unknown")}: SetRapidShot({enabled}) → RapidShotEnabled = {RapidShotEnabled}");
+    }
+
+    /// <summary>Toggle Fighting Defensively stance for this turn.</summary>
+    public void SetFightingDefensively(bool enabled)
+    {
+        IsFightingDefensively = enabled;
+        if (Stats != null)
+        {
+            Debug.Log($"[Defensive] {Stats.CharacterName}: Fighting Defensively {(enabled ? "ON" : "OFF")}");
+        }
     }
 
     /// <summary>Check if the given weapon is two-handed.</summary>
@@ -243,9 +259,17 @@ public class CharacterController : MonoBehaviour
         // Prone: melee attacks take -4.
         int proneAttackPenalty = GetProneAttackModifier(isMelee);
 
+        // Fighting Defensively: -4 attack rolls while stance is active.
+        int fightingDefensivelyPenalty = IsFightingDefensively ? -4 : 0;
+
+        // Shooting into melee: -4 for ranged attacks against targets engaged with attacker allies.
+        bool preciseShotNegated = false;
+        int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
+
         int totalAtkMod = Stats.BaseAttackBonus + abilityMod + Stats.SizeModifier
                           + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty + proneAttackPenalty;
+                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
+                          + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
 
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         // === FEAT: Improved Critical (double threat range) ===
@@ -270,6 +294,10 @@ public class CharacterController : MonoBehaviour
         result.WeaponFocusBonus = weaponFocusBonus;
         result.WeaponSpecBonus = weaponSpecBonus;
         result.CombatExpertisePenalty = combatExpertisePenalty;
+        result.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
+        result.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
+        result.PreciseShotNegated = preciseShotNegated;
+        result.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
 
         // Breakdown fields for detailed logging
         result.BreakdownBAB = Stats.BaseAttackBonus;
@@ -391,6 +419,13 @@ public class CharacterController : MonoBehaviour
         bool rapidShotActive = isRanged && hasRapidShotFeat && RapidShotEnabled;
         int rapidShotPenalty = rapidShotActive ? -2 : 0;
 
+        // Fighting Defensively: -4 attack while active.
+        int fightingDefensivelyPenalty = IsFightingDefensively ? -4 : 0;
+
+        // Shooting into melee: -4 unless Precise Shot negates it.
+        bool preciseShotNegated = false;
+        int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
+
         int totalFeatDmgBonus = powerAtkDmgBonus + pbsDmgBonus + weaponSpecBonus;
 
         // === Debug Logging ===
@@ -423,13 +458,15 @@ public class CharacterController : MonoBehaviour
 
             int baseBonus = allAttackBonuses[i];
             int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                         + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty + rapidShotPenalty + proneAttackPenalty;
+                         + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
+                         + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
 
             // Recalculate with correct ability mod (iterative uses BAB-based bonus, not STRMod again)
             // The baseBonus from GetIterativeAttackBonuses already includes STRMod+SizeModifier
             // So we need to add other feat/situational modifiers
             atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                     + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty + rapidShotPenalty + proneAttackPenalty;
+                     + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
+                     + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
             // Note: Weapon Finesse already handled in GetIterativeAttackBonuses if needed
             // For now, the base bonus includes STRMod; if Finesse, we adjust
             if (!isRanged && FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
@@ -460,6 +497,10 @@ public class CharacterController : MonoBehaviour
             atk.WeaponFocusBonus = weaponFocusBonus;
             atk.WeaponSpecBonus = weaponSpecBonus;
             atk.CombatExpertisePenalty = combatExpertisePenalty;
+            atk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
+            atk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
+            atk.PreciseShotNegated = preciseShotNegated;
+            atk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
 
             // Breakdown fields
             atk.BreakdownBAB = baseBonus;
@@ -614,9 +655,17 @@ public class CharacterController : MonoBehaviour
         // Prone: melee attacks take -4.
         int proneAttackPenalty = GetProneAttackModifier(isMelee);
 
+        // Fighting Defensively: -4 attack while active.
+        int fightingDefensivelyPenalty = IsFightingDefensively ? -4 : 0;
+
+        // Shooting into melee for ranged attacks.
+        bool preciseShotNegated = false;
+        int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
+
         // Main hand attack
         int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                         + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty + proneAttackPenalty;
+                         + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty
+                         + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
         string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
 
         int mainCritMin = mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20;
@@ -640,6 +689,10 @@ public class CharacterController : MonoBehaviour
         mainAtk.WeaponFocusBonus = mainWFBonus;
         mainAtk.WeaponSpecBonus = mainWSBonus;
         mainAtk.CombatExpertisePenalty = combatExpertisePenalty;
+        mainAtk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
+        mainAtk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
+        mainAtk.PreciseShotNegated = preciseShotNegated;
+        mainAtk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
         mainAtk.WeaponName = mainWeapon.Name;
         mainAtk.BaseDamageDiceStr = $"{mainWeapon.DamageCount}d{mainWeapon.DamageDice}";
         mainAtk.IsDualWieldAttack = true;
@@ -666,7 +719,8 @@ public class CharacterController : MonoBehaviour
         if (!target.Stats.IsDead)
         {
             int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                            + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty + proneAttackPenalty;
+                            + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty
+                            + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
             string offLabel = $"Attack 2 - Off Hand ({offWeapon.Name})";
 
             int offCritMin = offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20;
@@ -690,6 +744,10 @@ public class CharacterController : MonoBehaviour
             offAtk.WeaponFocusBonus = offWFBonus;
             offAtk.WeaponSpecBonus = offWSBonus;
             offAtk.CombatExpertisePenalty = combatExpertisePenalty;
+            offAtk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
+            offAtk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
+            offAtk.PreciseShotNegated = preciseShotNegated;
+            offAtk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
             offAtk.WeaponName = offWeapon.Name;
             offAtk.BaseDamageDiceStr = $"{offWeapon.DamageCount}d{offWeapon.DamageDice}";
             offAtk.IsDualWieldAttack = true;
@@ -725,6 +783,76 @@ public class CharacterController : MonoBehaviour
         return isMeleeAttack ? -4 : 0;
     }
 
+    private static List<CharacterController> GetAllCombatCharactersSnapshot()
+    {
+        var all = new List<CharacterController>();
+        var gm = GameManager.Instance;
+        if (gm == null) return all;
+
+        if (gm.PCs != null)
+        {
+            for (int i = 0; i < gm.PCs.Count; i++)
+            {
+                var pc = gm.PCs[i];
+                if (pc != null) all.Add(pc);
+            }
+        }
+
+        if (gm.NPCs != null)
+        {
+            for (int i = 0; i < gm.NPCs.Count; i++)
+            {
+                var npc = gm.NPCs[i];
+                if (npc != null) all.Add(npc);
+            }
+        }
+
+        return all;
+    }
+
+    private static bool IsTargetEngagedInMeleeWithAttackerAllies(CharacterController target, CharacterController attacker)
+    {
+        if (target == null || attacker == null || target.Stats == null || attacker.Stats == null) return false;
+
+        // Use threat map: target is engaged in melee if a threatening enemy of target
+        // (excluding attacker) is on the attacker's team.
+        List<CharacterController> all = GetAllCombatCharactersSnapshot();
+        if (all.Count == 0) return false;
+
+        List<CharacterController> threateningEnemies = ThreatSystem.GetThreateningEnemies(target.GridPosition, target, all);
+        for (int i = 0; i < threateningEnemies.Count; i++)
+        {
+            CharacterController threatener = threateningEnemies[i];
+            if (threatener == null || threatener == attacker) continue;
+            if (threatener.Stats == null || threatener.Stats.IsDead) continue;
+
+            if (threatener.IsPlayerControlled == attacker.IsPlayerControlled)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static int GetShootingIntoMeleePenalty(CharacterController attacker, CharacterController target, bool isRangedAttack, out bool preciseShotNegated)
+    {
+        preciseShotNegated = false;
+
+        if (!isRangedAttack || attacker == null || target == null)
+            return 0;
+
+        bool engaged = IsTargetEngagedInMeleeWithAttackerAllies(target, attacker);
+        if (!engaged)
+            return 0;
+
+        if (attacker.Stats != null && attacker.Stats.HasFeat("Precise Shot"))
+        {
+            preciseShotNegated = true;
+            return 0;
+        }
+
+        return -4;
+    }
+
     private static int GetSituationalTargetArmorClass(CharacterController target, bool isRangedAttack)
     {
         if (target == null || target.Stats == null)
@@ -733,6 +861,9 @@ public class CharacterController : MonoBehaviour
         int targetAC = target.Stats.ArmorClass;
         if (target.HasCondition(CombatConditionType.Prone))
             targetAC += isRangedAttack ? 4 : -4;
+
+        if (target.IsFightingDefensively)
+            targetAC += 2; // Dodge bonus
 
         return targetAC;
     }
@@ -997,6 +1128,7 @@ public class CharacterController : MonoBehaviour
         HasMovedThisTurn = false;
         HasTakenFiveFootStep = false;
         HasAttackedThisTurn = false;
+        IsFightingDefensively = false; // lasts until start of this character's next turn
         Actions.Reset();
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
         // They are player-controlled and reset only when the player changes them

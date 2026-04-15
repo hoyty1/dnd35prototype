@@ -781,6 +781,26 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.RapidShotLabel = combatUI.RapidShotToggle.GetComponentInChildren<Text>();
 
         rsPanel.SetActive(false);
+
+        // Fighting Defensively panel - above Rapid Shot
+        GameObject fdPanel = CreatePanel(canvasTransform, "FightingDefensivelyPanel",
+            new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
+            new Vector2(-8, BottomPanelHeight + featPanelH + 52), new Vector2(featPanelW, 36f),
+            new Color(0.12f, 0.18f, 0.3f, 0.9f));
+        combatUI.FightingDefensivelyPanel = fdPanel;
+
+        combatUI.FightingDefensivelyToggle = CreateGridButton(fdPanel.transform, "FDToggle",
+            "Fighting Defensively: OFF", new Color(0.45f, 0.45f, 0.5f));
+        RectTransform fdToggleRT = combatUI.FightingDefensivelyToggle.GetComponent<RectTransform>();
+        fdToggleRT.anchorMin = Vector2.zero;
+        fdToggleRT.anchorMax = Vector2.one;
+        fdToggleRT.offsetMin = new Vector2(4, 3);
+        fdToggleRT.offsetMax = new Vector2(-4, -3);
+        fdToggleRT.sizeDelta = Vector2.zero;
+
+        combatUI.FightingDefensivelyLabel = combatUI.FightingDefensivelyToggle.GetComponentInChildren<Text>();
+
+        fdPanel.SetActive(false);
     }
 
     // ========== GAME MANAGER ==========
@@ -890,6 +910,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.PowerAttackSlider.onValueChanged.AddListener((val) => GameManager.Instance.OnPowerAttackSliderChanged(val));
         if (ui.RapidShotToggle != null)
             ui.RapidShotToggle.onClick.AddListener(() => GameManager.Instance.OnRapidShotTogglePressed());
+        if (ui.FightingDefensivelyToggle != null)
+            ui.FightingDefensivelyToggle.onClick.AddListener(() => GameManager.Instance.OnFightingDefensivelyTogglePressed());
     }
 
     // ========== UI HELPER METHODS ==========

@@ -120,6 +120,9 @@ public class FullAttackResult
             if (first.PowerAttackValue > 0) feats.Add($"Power Attack (-{first.PowerAttackValue} atk/+{first.PowerAttackDamageBonus} dmg)");
             if (first.RapidShotActive) feats.Add("Rapid Shot (-2 all attacks, +1 extra attack)");
             if (first.PointBlankShotActive) feats.Add("Point Blank Shot (+1 atk/+1 dmg)");
+            if (first.FightingDefensivelyAttackPenalty != 0) feats.Add($"Fighting Defensively ({first.FightingDefensivelyAttackPenalty} atk/+2 AC)");
+            if (first.ShootingIntoMeleePenalty != 0) feats.Add($"Shooting into melee ({first.ShootingIntoMeleePenalty} atk)");
+            if (first.PreciseShotNegated) feats.Add("Precise Shot (no shooting-into-melee penalty)");
             if (feats.Count > 0)
                 sb.AppendLine($"  Active Feats: {string.Join(", ", feats)}");
         }

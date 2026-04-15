@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -17,7 +18,7 @@ public static class SpellCaster
     /// </summary>
     public static SpellResult Cast(SpellData spell, CharacterStats casterStats, CharacterStats targetStats)
     {
-        return Cast(spell, casterStats, targetStats, null, false);
+        return Cast(spell, casterStats, targetStats, null, false, null, null);
     }
 
     /// <summary>
@@ -27,11 +28,28 @@ public static class SpellCaster
     /// </summary>
     public static SpellResult Cast(SpellData spell, CharacterStats casterStats, CharacterStats targetStats, MetamagicData metamagic, bool forceFriendlyTouchNoRoll = false)
     {
+        return Cast(spell, casterStats, targetStats, metamagic, forceFriendlyTouchNoRoll, null, null);
+    }
+
+    /// <summary>
+    /// Spell resolution with optional controller context for situational modifiers
+    /// (fighting defensively, shooting into melee penalties, etc.).
+    /// </summary>
+    public static SpellResult Cast(
+        SpellData spell,
+        CharacterStats casterStats,
+        CharacterStats targetStats,
+        MetamagicData metamagic,
+        bool forceFriendlyTouchNoRoll,
+        CharacterController casterController,
+        CharacterController targetController)
+    {
         var result = new SpellResult();
         result.Spell = spell;
         result.CasterName = casterStats.CharacterName;
         result.TargetName = targetStats.CharacterName;
         result.DamageType = spell.DamageType ?? "";
+
         var parsedSpellDamageTypes = DamageTextUtils.ParseDamageTypes(spell.DamageType);
         result.DamageTypeSummary = DamageTextUtils.FormatDamageTypes(parsedSpellDamageTypes);
         result.Success = true;
@@ -69,15 +87,29 @@ public static class SpellCaster
             int atkBonus = isRanged
                 ? casterStats.BaseAttackBonus + casterStats.DEXMod + casterStats.SizeModifier
                 : casterStats.BaseAttackBonus + casterStats.STRMod + casterStats.SizeModifier;
-            int touchAC = SpellcastingComponent.GetTouchAC(targetStats);
+
+            int fightingDefensivelyPenalty = (casterController != null && casterController.IsFightingDefensively) ? -4 : 0;
+            bool preciseShotNegated = false;
+            int shootingIntoMeleePenalty = 0;
+            if (isRanged)
+            {
+                shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(casterController, targetController, out preciseShotNegated);
+            }
+
+            int touchAC = SpellcastingComponent.GetTouchAC(targetStats)
+                + ((targetController != null && targetController.IsFightingDefensively) ? 2 : 0);
 
             int roll = Random.Range(1, 21);
-            int total = roll + atkBonus;
+            int total = roll + atkBonus + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
 
             result.AttackRoll = roll;
             result.AttackBonus = atkBonus;
             result.AttackTotal = total;
             result.TouchAC = touchAC;
+            result.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
+            result.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
+            result.PreciseShotNegated = preciseShotNegated;
+            result.TargetFightingDefensivelyACBonus = (targetController != null && targetController.IsFightingDefensively) ? 2 : 0;
 
             if (roll == 20)
                 result.AttackHit = true;
@@ -227,6 +259,7 @@ public static class SpellCaster
                 else
                     healRoll += Random.Range(1, spell.HealDice + 1);
             }
+
             result.HealRolled = healRoll;
 
             int totalHeal = healRoll + spell.BonusHealing;
@@ -257,6 +290,67 @@ public static class SpellCaster
         }
 
         return result;
+    }
+
+    private static List<CharacterController> GetAllCombatCharactersSnapshot()
+    {
+        var allChars = new List<CharacterController>();
+        var gm = GameManager.Instance;
+        if (gm == null) return allChars;
+
+        if (gm.PCs != null)
+        {
+            for (int i = 0; i < gm.PCs.Count; i++)
+            {
+                var pc = gm.PCs[i];
+                if (pc != null) allChars.Add(pc);
+            }
+        }
+
+        if (gm.NPCs != null)
+        {
+            for (int i = 0; i < gm.NPCs.Count; i++)
+            {
+                var npc = gm.NPCs[i];
+                if (npc != null) allChars.Add(npc);
+            }
+        }
+
+        return allChars;
+    }
+
+    private static int GetShootingIntoMeleePenalty(CharacterController caster, CharacterController target, out bool preciseShotNegated)
+    {
+        preciseShotNegated = false;
+        if (caster == null || target == null || caster.Stats == null || target.Stats == null) return 0;
+
+        List<CharacterController> allChars = GetAllCombatCharactersSnapshot();
+        if (allChars.Count == 0) return 0;
+
+        List<CharacterController> threateningEnemies = ThreatSystem.GetThreateningEnemies(target.GridPosition, target, allChars);
+        bool engagedWithCasterAlly = false;
+        for (int i = 0; i < threateningEnemies.Count; i++)
+        {
+            var threatener = threateningEnemies[i];
+            if (threatener == null || threatener == caster) continue;
+            if (threatener.Stats == null || threatener.Stats.IsDead) continue;
+
+            if (threatener.IsPlayerControlled == caster.IsPlayerControlled)
+            {
+                engagedWithCasterAlly = true;
+                break;
+            }
+        }
+
+        if (!engagedWithCasterAlly) return 0;
+
+        if (caster.Stats.HasFeat("Precise Shot"))
+        {
+            preciseShotNegated = true;
+            return 0;
+        }
+
+        return -4;
     }
 
     /// <summary>
