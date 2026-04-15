@@ -693,12 +693,16 @@ public class SceneBootstrap : MonoBehaviour
             "Crawl", new Color(0.22f, 0.38f, 0.65f));
         combatUI.AttackButton = CreateGridButton(btnGrid.transform, "AttackBtn",
             "Attack", new Color(0.7f, 0.2f, 0.2f));
+        combatUI.AttackDefensivelyButton = CreateGridButton(btnGrid.transform, "AttackDefensivelyBtn",
+            "Fighting Defensively (Std)", new Color(0.22f, 0.38f, 0.62f));
         combatUI.SpecialAttackButton = CreateGridButton(btnGrid.transform, "SpecialAttackBtn",
             "Special Attack", new Color(0.55f, 0.35f, 0.15f));
         combatUI.ChargeButton = CreateGridButton(btnGrid.transform, "ChargeBtn",
             "Charge", new Color(0.78f, 0.45f, 0.15f));
         combatUI.FullAttackButton = CreateGridButton(btnGrid.transform, "FullAttackBtn",
             "Full Attack", new Color(0.6f, 0.15f, 0.15f));
+        combatUI.FullAttackDefensivelyButton = CreateGridButton(btnGrid.transform, "FullAttackDefensivelyBtn",
+            "Full Attack (Def)", new Color(0.26f, 0.34f, 0.62f));
         combatUI.DualWieldButton = CreateGridButton(btnGrid.transform, "DualWieldBtn",
             "Dual Wield", new Color(0.5f, 0.25f, 0.5f));
         combatUI.FlurryOfBlowsButton = CreateGridButton(btnGrid.transform, "FlurryBtn",
@@ -777,30 +781,9 @@ public class SceneBootstrap : MonoBehaviour
         rsToggleRT.offsetMin = new Vector2(4, 3);
         rsToggleRT.offsetMax = new Vector2(-4, -3);
         rsToggleRT.sizeDelta = Vector2.zero;
-
         combatUI.RapidShotLabel = combatUI.RapidShotToggle.GetComponentInChildren<Text>();
 
         rsPanel.SetActive(false);
-
-        // Fighting Defensively panel - above Rapid Shot
-        GameObject fdPanel = CreatePanel(canvasTransform, "FightingDefensivelyPanel",
-            new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
-            new Vector2(-8, BottomPanelHeight + featPanelH + 52), new Vector2(featPanelW, 36f),
-            new Color(0.12f, 0.18f, 0.3f, 0.9f));
-        combatUI.FightingDefensivelyPanel = fdPanel;
-
-        combatUI.FightingDefensivelyToggle = CreateGridButton(fdPanel.transform, "FDToggle",
-            "Fighting Defensively: OFF", new Color(0.45f, 0.45f, 0.5f));
-        RectTransform fdToggleRT = combatUI.FightingDefensivelyToggle.GetComponent<RectTransform>();
-        fdToggleRT.anchorMin = Vector2.zero;
-        fdToggleRT.anchorMax = Vector2.one;
-        fdToggleRT.offsetMin = new Vector2(4, 3);
-        fdToggleRT.offsetMax = new Vector2(-4, -3);
-        fdToggleRT.sizeDelta = Vector2.zero;
-
-        combatUI.FightingDefensivelyLabel = combatUI.FightingDefensivelyToggle.GetComponentInChildren<Text>();
-
-        fdPanel.SetActive(false);
     }
 
     // ========== GAME MANAGER ==========
@@ -889,12 +872,16 @@ public class SceneBootstrap : MonoBehaviour
             ui.CrawlButton.onClick.AddListener(() => GameManager.Instance.OnCrawlButtonPressed());
         if (ui.AttackButton != null)
             ui.AttackButton.onClick.AddListener(() => GameManager.Instance.OnAttackButtonPressed());
+        if (ui.AttackDefensivelyButton != null)
+            ui.AttackDefensivelyButton.onClick.AddListener(() => GameManager.Instance.OnAttackDefensivelyButtonPressed());
         if (ui.SpecialAttackButton != null)
             ui.SpecialAttackButton.onClick.AddListener(() => GameManager.Instance.OnSpecialAttackButtonPressed());
         if (ui.ChargeButton != null)
             ui.ChargeButton.onClick.AddListener(() => GameManager.Instance.OnChargeButtonPressed());
         if (ui.FullAttackButton != null)
             ui.FullAttackButton.onClick.AddListener(() => GameManager.Instance.OnFullAttackButtonPressed());
+        if (ui.FullAttackDefensivelyButton != null)
+            ui.FullAttackDefensivelyButton.onClick.AddListener(() => GameManager.Instance.OnFullAttackDefensivelyButtonPressed());
         if (ui.DualWieldButton != null)
             ui.DualWieldButton.onClick.AddListener(() => GameManager.Instance.OnDualWieldButtonPressed());
         if (ui.FlurryOfBlowsButton != null)
@@ -910,8 +897,6 @@ public class SceneBootstrap : MonoBehaviour
             ui.PowerAttackSlider.onValueChanged.AddListener((val) => GameManager.Instance.OnPowerAttackSliderChanged(val));
         if (ui.RapidShotToggle != null)
             ui.RapidShotToggle.onClick.AddListener(() => GameManager.Instance.OnRapidShotTogglePressed());
-        if (ui.FightingDefensivelyToggle != null)
-            ui.FightingDefensivelyToggle.onClick.AddListener(() => GameManager.Instance.OnFightingDefensivelyTogglePressed());
     }
 
     // ========== UI HELPER METHODS ==========

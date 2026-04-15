@@ -119,9 +119,8 @@ public class CombatUI : MonoBehaviour
     public GameObject RapidShotPanel;       // Panel containing Rapid Shot toggle
     public Button RapidShotToggle;          // Toggle button for Rapid Shot
     public Text RapidShotLabel;             // Shows "Rapid Shot: ON/OFF"
-    public GameObject FightingDefensivelyPanel; // Panel containing Fighting Defensively toggle
-    public Button FightingDefensivelyToggle;    // Toggle button for Fighting Defensively
-    public Text FightingDefensivelyLabel;       // Shows "Fighting Defensively: ON/OFF"
+    public Button AttackDefensivelyButton;    // Single attack (standard) while fighting defensively
+    public Button FullAttackDefensivelyButton; // Full attack while fighting defensively
 
     [Header("Layout Panels")]
     public GameObject PartyPanelGO;          // Left-side party panel container
@@ -512,7 +511,6 @@ public class CombatUI : MonoBehaviour
         {
             if (PowerAttackPanel != null) PowerAttackPanel.SetActive(false);
             if (RapidShotPanel != null) RapidShotPanel.SetActive(false);
-            if (FightingDefensivelyPanel != null) FightingDefensivelyPanel.SetActive(false);
             if (RageStatusText != null) RageStatusText.gameObject.SetActive(false);
             if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
             HideSpecialAttackMenu();
@@ -666,6 +664,8 @@ public class CombatUI : MonoBehaviour
             }
         }
 
+        bool canFightDefensively = pc.Stats.BaseAttackBonus >= 1;
+
         if (AttackButton != null)
         {
             AttackButton.gameObject.SetActive(true);
@@ -673,6 +673,21 @@ public class CombatUI : MonoBehaviour
             Text atkLabel = AttackButton.GetComponentInChildren<Text>();
             if (atkLabel != null)
                 atkLabel.text = actions.HasStandardAction ? "Attack (Standard)" : "Attack (Used)";
+        }
+
+        if (AttackDefensivelyButton != null)
+        {
+            AttackDefensivelyButton.gameObject.SetActive(true);
+            bool canAttackDefensively = actions.HasStandardAction && canFightDefensively;
+            AttackDefensivelyButton.interactable = canAttackDefensively;
+
+            Text atkDefLabel = AttackDefensivelyButton.GetComponentInChildren<Text>();
+            if (atkDefLabel != null)
+            {
+                if (!canFightDefensively) atkDefLabel.text = "Fighting Defensively (Std) [BAB +1]";
+                else if (!actions.HasStandardAction) atkDefLabel.text = "Fighting Defensively (Std) [Used]";
+                else atkDefLabel.text = "Fighting Defensively (Std)";
+            }
         }
 
         if (SpecialAttackButton != null)
@@ -710,11 +725,11 @@ public class CombatUI : MonoBehaviour
             }
         }
 
+        bool canTakeFullRoundAttack = fullAttackRelevant && actions.HasFullRoundAction;
         if (FullAttackButton != null)
         {
-            bool showFullAtk = fullAttackRelevant && actions.HasFullRoundAction;
             FullAttackButton.gameObject.SetActive(fullAttackRelevant);
-            FullAttackButton.interactable = showFullAtk;
+            FullAttackButton.interactable = canTakeFullRoundAttack;
             Text faLabel = FullAttackButton.GetComponentInChildren<Text>();
             if (faLabel != null)
             {
@@ -722,12 +737,27 @@ public class CombatUI : MonoBehaviour
                 bool weaponIsRanged = pc.IsEquippedWeaponRanged();
                 bool rapidShotWillApply = hasRapidShot && pc.RapidShotEnabled && weaponIsRanged;
                 string label;
-                if (!showFullAtk) label = "Full Attack (N/A)";
+                if (!canTakeFullRoundAttack) label = "Full Attack (N/A)";
                 else if (rapidShotWillApply) label = $"Full Attack x{atkCount + 1} (Rapid Shot)";
                 else if (hasRapidShot && pc.RapidShotEnabled && !weaponIsRanged) label = $"Full Attack x{atkCount} (RS: need ranged wpn)";
                 else if (hasIterativeAttacks) label = $"Full Attack x{atkCount} (Full-Round)";
                 else label = "Full Attack (Full-Round)";
                 faLabel.text = label;
+            }
+        }
+
+        if (FullAttackDefensivelyButton != null)
+        {
+            FullAttackDefensivelyButton.gameObject.SetActive(fullAttackRelevant);
+            bool canFullAttackDefensively = canTakeFullRoundAttack && canFightDefensively;
+            FullAttackDefensivelyButton.interactable = canFullAttackDefensively;
+
+            Text fullDefLabel = FullAttackDefensivelyButton.GetComponentInChildren<Text>();
+            if (fullDefLabel != null)
+            {
+                if (!canFightDefensively) fullDefLabel.text = "Full Attack (Def) [BAB +1]";
+                else if (!canTakeFullRoundAttack) fullDefLabel.text = "Full Attack (Def) [N/A]";
+                else fullDefLabel.text = "Full Attack (Def)";
             }
         }
 
@@ -832,8 +862,6 @@ public class CombatUI : MonoBehaviour
         if (ActionStatusText != null)
             ActionStatusText.text = actions.GetStatusString();
 
-        if (FightingDefensivelyPanel != null && FightingDefensivelyPanel.activeSelf)
-            UpdateFightingDefensivelyLabel(pc);
     }
 
     // ========== FEAT UI ==========
@@ -862,13 +890,6 @@ public class CombatUI : MonoBehaviour
         {
             RapidShotPanel.SetActive(hasRapidShot);
             if (hasRapidShot) UpdateRapidShotLabel(pc);
-        }
-
-        bool canFightDefensively = pc.Stats.BaseAttackBonus >= 1;
-        if (FightingDefensivelyPanel != null)
-        {
-            FightingDefensivelyPanel.SetActive(canFightDefensively);
-            if (canFightDefensively) UpdateFightingDefensivelyLabel(pc);
         }
     }
 
@@ -912,31 +933,6 @@ public class CombatUI : MonoBehaviour
         }
     }
 
-    public void UpdateFightingDefensivelyLabel(CharacterController pc)
-    {
-        if (FightingDefensivelyLabel == null || pc == null) return;
-
-        if (pc.IsFightingDefensively)
-        {
-            FightingDefensivelyLabel.text = "Fighting Defensively: ON (-4 atk, +2 AC)";
-            if (FightingDefensivelyToggle != null)
-            {
-                var colors = FightingDefensivelyToggle.colors;
-                colors.normalColor = new Color(0.2f, 0.45f, 0.78f, 1f);
-                FightingDefensivelyToggle.colors = colors;
-            }
-        }
-        else
-        {
-            FightingDefensivelyLabel.text = "Fighting Defensively: OFF";
-            if (FightingDefensivelyToggle != null)
-            {
-                var colors = FightingDefensivelyToggle.colors;
-                colors.normalColor = new Color(0.45f, 0.45f, 0.5f, 1f);
-                FightingDefensivelyToggle.colors = colors;
-            }
-        }
-    }
 
     public void ShowSpecialAttackMenu(CharacterController pc, System.Action<SpecialAttackType> onSelect, System.Action onCancel)
     {

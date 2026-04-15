@@ -1180,7 +1180,7 @@ public class CharacterController : MonoBehaviour
 
         bool success = atkTotal >= defTotal;
         if (success)
-            target.Stats.ApplyCondition(CombatConditionType.Prone, 2, Stats.CharacterName);
+            target.Stats.ApplyCondition(CombatConditionType.Prone, -1, Stats.CharacterName);
 
         return new SpecialAttackResult
         {
@@ -1191,7 +1191,7 @@ public class CharacterController : MonoBehaviour
             OpposedRoll = defRoll,
             OpposedTotal = defTotal,
             Log = success
-                ? $"{Stats.CharacterName} trips {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) → PRONE (2 rounds)."
+                ? $"{Stats.CharacterName} trips {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) → PRONE (until standing)."
                 : $"{Stats.CharacterName} fails to trip {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
         };
     }

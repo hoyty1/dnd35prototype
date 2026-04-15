@@ -101,6 +101,7 @@ public class GameManager : MonoBehaviour
     // Current attack mode being selected for
     private enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell }
     private PendingAttackMode _pendingAttackMode;
+    private bool _pendingDefensiveAttackSelection; // Set when targeting for a defensive attack action
     private SpellData _pendingSpell; // Spell selected for casting
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
     private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
@@ -530,7 +531,7 @@ public class GameManager : MonoBehaviour
                     if (_pendingAttackMode == PendingAttackMode.CastSpell)
                         CancelSpellTargeting();
                     else
-                        ShowActionChoices();
+                        CancelPendingAttackTargeting();
                 }
                 return;
             }
@@ -2001,6 +2002,9 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Actions.HasStandardAction) return;
 
+        _pendingDefensiveAttackSelection = false;
+        pc.SetFightingDefensively(false);
+
         _pendingAttackMode = PendingAttackMode.Single;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
         ShowAttackTargets(pc);
@@ -2039,9 +2043,56 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Actions.HasFullRoundAction) return;
 
+        _pendingDefensiveAttackSelection = false;
+        pc.SetFightingDefensively(false);
+
         _pendingAttackMode = PendingAttackMode.FullAttack;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
         ShowAttackTargets(pc);
+    }
+
+    public void OnAttackDefensivelyButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || pc.Stats == null || !pc.Actions.HasStandardAction) return;
+
+        if (pc.Stats.BaseAttackBonus < 1)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} needs BAB +1 to fight defensively.");
+            return;
+        }
+
+        _pendingDefensiveAttackSelection = true;
+        pc.SetFightingDefensively(true);
+
+        _pendingAttackMode = PendingAttackMode.Single;
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+        ShowAttackTargets(pc);
+        CombatUI?.SetTurnIndicator("FIGHTING DEFENSIVELY (STD): Select target");
+        CombatUI?.ShowCombatLog($"🛡 {pc.Stats.CharacterName} declares Fighting Defensively (Std): -4 attack, +2 AC.");
+        UpdateAllStatsUI();
+    }
+
+    public void OnFullAttackDefensivelyButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || pc.Stats == null || !pc.Actions.HasFullRoundAction) return;
+
+        if (pc.Stats.BaseAttackBonus < 1)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} needs BAB +1 to fight defensively.");
+            return;
+        }
+
+        _pendingDefensiveAttackSelection = true;
+        pc.SetFightingDefensively(true);
+
+        _pendingAttackMode = PendingAttackMode.FullAttack;
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+        ShowAttackTargets(pc);
+        CombatUI?.SetTurnIndicator("FULL ATTACK (DEF): Select target");
+        CombatUI?.ShowCombatLog($"🛡 {pc.Stats.CharacterName} declares Full Attack (Def): -4 attack, +2 AC.");
+        UpdateAllStatsUI();
     }
 
     public void OnDualWieldButtonPressed()
@@ -2089,30 +2140,6 @@ public class GameManager : MonoBehaviour
         Debug.Log($"[RapidShot] Rapid Shot toggle clicked, new value: {pc.RapidShotEnabled} (was {oldValue}) for {pc.Stats.CharacterName}");
         CombatUI.UpdateRapidShotLabel(pc);
         CombatUI.UpdateActionButtons(pc);
-    }
-
-    public void OnFightingDefensivelyTogglePressed()
-    {
-        CharacterController pc = ActivePC;
-        if (pc == null || pc.Stats == null) return;
-
-        if (pc.Stats.BaseAttackBonus < 1)
-        {
-            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} needs BAB +1 to fight defensively.");
-            return;
-        }
-
-        bool newValue = !pc.IsFightingDefensively;
-        pc.SetFightingDefensively(newValue);
-
-        if (newValue)
-            CombatUI.ShowCombatLog($"🛡 {pc.Stats.CharacterName} fights defensively: -4 attack, +2 AC until next turn.");
-        else
-            CombatUI.ShowCombatLog($"🛡 {pc.Stats.CharacterName} stops fighting defensively.");
-
-        CombatUI.UpdateFightingDefensivelyLabel(pc);
-        CombatUI.UpdateActionButtons(pc);
-        UpdateAllStatsUI();
     }
 
     public void OnFlurryOfBlowsButtonPressed()
@@ -3077,6 +3104,26 @@ public class GameManager : MonoBehaviour
         Grid.ClearAllHighlights();
         ShowActionChoices();
         Debug.Log("[Spell] Spell targeting cancelled via right-click/Escape");
+    }
+
+    /// <summary>
+    /// Cancel weapon attack targeting and clear any pending defensive declaration.
+    /// </summary>
+    private void CancelPendingAttackTargeting()
+    {
+        CharacterController pc = ActivePC;
+        if (pc != null && _pendingDefensiveAttackSelection)
+        {
+            pc.SetFightingDefensively(false);
+            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels defensive attack declaration.");
+            UpdateAllStatsUI();
+        }
+
+        _pendingDefensiveAttackSelection = false;
+        _pendingAttackMode = PendingAttackMode.Single;
+
+        Grid.ClearAllHighlights();
+        ShowActionChoices();
     }
 
     // ========== SELF-CENTERED AOE CONFIRMATION CALLBACKS ==========
@@ -4079,8 +4126,18 @@ public class GameManager : MonoBehaviour
     private IEnumerator ReturnToActionChoicesAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
-        if (IsPlayerTurn)
-            ShowActionChoices();
+        if (!IsPlayerTurn) yield break;
+
+        CharacterController pc = ActivePC;
+        if (pc != null && CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget && _pendingDefensiveAttackSelection)
+        {
+            pc.SetFightingDefensively(false);
+            _pendingDefensiveAttackSelection = false;
+            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels defensive attack declaration.");
+            UpdateAllStatsUI();
+        }
+
+        ShowActionChoices();
     }
 
     // ========== CELL CLICK HANDLING ==========
@@ -4969,6 +5026,8 @@ public class GameManager : MonoBehaviour
         string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
 
         RangeInfo rangeInfo = CalculateRangeInfo(attacker, target);
+        // Targeting is resolved; clear pending declaration marker.
+        _pendingDefensiveAttackSelection = false;
 
         switch (_pendingAttackMode)
         {
