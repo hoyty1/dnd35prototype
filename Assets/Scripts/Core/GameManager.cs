@@ -5089,20 +5089,33 @@ public class GameManager : MonoBehaviour
         // All combatants are considered for flanking checks (team and threat filtering happens in CombatUtils).
         List<CharacterController> allCombatants = GetAllCharacters();
 
-        // Determine the equipped weapon's range increment
+        // Determine the equipped weapon's range semantics.
         ItemData weapon = pc.GetEquippedMainWeapon();
         int rangeIncrement = (weapon != null) ? weapon.RangeIncrement : 0;
         bool isThrownWeapon = (weapon != null) && weapon.IsThrown;
         bool isRangedWeapon = (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged) || rangeIncrement > 0;
 
+        int meleeMinDistance = 1;
+        int meleeMaxDistance = 1;
+
         int maxRangeSquares;
         if (isRangedWeapon && rangeIncrement > 0)
+        {
             maxRangeSquares = RangeCalculator.GetMaxRangeSquares(rangeIncrement, isThrownWeapon);
-        else
-            maxRangeSquares = pc.Stats.AttackRange;
-
-        if (isRangedWeapon && rangeIncrement > 0)
             ShowRangeZoneHighlights(pc, rangeIncrement, maxRangeSquares, isThrownWeapon);
+        }
+        else if (!isRangedWeapon)
+        {
+            // IMPORTANT: use the same min/max ring logic as actual melee validation.
+            meleeMinDistance = pc.GetMeleeMinAttackDistance(weapon);
+            meleeMaxDistance = pc.GetMeleeMaxAttackDistance(weapon);
+            maxRangeSquares = Mathf.Max(1, meleeMaxDistance);
+            ShowMeleeRangeZoneHighlights(pc, meleeMinDistance, meleeMaxDistance);
+        }
+        else
+        {
+            maxRangeSquares = pc.Stats.AttackRange;
+        }
 
         List<SquareCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares);
         bool hasTarget = false;
@@ -5140,7 +5153,8 @@ public class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    cell.SetHighlight(HighlightType.Attack);
+                    // For melee targeting we keep enemy cells in the same "valid ring" color language.
+                    cell.SetHighlight(isRangedWeapon ? HighlightType.Attack : HighlightType.AttackRange);
                 }
                 _highlightedCells.Add(cell);
                 hasTarget = true;
@@ -5402,6 +5416,37 @@ public class GameManager : MonoBehaviour
             yield return null;
 
         CurrentSubPhase = PlayerSubPhase.Animating;
+    }
+
+    private void ShowMeleeRangeZoneHighlights(CharacterController attacker, int minDistance, int maxDistance)
+    {
+        if (attacker == null || Grid == null)
+            return;
+
+        int min = Mathf.Max(1, minDistance);
+        int max = Mathf.Max(min, maxDistance);
+
+        List<SquareCell> allCells = Grid.GetCellsInRange(attacker.GridPosition, max);
+        foreach (SquareCell cell in allCells)
+        {
+            if (cell == null || cell.Coords == attacker.GridPosition)
+                continue;
+
+            int sqDist = SquareGridUtils.GetDistance(attacker.GridPosition, cell.Coords);
+            if (sqDist <= 0 || sqDist > max)
+                continue;
+
+            // Dead zone ring(s): inside max reach but below legal min distance.
+            if (sqDist < min)
+            {
+                cell.SetHighlight(HighlightType.AttackDeadZone);
+                continue;
+            }
+
+            // Legal melee ring(s): exactly what CanMeleeAttackDistance uses.
+            if (sqDist >= min && sqDist <= max)
+                cell.SetHighlight(HighlightType.AttackRange);
+        }
     }
 
     private void ShowRangeZoneHighlights(CharacterController pc, int rangeIncrement, int maxRangeSquares, bool isThrownWeapon = false)

@@ -27,6 +27,8 @@ public class SquareCell : MonoBehaviour
     private static readonly Color HighlightMove = new Color(0.3f, 0.8f, 1f, 0.5f);
     private static readonly Color HighlightFiveFootStep = new Color(0.2f, 0.65f, 1f, 0.55f);
     private static readonly Color HighlightAttack = new Color(1f, 0.3f, 0.3f, 0.5f);
+    private static readonly Color HighlightAttackRange = new Color(0.95f, 0.9f, 0.25f, 0.45f); // Yellow-green: valid melee range
+    private static readonly Color HighlightAttackDeadZone = new Color(0.1f, 0.1f, 0.1f, 0.45f); // Dark gray: dead zone for reach weapons
     private static readonly Color HighlightSelected = new Color(1f, 1f, 0.3f, 0.6f);
     private static readonly Color HighlightFlanking = new Color(1f, 0.6f, 0.0f, 0.6f); // Orange for flanking
     // Range increment zone colors
@@ -72,6 +74,12 @@ public class SquareCell : MonoBehaviour
             case HighlightType.Attack:
                 _sr.color = HighlightAttack;
                 break;
+            case HighlightType.AttackRange:
+                _sr.color = HighlightAttackRange;
+                break;
+            case HighlightType.AttackDeadZone:
+                _sr.color = HighlightAttackDeadZone;
+                break;
             case HighlightType.Selected:
                 _sr.color = HighlightSelected;
                 break;
@@ -115,6 +123,8 @@ public enum HighlightType
     Move,
     FiveFootStep,
     Attack,
+    AttackRange,   // Generic melee attackable square preview (yellow-green)
+    AttackDeadZone,// Reach dead-zone preview (dark gray)
     Selected,
     Flanking,
     RangeClose,    // 1st range increment (green) - no penalty
