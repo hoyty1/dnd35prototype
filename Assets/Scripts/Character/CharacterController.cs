@@ -117,18 +117,57 @@ public class CharacterController : MonoBehaviour
 
         _sr.sprite = AliveSprite;
         _sr.sortingOrder = 10;
-        UpdateSizeVisuals();
 
-        // Position in world
-        transform.position = SquareGridUtils.GridToWorld(startPos);
+        RefreshGridOccupancy();
+        UpdateVisualSize();
+    }
 
-        // Register on grid
-        SquareCell cell = GameManager.Instance.Grid.GetCell(startPos);
-        if (cell != null)
+    private SquareGrid CurrentGrid => GameManager.Instance != null ? GameManager.Instance.Grid : SquareGrid.Instance;
+
+    public int GetVisualSquaresOccupied()
+    {
+        if (Stats == null) return 1;
+        return Stats.CurrentSizeCategory.GetSpaceWidthSquares();
+    }
+
+    public List<Vector2Int> GetOccupiedSquaresAt(Vector2Int basePosition)
+    {
+        SquareGrid grid = CurrentGrid;
+        if (grid != null)
+            return grid.GetOccupiedSquares(basePosition, GetVisualSquaresOccupied());
+
+        var occupied = new List<Vector2Int>();
+        int size = Mathf.Max(1, GetVisualSquaresOccupied());
+        for (int x = 0; x < size; x++)
         {
-            cell.IsOccupied = true;
-            cell.Occupant = this;
+            for (int y = 0; y < size; y++)
+            {
+                occupied.Add(new Vector2Int(basePosition.x + x, basePosition.y + y));
+            }
         }
+
+        return occupied;
+    }
+
+    public List<Vector2Int> GetOccupiedSquares()
+    {
+        return GetOccupiedSquaresAt(GridPosition);
+    }
+
+    private bool CanOccupyAtCurrentSize(Vector2Int basePosition)
+    {
+        SquareGrid grid = CurrentGrid;
+        if (grid == null) return true;
+        return grid.CanPlaceCreature(basePosition, GetVisualSquaresOccupied(), this);
+    }
+
+    private void RefreshGridOccupancy()
+    {
+        SquareGrid grid = CurrentGrid;
+        if (grid == null) return;
+
+        grid.ClearCreatureOccupancy(this);
+        grid.SetCreatureOccupancy(this, GridPosition, GetVisualSquaresOccupied());
     }
 
     private const float DefaultMoveSecondsPerStep = 0.08f;
@@ -143,21 +182,15 @@ public class CharacterController : MonoBehaviour
         if (targetCell == null || GameManager.Instance == null || GameManager.Instance.Grid == null)
             return;
 
-        // Clear old cell
-        SquareCell oldCell = GameManager.Instance.Grid.GetCell(GridPosition);
-        if (oldCell != null)
-        {
-            oldCell.IsOccupied = false;
-            oldCell.Occupant = null;
-        }
+        SquareGrid grid = CurrentGrid;
+        Vector2Int targetBasePosition = targetCell.Coords;
+        if (grid != null && !grid.CanPlaceCreature(targetBasePosition, GetVisualSquaresOccupied(), this))
+            return;
 
-        // Update position
-        GridPosition = targetCell.Coords;
-        transform.position = SquareGridUtils.GridToWorld(targetCell.X, targetCell.Y);
-
-        // Register on new cell
-        targetCell.IsOccupied = true;
-        targetCell.Occupant = this;
+        // Update position and occupancy
+        GridPosition = targetBasePosition;
+        RefreshGridOccupancy();
+        UpdatePositionForSize();
 
         if (markAsMoved)
             HasMovedThisTurn = true;
@@ -183,24 +216,18 @@ public class CharacterController : MonoBehaviour
             if (nextCell == null)
                 continue;
 
-            // Ignore blocked cells unless it's the character's current occupied square.
-            if (nextCell.IsOccupied && nextCell.Occupant != this)
+            SquareGrid grid = CurrentGrid;
+            if (grid != null && !grid.CanPlaceCreature(nextCell.Coords, GetVisualSquaresOccupied(), this))
                 break;
 
-            SquareCell oldCell = GameManager.Instance.Grid.GetCell(GridPosition);
-            if (oldCell != null && oldCell != nextCell)
-            {
-                oldCell.IsOccupied = false;
-                oldCell.Occupant = null;
-            }
-
             Vector3 startPos = transform.position;
-            Vector3 endPos = SquareGridUtils.GridToWorld(nextCell.X, nextCell.Y);
+            Vector3 endPos = grid != null
+                ? grid.GetCenteredWorldPosition(nextCell.Coords, GetVisualSquaresOccupied())
+                : SquareGridUtils.GridToWorld(nextCell.X, nextCell.Y);
 
-            // Reserve destination immediately so path occupancy remains consistent while animating.
+            // Reserve destination immediately so occupancy remains consistent while animating.
             GridPosition = nextCell.Coords;
-            nextCell.IsOccupied = true;
-            nextCell.Occupant = this;
+            RefreshGridOccupancy();
 
             float elapsed = 0f;
             while (elapsed < clampedStepDuration)
@@ -215,6 +242,8 @@ public class CharacterController : MonoBehaviour
             transform.position = endPos;
         }
 
+
+        UpdatePositionForSize();
         if (markAsMoved)
             HasMovedThisTurn = true;
     }
@@ -1382,11 +1411,11 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Current occupied footprint (in grid squares). Multi-tile occupancy is not yet enforced.
+    /// Current occupied footprint edge length in grid squares (1 => 1x1, 2 => 2x2, etc.).
     /// </summary>
     public int GetCurrentSpaceSquares()
     {
-        return Stats != null ? Stats.SpaceSquares : 1;
+        return GetVisualSquaresOccupied();
     }
 
     /// <summary>
@@ -1398,42 +1427,70 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Apply a temporary size shift (e.g., Enlarge/Reduce) and refresh visuals.
+    /// Apply a temporary size shift (e.g., Enlarge/Reduce) and refresh visuals/occupancy.
     /// </summary>
     public bool ChangeSize(int categoryDelta)
     {
         if (Stats == null) return false;
 
+        SizeCategory oldSize = Stats.CurrentSizeCategory;
         bool changed = Stats.ChangeSize(categoryDelta);
-        if (changed)
-            UpdateSizeVisuals();
+        if (!changed)
+            return false;
 
-        return changed;
+        if (!CanOccupyAtCurrentSize(GridPosition))
+        {
+            Stats.CurrentSizeCategory = oldSize;
+            Debug.LogWarning($"[Size] {Stats.CharacterName}: size change blocked - insufficient room at ({GridPosition.x},{GridPosition.y}).");
+            UpdateVisualSize();
+            RefreshGridOccupancy();
+            return false;
+        }
+
+        RefreshGridOccupancy();
+        UpdateVisualSize();
+        return true;
     }
 
     /// <summary>
-    /// Updates token scale to provide quick visual feedback for current size category.
-    /// This is cosmetic only and does not enforce multi-tile occupancy.
+    /// Updates token scale and position to match the exact number of occupied grid squares.
+    /// </summary>
+    public void UpdateVisualSize()
+    {
+        int squaresOccupied = GetVisualSquaresOccupied();
+        float targetScale = squaresOccupied;
+
+        transform.localScale = new Vector3(targetScale, targetScale, 1f);
+        UpdatePositionForSize();
+    }
+
+    /// <summary>
+    /// Backward-compatible wrapper.
     /// </summary>
     public void UpdateSizeVisuals()
     {
-        if (Stats == null) return;
+        UpdateVisualSize();
+    }
 
-        float scale = 1f;
-        switch (Stats.CurrentSizeCategory)
+    private void UpdatePositionForSize()
+    {
+        SquareGrid grid = CurrentGrid;
+        if (grid != null)
         {
-            case SizeCategory.Fine: scale = 0.55f; break;
-            case SizeCategory.Diminutive: scale = 0.65f; break;
-            case SizeCategory.Tiny: scale = 0.75f; break;
-            case SizeCategory.Small: scale = 0.88f; break;
-            case SizeCategory.Medium: scale = 1f; break;
-            case SizeCategory.Large: scale = 1.2f; break;
-            case SizeCategory.Huge: scale = 1.35f; break;
-            case SizeCategory.Gargantuan: scale = 1.5f; break;
-            case SizeCategory.Colossal: scale = 1.7f; break;
+            transform.position = grid.GetCenteredWorldPosition(GridPosition, GetVisualSquaresOccupied());
+            return;
         }
 
-        transform.localScale = new Vector3(scale, scale, 1f);
+        Vector3 basePosition = SquareGridUtils.GridToWorld(GridPosition);
+        int squares = GetVisualSquaresOccupied();
+        if (squares <= 1)
+        {
+            transform.position = basePosition;
+            return;
+        }
+
+        float offset = (squares - 1) * SquareGridUtils.CellSize * 0.5f;
+        transform.position = basePosition + new Vector3(offset, offset, 0f);
     }
 
 
@@ -1490,6 +1547,35 @@ public class CharacterController : MonoBehaviour
         return squareDistance >= minDist && squareDistance <= maxDist;
     }
 
+    public int GetMinimumDistanceToTarget(CharacterController target, bool chebyshev = true)
+    {
+        return GetMinimumDistanceToTargetSquares(target, chebyshev);
+    }
+
+    private int GetMinimumDistanceToTargetSquares(CharacterController target, bool chebyshev)
+    {
+        if (target == null) return int.MaxValue;
+
+        List<Vector2Int> mySquares = GetOccupiedSquares();
+        List<Vector2Int> targetSquares = target.GetOccupiedSquares();
+        int minDist = int.MaxValue;
+
+        for (int i = 0; i < mySquares.Count; i++)
+        {
+            for (int j = 0; j < targetSquares.Count; j++)
+            {
+                int distance = chebyshev
+                    ? SquareGridUtils.GetChebyshevDistance(mySquares[i], targetSquares[j])
+                    : SquareGridUtils.GetDistance(mySquares[i], targetSquares[j]);
+
+                if (distance < minDist)
+                    minDist = distance;
+            }
+        }
+
+        return minDist == int.MaxValue ? 0 : minDist;
+    }
+
     /// <summary>
     /// Check if this target is in range of the currently equipped weapon.
     /// </summary>
@@ -1502,8 +1588,8 @@ public class CharacterController : MonoBehaviour
         bool isRanged = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
         if (isRanged)
         {
-            // Keep existing ranged distance behavior (D&D 3.5 square distance rules).
-            int distance = SquareGridUtils.GetDistance(GridPosition, target.GridPosition);
+            // For multi-square creatures, use nearest occupied-square pair.
+            int distance = GetMinimumDistanceToTargetSquares(target, chebyshev: false);
             int rangeIncrement = weapon.RangeIncrement;
             bool isThrownWeapon = weapon.IsThrown;
 
@@ -1517,7 +1603,7 @@ public class CharacterController : MonoBehaviour
         }
 
         // Reach/threat uses Chebyshev distance so diagonals count the same as orthogonal squares.
-        int meleeDistance = SquareGridUtils.GetChebyshevDistance(GridPosition, target.GridPosition);
+        int meleeDistance = GetMinimumDistanceToTargetSquares(target, chebyshev: true);
         return CanMeleeAttackDistance(meleeDistance, weapon);
     }
 

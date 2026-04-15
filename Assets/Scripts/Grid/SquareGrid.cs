@@ -9,6 +9,8 @@ using UnityEngine;
 /// </summary>
 public class SquareGrid : MonoBehaviour
 {
+    public static SquareGrid Instance { get; private set; }
+
     [Header("Grid Settings")]
     public int Width = 20;
     public int Height = 20;
@@ -16,9 +18,14 @@ public class SquareGrid : MonoBehaviour
     [Header("References")]
     public Sprite cellSprite; // Assign a white square sprite (generated at runtime if null)
 
-    private Dictionary<Vector2Int, SquareCell> _cells = new Dictionary<Vector2Int, SquareCell>();
+    private readonly Dictionary<Vector2Int, SquareCell> _cells = new Dictionary<Vector2Int, SquareCell>();
 
     public Dictionary<Vector2Int, SquareCell> Cells => _cells;
+
+    private void Awake()
+    {
+        Instance = this;
+    }
 
     public void GenerateGrid()
     {
@@ -65,6 +72,99 @@ public class SquareGrid : MonoBehaviour
         return cell;
     }
 
+    public float GetSquareSize()
+    {
+        return SquareGridUtils.CellSize;
+    }
+
+    public bool IsValidPosition(Vector2Int position)
+    {
+        return _cells.ContainsKey(position);
+    }
+
+    public Vector3 GetWorldPosition(Vector2Int position)
+    {
+        return SquareGridUtils.GridToWorld(position);
+    }
+
+    public Vector3 GetCenteredWorldPosition(Vector2Int basePosition, int sizeSquares)
+    {
+        Vector3 baseWorld = GetWorldPosition(basePosition);
+        if (sizeSquares <= 1) return baseWorld;
+
+        float offset = (sizeSquares - 1) * GetSquareSize() * 0.5f;
+        return baseWorld + new Vector3(offset, offset, 0f);
+    }
+
+    public List<Vector2Int> GetOccupiedSquares(Vector2Int basePosition, int sizeSquares)
+    {
+        var occupied = new List<Vector2Int>();
+        int squares = Mathf.Max(1, sizeSquares);
+
+        for (int x = 0; x < squares; x++)
+        {
+            for (int y = 0; y < squares; y++)
+            {
+                occupied.Add(new Vector2Int(basePosition.x + x, basePosition.y + y));
+            }
+        }
+
+        return occupied;
+    }
+
+    public bool CanPlaceCreature(Vector2Int basePosition, int sizeSquares, CharacterController ignoreOccupant = null, bool ignoreOtherOccupants = false)
+    {
+        var occupiedSquares = GetOccupiedSquares(basePosition, sizeSquares);
+
+        for (int i = 0; i < occupiedSquares.Count; i++)
+        {
+            Vector2Int pos = occupiedSquares[i];
+            if (!IsValidPosition(pos))
+                return false;
+
+            SquareCell cell = GetCell(pos);
+            if (cell == null)
+                return false;
+
+            if (ignoreOtherOccupants)
+                continue;
+
+            if (cell.IsOccupied && cell.Occupant != null && cell.Occupant != ignoreOccupant)
+                return false;
+        }
+
+        return true;
+    }
+
+    public void ClearCreatureOccupancy(CharacterController character)
+    {
+        if (character == null) return;
+
+        foreach (var kvp in _cells)
+        {
+            SquareCell cell = kvp.Value;
+            if (cell != null && cell.Occupant == character)
+            {
+                cell.IsOccupied = false;
+                cell.Occupant = null;
+            }
+        }
+    }
+
+    public void SetCreatureOccupancy(CharacterController character, Vector2Int basePosition, int sizeSquares)
+    {
+        if (character == null) return;
+
+        var occupiedSquares = GetOccupiedSquares(basePosition, sizeSquares);
+        for (int i = 0; i < occupiedSquares.Count; i++)
+        {
+            SquareCell cell = GetCell(occupiedSquares[i]);
+            if (cell == null) continue;
+            cell.IsOccupied = true;
+            cell.Occupant = character;
+        }
+    }
+
     public SquareCell GetCell(Vector2Int coords)
     {
         return GetCell(coords.x, coords.y);
@@ -107,10 +207,14 @@ public class SquareGrid : MonoBehaviour
     /// <param name="maxRange">Maximum path length in D&D 3.5 squares.</param>
     /// <returns>AoOPathResult with the computed path and provoked AoOs.</returns>
     public AoOPathResult FindPathAoOAware(Vector2Int start, Vector2Int destination,
-        HashSet<Vector2Int> threatenedSquares, int maxRange)
+        HashSet<Vector2Int> threatenedSquares, int maxRange, int moverSizeSquares = 1, CharacterController mover = null)
     {
         var result = new AoOPathResult();
         if (start == destination) return result;
+
+        moverSizeSquares = Mathf.Max(1, moverSizeSquares);
+        if (!CanPlaceCreature(start, moverSizeSquares, mover))
+            return result;
 
         // A* data structures
         // Custom comparer needed because Vector2Int does not implement IComparable.
@@ -194,8 +298,14 @@ public class SquareGrid : MonoBehaviour
                 SquareCell cell = GetCell(neighbor);
                 if (cell == null) continue;
 
-                // Check occupancy (destination is OK even if occupied for pathfinding purposes)
-                if (cell.IsOccupied && neighbor != destination) continue;
+                bool isDestinationNode = neighbor == destination;
+                bool canStandHere = CanPlaceCreature(
+                    neighbor,
+                    moverSizeSquares,
+                    ignoreOccupant: mover,
+                    ignoreOtherOccupants: isDestinationNode);
+
+                if (!canStandHere) continue;
 
                 // Calculate step cost (weighted: orthogonal < diagonal to prefer straight paths)
                 bool isDiag = SquareGridUtils.IsDiagonalStep(current, neighbor);
@@ -227,6 +337,22 @@ public class SquareGrid : MonoBehaviour
         Debug.Log($"[SquareGrid] A* found no path, using simple path from ({start.x},{start.y}) to ({destination.x},{destination.y})");
         result.Path = ThreatSystem.GenerateSimplePath(start, destination);
 
+
+        // Remove invalid fallback steps for larger footprints / blocked tiles.
+        int firstInvalidIndex = -1;
+        for (int i = 0; i < result.Path.Count; i++)
+        {
+            Vector2Int step = result.Path[i];
+            bool canStand = CanPlaceCreature(step, moverSizeSquares, mover, ignoreOtherOccupants: step == destination);
+            if (!canStand)
+            {
+                firstInvalidIndex = i;
+                break;
+            }
+        }
+
+        if (firstInvalidIndex >= 0)
+            result.Path.RemoveRange(firstInvalidIndex, result.Path.Count - firstInvalidIndex);
         // Trim to max range
         while (result.Path.Count > 0 && SquareGridUtils.GetDistance(start, result.Path[result.Path.Count - 1]) > maxRange)
         {
@@ -281,7 +407,8 @@ public class SquareGrid : MonoBehaviour
         }
 
         // Run A* with threat awareness
-        var pathResult = FindPathAoOAware(start, destination, allThreatened, mover.Stats.MoveRange);
+        int moverSizeSquares = mover != null ? mover.GetVisualSquaresOccupied() : 1;
+        var pathResult = FindPathAoOAware(start, destination, allThreatened, mover.Stats.MoveRange, moverSizeSquares, mover);
 
         // If we got a path, analyze it for actual AoOs
         if (pathResult.Path.Count > 0)

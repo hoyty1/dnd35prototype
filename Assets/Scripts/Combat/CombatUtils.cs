@@ -57,8 +57,24 @@ public static class CombatUtils
         // D&D 3.5: ranged-only wielders do not threaten for flanking/AoO.
         if (!attacker.HasMeleeWeaponEquipped()) return false;
 
-        int distance = SquareGridUtils.GetChebyshevDistance(attackerPos, target.GridPosition);
-        return attacker.CanMeleeAttackDistance(distance);
+        List<Vector2Int> attackerSquares = attacker.GetOccupiedSquaresAt(attackerPos);
+        List<Vector2Int> targetSquares = target.GetOccupiedSquares();
+
+        int minDistance = int.MaxValue;
+        for (int i = 0; i < attackerSquares.Count; i++)
+        {
+            for (int j = 0; j < targetSquares.Count; j++)
+            {
+                int distance = SquareGridUtils.GetChebyshevDistance(attackerSquares[i], targetSquares[j]);
+                if (distance < minDistance)
+                    minDistance = distance;
+            }
+        }
+
+        if (minDistance == int.MaxValue)
+            return false;
+
+        return attacker.CanMeleeAttackDistance(minDistance);
     }
 
     /// <summary>

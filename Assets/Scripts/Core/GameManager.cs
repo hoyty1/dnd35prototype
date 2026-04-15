@@ -2095,7 +2095,7 @@ public class GameManager : MonoBehaviour
         if (cell == null)
             return false;
 
-        if (cell.IsOccupied)
+        if (!Grid.CanPlaceCreature(destination, pc.GetVisualSquaresOccupied(), pc))
             return false;
 
         if (IsDifficultTerrain(destination))
@@ -2419,7 +2419,10 @@ public class GameManager : MonoBehaviour
             return false;
 
         SquareCell cell = Grid.GetCell(destination);
-        if (cell == null || cell.IsOccupied)
+        if (cell == null)
+            return false;
+
+        if (!Grid.CanPlaceCreature(destination, pc.GetVisualSquaresOccupied(), pc))
             return false;
 
         if (IsDifficultTerrain(destination))
@@ -3399,12 +3402,7 @@ public class GameManager : MonoBehaviour
         if (summonVisual != null)
             yield return StartCoroutine(summonVisual.PlayDespawnEffect());
 
-        SquareCell currentCell = Grid.GetCell(cc.GridPosition);
-        if (currentCell != null && currentCell.Occupant == cc)
-        {
-            currentCell.IsOccupied = false;
-            currentCell.Occupant = null;
-        }
+        Grid.ClearCreatureOccupancy(cc);
 
         int npcIdx = NPCs.IndexOf(cc);
         if (npcIdx >= 0)
@@ -3506,9 +3504,10 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (targetCell.IsOccupied)
+        int summonSizeSquares = template.SizeCategory.GetSpaceWidthSquares();
+        if (!Grid.CanPlaceCreature(targetCell.Coords, summonSizeSquares))
         {
-            CombatUI.ShowCombatLog("Cannot summon there: tile is occupied.");
+            CombatUI.ShowCombatLog("Cannot summon there: not enough open space for that creature size.");
             ShowSummonPlacementTargets(caster, _pendingSpell);
             return;
         }
@@ -5534,10 +5533,11 @@ public class GameManager : MonoBehaviour
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
 
+        int sizeSquares = pc.GetVisualSquaresOccupied();
         List<SquareCell> moveCells = Grid.GetCellsInRange(pc.GridPosition, pc.Stats.MoveRange);
         foreach (var cell in moveCells)
         {
-            if (!cell.IsOccupied)
+            if (Grid.CanPlaceCreature(cell.Coords, sizeSquares, pc))
             {
                 cell.SetHighlight(HighlightType.Move);
                 _highlightedCells.Add(cell);
@@ -5677,7 +5677,7 @@ public class GameManager : MonoBehaviour
         var threatenedSquares = GetPreviewThreatenedSquares(pc);
 
         // Use AoO-aware A* pathfinder — routes around threatened squares when possible
-        var pathResult = Grid.FindPathAoOAware(pc.GridPosition, gridCoord, threatenedSquares, pc.Stats.MoveRange);
+        var pathResult = Grid.FindPathAoOAware(pc.GridPosition, gridCoord, threatenedSquares, pc.Stats.MoveRange, pc.GetVisualSquaresOccupied(), pc);
 
         if (pathResult.Path != null && pathResult.Path.Count > 0)
         {
@@ -5889,9 +5889,10 @@ public class GameManager : MonoBehaviour
             maxRangeSquares = pc.Stats.AttackRange;
         }
 
+        int sizePadding = Mathf.Max(0, pc.GetVisualSquaresOccupied() - 1);
         List<SquareCell> allCells = isRangedWeapon
-            ? Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares)
-            : GetCellsInChebyshevRange(pc.GridPosition, maxRangeSquares);
+            ? Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares + sizePadding)
+            : GetCellsInChebyshevRange(pc.GridPosition, maxRangeSquares + sizePadding);
         bool hasTarget = false;
         bool anyFlanking = false;
 
@@ -5902,21 +5903,8 @@ public class GameManager : MonoBehaviour
                 if (!IsEnemyTeam(pc, cell.Occupant))
                     continue;
 
-                int sqDist = isRangedWeapon
-                    ? SquareGridUtils.GetDistance(pc.GridPosition, cell.Coords)
-                    : SquareGridUtils.GetChebyshevDistance(pc.GridPosition, cell.Coords);
-
-                if (isRangedWeapon && rangeIncrement > 0)
-                {
-                    int distFeet = RangeCalculator.SquaresToFeet(sqDist);
-                    if (!RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement, isThrownWeapon))
-                        continue;
-                }
-                else
-                {
-                    if (!pc.CanMeleeAttackDistance(sqDist))
-                        continue;
-                }
+                if (!pc.IsTargetInCurrentWeaponRange(cell.Occupant))
+                    continue;
 
                 // Check whether attacker can flank this target with any ally who actually threatens.
                 CharacterController flankPartner;
@@ -5983,7 +5971,8 @@ public class GameManager : MonoBehaviour
             ? RangeCalculator.GetMaxRangeSquares(rangeIncrement, isThrownWeapon)
             : attacker.Stats.AttackRange;
 
-        List<SquareCell> allCells = Grid.GetCellsInRange(attacker.GridPosition, maxRangeSquares);
+        int sizePadding = Mathf.Max(0, attacker.GetVisualSquaresOccupied() - 1);
+        List<SquareCell> allCells = Grid.GetCellsInRange(attacker.GridPosition, maxRangeSquares + sizePadding);
         foreach (SquareCell cell in allCells)
         {
             if (cell == null || !cell.IsOccupied || cell.Occupant == null || cell.Occupant == attacker)
@@ -5995,19 +5984,7 @@ public class GameManager : MonoBehaviour
             if (!IsEnemyTeam(attacker, candidate))
                 continue;
 
-            int sqDist = SquareGridUtils.GetDistance(attacker.GridPosition, candidate.GridPosition);
-            bool inRange;
-            if (rangeIncrement > 0)
-            {
-                int distFeet = RangeCalculator.SquaresToFeet(sqDist);
-                inRange = RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement, isThrownWeapon);
-            }
-            else
-            {
-                inRange = sqDist <= attacker.Stats.AttackRange;
-            }
-
-            if (inRange)
+            if (attacker.IsTargetInCurrentWeaponRange(candidate))
                 valid.Add(candidate);
         }
 
@@ -6027,8 +6004,7 @@ public class GameManager : MonoBehaviour
             if (!IsEnemyTeam(attacker, candidate))
                 continue;
 
-            int distance = SquareGridUtils.GetChebyshevDistance(attacker.GridPosition, candidate.GridPosition);
-            if (attacker.CanMeleeAttackDistance(distance))
+            if (attacker.IsTargetInCurrentWeaponRange(candidate))
                 valid.Add(candidate);
         }
 
@@ -6047,29 +6023,10 @@ public class GameManager : MonoBehaviour
 
     private bool IsTargetInCurrentWeaponRange(CharacterController attacker, CharacterController target)
     {
-        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null || target.Stats.IsDead)
+        if (attacker == null || target == null || target.Stats == null || target.Stats.IsDead)
             return false;
 
-        bool isRanged = attacker.IsEquippedWeaponRanged();
-
-        if (isRanged)
-        {
-            int sqDist = SquareGridUtils.GetDistance(attacker.GridPosition, target.GridPosition);
-            ItemData weapon = attacker.GetEquippedMainWeapon();
-            int rangeIncrement = weapon != null ? weapon.RangeIncrement : 0;
-            bool isThrownWeapon = weapon != null && weapon.IsThrown;
-
-            if (rangeIncrement > 0)
-            {
-                int distFeet = RangeCalculator.SquaresToFeet(sqDist);
-                return RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement, isThrownWeapon);
-            }
-
-            return sqDist <= attacker.Stats.AttackRange;
-        }
-
-        int meleeDistance = SquareGridUtils.GetChebyshevDistance(attacker.GridPosition, target.GridPosition);
-        return attacker.CanMeleeAttackDistance(meleeDistance);
+        return attacker.IsTargetInCurrentWeaponRange(target);
     }
 
     private bool HasAnyValidTargetFromPosition(CharacterController attacker, Vector2Int attackerPosition, bool rangedMode)
@@ -6080,6 +6037,8 @@ public class GameManager : MonoBehaviour
         ItemData weapon = attacker.GetEquippedMainWeapon();
         int rangeIncrement = weapon != null ? weapon.RangeIncrement : 0;
         bool isThrownWeapon = weapon != null && weapon.IsThrown;
+        List<Vector2Int> attackerSquares = attacker.GetOccupiedSquaresAt(attackerPosition);
+
         foreach (CharacterController candidate in GetAllCharacters())
         {
             if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
@@ -6087,11 +6046,20 @@ public class GameManager : MonoBehaviour
             if (!IsEnemyTeam(attacker, candidate))
                 continue;
 
-            int sqDist = rangedMode
-                ? SquareGridUtils.GetDistance(attackerPosition, candidate.GridPosition)
-                : SquareGridUtils.GetChebyshevDistance(attackerPosition, candidate.GridPosition);
             if (rangedMode)
             {
+                int sqDist = int.MaxValue;
+                List<Vector2Int> candidateSquares = candidate.GetOccupiedSquares();
+                for (int i = 0; i < attackerSquares.Count; i++)
+                {
+                    for (int j = 0; j < candidateSquares.Count; j++)
+                    {
+                        int d = SquareGridUtils.GetDistance(attackerSquares[i], candidateSquares[j]);
+                        if (d < sqDist)
+                            sqDist = d;
+                    }
+                }
+
                 if (rangeIncrement > 0)
                 {
                     int distFeet = RangeCalculator.SquaresToFeet(sqDist);
@@ -6103,9 +6071,10 @@ public class GameManager : MonoBehaviour
                     return true;
                 }
             }
-            else if (attacker.CanMeleeAttackDistance(sqDist))
+            else
             {
-                return true;
+                if (CombatUtils.CanThreatenTargetFromPosition(attacker, attackerPosition, candidate))
+                    return true;
             }
         }
 
@@ -6236,13 +6205,22 @@ public class GameManager : MonoBehaviour
         int min = Mathf.Max(1, minDistance);
         int max = Mathf.Max(min, maxDistance);
 
-        List<SquareCell> allCells = GetCellsInChebyshevRange(attacker.GridPosition, max);
+        int sizePadding = Mathf.Max(0, attacker.GetVisualSquaresOccupied() - 1);
+        List<Vector2Int> attackerOccupiedSquares = attacker.GetOccupiedSquares();
+        List<SquareCell> allCells = GetCellsInChebyshevRange(attacker.GridPosition, max + sizePadding);
         foreach (SquareCell cell in allCells)
         {
-            if (cell == null || cell.Coords == attacker.GridPosition)
+            if (cell == null)
+                continue;
+            if (cell.IsOccupied && cell.Occupant == attacker)
                 continue;
 
-            int sqDist = SquareGridUtils.GetChebyshevDistance(attacker.GridPosition, cell.Coords);
+            int sqDist = int.MaxValue;
+            foreach (Vector2Int occupied in attackerOccupiedSquares)
+            {
+                int d = SquareGridUtils.GetChebyshevDistance(occupied, cell.Coords);
+                if (d < sqDist) sqDist = d;
+            }
             if (sqDist <= 0 || sqDist > max)
                 continue;
 
@@ -6261,12 +6239,20 @@ public class GameManager : MonoBehaviour
 
     private void ShowRangeZoneHighlights(CharacterController pc, int rangeIncrement, int maxRangeSquares, bool isThrownWeapon = false)
     {
-        List<SquareCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares);
+        int sizePadding = Mathf.Max(0, pc.GetVisualSquaresOccupied() - 1);
+        List<Vector2Int> occupiedSquares = pc.GetOccupiedSquares();
+        List<SquareCell> allCells = Grid.GetCellsInRange(pc.GridPosition, maxRangeSquares + sizePadding);
         foreach (var cell in allCells)
         {
-            if (cell.Coords == pc.GridPosition) continue;
+            if (cell.IsOccupied && cell.Occupant == pc) continue;
 
-            int sqDist = SquareGridUtils.GetDistance(pc.GridPosition, cell.Coords);
+            int sqDist = int.MaxValue;
+            foreach (Vector2Int occupied in occupiedSquares)
+            {
+                int d = SquareGridUtils.GetDistance(occupied, cell.Coords);
+                if (d < sqDist) sqDist = d;
+            }
+
             int zone = RangeCalculator.GetRangeZone(sqDist, rangeIncrement, isThrownWeapon);
 
             switch (zone)
@@ -6356,7 +6342,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (!_highlightedCells.Contains(cell) || cell.IsOccupied)
+        if (!_highlightedCells.Contains(cell) || !Grid.CanPlaceCreature(cell.Coords, pc.GetVisualSquaresOccupied(), pc))
             return;
 
         var allCharacters = GetAllCharacters();
@@ -6500,7 +6486,7 @@ public class GameManager : MonoBehaviour
             yield break;
 
         int maxRange = Mathf.Max(1, mover.Stats.MoveRange);
-        AoOPathResult pathResult = Grid.FindPathAoOAware(mover.GridPosition, destination, null, maxRange);
+        AoOPathResult pathResult = Grid.FindPathAoOAware(mover.GridPosition, destination, null, maxRange, mover.GetVisualSquaresOccupied(), mover);
         List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
             ? pathResult.Path
             : new List<Vector2Int> { destination };
@@ -6641,7 +6627,8 @@ public class GameManager : MonoBehaviour
             : attacker.GetMeleeMaxAttackDistance();
         if (maxRange < 1) maxRange = 1;
 
-        List<SquareCell> allCells = GetCellsInChebyshevRange(attacker.GridPosition, maxRange);
+        int sizePadding = Mathf.Max(0, attacker.GetVisualSquaresOccupied() - 1);
+        List<SquareCell> allCells = GetCellsInChebyshevRange(attacker.GridPosition, maxRange + sizePadding);
         bool hasTarget = false;
 
         foreach (var c in allCells)
@@ -6649,7 +6636,7 @@ public class GameManager : MonoBehaviour
             if (!c.IsOccupied || c.Occupant == attacker || c.Occupant.Stats.IsDead) continue;
             if (!IsEnemyTeam(attacker, c.Occupant)) continue;
 
-            int distance = SquareGridUtils.GetChebyshevDistance(attacker.GridPosition, c.Coords);
+            int distance = attacker.GetMinimumDistanceToTarget(c.Occupant, chebyshev: true);
             bool inRange = (type == SpecialAttackType.Feint)
                 ? distance == 1
                 : attacker.CanMeleeAttackDistance(distance);
@@ -6970,8 +6957,7 @@ public class GameManager : MonoBehaviour
         }
 
         Vector2Int finalPos = path[path.Count - 1];
-        int distToTarget = SquareGridUtils.GetChebyshevDistance(finalPos, target.GridPosition);
-        if (!charger.CanMeleeAttackDistance(distToTarget))
+        if (!CombatUtils.CanThreatenTargetFromPosition(charger, finalPos, target))
         {
             if (logFailures) CombatUI?.ShowCombatLog("⚠ Charge must end in legal melee reach ring of the target.");
             return false;
@@ -7289,7 +7275,7 @@ public class GameManager : MonoBehaviour
         ItemData weapon = attacker.GetEquippedMainWeapon();
         int rangeIncrement = (weapon != null) ? weapon.RangeIncrement : 0;
         bool isThrownWeapon = (weapon != null) && weapon.IsThrown;
-        int sqDist = SquareGridUtils.GetDistance(attacker.GridPosition, target.GridPosition);
+        int sqDist = attacker.GetMinimumDistanceToTarget(target, chebyshev: false);
         return RangeCalculator.GetRangeInfo(sqDist, rangeIncrement, isThrownWeapon);
     }
 
@@ -8155,7 +8141,7 @@ public class GameManager : MonoBehaviour
         if (!npc.HasMeleeWeaponEquipped()) return false;
         if (target.Stats == null || target.Stats.IsDead) return false;
 
-        int dist = SquareGridUtils.GetChebyshevDistance(npc.GridPosition, target.GridPosition);
+        int dist = npc.GetMinimumDistanceToTarget(target, chebyshev: true);
         // Prefer charge when out of melee reach but still reachable in a charge lane.
         if (npc.CanMeleeAttackDistance(dist)) return false;
 
@@ -8366,7 +8352,7 @@ public class GameManager : MonoBehaviour
 
         foreach (var cell in moveCells)
         {
-            if (cell.IsOccupied) continue;
+            if (!Grid.CanPlaceCreature(cell.Coords, mover.GetVisualSquaresOccupied(), mover)) continue;
 
             int dist = SquareGridUtils.GetDistance(cell.Coords, threatPos);
             if (dist > bestDist)
@@ -8406,7 +8392,7 @@ public class GameManager : MonoBehaviour
 
         foreach (var cell in moveCells)
         {
-            if (cell.IsOccupied) continue;
+            if (!Grid.CanPlaceCreature(cell.Coords, mover.GetVisualSquaresOccupied(), mover)) continue;
 
             int dist = SquareGridUtils.GetDistance(cell.Coords, targetPos);
 

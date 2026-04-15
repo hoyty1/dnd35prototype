@@ -114,10 +114,9 @@ public static class SizeCategoryExtensions
     }
 
     /// <summary>
-    /// Simplified combat footprint in squares (prototype currently supports 1x1 occupancy only).
-    /// Values are exposed for UI/future multi-tile occupancy work.
+    /// Number of grid squares along one edge of the creature's occupied footprint.
     /// </summary>
-    public static int GetSpaceSquares(this SizeCategory size)
+    public static int GetSpaceWidthSquares(this SizeCategory size)
     {
         switch (size)
         {
@@ -126,18 +125,27 @@ public static class SizeCategoryExtensions
             case SizeCategory.Tiny:
             case SizeCategory.Small:
             case SizeCategory.Medium:
-                return 1;
+                return 1; // 1x1
             case SizeCategory.Large:
-                return 4; // 2x2
+                return 2; // 2x2
             case SizeCategory.Huge:
-                return 9; // 3x3
+                return 3; // 3x3
             case SizeCategory.Gargantuan:
-                return 16; // 4x4
+                return 4; // 4x4
             case SizeCategory.Colossal:
-                return 25; // 5x5
+                return 6; // 6x6
             default:
                 return 1;
         }
+    }
+
+    /// <summary>
+    /// Total occupied squares in the creature footprint.
+    /// </summary>
+    public static int GetSpaceSquares(this SizeCategory size)
+    {
+        int width = GetSpaceWidthSquares(size);
+        return width * width;
     }
 
     public static bool TryIncrease(this SizeCategory size, out SizeCategory increased)

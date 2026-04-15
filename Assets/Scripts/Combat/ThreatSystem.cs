@@ -100,27 +100,30 @@ public static class ThreatSystem
 
         int minThreatDistance = character.GetMeleeMinAttackDistance();
         int maxThreatDistance = character.GetMeleeMaxAttackDistance();
-        Vector2Int pos = character.GridPosition;
+        List<Vector2Int> occupiedSquares = character.GetOccupiedSquares();
 
-        // Threat ring(s) are measured with Chebyshev distance (diagonals = 1):
-        // - normal melee weapon: distance 1
-        // - reach weapon: usually distance 2 only
-        // - special (spiked chain): distance 1-2
-        // - whip: distance 2-3
-        for (int dx = -maxThreatDistance; dx <= maxThreatDistance; dx++)
+        // Threat ring(s) are measured with Chebyshev distance (diagonals = 1)
+        // from every square occupied by the creature footprint.
+        for (int i = 0; i < occupiedSquares.Count; i++)
         {
-            for (int dy = -maxThreatDistance; dy <= maxThreatDistance; dy++)
+            Vector2Int origin = occupiedSquares[i];
+            for (int dx = -maxThreatDistance; dx <= maxThreatDistance; dx++)
             {
-                if (dx == 0 && dy == 0) continue;
-
-                Vector2Int target = new Vector2Int(pos.x + dx, pos.y + dy);
-                int distance = SquareGridUtils.GetChebyshevDistance(pos, target);
-                if (distance >= minThreatDistance && distance <= maxThreatDistance)
-                    threatened.Add(target);
+                for (int dy = -maxThreatDistance; dy <= maxThreatDistance; dy++)
+                {
+                    Vector2Int target = new Vector2Int(origin.x + dx, origin.y + dy);
+                    int distance = SquareGridUtils.GetChebyshevDistance(origin, target);
+                    if (distance >= minThreatDistance && distance <= maxThreatDistance)
+                        threatened.Add(target);
+                }
             }
         }
 
-        Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} threatens {threatened.Count} squares from ({pos.x},{pos.y}) at Chebyshev distances {minThreatDistance}-{maxThreatDistance} (melee weapon equipped)");
+        for (int i = 0; i < occupiedSquares.Count; i++)
+            threatened.Remove(occupiedSquares[i]);
+
+        Vector2Int basePos = character.GridPosition;
+        Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} threatens {threatened.Count} squares from footprint base ({basePos.x},{basePos.y}) at Chebyshev distances {minThreatDistance}-{maxThreatDistance} (melee weapon equipped)");
         return threatened;
     }
 
@@ -254,37 +257,51 @@ public static class ThreatSystem
             enemyAoOUsedThisMovement[character] = 0;
         }
 
-        // The mover starts at their current position
-        Vector2Int previousSquare = mover.GridPosition;
+        // The mover starts at their current base position.
+        Vector2Int previousBaseSquare = mover.GridPosition;
 
         for (int i = 0; i < path.Count; i++)
         {
-            Vector2Int currentSquare = path[i];
+            Vector2Int currentBaseSquare = path[i];
+            List<Vector2Int> previousOccupiedSquares = mover.GetOccupiedSquaresAt(previousBaseSquare);
 
-            // Check each enemy: does leaving previousSquare provoke?
+            // Check each enemy: does leaving any previously occupied square provoke?
             foreach (var kvp in enemyThreats)
             {
                 var enemy = kvp.Key;
                 var threatenedSquares = kvp.Value;
 
-                // AoO is provoked when leaving a threatened square
-                if (threatenedSquares.Contains(previousSquare))
+                bool provoked = false;
+                for (int s = 0; s < previousOccupiedSquares.Count; s++)
                 {
-                    // Check if this enemy can still make AoOs
-                    int usedThisMovement = enemyAoOUsedThisMovement[enemy];
-                    int remainingGlobal = enemy.Stats.MaxAttacksOfOpportunity - enemy.Stats.AttacksOfOpportunityUsed;
-                    int remainingThisMovement = remainingGlobal - usedThisMovement;
-
-                    if (remainingThisMovement > 0)
+                    if (threatenedSquares.Contains(previousOccupiedSquares[s]))
                     {
-                        provokedAoOs.Add(new AoOThreatInfo(enemy, previousSquare, i));
-                        enemyAoOUsedThisMovement[enemy]++;
-                        Debug.Log($"[ThreatSystem] Movement from ({previousSquare.x},{previousSquare.y}) to ({currentSquare.x},{currentSquare.y}) provokes AoO from {enemy.Stats.CharacterName}");
+                        provoked = true;
+                        break;
                     }
+                }
+
+                if (!provoked)
+                    continue;
+
+                // Check if this enemy can still make AoOs
+                int usedThisMovement = enemyAoOUsedThisMovement[enemy];
+                int remainingGlobal = enemy.Stats.MaxAttacksOfOpportunity - enemy.Stats.AttacksOfOpportunityUsed;
+                int remainingThisMovement = remainingGlobal - usedThisMovement;
+
+                if (remainingThisMovement > 0)
+                {
+                    Vector2Int provokedFrom = previousOccupiedSquares.Count > 0
+                        ? previousOccupiedSquares[0]
+                        : previousBaseSquare;
+
+                    provokedAoOs.Add(new AoOThreatInfo(enemy, provokedFrom, i));
+                    enemyAoOUsedThisMovement[enemy]++;
+                    Debug.Log($"[ThreatSystem] Movement from base ({previousBaseSquare.x},{previousBaseSquare.y}) to ({currentBaseSquare.x},{currentBaseSquare.y}) provokes AoO from {enemy.Stats.CharacterName}");
                 }
             }
 
-            previousSquare = currentSquare;
+            previousBaseSquare = currentBaseSquare;
         }
 
         if (provokedAoOs.Count > 0)
