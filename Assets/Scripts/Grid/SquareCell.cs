@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+
 /// <summary>
 /// Represents a single cell in the square grid.
 /// Attach to a square tile GameObject.
@@ -24,8 +25,16 @@ public class SquareCell : MonoBehaviour
     // Items dropped in this square (e.g., disarmed weapons).
     private readonly List<ItemData> _groundItems = new List<ItemData>();
     public IReadOnlyList<ItemData> GroundItems => _groundItems;
+
     private SpriteRenderer _sr;
     private Color _defaultColor;
+
+    // Small token rendered on top of a cell whenever it has one or more ground items.
+    private SpriteRenderer _groundItemTokenRenderer;
+    private static Sprite _groundItemTokenSprite;
+
+    private const int GroundItemTokenSortingOrder = 9; // Below character tokens (10), above grid tiles (0).
+    private const float GroundItemTokenScale = 0.33f;
 
     // Highlight colors
     private static readonly Color HighlightMove = new Color(0.3f, 0.8f, 1f, 0.5f);
@@ -57,6 +66,9 @@ public class SquareCell : MonoBehaviour
         _sr = GetComponent<SpriteRenderer>();
         if (_sr != null)
             _defaultColor = _sr.color;
+
+        EnsureGroundItemTokenVisual();
+        RefreshGroundItemTokenVisual();
     }
 
     public Vector2Int Coords => new Vector2Int(X, Y);
@@ -123,6 +135,7 @@ public class SquareCell : MonoBehaviour
             return;
 
         _groundItems.Add(item);
+        RefreshGroundItemTokenVisual();
     }
 
     public bool RemoveGroundItem(ItemData item)
@@ -130,7 +143,137 @@ public class SquareCell : MonoBehaviour
         if (item == null)
             return false;
 
-        return _groundItems.Remove(item);
+        bool removed = _groundItems.Remove(item);
+        if (removed)
+            RefreshGroundItemTokenVisual();
+
+        return removed;
+    }
+
+    private void EnsureGroundItemTokenVisual()
+    {
+        if (_groundItemTokenRenderer != null)
+            return;
+
+        GameObject tokenGO = new GameObject("GroundItemToken");
+        tokenGO.transform.SetParent(transform, false);
+
+        float halfCell = SquareGridUtils.CellSize * 0.5f;
+        tokenGO.transform.localPosition = new Vector3(halfCell * 0.48f, -halfCell * 0.48f, 0f);
+        tokenGO.transform.localScale = new Vector3(GroundItemTokenScale, GroundItemTokenScale, 1f);
+
+        _groundItemTokenRenderer = tokenGO.AddComponent<SpriteRenderer>();
+        _groundItemTokenRenderer.sprite = GetOrCreateGroundItemTokenSprite();
+        _groundItemTokenRenderer.sortingOrder = GroundItemTokenSortingOrder;
+        _groundItemTokenRenderer.enabled = false;
+    }
+
+    private void RefreshGroundItemTokenVisual()
+    {
+        if (_groundItemTokenRenderer == null)
+            EnsureGroundItemTokenVisual();
+
+        if (_groundItemTokenRenderer != null)
+            _groundItemTokenRenderer.enabled = _groundItems.Count > 0;
+    }
+
+    private static Sprite GetOrCreateGroundItemTokenSprite()
+    {
+        if (_groundItemTokenSprite != null)
+            return _groundItemTokenSprite;
+
+        const int size = 20;
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            filterMode = FilterMode.Point,
+            wrapMode = TextureWrapMode.Clamp
+        };
+
+        Color clear = new Color(0f, 0f, 0f, 0f);
+        Color bag = new Color(0.50f, 0.30f, 0.15f, 1f);
+        Color bagDark = new Color(0.33f, 0.18f, 0.09f, 1f);
+        Color rope = new Color(0.84f, 0.73f, 0.45f, 1f);
+        Color coin = new Color(0.96f, 0.82f, 0.24f, 1f);
+        Color coinDark = new Color(0.79f, 0.60f, 0.12f, 1f);
+
+        Color[] pixels = new Color[size * size];
+        for (int i = 0; i < pixels.Length; i++)
+            pixels[i] = clear;
+        texture.SetPixels(pixels);
+
+        DrawFilledEllipse(texture, 10, 8, 6, 5, bag);
+        DrawFilledEllipse(texture, 10, 13, 3, 2, bag);
+        DrawFilledRect(texture, 7, 11, 6, 2, rope);
+
+        DrawFilledEllipse(texture, 7, 5, 2, 2, coin);
+        DrawFilledEllipse(texture, 11, 4, 2, 2, coin);
+        DrawFilledEllipse(texture, 14, 6, 2, 2, coin);
+
+        DrawEllipseOutline(texture, 10, 8, 6, 5, bagDark);
+        DrawEllipseOutline(texture, 10, 13, 3, 2, bagDark);
+        DrawEllipseOutline(texture, 7, 5, 2, 2, coinDark);
+        DrawEllipseOutline(texture, 11, 4, 2, 2, coinDark);
+        DrawEllipseOutline(texture, 14, 6, 2, 2, coinDark);
+
+        texture.Apply();
+
+        _groundItemTokenSprite = Sprite.Create(
+            texture,
+            new Rect(0, 0, size, size),
+            new Vector2(0.5f, 0.5f),
+            size
+        );
+        _groundItemTokenSprite.name = "GroundItemTokenSprite";
+        return _groundItemTokenSprite;
+    }
+
+    private static void DrawFilledRect(Texture2D texture, int xMin, int yMin, int width, int height, Color color)
+    {
+        for (int y = yMin; y < yMin + height; y++)
+        {
+            for (int x = xMin; x < xMin + width; x++)
+            {
+                SetPixelSafe(texture, x, y, color);
+            }
+        }
+    }
+
+    private static void DrawFilledEllipse(Texture2D texture, int centerX, int centerY, int radiusX, int radiusY, Color color)
+    {
+        for (int y = centerY - radiusY; y <= centerY + radiusY; y++)
+        {
+            for (int x = centerX - radiusX; x <= centerX + radiusX; x++)
+            {
+                float nx = (x - centerX) / (float)radiusX;
+                float ny = (y - centerY) / (float)radiusY;
+                if (nx * nx + ny * ny <= 1f)
+                    SetPixelSafe(texture, x, y, color);
+            }
+        }
+    }
+
+    private static void DrawEllipseOutline(Texture2D texture, int centerX, int centerY, int radiusX, int radiusY, Color color)
+    {
+        const float thickness = 0.26f;
+        for (int y = centerY - radiusY - 1; y <= centerY + radiusY + 1; y++)
+        {
+            for (int x = centerX - radiusX - 1; x <= centerX + radiusX + 1; x++)
+            {
+                float nx = (x - centerX) / (float)radiusX;
+                float ny = (y - centerY) / (float)radiusY;
+                float d = nx * nx + ny * ny;
+                if (Mathf.Abs(1f - d) <= thickness)
+                    SetPixelSafe(texture, x, y, color);
+            }
+        }
+    }
+
+    private static void SetPixelSafe(Texture2D texture, int x, int y, Color color)
+    {
+        if (x < 0 || y < 0 || x >= texture.width || y >= texture.height)
+            return;
+
+        texture.SetPixel(x, y, color);
     }
 
     // OnMouseDown removed — click detection is handled via 2D raycasting
