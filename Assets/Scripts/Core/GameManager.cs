@@ -1965,6 +1965,7 @@ public class GameManager : MonoBehaviour
         _spellcastProvocationCancelled = false;
         ClearSpellcastResourceSnapshot();
         CombatUI.HideAoOConfirmationPrompt();
+        CombatUI.HideDisarmWeaponSelection();
         // Hide movement path preview and hover marker when leaving movement phase
         if (_pathPreview != null) _pathPreview.HidePath();
         if (_hoverMarker != null) _hoverMarker.Hide();
@@ -7115,17 +7116,81 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        ExecuteSpecialAttack(attacker, cell.Occupant, _pendingSpecialAttackType);
+        CharacterController target = cell.Occupant;
+        if (_pendingSpecialAttackType == SpecialAttackType.Disarm)
+        {
+            HandleDisarmTargetClick(attacker, target);
+            return;
+        }
+
+        ExecuteSpecialAttack(attacker, target, _pendingSpecialAttackType);
     }
 
-    private void ExecuteSpecialAttack(CharacterController attacker, CharacterController target, SpecialAttackType type)
+    private void HandleDisarmTargetClick(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        List<DisarmableWeaponOption> options = target.GetDisarmableWeaponOptions();
+        if (options.Count <= 1)
+        {
+            EquipSlot? selectedSlot = options.Count == 1 ? options[0].HandSlot : null;
+            ExecuteSpecialAttack(attacker, target, SpecialAttackType.Disarm, selectedSlot);
+            return;
+        }
+
+        List<string> optionLabels = new List<string>(options.Count);
+        for (int i = 0; i < options.Count; i++)
+        {
+            string handLabel = options[i].HandSlot == EquipSlot.RightHand ? "Main Hand" : "Off-Hand";
+            string weaponName = options[i].Weapon != null ? options[i].Weapon.Name : "Weapon";
+            optionLabels.Add($"{handLabel}: {weaponName}");
+        }
+
+        CombatUI.ShowDisarmWeaponSelection(
+            target.Stats.CharacterName,
+            optionLabels,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                {
+                    ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
+                    return;
+                }
+
+                // Re-validate in case gear changed while prompt was open.
+                List<DisarmableWeaponOption> latestOptions = target.GetDisarmableWeaponOptions();
+                EquipSlot selectedSlot = options[selectedIndex].HandSlot;
+                bool slotStillValid = latestOptions.Exists(o => o.HandSlot == selectedSlot);
+                if (!slotStillValid)
+                {
+                    CombatUI.ShowCombatLog($"⚠ {target.Stats.CharacterName}'s selected weapon is no longer equipped.");
+                    ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
+                    return;
+                }
+
+                ExecuteSpecialAttack(attacker, target, SpecialAttackType.Disarm, selectedSlot);
+            },
+            onCancel: () =>
+            {
+                if (CurrentPhase == TurnPhase.PlayerTurn && ActivePC == attacker && attacker.Actions.HasStandardAction)
+                    ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
+                else
+                    ShowActionChoices();
+            });
+    }
+
+    private void ExecuteSpecialAttack(CharacterController attacker, CharacterController target, SpecialAttackType type, EquipSlot? disarmTargetSlot = null)
     {
         if (attacker == null || target == null) { ShowActionChoices(); return; }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
         attacker.CommitStandardAction();
 
-        SpecialAttackResult result = attacker.ExecuteSpecialAttack(type, target);
+        SpecialAttackResult result = attacker.ExecuteSpecialAttack(type, target, disarmTargetSlot);
         CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}]: {result.Log}");
 
         if (result.Success)

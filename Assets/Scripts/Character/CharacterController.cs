@@ -12,6 +12,19 @@ public enum SpecialAttackType
     Overrun,
     Feint
 }
+
+public struct DisarmableWeaponOption
+{
+    public EquipSlot HandSlot;
+    public ItemData Weapon;
+
+    public DisarmableWeaponOption(EquipSlot handSlot, ItemData weapon)
+    {
+        HandSlot = handSlot;
+        Weapon = weapon;
+    }
+}
+
 /// <summary>
 /// Controls a character on the square grid (both PC and NPC).
 /// Supports D&D 3.5 action economy, full attacks, dual wielding, and critical hits.
@@ -2067,6 +2080,25 @@ public class CharacterController : MonoBehaviour
         return null; // Unarmed
     }
 
+    /// <summary>
+    /// Returns equipped hand weapons that are valid disarm targets (right, then left).
+    /// </summary>
+    public List<DisarmableWeaponOption> GetDisarmableWeaponOptions()
+    {
+        var options = new List<DisarmableWeaponOption>(2);
+        var inv = GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+            return options;
+
+        if (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon)
+            options.Add(new DisarmableWeaponOption(EquipSlot.RightHand, inv.RightHandSlot));
+
+        if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon)
+            options.Add(new DisarmableWeaponOption(EquipSlot.LeftHand, inv.LeftHandSlot));
+
+        return options;
+    }
+
     // ========== DUAL WIELD INFO ==========
 
     /// <summary>
@@ -2140,7 +2172,7 @@ public class CharacterController : MonoBehaviour
 
     // ========== SPECIAL ATTACK MANEUVERS ==========
 
-    public SpecialAttackResult ExecuteSpecialAttack(SpecialAttackType type, CharacterController target)
+    public SpecialAttackResult ExecuteSpecialAttack(SpecialAttackType type, CharacterController target, EquipSlot? disarmTargetSlot = null)
     {
         if (target == null || target.Stats == null)
         {
@@ -2155,7 +2187,7 @@ public class CharacterController : MonoBehaviour
         switch (type)
         {
             case SpecialAttackType.Trip: return ResolveTrip(target);
-            case SpecialAttackType.Disarm: return ResolveDisarm(target);
+            case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot);
             case SpecialAttackType.Grapple: return ResolveGrapple(target);
             case SpecialAttackType.Sunder: return ResolveSunder(target);
             case SpecialAttackType.BullRush: return ResolveBullRush(target);
@@ -2197,9 +2229,9 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    private SpecialAttackResult ResolveDisarm(CharacterController target)
+    private SpecialAttackResult ResolveDisarm(CharacterController target, EquipSlot? preferredTargetSlot)
     {
-        ItemData targetWeapon = target.GetEquippedMainWeapon();
+        if (!TryGetDisarmTargetWeapon(target, preferredTargetSlot, out ItemData targetWeapon, out EquipSlot targetWeaponSlot))
         {
             return new SpecialAttackResult
             {
@@ -2210,7 +2242,7 @@ public class CharacterController : MonoBehaviour
         }
 
         int atkWeaponMod = GetDisarmWeaponModifier(this);
-        int defWeaponMod = GetDisarmWeaponModifier(target);
+        int defWeaponMod = GetDisarmWeaponModifier(targetWeapon);
 
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
@@ -2220,7 +2252,7 @@ public class CharacterController : MonoBehaviour
         bool success = atkTotal >= defTotal;
         if (success)
         {
-            DestroyEquippedMainWeapon(target);
+            DestroyEquippedWeapon(target, targetWeaponSlot);
             target.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
         }
 
@@ -2426,23 +2458,74 @@ public class CharacterController : MonoBehaviour
 
     private static int GetDisarmWeaponModifier(CharacterController character)
     {
-        ItemData weapon = character.GetEquippedMainWeapon();
+        return GetDisarmWeaponModifier(character != null ? character.GetEquippedMainWeapon() : null);
+    }
+
+    private static int GetDisarmWeaponModifier(ItemData weapon)
+    {
         if (weapon == null) return 0;
         if (weapon.IsTwoHanded) return 4;
         if (weapon.IsLightWeapon) return -4;
         return 0;
     }
 
+    private static bool TryGetDisarmTargetWeapon(CharacterController target, EquipSlot? preferredTargetSlot, out ItemData weapon, out EquipSlot handSlot)
+    {
+        weapon = null;
+        handSlot = EquipSlot.None;
+        if (target == null) return false;
+
+        var options = target.GetDisarmableWeaponOptions();
+        if (options.Count == 0)
+            return false;
+
+        if (preferredTargetSlot.HasValue)
+        {
+            for (int i = 0; i < options.Count; i++)
+            {
+                if (options[i].HandSlot == preferredTargetSlot.Value)
+                {
+                    handSlot = options[i].HandSlot;
+                    weapon = options[i].Weapon;
+                    return weapon != null;
+                }
+            }
+        }
+
+        handSlot = options[0].HandSlot;
+        weapon = options[0].Weapon;
+        return weapon != null;
+    }
+
     private static void DestroyEquippedMainWeapon(CharacterController target)
+    {
+        DestroyEquippedWeapon(target, null);
+    }
+
+    private static void DestroyEquippedWeapon(CharacterController target, EquipSlot? handSlot)
     {
         var invComp = target.GetComponent<InventoryComponent>();
         if (invComp == null || invComp.CharacterInventory == null) return;
 
         var inv = invComp.CharacterInventory;
-        if (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon)
-            inv.RightHandSlot = null;
-        else if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon)
-            inv.LeftHandSlot = null;
+
+        if (handSlot == EquipSlot.RightHand)
+        {
+            if (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon)
+                inv.RightHandSlot = null;
+        }
+        else if (handSlot == EquipSlot.LeftHand)
+        {
+            if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon)
+                inv.LeftHandSlot = null;
+        }
+        else
+        {
+            if (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon)
+                inv.RightHandSlot = null;
+            else if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon)
+                inv.LeftHandSlot = null;
+        }
 
         inv.RecalculateStats();
     }
