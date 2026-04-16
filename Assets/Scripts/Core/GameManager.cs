@@ -4191,10 +4191,52 @@ public class GameManager : MonoBehaviour
         ShowAttackTargets(pc);
     }
 
+    private bool CanUseImprovedFeintAsMove(CharacterController actor)
+    {
+        if (actor == null || actor.Stats == null || !actor.Stats.HasFeat("Improved Feint"))
+            return false;
+
+        return actor.Actions.HasMoveAction || actor.Actions.CanConvertStandardToMove;
+    }
+
+    private bool CanOpenSpecialAttackMenu(CharacterController actor)
+    {
+        if (actor == null)
+            return false;
+
+        return actor.Actions.HasStandardAction || CanUseImprovedFeintAsMove(actor);
+    }
+
+    private bool TryConsumeFeintAction(CharacterController attacker, out string actionLabel)
+    {
+        actionLabel = "";
+        if (attacker == null)
+            return false;
+
+        if (CanUseImprovedFeintAsMove(attacker))
+        {
+            if (attacker.Actions.HasMoveAction)
+                attacker.Actions.UseMoveAction();
+            else
+                attacker.Actions.ConvertStandardToMove();
+
+            actionLabel = "move action (Improved Feint)";
+            return true;
+        }
+
+        if (attacker.CommitStandardAction())
+        {
+            actionLabel = "standard action";
+            return true;
+        }
+
+        return false;
+    }
+
     public void OnSpecialAttackButtonPressed()
     {
         CharacterController pc = ActivePC;
-        if (pc == null || !pc.Actions.HasStandardAction) return;
+        if (pc == null || !CanOpenSpecialAttackMenu(pc)) return;
 
         _isSelectingSpecialAttack = true;
         CombatUI.ShowSpecialAttackMenu(pc, OnSpecialAttackSelected, ShowActionChoices);
@@ -4212,6 +4254,20 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) { ShowActionChoices(); return; }
+
+        bool hasAction = type == SpecialAttackType.Feint
+            ? (pc.Actions.HasStandardAction || CanUseImprovedFeintAsMove(pc))
+            : pc.Actions.HasStandardAction;
+
+        if (!hasAction)
+        {
+            string reason = type == SpecialAttackType.Feint
+                ? "Need a standard action, or a move action with Improved Feint"
+                : "Need a standard action";
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use {type}: {reason}.");
+            ShowActionChoices();
+            return;
+        }
 
         _pendingSpecialAttackType = type;
         _isSelectingSpecialAttack = true;
@@ -8706,10 +8762,30 @@ public class GameManager : MonoBehaviour
         if (attacker == null || target == null) { ShowActionChoices(); return; }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        attacker.CommitStandardAction();
+
+        string actionLabel = "standard action";
+        if (type == SpecialAttackType.Feint)
+        {
+            if (!TryConsumeFeintAction(attacker, out actionLabel))
+            {
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot feint: no eligible action remaining.");
+                ShowActionChoices();
+                return;
+            }
+        }
+        else
+        {
+            if (!attacker.CommitStandardAction())
+            {
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot use {type}: standard action already spent.");
+                ShowActionChoices();
+                return;
+            }
+            actionLabel = "standard action";
+        }
 
         SpecialAttackResult result = attacker.ExecuteSpecialAttack(type, target, disarmTargetSlot);
-        CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}]: {result.Log}");
+        CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}] ({actionLabel}): {result.Log}");
 
         if (result.Success)
         {

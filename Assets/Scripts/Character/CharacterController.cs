@@ -72,6 +72,19 @@ public class CharacterController : MonoBehaviour
     // while active, this character's equipped shield bonus is removed until next StartNewTurn().
     private bool _shieldBashAcSuppressed;
     private int _suppressedShieldBonusAmount;
+
+    // Feint windows keyed by this attacker.
+    // A successful feint lets this attacker deny DEX-to-AC against that target on the next melee attack,
+    // usable before the end of this attacker's next turn.
+    private sealed class FeintWindow
+    {
+        public CharacterController Target;
+        public int ExpiresAfterTurnStartCount;
+    }
+
+    private readonly List<FeintWindow> _activeFeintWindows = new List<FeintWindow>();
+    private int _turnsStartedCount;
+
     /// <summary>Set Power Attack value, clamped to 0..BAB.</summary>
     public void SetPowerAttack(int value)
     {
@@ -1496,6 +1509,85 @@ public class CharacterController : MonoBehaviour
         return targetAC;
     }
 
+    private static int GetDexBonusAppliedToArmorClass(CharacterController target)
+    {
+        if (target == null || target.Stats == null)
+            return 0;
+
+        int dexToAc = target.Stats.DEXMod;
+        if (target.Stats.MaxDexBonus >= 0 && dexToAc > target.Stats.MaxDexBonus)
+            dexToAc = target.Stats.MaxDexBonus;
+
+        return Mathf.Max(0, dexToAc);
+    }
+
+    private void PruneExpiredFeintWindows()
+    {
+        _activeFeintWindows.RemoveAll(w =>
+            w == null
+            || w.Target == null
+            || w.Target.Stats == null
+            || w.Target.Stats.IsDead
+            || _turnsStartedCount > w.ExpiresAfterTurnStartCount);
+    }
+
+    private void RegisterSuccessfulFeint(CharacterController target)
+    {
+        if (target == null)
+            return;
+
+        PruneExpiredFeintWindows();
+
+        FeintWindow existing = _activeFeintWindows.Find(w => w != null && w.Target == target);
+        if (existing == null)
+        {
+            existing = new FeintWindow
+            {
+                Target = target,
+                ExpiresAfterTurnStartCount = _turnsStartedCount + 1
+            };
+            _activeFeintWindows.Add(existing);
+        }
+        else
+        {
+            existing.ExpiresAfterTurnStartCount = _turnsStartedCount + 1;
+        }
+    }
+
+    private bool TryConsumeFeintDexDenial(CharacterController target, bool isMeleeAttack, out int deniedDexBonus, out string note)
+    {
+        deniedDexBonus = 0;
+        note = string.Empty;
+
+        if (!isMeleeAttack || target == null || target.Stats == null)
+            return false;
+
+        PruneExpiredFeintWindows();
+        int idx = _activeFeintWindows.FindIndex(w => w != null && w.Target == target);
+        if (idx < 0)
+            return false;
+
+        // D&D 3.5: the effect is for your next melee attack against the feinted target.
+        // Consume the window regardless of whether it yields a numerical AC reduction.
+        _activeFeintWindows.RemoveAt(idx);
+
+        if (target.HasCondition(CombatConditionType.FlatFooted))
+        {
+            note = "Feint window consumed: target already flat-footed (no extra DEX denial).";
+            return false;
+        }
+
+        deniedDexBonus = GetDexBonusAppliedToArmorClass(target);
+        if (deniedDexBonus <= 0)
+        {
+            note = "Feint window consumed: target has no positive DEX bonus to AC.";
+            return false;
+        }
+
+        note = $"Feint: denied +{deniedDexBonus} DEX bonus to AC on this melee attack.";
+        return true;
+    }
+
     // ========== INTERNAL: Single attack with critical hit support ==========
 
     /// <summary>
@@ -1536,6 +1628,19 @@ public class CharacterController : MonoBehaviour
 
         bool isRangedAttack = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
         int targetAC = GetSituationalTargetArmorClass(target, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
+
+        int feintDexDenied = 0;
+        string feintNote;
+        if (TryConsumeFeintDexDenial(target, !isRangedAttack, out feintDexDenied, out feintNote))
+        {
+            targetAC -= feintDexDenied;
+            result.FeintDexDeniedToAc = feintDexDenied;
+            result.FeintWindowNote = feintNote;
+        }
+        else if (!string.IsNullOrEmpty(feintNote))
+        {
+            result.FeintWindowNote = feintNote;
+        }
 
         // Step 1: Roll to hit
         var (hit, roll, total) = Stats.RollToHitWithMod(totalAtkMod, targetAC);
@@ -2298,6 +2403,9 @@ public class CharacterController : MonoBehaviour
         SyncHPStateFromCurrentHP(emitLog: false);
         RestoreShieldBonusAfterShieldBash();
 
+        _turnsStartedCount++;
+        PruneExpiredFeintWindows();
+
         HasMovedThisTurn = false;
         HasTakenFiveFootStep = false;
         HasAttackedThisTurn = false;
@@ -2681,16 +2789,29 @@ public class CharacterController : MonoBehaviour
     private SpecialAttackResult ResolveFeint(CharacterController target)
     {
         int bluffRoll = Random.Range(1, 21);
-        int senseRoll = Random.Range(1, 21);
-        int bluffBonus = Stats.GetSkillBonus("Bluff") + (Stats.HasFeat("Improved Feint") ? 4 : 0);
-        int senseBonus = target.Stats.GetSkillBonus("Sense Motive");
+        int opposedRoll = Random.Range(1, 21);
+
+        int bluffBonus = Stats.GetSkillBonus("Bluff");
+
+        bool targetIsHumanoid = false;
+        if (target.Stats != null && !string.IsNullOrEmpty(target.Stats.CreatureType))
+            targetIsHumanoid = target.Stats.CreatureType.Trim().ToLowerInvariant().Contains("humanoid");
+
+        bool useBabWisDefense = !targetIsHumanoid || target.Stats.INT <= 2;
+        int opposedBonus = useBabWisDefense
+            ? (target.Stats.BaseAttackBonus + target.Stats.WISMod)
+            : target.Stats.GetSkillBonus("Sense Motive");
 
         int bluffTotal = bluffRoll + bluffBonus;
-        int senseTotal = senseRoll + senseBonus;
-        bool success = bluffTotal >= senseTotal;
+        int opposedTotal = opposedRoll + opposedBonus;
+        bool success = bluffTotal >= opposedTotal;
+
+        string opposedLabel = useBabWisDefense
+            ? "BAB + WIS (non-humanoid or animal-level INT)"
+            : "Sense Motive";
 
         if (success)
-            target.ApplyCondition(CombatConditionType.Feinted, 1, Stats.CharacterName);
+            RegisterSuccessfulFeint(target);
 
         return new SpecialAttackResult
         {
@@ -2698,11 +2819,11 @@ public class CharacterController : MonoBehaviour
             Success = success,
             CheckRoll = bluffRoll,
             CheckTotal = bluffTotal,
-            OpposedRoll = senseRoll,
-            OpposedTotal = senseTotal,
+            OpposedRoll = opposedRoll,
+            OpposedTotal = opposedTotal,
             Log = success
-                ? $"{Stats.CharacterName} feints {target.Stats.CharacterName} ({bluffTotal} vs {senseTotal}). Target is off-balance (-2 AC, 1 round)."
-                : $"{Stats.CharacterName}'s feint fails against {target.Stats.CharacterName} ({bluffTotal} vs {senseTotal})."
+                ? $"{Stats.CharacterName} feints {target.Stats.CharacterName}! Bluff ({bluffRoll}+{bluffBonus}={bluffTotal}) vs {opposedLabel} ({opposedRoll}+{opposedBonus}={opposedTotal}). Next melee attack by {Stats.CharacterName} before end of their next turn denies DEX-to-AC (unless target is already flat-footed)."
+                : $"{Stats.CharacterName}'s feint fails: Bluff ({bluffRoll}+{bluffBonus}={bluffTotal}) vs {target.Stats.CharacterName}'s {opposedLabel} ({opposedRoll}+{opposedBonus}={opposedTotal})."
         };
     }
 

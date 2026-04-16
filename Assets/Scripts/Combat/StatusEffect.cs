@@ -436,9 +436,9 @@ public static class ConditionRules
             Type = CombatConditionType.Feinted,
             DisplayName = "Feinted",
             ShortLabel = "FE",
-            Description = "Temporarily off-balance.",
+            Description = "Legacy marker for feint state (no direct AC modifier; handled by feint attack logic).",
             StackingRule = ConditionStackingRule.Refresh,
-            ArmorClassModifier = -2,
+            ArmorClassModifier = 0,
             MovementMultiplier = 1f
         });
 

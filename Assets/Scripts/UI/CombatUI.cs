@@ -702,11 +702,24 @@ public class CombatUI : MonoBehaviour
 
         if (SpecialAttackButton != null)
         {
+            bool canImprovedFeintMove = pc != null
+                && pc.Stats != null
+                && pc.Stats.HasFeat("Improved Feint")
+                && (actions.HasMoveAction || actions.CanConvertStandardToMove);
+            bool canSpecialAttack = actions.HasStandardAction || canImprovedFeintMove;
+
             SpecialAttackButton.gameObject.SetActive(true);
-            SpecialAttackButton.interactable = actions.HasStandardAction;
+            SpecialAttackButton.interactable = canSpecialAttack;
             Text spLabel = SpecialAttackButton.GetComponentInChildren<Text>();
             if (spLabel != null)
-                spLabel.text = actions.HasStandardAction ? "Special Attack (Standard)" : "Special Attack (Used)";
+            {
+                if (actions.HasStandardAction)
+                    spLabel.text = canImprovedFeintMove ? "Special Attack (Std / Feint Move)" : "Special Attack (Standard)";
+                else if (canImprovedFeintMove)
+                    spLabel.text = "Special Attack (Feint Move)";
+                else
+                    spLabel.text = "Special Attack (Used)";
+            }
         }
 
         if (AidAnotherButton != null)

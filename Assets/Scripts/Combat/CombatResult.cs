@@ -62,6 +62,9 @@ public class CombatResult
     public int AidAnotherAttackBonus;
     public int AidAnotherTargetAcBonus;
 
+    public int FeintDexDeniedToAc;
+    public string FeintWindowNote = "";
+
     public int BreakdownBAB;
     public int BreakdownAbilityMod;
     public string BreakdownAbilityName;
@@ -135,6 +138,10 @@ public class CombatResult
             sb.AppendLine($"  Defender stance: Fighting Defensively (+{FightingDefensivelyACBonus} AC)");
         if (AidAnotherTargetAcBonus > 0)
             sb.AppendLine($"  Defender aided: +{AidAnotherTargetAcBonus} AC vs this attack");
+        if (FeintDexDeniedToAc > 0)
+            sb.AppendLine($"  Feint: defender loses +{FeintDexDeniedToAc} DEX bonus to AC");
+        else if (!string.IsNullOrEmpty(FeintWindowNote))
+            sb.AppendLine($"  Feint: {FeintWindowNote}");
 
         sb.AppendLine();
         sb.AppendLine("  Attack Roll:");
