@@ -4200,6 +4200,14 @@ public class GameManager : MonoBehaviour
         CombatUI.ShowSpecialAttackMenu(pc, OnSpecialAttackSelected, ShowActionChoices);
     }
 
+    public void OnOverrunButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Actions.HasStandardAction) return;
+
+        OnSpecialAttackSelected(SpecialAttackType.Overrun);
+    }
+
     private void OnSpecialAttackSelected(SpecialAttackType type)
     {
         CharacterController pc = ActivePC;

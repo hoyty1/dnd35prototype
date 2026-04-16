@@ -100,6 +100,7 @@ public class CombatUI : MonoBehaviour
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
     public Button AidAnotherButton;     // Aid Another (Standard Action)
+    public Button OverrunButton;        // Overrun (Standard Action)
     public Button ChargeButton;         // Charge (Full-Round Action)
     public Button DualWieldButton;      // Dual Wield (Full-Round Action)
     public Button EndTurnButton;
@@ -720,6 +721,16 @@ public class CombatUI : MonoBehaviour
             Text aidLabel = AidAnotherButton.GetComponentInChildren<Text>();
             if (aidLabel != null)
                 aidLabel.text = canAidAnother ? "Aid Another (Standard)" : $"Aid Another ({aidAnotherReason})";
+        }
+
+        if (OverrunButton != null)
+        {
+            bool showOverrun = actions.HasStandardAction;
+            OverrunButton.gameObject.SetActive(showOverrun);
+            OverrunButton.interactable = showOverrun;
+            Text overrunLabel = OverrunButton.GetComponentInChildren<Text>();
+            if (overrunLabel != null)
+                overrunLabel.text = "Overrun (Standard)";
         }
 
         if (ChargeButton != null)

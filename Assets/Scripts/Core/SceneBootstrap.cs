@@ -701,6 +701,8 @@ public class SceneBootstrap : MonoBehaviour
             "Special Attack", new Color(0.55f, 0.35f, 0.15f));
         combatUI.AidAnotherButton = CreateGridButton(btnGrid.transform, "AidAnotherBtn",
             "Aid Another", new Color(0.42f, 0.3f, 0.58f));
+        combatUI.OverrunButton = CreateGridButton(btnGrid.transform, "OverrunBtn",
+            "Overrun", new Color(0.58f, 0.34f, 0.2f));
         combatUI.ChargeButton = CreateGridButton(btnGrid.transform, "ChargeBtn",
             "Charge", new Color(0.78f, 0.45f, 0.15f));
         combatUI.FullAttackButton = CreateGridButton(btnGrid.transform, "FullAttackBtn",
@@ -890,6 +892,11 @@ public class SceneBootstrap : MonoBehaviour
         {
             ui.AidAnotherButton.onClick.RemoveAllListeners();
             ui.AidAnotherButton.onClick.AddListener(() => GameManager.Instance.OnAidAnotherButtonPressed());
+        }
+        if (ui.OverrunButton != null)
+        {
+            ui.OverrunButton.onClick.RemoveAllListeners();
+            ui.OverrunButton.onClick.AddListener(() => GameManager.Instance.OnOverrunButtonPressed());
         }
         if (ui.ChargeButton != null)
             ui.ChargeButton.onClick.AddListener(() => GameManager.Instance.OnChargeButtonPressed());
