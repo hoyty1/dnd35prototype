@@ -7134,7 +7134,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        List<DisarmableWeaponOption> options = target.GetDisarmableWeaponOptions();
+        List<DisarmableHeldItemOption> options = target.GetDisarmableHeldItemOptions();
         if (options.Count <= 1)
         {
             EquipSlot? selectedSlot = options.Count == 1 ? options[0].HandSlot : null;
@@ -7146,8 +7146,8 @@ public class GameManager : MonoBehaviour
         for (int i = 0; i < options.Count; i++)
         {
             string handLabel = options[i].HandSlot == EquipSlot.RightHand ? "Main Hand" : "Off-Hand";
-            string weaponName = options[i].Weapon != null ? options[i].Weapon.Name : "Weapon";
-            optionLabels.Add($"{handLabel}: {weaponName}");
+            string heldItemName = options[i].HeldItem != null ? options[i].HeldItem.Name : "Held Item";
+            optionLabels.Add($"{handLabel}: {heldItemName}");
         }
 
         CombatUI.ShowDisarmWeaponSelection(
@@ -7162,12 +7162,12 @@ public class GameManager : MonoBehaviour
                 }
 
                 // Re-validate in case gear changed while prompt was open.
-                List<DisarmableWeaponOption> latestOptions = target.GetDisarmableWeaponOptions();
+                List<DisarmableHeldItemOption> latestOptions = target.GetDisarmableHeldItemOptions();
                 EquipSlot selectedSlot = options[selectedIndex].HandSlot;
                 bool slotStillValid = latestOptions.Exists(o => o.HandSlot == selectedSlot);
                 if (!slotStillValid)
                 {
-                    CombatUI.ShowCombatLog($"⚠ {target.Stats.CharacterName}'s selected weapon is no longer equipped.");
+                    CombatUI.ShowCombatLog($"⚠ {target.Stats.CharacterName}'s selected held item is no longer equipped.");
                     ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
                     return;
                 }

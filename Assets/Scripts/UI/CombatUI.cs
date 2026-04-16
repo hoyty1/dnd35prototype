@@ -2975,7 +2975,7 @@ public class CombatUI : MonoBehaviour
         }
     }
 
-    public void ShowDisarmWeaponSelection(string targetName, List<string> weaponOptions, System.Action<int> onSelect, System.Action onCancel)
+    public void ShowDisarmWeaponSelection(string targetName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
     {
         HideDisarmWeaponSelection();
 
@@ -2987,8 +2987,8 @@ public class CombatUI : MonoBehaviour
             return;
         }
 
-        if (weaponOptions == null)
-            weaponOptions = new List<string>();
+        if (itemOptions == null)
+            itemOptions = new List<string>();
 
         _disarmWeaponSelectionPanel = new GameObject("DisarmWeaponSelectionPanel");
         _disarmWeaponSelectionPanel.transform.SetParent(canvas.transform, false);
@@ -3036,7 +3036,7 @@ public class CombatUI : MonoBehaviour
         titleText.fontStyle = FontStyle.Bold;
         titleText.color = new Color(0.92f, 0.88f, 1f);
         titleText.alignment = TextAnchor.MiddleCenter;
-        titleText.text = "DISARM TARGET WEAPON";
+        titleText.text = "DISARM TARGET HELD ITEM";
 
         GameObject bodyObj = new GameObject("BodyText");
         bodyObj.transform.SetParent(dialog.transform, false);
@@ -3052,15 +3052,15 @@ public class CombatUI : MonoBehaviour
         bodyText.fontSize = 14;
         bodyText.alignment = TextAnchor.MiddleCenter;
         bodyText.color = new Color(0.9f, 0.95f, 1f);
-        bodyText.text = $"Choose which weapon to disarm from {targetName}:";
+        bodyText.text = $"Choose which held item to disarm from {targetName}:";
 
         float optionsTop = 0.7f;
         float optionsBottom = 0.2f;
-        int optionCount = Mathf.Max(1, weaponOptions.Count);
+        int optionCount = Mathf.Max(1, itemOptions.Count);
         float totalHeight = optionsTop - optionsBottom;
         float step = totalHeight / optionCount;
 
-        for (int i = 0; i < weaponOptions.Count; i++)
+        for (int i = 0; i < itemOptions.Count; i++)
         {
             int optionIndex = i;
             float yMax = optionsTop - (step * i);
@@ -3068,7 +3068,7 @@ public class CombatUI : MonoBehaviour
 
             Button optionBtn = CreateTouchPromptButton(dialog,
                 $"DisarmOption_{i}",
-                weaponOptions[i],
+                itemOptions[i],
                 new Vector2(0.08f, yMin),
                 new Vector2(0.92f, yMax),
                 new Color(0.3f, 0.26f, 0.58f, 1f));

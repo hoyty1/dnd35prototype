@@ -13,15 +13,15 @@ public enum SpecialAttackType
     Feint
 }
 
-public struct DisarmableWeaponOption
+public struct DisarmableHeldItemOption
 {
     public EquipSlot HandSlot;
-    public ItemData Weapon;
+    public ItemData HeldItem;
 
-    public DisarmableWeaponOption(EquipSlot handSlot, ItemData weapon)
+    public DisarmableHeldItemOption(EquipSlot handSlot, ItemData heldItem)
     {
         HandSlot = handSlot;
-        Weapon = weapon;
+        HeldItem = heldItem;
     }
 }
 
@@ -2081,20 +2081,20 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Returns equipped hand weapons that are valid disarm targets (right, then left).
+    /// Returns equipped held items in the hand slots that are valid disarm targets (right, then left).
     /// </summary>
-    public List<DisarmableWeaponOption> GetDisarmableWeaponOptions()
+    public List<DisarmableHeldItemOption> GetDisarmableHeldItemOptions()
     {
-        var options = new List<DisarmableWeaponOption>(2);
+        var options = new List<DisarmableHeldItemOption>(2);
         var inv = GetComponent<InventoryComponent>()?.CharacterInventory;
         if (inv == null)
             return options;
 
-        if (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon)
-            options.Add(new DisarmableWeaponOption(EquipSlot.RightHand, inv.RightHandSlot));
+        if (inv.RightHandSlot != null)
+            options.Add(new DisarmableHeldItemOption(EquipSlot.RightHand, inv.RightHandSlot));
 
-        if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon)
-            options.Add(new DisarmableWeaponOption(EquipSlot.LeftHand, inv.LeftHandSlot));
+        if (inv.LeftHandSlot != null)
+            options.Add(new DisarmableHeldItemOption(EquipSlot.LeftHand, inv.LeftHandSlot));
 
         return options;
     }
@@ -2231,28 +2231,28 @@ public class CharacterController : MonoBehaviour
 
     private SpecialAttackResult ResolveDisarm(CharacterController target, EquipSlot? preferredTargetSlot)
     {
-        if (!TryGetDisarmTargetWeapon(target, preferredTargetSlot, out ItemData targetWeapon, out EquipSlot targetWeaponSlot))
+        if (!TryGetDisarmTargetHeldItem(target, preferredTargetSlot, out ItemData targetHeldItem, out EquipSlot targetHeldItemSlot))
         {
             return new SpecialAttackResult
             {
                 ManeuverName = "Disarm",
                 Success = false,
-                Log = $"{target.Stats.CharacterName} has no weapon to disarm."
+                Log = $"{target.Stats.CharacterName} has no held item to disarm."
             };
         }
 
-        int atkWeaponMod = GetDisarmWeaponModifier(this);
-        int defWeaponMod = GetDisarmWeaponModifier(targetWeapon);
+        int atkHeldItemMod = GetDisarmHeldItemModifier(this);
+        int defHeldItemMod = GetDisarmHeldItemModifier(targetHeldItem);
 
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + atkWeaponMod + (Stats.HasFeat("Improved Disarm") ? 4 : 0);
-        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + defWeaponMod + (target.Stats.HasFeat("Improved Disarm") ? 4 : 0);
+        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + atkHeldItemMod + (Stats.HasFeat("Improved Disarm") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + defHeldItemMod + (target.Stats.HasFeat("Improved Disarm") ? 4 : 0);
 
         bool success = atkTotal >= defTotal;
         if (success)
         {
-            DestroyEquippedWeapon(target, targetWeaponSlot);
+            DestroyEquippedHeldItem(target, targetHeldItemSlot);
             target.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
         }
 
@@ -2265,7 +2265,7 @@ public class CharacterController : MonoBehaviour
             OpposedRoll = defRoll,
             OpposedTotal = defTotal,
             Log = success
-                ? $"{Stats.CharacterName} disarms {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) {targetWeapon.Name} knocked away."
+                ? $"{Stats.CharacterName} disarms {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) {targetHeldItem.Name} knocked away."
                 : $"{Stats.CharacterName} fails to disarm {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
         };
     }
@@ -2329,8 +2329,8 @@ public class CharacterController : MonoBehaviour
 
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + GetDisarmWeaponModifier(this) + (Stats.HasFeat("Improved Sunder") ? 4 : 0);
-        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + GetDisarmWeaponModifier(target);
+        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + GetDisarmHeldItemModifier(this) + (Stats.HasFeat("Improved Sunder") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + GetDisarmHeldItemModifier(target);
 
         bool success = atkTotal >= defTotal;
         int damage = 0;
@@ -2456,26 +2456,27 @@ public class CharacterController : MonoBehaviour
         return Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Grapple") ? 4 : 0);
     }
 
-    private static int GetDisarmWeaponModifier(CharacterController character)
+    private static int GetDisarmHeldItemModifier(CharacterController character)
     {
-        return GetDisarmWeaponModifier(character != null ? character.GetEquippedMainWeapon() : null);
+        return GetDisarmHeldItemModifier(character != null ? character.GetEquippedMainWeapon() : null);
     }
 
-    private static int GetDisarmWeaponModifier(ItemData weapon)
+    private static int GetDisarmHeldItemModifier(ItemData heldItem)
     {
-        if (weapon == null) return 0;
-        if (weapon.IsTwoHanded) return 4;
-        if (weapon.IsLightWeapon) return -4;
+        if (heldItem == null) return 0;
+        if (!heldItem.IsWeapon) return 0;
+        if (heldItem.IsTwoHanded) return 4;
+        if (heldItem.IsLightWeapon) return -4;
         return 0;
     }
 
-    private static bool TryGetDisarmTargetWeapon(CharacterController target, EquipSlot? preferredTargetSlot, out ItemData weapon, out EquipSlot handSlot)
+    private static bool TryGetDisarmTargetHeldItem(CharacterController target, EquipSlot? preferredTargetSlot, out ItemData heldItem, out EquipSlot handSlot)
     {
-        weapon = null;
+        heldItem = null;
         handSlot = EquipSlot.None;
         if (target == null) return false;
 
-        var options = target.GetDisarmableWeaponOptions();
+        var options = target.GetDisarmableHeldItemOptions();
         if (options.Count == 0)
             return false;
 
@@ -2486,23 +2487,23 @@ public class CharacterController : MonoBehaviour
                 if (options[i].HandSlot == preferredTargetSlot.Value)
                 {
                     handSlot = options[i].HandSlot;
-                    weapon = options[i].Weapon;
-                    return weapon != null;
+                    heldItem = options[i].HeldItem;
+                    return heldItem != null;
                 }
             }
         }
 
         handSlot = options[0].HandSlot;
-        weapon = options[0].Weapon;
-        return weapon != null;
+        heldItem = options[0].HeldItem;
+        return heldItem != null;
     }
 
     private static void DestroyEquippedMainWeapon(CharacterController target)
     {
-        DestroyEquippedWeapon(target, null);
+        DestroyEquippedHeldItem(target, null);
     }
 
-    private static void DestroyEquippedWeapon(CharacterController target, EquipSlot? handSlot)
+    private static void DestroyEquippedHeldItem(CharacterController target, EquipSlot? handSlot)
     {
         var invComp = target.GetComponent<InventoryComponent>();
         if (invComp == null || invComp.CharacterInventory == null) return;
@@ -2511,19 +2512,19 @@ public class CharacterController : MonoBehaviour
 
         if (handSlot == EquipSlot.RightHand)
         {
-            if (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon)
+            if (inv.RightHandSlot != null)
                 inv.RightHandSlot = null;
         }
         else if (handSlot == EquipSlot.LeftHand)
         {
-            if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon)
+            if (inv.LeftHandSlot != null)
                 inv.LeftHandSlot = null;
         }
         else
         {
-            if (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon)
+            if (inv.RightHandSlot != null)
                 inv.RightHandSlot = null;
-            else if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon)
+            else if (inv.LeftHandSlot != null)
                 inv.LeftHandSlot = null;
         }
 
