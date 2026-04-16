@@ -38,6 +38,7 @@ public class InventoryComponent : MonoBehaviour
         CharacterInventory.AddItem(ItemDatabase.CloneItem("breastplate"));
         CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
         CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
         CharacterInventory.AddItem(ItemDatabase.CloneItem("torch"));
 
         CharacterInventory.RecalculateStats();
@@ -64,6 +65,7 @@ public class InventoryComponent : MonoBehaviour
         CharacterInventory.AddItem(ItemDatabase.CloneItem("studded_leather"));
         CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
         CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_greater_healing"));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
         CharacterInventory.AddItem(ItemDatabase.CloneItem("rope"));
 
         CharacterInventory.RecalculateStats();

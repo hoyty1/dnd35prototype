@@ -58,6 +58,7 @@ public class RogueClass : ICharacterClass
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("rope"));
         Debug.Log("[Rogue] Equipment: Leather Armor, Rapier, Shortbow, Dagger");
     }

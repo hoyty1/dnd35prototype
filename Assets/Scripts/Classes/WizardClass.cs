@@ -43,6 +43,7 @@ public class WizardClass : ICharacterClass
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
         Debug.Log("[Wizard] Equipment: Quarterstaff, Light Crossbow, Dagger (no armor)");
     }
 

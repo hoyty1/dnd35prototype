@@ -46,6 +46,7 @@ public class BarbarianClass : ICharacterClass
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
         Debug.Log("[Barbarian] Equipment: Hide Armor, Greataxe, 3x Javelin");
     }
 

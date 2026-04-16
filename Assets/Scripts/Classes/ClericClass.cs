@@ -43,6 +43,7 @@ public class ClericClass : ICharacterClass
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("crossbow_light"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
         Debug.Log("[Cleric] Equipment: Chain Shirt, Heavy Shield, Heavy Mace, Light Crossbow");
     }
 

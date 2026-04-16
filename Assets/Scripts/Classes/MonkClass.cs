@@ -48,6 +48,7 @@ public class MonkClass : ICharacterClass
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("sling"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
         Debug.Log("[Monk] Equipment: Quarterstaff, Sling (unarmored for WIS AC bonus)");
     }
 
