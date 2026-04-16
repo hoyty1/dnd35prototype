@@ -2243,57 +2243,149 @@ public class CharacterController : MonoBehaviour
 
         ItemData attackerHeldWeapon = GetEquippedMainWeapon();
 
-        int atkHeldItemMod = GetDisarmHeldItemModifier(attackerHeldWeapon, treatUnarmedAsLight: true);
-        int atkSizeDiffMod = GetDisarmSizeDifferenceModifier(this, target);
-        int atkImprovedDisarmMod = Stats.HasFeat("Improved Disarm") ? 4 : 0;
+        bool defenderHasSpikedGauntlet = HasSpikedGauntletEquipped(target);
+        bool defenderHasLockedGauntlet = HasLockedGauntletEquipped(target);
+        int defenderLockedGauntletBonus = defenderHasLockedGauntlet ? 10 : 0;
 
-        int defHeldItemMod = GetDisarmHeldItemModifier(targetHeldItem, treatUnarmedAsLight: false);
-        int defNonMeleeHeldItemPenalty = GetDisarmNonMeleeHeldItemPenalty(targetHeldItem);
-        int defSizeDiffMod = GetDisarmSizeDifferenceModifier(target, this);
-        int defImprovedDisarmMod = target.Stats.HasFeat("Improved Disarm") ? 4 : 0;
-
-        int atkRoll = Random.Range(1, 21);
-        int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty
-                       + atkHeldItemMod + atkSizeDiffMod + atkImprovedDisarmMod;
-        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty
-                       + defHeldItemMod + defNonMeleeHeldItemPenalty + defSizeDiffMod + defImprovedDisarmMod;
-
-        bool success = atkTotal >= defTotal;
-        if (success)
+        DisarmCheckResult primaryCheck;
+        if (defenderHasSpikedGauntlet)
         {
-            DestroyEquippedHeldItem(target, targetHeldItemSlot);
-            target.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
+            primaryCheck = DisarmCheckResult.CreateAutomaticFailure(
+                attackerHeldWeapon,
+                targetHeldItem,
+                targetHeldItemSlot,
+                $"{target.Stats.CharacterName} is protected by Spiked Gauntlets and cannot be disarmed.");
+        }
+        else
+        {
+            primaryCheck = RollDisarmCheck(
+                this,
+                target,
+                attackerHeldWeapon,
+                targetHeldItem,
+                targetHeldItemSlot,
+                defenderLockedGauntletBonus,
+                lockedGauntletReason: defenderHasLockedGauntlet ? "Locked Gauntlet" : string.Empty);
         }
 
-        string attackerHeldLabel = attackerHeldWeapon != null ? attackerHeldWeapon.Name : "Unarmed Strike";
-        string defenderHeldLabel = targetHeldItem != null ? targetHeldItem.Name : "Held Item";
-        string atkBreakdown = BuildDisarmModifierBreakdown(
-            "ATK",
-            attackerHeldLabel,
-            atkHeldItemMod,
-            atkSizeDiffMod,
-            0,
-            atkImprovedDisarmMod);
-        string defBreakdown = BuildDisarmModifierBreakdown(
-            "DEF",
-            defenderHeldLabel,
-            defHeldItemMod,
-            defSizeDiffMod,
-            defNonMeleeHeldItemPenalty,
-            defImprovedDisarmMod);
+        bool success = primaryCheck.Success;
+        var logLines = new List<string>
+        {
+            success
+                ? $"{Stats.CharacterName} disarms {target.Stats.CharacterName}! ({primaryCheck.AttackerTotal} vs {primaryCheck.DefenderTotal})"
+                : $"{Stats.CharacterName} fails to disarm {target.Stats.CharacterName}. ({primaryCheck.AttackerTotal} vs {primaryCheck.DefenderTotal})",
+            primaryCheck.BreakdownLog
+        };
+
+        if (success)
+        {
+            ItemData disarmedItem = RemoveEquippedHeldItem(target, targetHeldItemSlot);
+            target.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
+
+            if (disarmedItem == null)
+            {
+                logLines.Add($"⚠ {target.Stats.CharacterName}'s held item could not be removed.");
+            }
+            else if (attackerHeldWeapon == null)
+            {
+                if (TryEquipDisarmedItem(this, disarmedItem, out EquipSlot equippedSlot))
+                {
+                    logLines.Add($"🤲 {Stats.CharacterName} was unarmed and catches {disarmedItem.Name}, equipping it in {equippedSlot}.");
+                }
+                else
+                {
+                    DropItemToGround(target, disarmedItem);
+                    logLines.Add($"{disarmedItem.Name} drops to the ground in {target.Stats.CharacterName}'s square ({target.GridPosition.x},{target.GridPosition.y}) because {Stats.CharacterName} had no free hand.");
+                }
+            }
+            else
+            {
+                DropItemToGround(target, disarmedItem);
+                logLines.Add($"{disarmedItem.Name} drops to the ground in {target.Stats.CharacterName}'s square ({target.GridPosition.x},{target.GridPosition.y}).");
+            }
+        }
+        else
+        {
+            // D&D 3.5e: failed disarm grants exactly one immediate counter-disarm attempt.
+            if (TryGetDisarmTargetHeldItem(this, null, out ItemData counterTargetHeldItem, out EquipSlot counterTargetSlot))
+            {
+                ItemData counterAttackerHeldWeapon = target.GetEquippedMainWeapon();
+                bool counterDefenderHasSpikedGauntlet = HasSpikedGauntletEquipped(this);
+                bool counterDefenderHasLockedGauntlet = HasLockedGauntletEquipped(this);
+                int counterDefenderLockedBonus = counterDefenderHasLockedGauntlet ? 10 : 0;
+
+                DisarmCheckResult counterCheck;
+                if (counterDefenderHasSpikedGauntlet)
+                {
+                    counterCheck = DisarmCheckResult.CreateAutomaticFailure(
+                        counterAttackerHeldWeapon,
+                        counterTargetHeldItem,
+                        counterTargetSlot,
+                        $"{Stats.CharacterName} is protected by Spiked Gauntlets and cannot be disarmed.");
+                }
+                else
+                {
+                    counterCheck = RollDisarmCheck(
+                        target,
+                        this,
+                        counterAttackerHeldWeapon,
+                        counterTargetHeldItem,
+                        counterTargetSlot,
+                        counterDefenderLockedBonus,
+                        lockedGauntletReason: counterDefenderHasLockedGauntlet ? "Locked Gauntlet" : string.Empty);
+                }
+
+                logLines.Add($"↩ Immediate counter-disarm by {target.Stats.CharacterName} (does not provoke AoO). {(counterCheck.Success ? "Success" : "Failed")} ({counterCheck.AttackerTotal} vs {counterCheck.DefenderTotal}).");
+                logLines.Add(counterCheck.BreakdownLog);
+
+                if (counterCheck.Success)
+                {
+                    ItemData counterDisarmedItem = RemoveEquippedHeldItem(this, counterTargetSlot);
+                    ApplyCondition(CombatConditionType.Disarmed, 2, target.Stats.CharacterName);
+
+                    if (counterDisarmedItem == null)
+                    {
+                        logLines.Add($"⚠ {Stats.CharacterName}'s held item could not be removed by the counter-disarm.");
+                    }
+                    else if (counterAttackerHeldWeapon == null)
+                    {
+                        if (TryEquipDisarmedItem(target, counterDisarmedItem, out EquipSlot counterEquipSlot))
+                        {
+                            logLines.Add($"🤲 {target.Stats.CharacterName} was unarmed and catches {counterDisarmedItem.Name}, equipping it in {counterEquipSlot}.");
+                        }
+                        else
+                        {
+                            DropItemToGround(this, counterDisarmedItem);
+                            logLines.Add($"{counterDisarmedItem.Name} drops to the ground in {Stats.CharacterName}'s square ({GridPosition.x},{GridPosition.y}) because {target.Stats.CharacterName} had no free hand.");
+                        }
+                    }
+                    else
+                    {
+                        DropItemToGround(this, counterDisarmedItem);
+                        logLines.Add($"{counterDisarmedItem.Name} drops to the ground in {Stats.CharacterName}'s square ({GridPosition.x},{GridPosition.y}).");
+                    }
+                }
+                else
+                {
+                    logLines.Add("Counter-disarm failed; no further free disarm attempts are granted.");
+                }
+            }
+            else
+            {
+                logLines.Add($"{target.Stats.CharacterName} has no held item to use for a counter-disarm.");
+            }
+        }
 
         return new SpecialAttackResult
         {
             ManeuverName = "Disarm",
             Success = success,
-            CheckRoll = atkRoll,
-            CheckTotal = atkTotal,
-            OpposedRoll = defRoll,
-            OpposedTotal = defTotal,
-            Log = success
-                ? $"{Stats.CharacterName} disarms {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) {targetHeldItem.Name} knocked away. {atkBreakdown} | {defBreakdown}"
-                : $"{Stats.CharacterName} fails to disarm {target.Stats.CharacterName}. ({atkTotal} vs {defTotal}) {atkBreakdown} | {defBreakdown}"
+            CheckRoll = primaryCheck.AttackerRoll,
+            CheckTotal = primaryCheck.AttackerTotal,
+            OpposedRoll = primaryCheck.DefenderRoll,
+            OpposedTotal = primaryCheck.DefenderTotal,
+            ProvokedAoO = false,
+            Log = string.Join("\n", logLines)
         };
     }
 
@@ -2483,6 +2575,169 @@ public class CharacterController : MonoBehaviour
         return Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Grapple") ? 4 : 0);
     }
 
+    private struct DisarmCheckResult
+    {
+        public bool Success;
+        public int AttackerRoll;
+        public int AttackerTotal;
+        public int DefenderRoll;
+        public int DefenderTotal;
+        public string BreakdownLog;
+
+        public static DisarmCheckResult CreateAutomaticFailure(
+            ItemData attackerHeldItem,
+            ItemData defenderHeldItem,
+            EquipSlot defenderHeldSlot,
+            string reason)
+        {
+            string attackerHeldLabel = attackerHeldItem != null ? attackerHeldItem.Name : "Unarmed Strike";
+            string defenderHeldLabel = defenderHeldItem != null ? defenderHeldItem.Name : $"Held Item ({defenderHeldSlot})";
+            string atkBreakdown = BuildDisarmModifierBreakdown("ATK", attackerHeldLabel, 0, 0, 0, 0);
+            string defBreakdown = BuildDisarmModifierBreakdown("DEF", defenderHeldLabel, 0, 0, 0, 0, 0, reason);
+
+            return new DisarmCheckResult
+            {
+                Success = false,
+                AttackerRoll = 0,
+                AttackerTotal = 0,
+                DefenderRoll = 0,
+                DefenderTotal = 99,
+                BreakdownLog = $"{reason} {atkBreakdown} | {defBreakdown}"
+            };
+        }
+    }
+
+    private static DisarmCheckResult RollDisarmCheck(
+        CharacterController attacker,
+        CharacterController defender,
+        ItemData attackerHeldItem,
+        ItemData defenderHeldItem,
+        EquipSlot defenderHeldSlot,
+        int defenderSpecialResistBonus,
+        string lockedGauntletReason)
+    {
+        int atkHeldItemMod = GetDisarmHeldItemModifier(attackerHeldItem, treatUnarmedAsLight: true);
+        int atkSizeDiffMod = GetDisarmSizeDifferenceModifier(attacker, defender);
+        int atkImprovedDisarmMod = attacker.Stats.HasFeat("Improved Disarm") ? 4 : 0;
+
+        int defHeldItemMod = GetDisarmHeldItemModifier(defenderHeldItem, treatUnarmedAsLight: false);
+        int defNonMeleeHeldItemPenalty = GetDisarmNonMeleeHeldItemPenalty(defenderHeldItem);
+        int defSizeDiffMod = GetDisarmSizeDifferenceModifier(defender, attacker);
+        int defImprovedDisarmMod = defender.Stats.HasFeat("Improved Disarm") ? 4 : 0;
+
+        int atkRoll = Random.Range(1, 21);
+        int defRoll = Random.Range(1, 21);
+
+        int atkTotal = atkRoll + attacker.Stats.BaseAttackBonus + attacker.Stats.STRMod + attacker.Stats.SizeModifier + attacker.Stats.ConditionAttackPenalty
+                       + atkHeldItemMod + atkSizeDiffMod + atkImprovedDisarmMod;
+        int defTotal = defRoll + defender.Stats.BaseAttackBonus + defender.Stats.STRMod + defender.Stats.SizeModifier + defender.Stats.ConditionAttackPenalty
+                       + defHeldItemMod + defNonMeleeHeldItemPenalty + defSizeDiffMod + defImprovedDisarmMod + defenderSpecialResistBonus;
+
+        string attackerHeldLabel = attackerHeldItem != null ? attackerHeldItem.Name : "Unarmed Strike";
+        string defenderHeldLabel = defenderHeldItem != null ? defenderHeldItem.Name : $"Held Item ({defenderHeldSlot})";
+
+        string atkBreakdown = BuildDisarmModifierBreakdown(
+            "ATK",
+            attackerHeldLabel,
+            atkHeldItemMod,
+            atkSizeDiffMod,
+            0,
+            atkImprovedDisarmMod);
+
+        string defBreakdown = BuildDisarmModifierBreakdown(
+            "DEF",
+            defenderHeldLabel,
+            defHeldItemMod,
+            defSizeDiffMod,
+            defNonMeleeHeldItemPenalty,
+            defImprovedDisarmMod,
+            defenderSpecialResistBonus,
+            lockedGauntletReason);
+
+        return new DisarmCheckResult
+        {
+            Success = atkTotal >= defTotal,
+            AttackerRoll = atkRoll,
+            AttackerTotal = atkTotal,
+            DefenderRoll = defRoll,
+            DefenderTotal = defTotal,
+            BreakdownLog = $"{atkBreakdown} | {defBreakdown}"
+        };
+    }
+
+    private static bool HasSpikedGauntletEquipped(CharacterController character)
+    {
+        ItemData handsItem = GetEquippedHandsItem(character);
+        if (handsItem == null)
+            return false;
+
+        string id = (handsItem.Id ?? string.Empty).ToLowerInvariant();
+        string name = (handsItem.Name ?? string.Empty).ToLowerInvariant();
+        return id == "spiked_gauntlet" || name.Contains("spiked gauntlet");
+    }
+
+    private static bool HasLockedGauntletEquipped(CharacterController character)
+    {
+        ItemData handsItem = GetEquippedHandsItem(character);
+        if (handsItem == null)
+            return false;
+
+        string id = (handsItem.Id ?? string.Empty).ToLowerInvariant();
+        string name = (handsItem.Name ?? string.Empty).ToLowerInvariant();
+        return id == "locked_gauntlet" || name.Contains("locked gauntlet");
+    }
+
+    private static ItemData GetEquippedHandsItem(CharacterController character)
+    {
+        if (character == null)
+            return null;
+
+        InventoryComponent invComp = character.GetComponent<InventoryComponent>();
+        Inventory inv = invComp != null ? invComp.CharacterInventory : null;
+        return inv != null ? inv.HandsSlot : null;
+    }
+
+    private static bool TryEquipDisarmedItem(CharacterController receiver, ItemData disarmedItem, out EquipSlot equippedSlot)
+    {
+        equippedSlot = EquipSlot.None;
+        if (receiver == null || disarmedItem == null)
+            return false;
+
+        InventoryComponent invComp = receiver.GetComponent<InventoryComponent>();
+        Inventory inv = invComp != null ? invComp.CharacterInventory : null;
+        if (inv == null)
+            return false;
+
+        if (inv.RightHandSlot == null && disarmedItem.CanEquipIn(EquipSlot.RightHand))
+        {
+            inv.RightHandSlot = disarmedItem;
+            inv.RecalculateStats();
+            equippedSlot = EquipSlot.RightHand;
+            return true;
+        }
+
+        if (inv.LeftHandSlot == null && disarmedItem.CanEquipIn(EquipSlot.LeftHand))
+        {
+            inv.LeftHandSlot = disarmedItem;
+            inv.RecalculateStats();
+            equippedSlot = EquipSlot.LeftHand;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static void DropItemToGround(CharacterController owner, ItemData item)
+    {
+        if (owner == null || item == null)
+            return;
+
+        SquareGrid grid = GameManager.Instance != null ? GameManager.Instance.Grid : SquareGrid.Instance;
+        SquareCell cell = grid != null ? grid.GetCell(owner.GridPosition) : null;
+        if (cell != null)
+            cell.AddGroundItem(item);
+    }
+
     private static int GetDisarmHeldItemModifier(CharacterController character)
     {
         ItemData heldItem = character != null ? character.GetEquippedMainWeapon() : null;
@@ -2530,15 +2785,27 @@ public class CharacterController : MonoBehaviour
         return -4;
     }
 
-    private static string BuildDisarmModifierBreakdown(string sideLabel, string heldItemLabel, int heldItemModifier, int sizeDifferenceModifier, int nonMeleePenalty, int improvedFeatModifier)
+    private static string BuildDisarmModifierBreakdown(
+        string sideLabel,
+        string heldItemLabel,
+        int heldItemModifier,
+        int sizeDifferenceModifier,
+        int nonMeleePenalty,
+        int improvedFeatModifier,
+        int specialGearModifier = 0,
+        string specialGearLabel = "")
     {
         string heldItemPart = heldItemModifier != 0 ? $"weapon {heldItemModifier:+#;-#;0}" : "weapon +0";
         string sizePart = sizeDifferenceModifier != 0 ? $"size {sizeDifferenceModifier:+#;-#;0}" : "size +0";
         string nonMeleePart = nonMeleePenalty != 0 ? $", non-melee {nonMeleePenalty:+#;-#;0}" : string.Empty;
         string featPart = improvedFeatModifier != 0 ? $", Improved Disarm {improvedFeatModifier:+#;-#;0}" : string.Empty;
+        string gearPart = specialGearModifier != 0
+            ? $", {specialGearLabel} {specialGearModifier:+#;-#;0}"
+            : (!string.IsNullOrEmpty(specialGearLabel) ? $", {specialGearLabel}" : string.Empty);
 
-        return $"{sideLabel}[{heldItemLabel}: {heldItemPart}, {sizePart}{nonMeleePart}{featPart}]";
+        return $"{sideLabel}[{heldItemLabel}: {heldItemPart}, {sizePart}{nonMeleePart}{featPart}{gearPart}]";
     }
+
     private static bool TryGetDisarmTargetHeldItem(CharacterController target, EquipSlot? preferredTargetSlot, out ItemData heldItem, out EquipSlot handSlot)
     {
         heldItem = null;
@@ -2574,30 +2841,44 @@ public class CharacterController : MonoBehaviour
 
     private static void DestroyEquippedHeldItem(CharacterController target, EquipSlot? handSlot)
     {
-        var invComp = target.GetComponent<InventoryComponent>();
-        if (invComp == null || invComp.CharacterInventory == null) return;
+        RemoveEquippedHeldItem(target, handSlot);
+    }
+
+    private static ItemData RemoveEquippedHeldItem(CharacterController target, EquipSlot? handSlot)
+    {
+        var invComp = target != null ? target.GetComponent<InventoryComponent>() : null;
+        if (invComp == null || invComp.CharacterInventory == null)
+            return null;
 
         var inv = invComp.CharacterInventory;
+        ItemData removedItem = null;
 
         if (handSlot == EquipSlot.RightHand)
         {
-            if (inv.RightHandSlot != null)
-                inv.RightHandSlot = null;
+            removedItem = inv.RightHandSlot;
+            inv.RightHandSlot = null;
         }
         else if (handSlot == EquipSlot.LeftHand)
         {
-            if (inv.LeftHandSlot != null)
-                inv.LeftHandSlot = null;
+            removedItem = inv.LeftHandSlot;
+            inv.LeftHandSlot = null;
         }
         else
         {
             if (inv.RightHandSlot != null)
+            {
+                removedItem = inv.RightHandSlot;
                 inv.RightHandSlot = null;
+            }
             else if (inv.LeftHandSlot != null)
+            {
+                removedItem = inv.LeftHandSlot;
                 inv.LeftHandSlot = null;
+            }
         }
 
         inv.RecalculateStats();
+        return removedItem;
     }
 
     // ========== 5-FOOT STEP ==========

@@ -1114,6 +1114,23 @@ public static class ItemDatabase
 
         Register(new ItemData
         {
+            Id = "spiked_gauntlet", Name = "Spiked Gauntlet", Type = ItemType.Misc,
+            Slot = EquipSlot.Hands,
+            Description = "A hand-slot spiked gauntlet setup. While worn, you cannot be disarmed.",
+            WeightLbs = 1f,
+            IconChar = "✹", IconColor = new Color(0.65f, 0.65f, 0.72f)
+        });
+
+        Register(new ItemData
+        {
+            Id = "locked_gauntlet", Name = "Locked Gauntlet", Type = ItemType.Misc,
+            Slot = EquipSlot.Hands,
+            Description = "A locking hand harness that secures held weapons. Grants +10 to resist disarm attempts.",
+            WeightLbs = 5f,
+            IconChar = "⛓", IconColor = new Color(0.55f, 0.55f, 0.65f)
+        });
+        Register(new ItemData
+        {
             Id = "torch", Name = "Torch", Type = ItemType.Misc,
             Slot = EquipSlot.None,
             Description = "A simple wooden torch. Provides light in dark places.",

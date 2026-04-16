@@ -1,5 +1,5 @@
+using System.Collections.Generic;
 using UnityEngine;
-
 /// <summary>
 /// Represents a single cell in the square grid.
 /// Attach to a square tile GameObject.
@@ -20,6 +20,10 @@ public class SquareCell : MonoBehaviour
     /// </summary>
     public CharacterController Occupant { get; set; }
 
+
+    // Items dropped in this square (e.g., disarmed weapons).
+    private readonly List<ItemData> _groundItems = new List<ItemData>();
+    public IReadOnlyList<ItemData> GroundItems => _groundItems;
     private SpriteRenderer _sr;
     private Color _defaultColor;
 
@@ -111,6 +115,22 @@ public class SquareCell : MonoBehaviour
                 _sr.color = HighlightAoEAlly;
                 break;
         }
+    }
+
+    public void AddGroundItem(ItemData item)
+    {
+        if (item == null)
+            return;
+
+        _groundItems.Add(item);
+    }
+
+    public bool RemoveGroundItem(ItemData item)
+    {
+        if (item == null)
+            return false;
+
+        return _groundItems.Remove(item);
     }
 
     // OnMouseDown removed — click detection is handled via 2D raycasting
