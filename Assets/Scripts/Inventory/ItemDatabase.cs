@@ -1021,16 +1021,16 @@ public static class ItemDatabase
             IconChar = "\u26E1", IconColor = new Color(0.6f, 0.6f, 0.7f)
         });
 
-        // Shield, Light Steel (Spiked): +1 AC, bash 1d3+1 piercing (martial, light off-hand)
+        // Shield, Light Steel (Spiked): +1 AC, bash 1d4 piercing (martial, light off-hand)
         Register(new ItemData
         {
             Id = "shield_light_steel_spiked", Name = "Shield, Light Steel (Spiked)", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
-            Description = "A light steel shield fitted with shield spikes. Shield spikes add +1 damage and change bash damage to piercing.",
+            Description = "A light steel shield fitted with shield spikes. Shield spikes increase bash damage die by one step and change damage to piercing.",
             ShieldBonus = 1, MaxDexBonus = -1, ArmorCheckPenalty = 1,
             ArcaneSpellFailure = 5, WeightLbs = 6f,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.Light,
-            DamageDice = 3, DamageCount = 1, BonusDamage = 1, AttackRange = 1,
+            DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = true,
             DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 2,
@@ -1072,16 +1072,16 @@ public static class ItemDatabase
             IconChar = "\u26E1", IconColor = new Color(0.6f, 0.6f, 0.7f)
         });
 
-        // Shield, Heavy Steel (Spiked): +2 AC, bash 1d4+1 piercing (martial)
+        // Shield, Heavy Steel (Spiked): +2 AC, bash 1d6 piercing (martial)
         Register(new ItemData
         {
             Id = "shield_heavy_steel_spiked", Name = "Shield, Heavy Steel (Spiked)", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
-            Description = "A heavy steel shield fitted with shield spikes. Shield spikes add +1 damage and change bash damage to piercing.",
+            Description = "A heavy steel shield fitted with shield spikes. Shield spikes increase bash damage die by one step and change damage to piercing.",
             ShieldBonus = 2, MaxDexBonus = -1, ArmorCheckPenalty = 2,
             ArcaneSpellFailure = 15, WeightLbs = 15f,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.OneHanded,
-            DamageDice = 4, DamageCount = 1, BonusDamage = 1, AttackRange = 1,
+            DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = false,
             DmgModType = DamageModifierType.Strength,
             CritThreatMin = 20, CritMultiplier = 2,
