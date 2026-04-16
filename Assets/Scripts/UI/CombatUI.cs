@@ -540,6 +540,7 @@ public class CombatUI : MonoBehaviour
             if (RageStatusText != null) RageStatusText.gameObject.SetActive(false);
             if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
             HideSpecialAttackMenu();
+            HidePickUpItemSelection();
         }
     }
 
@@ -547,6 +548,7 @@ public class CombatUI : MonoBehaviour
     private GameObject _specialAttackPanel;
     private GameObject _summonSelectionPanel;
     private GameObject _disarmWeaponSelectionPanel;
+    private GameObject _pickUpItemSelectionPanel;
     private bool _dischargeTouchHooked;
     private GameObject _summonContextMenuRoot;
 
@@ -2999,6 +3001,199 @@ public class CombatUI : MonoBehaviour
             _summonSelectionPanel = null;
         }
     }
+
+    public void ShowPickUpItemSelection(string actorName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
+    {
+        HidePickUpItemSelection();
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            onCancel?.Invoke();
+            return;
+        }
+
+        if (itemOptions == null)
+            itemOptions = new List<string>();
+
+        _pickUpItemSelectionPanel = new GameObject("PickUpItemSelectionPanel");
+        _pickUpItemSelectionPanel.transform.SetParent(canvas.transform, false);
+
+        RectTransform panelRT = _pickUpItemSelectionPanel.AddComponent<RectTransform>();
+        panelRT.anchorMin = Vector2.zero;
+        panelRT.anchorMax = Vector2.one;
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        Image overlay = _pickUpItemSelectionPanel.AddComponent<Image>();
+        overlay.color = new Color(0f, 0f, 0f, 0.75f);
+
+        CanvasGroup cg = _pickUpItemSelectionPanel.AddComponent<CanvasGroup>();
+        cg.blocksRaycasts = true;
+        cg.interactable = true;
+
+        GameObject dialog = new GameObject("Dialog");
+        dialog.transform.SetParent(_pickUpItemSelectionPanel.transform, false);
+
+        RectTransform dialogRT = dialog.AddComponent<RectTransform>();
+        dialogRT.anchorMin = new Vector2(0.18f, 0.16f);
+        dialogRT.anchorMax = new Vector2(0.82f, 0.84f);
+        dialogRT.offsetMin = Vector2.zero;
+        dialogRT.offsetMax = Vector2.zero;
+
+        Image dialogBg = dialog.AddComponent<Image>();
+        dialogBg.color = new Color(0.1f, 0.14f, 0.2f, 0.98f);
+        Outline outline = dialog.AddComponent<Outline>();
+        outline.effectColor = new Color(0.4f, 0.8f, 0.95f, 1f);
+        outline.effectDistance = new Vector2(2f, 2f);
+
+        GameObject titleObj = new GameObject("Title");
+        titleObj.transform.SetParent(dialog.transform, false);
+        RectTransform titleRT = titleObj.AddComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0.05f, 0.9f);
+        titleRT.anchorMax = new Vector2(0.95f, 0.98f);
+        titleRT.offsetMin = Vector2.zero;
+        titleRT.offsetMax = Vector2.zero;
+
+        Text titleText = titleObj.AddComponent<Text>();
+        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (titleText.font == null) titleText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        titleText.fontSize = 18;
+        titleText.fontStyle = FontStyle.Bold;
+        titleText.color = new Color(0.88f, 0.97f, 1f, 1f);
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.text = "PICK UP WHICH ITEM?";
+
+        GameObject bodyObj = new GameObject("BodyText");
+        bodyObj.transform.SetParent(dialog.transform, false);
+        RectTransform bodyRT = bodyObj.AddComponent<RectTransform>();
+        bodyRT.anchorMin = new Vector2(0.08f, 0.81f);
+        bodyRT.anchorMax = new Vector2(0.92f, 0.89f);
+        bodyRT.offsetMin = Vector2.zero;
+        bodyRT.offsetMax = Vector2.zero;
+
+        Text bodyText = bodyObj.AddComponent<Text>();
+        bodyText.font = titleText.font;
+        bodyText.fontSize = 13;
+        bodyText.alignment = TextAnchor.MiddleCenter;
+        bodyText.color = new Color(0.9f, 0.95f, 1f, 1f);
+        bodyText.text = $"{actorName}, choose one item within reach (this uses a move action and can provoke AoO):";
+
+        GameObject listRoot = new GameObject("ItemList");
+        listRoot.transform.SetParent(dialog.transform, false);
+        RectTransform listRT = listRoot.AddComponent<RectTransform>();
+        listRT.anchorMin = new Vector2(0.08f, 0.2f);
+        listRT.anchorMax = new Vector2(0.92f, 0.78f);
+        listRT.offsetMin = Vector2.zero;
+        listRT.offsetMax = Vector2.zero;
+
+        Image listBg = listRoot.AddComponent<Image>();
+        listBg.color = new Color(0.06f, 0.08f, 0.12f, 0.95f);
+
+        ScrollRect scrollRect = listRoot.AddComponent<ScrollRect>();
+        scrollRect.horizontal = false;
+        scrollRect.vertical = true;
+        scrollRect.movementType = ScrollRect.MovementType.Clamped;
+
+        GameObject viewport = new GameObject("Viewport");
+        viewport.transform.SetParent(listRoot.transform, false);
+        RectTransform viewportRT = viewport.AddComponent<RectTransform>();
+        viewportRT.anchorMin = Vector2.zero;
+        viewportRT.anchorMax = Vector2.one;
+        viewportRT.offsetMin = new Vector2(4f, 4f);
+        viewportRT.offsetMax = new Vector2(-4f, -4f);
+
+        Image viewportImage = viewport.AddComponent<Image>();
+        viewportImage.color = new Color(0f, 0f, 0f, 0f);
+        Mask viewportMask = viewport.AddComponent<Mask>();
+        viewportMask.showMaskGraphic = false;
+
+        GameObject content = new GameObject("Content");
+        content.transform.SetParent(viewport.transform, false);
+        RectTransform contentRT = content.AddComponent<RectTransform>();
+        contentRT.anchorMin = new Vector2(0f, 1f);
+        contentRT.anchorMax = new Vector2(1f, 1f);
+        contentRT.pivot = new Vector2(0.5f, 1f);
+        contentRT.offsetMin = Vector2.zero;
+        contentRT.offsetMax = Vector2.zero;
+
+        VerticalLayoutGroup contentLayout = content.AddComponent<VerticalLayoutGroup>();
+        contentLayout.spacing = 8f;
+        contentLayout.padding = new RectOffset(4, 4, 4, 4);
+        contentLayout.childAlignment = TextAnchor.UpperCenter;
+        contentLayout.childForceExpandHeight = false;
+        contentLayout.childForceExpandWidth = true;
+
+        ContentSizeFitter contentFitter = content.AddComponent<ContentSizeFitter>();
+        contentFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        contentFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+        scrollRect.viewport = viewportRT;
+        scrollRect.content = contentRT;
+
+        for (int i = 0; i < itemOptions.Count; i++)
+        {
+            int optionIndex = i;
+            string optionLabel = itemOptions[i];
+
+            GameObject btnObj = new GameObject($"PickUpOption_{i}");
+            btnObj.transform.SetParent(content.transform, false);
+            LayoutElement layoutElement = btnObj.AddComponent<LayoutElement>();
+            layoutElement.preferredHeight = 92f;
+
+            Image btnImg = btnObj.AddComponent<Image>();
+            btnImg.color = new Color(0.2f, 0.36f, 0.5f, 1f);
+
+            Button optionBtn = btnObj.AddComponent<Button>();
+            ColorBlock colors = optionBtn.colors;
+            colors.highlightedColor = new Color(0.32f, 0.48f, 0.62f, 1f);
+            colors.pressedColor = new Color(0.13f, 0.24f, 0.36f, 1f);
+            optionBtn.colors = colors;
+
+            GameObject txtObj = new GameObject("Text");
+            txtObj.transform.SetParent(btnObj.transform, false);
+            RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+            txtRT.anchorMin = Vector2.zero;
+            txtRT.anchorMax = Vector2.one;
+            txtRT.offsetMin = new Vector2(8f, 6f);
+            txtRT.offsetMax = new Vector2(-8f, -6f);
+
+            Text txt = txtObj.AddComponent<Text>();
+            txt.font = titleText.font;
+            txt.fontSize = 12;
+            txt.alignment = TextAnchor.UpperLeft;
+            txt.horizontalOverflow = HorizontalWrapMode.Wrap;
+            txt.verticalOverflow = VerticalWrapMode.Overflow;
+            txt.color = Color.white;
+            txt.text = optionLabel;
+
+            optionBtn.onClick.AddListener(() =>
+            {
+                HidePickUpItemSelection();
+                onSelect?.Invoke(optionIndex);
+            });
+        }
+
+        Button cancelBtn = CreateTouchPromptButton(dialog, "Cancel", "Cancel",
+            new Vector2(0.34f, 0.06f), new Vector2(0.66f, 0.15f),
+            new Color(0.45f, 0.2f, 0.2f, 1f));
+        cancelBtn.onClick.AddListener(() =>
+        {
+            HidePickUpItemSelection();
+            onCancel?.Invoke();
+        });
+    }
+
+    public void HidePickUpItemSelection()
+    {
+        if (_pickUpItemSelectionPanel != null)
+        {
+            Destroy(_pickUpItemSelectionPanel);
+            _pickUpItemSelectionPanel = null;
+        }
+    }
+
 
     public void ShowDisarmWeaponSelection(string targetName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
     {

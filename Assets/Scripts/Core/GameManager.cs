@@ -1966,6 +1966,7 @@ public class GameManager : MonoBehaviour
         ClearSpellcastResourceSnapshot();
         CombatUI.HideAoOConfirmationPrompt();
         CombatUI.HideDisarmWeaponSelection();
+        CombatUI.HidePickUpItemSelection();
         // Hide movement path preview and hover marker when leaving movement phase
         if (_pathPreview != null) _pathPreview.HidePath();
         if (_hoverMarker != null) _hoverMarker.Hide();
@@ -2339,7 +2340,7 @@ public class GameManager : MonoBehaviour
         if (inv == null)
             return "No inventory";
 
-        if (!TryGetPickUpTargetCellAndItem(character, out _, out _))
+        if (!TryGetAvailablePickUpItems(character, out _))
             return "No item on or adjacent";
 
         if (inv.EmptySlots <= 0)
@@ -2353,7 +2354,7 @@ public class GameManager : MonoBehaviour
 
     public bool HasGroundItemInPickupRange(CharacterController character)
     {
-        return TryGetPickUpTargetCellAndItem(character, out _, out _);
+        return TryGetAvailablePickUpItems(character, out _);
     }
 
     public void OnPickUpItemButtonPressed()
@@ -2368,13 +2369,54 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (!TryGetPickUpTargetCellAndItem(pc, out SquareCell cell, out ItemData item))
+        if (!TryGetAvailablePickUpItems(pc, out List<PickUpGroundItemOption> options))
         {
             CombatUI?.ShowCombatLog("⚠ No item to pick up in current or adjacent squares.");
             return;
         }
 
-        ResolvePickUpItemProvocation(pc, cell, item);
+        if (options.Count == 1)
+        {
+            PickUpGroundItemOption single = options[0];
+            ResolvePickUpItemProvocation(pc, single.Cell, single.Item);
+            return;
+        }
+
+        List<string> optionLabels = new List<string>(options.Count);
+        for (int i = 0; i < options.Count; i++)
+        {
+            optionLabels.Add(options[i].GetSelectionLabel());
+        }
+
+        if (CombatUI == null)
+        {
+            PickUpGroundItemOption fallbackOption = options[0];
+            ResolvePickUpItemProvocation(pc, fallbackOption.Cell, fallbackOption.Item);
+            return;
+        }
+
+        CombatUI.ShowPickUpItemSelection(
+            pc.Stats.CharacterName,
+            optionLabels,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                {
+                    ShowActionChoices();
+                    return;
+                }
+
+                PickUpGroundItemOption selectedOption = options[selectedIndex];
+                if (selectedOption.Cell == null || selectedOption.Item == null)
+                {
+                    CombatUI?.ShowCombatLog("⚠ That item is no longer available.");
+                    ShowActionChoices();
+                    return;
+                }
+
+                ResolvePickUpItemProvocation(pc, selectedOption.Cell, selectedOption.Item);
+            },
+            onCancel: ShowActionChoices);
     }
 
     private void ResolvePickUpItemProvocation(CharacterController actor, SquareCell cell, ItemData item)
@@ -2566,27 +2608,20 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
-    private bool TryGetPickUpTargetCellAndItem(CharacterController character, out SquareCell targetCell, out ItemData targetItem)
+    private bool TryGetAvailablePickUpItems(CharacterController character, out List<PickUpGroundItemOption> options)
     {
-        targetCell = null;
-        targetItem = null;
-
+        options = new List<PickUpGroundItemOption>();
         if (character == null)
             return false;
-
-        SquareCell currentCell = GetCharacterCurrentCell(character);
-        if (currentCell != null && currentCell.GroundItems != null && currentCell.GroundItems.Count > 0)
-        {
-            targetCell = currentCell;
-            targetItem = currentCell.GroundItems[0];
-            return true;
-        }
 
         SquareGrid grid = Grid != null ? Grid : SquareGrid.Instance;
         if (grid == null)
             return false;
 
         Vector2Int origin = character.GridPosition;
+
+        AddGroundItemsFromCell(grid.GetCell(origin), options);
+
         for (int y = -1; y <= 1; y++)
         {
             for (int x = -1; x <= 1; x++)
@@ -2595,17 +2630,53 @@ public class GameManager : MonoBehaviour
                     continue;
 
                 SquareCell adjacentCell = grid.GetCell(new Vector2Int(origin.x + x, origin.y + y));
-                if (adjacentCell == null || adjacentCell.GroundItems == null || adjacentCell.GroundItems.Count == 0)
-                    continue;
-
-                targetCell = adjacentCell;
-                targetItem = adjacentCell.GroundItems[0];
-                return true;
+                AddGroundItemsFromCell(adjacentCell, options);
             }
         }
 
-        return false;
+        return options.Count > 0;
     }
+
+    private void AddGroundItemsFromCell(SquareCell cell, List<PickUpGroundItemOption> options)
+    {
+        if (cell == null || options == null || cell.GroundItems == null || cell.GroundItems.Count == 0)
+            return;
+
+        for (int i = 0; i < cell.GroundItems.Count; i++)
+        {
+            ItemData item = cell.GroundItems[i];
+            if (item == null)
+                continue;
+
+            options.Add(new PickUpGroundItemOption(cell, item));
+        }
+    }
+
+    private sealed class PickUpGroundItemOption
+    {
+        public readonly SquareCell Cell;
+        public readonly ItemData Item;
+
+        public PickUpGroundItemOption(SquareCell cell, ItemData item)
+        {
+            Cell = cell;
+            Item = item;
+        }
+
+        public string GetSelectionLabel()
+        {
+            string itemName = Item != null && !string.IsNullOrEmpty(Item.Name) ? Item.Name : "Unknown Item";
+            string itemDescription = Item != null && !string.IsNullOrEmpty(Item.Description) ? Item.Description : "No description.";
+
+            Vector2Int coords = Cell != null ? Cell.Coords : Vector2Int.zero;
+            string locationText = Cell != null
+                ? $"Square ({coords.x},{coords.y})"
+                : "Square (unknown)";
+
+            return $"{itemName}\n{itemDescription}\n{locationText}";
+        }
+    }
+
     private SquareCell GetCharacterCurrentCell(CharacterController character)
     {
         if (character == null)
