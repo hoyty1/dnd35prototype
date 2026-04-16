@@ -601,6 +601,18 @@ public class CharacterController : MonoBehaviour
         return Attack(target, false, 0, null, null);
     }
 
+    private int ConsumeAidAnotherAttackBonus(CharacterController target)
+    {
+        if (GameManager.Instance == null) return 0;
+        return GameManager.Instance.ConsumeAidAnotherAttackBonus(this, target);
+    }
+
+    private int GetAidAnotherAcBonus(CharacterController target)
+    {
+        if (GameManager.Instance == null) return 0;
+        return GameManager.Instance.GetAidAnotherAcBonus(this, target);
+    }
+
     /// <summary>
     /// Perform a single attack with flanking context and optional range info.
     /// Includes full D&D 3.5 critical hit mechanics, racial attack bonuses, and feat effects.
@@ -717,12 +729,15 @@ public class CharacterController : MonoBehaviour
         int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
         int conditionAttackPenalty = Stats.ConditionAttackPenalty;
+        int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+        int aidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
 
         int totalAtkMod = Stats.BaseAttackBonus + abilityMod + Stats.SizeModifier
                           + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                           + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                           + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                          + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty;
+                          + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty
+                          + aidAnotherAttackBonus;
 
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         // === FEAT: Improved Critical (double threat range) ===
@@ -736,7 +751,7 @@ public class CharacterController : MonoBehaviour
 
         var result = PerformSingleAttackWithCrit(target, totalAtkMod, isFlanking, flankingBonus, flankingPartnerName,
             Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
-            equippedWeapon, false, totalFeatDmgBonus);
+            equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus);
 
         result.RacialAttackBonus = racialAtkBonus;
         result.SizeAttackBonus = Stats.SizeModifier;
@@ -750,6 +765,8 @@ public class CharacterController : MonoBehaviour
         result.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
         result.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
         result.PreciseShotNegated = preciseShotNegated;
+        result.AidAnotherAttackBonus = aidAnotherAttackBonus;
+        result.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
         result.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
 
         // Breakdown fields for detailed logging
@@ -953,23 +970,18 @@ public class CharacterController : MonoBehaviour
             }
 
             int baseBonus = allAttackBonuses[i];
+            int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+            int aidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
             int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                          + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                         + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty;
+                         + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty
+                         + aidAnotherAttackBonus;
 
-            // Recalculate with correct ability mod (iterative uses BAB-based bonus, not STRMod again)
-            // The baseBonus from GetIterativeAttackBonuses already includes STRMod+SizeModifier
-            // So we need to add other feat/situational modifiers
-            atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
-                     + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
-                     + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                     + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty;
-            // Note: Weapon Finesse already handled in GetIterativeAttackBonuses if needed
-            // For now, the base bonus includes STRMod; if Finesse, we adjust
+            // The base bonus from GetIterativeAttackBonuses already includes STRMod + SizeModifier.
             if (!isRanged && FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
             {
-                // Remove STR, add DEX (base bonus already has STRMod from GetIterativeAttackBonuses)
+                // Remove STR, add DEX (base bonus already has STRMod from GetIterativeAttackBonuses).
                 atkMod += (Stats.DEXMod - Stats.STRMod);
             }
 
@@ -983,7 +995,7 @@ public class CharacterController : MonoBehaviour
 
             CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
                 Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
-                equippedWeapon, false, totalFeatDmgBonus);
+                equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus);
 
             atk.RacialAttackBonus = racialAtkBonus;
             atk.SizeAttackBonus = Stats.SizeModifier;
@@ -998,6 +1010,8 @@ public class CharacterController : MonoBehaviour
             atk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
             atk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
             atk.PreciseShotNegated = preciseShotNegated;
+            atk.AidAnotherAttackBonus = aidAnotherAttackBonus;
+            atk.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
             atk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
 
             // Breakdown fields
@@ -1235,10 +1249,12 @@ public class CharacterController : MonoBehaviour
         // Main-hand attack
         if (canMainAttack)
         {
+            int mainAidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+            int mainAidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
             int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                              + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty
                              + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                             + mainWeaponNonProfPenalty + armorNonProfPenalty;
+                             + mainWeaponNonProfPenalty + armorNonProfPenalty + mainAidAnotherAttackBonus;
             string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
 
             int mainCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20);
@@ -1248,7 +1264,7 @@ public class CharacterController : MonoBehaviour
             int hpBeforeMain = target.Stats.CurrentHP;
             CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
                 mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, mainCritMin, mainCritMult,
-                mainWeapon, false, totalMainFeatDmg);
+                mainWeapon, false, totalMainFeatDmg, mainAidAnotherTargetAcBonus);
 
             mainAtk.RacialAttackBonus = racialAtkBonus;
             mainAtk.SizeAttackBonus = Stats.SizeModifier;
@@ -1261,6 +1277,8 @@ public class CharacterController : MonoBehaviour
             mainAtk.CombatExpertisePenalty = combatExpertisePenalty;
             mainAtk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
             mainAtk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
+            mainAtk.AidAnotherAttackBonus = mainAidAnotherAttackBonus;
+            mainAtk.AidAnotherTargetAcBonus = mainAidAnotherTargetAcBonus;
             mainAtk.PreciseShotNegated = preciseShotNegated;
             mainAtk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
             mainAtk.WeaponName = mainWeapon.Name;
@@ -1299,14 +1317,15 @@ public class CharacterController : MonoBehaviour
         {
             Debug.LogWarning($"[DualWield] {Stats.CharacterName} main-hand attack skipped: {mainBlockedReason}");
         }
-
         // Off-hand attack
         if (!target.Stats.IsDead && canOffAttack)
         {
+            int offAidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+            int offAidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
             int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                             + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty
                             + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                            + offWeaponNonProfPenalty + armorNonProfPenalty;
+                            + offWeaponNonProfPenalty + armorNonProfPenalty + offAidAnotherAttackBonus;
             bool offHandShieldBash = IsShieldBashWeapon(offWeapon);
             string offLabel = offHandFromSpikedGauntlet
                 ? $"Attack 2 - Off Hand ({offWeapon.Name}, Hands Slot)"
@@ -1321,7 +1340,7 @@ public class CharacterController : MonoBehaviour
             int hpBeforeOff = target.Stats.CurrentHP;
             CombatResult offAtk = PerformSingleAttackWithCrit(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
                 offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, offCritMin, offCritMult,
-                offWeapon, true, totalOffFeatDmg);
+                offWeapon, true, totalOffFeatDmg, offAidAnotherTargetAcBonus);
 
             offAtk.RacialAttackBonus = racialAtkBonus;
             offAtk.SizeAttackBonus = Stats.SizeModifier;
@@ -1329,6 +1348,8 @@ public class CharacterController : MonoBehaviour
             offAtk.PowerAttackDamageBonus = powerAtkDmgBonus;
             offAtk.PointBlankShotActive = pointBlankActive;
             offAtk.FeatDamageBonus = totalOffFeatDmg;
+            offAtk.AidAnotherAttackBonus = offAidAnotherAttackBonus;
+            offAtk.AidAnotherTargetAcBonus = offAidAnotherTargetAcBonus;
             offAtk.WeaponFocusBonus = offWFBonus;
             offAtk.WeaponSpecBonus = offWSBonus;
             offAtk.CombatExpertisePenalty = combatExpertisePenalty;
@@ -1491,7 +1512,7 @@ public class CharacterController : MonoBehaviour
         bool isFlanking, int flankingBonus, string flankingPartnerName,
         int damageDice, int damageCount, int bonusDamage,
         int critThreatMin, int critMultiplier,
-        ItemData weapon, bool isOffHand, int featDamageBonus = 0)
+        ItemData weapon, bool isOffHand, int featDamageBonus = 0, int situationalTargetAcBonus = 0)
     {
         var result = new CombatResult();
         result.Attacker = this;
@@ -1514,7 +1535,7 @@ public class CharacterController : MonoBehaviour
         result.DamageModifierDesc = damageModDesc;
 
         bool isRangedAttack = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
-        int targetAC = GetSituationalTargetArmorClass(target, isRangedAttack);
+        int targetAC = GetSituationalTargetArmorClass(target, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
 
         // Step 1: Roll to hit
         var (hit, roll, total) = Stats.RollToHitWithMod(totalAtkMod, targetAC);
@@ -3142,18 +3163,22 @@ public class CharacterController : MonoBehaviour
                 break;
             }
 
+            int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+            int aidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
             int atkMod = flurryBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus + proneAttackPenalty
-                       + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty;
+                       + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty + aidAnotherAttackBonus;
 
             string label = $"Flurry {i + 1} ({CharacterStats.FormatMod(flurryBonuses[i])})";
             int hpBefore = target.Stats.CurrentHP;
 
             CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
                 damageDice, damageCount, bonusDamage, critThreatMin, critMult,
-                equippedWeapon, false, 0);
+                equippedWeapon, false, 0, aidAnotherTargetAcBonus);
 
             atk.RacialAttackBonus = racialAtkBonus;
             atk.SizeAttackBonus = Stats.SizeModifier;
+            atk.AidAnotherAttackBonus = aidAnotherAttackBonus;
+            atk.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
             if (equippedWeapon != null)
             {
                 atk.WeaponName = equippedWeapon.Name;

@@ -59,6 +59,8 @@ public class CombatResult
     public int ShootingIntoMeleePenalty;
     public bool PreciseShotNegated;
     public int FightingDefensivelyACBonus;
+    public int AidAnotherAttackBonus;
+    public int AidAnotherTargetAcBonus;
 
     public int BreakdownBAB;
     public int BreakdownAbilityMod;
@@ -122,6 +124,8 @@ public class CombatResult
         if (FightingDefensivelyAttackPenalty != 0) activeFeats.Add($"Fighting Defensively ({FightingDefensivelyAttackPenalty} atk/+2 AC)");
         if (ShootingIntoMeleePenalty != 0) activeFeats.Add($"Shooting into melee ({ShootingIntoMeleePenalty} atk)");
         if (PreciseShotNegated) activeFeats.Add("Precise Shot (no shooting-into-melee penalty)");
+        if (AidAnotherAttackBonus > 0) activeFeats.Add($"Aid Another (+{AidAnotherAttackBonus} atk)");
+        if (AidAnotherTargetAcBonus > 0) activeFeats.Add($"Target Aided (+{AidAnotherTargetAcBonus} AC)");
         if (activeFeats.Count > 0)
             sb.AppendLine($"  Active Feats: {string.Join(", ", activeFeats)}");
 
@@ -129,6 +133,8 @@ public class CombatResult
             sb.AppendLine($"  Flanking: Yes (with {FlankingPartnerName}, +{FlankingBonus})");
         if (FightingDefensivelyACBonus != 0)
             sb.AppendLine($"  Defender stance: Fighting Defensively (+{FightingDefensivelyACBonus} AC)");
+        if (AidAnotherTargetAcBonus > 0)
+            sb.AppendLine($"  Defender aided: +{AidAnotherTargetAcBonus} AC vs this attack");
 
         sb.AppendLine();
         sb.AppendLine("  Attack Roll:");
@@ -148,6 +154,7 @@ public class CombatResult
         if (FightingDefensivelyAttackPenalty != 0) sb.AppendLine($"    {FormatModLine(FightingDefensivelyAttackPenalty, "Fighting Defensively")}");
         if (ShootingIntoMeleePenalty != 0) sb.AppendLine($"    {FormatModLine(ShootingIntoMeleePenalty, "shooting into melee")}");
         if (PreciseShotNegated) sb.AppendLine("    + 0 (Precise Shot negates shooting into melee penalty)");
+        if (AidAnotherAttackBonus > 0) sb.AppendLine($"    {FormatModLine(AidAnotherAttackBonus, "Aid Another")}");
         if (IsRangedAttack && RangePenalty != 0) sb.AppendLine($"    {FormatModLine(RangePenalty, "range")}");
         if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)
             sb.AppendLine($"    {FormatModLine(BreakdownDualWieldPenalty, IsOffHandAttack ? "off-hand penalty" : "dual wield penalty")}");
@@ -224,6 +231,7 @@ public class CombatResult
         if (FightingDefensivelyAttackPenalty != 0) sb.AppendLine($"      {FormatModLine(FightingDefensivelyAttackPenalty, "Fighting Defensively")}");
         if (ShootingIntoMeleePenalty != 0) sb.AppendLine($"      {FormatModLine(ShootingIntoMeleePenalty, "shooting into melee")}");
         if (PreciseShotNegated) sb.AppendLine("      + 0 (Precise Shot negates shooting into melee penalty)");
+        if (AidAnotherAttackBonus > 0) sb.AppendLine($"      {FormatModLine(AidAnotherAttackBonus, "Aid Another")}");
         if (IsRangedAttack && RangePenalty != 0) sb.AppendLine($"      {FormatModLine(RangePenalty, "range")}");
         if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)
             sb.AppendLine($"      {FormatModLine(BreakdownDualWieldPenalty, IsOffHandAttack ? "off-hand penalty" : "dual wield penalty")}");

@@ -131,6 +131,34 @@ public class GameManager : MonoBehaviour
     private SpecialAttackType _pendingSpecialAttackType;
     private bool _isSelectingSpecialAttack;
 
+    private enum AidAnotherMode
+    {
+        None,
+        Attack,
+        ArmorClass
+    }
+
+    private class AidAnotherAttackBonusEntry
+    {
+        public CharacterController Source;
+        public CharacterController Ally;
+        public CharacterController Enemy;
+        public int Bonus;
+    }
+
+    private class AidAnotherAcBonusEntry
+    {
+        public CharacterController Source;
+        public CharacterController Ally;
+        public CharacterController Enemy;
+        public int Bonus;
+    }
+
+    private AidAnotherMode _pendingAidAnotherMode = AidAnotherMode.None;
+    private bool _isSelectingAidAnother;
+    private readonly List<AidAnotherAttackBonusEntry> _aidAnotherAttackBonuses = new List<AidAnotherAttackBonusEntry>();
+    private readonly List<AidAnotherAcBonusEntry> _aidAnotherAcBonuses = new List<AidAnotherAcBonusEntry>();
+
     // Pending charge state
     private CharacterController _chargeTarget;
     private List<Vector2Int> _pendingChargePath = new List<Vector2Int>();
@@ -478,7 +506,191 @@ public class GameManager : MonoBehaviour
             if (c.IsPlayerControlled == isPlayerControlled)
                 team.Add(c);
         }
+
         return team;
+    }
+
+    private bool IsAdjacent(CharacterController a, CharacterController b)
+    {
+        if (a == null || b == null || a.Stats == null || b.Stats == null || a.Stats.IsDead || b.Stats.IsDead)
+            return false;
+
+        int distance = a.GetMinimumDistanceToTarget(b, chebyshev: true);
+        return distance == 1;
+    }
+
+    private bool CanAttemptAidAnotherTouch(CharacterController actor, CharacterController enemy)
+    {
+        if (actor == null || enemy == null || actor.Stats == null || enemy.Stats == null) return false;
+        if (!IsEnemyTeam(actor, enemy) || enemy.Stats.IsDead) return false;
+
+        int distance = actor.GetMinimumDistanceToTarget(enemy, chebyshev: true);
+        return actor.CanMeleeAttackDistance(distance);
+    }
+
+    private List<CharacterController> GetAidAnotherEnemyTargets(CharacterController actor)
+    {
+        var targets = new List<CharacterController>();
+        if (actor == null) return targets;
+
+        foreach (CharacterController candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate == actor || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+
+            if (!CanAttemptAidAnotherTouch(actor, candidate))
+                continue;
+
+            targets.Add(candidate);
+        }
+
+        return targets;
+    }
+
+    private List<CharacterController> GetAidAnotherAttackBeneficiaries(CharacterController actor, CharacterController enemy)
+    {
+        var allies = new List<CharacterController>();
+        if (actor == null || enemy == null) return allies;
+
+        foreach (CharacterController candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate == actor || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!IsAllyTeam(actor, candidate))
+                continue;
+            if (!candidate.IsTargetInCurrentWeaponRange(enemy))
+                continue;
+            if (!IsValidAidAnotherPosition(actor, candidate, enemy))
+                continue;
+
+            allies.Add(candidate);
+        }
+
+        return allies;
+    }
+
+    private List<CharacterController> GetAidAnotherAcBeneficiaries(CharacterController actor, CharacterController enemy)
+    {
+        var allies = new List<CharacterController>();
+        if (actor == null || enemy == null) return allies;
+
+        foreach (CharacterController candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate == actor || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!IsAllyTeam(actor, candidate))
+                continue;
+            if (!IsEnemyTeam(candidate, enemy))
+                continue;
+            if (!IsValidAidAnotherPosition(actor, candidate, enemy))
+                continue;
+
+            allies.Add(candidate);
+        }
+
+        return allies;
+    }
+
+    private bool IsValidAidAnotherPosition(CharacterController actor, CharacterController ally, CharacterController enemy)
+    {
+        bool adjacentToEnemy = IsAdjacent(actor, enemy);
+        bool adjacentToAlly = IsAdjacent(actor, ally);
+        return adjacentToEnemy || adjacentToAlly;
+    }
+
+    private static int GetAidAnotherTouchAttackModifier(CharacterController actor)
+    {
+        if (actor == null || actor.Stats == null) return 0;
+        return actor.Stats.BaseAttackBonus + actor.Stats.STRMod + actor.Stats.SizeModifier + actor.Stats.ConditionAttackPenalty;
+    }
+
+    private static string GetCombatantName(CharacterController c)
+    {
+        return c != null && c.Stats != null ? c.Stats.CharacterName : "Unknown";
+    }
+
+    public bool CanUseAidAnother(CharacterController actor, out string reason)
+    {
+        reason = "Unavailable";
+        if (actor == null || actor.Stats == null)
+            return false;
+        if (!actor.Actions.HasStandardAction)
+        {
+            reason = "Used";
+            return false;
+        }
+
+        if (actor.HasCondition(CombatConditionType.Prone))
+        {
+            reason = "Prone";
+            return false;
+        }
+
+        List<CharacterController> enemies = GetAidAnotherEnemyTargets(actor);
+        if (enemies.Count == 0)
+        {
+            reason = "No target";
+            return false;
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
+    public int ConsumeAidAnotherAttackBonus(CharacterController attacker, CharacterController defender)
+    {
+        if (attacker == null || defender == null) return 0;
+
+        int totalBonus = 0;
+        for (int i = _aidAnotherAttackBonuses.Count - 1; i >= 0; i--)
+        {
+            AidAnotherAttackBonusEntry entry = _aidAnotherAttackBonuses[i];
+            if (entry == null || entry.Ally == null || entry.Enemy == null || entry.Ally.Stats == null || entry.Enemy.Stats == null
+                || entry.Ally.Stats.IsDead || entry.Enemy.Stats.IsDead)
+            {
+                _aidAnotherAttackBonuses.RemoveAt(i);
+                continue;
+            }
+
+            if (entry.Ally == attacker && entry.Enemy == defender)
+            {
+                totalBonus += Mathf.Max(0, entry.Bonus);
+                _aidAnotherAttackBonuses.RemoveAt(i);
+            }
+        }
+
+        return totalBonus;
+    }
+
+    public int GetAidAnotherAcBonus(CharacterController attacker, CharacterController defender)
+    {
+        if (attacker == null || defender == null) return 0;
+
+        int totalBonus = 0;
+        for (int i = _aidAnotherAcBonuses.Count - 1; i >= 0; i--)
+        {
+            AidAnotherAcBonusEntry entry = _aidAnotherAcBonuses[i];
+            if (entry == null || entry.Ally == null || entry.Enemy == null || entry.Ally.Stats == null || entry.Enemy.Stats == null
+                || entry.Ally.Stats.IsDead || entry.Enemy.Stats.IsDead)
+            {
+                _aidAnotherAcBonuses.RemoveAt(i);
+                continue;
+            }
+
+            if (entry.Ally == defender && entry.Enemy == attacker)
+                totalBonus += Mathf.Max(0, entry.Bonus);
+        }
+
+        return totalBonus;
+    }
+
+    private void ExpireAidAnotherEffectsFromSource(CharacterController source)
+    {
+        if (source == null)
+            return;
+
+        _aidAnotherAttackBonuses.RemoveAll(entry => entry == null || entry.Source == source || entry.Source == null);
+        _aidAnotherAcBonuses.RemoveAll(entry => entry == null || entry.Source == source || entry.Source == null);
     }
 
     private CharacterController GetClosestAliveEnemyTo(CharacterController source)
@@ -1922,6 +2134,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
+        ExpireAidAnotherEffectsFromSource(pc);
         pc.StartNewTurn();
         _loggedHeldChargeNoActionsReminder = false;
 
@@ -1959,6 +2172,9 @@ public class GameManager : MonoBehaviour
 
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
         CombatUI.HideSummonContextMenu();
+
+        _isSelectingAidAnother = false;
+        _pendingAidAnotherMode = AidAnotherMode.None;
 
         _waitingForAoOConfirmation = false;
         _pendingAoOAction = null;
@@ -3658,6 +3874,287 @@ public class GameManager : MonoBehaviour
 
         if (!string.IsNullOrEmpty(reloadLog))
             CombatUI?.ShowCombatLog($"⚠ {reloadLog}");
+    }
+
+    public void OnAidAnotherButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        if (!CanUseAidAnother(pc, out string reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot Aid Another: {reason}.");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        List<string> options = new List<string>
+        {
+            "Aid Attack (+2 to ally's next attack)",
+            "Aid AC (+2 AC vs one opponent until your next turn)"
+        };
+
+        CombatUI?.ShowPickUpItemSelection(
+            pc.Stats.CharacterName,
+            options,
+            onSelect: selectedIndex =>
+            {
+                AidAnotherMode mode = selectedIndex == 1 ? AidAnotherMode.ArmorClass : AidAnotherMode.Attack;
+                BeginAidAnotherTargeting(pc, mode);
+            },
+            onCancel: () =>
+            {
+                ShowActionChoices();
+            });
+    }
+
+    private void BeginAidAnotherTargeting(CharacterController actor, AidAnotherMode mode)
+    {
+        if (actor == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        _pendingAidAnotherMode = mode;
+        _isSelectingAidAnother = true;
+        _isSelectingSpecialAttack = false;
+
+        CurrentSubPhase = PlayerSubPhase.SelectingSpecialTarget;
+        ShowAidAnotherTargets(actor, mode);
+    }
+
+    private void ShowAidAnotherTargets(CharacterController actor, AidAnotherMode mode)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI.SetActionButtonsVisible(false);
+
+        List<CharacterController> enemies = GetAidAnotherEnemyTargets(actor);
+        bool hasTarget = false;
+
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            CharacterController enemy = enemies[i];
+            SquareCell cell = Grid.GetCell(enemy.GridPosition);
+            if (cell == null) continue;
+
+            cell.SetHighlight(HighlightType.Attack);
+            _highlightedCells.Add(cell);
+            hasTarget = true;
+        }
+
+        HighlightCharacterFootprint(actor, HighlightType.Selected);
+
+        if (!hasTarget)
+        {
+            CombatUI?.SetTurnIndicator("No valid enemies in melee reach for Aid Another.");
+            StartCoroutine(ReturnToActionChoicesAfterDelay(1.0f));
+            return;
+        }
+
+        string modeLabel = mode == AidAnotherMode.Attack ? "Aid Attack" : "Aid AC";
+        CombatUI?.SetTurnIndicator($"AID ANOTHER ({modeLabel}): Select enemy for melee touch attack (AC 10)");
+    }
+
+    private void HandleAidAnotherTargetClick(CharacterController actor, SquareCell cell)
+    {
+        if (actor == null || cell == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!_highlightedCells.Contains(cell) || !cell.IsOccupied || cell.Occupant == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        CharacterController enemy = cell.Occupant;
+        if (!CanAttemptAidAnotherTouch(actor, enemy))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {GetCombatantName(enemy)} is not a valid Aid Another target.");
+            ShowActionChoices();
+            return;
+        }
+
+        int touchAtkMod = GetAidAnotherTouchAttackModifier(actor);
+        (bool hit, int roll, int total) = actor.Stats.RollToHitWithMod(touchAtkMod, 10);
+
+        actor.CommitStandardAction();
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        string modeLabel = _pendingAidAnotherMode == AidAnotherMode.Attack ? "Aid Attack" : "Aid AC";
+        string touchLog = $"🤝 AID ANOTHER [{modeLabel}]: {actor.Stats.CharacterName} melee touch attack vs AC 10 on {enemy.Stats.CharacterName} → d20 {roll} + {touchAtkMod} = {total} {(hit ? "HIT" : "MISS")}.";
+        CombatUI?.ShowCombatLog(touchLog);
+
+        if (!hit)
+        {
+            _pendingAidAnotherMode = AidAnotherMode.None;
+            _isSelectingAidAnother = false;
+            UpdateAllStatsUI();
+            StartCoroutine(AfterAttackDelay(actor, 0.9f));
+            return;
+        }
+
+        if (_pendingAidAnotherMode == AidAnotherMode.Attack)
+            ResolveAidAnotherAttackMode(actor, enemy);
+        else
+            ResolveAidAnotherArmorClassMode(actor, enemy);
+    }
+
+    private void ResolveAidAnotherAttackMode(CharacterController actor, CharacterController enemy)
+    {
+        List<CharacterController> allies = GetAidAnotherAttackBeneficiaries(actor, enemy);
+        if (allies.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ No ally can currently attack {enemy.Stats.CharacterName}; Aid Another has no effect.");
+            _pendingAidAnotherMode = AidAnotherMode.None;
+            _isSelectingAidAnother = false;
+            StartCoroutine(AfterAttackDelay(actor, 0.9f));
+            return;
+        }
+
+        if (allies.Count == 1)
+        {
+            ApplyAidAnotherAttackBonus(actor, allies[0], enemy);
+            return;
+        }
+
+        List<string> allyOptions = new List<string>(allies.Count);
+        for (int i = 0; i < allies.Count; i++)
+            allyOptions.Add(allies[i].Stats.CharacterName);
+
+        CombatUI?.ShowPickUpItemSelection(
+            actor.Stats.CharacterName,
+            allyOptions,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= allies.Count)
+                {
+                    ShowActionChoices();
+                    return;
+                }
+
+                ApplyAidAnotherAttackBonus(actor, allies[selectedIndex], enemy);
+            },
+            onCancel: () =>
+            {
+                _pendingAidAnotherMode = AidAnotherMode.None;
+                _isSelectingAidAnother = false;
+                ShowActionChoices();
+            });
+    }
+
+    private void ResolveAidAnotherArmorClassMode(CharacterController actor, CharacterController enemy)
+    {
+        List<CharacterController> allies = GetAidAnotherAcBeneficiaries(actor, enemy);
+        if (allies.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ No ally can be protected against {enemy.Stats.CharacterName}; Aid Another has no effect.");
+            _pendingAidAnotherMode = AidAnotherMode.None;
+            _isSelectingAidAnother = false;
+            StartCoroutine(AfterAttackDelay(actor, 0.9f));
+            return;
+        }
+
+        if (allies.Count == 1)
+        {
+            ApplyAidAnotherAcBonus(actor, allies[0], enemy);
+            return;
+        }
+
+        List<string> allyOptions = new List<string>(allies.Count);
+        for (int i = 0; i < allies.Count; i++)
+            allyOptions.Add(allies[i].Stats.CharacterName);
+
+        CombatUI?.ShowPickUpItemSelection(
+            actor.Stats.CharacterName,
+            allyOptions,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= allies.Count)
+                {
+                    ShowActionChoices();
+                    return;
+                }
+
+                ApplyAidAnotherAcBonus(actor, allies[selectedIndex], enemy);
+            },
+            onCancel: () =>
+            {
+                _pendingAidAnotherMode = AidAnotherMode.None;
+                _isSelectingAidAnother = false;
+                ShowActionChoices();
+            });
+    }
+
+    private void ApplyAidAnotherAttackBonus(CharacterController source, CharacterController ally, CharacterController enemy)
+    {
+        if (source == null || ally == null || enemy == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!IsValidAidAnotherPosition(source, ally, enemy))
+        {
+            CombatUI?.ShowCombatLog($"⚠ Aid Another requires {source.Stats.CharacterName} to be adjacent to {ally.Stats.CharacterName} or {enemy.Stats.CharacterName}.");
+            _pendingAidAnotherMode = AidAnotherMode.None;
+            _isSelectingAidAnother = false;
+            StartCoroutine(AfterAttackDelay(source, 0.9f));
+            return;
+        }
+
+        _aidAnotherAttackBonuses.Add(new AidAnotherAttackBonusEntry
+        {
+            Source = source,
+            Ally = ally,
+            Enemy = enemy,
+            Bonus = 2
+        });
+
+        CombatUI?.ShowCombatLog($"✅ {source.Stats.CharacterName} aids {ally.Stats.CharacterName}'s next attack against {enemy.Stats.CharacterName} (+2).");
+
+        _pendingAidAnotherMode = AidAnotherMode.None;
+        _isSelectingAidAnother = false;
+        UpdateAllStatsUI();
+        StartCoroutine(AfterAttackDelay(source, 0.9f));
+    }
+
+    private void ApplyAidAnotherAcBonus(CharacterController source, CharacterController ally, CharacterController enemy)
+    {
+        if (source == null || ally == null || enemy == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!IsValidAidAnotherPosition(source, ally, enemy))
+        {
+            CombatUI?.ShowCombatLog($"⚠ Aid Another requires {source.Stats.CharacterName} to be adjacent to {ally.Stats.CharacterName} or {enemy.Stats.CharacterName}.");
+            _pendingAidAnotherMode = AidAnotherMode.None;
+            _isSelectingAidAnother = false;
+            StartCoroutine(AfterAttackDelay(source, 0.9f));
+            return;
+        }
+
+        _aidAnotherAcBonuses.Add(new AidAnotherAcBonusEntry
+        {
+            Source = source,
+            Ally = ally,
+            Enemy = enemy,
+            Bonus = 2
+        });
+
+        CombatUI?.ShowCombatLog($"✅ {source.Stats.CharacterName} aids {ally.Stats.CharacterName}'s defense: +2 AC against {enemy.Stats.CharacterName} until {source.Stats.CharacterName}'s next turn.");
+
+        _pendingAidAnotherMode = AidAnotherMode.None;
+        _isSelectingAidAnother = false;
+        UpdateAllStatsUI();
+        StartCoroutine(AfterAttackDelay(source, 0.9f));
     }
 
     public void OnAttackButtonPressed()
@@ -7675,6 +8172,12 @@ public class GameManager : MonoBehaviour
 
     private void HandleSpecialAttackTargetClick(CharacterController attacker, SquareCell cell)
     {
+        if (_isSelectingAidAnother && _pendingAidAnotherMode != AidAnotherMode.None)
+        {
+            HandleAidAnotherTargetClick(attacker, cell);
+            return;
+        }
+
         if (!_highlightedCells.Contains(cell) || !cell.IsOccupied || cell.Occupant == attacker)
         {
             ShowActionChoices();
@@ -7824,6 +8327,8 @@ public class GameManager : MonoBehaviour
     private void CancelSpecialAttackTargeting()
     {
         _isSelectingSpecialAttack = false;
+        _isSelectingAidAnother = false;
+        _pendingAidAnotherMode = AidAnotherMode.None;
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
         ShowActionChoices();
@@ -8849,6 +9354,7 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private IEnumerator SingleNPCTurn(CharacterController npc, EnemyAIBehavior behavior)
     {
+        ExpireAidAnotherEffectsFromSource(npc);
         npc.StartNewTurn();
 
         bool isSummon = IsSummonedCreature(npc);

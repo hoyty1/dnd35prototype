@@ -99,6 +99,7 @@ public class CombatUI : MonoBehaviour
     public Button AttackButton;         // Single attack (Standard Action)
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
+    public Button AidAnotherButton;     // Aid Another (Standard Action)
     public Button ChargeButton;         // Charge (Full-Round Action)
     public Button DualWieldButton;      // Dual Wield (Full-Round Action)
     public Button EndTurnButton;
@@ -705,6 +706,20 @@ public class CombatUI : MonoBehaviour
             Text spLabel = SpecialAttackButton.GetComponentInChildren<Text>();
             if (spLabel != null)
                 spLabel.text = actions.HasStandardAction ? "Special Attack (Standard)" : "Special Attack (Used)";
+        }
+
+        if (AidAnotherButton != null)
+        {
+            bool canAidAnother = false;
+            string aidAnotherReason = "Unavailable";
+            if (GameManager.Instance != null)
+                canAidAnother = GameManager.Instance.CanUseAidAnother(pc, out aidAnotherReason);
+
+            AidAnotherButton.gameObject.SetActive(true);
+            AidAnotherButton.interactable = canAidAnother;
+            Text aidLabel = AidAnotherButton.GetComponentInChildren<Text>();
+            if (aidLabel != null)
+                aidLabel.text = canAidAnother ? "Aid Another (Standard)" : $"Aid Another ({aidAnotherReason})";
         }
 
         if (ChargeButton != null)
