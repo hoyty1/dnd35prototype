@@ -3810,7 +3810,9 @@ public class GameManager : MonoBehaviour
         string offHandInfo = pc.IsDualWieldOffHandSpikedGauntlet()
             ? " [Off-hand: Spiked Gauntlet]"
             : pc.IsDualWieldOffHandShieldBash()
-                ? " [Off-hand: Shield Bash, shield AC lost until next turn]"
+                ? (FeatManager.HasImprovedShieldBash(pc.Stats)
+                    ? " [Off-hand: Shield Bash, Improved Shield Bash keeps shield AC]"
+                    : " [Off-hand: Shield Bash, shield AC lost until next turn]")
                 : string.Empty;
 
         ShowAttackTargets(pc);

@@ -340,6 +340,9 @@ public static class FeatManager
     /// <summary>Does this character have Quick Draw?</summary>
     public static bool HasQuickDraw(CharacterStats stats) => stats.HasFeat("Quick Draw");
 
+    /// <summary>Does this character keep shield AC while performing a shield bash?</summary>
+    public static bool HasImprovedShieldBash(CharacterStats stats) => stats != null && stats.HasFeat("Improved Shield Bash");
+
     // ========================================================================
     // FEAT SUMMARY FOR DISPLAY
     // ========================================================================

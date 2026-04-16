@@ -268,6 +268,17 @@ public static class FeatDefinitions
         impCrit.Benefit.Description = "Double threat range with chosen weapon";
         Add(impCrit);
 
+        // --- Improved Shield Bash ---
+        var impShieldBash = new FeatDefinition("Improved Shield Bash",
+            "When you perform a shield bash, you may still apply the shield's AC bonus. You don't lose the shield AC bonus until your next turn.",
+            FeatType.Combat)
+        {
+            IsFighterBonus = true
+        };
+        impShieldBash.Prerequisites.Add(new FeatPrerequisite(PrerequisiteType.Proficiency, "Shield", 0));
+        impShieldBash.Benefit.Description = "Shield bash no longer causes loss of shield AC bonus";
+        Add(impShieldBash);
+
         // --- Combat Expertise ---
         var combatExpertise = new FeatDefinition("Combat Expertise",
             "When you use the attack action or the full attack action in melee, you can take a penalty of as much as -5 on your attack roll and add the same number (+5 or less) as a dodge bonus to your AC.",

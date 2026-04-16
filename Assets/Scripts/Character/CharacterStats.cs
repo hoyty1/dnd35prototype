@@ -1755,6 +1755,13 @@ public class CharacterStats
         if (key.Contains("simple_weapon") || key == "simple")
             return HasSimpleWeaponProficiency();
 
+        // Armor/shield proficiency feat prerequisites occasionally use this query path.
+        if (key == "shield" || key == "shields" || key == "shield_proficiency")
+            return HasShieldProficiency();
+
+        if (key == "tower_shield" || key == "tower_shield_proficiency")
+            return HasTowerShieldProficiency();
+
         ItemDatabase.Init();
 
         // Try direct ID lookup first.

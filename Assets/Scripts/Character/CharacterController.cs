@@ -2782,6 +2782,15 @@ public class CharacterController : MonoBehaviour
         if (!IsShieldBashWeapon(shield) || Stats == null)
             return;
 
+        if (FeatManager.HasImprovedShieldBash(Stats))
+        {
+            _shieldBashAcSuppressed = false;
+            _suppressedShieldBonusAmount = 0;
+            Debug.Log($"[ShieldBash] {Stats.CharacterName}: Improved Shield Bash active, shield AC bonus retained.");
+            GameManager.Instance?.CombatUI?.ShowCombatLog($"🛡 {Stats.CharacterName} uses Improved Shield Bash and keeps shield AC while bashing.");
+            return;
+        }
+
         int shieldBonus = Mathf.Max(0, shield.ShieldBonus);
         _shieldBashAcSuppressed = shieldBonus > 0;
         _suppressedShieldBonusAmount = shieldBonus;
