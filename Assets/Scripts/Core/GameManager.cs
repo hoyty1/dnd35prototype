@@ -2233,6 +2233,349 @@ public class GameManager : MonoBehaviour
         ShowActionChoices();
     }
 
+    /// <summary>
+    /// Drop one equipped held item into the actor's current square.
+    /// D&D 3.5e: dropping a held item is a free action.
+    /// </summary>
+    public string GetDropEquippedItemDisabledReason(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return "No active character";
+
+        Inventory inv = character.GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+            return "No inventory";
+
+        if (inv.RightHandSlot == null && inv.LeftHandSlot == null)
+            return "No held item";
+
+        return string.Empty;
+    }
+
+    public void OnDropEquippedItemButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        string disabledReason = GetDropEquippedItemDisabledReason(pc);
+        if (!string.IsNullOrEmpty(disabledReason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot drop an equipped item: {disabledReason}.");
+            return;
+        }
+
+        if (!TryDropEquippedHeldItemToGround(pc, out ItemData droppedItem, out EquipSlot droppedSlot, out string feedback))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {feedback}");
+            return;
+        }
+
+        CombatUI?.ShowCombatLog($"⬇ {pc.Stats.CharacterName} drops {droppedItem.Name} from {droppedSlot}.");
+        CombatUI?.ShowCombatLog("(Free action - no attacks of opportunity provoked)");
+        UpdateAllStatsUI();
+        InvalidatePreviewThreats();
+        ShowActionChoices();
+    }
+
+    /// <summary>
+    /// Drop an item from inventory (used by inventory context menu).
+    /// This is an immediate utility action and does not consume action economy.
+    /// </summary>
+    public bool TryDropInventoryItemToGround(CharacterController actor, int inventoryIndex, out string feedback)
+    {
+        feedback = string.Empty;
+        if (actor == null || actor.Stats == null)
+        {
+            feedback = "No active character.";
+            return false;
+        }
+
+        Inventory inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+        {
+            feedback = $"{actor.Stats.CharacterName} has no inventory.";
+            return false;
+        }
+
+        if (inventoryIndex < 0 || inventoryIndex >= inv.GeneralSlots.Length)
+        {
+            feedback = "Invalid inventory slot.";
+            return false;
+        }
+
+        ItemData item = inv.GeneralSlots[inventoryIndex];
+        if (item == null)
+        {
+            feedback = "Inventory slot is empty.";
+            return false;
+        }
+
+        SquareCell cell = GetCharacterCurrentCell(actor);
+        if (cell == null)
+        {
+            feedback = "Current ground square is unavailable.";
+            return false;
+        }
+
+        inv.GeneralSlots[inventoryIndex] = null;
+        cell.AddGroundItem(item);
+        feedback = $"{actor.Stats.CharacterName} drops {item.Name} on the ground at ({cell.Coords.x},{cell.Coords.y}).";
+        CombatUI?.ShowCombatLog($"⬇ {feedback}");
+        UpdateAllStatsUI();
+        InvalidatePreviewThreats();
+        return true;
+    }
+
+    /// <summary>
+    /// Pick up an item from the actor's current square.
+    /// In combat: move action (or standard->move conversion), and this provokes AoO.
+    /// </summary>
+    public string GetPickUpItemDisabledReason(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return "No active character";
+
+        Inventory inv = character.GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+            return "No inventory";
+
+        SquareCell cell = GetCharacterCurrentCell(character);
+        if (cell == null)
+            return "No current square";
+
+        if (cell.GroundItems == null || cell.GroundItems.Count == 0)
+            return "No item on ground";
+
+        if (inv.EmptySlots <= 0)
+            return "Inventory full";
+
+        if (!(character.Actions.HasMoveAction || character.Actions.CanConvertStandardToMove || character.Actions.HasStandardAction))
+            return "No move or standard action available";
+
+        return string.Empty;
+    }
+
+    public void OnPickUpItemButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null) return;
+
+        string disabledReason = GetPickUpItemDisabledReason(pc);
+        if (!string.IsNullOrEmpty(disabledReason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot pick up item: {disabledReason}.");
+            return;
+        }
+
+        SquareCell cell = GetCharacterCurrentCell(pc);
+        if (cell == null || cell.GroundItems == null || cell.GroundItems.Count == 0)
+        {
+            CombatUI?.ShowCombatLog("⚠ No item to pick up.");
+            return;
+        }
+
+        ItemData item = cell.GroundItems[0];
+        ResolvePickUpItemProvocation(pc, cell, item);
+    }
+
+    private void ResolvePickUpItemProvocation(CharacterController actor, SquareCell cell, ItemData item)
+    {
+        if (actor == null || cell == null || item == null)
+            return;
+
+        var threateningEnemies = ThreatSystem.GetThreateningEnemies(actor.GridPosition, actor, GetAllCharacters());
+        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+
+        if (threateningEnemies.Count == 0)
+        {
+            if (TryPickUpGroundItem(actor, cell, item, out string pickupMsg))
+            {
+                ConsumeItemManipulationAction(actor);
+                CombatUI?.ShowCombatLog(pickupMsg);
+                UpdateAllStatsUI();
+            }
+            else
+            {
+                CombatUI?.ShowCombatLog($"⚠ {pickupMsg}");
+            }
+
+            ShowActionChoices();
+            return;
+        }
+
+        ShowAoOActionConfirmation(new AoOProvokingActionInfo
+        {
+            ActionType = AoOProvokingAction.RetrieveItem,
+            ActionName = $"PICK UP {item.Name.ToUpper()}",
+            ActionDescription = $"Pick up {item.Name} from ground",
+            Actor = actor,
+            ThreateningEnemies = threateningEnemies,
+            OnProceed = () => StartCoroutine(ResolvePickUpAoOsAndApply(actor, cell, item, threateningEnemies)),
+            OnCancel = ShowActionChoices
+        });
+    }
+
+    private IEnumerator ResolvePickUpAoOsAndApply(CharacterController actor, SquareCell cell, ItemData item, List<CharacterController> threateningEnemies)
+    {
+        if (actor == null || actor.Stats == null)
+            yield break;
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} reaches for {item.Name} on the ground (provokes AoO).");
+
+        foreach (var enemy in threateningEnemies)
+        {
+            if (actor.Stats.IsDead) break;
+            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy))
+                continue;
+
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor);
+            if (aooResult == null) continue;
+
+            CombatUI?.ShowCombatLog($"⚔ AoO vs pick up: {aooResult.GetDetailedSummary()}");
+            UpdateAllStatsUI();
+
+            if (aooResult.Hit && aooResult.TotalDamage > 0)
+                CheckConcentrationOnDamage(actor, aooResult.TotalDamage);
+
+            yield return new WaitForSeconds(0.65f);
+        }
+
+        if (actor.Stats.IsDead)
+        {
+            CombatUI?.ShowCombatLog($"💀 {actor.Stats.CharacterName} is slain before picking up {item.Name}!");
+            UpdateAllStatsUI();
+            EndActivePCTurn();
+            yield break;
+        }
+
+        if (TryPickUpGroundItem(actor, cell, item, out string pickupMsg))
+        {
+            ConsumeItemManipulationAction(actor);
+            CombatUI?.ShowCombatLog(pickupMsg);
+            UpdateAllStatsUI();
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pickupMsg}");
+        }
+
+        ShowActionChoices();
+    }
+
+    private bool TryDropEquippedHeldItemToGround(CharacterController actor, out ItemData droppedItem, out EquipSlot droppedSlot, out string feedback)
+    {
+        droppedItem = null;
+        droppedSlot = EquipSlot.None;
+        feedback = string.Empty;
+
+        if (actor == null || actor.Stats == null)
+        {
+            feedback = "No active character.";
+            return false;
+        }
+
+        Inventory inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+        {
+            feedback = $"{actor.Stats.CharacterName} has no inventory.";
+            return false;
+        }
+
+        if (inv.RightHandSlot != null)
+        {
+            droppedItem = inv.RightHandSlot;
+            inv.RightHandSlot = null;
+            droppedSlot = EquipSlot.RightHand;
+        }
+        else if (inv.LeftHandSlot != null)
+        {
+            droppedItem = inv.LeftHandSlot;
+            inv.LeftHandSlot = null;
+            droppedSlot = EquipSlot.LeftHand;
+        }
+        else
+        {
+            feedback = "No held item to drop.";
+            return false;
+        }
+
+        SquareCell cell = GetCharacterCurrentCell(actor);
+        if (cell == null)
+        {
+            if (droppedSlot == EquipSlot.RightHand) inv.RightHandSlot = droppedItem;
+            else if (droppedSlot == EquipSlot.LeftHand) inv.LeftHandSlot = droppedItem;
+            droppedItem = null;
+            droppedSlot = EquipSlot.None;
+            feedback = "Current ground square is unavailable.";
+            return false;
+        }
+
+        cell.AddGroundItem(droppedItem);
+        inv.RecalculateStats();
+        return true;
+    }
+
+    private bool TryPickUpGroundItem(CharacterController actor, SquareCell cell, ItemData item, out string feedback)
+    {
+        feedback = string.Empty;
+        if (actor == null || actor.Stats == null)
+        {
+            feedback = "No active character.";
+            return false;
+        }
+
+        if (cell == null)
+        {
+            feedback = "No ground square available.";
+            return false;
+        }
+
+        if (item == null)
+        {
+            feedback = "No item selected.";
+            return false;
+        }
+
+        Inventory inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+        {
+            feedback = $"{actor.Stats.CharacterName} has no inventory.";
+            return false;
+        }
+
+        if (inv.EmptySlots <= 0)
+        {
+            feedback = $"{actor.Stats.CharacterName}'s inventory is full.";
+            return false;
+        }
+
+        if (!cell.RemoveGroundItem(item))
+        {
+            feedback = $"{item.Name} is no longer on the ground.";
+            return false;
+        }
+
+        if (!inv.AddItem(item))
+        {
+            cell.AddGroundItem(item);
+            feedback = $"{actor.Stats.CharacterName}'s inventory is full.";
+            return false;
+        }
+
+        feedback = $"📦 {actor.Stats.CharacterName} picks up {item.Name} from ({cell.Coords.x},{cell.Coords.y}).";
+        return true;
+    }
+
+    private SquareCell GetCharacterCurrentCell(CharacterController character)
+    {
+        if (character == null)
+            return null;
+
+        SquareGrid grid = Grid != null ? Grid : SquareGrid.Instance;
+        return grid != null ? grid.GetCell(character.GridPosition) : null;
+    }
+
     private bool ApplyConsumableEffectAndConsume(CharacterController actor, int inventoryIndex, out string resultMessage)
     {
         resultMessage = string.Empty;
@@ -7176,7 +7519,7 @@ public class GameManager : MonoBehaviour
             },
             onCancel: () =>
             {
-                if (CurrentPhase == TurnPhase.PlayerTurn && ActivePC == attacker && attacker.Actions.HasStandardAction)
+                if (CurrentPhase == TurnPhase.PCTurn && ActivePC == attacker && attacker.Actions.HasStandardAction)
                     ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
                 else
                     ShowActionChoices();
