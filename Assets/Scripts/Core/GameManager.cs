@@ -8200,6 +8200,12 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        if (_pendingSpecialAttackType == SpecialAttackType.Overrun)
+        {
+            HandleOverrunTargetClick(attacker, target);
+            return;
+        }
+
         ExecuteSpecialAttack(attacker, target, _pendingSpecialAttackType);
     }
 
@@ -8260,6 +8266,209 @@ public class GameManager : MonoBehaviour
             });
     }
 
+    private void HandleOverrunTargetClick(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        bool attackerHasImprovedOverrun = attacker.Stats.HasFeat("Improved Overrun");
+        if (attackerHasImprovedOverrun)
+        {
+            CombatUI.ShowCombatLog($"⚔ {attacker.Stats.CharacterName} has Improved Overrun — {target.Stats.CharacterName} cannot avoid and must block.");
+            ResolveOverrunSpecialAttack(attacker, target, defenderBlocks: true);
+            return;
+        }
+
+        CombatUI.ShowPickUpItemSelection(
+            actorName: target.Stats.CharacterName,
+            itemOptions: new List<string>
+            {
+                "Avoid — Yield space and let the attacker pass.",
+                "Block — Oppose with a Strength check."
+            },
+            onSelect: selectedIndex =>
+            {
+                bool defenderBlocks = selectedIndex == 1;
+                ResolveOverrunSpecialAttack(attacker, target, defenderBlocks);
+            },
+            onCancel: () =>
+            {
+                if (CurrentPhase == TurnPhase.PCTurn && ActivePC == attacker && attacker.Actions.HasStandardAction)
+                    ShowSpecialAttackTargets(attacker, SpecialAttackType.Overrun);
+                else
+                    ShowActionChoices();
+            },
+            titleOverride: $"OVERRUN — {target.Stats.CharacterName} RESPONSE",
+            bodyOverride: $"{target.Stats.CharacterName}: avoid or block {attacker.Stats.CharacterName}'s overrun?",
+            optionButtonColorOverride: new Color(0.42f, 0.27f, 0.16f, 1f));
+    }
+
+    private void ResolveOverrunSpecialAttack(CharacterController attacker, CharacterController target, bool defenderBlocks)
+    {
+        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        bool attackerHasImprovedOverrun = attacker.Stats.HasFeat("Improved Overrun");
+        bool provokedAoO = false;
+
+        if (!attackerHasImprovedOverrun && ThreatSystem.CanMakeAoO(target) && !target.Stats.IsDead)
+        {
+            provokedAoO = true;
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(target, attacker);
+            if (aooResult != null)
+            {
+                CombatUI.ShowCombatLog($"⚔ Overrun AoO: {aooResult.GetDetailedSummary()}");
+                UpdateAllStatsUI();
+
+                if (aooResult.Hit && aooResult.TotalDamage > 0)
+                    CheckConcentrationOnDamage(attacker, aooResult.TotalDamage);
+            }
+        }
+
+        if (attacker.Stats.IsDead)
+        {
+            CombatUI.ShowCombatLog($"{attacker.Stats.CharacterName} is dropped before completing the overrun.");
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+            _isSelectingSpecialAttack = false;
+            UpdateAllStatsUI();
+            ShowActionChoices();
+            return;
+        }
+
+        bool resolvedAsBlock = defenderBlocks;
+        if (!defenderBlocks)
+        {
+            if (!TryResolveOverrunAvoidMovement(attacker, target))
+            {
+                CombatUI.ShowCombatLog($"⚠ {target.Stats.CharacterName} has no room to avoid and must block the overrun.");
+                resolvedAsBlock = true;
+            }
+        }
+
+        SpecialAttackResult result = attacker.ResolveOverrunAttempt(target, resolvedAsBlock, provokedAoO);
+        CombatUI.ShowCombatLog($"⚔ SPECIAL [Overrun]: {result.Log}");
+
+        if (result.Success && !result.DefenderAvoided)
+            TryPushTargetAway(attacker, target, 1, allowAttackerFollow: true);
+
+        if (result.AttackerActionConsumed)
+            attacker.CommitStandardAction();
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        _isSelectingSpecialAttack = false;
+
+        UpdateAllStatsUI();
+
+        if (target.Stats.IsDead && !target.IsPlayerControlled && AreAllNPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            return;
+        }
+
+        if (result.DefenderAvoided && !result.AttackerActionConsumed && CurrentPhase == TurnPhase.PCTurn && ActivePC == attacker && attacker.Actions.HasMoveAction)
+        {
+            CurrentSubPhase = PlayerSubPhase.Moving;
+            ShowMovementRange(attacker);
+            CombatUI.SetActionButtonsVisible(false);
+            CombatUI.SetTurnIndicator($"{attacker.Stats.CharacterName} - Continue movement (Overrun avoided)");
+            return;
+        }
+
+        StartCoroutine(AfterAttackDelay(attacker, 1.0f));
+    }
+
+    private bool TryResolveOverrunAvoidMovement(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null)
+            return false;
+
+        Vector2Int originalTargetPos = target.GridPosition;
+        SquareCell sidestepCell = FindOverrunSidestepCell(target, attacker.GridPosition);
+        if (sidestepCell == null)
+            return false;
+
+        target.MoveToCell(sidestepCell);
+
+        SquareCell attackerDestination = Grid.GetCell(originalTargetPos);
+        if (attackerDestination == null || attackerDestination.IsOccupied ||
+            !Grid.CanPlaceCreature(originalTargetPos, attacker.GetVisualSquaresOccupied(), attacker))
+        {
+            // Roll back sidestep if attacker cannot complete the move-through.
+            SquareCell rollbackCell = Grid.GetCell(originalTargetPos);
+            if (rollbackCell != null && !rollbackCell.IsOccupied)
+                target.MoveToCell(rollbackCell);
+            return false;
+        }
+
+        CombatUI.ShowCombatLog($"↔ {target.Stats.CharacterName} avoids and sidesteps to ({sidestepCell.Coords.x},{sidestepCell.Coords.y}).");
+        attacker.MoveToCell(attackerDestination);
+        CombatUI.ShowCombatLog($"➤ {attacker.Stats.CharacterName} moves through into ({originalTargetPos.x},{originalTargetPos.y}).");
+        return true;
+    }
+
+    private SquareCell FindOverrunSidestepCell(CharacterController defender, Vector2Int attackerPosition)
+    {
+        if (defender == null)
+            return null;
+
+        Vector2Int defenderPos = defender.GridPosition;
+        Vector2Int approachDir = defenderPos - attackerPosition;
+        approachDir.x = Mathf.Clamp(approachDir.x, -1, 1);
+        approachDir.y = Mathf.Clamp(approachDir.y, -1, 1);
+        if (approachDir == Vector2Int.zero)
+            approachDir = Vector2Int.right;
+
+        var candidates = new List<Vector2Int>
+        {
+            defenderPos + new Vector2Int(-approachDir.y, approachDir.x),
+            defenderPos + new Vector2Int(approachDir.y, -approachDir.x),
+            defenderPos + new Vector2Int(-approachDir.y + approachDir.x, approachDir.x + approachDir.y),
+            defenderPos + new Vector2Int(approachDir.y + approachDir.x, -approachDir.x + approachDir.y)
+        };
+
+        // Fall back to any adjacent square if preferred sidestep cells are blocked.
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                if (dx == 0 && dy == 0)
+                    continue;
+                Vector2Int candidate = defenderPos + new Vector2Int(dx, dy);
+                if (!candidates.Contains(candidate))
+                    candidates.Add(candidate);
+            }
+        }
+
+        foreach (Vector2Int candidate in candidates)
+        {
+            if (candidate == attackerPosition)
+                continue;
+
+            SquareCell candidateCell = Grid.GetCell(candidate);
+            if (candidateCell == null || candidateCell.IsOccupied)
+                continue;
+
+            if (!Grid.CanPlaceCreature(candidate, defender.GetVisualSquaresOccupied(), defender))
+                continue;
+
+            return candidateCell;
+        }
+
+        return null;
+    }
+
     private void ExecuteSpecialAttack(CharacterController attacker, CharacterController target, SpecialAttackType type, EquipSlot? disarmTargetSlot = null)
     {
         if (attacker == null || target == null) { ShowActionChoices(); return; }
@@ -8275,7 +8484,7 @@ public class GameManager : MonoBehaviour
             if (type == SpecialAttackType.BullRush)
                 TryPushTargetAway(attacker, target, 1, allowAttackerFollow: true);
             else if (type == SpecialAttackType.Overrun)
-                TryPushTargetAway(attacker, target, 1, allowAttackerFollow: false);
+                TryPushTargetAway(attacker, target, 1, allowAttackerFollow: true);
         }
 
         Grid.ClearAllHighlights();
@@ -9826,7 +10035,7 @@ public class GameManager : MonoBehaviour
             if (choice.Value == SpecialAttackType.BullRush)
                 TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);
             else if (choice.Value == SpecialAttackType.Overrun)
-                TryPushTargetAway(npc, target, 1, allowAttackerFollow: false);
+                TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);
         }
 
         npc.CommitStandardAction();

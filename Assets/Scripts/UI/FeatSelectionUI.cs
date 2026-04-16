@@ -466,8 +466,10 @@ public class FeatSelectionUI : MonoBehaviour
         var row = new FeatRowUI();
         row.Feat = feat;
 
-        // Monk bonus feats bypass ALL prerequisites per D&D 3.5e rules
-        bool meetsPrereqs = _isMonkBonus ? true : feat.MeetsPrerequisites(_stats);
+        // Monk bonus feats bypass ALL prerequisites per D&D 3.5e rules.
+        // Other modes evaluate against current character feats + currently selected feats
+        // so chained picks (e.g., Power Attack -> Improved Overrun) unlock correctly.
+        bool meetsPrereqs = _isMonkBonus ? true : MeetsPrerequisitesWithSelectedFeats(feat);
         bool alreadyHas = !feat.CanTakeMultiple && _stats.HasFeat(feat.FeatName);
         bool isSelected = _selectedFeats.Contains(feat.FeatName);
         bool canSelect = meetsPrereqs && !alreadyHas && !isSelected;
@@ -545,8 +547,8 @@ public class FeatSelectionUI : MonoBehaviour
         var feat = FeatDefinitions.GetFeat(featName);
         if (feat == null) return;
 
-        bool meetsPrereqs = _isMonkBonus ? true : feat.MeetsPrerequisites(_stats);
-        var unmet = feat.GetUnmetPrerequisites(_stats);
+        bool meetsPrereqs = _isMonkBonus ? true : MeetsPrerequisitesWithSelectedFeats(feat);
+        var unmet = _isMonkBonus ? new List<string>() : GetUnmetPrerequisitesWithSelectedFeats(feat);
 
         string detail = $"<color=#FFD700><b>{feat.FeatName}</b></color>\n";
         detail += $"<color=#88AACC>Type: {feat.Type}</color>";
@@ -589,6 +591,21 @@ public class FeatSelectionUI : MonoBehaviour
                 Debug.Log($"[FeatSelectionUI] Already selected {_featsToSelect} feats. Remove one first.");
                 return;
             }
+
+            var feat = FeatDefinitions.GetFeat(featName);
+            if (feat == null)
+                return;
+
+            if (!_isMonkBonus && !MeetsPrerequisitesWithSelectedFeats(feat))
+            {
+                List<string> unmet = GetUnmetPrerequisitesWithSelectedFeats(feat);
+                Debug.LogWarning($"[FeatSelectionUI] Cannot select {featName}: missing prerequisites ({string.Join(", ", unmet)}).");
+                if (_featDetailText != null)
+                    _featDetailText.text = $"<color=#FF6666>Cannot select {featName}: missing prerequisites ({string.Join(", ", unmet)})</color>";
+                RefreshFeatList();
+                return;
+            }
+
             _selectedFeats.Add(featName);
             Debug.Log($"[FeatSelectionUI] Selected: {featName}");
         }
@@ -624,6 +641,26 @@ public class FeatSelectionUI : MonoBehaviour
         {
             Debug.LogWarning($"[FeatSelectionUI] Need to select {_featsToSelect} feats, only {_selectedFeats.Count} selected.");
             return;
+        }
+
+        if (!_isMonkBonus)
+        {
+            for (int i = 0; i < _selectedFeats.Count; i++)
+            {
+                string featName = _selectedFeats[i];
+                var feat = FeatDefinitions.GetFeat(featName);
+                if (feat == null) continue;
+
+                if (!MeetsPrerequisitesWithSelectedFeats(feat))
+                {
+                    List<string> unmet = GetUnmetPrerequisitesWithSelectedFeats(feat);
+                    Debug.LogWarning($"[FeatSelectionUI] Confirmation blocked: {featName} no longer meets prerequisites ({string.Join(", ", unmet)}).");
+                    if (_featDetailText != null)
+                        _featDetailText.text = $"<color=#FF6666>Cannot confirm: {featName} missing prerequisites ({string.Join(", ", unmet)})</color>";
+                    RefreshFeatList();
+                    return;
+                }
+            }
         }
 
         Debug.Log($"[FeatSelectionUI] Confirmed feats: {string.Join(", ", _selectedFeats)}");
@@ -665,6 +702,39 @@ public class FeatSelectionUI : MonoBehaviour
         _confirmButton.interactable = (_selectedFeats.Count == _featsToSelect);
         var btnImg = _confirmButton.GetComponent<Image>();
         btnImg.color = _confirmButton.interactable ? COLOR_BUTTON : COLOR_BUTTON_DISABLED;
+    }
+
+    private bool MeetsPrerequisitesWithSelectedFeats(FeatDefinition feat)
+    {
+        if (feat == null || _stats == null) return false;
+        return EvaluateWithProjectedFeats(() => feat.MeetsPrerequisites(_stats));
+    }
+
+    private List<string> GetUnmetPrerequisitesWithSelectedFeats(FeatDefinition feat)
+    {
+        if (feat == null || _stats == null) return new List<string>();
+        return EvaluateWithProjectedFeats(() => feat.GetUnmetPrerequisites(_stats));
+    }
+
+    private T EvaluateWithProjectedFeats<T>(Func<T> evaluator)
+    {
+        if (_stats == null || evaluator == null)
+            return default(T);
+
+        HashSet<string> originalFeats = _stats.Feats;
+        var projectedFeats = new HashSet<string>(originalFeats ?? new HashSet<string>());
+        for (int i = 0; i < _selectedFeats.Count; i++)
+            projectedFeats.Add(_selectedFeats[i]);
+
+        _stats.Feats = projectedFeats;
+        try
+        {
+            return evaluator();
+        }
+        finally
+        {
+            _stats.Feats = originalFeats;
+        }
     }
 
     private void RefreshFeatList()

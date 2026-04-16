@@ -2332,7 +2332,7 @@ public class CharacterController : MonoBehaviour
             case SpecialAttackType.Grapple: return ResolveGrapple(target);
             case SpecialAttackType.Sunder: return ResolveSunder(target);
             case SpecialAttackType.BullRush: return ResolveBullRush(target);
-            case SpecialAttackType.Overrun: return ResolveOverrun(target);
+            case SpecialAttackType.Overrun: return ResolveOverrun(target, defenderBlocks: true);
             case SpecialAttackType.Feint: return ResolveFeint(target);
             default:
                 return new SpecialAttackResult
@@ -2632,8 +2632,26 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    private SpecialAttackResult ResolveOverrun(CharacterController target)
+    public SpecialAttackResult ResolveOverrunAttempt(CharacterController target, bool defenderBlocks, bool provokedAoO = false)
     {
+        return ResolveOverrun(target, defenderBlocks, provokedAoO);
+    }
+
+    private SpecialAttackResult ResolveOverrun(CharacterController target, bool defenderBlocks, bool provokedAoO = false)
+    {
+        if (!defenderBlocks)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Overrun",
+                Success = true,
+                DefenderAvoided = true,
+                ProvokedAoO = provokedAoO,
+                AttackerActionConsumed = false,
+                Log = $"{target.Stats.CharacterName} avoids {Stats.CharacterName}'s overrun attempt and yields space."
+            };
+        }
+
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
         int atkTotal = atkRoll + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Overrun") ? 4 : 0);
@@ -2647,6 +2665,9 @@ public class CharacterController : MonoBehaviour
         {
             ManeuverName = "Overrun",
             Success = success,
+            DefenderAvoided = false,
+            ProvokedAoO = provokedAoO,
+            AttackerActionConsumed = true,
             CheckRoll = atkRoll,
             CheckTotal = atkTotal,
             OpposedRoll = defRoll,

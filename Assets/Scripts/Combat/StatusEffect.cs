@@ -586,4 +586,8 @@ public class SpecialAttackResult
     public int DamageDealt;
     public bool ProvokedAoO;
     public bool TargetKilled;
+
+    // Overrun-specific metadata.
+    public bool DefenderAvoided;
+    public bool AttackerActionConsumed = true;
 }
