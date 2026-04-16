@@ -98,6 +98,22 @@ public static partial class SpellDatabase
         return null;
     }
 
+    /// <summary>Get a spell by display name (case-insensitive). Returns null if not found.</summary>
+    public static SpellData GetSpellByName(string spellName)
+    {
+        Init();
+        if (string.IsNullOrWhiteSpace(spellName))
+            return null;
+
+        foreach (var spell in _spells.Values)
+        {
+            if (string.Equals(spell.Name, spellName, System.StringComparison.OrdinalIgnoreCase))
+                return spell;
+        }
+
+        Debug.LogWarning($"[SpellDatabase] Spell not found by name: {spellName}");
+        return null;
+    }
     /// <summary>Get all spells available to a specific class.</summary>
     public static List<SpellData> GetSpellsForClass(string className)
     {

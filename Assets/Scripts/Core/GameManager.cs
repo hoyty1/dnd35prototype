@@ -2264,6 +2264,7 @@ public class GameManager : MonoBehaviour
 
         int oldHP = actor.Stats.CurrentHP;
         int healedAmount = 0;
+        string spellSummary = string.Empty;
 
         switch (currentItem.ConsumableEffect)
         {
@@ -2273,6 +2274,15 @@ public class GameManager : MonoBehaviour
                 int newHP = Mathf.Min(actor.Stats.MaxHP, actor.Stats.CurrentHP + Mathf.Max(0, healingRoll));
                 actor.Stats.CurrentHP = newHP;
                 healedAmount = Mathf.Max(0, newHP - oldHP);
+                break;
+            }
+            case ConsumableEffectType.SpellEffect:
+            {
+                if (!TryApplySpellConsumableEffect(actor, currentItem, out spellSummary))
+                {
+                    resultMessage = spellSummary;
+                    return false;
+                }
                 break;
             }
             case ConsumableEffectType.None:
@@ -2296,9 +2306,126 @@ public class GameManager : MonoBehaviour
 
         inv.RemoveItemAt(inventoryIndex);
 
+        if (currentItem.ConsumableEffect == ConsumableEffectType.SpellEffect)
+        {
+            resultMessage = $"🧪 {actor.Stats.CharacterName} uses {currentItem.Name}. {spellSummary} Item consumed.";
+            return true;
+        }
+
         int newCurrentHP = actor.Stats.CurrentHP;
         resultMessage = $"🧪 {actor.Stats.CharacterName} uses {currentItem.Name}, healing {healedAmount} HP ({oldHP} → {newCurrentHP}). Item consumed.";
         return true;
+    }
+
+    private bool TryApplySpellConsumableEffect(CharacterController actor, ItemData item, out string summary)
+    {
+        summary = string.Empty;
+        if (actor == null || actor.Stats == null)
+        {
+            summary = "No active character.";
+            return false;
+        }
+
+        if (item == null || string.IsNullOrWhiteSpace(item.ConsumableSpellName))
+        {
+            summary = "Consumable has no linked spell definition.";
+            return false;
+        }
+
+        SpellDatabase.Init();
+        SpellData baseSpell = SpellDatabase.GetSpellByName(item.ConsumableSpellName);
+        if (baseSpell == null)
+        {
+            summary = $"Spell not found for consumable: {item.ConsumableSpellName}.";
+            return false;
+        }
+
+        int casterLevel = Mathf.Max(1, item.ConsumableMinimumCasterLevel);
+        SpellData consumableSpell = BuildConsumableSpellVariant(baseSpell, item);
+
+        if (consumableSpell.EffectType == SpellEffectType.Healing)
+        {
+            int oldHP = actor.Stats.CurrentHP;
+            int healingRoll = RollHealingFromSpell(consumableSpell);
+            int newHP = Mathf.Min(actor.Stats.MaxHP, actor.Stats.CurrentHP + Mathf.Max(0, healingRoll));
+            actor.Stats.CurrentHP = newHP;
+            int healedAmount = Mathf.Max(0, newHP - oldHP);
+            summary = $"{consumableSpell.Name} heals {healedAmount} HP ({oldHP} → {newHP}) at caster level {casterLevel}.";
+            return true;
+        }
+
+        if (consumableSpell.EffectType == SpellEffectType.Buff || consumableSpell.EffectType == SpellEffectType.Debuff)
+        {
+            var statusMgr = actor.GetComponent<StatusEffectManager>();
+            if (statusMgr == null)
+            {
+                statusMgr = actor.gameObject.AddComponent<StatusEffectManager>();
+                statusMgr.Init(actor.Stats);
+            }
+
+            var effect = statusMgr.AddEffect(consumableSpell, item.Name, casterLevel);
+            if (effect == null)
+            {
+                summary = $"{consumableSpell.Name} could not be applied (stacking or stronger existing effect).";
+                return false;
+            }
+
+            summary = $"{consumableSpell.Name} applied [{effect.GetDurationDisplayString()}].";
+            return true;
+        }
+
+        summary = $"{consumableSpell.Name} is not supported for consumable use yet.";
+        return false;
+    }
+
+    private static SpellData BuildConsumableSpellVariant(SpellData baseSpell, ItemData item)
+    {
+        SpellData spell = baseSpell != null ? baseSpell.Clone() : null;
+        if (spell == null || item == null)
+            return spell;
+
+        int modifier = item.ConsumableModifier;
+        if (modifier == 0)
+            return spell;
+
+        if (spell.EffectType == SpellEffectType.Healing)
+        {
+            spell.BonusHealing = modifier;
+            return spell;
+        }
+
+        if (spell.BuffDeflectionBonus != 0)
+            spell.BuffDeflectionBonus = modifier;
+        else if (spell.BuffShieldBonus != 0)
+            spell.BuffShieldBonus = modifier;
+        else if (spell.BuffACBonus != 0)
+            spell.BuffACBonus = modifier;
+        else if (spell.BuffAttackBonus != 0)
+            spell.BuffAttackBonus = modifier;
+        else if (spell.BuffDamageBonus != 0)
+            spell.BuffDamageBonus = modifier;
+        else if (spell.BuffSaveBonus != 0)
+            spell.BuffSaveBonus = modifier;
+        else if (spell.BuffStatBonus != 0)
+            spell.BuffStatBonus = Mathf.Abs(modifier) * (spell.BuffStatBonus >= 0 ? 1 : -1);
+
+        return spell;
+    }
+
+    private static int RollHealingFromSpell(SpellData spell)
+    {
+        if (spell == null) return 0;
+
+        if (spell.HealCount > 0 && spell.HealDice > 0)
+        {
+            int total = 0;
+            for (int i = 0; i < spell.HealCount; i++)
+                total += UnityEngine.Random.Range(1, spell.HealDice + 1);
+            total += spell.BonusHealing;
+            return Mathf.Max(0, total);
+        }
+
+        return Mathf.Max(0, spell.BonusHealing);
     }
 
     private static int RollHealingFromConsumable(ItemData item)

@@ -1069,30 +1069,36 @@ public static class ItemDatabase
     // ============================================================
     private static void RegisterConsumablesAndMisc()
     {
-        Register(new ItemData
-        {
-            Id = "potion_cure_light_wounds", Name = "Potion of Cure Light Wounds", Type = ItemType.Consumable,
-            Slot = EquipSlot.None,
-            Description = "Standard D&D 3.5e healing potion. Restores 1d8+1 hit points.",
-            ConsumableEffect = ConsumableEffectType.HealHP,
-            HealDiceCount = 1,
-            HealDiceSides = 8,
-            HealBonus = 1,
-            IconChar = "\u2661", IconColor = new Color(1f, 0.3f, 0.3f)
-        });
+        RegisterSpellPotion(
+            id: "potion_cure_light_wounds",
+            name: "Potion of Cure Light Wounds",
+            spellName: "Cure Light Wounds",
+            description: "Standard D&D 3.5e potion. Mimics Cure Light Wounds at minimum caster level (1d8+1).",
+            minimumCasterLevel: 1,
+            modifier: 1,
+            iconChar: "\u2661",
+            iconColor: new Color(1f, 0.3f, 0.3f));
 
         // Backward-compatible alias used by existing class loadouts.
-        Register(new ItemData
-        {
-            Id = "potion_healing", Name = "Potion of Cure Light Wounds", Type = ItemType.Consumable,
-            Slot = EquipSlot.None,
-            Description = "Standard D&D 3.5e healing potion. Restores 1d8+1 hit points.",
-            ConsumableEffect = ConsumableEffectType.HealHP,
-            HealDiceCount = 1,
-            HealDiceSides = 8,
-            HealBonus = 1,
-            IconChar = "\u2661", IconColor = new Color(1f, 0.3f, 0.3f)
-        });
+        RegisterSpellPotion(
+            id: "potion_healing",
+            name: "Potion of Cure Light Wounds",
+            spellName: "Cure Light Wounds",
+            description: "Standard D&D 3.5e potion. Mimics Cure Light Wounds at minimum caster level (1d8+1).",
+            minimumCasterLevel: 1,
+            modifier: 1,
+            iconChar: "\u2661",
+            iconColor: new Color(1f, 0.3f, 0.3f));
+
+        RegisterSpellPotion(
+            id: "potion_shield_of_faith",
+            name: "Potion of Shield of Faith",
+            spellName: "Shield of Faith",
+            description: "Grants a +2 deflection bonus to AC for 10 rounds (minimum caster level 1).",
+            minimumCasterLevel: 1,
+            modifier: 2,
+            iconChar: "\u2726",
+            iconColor: new Color(0.45f, 0.75f, 1f));
 
         Register(new ItemData
         {
@@ -1120,6 +1126,36 @@ public static class ItemDatabase
             Slot = EquipSlot.None,
             Description = "A coil of hempen rope. Useful for climbing and binding.",
             IconChar = "\u221E", IconColor = new Color(0.7f, 0.6f, 0.4f)
+        });
+    }
+
+    /// <summary>
+    /// Helper for registering potions/oils that emulate a spell at a specific caster level.
+    /// Keeps potion definitions compact and extensible.
+    /// </summary>
+    private static void RegisterSpellPotion(
+        string id,
+        string name,
+        string spellName,
+        string description,
+        int minimumCasterLevel,
+        int modifier,
+        string iconChar,
+        Color iconColor)
+    {
+        Register(new ItemData
+        {
+            Id = id,
+            Name = name,
+            Type = ItemType.Consumable,
+            Slot = EquipSlot.None,
+            Description = description,
+            ConsumableEffect = ConsumableEffectType.SpellEffect,
+            ConsumableSpellName = spellName,
+            ConsumableMinimumCasterLevel = Mathf.Max(1, minimumCasterLevel),
+            ConsumableModifier = modifier,
+            IconChar = iconChar,
+            IconColor = iconColor
         });
     }
 
@@ -1205,6 +1241,9 @@ public static class ItemDatabase
             ArcaneSpellFailure = src.ArcaneSpellFailure, WeightLbs = src.WeightLbs,
             // Other
             ConsumableEffect = src.ConsumableEffect,
+            ConsumableSpellName = src.ConsumableSpellName,
+            ConsumableMinimumCasterLevel = src.ConsumableMinimumCasterLevel,
+            ConsumableModifier = src.ConsumableModifier,
             HealAmount = src.HealAmount,
             HealDiceCount = src.HealDiceCount,
             HealDiceSides = src.HealDiceSides,

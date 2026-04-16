@@ -20,7 +20,8 @@ public enum ItemType
 public enum ConsumableEffectType
 {
     None,
-    HealHP
+    HealHP,
+    SpellEffect
 }
 
 /// <summary>
@@ -180,6 +181,9 @@ public class ItemData
 
     // --- Consumable ---
     public ConsumableEffectType ConsumableEffect; // Generic effect type for extensibility
+    public string ConsumableSpellName;            // Spell name this consumable emulates (e.g., "Cure Light Wounds")
+    public int ConsumableMinimumCasterLevel = 1;  // Potions use minimum caster level by default (D&D 3.5e)
+    public int ConsumableModifier;                // Generic +X modifier for spell-derived consumables
     public int HealAmount;      // Legacy flat HP restore fallback
     public int HealDiceCount;   // Number of healing dice (e.g., 1 for 1d8)
     public int HealDiceSides;   // Sides per healing die (e.g., 8 for 1d8)
@@ -402,6 +406,17 @@ public class ItemData
                 {
                     stats = $"Heals: {HealAmount} HP";
                 }
+            }
+            else if (ConsumableEffect == ConsumableEffectType.SpellEffect)
+            {
+                string spellLabel = string.IsNullOrEmpty(ConsumableSpellName) ? "Unknown Spell" : ConsumableSpellName;
+                stats = $"Spell Effect: {spellLabel}";
+
+                if (ConsumableModifier != 0)
+                    stats += $"\nModifier: {ConsumableModifier:+#;-#;0}";
+
+                if (ConsumableMinimumCasterLevel > 0)
+                    stats += $"\nCaster Level: {ConsumableMinimumCasterLevel}";
             }
             else if (HealAmount > 0)
             {
