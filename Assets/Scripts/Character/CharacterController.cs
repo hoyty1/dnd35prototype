@@ -2090,10 +2090,10 @@ public class CharacterController : MonoBehaviour
         if (inv == null)
             return options;
 
-        if (inv.RightHandSlot != null)
+        if (inv.RightHandSlot != null && !IsSpikedGauntletItem(inv.RightHandSlot))
             options.Add(new DisarmableHeldItemOption(EquipSlot.RightHand, inv.RightHandSlot));
 
-        if (inv.LeftHandSlot != null)
+        if (inv.LeftHandSlot != null && !IsSpikedGauntletItem(inv.LeftHandSlot))
             options.Add(new DisarmableHeldItemOption(EquipSlot.LeftHand, inv.LeftHandSlot));
 
         return options;
@@ -2243,30 +2243,17 @@ public class CharacterController : MonoBehaviour
 
         ItemData attackerHeldWeapon = GetEquippedMainWeapon();
 
-        bool defenderHasSpikedGauntlet = HasSpikedGauntletEquipped(target);
         bool defenderHasLockedGauntlet = HasLockedGauntletEquipped(target);
         int defenderLockedGauntletBonus = defenderHasLockedGauntlet ? 10 : 0;
 
-        DisarmCheckResult primaryCheck;
-        if (defenderHasSpikedGauntlet)
-        {
-            primaryCheck = DisarmCheckResult.CreateAutomaticFailure(
-                attackerHeldWeapon,
-                targetHeldItem,
-                targetHeldItemSlot,
-                $"{target.Stats.CharacterName} is protected by Spiked Gauntlets and cannot be disarmed.");
-        }
-        else
-        {
-            primaryCheck = RollDisarmCheck(
-                this,
-                target,
-                attackerHeldWeapon,
-                targetHeldItem,
-                targetHeldItemSlot,
-                defenderLockedGauntletBonus,
-                lockedGauntletReason: defenderHasLockedGauntlet ? "Locked Gauntlet" : string.Empty);
-        }
+        DisarmCheckResult primaryCheck = RollDisarmCheck(
+            this,
+            target,
+            attackerHeldWeapon,
+            targetHeldItem,
+            targetHeldItemSlot,
+            defenderLockedGauntletBonus,
+            lockedGauntletReason: defenderHasLockedGauntlet ? "Locked Gauntlet" : string.Empty);
 
         bool success = primaryCheck.Success;
         var logLines = new List<string>
@@ -2310,30 +2297,17 @@ public class CharacterController : MonoBehaviour
             if (TryGetDisarmTargetHeldItem(this, null, out ItemData counterTargetHeldItem, out EquipSlot counterTargetSlot))
             {
                 ItemData counterAttackerHeldWeapon = target.GetEquippedMainWeapon();
-                bool counterDefenderHasSpikedGauntlet = HasSpikedGauntletEquipped(this);
                 bool counterDefenderHasLockedGauntlet = HasLockedGauntletEquipped(this);
                 int counterDefenderLockedBonus = counterDefenderHasLockedGauntlet ? 10 : 0;
 
-                DisarmCheckResult counterCheck;
-                if (counterDefenderHasSpikedGauntlet)
-                {
-                    counterCheck = DisarmCheckResult.CreateAutomaticFailure(
-                        counterAttackerHeldWeapon,
-                        counterTargetHeldItem,
-                        counterTargetSlot,
-                        $"{Stats.CharacterName} is protected by Spiked Gauntlets and cannot be disarmed.");
-                }
-                else
-                {
-                    counterCheck = RollDisarmCheck(
-                        target,
-                        this,
-                        counterAttackerHeldWeapon,
-                        counterTargetHeldItem,
-                        counterTargetSlot,
-                        counterDefenderLockedBonus,
-                        lockedGauntletReason: counterDefenderHasLockedGauntlet ? "Locked Gauntlet" : string.Empty);
-                }
+                DisarmCheckResult counterCheck = RollDisarmCheck(
+                    target,
+                    this,
+                    counterAttackerHeldWeapon,
+                    counterTargetHeldItem,
+                    counterTargetSlot,
+                    counterDefenderLockedBonus,
+                    lockedGauntletReason: counterDefenderHasLockedGauntlet ? "Locked Gauntlet" : string.Empty);
 
                 logLines.Add($"↩ Immediate counter-disarm by {target.Stats.CharacterName} (does not provoke AoO). {(counterCheck.Success ? "Success" : "Failed")} ({counterCheck.AttackerTotal} vs {counterCheck.DefenderTotal}).");
                 logLines.Add(counterCheck.BreakdownLog);
@@ -2665,14 +2639,13 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    private static bool HasSpikedGauntletEquipped(CharacterController character)
+    private static bool IsSpikedGauntletItem(ItemData item)
     {
-        ItemData handsItem = GetEquippedHandsItem(character);
-        if (handsItem == null)
+        if (item == null)
             return false;
 
-        string id = (handsItem.Id ?? string.Empty).ToLowerInvariant();
-        string name = (handsItem.Name ?? string.Empty).ToLowerInvariant();
+        string id = (item.Id ?? string.Empty).ToLowerInvariant();
+        string name = (item.Name ?? string.Empty).ToLowerInvariant();
         return id == "spiked_gauntlet" || name.Contains("spiked gauntlet");
     }
 

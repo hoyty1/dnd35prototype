@@ -1116,7 +1116,7 @@ public static class ItemDatabase
         {
             Id = "spiked_gauntlet", Name = "Spiked Gauntlet", Type = ItemType.Misc,
             Slot = EquipSlot.Hands,
-            Description = "A hand-slot spiked gauntlet setup. While worn, you cannot be disarmed.",
+            Description = "A hand-slot spiked gauntlet setup. The gauntlet itself cannot be disarmed.",
             WeightLbs = 1f,
             IconChar = "✹", IconColor = new Color(0.65f, 0.65f, 0.72f)
         });
