@@ -365,7 +365,7 @@ public class SquareGrid : MonoBehaviour
     /// - Destination node must be fully unoccupied by anyone except the mover itself.
     /// - Enemy-occupied nodes are never traversable.
     /// </summary>
-    private bool CanTraversePathNode(Vector2Int basePosition, int moverSizeSquares, CharacterController mover, bool isDestinationNode)
+    public bool CanTraversePathNode(Vector2Int basePosition, int moverSizeSquares, CharacterController mover, bool isDestinationNode)
     {
         // Validate footprint bounds/cell existence first while ignoring occupancy.
         if (!CanPlaceCreature(basePosition, moverSizeSquares, mover, ignoreOtherOccupants: true))

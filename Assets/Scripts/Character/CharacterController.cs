@@ -267,6 +267,13 @@ public class CharacterController : MonoBehaviour
             yield break;
 
         float clampedStepDuration = Mathf.Max(0.01f, secondsPerStep);
+        SquareGrid grid = CurrentGrid;
+
+        // Clear the mover's footprint once before animating.
+        // During animation the token can pass through ally-occupied squares,
+        // so we only re-apply occupancy after movement completes.
+        if (grid != null)
+            grid.ClearCreatureOccupancy(this);
 
         for (int i = 0; i < path.Count; i++)
         {
@@ -274,8 +281,8 @@ public class CharacterController : MonoBehaviour
             if (nextCell == null)
                 continue;
 
-            SquareGrid grid = CurrentGrid;
-            if (grid != null && !grid.CanPlaceCreature(nextCell.Coords, GetVisualSquaresOccupied(), this))
+            bool isDestinationStep = (i == path.Count - 1);
+            if (grid != null && !grid.CanTraversePathNode(nextCell.Coords, GetVisualSquaresOccupied(), this, isDestinationStep))
                 break;
 
             Vector3 startPos = transform.position;
@@ -283,9 +290,9 @@ public class CharacterController : MonoBehaviour
                 ? grid.GetCenteredWorldPosition(nextCell.Coords, GetVisualSquaresOccupied())
                 : SquareGridUtils.GridToWorld(nextCell.X, nextCell.Y);
 
-            // Reserve destination immediately so occupancy remains consistent while animating.
+            // Update logical position for the current animation segment.
+            // Occupancy is restored once at the end to avoid clobbering allies while passing through.
             GridPosition = nextCell.Coords;
-            RefreshGridOccupancy();
 
             float elapsed = 0f;
             while (elapsed < clampedStepDuration)
@@ -300,12 +307,12 @@ public class CharacterController : MonoBehaviour
             transform.position = endPos;
         }
 
-
+        RefreshGridOccupancy();
         UpdatePositionForSize();
         if (markAsMoved)
             HasMovedThisTurn = true;
-    }
 
+    }
     /// <summary>
     /// Returns a snapshot list of currently active combat conditions on this character.
     /// </summary>
