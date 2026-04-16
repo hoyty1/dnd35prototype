@@ -601,8 +601,9 @@ public class CharacterController : MonoBehaviour
                 Defender = target,
                 WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed",
                 Hit = false,
-                DieRoll = 0,
-                TotalRoll = 0,
+                // No actual d20 is rolled in this early-return path, but keep roll fields within valid d20 bounds.
+                DieRoll = 1,
+                TotalRoll = 1,
                 TargetAC = target != null && target.Stats != null ? target.Stats.ArmorClass : 0,
                 DefenderHPBefore = target != null && target.Stats != null ? target.Stats.CurrentHP : 0,
                 DefenderHPAfter = target != null && target.Stats != null ? target.Stats.CurrentHP : 0
@@ -618,8 +619,9 @@ public class CharacterController : MonoBehaviour
                 Defender = target,
                 WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed",
                 Hit = false,
-                DieRoll = 0,
-                TotalRoll = 0,
+                // No actual d20 is rolled in this early-return path, but keep roll fields within valid d20 bounds.
+                DieRoll = 1,
+                TotalRoll = 1,
                 TargetAC = target != null && target.Stats != null ? target.Stats.ArmorClass : 0,
                 DefenderHPBefore = target != null && target.Stats != null ? target.Stats.CurrentHP : 0,
                 DefenderHPAfter = target != null && target.Stats != null ? target.Stats.CurrentHP : 0
