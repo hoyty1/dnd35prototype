@@ -320,6 +320,63 @@ public static class ConditionRules
 
         Add(new ConditionDefinition
         {
+            Type = CombatConditionType.Unconscious,
+            DisplayName = "Unconscious",
+            ShortLabel = "UC",
+            Description = "Unconscious and helpless. Cannot act or threaten.",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Disabled,
+            DisplayName = "Disabled",
+            ShortLabel = "DB",
+            Description = "At 0 HP: can take only one move or one standard action.",
+            StackingRule = ConditionStackingRule.Refresh,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Dying,
+            DisplayName = "Dying",
+            ShortLabel = "DY",
+            Description = "At -1 to -9 HP, unconscious and losing 1 HP each turn.",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Stable,
+            DisplayName = "Stable",
+            ShortLabel = "STB",
+            Description = "At negative HP, unconscious but no longer losing HP.",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f
+        });
+        Add(new ConditionDefinition
+        {
             Type = CombatConditionType.Prone,
             DisplayName = "Prone",
             ShortLabel = "PR",
@@ -495,6 +552,10 @@ public enum CombatConditionType
     Stunned,
     Paralyzed,
     Helpless,
+    Unconscious,
+    Disabled,
+    Dying,
+    Stable,
     Prone,
     Grappled,
     Invisible,

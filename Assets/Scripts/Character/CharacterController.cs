@@ -96,6 +96,19 @@ public class CharacterController : MonoBehaviour
     private ConditionManager _conditionManager;
     private Coroutine _currentScaleAnimation;
 
+
+    // ========== D&D 3.5e HP STATE ==========
+    private HPState _currentHPState = HPState.Healthy;
+    private bool _hasProcessedDeath;
+
+    public HPState CurrentHPState => _currentHPState;
+    public bool IsDead => _currentHPState == HPState.Dead;
+    public bool IsUnconscious => _currentHPState == HPState.Dying || _currentHPState == HPState.Stable || _currentHPState == HPState.Dead;
+
+    public bool CanTakeTurnActions()
+    {
+        return _currentHPState == HPState.Healthy || _currentHPState == HPState.Disabled;
+    }
     [Header("Visual Animation Settings")]
     [SerializeField, Min(0f)] private float _sizeChangeDuration = 0.4f;
     [SerializeField] private AnimationEasing _sizeChangeEasing = AnimationEasing.EaseOutCubic;
@@ -133,21 +146,34 @@ public class CharacterController : MonoBehaviour
         }
     }
 
+
+    private void OnDestroy()
+    {
+        if (Stats != null)
+            Stats.CurrentHPChanged -= OnCurrentHPChanged;
+    }
     /// <summary>
     /// Initialize the character with stats and place on grid.
     /// </summary>
     public void Init(CharacterStats stats, Vector2Int startPos, Sprite alive, Sprite dead)
     {
+        if (Stats != null)
+            Stats.CurrentHPChanged -= OnCurrentHPChanged;
+
         Stats = stats;
         AliveSprite = alive;
         DeadSprite = dead;
         GridPosition = startPos;
 
+        if (Stats != null)
+            Stats.CurrentHPChanged += OnCurrentHPChanged;
+
         if (_conditionManager == null)
             _conditionManager = GetComponent<ConditionManager>() ?? gameObject.AddComponent<ConditionManager>();
         _conditionManager.Init(Stats);
 
-        _sr.sprite = AliveSprite;
+        SyncHPStateFromCurrentHP(emitLog: false);
+        _sr.sprite = (_currentHPState == HPState.Dead && DeadSprite != null) ? DeadSprite : AliveSprite;
         _sr.sortingOrder = 10;
 
         RefreshGridOccupancy();
@@ -339,6 +365,207 @@ public class CharacterController : MonoBehaviour
 
         return Stats.TickConditions();
     }
+
+    private void OnCurrentHPChanged(int oldHP, int newHP)
+    {
+        HPState next = DetermineStateFromHPTransition(oldHP, newHP);
+        SetHPState(next, emitLog: true);
+    }
+
+    /// <summary>
+    /// Sync state from current HP value (used at initialization or forced refresh).
+    /// </summary>
+    public void SyncHPStateFromCurrentHP(bool emitLog = false)
+    {
+        if (Stats == null)
+            return;
+
+        HPState next;
+        if (Stats.CurrentHP >= 1) next = HPState.Healthy;
+        else if (Stats.CurrentHP == 0) next = HPState.Disabled;
+        else if (Stats.CurrentHP <= -10) next = HPState.Dead;
+        else next = HPState.Dying;
+
+        SetHPState(next, emitLog);
+    }
+
+    private HPState DetermineStateFromHPTransition(int oldHP, int newHP)
+    {
+        if (newHP >= 1) return HPState.Healthy;
+        if (newHP == 0) return HPState.Disabled;
+        if (newHP <= -10) return HPState.Dead;
+
+        // -1 to -9
+        if (newHP > oldHP)
+            return HPState.Stable; // Healing while still negative stabilizes.
+
+        if (_currentHPState == HPState.Stable && newHP == oldHP)
+            return HPState.Stable;
+
+        return HPState.Dying;
+    }
+
+    private void SetHPState(HPState newState, bool emitLog)
+    {
+        if (_currentHPState == newState)
+            return;
+
+        HPState oldState = _currentHPState;
+        _currentHPState = newState;
+        OnHPStateChanged(oldState, newState, emitLog);
+    }
+
+    private void OnHPStateChanged(HPState oldState, HPState newState, bool emitLog)
+    {
+        Debug.Log($"[HPState] {(Stats != null ? Stats.CharacterName : name)}: {oldState} -> {newState} (HP {(Stats != null ? Stats.CurrentHP : 0)})");
+
+        UpdateConditionsForHPState(newState);
+
+        Actions.SingleActionOnly = (newState == HPState.Disabled);
+
+        if (newState == HPState.Dying || newState == HPState.Stable)
+        {
+            var concMgr = GetComponent<ConcentrationManager>();
+            if (concMgr != null && concMgr.IsConcentrating)
+                concMgr.OnCharacterIncapacitated();
+
+            var spellComp = GetComponent<SpellcastingComponent>();
+            if (spellComp != null && spellComp.HasHeldTouchCharge)
+                spellComp.ClearHeldTouchCharge("caster incapacitated");
+        }
+
+        if (newState != HPState.Dead)
+            _hasProcessedDeath = false;
+
+        if (newState == HPState.Dead)
+            OnDeath();
+
+        if (emitLog && GameManager.Instance != null && GameManager.Instance.CombatUI != null && Stats != null)
+        {
+            string msg = BuildHPStateLogMessage(oldState, newState);
+            if (!string.IsNullOrEmpty(msg))
+                GameManager.Instance.CombatUI.ShowCombatLog(msg);
+        }
+    }
+
+    private string BuildHPStateLogMessage(HPState oldState, HPState newState)
+    {
+        string who = Stats != null ? Stats.CharacterName : "Character";
+
+        switch (newState)
+        {
+            case HPState.Healthy:
+                if (oldState == HPState.Disabled || oldState == HPState.Dying || oldState == HPState.Stable)
+                    return $"✅ {who} is back in the fight ({Stats.CurrentHP} HP).";
+                return string.Empty;
+
+            case HPState.Disabled:
+                return $"⚠ {who} is DISABLED at 0 HP (one move OR one standard action).";
+
+            case HPState.Dying:
+                return $"💀 {who} is DYING at {Stats.CurrentHP} HP and falls unconscious.";
+
+            case HPState.Stable:
+                return $"🛡 {who} is STABLE at {Stats.CurrentHP} HP (unconscious, no HP loss).";
+
+            case HPState.Dead:
+                return $"☠ {who} has DIED.";
+
+            default:
+                return string.Empty;
+        }
+    }
+
+    private void UpdateConditionsForHPState(HPState state)
+    {
+        // Remove existing HP-state conditions first.
+        RemoveCondition(CombatConditionType.Disabled);
+        RemoveCondition(CombatConditionType.Dying);
+        RemoveCondition(CombatConditionType.Stable);
+        RemoveCondition(CombatConditionType.Unconscious);
+
+        switch (state)
+        {
+            case HPState.Disabled:
+                ApplyCondition(CombatConditionType.Disabled, -1, "HP State");
+                break;
+            case HPState.Dying:
+                ApplyCondition(CombatConditionType.Dying, -1, "HP State");
+                ApplyCondition(CombatConditionType.Unconscious, -1, "HP State");
+                break;
+            case HPState.Stable:
+                ApplyCondition(CombatConditionType.Stable, -1, "HP State");
+                ApplyCondition(CombatConditionType.Unconscious, -1, "HP State");
+                break;
+        }
+    }
+
+    /// <summary>
+    /// D&D 3.5 end-of-turn dying progression (check first, then lose HP on failure).
+    /// </summary>
+    public void ProcessEndOfTurnHPState()
+    {
+        if (Stats == null || _currentHPState != HPState.Dying)
+            return;
+
+        int roll = Random.Range(1, 21);
+        int conMod = Stats.CONMod;
+        int total = roll + conMod;
+        const int dc = 10;
+
+        if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
+        {
+            GameManager.Instance.CombatUI.ShowCombatLog(
+                $"🎲 {Stats.CharacterName} stabilization check: d20({roll}) + CON({CharacterStats.FormatMod(conMod)}) = {total} vs DC {dc}");
+        }
+
+        if (total >= dc)
+        {
+            SetHPState(HPState.Stable, emitLog: true);
+            return;
+        }
+
+        int before = Stats.CurrentHP;
+        Stats.TakeDamage(1);
+        int after = Stats.CurrentHP;
+
+        if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
+        {
+            GameManager.Instance.CombatUI.ShowCombatLog($"💉 {Stats.CharacterName} fails to stabilize and loses 1 HP ({before} → {after}).");
+        }
+    }
+
+    public void Stabilize(string sourceName = "aid")
+    {
+        if (Stats == null)
+            return;
+
+        if (Stats.CurrentHP >= -9 && Stats.CurrentHP <= -1 && _currentHPState != HPState.Dead)
+        {
+            SetHPState(HPState.Stable, emitLog: true);
+            if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
+                GameManager.Instance.CombatUI.ShowCombatLog($"🩹 {Stats.CharacterName} is stabilized by {sourceName}.");
+        }
+    }
+
+    public bool CommitStandardAction()
+    {
+        if (!Actions.HasStandardAction)
+            return false;
+
+        Actions.UseStandardAction();
+
+        if (_currentHPState == HPState.Disabled && Stats != null && Stats.CurrentHP == 0)
+        {
+            if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
+                GameManager.Instance.CombatUI.ShowCombatLog($"⚠ {Stats.CharacterName} takes a standard action while disabled and drops to -1 HP!");
+
+            Stats.CurrentHP = -1;
+        }
+
+        return true;
+    }
+
     // ========== SINGLE ATTACK (Standard Action) ==========
 
     /// <summary>
@@ -1334,6 +1561,7 @@ public class CharacterController : MonoBehaviour
     public bool CanAttackWithWeapon(ItemData weapon, out string reason)
     {
         reason = string.Empty;
+
         if (weapon == null) return true;
 
         if (weapon.RequiresReload && !weapon.IsLoaded)
@@ -1852,10 +2080,15 @@ public class CharacterController : MonoBehaviour
     // ========== LIFECYCLE ==========
 
     /// <summary>
-    /// Called when this character reaches 0 HP.
+    /// Called when this character reaches -10 HP or lower.
     /// </summary>
     public void OnDeath()
     {
+        if (_hasProcessedDeath)
+            return;
+
+        _hasProcessedDeath = true;
+
         if (_sr != null && DeadSprite != null)
             _sr.sprite = DeadSprite;
 
@@ -1881,11 +2114,14 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public void StartNewTurn()
     {
+        SyncHPStateFromCurrentHP(emitLog: false);
+
         HasMovedThisTurn = false;
         HasTakenFiveFootStep = false;
         HasAttackedThisTurn = false;
         IsFightingDefensively = false; // lasts until start of this character's next turn
         Actions.Reset();
+        Actions.SingleActionOnly = (_currentHPState == HPState.Disabled);
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
         // They are player-controlled and reset only when the player changes them
 
@@ -1955,7 +2191,6 @@ public class CharacterController : MonoBehaviour
     private SpecialAttackResult ResolveDisarm(CharacterController target)
     {
         ItemData targetWeapon = target.GetEquippedMainWeapon();
-        if (targetWeapon == null)
         {
             return new SpecialAttackResult
             {

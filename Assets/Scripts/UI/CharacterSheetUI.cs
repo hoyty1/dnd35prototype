@@ -622,9 +622,15 @@ public class CharacterSheetUI : MonoBehaviour
         AddSeparator(content);
 
         // === HP / Movement / Initiative ===
-        Color hpColor = stats.CurrentHP > stats.TotalMaxHP / 2 ? HealthGreen : HealthRed;
-        AddColoredLine(content, "\u2764 ", hpColor, $"HP: {stats.CurrentHP}/{stats.TotalMaxHP}", LightText, 13, 16);
+        HPState hpState = HPState.Healthy;
+        if (stats.CurrentHP <= -10) hpState = HPState.Dead;
+        else if (stats.CurrentHP <= -1) hpState = HPState.Dying;
+        else if (stats.CurrentHP == 0) hpState = HPState.Disabled;
 
+        Color hpColor = hpState == HPState.Healthy
+            ? (stats.CurrentHP > stats.TotalMaxHP / 2 ? HealthGreen : HealthRed)
+            : new Color(1f, 0.7f, 0.35f);
+        AddColoredLine(content, "❤ ", hpColor, $"HP: {stats.CurrentHP}/{stats.TotalMaxHP} [{hpState}]", LightText, 13, 16);
         if (stats.TempHP > 0)
             AddLine(content, $"  Temp HP: {stats.TempHP}", 11, new Color(0.4f, 0.7f, 1f), FontStyle.Normal, 14);
 
@@ -641,6 +647,13 @@ public class CharacterSheetUI : MonoBehaviour
             activeConditions.Add("Disarmed (-4 attack while unarmed)");
         if (stats.IsFlanked)
             activeConditions.Add("Flanked (-2 AC)");
+
+        if (hpState == HPState.Disabled)
+            activeConditions.Add("Disabled (0 HP: can take one move OR one standard action)");
+        else if (hpState == HPState.Dying)
+            activeConditions.Add("Dying (-1 to -9 HP: unconscious, loses 1 HP each turn until stable)");
+        else if (hpState == HPState.Dead)
+            activeConditions.Add("Dead (-10 HP or lower)");
 
         if (activeConditions.Count > 0)
         {

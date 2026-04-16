@@ -16,19 +16,42 @@ public class ActionEconomy
     // Whether the standard action was converted to a second move action
     public bool StandardConvertedToMove;
 
+    // D&D 3.5 disabled state support: one move OR one standard action each turn.
+    public bool SingleActionOnly;
+
     // ========== AVAILABILITY CHECKS ==========
 
     /// <summary>Can the character still take a Move Action this turn?</summary>
-    public bool HasMoveAction => !FullRoundActionUsed && !MoveActionUsed;
+    public bool HasMoveAction
+    {
+        get
+        {
+            if (FullRoundActionUsed || MoveActionUsed)
+                return false;
+            if (SingleActionOnly && (StandardActionUsed || StandardConvertedToMove))
+                return false;
+            return true;
+        }
+    }
 
     /// <summary>Can the character still take a Standard Action?</summary>
-    public bool HasStandardAction => !FullRoundActionUsed && !StandardActionUsed && !StandardConvertedToMove;
+    public bool HasStandardAction
+    {
+        get
+        {
+            if (FullRoundActionUsed || StandardActionUsed || StandardConvertedToMove)
+                return false;
+            if (SingleActionOnly && MoveActionUsed)
+                return false;
+            return true;
+        }
+    }
 
     /// <summary>Can the character take a Full-Round Action? (requires neither standard nor move used yet)</summary>
-    public bool HasFullRoundAction => !FullRoundActionUsed && !StandardActionUsed && !MoveActionUsed && !StandardConvertedToMove;
+    public bool HasFullRoundAction => !SingleActionOnly && !FullRoundActionUsed && !StandardActionUsed && !MoveActionUsed && !StandardConvertedToMove;
 
     /// <summary>Can the character convert their standard action into a second move?</summary>
-    public bool CanConvertStandardToMove => HasStandardAction && MoveActionUsed;
+    public bool CanConvertStandardToMove => !SingleActionOnly && HasStandardAction && MoveActionUsed;
 
     /// <summary>Can the character take a Swift Action?</summary>
     public bool HasSwiftAction => !SwiftActionUsed;
@@ -61,11 +84,15 @@ public class ActionEconomy
     public void UseMoveAction()
     {
         MoveActionUsed = true;
+        if (SingleActionOnly)
+            StandardConvertedToMove = true;
     }
 
     public void UseStandardAction()
     {
         StandardActionUsed = true;
+        if (SingleActionOnly)
+            MoveActionUsed = true;
     }
 
     public void UseFullRoundAction()
@@ -82,6 +109,8 @@ public class ActionEconomy
     public void ConvertStandardToMove()
     {
         StandardConvertedToMove = true;
+        if (SingleActionOnly)
+            MoveActionUsed = true;
     }
 
     // ========== RESET ==========
@@ -93,6 +122,7 @@ public class ActionEconomy
         FullRoundActionUsed = false;
         SwiftActionUsed = false;
         StandardConvertedToMove = false;
+        SingleActionOnly = false;
     }
 
     // ========== STATUS STRING ==========
@@ -101,7 +131,7 @@ public class ActionEconomy
     {
         if (FullRoundActionUsed) return "Full-Round Action used - Turn complete";
 
-        string status = "";
+        string status = SingleActionOnly ? "[Disabled: one action only] " : "";
         if (HasMoveAction) status += "[Move] ";
         else status += "[Move USED] ";
 

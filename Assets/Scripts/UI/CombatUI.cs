@@ -216,7 +216,7 @@ public class CombatUI : MonoBehaviour
                 displayName = GameManager.Instance.GetSummonDisplayName(ch);
 
             nameText.text = $"{displayName} (Lv {s.Level} {raceStr}{s.CharacterClass}){sizeStr}";
-            if (s.IsDead) nameText.text += " (DEAD)";
+            if (ch.CurrentHPState == HPState.Dead) nameText.text += " (DEAD)";
         }
 
         // Use TotalMaxHP (includes feat bonuses like Toughness and spell-based BonusMaxHP)
@@ -224,8 +224,10 @@ public class CombatUI : MonoBehaviour
         if (totalMax <= 0) totalMax = 1; // Guard against division by zero
 
         if (hpText != null)
-            hpText.text = $"HP: {s.CurrentHP}/{totalMax}";
-
+        {
+            string hpStateTag = ch.CurrentHPState == HPState.Healthy ? string.Empty : $" [{ch.CurrentHPState}]";
+            hpText.text = $"HP: {s.CurrentHP}/{totalMax}{hpStateTag}";
+        }
         if (acText != null)
         {
             int effectiveDex = s.DEXMod;
@@ -269,8 +271,8 @@ public class CombatUI : MonoBehaviour
 
         if (hpBar != null)
         {
-            // Update fill amount based on HP percentage using TotalMaxHP
-            float hpPercent = (float)s.CurrentHP / totalMax;
+            // Update fill amount based on HP percentage using TotalMaxHP.
+            float hpPercent = totalMax > 0 ? Mathf.Clamp01((float)Mathf.Max(0, s.CurrentHP) / totalMax) : 0f;
             hpBar.fillAmount = hpPercent;
 
             // Update HP bar color based on HP percentage:

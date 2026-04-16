@@ -359,7 +359,7 @@ public class CharacterStats
         int hpLoss = Level * 2;
         MaxHP -= hpLoss;
         if (CurrentHP > MaxHP) CurrentHP = MaxHP;
-        if (CurrentHP < 0) CurrentHP = 0;
+        if (CurrentHP < -10) CurrentHP = -10;
 
         // Apply fatigue: -2 STR, -2 DEX
         IsFatigued = true;
@@ -772,8 +772,27 @@ public class CharacterStats
     /// <summary>Max HP = Base hit die HP + (CON modifier × level).</summary>
     public int MaxHP { get; private set; }
 
-    /// <summary>Current HP, clamped between 0 and MaxHP.</summary>
-    public int CurrentHP;
+    /// <summary>Current HP (can be negative under D&D 3.5e dying rules).</summary>
+    private int _currentHP;
+    public int CurrentHP
+    {
+        get => _currentHP;
+        set
+        {
+            if (_currentHP == value)
+                return;
+
+            int old = _currentHP;
+            _currentHP = value;
+            CurrentHPChanged?.Invoke(old, _currentHP);
+        }
+    }
+
+    /// <summary>
+    /// Fired whenever CurrentHP changes.
+    /// Args: oldHP, newHP.
+    /// </summary>
+    public event System.Action<int, int> CurrentHPChanged;
 
     /// <summary>
     /// Size modifier to AC and attack rolls from effective current size.
@@ -849,7 +868,7 @@ public class CharacterStats
         }
     }
 
-    public bool IsDead => CurrentHP <= 0;
+    public bool IsDead => CurrentHP <= -10;
 
     // ========== CONSTRUCTOR ==========
 
@@ -1248,7 +1267,7 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Apply raw HP damage (already mitigated), clamping HP to 0.
+    /// Apply raw HP damage (already mitigated), clamping HP to -10 minimum.
     /// </summary>
     public void TakeDamage(int amount)
     {
@@ -1266,7 +1285,7 @@ public class CharacterStats
                 TempHP = 0;
             }
         }
-        CurrentHP = Mathf.Max(0, CurrentHP - amount);
+        CurrentHP = Mathf.Max(-10, CurrentHP - amount);
     }
 
     public void AddDamageResistance(DamageType type, int amount)

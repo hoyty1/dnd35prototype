@@ -1832,9 +1832,29 @@ public class GameManager : MonoBehaviour
         CombatUI.SetActionButtonsVisible(false);
     }
 
+
+    private void ProcessEndOfTurnHPState(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return;
+
+        character.ProcessEndOfTurnHPState();
+
+        if (character.CurrentHPState == HPState.Dead)
+            HandleSummonDeathCleanup(character);
+
+        UpdateAllStatsUI();
+    }
+
+    private bool ShouldSkipTurnDueToHPState(CharacterController character)
+    {
+        return character == null || character.Stats == null || !character.CanTakeTurnActions();
+    }
     /// <summary>Move to the next initiative slot and start that turn.</summary>
     private void NextInitiativeTurn()
     {
+        ProcessEndOfTurnHPState(_activeTurnCharacter);
+
         _currentInitiativeIndex++;
         UpdateInitiativeUI();
         // Threat map may have changed (NPC moved, character died, etc.)
@@ -1853,13 +1873,6 @@ public class GameManager : MonoBehaviour
 
         CloseInventoryIfOpen();
 
-        // If this PC is dead, advance to next in initiative
-        if (pc.Stats.IsDead)
-        {
-            NextInitiativeTurn();
-            return;
-        }
-
         // ===== NEW ROUND DETECTION =====
         // A new round begins when PC1's turn starts (turn order: PC1 → PC2 → NPC → repeat)
         if (pc == PC1)
@@ -1874,6 +1887,21 @@ public class GameManager : MonoBehaviour
 
             // Tick summon durations (Summon Monster: 1 round/level)
             TickSummonDurations();
+        }
+
+        // If this PC is unconscious/dead, skip their actions.
+        if (ShouldSkipTurnDueToHPState(pc))
+        {
+            if (pc != null && pc.Stats != null)
+            {
+                string reason = pc.CurrentHPState == HPState.Dead
+                    ? "is dead"
+                    : "is unconscious";
+                CombatUI?.ShowCombatLog($"⏭ {pc.Stats.CharacterName} {reason} and cannot act this turn.");
+            }
+
+            NextInitiativeTurn();
+            return;
         }
 
         // Log turn start in combat log
@@ -3165,7 +3193,7 @@ public class GameManager : MonoBehaviour
 
         if (!isQuickened)
         {
-            caster.Actions.UseStandardAction();
+            caster.CommitStandardAction();
         }
         else
         {
@@ -3823,7 +3851,7 @@ public class GameManager : MonoBehaviour
         bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
         if (!isQuickened)
         {
-            caster.Actions.UseStandardAction();
+            caster.CommitStandardAction();
         }
         else
         {
@@ -3953,7 +3981,7 @@ public class GameManager : MonoBehaviour
         }
         else if (!isQuickened)
         {
-            caster.Actions.UseStandardAction();
+            caster.CommitStandardAction();
         }
         else
         {
@@ -4679,7 +4707,7 @@ public class GameManager : MonoBehaviour
         bool isQuickened = _pendingMetamagic != null && _pendingMetamagic.Has(MetamagicFeatId.QuickenSpell);
         if (!isQuickened)
         {
-            caster.Actions.UseStandardAction();
+            caster.CommitStandardAction();
         }
         else
         {
@@ -6681,7 +6709,7 @@ public class GameManager : MonoBehaviour
         if (attacker == null || target == null) { ShowActionChoices(); return; }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        attacker.Actions.UseStandardAction();
+        attacker.CommitStandardAction();
 
         SpecialAttackResult result = attacker.ExecuteSpecialAttack(type, target);
         CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}]: {result.Log}");
@@ -7277,7 +7305,7 @@ public class GameManager : MonoBehaviour
     private void PerformSingleAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        attacker.Actions.UseStandardAction();
+        attacker.CommitStandardAction();
 
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         string flankLogPrefix = isFlanking
@@ -7740,9 +7768,14 @@ public class GameManager : MonoBehaviour
         // Update initiative UI to highlight current NPC
         UpdateInitiativeUI();
 
-        if (npc.Stats.IsDead)
+        if (ShouldSkipTurnDueToHPState(npc))
         {
             CombatUI.SetActiveNPC(-1); // Clear NPC highlight
+            if (npc != null && npc.Stats != null)
+            {
+                string reason = npc.CurrentHPState == HPState.Dead ? "is dead" : "is unconscious";
+                CombatUI?.ShowCombatLog($"⏭ {npc.Stats.CharacterName} {reason} and cannot act this turn.");
+            }
             NextInitiativeTurn();
             yield break;
         }
@@ -7996,7 +8029,7 @@ public class GameManager : MonoBehaviour
         {
             var trip = summon.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
             CombatUI.ShowCombatLog($"<color=#66E8FF>✦ {GetSummonDisplayName(summon)} attempts Trip: {trip.Log}</color>");
-            summon.Actions.UseStandardAction();
+            summon.CommitStandardAction();
             UpdateAllStatsUI();
             yield return new WaitForSeconds(0.65f);
             yield break;
@@ -8118,7 +8151,7 @@ public class GameManager : MonoBehaviour
             summon.Stats.MoraleDamageBonus -= damageBonus;
         }
 
-        summon.Actions.UseStandardAction();
+        summon.CommitStandardAction();
         summonData.SmiteUsed = true;
 
         string targetAxis = smiteEvil ? "Evil" : "Good";
@@ -8237,7 +8270,7 @@ public class GameManager : MonoBehaviour
                 TryPushTargetAway(npc, target, 1, allowAttackerFollow: false);
         }
 
-        npc.Actions.UseStandardAction();
+        npc.CommitStandardAction();
         UpdateAllStatsUI();
         return true;
     }
@@ -8258,7 +8291,7 @@ public class GameManager : MonoBehaviour
             yield break;
         }
 
-        npc.Actions.UseStandardAction();
+        npc.CommitStandardAction();
         RangeInfo npcRangeInfo = CalculateRangeInfo(npc, target);
 
         CharacterController flankPartner;
