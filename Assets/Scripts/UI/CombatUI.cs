@@ -772,21 +772,26 @@ public class CombatUI : MonoBehaviour
         {
             bool canDW = canDualWield && actions.HasFullRoundAction;
             bool canDualWieldAttack = true;
+            bool offHandIsSpikedGauntlet = false;
             if (canDualWield)
             {
-                var inv = pc.GetComponent<InventoryComponent>();
-                ItemData mainWeapon = inv != null ? inv.CharacterInventory.RightHandSlot : null;
-                ItemData offWeapon = inv != null ? inv.CharacterInventory.LeftHandSlot : null;
+                ItemData mainWeapon = pc.GetDualWieldMainWeapon();
+                ItemData offWeapon = pc.GetDualWieldOffHandWeapon();
                 bool canMainAttack = pc.CanAttackWithWeapon(mainWeapon, out _);
                 bool canOffAttack = pc.CanAttackWithWeapon(offWeapon, out _);
                 canDualWieldAttack = canMainAttack || canOffAttack;
+                offHandIsSpikedGauntlet = pc.IsDualWieldOffHandSpikedGauntlet();
             }
 
             DualWieldButton.gameObject.SetActive(canDualWield);
             DualWieldButton.interactable = canDW && canDualWieldAttack;
             Text dwLabel = DualWieldButton.GetComponentInChildren<Text>();
             if (dwLabel != null)
-                dwLabel.text = !canDualWieldAttack ? "Dual Wield (Reload first)" : (canDW ? "Dual Wield (Full-Round)" : "Dual Wield (N/A)");
+            {
+                if (!canDualWieldAttack) dwLabel.text = "Dual Wield (Reload first)";
+                else if (canDW && offHandIsSpikedGauntlet) dwLabel.text = "Dual Wield (Spiked Gauntlet Off-Hand)";
+                else dwLabel.text = canDW ? "Dual Wield (Full-Round)" : "Dual Wield (N/A)";
+            }
         }
 
         if (FlurryOfBlowsButton != null)

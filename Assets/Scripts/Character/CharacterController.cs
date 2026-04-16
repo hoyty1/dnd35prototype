@@ -1043,14 +1043,76 @@ public class CharacterController : MonoBehaviour
     // ========== DUAL WIELD ATTACK (Full-Round Action) ==========
 
     /// <summary>
-    /// Check if this character has weapons in both hands (can dual wield).
-    /// Two-handed weapons cannot be dual-wielded.
+    /// Check if this character can make a dual-wield/off-hand attack sequence.
+    /// Supports normal hand-slot dual wielding and spiked gauntlet off-hand attacks from the Hands slot.
     /// </summary>
     public bool CanDualWield()
     {
-        var inv = GetComponent<InventoryComponent>();
-        if (inv == null || inv.CharacterInventory == null) return false;
-        return inv.CharacterInventory.CanDualWield();
+        return TryGetDualWieldWeapons(out _, out _, out _);
+    }
+
+    /// <summary>
+    /// Returns the resolved primary weapon for dual-wield style attacks, if any.
+    /// </summary>
+    public ItemData GetDualWieldMainWeapon()
+    {
+        return TryGetDualWieldWeapons(out ItemData mainWeapon, out _, out _) ? mainWeapon : null;
+    }
+
+    /// <summary>
+    /// Returns the resolved off-hand weapon for dual-wield style attacks, if any.
+    /// This can be either a left-hand weapon or a spiked gauntlet from the Hands slot.
+    /// </summary>
+    public ItemData GetDualWieldOffHandWeapon()
+    {
+        return TryGetDualWieldWeapons(out _, out ItemData offWeapon, out _) ? offWeapon : null;
+    }
+
+    /// <summary>
+    /// True if the current dual-wield off-hand attack option comes from a spiked gauntlet in the Hands slot.
+    /// </summary>
+    public bool IsDualWieldOffHandSpikedGauntlet()
+    {
+        return TryGetDualWieldWeapons(out _, out _, out bool offHandFromSpikedGauntlet) && offHandFromSpikedGauntlet;
+    }
+
+    private bool TryGetDualWieldWeapons(out ItemData mainWeapon, out ItemData offWeapon, out bool offHandFromSpikedGauntlet)
+    {
+        mainWeapon = null;
+        offWeapon = null;
+        offHandFromSpikedGauntlet = false;
+
+        var invComp = GetComponent<InventoryComponent>();
+        var inv = invComp != null ? invComp.CharacterInventory : null;
+        if (inv == null)
+            return false;
+
+        bool hasHeldWeapon = (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon)
+            || (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon);
+
+        // Off-hand gauntlet options only apply when another weapon is actively equipped.
+        if (!hasHeldWeapon)
+            return false;
+
+        mainWeapon = GetEquippedMainWeapon();
+        if (mainWeapon == null)
+            return false;
+
+        if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon && inv.LeftHandSlot != mainWeapon)
+        {
+            offWeapon = inv.LeftHandSlot;
+            return true;
+        }
+
+        ItemData handsItem = inv.HandsSlot;
+        if (IsSpikedGauntletItem(handsItem))
+        {
+            offWeapon = handsItem;
+            offHandFromSpikedGauntlet = true;
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -1062,10 +1124,9 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public (int mainPenalty, int offPenalty, bool lightOffHand) GetDualWieldPenalties()
     {
-        var inv = GetComponent<InventoryComponent>();
-        if (inv == null) return (-6, -10, false);
+        if (!TryGetDualWieldWeapons(out _, out ItemData offHandItem, out _))
+            return (-6, -10, false);
 
-        var offHandItem = inv.CharacterInventory.LeftHandSlot;
         bool lightOffHand = offHandItem != null && offHandItem.IsLightWeapon;
 
         var (mainPen, offPen) = FeatManager.GetTWFPenalties(Stats, lightOffHand);
@@ -1083,12 +1144,8 @@ public class CharacterController : MonoBehaviour
         result.Defender = target;
         result.DefenderHPBefore = target.Stats.CurrentHP;
 
-        var inv = GetComponent<InventoryComponent>();
-        if (inv == null) return result;
-
-        var mainWeapon = inv.CharacterInventory.RightHandSlot;
-        var offWeapon = inv.CharacterInventory.LeftHandSlot;
-        if (mainWeapon == null || offWeapon == null) return result;
+        if (!TryGetDualWieldWeapons(out ItemData mainWeapon, out ItemData offWeapon, out bool offHandFromSpikedGauntlet))
+            return result;
 
         bool canMainAttack = CanAttackWithWeapon(mainWeapon, out string mainBlockedReason);
         bool canOffAttack = CanAttackWithWeapon(offWeapon, out string offBlockedReason);
@@ -1227,7 +1284,9 @@ public class CharacterController : MonoBehaviour
                             + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty
                             + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                             + offWeaponNonProfPenalty + armorNonProfPenalty;
-            string offLabel = $"Attack 2 - Off Hand ({offWeapon.Name})";
+            string offLabel = offHandFromSpikedGauntlet
+                ? $"Attack 2 - Off Hand ({offWeapon.Name}, Hands Slot)"
+                : $"Attack 2 - Off Hand ({offWeapon.Name})";
 
             int offCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20);
             int offCritMult = offWeapon.CritMultiplier > 0 ? offWeapon.CritMultiplier : 2;
@@ -1559,6 +1618,27 @@ public class CharacterController : MonoBehaviour
     }
 
     // ========== WEAPON HELPERS ==========
+
+    /// <summary>
+    /// Returns the equipped spiked gauntlet from the Hands slot, if present.
+    /// </summary>
+    private ItemData GetEquippedHandsSpikedGauntlet()
+    {
+        var invComp = GetComponent<InventoryComponent>();
+        var inv = invComp != null ? invComp.CharacterInventory : null;
+        if (inv == null)
+            return null;
+
+        return IsSpikedGauntletItem(inv.HandsSlot) ? inv.HandsSlot : null;
+    }
+
+    /// <summary>
+    /// True if a spiked gauntlet is equipped in the Hands slot.
+    /// </summary>
+    public bool HasSpikedGauntletEquipped()
+    {
+        return GetEquippedHandsSpikedGauntlet() != null;
+    }
 
     /// <summary>
     /// Returns true if the provided weapon (or current main weapon) is a reload-based crossbow and currently unloaded.
@@ -2063,19 +2143,24 @@ public class CharacterController : MonoBehaviour
         return armorLikeBonus >= 1;
     }
     /// <summary>
-    /// Get the equipped main-hand weapon (right hand first, then left hand).
-    /// Returns null if no weapon equipped (unarmed).
+    /// Get the equipped primary attack weapon.
+    /// Priority: right-hand weapon, left-hand weapon, then spiked gauntlet in Hands slot.
+    /// Returns null if no weapon-equivalent item is available (unarmed).
     /// </summary>
     public ItemData GetEquippedMainWeapon()
     {
-        var inv = GetComponent<InventoryComponent>();
-        if (inv == null || inv.CharacterInventory == null) return null;
+        var invComp = GetComponent<InventoryComponent>();
+        var inv = invComp != null ? invComp.CharacterInventory : null;
+        if (inv == null) return null;
 
-        var rightHand = inv.CharacterInventory.RightHandSlot;
+        var rightHand = inv.RightHandSlot;
         if (rightHand != null && rightHand.IsWeapon) return rightHand;
 
-        var leftHand = inv.CharacterInventory.LeftHandSlot;
+        var leftHand = inv.LeftHandSlot;
         if (leftHand != null && leftHand.IsWeapon) return leftHand;
+
+        ItemData handsGauntlet = GetEquippedHandsSpikedGauntlet();
+        if (handsGauntlet != null) return handsGauntlet;
 
         return null; // Unarmed
     }
@@ -2106,15 +2191,14 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public string GetDualWieldDescription()
     {
-        if (!CanDualWield()) return "";
+        if (!TryGetDualWieldWeapons(out ItemData mainWeapon, out ItemData offWeapon, out bool offHandFromSpikedGauntlet))
+            return "";
 
-        var inv = GetComponent<InventoryComponent>();
-        var mainWeapon = inv.CharacterInventory.RightHandSlot;
-        var offWeapon = inv.CharacterInventory.LeftHandSlot;
         var (mainPen, offPen, lightOff) = GetDualWieldPenalties();
 
+        string offSource = offHandFromSpikedGauntlet ? " (Hands slot)" : "";
         string lightStr = lightOff ? " (light)" : "";
-        return $"Dual Wield: {mainWeapon.Name} / {offWeapon.Name}{lightStr}\n" +
+        return $"Dual Wield: {mainWeapon.Name} / {offWeapon.Name}{offSource}{lightStr}\n" +
                $"Penalties: Main {mainPen}, Off-hand {offPen}";
     }
 

@@ -3791,9 +3791,8 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Actions.HasFullRoundAction || !pc.CanDualWield()) return;
 
-        var inv = pc.GetComponent<InventoryComponent>();
-        ItemData main = inv != null ? inv.CharacterInventory.RightHandSlot : null;
-        ItemData off = inv != null ? inv.CharacterInventory.LeftHandSlot : null;
+        ItemData main = pc.GetDualWieldMainWeapon();
+        ItemData off = pc.GetDualWieldOffHandWeapon();
         bool canMain = pc.CanAttackWithWeapon(main, out string mainReason);
         bool canOff = pc.CanAttackWithWeapon(off, out string offReason);
         if (!canMain && !canOff)
@@ -3808,9 +3807,10 @@ public class GameManager : MonoBehaviour
 
         var (mainPen, offPen, lightOff) = pc.GetDualWieldPenalties();
         string penaltyInfo = lightOff ? $"(light off-hand: {mainPen}/{offPen})" : $"(penalties: {mainPen}/{offPen})";
+        string offHandInfo = pc.IsDualWieldOffHandSpikedGauntlet() ? " [Off-hand: Spiked Gauntlet]" : string.Empty;
 
         ShowAttackTargets(pc);
-        CombatUI.SetTurnIndicator($"DUAL WIELD: Select target {penaltyInfo}");
+        CombatUI.SetTurnIndicator($"DUAL WIELD: Select target {penaltyInfo}{offHandInfo}");
     }
 
     public void OnEndTurnButtonPressed()

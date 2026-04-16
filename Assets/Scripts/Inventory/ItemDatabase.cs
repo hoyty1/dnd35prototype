@@ -1114,9 +1114,23 @@ public static class ItemDatabase
 
         Register(new ItemData
         {
-            Id = "spiked_gauntlet", Name = "Spiked Gauntlet", Type = ItemType.Misc,
+            Id = "spiked_gauntlet", Name = "Spiked Gauntlet", Type = ItemType.Weapon,
             Slot = EquipSlot.Hands,
             Description = "A hand-slot spiked gauntlet setup. The gauntlet itself cannot be disarmed.",
+            Proficiency = WeaponProficiency.Simple,
+            WeaponCat = WeaponCategory.Melee,
+            WeaponSize = WeaponSizeCategory.Light,
+            IsLightWeapon = true,
+            DamageDice = 4,
+            DamageCount = 1,
+            BonusDamage = 0,
+            DmgModType = DamageModifierType.Strength,
+            AttackRange = 1,
+            ReachSquares = 1,
+            CanAttackAdjacent = true,
+            CritThreatMin = 20,
+            CritMultiplier = 2,
+            DamageType = "piercing",
             WeightLbs = 1f,
             IconChar = "✹", IconColor = new Color(0.65f, 0.65f, 0.72f)
         });

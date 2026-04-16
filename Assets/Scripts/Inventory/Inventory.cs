@@ -267,7 +267,8 @@ public class Inventory
         OwnerStats.ArcaneSpellFailure = totalASF;
 
         // --- Weapon Stats ---
-        // Primary weapon from right hand
+        // Primary weapon from right hand, then left hand.
+        // If neither hand has a weapon, allow spiked gauntlet in Hands slot as primary attack option.
         if (RightHandSlot != null && RightHandSlot.IsWeapon)
         {
             OwnerStats.EquippedMainWeaponItem = RightHandSlot;
@@ -278,6 +279,11 @@ public class Inventory
             // Fallback: weapon in left hand only
             OwnerStats.EquippedMainWeaponItem = LeftHandSlot;
             ApplyWeaponStats(LeftHandSlot);
+        }
+        else if (IsSpikedGauntletItem(HandsSlot))
+        {
+            OwnerStats.EquippedMainWeaponItem = HandsSlot;
+            ApplyWeaponStats(HandsSlot);
         }
         else
         {
@@ -306,6 +312,16 @@ public class Inventory
 
         OwnerStats.CritThreatMin = weapon.CritThreatMin > 0 ? weapon.CritThreatMin : 20;
         OwnerStats.CritMultiplier = weapon.CritMultiplier > 0 ? weapon.CritMultiplier : 2;
+    }
+
+    private static bool IsSpikedGauntletItem(ItemData item)
+    {
+        if (item == null)
+            return false;
+
+        string id = (item.Id ?? string.Empty).ToLowerInvariant();
+        string name = (item.Name ?? string.Empty).ToLowerInvariant();
+        return id == "spiked_gauntlet" || name.Contains("spiked gauntlet");
     }
 
     /// <summary>

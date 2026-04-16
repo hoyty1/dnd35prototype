@@ -28,6 +28,7 @@ public class InventoryComponent : MonoBehaviour
         CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
         CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
         CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        CharacterInventory.DirectEquip(ItemDatabase.CloneItem("spiked_gauntlet"), EquipSlot.Hands);
 
         // Extra items in inventory - showcase variety of PHB weapons and armor
         CharacterInventory.AddItem(ItemDatabase.CloneItem("mace_heavy"));
