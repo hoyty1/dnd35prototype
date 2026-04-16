@@ -86,12 +86,13 @@ public class StatusEffectIndicator : MonoBehaviour
         {
             foreach (var condition in _character.Stats.ActiveConditions)
             {
+                CombatConditionType normalized = ConditionRules.Normalize(condition.Type);
                 list.Add(new IconData
                 {
-                    Key = condition.Type.ToString(),
-                    ShortLabel = GetConditionLabel(condition.Type),
+                    Key = normalized.ToString(),
+                    ShortLabel = GetConditionLabel(normalized),
                     Tooltip = BuildConditionTooltip(condition),
-                    Color = GetConditionColor(condition.Type),
+                    Color = GetConditionColor(normalized),
                     Duration = condition.RemainingRounds
                 });
             }
@@ -237,31 +238,37 @@ public class StatusEffectIndicator : MonoBehaviour
 
     private static string GetConditionLabel(CombatConditionType type)
     {
-        switch (type)
-        {
-            case CombatConditionType.Prone: return "PR";
-            case CombatConditionType.Grappled: return "GR";
-            case CombatConditionType.Feinted: return "FE";
-            case CombatConditionType.ChargePenalty: return "CH";
-            case CombatConditionType.Disarmed: return "DS";
-            case CombatConditionType.Flanked: return "FL";
-            default: return "ST";
-        }
+        var def = ConditionRules.GetDefinition(type);
+        if (!string.IsNullOrEmpty(def.ShortLabel))
+            return def.ShortLabel;
+
+        string raw = def.DisplayName;
+        if (string.IsNullOrEmpty(raw))
+            raw = type.ToString();
+        return raw.Length <= 2 ? raw.ToUpperInvariant() : raw.Substring(0, 2).ToUpperInvariant();
     }
 
     private static Color GetConditionColor(CombatConditionType type)
     {
-        // Debuff = red, buff = green, neutral = yellow.
-        switch (type)
+        switch (ConditionRules.Normalize(type))
         {
+            case CombatConditionType.Invisible:
+                return new Color(0.38f, 0.72f, 0.95f, 0.88f);
+            case CombatConditionType.Flanked:
+                return new Color(1f, 0.55f, 0.2f, 0.9f);
             case CombatConditionType.Prone:
             case CombatConditionType.Grappled:
             case CombatConditionType.Feinted:
             case CombatConditionType.ChargePenalty:
             case CombatConditionType.Disarmed:
+            case CombatConditionType.Blinded:
+            case CombatConditionType.Entangled:
+            case CombatConditionType.Stunned:
+            case CombatConditionType.Paralyzed:
+            case CombatConditionType.Helpless:
+            case CombatConditionType.Nauseated:
+            case CombatConditionType.Panicked:
                 return new Color(0.9f, 0.35f, 0.35f, 0.88f);
-            case CombatConditionType.Flanked:
-                return new Color(1f, 0.55f, 0.2f, 0.9f);
             default:
                 return new Color(0.95f, 0.82f, 0.35f, 0.88f);
         }
@@ -270,24 +277,13 @@ public class StatusEffectIndicator : MonoBehaviour
     private static string BuildConditionTooltip(StatusEffect condition)
     {
         string duration = condition.RemainingRounds < 0 ? "∞" : $"{Mathf.Max(0, condition.RemainingRounds)} rounds";
+        var def = ConditionRules.GetDefinition(condition.Type);
+        string source = string.IsNullOrEmpty(condition.SourceName) ? "Unknown" : condition.SourceName;
 
-        switch (condition.Type)
-        {
-            case CombatConditionType.Prone:
-                return $"Prone\n-4 AC, -4 melee attacks\nDuration: {duration}";
-            case CombatConditionType.Grappled:
-                return $"Grappled\n-2 attacks, movement blocked\nDuration: {duration}";
-            case CombatConditionType.Feinted:
-                return $"Feinted\n-2 AC\nDuration: {duration}";
-            case CombatConditionType.ChargePenalty:
-                return $"Charge Penalty\n-2 AC\nDuration: {duration}";
-            case CombatConditionType.Disarmed:
-                return $"Disarmed\nWeapon unavailable\nDuration: {duration}";
-            case CombatConditionType.Flanked:
-                return "Flanked\nEnemies gain +2 attack bonus\nRogues can Sneak Attack";
-            default:
-                return $"{condition.Type}\nDuration: {duration}";
-        }
+        if (!string.IsNullOrEmpty(def.Description))
+            return $"{def.DisplayName}\n{def.Description}\nSource: {source}\nDuration: {duration}";
+
+        return $"{def.DisplayName}\nSource: {source}\nDuration: {duration}";
     }
 
     private static Sprite CreateBadgeSprite()

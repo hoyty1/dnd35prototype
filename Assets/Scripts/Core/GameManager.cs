@@ -1641,7 +1641,7 @@ public class GameManager : MonoBehaviour
             if (character.Stats.IsDead)
             {
                 if (hasFlanked)
-                    character.Stats.RemoveCondition(CombatConditionType.Flanked);
+                    character.RemoveCondition(CombatConditionType.Flanked);
                 continue;
             }
 
@@ -1661,9 +1661,9 @@ public class GameManager : MonoBehaviour
             }
 
             if (shouldBeFlanked && !hasFlanked)
-                character.Stats.ApplyCondition(CombatConditionType.Flanked, -1, "Flanking");
+                character.ApplyCondition(CombatConditionType.Flanked, -1, "Flanking");
             else if (!shouldBeFlanked && hasFlanked)
-                character.Stats.RemoveCondition(CombatConditionType.Flanked);
+                character.RemoveCondition(CombatConditionType.Flanked);
         }
     }
 
@@ -2292,7 +2292,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        pc.Stats.ApplyCondition(CombatConditionType.Prone, -1, pc.Stats.CharacterName);
+        pc.ApplyCondition(CombatConditionType.Prone, -1, pc.Stats.CharacterName);
         CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} drops prone.");
         CombatUI?.ShowCombatLog("(Free action - no attacks of opportunity provoked)");
 
@@ -2403,7 +2403,7 @@ public class GameManager : MonoBehaviour
             yield break;
         }
 
-        bool removed = pc.Stats.RemoveCondition(CombatConditionType.Prone);
+        bool removed = pc.RemoveCondition(CombatConditionType.Prone);
         if (removed)
             CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} stands up.");
 
@@ -5095,7 +5095,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        var expiredConditions = character.Stats.TickConditions();
+        var expiredConditions = character.TickConditions();
         foreach (var cond in expiredConditions)
         {
             string msg = $"⏱ {character.Stats.CharacterName} is no longer {cond.Type}.";
@@ -7193,7 +7193,7 @@ public class GameManager : MonoBehaviour
         }
 
         // Apply AC penalty until next turn.
-        charger.Stats.ApplyCondition(CombatConditionType.ChargePenalty, 1, charger.Stats.CharacterName);
+        charger.ApplyCondition(CombatConditionType.ChargePenalty, 1, charger.Stats.CharacterName);
         CombatUI.ShowCombatLog($"🛡 {charger.Stats.CharacterName} is charging: -2 AC until next turn.");
 
         charger.Actions.UseFullRoundAction();
@@ -8201,7 +8201,7 @@ public class GameManager : MonoBehaviour
                 CheckConcentrationOnDamage(target, result.TotalDamage);
         }
 
-        npc.Stats.ApplyCondition(CombatConditionType.ChargePenalty, 1, npc.Stats.CharacterName);
+        npc.ApplyCondition(CombatConditionType.ChargePenalty, 1, npc.Stats.CharacterName);
         npc.Actions.UseFullRoundAction();
         UpdateAllStatsUI();
 

@@ -218,26 +218,66 @@ public class CharacterStats
 
     // ========== SPECIAL COMBAT CONDITIONS ==========
 
-    /// <summary>Active special maneuver conditions (prone, grappled, disarmed).</summary>
+    /// <summary>Active combat conditions tracked on this character.</summary>
     public List<StatusEffect> ActiveConditions = new List<StatusEffect>();
 
+    private bool HasNormalizedCondition(CombatConditionType type)
+    {
+        CombatConditionType normalized = ConditionRules.Normalize(type);
+        return ActiveConditions.Any(c => ConditionRules.Normalize(c.Type) == normalized);
+    }
+
+    private int SumConditionValue(System.Func<ConditionDefinition, int> selector)
+    {
+        int total = 0;
+        for (int i = 0; i < ActiveConditions.Count; i++)
+        {
+            var def = ConditionRules.GetDefinition(ActiveConditions[i].Type);
+            total += selector(def);
+        }
+        return total;
+    }
+
     /// <summary>Quick flags for common conditions.</summary>
-    public bool IsProne => ActiveConditions.Any(c => c.Type == CombatConditionType.Prone);
-    public bool IsGrappled => ActiveConditions.Any(c => c.Type == CombatConditionType.Grappled);
-    public bool IsDisarmed => ActiveConditions.Any(c => c.Type == CombatConditionType.Disarmed);
-    public bool HasChargePenalty => ActiveConditions.Any(c => c.Type == CombatConditionType.ChargePenalty);
-    public bool IsFlanked => ActiveConditions.Any(c => c.Type == CombatConditionType.Flanked);
+    public bool IsProne => HasNormalizedCondition(CombatConditionType.Prone);
+    public bool IsGrappled => HasNormalizedCondition(CombatConditionType.Grappled);
+    public bool IsDisarmed => HasNormalizedCondition(CombatConditionType.Disarmed);
+    public bool HasChargePenalty => HasNormalizedCondition(CombatConditionType.ChargePenalty);
+    public bool IsFlanked => HasNormalizedCondition(CombatConditionType.Flanked);
 
-    /// <summary>Penalty to attack rolls from persistent conditions (situational prone penalties handled at attack resolution time).</summary>
-    public int ConditionAttackPenalty => (IsGrappled ? -2 : 0) + (IsDisarmed ? -4 : 0);
+    /// <summary>Aggregate attack modifier from active conditions.</summary>
+    public int ConditionAttackPenalty => SumConditionValue(d => d.AttackModifier);
 
-    /// <summary>Penalty to AC from persistent conditions (situational prone AC handled at attack resolution time).</summary>
-    public int ConditionACPenalty => (ActiveConditions.Any(c => c.Type == CombatConditionType.Feinted) ? -2 : 0)
-        + (HasChargePenalty ? -2 : 0);
+    /// <summary>Aggregate armor class modifier from active conditions.</summary>
+    public int ConditionACPenalty => SumConditionValue(d => d.ArmorClassModifier);
 
-    /// <summary>Movement override from conditions (grappled cannot move normally).</summary>
-    public bool MovementBlockedByCondition => IsGrappled;
+    /// <summary>Aggregate saving throw modifiers from active conditions.</summary>
+    public int ConditionFortitudeModifier => SumConditionValue(d => d.FortitudeModifier);
+    public int ConditionReflexModifier => SumConditionValue(d => d.ReflexModifier);
+    public int ConditionWillModifier => SumConditionValue(d => d.WillModifier);
 
+    /// <summary>Aggregate initiative modifier from active conditions.</summary>
+    public int ConditionInitiativeModifier => SumConditionValue(d => d.InitiativeModifier);
+
+    /// <summary>Movement blocked if any active condition prevents movement.</summary>
+    public bool MovementBlockedByCondition => ActiveConditions.Any(c => ConditionRules.GetDefinition(c.Type).PreventsMovement);
+
+    /// <summary>Movement multiplier from conditions (smallest multiplier wins).</summary>
+    public float ConditionMovementMultiplier
+    {
+        get
+        {
+            float mult = 1f;
+            for (int i = 0; i < ActiveConditions.Count; i++)
+            {
+                float candidate = Mathf.Clamp01(ConditionRules.GetDefinition(ActiveConditions[i].Type).MovementMultiplier <= 0f
+                    ? (ConditionRules.GetDefinition(ActiveConditions[i].Type).PreventsMovement ? 0f : 1f)
+                    : ConditionRules.GetDefinition(ActiveConditions[i].Type).MovementMultiplier);
+                if (candidate < mult) mult = candidate;
+            }
+            return mult;
+        }
+    }
     /// <summary>
     /// Barbarian Fast Movement: +10 ft speed in medium or lighter armor.
     /// Always active (not lost when raging).
@@ -330,25 +370,44 @@ public class CharacterStats
                   $"STR {STR}, DEX {DEX}, CON {CON}, HP {CurrentHP}/{MaxHP}");
     }
 
-    /// <summary>
-    /// Tick rage duration at start of barbarian's turn. Deactivates if expired.
-    /// </summary>
-
     // ========== CONDITION MANAGEMENT ==========
 
     /// <summary>
     /// Apply (or refresh) a combat condition.
-    /// If same condition exists, longer duration wins.
+    /// Stacking behavior is governed by <see cref="ConditionRules"/> definitions.
     /// </summary>
     public void ApplyCondition(CombatConditionType type, int rounds, string sourceName)
     {
-        var existing = ActiveConditions.FirstOrDefault(c => c.Type == type);
-        if (existing == null)
+        CombatConditionType normalized = ConditionRules.Normalize(type);
+        ConditionDefinition def = ConditionRules.GetDefinition(normalized);
+
+        if (def.StackingRule == ConditionStackingRule.StackBySource)
         {
-            ActiveConditions.Add(new StatusEffect(type, sourceName, rounds));
+            var existingBySource = ActiveConditions.FirstOrDefault(c =>
+                ConditionRules.Normalize(c.Type) == normalized && c.SourceName == sourceName);
+
+            if (existingBySource == null)
+            {
+                ActiveConditions.Add(new StatusEffect(normalized, sourceName, rounds));
+                return;
+            }
+
+            RefreshConditionDuration(existingBySource, rounds);
             return;
         }
 
+        var existing = ActiveConditions.FirstOrDefault(c => ConditionRules.Normalize(c.Type) == normalized);
+        if (existing == null)
+        {
+            ActiveConditions.Add(new StatusEffect(normalized, sourceName, rounds));
+            return;
+        }
+
+        RefreshConditionDuration(existing, rounds);
+    }
+
+    private static void RefreshConditionDuration(StatusEffect existing, int rounds)
+    {
         if (existing.RemainingRounds < 0) return; // existing indefinite stays
         if (rounds < 0 || rounds > existing.RemainingRounds)
             existing.RemainingRounds = rounds;
@@ -359,7 +418,8 @@ public class CharacterStats
     /// </summary>
     public bool RemoveCondition(CombatConditionType type)
     {
-        int idx = ActiveConditions.FindIndex(c => c.Type == type);
+        CombatConditionType normalized = ConditionRules.Normalize(type);
+        int idx = ActiveConditions.FindIndex(c => ConditionRules.Normalize(c.Type) == normalized);
         if (idx < 0) return false;
         ActiveConditions.RemoveAt(idx);
         return true;
@@ -393,13 +453,15 @@ public class CharacterStats
         var parts = new List<string>();
         foreach (var c in ActiveConditions)
         {
+            ConditionDefinition def = ConditionRules.GetDefinition(c.Type);
             string color = c.Type == CombatConditionType.Grappled ? "#FFAA44"
                 : c.Type == CombatConditionType.Prone ? "#FF7777"
                 : c.Type == CombatConditionType.Feinted ? "#66CCFF"
                 : c.Type == CombatConditionType.ChargePenalty ? "#FF9966"
                 : c.Type == CombatConditionType.Flanked ? "#FFB347"
+                : c.Type == CombatConditionType.Invisible ? "#88CCFF"
                 : "#FFFF66";
-            parts.Add($"<color={color}>{c.Type}</color>({c.GetDurationLabel()})");
+            parts.Add($"<color={color}>{def.DisplayName}</color>({c.GetDurationLabel()})");
         }
         return string.Join(" ", parts);
     }
@@ -474,14 +536,14 @@ public class CharacterStats
         }
     }
 
-    /// <summary>Total Fortitude save: CON mod + class base + feat bonus + morale bonus.</summary>
-    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus;
+    /// <summary>Total Fortitude save: CON mod + class base + feat bonus + morale bonus + condition modifiers.</summary>
+    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + ConditionFortitudeModifier;
 
-    /// <summary>Total Reflex save: DEX mod + class base + feat bonus + morale bonus.</summary>
-    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus;
+    /// <summary>Total Reflex save: DEX mod + class base + feat bonus + morale bonus + condition modifiers.</summary>
+    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + ConditionReflexModifier;
 
-    /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus + morale bonus.</summary>
-    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus;
+    /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus + morale bonus + condition modifiers.</summary>
+    public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus + ConditionWillModifier;
 
     // ========== FEATS (D&D 3.5) ==========
     /// <summary>Set of feats this character has.</summary>
@@ -590,8 +652,8 @@ public class CharacterStats
 
     // ========== FEAT-DERIVED STATS ==========
 
-    /// <summary>Total initiative modifier: DEX mod + feat bonuses (Improved Initiative).</summary>
-    public int InitiativeModifier => DEXMod + FeatManager.GetInitiativeBonus(this);
+    /// <summary>Total initiative modifier: DEX mod + feat bonuses + condition modifiers.</summary>
+    public int InitiativeModifier => DEXMod + FeatManager.GetInitiativeBonus(this) + ConditionInitiativeModifier;
 
     /// <summary>Fortitude save bonus from feats (Great Fortitude).</summary>
     public int FeatFortitudeBonus => FeatManager.GetFortitudeSaveBonus(this);
@@ -775,8 +837,17 @@ public class CharacterStats
     /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier + morale bonus + condition penalties.</summary>
     public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier + MoraleAttackBonus + ConditionAttackPenalty;
 
-    /// <summary>Movement speed in squares per turn (includes class fast movement bonuses).</summary>
-    public int MoveRange => MovementBlockedByCondition ? 0 : BaseSpeed + MonkFastMovementBonus + BarbarianFastMovementBonus;
+    /// <summary>Movement speed in squares per turn (includes class fast movement bonuses and condition multipliers).</summary>
+    public int MoveRange
+    {
+        get
+        {
+            if (MovementBlockedByCondition) return 0;
+            int baseRange = BaseSpeed + MonkFastMovementBonus + BarbarianFastMovementBonus;
+            int modified = Mathf.FloorToInt(baseRange * ConditionMovementMultiplier);
+            return Mathf.Max(0, modified);
+        }
+    }
 
     public bool IsDead => CurrentHP <= 0;
 

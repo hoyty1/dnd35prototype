@@ -93,6 +93,7 @@ public class CharacterController : MonoBehaviour
     }
 
     private SpriteRenderer _sr;
+    private ConditionManager _conditionManager;
     private Coroutine _currentScaleAnimation;
 
     [Header("Visual Animation Settings")]
@@ -117,6 +118,10 @@ public class CharacterController : MonoBehaviour
         // Battlefield status indicators (condition badges above token).
         if (GetComponent<StatusEffectIndicator>() == null)
             gameObject.AddComponent<StatusEffectIndicator>();
+
+        _conditionManager = GetComponent<ConditionManager>();
+        if (_conditionManager == null)
+            _conditionManager = gameObject.AddComponent<ConditionManager>();
     }
 
     private void OnDisable()
@@ -137,6 +142,10 @@ public class CharacterController : MonoBehaviour
         AliveSprite = alive;
         DeadSprite = dead;
         GridPosition = startPos;
+
+        if (_conditionManager == null)
+            _conditionManager = GetComponent<ConditionManager>() ?? gameObject.AddComponent<ConditionManager>();
+        _conditionManager.Init(Stats);
 
         _sr.sprite = AliveSprite;
         _sr.sortingOrder = 10;
@@ -287,11 +296,49 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool HasCondition(CombatConditionType type)
     {
-        return Stats != null
-            && Stats.ActiveConditions != null
-            && Stats.ActiveConditions.Exists(c => c.Type == type);
+        if (Stats == null) return false;
+
+        if (_conditionManager != null)
+            return _conditionManager.HasCondition(type);
+
+        CombatConditionType normalized = ConditionRules.Normalize(type);
+        return Stats.ActiveConditions != null
+            && Stats.ActiveConditions.Exists(c => ConditionRules.Normalize(c.Type) == normalized);
     }
 
+
+    public void ApplyCondition(CombatConditionType type, int rounds, string sourceName)
+    {
+        if (Stats == null) return;
+
+        if (_conditionManager != null)
+        {
+            _conditionManager.ApplyCondition(type, rounds, sourceName);
+            return;
+        }
+
+        Stats.ApplyCondition(type, rounds, sourceName);
+    }
+
+    public bool RemoveCondition(CombatConditionType type)
+    {
+        if (Stats == null) return false;
+
+        if (_conditionManager != null)
+            return _conditionManager.RemoveCondition(type);
+
+        return Stats.RemoveCondition(type);
+    }
+
+    public List<StatusEffect> TickConditions()
+    {
+        if (Stats == null) return new List<StatusEffect>();
+
+        if (_conditionManager != null)
+            return _conditionManager.TickConditions();
+
+        return Stats.TickConditions();
+    }
     // ========== SINGLE ATTACK (Standard Action) ==========
 
     /// <summary>
@@ -416,12 +463,13 @@ public class CharacterController : MonoBehaviour
 
         int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
+        int conditionAttackPenalty = Stats.ConditionAttackPenalty;
 
         int totalAtkMod = Stats.BaseAttackBonus + abilityMod + Stats.SizeModifier
                           + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                           + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                           + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                          + weaponNonProfPenalty + armorNonProfPenalty;
+                          + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty;
 
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         // === FEAT: Improved Critical (double threat range) ===
@@ -547,6 +595,7 @@ public class CharacterController : MonoBehaviour
         bool isMelee = !isRanged;
         int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
+        int conditionAttackPenalty = Stats.ConditionAttackPenalty;
 
         // === FEAT: Power Attack (melee only) ===
         int powerAtkPenalty = 0;
@@ -654,7 +703,7 @@ public class CharacterController : MonoBehaviour
             int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                          + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                         + weaponNonProfPenalty + armorNonProfPenalty;
+                         + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty;
 
             // Recalculate with correct ability mod (iterative uses BAB-based bonus, not STRMod again)
             // The baseBonus from GetIterativeAttackBonuses already includes STRMod+SizeModifier
@@ -662,7 +711,7 @@ public class CharacterController : MonoBehaviour
             atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                      + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                      + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                     + weaponNonProfPenalty + armorNonProfPenalty;
+                     + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty;
             // Note: Weapon Finesse already handled in GetIterativeAttackBonuses if needed
             // For now, the base bonus includes STRMod; if Finesse, we adjust
             if (!isRanged && FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
@@ -1881,13 +1930,13 @@ public class CharacterController : MonoBehaviour
     {
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + (Stats.HasFeat("Improved Trip") ? 4 : 0);
+        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Trip") ? 4 : 0);
         int defAbility = Mathf.Max(target.Stats.STRMod, target.Stats.DEXMod);
-        int defTotal = defRoll + target.Stats.BaseAttackBonus + defAbility + target.Stats.SizeModifier + (target.Stats.HasFeat("Improved Trip") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.BaseAttackBonus + defAbility + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + (target.Stats.HasFeat("Improved Trip") ? 4 : 0);
 
         bool success = atkTotal >= defTotal;
         if (success)
-            target.Stats.ApplyCondition(CombatConditionType.Prone, -1, Stats.CharacterName);
+            target.ApplyCondition(CombatConditionType.Prone, -1, Stats.CharacterName);
 
         return new SpecialAttackResult
         {
@@ -1921,14 +1970,14 @@ public class CharacterController : MonoBehaviour
 
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + atkWeaponMod + (Stats.HasFeat("Improved Disarm") ? 4 : 0);
-        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + defWeaponMod + (target.Stats.HasFeat("Improved Disarm") ? 4 : 0);
+        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + atkWeaponMod + (Stats.HasFeat("Improved Disarm") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + defWeaponMod + (target.Stats.HasFeat("Improved Disarm") ? 4 : 0);
 
         bool success = atkTotal >= defTotal;
         if (success)
         {
             DestroyEquippedMainWeapon(target);
-            target.Stats.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
+            target.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
         }
 
         return new SpecialAttackResult
@@ -1948,7 +1997,7 @@ public class CharacterController : MonoBehaviour
     private SpecialAttackResult ResolveGrapple(CharacterController target)
     {
         int touchRoll = Random.Range(1, 21);
-        int touchTotal = touchRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier;
+        int touchTotal = touchRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty;
         int touchAC = 10 + target.Stats.DEXMod + target.Stats.SizeModifier;
         if (touchTotal < touchAC)
         {
@@ -1971,8 +2020,8 @@ public class CharacterController : MonoBehaviour
         bool success = atkTotal >= defTotal;
         if (success)
         {
-            Stats.ApplyCondition(CombatConditionType.Grappled, 2, target.Stats.CharacterName);
-            target.Stats.ApplyCondition(CombatConditionType.Grappled, 2, Stats.CharacterName);
+            ApplyCondition(CombatConditionType.Grappled, 2, target.Stats.CharacterName);
+            target.ApplyCondition(CombatConditionType.Grappled, 2, Stats.CharacterName);
         }
 
         return new SpecialAttackResult
@@ -2004,8 +2053,8 @@ public class CharacterController : MonoBehaviour
 
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + GetDisarmWeaponModifier(this) + (Stats.HasFeat("Improved Sunder") ? 4 : 0);
-        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + GetDisarmWeaponModifier(target);
+        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + GetDisarmWeaponModifier(this) + (Stats.HasFeat("Improved Sunder") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + GetDisarmWeaponModifier(target);
 
         bool success = atkTotal >= defTotal;
         int damage = 0;
@@ -2021,7 +2070,7 @@ public class CharacterController : MonoBehaviour
             if (damage >= breakThreshold)
             {
                 DestroyEquippedMainWeapon(target);
-                target.Stats.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
+                target.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
                 return new SpecialAttackResult
                 {
                     ManeuverName = "Sunder",
@@ -2055,8 +2104,8 @@ public class CharacterController : MonoBehaviour
     {
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.STRMod + Stats.SizeModifier + (Stats.HasFeat("Improved Bull Rush") ? 4 : 0);
-        int defTotal = defRoll + target.Stats.STRMod + target.Stats.SizeModifier;
+        int atkTotal = atkRoll + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Bull Rush") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty;
         bool success = atkTotal >= defTotal;
 
         return new SpecialAttackResult
@@ -2077,12 +2126,12 @@ public class CharacterController : MonoBehaviour
     {
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.STRMod + Stats.SizeModifier + (Stats.HasFeat("Improved Overrun") ? 4 : 0);
-        int defTotal = defRoll + target.Stats.STRMod + target.Stats.SizeModifier;
+        int atkTotal = atkRoll + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Overrun") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty;
         bool success = atkTotal >= defTotal;
 
         if (success)
-            target.Stats.ApplyCondition(CombatConditionType.Prone, 1, Stats.CharacterName);
+            target.ApplyCondition(CombatConditionType.Prone, 1, Stats.CharacterName);
 
         return new SpecialAttackResult
         {
@@ -2110,7 +2159,7 @@ public class CharacterController : MonoBehaviour
         bool success = bluffTotal >= senseTotal;
 
         if (success)
-            target.Stats.ApplyCondition(CombatConditionType.Feinted, 1, Stats.CharacterName);
+            target.ApplyCondition(CombatConditionType.Feinted, 1, Stats.CharacterName);
 
         return new SpecialAttackResult
         {
@@ -2128,7 +2177,7 @@ public class CharacterController : MonoBehaviour
 
     public int GetGrappleModifier()
     {
-        return Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + (Stats.HasFeat("Improved Grapple") ? 4 : 0);
+        return Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Grapple") ? 4 : 0);
     }
 
     private static int GetDisarmWeaponModifier(CharacterController character)
@@ -2262,6 +2311,7 @@ public class CharacterController : MonoBehaviour
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
         int proneAttackPenalty = GetProneAttackModifier(isMeleeAttack: true);
         int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
+        int conditionAttackPenalty = Stats.ConditionAttackPenalty;
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
 
         for (int i = 0; i < flurryBonuses.Length; i++)
@@ -2273,7 +2323,7 @@ public class CharacterController : MonoBehaviour
             }
 
             int atkMod = flurryBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus + proneAttackPenalty
-                       + weaponNonProfPenalty + armorNonProfPenalty;
+                       + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty;
 
             string label = $"Flurry {i + 1} ({CharacterStats.FormatMod(flurryBonuses[i])})";
             int hpBefore = target.Stats.CurrentHP;

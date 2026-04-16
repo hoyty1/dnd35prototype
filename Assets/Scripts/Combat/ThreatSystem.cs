@@ -98,6 +98,16 @@ public static class ThreatSystem
             return threatened;
         }
 
+        if (character.Stats.ActiveConditions != null)
+        {
+            for (int i = 0; i < character.Stats.ActiveConditions.Count; i++)
+            {
+                ConditionDefinition def = ConditionRules.GetDefinition(character.Stats.ActiveConditions[i].Type);
+                if (def.PreventsThreatening)
+                    return threatened;
+            }
+        }
+
         int minThreatDistance = character.GetMeleeMinAttackDistance();
         int maxThreatDistance = character.GetMeleeMaxAttackDistance();
         List<Vector2Int> occupiedSquares = character.GetOccupiedSquares();
@@ -206,6 +216,17 @@ public static class ThreatSystem
         if (character == null || character.Stats == null || character.Stats.IsDead) return false;
         // Ranged-only characters cannot make AoOs
         if (!character.HasMeleeWeaponEquipped()) return false;
+
+        if (character.Stats.ActiveConditions != null)
+        {
+            for (int i = 0; i < character.Stats.ActiveConditions.Count; i++)
+            {
+                ConditionDefinition def = ConditionRules.GetDefinition(character.Stats.ActiveConditions[i].Type);
+                if (def.PreventsAoO)
+                    return false;
+            }
+        }
+
         return character.Stats.AttacksOfOpportunityUsed < character.Stats.MaxAttacksOfOpportunity;
     }
 
