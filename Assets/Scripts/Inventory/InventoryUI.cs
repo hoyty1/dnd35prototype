@@ -1,6 +1,6 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.EventSystems;
 
 /// <summary>
 /// Inventory UI panel showing equipment slots and general inventory grid.
@@ -15,13 +15,40 @@ public class InventoryUI : MonoBehaviour
     // References
     public CharacterController CurrentCharacter;
 
-    // UI Elements - Equipment Slots
-    private Image _armorSlotBg;
-    private Text _armorSlotText;
-    private Image _leftHandSlotBg;
-    private Text _leftHandSlotText;
-    private Image _rightHandSlotBg;
-    private Text _rightHandSlotText;
+    private readonly Dictionary<EquipSlot, Image> _equipSlotBgs = new Dictionary<EquipSlot, Image>();
+    private readonly Dictionary<EquipSlot, Text> _equipSlotTexts = new Dictionary<EquipSlot, Text>();
+
+    private struct EquipSlotDisplay
+    {
+        public EquipSlot Slot;
+        public string Label;
+
+        public EquipSlotDisplay(EquipSlot slot, string label)
+        {
+            Slot = slot;
+            Label = label;
+        }
+    }
+
+    // D&D 3.5e body slots + legacy combat hand slots.
+    private static readonly EquipSlotDisplay[] VisibleEquipSlots =
+    {
+        new EquipSlotDisplay(EquipSlot.Head, "HEAD"),
+        new EquipSlotDisplay(EquipSlot.FaceEyes, "FACE/EYES"),
+        new EquipSlotDisplay(EquipSlot.Neck, "NECK"),
+        new EquipSlotDisplay(EquipSlot.Torso, "TORSO"),
+        new EquipSlotDisplay(EquipSlot.ArmorRobe, "ARMOR/ROBE"),
+        new EquipSlotDisplay(EquipSlot.Waist, "WAIST"),
+        new EquipSlotDisplay(EquipSlot.Back, "BACK"),
+
+        new EquipSlotDisplay(EquipSlot.Wrists, "WRISTS"),
+        new EquipSlotDisplay(EquipSlot.Hands, "HANDS"),
+        new EquipSlotDisplay(EquipSlot.LeftRing, "L RING"),
+        new EquipSlotDisplay(EquipSlot.RightRing, "R RING"),
+        new EquipSlotDisplay(EquipSlot.Feet, "FEET"),
+        new EquipSlotDisplay(EquipSlot.LeftHand, "L HAND"),
+        new EquipSlotDisplay(EquipSlot.RightHand, "R HAND")
+    };
 
     // UI Elements - General Inventory
     private Image[] _generalSlotBgs;
@@ -50,7 +77,6 @@ public class InventoryUI : MonoBehaviour
 
     // Colors
     private static readonly Color SlotNormal = new Color(0.2f, 0.2f, 0.25f, 0.9f);
-    private static readonly Color SlotHover = new Color(0.3f, 0.3f, 0.4f, 0.95f);
     private static readonly Color SlotSelected = new Color(0.3f, 0.5f, 0.3f, 0.95f);
     private static readonly Color SlotEquipped = new Color(0.25f, 0.25f, 0.35f, 0.9f);
     private static readonly Color SlotEmpty = new Color(0.15f, 0.15f, 0.2f, 0.8f);
@@ -110,35 +136,15 @@ public class InventoryUI : MonoBehaviour
             new Vector2(15, -68), new Vector2(-30, 20),
             "EQUIPMENT", 15, new Color(0.8f, 0.7f, 0.4f), TextAnchor.MiddleLeft);
 
-        // Separator
         CreatePanel(PanelRoot.transform, "EquipSep",
             new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1),
             new Vector2(15, -88), new Vector2(-30, 1),
             new Color(0.8f, 0.7f, 0.4f, 0.4f));
 
-        // Equipment slots layout (3 slots side by side)
-        float equipY = -100;
-        float slotSize = 80;
-        float spacing = 20;
-        float equipStartX = (520 - (slotSize * 3 + spacing * 2)) / 2;
-
-        // Armor slot
-        _armorSlotBg = CreateEquipSlot(PanelRoot.transform, "ArmorSlot",
-            new Vector2(equipStartX, equipY), new Vector2(slotSize, slotSize + 20),
-            "ARMOR", out _armorSlotText);
-
-        // Left Hand slot
-        _leftHandSlotBg = CreateEquipSlot(PanelRoot.transform, "LeftHandSlot",
-            new Vector2(equipStartX + slotSize + spacing, equipY), new Vector2(slotSize, slotSize + 20),
-            "LEFT HAND", out _leftHandSlotText);
-
-        // Right Hand slot
-        _rightHandSlotBg = CreateEquipSlot(PanelRoot.transform, "RightHandSlot",
-            new Vector2(equipStartX + (slotSize + spacing) * 2, equipY), new Vector2(slotSize, slotSize + 20),
-            "RIGHT HAND", out _rightHandSlotText);
+        BuildEquipmentSlots();
 
         // ===== INVENTORY SECTION =====
-        float invLabelY = equipY - slotSize - 35;
+        float invLabelY = -248;
         CreateText(PanelRoot.transform, "InvLabel",
             new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1),
             new Vector2(15, invLabelY), new Vector2(-30, 20),
@@ -154,7 +160,7 @@ public class InventoryUI : MonoBehaviour
         _generalSlotTexts = new Text[Inventory.GeneralSlotCount];
 
         float gridStartY = invLabelY - 30;
-        float cellSize = 56;
+        float cellSize = 48;
         float cellSpacing = 6;
         int cols = 5;
         float gridStartX = (520 - (cellSize * cols + cellSpacing * (cols - 1))) / 2;
@@ -172,7 +178,7 @@ public class InventoryUI : MonoBehaviour
         // ===== INSTRUCTION TEXT =====
         _instructionText = CreateText(PanelRoot.transform, "Instructions",
             new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
-            new Vector2(0, 50), new Vector2(-20, 40),
+            new Vector2(0, 28), new Vector2(-20, 32),
             "Click an item to select, then click a slot to equip/move.\nClick an equipped item to unequip it.",
             12, new Color(0.6f, 0.6f, 0.5f), TextAnchor.MiddleCenter);
 
@@ -182,14 +188,52 @@ public class InventoryUI : MonoBehaviour
         PanelRoot.SetActive(false);
     }
 
+    private void BuildEquipmentSlots()
+    {
+        _equipSlotBgs.Clear();
+        _equipSlotTexts.Clear();
+
+        float startY = -100f;
+        float slotWidth = 66f;
+        float slotHeight = 74f;
+        float spacingX = 4f;
+        float spacingY = 8f;
+        int cols = 7;
+
+        float gridWidth = cols * slotWidth + (cols - 1) * spacingX;
+        float startX = (520f - gridWidth) / 2f;
+
+        for (int i = 0; i < VisibleEquipSlots.Length; i++)
+        {
+            int row = i / cols;
+            int col = i % cols;
+
+            float x = startX + col * (slotWidth + spacingX);
+            float y = startY - row * (slotHeight + spacingY);
+
+            var def = VisibleEquipSlots[i];
+            Text slotText;
+            Image slotBg = CreateEquipSlot(
+                PanelRoot.transform,
+                $"Equip_{def.Slot}",
+                def.Slot,
+                new Vector2(x, y),
+                new Vector2(slotWidth, slotHeight),
+                def.Label,
+                out slotText);
+
+            _equipSlotBgs[def.Slot] = slotBg;
+            _equipSlotTexts[def.Slot] = slotText;
+        }
+    }
+
     private void BuildTooltip()
     {
         _tooltipPanel = CreatePanel(PanelRoot.transform, "Tooltip",
             new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(0, 0.5f),
-            new Vector2(10, 0), new Vector2(200, 140),
+            new Vector2(10, 0), new Vector2(210, 140),
             new Color(0.05f, 0.05f, 0.1f, 0.95f));
 
-        // Border
         CreatePanel(_tooltipPanel.transform, "TooltipBorder",
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
             Vector2.zero, new Vector2(0, 0),
@@ -256,13 +300,9 @@ public class InventoryUI : MonoBehaviour
             Open(character);
     }
 
-    // ===== UPDATE / INPUT =====
-
     private void Update()
     {
         if (!IsOpen || CurrentCharacter == null) return;
-
-        // Handle mouse hover for tooltips
         HandleHover();
     }
 
@@ -275,24 +315,15 @@ public class InventoryUI : MonoBehaviour
             _parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _parentCanvas.worldCamera,
             out mousePos);
 
-        // Check equipment slots
-        if (IsOverRect(_armorSlotBg, mousePos))
+        foreach (var kv in _equipSlotBgs)
         {
-            ShowEquipTooltip(EquipSlot.Armor);
-            return;
-        }
-        if (IsOverRect(_leftHandSlotBg, mousePos))
-        {
-            ShowEquipTooltip(EquipSlot.LeftHand);
-            return;
-        }
-        if (IsOverRect(_rightHandSlotBg, mousePos))
-        {
-            ShowEquipTooltip(EquipSlot.RightHand);
-            return;
+            if (IsOverRect(kv.Value, mousePos))
+            {
+                ShowEquipTooltip(kv.Key);
+                return;
+            }
         }
 
-        // Check general slots
         for (int i = 0; i < Inventory.GeneralSlotCount; i++)
         {
             if (_generalSlotBgs[i] != null && IsOverRect(_generalSlotBgs[i], mousePos))
@@ -313,14 +344,12 @@ public class InventoryUI : MonoBehaviour
     {
         if (img == null) return false;
         var rt = img.GetComponent<RectTransform>();
-        // Convert to panel-local coordinates
         Vector3[] corners = new Vector3[4];
         rt.GetWorldCorners(corners);
         RectTransform panelRT = PanelRoot.GetComponent<RectTransform>();
         for (int i = 0; i < 4; i++)
-        {
             corners[i] = panelRT.InverseTransformPoint(corners[i]);
-        }
+
         float minX = corners[0].x, maxX = corners[2].x;
         float minY = corners[0].y, maxY = corners[2].y;
         return localMousePos.x >= minX && localMousePos.x <= maxX &&
@@ -349,7 +378,6 @@ public class InventoryUI : MonoBehaviour
 
         if (_hasSelection && _selectedGeneralSlot >= 0)
         {
-            // Try to equip selected general item into this slot
             var item = inv.GeneralSlots[_selectedGeneralSlot];
             if (item != null && item.CanEquipIn(slot))
             {
@@ -366,7 +394,6 @@ public class InventoryUI : MonoBehaviour
         }
         else
         {
-            // Unequip this slot's item
             if (inv.GetEquipped(slot) != null)
             {
                 inv.Unequip(slot);
@@ -385,7 +412,6 @@ public class InventoryUI : MonoBehaviour
 
         if (_hasSelection && _selectedEquipSlot != EquipSlot.None)
         {
-            // Should not happen — equip slots don't get "selected" to move
             ClearSelection();
             RefreshUI();
             return;
@@ -393,7 +419,6 @@ public class InventoryUI : MonoBehaviour
 
         if (_hasSelection && _selectedGeneralSlot >= 0)
         {
-            // Swap items between two general slots
             if (_selectedGeneralSlot != index)
             {
                 var temp = inv.GeneralSlots[_selectedGeneralSlot];
@@ -405,7 +430,6 @@ public class InventoryUI : MonoBehaviour
         }
         else
         {
-            // Select this slot
             if (inv.GeneralSlots[index] != null)
             {
                 _selectedGeneralSlot = index;
@@ -431,7 +455,6 @@ public class InventoryUI : MonoBehaviour
         var inv = GetInventory();
         if (inv == null) return;
 
-        // Character info
         if (_charNameText != null)
             _charNameText.text = $"{stats.CharacterName}'s Inventory ({stats.CharacterClass} Lv {stats.Level})";
 
@@ -448,18 +471,17 @@ public class InventoryUI : MonoBehaviour
             _charStatsText.text = baseSummary + armorSummary + asfSummary;
         }
 
-        // Equipment slots
-        RefreshEquipSlot(_armorSlotBg, _armorSlotText, inv.ArmorSlot, "Empty");
-        RefreshEquipSlot(_leftHandSlotBg, _leftHandSlotText, inv.LeftHandSlot, "Empty");
-        RefreshEquipSlot(_rightHandSlotBg, _rightHandSlotText, inv.RightHandSlot, "Empty");
-
-        // General inventory
-        for (int i = 0; i < Inventory.GeneralSlotCount; i++)
+        foreach (var def in VisibleEquipSlots)
         {
-            RefreshGeneralSlot(i, inv.GeneralSlots[i]);
+            if (_equipSlotBgs.TryGetValue(def.Slot, out var bg) && _equipSlotTexts.TryGetValue(def.Slot, out var text))
+            {
+                RefreshEquipSlot(bg, text, inv.GetEquipped(def.Slot), "Empty");
+            }
         }
 
-        // Update instruction text based on selection
+        for (int i = 0; i < Inventory.GeneralSlotCount; i++)
+            RefreshGeneralSlot(i, inv.GeneralSlots[i]);
+
         if (_instructionText != null)
         {
             if (_hasSelection && _selectedGeneralSlot >= 0)
@@ -482,7 +504,7 @@ public class InventoryUI : MonoBehaviour
         if (bg == null || text == null) return;
         if (item != null)
         {
-            text.text = $"{item.IconChar}\n{item.Name}";
+            text.text = string.IsNullOrEmpty(item.IconChar) ? item.Name : $"{item.IconChar}\n{item.Name}";
             text.color = item.IconColor;
             bg.color = SlotEquipped;
         }
@@ -552,7 +574,6 @@ public class InventoryUI : MonoBehaviour
 
     private void NotifyStatsChanged()
     {
-        // Update the main combat UI
         if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
         {
             GameManager.Instance.CombatUI.UpdateAllStats(
@@ -562,27 +583,23 @@ public class InventoryUI : MonoBehaviour
 
     // ===== UI CREATION HELPERS =====
 
-    private Image CreateEquipSlot(Transform parent, string name, Vector2 pos, Vector2 size, string label, out Text itemText)
+    private Image CreateEquipSlot(Transform parent, string name, EquipSlot slot, Vector2 pos, Vector2 size, string label, out Text itemText)
     {
-        // Slot container
         GameObject slotGO = CreatePanel(parent, name,
             new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1),
             pos, size,
             SlotEmpty);
 
-        // Label on top
         CreateText(slotGO.transform, name + "Label",
             new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
             new Vector2(0, -2), new Vector2(0, 16),
-            label, 10, new Color(0.7f, 0.7f, 0.5f), TextAnchor.MiddleCenter);
+            label, 9, new Color(0.7f, 0.7f, 0.5f), TextAnchor.MiddleCenter);
 
-        // Item text/icon
         itemText = CreateText(slotGO.transform, name + "Item",
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
             new Vector2(0, -6), new Vector2(-4, -18),
-            "Empty", 13, new Color(0.4f, 0.4f, 0.4f), TextAnchor.MiddleCenter);
+            "Empty", 11, new Color(0.4f, 0.4f, 0.4f), TextAnchor.MiddleCenter);
 
-        // Add click handler
         Button btn = slotGO.AddComponent<Button>();
         ColorBlock colors = btn.colors;
         colors.normalColor = Color.white;
@@ -591,11 +608,6 @@ public class InventoryUI : MonoBehaviour
         colors.selectedColor = Color.white;
         btn.colors = colors;
         btn.targetGraphic = slotGO.GetComponent<Image>();
-
-        EquipSlot slot = EquipSlot.None;
-        if (name.Contains("Armor")) slot = EquipSlot.Armor;
-        else if (name.Contains("Left")) slot = EquipSlot.LeftHand;
-        else if (name.Contains("Right")) slot = EquipSlot.RightHand;
 
         EquipSlot capturedSlot = slot;
         btn.onClick.AddListener(() => OnEquipSlotClicked(capturedSlot));
@@ -618,7 +630,6 @@ public class InventoryUI : MonoBehaviour
         _generalSlotBgs[index] = slotGO.GetComponent<Image>();
         _generalSlotTexts[index] = itemText;
 
-        // Add click handler
         Button btn = slotGO.AddComponent<Button>();
         ColorBlock colors = btn.colors;
         colors.normalColor = Color.white;

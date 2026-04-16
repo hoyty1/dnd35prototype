@@ -18,11 +18,28 @@ public enum ItemType
 /// </summary>
 public enum EquipSlot
 {
-    None,       // Cannot be equipped (consumable, misc)
-    Armor,      // Chest armor slot
-    LeftHand,   // Shield or weapon
-    RightHand,  // Weapon only
-    EitherHand  // Can go in left or right hand (weapons)
+    None = 0,         // Cannot be equipped (consumable, misc)
+
+    // Legacy/core combat slots (kept stable for serialized data compatibility)
+    Armor = 1,        // Legacy name for armor/robe slot
+    LeftHand = 2,     // Shield or weapon
+    RightHand = 3,    // Weapon only
+    EitherHand = 4,   // Can go in left or right hand (weapons)
+
+    // D&D 3.5e body equipment slots
+    Head = 5,
+    FaceEyes = 6,
+    Neck = 7,
+    Torso = 8,
+    ArmorRobe = 9,
+    Waist = 10,
+    Back = 11,
+    Wrists = 12,
+    Hands = 13,
+    LeftRing = 14,
+    RightRing = 15,
+    EitherRing = 16,
+    Feet = 17
 }
 
 /// <summary>
@@ -219,9 +236,20 @@ public class ItemData
     {
         if (Slot == EquipSlot.None) return false;
         if (Slot == targetSlot) return true;
-        // EitherHand items can go in LeftHand or RightHand
+
+        // Backward-compatible aliasing between legacy Armor and new ArmorRobe slot name.
+        if ((Slot == EquipSlot.Armor && targetSlot == EquipSlot.ArmorRobe) ||
+            (Slot == EquipSlot.ArmorRobe && targetSlot == EquipSlot.Armor))
+            return true;
+
+        // EitherHand items can go in LeftHand or RightHand.
         if (Slot == EquipSlot.EitherHand && (targetSlot == EquipSlot.LeftHand || targetSlot == EquipSlot.RightHand))
             return true;
+
+        // Ring items can support either finger ring slot.
+        if (Slot == EquipSlot.EitherRing && (targetSlot == EquipSlot.LeftRing || targetSlot == EquipSlot.RightRing))
+            return true;
+
         return false;
     }
 
