@@ -2241,13 +2241,23 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        int atkHeldItemMod = GetDisarmHeldItemModifier(this);
-        int defHeldItemMod = GetDisarmHeldItemModifier(targetHeldItem);
+        ItemData attackerHeldWeapon = GetEquippedMainWeapon();
+
+        int atkHeldItemMod = GetDisarmHeldItemModifier(attackerHeldWeapon, treatUnarmedAsLight: true);
+        int atkSizeDiffMod = GetDisarmSizeDifferenceModifier(this, target);
+        int atkImprovedDisarmMod = Stats.HasFeat("Improved Disarm") ? 4 : 0;
+
+        int defHeldItemMod = GetDisarmHeldItemModifier(targetHeldItem, treatUnarmedAsLight: false);
+        int defNonMeleeHeldItemPenalty = GetDisarmNonMeleeHeldItemPenalty(targetHeldItem);
+        int defSizeDiffMod = GetDisarmSizeDifferenceModifier(target, this);
+        int defImprovedDisarmMod = target.Stats.HasFeat("Improved Disarm") ? 4 : 0;
 
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + atkHeldItemMod + (Stats.HasFeat("Improved Disarm") ? 4 : 0);
-        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + defHeldItemMod + (target.Stats.HasFeat("Improved Disarm") ? 4 : 0);
+        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty
+                       + atkHeldItemMod + atkSizeDiffMod + atkImprovedDisarmMod;
+        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty
+                       + defHeldItemMod + defNonMeleeHeldItemPenalty + defSizeDiffMod + defImprovedDisarmMod;
 
         bool success = atkTotal >= defTotal;
         if (success)
@@ -2255,6 +2265,23 @@ public class CharacterController : MonoBehaviour
             DestroyEquippedHeldItem(target, targetHeldItemSlot);
             target.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
         }
+
+        string attackerHeldLabel = attackerHeldWeapon != null ? attackerHeldWeapon.Name : "Unarmed Strike";
+        string defenderHeldLabel = targetHeldItem != null ? targetHeldItem.Name : "Held Item";
+        string atkBreakdown = BuildDisarmModifierBreakdown(
+            "ATK",
+            attackerHeldLabel,
+            atkHeldItemMod,
+            atkSizeDiffMod,
+            0,
+            atkImprovedDisarmMod);
+        string defBreakdown = BuildDisarmModifierBreakdown(
+            "DEF",
+            defenderHeldLabel,
+            defHeldItemMod,
+            defSizeDiffMod,
+            defNonMeleeHeldItemPenalty,
+            defImprovedDisarmMod);
 
         return new SpecialAttackResult
         {
@@ -2265,8 +2292,8 @@ public class CharacterController : MonoBehaviour
             OpposedRoll = defRoll,
             OpposedTotal = defTotal,
             Log = success
-                ? $"{Stats.CharacterName} disarms {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) {targetHeldItem.Name} knocked away."
-                : $"{Stats.CharacterName} fails to disarm {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
+                ? $"{Stats.CharacterName} disarms {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) {targetHeldItem.Name} knocked away. {atkBreakdown} | {defBreakdown}"
+                : $"{Stats.CharacterName} fails to disarm {target.Stats.CharacterName}. ({atkTotal} vs {defTotal}) {atkBreakdown} | {defBreakdown}"
         };
     }
 
@@ -2458,18 +2485,60 @@ public class CharacterController : MonoBehaviour
 
     private static int GetDisarmHeldItemModifier(CharacterController character)
     {
-        return GetDisarmHeldItemModifier(character != null ? character.GetEquippedMainWeapon() : null);
+        ItemData heldItem = character != null ? character.GetEquippedMainWeapon() : null;
+        return GetDisarmHeldItemModifier(heldItem, treatUnarmedAsLight: true);
     }
 
-    private static int GetDisarmHeldItemModifier(ItemData heldItem)
+    private static int GetDisarmHeldItemModifier(ItemData heldItem, bool treatUnarmedAsLight)
     {
-        if (heldItem == null) return 0;
-        if (!heldItem.IsWeapon) return 0;
-        if (heldItem.IsTwoHanded) return 4;
-        if (heldItem.IsLightWeapon) return -4;
+        if (heldItem == null)
+            return treatUnarmedAsLight ? -4 : 0;
+
+        if (!heldItem.IsWeapon)
+            return 0;
+
+        if (heldItem.WeaponSize == WeaponSizeCategory.TwoHanded || heldItem.IsTwoHanded)
+            return 4;
+
+        if (heldItem.WeaponSize == WeaponSizeCategory.Light || heldItem.IsLightWeapon)
+            return -4;
+
         return 0;
     }
 
+    private static int GetDisarmSizeDifferenceModifier(CharacterController actor, CharacterController opponent)
+    {
+        if (actor == null || opponent == null || actor.Stats == null || opponent.Stats == null)
+            return 0;
+
+        int sizeStepDifference = (int)actor.Stats.CurrentSizeCategory - (int)opponent.Stats.CurrentSizeCategory;
+        return sizeStepDifference * 4;
+    }
+
+    private static int GetDisarmNonMeleeHeldItemPenalty(ItemData heldItem)
+    {
+        if (heldItem == null)
+            return 0;
+
+        if (heldItem.IsShield)
+            return -4;
+
+        if (heldItem.IsWeapon)
+            return heldItem.WeaponCat == WeaponCategory.Melee ? 0 : -4;
+
+        // Non-weapon held items (wands, rods, etc.) are easier to disarm.
+        return -4;
+    }
+
+    private static string BuildDisarmModifierBreakdown(string sideLabel, string heldItemLabel, int heldItemModifier, int sizeDifferenceModifier, int nonMeleePenalty, int improvedFeatModifier)
+    {
+        string heldItemPart = heldItemModifier != 0 ? $"weapon {heldItemModifier:+#;-#;0}" : "weapon +0";
+        string sizePart = sizeDifferenceModifier != 0 ? $"size {sizeDifferenceModifier:+#;-#;0}" : "size +0";
+        string nonMeleePart = nonMeleePenalty != 0 ? $", non-melee {nonMeleePenalty:+#;-#;0}" : string.Empty;
+        string featPart = improvedFeatModifier != 0 ? $", Improved Disarm {improvedFeatModifier:+#;-#;0}" : string.Empty;
+
+        return $"{sideLabel}[{heldItemLabel}: {heldItemPart}, {sizePart}{nonMeleePart}{featPart}]";
+    }
     private static bool TryGetDisarmTargetHeldItem(CharacterController target, EquipSlot? preferredTargetSlot, out ItemData heldItem, out EquipSlot handSlot)
     {
         heldItem = null;

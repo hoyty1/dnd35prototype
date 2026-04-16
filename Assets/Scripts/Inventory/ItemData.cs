@@ -75,6 +75,17 @@ public enum WeaponCategory
 }
 
 /// <summary>
+/// Handedness/size category for weapon use in D&D 3.5 combat maneuvers.
+/// </summary>
+public enum WeaponSizeCategory
+{
+    None,
+    Light,
+    OneHanded,
+    TwoHanded
+}
+
+/// <summary>
 /// How a weapon applies ability modifiers to damage (D&D 3.5 rules).
 /// </summary>
 public enum DamageModifierType
@@ -125,6 +136,7 @@ public class ItemData
     // --- Weapon Properties ---
     public WeaponProficiency Proficiency;   // Simple, Martial, Exotic
     public WeaponCategory WeaponCat;        // Melee or Ranged
+    public WeaponSizeCategory WeaponSize;   // Light, One-Handed, or Two-Handed
     public int DamageDice;      // Sides on damage die (e.g., 8 for d8)
     public int DamageCount;     // Number of damage dice (usually 1)
     public int BonusDamage;     // Flat bonus damage
@@ -359,8 +371,9 @@ public class ItemData
                 stats += $"\nReload: {reloadLabel} | {loadedLabel}";
             }
             string props = "";
-            if (IsLightWeapon) props += "Light, ";
-            if (IsTwoHanded) props += "Two-handed, ";
+            if (WeaponSize == WeaponSizeCategory.Light) props += "Light, ";
+            else if (WeaponSize == WeaponSizeCategory.OneHanded) props += "One-handed, ";
+            else if (WeaponSize == WeaponSizeCategory.TwoHanded) props += "Two-handed, ";
             if (IsReachWeapon) props += "Reach, ";
             if (DealsNonlethalDamage) props += "Nonlethal, ";
             if (WhipLikeArmorRestriction) props += "Cannot harm armor/natural armor +1+, ";

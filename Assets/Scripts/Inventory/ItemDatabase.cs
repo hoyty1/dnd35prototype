@@ -1165,8 +1165,52 @@ public static class ItemDatabase
 
     private static void Register(ItemData item)
     {
+        ApplyWeaponSizeDefaults(item);
         ApplyReachDefaults(item);
         _items[item.Id] = item;
+    }
+
+    /// <summary>
+    /// Ensures every registered weapon has an explicit D&D 3.5 size/handedness category.
+    /// Also keeps legacy IsLightWeapon/IsTwoHanded flags synchronized for older systems.
+    /// </summary>
+    private static void ApplyWeaponSizeDefaults(ItemData item)
+    {
+        if (item == null || item.Type != ItemType.Weapon)
+            return;
+
+        if (item.WeaponSize == WeaponSizeCategory.None)
+        {
+            string id = (item.Id ?? string.Empty).ToLowerInvariant();
+
+            if (id == "unarmed_strike")
+            {
+                item.WeaponSize = WeaponSizeCategory.Light;
+            }
+            else if (item.IsTwoHanded || item.DmgModType == DamageModifierType.StrengthOneAndHalf)
+            {
+                item.WeaponSize = WeaponSizeCategory.TwoHanded;
+            }
+            else if (item.IsLightWeapon)
+            {
+                item.WeaponSize = WeaponSizeCategory.Light;
+            }
+            else if (id.Contains("crossbow")
+                     || id.Contains("longbow")
+                     || id.Contains("shortbow")
+                     || id.Contains("composite_longbow")
+                     || id.Contains("composite_shortbow"))
+            {
+                item.WeaponSize = WeaponSizeCategory.TwoHanded;
+            }
+            else
+            {
+                item.WeaponSize = WeaponSizeCategory.OneHanded;
+            }
+        }
+
+        item.IsLightWeapon = item.WeaponSize == WeaponSizeCategory.Light;
+        item.IsTwoHanded = item.WeaponSize == WeaponSizeCategory.TwoHanded;
     }
 
     /// <summary>
@@ -1218,6 +1262,7 @@ public static class ItemDatabase
             Type = src.Type, Slot = src.Slot,
             // Weapon properties
             Proficiency = src.Proficiency, WeaponCat = src.WeaponCat,
+            WeaponSize = src.WeaponSize,
             DamageDice = src.DamageDice, DamageCount = src.DamageCount,
             BonusDamage = src.BonusDamage, AttackRange = src.AttackRange,
             IsLightWeapon = src.IsLightWeapon, IsTwoHanded = src.IsTwoHanded,
