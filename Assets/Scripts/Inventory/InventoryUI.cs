@@ -179,7 +179,7 @@ public class InventoryUI : MonoBehaviour
         _instructionText = CreateText(PanelRoot.transform, "Instructions",
             new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
             new Vector2(0, 28), new Vector2(-20, 32),
-            "Click an item to select, then click a slot to equip/move.\nClick an equipped item to unequip it.",
+            "Click equipment items to select/equip.\nClick consumables to use them from inventory.",
             12, new Color(0.6f, 0.6f, 0.5f), TextAnchor.MiddleCenter);
 
         // ===== TOOLTIP =====
@@ -419,26 +419,72 @@ public class InventoryUI : MonoBehaviour
 
         if (_hasSelection && _selectedGeneralSlot >= 0)
         {
-            if (_selectedGeneralSlot != index)
+            // Clicking the same selected consumable slot uses the item.
+            if (_selectedGeneralSlot == index)
             {
-                var temp = inv.GeneralSlots[_selectedGeneralSlot];
-                inv.GeneralSlots[_selectedGeneralSlot] = inv.GeneralSlots[index];
-                inv.GeneralSlots[index] = temp;
+                ItemData selectedItem = inv.GeneralSlots[index];
+                if (selectedItem != null && selectedItem.IsConsumable)
+                {
+                    TryUseConsumable(index, selectedItem);
+                    return;
+                }
+
+                ClearSelection();
+                RefreshUI();
+                return;
             }
+
+            var temp = inv.GeneralSlots[_selectedGeneralSlot];
+            inv.GeneralSlots[_selectedGeneralSlot] = inv.GeneralSlots[index];
+            inv.GeneralSlots[index] = temp;
             ClearSelection();
             RefreshUI();
+            return;
         }
-        else
+
+        ItemData clickedItem = inv.GeneralSlots[index];
+        if (clickedItem == null)
+            return;
+
+        // Single-click convenience: consumables can be used directly from inventory.
+        if (clickedItem.IsConsumable)
         {
-            if (inv.GeneralSlots[index] != null)
-            {
-                _selectedGeneralSlot = index;
-                _hasSelection = true;
-                RefreshUI();
-            }
+            TryUseConsumable(index, clickedItem);
+            return;
         }
+
+        _selectedGeneralSlot = index;
+        _hasSelection = true;
+        RefreshUI();
     }
 
+    private void TryUseConsumable(int index, ItemData item)
+    {
+        if (CurrentCharacter == null || item == null)
+            return;
+
+        GameManager gm = GameManager.Instance;
+        bool used = false;
+        string feedback = string.Empty;
+
+        if (gm != null)
+        {
+            used = gm.TryUseConsumableFromInventory(CurrentCharacter, index, out feedback);
+            if (!used && !string.IsNullOrEmpty(feedback))
+                gm.CombatUI?.ShowCombatLog($"⚠ {feedback}");
+        }
+
+        if (!used && gm == null)
+        {
+            feedback = "Cannot use consumables: GameManager is unavailable.";
+        }
+
+        if (used)
+            NotifyStatsChanged();
+
+        ClearSelection();
+        RefreshUI();
+    }
     private void ClearSelection()
     {
         _selectedGeneralSlot = -1;
@@ -488,12 +534,15 @@ public class InventoryUI : MonoBehaviour
             {
                 var selItem = inv.GeneralSlots[_selectedGeneralSlot];
                 string itemName = selItem != null ? selItem.Name : "item";
-                _instructionText.text = $"Selected: {itemName}\nClick an equipment slot to equip, or another inventory slot to swap.";
+                bool selectedIsConsumable = selItem != null && selItem.IsConsumable;
+                _instructionText.text = selectedIsConsumable
+                    ? $"Selected: {itemName}\nClick again to use, or click another inventory slot to swap."
+                    : $"Selected: {itemName}\nClick an equipment slot to equip, or another inventory slot to swap.";
                 _instructionText.color = new Color(0.4f, 0.9f, 0.4f);
             }
             else
             {
-                _instructionText.text = "Click an item to select, then click a slot to equip/move.\nClick an equipped item to unequip it.";
+                _instructionText.text = "Click equipment items to select/equip.\nClick consumables to use them from inventory.";
                 _instructionText.color = new Color(0.6f, 0.6f, 0.5f);
             }
         }

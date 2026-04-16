@@ -1071,10 +1071,26 @@ public static class ItemDatabase
     {
         Register(new ItemData
         {
-            Id = "potion_healing", Name = "Potion of Healing", Type = ItemType.Consumable,
+            Id = "potion_cure_light_wounds", Name = "Potion of Cure Light Wounds", Type = ItemType.Consumable,
             Slot = EquipSlot.None,
-            Description = "A red potion that restores 2d4+2 hit points.",
-            HealAmount = 7, // average of 2d4+2
+            Description = "Standard D&D 3.5e healing potion. Restores 1d8+1 hit points.",
+            ConsumableEffect = ConsumableEffectType.HealHP,
+            HealDiceCount = 1,
+            HealDiceSides = 8,
+            HealBonus = 1,
+            IconChar = "\u2661", IconColor = new Color(1f, 0.3f, 0.3f)
+        });
+
+        // Backward-compatible alias used by existing class loadouts.
+        Register(new ItemData
+        {
+            Id = "potion_healing", Name = "Potion of Cure Light Wounds", Type = ItemType.Consumable,
+            Slot = EquipSlot.None,
+            Description = "Standard D&D 3.5e healing potion. Restores 1d8+1 hit points.",
+            ConsumableEffect = ConsumableEffectType.HealHP,
+            HealDiceCount = 1,
+            HealDiceSides = 8,
+            HealBonus = 1,
             IconChar = "\u2661", IconColor = new Color(1f, 0.3f, 0.3f)
         });
 
@@ -1083,7 +1099,10 @@ public static class ItemDatabase
             Id = "potion_greater_healing", Name = "Potion of Greater Healing", Type = ItemType.Consumable,
             Slot = EquipSlot.None,
             Description = "A glowing red potion that restores 4d4+4 hit points.",
-            HealAmount = 14,
+            ConsumableEffect = ConsumableEffectType.HealHP,
+            HealDiceCount = 4,
+            HealDiceSides = 4,
+            HealBonus = 4,
             IconChar = "\u2661", IconColor = new Color(1f, 0.1f, 0.5f)
         });
 
@@ -1185,7 +1204,11 @@ public static class ItemDatabase
             ArmorCheckPenalty = src.ArmorCheckPenalty,
             ArcaneSpellFailure = src.ArcaneSpellFailure, WeightLbs = src.WeightLbs,
             // Other
+            ConsumableEffect = src.ConsumableEffect,
             HealAmount = src.HealAmount,
+            HealDiceCount = src.HealDiceCount,
+            HealDiceSides = src.HealDiceSides,
+            HealBonus = src.HealBonus,
             IconChar = src.IconChar, IconColor = src.IconColor
         };
     }

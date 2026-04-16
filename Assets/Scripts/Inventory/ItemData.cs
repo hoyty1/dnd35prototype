@@ -14,6 +14,16 @@ public enum ItemType
 }
 
 /// <summary>
+/// Built-in consumable effect categories.
+/// Keep this extensible so future item effects can be added cleanly.
+/// </summary>
+public enum ConsumableEffectType
+{
+    None,
+    HealHP
+}
+
+/// <summary>
 /// Which equipment slot(s) an item can go into.
 /// </summary>
 public enum EquipSlot
@@ -169,7 +179,11 @@ public class ItemData
     public float WeightLbs;         // Weight in pounds
 
     // --- Consumable ---
-    public int HealAmount;      // HP restored if consumable
+    public ConsumableEffectType ConsumableEffect; // Generic effect type for extensibility
+    public int HealAmount;      // Legacy flat HP restore fallback
+    public int HealDiceCount;   // Number of healing dice (e.g., 1 for 1d8)
+    public int HealDiceSides;   // Sides per healing die (e.g., 8 for 1d8)
+    public int HealBonus;       // Flat healing bonus (e.g., +1)
 
     // --- Visual ---
     public string IconChar;     // Unicode/emoji character for display (fallback icon)
@@ -373,9 +387,27 @@ public class ItemData
             if (ArcaneSpellFailure > 0) stats += $"\nSpell Fail: {ArcaneSpellFailure}%";
             if (WeightLbs > 0) stats += $" | {WeightLbs} lbs";
         }
-        else if (Type == ItemType.Consumable && HealAmount > 0)
+        else if (Type == ItemType.Consumable)
         {
-            stats = $"Heals: {HealAmount} HP";
+            if (ConsumableEffect == ConsumableEffectType.HealHP)
+            {
+                if (HealDiceCount > 0 && HealDiceSides > 0)
+                {
+                    string healExpr = $"{HealDiceCount}d{HealDiceSides}";
+                    if (HealBonus > 0)
+                        healExpr += $"+{HealBonus}";
+                    stats = $"Heals: {healExpr} HP";
+                }
+                else if (HealAmount > 0)
+                {
+                    stats = $"Heals: {HealAmount} HP";
+                }
+            }
+            else if (HealAmount > 0)
+            {
+                // Backward-compatible fallback for legacy consumables.
+                stats = $"Heals: {HealAmount} HP";
+            }
         }
         return stats;
     }

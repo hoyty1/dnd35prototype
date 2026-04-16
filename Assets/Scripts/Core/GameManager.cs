@@ -2033,6 +2033,293 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private bool IsCombatEncounterRunning()
+    {
+        return _initiativeOrder != null && _initiativeOrder.Count > 0 && CurrentPhase != TurnPhase.CombatOver;
+    }
+
+    /// <summary>
+    /// Attempt to use a consumable item from inventory.
+    /// In combat this uses D&D 3.5 item-manipulation timing (move action, or standard as alternative)
+    /// and can provoke attacks of opportunity from adjacent enemies.
+    /// </summary>
+    public bool TryUseConsumableFromInventory(CharacterController actor, int inventoryIndex, out string feedback)
+    {
+        feedback = string.Empty;
+
+        if (actor == null || actor.Stats == null)
+        {
+            feedback = "No active character.";
+            return false;
+        }
+
+        var invComp = actor.GetComponent<InventoryComponent>();
+        var inv = invComp != null ? invComp.CharacterInventory : null;
+        if (inv == null)
+        {
+            feedback = $"{actor.Stats.CharacterName} has no inventory.";
+            return false;
+        }
+
+        if (inventoryIndex < 0 || inventoryIndex >= inv.GeneralSlots.Length)
+        {
+            feedback = "Invalid inventory slot.";
+            return false;
+        }
+
+        ItemData item = inv.GeneralSlots[inventoryIndex];
+        if (item == null)
+        {
+            feedback = "Inventory slot is empty.";
+            return false;
+        }
+
+        if (!item.IsConsumable)
+        {
+            feedback = $"{item.Name} is not a consumable item.";
+            return false;
+        }
+
+        if (IsCombatEncounterRunning())
+        {
+            if (!IsPlayerTurn || ActivePC != actor)
+            {
+                feedback = "Only the active character can use consumables during combat.";
+                return false;
+            }
+
+            if (CurrentSubPhase != PlayerSubPhase.ChoosingAction)
+            {
+                feedback = "Cannot use items right now.";
+                return false;
+            }
+
+            if (_waitingForAoOConfirmation)
+            {
+                feedback = "Resolve the current attack-of-opportunity prompt first.";
+                return false;
+            }
+
+            if (!CanUseItemManipulationAction(actor, out string actionReason))
+            {
+                feedback = actionReason;
+                return false;
+            }
+
+            ResolveConsumableUseProvocation(actor, inventoryIndex, item);
+            feedback = $"Using {item.Name}...";
+            return true;
+        }
+
+        if (!ApplyConsumableEffectAndConsume(actor, inventoryIndex, out string outOfCombatResult))
+        {
+            feedback = outOfCombatResult;
+            return false;
+        }
+
+        feedback = outOfCombatResult;
+        UpdateAllStatsUI();
+        return true;
+    }
+
+    private bool CanUseItemManipulationAction(CharacterController actor, out string reason)
+    {
+        reason = string.Empty;
+        if (actor == null)
+        {
+            reason = "No active character.";
+            return false;
+        }
+
+        if (actor.Actions.HasMoveAction || actor.Actions.CanConvertStandardToMove || actor.Actions.HasStandardAction)
+            return true;
+
+        reason = "No move or standard action available to manipulate an item.";
+        return false;
+    }
+
+    private void ConsumeItemManipulationAction(CharacterController actor)
+    {
+        if (actor == null) return;
+
+        if (actor.Actions.HasMoveAction)
+            actor.Actions.UseMoveAction();
+        else if (actor.Actions.CanConvertStandardToMove)
+            actor.Actions.ConvertStandardToMove();
+        else if (actor.Actions.HasStandardAction)
+            actor.Actions.UseStandardAction();
+    }
+
+    private void ResolveConsumableUseProvocation(CharacterController actor, int inventoryIndex, ItemData item)
+    {
+        var threateningEnemies = ThreatSystem.GetThreateningEnemies(actor.GridPosition, actor, GetAllCharacters());
+        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+
+        if (threateningEnemies.Count == 0)
+        {
+            if (ApplyConsumableEffectAndConsume(actor, inventoryIndex, out string noThreatMessage))
+            {
+                ConsumeItemManipulationAction(actor);
+                CombatUI?.ShowCombatLog(noThreatMessage);
+                UpdateAllStatsUI();
+            }
+            else
+            {
+                CombatUI?.ShowCombatLog($"⚠ {noThreatMessage}");
+            }
+
+            ShowActionChoices();
+            return;
+        }
+
+        ShowAoOActionConfirmation(new AoOProvokingActionInfo
+        {
+            ActionType = AoOProvokingAction.DrinkPotion,
+            ActionName = $"USE {item.Name.ToUpper()}",
+            ActionDescription = $"Use {item.Name} (item manipulation)",
+            Actor = actor,
+            ThreateningEnemies = threateningEnemies,
+            OnProceed = () => StartCoroutine(ResolveConsumableAoOsAndApply(actor, inventoryIndex, item, threateningEnemies)),
+            OnCancel = ShowActionChoices
+        });
+    }
+
+    private IEnumerator ResolveConsumableAoOsAndApply(CharacterController actor, int inventoryIndex, ItemData item, List<CharacterController> threateningEnemies)
+    {
+        if (actor == null || actor.Stats == null)
+            yield break;
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} manipulates {item.Name} (provokes AoO).");
+
+        foreach (var enemy in threateningEnemies)
+        {
+            if (actor.Stats.IsDead) break;
+            if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy))
+                continue;
+
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, actor);
+            if (aooResult == null) continue;
+
+            CombatUI?.ShowCombatLog($"⚔ AoO vs item use: {aooResult.GetDetailedSummary()}");
+            UpdateAllStatsUI();
+
+            if (aooResult.Hit && aooResult.TotalDamage > 0)
+                CheckConcentrationOnDamage(actor, aooResult.TotalDamage);
+
+            yield return new WaitForSeconds(0.65f);
+        }
+
+        if (actor.Stats.IsDead)
+        {
+            CombatUI?.ShowCombatLog($"💀 {actor.Stats.CharacterName} is slain before using {item.Name}!");
+            UpdateAllStatsUI();
+            EndActivePCTurn();
+            yield break;
+        }
+
+        if (ApplyConsumableEffectAndConsume(actor, inventoryIndex, out string resultMessage))
+        {
+            ConsumeItemManipulationAction(actor);
+            CombatUI?.ShowCombatLog(resultMessage);
+            UpdateAllStatsUI();
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog($"⚠ {resultMessage}");
+        }
+
+        ShowActionChoices();
+    }
+
+    private bool ApplyConsumableEffectAndConsume(CharacterController actor, int inventoryIndex, out string resultMessage)
+    {
+        resultMessage = string.Empty;
+
+        if (actor == null || actor.Stats == null)
+        {
+            resultMessage = "No active character.";
+            return false;
+        }
+
+        var inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+        {
+            resultMessage = $"{actor.Stats.CharacterName} has no inventory.";
+            return false;
+        }
+
+        if (inventoryIndex < 0 || inventoryIndex >= inv.GeneralSlots.Length)
+        {
+            resultMessage = "Invalid inventory slot.";
+            return false;
+        }
+
+        ItemData currentItem = inv.GeneralSlots[inventoryIndex];
+        if (currentItem == null)
+        {
+            resultMessage = "That item is no longer in the selected slot.";
+            return false;
+        }
+
+        int oldHP = actor.Stats.CurrentHP;
+        int healedAmount = 0;
+
+        switch (currentItem.ConsumableEffect)
+        {
+            case ConsumableEffectType.HealHP:
+            {
+                int healingRoll = RollHealingFromConsumable(currentItem);
+                int newHP = Mathf.Min(actor.Stats.MaxHP, actor.Stats.CurrentHP + Mathf.Max(0, healingRoll));
+                actor.Stats.CurrentHP = newHP;
+                healedAmount = Mathf.Max(0, newHP - oldHP);
+                break;
+            }
+            case ConsumableEffectType.None:
+            default:
+            {
+                // Legacy fallback for older consumables defined with flat HealAmount only.
+                if (currentItem.HealAmount > 0)
+                {
+                    int newHP = Mathf.Min(actor.Stats.MaxHP, actor.Stats.CurrentHP + currentItem.HealAmount);
+                    actor.Stats.CurrentHP = newHP;
+                    healedAmount = Mathf.Max(0, newHP - oldHP);
+                }
+                else
+                {
+                    resultMessage = $"{currentItem.Name} has no implemented consumable effect yet.";
+                    return false;
+                }
+                break;
+            }
+        }
+
+        inv.RemoveItemAt(inventoryIndex);
+
+        int newCurrentHP = actor.Stats.CurrentHP;
+        resultMessage = $"🧪 {actor.Stats.CharacterName} uses {currentItem.Name}, healing {healedAmount} HP ({oldHP} → {newCurrentHP}). Item consumed.";
+        return true;
+    }
+
+    private static int RollHealingFromConsumable(ItemData item)
+    {
+        if (item == null) return 0;
+
+        if (item.HealDiceCount > 0 && item.HealDiceSides > 0)
+        {
+            int total = 0;
+            for (int i = 0; i < item.HealDiceCount; i++)
+                total += UnityEngine.Random.Range(1, item.HealDiceSides + 1);
+            total += item.HealBonus;
+            return Mathf.Max(0, total);
+        }
+
+        if (item.HealAmount > 0)
+            return item.HealAmount;
+
+        return 0;
+    }
+
     // ========== ACTION BUTTON HANDLERS ==========
 
     public void OnMoveButtonPressed()

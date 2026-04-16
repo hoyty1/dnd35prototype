@@ -1298,6 +1298,11 @@ public class CombatUI : MonoBehaviour
                 proceedText.AppendLine();
                 proceedText.AppendLine("Stand up (move action)");
             }
+            else if (actionInfo.ActionType == AoOProvokingAction.DrinkPotion)
+            {
+                proceedText.AppendLine();
+                proceedText.AppendLine("Manipulate item (move action, or standard)");
+            }
 
             _aooProceedButtonText.text = proceedText.ToString();
         }
