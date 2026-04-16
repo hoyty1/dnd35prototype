@@ -541,6 +541,7 @@ public class CombatUI : MonoBehaviour
             if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
             HideSpecialAttackMenu();
             HidePickUpItemSelection();
+            HideDropEquippedItemSelection();
         }
     }
 
@@ -549,6 +550,7 @@ public class CombatUI : MonoBehaviour
     private GameObject _summonSelectionPanel;
     private GameObject _disarmWeaponSelectionPanel;
     private GameObject _pickUpItemSelectionPanel;
+    private GameObject _dropEquippedItemSelectionPanel;
     private bool _dischargeTouchHooked;
     private GameObject _summonContextMenuRoot;
 
@@ -3194,6 +3196,129 @@ public class CombatUI : MonoBehaviour
         }
     }
 
+    public void ShowDropEquippedItemSelection(string actorName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
+    {
+        HideDropEquippedItemSelection();
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            onCancel?.Invoke();
+            return;
+        }
+
+        if (itemOptions == null)
+            itemOptions = new List<string>();
+
+        _dropEquippedItemSelectionPanel = new GameObject("DropEquippedItemSelectionPanel");
+        _dropEquippedItemSelectionPanel.transform.SetParent(canvas.transform, false);
+
+        RectTransform panelRT = _dropEquippedItemSelectionPanel.AddComponent<RectTransform>();
+        panelRT.anchorMin = Vector2.zero;
+        panelRT.anchorMax = Vector2.one;
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        Image overlay = _dropEquippedItemSelectionPanel.AddComponent<Image>();
+        overlay.color = new Color(0f, 0f, 0f, 0.75f);
+
+        CanvasGroup cg = _dropEquippedItemSelectionPanel.AddComponent<CanvasGroup>();
+        cg.blocksRaycasts = true;
+        cg.interactable = true;
+
+        GameObject dialog = new GameObject("Dialog");
+        dialog.transform.SetParent(_dropEquippedItemSelectionPanel.transform, false);
+
+        RectTransform dialogRT = dialog.AddComponent<RectTransform>();
+        dialogRT.anchorMin = new Vector2(0.24f, 0.2f);
+        dialogRT.anchorMax = new Vector2(0.76f, 0.8f);
+        dialogRT.offsetMin = Vector2.zero;
+        dialogRT.offsetMax = Vector2.zero;
+
+        Image dialogBg = dialog.AddComponent<Image>();
+        dialogBg.color = new Color(0.12f, 0.12f, 0.2f, 0.97f);
+        Outline outline = dialog.AddComponent<Outline>();
+        outline.effectColor = new Color(0.62f, 0.55f, 1f, 1f);
+        outline.effectDistance = new Vector2(2f, 2f);
+
+        GameObject titleObj = new GameObject("Title");
+        titleObj.transform.SetParent(dialog.transform, false);
+        RectTransform titleRT = titleObj.AddComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0.05f, 0.86f);
+        titleRT.anchorMax = new Vector2(0.95f, 0.98f);
+        titleRT.offsetMin = Vector2.zero;
+        titleRT.offsetMax = Vector2.zero;
+
+        Text titleText = titleObj.AddComponent<Text>();
+        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (titleText.font == null) titleText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        titleText.fontSize = 18;
+        titleText.fontStyle = FontStyle.Bold;
+        titleText.color = new Color(0.92f, 0.88f, 1f);
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.text = "DROP WHICH HELD ITEM?";
+
+        GameObject bodyObj = new GameObject("BodyText");
+        bodyObj.transform.SetParent(dialog.transform, false);
+        RectTransform bodyRT = bodyObj.AddComponent<RectTransform>();
+        bodyRT.anchorMin = new Vector2(0.08f, 0.75f);
+        bodyRT.anchorMax = new Vector2(0.92f, 0.86f);
+        bodyRT.offsetMin = Vector2.zero;
+        bodyRT.offsetMax = Vector2.zero;
+
+        Text bodyText = bodyObj.AddComponent<Text>();
+        bodyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (bodyText.font == null) bodyText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        bodyText.fontSize = 14;
+        bodyText.alignment = TextAnchor.MiddleCenter;
+        bodyText.color = new Color(0.9f, 0.95f, 1f);
+        bodyText.text = $"{actorName}, choose which held item to drop (free action, no AoO):";
+
+        float optionsTop = 0.7f;
+        float optionsBottom = 0.2f;
+        int optionCount = Mathf.Max(1, itemOptions.Count);
+        float totalHeight = optionsTop - optionsBottom;
+        float step = totalHeight / optionCount;
+
+        for (int i = 0; i < itemOptions.Count; i++)
+        {
+            int optionIndex = i;
+            float yMax = optionsTop - (step * i);
+            float yMin = yMax - (step * 0.8f);
+
+            Button optionBtn = CreateTouchPromptButton(dialog,
+                $"DropEquippedOption_{i}",
+                itemOptions[i],
+                new Vector2(0.08f, yMin),
+                new Vector2(0.92f, yMax),
+                new Color(0.3f, 0.26f, 0.58f, 1f));
+
+            optionBtn.onClick.AddListener(() =>
+            {
+                HideDropEquippedItemSelection();
+                onSelect?.Invoke(optionIndex);
+            });
+        }
+
+        Button cancelBtn = CreateTouchPromptButton(dialog, "Cancel", "Cancel",
+            new Vector2(0.36f, 0.06f), new Vector2(0.64f, 0.16f),
+            new Color(0.45f, 0.2f, 0.2f, 1f));
+        cancelBtn.onClick.AddListener(() =>
+        {
+            HideDropEquippedItemSelection();
+            onCancel?.Invoke();
+        });
+    }
+
+    public void HideDropEquippedItemSelection()
+    {
+        if (_dropEquippedItemSelectionPanel != null)
+        {
+            Destroy(_dropEquippedItemSelectionPanel);
+            _dropEquippedItemSelectionPanel = null;
+        }
+    }
 
     public void ShowDisarmWeaponSelection(string targetName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
     {

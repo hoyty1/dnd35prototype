@@ -1967,6 +1967,7 @@ public class GameManager : MonoBehaviour
         CombatUI.HideAoOConfirmationPrompt();
         CombatUI.HideDisarmWeaponSelection();
         CombatUI.HidePickUpItemSelection();
+        CombatUI.HideDropEquippedItemSelection();
         // Hide movement path preview and hover marker when leaving movement phase
         if (_pathPreview != null) _pathPreview.HidePath();
         if (_hoverMarker != null) _hoverMarker.Hide();
@@ -2265,13 +2266,69 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (!TryDropEquippedHeldItemToGround(pc, out ItemData droppedItem, out EquipSlot droppedSlot, out string feedback))
+        if (!TryGetHeldItemDropOptions(pc, out List<DropEquippedHeldItemOption> options))
         {
-            CombatUI?.ShowCombatLog($"⚠ {feedback}");
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no held item to drop.");
+            ShowActionChoices();
             return;
         }
 
-        CombatUI?.ShowCombatLog($"⬇ {pc.Stats.CharacterName} drops {droppedItem.Name} from {droppedSlot}.");
+        if (options.Count == 1)
+        {
+            ResolveDropEquippedHeldItemFreeAction(pc, options[0].HandSlot);
+            return;
+        }
+
+        if (CombatUI == null)
+        {
+            ResolveDropEquippedHeldItemFreeAction(pc, options[0].HandSlot);
+            return;
+        }
+
+        List<string> optionLabels = new List<string>(options.Count);
+        for (int i = 0; i < options.Count; i++)
+        {
+            optionLabels.Add(options[i].GetSelectionLabel());
+        }
+
+        CombatUI.ShowDropEquippedItemSelection(
+            pc.Stats.CharacterName,
+            optionLabels,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                {
+                    ShowActionChoices();
+                    return;
+                }
+
+                List<DropEquippedHeldItemOption> latestOptions = new List<DropEquippedHeldItemOption>();
+                TryGetHeldItemDropOptions(pc, out latestOptions);
+
+                EquipSlot selectedSlot = options[selectedIndex].HandSlot;
+                bool slotStillHeld = latestOptions.Exists(o => o.HandSlot == selectedSlot);
+                if (!slotStillHeld)
+                {
+                    CombatUI?.ShowCombatLog("⚠ That held item is no longer equipped.");
+                    ShowActionChoices();
+                    return;
+                }
+
+                ResolveDropEquippedHeldItemFreeAction(pc, selectedSlot);
+            },
+            onCancel: ShowActionChoices);
+    }
+
+    private void ResolveDropEquippedHeldItemFreeAction(CharacterController actor, EquipSlot handSlot)
+    {
+        if (!TryDropEquippedHeldItemToGround(actor, handSlot, out ItemData droppedItem, out EquipSlot droppedSlot, out string feedback))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {feedback}");
+            ShowActionChoices();
+            return;
+        }
+
+        CombatUI?.ShowCombatLog($"⬇ {actor.Stats.CharacterName} drops {droppedItem.Name} from {droppedSlot}.");
         CombatUI?.ShowCombatLog("(Free action - no attacks of opportunity provoked)");
         UpdateAllStatsUI();
         InvalidatePreviewThreats();
@@ -2504,7 +2561,26 @@ public class GameManager : MonoBehaviour
         ShowActionChoices();
     }
 
-    private bool TryDropEquippedHeldItemToGround(CharacterController actor, out ItemData droppedItem, out EquipSlot droppedSlot, out string feedback)
+    private bool TryGetHeldItemDropOptions(CharacterController actor, out List<DropEquippedHeldItemOption> options)
+    {
+        options = new List<DropEquippedHeldItemOption>();
+        if (actor == null)
+            return false;
+
+        Inventory inv = actor.GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+            return false;
+
+        if (inv.RightHandSlot != null)
+            options.Add(new DropEquippedHeldItemOption(EquipSlot.RightHand, inv.RightHandSlot));
+
+        if (inv.LeftHandSlot != null)
+            options.Add(new DropEquippedHeldItemOption(EquipSlot.LeftHand, inv.LeftHandSlot));
+
+        return options.Count > 0;
+    }
+
+    private bool TryDropEquippedHeldItemToGround(CharacterController actor, EquipSlot preferredSlot, out ItemData droppedItem, out EquipSlot droppedSlot, out string feedback)
     {
         droppedItem = null;
         droppedSlot = EquipSlot.None;
@@ -2523,21 +2599,33 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        if (inv.RightHandSlot != null)
+        if (preferredSlot == EquipSlot.RightHand)
         {
+            if (inv.RightHandSlot == null)
+            {
+                feedback = "RightHand has no held item to drop.";
+                return false;
+            }
+
             droppedItem = inv.RightHandSlot;
             inv.RightHandSlot = null;
             droppedSlot = EquipSlot.RightHand;
         }
-        else if (inv.LeftHandSlot != null)
+        else if (preferredSlot == EquipSlot.LeftHand)
         {
+            if (inv.LeftHandSlot == null)
+            {
+                feedback = "LeftHand has no held item to drop.";
+                return false;
+            }
+
             droppedItem = inv.LeftHandSlot;
             inv.LeftHandSlot = null;
             droppedSlot = EquipSlot.LeftHand;
         }
         else
         {
-            feedback = "No held item to drop.";
+            feedback = "Invalid held slot selection.";
             return false;
         }
 
@@ -2649,6 +2737,24 @@ public class GameManager : MonoBehaviour
                 continue;
 
             options.Add(new PickUpGroundItemOption(cell, item));
+        }
+    }
+
+    private sealed class DropEquippedHeldItemOption
+    {
+        public readonly EquipSlot HandSlot;
+        public readonly ItemData HeldItem;
+
+        public DropEquippedHeldItemOption(EquipSlot handSlot, ItemData heldItem)
+        {
+            HandSlot = handSlot;
+            HeldItem = heldItem;
+        }
+
+        public string GetSelectionLabel()
+        {
+            string itemName = HeldItem != null && !string.IsNullOrEmpty(HeldItem.Name) ? HeldItem.Name : "Unknown Item";
+            return $"{itemName} ({HandSlot})";
         }
     }
 
