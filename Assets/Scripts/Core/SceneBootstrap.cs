@@ -887,7 +887,10 @@ public class SceneBootstrap : MonoBehaviour
         if (ui.SpecialAttackButton != null)
             ui.SpecialAttackButton.onClick.AddListener(() => GameManager.Instance.OnSpecialAttackButtonPressed());
         if (ui.AidAnotherButton != null)
+        {
+            ui.AidAnotherButton.onClick.RemoveAllListeners();
             ui.AidAnotherButton.onClick.AddListener(() => GameManager.Instance.OnAidAnotherButtonPressed());
+        }
         if (ui.ChargeButton != null)
             ui.ChargeButton.onClick.AddListener(() => GameManager.Instance.OnChargeButtonPressed());
         if (ui.FullAttackButton != null)
@@ -907,7 +910,10 @@ public class SceneBootstrap : MonoBehaviour
         if (ui.DropEquippedItemButton != null)
             ui.DropEquippedItemButton.onClick.AddListener(() => GameManager.Instance.OnDropEquippedItemButtonPressed());
         if (ui.PickUpItemButton != null)
+        {
+            ui.PickUpItemButton.onClick.RemoveAllListeners();
             ui.PickUpItemButton.onClick.AddListener(() => GameManager.Instance.OnPickUpItemButtonPressed());
+        }
         if (ui.EndTurnButton != null)
             ui.EndTurnButton.onClick.AddListener(() => GameManager.Instance.OnEndTurnButtonPressed());
 

@@ -3905,7 +3905,10 @@ public class GameManager : MonoBehaviour
             onCancel: () =>
             {
                 ShowActionChoices();
-            });
+            },
+            titleOverride: "AID ANOTHER",
+            bodyOverride: $"{pc.Stats.CharacterName}, choose how you want to aid an ally:",
+            optionButtonColorOverride: new Color(0.34f, 0.28f, 0.56f, 1f));
     }
 
     private void BeginAidAnotherTargeting(CharacterController actor, AidAnotherMode mode)
@@ -4045,7 +4048,10 @@ public class GameManager : MonoBehaviour
                 _pendingAidAnotherMode = AidAnotherMode.None;
                 _isSelectingAidAnother = false;
                 ShowActionChoices();
-            });
+            },
+            titleOverride: "AID ANOTHER: CHOOSE ALLY",
+            bodyOverride: $"{actor.Stats.CharacterName}, choose which ally gets +2 attack vs {enemy.Stats.CharacterName}:",
+            optionButtonColorOverride: new Color(0.34f, 0.28f, 0.56f, 1f));
     }
 
     private void ResolveAidAnotherArmorClassMode(CharacterController actor, CharacterController enemy)
@@ -4088,7 +4094,10 @@ public class GameManager : MonoBehaviour
                 _pendingAidAnotherMode = AidAnotherMode.None;
                 _isSelectingAidAnother = false;
                 ShowActionChoices();
-            });
+            },
+            titleOverride: "AID ANOTHER: CHOOSE ALLY",
+            bodyOverride: $"{actor.Stats.CharacterName}, choose which ally gets +2 AC vs {enemy.Stats.CharacterName}:",
+            optionButtonColorOverride: new Color(0.34f, 0.28f, 0.56f, 1f));
     }
 
     private void ApplyAidAnotherAttackBonus(CharacterController source, CharacterController ally, CharacterController enemy)

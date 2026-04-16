@@ -3027,7 +3027,14 @@ public class CombatUI : MonoBehaviour
         }
     }
 
-    public void ShowPickUpItemSelection(string actorName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
+    public void ShowPickUpItemSelection(
+        string actorName,
+        List<string> itemOptions,
+        System.Action<int> onSelect,
+        System.Action onCancel,
+        string titleOverride = null,
+        string bodyOverride = null,
+        Color? optionButtonColorOverride = null)
     {
         HidePickUpItemSelection();
 
@@ -3088,7 +3095,7 @@ public class CombatUI : MonoBehaviour
         titleText.fontStyle = FontStyle.Bold;
         titleText.color = new Color(0.88f, 0.97f, 1f, 1f);
         titleText.alignment = TextAnchor.MiddleCenter;
-        titleText.text = "PICK UP WHICH ITEM?";
+        titleText.text = string.IsNullOrEmpty(titleOverride) ? "PICK UP WHICH ITEM?" : titleOverride;
 
         GameObject bodyObj = new GameObject("BodyText");
         bodyObj.transform.SetParent(dialog.transform, false);
@@ -3103,7 +3110,9 @@ public class CombatUI : MonoBehaviour
         bodyText.fontSize = 13;
         bodyText.alignment = TextAnchor.MiddleCenter;
         bodyText.color = new Color(0.9f, 0.95f, 1f, 1f);
-        bodyText.text = $"{actorName}, choose one item within reach (this uses a move action and can provoke AoO):";
+        bodyText.text = string.IsNullOrEmpty(bodyOverride)
+            ? $"{actorName}, choose one item within reach (this uses a move action and can provoke AoO):"
+            : bodyOverride;
 
         GameObject listRoot = new GameObject("ItemList");
         listRoot.transform.SetParent(dialog.transform, false);
@@ -3168,7 +3177,7 @@ public class CombatUI : MonoBehaviour
             layoutElement.preferredHeight = 92f;
 
             Image btnImg = btnObj.AddComponent<Image>();
-            btnImg.color = new Color(0.2f, 0.36f, 0.5f, 1f);
+            btnImg.color = optionButtonColorOverride ?? new Color(0.2f, 0.36f, 0.5f, 1f);
 
             Button optionBtn = btnObj.AddComponent<Button>();
             ColorBlock colors = optionBtn.colors;
