@@ -394,7 +394,6 @@ public class ItemData
             if (MaxDexBonus >= 0) stats += $"\nMax Dex: +{MaxDexBonus}";
             if (ArmorCheckPenalty > 0) stats += $" | Check: -{ArmorCheckPenalty}";
             if (ArcaneSpellFailure > 0) stats += $"\nSpell Fail: {ArcaneSpellFailure}%";
-            if (WeightLbs > 0) stats += $" | {WeightLbs} lbs";
         }
         else if (Type == ItemType.Shield)
         {
@@ -402,7 +401,6 @@ public class ItemData
             if (MaxDexBonus >= 0) stats += $"\nMax Dex: +{MaxDexBonus}";
             if (ArmorCheckPenalty > 0) stats += $" | Check: -{ArmorCheckPenalty}";
             if (ArcaneSpellFailure > 0) stats += $"\nSpell Fail: {ArcaneSpellFailure}%";
-            if (WeightLbs > 0) stats += $" | {WeightLbs} lbs";
 
             // D&D 3.5 shield bash profile (when present on this shield definition).
             if (DamageDice > 0 && DamageCount > 0)
@@ -447,6 +445,15 @@ public class ItemData
                 stats = $"Heals: {HealAmount} HP";
             }
         }
+
+        if (WeightLbs > 0f)
+        {
+            string weightLabel = WeightLbs == Mathf.Floor(WeightLbs)
+                ? $"{WeightLbs:0} lbs"
+                : $"{WeightLbs:0.##} lbs";
+            stats = string.IsNullOrEmpty(stats) ? $"Weight: {weightLabel}" : $"{stats}\nWeight: {weightLabel}";
+        }
+
         return stats;
     }
 }

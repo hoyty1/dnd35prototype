@@ -66,6 +66,12 @@ public class InventoryUI : MonoBehaviour
     private Text _charStatsText;
     private Text _instructionText;
 
+    // Context menu (right-click on inventory slots)
+    private GameObject _slotContextMenu;
+    private Text _slotContextTitle;
+    private Button _slotContextDropButton;
+    private int _contextMenuSlotIndex = -1;
+
     // Standalone-only UI elements (hidden when embedded in CharacterSheetUI)
     private GameObject _titleBar;
     private GameObject _closeHint;
@@ -179,11 +185,12 @@ public class InventoryUI : MonoBehaviour
         _instructionText = CreateText(PanelRoot.transform, "Instructions",
             new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
             new Vector2(0, 28), new Vector2(-20, 32),
-            "Click equipment items to select/equip.\nClick consumables to use them from inventory.",
+            "Click equipment items to select/equip.\nClick consumables to use. Right-click inventory items to drop.",
             12, new Color(0.6f, 0.6f, 0.5f), TextAnchor.MiddleCenter);
 
         // ===== TOOLTIP =====
         BuildTooltip();
+        BuildContextMenu();
 
         PanelRoot.SetActive(false);
     }
@@ -262,6 +269,44 @@ public class InventoryUI : MonoBehaviour
         _tooltipPanel.SetActive(false);
     }
 
+    private void BuildContextMenu()
+    {
+        _slotContextMenu = CreatePanel(PanelRoot.transform, "SlotContextMenu",
+            new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1),
+            new Vector2(0, 0), new Vector2(190, 82),
+            new Color(0.06f, 0.06f, 0.1f, 0.96f));
+
+        CreatePanel(_slotContextMenu.transform, "ContextBorder",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero,
+            new Color(0.55f, 0.55f, 0.35f, 0.28f));
+
+        _slotContextTitle = CreateText(_slotContextMenu.transform, "ContextTitle",
+            new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
+            new Vector2(0, -4), new Vector2(-10, 22),
+            "Item", 12, new Color(0.95f, 0.9f, 0.7f), TextAnchor.MiddleCenter);
+
+        GameObject dropBtnGO = CreatePanel(_slotContextMenu.transform, "DropBtn",
+            new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0),
+            new Vector2(0, 6), new Vector2(-12, 30),
+            new Color(0.45f, 0.18f, 0.18f, 1f));
+
+        _slotContextDropButton = dropBtnGO.AddComponent<Button>();
+        _slotContextDropButton.targetGraphic = dropBtnGO.GetComponent<Image>();
+
+        Text dropText = CreateText(dropBtnGO.transform, "DropText",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero,
+            "Drop", 13, Color.white, TextAnchor.MiddleCenter);
+
+        _slotContextDropButton.onClick.AddListener(OnContextDropClicked);
+
+        if (dropText != null)
+            dropText.raycastTarget = false;
+
+        HideContextMenu();
+    }
+
     // ===== PUBLIC API =====
 
     /// <summary>
@@ -279,6 +324,7 @@ public class InventoryUI : MonoBehaviour
         if (character == null || character.Stats == null) return;
         CurrentCharacter = character;
         ClearSelection();
+        HideContextMenu();
         RefreshUI();
         PanelRoot.SetActive(true);
     }
@@ -289,6 +335,7 @@ public class InventoryUI : MonoBehaviour
             PanelRoot.SetActive(false);
         ClearSelection();
         HideTooltip();
+        HideContextMenu();
         CurrentCharacter = null;
     }
 
@@ -304,6 +351,7 @@ public class InventoryUI : MonoBehaviour
     {
         if (!IsOpen || CurrentCharacter == null) return;
         HandleHover();
+        HandleContextMenuInput();
     }
 
     private void HandleHover()
@@ -340,6 +388,161 @@ public class InventoryUI : MonoBehaviour
         HideTooltip();
     }
 
+    private void HandleContextMenuInput()
+    {
+        if (IsRightMouseDown())
+        {
+            int slotIndex = GetGeneralSlotIndexUnderCursor();
+            Inventory inv = GetInventory();
+            if (slotIndex >= 0 && inv != null && inv.GeneralSlots[slotIndex] != null)
+            {
+                ShowContextMenuForGeneralSlot(slotIndex, inv.GeneralSlots[slotIndex]);
+                return;
+            }
+
+            HideContextMenu();
+            return;
+        }
+
+        if (IsLeftMouseDown() && _slotContextMenu != null && _slotContextMenu.activeSelf)
+        {
+            if (!IsMouseOverContextMenu())
+                HideContextMenu();
+        }
+    }
+
+    private int GetGeneralSlotIndexUnderCursor()
+    {
+        if (PanelRoot == null || _generalSlotBgs == null)
+            return -1;
+
+        Vector2 mousePos;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            PanelRoot.GetComponent<RectTransform>(),
+            GetMousePosition(),
+            _parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _parentCanvas.worldCamera,
+            out mousePos);
+
+        for (int i = 0; i < Inventory.GeneralSlotCount; i++)
+        {
+            if (_generalSlotBgs[i] != null && IsOverRect(_generalSlotBgs[i], mousePos))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private bool IsMouseOverContextMenu()
+    {
+        if (_slotContextMenu == null)
+            return false;
+
+        RectTransform rt = _slotContextMenu.GetComponent<RectTransform>();
+        Vector2 localPoint;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                rt,
+                GetMousePosition(),
+                _parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _parentCanvas.worldCamera,
+                out localPoint))
+        {
+            return false;
+        }
+
+        return rt.rect.Contains(localPoint);
+    }
+
+    private void ShowContextMenuForGeneralSlot(int slotIndex, ItemData item)
+    {
+        if (_slotContextMenu == null || item == null || PanelRoot == null)
+            return;
+
+        _contextMenuSlotIndex = slotIndex;
+        if (_slotContextTitle != null)
+            _slotContextTitle.text = item.Name;
+
+        RectTransform panelRT = PanelRoot.GetComponent<RectTransform>();
+        RectTransform menuRT = _slotContextMenu.GetComponent<RectTransform>();
+
+        Vector2 localPoint;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            panelRT,
+            GetMousePosition(),
+            _parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _parentCanvas.worldCamera,
+            out localPoint);
+
+        float panelHalfW = panelRT.rect.width * 0.5f;
+        float panelHalfH = panelRT.rect.height * 0.5f;
+        float menuW = menuRT.sizeDelta.x;
+        float menuH = menuRT.sizeDelta.y;
+
+        float x = Mathf.Clamp(localPoint.x + panelHalfW + 12f, 8f, panelRT.rect.width - menuW - 8f);
+        float y = Mathf.Clamp(localPoint.y + panelHalfH - 12f, menuH + 8f, panelRT.rect.height - 8f);
+
+        menuRT.anchoredPosition = new Vector2(x, -y);
+        _slotContextMenu.SetActive(true);
+        _slotContextMenu.transform.SetAsLastSibling();
+    }
+
+    private void HideContextMenu()
+    {
+        _contextMenuSlotIndex = -1;
+        if (_slotContextMenu != null)
+            _slotContextMenu.SetActive(false);
+    }
+
+    private void OnContextDropClicked()
+    {
+        if (_contextMenuSlotIndex < 0 || CurrentCharacter == null)
+        {
+            HideContextMenu();
+            return;
+        }
+
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+        {
+            HideContextMenu();
+            return;
+        }
+
+        if (!gm.TryDropInventoryItemToGround(CurrentCharacter, _contextMenuSlotIndex, out string feedback))
+        {
+            if (!string.IsNullOrEmpty(feedback))
+                gm.CombatUI?.ShowCombatLog($"⚠ {feedback}");
+        }
+
+        HideContextMenu();
+        ClearSelection();
+        RefreshUI();
+    }
+
+    private bool IsRightMouseDown()
+    {
+#if ENABLE_INPUT_SYSTEM
+        var mouse = UnityEngine.InputSystem.Mouse.current;
+        if (mouse != null && mouse.rightButton.wasPressedThisFrame)
+            return true;
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetMouseButtonDown(1))
+            return true;
+#endif
+        return false;
+    }
+
+    private bool IsLeftMouseDown()
+    {
+#if ENABLE_INPUT_SYSTEM
+        var mouse = UnityEngine.InputSystem.Mouse.current;
+        if (mouse != null && mouse.leftButton.wasPressedThisFrame)
+            return true;
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetMouseButtonDown(0))
+            return true;
+#endif
+        return false;
+    }
     private bool IsOverRect(Image img, Vector2 localMousePos)
     {
         if (img == null) return false;
@@ -373,6 +576,7 @@ public class InventoryUI : MonoBehaviour
     /// <summary>Called when an equipment slot is clicked.</summary>
     public void OnEquipSlotClicked(EquipSlot slot)
     {
+        HideContextMenu();
         var inv = GetInventory();
         if (inv == null) return;
 
@@ -407,6 +611,7 @@ public class InventoryUI : MonoBehaviour
     /// <summary>Called when a general inventory slot is clicked.</summary>
     public void OnGeneralSlotClicked(int index)
     {
+        HideContextMenu();
         var inv = GetInventory();
         if (inv == null) return;
 
@@ -513,8 +718,9 @@ public class InventoryUI : MonoBehaviour
                 ? Mathf.Clamp(stats.ArcaneSpellFailure, 0, 100)
                 : 0;
             string asfSummary = asfChance > 0 ? $"  ASF: {asfChance}%" : "";
+            string encumbranceSummary = $"\nLoad: {stats.EncumbranceSummary}";
 
-            _charStatsText.text = baseSummary + armorSummary + asfSummary;
+            _charStatsText.text = baseSummary + armorSummary + asfSummary + encumbranceSummary;
         }
 
         foreach (var def in VisibleEquipSlots)
@@ -542,7 +748,7 @@ public class InventoryUI : MonoBehaviour
             }
             else
             {
-                _instructionText.text = "Click equipment items to select/equip.\nClick consumables to use them from inventory.";
+                _instructionText.text = "Click equipment items to select/equip.\nClick consumables to use. Right-click inventory items to drop.";
                 _instructionText.color = new Color(0.6f, 0.6f, 0.5f);
             }
         }

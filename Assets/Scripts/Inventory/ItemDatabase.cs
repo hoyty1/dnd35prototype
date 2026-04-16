@@ -1028,7 +1028,7 @@ public static class ItemDatabase
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A light steel shield fitted with shield spikes. Shield spikes increase bash damage die by one step and change damage to piercing.",
             ShieldBonus = 1, MaxDexBonus = -1, ArmorCheckPenalty = 1,
-            ArcaneSpellFailure = 5, WeightLbs = 6f,
+            ArcaneSpellFailure = 5, WeightLbs = 11f,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.Light,
             DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = true,
@@ -1079,7 +1079,7 @@ public static class ItemDatabase
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A heavy steel shield fitted with shield spikes. Shield spikes increase bash damage die by one step and change damage to piercing.",
             ShieldBonus = 2, MaxDexBonus = -1, ArmorCheckPenalty = 2,
-            ArcaneSpellFailure = 15, WeightLbs = 15f,
+            ArcaneSpellFailure = 15, WeightLbs = 20f,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.OneHanded,
             DamageDice = 6, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = false,
@@ -1179,6 +1179,7 @@ public static class ItemDatabase
             HealDiceCount = 4,
             HealDiceSides = 4,
             HealBonus = 4,
+            WeightLbs = 0.1f,
             IconChar = "\u2661", IconColor = new Color(1f, 0.1f, 0.5f)
         });
 
@@ -1218,6 +1219,7 @@ public static class ItemDatabase
             Id = "torch", Name = "Torch", Type = ItemType.Misc,
             Slot = EquipSlot.None,
             Description = "A simple wooden torch. Provides light in dark places.",
+            WeightLbs = 1f,
             IconChar = "\u2600", IconColor = new Color(1f, 0.8f, 0.2f)
         });
 
@@ -1226,6 +1228,7 @@ public static class ItemDatabase
             Id = "rope", Name = "Rope (50 ft)", Type = ItemType.Misc,
             Slot = EquipSlot.None,
             Description = "A coil of hempen rope. Useful for climbing and binding.",
+            WeightLbs = 10f,
             IconChar = "\u221E", IconColor = new Color(0.7f, 0.6f, 0.4f)
         });
     }
@@ -1255,6 +1258,7 @@ public static class ItemDatabase
             ConsumableSpellName = spellName,
             ConsumableMinimumCasterLevel = Mathf.Max(1, minimumCasterLevel),
             ConsumableModifier = modifier,
+            WeightLbs = 0.1f,
             IconChar = iconChar,
             IconColor = iconColor
         });

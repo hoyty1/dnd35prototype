@@ -635,6 +635,7 @@ public class CharacterSheetUI : MonoBehaviour
             AddLine(content, $"  Temp HP: {stats.TempHP}", 11, new Color(0.4f, 0.7f, 1f), FontStyle.Normal, 14);
 
         AddLine(content, $"\u2694 Initiative: {FormatMod(stats.InitiativeModifier)}     \u27a1 Speed: {stats.SpeedInFeet} ft ({stats.MoveRange} sq)", 11, LightText, FontStyle.Normal, 14);
+        AddLine(content, $"⚖ Load: {stats.EncumbranceSummary}", 10, DimText, FontStyle.Normal, 13);
         AddLine(content, $"📏 Size: {stats.SizeCategoryName}    Reach: {stats.NaturalReachFeet} ft ({stats.NaturalReachSquares} sq)    Space: {stats.SpaceSquares} sq", 10, DimText, FontStyle.Normal, 13);
         AddLine(content, $"🧬 Creature Type: {stats.CreatureType}    Natural Armor: {stats.NaturalArmorBonus}", 10, DimText, FontStyle.Normal, 13);
 
@@ -680,15 +681,22 @@ public class CharacterSheetUI : MonoBehaviour
         AddLine(content, "DEFENSE", 12, GoldText, FontStyle.Bold, 16);
         AddLine(content, $"\u26e1 AC: {stats.ArmorClass}", 13, LightText, FontStyle.Bold, 16);
 
-        string acBreakdown = $"  10 + Armor {stats.ArmorBonus} + Shield {stats.ShieldBonus} + DEX {FormatMod(stats.DEXMod)}";
+        int effectiveDex = stats.DEXMod;
+        if (stats.MaxDexBonus >= 0 && effectiveDex > stats.MaxDexBonus)
+            effectiveDex = stats.MaxDexBonus;
+
+        string acBreakdown = $"  10 + Armor {stats.ArmorBonus} + Shield {stats.ShieldBonus} + DEX {FormatMod(effectiveDex)}";
         if (stats.SpellACBonus > 0) acBreakdown += $" + Spell {stats.SpellACBonus}";
         if (stats.DeflectionBonus > 0) acBreakdown += $" + Deflect {stats.DeflectionBonus}";
         if (stats.SizeModifier != 0) acBreakdown += $" + Size {FormatMod(stats.SizeModifier)}";
         AddLine(content, acBreakdown, 9, DimText, FontStyle.Normal, 13);
 
         string maxDexDisplay = stats.MaxDexBonus < 0 ? "No limit" : $"+{stats.MaxDexBonus}";
+        string armorCapDisplay = stats.EquipmentMaxDexBonus < 0 ? "No limit" : $"+{stats.EquipmentMaxDexBonus}";
+        string loadCapDisplay = stats.EncumbranceMaxDexBonus < 0 ? "No limit" : $"+{stats.EncumbranceMaxDexBonus}";
         string acpDisplay = stats.ArmorCheckPenalty > 0 ? $"-{stats.ArmorCheckPenalty}" : "0";
-        AddLine(content, $"  Max Dex: {maxDexDisplay}    ACP: {acpDisplay}", 10, DimText, FontStyle.Normal, 13);
+        AddLine(content, $"  Max Dex: {maxDexDisplay} (Armor {armorCapDisplay}, Load {loadCapDisplay})", 10, DimText, FontStyle.Normal, 13);
+        AddLine(content, $"  ACP: {acpDisplay} (Armor {stats.EquipmentArmorCheckPenalty}, Load {stats.EncumbranceCheckPenalty})", 10, DimText, FontStyle.Normal, 13);
 
         if (stats.IsAffectedByArcaneSpellFailure)
         {

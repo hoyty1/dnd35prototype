@@ -14,6 +14,14 @@ public enum SpellcastingType
     Divine
 }
 
+public enum EncumbranceLevel
+{
+    Light,
+    Medium,
+    Heavy,
+    Overloaded
+}
+
 [System.Serializable]
 public class CharacterStats
 {
@@ -146,8 +154,9 @@ public class CharacterStats
         get
         {
             if (!IsMonk) return 0;
-            // Only applies when unarmored (ArmorBonus == 0) and no shield (ShieldBonus == 0)
+            // Only applies when unarmored, no shield, and light or lower encumbrance.
             if (ArmorBonus > 0 || ShieldBonus > 0) return 0;
+            if (CurrentEncumbrance != EncumbranceLevel.Light) return 0;
             return Mathf.Max(0, WISMod);
         }
     }
@@ -287,9 +296,11 @@ public class CharacterStats
         get
         {
             if (!IsBarbarian) return 0;
-            // +10 ft = 2 squares, only in medium or lighter armor (MaxDexBonus >= 2 or no armor)
-            // Heavy armor has MaxDexBonus of 0 or 1
-            if (MaxDexBonus >= 0 && MaxDexBonus < 2) return 0; // Heavy armor
+            // +10 ft = 2 squares, only in medium or lighter armor and while not carrying a heavy/overloaded load.
+            if (EquippedArmorItem != null && EquippedArmorItem.ArmorCat == ArmorCategory.Heavy)
+                return 0;
+            if (CurrentEncumbrance == EncumbranceLevel.Heavy || CurrentEncumbrance == EncumbranceLevel.Overloaded)
+                return 0;
             return 2;
         }
     }
@@ -744,10 +755,20 @@ public class CharacterStats
     public int CritThreatMin;   // Minimum natural d20 roll for crit threat (from equipped weapon, default 20)
     public int CritMultiplier;  // Crit damage multiplier (from equipped weapon, default 2)
 
-    // ========== ARMOR PROPERTIES (D&D 3.5) ==========
-    public int MaxDexBonus;         // Max DEX bonus to AC from armor (-1 = no limit)
-    public int ArmorCheckPenalty;   // Total armor check penalty (armor + shield, stored positive)
-    public int ArcaneSpellFailure;  // Total arcane spell failure % (armor + shield)
+    // ========== ARMOR & ENCUMBRANCE PROPERTIES (D&D 3.5) ==========
+    public int MaxDexBonus;                // Effective Max DEX bonus to AC after armor + encumbrance limits (-1 = no limit)
+    public int EquipmentMaxDexBonus = -1;  // Armor-derived Max DEX cap only (-1 = no limit)
+    public int EncumbranceMaxDexBonus = -1;// Encumbrance-derived Max DEX cap only (-1 = no limit)
+
+    public int ArmorCheckPenalty;          // Effective ACP after most-restrictive armor/shield vs encumbrance
+    public int EquipmentArmorCheckPenalty; // Armor+shield ACP only (stored positive)
+    public int EncumbranceCheckPenalty;    // Encumbrance ACP only (stored positive)
+
+    public int ArcaneSpellFailure;         // Total arcane spell failure % (armor + shield)
+
+    public float TotalCarriedWeightLbs;    // Combined weight of equipped + inventory items
+    public float MaxCarryWeightLbs;        // Heavy load threshold from STR carrying capacity table
+    public EncumbranceLevel CurrentEncumbrance = EncumbranceLevel.Light;
 
 
     // Runtime references to currently equipped items (set by Inventory.RecalculateStats)
@@ -760,6 +781,138 @@ public class CharacterStats
     public static int GetModifier(int abilityScore)
     {
         return Mathf.FloorToInt((abilityScore - 10) / 2f);
+    }
+
+    private static readonly int[] HeavyLoadByStrength =
+    {
+        0,    // STR 0 (invalid)
+        10,   // STR 1
+        20,   // STR 2
+        30,   // STR 3
+        40,   // STR 4
+        50,   // STR 5
+        60,   // STR 6
+        70,   // STR 7
+        80,   // STR 8
+        90,   // STR 9
+        100,  // STR 10
+        115,  // STR 11
+        130,  // STR 12
+        150,  // STR 13
+        175,  // STR 14
+        200,  // STR 15
+        230,  // STR 16
+        260,  // STR 17
+        300,  // STR 18
+        350,  // STR 19
+        400,  // STR 20
+        466,  // STR 21
+        533,  // STR 22
+        600,  // STR 23
+        700,  // STR 24
+        800,  // STR 25
+        933,  // STR 26
+        1066, // STR 27
+        1200, // STR 28
+        1400  // STR 29
+    };
+
+    public static float GetHeavyLoadForStrength(int strength)
+    {
+        if (strength <= 0)
+            return 0f;
+
+        if (strength < HeavyLoadByStrength.Length)
+            return HeavyLoadByStrength[strength];
+
+        int reductionSteps = 0;
+        int normalized = strength;
+        while (normalized > 29)
+        {
+            normalized -= 10;
+            reductionSteps++;
+        }
+
+        float baseHeavyLoad = HeavyLoadByStrength[Mathf.Max(1, normalized)];
+        return baseHeavyLoad * Mathf.Pow(4f, reductionSteps);
+    }
+
+    public static EncumbranceLevel GetEncumbranceLevel(float carriedWeightLbs, float maxCarryWeightLbs)
+    {
+        if (maxCarryWeightLbs <= 0f)
+            return carriedWeightLbs > 0f ? EncumbranceLevel.Overloaded : EncumbranceLevel.Light;
+
+        if (carriedWeightLbs > maxCarryWeightLbs)
+            return EncumbranceLevel.Overloaded;
+
+        float lightMax = maxCarryWeightLbs / 3f;
+        float mediumMax = (maxCarryWeightLbs * 2f) / 3f;
+
+        if (carriedWeightLbs <= lightMax)
+            return EncumbranceLevel.Light;
+        if (carriedWeightLbs <= mediumMax)
+            return EncumbranceLevel.Medium;
+        return EncumbranceLevel.Heavy;
+    }
+
+    public static int GetEncumbranceDexCap(EncumbranceLevel level)
+    {
+        switch (level)
+        {
+            case EncumbranceLevel.Medium: return 3;
+            case EncumbranceLevel.Heavy:
+            case EncumbranceLevel.Overloaded:
+                return 1;
+            default:
+                return -1;
+        }
+    }
+
+    public static int GetEncumbranceCheckPenalty(EncumbranceLevel level)
+    {
+        switch (level)
+        {
+            case EncumbranceLevel.Medium: return 3;
+            case EncumbranceLevel.Heavy:
+            case EncumbranceLevel.Overloaded:
+                return 6;
+            default:
+                return 0;
+        }
+    }
+
+    public static float GetEncumbranceSpeedMultiplier(EncumbranceLevel level)
+    {
+        switch (level)
+        {
+            case EncumbranceLevel.Medium: return 2f / 3f;
+            case EncumbranceLevel.Heavy: return 0.5f;
+            case EncumbranceLevel.Overloaded: return 0f;
+            default: return 1f;
+        }
+    }
+
+    public static int CombineMostRestrictiveMaxDex(int firstCap, int secondCap)
+    {
+        if (firstCap < 0) return secondCap;
+        if (secondCap < 0) return firstCap;
+        return Mathf.Min(firstCap, secondCap);
+    }
+
+    public string EncumbranceLabel => CurrentEncumbrance.ToString();
+
+    public string EncumbranceSummary
+    {
+        get
+        {
+            string carried = TotalCarriedWeightLbs == Mathf.Floor(TotalCarriedWeightLbs)
+                ? $"{TotalCarriedWeightLbs:0}"
+                : $"{TotalCarriedWeightLbs:0.##}";
+            string max = MaxCarryWeightLbs == Mathf.Floor(MaxCarryWeightLbs)
+                ? $"{MaxCarryWeightLbs:0}"
+                : $"{MaxCarryWeightLbs:0.##}";
+            return $"{EncumbranceLabel} ({carried}/{max} lbs)";
+        }
     }
 
     public int STRMod => GetModifier(STR);
@@ -856,15 +1009,37 @@ public class CharacterStats
     /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier + morale bonus + condition penalties.</summary>
     public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier + MoraleAttackBonus + ConditionAttackPenalty;
 
-    /// <summary>Movement speed in squares per turn (includes class fast movement bonuses and condition multipliers).</summary>
+    /// <summary>Movement speed in squares per turn after class bonuses, encumbrance, conditions, and 5-ft rounding.</summary>
     public int MoveRange
     {
         get
         {
             if (MovementBlockedByCondition) return 0;
-            int baseRange = BaseSpeed + MonkFastMovementBonus + BarbarianFastMovementBonus;
-            int modified = Mathf.FloorToInt(baseRange * ConditionMovementMultiplier);
-            return Mathf.Max(0, modified);
+            return EffectiveSpeedFeet / 5;
+        }
+    }
+
+    /// <summary>
+    /// Effective movement in feet after class bonuses, encumbrance penalties, and condition multipliers.
+    /// Rounded down to 5-ft increments per D&D movement granularity.
+    /// </summary>
+    public int EffectiveSpeedFeet
+    {
+        get
+        {
+            if (MovementBlockedByCondition) return 0;
+            if (CurrentEncumbrance == EncumbranceLevel.Overloaded) return 0;
+
+            int baseFeet = (Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5)
+                           + (MonkFastMovementBonus + BarbarianFastMovementBonus) * 5;
+
+            float speed = baseFeet;
+            if (!SpeedNotReducedByArmor)
+                speed *= GetEncumbranceSpeedMultiplier(CurrentEncumbrance);
+
+            speed *= ConditionMovementMultiplier;
+            int roundedToFive = Mathf.FloorToInt(Mathf.Max(0f, speed) / 5f) * 5;
+            return Mathf.Max(0, roundedToFive);
         }
     }
 
@@ -962,10 +1137,17 @@ public class CharacterStats
         CritThreatMin = 20;   // Only natural 20 threatens by default
         CritMultiplier = 2;   // ×2 by default
 
-        // Default armor properties (no armor = no limit on DEX to AC)
+        // Default armor/encumbrance properties
         MaxDexBonus = -1;       // -1 = no limit
+        EquipmentMaxDexBonus = -1;
+        EncumbranceMaxDexBonus = -1;
         ArmorCheckPenalty = 0;
+        EquipmentArmorCheckPenalty = 0;
+        EncumbranceCheckPenalty = 0;
         ArcaneSpellFailure = 0;
+        TotalCarriedWeightLbs = 0f;
+        MaxCarryWeightLbs = GetHeavyLoadForStrength(STR);
+        CurrentEncumbrance = EncumbranceLevel.Light;
 
         // Calculate MaxHP: base + CON mod × level (minimum 1 HP per level)
         // Uses final CON (with racial modifier applied)
@@ -1706,24 +1888,26 @@ public class CharacterStats
     {
         if (!IsArmorCheckPenaltySkill(skillName)) return 0;
 
-        int totalAcp = 0;
+        int equipmentAcp = 0;
 
         // Preferred path: use concrete equipped item refs (supports proficiency-aware doubling).
         if (EquippedArmorItem != null || EquippedShieldItem != null)
         {
-            totalAcp += GetSkillAcpContributionForItem(EquippedArmorItem);
-            totalAcp += GetSkillAcpContributionForItem(EquippedShieldItem);
+            equipmentAcp += GetSkillAcpContributionForItem(EquippedArmorItem);
+            equipmentAcp += GetSkillAcpContributionForItem(EquippedShieldItem);
         }
-        else if (ArmorCheckPenalty > 0)
+        else
         {
             // Fallback for non-inventory test contexts.
-            totalAcp += ArmorCheckPenalty;
+            equipmentAcp += Mathf.Max(0, EquipmentArmorCheckPenalty > 0 ? EquipmentArmorCheckPenalty : ArmorCheckPenalty);
         }
 
-        if (NormalizeItemKey(skillName) == "swim")
-            totalAcp *= 2;
+        int effectiveAcp = Mathf.Max(Mathf.Abs(equipmentAcp), Mathf.Abs(EncumbranceCheckPenalty));
 
-        return -Mathf.Abs(totalAcp);
+        if (NormalizeItemKey(skillName) == "swim")
+            effectiveAcp *= 2;
+
+        return -Mathf.Abs(effectiveAcp);
     }
 
     private int GetSkillAcpContributionForItem(ItemData item)
@@ -1846,8 +2030,8 @@ public class CharacterStats
     /// <summary>Legacy helper to apply a temporary size delta.</summary>
     public bool ChangeSize(int categoryDelta) => TryShiftCurrentSize(categoryDelta);
 
-    /// <summary>Speed in feet for display purposes (includes fast movement bonuses).</summary>
-    public int SpeedInFeet => (Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5) + (MonkFastMovementBonus + BarbarianFastMovementBonus) * 5;
+    /// <summary>Current speed in feet for display and movement UI.</summary>
+    public int SpeedInFeet => EffectiveSpeedFeet;
 
 
     /// <summary>

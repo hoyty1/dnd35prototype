@@ -2375,7 +2375,7 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        inv.GeneralSlots[inventoryIndex] = null;
+        inv.RemoveItemAt(inventoryIndex);
         cell.AddGroundItem(item);
         feedback = $"{actor.Stats.CharacterName} drops {item.Name} on the ground at ({cell.Coords.x},{cell.Coords.y}).";
         CombatUI?.ShowCombatLog($"⬇ {feedback}");

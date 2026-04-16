@@ -65,6 +65,7 @@ public class Inventory
 
     // Reference to the owning character's stats for recalculation
     [NonSerialized] public CharacterStats OwnerStats;
+    [NonSerialized] private bool _isRecalculating;
 
     public Inventory()
     {
@@ -80,6 +81,7 @@ public class Inventory
             if (GeneralSlots[i] == null)
             {
                 GeneralSlots[i] = item;
+                if (!_isRecalculating) RecalculateStats();
                 return true;
             }
         }
@@ -92,6 +94,7 @@ public class Inventory
         if (index < 0 || index >= GeneralSlots.Length) return null;
         var item = GeneralSlots[index];
         GeneralSlots[index] = null;
+        if (!_isRecalculating) RecalculateStats();
         return item;
     }
 
@@ -181,6 +184,7 @@ public class Inventory
         if (item == null) return;
         if (!item.CanEquipIn(slot)) return;
         SetEquipSlot(slot, item);
+        if (!_isRecalculating) RecalculateStats();
     }
 
     private void SetEquipSlot(EquipSlot slot, ItemData item)
@@ -213,88 +217,114 @@ public class Inventory
     public void RecalculateStats()
     {
         if (OwnerStats == null) return;
+        if (_isRecalculating) return;
 
-        // --- Two-Handed Weapon Enforcement ---
-        // If the right hand weapon is two-handed, the left hand must be empty
-        if (RightHandSlot != null && RightHandSlot.IsWeapon && RightHandSlot.IsTwoHanded && LeftHandSlot != null)
+        _isRecalculating = true;
+        try
         {
-            // Move left hand item to inventory
-            AddItem(LeftHandSlot);
-            LeftHandSlot = null;
+            // --- Two-Handed Weapon Enforcement ---
+            // If a two-handed weapon is equipped in one hand, the opposite hand must be empty.
+            if (RightHandSlot != null && RightHandSlot.IsWeapon && RightHandSlot.IsTwoHanded && LeftHandSlot != null)
+            {
+                ItemData displaced = LeftHandSlot;
+                LeftHandSlot = null;
+                if (!AddItem(displaced))
+                    LeftHandSlot = displaced;
+            }
+
+            if (LeftHandSlot != null && LeftHandSlot.IsWeapon && LeftHandSlot.IsTwoHanded && RightHandSlot != null)
+            {
+                ItemData displaced = RightHandSlot;
+                RightHandSlot = null;
+                if (!AddItem(displaced))
+                    RightHandSlot = displaced;
+            }
+
+            // --- Armor Bonus & Properties ---
+            OwnerStats.ArmorBonus = ArmorRobeSlot != null ? ArmorRobeSlot.ArmorBonus : 0;
+
+            // Max Dex cap from armor only (-1 means no limit).
+            int armorMaxDex = -1;
+            if (ArmorRobeSlot != null)
+                armorMaxDex = ArmorRobeSlot.MaxDexBonus;
+
+            // --- Shield Bonus & Properties ---
+            OwnerStats.ShieldBonus = 0;
+            if (LeftHandSlot != null && LeftHandSlot.IsShield)
+                OwnerStats.ShieldBonus = LeftHandSlot.ShieldBonus;
+
+            // Runtime equipped-item references for proficiency/ACP calculations
+            OwnerStats.EquippedArmorItem = ArmorRobeSlot;
+            OwnerStats.EquippedShieldItem = (LeftHandSlot != null && LeftHandSlot.IsShield) ? LeftHandSlot : null;
+
+            // --- Encumbrance from total carried weight ---
+            float totalWeight = GetTotalCarriedWeightLbs();
+            float maxCarry = CharacterStats.GetHeavyLoadForStrength(OwnerStats.STR);
+            EncumbranceLevel encumbrance = CharacterStats.GetEncumbranceLevel(totalWeight, maxCarry);
+            int encDexCap = CharacterStats.GetEncumbranceDexCap(encumbrance);
+            int encAcp = CharacterStats.GetEncumbranceCheckPenalty(encumbrance);
+
+            OwnerStats.TotalCarriedWeightLbs = totalWeight;
+            OwnerStats.MaxCarryWeightLbs = maxCarry;
+            OwnerStats.CurrentEncumbrance = encumbrance;
+            OwnerStats.EncumbranceMaxDexBonus = encDexCap;
+            OwnerStats.EncumbranceCheckPenalty = encAcp;
+
+            // Effective Max Dex cap is the most restrictive between armor and encumbrance caps.
+            OwnerStats.EquipmentMaxDexBonus = armorMaxDex >= 0 ? armorMaxDex : -1;
+            OwnerStats.MaxDexBonus = CharacterStats.CombineMostRestrictiveMaxDex(OwnerStats.EquipmentMaxDexBonus, encDexCap);
+
+            // --- Armor Check Penalty ---
+            // Effective ACP is the most restrictive between armor/shield ACP and encumbrance ACP.
+            int totalACP = 0;
+            if (ArmorRobeSlot != null)
+                totalACP += ArmorRobeSlot.ArmorCheckPenalty;
+            if (LeftHandSlot != null && LeftHandSlot.IsShield)
+                totalACP += LeftHandSlot.ArmorCheckPenalty;
+            OwnerStats.EquipmentArmorCheckPenalty = totalACP;
+            OwnerStats.ArmorCheckPenalty = Mathf.Max(totalACP, encAcp);
+
+            // --- Arcane Spell Failure (sum of armor + shield) ---
+            int totalASF = 0;
+            if (ArmorRobeSlot != null)
+                totalASF += ArmorRobeSlot.ArcaneSpellFailure;
+            if (LeftHandSlot != null && LeftHandSlot.IsShield)
+                totalASF += LeftHandSlot.ArcaneSpellFailure;
+            OwnerStats.ArcaneSpellFailure = totalASF;
+
+            // --- Weapon Stats ---
+            // Primary weapon from right hand, then left hand.
+            // If neither hand has a weapon, allow spiked gauntlet in Hands slot as primary attack option.
+            if (RightHandSlot != null && RightHandSlot.IsWeapon)
+            {
+                OwnerStats.EquippedMainWeaponItem = RightHandSlot;
+                ApplyWeaponStats(RightHandSlot);
+            }
+            else if (LeftHandSlot != null && LeftHandSlot.IsWeapon)
+            {
+                OwnerStats.EquippedMainWeaponItem = LeftHandSlot;
+                ApplyWeaponStats(LeftHandSlot);
+            }
+            else if (IsSpikedGauntletItem(HandsSlot))
+            {
+                OwnerStats.EquippedMainWeaponItem = HandsSlot;
+                ApplyWeaponStats(HandsSlot);
+            }
+            else
+            {
+                OwnerStats.EquippedMainWeaponItem = null;
+                // Unarmed: 1d3, 20/×2, bludgeoning
+                OwnerStats.BaseDamageDice = 3;
+                OwnerStats.BaseDamageCount = 1;
+                OwnerStats.BonusDamage = 0;
+                OwnerStats.AttackRange = 1;
+                OwnerStats.CritThreatMin = 20;
+                OwnerStats.CritMultiplier = 2;
+            }
         }
-        // If the left hand weapon is two-handed, the right hand must be empty
-        if (LeftHandSlot != null && LeftHandSlot.IsWeapon && LeftHandSlot.IsTwoHanded && RightHandSlot != null)
+        finally
         {
-            AddItem(RightHandSlot);
-            RightHandSlot = null;
-        }
-
-        // --- Armor Bonus & Properties ---
-        OwnerStats.ArmorBonus = ArmorRobeSlot != null ? ArmorRobeSlot.ArmorBonus : 0;
-
-        // Max Dex Bonus: only armor limits DEX-to-AC in this prototype's D&D 3.5 implementation.
-        // -1 means no limit (no armor equipped).
-        int armorMaxDex = -1;
-        if (ArmorRobeSlot != null)
-            armorMaxDex = ArmorRobeSlot.MaxDexBonus;
-
-        // --- Shield Bonus & Properties ---
-        OwnerStats.ShieldBonus = 0;
-        if (LeftHandSlot != null && LeftHandSlot.IsShield)
-            OwnerStats.ShieldBonus = LeftHandSlot.ShieldBonus;
-
-        // Runtime equipped-item references for proficiency/ACP calculations
-        OwnerStats.EquippedArmorItem = ArmorRobeSlot;
-        OwnerStats.EquippedShieldItem = (LeftHandSlot != null && LeftHandSlot.IsShield) ? LeftHandSlot : null;
-
-        // Effective Max Dex cap comes from armor only.
-        OwnerStats.MaxDexBonus = armorMaxDex >= 0 ? armorMaxDex : -1;
-
-        // --- Armor Check Penalty (sum of armor + shield) ---
-        int totalACP = 0;
-        if (ArmorRobeSlot != null)
-            totalACP += ArmorRobeSlot.ArmorCheckPenalty;
-        if (LeftHandSlot != null && LeftHandSlot.IsShield)
-            totalACP += LeftHandSlot.ArmorCheckPenalty;
-        OwnerStats.ArmorCheckPenalty = totalACP;
-
-        // --- Arcane Spell Failure (sum of armor + shield) ---
-        int totalASF = 0;
-        if (ArmorRobeSlot != null)
-            totalASF += ArmorRobeSlot.ArcaneSpellFailure;
-        if (LeftHandSlot != null && LeftHandSlot.IsShield)
-            totalASF += LeftHandSlot.ArcaneSpellFailure;
-        OwnerStats.ArcaneSpellFailure = totalASF;
-
-        // --- Weapon Stats ---
-        // Primary weapon from right hand, then left hand.
-        // If neither hand has a weapon, allow spiked gauntlet in Hands slot as primary attack option.
-        if (RightHandSlot != null && RightHandSlot.IsWeapon)
-        {
-            OwnerStats.EquippedMainWeaponItem = RightHandSlot;
-            ApplyWeaponStats(RightHandSlot);
-        }
-        else if (LeftHandSlot != null && LeftHandSlot.IsWeapon)
-        {
-            // Fallback: weapon in left hand only
-            OwnerStats.EquippedMainWeaponItem = LeftHandSlot;
-            ApplyWeaponStats(LeftHandSlot);
-        }
-        else if (IsSpikedGauntletItem(HandsSlot))
-        {
-            OwnerStats.EquippedMainWeaponItem = HandsSlot;
-            ApplyWeaponStats(HandsSlot);
-        }
-        else
-        {
-            OwnerStats.EquippedMainWeaponItem = null;
-            // Unarmed: 1d3, 20/×2, bludgeoning
-            OwnerStats.BaseDamageDice = 3;
-            OwnerStats.BaseDamageCount = 1;
-            OwnerStats.BonusDamage = 0;
-            OwnerStats.AttackRange = 1;
-            OwnerStats.CritThreatMin = 20;
-            OwnerStats.CritMultiplier = 2;
+            _isRecalculating = false;
         }
     }
 
@@ -322,6 +352,28 @@ public class Inventory
         string id = (item.Id ?? string.Empty).ToLowerInvariant();
         string name = (item.Name ?? string.Empty).ToLowerInvariant();
         return id == "spiked_gauntlet" || name.Contains("spiked gauntlet");
+    }
+
+    /// <summary>Total carried weight from all equipped items and inventory contents.</summary>
+    public float GetTotalCarriedWeightLbs()
+    {
+        float total = 0f;
+
+        foreach (EquipSlot slot in AllEquipmentSlots)
+        {
+            ItemData equipped = GetEquipped(slot);
+            if (equipped != null)
+                total += Mathf.Max(0f, equipped.WeightLbs);
+        }
+
+        for (int i = 0; i < GeneralSlots.Length; i++)
+        {
+            ItemData item = GeneralSlots[i];
+            if (item != null)
+                total += Mathf.Max(0f, item.WeightLbs);
+        }
+
+        return total;
     }
 
     /// <summary>

@@ -253,9 +253,9 @@ public class CombatUI : MonoBehaviour
 
         if (speedText != null)
         {
-            string speedExtra = "";
+            string speedExtra = $" | Load: {s.EncumbranceSummary}";
             if (s.SpeedNotReducedByArmor)
-                speedExtra = " (no armor penalty)";
+                speedExtra += " (no armor speed reduction)";
             speedText.text = $"Speed: {s.MoveRange} sq ({s.SpeedInFeet} ft){speedExtra}";
         }
 
