@@ -299,13 +299,9 @@ public class SquareGrid : MonoBehaviour
                 if (cell == null) continue;
 
                 bool isDestinationNode = neighbor == destination;
-                bool canStandHere = CanPlaceCreature(
-                    neighbor,
-                    moverSizeSquares,
-                    ignoreOccupant: mover,
-                    ignoreOtherOccupants: isDestinationNode);
+                bool canTraverseHere = CanTraversePathNode(neighbor, moverSizeSquares, mover, isDestinationNode);
 
-                if (!canStandHere) continue;
+                if (!canTraverseHere) continue;
 
                 // Calculate step cost (weighted: orthogonal < diagonal to prefer straight paths)
                 bool isDiag = SquareGridUtils.IsDiagonalStep(current, neighbor);
@@ -343,8 +339,9 @@ public class SquareGrid : MonoBehaviour
         for (int i = 0; i < result.Path.Count; i++)
         {
             Vector2Int step = result.Path[i];
-            bool canStand = CanPlaceCreature(step, moverSizeSquares, mover, ignoreOtherOccupants: step == destination);
-            if (!canStand)
+            bool isDestinationStep = step == destination;
+            bool canTraverse = CanTraversePathNode(step, moverSizeSquares, mover, isDestinationStep);
+            if (!canTraverse)
             {
                 firstInvalidIndex = i;
                 break;
@@ -360,6 +357,42 @@ public class SquareGrid : MonoBehaviour
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Movement-path occupancy rules:
+    /// - Intermediate path nodes may be occupied by allies (you can move through allies).
+    /// - Destination node must be fully unoccupied by anyone except the mover itself.
+    /// - Enemy-occupied nodes are never traversable.
+    /// </summary>
+    private bool CanTraversePathNode(Vector2Int basePosition, int moverSizeSquares, CharacterController mover, bool isDestinationNode)
+    {
+        // Validate footprint bounds/cell existence first while ignoring occupancy.
+        if (!CanPlaceCreature(basePosition, moverSizeSquares, mover, ignoreOtherOccupants: true))
+            return false;
+
+        var occupiedSquares = GetOccupiedSquares(basePosition, moverSizeSquares);
+        for (int i = 0; i < occupiedSquares.Count; i++)
+        {
+            SquareCell cell = GetCell(occupiedSquares[i]);
+            if (cell == null)
+                return false;
+
+            CharacterController occupant = cell.Occupant;
+            if (!cell.IsOccupied || occupant == null || occupant == mover)
+                continue;
+
+            // Final destination must be unoccupied.
+            if (isDestinationNode)
+                return false;
+
+            // During traversal, allies are pass-through, enemies are blocking.
+            bool isAllyOccupant = mover != null && occupant.IsPlayerControlled == mover.IsPlayerControlled;
+            if (!isAllyOccupant)
+                return false;
+        }
+
+        return true;
     }
 
     /// <summary>
