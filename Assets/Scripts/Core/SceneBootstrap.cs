@@ -715,6 +715,10 @@ public class SceneBootstrap : MonoBehaviour
             "Cast Spell", new Color(0.4f, 0.2f, 0.6f));
         combatUI.ReloadButton = CreateGridButton(btnGrid.transform, "ReloadBtn",
             "Reload", new Color(0.38f, 0.44f, 0.16f));
+        combatUI.DropEquippedItemButton = CreateGridButton(btnGrid.transform, "DropEquippedBtn",
+            "Drop Equipped", new Color(0.45f, 0.18f, 0.18f));
+        combatUI.PickUpItemButton = CreateGridButton(btnGrid.transform, "PickUpItemBtn",
+            "Pick Up Item", new Color(0.2f, 0.45f, 0.28f));
         combatUI.EndTurnButton = CreateGridButton(btnGrid.transform, "EndTurnBtn",
             "End Turn", new Color(0.3f, 0.3f, 0.55f));
 
@@ -896,6 +900,10 @@ public class SceneBootstrap : MonoBehaviour
             ui.CastSpellButton.onClick.AddListener(() => GameManager.Instance.OnCastSpellButtonPressed());
         if (ui.ReloadButton != null)
             ui.ReloadButton.onClick.AddListener(() => GameManager.Instance.OnReloadButtonPressed());
+        if (ui.DropEquippedItemButton != null)
+            ui.DropEquippedItemButton.onClick.AddListener(() => GameManager.Instance.OnDropEquippedItemButtonPressed());
+        if (ui.PickUpItemButton != null)
+            ui.PickUpItemButton.onClick.AddListener(() => GameManager.Instance.OnPickUpItemButtonPressed());
         if (ui.EndTurnButton != null)
             ui.EndTurnButton.onClick.AddListener(() => GameManager.Instance.OnEndTurnButtonPressed());
 

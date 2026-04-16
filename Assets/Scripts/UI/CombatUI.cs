@@ -102,8 +102,10 @@ public class CombatUI : MonoBehaviour
     public Button ChargeButton;         // Charge (Full-Round Action)
     public Button DualWieldButton;      // Dual Wield (Full-Round Action)
     public Button EndTurnButton;
-    public Button ReloadButton;         // Reload equipped crossbow (action varies by weapon/feat)
-    public Text ActionStatusText;       // Shows current action economy status
+    public Button ReloadButton;            // Reload equipped crossbow (action varies by weapon/feat)
+    public Button DropEquippedItemButton;  // Drop currently held equipped item (Free Action)
+    public Button PickUpItemButton;        // Pick up item from current or adjacent square (Move Action, provokes AoO)
+    public Text ActionStatusText;          // Shows current action economy status
 
     [Header("Monk/Barbarian Buttons")]
     public Button FlurryOfBlowsButton;     // Flurry of Blows (Full-Round Action, Monk only)
@@ -878,6 +880,29 @@ public class CombatUI : MonoBehaviour
                 else if (canReload) reloadLabel.text = $"Reload ({actionLabel})";
                 else reloadLabel.text = $"Reload ({actionLabel}) [{reloadDisabledReason}]";
             }
+        }
+
+        if (DropEquippedItemButton != null)
+        {
+            string disabledReason = GameManager.Instance != null ? GameManager.Instance.GetDropEquippedItemDisabledReason(pc) : "Unavailable";
+            bool canDropEquipped = string.IsNullOrEmpty(disabledReason);
+            DropEquippedItemButton.gameObject.SetActive(true);
+            DropEquippedItemButton.interactable = canDropEquipped;
+            Text dropLabel = DropEquippedItemButton.GetComponentInChildren<Text>();
+            if (dropLabel != null)
+                dropLabel.text = canDropEquipped ? "Drop Equipped (Free)" : $"Drop Equipped ({disabledReason})";
+        }
+
+        if (PickUpItemButton != null)
+        {
+            bool hasNearbyGroundItem = GameManager.Instance != null && GameManager.Instance.HasGroundItemInPickupRange(pc);
+            string disabledReason = GameManager.Instance != null ? GameManager.Instance.GetPickUpItemDisabledReason(pc) : "Unavailable";
+            bool canPickUp = string.IsNullOrEmpty(disabledReason);
+            PickUpItemButton.gameObject.SetActive(hasNearbyGroundItem);
+            PickUpItemButton.interactable = canPickUp;
+            Text pickupLabel = PickUpItemButton.GetComponentInChildren<Text>();
+            if (pickupLabel != null)
+                pickupLabel.text = canPickUp ? "Pick Up Item (Move, AoO)" : $"Pick Up Item ({disabledReason})";
         }
 
         if (RageStatusText != null)

@@ -2327,7 +2327,7 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Pick up an item from the actor's current square.
+    /// Pick up an item from the actor's current square or any adjacent square.
     /// In combat: move action (or standard->move conversion), and this provokes AoO.
     /// </summary>
     public string GetPickUpItemDisabledReason(CharacterController character)
@@ -2339,12 +2339,8 @@ public class GameManager : MonoBehaviour
         if (inv == null)
             return "No inventory";
 
-        SquareCell cell = GetCharacterCurrentCell(character);
-        if (cell == null)
-            return "No current square";
-
-        if (cell.GroundItems == null || cell.GroundItems.Count == 0)
-            return "No item on ground";
+        if (!TryGetPickUpTargetCellAndItem(character, out _, out _))
+            return "No item on or adjacent";
 
         if (inv.EmptySlots <= 0)
             return "Inventory full";
@@ -2353,6 +2349,11 @@ public class GameManager : MonoBehaviour
             return "No move or standard action available";
 
         return string.Empty;
+    }
+
+    public bool HasGroundItemInPickupRange(CharacterController character)
+    {
+        return TryGetPickUpTargetCellAndItem(character, out _, out _);
     }
 
     public void OnPickUpItemButtonPressed()
@@ -2367,14 +2368,12 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        SquareCell cell = GetCharacterCurrentCell(pc);
-        if (cell == null || cell.GroundItems == null || cell.GroundItems.Count == 0)
+        if (!TryGetPickUpTargetCellAndItem(pc, out SquareCell cell, out ItemData item))
         {
-            CombatUI?.ShowCombatLog("⚠ No item to pick up.");
+            CombatUI?.ShowCombatLog("⚠ No item to pick up in current or adjacent squares.");
             return;
         }
 
-        ItemData item = cell.GroundItems[0];
         ResolvePickUpItemProvocation(pc, cell, item);
     }
 
@@ -2567,6 +2566,46 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
+    private bool TryGetPickUpTargetCellAndItem(CharacterController character, out SquareCell targetCell, out ItemData targetItem)
+    {
+        targetCell = null;
+        targetItem = null;
+
+        if (character == null)
+            return false;
+
+        SquareCell currentCell = GetCharacterCurrentCell(character);
+        if (currentCell != null && currentCell.GroundItems != null && currentCell.GroundItems.Count > 0)
+        {
+            targetCell = currentCell;
+            targetItem = currentCell.GroundItems[0];
+            return true;
+        }
+
+        SquareGrid grid = Grid != null ? Grid : SquareGrid.Instance;
+        if (grid == null)
+            return false;
+
+        Vector2Int origin = character.GridPosition;
+        for (int y = -1; y <= 1; y++)
+        {
+            for (int x = -1; x <= 1; x++)
+            {
+                if (x == 0 && y == 0)
+                    continue;
+
+                SquareCell adjacentCell = grid.GetCell(new Vector2Int(origin.x + x, origin.y + y));
+                if (adjacentCell == null || adjacentCell.GroundItems == null || adjacentCell.GroundItems.Count == 0)
+                    continue;
+
+                targetCell = adjacentCell;
+                targetItem = adjacentCell.GroundItems[0];
+                return true;
+            }
+        }
+
+        return false;
+    }
     private SquareCell GetCharacterCurrentCell(CharacterController character)
     {
         if (character == null)
