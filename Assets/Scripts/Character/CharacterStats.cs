@@ -1590,7 +1590,10 @@ public class CharacterStats
     public bool IsProficientWithWeapon(ItemData weapon)
     {
         if (weapon == null) return true; // unarmed or no weapon selected
-        if (weapon.Type != ItemType.Weapon) return true;
+
+        bool treatAsWeaponAttack = weapon.Type == ItemType.Weapon
+            || (weapon.Type == ItemType.Shield && weapon.DamageDice > 0 && weapon.DamageCount > 0);
+        if (!treatAsWeaponAttack) return true;
 
         string weaponId = NormalizeItemKey(weapon.Id);
         if (HasRacialWeaponProficiency(weaponId))
@@ -1598,6 +1601,9 @@ public class CharacterStats
 
         if (HasClassSpecificWeaponProficiency(weaponId))
             return true;
+
+        if (weapon.Type == ItemType.Shield && weapon.Proficiency == WeaponProficiency.None)
+            return HasMartialWeaponProficiency();
 
         if (weapon.Proficiency == WeaponProficiency.Simple)
             return HasSimpleWeaponProficiency();

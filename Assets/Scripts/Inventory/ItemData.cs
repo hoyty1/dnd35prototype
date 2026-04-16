@@ -403,6 +403,16 @@ public class ItemData
             if (ArmorCheckPenalty > 0) stats += $" | Check: -{ArmorCheckPenalty}";
             if (ArcaneSpellFailure > 0) stats += $"\nSpell Fail: {ArcaneSpellFailure}%";
             if (WeightLbs > 0) stats += $" | {WeightLbs} lbs";
+
+            // D&D 3.5 shield bash profile (when present on this shield definition).
+            if (DamageDice > 0 && DamageCount > 0)
+            {
+                string bashDmg = $"{DamageCount}d{DamageDice}";
+                if (BonusDamage > 0) bashDmg += $"+{BonusDamage}";
+                string dmgType = string.IsNullOrEmpty(DamageType) ? "bludgeoning" : DamageType;
+                string prof = Proficiency == WeaponProficiency.None ? "Martial" : Proficiency.ToString();
+                stats += $"\nShield Bash: {bashDmg} {dmgType} ({prof})";
+            }
         }
         else if (Type == ItemType.Consumable)
         {

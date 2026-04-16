@@ -3807,7 +3807,11 @@ public class GameManager : MonoBehaviour
 
         var (mainPen, offPen, lightOff) = pc.GetDualWieldPenalties();
         string penaltyInfo = lightOff ? $"(light off-hand: {mainPen}/{offPen})" : $"(penalties: {mainPen}/{offPen})";
-        string offHandInfo = pc.IsDualWieldOffHandSpikedGauntlet() ? " [Off-hand: Spiked Gauntlet]" : string.Empty;
+        string offHandInfo = pc.IsDualWieldOffHandSpikedGauntlet()
+            ? " [Off-hand: Spiked Gauntlet]"
+            : pc.IsDualWieldOffHandShieldBash()
+                ? " [Off-hand: Shield Bash, shield AC lost until next turn]"
+                : string.Empty;
 
         ShowAttackTargets(pc);
         CombatUI.SetTurnIndicator($"DUAL WIELD: Select target {penaltyInfo}{offHandInfo}");

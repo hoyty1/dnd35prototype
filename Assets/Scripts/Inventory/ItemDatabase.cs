@@ -987,48 +987,106 @@ public static class ItemDatabase
             IconChar = "\u26E1", IconColor = new Color(0.5f, 0.5f, 0.4f)
         });
 
-        // Shield, Light Wooden: +1 AC, Max Dex -, Check -1, Spell Failure 5%, 5 lbs
+        // Shield, Light Wooden: +1 AC, bash 1d3 bludgeoning (martial, light off-hand)
         Register(new ItemData
         {
             Id = "shield_light_wooden", Name = "Shield, Light Wooden", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
-            Description = "A light shield made of wood.",
+            Description = "A light shield made of wood. Can be used for shield bashes.",
             ShieldBonus = 1, MaxDexBonus = -1, ArmorCheckPenalty = 1,
             ArcaneSpellFailure = 5, WeightLbs = 5f,
+            Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.Light,
+            DamageDice = 3, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = true,
+            DmgModType = DamageModifierType.Strength,
+            CritThreatMin = 20, CritMultiplier = 2,
+            DamageType = "bludgeoning",
             IconChar = "\u26E1", IconColor = new Color(0.6f, 0.5f, 0.3f)
         });
 
-        // Shield, Light Steel: +1 AC, Max Dex -, Check -1, Spell Failure 5%, 6 lbs
+        // Shield, Light Steel: +1 AC, bash 1d3 bludgeoning (martial, light off-hand)
         Register(new ItemData
         {
             Id = "shield_light_steel", Name = "Shield, Light Steel", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
-            Description = "A light shield made of steel.",
+            Description = "A light shield made of steel. Can be used for shield bashes.",
             ShieldBonus = 1, MaxDexBonus = -1, ArmorCheckPenalty = 1,
             ArcaneSpellFailure = 5, WeightLbs = 6f,
+            Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.Light,
+            DamageDice = 3, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = true,
+            DmgModType = DamageModifierType.Strength,
+            CritThreatMin = 20, CritMultiplier = 2,
+            DamageType = "bludgeoning",
             IconChar = "\u26E1", IconColor = new Color(0.6f, 0.6f, 0.7f)
         });
 
-        // Shield, Heavy Wooden: +2 AC, Max Dex -, Check -2, Spell Failure 15%, 10 lbs
+        // Shield, Light Steel (Spiked): +1 AC, bash 1d3+1 piercing (martial, light off-hand)
+        Register(new ItemData
+        {
+            Id = "shield_light_steel_spiked", Name = "Shield, Light Steel (Spiked)", Type = ItemType.Shield,
+            Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
+            Description = "A light steel shield fitted with shield spikes. Shield spikes add +1 damage and change bash damage to piercing.",
+            ShieldBonus = 1, MaxDexBonus = -1, ArmorCheckPenalty = 1,
+            ArcaneSpellFailure = 5, WeightLbs = 6f,
+            Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.Light,
+            DamageDice = 3, DamageCount = 1, BonusDamage = 1, AttackRange = 1,
+            ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = true,
+            DmgModType = DamageModifierType.Strength,
+            CritThreatMin = 20, CritMultiplier = 2,
+            DamageType = "piercing",
+            IconChar = "\u26E1", IconColor = new Color(0.65f, 0.65f, 0.75f)
+        });
+
+        // Shield, Heavy Wooden: +2 AC, bash 1d4 bludgeoning (martial)
         Register(new ItemData
         {
             Id = "shield_heavy_wooden", Name = "Shield, Heavy Wooden", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
-            Description = "A heavy shield made of wood. Provides solid protection.",
+            Description = "A heavy shield made of wood. Provides solid protection and can be used for shield bashes.",
             ShieldBonus = 2, MaxDexBonus = -1, ArmorCheckPenalty = 2,
             ArcaneSpellFailure = 15, WeightLbs = 10f,
+            Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.OneHanded,
+            DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = false,
+            DmgModType = DamageModifierType.Strength,
+            CritThreatMin = 20, CritMultiplier = 2,
+            DamageType = "bludgeoning",
             IconChar = "\u26E1", IconColor = new Color(0.6f, 0.5f, 0.3f)
         });
 
-        // Shield, Heavy Steel: +2 AC, Max Dex -, Check -2, Spell Failure 15%, 15 lbs
+        // Shield, Heavy Steel: +2 AC, bash 1d4 bludgeoning (martial)
         Register(new ItemData
         {
             Id = "shield_heavy_steel", Name = "Shield, Heavy Steel", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
-            Description = "A heavy shield made of steel. Standard protection for fighters.",
+            Description = "A heavy shield made of steel. Standard protection for fighters, and usable for shield bashes.",
             ShieldBonus = 2, MaxDexBonus = -1, ArmorCheckPenalty = 2,
             ArcaneSpellFailure = 15, WeightLbs = 15f,
+            Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.OneHanded,
+            DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = false,
+            DmgModType = DamageModifierType.Strength,
+            CritThreatMin = 20, CritMultiplier = 2,
+            DamageType = "bludgeoning",
             IconChar = "\u26E1", IconColor = new Color(0.6f, 0.6f, 0.7f)
+        });
+
+        // Shield, Heavy Steel (Spiked): +2 AC, bash 1d4+1 piercing (martial)
+        Register(new ItemData
+        {
+            Id = "shield_heavy_steel_spiked", Name = "Shield, Heavy Steel (Spiked)", Type = ItemType.Shield,
+            Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
+            Description = "A heavy steel shield fitted with shield spikes. Shield spikes add +1 damage and change bash damage to piercing.",
+            ShieldBonus = 2, MaxDexBonus = -1, ArmorCheckPenalty = 2,
+            ArcaneSpellFailure = 15, WeightLbs = 15f,
+            Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.OneHanded,
+            DamageDice = 4, DamageCount = 1, BonusDamage = 1, AttackRange = 1,
+            ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = false,
+            DmgModType = DamageModifierType.Strength,
+            CritThreatMin = 20, CritMultiplier = 2,
+            DamageType = "piercing",
+            IconChar = "\u26E1", IconColor = new Color(0.65f, 0.65f, 0.75f)
         });
 
         // Tower Shield: +4 AC, Max Dex -, Check -10, Spell Failure 50%, 45 lbs
@@ -1047,9 +1105,15 @@ public static class ItemDatabase
         {
             Id = "heavy_shield", Name = "Shield, Heavy Steel", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
-            Description = "A heavy shield made of steel. Standard protection for fighters.",
+            Description = "A heavy shield made of steel. Standard protection for fighters, and usable for shield bashes.",
             ShieldBonus = 2, MaxDexBonus = -1, ArmorCheckPenalty = 2,
             ArcaneSpellFailure = 15, WeightLbs = 15f,
+            Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.OneHanded,
+            DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = false,
+            DmgModType = DamageModifierType.Strength,
+            CritThreatMin = 20, CritMultiplier = 2,
+            DamageType = "bludgeoning",
             IconChar = "\u26E1", IconColor = new Color(0.6f, 0.6f, 0.7f)
         });
 
@@ -1057,9 +1121,15 @@ public static class ItemDatabase
         {
             Id = "light_shield", Name = "Shield, Light Wooden", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
-            Description = "A light shield made of wood.",
+            Description = "A light shield made of wood. Can be used for shield bashes.",
             ShieldBonus = 1, MaxDexBonus = -1, ArmorCheckPenalty = 1,
             ArcaneSpellFailure = 5, WeightLbs = 5f,
+            Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee, WeaponSize = WeaponSizeCategory.Light,
+            DamageDice = 3, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
+            ReachSquares = 1, CanAttackAdjacent = true, IsLightWeapon = true,
+            DmgModType = DamageModifierType.Strength,
+            CritThreatMin = 20, CritMultiplier = 2,
+            DamageType = "bludgeoning",
             IconChar = "\u26E1", IconColor = new Color(0.6f, 0.5f, 0.3f)
         });
     }

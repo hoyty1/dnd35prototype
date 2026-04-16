@@ -68,6 +68,10 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool IsFightingDefensively { get; private set; }
 
+    // Shield bash AC suppression state:
+    // while active, this character's equipped shield bonus is removed until next StartNewTurn().
+    private bool _shieldBashAcSuppressed;
+    private int _suppressedShieldBonusAmount;
     /// <summary>Set Power Attack value, clamped to 0..BAB.</summary>
     public void SetPowerAttack(int value)
     {
@@ -1044,7 +1048,7 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Check if this character can make a dual-wield/off-hand attack sequence.
-    /// Supports normal hand-slot dual wielding and spiked gauntlet off-hand attacks from the Hands slot.
+    /// Supports: left-hand weapon, shield bash off-hand, and spiked gauntlet off-hand.
     /// </summary>
     public bool CanDualWield()
     {
@@ -1061,7 +1065,8 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Returns the resolved off-hand weapon for dual-wield style attacks, if any.
-    /// This can be either a left-hand weapon or a spiked gauntlet from the Hands slot.
+    /// This can be a left-hand weapon, a shield bash profile from the left-hand shield,
+    /// or a spiked gauntlet from the Hands slot.
     /// </summary>
     public ItemData GetDualWieldOffHandWeapon()
     {
@@ -1074,6 +1079,14 @@ public class CharacterController : MonoBehaviour
     public bool IsDualWieldOffHandSpikedGauntlet()
     {
         return TryGetDualWieldWeapons(out _, out _, out bool offHandFromSpikedGauntlet) && offHandFromSpikedGauntlet;
+    }
+
+    /// <summary>
+    /// True if the current dual-wield off-hand attack option is a shield bash.
+    /// </summary>
+    public bool IsDualWieldOffHandShieldBash()
+    {
+        return TryGetDualWieldWeapons(out _, out ItemData offWeapon, out _) && IsShieldBashWeapon(offWeapon);
     }
 
     private bool TryGetDualWieldWeapons(out ItemData mainWeapon, out ItemData offWeapon, out bool offHandFromSpikedGauntlet)
@@ -1090,7 +1103,7 @@ public class CharacterController : MonoBehaviour
         bool hasHeldWeapon = (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon)
             || (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon);
 
-        // Off-hand gauntlet options only apply when another weapon is actively equipped.
+        // Off-hand options only apply when another weapon is actively equipped.
         if (!hasHeldWeapon)
             return false;
 
@@ -1099,6 +1112,16 @@ public class CharacterController : MonoBehaviour
             return false;
 
         if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon && inv.LeftHandSlot != mainWeapon)
+        {
+            offWeapon = inv.LeftHandSlot;
+            return true;
+        }
+
+        bool canShieldBashOffHand = inv.RightHandSlot != null
+            && inv.RightHandSlot == mainWeapon
+            && !mainWeapon.IsTwoHanded
+            && IsShieldBashWeapon(inv.LeftHandSlot);
+        if (canShieldBashOffHand)
         {
             offWeapon = inv.LeftHandSlot;
             return true;
@@ -1284,9 +1307,12 @@ public class CharacterController : MonoBehaviour
                             + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty
                             + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                             + offWeaponNonProfPenalty + armorNonProfPenalty;
+            bool offHandShieldBash = IsShieldBashWeapon(offWeapon);
             string offLabel = offHandFromSpikedGauntlet
                 ? $"Attack 2 - Off Hand ({offWeapon.Name}, Hands Slot)"
-                : $"Attack 2 - Off Hand ({offWeapon.Name})";
+                : offHandShieldBash
+                    ? $"Attack 2 - Off Hand (Shield Bash: {offWeapon.Name})"
+                    : $"Attack 2 - Off Hand ({offWeapon.Name})";
 
             int offCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, offWeapon.CritThreatMin > 0 ? offWeapon.CritThreatMin : 20);
             int offCritMult = offWeapon.CritMultiplier > 0 ? offWeapon.CritMultiplier : 2;
@@ -1334,6 +1360,11 @@ public class CharacterController : MonoBehaviour
 
             result.Attacks.Add(offAtk);
             result.AttackLabels.Add(offLabel);
+
+            if (IsShieldBashWeapon(offWeapon))
+            {
+                SuppressShieldBonusForShieldBash(offWeapon);
+            }
 
             if (offWeapon.RequiresReload)
             {
@@ -2196,7 +2227,11 @@ public class CharacterController : MonoBehaviour
 
         var (mainPen, offPen, lightOff) = GetDualWieldPenalties();
 
-        string offSource = offHandFromSpikedGauntlet ? " (Hands slot)" : "";
+        string offSource = offHandFromSpikedGauntlet
+            ? " (Hands slot)"
+            : IsShieldBashWeapon(offWeapon)
+                ? " (Shield Bash)"
+                : "";
         string lightStr = lightOff ? " (light)" : "";
         return $"Dual Wield: {mainWeapon.Name} / {offWeapon.Name}{offSource}{lightStr}\n" +
                $"Penalties: Main {mainPen}, Off-hand {offPen}";
@@ -2240,6 +2275,7 @@ public class CharacterController : MonoBehaviour
     public void StartNewTurn()
     {
         SyncHPStateFromCurrentHP(emitLog: false);
+        RestoreShieldBonusAfterShieldBash();
 
         HasMovedThisTurn = false;
         HasTakenFiveFootStep = false;
@@ -2731,6 +2767,46 @@ public class CharacterController : MonoBehaviour
         string id = (item.Id ?? string.Empty).ToLowerInvariant();
         string name = (item.Name ?? string.Empty).ToLowerInvariant();
         return id == "spiked_gauntlet" || name.Contains("spiked gauntlet");
+    }
+
+    private static bool IsShieldBashWeapon(ItemData item)
+    {
+        return item != null
+            && item.IsShield
+            && item.DamageDice > 0
+            && item.DamageCount > 0;
+    }
+
+    private void SuppressShieldBonusForShieldBash(ItemData shield)
+    {
+        if (!IsShieldBashWeapon(shield) || Stats == null)
+            return;
+
+        int shieldBonus = Mathf.Max(0, shield.ShieldBonus);
+        _shieldBashAcSuppressed = shieldBonus > 0;
+        _suppressedShieldBonusAmount = shieldBonus;
+
+        if (_shieldBashAcSuppressed)
+        {
+            Stats.ShieldBonus = 0;
+            Debug.Log($"[ShieldBash] {Stats.CharacterName}: Shield bonus suppressed (+{_suppressedShieldBonusAmount} AC) until next turn.");
+        }
+    }
+
+    private void RestoreShieldBonusAfterShieldBash()
+    {
+        if (!_shieldBashAcSuppressed || Stats == null)
+            return;
+
+        var inv = GetComponent<InventoryComponent>()?.CharacterInventory;
+        ItemData leftHandShield = inv != null ? inv.LeftHandSlot : null;
+        int restoredShieldBonus = IsShieldBashWeapon(leftHandShield) ? Mathf.Max(0, leftHandShield.ShieldBonus) : 0;
+
+        Stats.ShieldBonus = restoredShieldBonus;
+        _shieldBashAcSuppressed = false;
+        _suppressedShieldBonusAmount = 0;
+
+        Debug.Log($"[ShieldBash] {Stats.CharacterName}: Shield bonus restored (+{restoredShieldBonus} AC).");
     }
 
     private static bool HasLockedGauntletEquipped(CharacterController character)

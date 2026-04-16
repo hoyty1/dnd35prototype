@@ -773,6 +773,7 @@ public class CombatUI : MonoBehaviour
             bool canDW = canDualWield && actions.HasFullRoundAction;
             bool canDualWieldAttack = true;
             bool offHandIsSpikedGauntlet = false;
+            bool offHandIsShieldBash = false;
             if (canDualWield)
             {
                 ItemData mainWeapon = pc.GetDualWieldMainWeapon();
@@ -781,6 +782,7 @@ public class CombatUI : MonoBehaviour
                 bool canOffAttack = pc.CanAttackWithWeapon(offWeapon, out _);
                 canDualWieldAttack = canMainAttack || canOffAttack;
                 offHandIsSpikedGauntlet = pc.IsDualWieldOffHandSpikedGauntlet();
+                offHandIsShieldBash = pc.IsDualWieldOffHandShieldBash();
             }
 
             DualWieldButton.gameObject.SetActive(canDualWield);
@@ -790,6 +792,7 @@ public class CombatUI : MonoBehaviour
             {
                 if (!canDualWieldAttack) dwLabel.text = "Dual Wield (Reload first)";
                 else if (canDW && offHandIsSpikedGauntlet) dwLabel.text = "Dual Wield (Spiked Gauntlet Off-Hand)";
+                else if (canDW && offHandIsShieldBash) dwLabel.text = "Dual Wield (Shield Bash Off-Hand)";
                 else dwLabel.text = canDW ? "Dual Wield (Full-Round)" : "Dual Wield (N/A)";
             }
         }
