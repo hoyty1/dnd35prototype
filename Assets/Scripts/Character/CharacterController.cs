@@ -20,7 +20,8 @@ public enum GrappleActionType
     DamageOpponent,
     PinOpponent,
     BreakPin,
-    MoveHalfSpeed
+    MoveHalfSpeed,
+    DrawLightWeapon
 }
 
 public enum AttackDamageMode
@@ -3160,6 +3161,8 @@ public class CharacterController : MonoBehaviour
                         : $"{Stats.CharacterName} fails to move the grapple ({myTotal} vs {oppTotal})."
                 };
             }
+            case GrappleActionType.DrawLightWeapon:
+                return ResolveDrawLightWeaponDuringGrappleStub();
             default:
                 return new SpecialAttackResult
                 {
@@ -3168,6 +3171,24 @@ public class CharacterController : MonoBehaviour
                     Log = "Unknown grapple action."
                 };
         }
+    }
+
+    private SpecialAttackResult ResolveDrawLightWeaponDuringGrappleStub()
+    {
+        // TODO: Implement Draw Light Weapon during grapple
+        // - Check inventory for light weapons
+        // - Draw weapon (move-equivalent action)
+        // - Update equipped weapon slot
+        // - Allow attacking with drawn weapon on subsequent turns
+        // - Add detailed combat log message for the draw action result
+        Debug.Log("Draw a Light Weapon - Not yet implemented");
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Draw a Light Weapon",
+            Success = false,
+            Log = "Draw a Light Weapon - Not yet implemented"
+        };
     }
 
     // ========== LIFECYCLE ==========

@@ -8812,6 +8812,7 @@ public class GameManager : MonoBehaviour
         else
         {
             options.Add((GrappleActionType.DamageOpponent, "Deal grapple damage (opposed check + unarmed strike damage; choose lethal/nonlethal)"));
+            options.Add((GrappleActionType.DrawLightWeapon, "Draw a Light Weapon (Not yet implemented)"));
             if (!opponentPinned)
                 options.Add((GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)"));
 
