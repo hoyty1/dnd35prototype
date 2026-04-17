@@ -942,10 +942,37 @@ public class CharacterStats
     }
 
     /// <summary>
+    /// Tracked nonlethal damage total.
+    /// D&D 3.5: if nonlethal damage equals current HP, creature is staggered;
+    /// if it exceeds current HP, creature falls unconscious.
+    /// </summary>
+    private int _nonlethalDamage;
+    public int NonlethalDamage
+    {
+        get => _nonlethalDamage;
+        private set
+        {
+            int clamped = Mathf.Max(0, value);
+            if (_nonlethalDamage == clamped)
+                return;
+
+            int old = _nonlethalDamage;
+            _nonlethalDamage = clamped;
+            NonlethalDamageChanged?.Invoke(old, _nonlethalDamage);
+        }
+    }
+
+    /// <summary>
     /// Fired whenever CurrentHP changes.
     /// Args: oldHP, newHP.
     /// </summary>
     public event System.Action<int, int> CurrentHPChanged;
+
+    /// <summary>
+    /// Fired whenever nonlethal damage changes.
+    /// Args: oldNonlethal, newNonlethal.
+    /// </summary>
+    public event System.Action<int, int> NonlethalDamageChanged;
 
     /// <summary>
     /// Size modifier to AC and attack rolls from effective current size.
@@ -1444,7 +1471,17 @@ public class CharacterStats
         result.DamageReductionApplied = drApplied;
         result.FinalDamage = Mathf.Max(0, result.DamageAfterResistance - drApplied);
 
-        TakeDamage(result.FinalDamage);
+        if (packet.IsNonlethal)
+        {
+            ApplyNonlethalDamage(result.FinalDamage);
+            if (result.FinalDamage > 0)
+                result.Notes.Add($"Applied {result.FinalDamage} nonlethal damage.");
+        }
+        else
+        {
+            TakeDamage(result.FinalDamage);
+        }
+
         return result;
     }
 
@@ -1468,6 +1505,46 @@ public class CharacterStats
             }
         }
         CurrentHP = Mathf.Max(-10, CurrentHP - amount);
+    }
+
+    /// <summary>
+    /// Apply nonlethal damage. Nonlethal damage does not reduce HP directly,
+    /// but contributes to staggered/unconscious state checks.
+    /// </summary>
+    public void ApplyNonlethalDamage(int amount)
+    {
+        if (amount <= 0)
+            return;
+
+        NonlethalDamage += amount;
+    }
+
+    /// <summary>
+    /// Heal damage with D&D 3.5 nonlethal-first ordering.
+    /// Healing removes nonlethal damage first, then restores lethal HP damage.
+    /// Returns healed lethal HP and outputs removed nonlethal amount.
+    /// </summary>
+    public int HealDamage(int amount, out int nonlethalHealed)
+    {
+        int remaining = Mathf.Max(0, amount);
+        if (remaining <= 0)
+        {
+            nonlethalHealed = 0;
+            return 0;
+        }
+
+        nonlethalHealed = Mathf.Min(NonlethalDamage, remaining);
+        if (nonlethalHealed > 0)
+        {
+            NonlethalDamage -= nonlethalHealed;
+            remaining -= nonlethalHealed;
+        }
+
+        int hpBefore = CurrentHP;
+        if (remaining > 0 && CurrentHP < TotalMaxHP)
+            CurrentHP = Mathf.Min(TotalMaxHP, CurrentHP + remaining);
+
+        return Mathf.Max(0, CurrentHP - hpBefore);
     }
 
     public void AddDamageResistance(DamageType type, int amount)

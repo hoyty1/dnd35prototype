@@ -164,11 +164,11 @@ public class CharacterController : MonoBehaviour
 
     public HPState CurrentHPState => _currentHPState;
     public bool IsDead => _currentHPState == HPState.Dead;
-    public bool IsUnconscious => _currentHPState == HPState.Dying || _currentHPState == HPState.Stable || _currentHPState == HPState.Dead;
+    public bool IsUnconscious => _currentHPState == HPState.Unconscious || _currentHPState == HPState.Dying || _currentHPState == HPState.Stable || _currentHPState == HPState.Dead;
 
     public bool CanTakeTurnActions()
     {
-        return _currentHPState == HPState.Healthy || _currentHPState == HPState.Disabled;
+        return _currentHPState == HPState.Healthy || _currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered;
     }
     [Header("Visual Animation Settings")]
     [SerializeField, Min(0f)] private float _sizeChangeDuration = 0.4f;
@@ -211,7 +211,10 @@ public class CharacterController : MonoBehaviour
     private void OnDestroy()
     {
         if (Stats != null)
+        {
             Stats.CurrentHPChanged -= OnCurrentHPChanged;
+            Stats.NonlethalDamageChanged -= OnNonlethalDamageChanged;
+        }
 
         ReleaseGrappleState("character removed");
     }
@@ -221,7 +224,10 @@ public class CharacterController : MonoBehaviour
     public void Init(CharacterStats stats, Vector2Int startPos, Sprite alive, Sprite dead)
     {
         if (Stats != null)
+        {
             Stats.CurrentHPChanged -= OnCurrentHPChanged;
+            Stats.NonlethalDamageChanged -= OnNonlethalDamageChanged;
+        }
 
         Stats = stats;
         AliveSprite = alive;
@@ -229,7 +235,10 @@ public class CharacterController : MonoBehaviour
         GridPosition = startPos;
 
         if (Stats != null)
+        {
             Stats.CurrentHPChanged += OnCurrentHPChanged;
+            Stats.NonlethalDamageChanged += OnNonlethalDamageChanged;
+        }
 
         if (_conditionManager == null)
             _conditionManager = GetComponent<ConditionManager>() ?? gameObject.AddComponent<ConditionManager>();
@@ -442,6 +451,15 @@ public class CharacterController : MonoBehaviour
         SetHPState(next, emitLog: true);
     }
 
+    private void OnNonlethalDamageChanged(int oldValue, int newValue)
+    {
+        if (Stats == null)
+            return;
+
+        HPState next = DetermineStateFromHPTransition(Stats.CurrentHP, Stats.CurrentHP);
+        SetHPState(next, emitLog: true);
+    }
+
     /// <summary>
     /// Sync state from current HP value (used at initialization or forced refresh).
     /// </summary>
@@ -450,29 +468,40 @@ public class CharacterController : MonoBehaviour
         if (Stats == null)
             return;
 
-        HPState next;
-        if (Stats.CurrentHP >= 1) next = HPState.Healthy;
-        else if (Stats.CurrentHP == 0) next = HPState.Disabled;
-        else if (Stats.CurrentHP <= -10) next = HPState.Dead;
-        else next = HPState.Dying;
-
+        HPState next = DetermineStateFromHPTransition(Stats.CurrentHP, Stats.CurrentHP);
         SetHPState(next, emitLog);
     }
 
     private HPState DetermineStateFromHPTransition(int oldHP, int newHP)
     {
-        if (newHP >= 1) return HPState.Healthy;
-        if (newHP == 0) return HPState.Disabled;
-        if (newHP <= -10) return HPState.Dead;
+        if (Stats == null)
+            return HPState.Healthy;
 
-        // -1 to -9
-        if (newHP > oldHP)
-            return HPState.Stable; // Healing while still negative stabilizes.
+        if (newHP <= -10)
+            return HPState.Dead;
 
-        if (_currentHPState == HPState.Stable && newHP == oldHP)
-            return HPState.Stable;
+        if (newHP <= -1)
+        {
+            if (newHP > oldHP)
+                return HPState.Stable; // Healing while still negative stabilizes.
 
-        return HPState.Dying;
+            if (_currentHPState == HPState.Stable && newHP == oldHP)
+                return HPState.Stable;
+
+            return HPState.Dying;
+        }
+
+        // 0 or higher HP: evaluate disabled/nonlethal states.
+        if (Stats.NonlethalDamage > newHP)
+            return HPState.Unconscious;
+
+        if (newHP > 0 && Stats.NonlethalDamage == newHP)
+            return HPState.Staggered;
+
+        if (newHP == 0)
+            return HPState.Disabled;
+
+        return HPState.Healthy;
     }
 
     private void SetHPState(HPState newState, bool emitLog)
@@ -491,9 +520,9 @@ public class CharacterController : MonoBehaviour
 
         UpdateConditionsForHPState(newState);
 
-        Actions.SingleActionOnly = (newState == HPState.Disabled);
+        Actions.SingleActionOnly = (newState == HPState.Disabled || newState == HPState.Staggered);
 
-        if (newState == HPState.Dying || newState == HPState.Stable)
+        if (newState == HPState.Unconscious || newState == HPState.Dying || newState == HPState.Stable)
         {
             ReleaseGrappleState("incapacitated");
 
@@ -527,12 +556,18 @@ public class CharacterController : MonoBehaviour
         switch (newState)
         {
             case HPState.Healthy:
-                if (oldState == HPState.Disabled || oldState == HPState.Dying || oldState == HPState.Stable)
+                if (oldState == HPState.Disabled || oldState == HPState.Staggered || oldState == HPState.Unconscious || oldState == HPState.Dying || oldState == HPState.Stable)
                     return $"✅ {who} is back in the fight ({Stats.CurrentHP} HP).";
                 return string.Empty;
 
             case HPState.Disabled:
                 return $"⚠ {who} is DISABLED at 0 HP (one move OR one standard action).";
+
+            case HPState.Staggered:
+                return $"⚠ {who} is STAGGERED (nonlethal damage equals current HP: one move OR one standard action).";
+
+            case HPState.Unconscious:
+                return $"💤 {who} falls UNCONSCIOUS from nonlethal damage ({Stats.NonlethalDamage} nonlethal vs {Stats.CurrentHP} HP).";
 
             case HPState.Dying:
                 return $"💀 {who} is DYING at {Stats.CurrentHP} HP and falls unconscious.";
@@ -552,6 +587,7 @@ public class CharacterController : MonoBehaviour
     {
         // Remove existing HP-state conditions first.
         RemoveCondition(CombatConditionType.Disabled);
+        RemoveCondition(CombatConditionType.Staggered);
         RemoveCondition(CombatConditionType.Dying);
         RemoveCondition(CombatConditionType.Stable);
         RemoveCondition(CombatConditionType.Unconscious);
@@ -560,6 +596,12 @@ public class CharacterController : MonoBehaviour
         {
             case HPState.Disabled:
                 ApplyCondition(CombatConditionType.Disabled, -1, "HP State");
+                break;
+            case HPState.Staggered:
+                ApplyCondition(CombatConditionType.Staggered, -1, "HP State");
+                break;
+            case HPState.Unconscious:
+                ApplyCondition(CombatConditionType.Unconscious, -1, "HP State");
                 break;
             case HPState.Dying:
                 ApplyCondition(CombatConditionType.Dying, -1, "HP State");
@@ -1832,6 +1874,7 @@ public class CharacterController : MonoBehaviour
                 Types = damageTypes,
                 AttackTags = attackTags,
                 IsRanged = result.IsRangedAttack,
+                IsNonlethal = weapon != null && weapon.DealsNonlethalDamage,
                 Source = AttackSource.Weapon,
                 SourceName = string.IsNullOrEmpty(result.WeaponName) ? "attack" : result.WeaponName,
             };
@@ -1849,9 +1892,6 @@ public class CharacterController : MonoBehaviour
                 result.DamageTypeSummary = string.IsNullOrEmpty(result.DamageTypeSummary)
                     ? "nonlethal"
                     : $"{result.DamageTypeSummary}, nonlethal";
-
-                if (string.IsNullOrEmpty(result.MitigationSummary))
-                    result.MitigationSummary = "Nonlethal damage is tracked as normal HP damage in this prototype.";
             }
 
             if (target.Stats.IsDead)
@@ -2980,7 +3020,7 @@ public class CharacterController : MonoBehaviour
         HasAttackedThisTurn = false;
         IsFightingDefensively = false; // lasts until start of this character's next turn
         Actions.Reset();
-        Actions.SingleActionOnly = (_currentHPState == HPState.Disabled);
+        Actions.SingleActionOnly = (_currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered);
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
         // They are player-controlled and reset only when the player changes them
 

@@ -242,6 +242,7 @@ public static class SpellCaster
                 Types = parsedSpellDamageTypes,
                 AttackTags = DamageBypassTag.None,
                 IsRanged = isRangedSpellDamage,
+                IsNonlethal = false,
                 Source = AttackSource.Spell,
                 SourceName = spell.Name
             };
@@ -285,8 +286,9 @@ public static class SpellCaster
 
             totalHeal = Mathf.Max(1, totalHeal);
 
-            targetStats.CurrentHP = Mathf.Min(targetStats.CurrentHP + totalHeal, targetStats.TotalMaxHP);
-            result.HealingDone = totalHeal;
+            int nonlethalHealed;
+            result.HealingDone = targetStats.HealDamage(totalHeal, out nonlethalHealed);
+            result.NonlethalHealed = nonlethalHealed;
             result.TargetHPAfter = targetStats.CurrentHP;
         }
 

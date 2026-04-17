@@ -629,6 +629,7 @@ public class CharacterSheetUI : MonoBehaviour
             ? (stats.CurrentHP > stats.TotalMaxHP / 2 ? HealthGreen : HealthRed)
             : new Color(1f, 0.7f, 0.35f);
         AddColoredLine(content, "❤ ", hpColor, $"HP: {stats.CurrentHP}/{stats.TotalMaxHP} [{hpState}]", LightText, 13, 16);
+        AddLine(content, $"  Nonlethal: {stats.NonlethalDamage}", 11, new Color(0.93f, 0.76f, 0.52f), FontStyle.Normal, 14);
         if (stats.TempHP > 0)
             AddLine(content, $"  Temp HP: {stats.TempHP}", 11, new Color(0.4f, 0.7f, 1f), FontStyle.Normal, 14);
 
@@ -649,6 +650,10 @@ public class CharacterSheetUI : MonoBehaviour
 
         if (hpState == HPState.Disabled)
             activeConditions.Add("Disabled (0 HP: can take one move OR one standard action)");
+        else if (hpState == HPState.Staggered)
+            activeConditions.Add("Staggered (nonlethal damage equals current HP: one move OR one standard action)");
+        else if (hpState == HPState.Unconscious)
+            activeConditions.Add("Unconscious (nonlethal damage exceeds current HP)");
         else if (hpState == HPState.Dying)
             activeConditions.Add("Dying (-1 to -9 HP: unconscious, loses 1 HP each turn until stable)");
         else if (hpState == HPState.Stable)

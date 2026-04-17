@@ -131,7 +131,7 @@ public class ActionEconomy
     {
         if (FullRoundActionUsed) return "Full-Round Action used - Turn complete";
 
-        string status = SingleActionOnly ? "[Disabled: one action only] " : "";
+        string status = SingleActionOnly ? "[Single action only] " : "";
         if (HasMoveAction) status += "[Move] ";
         else status += "[Move USED] ";
 

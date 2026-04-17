@@ -47,7 +47,8 @@ public class SpellResult
     public bool ImmunityPrevented;
     public string MitigationSummary;
     // ========== HEALING ==========
-    public int HealingDone;
+    public int HealingDone;             // Lethal HP restored
+    public int NonlethalHealed;         // Nonlethal damage removed
     public int HealRolled;              // Raw healing dice roll
 
     // ========== BUFF ==========
@@ -199,6 +200,8 @@ public class SpellResult
             if (EmpowerBonus > 0)
                 sb.AppendLine($"    Empower: +{EmpowerBonus} (×1.5)");
             sb.AppendLine($"    = {HealingDone} HP restored");
+            if (NonlethalHealed > 0)
+                sb.AppendLine($"    + {NonlethalHealed} nonlethal removed");
             sb.AppendLine($"  {TargetName}: {TargetHPBefore} → {TargetHPAfter} HP");
         }
 

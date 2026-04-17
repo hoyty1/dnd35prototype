@@ -3044,7 +3044,9 @@ public class GameManager : MonoBehaviour
         }
 
         int oldHP = actor.Stats.CurrentHP;
+        int oldNonlethal = actor.Stats.NonlethalDamage;
         int healedAmount = 0;
+        int nonlethalHealedAmount = 0;
         string spellSummary = string.Empty;
 
         switch (currentItem.ConsumableEffect)
@@ -3052,9 +3054,7 @@ public class GameManager : MonoBehaviour
             case ConsumableEffectType.HealHP:
             {
                 int healingRoll = RollHealingFromConsumable(currentItem);
-                int newHP = Mathf.Min(actor.Stats.TotalMaxHP, actor.Stats.CurrentHP + Mathf.Max(0, healingRoll));
-                actor.Stats.CurrentHP = newHP;
-                healedAmount = Mathf.Max(0, newHP - oldHP);
+                healedAmount = actor.Stats.HealDamage(healingRoll, out nonlethalHealedAmount);
                 break;
             }
             case ConsumableEffectType.SpellEffect:
@@ -3072,9 +3072,7 @@ public class GameManager : MonoBehaviour
                 // Legacy fallback for older consumables defined with flat HealAmount only.
                 if (currentItem.HealAmount > 0)
                 {
-                    int newHP = Mathf.Min(actor.Stats.TotalMaxHP, actor.Stats.CurrentHP + currentItem.HealAmount);
-                    actor.Stats.CurrentHP = newHP;
-                    healedAmount = Mathf.Max(0, newHP - oldHP);
+                    healedAmount = actor.Stats.HealDamage(currentItem.HealAmount, out nonlethalHealedAmount);
                 }
                 else
                 {
@@ -3094,7 +3092,9 @@ public class GameManager : MonoBehaviour
         }
 
         int newCurrentHP = actor.Stats.CurrentHP;
-        resultMessage = $"🧪 {actor.Stats.CharacterName} uses {currentItem.Name}, healing {healedAmount} HP ({oldHP} → {newCurrentHP}). Item consumed.";
+        int newNonlethal = actor.Stats.NonlethalDamage;
+        int nonlethalHealed = Mathf.Max(nonlethalHealedAmount, Mathf.Max(0, oldNonlethal - newNonlethal));
+        resultMessage = $"🧪 {actor.Stats.CharacterName} uses {currentItem.Name}, healing {healedAmount} HP ({oldHP} → {newCurrentHP}) and removing {nonlethalHealed} nonlethal ({oldNonlethal} → {newNonlethal}). Item consumed.";
         return true;
     }
 
@@ -3127,11 +3127,12 @@ public class GameManager : MonoBehaviour
         if (consumableSpell.EffectType == SpellEffectType.Healing)
         {
             int oldHP = actor.Stats.CurrentHP;
+            int oldNonlethal = actor.Stats.NonlethalDamage;
             int healingRoll = RollHealingFromSpell(consumableSpell);
-            int newHP = Mathf.Min(actor.Stats.TotalMaxHP, actor.Stats.CurrentHP + Mathf.Max(0, healingRoll));
-            actor.Stats.CurrentHP = newHP;
-            int healedAmount = Mathf.Max(0, newHP - oldHP);
-            summary = $"{consumableSpell.Name} heals {healedAmount} HP ({oldHP} → {newHP}) at caster level {casterLevel}.";
+            int nonlethalHealed;
+            int hpHealed = actor.Stats.HealDamage(healingRoll, out nonlethalHealed);
+            int newHP = actor.Stats.CurrentHP;
+            summary = $"{consumableSpell.Name} heals {hpHealed} HP ({oldHP} → {newHP}) and removes {nonlethalHealed} nonlethal ({oldNonlethal} → {actor.Stats.NonlethalDamage}) at caster level {casterLevel}.";
             return true;
         }
 

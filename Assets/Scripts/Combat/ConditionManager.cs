@@ -131,6 +131,7 @@ public class ConditionManager : MonoBehaviour
             case CombatConditionType.Flanked: return "#FFB347";
             case CombatConditionType.Invisible: return "#88CCFF";
             case CombatConditionType.Disabled: return "#FFD966";
+            case CombatConditionType.Staggered: return "#FFCC88";
             case CombatConditionType.Dying: return "#FF6666";
             case CombatConditionType.Stable: return "#FFB366";
             case CombatConditionType.Unconscious: return "#99AACC";

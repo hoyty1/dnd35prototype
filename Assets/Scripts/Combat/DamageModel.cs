@@ -78,6 +78,7 @@ public class DamagePacket
     public HashSet<DamageType> Types = new HashSet<DamageType>();
     public DamageBypassTag AttackTags = DamageBypassTag.None;
     public bool IsRanged;
+    public bool IsNonlethal;
     public AttackSource Source = AttackSource.Other;
     public string SourceName;
 }

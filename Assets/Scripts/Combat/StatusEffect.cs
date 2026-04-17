@@ -346,6 +346,16 @@ public static class ConditionRules
 
         Add(new ConditionDefinition
         {
+            Type = CombatConditionType.Staggered,
+            DisplayName = "Staggered",
+            ShortLabel = "SG",
+            Description = "Nonlethal damage equals current HP: can take one move or one standard action each turn.",
+            StackingRule = ConditionStackingRule.Refresh,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
             Type = CombatConditionType.Dying,
             DisplayName = "Dying",
             ShortLabel = "DY",
@@ -574,6 +584,7 @@ public enum CombatConditionType
     Helpless,
     Unconscious,
     Disabled,
+    Staggered,
     Dying,
     Stable,
     Prone,
