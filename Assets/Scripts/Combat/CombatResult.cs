@@ -62,6 +62,10 @@ public class CombatResult
     public int AidAnotherAttackBonus;
     public int AidAnotherTargetAcBonus;
 
+    public AttackDamageMode AttackDamageMode = AttackDamageMode.Lethal;
+    public int DamageModeAttackPenalty;
+    public string DamageModePenaltySource = "";
+
     public int GrappleDexDeniedToAc;
     public string GrappleDexRuleNote = "";
 
@@ -114,6 +118,14 @@ public class CombatResult
         if (!string.IsNullOrEmpty(WeaponName))
             sb.AppendLine($"  Weapon: {WeaponName} ({attackType})");
 
+        string damageModeLabel = AttackDamageMode == AttackDamageMode.Nonlethal ? "Nonlethal" : "Lethal";
+        sb.AppendLine($"  Damage Mode: {damageModeLabel}");
+        if (DamageModeAttackPenalty != 0)
+        {
+            string sourceLabel = string.IsNullOrEmpty(DamageModePenaltySource) ? "damage mode" : DamageModePenaltySource;
+            sb.AppendLine($"  Damage Mode Penalty: {FormatModLine(DamageModeAttackPenalty, sourceLabel)}");
+        }
+
         if (IsRangedAttack)
         {
             string penaltyStr = RangePenalty == 0 ? "no penalty" : $"{RangePenalty} penalty";
@@ -132,6 +144,7 @@ public class CombatResult
         if (PreciseShotNegated) activeFeats.Add("Precise Shot (no shooting-into-melee penalty)");
         if (AidAnotherAttackBonus > 0) activeFeats.Add($"Aid Another (+{AidAnotherAttackBonus} atk)");
         if (AidAnotherTargetAcBonus > 0) activeFeats.Add($"Target Aided (+{AidAnotherTargetAcBonus} AC)");
+        if (AttackDamageMode == AttackDamageMode.Nonlethal) activeFeats.Add("Nonlethal attack mode");
         if (activeFeats.Count > 0)
             sb.AppendLine($"  Active Feats: {string.Join(", ", activeFeats)}");
 
@@ -169,6 +182,11 @@ public class CombatResult
         if (ShootingIntoMeleePenalty != 0) sb.AppendLine($"    {FormatModLine(ShootingIntoMeleePenalty, "shooting into melee")}");
         if (PreciseShotNegated) sb.AppendLine("    + 0 (Precise Shot negates shooting into melee penalty)");
         if (AidAnotherAttackBonus > 0) sb.AppendLine($"    {FormatModLine(AidAnotherAttackBonus, "Aid Another")}");
+        if (DamageModeAttackPenalty != 0)
+        {
+            string sourceLabel = string.IsNullOrEmpty(DamageModePenaltySource) ? "damage mode" : DamageModePenaltySource;
+            sb.AppendLine($"    {FormatModLine(DamageModeAttackPenalty, sourceLabel)}");
+        }
         if (IsRangedAttack && RangePenalty != 0) sb.AppendLine($"    {FormatModLine(RangePenalty, "range")}");
         if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)
             sb.AppendLine($"    {FormatModLine(BreakdownDualWieldPenalty, IsOffHandAttack ? "off-hand penalty" : "dual wield penalty")}");
@@ -231,6 +249,7 @@ public class CombatResult
         var sb = new StringBuilder();
         sb.AppendLine($"  {label}:");
         sb.AppendLine($"    Roll: d20 = {DieRoll}");
+        sb.AppendLine($"      Damage mode: {(AttackDamageMode == AttackDamageMode.Nonlethal ? "Nonlethal" : "Lethal")}");
         if (GrappleDexDeniedToAc > 0)
             sb.AppendLine($"      Defender grappled: -{GrappleDexDeniedToAc} DEX to AC vs this attacker");
         else if (!string.IsNullOrEmpty(GrappleDexRuleNote))
@@ -250,6 +269,11 @@ public class CombatResult
         if (ShootingIntoMeleePenalty != 0) sb.AppendLine($"      {FormatModLine(ShootingIntoMeleePenalty, "shooting into melee")}");
         if (PreciseShotNegated) sb.AppendLine("      + 0 (Precise Shot negates shooting into melee penalty)");
         if (AidAnotherAttackBonus > 0) sb.AppendLine($"      {FormatModLine(AidAnotherAttackBonus, "Aid Another")}");
+        if (DamageModeAttackPenalty != 0)
+        {
+            string sourceLabel = string.IsNullOrEmpty(DamageModePenaltySource) ? "damage mode" : DamageModePenaltySource;
+            sb.AppendLine($"      {FormatModLine(DamageModeAttackPenalty, sourceLabel)}");
+        }
         if (IsRangedAttack && RangePenalty != 0) sb.AppendLine($"      {FormatModLine(RangePenalty, "range")}");
         if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)
             sb.AppendLine($"      {FormatModLine(BreakdownDualWieldPenalty, IsOffHandAttack ? "off-hand penalty" : "dual wield penalty")}");

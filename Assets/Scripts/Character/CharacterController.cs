@@ -23,6 +23,12 @@ public enum GrappleActionType
     MoveHalfSpeed
 }
 
+public enum AttackDamageMode
+{
+    Lethal,
+    Nonlethal
+}
+
 public struct DisarmableHeldItemOption
 {
     public EquipSlot HandSlot;
@@ -77,6 +83,19 @@ public class CharacterController : MonoBehaviour
     /// While active: -4 attack rolls, +2 dodge AC until start of next turn.
     /// </summary>
     public bool IsFightingDefensively { get; private set; }
+
+    /// <summary>
+    /// Current selected attack damage mode for this character.
+    /// Defaults to lethal and can be toggled by the combat UI.
+    /// </summary>
+    public AttackDamageMode CurrentAttackDamageMode { get; private set; } = AttackDamageMode.Lethal;
+
+    private struct DamageModeAttackProfile
+    {
+        public bool DealNonlethalDamage;
+        public int AttackPenalty;
+        public string PenaltySource;
+    }
 
     // Shield bash AC suppression state:
     // while active, this character's equipped shield bonus is removed until next StartNewTurn().
@@ -138,6 +157,71 @@ public class CharacterController : MonoBehaviour
         {
             Debug.Log($"[Defensive] {Stats.CharacterName}: Fighting Defensively {(enabled ? "ON" : "OFF")}");
         }
+    }
+
+    public void SetAttackDamageMode(AttackDamageMode mode)
+    {
+        CurrentAttackDamageMode = mode;
+    }
+
+    public void ToggleAttackDamageMode()
+    {
+        CurrentAttackDamageMode = CurrentAttackDamageMode == AttackDamageMode.Lethal
+            ? AttackDamageMode.Nonlethal
+            : AttackDamageMode.Lethal;
+    }
+
+    public void ResetAttackDamageMode()
+    {
+        CurrentAttackDamageMode = AttackDamageMode.Lethal;
+    }
+
+    private DamageModeAttackProfile ResolveDamageModeAttackProfile(ItemData weapon)
+    {
+        bool selectedNonlethal = CurrentAttackDamageMode == AttackDamageMode.Nonlethal;
+        bool isUnarmedStrike = weapon == null;
+        bool weaponIsInherentlyNonlethal = weapon != null && weapon.DealsNonlethalDamage;
+
+        var profile = new DamageModeAttackProfile
+        {
+            DealNonlethalDamage = false,
+            AttackPenalty = 0,
+            PenaltySource = string.Empty
+        };
+
+        if (isUnarmedStrike)
+        {
+            profile.DealNonlethalDamage = selectedNonlethal;
+            if (!selectedNonlethal)
+            {
+                profile.AttackPenalty = -4;
+                profile.PenaltySource = "Unarmed strike set to lethal";
+            }
+
+            return profile;
+        }
+
+        if (weaponIsInherentlyNonlethal)
+        {
+            profile.DealNonlethalDamage = selectedNonlethal;
+            if (!selectedNonlethal)
+            {
+                profile.AttackPenalty = -4;
+                profile.PenaltySource = "Nonlethal weapon used for lethal damage";
+            }
+
+            return profile;
+        }
+
+        // Default weapon behavior is lethal.
+        profile.DealNonlethalDamage = selectedNonlethal;
+        if (selectedNonlethal)
+        {
+            profile.AttackPenalty = -4;
+            profile.PenaltySource = "Lethal weapon used for nonlethal damage";
+        }
+
+        return profile;
     }
 
     /// <summary>Check if the given weapon is two-handed.</summary>
@@ -821,13 +905,14 @@ public class CharacterController : MonoBehaviour
         int conditionAttackPenalty = Stats.ConditionAttackPenalty;
         int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
         int aidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
+        DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
 
         int totalAtkMod = Stats.BaseAttackBonus + abilityMod + Stats.SizeModifier
                           + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                           + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                           + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                           + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty
-                          + aidAnotherAttackBonus;
+                          + aidAnotherAttackBonus + damageModeProfile.AttackPenalty;
 
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         // === FEAT: Improved Critical (double threat range) ===
@@ -841,7 +926,8 @@ public class CharacterController : MonoBehaviour
 
         var result = PerformSingleAttackWithCrit(target, totalAtkMod, isFlanking, flankingBonus, flankingPartnerName,
             Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
-            equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus);
+            equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus,
+            damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
         result.RacialAttackBonus = racialAtkBonus;
         result.SizeAttackBonus = Stats.SizeModifier;
@@ -1023,6 +1109,7 @@ public class CharacterController : MonoBehaviour
         int shootingIntoMeleePenalty = GetShootingIntoMeleePenalty(this, target, isRanged, out preciseShotNegated);
 
         int totalFeatDmgBonus = powerAtkDmgBonus + pbsDmgBonus + weaponSpecBonus;
+        DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
 
         // === Debug Logging ===
         Debug.Log($"[FullAttack] {Stats.CharacterName}: FullAttack() called");
@@ -1066,7 +1153,7 @@ public class CharacterController : MonoBehaviour
                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                          + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                          + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty
-                         + aidAnotherAttackBonus;
+                         + aidAnotherAttackBonus + damageModeProfile.AttackPenalty;
 
             // The base bonus from GetIterativeAttackBonuses already includes STRMod + SizeModifier.
             if (!isRanged && FeatManager.ShouldUseWeaponFinesse(Stats, equippedWeapon))
@@ -1085,7 +1172,8 @@ public class CharacterController : MonoBehaviour
 
             CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
                 Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
-                equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus);
+                equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus,
+                damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
             atk.RacialAttackBonus = racialAtkBonus;
             atk.SizeAttackBonus = Stats.SizeModifier;
@@ -1287,6 +1375,8 @@ public class CharacterController : MonoBehaviour
 
         bool canMainAttack = CanAttackWithWeapon(mainWeapon, out string mainBlockedReason);
         bool canOffAttack = CanAttackWithWeapon(offWeapon, out string offBlockedReason);
+        DamageModeAttackProfile mainDamageModeProfile = ResolveDamageModeAttackProfile(mainWeapon);
+        DamageModeAttackProfile offDamageModeProfile = ResolveDamageModeAttackProfile(offWeapon);
 
         result.MainWeaponName = mainWeapon.Name;
         result.OffWeaponName = offWeapon.Name;
@@ -1355,7 +1445,8 @@ public class CharacterController : MonoBehaviour
             int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                              + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty
                              + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                             + mainWeaponNonProfPenalty + armorNonProfPenalty + mainAidAnotherAttackBonus;
+                             + mainWeaponNonProfPenalty + armorNonProfPenalty + mainAidAnotherAttackBonus
+                             + mainDamageModeProfile.AttackPenalty;
             string mainLabel = $"Attack 1 - Main Hand ({mainWeapon.Name})";
 
             int mainCritMin = FeatManager.GetAdjustedCritThreatMin(Stats, mainWeapon.CritThreatMin > 0 ? mainWeapon.CritThreatMin : 20);
@@ -1365,7 +1456,8 @@ public class CharacterController : MonoBehaviour
             int hpBeforeMain = target.Stats.CurrentHP;
             CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
                 mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, mainCritMin, mainCritMult,
-                mainWeapon, false, totalMainFeatDmg, mainAidAnotherTargetAcBonus);
+                mainWeapon, false, totalMainFeatDmg, mainAidAnotherTargetAcBonus,
+                mainDamageModeProfile.DealNonlethalDamage, mainDamageModeProfile.AttackPenalty, mainDamageModeProfile.PenaltySource);
 
             mainAtk.RacialAttackBonus = racialAtkBonus;
             mainAtk.SizeAttackBonus = Stats.SizeModifier;
@@ -1426,7 +1518,8 @@ public class CharacterController : MonoBehaviour
             int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                             + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty
                             + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                            + offWeaponNonProfPenalty + armorNonProfPenalty + offAidAnotherAttackBonus;
+                            + offWeaponNonProfPenalty + armorNonProfPenalty + offAidAnotherAttackBonus
+                            + offDamageModeProfile.AttackPenalty;
             bool offHandShieldBash = IsShieldBashWeapon(offWeapon);
             string offLabel = offHandFromSpikedGauntlet
                 ? $"Attack 2 - Off Hand ({offWeapon.Name}, Hands Slot)"
@@ -1441,7 +1534,8 @@ public class CharacterController : MonoBehaviour
             int hpBeforeOff = target.Stats.CurrentHP;
             CombatResult offAtk = PerformSingleAttackWithCrit(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
                 offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, offCritMin, offCritMult,
-                offWeapon, true, totalOffFeatDmg, offAidAnotherTargetAcBonus);
+                offWeapon, true, totalOffFeatDmg, offAidAnotherTargetAcBonus,
+                offDamageModeProfile.DealNonlethalDamage, offDamageModeProfile.AttackPenalty, offDamageModeProfile.PenaltySource);
 
             offAtk.RacialAttackBonus = racialAtkBonus;
             offAtk.SizeAttackBonus = Stats.SizeModifier;
@@ -1727,7 +1821,8 @@ public class CharacterController : MonoBehaviour
         bool isFlanking, int flankingBonus, string flankingPartnerName,
         int damageDice, int damageCount, int bonusDamage,
         int critThreatMin, int critMultiplier,
-        ItemData weapon, bool isOffHand, int featDamageBonus = 0, int situationalTargetAcBonus = 0)
+        ItemData weapon, bool isOffHand, int featDamageBonus = 0, int situationalTargetAcBonus = 0,
+        bool dealNonlethalDamage = false, int damageModeAttackPenalty = 0, string damageModePenaltySource = "")
     {
         var result = new CombatResult();
         result.Attacker = this;
@@ -1735,6 +1830,9 @@ public class CharacterController : MonoBehaviour
         result.IsFlanking = isFlanking;
         result.FlankingBonus = isFlanking ? flankingBonus : 0;
         result.FlankingPartnerName = flankingPartnerName ?? "";
+        result.AttackDamageMode = dealNonlethalDamage ? AttackDamageMode.Nonlethal : AttackDamageMode.Lethal;
+        result.DamageModeAttackPenalty = damageModeAttackPenalty;
+        result.DamageModePenaltySource = damageModePenaltySource ?? string.Empty;
 
         // Store weapon crit properties on result for display
         result.CritThreatMin = critThreatMin;
@@ -1874,7 +1972,7 @@ public class CharacterController : MonoBehaviour
                 Types = damageTypes,
                 AttackTags = attackTags,
                 IsRanged = result.IsRangedAttack,
-                IsNonlethal = weapon != null && weapon.DealsNonlethalDamage,
+                IsNonlethal = dealNonlethalDamage,
                 Source = AttackSource.Weapon,
                 SourceName = string.IsNullOrEmpty(result.WeaponName) ? "attack" : result.WeaponName,
             };
@@ -1887,7 +1985,7 @@ public class CharacterController : MonoBehaviour
             result.MitigationSummary = mitigation.GetMitigationSummary();
             result.DamageTypeSummary = DamageTextUtils.FormatDamageTypes(damageTypes);
 
-            if (weapon != null && weapon.DealsNonlethalDamage)
+            if (dealNonlethalDamage)
             {
                 result.DamageTypeSummary = string.IsNullOrEmpty(result.DamageTypeSummary)
                     ? "nonlethal"
@@ -3933,6 +4031,7 @@ public class CharacterController : MonoBehaviour
         int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
         int conditionAttackPenalty = Stats.ConditionAttackPenalty;
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
+        DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
 
         for (int i = 0; i < flurryBonuses.Length; i++)
         {
@@ -3945,14 +4044,16 @@ public class CharacterController : MonoBehaviour
             int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
             int aidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
             int atkMod = flurryBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus + proneAttackPenalty
-                       + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty + aidAnotherAttackBonus;
+                       + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty + aidAnotherAttackBonus
+                       + damageModeProfile.AttackPenalty;
 
             string label = $"Flurry {i + 1} ({CharacterStats.FormatMod(flurryBonuses[i])})";
             int hpBefore = target.Stats.CurrentHP;
 
             CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
                 damageDice, damageCount, bonusDamage, critThreatMin, critMult,
-                equippedWeapon, false, 0, aidAnotherTargetAcBonus);
+                equippedWeapon, false, 0, aidAnotherTargetAcBonus,
+                damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
             atk.RacialAttackBonus = racialAtkBonus;
             atk.SizeAttackBonus = Stats.SizeModifier;

@@ -2097,6 +2097,7 @@ public class GameManager : MonoBehaviour
             Debug.Log($"[GameManager] ═══ ROUND {_currentRound} BEGINS ═══");
             CombatUI.AddTurnSeparator(_currentRound);
             ResetQuickenedSpellTrackingForAllCharacters();
+            ResetAttackDamageModesForAllCharacters();
 
             // Tick all spell effect durations at the start of each new round
             TickAllSpellDurations();
@@ -4447,6 +4448,20 @@ public class GameManager : MonoBehaviour
         CombatUI.UpdateActionButtons(pc);
     }
 
+
+    public void OnDamageModeTogglePressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null)
+            return;
+
+        pc.ToggleAttackDamageMode();
+        CombatUI?.UpdateDamageModeToggle(pc);
+        CombatUI?.UpdateActionButtons(pc);
+
+        string modeLabel = pc.CurrentAttackDamageMode == AttackDamageMode.Nonlethal ? "Nonlethal" : "Lethal";
+        CombatUI?.ShowCombatLog($"🗡 {pc.Stats.CharacterName} switches damage mode to {modeLabel}.");
+    }
     public void OnFlurryOfBlowsButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -9737,7 +9752,13 @@ public class GameManager : MonoBehaviour
         string flankLogPrefix = isFlanking
             ? $"⚔ {attackerName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
             : string.Empty;
-        return flankLogPrefix + result.GetDetailedSummary();
+
+        string damageModeLabel = result.AttackDamageMode == AttackDamageMode.Nonlethal ? "nonlethal" : "lethal";
+        string damageModePrefix = result.DamageModeAttackPenalty != 0
+            ? $"🗡 Attacking with {damageModeLabel} damage ({result.DamageModeAttackPenalty} penalty).\n"
+            : $"🗡 Attacking with {damageModeLabel} damage.\n";
+
+        return flankLogPrefix + damageModePrefix + result.GetDetailedSummary();
     }
 
     private void PerformSingleAttack(CharacterController attacker, CharacterController target,
@@ -11074,6 +11095,20 @@ public class GameManager : MonoBehaviour
             Debug.Log($"[Combat] {defenderName} has been slain!");
 
         Debug.Log("[Combat] ═══════════════════════════════════════");
+    }
+
+    private void ResetAttackDamageModesForAllCharacters()
+    {
+        foreach (var character in GetAllCharacters())
+        {
+            if (character == null)
+                continue;
+
+            character.ResetAttackDamageMode();
+        }
+
+        CombatUI?.ResetDamageModeToggleVisual();
+        Debug.Log("[GameManager] Attack damage modes reset to lethal for new round");
     }
 
     private static string FormatConsoleModLine(int value, string label)

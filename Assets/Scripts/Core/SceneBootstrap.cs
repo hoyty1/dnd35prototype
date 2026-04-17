@@ -723,6 +723,8 @@ public class SceneBootstrap : MonoBehaviour
             "Drop Equipped", new Color(0.45f, 0.18f, 0.18f));
         combatUI.PickUpItemButton = CreateGridButton(btnGrid.transform, "PickUpItemBtn",
             "Pick Up Item", new Color(0.2f, 0.45f, 0.28f));
+        combatUI.DamageModeToggleButton = CreateGridButton(btnGrid.transform, "DamageModeToggleBtn",
+            "Damage: Lethal", new Color(0.65f, 0.2f, 0.2f));
         combatUI.EndTurnButton = CreateGridButton(btnGrid.transform, "EndTurnBtn",
             "End Turn", new Color(0.3f, 0.3f, 0.55f));
 
@@ -920,6 +922,11 @@ public class SceneBootstrap : MonoBehaviour
         {
             ui.PickUpItemButton.onClick.RemoveAllListeners();
             ui.PickUpItemButton.onClick.AddListener(() => GameManager.Instance.OnPickUpItemButtonPressed());
+        }
+        if (ui.DamageModeToggleButton != null)
+        {
+            ui.DamageModeToggleButton.onClick.RemoveAllListeners();
+            ui.DamageModeToggleButton.onClick.AddListener(() => GameManager.Instance.OnDamageModeTogglePressed());
         }
         if (ui.EndTurnButton != null)
             ui.EndTurnButton.onClick.AddListener(() => GameManager.Instance.OnEndTurnButtonPressed());

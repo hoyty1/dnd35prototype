@@ -107,6 +107,7 @@ public class CombatUI : MonoBehaviour
     public Button ReloadButton;            // Reload equipped crossbow (action varies by weapon/feat)
     public Button DropEquippedItemButton;  // Drop currently held equipped item (Free Action)
     public Button PickUpItemButton;        // Pick up item from current or adjacent square (Move Action, provokes AoO)
+    public Button DamageModeToggleButton;  // Toggle attack damage mode (Lethal/Nonlethal)
     public Text ActionStatusText;          // Shows current action economy status
 
     [Header("Monk/Barbarian Buttons")]
@@ -544,6 +545,7 @@ public class CombatUI : MonoBehaviour
             HideSpecialAttackMenu();
             HidePickUpItemSelection();
             HideDropEquippedItemSelection();
+            ResetDamageModeToggleVisual();
         }
     }
 
@@ -972,8 +974,53 @@ public class CombatUI : MonoBehaviour
             EndTurnButton.interactable = true;
         }
 
+        UpdateDamageModeToggle(pc);
+
         if (ActionStatusText != null)
             ActionStatusText.text = actions.GetStatusString();
+    }
+
+    public void ResetDamageModeToggleVisual()
+    {
+        if (DamageModeToggleButton == null)
+            return;
+
+        DamageModeToggleButton.gameObject.SetActive(false);
+        DamageModeToggleButton.interactable = false;
+
+        Text label = DamageModeToggleButton.GetComponentInChildren<Text>();
+        if (label != null)
+            label.text = "Damage: Lethal";
+
+        Image buttonImage = DamageModeToggleButton.GetComponent<Image>();
+        if (buttonImage != null)
+            buttonImage.color = new Color(0.65f, 0.2f, 0.2f, 1f);
+    }
+
+    public void UpdateDamageModeToggle(CharacterController pc)
+    {
+        if (DamageModeToggleButton == null)
+            return;
+
+        if (pc == null)
+        {
+            ResetDamageModeToggleVisual();
+            return;
+        }
+
+        bool isNonlethal = pc.CurrentAttackDamageMode == AttackDamageMode.Nonlethal;
+        DamageModeToggleButton.gameObject.SetActive(true);
+        DamageModeToggleButton.interactable = true;
+
+        Text label = DamageModeToggleButton.GetComponentInChildren<Text>();
+        if (label != null)
+            label.text = isNonlethal ? "Damage: Nonlethal" : "Damage: Lethal";
+
+        Image buttonImage = DamageModeToggleButton.GetComponent<Image>();
+        if (buttonImage != null)
+            buttonImage.color = isNonlethal
+                ? new Color(0.25f, 0.45f, 0.75f, 1f)
+                : new Color(0.65f, 0.2f, 0.2f, 1f);
     }
 
     // ========== FEAT UI ==========
