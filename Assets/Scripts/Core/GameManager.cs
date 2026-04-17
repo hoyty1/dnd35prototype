@@ -4375,7 +4375,16 @@ public class GameManager : MonoBehaviour
     public void OnDualWieldButtonPressed()
     {
         CharacterController pc = ActivePC;
-        if (pc == null || !pc.Actions.HasFullRoundAction || !pc.CanDualWield()) return;
+        if (pc == null || !pc.Actions.HasFullRoundAction) return;
+
+        if (pc.HasCondition(CombatConditionType.Grappled))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot dual-wield while grappled (D&D 3.5: no two-weapon attacks in a grapple).");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        if (!pc.CanDualWield()) return;
 
         ItemData main = pc.GetDualWieldMainWeapon();
         ItemData off = pc.GetDualWieldOffHandWeapon();

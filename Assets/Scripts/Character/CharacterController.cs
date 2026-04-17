@@ -1114,6 +1114,11 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool CanDualWield()
     {
+        // D&D 3.5: You can't attack with two weapons while grappling,
+        // even if both weapons are light.
+        if (HasCondition(CombatConditionType.Grappled))
+            return false;
+
         return TryGetDualWieldWeapons(out _, out _, out _);
     }
 
@@ -1228,6 +1233,12 @@ public class CharacterController : MonoBehaviour
         result.Attacker = this;
         result.Defender = target;
         result.DefenderHPBefore = target.Stats.CurrentHP;
+
+        if (HasCondition(CombatConditionType.Grappled))
+        {
+            Debug.LogWarning($"[DualWield] {Stats.CharacterName} cannot dual-wield while grappled.");
+            return result;
+        }
 
         if (!TryGetDualWieldWeapons(out ItemData mainWeapon, out ItemData offWeapon, out bool offHandFromSpikedGauntlet))
             return result;
