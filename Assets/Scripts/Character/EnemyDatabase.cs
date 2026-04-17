@@ -22,6 +22,7 @@ public static class EnemyDatabase
         RegisterGoblinWarchief();
         RegisterSkeletonArcher();
         RegisterOrcBerserker();
+        RegisterOrcGrappleDrill();
         RegisterHobgoblinSergeant();
         RegisterOgreBrute();
         RegisterDireWolf();
@@ -49,6 +50,7 @@ public static class EnemyDatabase
     {
         return new List<EncounterPreset>
         {
+            new EncounterPreset("grapple_test", "🧪 Grapple Test Encounter", "Fighter vs orc in adjacent squares for dedicated grappling checks.", new List<string> { "orc_grapple_drill" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
@@ -211,6 +213,46 @@ public static class EnemyDatabase
             PanelColor = new Color(0.35f, 0.15f, 0.05f, 0.85f), // dark brown
             NameColor = new Color(1f, 0.6f, 0.3f),              // orange
             Description = "A hulking orc driven by bloodlust. Charges into melee with a massive greataxe, caring nothing for defense."
+        });
+    }
+
+    /// <summary>
+    /// Orc Grapple Drill (CR ~2) — focused test target for grapple mechanics.
+    /// Medium orc with solid STR/BAB and a light weapon (dagger) for
+    /// "Use Opponent's Weapon" grapple action testing.
+    /// </summary>
+    private static void RegisterOrcGrappleDrill()
+    {
+        Register(new EnemyDefinition
+        {
+            Id = "orc_grapple_drill",
+            Name = "Orc Grapple Drill",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            SizeCategory = SizeCategory.Medium,
+            STR = 16, DEX = 11, CON = 14, WIS = 10, INT = 8, CHA = 8,
+            BAB = 3,
+            ArmorBonus = 2,
+            ShieldBonus = 0,
+            DamageDice = 4,   // dagger 1d4
+            DamageCount = 1,
+            BonusDamage = 0,
+            BaseSpeed = 6,
+            AttackRange = 1,
+            BaseHitDieHP = 20,
+            CreatureTags = new List<string> { "Orc" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
+                new EquipmentSlotPair("dagger", EquipSlot.RightHand)
+            },
+            BackpackItemIds = new List<string> { "dagger" },
+            AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            SpriteColor = new Color(0.55f, 0.68f, 0.45f, 1f),
+            PanelColor = new Color(0.32f, 0.14f, 0.08f, 0.85f),
+            NameColor = new Color(1f, 0.72f, 0.42f),
+            Description = "An orc sparring target tuned for grappling tests. Carries a dagger to validate weapon-in-grapple interactions."
         });
     }
 

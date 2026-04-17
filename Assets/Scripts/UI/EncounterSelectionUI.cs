@@ -20,7 +20,7 @@ public class EncounterSelectionUI : MonoBehaviour
         if (_panel == null) return;
 
         _panel.SetActive(true);
-        _descriptionText.text = "Choose an encounter preset to begin combat.";
+        _descriptionText.text = "Choose an encounter preset, or launch the dedicated Grapple Test.";
 
         if (_buttonContainer != null)
         {
@@ -29,17 +29,39 @@ public class EncounterSelectionUI : MonoBehaviour
                 Destroy(_buttonContainer.GetChild(i).gameObject);
             }
 
+            // Dedicated quick launcher for the grappling test encounter.
+            CreateActionButton("🧪 Grapple Test", new Color(0.38f, 0.16f, 0.5f, 0.98f), () =>
+            {
+                Close();
+                onSelect?.Invoke("grapple_test");
+            });
+
             if (presets != null)
             {
                 foreach (var preset in presets)
                 {
+                    // Avoid duplicate button if grapple preset is also listed as a normal encounter card.
+                    if (preset != null && preset.Id == "grapple_test")
+                        continue;
+
                     CreatePresetButton(preset, onSelect);
                 }
             }
-
             CreateActionButton("Use Default", new Color(0.2f, 0.35f, 0.6f, 0.95f), () =>
             {
-                string fallbackId = (presets != null && presets.Count > 0) ? presets[0].Id : "goblin_raiders";
+                string fallbackId = "goblin_raiders";
+                if (presets != null)
+                {
+                    for (int i = 0; i < presets.Count; i++)
+                    {
+                        if (presets[i] != null && presets[i].Id != "grapple_test")
+                        {
+                            fallbackId = presets[i].Id;
+                            break;
+                        }
+                    }
+                }
+
                 Close();
                 onSelect?.Invoke(fallbackId);
             });

@@ -61,7 +61,9 @@ public class GameManager : MonoBehaviour
     /// <summary>Whether combat setup is waiting on encounter selection.</summary>
     public bool WaitingForEncounterSelection { get; private set; }
 
+    private const string GrappleTestPresetId = "grapple_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
+    private bool _isGrappleTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
     // Game state
     public enum TurnPhase { PCTurn, NPCTurn, CombatOver }
@@ -805,6 +807,7 @@ public class GameManager : MonoBehaviour
     {
         EncounterPreset preset = EnemyDatabase.GetEncounterPreset(presetId);
         _activeEncounterEnemyIds.Clear();
+        _isGrappleTestEncounter = string.Equals(presetId, GrappleTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.EnemyIds != null && preset.EnemyIds.Count > 0)
         {
@@ -818,6 +821,11 @@ public class GameManager : MonoBehaviour
             _activeEncounterEnemyIds.Add("skeleton_archer");
             CombatUI?.ShowCombatLog("🧭 Encounter fallback selected: Goblin Raiders");
         }
+
+        if (_isGrappleTestEncounter)
+            ConfigureGrappleTestParty();
+        else
+            RestoreStandardPartyLayout();
 
         SetupEnemyEncounter(_activeEncounterEnemyIds);
         SetupNPCIcons();
@@ -1389,6 +1397,71 @@ public class GameManager : MonoBehaviour
             CharacterSheetUI.Close();
     }
 
+    private void ConfigureGrappleTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats fighterStats = new CharacterStats(
+            name: "Grapple Tester",
+            level: 4,
+            characterClass: "Fighter",
+            str: 17, dex: 12, con: 14, wis: 10, intelligence: 10, cha: 10,
+            bab: 4,
+            armorBonus: 4,
+            shieldBonus: 1,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 30,
+            raceName: "Human"
+        );
+
+        fighterStats.CharacterAlignment = Alignment.LawfulNeutral;
+
+        Vector2Int fighterStart = new Vector2Int(9, 9);
+        Sprite fighterAlive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+        PC1.Init(fighterStats, fighterStart, fighterAlive, pcDead);
+
+        var fighterInventory = PC1.gameObject.GetComponent<InventoryComponent>();
+        if (fighterInventory == null)
+            fighterInventory = PC1.gameObject.AddComponent<InventoryComponent>();
+        fighterInventory.Init(fighterStats);
+        SetupStartingEquipment(fighterInventory, "Fighter");
+        fighterInventory.CharacterInventory.RecalculateStats();
+
+        // Keep only one player combatant active for a focused grapple scenario.
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("🧪 Grapple Test: Fighter and target start adjacent. Use Special Attack -> Grapple.");
+    }
+
+    private void RestoreStandardPartyLayout()
+    {
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, true, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, true, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, true, CombatUI != null ? CombatUI.PC4Panel : null);
+    }
+
+    private static void SetPCActiveState(CharacterController pc, bool active, GameObject panel)
+    {
+        if (pc != null && pc.gameObject != null)
+            pc.gameObject.SetActive(active);
+
+        if (panel != null)
+            panel.SetActive(active);
+    }
+
     // ========== DEFAULT CHARACTER SETUP (Quick Start / No Creation UI) ==========
 
     private void SetupCharacters()
@@ -1692,9 +1765,18 @@ public class GameManager : MonoBehaviour
             if (CombatUI != null && i < CombatUI.NPCPanels.Count && CombatUI.NPCPanels[i].Panel != null)
                 CombatUI.NPCPanels[i].Panel.SetActive(true);
 
-            Vector2Int pos = (i < EncounterSpawnPositions.Length)
-                ? EncounterSpawnPositions[i]
-                : new Vector2Int(15 + i, 10);
+            Vector2Int pos;
+            if (_isGrappleTestEncounter && i == 0 && PC1 != null)
+            {
+                // Spawn adjacent to the fighter to begin immediate grapple testing.
+                pos = PC1.GridPosition + Vector2Int.right;
+            }
+            else
+            {
+                pos = (i < EncounterSpawnPositions.Length)
+                    ? EncounterSpawnPositions[i]
+                    : new Vector2Int(15 + i, 10);
+            }
 
             // Try class-specific monster token; fallback to generic NPC sprite
             string monsterType = IconLoader.DetermineMonsterType(def.Name);
