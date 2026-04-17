@@ -2,7 +2,7 @@ using System.Reflection;
 using UnityEngine;
 
 /// <summary>
-/// Tests for unarmed damage mode defaults with Improved Unarmed Strike and Gauntlet.
+/// Tests for attack damage mode defaults and D&D 3.5 mismatch penalties.
 /// Run via UnarmedDamageModeTests.RunAll() from a runtime test hook.
 /// </summary>
 public static class UnarmedDamageModeTests
@@ -25,6 +25,10 @@ public static class UnarmedDamageModeTests
         TestGauntletMakesUnarmedDefaultLethal();
         TestImprovedUnarmedStrikeTakesPriorityAndDefaultsLethal();
         TestToggleStillOverridesDefault();
+        TestLethalWeaponToNonlethalAppliesPenaltyAndLogsBreakdown();
+        TestLethalWeaponToLethalHasNoPenalty();
+        TestMonkUnarmedLethalWithoutIusAppliesPenalty();
+        TestMonkUnarmedLethalWithIusHasNoPenalty();
         TestGetUnarmedDamageDefaultsTo1d3();
         TestMonkUnarmedDamageUsesMonkDie();
         TestAttackResultUsesUnarmedStrikeLabel();
@@ -46,12 +50,12 @@ public static class UnarmedDamageModeTests
         }
     }
 
-    private static CharacterController CreateTestCharacter(string name)
+    private static CharacterController CreateTestCharacter(string name, string className = "Fighter")
     {
         var go = new GameObject($"{name}_GO");
         var controller = go.AddComponent<CharacterController>();
         var inventory = go.AddComponent<InventoryComponent>();
-        var stats = new CharacterStats(name, 2, "Fighter", 14, 12, 12, 10, 10, 10, 2, 0, 0, 8, 1, 0, 4, 1, 18);
+        var stats = new CharacterStats(name, 2, className, 14, 12, 12, 10, 10, 10, 2, 0, 0, 8, 1, 0, 4, 1, 18);
 
         controller.Init(stats, Vector2Int.zero, null, null);
         inventory.Init(stats);
@@ -71,6 +75,12 @@ public static class UnarmedDamageModeTests
         return method.Invoke(controller, new object[] { null });
     }
 
+    private static object ResolveDamageProfile(CharacterController controller, ItemData weapon)
+    {
+        MethodInfo method = typeof(CharacterController).GetMethod("ResolveDamageModeAttackProfile", BindingFlags.Instance | BindingFlags.NonPublic);
+        return method.Invoke(controller, new object[] { weapon });
+    }
+
     private static bool GetProfileBool(object profile, string fieldName)
     {
         FieldInfo field = profile.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public);
@@ -81,6 +91,12 @@ public static class UnarmedDamageModeTests
     {
         FieldInfo field = profile.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public);
         return field != null ? (int)field.GetValue(profile) : 0;
+    }
+
+    private static string GetProfileString(object profile, string fieldName)
+    {
+        FieldInfo field = profile.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public);
+        return field != null ? (string)field.GetValue(profile) : string.Empty;
     }
 
     private static void TestNormalUnarmedDefaultsToNonlethal()
@@ -144,6 +160,86 @@ public static class UnarmedDamageModeTests
 
         Cleanup(c);
     }
+
+    private static void TestLethalWeaponToNonlethalAppliesPenaltyAndLogsBreakdown()
+    {
+        var attacker = CreateTestCharacter("LongswordNonlethalAttacker");
+        var defender = CreateTestCharacter("LongswordNonlethalDefender");
+
+        attacker.GridPosition = new Vector2Int(0, 0);
+        defender.GridPosition = new Vector2Int(1, 0);
+
+        var inv = attacker.GetComponent<InventoryComponent>();
+        ItemData longsword = ItemDatabase.CloneItem("longsword");
+        inv.CharacterInventory.DirectEquip(longsword, EquipSlot.RightHand);
+
+        attacker.SetAttackDamageMode(AttackDamageMode.Nonlethal);
+
+        object profile = ResolveDamageProfile(attacker, longsword);
+        Assert(GetProfileBool(profile, "DealNonlethalDamage"), "Longsword toggled to nonlethal resolves as nonlethal");
+        Assert(GetProfileInt(profile, "AttackPenalty") == -4, "Longsword toggled to nonlethal applies -4 attack penalty");
+        Assert(GetProfileString(profile, "PenaltySource").Contains("Longsword"), "Penalty source includes weapon name for longsword nonlethal mismatch");
+
+        CombatResult result = attacker.Attack(defender, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+        Assert(result != null, "Longsword nonlethal attack returns combat result");
+        Assert(result != null && result.AttackDamageMode == AttackDamageMode.Nonlethal, "Combat result tracks nonlethal damage mode");
+        Assert(result != null && result.DamageModeAttackPenalty == -4, "Combat result attack penalty includes -4 damage mode mismatch");
+
+        string detailedLog = result != null ? result.GetDetailedSummary() : string.Empty;
+        Assert(detailedLog.Contains("Using nonlethal damage with Longsword"), "Detailed combat log shows nonlethal-with-longsword penalty source");
+
+        string breakdown = result != null ? result.GetAttackBreakdown("Attack 1") : string.Empty;
+        Assert(breakdown.Contains("Using nonlethal damage with Longsword"), "Attack breakdown shows nonlethal-with-longsword penalty source");
+
+        Cleanup(attacker);
+        Cleanup(defender);
+    }
+
+    private static void TestLethalWeaponToLethalHasNoPenalty()
+    {
+        var c = CreateTestCharacter("LongswordLethal");
+        var inv = c.GetComponent<InventoryComponent>();
+        ItemData longsword = ItemDatabase.CloneItem("longsword");
+        inv.CharacterInventory.DirectEquip(longsword, EquipSlot.RightHand);
+
+        c.SetAttackDamageMode(AttackDamageMode.Lethal);
+        object profile = ResolveDamageProfile(c, longsword);
+
+        Assert(!GetProfileBool(profile, "DealNonlethalDamage"), "Longsword in lethal mode resolves as lethal");
+        Assert(GetProfileInt(profile, "AttackPenalty") == 0, "Longsword in lethal mode has no attack penalty");
+
+        Cleanup(c);
+    }
+
+    private static void TestMonkUnarmedLethalWithoutIusAppliesPenalty()
+    {
+        var c = CreateTestCharacter("MonkNoIus", "Monk");
+        c.Stats.Feats.Remove("Improved Unarmed Strike");
+
+        c.SetAttackDamageMode(AttackDamageMode.Lethal);
+        object profile = ResolveUnarmedDamageProfile(c);
+
+        Assert(!GetProfileBool(profile, "DealNonlethalDamage"), "Monk toggled to lethal resolves as lethal");
+        Assert(GetProfileInt(profile, "AttackPenalty") == -4, "Monk unarmed lethal without IUS applies -4 attack penalty");
+
+        Cleanup(c);
+    }
+
+    private static void TestMonkUnarmedLethalWithIusHasNoPenalty()
+    {
+        var c = CreateTestCharacter("MonkWithIus", "Monk");
+        if (!c.Stats.HasFeat("Improved Unarmed Strike"))
+            c.Stats.Feats.Add("Improved Unarmed Strike");
+
+        c.SetAttackDamageMode(AttackDamageMode.Lethal);
+        object profile = ResolveUnarmedDamageProfile(c);
+
+        Assert(!GetProfileBool(profile, "DealNonlethalDamage"), "Monk with IUS toggled to lethal resolves as lethal");
+        Assert(GetProfileInt(profile, "AttackPenalty") == 0, "Monk unarmed lethal with IUS has no attack penalty");
+
+        Cleanup(c);
+    }
+
     private static void TestGetUnarmedDamageDefaultsTo1d3()
     {
         var c = CreateTestCharacter("UnarmedDamageDefault");

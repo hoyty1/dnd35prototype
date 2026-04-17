@@ -220,7 +220,7 @@ public class CharacterController : MonoBehaviour
             if (!selectedNonlethal && !hasLethalUnarmedDefault)
             {
                 profile.AttackPenalty = -4;
-                profile.PenaltySource = "Unarmed strike set to lethal";
+                profile.PenaltySource = "Using lethal damage with unarmed strike";
             }
 
             return profile;
@@ -232,7 +232,7 @@ public class CharacterController : MonoBehaviour
             if (!selectedNonlethal)
             {
                 profile.AttackPenalty = -4;
-                profile.PenaltySource = "Nonlethal weapon used for lethal damage";
+                profile.PenaltySource = $"Using lethal damage with {weapon.Name}";
             }
 
             return profile;
@@ -243,7 +243,7 @@ public class CharacterController : MonoBehaviour
         if (selectedNonlethal)
         {
             profile.AttackPenalty = -4;
-            profile.PenaltySource = "Lethal weapon used for nonlethal damage";
+            profile.PenaltySource = $"Using nonlethal damage with {weapon.Name}";
         }
 
         return profile;
