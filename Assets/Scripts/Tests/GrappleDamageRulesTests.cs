@@ -24,10 +24,11 @@ public static class GrappleDamageRulesTests
 
         TestNonMonkDefaultGrappleDamageIsNonlethal();
         TestNonMonkLethalGrappleAppliesMinus4ToGrappleCheck();
+        TestImprovedUnarmedStrikeDefaultGrappleDamageIsLethalWithoutPenalty();
+        TestImprovedUnarmedStrikeNonlethalChoiceHasNoPenalty();
         TestMonkDefaultGrappleDamageIsLethalWithoutPenalty();
         TestMonkNonlethalChoiceHasNoPenalty();
         TestGrappleDamageUsesUnarmedStrikeDamageEvenWithWeaponEquipped();
-
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
 
@@ -123,6 +124,39 @@ public static class GrappleDamageRulesTests
         }
         Assert(result != null && result.Log.Contains("lethal"), "Non-monk lethal grapple damage is logged as lethal");
         Assert(result != null && result.Log.Contains("-4"), "Combat log includes the lethal grapple check penalty for non-monks");
+
+        Cleanup(attacker, defender);
+    }
+    private static void TestImprovedUnarmedStrikeDefaultGrappleDamageIsLethalWithoutPenalty()
+    {
+        var attacker = CreateTestCharacter("GrappleIusDefault", "Fighter");
+        var defender = CreateWeakDefender("GrappleIusDefaultTarget");
+        attacker.Stats.Feats.Add("Improved Unarmed Strike");
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.DamageOpponent);
+
+        Assert(result != null && result.Success, "Improved Unarmed Strike default grapple damage action succeeds with favorable stats");
+        Assert(result != null && result.CheckTotal == result.CheckRoll + attacker.GetGrappleModifier(), "Improved Unarmed Strike default lethal grapple damage has no -4 penalty");
+        Assert(result != null && result.Log.Contains("lethal"), "Improved Unarmed Strike default grapple damage is logged as lethal");
+        Assert(result != null && result.Log.Contains("Deals lethal damage by default (Improved Unarmed Strike feat)"), "Combat log explains lethal default from Improved Unarmed Strike feat");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestImprovedUnarmedStrikeNonlethalChoiceHasNoPenalty()
+    {
+        var attacker = CreateTestCharacter("GrappleIusNonlethal", "Fighter");
+        var defender = CreateWeakDefender("GrappleIusNonlethalTarget");
+        attacker.Stats.Feats.Add("Improved Unarmed Strike");
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.DamageOpponent, AttackDamageMode.Nonlethal);
+
+        Assert(result != null && result.Success, "Improved Unarmed Strike nonlethal grapple damage action succeeds with favorable stats");
+        Assert(result != null && result.CheckTotal == result.CheckRoll + attacker.GetGrappleModifier(), "Improved Unarmed Strike nonlethal grapple damage has no -4 penalty");
+        Assert(result != null && result.Log.Contains("nonlethal"), "Improved Unarmed Strike nonlethal grapple damage is logged as nonlethal");
+        Assert(result != null && result.Log.Contains("No penalty (Improved Unarmed Strike feat)"), "Combat log explains no-penalty nonlethal choice from Improved Unarmed Strike feat");
 
         Cleanup(attacker, defender);
     }

@@ -2936,10 +2936,16 @@ public class CharacterController : MonoBehaviour
                 }
 
                 bool isMonk = Stats != null && Stats.IsMonk;
+                bool hasImprovedUnarmedStrike = FeatManager.HasImprovedUnarmedStrike(Stats);
+                bool usesMonkOrIusException = isMonk || hasImprovedUnarmedStrike;
+                string grappleDamageRuleReason = isMonk
+                    ? "Monk exception"
+                    : (hasImprovedUnarmedStrike ? "Improved Unarmed Strike feat" : null);
+
                 AttackDamageMode selectedMode = grappleDamageModeOverride
-                    ?? (isMonk ? AttackDamageMode.Lethal : AttackDamageMode.Nonlethal);
+                    ?? (usesMonkOrIusException ? AttackDamageMode.Lethal : AttackDamageMode.Nonlethal);
                 bool dealNonlethalDamage = selectedMode == AttackDamageMode.Nonlethal;
-                int grappleCheckPenalty = (!isMonk && !dealNonlethalDamage) ? -4 : 0;
+                int grappleCheckPenalty = (!usesMonkOrIusException && !dealNonlethalDamage) ? -4 : 0;
 
                 if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, grappleCheckPenalty))
                 {
@@ -2990,6 +2996,14 @@ public class CharacterController : MonoBehaviour
 
                 string damageTypeLabel = dealNonlethalDamage ? "nonlethal" : "lethal";
                 string penaltySuffix = grappleCheckPenalty != 0 ? $" (includes {grappleCheckPenalty} lethal damage penalty)" : string.Empty;
+                string defaultDamageRuleSummary = grappleDamageRuleReason != null
+                    ? $"Deals lethal damage by default ({grappleDamageRuleReason})."
+                    : "Deals nonlethal damage by default (no Monk/Improved Unarmed Strike exception).";
+                string penaltyRuleSummary = grappleCheckPenalty != 0
+                    ? "Applies -4 penalty for choosing lethal damage without Monk/Improved Unarmed Strike exception."
+                    : (grappleDamageRuleReason != null
+                        ? $"No penalty ({grappleDamageRuleReason})."
+                        : "No penalty (nonlethal default).");
 
                 return new SpecialAttackResult
                 {
@@ -3002,8 +3016,8 @@ public class CharacterController : MonoBehaviour
                     DamageDealt = finalDamageDealt,
                     TargetKilled = opponent.Stats.IsDead,
                     Log = success
-                        ? $"{Stats.CharacterName} wins opposed grapple check ({myRoll}+{GetGrappleModifier()}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals {finalDamageDealt} {damageTypeLabel} unarmed grapple damage to {opponent.Stats.CharacterName} (rolled {damageDiceCount}d{damageDiceSides}{bonusDamage:+#;-#;0} => {rawDamage})."
-                        : $"{Stats.CharacterName} loses opposed grapple check ({myRoll}+{GetGrappleModifier()}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals no grapple damage."
+                        ? $"{Stats.CharacterName} wins opposed grapple check ({myRoll}+{GetGrappleModifier()}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals {finalDamageDealt} {damageTypeLabel} unarmed grapple damage to {opponent.Stats.CharacterName} (rolled {damageDiceCount}d{damageDiceSides}{bonusDamage:+#;-#;0} => {rawDamage}). {defaultDamageRuleSummary} {penaltyRuleSummary}"
+                        : $"{Stats.CharacterName} loses opposed grapple check ({myRoll}+{GetGrappleModifier()}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals no grapple damage. {defaultDamageRuleSummary} {penaltyRuleSummary}"
                 };
             }
             case GrappleActionType.PinOpponent:
