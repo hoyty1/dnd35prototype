@@ -28,6 +28,8 @@ public static class GrappleDamageRulesTests
         TestImprovedUnarmedStrikeNonlethalChoiceHasNoPenalty();
         TestMonkDefaultGrappleDamageIsLethalWithoutPenalty();
         TestMonkNonlethalChoiceHasNoPenalty();
+        TestMoveWhileGrapplingWithoutPinnedBonusByDefault();
+        TestMoveWhileGrapplingPinnedBonusAppliedInOneVsOne();
         TestGrappleDamageUsesUnarmedStrikeDamageEvenWithWeaponEquipped();
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
@@ -187,6 +189,38 @@ public static class GrappleDamageRulesTests
         Assert(result != null && result.Success, "Monk nonlethal grapple damage action succeeds with favorable stats");
         Assert(result != null && result.CheckTotal == result.CheckRoll + attacker.GetGrappleModifier(), "Monk nonlethal grapple damage has no -4 penalty");
         Assert(result != null && result.Log.Contains("nonlethal"), "Monk nonlethal grapple damage is logged as nonlethal");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestMoveWhileGrapplingWithoutPinnedBonusByDefault()
+    {
+        var attacker = CreateTestCharacter("GrappleMoveNoPinnedBonus", "Fighter");
+        var defender = CreateWeakDefender("GrappleMoveNoPinnedBonusTarget");
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.MoveHalfSpeed);
+
+        Assert(result != null, "Move while grappling returns a result");
+        Assert(result != null && result.CheckTotal == result.CheckRoll + attacker.GetGrappleModifier(), "Move while grappling uses normal grapple modifier when no pinned opponent bonus applies");
+        Assert(result != null && !result.Log.Contains("gains +4"), "Move while grappling log does not report pinned bonus when not moving a pinned opponent");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestMoveWhileGrapplingPinnedBonusAppliedInOneVsOne()
+    {
+        var attacker = CreateTestCharacter("GrappleMovePinnedBonus", "Fighter");
+        var defender = CreateWeakDefender("GrappleMovePinnedBonusTarget");
+
+        ForceGrappleState(attacker, defender);
+        defender.ApplyCondition(CombatConditionType.Pinned, -1, attacker.Stats.CharacterName);
+
+        SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.MoveHalfSpeed);
+
+        Assert(result != null, "Move while grappling with pinned opponent returns a result");
+        Assert(result != null && result.CheckTotal == result.CheckRoll + attacker.GetGrappleModifier() + 4, "Move while grappling gains +4 in 1v1 when moving a pinned opponent");
+        Assert(result != null && result.Log.Contains("gains +4"), "Move while grappling log reports the pinned-opponent +4 bonus");
 
         Cleanup(attacker, defender);
     }

@@ -2841,6 +2841,36 @@ public class CharacterController : MonoBehaviour
         return TryGetGrappleState(out _, out _, out _, out _);
     }
 
+    public bool TryGetActiveGrappleOpponents(out List<CharacterController> opponents)
+    {
+        opponents = new List<CharacterController>();
+
+        if (!TryGetGrappleLink(this, out GrappleLink link))
+            return false;
+
+        CharacterController controller = link.Controller;
+        CharacterController defender = link.Defender;
+
+        if (controller != null
+            && controller != this
+            && controller.Stats != null
+            && !controller.Stats.IsDead)
+        {
+            opponents.Add(controller);
+        }
+
+        if (defender != null
+            && defender != this
+            && defender.Stats != null
+            && !defender.Stats.IsDead
+            && !opponents.Contains(defender))
+        {
+            opponents.Add(defender);
+        }
+
+        return opponents.Count > 0;
+    }
+
     private bool TryResolveOpposedGrappleCheck(CharacterController opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, int myCheckModifier = 0)
     {
         myRoll = 0;
@@ -2860,7 +2890,7 @@ public class CharacterController : MonoBehaviour
 
     public SpecialAttackResult ResolveGrappleAction(GrappleActionType actionType, AttackDamageMode? grappleDamageModeOverride = null)
     {
-        if (!TryGetGrappleState(out CharacterController opponent, out bool isController, out bool isPinned, out bool opponentPinned))
+        if (!TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out _))
         {
             return new SpecialAttackResult
             {
@@ -3127,42 +3157,83 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                if (!isController)
+                if (!TryGetActiveGrappleOpponents(out List<CharacterController> grappleOpponents))
                 {
                     return new SpecialAttackResult
                     {
                         ManeuverName = "Move While Grappling",
                         Success = false,
-                        Log = $"{Stats.CharacterName} cannot reposition the grapple this round (not controlling the hold)."
+                        Log = "No valid grapple opponents."
                     };
                 }
 
-                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
+                int myRoll = Random.Range(1, 21);
+                int myBaseModifier = GetGrappleModifier();
+
+                bool isOneVsOne = grappleOpponents.Count == 1;
+                bool movingPinnedOpponent = isOneVsOne && grappleOpponents[0] != null && grappleOpponents[0].HasCondition(CombatConditionType.Pinned);
+                int pinnedMoveBonus = (isOneVsOne && movingPinnedOpponent) ? 4 : 0;
+
+                int myTotal = myRoll + myBaseModifier + pinnedMoveBonus;
+                bool beatAllOpponents = true;
+                int highestOpposedTotal = int.MinValue;
+                int highestOpposedRoll = 0;
+
+                var opposedCheckLogLines = new List<string>
                 {
-                    return new SpecialAttackResult
+                    pinnedMoveBonus > 0
+                        ? $"{Stats.CharacterName} gains +4 on grapple check for moving a pinned opponent in a 1v1 grapple."
+                        : string.Empty,
+                    $"{Stats.CharacterName} grapple check: d20 ({myRoll}) + grapple mod ({myBaseModifier:+#;-#;0}){(pinnedMoveBonus != 0 ? $" + pinned bonus ({pinnedMoveBonus:+#;-#;0})" : string.Empty)} = {myTotal}."
+                };
+
+                for (int i = 0; i < grappleOpponents.Count; i++)
+                {
+                    CharacterController currentOpponent = grappleOpponents[i];
+                    if (currentOpponent == null || currentOpponent.Stats == null || currentOpponent.Stats.IsDead)
+                        continue;
+
+                    int oppRoll = Random.Range(1, 21);
+                    int oppMod = currentOpponent.GetGrappleModifier();
+                    int oppTotal = oppRoll + oppMod;
+                    bool beatThisOpponent = myTotal > oppTotal;
+                    beatAllOpponents &= beatThisOpponent;
+
+                    if (oppTotal > highestOpposedTotal)
                     {
-                        ManeuverName = "Move While Grappling",
-                        Success = false,
-                        Log = "No valid grapple opponent."
-                    };
+                        highestOpposedTotal = oppTotal;
+                        highestOpposedRoll = oppRoll;
+                    }
+
+                    opposedCheckLogLines.Add(
+                        $"vs {currentOpponent.Stats.CharacterName}: d20 ({oppRoll}) + grapple mod ({oppMod:+#;-#;0}) = {oppTotal} → {(beatThisOpponent ? "beaten" : "not beaten")}");
                 }
 
-                bool success = myTotal >= oppTotal;
+                if (highestOpposedTotal == int.MinValue)
+                    highestOpposedTotal = 0;
+
+                opposedCheckLogLines.RemoveAll(string.IsNullOrEmpty);
+
+                string resultSummary = beatAllOpponents
+                    ? $"{Stats.CharacterName} beats all opposed grapple checks and can move the grapple up to half speed (standard action)."
+                    : $"{Stats.CharacterName} fails to beat all opposed grapple checks. No grapple movement occurs.";
+
+                opposedCheckLogLines.Add(resultSummary);
+
                 return new SpecialAttackResult
                 {
                     ManeuverName = "Move While Grappling",
-                    Success = success,
+                    Success = beatAllOpponents,
                     CheckRoll = myRoll,
                     CheckTotal = myTotal,
-                    OpposedRoll = oppRoll,
-                    OpposedTotal = oppTotal,
-                    Log = success
-                        ? $"{Stats.CharacterName} wins control of the grapple movement ({myTotal} vs {oppTotal}). Use Move to reposition at half speed while maintaining the hold."
-                        : $"{Stats.CharacterName} fails to move the grapple ({myTotal} vs {oppTotal})."
+                    OpposedRoll = highestOpposedRoll,
+                    OpposedTotal = highestOpposedTotal,
+                    Log = string.Join("\n", opposedCheckLogLines)
                 };
             }
             case GrappleActionType.DrawLightWeapon:
                 return ResolveDrawLightWeaponDuringGrappleStub();
+
             default:
                 return new SpecialAttackResult
                 {

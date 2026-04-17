@@ -135,6 +135,12 @@ public class GameManager : MonoBehaviour
     private bool _isOverrunContinuationSelection;
     private CharacterController _overrunContinuationAttacker;
     private readonly Dictionary<Vector2Int, List<Vector2Int>> _overrunContinuationPathsByDestination = new Dictionary<Vector2Int, List<Vector2Int>>();
+    // Player grapple movement selection state (after winning Move While Grappling opposed check).
+    private bool _isGrappleMoveSelection;
+    private CharacterController _grappleMoveActor;
+    private int _grappleMoveMaxRangeSquares;
+    private readonly List<CharacterController> _grappleMoveOpponents = new List<CharacterController>();
+    private readonly Dictionary<Vector2Int, List<Vector2Int>> _grappleMovePathsByDestination = new Dictionary<Vector2Int, List<Vector2Int>>();
     private enum AidAnotherMode
     {
         None,
@@ -7371,6 +7377,283 @@ public class GameManager : MonoBehaviour
         HighlightCharacterFootprint(pc, HighlightType.Selected);
     }
 
+    private void ClearGrappleMoveSelectionState()
+    {
+        _isGrappleMoveSelection = false;
+        _grappleMoveActor = null;
+        _grappleMoveMaxRangeSquares = 0;
+        _grappleMoveOpponents.Clear();
+        _grappleMovePathsByDestination.Clear();
+    }
+
+    private void BeginGrappleMoveSelection(CharacterController actor)
+    {
+        if (actor == null || actor.Stats == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!actor.TryGetActiveGrappleOpponents(out List<CharacterController> opponents)
+            || opponents.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot move the grapple: no valid grapple opponents.");
+            StartCoroutine(AfterAttackDelay(actor, 0.5f));
+            return;
+        }
+
+        int halfSpeedRange = Mathf.Max(0, actor.Stats.MoveRange / 2);
+        if (halfSpeedRange <= 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} has no available movement (half speed is 0 squares). Grapple move action is spent.");
+            StartCoroutine(AfterAttackDelay(actor, 0.5f));
+            return;
+        }
+
+        ClearOverrunContinuationState();
+        ClearGrappleMoveSelectionState();
+
+        _isGrappleMoveSelection = true;
+        _grappleMoveActor = actor;
+        _grappleMoveMaxRangeSquares = halfSpeedRange;
+        _grappleMoveOpponents.AddRange(opponents);
+
+        CurrentSubPhase = PlayerSubPhase.Moving;
+        ShowGrappleMoveRange(actor);
+        CombatUI?.SetActionButtonsVisible(false);
+
+        if (_highlightedCells.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} beats the grapple check but has no valid destination within half speed ({halfSpeedRange} squares) while dragging grappled opponents.");
+            ClearGrappleMoveSelectionState();
+            StartCoroutine(AfterAttackDelay(actor, 0.5f));
+            return;
+        }
+
+        CombatUI?.SetTurnIndicator($"{actor.Stats.CharacterName} - Move while grappling: choose destination within half speed ({halfSpeedRange} sq)");
+        CombatUI?.ShowCombatLog($"↔ Move while grappling: select any highlighted square up to half speed ({halfSpeedRange} squares). Grappled opponents will be dragged with you.");
+    }
+
+    private void ShowGrappleMoveRange(CharacterController actor)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        _grappleMovePathsByDestination.Clear();
+
+        if (actor == null || actor.Stats == null)
+            return;
+
+        List<SquareCell> candidateCells = Grid.GetCellsInRange(actor.GridPosition, _grappleMoveMaxRangeSquares);
+        foreach (SquareCell candidate in candidateCells)
+        {
+            if (candidate == null || candidate.Coords == actor.GridPosition)
+                continue;
+
+            if (!TryBuildGrappleMovePath(actor, candidate.Coords, out List<Vector2Int> path))
+                continue;
+
+            candidate.SetHighlight(HighlightType.Move);
+            _highlightedCells.Add(candidate);
+            _grappleMovePathsByDestination[candidate.Coords] = path;
+        }
+
+        HighlightCharacterFootprint(actor, HighlightType.Selected);
+    }
+
+    private bool TryBuildGrappleMovePath(CharacterController actor, Vector2Int destination, out List<Vector2Int> path)
+    {
+        path = null;
+        if (actor == null || actor.Stats == null)
+            return false;
+
+        HashSet<Vector2Int> threatenedSquares = GetPreviewThreatenedSquares(actor);
+        AoOPathResult pathResult = Grid.FindPathAoOAware(
+            actor.GridPosition,
+            destination,
+            threatenedSquares,
+            _grappleMoveMaxRangeSquares,
+            actor.GetVisualSquaresOccupied(),
+            actor);
+
+        if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
+            return false;
+
+        if (!IsValidGrappleGroupTranslation(actor, destination))
+            return false;
+
+        path = new List<Vector2Int>(pathResult.Path);
+        return true;
+    }
+
+    private bool IsValidGrappleGroupTranslation(CharacterController actor, Vector2Int actorDestination)
+    {
+        if (actor == null || Grid == null)
+            return false;
+
+        Vector2Int delta = actorDestination - actor.GridPosition;
+        var movingParticipants = new HashSet<CharacterController> { actor };
+
+        var finalPositions = new Dictionary<CharacterController, Vector2Int>
+        {
+            [actor] = actorDestination
+        };
+
+        for (int i = 0; i < _grappleMoveOpponents.Count; i++)
+        {
+            CharacterController opponent = _grappleMoveOpponents[i];
+            if (opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
+                continue;
+
+            movingParticipants.Add(opponent);
+            finalPositions[opponent] = opponent.GridPosition + delta;
+        }
+
+        var claimedSquares = new Dictionary<Vector2Int, CharacterController>();
+
+        foreach (KeyValuePair<CharacterController, Vector2Int> kvp in finalPositions)
+        {
+            CharacterController participant = kvp.Key;
+            Vector2Int participantDestination = kvp.Value;
+            int sizeSquares = participant.GetVisualSquaresOccupied();
+
+            if (!Grid.CanPlaceCreature(participantDestination, sizeSquares, participant, ignoreOtherOccupants: true))
+                return false;
+
+            List<Vector2Int> occupied = Grid.GetOccupiedSquares(participantDestination, sizeSquares);
+            for (int squareIndex = 0; squareIndex < occupied.Count; squareIndex++)
+            {
+                Vector2Int square = occupied[squareIndex];
+                if (!Grid.IsValidPosition(square))
+                    return false;
+
+                if (claimedSquares.TryGetValue(square, out CharacterController existingOwner) && existingOwner != participant)
+                    return false;
+
+                claimedSquares[square] = participant;
+
+                SquareCell cell = Grid.GetCell(square);
+                if (cell == null)
+                    return false;
+
+                CharacterController occupant = cell.Occupant;
+                if (cell.IsOccupied && occupant != null && !movingParticipants.Contains(occupant))
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void HandleGrappleMovementClick(CharacterController actor, SquareCell cell)
+    {
+        if (!_isGrappleMoveSelection || actor == null || cell == null)
+            return;
+
+        if (_grappleMoveActor != actor)
+        {
+            ClearGrappleMoveSelectionState();
+            ShowActionChoices();
+            return;
+        }
+
+        if (cell.Coords == actor.GridPosition)
+        {
+            CancelGrappleMoveSelection(actor);
+            return;
+        }
+
+        if (!_highlightedCells.Contains(cell))
+            return;
+
+        if (!_grappleMovePathsByDestination.TryGetValue(cell.Coords, out List<Vector2Int> selectedPath)
+            || selectedPath == null
+            || selectedPath.Count == 0)
+        {
+            CombatUI?.ShowCombatLog("⚠ Invalid grapple move destination.");
+            return;
+        }
+
+        StartCoroutine(ExecuteGrappleMovement(actor, selectedPath));
+    }
+
+    private IEnumerator ExecuteGrappleMovement(CharacterController actor, List<Vector2Int> actorPath)
+    {
+        if (actor == null || actor.Stats == null || actorPath == null || actorPath.Count == 0)
+            yield break;
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        if (_pathPreview != null) _pathPreview.HidePath();
+        if (_hoverMarker != null) _hoverMarker.Hide();
+
+        Vector2Int actorStart = actor.GridPosition;
+        var opponentStartPositions = new Dictionary<CharacterController, Vector2Int>();
+        var movedOpponents = new List<CharacterController>();
+
+        for (int i = 0; i < _grappleMoveOpponents.Count; i++)
+        {
+            CharacterController opponent = _grappleMoveOpponents[i];
+            if (opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
+                continue;
+
+            opponentStartPositions[opponent] = opponent.GridPosition;
+            movedOpponents.Add(opponent);
+        }
+
+        yield return StartCoroutine(actor.MoveAlongPath(actorPath, PlayerMoveSecondsPerStep, markAsMoved: true));
+
+        Vector2Int movementDelta = actor.GridPosition - actorStart;
+
+        if (movementDelta != Vector2Int.zero)
+        {
+            for (int i = 0; i < movedOpponents.Count; i++)
+                Grid.ClearCreatureOccupancy(movedOpponents[i]);
+
+            for (int i = 0; i < movedOpponents.Count; i++)
+            {
+                CharacterController opponent = movedOpponents[i];
+                if (!opponentStartPositions.TryGetValue(opponent, out Vector2Int opponentStart))
+                    continue;
+
+                Vector2Int opponentDestination = opponentStart + movementDelta;
+                SquareCell destinationCell = Grid.GetCell(opponentDestination);
+                if (destinationCell == null)
+                {
+                    CombatUI?.ShowCombatLog($"⚠ Grapple drag failed for {opponent.Stats.CharacterName}: invalid destination square.");
+                    continue;
+                }
+
+                opponent.MoveToCell(destinationCell, markAsMoved: false);
+            }
+        }
+
+        string draggedList = movedOpponents.Count > 0
+            ? string.Join(", ", movedOpponents.ConvertAll(o => o.Stats.CharacterName))
+            : "no opponents";
+
+        CombatUI?.ShowCombatLog($"↔ {actor.Stats.CharacterName} moves while grappling from ({actorStart.x},{actorStart.y}) to ({actor.GridPosition.x},{actor.GridPosition.y}), dragging {draggedList}.");
+
+        RefreshFlankedConditions();
+        UpdateAllStatsUI();
+        InvalidatePreviewThreats();
+
+        ClearGrappleMoveSelectionState();
+        ShowActionChoices();
+    }
+
+    private void CancelGrappleMoveSelection(CharacterController actor)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        ClearGrappleMoveSelectionState();
+
+        if (actor != null && actor.Stats != null)
+            CombatUI?.ShowCombatLog($"↩ {actor.Stats.CharacterName} chooses not to move after winning grapple control.");
+
+        ShowActionChoices();
+    }
+
     private void ClearOverrunContinuationState()
     {
         _isOverrunContinuationSelection = false;
@@ -7581,9 +7864,17 @@ public class GameManager : MonoBehaviour
         _waitingForAoOConfirmation = false;
         _pendingAoOAction = null;
         ClearOverrunContinuationState();
+        bool wasGrappleMoveSelection = _isGrappleMoveSelection;
+        if (wasGrappleMoveSelection)
+            ClearGrappleMoveSelectionState();
+
         CombatUI?.HideAoOConfirmationPrompt();
         if (pc != null)
-            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels movement.");
+        {
+            CombatUI?.ShowCombatLog(wasGrappleMoveSelection
+                ? $"↩ {pc.Stats.CharacterName} chooses not to move after winning grapple control."
+                : $"↩ {pc.Stats.CharacterName} cancels movement.");
+        }
 
         ShowActionChoices();
     }
@@ -7696,8 +7987,10 @@ public class GameManager : MonoBehaviour
         // Build threatened squares for AoO-aware pathfinding
         var threatenedSquares = GetPreviewThreatenedSquares(pc);
 
-        // Use AoO-aware A* pathfinder — routes around threatened squares when possible
-        var pathResult = Grid.FindPathAoOAware(pc.GridPosition, gridCoord, threatenedSquares, pc.Stats.MoveRange, pc.GetVisualSquaresOccupied(), pc);
+        // Use AoO-aware A* pathfinder — routes around threatened squares when possible.
+        // Grapple move selection is capped at half speed.
+        int previewMaxRange = _isGrappleMoveSelection ? Mathf.Max(1, _grappleMoveMaxRangeSquares) : pc.Stats.MoveRange;
+        var pathResult = Grid.FindPathAoOAware(pc.GridPosition, gridCoord, threatenedSquares, previewMaxRange, pc.GetVisualSquaresOccupied(), pc);
 
         if (pathResult.Path != null && pathResult.Path.Count > 0)
         {
@@ -8359,6 +8652,12 @@ public class GameManager : MonoBehaviour
     {
         if (_waitingForAoOConfirmation) return;
 
+        if (_isGrappleMoveSelection)
+        {
+            HandleGrappleMovementClick(pc, cell);
+            return;
+        }
+
         if (_isOverrunContinuationSelection)
         {
             HandleOverrunContinuationMovementClick(pc, cell);
@@ -8412,9 +8711,14 @@ public class GameManager : MonoBehaviour
             OnCancel = () =>
             {
                 CurrentSubPhase = PlayerSubPhase.Moving;
-                ShowMovementRange(pc);
+                if (_isGrappleMoveSelection)
+                    ShowGrappleMoveRange(pc);
+                else
+                    ShowMovementRange(pc);
                 CombatUI.SetActionButtonsVisible(false);
-                CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)");
+                CombatUI.SetTurnIndicator(_isGrappleMoveSelection
+                    ? $"{pc.Stats.CharacterName} - Move while grappling: choose destination within half speed ({_grappleMoveMaxRangeSquares} sq)"
+                    : $"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)");
             }
         });
     }
@@ -8792,7 +9096,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (!actor.TryGetGrappleState(out CharacterController liveOpponent, out bool isController, out bool isPinned, out bool opponentPinned))
+        if (!actor.TryGetGrappleState(out CharacterController liveOpponent, out _, out bool isPinned, out bool opponentPinned))
         {
             CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is no longer in a grapple.");
             ShowActionChoices();
@@ -8816,8 +9120,7 @@ public class GameManager : MonoBehaviour
             if (!opponentPinned)
                 options.Add((GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)"));
 
-            if (isController)
-                options.Add((GrappleActionType.MoveHalfSpeed, "Move while grappling (win opposed check, then move at half speed)"));
+            options.Add((GrappleActionType.MoveHalfSpeed, "Move while grappling (standard action, beat opposed grapple check(s), then move at half speed)"));
         }
 
         List<string> optionLabelsForPrompt = new List<string>(options.Count);
@@ -8941,7 +9244,8 @@ public class GameManager : MonoBehaviour
 
         if (actionType == GrappleActionType.MoveHalfSpeed && result.Success)
         {
-            CombatUI?.ShowCombatLog("↔ Grapple movement control established. Current implementation keeps both combatants in place; future update will add dragged movement pathing.");
+            BeginGrappleMoveSelection(actor);
+            return;
         }
 
         StartCoroutine(AfterAttackDelay(actor, 0.8f));
