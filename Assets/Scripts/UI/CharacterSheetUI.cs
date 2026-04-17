@@ -746,7 +746,20 @@ public class CharacterSheetUI : MonoBehaviour
         AddLine(content, $"  Base Attack Bonus: {FormatMod(stats.BaseAttackBonus)}", 11, LightText, FontStyle.Normal, 14);
         AddLine(content, $"  Melee Attack: {FormatMod(stats.AttackBonus)}", 11, LightText, FontStyle.Normal, 14);
         AddLine(content, $"  Ranged Attack: {FormatMod(stats.BaseAttackBonus + stats.DEXMod + stats.SizeModifier)}", 11, LightText, FontStyle.Normal, 14);
-        AddLine(content, $"  Damage: {stats.BaseDamageCount}d{stats.BaseDamageDice}{(stats.BonusDamage != 0 ? FormatMod(stats.BonusDamage) : "")}", 11, LightText, FontStyle.Normal, 14);
+
+        ItemData selectedWeapon = selectedPC != null ? selectedPC.GetEquippedMainWeapon() : null;
+        if (selectedWeapon != null)
+        {
+            AddLine(content, $"  Attack Source: {selectedWeapon.Name}", 11, LightText, FontStyle.Normal, 14);
+            AddLine(content, $"  Damage: {stats.BaseDamageCount}d{stats.BaseDamageDice}{(stats.BonusDamage != 0 ? FormatMod(stats.BonusDamage) : "")}", 11, LightText, FontStyle.Normal, 14);
+        }
+        else
+        {
+            var unarmed = selectedPC != null ? selectedPC.GetUnarmedDamage() : (1, 3, 0);
+            string unarmedBonusStr = unarmed.Item3 != 0 ? FormatMod(unarmed.Item3) : "";
+            AddLine(content, "  Attack Source: Unarmed strike", 11, LightText, FontStyle.Normal, 14);
+            AddLine(content, $"  Damage: {unarmed.Item1}d{unarmed.Item2}{unarmedBonusStr}", 11, LightText, FontStyle.Normal, 14);
+        }
 
         // === Active Buffs ===
         // Use StatusEffectManager (present on ALL characters) for buff display,

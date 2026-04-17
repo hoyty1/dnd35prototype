@@ -2213,9 +2213,16 @@ public class GameManager : MonoBehaviour
 
         string weaponStateInfo = string.Empty;
         ItemData currentWeapon = pc.GetEquippedMainWeapon();
-        if (currentWeapon != null && currentWeapon.RequiresReload)
+        if (currentWeapon != null)
         {
-            weaponStateInfo = $"\n{pc.GetWeaponLoadStateLabel(currentWeapon)}";
+            weaponStateInfo = $"\nAttack Source: {currentWeapon.Name}";
+            if (currentWeapon.RequiresReload)
+                weaponStateInfo += $"\n{pc.GetWeaponLoadStateLabel(currentWeapon)}";
+        }
+        else
+        {
+            var unarmed = pc.GetUnarmedDamage();
+            weaponStateInfo = $"\nAttack Source: Unarmed strike ({unarmed.damageCount}d{unarmed.damageDice})";
         }
 
         string dwInfo = "";
@@ -7957,6 +7964,11 @@ public class GameManager : MonoBehaviour
                 int incSquares = RangeCalculator.GetRangeIncrementSquares(rangeIncrement);
                 int maxRange = RangeCalculator.GetMaxRangeFeet(rangeIncrement, isThrownWeapon);
                 rangeMsg = $"\n{weapon.Name}: {rangeIncrement} ft increment ({incSquares} sq), max {maxRange} ft";
+            }
+            else if (weapon == null)
+            {
+                var unarmed = pc.GetUnarmedDamage();
+                rangeMsg = $"\nUnarmed strike: {unarmed.damageCount}d{unarmed.damageDice}";
             }
 
             if (CombatUI.TurnIndicatorText != null && !CombatUI.TurnIndicatorText.text.Contains("DUAL WIELD"))

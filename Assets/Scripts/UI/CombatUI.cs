@@ -607,6 +607,9 @@ public class CombatUI : MonoBehaviour
         bool fullAttackRelevant = hasIterativeAttacks || hasRapidShot;
         bool isProne = pc.HasCondition(CombatConditionType.Prone);
         bool canAttackWithWeapon = pc.CanAttackWithEquippedWeapon(out _);
+        ItemData equippedWeapon = pc.GetEquippedMainWeapon();
+        bool usingUnarmedStrike = equippedWeapon == null;
+        string attackSourceLabel = usingUnarmedStrike ? "Unarmed strike" : equippedWeapon.Name;
 
         if (MoveButton != null)
         {
@@ -683,7 +686,7 @@ public class CombatUI : MonoBehaviour
             {
                 if (!actions.HasStandardAction) atkLabel.text = "Attack (Used)";
                 else if (!canAttackWithWeapon) atkLabel.text = "Attack (Reload first)";
-                else atkLabel.text = "Attack (Standard)";
+                else atkLabel.text = usingUnarmedStrike ? $"Attack (Standard, {attackSourceLabel})" : "Attack (Standard)";
             }
         }
 
@@ -698,7 +701,7 @@ public class CombatUI : MonoBehaviour
                 if (!canFightDefensively) atkDefLabel.text = "Fighting Defensively (Std) [BAB +1]";
                 else if (!actions.HasStandardAction) atkDefLabel.text = "Fighting Defensively (Std) [Used]";
                 else if (!canAttackWithWeapon) atkDefLabel.text = "Fighting Defensively (Std) [Reload first]";
-                else atkDefLabel.text = "Fighting Defensively (Std)";
+                else atkDefLabel.text = usingUnarmedStrike ? $"Fighting Defensively (Std, {attackSourceLabel})" : "Fighting Defensively (Std)";
             }
         }
 
@@ -789,8 +792,8 @@ public class CombatUI : MonoBehaviour
                 else if (!canTakeFullRoundAttack) faLabel.text = "Full Attack (N/A)";
                 else if (rapidShotWillApply) faLabel.text = $"Full Attack x{atkCount + 1} (Rapid Shot)";
                 else if (hasRapidShot && pc.RapidShotEnabled && !weaponIsRanged) faLabel.text = $"Full Attack x{atkCount} (RS: need ranged wpn)";
-                else if (hasIterativeAttacks) faLabel.text = $"Full Attack x{atkCount} (Full-Round)";
-                else faLabel.text = "Full Attack (Full-Round)";
+                else if (hasIterativeAttacks) faLabel.text = usingUnarmedStrike ? $"Full Attack x{atkCount} (Unarmed strike)" : $"Full Attack x{atkCount} (Full-Round)";
+                else faLabel.text = usingUnarmedStrike ? "Full Attack (Unarmed strike)" : "Full Attack (Full-Round)";
             }
         }
 

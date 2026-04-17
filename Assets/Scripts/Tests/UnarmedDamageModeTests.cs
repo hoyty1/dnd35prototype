@@ -25,6 +25,9 @@ public static class UnarmedDamageModeTests
         TestGauntletMakesUnarmedDefaultLethal();
         TestImprovedUnarmedStrikeTakesPriorityAndDefaultsLethal();
         TestToggleStillOverridesDefault();
+        TestGetUnarmedDamageDefaultsTo1d3();
+        TestMonkUnarmedDamageUsesMonkDie();
+        TestAttackResultUsesUnarmedStrikeLabel();
 
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
@@ -140,5 +143,48 @@ public static class UnarmedDamageModeTests
         Assert(GetProfileBool(profile, "DealNonlethalDamage"), "Toggle can switch lethal-default unarmed to nonlethal");
 
         Cleanup(c);
+    }
+    private static void TestGetUnarmedDamageDefaultsTo1d3()
+    {
+        var c = CreateTestCharacter("UnarmedDamageDefault");
+        var unarmed = c.GetUnarmedDamage();
+
+        Assert(unarmed.damageCount == 1, "Default unarmed strike uses one damage die");
+        Assert(unarmed.damageDice == 3, "Default unarmed strike die is 1d3");
+
+        Cleanup(c);
+    }
+
+    private static void TestMonkUnarmedDamageUsesMonkDie()
+    {
+        var go = new GameObject("MonkUnarmed_GO");
+        var controller = go.AddComponent<CharacterController>();
+        var inventory = go.AddComponent<InventoryComponent>();
+        var stats = new CharacterStats("MonkUnarmed", 3, "Monk", 12, 14, 12, 10, 14, 10, 2, 0, 0, 8, 1, 0, 6, 1, 18);
+
+        controller.Init(stats, Vector2Int.zero, null, null);
+        inventory.Init(stats);
+
+        var unarmed = controller.GetUnarmedDamage();
+        Assert(stats.IsMonk, "Monk test character recognized as monk");
+        Assert(unarmed.damageDice == stats.MonkUnarmedDamageDie, "Monk unarmed strike uses monk progression damage die");
+
+        Cleanup(controller);
+    }
+
+    private static void TestAttackResultUsesUnarmedStrikeLabel()
+    {
+        var attacker = CreateTestCharacter("UnarmedLabelAttacker");
+        var defender = CreateTestCharacter("UnarmedLabelDefender");
+
+        attacker.GridPosition = new Vector2Int(0, 0);
+        defender.GridPosition = new Vector2Int(1, 0);
+
+        CombatResult result = attacker.Attack(defender, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+        Assert(result != null, "Unarmed attack produces a combat result");
+        Assert(result != null && result.WeaponName == "Unarmed strike", "Combat result weapon label is 'Unarmed strike' for no-weapon attacks");
+
+        Cleanup(attacker);
+        Cleanup(defender);
     }
 }

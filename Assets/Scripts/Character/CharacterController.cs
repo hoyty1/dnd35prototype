@@ -249,6 +249,40 @@ public class CharacterController : MonoBehaviour
         return profile;
     }
 
+    /// <summary>
+    /// Resolve base unarmed strike damage for this character.
+    /// D&D 3.5 baseline is 1d3; monks use their class progression die (prototype: 1d6 at level 3).
+    /// </summary>
+    public (int damageCount, int damageDice, int bonusDamage) GetUnarmedDamage()
+    {
+        int unarmedDie = 3;
+        if (Stats != null && Stats.MonkUnarmedDamageDie > 0)
+            unarmedDie = Stats.MonkUnarmedDamageDie;
+
+        return (1, unarmedDie, 0);
+    }
+
+    /// <summary>
+    /// Resolve base damage inputs and display label for the current attack source.
+    /// </summary>
+    private void ResolveBaseAttackDamageProfile(ItemData weapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel)
+    {
+        if (weapon != null)
+        {
+            damageDice = Stats.BaseDamageDice;
+            damageCount = Stats.BaseDamageCount;
+            bonusDamage = Stats.BonusDamage;
+            attackLabel = weapon.Name;
+            return;
+        }
+
+        var unarmed = GetUnarmedDamage();
+        damageDice = unarmed.damageDice;
+        damageCount = unarmed.damageCount;
+        bonusDamage = unarmed.bonusDamage;
+        attackLabel = "Unarmed strike";
+    }
+
     /// <summary>Check if the given weapon is two-handed.</summary>
     public static bool IsWeaponTwoHanded(ItemData weapon)
     {
@@ -834,7 +868,7 @@ public class CharacterController : MonoBehaviour
             {
                 Attacker = this,
                 Defender = target,
-                WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed",
+                WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed strike",
                 Hit = false,
                 // No actual d20 is rolled in this early-return path, but keep roll fields within valid d20 bounds.
                 DieRoll = 1,
@@ -852,7 +886,7 @@ public class CharacterController : MonoBehaviour
             {
                 Attacker = this,
                 Defender = target,
-                WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed",
+                WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed strike",
                 Hit = false,
                 // No actual d20 is rolled in this early-return path, but keep roll fields within valid d20 bounds.
                 DieRoll = 1,
@@ -945,12 +979,13 @@ public class CharacterController : MonoBehaviour
         int critMult = Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2;
 
         int totalFeatDmgBonus = powerAtkDmgBonus + pbsDmgBonus + weaponSpecBonus;
+        ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
         // Record HP before attack
         int hpBefore = target.Stats.CurrentHP;
 
         var result = PerformSingleAttackWithCrit(target, totalAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-            Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
+            damageDice, damageCount, bonusDamage, critThreatMin, critMult,
             equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus,
             damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
@@ -986,11 +1021,8 @@ public class CharacterController : MonoBehaviour
             result.RangeIncrementNumber = rangeInfo.IncrementNumber;
             result.RangePenalty = rangeInfo.Penalty;
         }
-        if (equippedWeapon != null)
-        {
-            result.WeaponName = equippedWeapon.Name;
-            result.BaseDamageDiceStr = $"{Stats.BaseDamageCount}d{Stats.BaseDamageDice}";
-        }
+        result.WeaponName = attackLabel;
+        result.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
 
         // HP tracking
         result.DefenderHPBefore = hpBefore;
@@ -1135,6 +1167,7 @@ public class CharacterController : MonoBehaviour
 
         int totalFeatDmgBonus = powerAtkDmgBonus + pbsDmgBonus + weaponSpecBonus;
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
+        ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
         // === Debug Logging ===
         Debug.Log($"[FullAttack] {Stats.CharacterName}: FullAttack() called");
@@ -1196,7 +1229,7 @@ public class CharacterController : MonoBehaviour
             int hpBeforeAtk = target.Stats.CurrentHP;
 
             CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
-                Stats.BaseDamageDice, Stats.BaseDamageCount, Stats.BonusDamage, critThreatMin, critMult,
+                damageDice, damageCount, bonusDamage, critThreatMin, critMult,
                 equippedWeapon, false, totalFeatDmgBonus, aidAnotherTargetAcBonus,
                 damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
 
@@ -1233,11 +1266,8 @@ public class CharacterController : MonoBehaviour
                 atk.RangeIncrementNumber = rangeInfo.IncrementNumber;
                 atk.RangePenalty = rangeInfo.Penalty;
             }
-            if (equippedWeapon != null)
-            {
-                atk.WeaponName = equippedWeapon.Name;
-                atk.BaseDamageDiceStr = $"{Stats.BaseDamageCount}d{Stats.BaseDamageDice}";
-            }
+            atk.WeaponName = attackLabel;
+            atk.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
 
             atk.DefenderHPBefore = hpBeforeAtk;
             atk.DefenderHPAfter = target.Stats.CurrentHP;
@@ -1865,6 +1895,7 @@ public class CharacterController : MonoBehaviour
 
         // Store base damage dice string
         result.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
+        result.WeaponName = weapon != null ? weapon.Name : "Unarmed strike";
 
         // Calculate the damage modifier based on weapon's DamageModifierType
         int damageModifier = Stats.GetWeaponDamageModifier(weapon, isOffHand);
