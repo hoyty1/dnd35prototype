@@ -36,6 +36,9 @@ public static class GrappleDamageRulesTests
         TestPinExpiresAtMaintainerEndOfNextTurnWithoutMaintenance();
         TestMaintainPinExtendsDurationAcrossTurns();
         TestGrappleDamageUsesUnarmedStrikeDamageEvenWithWeaponEquipped();
+        TestUseOpponentWeaponFailsWhenOpponentHasNoLightWeapon();
+        TestUseOpponentWeaponUsesSelectedRightHandLightWeaponWithoutTransfer();
+        TestUseOpponentWeaponCanSelectLeftHandLightWeapon();
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
 
@@ -373,6 +376,70 @@ public static class GrappleDamageRulesTests
         Assert(result != null && result.Success, "Grapple damage succeeds even while a regular weapon is equipped");
         Assert(result != null && result.Log.Contains("unarmed grapple damage"), "Grapple damage log identifies unarmed grapple damage");
         Assert(result != null && result.Log.Contains("rolled 1d3"), "Grapple damage roll uses unarmed damage dice (1d3 for Medium) instead of weapon dice");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestUseOpponentWeaponFailsWhenOpponentHasNoLightWeapon()
+    {
+        var attacker = CreateTestCharacter("GrappleUseOppWeaponNoLight", "Fighter");
+        var defender = CreateWeakDefender("GrappleUseOppWeaponNoLightTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        var defenderInv = defender.GetComponent<InventoryComponent>();
+        defenderInv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("greatsword"), EquipSlot.RightHand);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.UseOpponentWeapon);
+
+        Assert(result != null && !result.Success, "Use Opponent's Weapon fails when defender has no equipped light weapon");
+        Assert(result != null && result.Log.Contains("no equipped light weapon"), "Use Opponent's Weapon failure log explains missing light weapon requirement");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestUseOpponentWeaponUsesSelectedRightHandLightWeaponWithoutTransfer()
+    {
+        var attacker = CreateTestCharacter("GrappleUseOppWeaponRight", "Fighter");
+        var defender = CreateWeakDefender("GrappleUseOppWeaponRightTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        var defenderInv = defender.GetComponent<InventoryComponent>();
+        ItemData defenderDagger = ItemDatabase.CloneItem("dagger");
+        defenderInv.CharacterInventory.DirectEquip(defenderDagger, EquipSlot.RightHand);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.UseOpponentWeapon, null, EquipSlot.RightHand);
+
+        Assert(result != null && result.Success, "Use Opponent's Weapon succeeds with favorable opposed grapple modifier gap");
+        Assert(result != null && result.Log.Contains("-4 penalty"), "Use Opponent's Weapon combat log includes the fixed -4 attack penalty");
+        Assert(result != null && result.Log.Contains("dagger"), "Use Opponent's Weapon log names the selected opponent weapon");
+
+        ItemData equippedAfter = defenderInv.CharacterInventory.RightHandSlot;
+        Assert(equippedAfter != null && equippedAfter.Name == defenderDagger.Name, "Use Opponent's Weapon does not transfer or remove defender's weapon");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestUseOpponentWeaponCanSelectLeftHandLightWeapon()
+    {
+        var attacker = CreateTestCharacter("GrappleUseOppWeaponLeft", "Fighter");
+        var defender = CreateWeakDefender("GrappleUseOppWeaponLeftTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        var defenderInv = defender.GetComponent<InventoryComponent>();
+        defenderInv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.RightHand);
+        ItemData leftWeapon = ItemDatabase.CloneItem("sickle");
+        defenderInv.CharacterInventory.DirectEquip(leftWeapon, EquipSlot.LeftHand);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.UseOpponentWeapon, null, EquipSlot.LeftHand);
+
+        Assert(result != null && result.Success, "Use Opponent's Weapon supports selecting the left-hand light weapon");
+        Assert(result != null && result.Log.Contains("LeftHand") && result.Log.Contains(leftWeapon.Name), "Use Opponent's Weapon log confirms left-hand weapon selection");
 
         Cleanup(attacker, defender);
     }

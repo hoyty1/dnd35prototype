@@ -21,6 +21,7 @@ public enum GrappleActionType
     PinOpponent,
     BreakPin,
     MoveHalfSpeed,
+    UseOpponentWeapon,
     DrawLightWeapon,
     RetrieveSpellComponent
 }
@@ -2716,6 +2717,34 @@ public class CharacterController : MonoBehaviour
         return options;
     }
 
+    /// <summary>
+    /// Returns equipped hand-slot light weapons (right hand first, then left hand).
+    /// Used by grapple "Use Opponent's Weapon" availability and resolution.
+    /// </summary>
+    public List<DisarmableHeldItemOption> GetEquippedLightHandWeaponOptions()
+    {
+        var options = new List<DisarmableHeldItemOption>(2);
+        var inv = GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+            return options;
+
+        if (IsLightHandWeapon(inv.RightHandSlot))
+            options.Add(new DisarmableHeldItemOption(EquipSlot.RightHand, inv.RightHandSlot));
+
+        if (IsLightHandWeapon(inv.LeftHandSlot))
+            options.Add(new DisarmableHeldItemOption(EquipSlot.LeftHand, inv.LeftHandSlot));
+
+        return options;
+    }
+
+    private static bool IsLightHandWeapon(ItemData item)
+    {
+        if (item == null || !item.IsWeapon)
+            return false;
+
+        return item.IsLightWeapon || item.WeaponSize == WeaponSizeCategory.Light;
+    }
+
     // ========== DUAL WIELD INFO ==========
 
     /// <summary>
@@ -2961,7 +2990,10 @@ public class CharacterController : MonoBehaviour
         return true;
     }
 
-    public SpecialAttackResult ResolveGrappleAction(GrappleActionType actionType, AttackDamageMode? grappleDamageModeOverride = null)
+    public SpecialAttackResult ResolveGrappleAction(
+        GrappleActionType actionType,
+        AttackDamageMode? grappleDamageModeOverride = null,
+        EquipSlot? opponentWeaponHandSlotOverride = null)
     {
         if (!TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out _))
         {
@@ -3304,6 +3336,9 @@ public class CharacterController : MonoBehaviour
                     Log = string.Join("\n", opposedCheckLogLines)
                 };
             }
+            case GrappleActionType.UseOpponentWeapon:
+                return ResolveUseOpponentWeapon(opponent, isPinned, opponentWeaponHandSlotOverride);
+
             case GrappleActionType.DrawLightWeapon:
                 return ResolveDrawLightWeaponDuringGrappleStub();
 
@@ -3318,6 +3353,215 @@ public class CharacterController : MonoBehaviour
                     Log = "Unknown grapple action."
                 };
         }
+    }
+
+    private int GetStrictOpposedGrappleModifierForUseOpponentWeapon()
+    {
+        int sizeMod = Stats != null ? Stats.CurrentSizeCategory.GetGrappleModifier() : 0;
+        return (Stats != null ? Stats.BaseAttackBonus : 0) + (Stats != null ? Stats.STRMod : 0) + sizeMod;
+    }
+
+    private bool TryResolveStrictOpposedGrappleCheckForUseOpponentWeapon(
+        CharacterController opponent,
+        out int myRoll,
+        out int myTotal,
+        out int oppRoll,
+        out int oppTotal,
+        out int myModifier,
+        out int oppModifier)
+    {
+        myRoll = 0;
+        myTotal = 0;
+        oppRoll = 0;
+        oppTotal = 0;
+        myModifier = 0;
+        oppModifier = 0;
+
+        if (opponent == null || opponent.Stats == null || Stats == null)
+            return false;
+
+        myModifier = GetStrictOpposedGrappleModifierForUseOpponentWeapon();
+        oppModifier = opponent.GetStrictOpposedGrappleModifierForUseOpponentWeapon();
+
+        myRoll = Random.Range(1, 21);
+        oppRoll = Random.Range(1, 21);
+        myTotal = myRoll + myModifier;
+        oppTotal = oppRoll + oppModifier;
+        return true;
+    }
+
+    private ItemData ResolveOpponentLightWeaponForUseOpponentWeapon(
+        CharacterController opponent,
+        EquipSlot? handSlotOverride,
+        out EquipSlot selectedSlot,
+        out string selectionNote)
+    {
+        selectedSlot = EquipSlot.RightHand;
+        selectionNote = string.Empty;
+
+        if (opponent == null)
+            return null;
+
+        List<DisarmableHeldItemOption> options = opponent.GetEquippedLightHandWeaponOptions();
+        if (options == null || options.Count == 0)
+            return null;
+
+        if (handSlotOverride.HasValue)
+        {
+            for (int i = 0; i < options.Count; i++)
+            {
+                if (options[i].HandSlot == handSlotOverride.Value)
+                {
+                    selectedSlot = options[i].HandSlot;
+                    return options[i].HeldItem;
+                }
+            }
+        }
+
+        selectedSlot = options[0].HandSlot;
+        ItemData fallbackWeapon = options[0].HeldItem;
+        if (handSlotOverride.HasValue)
+            selectionNote = $"Requested {handSlotOverride.Value} light weapon was unavailable; defaulted to {selectedSlot}.";
+
+        return fallbackWeapon;
+    }
+
+    private SpecialAttackResult ResolveUseOpponentWeapon(CharacterController opponent, bool isPinned, EquipSlot? opponentWeaponHandSlotOverride)
+    {
+        const int useOpponentWeaponAttackPenalty = -4;
+
+        if (isPinned)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Use Opponent's Weapon",
+                Success = false,
+                Log = $"{Stats.CharacterName} is pinned and cannot use {opponent?.Stats?.CharacterName ?? "the opponent"}'s weapon."
+            };
+        }
+
+        ItemData opponentWeapon = ResolveOpponentLightWeaponForUseOpponentWeapon(
+            opponent,
+            opponentWeaponHandSlotOverride,
+            out EquipSlot selectedHandSlot,
+            out string selectionNote);
+
+        if (opponentWeapon == null)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Use Opponent's Weapon",
+                Success = false,
+                Log = $"{Stats.CharacterName} cannot use opponent's weapon because {opponent.Stats.CharacterName} has no equipped light weapon in either hand."
+            };
+        }
+
+        if (!TryResolveStrictOpposedGrappleCheckForUseOpponentWeapon(
+                opponent,
+                out int myRoll,
+                out int myTotal,
+                out int oppRoll,
+                out int oppTotal,
+                out int myModifier,
+                out int oppModifier))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Use Opponent's Weapon",
+                Success = false,
+                Log = "No valid grapple opponent."
+            };
+        }
+
+        bool grappleSuccess = myTotal >= oppTotal;
+        var logLines = new List<string>
+        {
+            $"{Stats.CharacterName} attempts to use opponent's {opponentWeapon.Name}.",
+            string.IsNullOrEmpty(selectionNote) ? string.Empty : selectionNote,
+            $"Grapple check: d20 ({myRoll}) + BAB/STR/size ({myModifier:+#;-#;0}) = {myTotal} vs d20 ({oppRoll}) + BAB/STR/size ({oppModifier:+#;-#;0}) = {oppTotal}."
+        };
+
+        int finalDamageDealt = 0;
+        bool targetKilled = false;
+
+        if (grappleSuccess)
+        {
+            int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(opponentWeapon);
+            int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
+            int attackMod = Stats.BaseAttackBonus
+                            + Stats.STRMod
+                            + Stats.SizeModifier
+                            + Stats.ConditionAttackPenalty
+                            + GetProneAttackModifier(isMeleeAttack: true)
+                            + weaponNonProfPenalty
+                            + armorNonProfPenalty
+                            + useOpponentWeaponAttackPenalty;
+
+            int damageDice = Mathf.Max(2, opponentWeapon.DamageDice);
+            int damageCount = Mathf.Max(1, opponentWeapon.DamageCount);
+            int bonusDamage = opponentWeapon.BonusDamage;
+            int critThreatMin = opponentWeapon.CritThreatMin > 0 ? opponentWeapon.CritThreatMin : 20;
+            int critMultiplier = opponentWeapon.CritMultiplier > 0 ? opponentWeapon.CritMultiplier : 2;
+
+            int hpBefore = opponent.Stats.CurrentHP;
+            CombatResult attackResult = PerformSingleAttackWithCrit(
+                opponent,
+                attackMod,
+                isFlanking: false,
+                flankingBonus: 0,
+                flankingPartnerName: null,
+                damageDice,
+                damageCount,
+                bonusDamage,
+                critThreatMin,
+                critMultiplier,
+                opponentWeapon,
+                isOffHand: false,
+                featDamageBonus: 0,
+                situationalTargetAcBonus: 0,
+                dealNonlethalDamage: false,
+                damageModeAttackPenalty: 0,
+                damageModePenaltySource: string.Empty);
+
+            attackResult.BreakdownBAB = Stats.BaseAttackBonus;
+            attackResult.BreakdownAbilityMod = Stats.STRMod;
+            attackResult.BreakdownAbilityName = "STR";
+            attackResult.SizeAttackBonus = Stats.SizeModifier;
+            attackResult.WeaponNonProficiencyPenalty = weaponNonProfPenalty;
+            attackResult.ArmorNonProficiencyPenalty = armorNonProfPenalty;
+            attackResult.DefenderHPBefore = hpBefore;
+            attackResult.DefenderHPAfter = opponent.Stats.CurrentHP;
+
+            finalDamageDealt = attackResult.FinalDamageDealt;
+            targetKilled = opponent.Stats.IsDead;
+
+            logLines.Add($"{Stats.CharacterName} uses {opponent.Stats.CharacterName}'s {opponentWeapon.Name} against them ({selectedHandSlot}).");
+            logLines.Add("-4 penalty for using opponent's weapon.");
+            logLines.Add($"Attack roll: d20 ({attackResult.DieRoll}) + modifiers ({attackMod:+#;-#;0}) = {attackResult.TotalRoll} vs AC {attackResult.TargetAC} => {(attackResult.Hit ? "HIT" : "MISS")}.");
+            if (attackResult.Hit)
+                logLines.Add($"Damage: {finalDamageDealt} (target HP {attackResult.DefenderHPBefore} -> {attackResult.DefenderHPAfter}).");
+            else
+                logLines.Add("Damage: 0 (attack missed).");
+        }
+        else
+        {
+            logLines.Add($"{Stats.CharacterName} fails to control {opponent.Stats.CharacterName}'s weapon and cannot make the attack.");
+        }
+
+        logLines.RemoveAll(string.IsNullOrEmpty);
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Use Opponent's Weapon",
+            Success = grappleSuccess,
+            CheckRoll = myRoll,
+            CheckTotal = myTotal,
+            OpposedRoll = oppRoll,
+            OpposedTotal = oppTotal,
+            DamageDealt = finalDamageDealt,
+            TargetKilled = targetKilled,
+            Log = string.Join("\n", logLines)
+        };
     }
 
     private SpecialAttackResult ResolveDrawLightWeaponDuringGrappleStub()

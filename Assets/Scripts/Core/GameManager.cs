@@ -9240,30 +9240,38 @@ public class GameManager : MonoBehaviour
 
         opponent = liveOpponent;
 
-        var options = new List<(GrappleActionType Action, string Label)>();
-        options.Add((GrappleActionType.EscapeArtist, $"Escape Artist check (d20 + Escape Artist) vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})"));
-        options.Add((GrappleActionType.OpposedGrappleEscape, $"Break grapple (opposed grapple check vs {opponent.Stats.CharacterName})"));
+        var options = new List<(GrappleActionType Action, string Label, bool Enabled)>();
+        options.Add((GrappleActionType.EscapeArtist, $"Escape Artist check (d20 + Escape Artist) vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})", true));
+        options.Add((GrappleActionType.OpposedGrappleEscape, $"Break grapple (opposed grapple check vs {opponent.Stats.CharacterName})", true));
 
         if (isPinned)
         {
-            options.Add((GrappleActionType.BreakPin, $"Break pin (opposed grapple check vs {opponent.Stats.CharacterName})"));
+            options.Add((GrappleActionType.BreakPin, $"Break pin (opposed grapple check vs {opponent.Stats.CharacterName})", true));
         }
         else
         {
-            options.Add((GrappleActionType.DamageOpponent, "Deal grapple damage (opposed check + unarmed strike damage; choose lethal/nonlethal)"));
-            options.Add((GrappleActionType.DrawLightWeapon, "Draw a Light Weapon (Not yet implemented)"));
-            options.Add((GrappleActionType.RetrieveSpellComponent, "Retrieve a Spell Component (Not yet implemented)"));
-            options.Add(opponentPinned
-                ? (GrappleActionType.PinOpponent, $"Maintain pin on {opponent.Stats.CharacterName} (opposed grapple check)")
-                : (GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)"));
+            List<DisarmableHeldItemOption> opponentLightWeaponOptions = opponent.GetEquippedLightHandWeaponOptions();
+            bool hasOpponentLightWeapon = opponentLightWeaponOptions != null && opponentLightWeaponOptions.Count > 0;
 
-            options.Add((GrappleActionType.MoveHalfSpeed, "Move while grappling (standard action, beat opposed grapple check(s), then move at half speed)"));
+            options.Add((GrappleActionType.DamageOpponent, "Deal grapple damage (opposed check + unarmed strike damage; choose lethal/nonlethal)", true));
+            options.Add((
+                GrappleActionType.UseOpponentWeapon,
+                hasOpponentLightWeapon
+                    ? $"Use Opponent's Weapon (opposed grapple check, then immediate attack at -4; choose weapon hand)"
+                    : $"Use Opponent's Weapon (Unavailable: {opponent.Stats.CharacterName} has no equipped light weapon)",
+                hasOpponentLightWeapon));
+            options.Add((GrappleActionType.DrawLightWeapon, "Draw a Light Weapon (Not yet implemented)", true));
+            options.Add((GrappleActionType.RetrieveSpellComponent, "Retrieve a Spell Component (Not yet implemented)", true));
+            options.Add(opponentPinned
+                ? (GrappleActionType.PinOpponent, $"Maintain pin on {opponent.Stats.CharacterName} (opposed grapple check)", true)
+                : (GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)", true));
+
+            options.Add((GrappleActionType.MoveHalfSpeed, "Move while grappling (standard action, beat opposed grapple check(s), then move at half speed)", true));
         }
 
         List<string> optionLabelsForPrompt = new List<string>(options.Count);
         foreach (var option in options)
-            optionLabelsForPrompt.Add(option.Label);
-
+            optionLabelsForPrompt.Add(option.Enabled ? option.Label : $"[Disabled] {option.Label}");
         CurrentSubPhase = PlayerSubPhase.Animating;
         CombatUI?.ShowPickUpItemSelection(
             actorName: actor.Stats.CharacterName,
@@ -9273,6 +9281,12 @@ public class GameManager : MonoBehaviour
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
                     ShowActionChoices();
+                    return;
+                }
+                if (!options[selectedIndex].Enabled)
+                {
+                    CombatUI?.ShowCombatLog($"⚠ {options[selectedIndex].Label}");
+                    ShowGrappleActionMenu(actor, opponent);
                     return;
                 }
 
@@ -9305,9 +9319,71 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        if (actionType == GrappleActionType.UseOpponentWeapon)
+        {
+            ShowUseOpponentWeaponHandSelectionMenu(actor);
+            return;
+        }
+
         ExecuteGrappleAction(actor, actionType);
     }
 
+    private void ShowUseOpponentWeaponHandSelectionMenu(CharacterController actor)
+    {
+        if (actor == null || actor.Stats == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!actor.TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out _))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is no longer in a grapple.");
+            ShowActionChoices();
+            return;
+        }
+
+        if (isPinned)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is pinned and cannot use opponent's weapon.");
+            ShowGrappleActionMenu(actor, opponent);
+            return;
+        }
+
+        List<DisarmableHeldItemOption> options = opponent.GetEquippedLightHandWeaponOptions();
+        if (options == null || options.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {opponent.Stats.CharacterName} has no equipped light weapon to use.");
+            ShowGrappleActionMenu(actor, opponent);
+            return;
+        }
+
+        var labels = new List<string>(options.Count);
+        for (int i = 0; i < options.Count; i++)
+        {
+            string handLabel = options[i].HandSlot == EquipSlot.RightHand ? "Right Hand" : "Left Hand";
+            labels.Add($"{options[i].HeldItem.Name} ({handLabel}, light weapon)");
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CombatUI?.ShowPickUpItemSelection(
+            actorName: actor.Stats.CharacterName,
+            itemOptions: labels,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                {
+                    ShowGrappleActionMenu(actor, opponent);
+                    return;
+                }
+
+                ExecuteGrappleAction(actor, GrappleActionType.UseOpponentWeapon, null, options[selectedIndex].HandSlot);
+            },
+            onCancel: () => ShowGrappleActionMenu(actor, opponent),
+            titleOverride: $"USE OPPONENT'S WEAPON — {actor.Stats.CharacterName}",
+            bodyOverride: $"Choose which of {opponent.Stats.CharacterName}'s equipped light weapons to turn against them.",
+            optionButtonColorOverride: new Color(0.45f, 0.24f, 0.14f, 1f));
+    }
     private void ShowGrappleDamageModeMenu(CharacterController actor)
     {
         if (actor == null || actor.Stats == null)
@@ -9358,7 +9434,11 @@ public class GameManager : MonoBehaviour
             optionButtonColorOverride: new Color(0.42f, 0.23f, 0.18f, 1f));
     }
 
-    private void ExecuteGrappleAction(CharacterController actor, GrappleActionType actionType, AttackDamageMode? grappleDamageModeOverride = null)
+    private void ExecuteGrappleAction(
+        CharacterController actor,
+        GrappleActionType actionType,
+        AttackDamageMode? grappleDamageModeOverride = null,
+        EquipSlot? opponentWeaponHandSlotOverride = null)
     {
         if (actor == null || actor.Stats == null)
         {
@@ -9374,7 +9454,7 @@ public class GameManager : MonoBehaviour
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        SpecialAttackResult result = actor.ResolveGrappleAction(actionType, grappleDamageModeOverride);
+        SpecialAttackResult result = actor.ResolveGrappleAction(actionType, grappleDamageModeOverride, opponentWeaponHandSlotOverride);
         CombatUI?.ShowCombatLog($"⚔ GRAPPLE [{actionType}]: {result.Log}");
 
         UpdateAllStatsUI();
