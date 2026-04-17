@@ -1,0 +1,144 @@
+using System.Reflection;
+using UnityEngine;
+
+/// <summary>
+/// Tests for unarmed damage mode defaults with Improved Unarmed Strike and Gauntlet.
+/// Run via UnarmedDamageModeTests.RunAll() from a runtime test hook.
+/// </summary>
+public static class UnarmedDamageModeTests
+{
+    private static int _passed;
+    private static int _failed;
+
+    public static void RunAll()
+    {
+        _passed = 0;
+        _failed = 0;
+
+        RaceDatabase.Init();
+        ItemDatabase.Init();
+        FeatDefinitions.Init();
+
+        Debug.Log("========== UNARMED DAMAGE MODE TESTS ==========");
+
+        TestNormalUnarmedDefaultsToNonlethal();
+        TestGauntletMakesUnarmedDefaultLethal();
+        TestImprovedUnarmedStrikeTakesPriorityAndDefaultsLethal();
+        TestToggleStillOverridesDefault();
+
+        Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
+    }
+
+    private static void Assert(bool condition, string testName)
+    {
+        if (condition)
+        {
+            _passed++;
+            Debug.Log($"  [PASS] {testName}");
+        }
+        else
+        {
+            _failed++;
+            Debug.LogError($"  [FAIL] {testName}");
+        }
+    }
+
+    private static CharacterController CreateTestCharacter(string name)
+    {
+        var go = new GameObject($"{name}_GO");
+        var controller = go.AddComponent<CharacterController>();
+        var inventory = go.AddComponent<InventoryComponent>();
+        var stats = new CharacterStats(name, 2, "Fighter", 14, 12, 12, 10, 10, 10, 2, 0, 0, 8, 1, 0, 4, 1, 18);
+
+        controller.Init(stats, Vector2Int.zero, null, null);
+        inventory.Init(stats);
+
+        return controller;
+    }
+
+    private static void Cleanup(CharacterController controller)
+    {
+        if (controller != null)
+            Object.DestroyImmediate(controller.gameObject);
+    }
+
+    private static object ResolveUnarmedDamageProfile(CharacterController controller)
+    {
+        MethodInfo method = typeof(CharacterController).GetMethod("ResolveDamageModeAttackProfile", BindingFlags.Instance | BindingFlags.NonPublic);
+        return method.Invoke(controller, new object[] { null });
+    }
+
+    private static bool GetProfileBool(object profile, string fieldName)
+    {
+        FieldInfo field = profile.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public);
+        return field != null && (bool)field.GetValue(profile);
+    }
+
+    private static int GetProfileInt(object profile, string fieldName)
+    {
+        FieldInfo field = profile.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.Public);
+        return field != null ? (int)field.GetValue(profile) : 0;
+    }
+
+    private static void TestNormalUnarmedDefaultsToNonlethal()
+    {
+        var c = CreateTestCharacter("UnarmedDefault");
+        c.ResetAttackDamageMode();
+
+        object profile = ResolveUnarmedDamageProfile(c);
+        Assert(GetProfileBool(profile, "DealNonlethalDamage"), "Unarmed without feat/gauntlet defaults to nonlethal");
+        Assert(GetProfileInt(profile, "AttackPenalty") == 0, "Default nonlethal unarmed has no penalty");
+
+        c.SetAttackDamageMode(AttackDamageMode.Lethal);
+        profile = ResolveUnarmedDamageProfile(c);
+        Assert(!GetProfileBool(profile, "DealNonlethalDamage"), "Manual lethal toggle forces lethal unarmed");
+        Assert(GetProfileInt(profile, "AttackPenalty") == -4, "Lethal unarmed without feat/gauntlet applies -4 penalty");
+
+        Cleanup(c);
+    }
+
+    private static void TestGauntletMakesUnarmedDefaultLethal()
+    {
+        var c = CreateTestCharacter("GauntletDefault");
+        var inv = c.GetComponent<InventoryComponent>();
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("gauntlet"), EquipSlot.Hands);
+
+        c.ResetAttackDamageMode();
+        object profile = ResolveUnarmedDamageProfile(c);
+
+        Assert(c.HasGauntletEquipped(), "Gauntlet is detected in hands slot");
+        Assert(!GetProfileBool(profile, "DealNonlethalDamage"), "Gauntlet makes unarmed default lethal");
+        Assert(GetProfileInt(profile, "AttackPenalty") == 0, "Gauntlet lethal default has no penalty");
+
+        Cleanup(c);
+    }
+
+    private static void TestImprovedUnarmedStrikeTakesPriorityAndDefaultsLethal()
+    {
+        var c = CreateTestCharacter("IUSPriority");
+        c.Stats.Feats.Add("Improved Unarmed Strike");
+
+        c.ResetAttackDamageMode();
+        object profile = ResolveUnarmedDamageProfile(c);
+
+        Assert(FeatManager.HasImprovedUnarmedStrike(c.Stats), "Improved Unarmed Strike helper detects feat");
+        Assert(!GetProfileBool(profile, "DealNonlethalDamage"), "Improved Unarmed Strike makes unarmed default lethal");
+        Assert(GetProfileInt(profile, "AttackPenalty") == 0, "Improved Unarmed Strike lethal default has no penalty");
+
+        Cleanup(c);
+    }
+
+    private static void TestToggleStillOverridesDefault()
+    {
+        var c = CreateTestCharacter("ToggleOverride");
+        c.Stats.Feats.Add("Improved Unarmed Strike");
+        c.ResetAttackDamageMode();
+
+        c.ToggleAttackDamageMode();
+        object profile = ResolveUnarmedDamageProfile(c);
+
+        Assert(GetProfileBool(profile, "DealNonlethalDamage"), "Toggle can switch lethal-default unarmed to nonlethal");
+
+        Cleanup(c);
+    }
+}

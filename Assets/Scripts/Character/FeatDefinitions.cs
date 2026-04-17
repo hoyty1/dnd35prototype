@@ -769,13 +769,15 @@ public static class FeatDefinitions
     {
         // --- Improved Unarmed Strike ---
         var impUnarmed = new FeatDefinition("Improved Unarmed Strike",
-            "You are considered to be armed even when unarmed — you do not provoke attacks of opportunity from armed opponents when you attack them while unarmed.",
+            "You are considered to be armed even when unarmed — you do not provoke attacks of opportunity from armed opponents when you attack them while unarmed. Your unarmed strikes can deal lethal damage by default.",
             FeatType.Unarmed)
         {
-            IsFighterBonus = true
+            IsFighterBonus = true,
+            IsMonkBonus = true,
+            MonkBonusLevel = 1
         };
         impUnarmed.Benefit.AllowsUnarmedWithoutAoO = true;
-        impUnarmed.Benefit.Description = "Unarmed attacks don't provoke attacks of opportunity";
+        impUnarmed.Benefit.Description = "Unarmed attacks don't provoke attacks of opportunity and deal lethal damage by default";
         Add(impUnarmed);
 
         // --- Deflect Arrows ---

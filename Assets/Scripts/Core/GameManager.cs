@@ -11108,7 +11108,7 @@ public class GameManager : MonoBehaviour
         }
 
         CombatUI?.ResetDamageModeToggleVisual();
-        Debug.Log("[GameManager] Attack damage modes reset to lethal for new round");
+        Debug.Log("[GameManager] Attack damage modes reset to class/equipment defaults for new round");
     }
 
     private static string FormatConsoleModLine(int value, string label)

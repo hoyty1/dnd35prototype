@@ -343,6 +343,9 @@ public static class FeatManager
     /// <summary>Does this character keep shield AC while performing a shield bash?</summary>
     public static bool HasImprovedShieldBash(CharacterStats stats) => stats != null && stats.HasFeat("Improved Shield Bash");
 
+    /// <summary>Does this character have Improved Unarmed Strike (lethal unarmed by default)?</summary>
+    public static bool HasImprovedUnarmedStrike(CharacterStats stats) => stats != null && stats.HasFeat("Improved Unarmed Strike");
+
     // ========================================================================
     // FEAT SUMMARY FOR DISPLAY
     // ========================================================================

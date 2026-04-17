@@ -35,6 +35,7 @@ public class InventoryComponent : MonoBehaviour
         CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
         CharacterInventory.AddItem(ItemDatabase.CloneItem("greatsword"));
         CharacterInventory.AddItem(ItemDatabase.CloneItem("battleaxe"));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem("gauntlet"));
         CharacterInventory.AddItem(ItemDatabase.CloneItem("scale_mail"));
         CharacterInventory.AddItem(ItemDatabase.CloneItem("breastplate"));
         CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));

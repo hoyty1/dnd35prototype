@@ -86,10 +86,10 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Current selected attack damage mode for this character.
-    /// Defaults to lethal and can be toggled by the combat UI.
+    /// This value can be manually toggled by the combat UI, or auto-resolved to a rules default on reset.
     /// </summary>
     public AttackDamageMode CurrentAttackDamageMode { get; private set; } = AttackDamageMode.Lethal;
-
+    private bool _attackDamageModeManuallySetThisRound;
     private struct DamageModeAttackProfile
     {
         public bool DealNonlethalDamage;
@@ -162,6 +162,7 @@ public class CharacterController : MonoBehaviour
     public void SetAttackDamageMode(AttackDamageMode mode)
     {
         CurrentAttackDamageMode = mode;
+        _attackDamageModeManuallySetThisRound = true;
     }
 
     public void ToggleAttackDamageMode()
@@ -169,16 +170,39 @@ public class CharacterController : MonoBehaviour
         CurrentAttackDamageMode = CurrentAttackDamageMode == AttackDamageMode.Lethal
             ? AttackDamageMode.Nonlethal
             : AttackDamageMode.Lethal;
+        _attackDamageModeManuallySetThisRound = true;
     }
 
     public void ResetAttackDamageMode()
     {
-        CurrentAttackDamageMode = AttackDamageMode.Lethal;
+        _attackDamageModeManuallySetThisRound = false;
+        CurrentAttackDamageMode = GetDefaultAttackDamageModeForWeapon(GetEquippedMainWeapon());
+    }
+
+    private AttackDamageMode GetDefaultAttackDamageModeForWeapon(ItemData weapon)
+    {
+        if (weapon != null)
+            return AttackDamageMode.Lethal;
+
+        if (HasImprovedUnarmedStrikeForDamageMode() || HasGauntletEquipped())
+            return AttackDamageMode.Lethal;
+
+        return AttackDamageMode.Nonlethal;
+    }
+
+    private AttackDamageMode ResolveSelectedAttackDamageMode(ItemData weapon)
+    {
+        if (_attackDamageModeManuallySetThisRound)
+            return CurrentAttackDamageMode;
+
+        AttackDamageMode defaultMode = GetDefaultAttackDamageModeForWeapon(weapon);
+        CurrentAttackDamageMode = defaultMode;
+        return defaultMode;
     }
 
     private DamageModeAttackProfile ResolveDamageModeAttackProfile(ItemData weapon)
     {
-        bool selectedNonlethal = CurrentAttackDamageMode == AttackDamageMode.Nonlethal;
+        bool selectedNonlethal = ResolveSelectedAttackDamageMode(weapon) == AttackDamageMode.Nonlethal;
         bool isUnarmedStrike = weapon == null;
         bool weaponIsInherentlyNonlethal = weapon != null && weapon.DealsNonlethalDamage;
 
@@ -192,7 +216,8 @@ public class CharacterController : MonoBehaviour
         if (isUnarmedStrike)
         {
             profile.DealNonlethalDamage = selectedNonlethal;
-            if (!selectedNonlethal)
+            bool hasLethalUnarmedDefault = HasImprovedUnarmedStrikeForDamageMode() || HasGauntletEquipped();
+            if (!selectedNonlethal && !hasLethalUnarmedDefault)
             {
                 profile.AttackPenalty = -4;
                 profile.PenaltySource = "Unarmed strike set to lethal";
@@ -2005,16 +2030,25 @@ public class CharacterController : MonoBehaviour
     // ========== WEAPON HELPERS ==========
 
     /// <summary>
-    /// Returns the equipped spiked gauntlet from the Hands slot, if present.
+    /// Returns the equipped item from the Hands slot, if any.
     /// </summary>
-    private ItemData GetEquippedHandsSpikedGauntlet()
+    private ItemData GetEquippedHandsItem()
     {
         var invComp = GetComponent<InventoryComponent>();
         var inv = invComp != null ? invComp.CharacterInventory : null;
         if (inv == null)
             return null;
 
-        return IsSpikedGauntletItem(inv.HandsSlot) ? inv.HandsSlot : null;
+        return inv.HandsSlot;
+    }
+
+    /// <summary>
+    /// Returns the equipped spiked gauntlet from the Hands slot, if present.
+    /// </summary>
+    private ItemData GetEquippedHandsSpikedGauntlet()
+    {
+        ItemData handsItem = GetEquippedHandsItem();
+        return IsSpikedGauntletItem(handsItem) ? handsItem : null;
     }
 
     /// <summary>
@@ -2025,6 +2059,21 @@ public class CharacterController : MonoBehaviour
         return GetEquippedHandsSpikedGauntlet() != null;
     }
 
+    /// <summary>
+    /// True if a standard gauntlet is equipped in the Hands slot.
+    /// </summary>
+    public bool HasGauntletEquipped()
+    {
+        return IsGauntletItem(GetEquippedHandsItem());
+    }
+
+    /// <summary>
+    /// True if the character has Improved Unarmed Strike for damage-mode defaults.
+    /// </summary>
+    private bool HasImprovedUnarmedStrikeForDamageMode()
+    {
+        return FeatManager.HasImprovedUnarmedStrike(Stats);
+    }
     /// <summary>
     /// Returns true if the provided weapon (or current main weapon) is a reload-based crossbow and currently unloaded.
     /// </summary>
@@ -3673,6 +3722,16 @@ public class CharacterController : MonoBehaviour
             && item.IsShield
             && item.DamageDice > 0
             && item.DamageCount > 0;
+    }
+
+    private static bool IsGauntletItem(ItemData item)
+    {
+        if (item == null)
+            return false;
+
+        string id = (item.Id ?? string.Empty).ToLowerInvariant();
+        string name = (item.Name ?? string.Empty).ToLowerInvariant();
+        return id == "gauntlet" || name == "gauntlet";
     }
 
     private void SuppressShieldBonusForShieldBash(ItemData shield)

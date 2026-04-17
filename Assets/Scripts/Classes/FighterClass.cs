@@ -45,6 +45,7 @@ public class FighterClass : ICharacterClass
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("longspear"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("gauntlet"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
         inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("torch"));

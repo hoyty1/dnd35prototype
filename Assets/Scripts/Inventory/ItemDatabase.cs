@@ -51,13 +51,15 @@ public static class ItemDatabase
             IconChar = "\u270A", IconColor = new Color(0.9f, 0.8f, 0.7f)
         });
 
-        // Gauntlet: 1d3, 20/×2, bludgeoning
+        // Gauntlet: 1d3, 20/×2, bludgeoning (equipped in Hands slot)
         Register(new ItemData
         {
             Id = "gauntlet", Name = "Gauntlet", Type = ItemType.Weapon,
-            Slot = EquipSlot.EitherHand,
+            Slot = EquipSlot.Hands,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "An armored glove that lets you deal lethal damage with unarmed strikes.",
+            WeaponSize = WeaponSizeCategory.Light,
+            IsLightWeapon = true,
+            Description = "An armored glove worn in the hands slot. It allows unarmed strikes to deal lethal damage by default.",
             DamageDice = 3, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             DamageType = "bludgeoning",
             DmgModType = DamageModifierType.Strength,
