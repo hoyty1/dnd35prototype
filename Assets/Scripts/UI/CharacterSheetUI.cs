@@ -622,10 +622,8 @@ public class CharacterSheetUI : MonoBehaviour
         AddSeparator(content);
 
         // === HP / Movement / Initiative ===
-        HPState hpState = HPState.Healthy;
-        if (stats.CurrentHP <= -10) hpState = HPState.Dead;
-        else if (stats.CurrentHP <= -1) hpState = HPState.Dying;
-        else if (stats.CurrentHP == 0) hpState = HPState.Disabled;
+        CharacterController selectedPC = SelectedPC;
+        HPState hpState = selectedPC != null ? selectedPC.CurrentHPState : HPState.Healthy;
 
         Color hpColor = hpState == HPState.Healthy
             ? (stats.CurrentHP > stats.TotalMaxHP / 2 ? HealthGreen : HealthRed)
@@ -653,6 +651,8 @@ public class CharacterSheetUI : MonoBehaviour
             activeConditions.Add("Disabled (0 HP: can take one move OR one standard action)");
         else if (hpState == HPState.Dying)
             activeConditions.Add("Dying (-1 to -9 HP: unconscious, loses 1 HP each turn until stable)");
+        else if (hpState == HPState.Stable)
+            activeConditions.Add("Stable (-1 to -9 HP: unconscious, no longer losing HP)");
         else if (hpState == HPState.Dead)
             activeConditions.Add("Dead (-10 HP or lower)");
 

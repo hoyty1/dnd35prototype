@@ -3052,7 +3052,7 @@ public class GameManager : MonoBehaviour
             case ConsumableEffectType.HealHP:
             {
                 int healingRoll = RollHealingFromConsumable(currentItem);
-                int newHP = Mathf.Min(actor.Stats.MaxHP, actor.Stats.CurrentHP + Mathf.Max(0, healingRoll));
+                int newHP = Mathf.Min(actor.Stats.TotalMaxHP, actor.Stats.CurrentHP + Mathf.Max(0, healingRoll));
                 actor.Stats.CurrentHP = newHP;
                 healedAmount = Mathf.Max(0, newHP - oldHP);
                 break;
@@ -3072,7 +3072,7 @@ public class GameManager : MonoBehaviour
                 // Legacy fallback for older consumables defined with flat HealAmount only.
                 if (currentItem.HealAmount > 0)
                 {
-                    int newHP = Mathf.Min(actor.Stats.MaxHP, actor.Stats.CurrentHP + currentItem.HealAmount);
+                    int newHP = Mathf.Min(actor.Stats.TotalMaxHP, actor.Stats.CurrentHP + currentItem.HealAmount);
                     actor.Stats.CurrentHP = newHP;
                     healedAmount = Mathf.Max(0, newHP - oldHP);
                 }
@@ -3128,7 +3128,7 @@ public class GameManager : MonoBehaviour
         {
             int oldHP = actor.Stats.CurrentHP;
             int healingRoll = RollHealingFromSpell(consumableSpell);
-            int newHP = Mathf.Min(actor.Stats.MaxHP, actor.Stats.CurrentHP + Mathf.Max(0, healingRoll));
+            int newHP = Mathf.Min(actor.Stats.TotalMaxHP, actor.Stats.CurrentHP + Mathf.Max(0, healingRoll));
             actor.Stats.CurrentHP = newHP;
             int healedAmount = Mathf.Max(0, newHP - oldHP);
             summary = $"{consumableSpell.Name} heals {healedAmount} HP ({oldHP} → {newHP}) at caster level {casterLevel}.";
@@ -9725,16 +9725,27 @@ public class GameManager : MonoBehaviour
         return RangeCalculator.GetRangeInfo(sqDist, rangeIncrement, isThrownWeapon);
     }
 
+    private string BuildAttackLog(CharacterController attacker, bool isFlanking, string partnerName, CombatResult result)
+    {
+        if (result == null)
+            return string.Empty;
+
+        string attackerName = attacker != null && attacker.Stats != null
+            ? attacker.Stats.CharacterName
+            : "Attacker";
+        string flankLogPrefix = isFlanking
+            ? $"⚔ {attackerName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
+            : string.Empty;
+        return flankLogPrefix + result.GetDetailedSummary();
+    }
+
     private void PerformSingleAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
         attacker.CommitStandardAction();
 
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        string flankLogPrefix = isFlanking
-            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-        _lastCombatLog = flankLogPrefix + result.GetDetailedSummary();
+        _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
 
         if (LogAttacksToConsole)
             Debug.Log("[Combat] " + _lastCombatLog);
@@ -10725,10 +10736,10 @@ public class GameManager : MonoBehaviour
         CombatResult result = npc.Attack(target, isFlanking, flankBonus,
             flankPartner != null ? flankPartner.Stats.CharacterName : null, npcRangeInfo);
 
-        string flankLogPrefix = isFlanking
-            ? $"⚔ {npc.Stats.CharacterName} gains +2 flanking bonus{(flankPartner != null ? $" (with {flankPartner.Stats.CharacterName})" : "")}.\n"
-            : string.Empty;
-        _lastCombatLog = flankLogPrefix + result.GetDetailedSummary();
+        string partnerName = flankPartner != null && flankPartner.Stats != null
+            ? flankPartner.Stats.CharacterName
+            : null;
+        _lastCombatLog = BuildAttackLog(npc, isFlanking, partnerName, result);
 
         if (LogAttacksToConsole)
             Debug.Log("[Combat] " + _lastCombatLog);
