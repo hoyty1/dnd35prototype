@@ -8811,7 +8811,7 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            options.Add((GrappleActionType.DamageOpponent, "Deal grapple damage (unarmed or light weapon only)"));
+            options.Add((GrappleActionType.DamageOpponent, "Deal grapple damage (opposed check + unarmed strike damage; choose lethal/nonlethal)"));
             if (!opponentPinned)
                 options.Add((GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)"));
 
@@ -8858,14 +8858,82 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (!actor.CommitStandardAction())
+        if (actionType == GrappleActionType.DamageOpponent)
+        {
+            ShowGrappleDamageModeMenu(actor);
+            return;
+        }
+
+        ExecuteGrappleAction(actor, actionType);
+    }
+
+    private void ShowGrappleDamageModeMenu(CharacterController actor)
+    {
+        if (actor == null || actor.Stats == null)
         {
             ShowActionChoices();
             return;
         }
 
+        if (!actor.TryGetGrappleState(out CharacterController opponent, out _, out _, out _))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is no longer in a grapple.");
+            ShowActionChoices();
+            return;
+        }
+
+        bool isMonk = actor.Stats.IsMonk;
+        var options = new List<(AttackDamageMode mode, string label)>
+        {
+            isMonk
+                ? (AttackDamageMode.Lethal, "Lethal damage (Monk default, no grapple penalty)")
+                : (AttackDamageMode.Nonlethal, "Nonlethal damage (default, no grapple penalty)"),
+            isMonk
+                ? (AttackDamageMode.Nonlethal, "Nonlethal damage (Monk can choose this with no penalty)")
+                : (AttackDamageMode.Lethal, "Lethal damage (-4 penalty on your grapple check)")
+        };
+
+        var labels = new List<string>(options.Count);
+        foreach (var option in options)
+            labels.Add(option.label);
+
         CurrentSubPhase = PlayerSubPhase.Animating;
-        SpecialAttackResult result = actor.ResolveGrappleAction(actionType);
+        CombatUI?.ShowPickUpItemSelection(
+            actorName: actor.Stats.CharacterName,
+            itemOptions: labels,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                {
+                    ShowGrappleActionMenu(actor, opponent);
+                    return;
+                }
+
+                ExecuteGrappleAction(actor, GrappleActionType.DamageOpponent, options[selectedIndex].mode);
+            },
+            onCancel: () => ShowGrappleActionMenu(actor, opponent),
+            titleOverride: $"GRAPPLE DAMAGE MODE — {actor.Stats.CharacterName}",
+            bodyOverride: $"{actor.Stats.CharacterName} vs {opponent.Stats.CharacterName}: choose grapple damage type before the opposed grapple check.",
+            optionButtonColorOverride: new Color(0.42f, 0.23f, 0.18f, 1f));
+    }
+
+    private void ExecuteGrappleAction(CharacterController actor, GrappleActionType actionType, AttackDamageMode? grappleDamageModeOverride = null)
+    {
+        if (actor == null || actor.Stats == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!actor.CommitStandardAction())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot use grapple action: standard action already spent.");
+            ShowActionChoices();
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        SpecialAttackResult result = actor.ResolveGrappleAction(actionType, grappleDamageModeOverride);
         CombatUI?.ShowCombatLog($"⚔ GRAPPLE [{actionType}]: {result.Log}");
 
         UpdateAllStatsUI();

@@ -251,11 +251,14 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Resolve base unarmed strike damage for this character.
-    /// D&D 3.5 baseline is 1d3; monks use their class progression die (prototype: 1d6 at level 3).
+    /// D&D 3.5 baseline is 1d3 (Medium) / 1d2 (Small); monks use their class progression die.
     /// </summary>
     public (int damageCount, int damageDice, int bonusDamage) GetUnarmedDamage()
     {
         int unarmedDie = 3;
+        if (Stats != null && Stats.CurrentSizeCategory == SizeCategory.Small)
+            unarmedDie = 2;
+
         if (Stats != null && Stats.MonkUnarmedDamageDie > 0)
             unarmedDie = Stats.MonkUnarmedDamageDie;
 
@@ -2837,7 +2840,7 @@ public class CharacterController : MonoBehaviour
         return TryGetGrappleState(out _, out _, out _, out _);
     }
 
-    private bool TryResolveOpposedGrappleCheck(CharacterController opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal)
+    private bool TryResolveOpposedGrappleCheck(CharacterController opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, int myCheckModifier = 0)
     {
         myRoll = 0;
         myTotal = 0;
@@ -2849,12 +2852,12 @@ public class CharacterController : MonoBehaviour
 
         myRoll = Random.Range(1, 21);
         oppRoll = Random.Range(1, 21);
-        myTotal = myRoll + GetGrappleModifier();
+        myTotal = myRoll + GetGrappleModifier() + myCheckModifier;
         oppTotal = oppRoll + opponent.GetGrappleModifier();
         return true;
     }
 
-    public SpecialAttackResult ResolveGrappleAction(GrappleActionType actionType)
+    public SpecialAttackResult ResolveGrappleAction(GrappleActionType actionType, AttackDamageMode? grappleDamageModeOverride = null)
     {
         if (!TryGetGrappleState(out CharacterController opponent, out bool isController, out bool isPinned, out bool opponentPinned))
         {
@@ -2932,20 +2935,13 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                ItemData weapon = GetEquippedMainWeapon();
-                bool usingUnarmed = weapon == null;
-                bool legalWeapon = usingUnarmed || weapon.IsLightWeapon;
-                if (!legalWeapon)
-                {
-                    return new SpecialAttackResult
-                    {
-                        ManeuverName = "Grapple Damage",
-                        Success = false,
-                        Log = $"{Stats.CharacterName} can only deal grapple damage with an unarmed strike or light weapon."
-                    };
-                }
+                bool isMonk = Stats != null && Stats.IsMonk;
+                AttackDamageMode selectedMode = grappleDamageModeOverride
+                    ?? (isMonk ? AttackDamageMode.Lethal : AttackDamageMode.Nonlethal);
+                bool dealNonlethalDamage = selectedMode == AttackDamageMode.Nonlethal;
+                int grappleCheckPenalty = (!isMonk && !dealNonlethalDamage) ? -4 : 0;
 
-                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
+                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, grappleCheckPenalty))
                 {
                     return new SpecialAttackResult
                     {
@@ -2956,32 +2952,44 @@ public class CharacterController : MonoBehaviour
                 }
 
                 bool success = myTotal >= oppTotal;
-                int damageDealt = 0;
+                int finalDamageDealt = 0;
+                int rawDamage = 0;
+                var unarmed = GetUnarmedDamage();
+                int damageDiceCount = Mathf.Max(1, unarmed.damageCount);
+                int damageDiceSides = Mathf.Max(2, unarmed.damageDice);
+                int bonusDamage = Stats.STRMod + unarmed.bonusDamage;
+
                 if (success)
                 {
-                    int damageDiceCount = 1;
-                    int damageDiceSides = 3;
-                    int bonusDamage = Stats.STRMod;
-
-                    if (!usingUnarmed)
-                    {
-                        damageDiceCount = Mathf.Max(1, weapon.DamageCount);
-                        damageDiceSides = Mathf.Max(2, weapon.DamageDice);
-                        bonusDamage = Stats.STRMod + weapon.BonusDamage;
-                    }
-
                     for (int i = 0; i < damageDiceCount; i++)
-                        damageDealt += Random.Range(1, damageDiceSides + 1);
-                    damageDealt += bonusDamage;
-                    damageDealt = Mathf.Max(1, damageDealt);
+                        rawDamage += Random.Range(1, damageDiceSides + 1);
 
-                    opponent.Stats.TakeDamage(damageDealt);
+                    rawDamage += bonusDamage;
+                    rawDamage = Mathf.Max(1, rawDamage);
+
+                    var packet = new DamagePacket
+                    {
+                        RawDamage = rawDamage,
+                        Types = new HashSet<DamageType> { DamageType.Bludgeoning },
+                        AttackTags = DamageBypassTag.Bludgeoning,
+                        IsRanged = false,
+                        IsNonlethal = dealNonlethalDamage,
+                        Source = AttackSource.Weapon,
+                        SourceName = "Grapple damage (unarmed strike)"
+                    };
+
+                    DamageResolutionResult mitigation = opponent.Stats.ApplyIncomingDamage(rawDamage, packet);
+                    finalDamageDealt = mitigation.FinalDamage;
+
                     if (opponent.Stats.IsDead)
                     {
                         opponent.OnDeath();
                         ReleaseGrappleState("opponent killed in grapple");
                     }
                 }
+
+                string damageTypeLabel = dealNonlethalDamage ? "nonlethal" : "lethal";
+                string penaltySuffix = grappleCheckPenalty != 0 ? $" (includes {grappleCheckPenalty} lethal damage penalty)" : string.Empty;
 
                 return new SpecialAttackResult
                 {
@@ -2991,11 +2999,11 @@ public class CharacterController : MonoBehaviour
                     CheckTotal = myTotal,
                     OpposedRoll = oppRoll,
                     OpposedTotal = oppTotal,
-                    DamageDealt = damageDealt,
+                    DamageDealt = finalDamageDealt,
                     TargetKilled = opponent.Stats.IsDead,
                     Log = success
-                        ? $"{Stats.CharacterName} deals {damageDealt} grapple damage to {opponent.Stats.CharacterName} ({myTotal} vs {oppTotal})."
-                        : $"{Stats.CharacterName} fails to deal grapple damage ({myTotal} vs {oppTotal})."
+                        ? $"{Stats.CharacterName} wins opposed grapple check ({myRoll}+{GetGrappleModifier()}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals {finalDamageDealt} {damageTypeLabel} unarmed grapple damage to {opponent.Stats.CharacterName} (rolled {damageDiceCount}d{damageDiceSides}{bonusDamage:+#;-#;0} => {rawDamage})."
+                        : $"{Stats.CharacterName} loses opposed grapple check ({myRoll}+{GetGrappleModifier()}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals no grapple damage."
                 };
             }
             case GrappleActionType.PinOpponent:
