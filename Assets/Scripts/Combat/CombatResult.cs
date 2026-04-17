@@ -62,6 +62,9 @@ public class CombatResult
     public int AidAnotherAttackBonus;
     public int AidAnotherTargetAcBonus;
 
+    public int GrappleDexDeniedToAc;
+    public string GrappleDexRuleNote = "";
+
     public int FeintDexDeniedToAc;
     public string FeintWindowNote = "";
 
@@ -138,6 +141,10 @@ public class CombatResult
             sb.AppendLine($"  Defender stance: Fighting Defensively (+{FightingDefensivelyACBonus} AC)");
         if (AidAnotherTargetAcBonus > 0)
             sb.AppendLine($"  Defender aided: +{AidAnotherTargetAcBonus} AC vs this attack");
+        if (GrappleDexDeniedToAc > 0)
+            sb.AppendLine($"  Grapple: defender loses +{GrappleDexDeniedToAc} DEX bonus to AC vs non-grappled attacker");
+        else if (!string.IsNullOrEmpty(GrappleDexRuleNote))
+            sb.AppendLine($"  Grapple: {GrappleDexRuleNote}");
         if (FeintDexDeniedToAc > 0)
             sb.AppendLine($"  Feint: defender loses +{FeintDexDeniedToAc} DEX bonus to AC");
         else if (!string.IsNullOrEmpty(FeintWindowNote))
@@ -224,6 +231,10 @@ public class CombatResult
         var sb = new StringBuilder();
         sb.AppendLine($"  {label}:");
         sb.AppendLine($"    Roll: d20 = {DieRoll}");
+        if (GrappleDexDeniedToAc > 0)
+            sb.AppendLine($"      Defender grappled: -{GrappleDexDeniedToAc} DEX to AC vs this attacker");
+        else if (!string.IsNullOrEmpty(GrappleDexRuleNote))
+            sb.AppendLine($"      {GrappleDexRuleNote}");
 
         if (BreakdownBAB != 0) sb.AppendLine($"      {FormatModLine(BreakdownBAB, "BAB")}");
         if (BreakdownAbilityMod != 0) sb.AppendLine($"      {FormatModLine(BreakdownAbilityMod, string.IsNullOrEmpty(BreakdownAbilityName) ? "STR" : BreakdownAbilityName)}");

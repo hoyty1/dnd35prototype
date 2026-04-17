@@ -102,9 +102,14 @@ public static class ThreatSystem
         {
             for (int i = 0; i < character.Stats.ActiveConditions.Count; i++)
             {
-                ConditionDefinition def = ConditionRules.GetDefinition(character.Stats.ActiveConditions[i].Type);
+                CombatConditionType activeType = ConditionRules.Normalize(character.Stats.ActiveConditions[i].Type);
+                ConditionDefinition def = ConditionRules.GetDefinition(activeType);
                 if (def.PreventsThreatening)
+                {
+                    if (activeType == CombatConditionType.Grappled)
+                        Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} is grappled and threatens 0 squares.");
                     return threatened;
+                }
             }
         }
 
@@ -221,9 +226,14 @@ public static class ThreatSystem
         {
             for (int i = 0; i < character.Stats.ActiveConditions.Count; i++)
             {
-                ConditionDefinition def = ConditionRules.GetDefinition(character.Stats.ActiveConditions[i].Type);
+                CombatConditionType activeType = ConditionRules.Normalize(character.Stats.ActiveConditions[i].Type);
+                ConditionDefinition def = ConditionRules.GetDefinition(activeType);
                 if (def.PreventsAoO)
+                {
+                    if (activeType == CombatConditionType.Grappled)
+                        Debug.Log($"[ThreatSystem] {character.Stats.CharacterName} is grappled and cannot make attacks of opportunity.");
                     return false;
+                }
             }
         }
 

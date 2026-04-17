@@ -3237,7 +3237,10 @@ public class GameManager : MonoBehaviour
 
         if (pc.Stats.MovementBlockedByCondition)
         {
-            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is grappled and cannot move.");
+            if (pc.HasCondition(CombatConditionType.Grappled))
+                CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is grappled and cannot take normal movement. Use a grapple action (Move while grappling) after winning the opposed check.");
+            else
+                CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot move due to an active condition.");
             return;
         }
 

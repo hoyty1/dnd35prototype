@@ -1556,6 +1556,41 @@ public class CharacterController : MonoBehaviour
         return Mathf.Max(0, dexToAc);
     }
 
+    /// <summary>
+    /// D&D 3.5 Grapple AC rule:
+    /// A grappled defender loses their DEX bonus to AC against attackers they are NOT grappling,
+    /// but keeps DEX bonus to AC against the grapple opponent.
+    /// </summary>
+    private static int GetGrappleDexDeniedAgainstAttacker(CharacterController defender, CharacterController attacker, out string note)
+    {
+        note = string.Empty;
+
+        if (defender == null || defender.Stats == null)
+            return 0;
+
+        if (!defender.HasCondition(CombatConditionType.Grappled))
+            return 0;
+
+        if (defender.TryGetGrappleState(out CharacterController grappleOpponent, out _, out _, out _)
+            && grappleOpponent == attacker)
+        {
+            note = "Grapple: defender keeps DEX bonus to AC against current grapple opponent.";
+            return 0;
+        }
+
+        int deniedDexBonus = GetDexBonusAppliedToArmorClass(defender);
+        if (deniedDexBonus > 0)
+        {
+            note = "Grapple: defender loses DEX bonus to AC vs non-grappled attacker.";
+        }
+        else
+        {
+            note = "Grapple: defender has no positive DEX bonus to lose vs non-grappled attacker.";
+        }
+
+        return deniedDexBonus;
+    }
+
     private void PruneExpiredFeintWindows()
     {
         _activeFeintWindows.RemoveAll(w =>
@@ -1663,6 +1698,15 @@ public class CharacterController : MonoBehaviour
 
         bool isRangedAttack = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
         int targetAC = GetSituationalTargetArmorClass(target, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
+
+        int grappleDexDenied = GetGrappleDexDeniedAgainstAttacker(target, this, out string grappleDexNote);
+        if (grappleDexDenied > 0)
+        {
+            targetAC -= grappleDexDenied;
+            result.GrappleDexDeniedToAc = grappleDexDenied;
+        }
+        if (!string.IsNullOrEmpty(grappleDexNote))
+            result.GrappleDexRuleNote = grappleDexNote;
 
         int feintDexDenied = 0;
         string feintNote;
@@ -3192,7 +3236,7 @@ public class CharacterController : MonoBehaviour
             OpposedRoll = defRoll,
             OpposedTotal = defTotal,
             Log = success
-                ? $"{Stats.CharacterName} starts a grapple with {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) Both are GRAPPLED."
+                ? $"{Stats.CharacterName} starts a grapple with {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) Both are GRAPPLED. While grappled: no threatened squares, no attacks of opportunity, no normal movement (only Move grapple action at half speed after winning opposed check)."
                 : $"{Stats.CharacterName} fails to secure grapple on {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
         };
     }
