@@ -643,7 +643,7 @@ public class CharacterSheetUI : MonoBehaviour
         if (stats.IsProne)
             activeConditions.Add("Prone (-4 melee attacks, +4 AC vs ranged, -4 AC vs melee)");
         if (stats.IsGrappled)
-            activeConditions.Add("Grappled (-2 attack, -4 DEX, no movement)");
+            activeConditions.Add("Grappled (-2 attack, no movement; lose DEX bonus to AC only vs non-grapple opponents)");
         if (stats.IsDisarmed)
             activeConditions.Add("Disarmed (-4 attack while unarmed)");
         if (stats.IsFlanked)
