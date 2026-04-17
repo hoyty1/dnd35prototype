@@ -31,6 +31,8 @@ public static class GrappleDamageRulesTests
         TestMoveWhileGrapplingWithoutPinnedBonusByDefault();
         TestMoveWhileGrapplingPinnedBonusAppliedInOneVsOne();
         TestPinOpponentAppliesPinnedCondition();
+        TestPinnedIsNotHelpless();
+        TestPinnedAcPenaltyAppliesOnlyVsNonGrappler();
         TestPinExpiresAtMaintainerEndOfNextTurnWithoutMaintenance();
         TestMaintainPinExtendsDurationAcrossTurns();
         TestGrappleDamageUsesUnarmedStrikeDamageEvenWithWeaponEquipped();
@@ -262,6 +264,51 @@ public static class GrappleDamageRulesTests
 
         Cleanup(attacker, defender);
     }
+    private static void TestPinnedIsNotHelpless()
+    {
+        var attacker = CreateTestCharacter("GrapplePinNotHelpless", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinNotHelplessTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+
+        Assert(result != null && result.Success, "Pin succeeds before pinned-vs-helpless validation");
+        Assert(defender.HasCondition(CombatConditionType.Pinned), "Pinned condition is present after successful pin");
+        Assert(!defender.HasCondition(CombatConditionType.Helpless), "Pinned condition does not apply helpless status");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestPinnedAcPenaltyAppliesOnlyVsNonGrappler()
+    {
+        var attacker = CreateTestCharacter("GrapplePinAcMaintainer", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinAcTarget");
+        var bystander = CreateTestCharacter("GrapplePinAcBystander", "Fighter");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+
+        Assert(result != null && result.Success, "Pin succeeds before AC-penalty split validation");
+
+        MethodInfo getSituationalAc = typeof(CharacterController).GetMethod(
+            "GetSituationalTargetArmorClass",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert(getSituationalAc != null, "Internal AC helper is available for pinned AC split test");
+
+        if (getSituationalAc != null)
+        {
+            int acVsMaintainer = (int)getSituationalAc.Invoke(null, new object[] { defender, attacker, false });
+            int acVsBystander = (int)getSituationalAc.Invoke(null, new object[] { defender, bystander, false });
+            Assert(acVsBystander == acVsMaintainer - 4, "Pinned defender takes -4 AC only vs non-grappling attackers");
+        }
+
+        Cleanup(attacker, defender, bystander);
+    }
+
 
     private static void TestPinExpiresAtMaintainerEndOfNextTurnWithoutMaintenance()
     {

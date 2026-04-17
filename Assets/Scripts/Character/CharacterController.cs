@@ -1738,7 +1738,7 @@ public class CharacterController : MonoBehaviour
         return -4;
     }
 
-    private static int GetSituationalTargetArmorClass(CharacterController target, bool isRangedAttack)
+    private static int GetSituationalTargetArmorClass(CharacterController target, CharacterController attacker, bool isRangedAttack)
     {
         if (target == null || target.Stats == null)
             return 10;
@@ -1746,6 +1746,16 @@ public class CharacterController : MonoBehaviour
         int targetAC = target.Stats.ArmorClass;
         if (target.HasCondition(CombatConditionType.Prone))
             targetAC += isRangedAttack ? 4 : -4;
+
+        // D&D 3.5 Pinned AC rule:
+        // Pinned creatures take a -4 AC penalty against opponents other than the creature pinning them.
+        if (target.HasCondition(CombatConditionType.Pinned))
+        {
+            bool attackerIsGrappleOpponent = target.TryGetGrappleState(out CharacterController grappleOpponent, out _, out _, out _)
+                && grappleOpponent == attacker;
+            if (!attackerIsGrappleOpponent)
+                targetAC -= 4;
+        }
 
         if (target.IsFightingDefensively)
             targetAC += 2; // Dodge bonus
@@ -1801,8 +1811,9 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Pinned defenders lose their DEX bonus to AC against all attackers.
-    /// Against attackers other than the one controlling the grapple, they are treated as helpless for AC purposes.
+    /// D&D 3.5 Pinned AC rule:
+    /// Pinned defenders are immobile and lose their DEX bonus to AC against all attackers.
+    /// They are NOT helpless.
     /// </summary>
     private static int GetPinnedDexDeniedAgainstAttacker(CharacterController defender, CharacterController attacker, out string note)
     {
@@ -1817,12 +1828,12 @@ public class CharacterController : MonoBehaviour
 
         if (attackerIsGrappleOpponent)
             note = deniedDexBonus > 0
-                ? "Pinned: defender loses DEX bonus to AC while pinned."
-                : "Pinned: defender has no positive DEX bonus to lose.";
+                ? "Pinned: defender is immobile and loses DEX bonus to AC while pinned."
+                : "Pinned: defender is immobile and has no positive DEX bonus to lose.";
         else
             note = deniedDexBonus > 0
-                ? "Pinned: defender is effectively helpless vs non-grappling attackers and loses DEX bonus to AC."
-                : "Pinned: defender is effectively helpless vs non-grappling attackers.";
+                ? "Pinned: defender is immobile, loses DEX bonus to AC, and takes -4 AC vs non-grappling attackers."
+                : "Pinned: defender is immobile and takes -4 AC vs non-grappling attackers.";
 
         return deniedDexBonus;
     }
@@ -1938,7 +1949,7 @@ public class CharacterController : MonoBehaviour
         result.DamageModifierDesc = damageModDesc;
 
         bool isRangedAttack = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
-        int targetAC = GetSituationalTargetArmorClass(target, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
+        int targetAC = GetSituationalTargetArmorClass(target, this, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
 
         int grappleDexDenied = GetGrappleDexDeniedAgainstAttacker(target, this, out string grappleDexNote);
         int pinnedDexDenied = GetPinnedDexDeniedAgainstAttacker(target, this, out string pinnedDexNote);
