@@ -30,6 +30,9 @@ public static class GrappleDamageRulesTests
         TestMonkNonlethalChoiceHasNoPenalty();
         TestMoveWhileGrapplingWithoutPinnedBonusByDefault();
         TestMoveWhileGrapplingPinnedBonusAppliedInOneVsOne();
+        TestPinOpponentAppliesPinnedCondition();
+        TestPinExpiresAtMaintainerEndOfNextTurnWithoutMaintenance();
+        TestMaintainPinExtendsDurationAcrossTurns();
         TestGrappleDamageUsesUnarmedStrikeDamageEvenWithWeaponEquipped();
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
@@ -77,6 +80,24 @@ public static class GrappleDamageRulesTests
     {
         MethodInfo establishMethod = typeof(CharacterController).GetMethod("EstablishGrappleWith", BindingFlags.Instance | BindingFlags.NonPublic);
         establishMethod.Invoke(attacker, new object[] { defender });
+    }
+
+    private static void ConfigureVeryStrongGrappler(CharacterController controller)
+    {
+        if (controller == null || controller.Stats == null)
+            return;
+
+        controller.Stats.BaseAttackBonus = 20;
+        controller.Stats.STR = 30;
+    }
+
+    private static void ConfigureVeryWeakGrappler(CharacterController controller)
+    {
+        if (controller == null || controller.Stats == null)
+            return;
+
+        controller.Stats.BaseAttackBonus = 0;
+        controller.Stats.STR = 6;
     }
 
     private static void Cleanup(params CharacterController[] controllers)
@@ -225,6 +246,71 @@ public static class GrappleDamageRulesTests
         Cleanup(attacker, defender);
     }
 
+
+    private static void TestPinOpponentAppliesPinnedCondition()
+    {
+        var attacker = CreateTestCharacter("GrapplePinApplies", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinAppliesTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+
+        Assert(result != null && result.Success, "Pin opponent succeeds with strong grappler advantage");
+        Assert(defender.HasCondition(CombatConditionType.Pinned), "Successful pin applies pinned condition to defender");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestPinExpiresAtMaintainerEndOfNextTurnWithoutMaintenance()
+    {
+        var attacker = CreateTestCharacter("GrapplePinExpires", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinExpiresTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "Initial pin succeeds before expiry test");
+        Assert(defender.HasCondition(CombatConditionType.Pinned), "Defender is pinned immediately after successful pin");
+
+        attacker.ProcessPinnedDurationAtTurnEnd();
+        Assert(defender.HasCondition(CombatConditionType.Pinned), "Pin does not expire at end of the same turn it was applied");
+
+        attacker.StartNewTurn();
+        attacker.ProcessPinnedDurationAtTurnEnd();
+        Assert(!defender.HasCondition(CombatConditionType.Pinned), "Pin expires at end of maintainer's next turn if not maintained");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestMaintainPinExtendsDurationAcrossTurns()
+    {
+        var attacker = CreateTestCharacter("GrappleMaintainPin", "Fighter");
+        var defender = CreateWeakDefender("GrappleMaintainPinTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult initialPin = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(initialPin != null && initialPin.Success, "Initial pin succeeds before maintenance test");
+        Assert(defender.HasCondition(CombatConditionType.Pinned), "Defender is pinned before maintenance attempt");
+
+        attacker.StartNewTurn();
+        SpecialAttackResult maintainResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(maintainResult != null && maintainResult.Success, "Maintain pin action succeeds on subsequent turn");
+        Assert(defender.HasCondition(CombatConditionType.Pinned), "Defender remains pinned after successful maintenance");
+
+        attacker.ProcessPinnedDurationAtTurnEnd();
+        Assert(defender.HasCondition(CombatConditionType.Pinned), "Maintained pin persists through current turn end");
+
+        attacker.StartNewTurn();
+        attacker.ProcessPinnedDurationAtTurnEnd();
+        Assert(!defender.HasCondition(CombatConditionType.Pinned), "Maintained pin eventually expires when not maintained again");
+
+        Cleanup(attacker, defender);
+    }
     private static void TestGrappleDamageUsesUnarmedStrikeDamageEvenWithWeaponEquipped()
     {
         var attacker = CreateTestCharacter("GrappleUnarmedDice", "Fighter");

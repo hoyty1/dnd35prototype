@@ -636,6 +636,12 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
+        if (actor.HasCondition(CombatConditionType.Pinned))
+        {
+            reason = "Pinned";
+            return false;
+        }
+
         List<CharacterController> enemies = GetAidAnotherEnemyTargets(actor);
         if (enemies.Count == 0)
         {
@@ -2075,6 +2081,7 @@ public class GameManager : MonoBehaviour
     /// <summary>Move to the next initiative slot and start that turn.</summary>
     private void NextInitiativeTurn()
     {
+        _activeTurnCharacter?.ProcessPinnedDurationAtTurnEnd();
         ProcessEndOfTurnHPState(_activeTurnCharacter);
 
         _currentInitiativeIndex++;
@@ -2369,6 +2376,12 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
+        if (actor.HasCondition(CombatConditionType.Pinned))
+        {
+            reason = "Pinned creatures cannot manipulate items; only grapple escape actions are allowed.";
+            return false;
+        }
+
         if (actor.Actions.HasMoveAction || actor.Actions.CanConvertStandardToMove || actor.Actions.HasStandardAction)
             return true;
 
@@ -2483,6 +2496,9 @@ public class GameManager : MonoBehaviour
         if (inv == null)
             return "No inventory";
 
+        if (character.HasCondition(CombatConditionType.Pinned))
+            return "Pinned: only grapple escape actions allowed";
+
         if (inv.RightHandSlot == null && inv.LeftHandSlot == null)
             return "No held item";
 
@@ -2493,6 +2509,9 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "dropping equipped items"))
+            return;
 
         string disabledReason = GetDropEquippedItemDisabledReason(pc);
         if (!string.IsNullOrEmpty(disabledReason))
@@ -2632,6 +2651,9 @@ public class GameManager : MonoBehaviour
         if (inv == null)
             return "No inventory";
 
+        if (character.HasCondition(CombatConditionType.Pinned))
+            return "Pinned: only grapple escape actions allowed";
+
         if (!TryGetAvailablePickUpItems(character, out _))
             return "No item on or adjacent";
 
@@ -2653,6 +2675,9 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "picking up items"))
+            return;
 
         string disabledReason = GetPickUpItemDisabledReason(pc);
         if (!string.IsNullOrEmpty(disabledReason))
@@ -3245,10 +3270,53 @@ public class GameManager : MonoBehaviour
 
     // ========== ACTION BUTTON HANDLERS ==========
 
+    private bool TryGetPinnedGrappleOpponent(CharacterController actor, out CharacterController opponent)
+    {
+        opponent = null;
+        if (actor == null || actor.Stats == null)
+            return false;
+
+        if (!actor.HasCondition(CombatConditionType.Pinned))
+            return false;
+
+        if (!actor.TryGetGrappleState(out CharacterController liveOpponent, out _, out _, out _))
+            return false;
+
+        if (liveOpponent == null || liveOpponent.Stats == null || liveOpponent.Stats.IsDead)
+            return false;
+
+        opponent = liveOpponent;
+        return true;
+    }
+
+    private bool RedirectPinnedCharacterToGrappleMenu(CharacterController actor, string attemptedActionLabel)
+    {
+        if (!TryGetPinnedGrappleOpponent(actor, out CharacterController opponent))
+            return false;
+
+        string actionName = string.IsNullOrWhiteSpace(attemptedActionLabel) ? "that action" : attemptedActionLabel;
+        CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is pinned and cannot use {actionName}. Only grapple escape actions are allowed.");
+
+        if (actor.Actions.HasStandardAction)
+        {
+            ShowGrappleActionMenu(actor, opponent);
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} has no standard action left to attempt an escape and must end the turn.");
+            ShowActionChoices();
+        }
+
+        return true;
+    }
+
     public void OnMoveButtonPressed()
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "movement"))
+            return;
 
         if (pc.Stats.MovementBlockedByCondition)
         {
@@ -3300,6 +3368,9 @@ public class GameManager : MonoBehaviour
         if (character.HasCondition(CombatConditionType.Prone))
             return "Cannot 5-foot step while prone";
 
+        if (character.HasCondition(CombatConditionType.Pinned))
+            return "Cannot 5-foot step while pinned";
+
         if (character.HasCondition(CombatConditionType.Grappled))
             return "Cannot 5-foot step while grappled";
 
@@ -3317,6 +3388,9 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "a 5-foot step"))
+            return;
 
         string reason = GetFiveFootStepDisabledReason(pc);
         if (!string.IsNullOrEmpty(reason))
@@ -3462,6 +3536,9 @@ public class GameManager : MonoBehaviour
         if (character.HasCondition(CombatConditionType.Prone))
             return "Already prone";
 
+        if (character.HasCondition(CombatConditionType.Pinned))
+            return "Cannot drop prone while pinned";
+
         if (character.HasCondition(CombatConditionType.Grappled))
             return "Cannot drop prone while grappled";
 
@@ -3475,6 +3552,9 @@ public class GameManager : MonoBehaviour
 
         if (!character.HasCondition(CombatConditionType.Prone))
             return "Not prone";
+
+        if (character.HasCondition(CombatConditionType.Pinned))
+            return "Cannot stand up while pinned";
 
         if (character.HasCondition(CombatConditionType.Grappled))
             return "Cannot stand up while grappled";
@@ -3495,6 +3575,9 @@ public class GameManager : MonoBehaviour
 
         if (!character.HasCondition(CombatConditionType.Prone))
             return "Must be prone";
+
+        if (character.HasCondition(CombatConditionType.Pinned))
+            return "Cannot crawl while pinned";
 
         if (character.HasCondition(CombatConditionType.Grappled))
             return "Cannot crawl while grappled";
@@ -3526,6 +3609,9 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null) return;
 
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "dropping prone"))
+            return;
+
         string reason = GetDropProneDisabledReason(pc);
         if (!string.IsNullOrEmpty(reason))
         {
@@ -3547,6 +3633,9 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "standing up"))
+            return;
 
         string reason = GetStandUpDisabledReason(pc);
         if (!string.IsNullOrEmpty(reason))
@@ -3580,6 +3669,9 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "crawling"))
+            return;
 
         string reason = GetCrawlDisabledReason(pc);
         if (!string.IsNullOrEmpty(reason))
@@ -3819,6 +3911,12 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
+        if (character.HasCondition(CombatConditionType.Pinned))
+        {
+            reason = "Pinned creatures cannot reload";
+            return false;
+        }
+
         reloadAction = character.GetEffectiveReloadAction(weapon);
         switch (reloadAction)
         {
@@ -3887,6 +3985,9 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null) return;
 
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "reloading"))
+            return;
+
         if (ExecuteReload(pc, out string reloadLog))
         {
             CombatUI?.ShowCombatLog(reloadLog);
@@ -3903,6 +4004,9 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "Aid Another"))
+            return;
 
         if (!CanUseAidAnother(pc, out string reason))
         {
@@ -4194,6 +4298,9 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Actions.HasStandardAction) return;
 
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "attacks"))
+            return;
+
         if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot attack: {cannotAttackReason}");
@@ -4256,6 +4363,9 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || !CanOpenSpecialAttackMenu(pc)) return;
 
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "special attacks"))
+            return;
+
         _isSelectingSpecialAttack = true;
         CombatUI.ShowSpecialAttackMenu(pc, OnSpecialAttackSelected, ShowActionChoices);
     }
@@ -4264,6 +4374,9 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Actions.HasStandardAction) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "overrun"))
+            return;
 
         OnSpecialAttackSelected(SpecialAttackType.Overrun);
     }
@@ -4306,6 +4419,10 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "charging"))
+            return;
+
         EnterChargeMode(pc);
     }
 
@@ -4313,6 +4430,9 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Actions.HasFullRoundAction) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "full attacks"))
+            return;
 
         if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
@@ -4333,6 +4453,9 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null || pc.Stats == null || !pc.Actions.HasStandardAction) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "fighting defensively"))
+            return;
 
         if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
@@ -4363,6 +4486,9 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || pc.Stats == null || !pc.Actions.HasFullRoundAction) return;
 
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "full attacks"))
+            return;
+
         if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot full attack: {cannotAttackReason}");
@@ -4391,6 +4517,9 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Actions.HasFullRoundAction) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "dual-wield attacks"))
+            return;
 
         if (pc.HasCondition(CombatConditionType.Grappled))
         {
@@ -4480,6 +4609,9 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Stats.IsMonk || !pc.Actions.HasFullRoundAction) return;
 
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "flurry of blows"))
+            return;
+
         _pendingAttackMode = PendingAttackMode.FlurryOfBlows;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
 
@@ -4521,6 +4653,9 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Stats.IsSpellcaster || !pc.Actions.HasStandardAction) return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "spellcasting"))
+            return;
 
         var spellComp = pc.GetComponent<SpellcastingComponent>();
         if (spellComp == null) return;
@@ -9118,8 +9253,9 @@ public class GameManager : MonoBehaviour
             options.Add((GrappleActionType.DamageOpponent, "Deal grapple damage (opposed check + unarmed strike damage; choose lethal/nonlethal)"));
             options.Add((GrappleActionType.DrawLightWeapon, "Draw a Light Weapon (Not yet implemented)"));
             options.Add((GrappleActionType.RetrieveSpellComponent, "Retrieve a Spell Component (Not yet implemented)"));
-            if (!opponentPinned)
-                options.Add((GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)"));
+            options.Add(opponentPinned
+                ? (GrappleActionType.PinOpponent, $"Maintain pin on {opponent.Stats.CharacterName} (opposed grapple check)")
+                : (GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)"));
 
             options.Add((GrappleActionType.MoveHalfSpeed, "Move while grappling (standard action, beat opposed grapple check(s), then move at half speed)"));
         }

@@ -121,6 +121,8 @@ public class CharacterController : MonoBehaviour
         public CharacterController Controller;
         public CharacterController Defender;
         public CharacterController PinnedCharacter;
+        public CharacterController PinMaintainer;
+        public int PinExpiresAfterMaintainerTurnStartCount;
 
         public CharacterController GetOpponent(CharacterController actor)
         {
@@ -1798,6 +1800,33 @@ public class CharacterController : MonoBehaviour
         return deniedDexBonus;
     }
 
+    /// <summary>
+    /// Pinned defenders lose their DEX bonus to AC against all attackers.
+    /// Against attackers other than the one controlling the grapple, they are treated as helpless for AC purposes.
+    /// </summary>
+    private static int GetPinnedDexDeniedAgainstAttacker(CharacterController defender, CharacterController attacker, out string note)
+    {
+        note = string.Empty;
+
+        if (defender == null || defender.Stats == null || !defender.HasCondition(CombatConditionType.Pinned))
+            return 0;
+
+        int deniedDexBonus = GetDexBonusAppliedToArmorClass(defender);
+        bool attackerIsGrappleOpponent = defender.TryGetGrappleState(out CharacterController grappleOpponent, out _, out _, out _)
+            && grappleOpponent == attacker;
+
+        if (attackerIsGrappleOpponent)
+            note = deniedDexBonus > 0
+                ? "Pinned: defender loses DEX bonus to AC while pinned."
+                : "Pinned: defender has no positive DEX bonus to lose.";
+        else
+            note = deniedDexBonus > 0
+                ? "Pinned: defender is effectively helpless vs non-grappling attackers and loses DEX bonus to AC."
+                : "Pinned: defender is effectively helpless vs non-grappling attackers.";
+
+        return deniedDexBonus;
+    }
+
     private void PruneExpiredFeintWindows()
     {
         _activeFeintWindows.RemoveAll(w =>
@@ -1912,12 +1941,17 @@ public class CharacterController : MonoBehaviour
         int targetAC = GetSituationalTargetArmorClass(target, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
 
         int grappleDexDenied = GetGrappleDexDeniedAgainstAttacker(target, this, out string grappleDexNote);
-        if (grappleDexDenied > 0)
+        int pinnedDexDenied = GetPinnedDexDeniedAgainstAttacker(target, this, out string pinnedDexNote);
+        int totalDexDenied = Mathf.Max(grappleDexDenied, pinnedDexDenied);
+        if (totalDexDenied > 0)
         {
-            targetAC -= grappleDexDenied;
-            result.GrappleDexDeniedToAc = grappleDexDenied;
+            targetAC -= totalDexDenied;
+            result.GrappleDexDeniedToAc = totalDexDenied;
         }
-        if (!string.IsNullOrEmpty(grappleDexNote))
+
+        if (!string.IsNullOrEmpty(pinnedDexNote))
+            result.GrappleDexRuleNote = pinnedDexNote;
+        else if (!string.IsNullOrEmpty(grappleDexNote))
             result.GrappleDexRuleNote = grappleDexNote;
 
         int feintDexDenied = 0;
@@ -2752,13 +2786,38 @@ public class CharacterController : MonoBehaviour
             actor.ApplyCondition(condition, -1, sourceName);
     }
 
-    private static void ClearPinnedState(GrappleLink link)
+    private static void SetPinnedState(GrappleLink link, CharacterController pinned, CharacterController maintainer)
     {
-        if (link == null || link.PinnedCharacter == null)
+        if (link == null || pinned == null || pinned.Stats == null)
             return;
 
-        RemoveConditionIfPresent(link.PinnedCharacter, CombatConditionType.Pinned);
+        if (link.PinnedCharacter != null && link.PinnedCharacter != pinned)
+            RemoveConditionIfPresent(link.PinnedCharacter, CombatConditionType.Pinned);
+
+        link.PinnedCharacter = pinned;
+        link.PinMaintainer = maintainer;
+        link.PinExpiresAfterMaintainerTurnStartCount = maintainer != null
+            ? maintainer._turnsStartedCount + 1
+            : 0;
+
+        string sourceName = maintainer != null && maintainer.Stats != null
+            ? maintainer.Stats.CharacterName
+            : "Grapple";
+        // Duration is controlled by grapple maintenance logic; keep condition itself indefinite.
+        pinned.ApplyCondition(CombatConditionType.Pinned, -1, sourceName);
+    }
+
+    private static void ClearPinnedState(GrappleLink link)
+    {
+        if (link == null)
+            return;
+
+        if (link.PinnedCharacter != null)
+            RemoveConditionIfPresent(link.PinnedCharacter, CombatConditionType.Pinned);
+
         link.PinnedCharacter = null;
+        link.PinMaintainer = null;
+        link.PinExpiresAfterMaintainerTurnStartCount = 0;
     }
 
     private static void EndGrappleLink(GrappleLink link, string reason)
@@ -2795,7 +2854,9 @@ public class CharacterController : MonoBehaviour
         {
             Controller = this,
             Defender = target,
-            PinnedCharacter = null
+            PinnedCharacter = null,
+            PinMaintainer = null,
+            PinExpiresAfterMaintainerTurnStartCount = 0
         };
 
         RegisterGrappleLink(link);
@@ -3064,16 +3125,6 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                if (opponentPinned)
-                {
-                    return new SpecialAttackResult
-                    {
-                        ManeuverName = "Pin Opponent",
-                        Success = true,
-                        Log = $"{opponent.Stats.CharacterName} is already pinned."
-                    };
-                }
-
                 if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
                 {
                     return new SpecialAttackResult
@@ -3085,24 +3136,34 @@ public class CharacterController : MonoBehaviour
                 }
 
                 bool success = myTotal >= oppTotal;
-                if (success && TryGetGrappleLink(this, out GrappleLink link))
+                if (TryGetGrappleLink(this, out GrappleLink link))
                 {
-                    link.PinnedCharacter = opponent;
-                    ApplyConditionIfMissing(opponent, CombatConditionType.Pinned, Stats.CharacterName);
-                    RemoveConditionIfPresent(this, CombatConditionType.Pinned);
+                    if (success)
+                    {
+                        SetPinnedState(link, opponent, this);
+                        RemoveConditionIfPresent(this, CombatConditionType.Pinned);
+                    }
+                    else if (opponentPinned)
+                    {
+                        // Failed maintenance attempt: pin ends but grapple remains.
+                        ClearPinnedState(link);
+                    }
                 }
+
+                string actionLabel = opponentPinned ? "maintain pin on" : "pin";
+                string failureLabel = opponentPinned ? "fails to maintain the pin on" : "fails to pin";
 
                 return new SpecialAttackResult
                 {
-                    ManeuverName = "Pin Opponent",
+                    ManeuverName = opponentPinned ? "Maintain Pin" : "Pin Opponent",
                     Success = success,
                     CheckRoll = myRoll,
                     CheckTotal = myTotal,
                     OpposedRoll = oppRoll,
                     OpposedTotal = oppTotal,
                     Log = success
-                        ? $"{Stats.CharacterName} pins {opponent.Stats.CharacterName}! ({myTotal} vs {oppTotal})"
-                        : $"{Stats.CharacterName} fails to pin {opponent.Stats.CharacterName}. ({myTotal} vs {oppTotal})"
+                        ? $"{Stats.CharacterName} {actionLabel} {opponent.Stats.CharacterName} for 1 round. ({myTotal} vs {oppTotal})"
+                        : $"{Stats.CharacterName} {failureLabel} {opponent.Stats.CharacterName}. ({myTotal} vs {oppTotal})"
                 };
             }
             case GrappleActionType.BreakPin:
@@ -3315,6 +3376,36 @@ public class CharacterController : MonoBehaviour
         }
 
         ReleaseGrappleState("death");
+    }
+
+    public void ProcessPinnedDurationAtTurnEnd()
+    {
+        if (!TryGetGrappleLink(this, out GrappleLink link) || link == null || link.PinnedCharacter == null)
+            return;
+
+        if (link.PinMaintainer == null || link.PinMaintainer.Stats == null || link.PinMaintainer.Stats.IsDead)
+        {
+            CharacterController pinnedNoMaintainer = link.PinnedCharacter;
+            ClearPinnedState(link);
+            if (GameManager.Instance != null && GameManager.Instance.CombatUI != null && pinnedNoMaintainer != null && pinnedNoMaintainer.Stats != null)
+                GameManager.Instance.CombatUI.ShowCombatLog($"⏱ Pin on {pinnedNoMaintainer.Stats.CharacterName} ends because the controlling grappler can no longer maintain it.");
+            return;
+        }
+
+        if (link.PinMaintainer != this)
+            return;
+
+        if (link.PinExpiresAfterMaintainerTurnStartCount <= 0 || _turnsStartedCount < link.PinExpiresAfterMaintainerTurnStartCount)
+            return;
+
+        CharacterController pinned = link.PinnedCharacter;
+        ClearPinnedState(link);
+
+        if (GameManager.Instance != null && GameManager.Instance.CombatUI != null && pinned != null && pinned.Stats != null && Stats != null)
+        {
+            GameManager.Instance.CombatUI.ShowCombatLog(
+                $"⏱ {Stats.CharacterName}'s pin on {pinned.Stats.CharacterName} expires at end of turn. Spend a standard action each turn to maintain it.");
+        }
     }
 
     /// <summary>

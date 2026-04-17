@@ -606,6 +606,7 @@ public class CombatUI : MonoBehaviour
         bool hasRapidShot = pc.Stats.HasFeat("Rapid Shot");
         bool fullAttackRelevant = hasIterativeAttacks || hasRapidShot;
         bool isProne = pc.HasCondition(CombatConditionType.Prone);
+        bool isPinned = pc.HasCondition(CombatConditionType.Pinned);
         bool canAttackWithWeapon = pc.CanAttackWithEquippedWeapon(out _);
         ItemData equippedWeapon = pc.GetEquippedMainWeapon();
         bool usingUnarmedStrike = equippedWeapon == null;
@@ -615,14 +616,15 @@ public class CombatUI : MonoBehaviour
         {
             bool canMoveByActions = actions.HasMoveAction || actions.CanConvertStandardToMove;
             bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
-            bool canMove = canMoveByActions && !blockedByFiveFootStep && !isProne;
+            bool canMove = canMoveByActions && !blockedByFiveFootStep && !isProne && !isPinned;
 
             MoveButton.gameObject.SetActive(true);
             MoveButton.interactable = canMove;
             Text moveLabel = MoveButton.GetComponentInChildren<Text>();
             if (moveLabel != null)
             {
-                if (isProne) moveLabel.text = "Move (Stand up first)";
+                if (isPinned) moveLabel.text = "Move (Pinned: grapple escape only)";
+                else if (isProne) moveLabel.text = "Move (Stand up first)";
                 else if (blockedByFiveFootStep) moveLabel.text = "Move (After 5-ft step: no)";
                 else if (actions.HasMoveAction) moveLabel.text = "Move (Move Action)";
                 else if (actions.CanConvertStandardToMove) moveLabel.text = "Move (Std→Move)";
@@ -678,13 +680,14 @@ public class CombatUI : MonoBehaviour
 
         if (AttackButton != null)
         {
-            bool canSingleAttack = actions.HasStandardAction && canAttackWithWeapon;
+            bool canSingleAttack = actions.HasStandardAction && canAttackWithWeapon && !isPinned;
             AttackButton.gameObject.SetActive(true);
             AttackButton.interactable = canSingleAttack;
             Text atkLabel = AttackButton.GetComponentInChildren<Text>();
             if (atkLabel != null)
             {
-                if (!actions.HasStandardAction) atkLabel.text = "Attack (Used)";
+                if (isPinned) atkLabel.text = "Attack (Pinned: grapple escape only)";
+                else if (!actions.HasStandardAction) atkLabel.text = "Attack (Used)";
                 else if (!canAttackWithWeapon) atkLabel.text = "Attack (Reload first)";
                 else atkLabel.text = usingUnarmedStrike ? $"Attack (Standard, {attackSourceLabel})" : "Attack (Standard)";
             }
@@ -692,13 +695,14 @@ public class CombatUI : MonoBehaviour
 
         if (AttackDefensivelyButton != null)
         {
-            bool canAttackDefensively = actions.HasStandardAction && canFightDefensively && canAttackWithWeapon;
+            bool canAttackDefensively = actions.HasStandardAction && canFightDefensively && canAttackWithWeapon && !isPinned;
             AttackDefensivelyButton.gameObject.SetActive(true);
             AttackDefensivelyButton.interactable = canAttackDefensively;
             Text atkDefLabel = AttackDefensivelyButton.GetComponentInChildren<Text>();
             if (atkDefLabel != null)
             {
-                if (!canFightDefensively) atkDefLabel.text = "Fighting Defensively (Std) [BAB +1]";
+                if (isPinned) atkDefLabel.text = "Fighting Defensively (Pinned: no)";
+                else if (!canFightDefensively) atkDefLabel.text = "Fighting Defensively (Std) [BAB +1]";
                 else if (!actions.HasStandardAction) atkDefLabel.text = "Fighting Defensively (Std) [Used]";
                 else if (!canAttackWithWeapon) atkDefLabel.text = "Fighting Defensively (Std) [Reload first]";
                 else atkDefLabel.text = usingUnarmedStrike ? $"Fighting Defensively (Std, {attackSourceLabel})" : "Fighting Defensively (Std)";
@@ -711,14 +715,16 @@ public class CombatUI : MonoBehaviour
                 && pc.Stats != null
                 && pc.Stats.HasFeat("Improved Feint")
                 && (actions.HasMoveAction || actions.CanConvertStandardToMove);
-            bool canSpecialAttack = actions.HasStandardAction || canImprovedFeintMove;
+            bool canSpecialAttack = isPinned ? actions.HasStandardAction : (actions.HasStandardAction || canImprovedFeintMove);
 
             SpecialAttackButton.gameObject.SetActive(true);
             SpecialAttackButton.interactable = canSpecialAttack;
             Text spLabel = SpecialAttackButton.GetComponentInChildren<Text>();
             if (spLabel != null)
             {
-                if (actions.HasStandardAction)
+                if (isPinned)
+                    spLabel.text = actions.HasStandardAction ? "Grapple Escape Actions (Standard)" : "Grapple Escape Actions (Used)";
+                else if (actions.HasStandardAction)
                     spLabel.text = canImprovedFeintMove ? "Special Attack (Std / Feint Move)" : "Special Attack (Standard)";
                 else if (canImprovedFeintMove)
                     spLabel.text = "Special Attack (Feint Move)";
@@ -745,10 +751,10 @@ public class CombatUI : MonoBehaviour
         {
             bool showOverrun = actions.HasStandardAction;
             OverrunButton.gameObject.SetActive(showOverrun);
-            OverrunButton.interactable = showOverrun;
+            OverrunButton.interactable = showOverrun && !isPinned;
             Text overrunLabel = OverrunButton.GetComponentInChildren<Text>();
             if (overrunLabel != null)
-                overrunLabel.text = "Overrun (Standard)";
+                overrunLabel.text = isPinned ? "Overrun (Pinned: no)" : "Overrun (Standard)";
         }
 
         if (ChargeButton != null)
@@ -759,14 +765,15 @@ public class CombatUI : MonoBehaviour
             bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
             bool blockedByProne = isProne;
             bool hasAnyChargeTarget = GameManager.Instance != null && GameManager.Instance.HasAnyValidChargeTarget(pc);
-            bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigued && !blockedByFiveFootStep && !blockedByProne && hasAnyChargeTarget;
+            bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigued && !blockedByFiveFootStep && !blockedByProne && !isPinned && hasAnyChargeTarget;
 
             ChargeButton.gameObject.SetActive(hasMeleeThreat || fatigued || blockedByFiveFootStep || blockedByProne);
             ChargeButton.interactable = canChargeTarget;
             Text chargeLabel = ChargeButton.GetComponentInChildren<Text>();
             if (chargeLabel != null)
             {
-                if (!hasMeleeThreat) chargeLabel.text = "Charge (Need melee)";
+                if (isPinned) chargeLabel.text = "Charge (Pinned: no)";
+                else if (!hasMeleeThreat) chargeLabel.text = "Charge (Need melee)";
                 else if (fatigued) chargeLabel.text = "Charge (Fatigued)";
                 else if (blockedByProne) chargeLabel.text = "Charge (Prone)";
                 else if (blockedByFiveFootStep) chargeLabel.text = "Charge (After 5-ft step: no)";
@@ -776,7 +783,7 @@ public class CombatUI : MonoBehaviour
             }
         }
 
-        bool canTakeFullRoundAttack = fullAttackRelevant && actions.HasFullRoundAction && canAttackWithWeapon;
+        bool canTakeFullRoundAttack = fullAttackRelevant && actions.HasFullRoundAction && canAttackWithWeapon && !isPinned;
         if (FullAttackButton != null)
         {
             FullAttackButton.gameObject.SetActive(fullAttackRelevant);
@@ -788,7 +795,8 @@ public class CombatUI : MonoBehaviour
                 bool weaponIsRanged = pc.IsEquippedWeaponRanged();
                 bool rapidShotWillApply = hasRapidShot && pc.RapidShotEnabled && weaponIsRanged;
 
-                if (!canAttackWithWeapon) faLabel.text = "Full Attack (Reload first)";
+                if (isPinned) faLabel.text = "Full Attack (Pinned: no)";
+                else if (!canAttackWithWeapon) faLabel.text = "Full Attack (Reload first)";
                 else if (!canTakeFullRoundAttack) faLabel.text = "Full Attack (N/A)";
                 else if (rapidShotWillApply) faLabel.text = $"Full Attack x{atkCount + 1} (Rapid Shot)";
                 else if (hasRapidShot && pc.RapidShotEnabled && !weaponIsRanged) faLabel.text = $"Full Attack x{atkCount} (RS: need ranged wpn)";
@@ -805,7 +813,8 @@ public class CombatUI : MonoBehaviour
             Text fullDefLabel = FullAttackDefensivelyButton.GetComponentInChildren<Text>();
             if (fullDefLabel != null)
             {
-                if (!canFightDefensively) fullDefLabel.text = "Full Attack (Def) [BAB +1]";
+                if (isPinned) fullDefLabel.text = "Full Attack (Def) [Pinned]";
+                else if (!canFightDefensively) fullDefLabel.text = "Full Attack (Def) [BAB +1]";
                 else if (!canAttackWithWeapon) fullDefLabel.text = "Full Attack (Def) [Reload first]";
                 else if (!canTakeFullRoundAttack) fullDefLabel.text = "Full Attack (Def) [N/A]";
                 else fullDefLabel.text = "Full Attack (Def)";
@@ -814,7 +823,7 @@ public class CombatUI : MonoBehaviour
 
         if (DualWieldButton != null)
         {
-            bool canDW = canDualWield && actions.HasFullRoundAction;
+            bool canDW = canDualWield && actions.HasFullRoundAction && !isPinned;
             bool canDualWieldAttack = true;
             bool offHandIsSpikedGauntlet = false;
             bool offHandIsShieldBash = false;
@@ -834,7 +843,8 @@ public class CombatUI : MonoBehaviour
             Text dwLabel = DualWieldButton.GetComponentInChildren<Text>();
             if (dwLabel != null)
             {
-                if (!canDualWieldAttack) dwLabel.text = "Dual Wield (Reload first)";
+                if (isPinned) dwLabel.text = "Dual Wield (Pinned: no)";
+                else if (!canDualWieldAttack) dwLabel.text = "Dual Wield (Reload first)";
                 else if (canDW && offHandIsSpikedGauntlet) dwLabel.text = "Dual Wield (Spiked Gauntlet Off-Hand)";
                 else if (canDW && offHandIsShieldBash) dwLabel.text = "Dual Wield (Shield Bash Off-Hand)";
                 else dwLabel.text = canDW ? "Dual Wield (Full-Round)" : "Dual Wield (N/A)";
@@ -844,13 +854,17 @@ public class CombatUI : MonoBehaviour
         if (FlurryOfBlowsButton != null)
         {
             bool isMonk = pc.Stats.IsMonk;
-            bool canFlurry = isMonk && actions.HasFullRoundAction;
+            bool canFlurry = isMonk && actions.HasFullRoundAction && !isPinned;
             FlurryOfBlowsButton.gameObject.SetActive(isMonk);
             FlurryOfBlowsButton.interactable = canFlurry;
             Text flurryLabel = FlurryOfBlowsButton.GetComponentInChildren<Text>();
             if (flurryLabel != null)
             {
-                if (canFlurry)
+                if (isPinned)
+                {
+                    flurryLabel.text = "Flurry of Blows (Pinned: no)";
+                }
+                else if (canFlurry)
                 {
                     int[] bonuses = pc.Stats.GetFlurryOfBlowsBonuses();
                     string bonusStr = string.Join("/", System.Array.ConvertAll(bonuses, b => CharacterStats.FormatMod(b)));
@@ -881,14 +895,16 @@ public class CombatUI : MonoBehaviour
             bool isSpellcaster = pc.Stats.IsSpellcaster;
             var spellComp = pc.GetComponent<SpellcastingComponent>();
             bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnyCastablePreparedSpell();
-            bool canCast = actions.HasStandardAction && hasCastableSpells;
+            bool canCast = actions.HasStandardAction && hasCastableSpells && !isPinned;
 
             CastSpellButton.gameObject.SetActive(hasCastableSpells);
             CastSpellButton.interactable = canCast;
             Text castLabel = CastSpellButton.GetComponentInChildren<Text>();
             if (castLabel != null)
             {
-                string baseLabel = canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)";
+                string baseLabel = isPinned
+                    ? "Cast Spell (Pinned: no)"
+                    : (canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)");
                 int asfChance = (pc.Stats != null && pc.Stats.IsAffectedByArcaneSpellFailure)
                     ? Mathf.Clamp(pc.Stats.ArcaneSpellFailure, 0, 100)
                     : 0;
