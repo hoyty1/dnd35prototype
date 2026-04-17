@@ -23,7 +23,8 @@ public enum GrappleActionType
     MoveHalfSpeed,
     UseOpponentWeapon,
     DrawLightWeapon,
-    RetrieveSpellComponent
+    RetrieveSpellComponent,
+    ReleasePinnedOpponent
 }
 
 public enum AttackDamageMode
@@ -2943,6 +2944,74 @@ public class CharacterController : MonoBehaviour
         return TryGetGrappleState(out _, out _, out _, out _);
     }
 
+    public bool IsPinningOpponent()
+    {
+        if (!TryGetGrappleLink(this, out GrappleLink link) || link == null)
+            return false;
+
+        if (link.PinMaintainer != this)
+            return false;
+
+        CharacterController pinned = link.PinnedCharacter;
+        if (pinned == null || pinned.Stats == null || pinned.Stats.IsDead)
+        {
+            ClearPinnedState(link);
+            return false;
+        }
+
+        return true;
+    }
+
+    public bool IsGrappleActionBlockedWhilePinning(GrappleActionType actionType, out string blockedReason)
+    {
+        blockedReason = string.Empty;
+
+        if (!IsPinningOpponent())
+            return false;
+
+        bool hasGrappleState = TryGetGrappleState(out _, out _, out _, out bool opponentPinned);
+
+        switch (actionType)
+        {
+            case GrappleActionType.DamageOpponent:
+            case GrappleActionType.UseOpponentWeapon:
+            case GrappleActionType.ReleasePinnedOpponent:
+                return false;
+
+            case GrappleActionType.PinOpponent:
+                if (hasGrappleState && opponentPinned)
+                    return false; // Maintain pin is allowed.
+
+                blockedReason = "Cannot pin another character while pinning";
+                return true;
+
+            case GrappleActionType.DrawLightWeapon:
+                blockedReason = "Cannot draw weapon while pinning";
+                return true;
+
+            case GrappleActionType.RetrieveSpellComponent:
+                blockedReason = "Cannot retrieve component while pinning";
+                return true;
+
+            case GrappleActionType.BreakPin:
+                blockedReason = "Cannot break pin while pinning";
+                return true;
+
+            case GrappleActionType.EscapeArtist:
+            case GrappleActionType.OpposedGrappleEscape:
+                blockedReason = "Cannot escape while pinning";
+                return true;
+
+            case GrappleActionType.MoveHalfSpeed:
+                blockedReason = "Cannot move while pinning";
+                return true;
+
+            default:
+                blockedReason = "Cannot do that while pinning";
+                return true;
+        }
+    }
+
     public bool TryGetActiveGrappleOpponents(out List<CharacterController> opponents)
     {
         opponents = new List<CharacterController>();
@@ -2995,13 +3064,24 @@ public class CharacterController : MonoBehaviour
         AttackDamageMode? grappleDamageModeOverride = null,
         EquipSlot? opponentWeaponHandSlotOverride = null)
     {
-        if (!TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out _))
+        if (!TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out bool opponentPinned))
         {
             return new SpecialAttackResult
             {
                 ManeuverName = "Grapple Action",
                 Success = false,
                 Log = $"{Stats.CharacterName} is not currently in a grapple."
+            };
+        }
+
+        bool isPinning = IsPinningOpponent();
+        if (IsGrappleActionBlockedWhilePinning(actionType, out string blockedReason))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Grapple Action",
+                Success = false,
+                Log = blockedReason
             };
         }
 
@@ -3168,6 +3248,15 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
+                if (isPinning && !opponentPinned)
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Pin Opponent",
+                        Success = false,
+                        Log = "Cannot pin another character while pinning"
+                    };
+                }
                 if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
                 {
                     return new SpecialAttackResult
@@ -3345,6 +3434,30 @@ public class CharacterController : MonoBehaviour
             case GrappleActionType.RetrieveSpellComponent:
                 return ResolveRetrieveSpellComponentDuringGrappleStub();
 
+            case GrappleActionType.ReleasePinnedOpponent:
+            {
+                if (!isPinning || !opponentPinned)
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Release Pinned Opponent",
+                        Success = false,
+                        Log = $"{Stats.CharacterName} is not actively pinning {opponent.Stats.CharacterName}."
+                    };
+                }
+
+                string opponentName = opponent != null && opponent.Stats != null
+                    ? opponent.Stats.CharacterName
+                    : "opponent";
+
+                ReleaseGrappleState("pin released by maintainer");
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Release Pinned Opponent",
+                    Success = true,
+                    Log = $"{Stats.CharacterName} releases {opponentName} from pin, ending the grapple."
+                };
+            }
             default:
                 return new SpecialAttackResult
                 {

@@ -416,6 +416,20 @@ public static class SpellCaster
             spell.ActionType = SpellActionType.Free;
             Debug.Log($"[Metamagic] Quicken Spell: action type changed to Free");
         }
+
+        // Silent Spell: remove verbal component requirement
+        if (metamagic.Has(MetamagicFeatId.SilentSpell))
+        {
+            spell.HasVerbalComponent = false;
+            Debug.Log("[Metamagic] Silent Spell: verbal component removed");
+        }
+
+        // Still Spell: remove somatic component requirement
+        if (metamagic.Has(MetamagicFeatId.StillSpell))
+        {
+            spell.HasSomaticComponent = false;
+            Debug.Log("[Metamagic] Still Spell: somatic component removed");
+        }
     }
 
     /// <summary>

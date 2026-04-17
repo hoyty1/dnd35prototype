@@ -126,8 +126,8 @@ public class SpellData
     // ========== CASTING ==========
     public SpellActionType ActionType;  // Standard, FullRound, Swift, Free
     public bool ProvokesAoO;            // Most spells provoke AoO (true by default)
+    public bool HasVerbalComponent = true; // Most spells include verbal components unless explicitly overridden.
     public bool HasSomaticComponent = true; // Most spells include somatic components unless explicitly overridden.
-
     // ========== SPECIAL ==========
     /// <summary>Number of missiles for Magic Missile (1 at CL1, +1 per 2 CL above 1).</summary>
     public int MissileCount;

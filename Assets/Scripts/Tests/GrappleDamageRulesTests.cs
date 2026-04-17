@@ -19,6 +19,7 @@ public static class GrappleDamageRulesTests
         RaceDatabase.Init();
         ItemDatabase.Init();
         FeatDefinitions.Init();
+        SpellDatabase.Init();
 
         Debug.Log("========== GRAPPLE DAMAGE RULES TESTS ==========");
 
@@ -39,6 +40,10 @@ public static class GrappleDamageRulesTests
         TestUseOpponentWeaponFailsWhenOpponentHasNoLightWeapon();
         TestUseOpponentWeaponUsesSelectedRightHandLightWeaponWithoutTransfer();
         TestUseOpponentWeaponCanSelectLeftHandLightWeapon();
+        TestIsPinningOpponentHelperTracksMaintainer();
+        TestPinnerBlockedActionsReturnExpectedMessages();
+        TestReleasePinnedOpponentEndsEntireGrapple();
+        TestSilentAndStillMetamagicRemoveVerbalAndSomaticComponents();
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
 
@@ -442,5 +447,97 @@ public static class GrappleDamageRulesTests
         Assert(result != null && result.Log.Contains("LeftHand") && result.Log.Contains(leftWeapon.Name), "Use Opponent's Weapon log confirms left-hand weapon selection");
 
         Cleanup(attacker, defender);
+    }
+
+    private static void TestIsPinningOpponentHelperTracksMaintainer()
+    {
+        var attacker = CreateTestCharacter("GrappleIsPinningMaintainer", "Fighter");
+        var defender = CreateWeakDefender("GrappleIsPinningMaintainerTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+
+        Assert(pinResult != null && pinResult.Success, "Pin succeeds before helper validation");
+        Assert(attacker.IsPinningOpponent(), "Pin maintainer is reported as actively pinning an opponent");
+        Assert(!defender.IsPinningOpponent(), "Pinned defender is not reported as pinning an opponent");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestPinnerBlockedActionsReturnExpectedMessages()
+    {
+        var attacker = CreateTestCharacter("GrapplePinnerBlockedActions", "Fighter");
+        var defender = CreateWeakDefender("GrapplePinnerBlockedActionsTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "Pin succeeds before blocked-action validation");
+
+        SpecialAttackResult drawResult = attacker.ResolveGrappleAction(GrappleActionType.DrawLightWeapon);
+        Assert(drawResult != null && !drawResult.Success, "Pinner cannot draw a weapon while maintaining a pin");
+        Assert(drawResult != null && drawResult.Log.Contains("Cannot draw weapon while pinning"), "Draw weapon block message is explicit while pinning");
+
+        SpecialAttackResult retrieveResult = attacker.ResolveGrappleAction(GrappleActionType.RetrieveSpellComponent);
+        Assert(retrieveResult != null && !retrieveResult.Success, "Pinner cannot retrieve a spell component while maintaining a pin");
+        Assert(retrieveResult != null && retrieveResult.Log.Contains("Cannot retrieve component while pinning"), "Retrieve component block message is explicit while pinning");
+
+        SpecialAttackResult breakPinResult = attacker.ResolveGrappleAction(GrappleActionType.BreakPin);
+        Assert(breakPinResult != null && !breakPinResult.Success, "Pinner cannot break another person's pin while pinning");
+        Assert(breakPinResult != null && breakPinResult.Log.Contains("Cannot break pin while pinning"), "Break pin block message is explicit while pinning");
+
+        SpecialAttackResult escapeResult = attacker.ResolveGrappleAction(GrappleActionType.EscapeArtist);
+        Assert(escapeResult != null && !escapeResult.Success, "Pinner cannot escape while maintaining a pin");
+        Assert(escapeResult != null && escapeResult.Log.Contains("Cannot escape while pinning"), "Escape block message is explicit while pinning");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestReleasePinnedOpponentEndsEntireGrapple()
+    {
+        var attacker = CreateTestCharacter("GrappleReleasePin", "Fighter");
+        var defender = CreateWeakDefender("GrappleReleasePinTarget");
+        ConfigureVeryStrongGrappler(attacker);
+        ConfigureVeryWeakGrappler(defender);
+
+        ForceGrappleState(attacker, defender);
+        SpecialAttackResult pinResult = attacker.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "Pin succeeds before release validation");
+
+        SpecialAttackResult releaseResult = attacker.ResolveGrappleAction(GrappleActionType.ReleasePinnedOpponent);
+        Assert(releaseResult != null && releaseResult.Success, "Release pinned opponent action succeeds for pin maintainer");
+        Assert(releaseResult != null && releaseResult.Log.Contains("releases") && releaseResult.Log.Contains("ending the grapple"), "Release action combat log describes releasing the pin and ending the grapple");
+        Assert(!attacker.HasCondition(CombatConditionType.Grappled), "Pin maintainer is no longer grappled after release action");
+        Assert(!defender.HasCondition(CombatConditionType.Grappled), "Released opponent is no longer grappled after release action");
+        Assert(!defender.HasCondition(CombatConditionType.Pinned), "Released opponent is no longer pinned after release action");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestSilentAndStillMetamagicRemoveVerbalAndSomaticComponents()
+    {
+        SpellData spell = SpellDatabase.GetSpell("magic_missile");
+        Assert(spell != null, "Magic Missile exists for metamagic component suppression test");
+        if (spell == null)
+            return;
+
+        SpellData spellClone = spell.Clone();
+        spellClone.HasVerbalComponent = true;
+        spellClone.HasSomaticComponent = true;
+
+        var metamagic = new MetamagicData();
+        metamagic.AppliedMetamagic.Add(MetamagicFeatId.SilentSpell);
+        metamagic.AppliedMetamagic.Add(MetamagicFeatId.StillSpell);
+
+        SpellCaster.ApplyMetamagicToSpellData(spellClone, metamagic);
+
+        Assert(!spellClone.HasVerbalComponent, "Silent Spell metamagic removes verbal component from cloned spell data");
+        Assert(!spellClone.HasSomaticComponent, "Still Spell metamagic removes somatic component from cloned spell data");
+
+        Assert(spell.HasVerbalComponent, "Original spell data verbal component remains unchanged after metamagic clone mutation");
+        Assert(spell.HasSomaticComponent, "Original spell data somatic component remains unchanged after metamagic clone mutation");
     }
 }
