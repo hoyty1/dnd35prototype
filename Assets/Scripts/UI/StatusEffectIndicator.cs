@@ -258,6 +258,7 @@ public class StatusEffectIndicator : MonoBehaviour
                 return new Color(1f, 0.55f, 0.2f, 0.9f);
             case CombatConditionType.Prone:
             case CombatConditionType.Grappled:
+            case CombatConditionType.Pinned:
             case CombatConditionType.Feinted:
             case CombatConditionType.ChargePenalty:
             case CombatConditionType.Disarmed:

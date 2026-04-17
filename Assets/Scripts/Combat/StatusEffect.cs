@@ -390,10 +390,30 @@ public static class ConditionRules
             Type = CombatConditionType.Grappled,
             DisplayName = "Grappled",
             ShortLabel = "GR",
-            Description = "-2 attack, movement blocked.",
+            Description = "-2 attack, no movement, no attacks of opportunity; limited actions.",
             StackingRule = ConditionStackingRule.Refresh,
             AttackModifier = -2,
             PreventsMovement = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Pinned,
+            DisplayName = "Pinned",
+            ShortLabel = "PD",
+            Description = "Held immobile in a grapple. Can only attempt to escape.",
+            StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -4,
+            ArmorClassModifier = -4,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
             MovementMultiplier = 0f
         });
 
@@ -558,6 +578,7 @@ public enum CombatConditionType
     Stable,
     Prone,
     Grappled,
+    Pinned,
     Invisible,
     FlatFooted,
 

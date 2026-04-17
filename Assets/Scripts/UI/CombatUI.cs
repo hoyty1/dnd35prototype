@@ -1065,7 +1065,7 @@ public class CombatUI : MonoBehaviour
             {
                 if (btn.name == "Disarm" || btn.name == "Sunder")
                     enabled &= pc.HasMeleeWeaponEquipped();
-                if (btn.name == "Grapple" || btn.name == "Bull Rush" || btn.name == "Overrun" || btn.name == "Trip")
+                if (btn.name == "Bull Rush" || btn.name == "Overrun" || btn.name == "Trip")
                     enabled &= pc.HasMeleeWeaponEquipped();
             }
 

@@ -13,6 +13,16 @@ public enum SpecialAttackType
     Feint
 }
 
+public enum GrappleActionType
+{
+    EscapeArtist,
+    OpposedGrappleEscape,
+    DamageOpponent,
+    PinOpponent,
+    BreakPin,
+    MoveHalfSpeed
+}
+
 public struct DisarmableHeldItemOption
 {
     public EquipSlot HandSlot;
@@ -84,6 +94,27 @@ public class CharacterController : MonoBehaviour
 
     private readonly List<FeintWindow> _activeFeintWindows = new List<FeintWindow>();
     private int _turnsStartedCount;
+
+    private sealed class GrappleLink
+    {
+        public CharacterController Controller;
+        public CharacterController Defender;
+        public CharacterController PinnedCharacter;
+
+        public CharacterController GetOpponent(CharacterController actor)
+        {
+            if (actor == Controller) return Defender;
+            if (actor == Defender) return Controller;
+            return null;
+        }
+
+        public bool Contains(CharacterController actor)
+        {
+            return actor == Controller || actor == Defender;
+        }
+    }
+
+    private static readonly Dictionary<CharacterController, GrappleLink> _grappleLinksByCharacter = new Dictionary<CharacterController, GrappleLink>();
 
     /// <summary>Set Power Attack value, clamped to 0..BAB.</summary>
     public void SetPowerAttack(int value)
@@ -181,6 +212,8 @@ public class CharacterController : MonoBehaviour
     {
         if (Stats != null)
             Stats.CurrentHPChanged -= OnCurrentHPChanged;
+
+        ReleaseGrappleState("character removed");
     }
     /// <summary>
     /// Initialize the character with stats and place on grid.
@@ -462,6 +495,8 @@ public class CharacterController : MonoBehaviour
 
         if (newState == HPState.Dying || newState == HPState.Stable)
         {
+            ReleaseGrappleState("incapacitated");
+
             var concMgr = GetComponent<ConcentrationManager>();
             if (concMgr != null && concMgr.IsConcentrating)
                 concMgr.OnCharacterIncapacitated();
@@ -1821,6 +1856,23 @@ public class CharacterController : MonoBehaviour
     {
         reason = string.Empty;
 
+        if (HasCondition(CombatConditionType.Pinned))
+        {
+            reason = "Pinned creatures cannot attack.";
+            return false;
+        }
+
+        if (HasCondition(CombatConditionType.Grappled))
+        {
+            bool usingUnarmed = weapon == null;
+            bool usingLightWeapon = weapon != null && weapon.IsLightWeapon;
+            if (!usingUnarmed && !usingLightWeapon)
+            {
+                reason = "While grappled, only unarmed strikes or light weapons can be used.";
+                return false;
+            }
+        }
+
         if (weapon == null) return true;
 
         if (weapon.RequiresReload && !weapon.IsLoaded)
@@ -2363,6 +2415,466 @@ public class CharacterController : MonoBehaviour
                $"Penalties: Main {mainPen}, Off-hand {offPen}";
     }
 
+    // ========== GRAPPLE STATE ==========
+
+    private static bool TryGetGrappleLink(CharacterController actor, out GrappleLink link)
+    {
+        link = null;
+        if (actor == null)
+            return false;
+
+        if (!_grappleLinksByCharacter.TryGetValue(actor, out link) || link == null)
+            return false;
+
+        if (link.Controller == null || link.Defender == null || link.Controller == link.Defender)
+        {
+            _grappleLinksByCharacter.Remove(actor);
+            link = null;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static void RegisterGrappleLink(GrappleLink link)
+    {
+        if (link == null || link.Controller == null || link.Defender == null)
+            return;
+
+        _grappleLinksByCharacter[link.Controller] = link;
+        _grappleLinksByCharacter[link.Defender] = link;
+    }
+
+    private static void UnregisterGrappleLink(GrappleLink link)
+    {
+        if (link == null)
+            return;
+
+        if (link.Controller != null)
+            _grappleLinksByCharacter.Remove(link.Controller);
+        if (link.Defender != null)
+            _grappleLinksByCharacter.Remove(link.Defender);
+    }
+
+    private static void RemoveConditionIfPresent(CharacterController actor, CombatConditionType condition)
+    {
+        if (actor == null || actor.Stats == null)
+            return;
+
+        if (actor.HasCondition(condition))
+            actor.RemoveCondition(condition);
+    }
+
+    private static void ApplyConditionIfMissing(CharacterController actor, CombatConditionType condition, string sourceName)
+    {
+        if (actor == null || actor.Stats == null)
+            return;
+
+        if (!actor.HasCondition(condition))
+            actor.ApplyCondition(condition, -1, sourceName);
+    }
+
+    private static void ClearPinnedState(GrappleLink link)
+    {
+        if (link == null || link.PinnedCharacter == null)
+            return;
+
+        RemoveConditionIfPresent(link.PinnedCharacter, CombatConditionType.Pinned);
+        link.PinnedCharacter = null;
+    }
+
+    private static void EndGrappleLink(GrappleLink link, string reason)
+    {
+        if (link == null)
+            return;
+
+        CharacterController controller = link.Controller;
+        CharacterController defender = link.Defender;
+        CharacterController pinned = link.PinnedCharacter;
+
+        UnregisterGrappleLink(link);
+
+        if (controller != null)
+            RemoveConditionIfPresent(controller, CombatConditionType.Grappled);
+        if (defender != null)
+            RemoveConditionIfPresent(defender, CombatConditionType.Grappled);
+        if (pinned != null)
+            RemoveConditionIfPresent(pinned, CombatConditionType.Pinned);
+
+        if (!string.IsNullOrEmpty(reason))
+            Debug.Log($"[Grapple] Link ended ({reason}).");
+    }
+
+    private void EstablishGrappleWith(CharacterController target)
+    {
+        if (target == null || target == this)
+            return;
+
+        ReleaseGrappleState("new grapple established");
+        target.ReleaseGrappleState("new grapple established");
+
+        var link = new GrappleLink
+        {
+            Controller = this,
+            Defender = target,
+            PinnedCharacter = null
+        };
+
+        RegisterGrappleLink(link);
+        ApplyConditionIfMissing(this, CombatConditionType.Grappled, target.Stats != null ? target.Stats.CharacterName : "Grapple");
+        ApplyConditionIfMissing(target, CombatConditionType.Grappled, Stats != null ? Stats.CharacterName : "Grapple");
+
+        RemoveConditionIfPresent(this, CombatConditionType.Pinned);
+        RemoveConditionIfPresent(target, CombatConditionType.Pinned);
+    }
+
+    public void ReleaseGrappleState(string reason = "")
+    {
+        if (!TryGetGrappleLink(this, out GrappleLink link))
+            return;
+
+        EndGrappleLink(link, reason);
+    }
+
+    public bool TryGetGrappleState(out CharacterController opponent, out bool isController, out bool isPinned, out bool opponentPinned)
+    {
+        opponent = null;
+        isController = false;
+        isPinned = false;
+        opponentPinned = false;
+
+        if (!TryGetGrappleLink(this, out GrappleLink link))
+            return false;
+
+        opponent = link.GetOpponent(this);
+        if (opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
+        {
+            EndGrappleLink(link, "opponent unavailable");
+            return false;
+        }
+
+        isController = link.Controller == this;
+        isPinned = link.PinnedCharacter == this;
+        opponentPinned = link.PinnedCharacter == opponent;
+        return true;
+    }
+
+    public bool IsInActiveGrapple()
+    {
+        return TryGetGrappleState(out _, out _, out _, out _);
+    }
+
+    private bool TryResolveOpposedGrappleCheck(CharacterController opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal)
+    {
+        myRoll = 0;
+        myTotal = 0;
+        oppRoll = 0;
+        oppTotal = 0;
+
+        if (opponent == null || opponent.Stats == null)
+            return false;
+
+        myRoll = Random.Range(1, 21);
+        oppRoll = Random.Range(1, 21);
+        myTotal = myRoll + GetGrappleModifier();
+        oppTotal = oppRoll + opponent.GetGrappleModifier();
+        return true;
+    }
+
+    public SpecialAttackResult ResolveGrappleAction(GrappleActionType actionType)
+    {
+        if (!TryGetGrappleState(out CharacterController opponent, out bool isController, out bool isPinned, out bool opponentPinned))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Grapple Action",
+                Success = false,
+                Log = $"{Stats.CharacterName} is not currently in a grapple."
+            };
+        }
+
+        switch (actionType)
+        {
+            case GrappleActionType.EscapeArtist:
+            {
+                int roll = Random.Range(1, 21);
+                int bonus = Stats.GetSkillBonus("Escape Artist");
+                int total = roll + bonus;
+                int dc = 20 + opponent.GetGrappleModifier();
+                bool success = total >= dc;
+
+                if (success)
+                    ReleaseGrappleState("escaped with Escape Artist");
+
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Grapple Escape (Escape Artist)",
+                    Success = success,
+                    CheckRoll = roll,
+                    CheckTotal = total,
+                    OpposedTotal = dc,
+                    Log = success
+                        ? $"{Stats.CharacterName} slips free of {opponent.Stats.CharacterName}'s hold! Escape Artist ({total}) vs DC {dc}."
+                        : $"{Stats.CharacterName} fails to slip free. Escape Artist ({total}) vs DC {dc}."
+                };
+            }
+            case GrappleActionType.OpposedGrappleEscape:
+            {
+                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Grapple Escape",
+                        Success = false,
+                        Log = "No valid grapple opponent."
+                    };
+                }
+
+                bool success = myTotal >= oppTotal;
+                if (success)
+                    ReleaseGrappleState("escaped with grapple check");
+
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Grapple Escape (Opposed)",
+                    Success = success,
+                    CheckRoll = myRoll,
+                    CheckTotal = myTotal,
+                    OpposedRoll = oppRoll,
+                    OpposedTotal = oppTotal,
+                    Log = success
+                        ? $"{Stats.CharacterName} breaks free from {opponent.Stats.CharacterName}! ({myTotal} vs {oppTotal})"
+                        : $"{Stats.CharacterName} fails to break free from {opponent.Stats.CharacterName}. ({myTotal} vs {oppTotal})"
+                };
+            }
+            case GrappleActionType.DamageOpponent:
+            {
+                if (isPinned)
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Grapple Damage",
+                        Success = false,
+                        Log = $"{Stats.CharacterName} is pinned and cannot deal grapple damage until they break the pin."
+                    };
+                }
+
+                ItemData weapon = GetEquippedMainWeapon();
+                bool usingUnarmed = weapon == null;
+                bool legalWeapon = usingUnarmed || weapon.IsLightWeapon;
+                if (!legalWeapon)
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Grapple Damage",
+                        Success = false,
+                        Log = $"{Stats.CharacterName} can only deal grapple damage with an unarmed strike or light weapon."
+                    };
+                }
+
+                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Grapple Damage",
+                        Success = false,
+                        Log = "No valid grapple opponent."
+                    };
+                }
+
+                bool success = myTotal >= oppTotal;
+                int damageDealt = 0;
+                if (success)
+                {
+                    int damageDiceCount = 1;
+                    int damageDiceSides = 3;
+                    int bonusDamage = Stats.STRMod;
+
+                    if (!usingUnarmed)
+                    {
+                        damageDiceCount = Mathf.Max(1, weapon.DamageCount);
+                        damageDiceSides = Mathf.Max(2, weapon.DamageDice);
+                        bonusDamage = Stats.STRMod + weapon.BonusDamage;
+                    }
+
+                    for (int i = 0; i < damageDiceCount; i++)
+                        damageDealt += Random.Range(1, damageDiceSides + 1);
+                    damageDealt += bonusDamage;
+                    damageDealt = Mathf.Max(1, damageDealt);
+
+                    opponent.Stats.TakeDamage(damageDealt);
+                    if (opponent.Stats.IsDead)
+                    {
+                        opponent.OnDeath();
+                        ReleaseGrappleState("opponent killed in grapple");
+                    }
+                }
+
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Grapple Damage",
+                    Success = success,
+                    CheckRoll = myRoll,
+                    CheckTotal = myTotal,
+                    OpposedRoll = oppRoll,
+                    OpposedTotal = oppTotal,
+                    DamageDealt = damageDealt,
+                    TargetKilled = opponent.Stats.IsDead,
+                    Log = success
+                        ? $"{Stats.CharacterName} deals {damageDealt} grapple damage to {opponent.Stats.CharacterName} ({myTotal} vs {oppTotal})."
+                        : $"{Stats.CharacterName} fails to deal grapple damage ({myTotal} vs {oppTotal})."
+                };
+            }
+            case GrappleActionType.PinOpponent:
+            {
+                if (isPinned)
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Pin Opponent",
+                        Success = false,
+                        Log = $"{Stats.CharacterName} is pinned and cannot pin {opponent.Stats.CharacterName}."
+                    };
+                }
+
+                if (opponentPinned)
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Pin Opponent",
+                        Success = true,
+                        Log = $"{opponent.Stats.CharacterName} is already pinned."
+                    };
+                }
+
+                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Pin Opponent",
+                        Success = false,
+                        Log = "No valid grapple opponent."
+                    };
+                }
+
+                bool success = myTotal >= oppTotal;
+                if (success && TryGetGrappleLink(this, out GrappleLink link))
+                {
+                    link.PinnedCharacter = opponent;
+                    ApplyConditionIfMissing(opponent, CombatConditionType.Pinned, Stats.CharacterName);
+                    RemoveConditionIfPresent(this, CombatConditionType.Pinned);
+                }
+
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Pin Opponent",
+                    Success = success,
+                    CheckRoll = myRoll,
+                    CheckTotal = myTotal,
+                    OpposedRoll = oppRoll,
+                    OpposedTotal = oppTotal,
+                    Log = success
+                        ? $"{Stats.CharacterName} pins {opponent.Stats.CharacterName}! ({myTotal} vs {oppTotal})"
+                        : $"{Stats.CharacterName} fails to pin {opponent.Stats.CharacterName}. ({myTotal} vs {oppTotal})"
+                };
+            }
+            case GrappleActionType.BreakPin:
+            {
+                if (!isPinned)
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Break Pin",
+                        Success = false,
+                        Log = $"{Stats.CharacterName} is not pinned."
+                    };
+                }
+
+                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Break Pin",
+                        Success = false,
+                        Log = "No valid grapple opponent."
+                    };
+                }
+
+                bool success = myTotal >= oppTotal;
+                if (success && TryGetGrappleLink(this, out GrappleLink link))
+                {
+                    ClearPinnedState(link);
+                }
+
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Break Pin",
+                    Success = success,
+                    CheckRoll = myRoll,
+                    CheckTotal = myTotal,
+                    OpposedRoll = oppRoll,
+                    OpposedTotal = oppTotal,
+                    Log = success
+                        ? $"{Stats.CharacterName} breaks the pin from {opponent.Stats.CharacterName}! ({myTotal} vs {oppTotal})"
+                        : $"{Stats.CharacterName} fails to break the pin. ({myTotal} vs {oppTotal})"
+                };
+            }
+            case GrappleActionType.MoveHalfSpeed:
+            {
+                if (isPinned)
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Move While Grappling",
+                        Success = false,
+                        Log = $"{Stats.CharacterName} is pinned and cannot move the grapple."
+                    };
+                }
+
+                if (!isController)
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Move While Grappling",
+                        Success = false,
+                        Log = $"{Stats.CharacterName} cannot reposition the grapple this round (not controlling the hold)."
+                    };
+                }
+
+                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
+                {
+                    return new SpecialAttackResult
+                    {
+                        ManeuverName = "Move While Grappling",
+                        Success = false,
+                        Log = "No valid grapple opponent."
+                    };
+                }
+
+                bool success = myTotal >= oppTotal;
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Move While Grappling",
+                    Success = success,
+                    CheckRoll = myRoll,
+                    CheckTotal = myTotal,
+                    OpposedRoll = oppRoll,
+                    OpposedTotal = oppTotal,
+                    Log = success
+                        ? $"{Stats.CharacterName} wins control of the grapple movement ({myTotal} vs {oppTotal}). Use Move to reposition at half speed while maintaining the hold."
+                        : $"{Stats.CharacterName} fails to move the grapple ({myTotal} vs {oppTotal})."
+                };
+            }
+            default:
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Grapple Action",
+                    Success = false,
+                    Log = "Unknown grapple action."
+                };
+        }
+    }
+
     // ========== LIFECYCLE ==========
 
     /// <summary>
@@ -2391,6 +2903,8 @@ public class CharacterController : MonoBehaviour
         {
             spellComp.ClearHeldTouchCharge("caster incapacitated");
         }
+
+        ReleaseGrappleState("death");
     }
 
     /// <summary>
@@ -2614,6 +3128,36 @@ public class CharacterController : MonoBehaviour
 
     private SpecialAttackResult ResolveGrapple(CharacterController target)
     {
+        if (target == null || target.Stats == null)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Grapple",
+                Success = false,
+                Log = "No valid grapple target."
+            };
+        }
+
+        if (TryGetGrappleState(out CharacterController currentOpponent, out _, out _, out _))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Grapple",
+                Success = false,
+                Log = $"{Stats.CharacterName} is already grappling {currentOpponent.Stats.CharacterName}."
+            };
+        }
+
+        if (target.TryGetGrappleState(out CharacterController targetOpponent, out _, out _, out _))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Grapple",
+                Success = false,
+                Log = $"{target.Stats.CharacterName} is already grappling {targetOpponent.Stats.CharacterName}."
+            };
+        }
+
         int touchRoll = Random.Range(1, 21);
         int touchTotal = touchRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty;
         int touchAC = 10 + target.Stats.DEXMod + target.Stats.SizeModifier;
@@ -2637,10 +3181,7 @@ public class CharacterController : MonoBehaviour
 
         bool success = atkTotal >= defTotal;
         if (success)
-        {
-            ApplyCondition(CombatConditionType.Grappled, 2, target.Stats.CharacterName);
-            target.ApplyCondition(CombatConditionType.Grappled, 2, Stats.CharacterName);
-        }
+            EstablishGrappleWith(target);
 
         return new SpecialAttackResult
         {
@@ -2651,7 +3192,7 @@ public class CharacterController : MonoBehaviour
             OpposedRoll = defRoll,
             OpposedTotal = defTotal,
             Log = success
-                ? $"{Stats.CharacterName} grapples {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) Both are GRAPPLED (2 rounds)."
+                ? $"{Stats.CharacterName} starts a grapple with {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) Both are GRAPPLED."
                 : $"{Stats.CharacterName} fails to secure grapple on {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
         };
     }
@@ -2829,7 +3370,8 @@ public class CharacterController : MonoBehaviour
 
     public int GetGrappleModifier()
     {
-        return Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Grapple") ? 4 : 0);
+        int sizeMod = Stats != null ? Stats.CurrentSizeCategory.GetGrappleModifier() : 0;
+        return Stats.BaseAttackBonus + Stats.STRMod + sizeMod + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Grapple") ? 4 : 0);
     }
 
     private struct DisarmCheckResult

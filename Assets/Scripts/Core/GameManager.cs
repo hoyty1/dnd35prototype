@@ -4269,9 +4269,17 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        CombatUI.HideSpecialAttackMenu();
+
+        if (type == SpecialAttackType.Grapple
+            && pc.TryGetGrappleState(out CharacterController grappleOpponent, out _, out _, out _))
+        {
+            ShowGrappleActionMenu(pc, grappleOpponent);
+            return;
+        }
+
         _pendingSpecialAttackType = type;
         _isSelectingSpecialAttack = true;
-        CombatUI.HideSpecialAttackMenu();
         CurrentSubPhase = PlayerSubPhase.SelectingSpecialTarget;
         ShowSpecialAttackTargets(pc, type);
     }
@@ -4760,6 +4768,53 @@ public class GameManager : MonoBehaviour
         if (hasMetamagicApplied)
             slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
 
+
+        CharacterController grappleOpponent = null;
+        bool hasActiveGrapple = caster.TryGetGrappleState(out grappleOpponent, out _, out _, out _);
+        bool requiresGrappledSomaticCheck = _pendingSpell.HasSomaticComponent
+            && hasActiveGrapple
+            && grappleOpponent != null
+            && grappleOpponent.Stats != null
+            && !grappleOpponent.Stats.IsDead;
+
+        if (requiresGrappledSomaticCheck)
+        {
+            int grappleDc = 20 + grappleOpponent.GetGrappleModifier();
+            ConcentrationCheckResult grappleCheck = ConcentrationManager.MakeSpellcastingConcentrationCheck(
+                caster,
+                grappleDc,
+                ConcentrationCheckType.Grappled,
+                _pendingSpell);
+
+            CombatUI?.ShowCombatLog(
+                $"🪢 Grappled casting check ({caster.Stats.CharacterName}, {_pendingSpell.Name}): d20 {grappleCheck.D20Roll} + conc {grappleCheck.TotalBonus} = {grappleCheck.TotalRoll} vs DC {grappleDc} (20 + {grappleOpponent.Stats.CharacterName} grapple mod {grappleOpponent.GetGrappleModifier():+#;-#;0})");
+
+            if (!grappleCheck.Success)
+            {
+                bool consumedOnGrappleFail = ConsumePendingSpellSlot(
+                    spellComp,
+                    _pendingSpell,
+                    _pendingMetamagic,
+                    hasMetamagicApplied,
+                    slotLevelToConsume,
+                    false,
+                    -1,
+                    null);
+
+                if (!consumedOnGrappleFail)
+                {
+                    Debug.LogError($"[GameManager] Grappled casting failure path: could not consume level {slotLevelToConsume} slot for {_pendingSpell.Name}");
+                    return false;
+                }
+
+                CombatUI?.ShowCombatLog($"⚠ {_pendingSpell.Name} is lost while grappled. Action and spell slot are spent.");
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
+                return false;
+            }
+        }
         if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
         {
             bool consumedOnFailure = ConsumePendingSpellSlot(
@@ -8401,6 +8456,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
+
         if (cell.IsOccupied && cell.Occupant != pc && !cell.Occupant.Stats.IsDead && _highlightedCells.Contains(cell)
             && IsEnemyTeam(pc, cell.Occupant))
         {
@@ -8537,6 +8593,107 @@ public class GameManager : MonoBehaviour
                 else
                     ShowActionChoices();
             });
+    }
+
+    private void ShowGrappleActionMenu(CharacterController actor, CharacterController opponent)
+    {
+        if (actor == null || opponent == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!actor.Actions.HasStandardAction)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot take a grapple action: no standard action remaining.");
+            ShowActionChoices();
+            return;
+        }
+
+        if (!actor.TryGetGrappleState(out CharacterController liveOpponent, out bool isController, out bool isPinned, out bool opponentPinned))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is no longer in a grapple.");
+            ShowActionChoices();
+            return;
+        }
+
+        opponent = liveOpponent;
+
+        var options = new List<(GrappleActionType Action, string Label)>();
+        options.Add((GrappleActionType.EscapeArtist, $"Escape Artist check (d20 + Escape Artist) vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})"));
+        options.Add((GrappleActionType.OpposedGrappleEscape, $"Break grapple (opposed grapple check vs {opponent.Stats.CharacterName})"));
+
+        if (isPinned)
+        {
+            options.Add((GrappleActionType.BreakPin, $"Break pin (opposed grapple check vs {opponent.Stats.CharacterName})"));
+        }
+        else
+        {
+            options.Add((GrappleActionType.DamageOpponent, "Deal grapple damage (unarmed or light weapon only)"));
+            if (!opponentPinned)
+                options.Add((GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)"));
+
+            if (isController)
+                options.Add((GrappleActionType.MoveHalfSpeed, "Move while grappling (win opposed check, then move at half speed)"));
+        }
+
+        List<string> optionLabelsForPrompt = new List<string>(options.Count);
+        foreach (var option in options)
+            optionLabelsForPrompt.Add(option.Label);
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CombatUI?.ShowPickUpItemSelection(
+            actorName: actor.Stats.CharacterName,
+            itemOptions: optionLabelsForPrompt,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                {
+                    ShowActionChoices();
+                    return;
+                }
+
+                ResolveGrappleActionSelection(actor, options[selectedIndex].Action);
+            },
+            onCancel: ShowActionChoices,
+            titleOverride: $"GRAPPLE OPTIONS — {actor.Stats.CharacterName}",
+            bodyOverride: $"{actor.Stats.CharacterName} vs {opponent.Stats.CharacterName}: choose a grapple action (standard action).",
+            optionButtonColorOverride: new Color(0.35f, 0.24f, 0.18f, 1f));
+    }
+
+    private void ResolveGrappleActionSelection(CharacterController actor, GrappleActionType actionType)
+    {
+        if (actor == null || actor.Stats == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!actor.Actions.HasStandardAction)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot use grapple action: standard action already spent.");
+            ShowActionChoices();
+            return;
+        }
+
+        if (!actor.CommitStandardAction())
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        SpecialAttackResult result = actor.ResolveGrappleAction(actionType);
+        CombatUI?.ShowCombatLog($"⚔ GRAPPLE [{actionType}]: {result.Log}");
+
+        UpdateAllStatsUI();
+
+        if (actionType == GrappleActionType.MoveHalfSpeed && result.Success)
+        {
+            CombatUI?.ShowCombatLog("↔ Grapple movement control established. Current implementation keeps both combatants in place; future update will add dragged movement pathing.");
+        }
+
+        StartCoroutine(AfterAttackDelay(actor, 0.8f));
     }
 
     private void HandleOverrunTargetClick(CharacterController attacker, CharacterController target)
@@ -8784,6 +8941,32 @@ public class GameManager : MonoBehaviour
             actionLabel = "standard action";
         }
 
+        if (type == SpecialAttackType.Grapple)
+        {
+            bool attackerHasImprovedGrapple = attacker.Stats != null && attacker.Stats.HasFeat("Improved Grapple");
+            bool targetCanAoO = target != null && !target.Stats.IsDead && ThreatSystem.CanMakeAoO(target);
+
+            if (!attackerHasImprovedGrapple && targetCanAoO)
+            {
+                CombatResult grappleAoO = ThreatSystem.ExecuteAoO(target, attacker);
+                if (grappleAoO != null)
+                {
+                    CombatUI.ShowCombatLog($"⚔ Grapple initiation AoO: {grappleAoO.GetDetailedSummary()}");
+                    UpdateAllStatsUI();
+                }
+
+                if (attacker.Stats.IsDead)
+                {
+                    CombatUI.ShowCombatLog($"💀 {attacker.Stats.CharacterName} is dropped while attempting to start a grapple.");
+                    Grid.ClearAllHighlights();
+                    _highlightedCells.Clear();
+                    _isSelectingSpecialAttack = false;
+                    StartCoroutine(AfterAttackDelay(attacker, 0.8f));
+                    return;
+                }
+            }
+        }
+
         SpecialAttackResult result = attacker.ExecuteSpecialAttack(type, target, disarmTargetSlot);
         CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}] ({actionLabel}): {result.Log}");
 
@@ -8873,6 +9056,7 @@ public class GameManager : MonoBehaviour
 
         Vector3 mouseScreenPos = Vector3.zero;
 #if ENABLE_LEGACY_INPUT_MANAGER
+
         mouseScreenPos = Input.mousePosition;
 #endif
 #if ENABLE_INPUT_SYSTEM
