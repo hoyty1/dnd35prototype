@@ -21,7 +21,8 @@ public enum GrappleActionType
     PinOpponent,
     BreakPin,
     MoveHalfSpeed,
-    DrawLightWeapon
+    DrawLightWeapon,
+    RetrieveSpellComponent
 }
 
 public enum AttackDamageMode
@@ -3234,6 +3235,9 @@ public class CharacterController : MonoBehaviour
             case GrappleActionType.DrawLightWeapon:
                 return ResolveDrawLightWeaponDuringGrappleStub();
 
+            case GrappleActionType.RetrieveSpellComponent:
+                return ResolveRetrieveSpellComponentDuringGrappleStub();
+
             default:
                 return new SpecialAttackResult
                 {
@@ -3259,6 +3263,25 @@ public class CharacterController : MonoBehaviour
             ManeuverName = "Draw a Light Weapon",
             Success = false,
             Log = "Draw a Light Weapon - Not yet implemented"
+        };
+    }
+
+    private SpecialAttackResult ResolveRetrieveSpellComponentDuringGrappleStub()
+    {
+        // TODO: Implement Retrieve Spell Component during grapple
+        // - Check if character is spellcaster
+        // - Check if character has spell components in inventory
+        // - Retrieve component (move-equivalent action)
+        // - Make component available for next spell
+        // - May require Concentration check or Escape Artist check
+        // - Add detailed combat log message for the retrieve action result
+        Debug.Log("Retrieve a Spell Component - Not yet implemented");
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Retrieve a Spell Component",
+            Success = false,
+            Log = "Retrieve a Spell Component - Not yet implemented"
         };
     }
 
