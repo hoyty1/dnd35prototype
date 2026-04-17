@@ -8953,6 +8953,16 @@ public class GameManager : MonoBehaviour
                 {
                     CombatUI.ShowCombatLog($"⚔ Grapple initiation AoO: {grappleAoO.GetDetailedSummary()}");
                     UpdateAllStatsUI();
+
+                    if (grappleAoO.Hit)
+                    {
+                        CombatUI.ShowCombatLog("Grapple attempt disrupted by attack of opportunity");
+                        Grid.ClearAllHighlights();
+                        _highlightedCells.Clear();
+                        _isSelectingSpecialAttack = false;
+                        StartCoroutine(AfterAttackDelay(attacker, 0.8f));
+                        return;
+                    }
                 }
 
                 if (attacker.Stats.IsDead)
