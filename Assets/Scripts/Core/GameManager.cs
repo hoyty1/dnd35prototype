@@ -4754,6 +4754,100 @@ public class GameManager : MonoBehaviour
         CombatUI.SetTurnIndicator($"✦ {_pendingSpell.Name}: Click an empty tile to place summon | Range: {range * 5} ft | Right-click to cancel");
 
     }
+    private bool TryGetGrappledOrPinnedState(CharacterController caster, out string conditionLabel)
+    {
+        conditionLabel = null;
+        if (caster == null)
+            return false;
+
+        bool isPinned = caster.HasCondition(CombatConditionType.Pinned);
+        bool isGrappled = caster.HasCondition(CombatConditionType.Grappled);
+
+        if (!isPinned && !isGrappled)
+            return false;
+
+        conditionLabel = isPinned ? "pinned" : "grappled";
+        return true;
+    }
+
+    private bool CanBeginSpellcastWhileGrappledOrPinned(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || spell == null)
+            return false;
+
+        if (!TryGetGrappledOrPinnedState(caster, out string conditionLabel))
+            return true;
+
+        // D&D 3.5e: While grappled/pinned, you can only cast spells with casting time
+        // of 1 standard action or less, and the spell must have no somatic component.
+        bool hasAllowedCastingTime = spell.ActionType == SpellActionType.Standard
+            || spell.ActionType == SpellActionType.Swift
+            || spell.ActionType == SpellActionType.Free;
+        if (!hasAllowedCastingTime)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: casting time must be 1 standard action or less.");
+            return false;
+        }
+
+        if (spell.HasSomaticComponent)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} cannot cast {spell.Name} while {conditionLabel}: spells with somatic components are blocked.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool ResolveGrappledOrPinnedCastingConcentration(
+        CharacterController caster,
+        SpellcastingComponent spellComp,
+        SpellData spell,
+        MetamagicData metamagic,
+        bool hasMetamagicApplied,
+        int slotLevelToConsume,
+        bool isSpontaneous,
+        int spontaneousLevel,
+        string spontaneousSacrificedSpellId)
+    {
+        if (caster == null || spell == null)
+            return false;
+
+        if (!TryGetGrappledOrPinnedState(caster, out string conditionLabel))
+            return true;
+
+        int dc = 20 + spell.SpellLevel;
+        ConcentrationCheckResult check = ConcentrationManager.MakeSpellcastingConcentrationCheck(
+            caster,
+            dc,
+            ConcentrationCheckType.Grappled,
+            spell);
+
+        CombatUI?.ShowCombatLog(
+            $"🪢 {conditionLabel.ToUpperInvariant()} casting concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {check.D20Roll} + conc {check.TotalBonus} = {check.TotalRoll} vs DC {dc} (20 + spell level {spell.SpellLevel})");
+
+        if (check.Success)
+            return true;
+
+        bool consumed = ConsumePendingSpellSlot(
+            spellComp,
+            spell,
+            metamagic,
+            hasMetamagicApplied,
+            slotLevelToConsume,
+            isSpontaneous,
+            spontaneousLevel,
+            spontaneousSacrificedSpellId);
+
+        if (!consumed)
+        {
+            Debug.LogError($"[GameManager] {conditionLabel} concentration failure path: could not consume level {slotLevelToConsume} slot for {spell.Name}");
+            return false;
+        }
+
+        CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} fails the DC {dc} concentration check while {conditionLabel}. {spell.Name} is lost and the spell slot is spent.");
+        return false;
+    }
+
     private bool TryConsumePendingSpellCast(CharacterController caster)
     {
         if (caster == null || _pendingSpell == null) return false;
@@ -4781,51 +4875,22 @@ public class GameManager : MonoBehaviour
             slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
 
 
-        CharacterController grappleOpponent = null;
-        bool hasActiveGrapple = caster.TryGetGrappleState(out grappleOpponent, out _, out _, out _);
-        bool requiresGrappledSomaticCheck = _pendingSpell.HasSomaticComponent
-            && hasActiveGrapple
-            && grappleOpponent != null
-            && grappleOpponent.Stats != null
-            && !grappleOpponent.Stats.IsDead;
-
-        if (requiresGrappledSomaticCheck)
-        {
-            int grappleDc = 20 + grappleOpponent.GetGrappleModifier();
-            ConcentrationCheckResult grappleCheck = ConcentrationManager.MakeSpellcastingConcentrationCheck(
+        if (!ResolveGrappledOrPinnedCastingConcentration(
                 caster,
-                grappleDc,
-                ConcentrationCheckType.Grappled,
-                _pendingSpell);
-
-            CombatUI?.ShowCombatLog(
-                $"🪢 Grappled casting check ({caster.Stats.CharacterName}, {_pendingSpell.Name}): d20 {grappleCheck.D20Roll} + conc {grappleCheck.TotalBonus} = {grappleCheck.TotalRoll} vs DC {grappleDc} (20 + {grappleOpponent.Stats.CharacterName} grapple mod {grappleOpponent.GetGrappleModifier():+#;-#;0})");
-
-            if (!grappleCheck.Success)
-            {
-                bool consumedOnGrappleFail = ConsumePendingSpellSlot(
-                    spellComp,
-                    _pendingSpell,
-                    _pendingMetamagic,
-                    hasMetamagicApplied,
-                    slotLevelToConsume,
-                    false,
-                    -1,
-                    null);
-
-                if (!consumedOnGrappleFail)
-                {
-                    Debug.LogError($"[GameManager] Grappled casting failure path: could not consume level {slotLevelToConsume} slot for {_pendingSpell.Name}");
-                    return false;
-                }
-
-                CombatUI?.ShowCombatLog($"⚠ {_pendingSpell.Name} is lost while grappled. Action and spell slot are spent.");
-
-                _pendingSpell = null;
-                _pendingMetamagic = null;
-                _pendingSpellFromHeldCharge = false;
-                return false;
-            }
+                spellComp,
+                _pendingSpell,
+                _pendingMetamagic,
+                hasMetamagicApplied,
+                slotLevelToConsume,
+                false,
+                -1,
+                null))
+        {
+            HandleConcentrationOnCasting(caster, _pendingSpell);
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            return false;
         }
         if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
         {
@@ -5259,6 +5324,15 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        if (!CanBeginSpellcastWhileGrappledOrPinned(caster, _pendingSpell))
+        {
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            ShowActionChoices();
+            return;
+        }
+
         // ===== AoE SPELLS: Enter AoE targeting mode =====
         if (_pendingSpell.AoEShapeType != AoEShape.None)
         {
@@ -5488,6 +5562,29 @@ public class GameManager : MonoBehaviour
             if (hasMetamagicApplied)
                 slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
 
+            if (!ResolveGrappledOrPinnedCastingConcentration(
+                    caster,
+                    spellComp,
+                    _pendingSpell,
+                    _pendingMetamagic,
+                    hasMetamagicApplied,
+                    slotLevelToConsume,
+                    false,
+                    -1,
+                    null))
+            {
+                HandleConcentrationOnCasting(caster, _pendingSpell);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
+
+                ClearSpellcastResourceSnapshot();
+                StartCoroutine(AfterAttackDelay(caster, 1.0f));
+                return;
+            }
             if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
             {
                 consumed = ConsumePendingSpellSlot(
@@ -5648,6 +5745,29 @@ public class GameManager : MonoBehaviour
 
         if (!isDeliveringHeldCharge)
         {
+            if (!ResolveGrappledOrPinnedCastingConcentration(
+                    caster,
+                    spellComp,
+                    _pendingSpell,
+                    _pendingMetamagic,
+                    hasMetamagicApplied,
+                    slotLevelToConsume,
+                    isSpontaneous,
+                    spontaneousLevel,
+                    spontaneousSacrificedSpellId))
+            {
+                HandleConcentrationOnCasting(caster, _pendingSpell);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingMetamagic = null;
+
+                ClearSpellcastResourceSnapshot();
+                StartCoroutine(AfterAttackDelay(caster, 1.0f));
+                return;
+            }
             if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
             {
                 bool consumedOnFailure = ConsumePendingSpellSlot(
@@ -6365,6 +6485,28 @@ public class GameManager : MonoBehaviour
             slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
         }
 
+        if (!ResolveGrappledOrPinnedCastingConcentration(
+                caster,
+                spellComp,
+                _pendingSpell,
+                _pendingMetamagic,
+                hasMetamagicApplied,
+                slotLevelToConsume,
+                isSpontaneous,
+                spontaneousLevel,
+                spontaneousSacrificedSpellId))
+        {
+            HandleConcentrationOnCasting(caster, _pendingSpell);
+            UpdateAllStatsUI();
+            Grid.ClearAllHighlights();
+
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+
+            ClearSpellcastResourceSnapshot();
+            StartCoroutine(AfterAttackDelay(caster, 1.0f));
+            return;
+        }
         if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
         {
             bool consumedOnFailure = ConsumePendingSpellSlot(
