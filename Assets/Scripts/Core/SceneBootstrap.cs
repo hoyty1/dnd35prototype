@@ -525,48 +525,50 @@ public class SceneBootstrap : MonoBehaviour
     /// </summary>
     private void CreateCombatDataPanel(Transform parent, CombatUI combatUI)
     {
-        // Main bottom panel
-        GameObject bottomPanel = new GameObject("CombatDataPanel");
+        // Keep a subtle bottom background strip for readability, but make the two sections
+        // independent floating windows so they can be dragged and resized.
+        GameObject bottomPanel = new GameObject("CombatDataPanelBackdrop");
         bottomPanel.transform.SetParent(parent, false);
         RectTransform bpRT = bottomPanel.AddComponent<RectTransform>();
         bpRT.anchorMin = new Vector2(0, 0);
         bpRT.anchorMax = new Vector2(1, 0);
         bpRT.pivot = new Vector2(0.5f, 0);
         bpRT.anchoredPosition = Vector2.zero;
-        bpRT.sizeDelta = new Vector2(0, BottomPanelHeight);
+        bpRT.sizeDelta = new Vector2(0, BottomPanelHeight + 20f);
 
         Image bpBg = bottomPanel.AddComponent<Image>();
-        bpBg.color = new Color(0.08f, 0.08f, 0.12f, 0.92f);
+        bpBg.color = new Color(0.06f, 0.06f, 0.1f, 0.45f);
 
         combatUI.CombatDataPanelGO = bottomPanel;
 
-        // === LEFT SECTION: Combat Log (0% to 55%) ===
-        CreateCombatLogSection(bottomPanel.transform, combatUI);
-
-        // === RIGHT SECTION: Action Buttons (55% to 100%) ===
-        CreateActionButtonsSection(bottomPanel.transform, combatUI);
+        // Floating windows are parented directly to canvas root.
+        CreateCombatLogSection(parent, combatUI);
+        CreateActionButtonsSection(parent, combatUI);
     }
 
-    /// <summary>Left section of bottom panel: persistent scrollable combat log with ScrollRect.</summary>
+    /// <summary>Floating combat log window with draggable title bar + resizable edges/corners.</summary>
     private void CreateCombatLogSection(Transform parent, CombatUI combatUI)
     {
-        // --- Outer container ---
         GameObject logSection = new GameObject("CombatLogSection");
         logSection.transform.SetParent(parent, false);
         RectTransform lsRT = logSection.AddComponent<RectTransform>();
-        lsRT.anchorMin = new Vector2(0, 0);
-        lsRT.anchorMax = new Vector2(0.55f, 1);
-        lsRT.offsetMin = new Vector2(8, 8);
-        lsRT.offsetMax = new Vector2(-4, -8);
+        lsRT.anchorMin = new Vector2(0.5f, 0.5f);
+        lsRT.anchorMax = new Vector2(0.5f, 0.5f);
+        lsRT.pivot = new Vector2(0.5f, 0.5f);
+        lsRT.anchoredPosition = new Vector2(-360f, -420f);
+        lsRT.sizeDelta = new Vector2(900f, 220f);
 
         Image lsBg = logSection.AddComponent<Image>();
-        lsBg.color = new Color(0.05f, 0.05f, 0.1f, 0.8f);
+        lsBg.color = new Color(0.05f, 0.05f, 0.1f, 0.9f);
 
-        // Log title (fixed at top, outside scroll area)
-        CreateText(logSection.transform, "LogTitle",
-            new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
-            new Vector2(0, -2), new Vector2(0, 18),
-            "── COMBAT LOG ──", 10, new Color(0.6f, 0.6f, 0.8f), TextAnchor.MiddleCenter);
+        // Title bar (drag handle)
+        CreateWindowTitleBar(
+            logSection.transform,
+            "CombatLogTitleBar",
+            "── COMBAT LOG ──",
+            new Color(0.16f, 0.16f, 0.28f, 0.95f),
+            "ui_window_combat_log",
+            lsRT);
 
         // --- Scroll Area (holds ScrollRect) ---
         GameObject scrollArea = new GameObject("CombatLogScrollArea");
@@ -575,7 +577,7 @@ public class SceneBootstrap : MonoBehaviour
         scrollAreaRT.anchorMin = new Vector2(0, 0);
         scrollAreaRT.anchorMax = new Vector2(1, 1);
         scrollAreaRT.offsetMin = new Vector2(0, 0);
-        scrollAreaRT.offsetMax = new Vector2(0, -20); // Leave room for title
+        scrollAreaRT.offsetMax = new Vector2(0, -24); // Leave room for title bar
 
         ScrollRect scrollRect = scrollArea.AddComponent<ScrollRect>();
         scrollRect.horizontal = false;
@@ -606,7 +608,7 @@ public class SceneBootstrap : MonoBehaviour
         contentRT.anchorMax = new Vector2(1, 1);
         contentRT.pivot = new Vector2(0.5f, 1);
         contentRT.anchoredPosition = Vector2.zero;
-        contentRT.sizeDelta = new Vector2(0, 0); // Will grow via ContentSizeFitter
+        contentRT.sizeDelta = new Vector2(0, 0);
 
         VerticalLayoutGroup vlg = content.AddComponent<VerticalLayoutGroup>();
         vlg.childAlignment = TextAnchor.UpperLeft;
@@ -627,6 +629,15 @@ public class SceneBootstrap : MonoBehaviour
         // --- Scrollbar via helper ---
         ScrollbarHelper.CreateVerticalScrollbar(scrollRect, scrollArea.transform, 14f);
 
+        // --- Draggable + resizable behavior ---
+        ResizableWindow logResizable = logSection.AddComponent<ResizableWindow>();
+        logResizable.WindowRect = lsRT;
+        logResizable.MinSize = new Vector2(360f, 140f);
+        logResizable.MaxSize = new Vector2(1400f, 720f);
+        logResizable.PersistenceKey = "ui_window_combat_log";
+        logResizable.SavePositionToPlayerPrefs = true;
+        logResizable.SaveSizeToPlayerPrefs = true;
+
         // --- Store references in CombatUI ---
         combatUI.CombatLogContent = content;
         combatUI.CombatLogScrollRect = scrollRect;
@@ -635,32 +646,42 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.ShowCombatLog("Combat begins! Choose your actions.");
     }
 
-    /// <summary>Right section of bottom panel: action buttons in a grid.</summary>
+    /// <summary>Floating action button window with draggable title bar + resizable edges/corners.</summary>
     private void CreateActionButtonsSection(Transform parent, CombatUI combatUI)
     {
         GameObject actionSection = new GameObject("ActionPanel");
         actionSection.transform.SetParent(parent, false);
         RectTransform asRT = actionSection.AddComponent<RectTransform>();
-        asRT.anchorMin = new Vector2(0.55f, 0);
-        asRT.anchorMax = new Vector2(1, 1);
-        asRT.offsetMin = new Vector2(4, 8);
-        asRT.offsetMax = new Vector2(-8, -8);
+        asRT.anchorMin = new Vector2(0.5f, 0.5f);
+        asRT.anchorMax = new Vector2(0.5f, 0.5f);
+        asRT.pivot = new Vector2(0.5f, 0.5f);
+        asRT.anchoredPosition = new Vector2(450f, -410f);
+        asRT.sizeDelta = new Vector2(760f, 240f);
 
         Image asBg = actionSection.AddComponent<Image>();
-        asBg.color = new Color(0.12f, 0.12f, 0.2f, 0.85f);
+        asBg.color = new Color(0.12f, 0.12f, 0.2f, 0.9f);
 
         combatUI.ActionPanel = actionSection;
+
+        // Title bar (drag handle)
+        CreateWindowTitleBar(
+            actionSection.transform,
+            "ActionPanelTitleBar",
+            "── ACTIONS ──",
+            new Color(0.2f, 0.2f, 0.32f, 0.95f),
+            "ui_window_action_panel",
+            asRT);
 
         // Action Status text (top of action section)
         combatUI.ActionStatusText = CreateText(actionSection.transform, "ActionStatus",
             new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1),
-            new Vector2(0, -2), new Vector2(0, 18),
+            new Vector2(0, -24), new Vector2(0, 18),
             "[Move] [Standard]", 10, new Color(0.7f, 0.9f, 0.7f), TextAnchor.MiddleCenter);
         RectTransform statusRT = combatUI.ActionStatusText.GetComponent<RectTransform>();
         statusRT.anchorMin = new Vector2(0, 1);
         statusRT.anchorMax = new Vector2(1, 1);
-        statusRT.offsetMin = new Vector2(4, -20);
-        statusRT.offsetMax = new Vector2(-4, -2);
+        statusRT.offsetMin = new Vector2(4, -42);
+        statusRT.offsetMax = new Vector2(-4, -24);
 
         // Button grid container
         GameObject btnGrid = new GameObject("ButtonGrid");
@@ -668,12 +689,10 @@ public class SceneBootstrap : MonoBehaviour
         RectTransform gridRT = btnGrid.AddComponent<RectTransform>();
         gridRT.anchorMin = new Vector2(0, 0);
         gridRT.anchorMax = new Vector2(1, 1);
-        gridRT.offsetMin = new Vector2(6, 6);
-        gridRT.offsetMax = new Vector2(-6, -24);
+        gridRT.offsetMin = new Vector2(6, 30);
+        gridRT.offsetMax = new Vector2(-6, -48);
 
         GridLayoutGroup grid = btnGrid.AddComponent<GridLayoutGroup>();
-        // 3-column layout to reduce vertical overflow in the action panel,
-        // keeping End Turn visible even when many contextual buttons are active.
         grid.cellSize = new Vector2(170, 26);
         grid.spacing = new Vector2(6, 3);
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
@@ -754,7 +773,80 @@ public class SceneBootstrap : MonoBehaviour
         spellRT.offsetMax = new Vector2(-4, 30);
         combatUI.SpellSlotsText.gameObject.SetActive(false);
 
+        // Draggable + resizable behavior with PlayerPrefs persistence.
+        ResizableWindow actionResizable = actionSection.AddComponent<ResizableWindow>();
+        actionResizable.WindowRect = asRT;
+        actionResizable.MinSize = new Vector2(420f, 180f);
+        actionResizable.MaxSize = new Vector2(1500f, 760f);
+        actionResizable.PersistenceKey = "ui_window_action_panel";
+        actionResizable.SavePositionToPlayerPrefs = true;
+        actionResizable.SaveSizeToPlayerPrefs = true;
+
+        // Reflow button grid whenever the action panel is resized.
+        actionResizable.OnResized += _ => ReflowActionButtonGrid(grid, gridRT);
+        ReflowActionButtonGrid(grid, gridRT);
+
         actionSection.SetActive(false);
+    }
+
+    private void CreateWindowTitleBar(Transform windowParent, string objectName, string label, Color barColor, string persistenceKey, RectTransform windowRect)
+    {
+        GameObject titleBar = new GameObject(objectName);
+        titleBar.transform.SetParent(windowParent, false);
+
+        RectTransform titleRT = titleBar.AddComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0, 1);
+        titleRT.anchorMax = new Vector2(1, 1);
+        titleRT.pivot = new Vector2(0.5f, 1f);
+        titleRT.anchoredPosition = Vector2.zero;
+        titleRT.sizeDelta = new Vector2(0f, 22f);
+
+        Image titleBg = titleBar.AddComponent<Image>();
+        titleBg.color = barColor;
+
+        Text titleText = CreateText(titleBar.transform, objectName + "Label",
+            new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero,
+            label, 10, new Color(0.8f, 0.85f, 1f), TextAnchor.MiddleCenter);
+        titleText.raycastTarget = false;
+
+        DraggableWindow draggable = titleBar.AddComponent<DraggableWindow>();
+        draggable.WindowRect = windowRect;
+        draggable.ClampToCanvasBounds = true;
+        draggable.PersistenceKey = persistenceKey;
+        draggable.SavePositionToPlayerPrefs = true;
+    }
+
+    private void ReflowActionButtonGrid(GridLayoutGroup grid, RectTransform gridRect)
+    {
+        if (grid == null || gridRect == null)
+            return;
+
+        float width = Mathf.Max(300f, gridRect.rect.width);
+        float height = Mathf.Max(120f, gridRect.rect.height);
+
+        int columns;
+        if (width >= 940f) columns = 4;
+        else if (width >= 700f) columns = 3;
+        else if (width >= 500f) columns = 2;
+        else columns = 1;
+
+        int buttonCount = gridRect.childCount;
+        int rows = Mathf.Max(1, Mathf.CeilToInt((float)buttonCount / columns));
+
+        float spacingX = 6f;
+        float spacingY = 3f;
+
+        float availableWidth = width - ((columns - 1) * spacingX);
+        float availableHeight = height - ((rows - 1) * spacingY);
+
+        float cellWidth = Mathf.Clamp((availableWidth / columns), 125f, 240f);
+        float cellHeight = Mathf.Clamp((availableHeight / rows), 24f, 34f);
+
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = columns;
+        grid.spacing = new Vector2(spacingX, spacingY);
+        grid.cellSize = new Vector2(cellWidth, cellHeight);
     }
 
     // ========== FEAT CONTROLS (above bottom panel, right side) ==========
