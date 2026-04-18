@@ -11112,6 +11112,12 @@ public class GameManager : MonoBehaviour
         CharacterController targetPC = GetClosestAlivePCTo(npc);
         if (targetPC == null) yield break;
 
+        if (npc.IsGrappling())
+        {
+            yield return StartCoroutine(AI_GrappleRestrictedTurn(npc));
+            yield break;
+        }
+
         if (isSummon)
         {
             yield return StartCoroutine(AI_SummonedCreature(npc));
@@ -11135,6 +11141,165 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private IEnumerator AI_GrappleRestrictedTurn(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null)
+            yield break;
+
+        if (!npc.TryGetGrappleState(out CharacterController opponent, out _, out bool actorPinned, out bool opponentPinned) || opponent == null || opponent.Stats == null)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} is in an invalid grapple state and cannot pick a grapple action.");
+            yield return new WaitForSeconds(0.35f);
+            yield break;
+        }
+
+        GrappleActionType? chosenAction = ChooseNPCGrappleAction(npc, opponent, actorPinned, opponentPinned);
+        if (chosenAction == null)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no legal grapple actions available.");
+            yield return new WaitForSeconds(0.35f);
+            yield break;
+        }
+
+        bool isFreeAction = chosenAction.Value == GrappleActionType.ReleasePinnedOpponent;
+        if (!isFreeAction && !npc.CommitStandardAction())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} cannot use grapple action: standard action already spent.");
+            yield return new WaitForSeconds(0.35f);
+            yield break;
+        }
+
+        SpecialAttackResult result = npc.ResolveGrappleAction(chosenAction.Value);
+        CombatUI?.ShowCombatLog($"☠ {npc.Stats.CharacterName} chooses grapple action [{chosenAction.Value}] against {opponent.Stats.CharacterName}: {result.Log}");
+        UpdateAllStatsUI();
+
+        if (result != null && result.TargetKilled)
+        {
+            HandleSummonDeathCleanup(opponent);
+
+            if (AreAllPCsDead())
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+                CombatUI?.SetActionButtonsVisible(false);
+                yield break;
+            }
+        }
+
+        yield return new WaitForSeconds(isFreeAction ? 0.35f : 0.8f);
+    }
+
+    private GrappleActionType? ChooseNPCGrappleAction(CharacterController npc, CharacterController opponent, bool actorPinned, bool opponentPinned)
+    {
+        List<GrappleActionType> legalActions = BuildNPCLegalGrappleActions(npc, opponent, actorPinned, opponentPinned);
+        if (legalActions.Count == 0)
+            return null;
+
+        if (actorPinned)
+        {
+            if (legalActions.Contains(GrappleActionType.BreakPin))
+                return GrappleActionType.BreakPin;
+            if (legalActions.Contains(GrappleActionType.OpposedGrappleEscape))
+                return GrappleActionType.OpposedGrappleEscape;
+            if (legalActions.Contains(GrappleActionType.EscapeArtist))
+                return GrappleActionType.EscapeArtist;
+        }
+
+        bool isPinning = npc.IsPinningOpponent();
+        if (isPinning)
+        {
+            if (opponentPinned && legalActions.Contains(GrappleActionType.PinOpponent) && Random.value < 0.35f)
+                return GrappleActionType.PinOpponent; // maintain pin
+
+            if (legalActions.Contains(GrappleActionType.DamageOpponent))
+                return GrappleActionType.DamageOpponent;
+
+            if (legalActions.Contains(GrappleActionType.UseOpponentWeapon) && Random.value < 0.35f)
+                return GrappleActionType.UseOpponentWeapon;
+
+            if (opponentPinned && legalActions.Contains(GrappleActionType.ReleasePinnedOpponent) && Random.value < 0.10f)
+                return GrappleActionType.ReleasePinnedOpponent;
+        }
+        else
+        {
+            if (!opponentPinned && legalActions.Contains(GrappleActionType.PinOpponent) && npc.Stats.STRMod >= 3 && Random.value < 0.35f)
+                return GrappleActionType.PinOpponent;
+
+            if (legalActions.Contains(GrappleActionType.UseOpponentWeapon) && Random.value < 0.30f)
+                return GrappleActionType.UseOpponentWeapon;
+
+            if (legalActions.Contains(GrappleActionType.DamageOpponent))
+                return GrappleActionType.DamageOpponent;
+        }
+
+        return legalActions[Random.Range(0, legalActions.Count)];
+    }
+
+    private List<GrappleActionType> BuildNPCLegalGrappleActions(CharacterController npc, CharacterController opponent, bool actorPinned, bool opponentPinned)
+    {
+        var actions = new List<GrappleActionType>();
+        if (npc == null || opponent == null)
+            return actions;
+
+        bool hasStandardAction = npc.Actions != null && npc.Actions.HasStandardAction;
+
+        void TryAdd(GrappleActionType actionType, bool requiresStandardAction = true)
+        {
+            if (requiresStandardAction && !hasStandardAction)
+                return;
+
+            if (npc.IsGrappleActionBlockedWhilePinning(actionType, out _))
+                return;
+
+            switch (actionType)
+            {
+                case GrappleActionType.BreakPin:
+                    if (!actorPinned)
+                        return;
+                    break;
+
+                case GrappleActionType.DamageOpponent:
+                case GrappleActionType.PinOpponent:
+                case GrappleActionType.MoveHalfSpeed:
+                case GrappleActionType.UseOpponentWeapon:
+                    if (actorPinned)
+                        return;
+                    break;
+
+                case GrappleActionType.ReleasePinnedOpponent:
+                    if (!npc.IsPinningOpponent() || !opponentPinned)
+                        return;
+                    break;
+            }
+
+            if (actionType == GrappleActionType.UseOpponentWeapon)
+            {
+                List<DisarmableHeldItemOption> opponentLightWeapons = opponent.GetEquippedLightHandWeaponOptions();
+                if (opponentLightWeapons == null || opponentLightWeapons.Count == 0)
+                    return;
+            }
+
+            actions.Add(actionType);
+        }
+
+        if (actorPinned)
+        {
+            TryAdd(GrappleActionType.BreakPin);
+            TryAdd(GrappleActionType.OpposedGrappleEscape);
+            TryAdd(GrappleActionType.EscapeArtist);
+            return actions;
+        }
+
+        TryAdd(GrappleActionType.DamageOpponent);
+        TryAdd(GrappleActionType.PinOpponent);
+        TryAdd(GrappleActionType.UseOpponentWeapon);
+        TryAdd(GrappleActionType.MoveHalfSpeed);
+        TryAdd(GrappleActionType.OpposedGrappleEscape);
+        TryAdd(GrappleActionType.EscapeArtist);
+        TryAdd(GrappleActionType.ReleasePinnedOpponent, requiresStandardAction: false);
+
+        return actions;
+    }
     private IEnumerator AI_AggressiveMelee(CharacterController npc, CharacterController targetPC)
     {
         if (npc == null || targetPC == null || targetPC.Stats == null || targetPC.Stats.IsDead)
@@ -11538,6 +11703,7 @@ public class GameManager : MonoBehaviour
     private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target)
     {
         if (npc == null || target == null) return false;
+        if (npc.IsGrappling()) return false;
         if (!npc.Actions.HasStandardAction) return false;
 
         SpecialAttackType? choice = null;
