@@ -552,11 +552,13 @@ public class SceneBootstrap : MonoBehaviour
         GameObject logSection = new GameObject("CombatLogSection");
         logSection.transform.SetParent(parent, false);
         RectTransform lsRT = logSection.AddComponent<RectTransform>();
+        Vector2 defaultLogPosition = new Vector2(-360f, -420f);
+        Vector2 defaultLogSize = new Vector2(900f, 220f);
         lsRT.anchorMin = new Vector2(0.5f, 0.5f);
         lsRT.anchorMax = new Vector2(0.5f, 0.5f);
         lsRT.pivot = new Vector2(0.5f, 0.5f);
-        lsRT.anchoredPosition = new Vector2(-360f, -420f);
-        lsRT.sizeDelta = new Vector2(900f, 220f);
+        lsRT.anchoredPosition = defaultLogPosition;
+        lsRT.sizeDelta = defaultLogSize;
 
         Image lsBg = logSection.AddComponent<Image>();
         lsBg.color = new Color(0.05f, 0.05f, 0.1f, 0.9f);
@@ -638,6 +640,11 @@ public class SceneBootstrap : MonoBehaviour
         logResizable.SavePositionToPlayerPrefs = true;
         logResizable.SaveSizeToPlayerPrefs = true;
 
+        combatUI.CombatLogWindowRect = lsRT;
+        combatUI.CombatLogResizable = logResizable;
+        combatUI.DefaultCombatLogWindowPosition = defaultLogPosition;
+        combatUI.DefaultCombatLogWindowSize = defaultLogSize;
+
         // --- Store references in CombatUI ---
         combatUI.CombatLogContent = content;
         combatUI.CombatLogScrollRect = scrollRect;
@@ -652,11 +659,13 @@ public class SceneBootstrap : MonoBehaviour
         GameObject actionSection = new GameObject("ActionPanel");
         actionSection.transform.SetParent(parent, false);
         RectTransform asRT = actionSection.AddComponent<RectTransform>();
+        Vector2 defaultActionPosition = new Vector2(450f, -410f);
+        Vector2 defaultActionSize = new Vector2(760f, 240f);
         asRT.anchorMin = new Vector2(0.5f, 0.5f);
         asRT.anchorMax = new Vector2(0.5f, 0.5f);
         asRT.pivot = new Vector2(0.5f, 0.5f);
-        asRT.anchoredPosition = new Vector2(450f, -410f);
-        asRT.sizeDelta = new Vector2(760f, 240f);
+        asRT.anchoredPosition = defaultActionPosition;
+        asRT.sizeDelta = defaultActionSize;
 
         Image asBg = actionSection.AddComponent<Image>();
         asBg.color = new Color(0.12f, 0.12f, 0.2f, 0.9f);
@@ -671,6 +680,34 @@ public class SceneBootstrap : MonoBehaviour
             new Color(0.2f, 0.2f, 0.32f, 0.95f),
             "ui_window_action_panel",
             asRT);
+
+        // Reset floating windows button.
+        GameObject resetBtnGO = new GameObject("ResetUILayoutButton");
+        resetBtnGO.transform.SetParent(actionSection.transform, false);
+        RectTransform resetBtnRT = resetBtnGO.AddComponent<RectTransform>();
+        resetBtnRT.anchorMin = new Vector2(1f, 1f);
+        resetBtnRT.anchorMax = new Vector2(1f, 1f);
+        resetBtnRT.pivot = new Vector2(1f, 1f);
+        resetBtnRT.anchoredPosition = new Vector2(-6f, -2f);
+        resetBtnRT.sizeDelta = new Vector2(86f, 18f);
+
+        Image resetBtnImage = resetBtnGO.AddComponent<Image>();
+        Color resetColor = new Color(0.36f, 0.2f, 0.2f, 0.95f);
+        resetBtnImage.color = resetColor;
+
+        Button resetButton = resetBtnGO.AddComponent<Button>();
+        ColorBlock resetColors = resetButton.colors;
+        resetColors.normalColor = resetColor;
+        resetColors.highlightedColor = resetColor * 1.15f;
+        resetColors.pressedColor = resetColor * 0.85f;
+        resetButton.colors = resetColors;
+        combatUI.ResetUILayoutButton = resetButton;
+
+        Text resetLabel = CreateText(resetBtnGO.transform, "ResetUILayoutLabel",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero,
+            "Reset UI", 10, new Color(1f, 0.9f, 0.9f), TextAnchor.MiddleCenter);
+        resetLabel.raycastTarget = false;
 
         // Action Status text (top of action section)
         combatUI.ActionStatusText = CreateText(actionSection.transform, "ActionStatus",
@@ -781,6 +818,11 @@ public class SceneBootstrap : MonoBehaviour
         actionResizable.PersistenceKey = "ui_window_action_panel";
         actionResizable.SavePositionToPlayerPrefs = true;
         actionResizable.SaveSizeToPlayerPrefs = true;
+
+        combatUI.ActionWindowRect = asRT;
+        combatUI.ActionWindowResizable = actionResizable;
+        combatUI.DefaultActionWindowPosition = defaultActionPosition;
+        combatUI.DefaultActionWindowSize = defaultActionSize;
 
         // Reflow button grid whenever the action panel is resized.
         actionResizable.OnResized += _ => ReflowActionButtonGrid(grid, gridRT);
@@ -1029,6 +1071,12 @@ public class SceneBootstrap : MonoBehaviour
         }
         if (ui.EndTurnButton != null)
             ui.EndTurnButton.onClick.AddListener(() => GameManager.Instance.OnEndTurnButtonPressed());
+
+        if (ui.ResetUILayoutButton != null)
+        {
+            ui.ResetUILayoutButton.onClick.RemoveAllListeners();
+            ui.ResetUILayoutButton.onClick.AddListener(() => ui.ResetFloatingWindowLayout());
+        }
 
         if (ui.PowerAttackSlider != null)
             ui.PowerAttackSlider.onValueChanged.AddListener((val) => GameManager.Instance.OnPowerAttackSliderChanged(val));

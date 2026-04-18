@@ -134,6 +134,17 @@ public class CombatUI : MonoBehaviour
     public GameObject PartyPanelGO;          // Left-side party panel container
     public GameObject CombatDataPanelGO;     // Bottom combat data panel container
 
+    [Header("Floating Windows")]
+    public RectTransform CombatLogWindowRect;
+    public RectTransform ActionWindowRect;
+    public ResizableWindow CombatLogResizable;
+    public ResizableWindow ActionWindowResizable;
+    public Button ResetUILayoutButton;
+    public Vector2 DefaultCombatLogWindowPosition;
+    public Vector2 DefaultCombatLogWindowSize;
+    public Vector2 DefaultActionWindowPosition;
+    public Vector2 DefaultActionWindowSize;
+
     // Active-PC indicator images on the panels
     public Image PC1ActiveIndicator;
     public Image PC2ActiveIndicator;
@@ -549,6 +560,42 @@ public class CombatUI : MonoBehaviour
             HideDropEquippedItemSelection();
             ResetDamageModeToggleVisual();
         }
+    }
+
+    public void ResetFloatingWindowLayout()
+    {
+        DeleteWindowPrefs("ui_window_combat_log");
+        DeleteWindowPrefs("ui_window_action_panel");
+
+        if (CombatLogResizable != null)
+            CombatLogResizable.ApplyWindowState(DefaultCombatLogWindowPosition, DefaultCombatLogWindowSize, saveToPlayerPrefs: true);
+        else if (CombatLogWindowRect != null)
+        {
+            CombatLogWindowRect.sizeDelta = DefaultCombatLogWindowSize;
+            CombatLogWindowRect.anchoredPosition = DefaultCombatLogWindowPosition;
+        }
+
+        if (ActionWindowResizable != null)
+            ActionWindowResizable.ApplyWindowState(DefaultActionWindowPosition, DefaultActionWindowSize, saveToPlayerPrefs: true);
+        else if (ActionWindowRect != null)
+        {
+            ActionWindowRect.sizeDelta = DefaultActionWindowSize;
+            ActionWindowRect.anchoredPosition = DefaultActionWindowPosition;
+        }
+
+        PlayerPrefs.Save();
+        ShowCombatLog("UI layout reset to default window positions and sizes.");
+    }
+
+    private static void DeleteWindowPrefs(string persistenceKey)
+    {
+        if (string.IsNullOrEmpty(persistenceKey))
+            return;
+
+        PlayerPrefs.DeleteKey(persistenceKey + "_x");
+        PlayerPrefs.DeleteKey(persistenceKey + "_y");
+        PlayerPrefs.DeleteKey(persistenceKey + "_w");
+        PlayerPrefs.DeleteKey(persistenceKey + "_h");
     }
 
     private GameObject _touchSpellPromptPanel;

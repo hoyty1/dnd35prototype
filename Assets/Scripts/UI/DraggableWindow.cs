@@ -18,27 +18,31 @@ public class DraggableWindow : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     [Tooltip("Persist dragged position in PlayerPrefs when drag ends.")]
     public bool SavePositionToPlayerPrefs = true;
 
-    private Canvas _canvas;
-    private RectTransform _canvasRect;
     private RectTransform _windowParentRect;
     private Vector2 _dragOffset;
+    private bool _positionLoaded;
 
     private void Awake()
     {
-        if (WindowRect == null)
-            WindowRect = transform as RectTransform;
+        ResolveReferences();
+    }
 
-        _canvas = GetComponentInParent<Canvas>();
-        if (_canvas != null)
-            _canvasRect = _canvas.transform as RectTransform;
-
-        _windowParentRect = WindowRect != null ? WindowRect.parent as RectTransform : null;
-
+    private void Start()
+    {
+        ResolveReferences();
         TryLoadPosition();
+    }
+
+    private void OnEnable()
+    {
+        ResolveReferences();
+        if (!_positionLoaded)
+            TryLoadPosition();
     }
 
     public void OnBeginDrag(PointerEventData eventData)
     {
+        ResolveReferences();
         if (!CanDrag())
             return;
 
@@ -49,6 +53,7 @@ public class DraggableWindow : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     public void OnDrag(PointerEventData eventData)
     {
+        ResolveReferences();
         if (!CanDrag())
             return;
 
@@ -73,6 +78,14 @@ public class DraggableWindow : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         return WindowRect != null && _windowParentRect != null;
     }
 
+    private void ResolveReferences()
+    {
+        if (WindowRect == null)
+            WindowRect = transform as RectTransform;
+
+        _windowParentRect = WindowRect != null ? WindowRect.parent as RectTransform : null;
+    }
+
     private void TryLoadPosition()
     {
         if (WindowRect == null || string.IsNullOrEmpty(PersistenceKey))
@@ -88,6 +101,8 @@ public class DraggableWindow : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                 loaded = ClampAnchoredPositionToParent(loaded, WindowRect, _windowParentRect);
             WindowRect.anchoredPosition = loaded;
         }
+
+        _positionLoaded = true;
     }
 
     private void SavePosition()

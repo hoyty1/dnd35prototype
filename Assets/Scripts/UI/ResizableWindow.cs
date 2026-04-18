@@ -169,6 +169,33 @@ public class ResizableWindow : MonoBehaviour
         SaveWindowState();
     }
 
+    /// <summary>
+    /// Programmatically applies a window position/size, enforces constraints, notifies listeners,
+    /// and optionally persists the new values.
+    /// </summary>
+    public void ApplyWindowState(Vector2 anchoredPosition, Vector2 sizeDelta, bool saveToPlayerPrefs = true)
+    {
+        if (WindowRect == null)
+            return;
+
+        Vector2 clampedSize = new Vector2(
+            Mathf.Clamp(sizeDelta.x, MinSize.x, MaxAllowedWidth()),
+            Mathf.Clamp(sizeDelta.y, MinSize.y, MaxAllowedHeight()));
+
+        WindowRect.sizeDelta = clampedSize;
+
+        Vector2 targetPosition = anchoredPosition;
+        if (ClampToCanvasBounds && _parentRect != null)
+            targetPosition = DraggableWindow.ClampAnchoredPositionToParent(targetPosition, WindowRect, _parentRect);
+
+        WindowRect.anchoredPosition = targetPosition;
+
+        NotifyResized();
+
+        if (saveToPlayerPrefs)
+            SaveWindowState();
+    }
+
     public void SetHoverState(Image handleImage, bool isHovering)
     {
         if (handleImage != null)
