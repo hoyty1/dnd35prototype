@@ -2286,6 +2286,7 @@ public class GameManager : MonoBehaviour
         ClearOverrunContinuationState();
         CombatUI.HideAoOConfirmationPrompt();
         CombatUI.HideDisarmWeaponSelection();
+        CombatUI.HideSpecialStyleSelectionMenu();
         CombatUI.HidePickUpItemSelection();
         CombatUI.HideDropEquippedItemSelection();
         // Hide movement path preview and hover marker when leaving movement phase
@@ -9435,14 +9436,19 @@ public class GameManager : MonoBehaviour
             AddOption(GrappleActionType.MoveHalfSpeed, "Move while grappling (standard action, beat opposed grapple check(s), then move at half speed)");
         }
 
-        List<string> optionLabelsForPrompt = new List<string>(options.Count);
+        List<string> optionLabels = new List<string>(options.Count);
+        List<bool> optionEnabledStates = new List<bool>(options.Count);
         foreach (var option in options)
-            optionLabelsForPrompt.Add(option.Enabled ? option.Label : $"[Disabled] {option.Label}");
+        {
+            optionLabels.Add(option.Enabled ? option.Label : $"{option.Label} (Unavailable)");
+            optionEnabledStates.Add(option.Enabled);
+        }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.ShowPickUpItemSelection(
-            actorName: actor.Stats.CharacterName,
-            itemOptions: optionLabelsForPrompt,
+        CombatUI?.ShowSpecialStyleSelectionMenu(
+            menuName: "GrappleActionMenu",
+            optionLabels: optionLabels,
+            optionEnabledStates: optionEnabledStates,
             onSelect: selectedIndex =>
             {
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
@@ -9463,12 +9469,7 @@ public class GameManager : MonoBehaviour
 
                 ResolveGrappleActionSelection(actor, options[selectedIndex].Action);
             },
-            onCancel: ShowActionChoices,
-            titleOverride: $"GRAPPLE OPTIONS — {actor.Stats.CharacterName}",
-            bodyOverride: isPinning
-                ? $"{actor.Stats.CharacterName} is pinning {opponent.Stats.CharacterName}: only limited actions are allowed while maintaining a pin."
-                : $"{actor.Stats.CharacterName} vs {opponent.Stats.CharacterName}: choose a grapple action (standard action unless marked free).",
-            optionButtonColorOverride: new Color(0.35f, 0.24f, 0.18f, 1f));
+            onCancel: ShowActionChoices);
     }
 
     private void ResolveGrappleActionSelection(CharacterController actor, GrappleActionType actionType)
@@ -9538,10 +9539,15 @@ public class GameManager : MonoBehaviour
             labels.Add($"{options[i].HeldItem.Name} ({handLabel}, light weapon)");
         }
 
+        var enabledStates = new List<bool>(labels.Count);
+        for (int i = 0; i < labels.Count; i++)
+            enabledStates.Add(true);
+
         CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.ShowPickUpItemSelection(
-            actorName: actor.Stats.CharacterName,
-            itemOptions: labels,
+        CombatUI?.ShowSpecialStyleSelectionMenu(
+            menuName: "GrappleUseWeaponMenu",
+            optionLabels: labels,
+            optionEnabledStates: enabledStates,
             onSelect: selectedIndex =>
             {
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
@@ -9552,10 +9558,7 @@ public class GameManager : MonoBehaviour
 
                 ExecuteGrappleAction(actor, GrappleActionType.UseOpponentWeapon, null, options[selectedIndex].HandSlot);
             },
-            onCancel: () => ShowGrappleActionMenu(actor, opponent),
-            titleOverride: $"USE OPPONENT'S WEAPON — {actor.Stats.CharacterName}",
-            bodyOverride: $"Choose which of {opponent.Stats.CharacterName}'s equipped light weapons to turn against them.",
-            optionButtonColorOverride: new Color(0.45f, 0.24f, 0.14f, 1f));
+            onCancel: () => ShowGrappleActionMenu(actor, opponent));
     }
     private void ShowGrappleDamageModeMenu(CharacterController actor)
     {
@@ -9587,10 +9590,15 @@ public class GameManager : MonoBehaviour
         foreach (var option in options)
             labels.Add(option.label);
 
+        var enabledStates = new List<bool>(labels.Count);
+        for (int i = 0; i < labels.Count; i++)
+            enabledStates.Add(true);
+
         CurrentSubPhase = PlayerSubPhase.Animating;
-        CombatUI?.ShowPickUpItemSelection(
-            actorName: actor.Stats.CharacterName,
-            itemOptions: labels,
+        CombatUI?.ShowSpecialStyleSelectionMenu(
+            menuName: "GrappleDamageModeMenu",
+            optionLabels: labels,
+            optionEnabledStates: enabledStates,
             onSelect: selectedIndex =>
             {
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
@@ -9601,10 +9609,7 @@ public class GameManager : MonoBehaviour
 
                 ExecuteGrappleAction(actor, GrappleActionType.DamageOpponent, options[selectedIndex].mode);
             },
-            onCancel: () => ShowGrappleActionMenu(actor, opponent),
-            titleOverride: $"GRAPPLE DAMAGE MODE — {actor.Stats.CharacterName}",
-            bodyOverride: $"{actor.Stats.CharacterName} vs {opponent.Stats.CharacterName}: choose grapple damage type before the opposed grapple check.",
-            optionButtonColorOverride: new Color(0.42f, 0.23f, 0.18f, 1f));
+            onCancel: () => ShowGrappleActionMenu(actor, opponent));
     }
 
     private void ExecuteGrappleAction(

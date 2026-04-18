@@ -544,6 +544,7 @@ public class CombatUI : MonoBehaviour
             if (RageStatusText != null) RageStatusText.gameObject.SetActive(false);
             if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
             HideSpecialAttackMenu();
+            HideSpecialStyleSelectionMenu();
             HidePickUpItemSelection();
             HideDropEquippedItemSelection();
             ResetDamageModeToggleVisual();
@@ -552,6 +553,7 @@ public class CombatUI : MonoBehaviour
 
     private GameObject _touchSpellPromptPanel;
     private GameObject _specialAttackPanel;
+    private GameObject _specialStyleSelectionPanel;
     private GameObject _summonSelectionPanel;
     private GameObject _disarmWeaponSelectionPanel;
     private GameObject _pickUpItemSelectionPanel;
@@ -1134,6 +1136,8 @@ public class CombatUI : MonoBehaviour
 
     public void ShowSpecialAttackMenu(CharacterController pc, System.Action<SpecialAttackType> onSelect, System.Action onCancel)
     {
+        HideSpecialStyleSelectionMenu();
+
         if (_specialAttackPanel == null)
             BuildSpecialAttackPanel();
 
@@ -1165,6 +1169,143 @@ public class CombatUI : MonoBehaviour
     {
         if (_specialAttackPanel != null)
             _specialAttackPanel.SetActive(false);
+    }
+
+    public void ShowSpecialStyleSelectionMenu(
+        string menuName,
+        List<string> optionLabels,
+        List<bool> optionEnabledStates,
+        System.Action<int> onSelect,
+        System.Action onCancel)
+    {
+        HideSpecialStyleSelectionMenu();
+
+        if (ActionPanel == null)
+        {
+            onCancel?.Invoke();
+            return;
+        }
+
+        if (optionLabels == null)
+            optionLabels = new List<string>();
+
+        if (optionEnabledStates == null || optionEnabledStates.Count != optionLabels.Count)
+        {
+            optionEnabledStates = new List<bool>(optionLabels.Count);
+            for (int i = 0; i < optionLabels.Count; i++)
+                optionEnabledStates.Add(true);
+        }
+
+        _specialStyleSelectionPanel = new GameObject(string.IsNullOrEmpty(menuName) ? "SpecialStyleSelectionPanel" : menuName);
+        _specialStyleSelectionPanel.transform.SetParent(ActionPanel.transform, false);
+
+        RectTransform rt = _specialStyleSelectionPanel.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.02f, 0.35f);
+        rt.anchorMax = new Vector2(0.52f, 0.98f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        Image bg = _specialStyleSelectionPanel.AddComponent<Image>();
+        bg.color = new Color(0.08f, 0.08f, 0.1f, 0.95f);
+
+        VerticalLayoutGroup layout = _specialStyleSelectionPanel.AddComponent<VerticalLayoutGroup>();
+        layout.spacing = 4f;
+        layout.padding = new RectOffset(8, 8, 8, 8);
+        layout.childControlHeight = true;
+        layout.childControlWidth = true;
+
+        _specialStyleSelectionPanel.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        for (int i = 0; i < optionLabels.Count; i++)
+        {
+            int optionIndex = i;
+            bool isEnabled = optionEnabledStates[i];
+            Button optionButton = CreateSpecialStyleSelectionButton(
+                parent: _specialStyleSelectionPanel.transform,
+                name: $"Option_{i}",
+                label: optionLabels[i],
+                backgroundColor: new Color(0.22f, 0.22f, 0.28f, 1f),
+                isInteractable: isEnabled);
+
+            if (!isEnabled)
+            {
+                Text labelText = optionButton != null ? optionButton.GetComponentInChildren<Text>() : null;
+                if (labelText != null)
+                    labelText.color = new Color(0.74f, 0.74f, 0.74f, 1f);
+            }
+
+            if (optionButton != null)
+            {
+                optionButton.onClick.AddListener(() =>
+                {
+                    HideSpecialStyleSelectionMenu();
+                    onSelect?.Invoke(optionIndex);
+                });
+            }
+        }
+
+        Button cancelButton = CreateSpecialStyleSelectionButton(
+            parent: _specialStyleSelectionPanel.transform,
+            name: "Cancel",
+            label: "Cancel",
+            backgroundColor: new Color(0.35f, 0.16f, 0.16f, 1f),
+            isInteractable: true);
+
+        if (cancelButton != null)
+        {
+            cancelButton.onClick.AddListener(() =>
+            {
+                HideSpecialStyleSelectionMenu();
+                onCancel?.Invoke();
+            });
+        }
+
+        _specialStyleSelectionPanel.SetActive(true);
+    }
+
+    public void HideSpecialStyleSelectionMenu()
+    {
+        if (_specialStyleSelectionPanel != null)
+        {
+            Destroy(_specialStyleSelectionPanel);
+            _specialStyleSelectionPanel = null;
+        }
+    }
+
+    private Button CreateSpecialStyleSelectionButton(Transform parent, string name, string label, Color backgroundColor, bool isInteractable)
+    {
+        if (parent == null)
+            return null;
+
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+
+        Image img = go.AddComponent<Image>();
+        img.color = backgroundColor;
+
+        Button button = go.AddComponent<Button>();
+        button.interactable = isInteractable;
+
+        GameObject txtGo = new GameObject("Text");
+        txtGo.transform.SetParent(go.transform, false);
+        RectTransform txtRt = txtGo.AddComponent<RectTransform>();
+        txtRt.anchorMin = Vector2.zero;
+        txtRt.anchorMax = Vector2.one;
+        txtRt.offsetMin = Vector2.zero;
+        txtRt.offsetMax = Vector2.zero;
+
+        Text txt = txtGo.AddComponent<Text>();
+        txt.text = label;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.fontSize = 12;
+        txt.color = Color.white;
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 12);
+
+        LayoutElement le = go.AddComponent<LayoutElement>();
+        le.minHeight = 24;
+
+        return button;
     }
 
     private void BuildSpecialAttackPanel()
