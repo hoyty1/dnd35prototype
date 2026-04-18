@@ -11208,31 +11208,31 @@ public class GameManager : MonoBehaviour
         bool isPinning = npc.IsPinningOpponent();
         if (isPinning)
         {
-            if (opponentPinned && legalActions.Contains(GrappleActionType.PinOpponent) && Random.value < 0.35f)
+            if (opponentPinned && legalActions.Contains(GrappleActionType.PinOpponent) && UnityEngine.Random.value < 0.35f)
                 return GrappleActionType.PinOpponent; // maintain pin
 
             if (legalActions.Contains(GrappleActionType.DamageOpponent))
                 return GrappleActionType.DamageOpponent;
 
-            if (legalActions.Contains(GrappleActionType.UseOpponentWeapon) && Random.value < 0.35f)
+            if (legalActions.Contains(GrappleActionType.UseOpponentWeapon) && UnityEngine.Random.value < 0.35f)
                 return GrappleActionType.UseOpponentWeapon;
 
-            if (opponentPinned && legalActions.Contains(GrappleActionType.ReleasePinnedOpponent) && Random.value < 0.10f)
+            if (opponentPinned && legalActions.Contains(GrappleActionType.ReleasePinnedOpponent) && UnityEngine.Random.value < 0.10f)
                 return GrappleActionType.ReleasePinnedOpponent;
         }
         else
         {
-            if (!opponentPinned && legalActions.Contains(GrappleActionType.PinOpponent) && npc.Stats.STRMod >= 3 && Random.value < 0.35f)
+            if (!opponentPinned && legalActions.Contains(GrappleActionType.PinOpponent) && npc.Stats.STRMod >= 3 && UnityEngine.Random.value < 0.35f)
                 return GrappleActionType.PinOpponent;
 
-            if (legalActions.Contains(GrappleActionType.UseOpponentWeapon) && Random.value < 0.30f)
+            if (legalActions.Contains(GrappleActionType.UseOpponentWeapon) && UnityEngine.Random.value < 0.30f)
                 return GrappleActionType.UseOpponentWeapon;
 
             if (legalActions.Contains(GrappleActionType.DamageOpponent))
                 return GrappleActionType.DamageOpponent;
         }
 
-        return legalActions[Random.Range(0, legalActions.Count)];
+        return legalActions[UnityEngine.Random.Range(0, legalActions.Count)];
     }
 
     private List<GrappleActionType> BuildNPCLegalGrappleActions(CharacterController npc, CharacterController opponent, bool actorPinned, bool opponentPinned)
