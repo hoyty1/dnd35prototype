@@ -2222,6 +2222,8 @@ public class GameManager : MonoBehaviour
         // Log turn start in combat log
         CombatUI.ShowCombatLog($"<color=#FFD700>⚔ {pc.Stats.CharacterName}'s turn begins</color>");
 
+        if (pc.IsGrappling())
+            CombatUI?.ShowCombatLog("🪢 You are grappling — only grapple actions are available (spellcasting allowed with concentration and component restrictions).");
         // Tick Barbarian Rage at start of turn
         if (pc.Stats.IsBarbarian && pc.Stats.IsRaging)
         {
@@ -3383,15 +3385,11 @@ public class GameManager : MonoBehaviour
         string actionName = string.IsNullOrWhiteSpace(attemptedActionLabel) ? "that action" : attemptedActionLabel;
         CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is pinned and cannot use {actionName}. Only grapple escape actions are allowed.");
 
-        if (actor.Actions.HasStandardAction)
-        {
-            ShowGrappleActionMenu(actor, opponent);
-        }
-        else
-        {
+        if (!actor.Actions.HasStandardAction)
             CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} has no standard action left to attempt an escape and must end the turn.");
-            ShowActionChoices();
-        }
+
+        // Grapple actions are now presented as direct action buttons in the main action panel.
+        ShowActionChoices();
 
         return true;
     }
@@ -4482,6 +4480,54 @@ public class GameManager : MonoBehaviour
         ShowGrappleActionMenu(pc, opponent);
     }
 
+    private bool TryHandleDirectGrappleAction(GrappleActionType actionType)
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || pc.Stats == null)
+        {
+            ShowActionChoices();
+            return false;
+        }
+
+        if (!pc.IsGrappling() || !pc.TryGetGrappleState(out _, out _, out bool isPinned, out _))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is not currently in a valid grapple state.");
+            ShowActionChoices();
+            return false;
+        }
+
+        if (isPinned && actionType != GrappleActionType.EscapeArtist && actionType != GrappleActionType.OpposedGrappleEscape && actionType != GrappleActionType.BreakPin)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is pinned and can only attempt grapple escape actions.");
+            ShowActionChoices();
+            return false;
+        }
+
+        if (actionType == GrappleActionType.DamageOpponent)
+        {
+            ShowGrappleDamageModeMenu(pc);
+            return true;
+        }
+
+        if (actionType == GrappleActionType.UseOpponentWeapon)
+        {
+            ShowUseOpponentWeaponHandSelectionMenu(pc);
+            return true;
+        }
+
+        ExecuteGrappleAction(pc, actionType);
+        return true;
+    }
+
+    public void OnGrappleDamageButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.DamageOpponent);
+    public void OnGrapplePinButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.PinOpponent);
+    public void OnGrappleBreakPinButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.BreakPin);
+    public void OnGrappleEscapeArtistButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.EscapeArtist);
+    public void OnGrappleEscapeCheckButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.OpposedGrappleEscape);
+    public void OnGrappleMoveButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.MoveHalfSpeed);
+    public void OnGrappleUseOpponentWeaponButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.UseOpponentWeapon);
+    public void OnGrappleReleasePinButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.ReleasePinnedOpponent);
+
     public void OnOverrunButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -4515,9 +4561,10 @@ public class GameManager : MonoBehaviour
         CombatUI.HideSpecialAttackMenu();
 
         if (type == SpecialAttackType.Grapple
-            && pc.TryGetGrappleState(out CharacterController grappleOpponent, out _, out _, out _))
+            && pc.TryGetGrappleState(out _, out _, out _, out _))
         {
-            ShowGrappleActionMenu(pc, grappleOpponent);
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is already grappling. Use the grapple action buttons in the action panel.");
+            ShowActionChoices();
             return;
         }
 
@@ -4778,6 +4825,8 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        if (pc.IsGrappling())
+            CombatUI?.ShowCombatLog("🪢 Grappled casting: you must satisfy component restrictions and pass a concentration check (DC 20 + spell level).");
         // Show spell selection panel with metamagic support (only prepared spells shown)
         CombatUI.SetActionButtonsVisible(false);
         CombatUI.ShowSpellSelection(spellComp, OnSpellSelectedWithMetamagic, OnSpellSelectionCancelled);
@@ -9520,7 +9569,7 @@ public class GameManager : MonoBehaviour
         if (isPinned)
         {
             CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is pinned and cannot use opponent's weapon.");
-            ShowGrappleActionMenu(actor, opponent);
+            ShowActionChoices();
             return;
         }
 
@@ -9528,7 +9577,7 @@ public class GameManager : MonoBehaviour
         if (options == null || options.Count == 0)
         {
             CombatUI?.ShowCombatLog($"⚠ {opponent.Stats.CharacterName} has no equipped light weapon to use.");
-            ShowGrappleActionMenu(actor, opponent);
+            ShowActionChoices();
             return;
         }
 
@@ -9552,13 +9601,13 @@ public class GameManager : MonoBehaviour
             {
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
-                    ShowGrappleActionMenu(actor, opponent);
+                    ShowActionChoices();
                     return;
                 }
 
                 ExecuteGrappleAction(actor, GrappleActionType.UseOpponentWeapon, null, options[selectedIndex].HandSlot);
             },
-            onCancel: () => ShowGrappleActionMenu(actor, opponent));
+            onCancel: ShowActionChoices);
     }
     private void ShowGrappleDamageModeMenu(CharacterController actor)
     {
@@ -9603,13 +9652,13 @@ public class GameManager : MonoBehaviour
             {
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
-                    ShowGrappleActionMenu(actor, opponent);
+                    ShowActionChoices();
                     return;
                 }
 
                 ExecuteGrappleAction(actor, GrappleActionType.DamageOpponent, options[selectedIndex].mode);
             },
-            onCancel: () => ShowGrappleActionMenu(actor, opponent));
+            onCancel: ShowActionChoices);
     }
 
     private void ExecuteGrappleAction(

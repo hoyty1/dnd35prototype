@@ -756,7 +756,23 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.SpecialAttackButton = CreateGridButton(btnGrid.transform, "SpecialAttackBtn",
             "Special Attack", new Color(0.55f, 0.35f, 0.15f));
         combatUI.GrappleActionsButton = CreateGridButton(btnGrid.transform, "GrappleActionsBtn",
-            "Grapple Actions", new Color(0.45f, 0.24f, 0.6f));
+            "Grapple Actions (Legacy)", new Color(0.45f, 0.24f, 0.6f));
+        combatUI.GrappleDamageButton = CreateGridButton(btnGrid.transform, "GrappleDamageBtn",
+            "Grapple: Damage", new Color(0.55f, 0.22f, 0.45f));
+        combatUI.GrapplePinButton = CreateGridButton(btnGrid.transform, "GrapplePinBtn",
+            "Grapple: Pin Opponent", new Color(0.5f, 0.24f, 0.56f));
+        combatUI.GrappleBreakPinButton = CreateGridButton(btnGrid.transform, "GrappleBreakPinBtn",
+            "Grapple: Break Pin", new Color(0.44f, 0.3f, 0.58f));
+        combatUI.GrappleEscapeArtistButton = CreateGridButton(btnGrid.transform, "GrappleEscapeArtistBtn",
+            "Grapple: Escape Artist", new Color(0.35f, 0.34f, 0.62f));
+        combatUI.GrappleEscapeCheckButton = CreateGridButton(btnGrid.transform, "GrappleEscapeCheckBtn",
+            "Grapple: Escape Check", new Color(0.3f, 0.3f, 0.65f));
+        combatUI.GrappleMoveButton = CreateGridButton(btnGrid.transform, "GrappleMoveBtn",
+            "Grapple: Move", new Color(0.28f, 0.42f, 0.6f));
+        combatUI.GrappleUseOpponentWeaponButton = CreateGridButton(btnGrid.transform, "GrappleUseWeaponBtn",
+            "Grapple: Use Opp Weapon", new Color(0.58f, 0.3f, 0.32f));
+        combatUI.GrappleReleasePinnedButton = CreateGridButton(btnGrid.transform, "GrappleReleasePinBtn",
+            "Grapple: Release Pin", new Color(0.4f, 0.44f, 0.2f));
         combatUI.AidAnotherButton = CreateGridButton(btnGrid.transform, "AidAnotherBtn",
             "Aid Another", new Color(0.42f, 0.3f, 0.58f));
         combatUI.OverrunButton = CreateGridButton(btnGrid.transform, "OverrunBtn",
@@ -1029,8 +1045,24 @@ public class SceneBootstrap : MonoBehaviour
         if (ui.GrappleActionsButton != null)
         {
             ui.GrappleActionsButton.onClick.RemoveAllListeners();
-            ui.GrappleActionsButton.onClick.AddListener(() => ui.OnGrappleActionsClicked());
+            ui.GrappleActionsButton.gameObject.SetActive(false); // legacy menu button disabled
         }
+        if (ui.GrappleDamageButton != null)
+            ui.GrappleDamageButton.onClick.AddListener(() => GameManager.Instance.OnGrappleDamageButtonPressed());
+        if (ui.GrapplePinButton != null)
+            ui.GrapplePinButton.onClick.AddListener(() => GameManager.Instance.OnGrapplePinButtonPressed());
+        if (ui.GrappleBreakPinButton != null)
+            ui.GrappleBreakPinButton.onClick.AddListener(() => GameManager.Instance.OnGrappleBreakPinButtonPressed());
+        if (ui.GrappleEscapeArtistButton != null)
+            ui.GrappleEscapeArtistButton.onClick.AddListener(() => GameManager.Instance.OnGrappleEscapeArtistButtonPressed());
+        if (ui.GrappleEscapeCheckButton != null)
+            ui.GrappleEscapeCheckButton.onClick.AddListener(() => GameManager.Instance.OnGrappleEscapeCheckButtonPressed());
+        if (ui.GrappleMoveButton != null)
+            ui.GrappleMoveButton.onClick.AddListener(() => GameManager.Instance.OnGrappleMoveButtonPressed());
+        if (ui.GrappleUseOpponentWeaponButton != null)
+            ui.GrappleUseOpponentWeaponButton.onClick.AddListener(() => GameManager.Instance.OnGrappleUseOpponentWeaponButtonPressed());
+        if (ui.GrappleReleasePinnedButton != null)
+            ui.GrappleReleasePinnedButton.onClick.AddListener(() => GameManager.Instance.OnGrappleReleasePinButtonPressed());
         if (ui.AidAnotherButton != null)
         {
             ui.AidAnotherButton.onClick.RemoveAllListeners();

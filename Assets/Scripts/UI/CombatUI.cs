@@ -99,7 +99,15 @@ public class CombatUI : MonoBehaviour
     public Button AttackButton;         // Single attack (Standard Action)
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
-    public Button GrappleActionsButton; // Grapple actions menu (visible only while grappling)
+    public Button GrappleActionsButton; // Legacy grapple menu button (deprecated)
+    public Button GrappleDamageButton;          // Grapple: deal damage (Standard Action)
+    public Button GrapplePinButton;             // Grapple: pin/maintain pin (Standard Action)
+    public Button GrappleBreakPinButton;        // Grapple: break pin (Standard Action)
+    public Button GrappleEscapeArtistButton;    // Grapple: escape via Escape Artist (Standard Action)
+    public Button GrappleEscapeCheckButton;     // Grapple: escape via opposed grapple (Standard Action)
+    public Button GrappleMoveButton;            // Grapple: move while grappling (Standard Action)
+    public Button GrappleUseOpponentWeaponButton; // Grapple: use opponent weapon (Standard Action)
+    public Button GrappleReleasePinnedButton;   // Grapple: release pinned opponent (Free Action)
     public Button AidAnotherButton;     // Aid Another (Standard Action)
     public Button OverrunButton;        // Overrun (Standard Action)
     public Button ChargeButton;         // Charge (Full-Round Action)
@@ -663,6 +671,14 @@ public class CombatUI : MonoBehaviour
         bool usingUnarmedStrike = equippedWeapon == null;
         string attackSourceLabel = usingUnarmedStrike ? "Unarmed strike" : equippedWeapon.Name;
 
+        bool hasGrappleState = pc.TryGetGrappleState(out CharacterController grappleOpponent, out _, out bool actorPinnedInGrappleState, out bool opponentPinnedByActor);
+        bool isPinningOpponent = pc.IsPinningOpponent();
+
+        bool CanUseWhilePinning(GrappleActionType actionType)
+        {
+            return !pc.IsGrappleActionBlockedWhilePinning(actionType, out _);
+        }
+
         if (MoveButton != null)
         {
             bool canMoveByActions = actions.HasMoveAction || actions.CanConvertStandardToMove;
@@ -957,16 +973,23 @@ public class CombatUI : MonoBehaviour
             bool isSpellcaster = pc.Stats.IsSpellcaster;
             var spellComp = pc.GetComponent<SpellcastingComponent>();
             bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnyCastablePreparedSpell();
-            bool canCast = actions.HasStandardAction && hasCastableSpells && !isPinned;
+            bool canCast = actions.HasStandardAction && hasCastableSpells;
 
             CastSpellButton.gameObject.SetActive(hasCastableSpells);
             CastSpellButton.interactable = canCast;
             Text castLabel = CastSpellButton.GetComponentInChildren<Text>();
             if (castLabel != null)
             {
-                string baseLabel = isPinned
-                    ? "Cast Spell (Pinned: no)"
-                    : (canCast ? "Cast Spell (Standard)" : "Cast Spell (N/A)");
+                string baseLabel;
+                if (!canCast)
+                    baseLabel = "Cast Spell (N/A)";
+                else if (isPinned)
+                    baseLabel = "Cast Spell (Std, pinned: concentration/components apply)";
+                else if (isGrappling)
+                    baseLabel = "Cast Spell (Std, grappled: concentration/components apply)";
+                else
+                    baseLabel = "Cast Spell (Standard)";
+
                 int asfChance = (pc.Stats != null && pc.Stats.IsAffectedByArcaneSpellFailure)
                     ? Mathf.Clamp(pc.Stats.ArcaneSpellFailure, 0, 100)
                     : 0;
@@ -1039,6 +1062,97 @@ public class CombatUI : MonoBehaviour
                 pickupLabel.text = canPickUp ? "Pick Up Item (Move, AoO)" : $"Pick Up Item ({disabledReason})";
         }
 
+        // Grapple-only action buttons (shown only while grappling)
+        bool showOnlyPinnedEscapeActions = isGrappling && (isPinned || actorPinnedInGrappleState);
+
+        if (GrappleDamageButton != null)
+        {
+            bool canUse = isGrappling && !showOnlyPinnedEscapeActions && actions.HasStandardAction && CanUseWhilePinning(GrappleActionType.DamageOpponent);
+            GrappleDamageButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions);
+            GrappleDamageButton.interactable = canUse;
+            Text label = GrappleDamageButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = canUse ? "Grapple: Damage (Std)" : "Grapple: Damage (Used/Blocked)";
+        }
+
+        if (GrapplePinButton != null)
+        {
+            bool canUse = isGrappling && !showOnlyPinnedEscapeActions && actions.HasStandardAction && CanUseWhilePinning(GrappleActionType.PinOpponent);
+            string pinLabel = opponentPinnedByActor ? "Grapple: Maintain Pin (Std)" : "Grapple: Pin Opponent (Std)";
+            GrapplePinButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions);
+            GrapplePinButton.interactable = canUse;
+            Text label = GrapplePinButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = canUse ? pinLabel : pinLabel.Replace("(Std)", "(Used/Blocked)");
+        }
+
+        if (GrappleBreakPinButton != null)
+        {
+            bool canUse = isGrappling && actions.HasStandardAction && (showOnlyPinnedEscapeActions || CanUseWhilePinning(GrappleActionType.BreakPin));
+            GrappleBreakPinButton.gameObject.SetActive(isGrappling);
+            GrappleBreakPinButton.interactable = canUse;
+            Text label = GrappleBreakPinButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = canUse ? "Grapple: Break Pin (Std)" : "Grapple: Break Pin (Used/Blocked)";
+        }
+
+        if (GrappleEscapeArtistButton != null)
+        {
+            bool canUse = isGrappling && actions.HasStandardAction;
+            GrappleEscapeArtistButton.gameObject.SetActive(isGrappling);
+            GrappleEscapeArtistButton.interactable = canUse;
+            Text label = GrappleEscapeArtistButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = canUse ? "Grapple: Escape Artist (Std)" : "Grapple: Escape Artist (Used)";
+        }
+
+        if (GrappleEscapeCheckButton != null)
+        {
+            bool canUse = isGrappling && actions.HasStandardAction;
+            GrappleEscapeCheckButton.gameObject.SetActive(isGrappling);
+            GrappleEscapeCheckButton.interactable = canUse;
+            Text label = GrappleEscapeCheckButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = canUse ? "Grapple: Escape Check (Std)" : "Grapple: Escape Check (Used)";
+        }
+
+        if (GrappleMoveButton != null)
+        {
+            bool canUse = isGrappling && !showOnlyPinnedEscapeActions && actions.HasStandardAction && CanUseWhilePinning(GrappleActionType.MoveHalfSpeed);
+            GrappleMoveButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions);
+            GrappleMoveButton.interactable = canUse;
+            Text label = GrappleMoveButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = canUse ? "Grapple: Move (Std)" : "Grapple: Move (Used/Blocked)";
+        }
+
+        if (GrappleUseOpponentWeaponButton != null)
+        {
+            bool opponentHasLightWeapon = hasGrappleState && grappleOpponent != null
+                && grappleOpponent.GetEquippedLightHandWeaponOptions() != null
+                && grappleOpponent.GetEquippedLightHandWeaponOptions().Count > 0;
+            bool canUse = isGrappling
+                          && !showOnlyPinnedEscapeActions
+                          && actions.HasStandardAction
+                          && opponentHasLightWeapon
+                          && CanUseWhilePinning(GrappleActionType.UseOpponentWeapon);
+            GrappleUseOpponentWeaponButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions);
+            GrappleUseOpponentWeaponButton.interactable = canUse;
+            Text label = GrappleUseOpponentWeaponButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = canUse ? "Grapple: Use Opponent Weapon (Std)" : "Grapple: Use Opponent Weapon (Unavailable)";
+        }
+
+        if (GrappleReleasePinnedButton != null)
+        {
+            bool canUse = isGrappling && !showOnlyPinnedEscapeActions && isPinningOpponent && opponentPinnedByActor;
+            GrappleReleasePinnedButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions);
+            GrappleReleasePinnedButton.interactable = canUse;
+            Text label = GrappleReleasePinnedButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = canUse ? "Grapple: Release Pin (Free)" : "Grapple: Release Pin (N/A)";
+        }
+
         if (RageStatusText != null)
         {
             bool isBarbarian = pc.Stats.IsBarbarian;
@@ -1057,6 +1171,33 @@ public class CombatUI : MonoBehaviour
         }
 
         UpdateDamageModeToggle(pc);
+
+        if (isGrappling)
+        {
+            // D&D 3.5e grapple restriction: hide non-grapple actions while grappled.
+            if (MoveButton != null) MoveButton.gameObject.SetActive(false);
+            if (FiveFootStepButton != null) FiveFootStepButton.gameObject.SetActive(false);
+            if (DropProneButton != null) DropProneButton.gameObject.SetActive(false);
+            if (StandUpButton != null) StandUpButton.gameObject.SetActive(false);
+            if (CrawlButton != null) CrawlButton.gameObject.SetActive(false);
+            if (AttackButton != null) AttackButton.gameObject.SetActive(false);
+            if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
+            if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
+            if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);
+            if (AidAnotherButton != null) AidAnotherButton.gameObject.SetActive(false);
+            if (OverrunButton != null) OverrunButton.gameObject.SetActive(false);
+            if (ChargeButton != null) ChargeButton.gameObject.SetActive(false);
+            if (FullAttackButton != null) FullAttackButton.gameObject.SetActive(false);
+            if (FullAttackDefensivelyButton != null) FullAttackDefensivelyButton.gameObject.SetActive(false);
+            if (DualWieldButton != null) DualWieldButton.gameObject.SetActive(false);
+            if (FlurryOfBlowsButton != null) FlurryOfBlowsButton.gameObject.SetActive(false);
+            if (RageButton != null) RageButton.gameObject.SetActive(false);
+            if (ReloadButton != null) ReloadButton.gameObject.SetActive(false);
+            if (DropEquippedItemButton != null) DropEquippedItemButton.gameObject.SetActive(false);
+            if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
+            if (DamageModeToggleButton != null) DamageModeToggleButton.gameObject.SetActive(false);
+            if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
+        }
 
         if (ActionStatusText != null)
             ActionStatusText.text = actions.GetStatusString();
