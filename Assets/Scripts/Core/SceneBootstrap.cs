@@ -699,6 +699,8 @@ public class SceneBootstrap : MonoBehaviour
             "Fighting Defensively (Std)", new Color(0.22f, 0.38f, 0.62f));
         combatUI.SpecialAttackButton = CreateGridButton(btnGrid.transform, "SpecialAttackBtn",
             "Special Attack", new Color(0.55f, 0.35f, 0.15f));
+        combatUI.GrappleActionsButton = CreateGridButton(btnGrid.transform, "GrappleActionsBtn",
+            "Grapple Actions", new Color(0.45f, 0.24f, 0.6f));
         combatUI.AidAnotherButton = CreateGridButton(btnGrid.transform, "AidAnotherBtn",
             "Aid Another", new Color(0.42f, 0.3f, 0.58f));
         combatUI.OverrunButton = CreateGridButton(btnGrid.transform, "OverrunBtn",
@@ -890,6 +892,11 @@ public class SceneBootstrap : MonoBehaviour
             ui.AttackDefensivelyButton.onClick.AddListener(() => GameManager.Instance.OnAttackDefensivelyButtonPressed());
         if (ui.SpecialAttackButton != null)
             ui.SpecialAttackButton.onClick.AddListener(() => GameManager.Instance.OnSpecialAttackButtonPressed());
+        if (ui.GrappleActionsButton != null)
+        {
+            ui.GrappleActionsButton.onClick.RemoveAllListeners();
+            ui.GrappleActionsButton.onClick.AddListener(() => ui.OnGrappleActionsClicked());
+        }
         if (ui.AidAnotherButton != null)
         {
             ui.AidAnotherButton.onClick.RemoveAllListeners();

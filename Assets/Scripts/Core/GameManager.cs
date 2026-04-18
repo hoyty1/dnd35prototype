@@ -4455,6 +4455,32 @@ public class GameManager : MonoBehaviour
         CombatUI.ShowSpecialAttackMenu(pc, OnSpecialAttackSelected, ShowActionChoices);
     }
 
+    public void ShowGrappleActionMenu()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!pc.IsGrappling())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is not currently grappling.");
+            ShowActionChoices();
+            return;
+        }
+
+        if (!pc.TryGetGrappleState(out CharacterController opponent, out _, out _, out _))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is no longer in a grapple.");
+            ShowActionChoices();
+            return;
+        }
+
+        ShowGrappleActionMenu(pc, opponent);
+    }
+
     public void OnOverrunButtonPressed()
     {
         CharacterController pc = ActivePC;

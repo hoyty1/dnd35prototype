@@ -99,6 +99,7 @@ public class CombatUI : MonoBehaviour
     public Button AttackButton;         // Single attack (Standard Action)
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
+    public Button GrappleActionsButton; // Grapple actions menu (visible only while grappling)
     public Button AidAnotherButton;     // Aid Another (Standard Action)
     public Button OverrunButton;        // Overrun (Standard Action)
     public Button ChargeButton;         // Charge (Full-Round Action)
@@ -604,6 +605,7 @@ public class CombatUI : MonoBehaviour
         bool canDualWield = pc.CanDualWield();
         bool hasIterativeAttacks = pc.Stats.IterativeAttackCount > 1;
         bool hasRapidShot = pc.Stats.HasFeat("Rapid Shot");
+        bool isGrappling = pc.IsGrappling();
         bool fullAttackRelevant = hasIterativeAttacks || hasRapidShot;
         bool isProne = pc.HasCondition(CombatConditionType.Prone);
         bool isPinned = pc.HasCondition(CombatConditionType.Pinned);
@@ -731,6 +733,17 @@ public class CombatUI : MonoBehaviour
                 else
                     spLabel.text = "Special Attack (Used)";
             }
+        }
+
+        if (GrappleActionsButton != null)
+        {
+            bool canUseGrappleAction = isGrappling && actions.HasStandardAction;
+            GrappleActionsButton.gameObject.SetActive(isGrappling);
+            GrappleActionsButton.interactable = canUseGrappleAction;
+
+            Text grappleLabel = GrappleActionsButton.GetComponentInChildren<Text>();
+            if (grappleLabel != null)
+                grappleLabel.text = canUseGrappleAction ? "Grapple Actions" : "Grapple Actions (Used)";
         }
 
         if (AidAnotherButton != null)
@@ -987,6 +1000,7 @@ public class CombatUI : MonoBehaviour
                 RageStatusText.text = "😫 FATIGUED: -2 STR, -2 DEX";
         }
 
+
         if (EndTurnButton != null)
         {
             EndTurnButton.gameObject.SetActive(true);
@@ -997,6 +1011,12 @@ public class CombatUI : MonoBehaviour
 
         if (ActionStatusText != null)
             ActionStatusText.text = actions.GetStatusString();
+    }
+
+    public void OnGrappleActionsClicked()
+    {
+        if (GameManager.Instance != null)
+            GameManager.Instance.ShowGrappleActionMenu();
     }
 
     public void ResetDamageModeToggleVisual()

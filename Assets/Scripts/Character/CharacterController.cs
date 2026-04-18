@@ -2944,6 +2944,15 @@ public class CharacterController : MonoBehaviour
         return TryGetGrappleState(out _, out _, out _, out _);
     }
 
+    /// <summary>
+    /// Convenience alias for UI/gameplay checks that need to know whether this character
+    /// is currently in an active grapple.
+    /// </summary>
+    public bool IsGrappling()
+    {
+        return IsInActiveGrapple();
+    }
+
     public bool IsPinningOpponent()
     {
         if (!TryGetGrappleLink(this, out GrappleLink link) || link == null)
