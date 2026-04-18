@@ -1994,13 +1994,16 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>Check if all PCs in the party are dead.</summary>
+    /// <summary>Check if all active PCs in the party are dead.</summary>
     private bool AreAllPCsDead()
     {
         foreach (var pc in PCs)
         {
-            if (pc != null && !pc.Stats.IsDead) return false;
+            if (!IsActiveCombatant(pc)) continue;
+            if (!pc.Stats.IsDead) return false;
         }
+
+        // If no active PCs remain, treat the party as defeated.
         return true;
     }
 
@@ -7096,17 +7099,17 @@ public class GameManager : MonoBehaviour
     {
         Debug.Log($"[SpellDuration] Ticking spell durations for round {_currentRound}...");
 
-        // Tick PCs
+        // Tick active, living PCs
         foreach (var pc in PCs)
         {
-            if (pc == null || pc.Stats.IsDead) continue;
+            if (!IsActiveCombatant(pc) || pc.Stats.IsDead) continue;
             TickCharacterSpellDurations(pc);
         }
 
-        // Tick NPCs
+        // Tick active, living NPCs
         foreach (var npc in NPCs)
         {
-            if (npc == null || npc.Stats.IsDead) continue;
+            if (!IsActiveCombatant(npc) || npc.Stats.IsDead) continue;
             TickCharacterSpellDurations(npc);
         }
 
@@ -7118,6 +7121,8 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void TickCharacterSpellDurations(CharacterController character)
     {
+        if (!IsActiveCombatant(character) || character.Stats.IsDead)
+            return;
         var statusMgr = character.GetComponent<StatusEffectManager>();
         if (statusMgr != null && statusMgr.ActiveEffectCount > 0)
         {
