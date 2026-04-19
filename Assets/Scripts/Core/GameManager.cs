@@ -143,6 +143,11 @@ public class GameManager : MonoBehaviour
     private int _grappleMoveMaxRangeSquares;
     private readonly List<CharacterController> _grappleMoveOpponents = new List<CharacterController>();
     private readonly Dictionary<Vector2Int, List<Vector2Int>> _grappleMovePathsByDestination = new Dictionary<Vector2Int, List<Vector2Int>>();
+
+    // Free adjacent reposition after ending a grapple (escape/release).
+    private bool _isFreeAdjacentGrappleMoveSelection;
+    private CharacterController _freeAdjacentGrappleMoveActor;
+    private readonly List<Vector2Int> _freeAdjacentGrappleMoveDestinations = new List<Vector2Int>();
     private enum AidAnotherMode
     {
         None,
@@ -7684,6 +7689,200 @@ public class GameManager : MonoBehaviour
         HighlightCharacterFootprint(pc, HighlightType.Selected);
     }
 
+    private List<Vector2Int> GetAdjacentSquares(Vector2Int origin)
+    {
+        Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(origin);
+        var adjacent = new List<Vector2Int>(neighbors.Length);
+        for (int i = 0; i < neighbors.Length; i++)
+            adjacent.Add(neighbors[i]);
+        return adjacent;
+    }
+
+    private List<Vector2Int> GetValidFreeAdjacentGrappleMoveSquares(CharacterController actor)
+    {
+        var validSquares = new List<Vector2Int>();
+        if (actor == null || actor.Stats == null || Grid == null)
+            return validSquares;
+
+        List<Vector2Int> adjacentSquares = GetAdjacentSquares(actor.GridPosition);
+        int actorSize = actor.GetVisualSquaresOccupied();
+        for (int i = 0; i < adjacentSquares.Count; i++)
+        {
+            Vector2Int destination = adjacentSquares[i];
+            if (!Grid.CanPlaceCreature(destination, actorSize, actor))
+                continue;
+
+            validSquares.Add(destination);
+        }
+
+        return validSquares;
+    }
+
+    private bool DidActorEndGrappleAndGainFreeAdjacentMove(GrappleActionType actionType, SpecialAttackResult result)
+    {
+        if (result == null || !result.Success)
+            return false;
+
+        return actionType == GrappleActionType.EscapeArtist
+            || actionType == GrappleActionType.OpposedGrappleEscape
+            || actionType == GrappleActionType.ReleasePinnedOpponent;
+    }
+
+    private bool TryOfferFreeAdjacentMovementAfterGrappleEnds(CharacterController actor, GrappleActionType actionType, SpecialAttackResult result)
+    {
+        if (!DidActorEndGrappleAndGainFreeAdjacentMove(actionType, result))
+            return false;
+
+        return OfferFreeAdjacentMovement(actor);
+    }
+
+    private bool OfferFreeAdjacentMovement(CharacterController actor)
+    {
+        if (actor == null || actor.Stats == null || actor.Stats.IsDead || Grid == null)
+            return false;
+
+        List<Vector2Int> validSquares = GetValidFreeAdjacentGrappleMoveSquares(actor);
+        if (validSquares.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} has no adjacent squares to move to after the grapple ends.");
+            return false;
+        }
+
+        bool actorCanSelectNow = actor.IsPlayerControlled
+            && CurrentPhase == TurnPhase.PCTurn
+            && ActivePC == actor;
+
+        if (!actorCanSelectNow)
+        {
+            Vector2Int selectedSquare = validSquares[UnityEngine.Random.Range(0, validSquares.Count)];
+            ExecuteFreeAdjacentGrappleMovement(actor, selectedSquare, showActionChoicesAfterMove: false);
+            return false;
+        }
+
+        BeginFreeAdjacentGrappleMoveSelection(actor, validSquares);
+        return true;
+    }
+
+    private void ClearFreeAdjacentGrappleMoveSelectionState()
+    {
+        _isFreeAdjacentGrappleMoveSelection = false;
+        _freeAdjacentGrappleMoveActor = null;
+        _freeAdjacentGrappleMoveDestinations.Clear();
+    }
+
+    private void BeginFreeAdjacentGrappleMoveSelection(CharacterController actor, List<Vector2Int> validSquares)
+    {
+        if (actor == null || actor.Stats == null || validSquares == null || validSquares.Count == 0)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        ClearOverrunContinuationState();
+        ClearGrappleMoveSelectionState();
+        ClearFreeAdjacentGrappleMoveSelectionState();
+
+        _isFreeAdjacentGrappleMoveSelection = true;
+        _freeAdjacentGrappleMoveActor = actor;
+        _freeAdjacentGrappleMoveDestinations.AddRange(validSquares);
+
+        CurrentSubPhase = PlayerSubPhase.Moving;
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        for (int i = 0; i < validSquares.Count; i++)
+        {
+            SquareCell cell = Grid.GetCell(validSquares[i]);
+            if (cell == null)
+                continue;
+
+            cell.SetHighlight(HighlightType.Move);
+            _highlightedCells.Add(cell);
+        }
+
+        HighlightCharacterFootprint(actor, HighlightType.Selected);
+
+        CombatUI?.SetActionButtonsVisible(false);
+        CombatUI?.SetTurnIndicator($"{actor.Stats.CharacterName} - Grapple ended: choose a free adjacent square");
+        CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} can move to an adjacent square (free action). Right-click/ESC to remain in place.");
+    }
+
+    private bool ExecuteFreeAdjacentGrappleMovement(CharacterController actor, Vector2Int destination, bool showActionChoicesAfterMove)
+    {
+        if (actor == null || actor.Stats == null || Grid == null)
+            return false;
+
+        if (!SquareGridUtils.IsAdjacent(actor.GridPosition, destination))
+            return false;
+
+        if (!Grid.CanPlaceCreature(destination, actor.GetVisualSquaresOccupied(), actor))
+            return false;
+
+        SquareCell destinationCell = Grid.GetCell(destination);
+        if (destinationCell == null)
+            return false;
+
+        actor.MoveToCell(destinationCell, markAsMoved: false);
+
+        if (actor.GridPosition != destination)
+            return false;
+
+        CombatUI?.ShowCombatLog($"{actor.Stats.CharacterName} moves to ({destination.x},{destination.y}) (free action after ending grapple).");
+
+        RefreshFlankedConditions();
+        UpdateAllStatsUI();
+        InvalidatePreviewThreats();
+
+        if (_isFreeAdjacentGrappleMoveSelection)
+        {
+            Grid.ClearAllHighlights();
+            _highlightedCells.Clear();
+            ClearFreeAdjacentGrappleMoveSelectionState();
+        }
+
+        if (showActionChoicesAfterMove)
+            ShowActionChoices();
+
+        return true;
+    }
+
+    private void HandleFreeAdjacentGrappleMovementClick(CharacterController actor, SquareCell cell)
+    {
+        if (!_isFreeAdjacentGrappleMoveSelection || actor == null || cell == null)
+            return;
+
+        if (_freeAdjacentGrappleMoveActor != actor)
+        {
+            ClearFreeAdjacentGrappleMoveSelectionState();
+            ShowActionChoices();
+            return;
+        }
+
+        if (cell.Coords == actor.GridPosition)
+        {
+            CancelFreeAdjacentGrappleMovementSelection(actor);
+            return;
+        }
+
+        if (!_highlightedCells.Contains(cell) || !_freeAdjacentGrappleMoveDestinations.Contains(cell.Coords))
+            return;
+
+        if (!ExecuteFreeAdjacentGrappleMovement(actor, cell.Coords, showActionChoicesAfterMove: true))
+            CombatUI?.ShowCombatLog("⚠ Invalid adjacent free-move destination.");
+    }
+
+    private void CancelFreeAdjacentGrappleMovementSelection(CharacterController actor)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        ClearFreeAdjacentGrappleMoveSelectionState();
+
+        if (actor != null && actor.Stats != null)
+            CombatUI?.ShowCombatLog($"↩ {actor.Stats.CharacterName} remains in place after ending the grapple.");
+
+        ShowActionChoices();
+    }
+
     private void ClearGrappleMoveSelectionState()
     {
         _isGrappleMoveSelection = false;
@@ -7718,8 +7917,8 @@ public class GameManager : MonoBehaviour
         }
 
         ClearOverrunContinuationState();
+        ClearFreeAdjacentGrappleMoveSelectionState();
         ClearGrappleMoveSelectionState();
-
         _isGrappleMoveSelection = true;
         _grappleMoveActor = actor;
         _grappleMoveMaxRangeSquares = halfSpeedRange;
@@ -8343,6 +8542,11 @@ public class GameManager : MonoBehaviour
         _waitingForAoOConfirmation = false;
         _pendingAoOAction = null;
         ClearOverrunContinuationState();
+
+        bool wasFreeAdjacentGrappleMoveSelection = _isFreeAdjacentGrappleMoveSelection;
+        if (wasFreeAdjacentGrappleMoveSelection)
+            ClearFreeAdjacentGrappleMoveSelectionState();
+
         bool wasGrappleMoveSelection = _isGrappleMoveSelection;
         if (wasGrappleMoveSelection)
             ClearGrappleMoveSelectionState();
@@ -8350,9 +8554,16 @@ public class GameManager : MonoBehaviour
         CombatUI?.HideAoOConfirmationPrompt();
         if (pc != null)
         {
-            CombatUI?.ShowCombatLog(wasGrappleMoveSelection
-                ? $"↩ {pc.Stats.CharacterName} chooses not to move after winning grapple control."
-                : $"↩ {pc.Stats.CharacterName} cancels movement.");
+            if (wasFreeAdjacentGrappleMoveSelection)
+            {
+                CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} remains in place after ending the grapple.");
+            }
+            else
+            {
+                CombatUI?.ShowCombatLog(wasGrappleMoveSelection
+                    ? $"↩ {pc.Stats.CharacterName} chooses not to move after winning grapple control."
+                    : $"↩ {pc.Stats.CharacterName} cancels movement.");
+            }
         }
 
         ShowActionChoices();
@@ -8467,8 +8678,10 @@ public class GameManager : MonoBehaviour
         var threatenedSquares = GetPreviewThreatenedSquares(pc);
 
         // Use AoO-aware A* pathfinder — routes around threatened squares when possible.
-        // Grapple move selection is capped at half speed.
-        int previewMaxRange = _isGrappleMoveSelection ? Mathf.Max(1, _grappleMoveMaxRangeSquares) : pc.Stats.MoveRange;
+        // Grapple move selection is capped at half speed; post-grapple free reposition is adjacent only.
+        int previewMaxRange = _isGrappleMoveSelection
+            ? Mathf.Max(1, _grappleMoveMaxRangeSquares)
+            : (_isFreeAdjacentGrappleMoveSelection ? 1 : pc.Stats.MoveRange);
         var pathResult = Grid.FindPathAoOAware(pc.GridPosition, gridCoord, threatenedSquares, previewMaxRange, pc.GetVisualSquaresOccupied(), pc);
 
         if (pathResult.Path != null && pathResult.Path.Count > 0)
@@ -9130,6 +9343,12 @@ public class GameManager : MonoBehaviour
     private void HandleMovementClick(CharacterController pc, SquareCell cell)
     {
         if (_waitingForAoOConfirmation) return;
+
+        if (_isFreeAdjacentGrappleMoveSelection)
+        {
+            HandleFreeAdjacentGrappleMovementClick(pc, cell);
+            return;
+        }
 
         if (_isGrappleMoveSelection)
         {
@@ -9875,6 +10094,9 @@ public class GameManager : MonoBehaviour
             BeginGrappleMoveSelection(actor);
             return;
         }
+
+        if (TryOfferFreeAdjacentMovementAfterGrappleEnds(actor, actionType, result))
+            return;
 
         StartCoroutine(AfterAttackDelay(actor, isFreeAction ? 0.35f : 0.8f));
     }
@@ -11347,6 +11569,8 @@ public class GameManager : MonoBehaviour
         SpecialAttackResult result = npc.ResolveGrappleAction(chosenAction.Value);
         CombatUI?.ShowCombatLog($"☠ {npc.Stats.CharacterName} chooses grapple action [{chosenAction.Value}] against {opponent.Stats.CharacterName}: {result.Log}");
         UpdateAllStatsUI();
+
+        TryOfferFreeAdjacentMovementAfterGrappleEnds(npc, chosenAction.Value, result);
 
         if (result != null && result.TargetKilled)
         {
