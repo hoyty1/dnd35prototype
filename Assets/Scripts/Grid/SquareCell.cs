@@ -11,16 +11,51 @@ public class SquareCell : MonoBehaviour
     [HideInInspector] public int X; // grid x coordinate
     [HideInInspector] public int Y; // grid y coordinate
 
-    /// <summary>
-    /// Whether this cell is occupied by a character.
-    /// </summary>
-    public bool IsOccupied { get; set; }
+    // Characters currently occupying this square.
+    // Most gameplay treats the first occupant as the "primary" occupant,
+    // but we track all occupants to support shared-space states such as grapples.
+    private readonly List<CharacterController> _occupants = new List<CharacterController>();
 
     /// <summary>
-    /// Reference to the character occupying this cell (null if empty).
+    /// Whether this cell currently has at least one occupant.
     /// </summary>
-    public CharacterController Occupant { get; set; }
+    public bool IsOccupied => _occupants.Count > 0;
 
+    /// <summary>
+    /// Primary occupant for compatibility with existing single-occupant callers.
+    /// </summary>
+    public CharacterController Occupant => _occupants.Count > 0 ? _occupants[0] : null;
+
+    /// <summary>
+    /// Full occupant list for multi-creature overlap scenarios.
+    /// </summary>
+    public IReadOnlyList<CharacterController> Occupants => _occupants;
+
+    public bool ContainsOccupant(CharacterController occupant)
+    {
+        return occupant != null && _occupants.Contains(occupant);
+    }
+
+    public void AddOccupant(CharacterController occupant)
+    {
+        if (occupant == null || _occupants.Contains(occupant))
+            return;
+
+        _occupants.Add(occupant);
+    }
+
+    public void RemoveOccupant(CharacterController occupant)
+    {
+        if (occupant == null)
+            return;
+
+        _occupants.Remove(occupant);
+    }
+
+    public void ClearOccupants()
+    {
+        _occupants.Clear();
+    }
 
     // Items dropped in this square (e.g., disarmed weapons).
     private readonly List<ItemData> _groundItems = new List<ItemData>();

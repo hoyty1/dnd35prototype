@@ -216,7 +216,7 @@ public class StatusEffectIndicator : MonoBehaviour
             return false;
 
         SquareCell cell = GameManager.Instance.Grid.GetCell(coord);
-        return cell != null && cell.Occupant == _character;
+        return cell != null && cell.ContainsOccupant(_character);
     }
 
     private static Vector3 GetMouseScreenPosition()

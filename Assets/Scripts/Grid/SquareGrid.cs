@@ -112,7 +112,12 @@ public class SquareGrid : MonoBehaviour
         return occupied;
     }
 
-    public bool CanPlaceCreature(Vector2Int basePosition, int sizeSquares, CharacterController ignoreOccupant = null, bool ignoreOtherOccupants = false)
+    public bool CanPlaceCreature(
+        Vector2Int basePosition,
+        int sizeSquares,
+        CharacterController ignoreOccupant = null,
+        bool ignoreOtherOccupants = false,
+        IList<CharacterController> additionalIgnoredOccupants = null)
     {
         var occupiedSquares = GetOccupiedSquares(basePosition, sizeSquares);
 
@@ -129,8 +134,24 @@ public class SquareGrid : MonoBehaviour
             if (ignoreOtherOccupants)
                 continue;
 
-            if (cell.IsOccupied && cell.Occupant != null && cell.Occupant != ignoreOccupant)
+            if (!cell.IsOccupied)
+                continue;
+
+            IReadOnlyList<CharacterController> occupants = cell.Occupants;
+            for (int occIndex = 0; occIndex < occupants.Count; occIndex++)
+            {
+                CharacterController occupant = occupants[occIndex];
+                if (occupant == null)
+                    continue;
+
+                if (occupant == ignoreOccupant)
+                    continue;
+
+                if (additionalIgnoredOccupants != null && additionalIgnoredOccupants.Contains(occupant))
+                    continue;
+
                 return false;
+            }
         }
 
         return true;
@@ -143,11 +164,10 @@ public class SquareGrid : MonoBehaviour
         foreach (var kvp in _cells)
         {
             SquareCell cell = kvp.Value;
-            if (cell != null && cell.Occupant == character)
-            {
-                cell.IsOccupied = false;
-                cell.Occupant = null;
-            }
+            if (cell == null)
+                continue;
+
+            cell.RemoveOccupant(character);
         }
     }
 
@@ -160,8 +180,7 @@ public class SquareGrid : MonoBehaviour
         {
             SquareCell cell = GetCell(occupiedSquares[i]);
             if (cell == null) continue;
-            cell.IsOccupied = true;
-            cell.Occupant = character;
+            cell.AddOccupant(character);
         }
     }
 
@@ -378,18 +397,25 @@ public class SquareGrid : MonoBehaviour
             if (cell == null)
                 return false;
 
-            CharacterController occupant = cell.Occupant;
-            if (!cell.IsOccupied || occupant == null || occupant == mover)
+            if (!cell.IsOccupied)
                 continue;
 
-            // Final destination must be unoccupied.
-            if (isDestinationNode)
-                return false;
+            IReadOnlyList<CharacterController> occupants = cell.Occupants;
+            for (int occIndex = 0; occIndex < occupants.Count; occIndex++)
+            {
+                CharacterController occupant = occupants[occIndex];
+                if (occupant == null || occupant == mover)
+                    continue;
 
-            // During traversal, allies are pass-through, enemies are blocking.
-            bool isAllyOccupant = mover != null && occupant.IsPlayerControlled == mover.IsPlayerControlled;
-            if (!isAllyOccupant)
-                return false;
+                // Final destination must be unoccupied.
+                if (isDestinationNode)
+                    return false;
+
+                // During traversal, allies are pass-through, enemies are blocking.
+                bool isAllyOccupant = mover != null && occupant.IsPlayerControlled == mover.IsPlayerControlled;
+                if (!isAllyOccupant)
+                    return false;
+            }
         }
 
         return true;

@@ -436,6 +436,120 @@ public class CharacterController : MonoBehaviour
         return GetOccupiedSquaresAt(GridPosition);
     }
 
+    private static int GetGrappleMovementPriority(Vector2Int moverPos, Vector2Int destination)
+    {
+        int dx = Mathf.Abs(destination.x - moverPos.x);
+        int dy = Mathf.Abs(destination.y - moverPos.y);
+
+        if (dx == 0 && dy == 0) return 0;      // Already on square
+        if (dy == 0 && dx > 0) return 1;       // Horizontal preferred
+        if (dx == 0 && dy > 0) return 2;       // Vertical next
+        return 3;                              // Diagonal / mixed movement fallback
+    }
+
+    private Vector2Int FindBestGrapplePosition(CharacterController mover, CharacterController stayer)
+    {
+        if (mover == null || stayer == null)
+            return GridPosition;
+
+        List<Vector2Int> stayerSquares = stayer.GetOccupiedSquares();
+        if (stayerSquares == null || stayerSquares.Count == 0)
+            return stayer.GridPosition;
+
+        if (mover.GetVisualSquaresOccupied() == stayer.GetVisualSquaresOccupied())
+            return stayer.GridPosition;
+
+        Vector2Int moverPos = mover.GridPosition;
+        Vector2Int bestSquare = stayerSquares[0];
+        int bestPriority = GetGrappleMovementPriority(moverPos, bestSquare);
+        int bestDistance = Mathf.Abs(bestSquare.x - moverPos.x) + Mathf.Abs(bestSquare.y - moverPos.y);
+
+        for (int i = 1; i < stayerSquares.Count; i++)
+        {
+            Vector2Int candidate = stayerSquares[i];
+            int candidatePriority = GetGrappleMovementPriority(moverPos, candidate);
+            int candidateDistance = Mathf.Abs(candidate.x - moverPos.x) + Mathf.Abs(candidate.y - moverPos.y);
+
+            if (candidatePriority < bestPriority || (candidatePriority == bestPriority && candidateDistance < bestDistance))
+            {
+                bestSquare = candidate;
+                bestPriority = candidatePriority;
+                bestDistance = candidateDistance;
+            }
+        }
+
+        return bestSquare;
+    }
+
+    private bool TrySetGrapplePosition(Vector2Int destination, CharacterController overlapAllowedWith)
+    {
+        SquareGrid grid = CurrentGrid;
+        if (grid != null)
+        {
+            List<CharacterController> allowedOverlap = null;
+            if (overlapAllowedWith != null)
+                allowedOverlap = new List<CharacterController> { overlapAllowedWith };
+
+            bool canPlace = grid.CanPlaceCreature(
+                destination,
+                GetVisualSquaresOccupied(),
+                this,
+                ignoreOtherOccupants: false,
+                additionalIgnoredOccupants: allowedOverlap);
+
+            if (!canPlace)
+                return false;
+
+            grid.ClearCreatureOccupancy(this);
+        }
+
+        GridPosition = destination;
+
+        if (grid != null)
+            grid.SetCreatureOccupancy(this, GridPosition, GetVisualSquaresOccupied());
+
+        UpdatePositionForSize();
+        return true;
+    }
+
+    private string PositionGrapplingCharacters(CharacterController initiator, CharacterController target)
+    {
+        if (initiator == null || target == null)
+            return string.Empty;
+
+        CharacterController mover;
+        CharacterController stayer;
+
+        int initiatorFootprint = initiator.GetVisualSquaresOccupied();
+        int targetFootprint = target.GetVisualSquaresOccupied();
+
+        if (initiatorFootprint > targetFootprint)
+        {
+            stayer = initiator;
+            mover = target;
+        }
+        else if (targetFootprint > initiatorFootprint)
+        {
+            stayer = target;
+            mover = initiator;
+        }
+        else
+        {
+            // Same-size grapple: initiator keeps position, target stacks into initiator square(s).
+            stayer = initiator;
+            mover = target;
+        }
+
+        Vector2Int destination = FindBestGrapplePosition(mover, stayer);
+        bool moved = TrySetGrapplePosition(destination, stayer);
+        if (!moved)
+            return string.Empty;
+
+        string moverName = mover.Stats != null ? mover.Stats.CharacterName : mover.name;
+        string stayerName = stayer.Stats != null ? stayer.Stats.CharacterName : stayer.name;
+        return $"{moverName} moves into {stayerName}'s space at ({destination.x}, {destination.y}).";
+    }
+
     private bool CanOccupyAtCurrentSize(Vector2Int basePosition)
     {
         SquareGrid grid = CurrentGrid;
@@ -2883,10 +2997,10 @@ public class CharacterController : MonoBehaviour
             Debug.Log($"[Grapple] Link ended ({reason}).");
     }
 
-    private void EstablishGrappleWith(CharacterController target)
+    private string EstablishGrappleWith(CharacterController target)
     {
         if (target == null || target == this)
-            return;
+            return string.Empty;
 
         ReleaseGrappleState("new grapple established");
         target.ReleaseGrappleState("new grapple established");
@@ -2906,6 +3020,8 @@ public class CharacterController : MonoBehaviour
 
         RemoveConditionIfPresent(this, CombatConditionType.Pinned);
         RemoveConditionIfPresent(target, CombatConditionType.Pinned);
+
+        return PositionGrapplingCharacters(this, target);
     }
 
     public void ReleaseGrappleState(string reason = "")
@@ -4058,8 +4174,13 @@ public class CharacterController : MonoBehaviour
         int defTotal = defRoll + target.GetGrappleModifier();
 
         bool success = atkTotal >= defTotal;
+        string grapplePositioningLog = string.Empty;
         if (success)
-            EstablishGrappleWith(target);
+            grapplePositioningLog = EstablishGrappleWith(target);
+
+        string successLog = $"{Stats.CharacterName} starts a grapple with {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) Both are GRAPPLED. While grappled: no threatened squares, no attacks of opportunity, no normal movement (only Move grapple action at half speed after winning opposed check).";
+        if (success && !string.IsNullOrEmpty(grapplePositioningLog))
+            successLog = $"{successLog} {grapplePositioningLog}";
 
         return new SpecialAttackResult
         {
@@ -4070,7 +4191,7 @@ public class CharacterController : MonoBehaviour
             OpposedRoll = defRoll,
             OpposedTotal = defTotal,
             Log = success
-                ? $"{Stats.CharacterName} starts a grapple with {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) Both are GRAPPLED. While grappled: no threatened squares, no attacks of opportunity, no normal movement (only Move grapple action at half speed after winning opposed check)."
+                ? successLog
                 : $"{Stats.CharacterName} fails to secure grapple on {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
         };
     }
