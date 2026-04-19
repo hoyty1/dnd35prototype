@@ -3402,12 +3402,15 @@ public class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "movement"))
             return;
 
+        if (pc.IsGrappling())
+        {
+            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is grappled and cannot take normal movement. Use a grapple action (Move while grappling) after winning the opposed check.");
+            return;
+        }
+
         if (pc.Stats.MovementBlockedByCondition)
         {
-            if (pc.HasCondition(CombatConditionType.Grappled))
-                CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is grappled and cannot take normal movement. Use a grapple action (Move while grappling) after winning the opposed check.");
-            else
-                CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot move due to an active condition.");
+            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot move due to an active condition.");
             return;
         }
 

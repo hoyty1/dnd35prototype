@@ -31,6 +31,7 @@ public static class GrappleDamageRulesTests
         TestMonkNonlethalChoiceHasNoPenalty();
         TestMoveWhileGrapplingWithoutPinnedBonusByDefault();
         TestMoveWhileGrapplingPinnedBonusAppliedInOneVsOne();
+        TestGrappledConditionDoesNotZeroBaseSpeed();
         TestPinOpponentAppliesPinnedCondition();
         TestPinnedIsNotHelpless();
         TestPinnedAcPenaltyAppliesOnlyVsNonGrappler();
@@ -255,6 +256,25 @@ public static class GrappleDamageRulesTests
 
         Cleanup(attacker, defender);
     }
+    private static void TestGrappledConditionDoesNotZeroBaseSpeed()
+    {
+        var attacker = CreateTestCharacter("GrappleSpeedSource", "Fighter");
+        var defender = CreateWeakDefender("GrappleSpeedTarget");
+
+        int expectedSpeedFeet = attacker.Stats.EffectiveSpeedFeet;
+        int expectedMoveRange = attacker.Stats.MoveRange;
+
+        ForceGrappleState(attacker, defender);
+
+        Assert(attacker.HasCondition(CombatConditionType.Grappled), "Attacker has grappled condition after grapple is established");
+        Assert(attacker.Stats.EffectiveSpeedFeet == expectedSpeedFeet,
+            "Grappled condition does not reduce base speed to 0");
+        Assert(attacker.Stats.MoveRange == expectedMoveRange,
+            "Grappled condition preserves normal move range for half-speed grapple move math");
+
+        Cleanup(attacker, defender);
+    }
+
 
 
     private static void TestPinOpponentAppliesPinnedCondition()

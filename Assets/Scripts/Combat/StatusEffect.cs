@@ -400,13 +400,12 @@ public static class ConditionRules
             Type = CombatConditionType.Grappled,
             DisplayName = "Grappled",
             ShortLabel = "GR",
-            Description = "-4 attack, no movement, no attacks of opportunity, no threatened squares; only light weapons or unarmed strikes.",
+            Description = "-4 attack, no attacks of opportunity, no threatened squares; normal movement actions are restricted, but grapple move uses half speed on success.",
             StackingRule = ConditionStackingRule.Refresh,
             AttackModifier = -4,
-            PreventsMovement = true,
             PreventsAoO = true,
             PreventsThreatening = true,
-            MovementMultiplier = 0f
+            MovementMultiplier = 1f
         });
 
         Add(new ConditionDefinition
