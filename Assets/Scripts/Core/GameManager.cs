@@ -1413,10 +1413,10 @@ public class GameManager : MonoBehaviour
 
         CharacterStats fighterStats = new CharacterStats(
             name: "Grapple Tester",
-            level: 4,
+            level: 6,
             characterClass: "Fighter",
             str: 17, dex: 12, con: 14, wis: 10, intelligence: 10, cha: 10,
-            bab: 4,
+            bab: 6,
             armorBonus: 4,
             shieldBonus: 1,
             damageDice: 8,
@@ -1424,7 +1424,7 @@ public class GameManager : MonoBehaviour
             bonusDamage: 0,
             baseSpeed: 6,
             atkRange: 1,
-            baseHitDieHP: 30,
+            baseHitDieHP: 45,
             raceName: "Human"
         );
 
