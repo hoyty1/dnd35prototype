@@ -460,6 +460,7 @@ public class CharacterController : MonoBehaviour
     private ConditionManager _conditionManager;
     private Coroutine _currentScaleAnimation;
     private Coroutine _grappleAlternateVisibilityCoroutine;
+    private int _grappleDisplayPauseLocks;
 
     private const float GrappleAlternateVisibilitySeconds = 1f;
 
@@ -2846,6 +2847,40 @@ public class CharacterController : MonoBehaviour
             SetTokenVisible(true);
     }
 
+    public void SetGrappleContextMenuDisplayLocked(bool isLocked)
+    {
+        if (!TryGetGrappleLink(this, out GrappleLink link) || link == null)
+            return;
+
+        CharacterController controller = link.Controller;
+        CharacterController defender = link.Defender;
+        if (controller == null || defender == null)
+            return;
+
+        if (isLocked)
+        {
+            controller._grappleDisplayPauseLocks++;
+            defender._grappleDisplayPauseLocks++;
+
+            controller.StopGrappleAlternatingDisplay(ensureVisible: true);
+            defender.StopGrappleAlternatingDisplay(ensureVisible: true);
+            controller.SetTokenVisible(true);
+            defender.SetTokenVisible(true);
+            return;
+        }
+
+        controller._grappleDisplayPauseLocks = Mathf.Max(0, controller._grappleDisplayPauseLocks - 1);
+        defender._grappleDisplayPauseLocks = Mathf.Max(0, defender._grappleDisplayPauseLocks - 1);
+
+        bool shouldResumeAlternatingDisplay = controller._grappleDisplayPauseLocks == 0
+            && defender._grappleDisplayPauseLocks == 0
+            && controller.TryGetGrappleState(out CharacterController controllerOpponent, out _, out _, out _)
+            && controllerOpponent == defender;
+
+        if (shouldResumeAlternatingDisplay)
+            StartGrappleAlternatingDisplay(controller, defender);
+    }
+
     private static void StartGrappleAlternatingDisplay(CharacterController initiator, CharacterController target)
     {
         if (initiator == null || target == null)
@@ -2868,6 +2903,14 @@ public class CharacterController : MonoBehaviour
             && target.TryGetGrappleState(out CharacterController theirOpponent, out _, out _, out _)
             && theirOpponent == this)
         {
+            if (_grappleDisplayPauseLocks > 0 || target._grappleDisplayPauseLocks > 0)
+            {
+                SetTokenVisible(true);
+                target.SetTokenVisible(true);
+                yield return new WaitForSeconds(0.1f);
+                continue;
+            }
+
             SetTokenVisible(showInitiator);
             target.SetTokenVisible(!showInitiator);
 
@@ -3290,9 +3333,16 @@ public class CharacterController : MonoBehaviour
         }
 
         if (controller != null)
+        {
+            controller._grappleDisplayPauseLocks = 0;
             controller.StopGrappleAlternatingDisplay(ensureVisible: true);
+        }
+
         if (defender != null)
+        {
+            defender._grappleDisplayPauseLocks = 0;
             defender.StopGrappleAlternatingDisplay(ensureVisible: true);
+        }
 
         if (!string.IsNullOrEmpty(reason))
             Debug.Log($"[Grapple] Link ended ({reason}).");

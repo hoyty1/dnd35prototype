@@ -144,6 +144,8 @@ public class GameManager : MonoBehaviour
     private readonly List<CharacterController> _grappleMoveOpponents = new List<CharacterController>();
     private readonly Dictionary<Vector2Int, List<Vector2Int>> _grappleMovePathsByDestination = new Dictionary<Vector2Int, List<Vector2Int>>();
 
+    // Active grapple context menu lock (pauses token alternation while contextual menu is open).
+    private CharacterController _grappleContextMenuLockOwner;
     // Free adjacent reposition after ending a grapple (escape/release).
     private bool _isFreeAdjacentGrappleMoveSelection;
     private CharacterController _freeAdjacentGrappleMoveActor;
@@ -2284,6 +2286,7 @@ public class GameManager : MonoBehaviour
         if (pc == null) return;
 
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
+        EndGrappleContextMenuDisplayLock();
         CombatUI.HideSummonContextMenu();
 
         _isSelectingAidAnother = false;
@@ -9857,6 +9860,29 @@ public class GameManager : MonoBehaviour
             });
     }
 
+    private void BeginGrappleContextMenuDisplayLock(CharacterController actor)
+    {
+        if (_grappleContextMenuLockOwner == actor)
+            return;
+
+        EndGrappleContextMenuDisplayLock();
+
+        if (actor == null)
+            return;
+
+        actor.SetGrappleContextMenuDisplayLocked(true);
+        _grappleContextMenuLockOwner = actor;
+    }
+
+    private void EndGrappleContextMenuDisplayLock()
+    {
+        if (_grappleContextMenuLockOwner == null)
+            return;
+
+        _grappleContextMenuLockOwner.SetGrappleContextMenuDisplayLocked(false);
+        _grappleContextMenuLockOwner = null;
+    }
+
     private void ShowGrappleActionMenu(CharacterController actor, CharacterController opponent)
     {
         if (actor == null || opponent == null)
@@ -9873,6 +9899,7 @@ public class GameManager : MonoBehaviour
         }
 
         opponent = liveOpponent;
+        BeginGrappleContextMenuDisplayLock(actor);
         bool isPinning = actor.IsPinningOpponent();
 
         var options = new List<(GrappleActionType Action, string Label, bool Enabled, string DisabledMessage)>();
@@ -10067,6 +10094,8 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        BeginGrappleContextMenuDisplayLock(actor);
+
         List<DisarmableHeldItemOption> options = opponent.GetEquippedLightHandWeaponOptions();
         if (options == null || options.Count == 0)
         {
@@ -10117,6 +10146,8 @@ public class GameManager : MonoBehaviour
             ShowActionChoices();
             return;
         }
+
+        BeginGrappleContextMenuDisplayLock(actor);
 
         bool isMonk = actor.Stats.IsMonk;
         var options = new List<(AttackDamageMode mode, string label)>
@@ -10200,6 +10231,8 @@ public class GameManager : MonoBehaviour
             ShowActionChoices();
             return;
         }
+
+        EndGrappleContextMenuDisplayLock();
 
         bool isFreeAction = actionType == GrappleActionType.ReleasePinnedOpponent;
         bool usesIterativeAttack = CharacterController.IsIterativeGrappleAttackAction(actionType);
