@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 
 public enum SpecialAttackType
 {
@@ -45,6 +46,59 @@ public struct DisarmableHeldItemOption
     {
         HandSlot = handSlot;
         HeldItem = heldItem;
+    }
+}
+
+public class GrappleCheckResult
+{
+    public int BaseRoll;
+    public int BaseAttackBonus;
+    public int StrengthModifier;
+    public int SizeModifier;
+    public int MiscModifier;
+    public int Total;
+
+    public string CharacterName;
+    public readonly List<string> MiscBreakdown = new List<string>();
+
+    public void AddMiscModifier(int value, string source)
+    {
+        if (value == 0)
+            return;
+
+        MiscModifier += value;
+        if (!string.IsNullOrEmpty(source))
+            MiscBreakdown.Add(source);
+    }
+
+    private static string FormatSigned(int value)
+    {
+        return value >= 0 ? $"+{value}" : value.ToString();
+    }
+
+    public string GetBreakdown()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"{CharacterName}'s grapple check:");
+        sb.AppendLine($"  Base roll: 1d20 = {BaseRoll}");
+        sb.AppendLine($"  BAB: {FormatSigned(BaseAttackBonus)}");
+        sb.AppendLine($"  STR modifier: {FormatSigned(StrengthModifier)}");
+        sb.AppendLine($"  Size modifier: {FormatSigned(SizeModifier)}");
+
+        if (MiscModifier != 0)
+        {
+            if (MiscBreakdown.Count == 1)
+                sb.AppendLine($"  Misc modifiers: {FormatSigned(MiscModifier)} ({MiscBreakdown[0]})");
+            else
+            {
+                sb.AppendLine($"  Misc modifiers: {FormatSigned(MiscModifier)}");
+                for (int i = 0; i < MiscBreakdown.Count; i++)
+                    sb.AppendLine($"    - {MiscBreakdown[i]}");
+            }
+        }
+
+        sb.AppendLine($"  Total: {Total}");
+        return sb.ToString().TrimEnd();
     }
 }
 
@@ -3559,6 +3613,49 @@ public class CharacterController : MonoBehaviour
         return opponents.Count > 0;
     }
 
+    public int GetGrappleSizeModifier()
+    {
+        return Stats != null ? Stats.CurrentSizeCategory.GetGrappleModifier() : 0;
+    }
+
+    private GrappleCheckResult RollGrappleCheck(int? baseAttackBonusOverride = null, int additionalModifier = 0, string additionalModifierLabel = null)
+    {
+        var result = new GrappleCheckResult
+        {
+            CharacterName = Stats != null ? Stats.CharacterName : name,
+            BaseRoll = Random.Range(1, 21),
+            BaseAttackBonus = baseAttackBonusOverride ?? (Stats != null ? Stats.BaseAttackBonus : 0),
+            StrengthModifier = Stats != null ? Stats.STRMod : 0,
+            SizeModifier = GetGrappleSizeModifier()
+        };
+
+        if (Stats != null)
+        {
+            if (Stats.ConditionAttackPenalty != 0)
+                result.AddMiscModifier(Stats.ConditionAttackPenalty, "Condition modifiers");
+
+            if (Stats.HasFeat("Improved Grapple"))
+                result.AddMiscModifier(4, "Improved Grapple feat");
+        }
+
+        if (additionalModifier != 0)
+            result.AddMiscModifier(additionalModifier, string.IsNullOrEmpty(additionalModifierLabel) ? "Additional modifiers" : additionalModifierLabel);
+
+        result.Total = result.BaseRoll + result.BaseAttackBonus + result.StrengthModifier + result.SizeModifier + result.MiscModifier;
+        return result;
+    }
+
+    private static string BuildOpposedResultLine(string actorName, int actorTotal, string opponentName, int opponentTotal)
+    {
+        if (actorTotal > opponentTotal)
+            return $"Result: {actorName} wins ({actorTotal} vs {opponentTotal})";
+
+        if (actorTotal == opponentTotal)
+            return $"Result: Tie - {opponentName} wins ({opponentTotal} vs {actorTotal})";
+
+        return $"Result: {opponentName} wins ({opponentTotal} vs {actorTotal})";
+    }
+
     private bool TryResolveOpposedGrappleCheck(CharacterController opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, int myCheckModifier = 0, int? myBaseAttackBonusOverride = null)
     {
         myRoll = 0;
@@ -3566,13 +3663,16 @@ public class CharacterController : MonoBehaviour
         oppRoll = 0;
         oppTotal = 0;
 
-        if (opponent == null || opponent.Stats == null)
+        if (opponent == null || opponent.Stats == null || Stats == null)
             return false;
 
-        myRoll = Random.Range(1, 21);
-        oppRoll = Random.Range(1, 21);
-        myTotal = myRoll + GetGrappleModifier(myBaseAttackBonusOverride) + myCheckModifier;
-        oppTotal = oppRoll + opponent.GetGrappleModifier();
+        GrappleCheckResult myCheck = RollGrappleCheck(myBaseAttackBonusOverride, myCheckModifier);
+        GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
+
+        myRoll = myCheck.BaseRoll;
+        myTotal = myCheck.Total;
+        oppRoll = oppCheck.BaseRoll;
+        oppTotal = oppCheck.Total;
         return true;
     }
 
@@ -3646,7 +3746,7 @@ public class CharacterController : MonoBehaviour
             }
             case GrappleActionType.OpposedGrappleEscape:
             {
-                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, 0, iterativeAttackBonusOverride))
+                if (opponent == null || opponent.Stats == null || Stats == null)
                 {
                     return new SpecialAttackResult
                     {
@@ -3656,7 +3756,10 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                bool success = myTotal >= oppTotal;
+                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride);
+                GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
+
+                bool success = myCheck.Total > oppCheck.Total;
                 bool escapedPinOnly = false;
                 if (success)
                 {
@@ -3674,19 +3777,29 @@ public class CharacterController : MonoBehaviour
                     }
                 }
 
+                string outcome = success
+                    ? (escapedPinOnly
+                        ? $"{Stats.CharacterName} escapes the pin, but the grapple continues!"
+                        : $"{Stats.CharacterName} escapes from grapple!")
+                    : $"{Stats.CharacterName} fails to escape.";
+
+                string log = string.Join("\n\n", new[]
+                {
+                    $"{Stats.CharacterName} attempts to escape from grapple",
+                    myCheck.GetBreakdown(),
+                    oppCheck.GetBreakdown(),
+                    BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total) + "\n" + outcome
+                });
+
                 return new SpecialAttackResult
                 {
                     ManeuverName = "Grapple Escape (Opposed)",
                     Success = success,
-                    CheckRoll = myRoll,
-                    CheckTotal = myTotal,
-                    OpposedRoll = oppRoll,
-                    OpposedTotal = oppTotal,
-                    Log = success
-                        ? (escapedPinOnly
-                            ? $"{Stats.CharacterName} breaks the pin from {opponent.Stats.CharacterName}! ({myTotal} vs {oppTotal}) The grapple continues."
-                            : $"{Stats.CharacterName} breaks free from {opponent.Stats.CharacterName}! ({myTotal} vs {oppTotal})")
-                        : $"{Stats.CharacterName} fails to break free from {opponent.Stats.CharacterName}. ({myTotal} vs {oppTotal})"
+                    CheckRoll = myCheck.BaseRoll,
+                    CheckTotal = myCheck.Total,
+                    OpposedRoll = oppCheck.BaseRoll,
+                    OpposedTotal = oppCheck.Total,
+                    Log = log
                 };
             }
             case GrappleActionType.DamageOpponent:
@@ -3713,7 +3826,7 @@ public class CharacterController : MonoBehaviour
                 bool dealNonlethalDamage = selectedMode == AttackDamageMode.Nonlethal;
                 int grappleCheckPenalty = (!usesMonkOrIusException && !dealNonlethalDamage) ? -4 : 0;
 
-                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, grappleCheckPenalty, iterativeAttackBonusOverride))
+                if (opponent == null || opponent.Stats == null || Stats == null)
                 {
                     return new SpecialAttackResult
                     {
@@ -3723,18 +3836,26 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                bool success = myTotal >= oppTotal;
+                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride, grappleCheckPenalty, grappleCheckPenalty != 0 ? "Lethal damage without Monk/Improved Unarmed Strike" : null);
+                GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
+
+                bool success = myCheck.Total > oppCheck.Total;
                 int finalDamageDealt = 0;
                 int rawDamage = 0;
                 var unarmed = GetUnarmedDamage();
                 int damageDiceCount = Mathf.Max(1, unarmed.damageCount);
                 int damageDiceSides = Mathf.Max(2, unarmed.damageDice);
                 int bonusDamage = Stats.STRMod + unarmed.bonusDamage;
+                var damageRolls = new List<int>();
 
                 if (success)
                 {
                     for (int i = 0; i < damageDiceCount; i++)
-                        rawDamage += Random.Range(1, damageDiceSides + 1);
+                    {
+                        int die = Random.Range(1, damageDiceSides + 1);
+                        damageRolls.Add(die);
+                        rawDamage += die;
+                    }
 
                     rawDamage += bonusDamage;
                     rawDamage = Mathf.Max(1, rawDamage);
@@ -3760,9 +3881,7 @@ public class CharacterController : MonoBehaviour
                     }
                 }
 
-                int usedGrappleModifier = GetGrappleModifier(iterativeAttackBonusOverride);
                 string damageTypeLabel = dealNonlethalDamage ? "nonlethal" : "lethal";
-                string penaltySuffix = grappleCheckPenalty != 0 ? $" (includes {grappleCheckPenalty} lethal damage penalty)" : string.Empty;
                 string defaultDamageRuleSummary = grappleDamageRuleReason != null
                     ? $"Deals lethal damage by default ({grappleDamageRuleReason})."
                     : "Deals nonlethal damage by default (no Monk/Improved Unarmed Strike exception).";
@@ -3772,19 +3891,34 @@ public class CharacterController : MonoBehaviour
                         ? $"No penalty ({grappleDamageRuleReason})."
                         : "No penalty (nonlethal default).");
 
+                string resultLine = BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total);
+                string outcomeLine = success
+                    ? $"Damage: {damageDiceCount}d{damageDiceSides}{bonusDamage:+#;-#;0} = {rawDamage} {damageTypeLabel} ({opponent.Stats.CharacterName} takes {finalDamageDealt})."
+                    : $"{Stats.CharacterName} fails to damage {opponent.Stats.CharacterName}.";
+
+                if (success && damageRolls.Count > 0)
+                    outcomeLine += $" [Rolls: {string.Join(", ", damageRolls)}]";
+
+                string log = string.Join("\n\n", new[]
+                {
+                    $"{Stats.CharacterName} attempts to damage {opponent.Stats.CharacterName}",
+                    myCheck.GetBreakdown(),
+                    oppCheck.GetBreakdown(),
+                    resultLine + "\n" + outcomeLine,
+                    defaultDamageRuleSummary + " " + penaltyRuleSummary
+                });
+
                 return new SpecialAttackResult
                 {
                     ManeuverName = "Grapple Damage",
                     Success = success,
-                    CheckRoll = myRoll,
-                    CheckTotal = myTotal,
-                    OpposedRoll = oppRoll,
-                    OpposedTotal = oppTotal,
+                    CheckRoll = myCheck.BaseRoll,
+                    CheckTotal = myCheck.Total,
+                    OpposedRoll = oppCheck.BaseRoll,
+                    OpposedTotal = oppCheck.Total,
                     DamageDealt = finalDamageDealt,
                     TargetKilled = opponent.Stats.IsDead,
-                    Log = success
-                        ? $"{Stats.CharacterName} wins opposed grapple check ({myRoll}+{usedGrappleModifier}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals {finalDamageDealt} {damageTypeLabel} unarmed grapple damage to {opponent.Stats.CharacterName} (rolled {damageDiceCount}d{damageDiceSides}{bonusDamage:+#;-#;0} => {rawDamage}). {defaultDamageRuleSummary} {penaltyRuleSummary}"
-                        : $"{Stats.CharacterName} loses opposed grapple check ({myRoll}+{usedGrappleModifier}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals no grapple damage. {defaultDamageRuleSummary} {penaltyRuleSummary}"
+                    Log = log
                 };
             }
             case GrappleActionType.AttackWithLightWeapon:
@@ -3817,7 +3951,7 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, 0, iterativeAttackBonusOverride))
+                if (opponent == null || opponent.Stats == null || Stats == null)
                 {
                     return new SpecialAttackResult
                     {
@@ -3827,24 +3961,37 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                bool success = myTotal >= oppTotal;
+                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride);
+                GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
+
+                bool success = myCheck.Total > oppCheck.Total;
                 if (success && TryGetGrappleLink(this, out GrappleLink link))
                 {
                     SetPinnedState(link, opponent, this);
                     RemoveConditionIfPresent(this, CombatConditionType.Pinned);
                 }
 
+                string outcomeLine = success
+                    ? $"{opponent.Stats.CharacterName} is pinned!"
+                    : $"{Stats.CharacterName} fails to pin {opponent.Stats.CharacterName}.";
+
+                string log = string.Join("\n\n", new[]
+                {
+                    $"{Stats.CharacterName} attempts to pin {opponent.Stats.CharacterName}",
+                    myCheck.GetBreakdown(),
+                    oppCheck.GetBreakdown(),
+                    BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total) + "\n" + outcomeLine
+                });
+
                 return new SpecialAttackResult
                 {
                     ManeuverName = "Pin Opponent",
                     Success = success,
-                    CheckRoll = myRoll,
-                    CheckTotal = myTotal,
-                    OpposedRoll = oppRoll,
-                    OpposedTotal = oppTotal,
-                    Log = success
-                        ? $"{Stats.CharacterName} pins {opponent.Stats.CharacterName}. {Stats.CharacterName} is now holding the pin. ({myTotal} vs {oppTotal})"
-                        : $"{Stats.CharacterName} fails to pin {opponent.Stats.CharacterName}. ({myTotal} vs {oppTotal})"
+                    CheckRoll = myCheck.BaseRoll,
+                    CheckTotal = myCheck.Total,
+                    OpposedRoll = oppCheck.BaseRoll,
+                    OpposedTotal = oppCheck.Total,
+                    Log = log
                 };
             }
             case GrappleActionType.BreakPin:
@@ -3859,7 +4006,7 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, 0, iterativeAttackBonusOverride))
+                if (opponent == null || opponent.Stats == null || Stats == null)
                 {
                     return new SpecialAttackResult
                     {
@@ -3869,23 +4016,36 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                bool success = myTotal >= oppTotal;
+                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride);
+                GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
+
+                bool success = myCheck.Total > oppCheck.Total;
                 if (success && TryGetGrappleLink(this, out GrappleLink link))
                 {
                     ClearPinnedState(link);
                 }
 
+                string outcomeLine = success
+                    ? $"{Stats.CharacterName} breaks the pin from {opponent.Stats.CharacterName}!"
+                    : $"{Stats.CharacterName} fails to break the pin.";
+
+                string log = string.Join("\n\n", new[]
+                {
+                    $"{Stats.CharacterName} attempts to break pin from {opponent.Stats.CharacterName}",
+                    myCheck.GetBreakdown(),
+                    oppCheck.GetBreakdown(),
+                    BuildOpposedResultLine(Stats.CharacterName, myCheck.Total, opponent.Stats.CharacterName, oppCheck.Total) + "\n" + outcomeLine
+                });
+
                 return new SpecialAttackResult
                 {
                     ManeuverName = "Break Pin",
                     Success = success,
-                    CheckRoll = myRoll,
-                    CheckTotal = myTotal,
-                    OpposedRoll = oppRoll,
-                    OpposedTotal = oppTotal,
-                    Log = success
-                        ? $"{Stats.CharacterName} breaks the pin from {opponent.Stats.CharacterName}! ({myTotal} vs {oppTotal})"
-                        : $"{Stats.CharacterName} fails to break the pin. ({myTotal} vs {oppTotal})"
+                    CheckRoll = myCheck.BaseRoll,
+                    CheckTotal = myCheck.Total,
+                    OpposedRoll = oppCheck.BaseRoll,
+                    OpposedTotal = oppCheck.Total,
+                    Log = log
                 };
             }
             case GrappleActionType.MoveHalfSpeed:
@@ -4778,7 +4938,7 @@ public class CharacterController : MonoBehaviour
 
     private SpecialAttackResult ResolveGrapple(CharacterController target, int? iterativeAttackBonusOverride = null)
     {
-        if (target == null || target.Stats == null)
+        if (target == null || target.Stats == null || Stats == null)
         {
             return new SpecialAttackResult
             {
@@ -4810,10 +4970,32 @@ public class CharacterController : MonoBehaviour
 
         int touchRoll = Random.Range(1, 21);
         int attackBab = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
-        int touchTotal = touchRoll + attackBab + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty;
+        int touchStr = Stats.STRMod;
+        int touchSize = Stats.SizeModifier;
+        int touchCondition = Stats.ConditionAttackPenalty;
+        int touchTotal = touchRoll + attackBab + touchStr + touchSize + touchCondition;
         int touchAC = 10 + target.Stats.DEXMod + target.Stats.SizeModifier;
+
+        var touchBuilder = new StringBuilder();
+        touchBuilder.AppendLine("Touch attack:");
+        touchBuilder.AppendLine($"  Base roll: 1d20 = {touchRoll}");
+        touchBuilder.AppendLine($"  BAB: {attackBab:+0;-#;+0}");
+        touchBuilder.AppendLine($"  STR modifier: {touchStr:+0;-#;+0}");
+        touchBuilder.AppendLine($"  Size modifier: {touchSize:+0;-#;+0}");
+        if (touchCondition != 0)
+            touchBuilder.AppendLine($"  Condition modifiers: {touchCondition:+0;-#;+0}");
+        touchBuilder.AppendLine($"  Total: {touchTotal}");
+        touchBuilder.AppendLine($"  Target touch AC: {touchAC}");
+
         if (touchTotal < touchAC)
         {
+            string missLog = string.Join("\n\n", new[]
+            {
+                $"{Stats.CharacterName} attempts to grapple {target.Stats.CharacterName}",
+                touchBuilder.ToString().TrimEnd(),
+                "Result: Miss!\nGrapple attempt failed"
+            });
+
             return new SpecialAttackResult
             {
                 ManeuverName = "Grapple",
@@ -4821,35 +5003,47 @@ public class CharacterController : MonoBehaviour
                 CheckRoll = touchRoll,
                 CheckTotal = touchTotal,
                 OpposedTotal = touchAC,
-                Log = $"{Stats.CharacterName} misses grapple touch attack ({touchTotal} vs touch AC {touchAC})."
+                Log = missLog
             };
         }
 
-        int atkRoll = Random.Range(1, 21);
-        int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + GetGrappleModifier(attackBab);
-        int defTotal = defRoll + target.GetGrappleModifier();
+        GrappleCheckResult attackerCheck = RollGrappleCheck(attackBab);
+        GrappleCheckResult defenderCheck = target.RollGrappleCheck();
 
-        bool success = atkTotal >= defTotal;
+        bool success = attackerCheck.Total > defenderCheck.Total;
         string grapplePositioningLog = string.Empty;
         if (success)
             grapplePositioningLog = EstablishGrappleWith(target);
 
-        string successLog = $"{Stats.CharacterName} starts a grapple with {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) Both are GRAPPLED. While grappled: no threatened squares, no attacks of opportunity, no normal movement (only Move grapple action at half speed after winning opposed check).";
+        string resultLine = BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total);
+        string outcomeLine = success
+            ? $"{Stats.CharacterName} successfully grapples {target.Stats.CharacterName}!"
+            : "Grapple attempt failed";
+
+        if (success)
+            outcomeLine += " Both are GRAPPLED. While grappled: no threatened squares, no attacks of opportunity, no normal movement (only Move grapple action at half speed after winning opposed check).";
+
         if (success && !string.IsNullOrEmpty(grapplePositioningLog))
-            successLog = $"{successLog} {grapplePositioningLog}";
+            outcomeLine += $" {grapplePositioningLog}";
+
+        string successLog = string.Join("\n\n", new[]
+        {
+            $"{Stats.CharacterName} attempts to grapple {target.Stats.CharacterName}",
+            touchBuilder.ToString().TrimEnd() + "\nResult: Hit!",
+            attackerCheck.GetBreakdown(),
+            defenderCheck.GetBreakdown(),
+            resultLine + "\n" + outcomeLine
+        });
 
         return new SpecialAttackResult
         {
             ManeuverName = "Grapple",
             Success = success,
-            CheckRoll = atkRoll,
-            CheckTotal = atkTotal,
-            OpposedRoll = defRoll,
-            OpposedTotal = defTotal,
-            Log = success
-                ? successLog
-                : $"{Stats.CharacterName} fails to secure grapple on {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
+            CheckRoll = attackerCheck.BaseRoll,
+            CheckTotal = attackerCheck.Total,
+            OpposedRoll = defenderCheck.BaseRoll,
+            OpposedTotal = defenderCheck.Total,
+            Log = successLog
         };
     }
 

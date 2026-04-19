@@ -10394,7 +10394,16 @@ public class GameManager : MonoBehaviour
             : (usesIterativeAttack
                 ? $" [Attack BAB {CharacterStats.FormatMod(attackBonusUsed)} | {attacksRemaining} left]"
                 : " [Standard Action]");
-        CombatUI?.ShowCombatLog($"⚔ GRAPPLE [{actionType}]{actionCostLabel}: {result.Log}");
+        string grappleHeader = $"⚔ GRAPPLE [{actionType}]{actionCostLabel}";
+        if (!string.IsNullOrEmpty(result.Log) && result.Log.Contains("\n"))
+        {
+            CombatUI?.ShowCombatLog(grappleHeader);
+            CombatUI?.ShowCombatLog(result.Log);
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog($"{grappleHeader}: {result.Log}");
+        }
 
         UpdateAllStatsUI();
 
@@ -11960,7 +11969,16 @@ public class GameManager : MonoBehaviour
             string iterativeLabel = usesIterativeAttack
                 ? $" [BAB {CharacterStats.FormatMod(iterativeAttackBonusOverride ?? 0)} | {remainingAttacks} left]"
                 : string.Empty;
-            CombatUI?.ShowCombatLog($"☠ {npc.Stats.CharacterName} chooses grapple action [{chosenAction.Value}]{iterativeLabel} against {opponent.Stats.CharacterName}: {result.Log}");
+            string npcGrappleHeader = $"☠ {npc.Stats.CharacterName} chooses grapple action [{chosenAction.Value}]{iterativeLabel} against {opponent.Stats.CharacterName}";
+            if (!string.IsNullOrEmpty(result.Log) && result.Log.Contains("\n"))
+            {
+                CombatUI?.ShowCombatLog(npcGrappleHeader);
+                CombatUI?.ShowCombatLog(result.Log);
+            }
+            else
+            {
+                CombatUI?.ShowCombatLog($"{npcGrappleHeader}: {result.Log}");
+            }
             UpdateAllStatsUI();
 
             TryOfferFreeAdjacentMovementAfterGrappleEnds(npc, chosenAction.Value, result);
