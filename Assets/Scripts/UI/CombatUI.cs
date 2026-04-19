@@ -101,6 +101,8 @@ public class CombatUI : MonoBehaviour
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
     public Button GrappleActionsButton; // Legacy grapple menu button (deprecated)
     public Button GrappleDamageButton;          // Grapple: deal damage (Standard Action)
+    public Button GrappleLightWeaponAttackButton; // Grapple: attack with main-hand light weapon (Standard Action)
+    public Button GrappleUnarmedAttackButton;     // Grapple: attack unarmed strike (Standard Action)
     public Button GrapplePinButton;             // Grapple: pin/maintain pin (Standard Action)
     public Button GrappleBreakPinButton;        // Grapple: break pin (Standard Action)
     public Button GrappleEscapeArtistButton;    // Grapple: escape via Escape Artist (Standard Action)
@@ -1073,6 +1075,41 @@ public class CombatUI : MonoBehaviour
             Text label = GrappleDamageButton.GetComponentInChildren<Text>();
             if (label != null)
                 label.text = canUse ? "Grapple: Damage (Std)" : "Grapple: Damage (Used/Blocked)";
+        }
+
+        if (GrappleLightWeaponAttackButton != null)
+        {
+            bool hasMainHandLightWeapon = pc.CanAttackWithLightWeaponWhileGrappling(out ItemData mainHandLightWeapon, out _);
+            bool canUse = isGrappling
+                          && !showOnlyPinnedEscapeActions
+                          && actions.HasStandardAction
+                          && hasMainHandLightWeapon
+                          && CanUseWhilePinning(GrappleActionType.AttackWithLightWeapon);
+            GrappleLightWeaponAttackButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions);
+            GrappleLightWeaponAttackButton.interactable = canUse;
+            Text label = GrappleLightWeaponAttackButton.GetComponentInChildren<Text>();
+            if (label != null)
+            {
+                string weaponLabel = hasMainHandLightWeapon ? mainHandLightWeapon.Name : "Main-hand light weapon";
+                label.text = canUse
+                    ? $"Grapple: Attack {weaponLabel} (-4, Std)"
+                    : $"Grapple: Attack {weaponLabel} (-4, N/A)";
+            }
+        }
+
+        if (GrappleUnarmedAttackButton != null)
+        {
+            bool canUnarmedByRule = pc.CanAttackUnarmedWhileGrappling(out _);
+            bool canUse = isGrappling
+                          && !showOnlyPinnedEscapeActions
+                          && actions.HasStandardAction
+                          && canUnarmedByRule
+                          && CanUseWhilePinning(GrappleActionType.AttackUnarmed);
+            GrappleUnarmedAttackButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions);
+            GrappleUnarmedAttackButton.interactable = canUse;
+            Text label = GrappleUnarmedAttackButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = canUse ? "Grapple: Attack Unarmed (-4, Std)" : "Grapple: Attack Unarmed (-4, N/A)";
         }
 
         if (GrapplePinButton != null)

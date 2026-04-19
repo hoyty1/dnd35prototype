@@ -1439,6 +1439,9 @@ public class GameManager : MonoBehaviour
             fighterInventory = PC1.gameObject.AddComponent<InventoryComponent>();
         fighterInventory.Init(fighterStats);
         SetupStartingEquipment(fighterInventory, "Fighter");
+
+        // Grapple test loadout: force a dagger in main hand to validate light-weapon grapple attacks.
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.RightHand);
         fighterInventory.CharacterInventory.RecalculateStats();
 
         // Keep only one player combatant active for a focused grapple scenario.
@@ -4528,6 +4531,9 @@ public class GameManager : MonoBehaviour
     }
 
     public void OnGrappleDamageButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.DamageOpponent);
+    public void OnGrappleLightWeaponAttackButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.AttackWithLightWeapon);
+    public void OnGrappleUnarmedAttackButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.AttackUnarmed);
+
     public void OnGrapplePinButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.PinOpponent);
     public void OnGrappleBreakPinButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.BreakPin);
     public void OnGrappleEscapeArtistButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.EscapeArtist);
@@ -9840,6 +9846,38 @@ public class GameManager : MonoBehaviour
 
             AddOption(GrappleActionType.DamageOpponent, "Deal grapple damage (opposed check + unarmed strike damage; choose lethal/nonlethal)");
 
+            bool actorHasMainHandLightWeapon = actor.CanAttackWithLightWeaponWhileGrappling(out ItemData actorMainHandLightWeapon, out string actorLightWeaponReason);
+            string actorLightWeaponLabel = actorHasMainHandLightWeapon
+                ? $"Attack with Light Weapon: {actorMainHandLightWeapon.Name} (-4 attack roll, no grapple check)"
+                : $"Attack with Light Weapon (Unavailable: {actorLightWeaponReason})";
+            bool actorLightWeaponEnabled = actorHasMainHandLightWeapon;
+            string actorLightWeaponDisabledMessage = actorHasMainHandLightWeapon ? string.Empty : actorLightWeaponReason;
+
+            if (isPinning && actor.IsGrappleActionBlockedWhilePinning(GrappleActionType.AttackWithLightWeapon, out string pinningBlockForLightWeaponAttack))
+            {
+                actorLightWeaponEnabled = false;
+                actorLightWeaponDisabledMessage = pinningBlockForLightWeaponAttack;
+                actorLightWeaponLabel = $"{actorLightWeaponLabel} (Cannot do while pinning)";
+            }
+
+            options.Add((GrappleActionType.AttackWithLightWeapon, actorLightWeaponLabel, actorLightWeaponEnabled, actorLightWeaponDisabledMessage));
+
+            bool actorCanAttackUnarmed = actor.CanAttackUnarmedWhileGrappling(out string actorUnarmedReason);
+            string actorUnarmedLabel = actorCanAttackUnarmed
+                ? "Attack Unarmed (-4 attack roll, no grapple check)"
+                : $"Attack Unarmed (Unavailable: {actorUnarmedReason})";
+            bool actorUnarmedEnabled = actorCanAttackUnarmed;
+            string actorUnarmedDisabledMessage = actorCanAttackUnarmed ? string.Empty : actorUnarmedReason;
+
+            if (isPinning && actor.IsGrappleActionBlockedWhilePinning(GrappleActionType.AttackUnarmed, out string pinningBlockForUnarmedAttack))
+            {
+                actorUnarmedEnabled = false;
+                actorUnarmedDisabledMessage = pinningBlockForUnarmedAttack;
+                actorUnarmedLabel = $"{actorUnarmedLabel} (Cannot do while pinning)";
+            }
+
+            options.Add((GrappleActionType.AttackUnarmed, actorUnarmedLabel, actorUnarmedEnabled, actorUnarmedDisabledMessage));
+
             string useWeaponLabel = hasOpponentLightWeapon
                 ? "Use Opponent's Weapon (opposed grapple check, then immediate attack at -4; choose weapon hand)"
                 : $"Use Opponent's Weapon (Unavailable: {opponent.Stats.CharacterName} has no equipped light weapon)";
@@ -11610,6 +11648,12 @@ public class GameManager : MonoBehaviour
             if (opponentPinned && legalActions.Contains(GrappleActionType.PinOpponent) && UnityEngine.Random.value < 0.35f)
                 return GrappleActionType.PinOpponent; // maintain pin
 
+            if (legalActions.Contains(GrappleActionType.AttackWithLightWeapon) && UnityEngine.Random.value < 0.45f)
+                return GrappleActionType.AttackWithLightWeapon;
+
+            if (legalActions.Contains(GrappleActionType.AttackUnarmed) && UnityEngine.Random.value < 0.25f)
+                return GrappleActionType.AttackUnarmed;
+
             if (legalActions.Contains(GrappleActionType.DamageOpponent))
                 return GrappleActionType.DamageOpponent;
 
@@ -11624,8 +11668,14 @@ public class GameManager : MonoBehaviour
             if (!opponentPinned && legalActions.Contains(GrappleActionType.PinOpponent) && npc.Stats.STRMod >= 3 && UnityEngine.Random.value < 0.35f)
                 return GrappleActionType.PinOpponent;
 
+            if (legalActions.Contains(GrappleActionType.AttackWithLightWeapon) && UnityEngine.Random.value < 0.45f)
+                return GrappleActionType.AttackWithLightWeapon;
+
             if (legalActions.Contains(GrappleActionType.UseOpponentWeapon) && UnityEngine.Random.value < 0.30f)
                 return GrappleActionType.UseOpponentWeapon;
+
+            if (legalActions.Contains(GrappleActionType.AttackUnarmed) && UnityEngine.Random.value < 0.20f)
+                return GrappleActionType.AttackUnarmed;
 
             if (legalActions.Contains(GrappleActionType.DamageOpponent))
                 return GrappleActionType.DamageOpponent;
@@ -11658,6 +11708,8 @@ public class GameManager : MonoBehaviour
                     break;
 
                 case GrappleActionType.DamageOpponent:
+                case GrappleActionType.AttackWithLightWeapon:
+                case GrappleActionType.AttackUnarmed:
                 case GrappleActionType.PinOpponent:
                 case GrappleActionType.MoveHalfSpeed:
                 case GrappleActionType.UseOpponentWeapon:
@@ -11678,6 +11730,17 @@ public class GameManager : MonoBehaviour
                     return;
             }
 
+            if (actionType == GrappleActionType.AttackWithLightWeapon)
+            {
+                if (!npc.CanAttackWithLightWeaponWhileGrappling(out _, out _))
+                    return;
+            }
+
+            if (actionType == GrappleActionType.AttackUnarmed)
+            {
+                if (!npc.CanAttackUnarmedWhileGrappling(out _))
+                    return;
+            }
             actions.Add(actionType);
         }
 
@@ -11690,6 +11753,8 @@ public class GameManager : MonoBehaviour
         }
 
         TryAdd(GrappleActionType.DamageOpponent);
+        TryAdd(GrappleActionType.AttackWithLightWeapon);
+        TryAdd(GrappleActionType.AttackUnarmed);
         TryAdd(GrappleActionType.PinOpponent);
         TryAdd(GrappleActionType.UseOpponentWeapon);
         TryAdd(GrappleActionType.MoveHalfSpeed);

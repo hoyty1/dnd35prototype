@@ -759,6 +759,10 @@ public class SceneBootstrap : MonoBehaviour
             "Grapple Actions (Legacy)", new Color(0.45f, 0.24f, 0.6f));
         combatUI.GrappleDamageButton = CreateGridButton(btnGrid.transform, "GrappleDamageBtn",
             "Grapple: Damage", new Color(0.55f, 0.22f, 0.45f));
+        combatUI.GrappleLightWeaponAttackButton = CreateGridButton(btnGrid.transform, "GrappleLightWeaponAttackBtn",
+            "Grapple: Attack Light Weapon", new Color(0.6f, 0.24f, 0.42f));
+        combatUI.GrappleUnarmedAttackButton = CreateGridButton(btnGrid.transform, "GrappleUnarmedAttackBtn",
+            "Grapple: Attack Unarmed", new Color(0.62f, 0.2f, 0.36f));
         combatUI.GrapplePinButton = CreateGridButton(btnGrid.transform, "GrapplePinBtn",
             "Grapple: Pin Opponent", new Color(0.5f, 0.24f, 0.56f));
         combatUI.GrappleBreakPinButton = CreateGridButton(btnGrid.transform, "GrappleBreakPinBtn",
@@ -1049,6 +1053,10 @@ public class SceneBootstrap : MonoBehaviour
         }
         if (ui.GrappleDamageButton != null)
             ui.GrappleDamageButton.onClick.AddListener(() => GameManager.Instance.OnGrappleDamageButtonPressed());
+        if (ui.GrappleLightWeaponAttackButton != null)
+            ui.GrappleLightWeaponAttackButton.onClick.AddListener(() => GameManager.Instance.OnGrappleLightWeaponAttackButtonPressed());
+        if (ui.GrappleUnarmedAttackButton != null)
+            ui.GrappleUnarmedAttackButton.onClick.AddListener(() => GameManager.Instance.OnGrappleUnarmedAttackButtonPressed());
         if (ui.GrapplePinButton != null)
             ui.GrapplePinButton.onClick.AddListener(() => GameManager.Instance.OnGrapplePinButtonPressed());
         if (ui.GrappleBreakPinButton != null)

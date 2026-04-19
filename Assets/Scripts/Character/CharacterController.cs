@@ -18,6 +18,8 @@ public enum GrappleActionType
     EscapeArtist,
     OpposedGrappleEscape,
     DamageOpponent,
+    AttackWithLightWeapon,
+    AttackUnarmed,
     PinOpponent,
     BreakPin,
     MoveHalfSpeed,
@@ -2925,6 +2927,60 @@ public class CharacterController : MonoBehaviour
         return item.IsLightWeapon || item.WeaponSize == WeaponSizeCategory.Light;
     }
 
+    /// <summary>
+    /// Returns the equipped main-hand (right-hand) weapon if present.
+    /// This is used for grapple light-weapon attacks that are intentionally constrained to main hand.
+    /// </summary>
+    public ItemData GetEquippedMainHandWeapon()
+    {
+        var inv = GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+            return null;
+
+        ItemData rightHand = inv.RightHandSlot;
+        return rightHand != null && rightHand.IsWeapon ? rightHand : null;
+    }
+
+    /// <summary>
+    /// D&D 3.5 grapple option: attack with a light weapon at -4 attack penalty.
+    /// Availability is constrained to the equipped main-hand weapon.
+    /// </summary>
+    public bool CanAttackWithLightWeaponWhileGrappling(out ItemData mainHandLightWeapon, out string reason)
+    {
+        reason = string.Empty;
+        mainHandLightWeapon = GetEquippedMainHandWeapon();
+
+        if (mainHandLightWeapon == null)
+        {
+            reason = "No main-hand weapon equipped.";
+            return false;
+        }
+
+        bool isLight = mainHandLightWeapon.IsLightWeapon || mainHandLightWeapon.WeaponSize == WeaponSizeCategory.Light;
+        if (!isLight)
+        {
+            reason = $"{mainHandLightWeapon.Name} is not a light weapon.";
+            return false;
+        }
+
+        if (mainHandLightWeapon.RequiresReload && !mainHandLightWeapon.IsLoaded)
+        {
+            reason = $"{mainHandLightWeapon.Name} is unloaded and must be reloaded.";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// D&D 3.5 grapple option: attack unarmed at -4 attack penalty.
+    /// </summary>
+    public bool CanAttackUnarmedWhileGrappling(out string reason)
+    {
+        reason = string.Empty;
+        return true;
+    }
+
     // ========== DUAL WIELD INFO ==========
 
     /// <summary>
@@ -3171,6 +3227,8 @@ public class CharacterController : MonoBehaviour
         switch (actionType)
         {
             case GrappleActionType.DamageOpponent:
+            case GrappleActionType.AttackWithLightWeapon:
+            case GrappleActionType.AttackUnarmed:
             case GrappleActionType.UseOpponentWeapon:
             case GrappleActionType.ReleasePinnedOpponent:
                 return false;
@@ -3432,6 +3490,14 @@ public class CharacterController : MonoBehaviour
                         ? $"{Stats.CharacterName} wins opposed grapple check ({myRoll}+{GetGrappleModifier()}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals {finalDamageDealt} {damageTypeLabel} unarmed grapple damage to {opponent.Stats.CharacterName} (rolled {damageDiceCount}d{damageDiceSides}{bonusDamage:+#;-#;0} => {rawDamage}). {defaultDamageRuleSummary} {penaltyRuleSummary}"
                         : $"{Stats.CharacterName} loses opposed grapple check ({myRoll}+{GetGrappleModifier()}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals no grapple damage. {defaultDamageRuleSummary} {penaltyRuleSummary}"
                 };
+            }
+            case GrappleActionType.AttackWithLightWeapon:
+            {
+                return ResolveLightWeaponAttackWhileGrappling(opponent, isPinned);
+            }
+            case GrappleActionType.AttackUnarmed:
+            {
+                return ResolveUnarmedAttackWhileGrappling(opponent, isPinned);
             }
             case GrappleActionType.PinOpponent:
             {
@@ -3874,6 +3940,196 @@ public class CharacterController : MonoBehaviour
         };
     }
 
+    private SpecialAttackResult ResolveLightWeaponAttackWhileGrappling(CharacterController opponent, bool isPinned)
+    {
+        if (!CanAttackWithLightWeaponWhileGrappling(out ItemData mainHandLightWeapon, out string reason))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Grapple Light Weapon Attack",
+                Success = false,
+                Log = $"{Stats.CharacterName} cannot attack with a light weapon while grappling: {reason}"
+            };
+        }
+
+        return ResolveAttackWhileGrappling(
+            opponent,
+            mainHandLightWeapon,
+            maneuverName: "Grapple Light Weapon Attack",
+            isPinned: isPinned,
+            enforceMainHandLightWeaponOnly: true);
+    }
+
+    private SpecialAttackResult ResolveUnarmedAttackWhileGrappling(CharacterController opponent, bool isPinned)
+    {
+        if (!CanAttackUnarmedWhileGrappling(out string reason))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Grapple Unarmed Attack",
+                Success = false,
+                Log = $"{Stats.CharacterName} cannot make an unarmed grapple attack: {reason}"
+            };
+        }
+
+        return ResolveAttackWhileGrappling(
+            opponent,
+            null,
+            maneuverName: "Grapple Unarmed Attack",
+            isPinned: isPinned,
+            enforceMainHandLightWeaponOnly: false);
+    }
+
+    private SpecialAttackResult ResolveAttackWhileGrappling(
+        CharacterController opponent,
+        ItemData weapon,
+        string maneuverName,
+        bool isPinned,
+        bool enforceMainHandLightWeaponOnly)
+    {
+        const int grappleAttackPenalty = -4;
+
+        if (isPinned)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = maneuverName,
+                Success = false,
+                Log = $"{Stats.CharacterName} is pinned and cannot make this grapple attack."
+            };
+        }
+
+        if (opponent == null || opponent.Stats == null)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = maneuverName,
+                Success = false,
+                Log = "No valid grapple opponent."
+            };
+        }
+
+        if (enforceMainHandLightWeaponOnly)
+        {
+            if (!CanAttackWithLightWeaponWhileGrappling(out ItemData mainHandWeapon, out string reason))
+            {
+                return new SpecialAttackResult
+                {
+                    ManeuverName = maneuverName,
+                    Success = false,
+                    Log = $"{Stats.CharacterName} cannot attack with a light weapon while grappling: {reason}"
+                };
+            }
+
+            weapon = mainHandWeapon;
+        }
+        else if (!CanAttackWithWeapon(weapon, out string cannotAttackReason))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = maneuverName,
+                Success = false,
+                Log = $"{Stats.CharacterName} cannot make grapple attack: {cannotAttackReason}"
+            };
+        }
+
+        bool isUnarmed = weapon == null;
+        DamageModeAttackProfile damageMode = ResolveDamageModeAttackProfile(weapon);
+
+        int weaponNonProfPenalty = isUnarmed ? 0 : Stats.GetWeaponNonProficiencyPenalty(weapon);
+        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
+        int attackMod = Stats.BaseAttackBonus
+                        + Stats.STRMod
+                        + Stats.SizeModifier
+                        + Stats.ConditionAttackPenalty
+                        + GetProneAttackModifier(isMeleeAttack: true)
+                        + weaponNonProfPenalty
+                        + armorNonProfPenalty
+                        + grappleAttackPenalty
+                        + damageMode.AttackPenalty;
+
+        int damageDice;
+        int damageCount;
+        int bonusDamage;
+        int critThreatMin;
+        int critMultiplier;
+
+        if (isUnarmed)
+        {
+            var unarmed = GetUnarmedDamage();
+            damageDice = Mathf.Max(2, unarmed.damageDice);
+            damageCount = Mathf.Max(1, unarmed.damageCount);
+            bonusDamage = Stats.STRMod + unarmed.bonusDamage;
+            critThreatMin = 20;
+            critMultiplier = 2;
+        }
+        else
+        {
+            damageDice = Mathf.Max(2, weapon.DamageDice);
+            damageCount = Mathf.Max(1, weapon.DamageCount);
+            bonusDamage = weapon.BonusDamage;
+            critThreatMin = weapon.CritThreatMin > 0 ? weapon.CritThreatMin : 20;
+            critMultiplier = weapon.CritMultiplier > 0 ? weapon.CritMultiplier : 2;
+        }
+
+        int hpBefore = opponent.Stats.CurrentHP;
+        CombatResult attackResult = PerformSingleAttackWithCrit(
+            opponent,
+            attackMod,
+            isFlanking: false,
+            flankingBonus: 0,
+            flankingPartnerName: null,
+            damageDice,
+            damageCount,
+            bonusDamage,
+            critThreatMin,
+            critMultiplier,
+            weapon,
+            isOffHand: false,
+            featDamageBonus: 0,
+            situationalTargetAcBonus: 0,
+            dealNonlethalDamage: damageMode.DealNonlethalDamage,
+            damageModeAttackPenalty: damageMode.AttackPenalty,
+            damageModePenaltySource: damageMode.PenaltySource);
+
+        attackResult.BreakdownBAB = Stats.BaseAttackBonus;
+        attackResult.BreakdownAbilityMod = Stats.STRMod;
+        attackResult.BreakdownAbilityName = "STR";
+        attackResult.SizeAttackBonus = Stats.SizeModifier;
+        attackResult.WeaponNonProficiencyPenalty = weaponNonProfPenalty;
+        attackResult.ArmorNonProficiencyPenalty = armorNonProfPenalty;
+        attackResult.DefenderHPBefore = hpBefore;
+        attackResult.DefenderHPAfter = opponent.Stats.CurrentHP;
+
+        string weaponLabel = isUnarmed ? "unarmed strike" : weapon.Name;
+        string damageTypeLabel = damageMode.DealNonlethalDamage ? "nonlethal" : "lethal";
+
+        var logLines = new List<string>
+        {
+            $"{Stats.CharacterName} attacks {opponent.Stats.CharacterName} with {weaponLabel} while grappling.",
+            $"Attack roll: d20 ({attackResult.DieRoll}) + modifiers ({attackMod:+#;-#;0}) vs AC {attackResult.TargetAC} => {(attackResult.Hit ? "HIT" : "MISS")}",
+            "Includes -4 grapple attack penalty.",
+            damageMode.AttackPenalty != 0
+                ? $"Damage-mode penalty applied: {damageMode.AttackPenalty:+#;-#;0} ({damageMode.PenaltySource})."
+                : string.Empty,
+            attackResult.Hit
+                ? $"Damage dealt: {attackResult.FinalDamageDealt} {damageTypeLabel} (target HP {attackResult.DefenderHPBefore} -> {attackResult.DefenderHPAfter})."
+                : "Damage dealt: 0 (attack missed)."
+        };
+        logLines.RemoveAll(string.IsNullOrEmpty);
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = maneuverName,
+            Success = attackResult.Hit,
+            CheckRoll = attackResult.DieRoll,
+            CheckTotal = attackResult.TotalRoll,
+            OpposedTotal = attackResult.TargetAC,
+            DamageDealt = attackResult.FinalDamageDealt,
+            TargetKilled = opponent.Stats.IsDead,
+            Log = string.Join("\n", logLines)
+        };
+    }
     private SpecialAttackResult ResolveDrawLightWeaponDuringGrappleStub()
     {
         // TODO: Implement Draw Light Weapon during grapple
