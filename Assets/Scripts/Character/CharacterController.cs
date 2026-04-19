@@ -308,6 +308,9 @@ public class CharacterController : MonoBehaviour
     private SpriteRenderer _sr;
     private ConditionManager _conditionManager;
     private Coroutine _currentScaleAnimation;
+    private Coroutine _grappleAlternateVisibilityCoroutine;
+
+    private const float GrappleAlternateVisibilitySeconds = 1f;
 
 
     // ========== D&D 3.5e HP STATE ==========
@@ -357,6 +360,8 @@ public class CharacterController : MonoBehaviour
             StopCoroutine(_currentScaleAnimation);
             _currentScaleAnimation = null;
         }
+
+        StopGrappleAlternatingDisplay(ensureVisible: true);
     }
 
 
@@ -517,6 +522,12 @@ public class CharacterController : MonoBehaviour
         if (initiator == null || target == null)
             return string.Empty;
 
+        // Visual clarity rule for grapples: attempt to move the initiator token into the target square first.
+        // If footprint constraints prevent that placement, fall back to size-aware mover/stayer resolution.
+        Vector2Int initiatorDestination = FindBestGrapplePosition(initiator, target);
+        if (initiator.TrySetGrapplePosition(initiatorDestination, target))
+            return $"{(initiator.Stats != null ? initiator.Stats.CharacterName : initiator.name)} moves into {(target.Stats != null ? target.Stats.CharacterName : target.name)}'s space at ({initiatorDestination.x}, {initiatorDestination.y}).";
+
         CharacterController mover;
         CharacterController stayer;
 
@@ -535,19 +546,18 @@ public class CharacterController : MonoBehaviour
         }
         else
         {
-            // Same-size grapple: initiator keeps position, target stacks into initiator square(s).
             stayer = initiator;
             mover = target;
         }
 
-        Vector2Int destination = FindBestGrapplePosition(mover, stayer);
-        bool moved = TrySetGrapplePosition(destination, stayer);
+        Vector2Int fallbackDestination = FindBestGrapplePosition(mover, stayer);
+        bool moved = mover.TrySetGrapplePosition(fallbackDestination, stayer);
         if (!moved)
             return string.Empty;
 
         string moverName = mover.Stats != null ? mover.Stats.CharacterName : mover.name;
         string stayerName = stayer.Stats != null ? stayer.Stats.CharacterName : stayer.name;
-        return $"{moverName} moves into {stayerName}'s space at ({destination.x}, {destination.y}).";
+        return $"{moverName} moves into {stayerName}'s space at ({fallbackDestination.x}, {fallbackDestination.y}).";
     }
 
     private bool CanOccupyAtCurrentSize(Vector2Int basePosition)
@@ -2664,7 +2674,62 @@ public class CharacterController : MonoBehaviour
         transform.position = basePosition + new Vector3(offset, offset, 0f);
     }
 
+    private void SetTokenVisible(bool visible)
+    {
+        if (_sr == null)
+            _sr = GetComponent<SpriteRenderer>();
 
+        if (_sr != null)
+            _sr.enabled = visible;
+    }
+
+    private void StopGrappleAlternatingDisplay(bool ensureVisible)
+    {
+        if (_grappleAlternateVisibilityCoroutine != null)
+        {
+            StopCoroutine(_grappleAlternateVisibilityCoroutine);
+            _grappleAlternateVisibilityCoroutine = null;
+        }
+
+        if (ensureVisible)
+            SetTokenVisible(true);
+    }
+
+    private static void StartGrappleAlternatingDisplay(CharacterController initiator, CharacterController target)
+    {
+        if (initiator == null || target == null)
+            return;
+
+        initiator.StopGrappleAlternatingDisplay(ensureVisible: true);
+        target.StopGrappleAlternatingDisplay(ensureVisible: true);
+
+        initiator._grappleAlternateVisibilityCoroutine = initiator.StartCoroutine(
+            initiator.RunGrappleAlternatingDisplay(target));
+    }
+
+    private IEnumerator RunGrappleAlternatingDisplay(CharacterController target)
+    {
+        bool showInitiator = true;
+
+        while (target != null
+            && TryGetGrappleState(out CharacterController myOpponent, out _, out _, out _)
+            && myOpponent == target
+            && target.TryGetGrappleState(out CharacterController theirOpponent, out _, out _, out _)
+            && theirOpponent == this)
+        {
+            SetTokenVisible(showInitiator);
+            target.SetTokenVisible(!showInitiator);
+
+            yield return new WaitForSeconds(GrappleAlternateVisibilitySeconds);
+            showInitiator = !showInitiator;
+        }
+
+        SetTokenVisible(true);
+        if (target != null)
+            target.SetTokenVisible(true);
+
+        _grappleAlternateVisibilityCoroutine = null;
+    }
     /// <summary>
     /// Get minimum melee distance (in squares) this character can attack with current weapon.
     /// Most melee weapons: 1. Reach-only weapons: 2. Whip: 2 (with max 3).
@@ -2993,6 +3058,11 @@ public class CharacterController : MonoBehaviour
         if (pinned != null)
             RemoveConditionIfPresent(pinned, CombatConditionType.Pinned);
 
+        if (controller != null)
+            controller.StopGrappleAlternatingDisplay(ensureVisible: true);
+        if (defender != null)
+            defender.StopGrappleAlternatingDisplay(ensureVisible: true);
+
         if (!string.IsNullOrEmpty(reason))
             Debug.Log($"[Grapple] Link ended ({reason}).");
     }
@@ -3021,7 +3091,9 @@ public class CharacterController : MonoBehaviour
         RemoveConditionIfPresent(this, CombatConditionType.Pinned);
         RemoveConditionIfPresent(target, CombatConditionType.Pinned);
 
-        return PositionGrapplingCharacters(this, target);
+        string positioningLog = PositionGrapplingCharacters(this, target);
+        StartGrappleAlternatingDisplay(this, target);
+        return positioningLog;
     }
 
     public void ReleaseGrappleState(string reason = "")
