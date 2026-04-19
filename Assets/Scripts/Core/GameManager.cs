@@ -2295,6 +2295,16 @@ public class GameManager : MonoBehaviour
 
         LogMenuFlow("ShowActionChoices:ENTER", pc, $"isGrappling={pc.IsGrappling()}, isPinned={pc.IsPinned()}");
 
+        // SAFETY CHECK: A delayed coroutine from a previous action can fire while a submenu is open.
+        // In that case we must not refresh action choices or hide transient panels.
+        bool isSubmenuOpen = CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen();
+        if (isSubmenuOpen)
+        {
+            LogMenuFlow("ShowActionChoices:ABORT_SUBMENU_OPEN", pc, "Submenu is open; skipping action choice refresh");
+            Debug.Log("[GameManager][MenuFlow] ABORT: Submenu is open, skipping ShowActionChoices");
+            return;
+        }
+
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
         EndGrappleContextMenuDisplayLock();
         CombatUI.HideSummonContextMenu();
@@ -11732,10 +11742,22 @@ public class GameManager : MonoBehaviour
 
     private IEnumerator DelayedEndActivePCTurn(float delay)
     {
+        LogMenuFlow("DelayedEndActivePCTurn:START", ActivePC, $"delay={delay}");
+
         yield return new WaitForSeconds(delay);
+
+        LogMenuFlow("DelayedEndActivePCTurn:AFTER_DELAY", ActivePC, $"delay={delay}");
 
         if (CurrentPhase == TurnPhase.CombatOver)
             yield break;
+
+        // SAFETY CHECK: if a submenu opened during the delay window, do not force-close it.
+        if (CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen())
+        {
+            LogMenuFlow("DelayedEndActivePCTurn:ABORT_SUBMENU_OPEN", ActivePC, "Submenu open after delay");
+            Debug.Log("[GameManager][MenuFlow] DelayedEndActivePCTurn: Submenu open, aborting");
+            yield break;
+        }
 
         CharacterController pc = ActivePC;
         if (ShouldAutoEndTurn(pc))
