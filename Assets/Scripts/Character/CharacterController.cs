@@ -120,6 +120,13 @@ public class CharacterController : MonoBehaviour
     private readonly List<FeintWindow> _activeFeintWindows = new List<FeintWindow>();
     private int _turnsStartedCount;
 
+    // Iterative grapple attack tracking (D&D 3.5):
+    // Some grapple actions can be used multiple times as attacks during a full attack sequence.
+    private readonly List<int> _grappleAttackBonusesThisTurn = new List<int>();
+    private int _grappleAttacksUsedThisTurn;
+    private int _grappleAttackBudgetThisTurn;
+    private bool _grappleAttackSequenceStarted;
+
     private sealed class GrappleLink
     {
         public CharacterController Controller;
@@ -185,6 +192,140 @@ public class CharacterController : MonoBehaviour
     {
         _attackDamageModeManuallySetThisRound = false;
         CurrentAttackDamageMode = GetDefaultAttackDamageModeForWeapon(GetEquippedMainWeapon());
+    }
+
+    public static bool IsIterativeGrappleAttackAction(GrappleActionType actionType)
+    {
+        switch (actionType)
+        {
+            case GrappleActionType.DamageOpponent:
+            case GrappleActionType.AttackWithLightWeapon:
+            case GrappleActionType.AttackUnarmed:
+            case GrappleActionType.OpposedGrappleEscape:
+            case GrappleActionType.PinOpponent:
+            case GrappleActionType.UseOpponentWeapon:
+            case GrappleActionType.BreakPin:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public int GetNumberOfAttacks()
+    {
+        int bab = Stats != null ? Stats.BaseAttackBonus : 0;
+        if (bab >= 16) return 4;
+        if (bab >= 11) return 3;
+        if (bab >= 6) return 2;
+        return 1;
+    }
+
+    public List<int> GetAttackBonuses()
+    {
+        int bab = Stats != null ? Stats.BaseAttackBonus : 0;
+        var bonuses = new List<int> { bab };
+
+        if (bab >= 6) bonuses.Add(bab - 5);
+        if (bab >= 11) bonuses.Add(bab - 10);
+        if (bab >= 16) bonuses.Add(bab - 15);
+
+        return bonuses;
+    }
+
+    public bool CanUseIterativeGrappleAttackAction()
+    {
+        if (_grappleAttackSequenceStarted)
+            return _grappleAttacksUsedThisTurn < _grappleAttackBudgetThisTurn;
+
+        return Actions != null && (Actions.HasFullRoundAction || Actions.HasStandardAction);
+    }
+
+    public int GetRemainingGrappleAttackActions()
+    {
+        if (_grappleAttackSequenceStarted)
+            return Mathf.Max(0, _grappleAttackBudgetThisTurn - _grappleAttacksUsedThisTurn);
+
+        if (Actions == null)
+            return 0;
+
+        if (Actions.HasFullRoundAction)
+            return GetAttackBonuses().Count;
+
+        if (Actions.HasStandardAction)
+            return 1;
+
+        return 0;
+    }
+
+    public int GetCurrentGrappleAttackBonus()
+    {
+        if (_grappleAttackSequenceStarted)
+        {
+            if (_grappleAttacksUsedThisTurn >= _grappleAttackBudgetThisTurn || _grappleAttacksUsedThisTurn >= _grappleAttackBonusesThisTurn.Count)
+                return 0;
+            return _grappleAttackBonusesThisTurn[_grappleAttacksUsedThisTurn];
+        }
+
+        if (Actions != null && !Actions.HasFullRoundAction && Actions.HasStandardAction)
+            return Stats != null ? Stats.BaseAttackBonus : 0;
+
+        List<int> bonuses = GetAttackBonuses();
+        return bonuses.Count > 0 ? bonuses[0] : 0;
+    }
+
+    public bool TryConsumeIterativeGrappleAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
+    {
+        attackBonusUsed = 0;
+        attacksRemaining = 0;
+        reason = string.Empty;
+
+        if (Actions == null)
+        {
+            reason = "No action economy available.";
+            return false;
+        }
+
+        if (!_grappleAttackSequenceStarted)
+        {
+            _grappleAttackBonusesThisTurn.Clear();
+            _grappleAttackBonusesThisTurn.AddRange(GetAttackBonuses());
+
+            if (Actions.HasFullRoundAction)
+            {
+                Actions.UseFullRoundAction();
+                _grappleAttackBudgetThisTurn = _grappleAttackBonusesThisTurn.Count;
+            }
+            else if (CommitStandardAction())
+            {
+                _grappleAttackBudgetThisTurn = Mathf.Min(1, _grappleAttackBonusesThisTurn.Count);
+            }
+            else
+            {
+                reason = "No standard or full-round action remaining.";
+                return false;
+            }
+
+            _grappleAttackBudgetThisTurn = Mathf.Max(0, _grappleAttackBudgetThisTurn);
+            _grappleAttacksUsedThisTurn = 0;
+            _grappleAttackSequenceStarted = true;
+        }
+
+        if (_grappleAttacksUsedThisTurn >= _grappleAttackBudgetThisTurn)
+        {
+            reason = "No grapple attacks remaining this turn.";
+            return false;
+        }
+
+        if (_grappleAttacksUsedThisTurn >= _grappleAttackBonusesThisTurn.Count)
+        {
+            reason = "No iterative attack bonus available for this grapple attack.";
+            return false;
+        }
+
+        attackBonusUsed = _grappleAttackBonusesThisTurn[_grappleAttacksUsedThisTurn];
+        _grappleAttacksUsedThisTurn++;
+        attacksRemaining = Mathf.Max(0, _grappleAttackBudgetThisTurn - _grappleAttacksUsedThisTurn);
+        return true;
     }
 
     private AttackDamageMode GetDefaultAttackDamageModeForWeapon(ItemData weapon)
@@ -3297,7 +3438,7 @@ public class CharacterController : MonoBehaviour
         return opponents.Count > 0;
     }
 
-    private bool TryResolveOpposedGrappleCheck(CharacterController opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, int myCheckModifier = 0)
+    private bool TryResolveOpposedGrappleCheck(CharacterController opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, int myCheckModifier = 0, int? myBaseAttackBonusOverride = null)
     {
         myRoll = 0;
         myTotal = 0;
@@ -3309,7 +3450,7 @@ public class CharacterController : MonoBehaviour
 
         myRoll = Random.Range(1, 21);
         oppRoll = Random.Range(1, 21);
-        myTotal = myRoll + GetGrappleModifier() + myCheckModifier;
+        myTotal = myRoll + GetGrappleModifier(myBaseAttackBonusOverride) + myCheckModifier;
         oppTotal = oppRoll + opponent.GetGrappleModifier();
         return true;
     }
@@ -3317,7 +3458,8 @@ public class CharacterController : MonoBehaviour
     public SpecialAttackResult ResolveGrappleAction(
         GrappleActionType actionType,
         AttackDamageMode? grappleDamageModeOverride = null,
-        EquipSlot? opponentWeaponHandSlotOverride = null)
+        EquipSlot? opponentWeaponHandSlotOverride = null,
+        int? iterativeAttackBonusOverride = null)
     {
         if (!TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out bool opponentPinned))
         {
@@ -3367,7 +3509,7 @@ public class CharacterController : MonoBehaviour
             }
             case GrappleActionType.OpposedGrappleEscape:
             {
-                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
+                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, 0, iterativeAttackBonusOverride))
                 {
                     return new SpecialAttackResult
                     {
@@ -3418,7 +3560,7 @@ public class CharacterController : MonoBehaviour
                 bool dealNonlethalDamage = selectedMode == AttackDamageMode.Nonlethal;
                 int grappleCheckPenalty = (!usesMonkOrIusException && !dealNonlethalDamage) ? -4 : 0;
 
-                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, grappleCheckPenalty))
+                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, grappleCheckPenalty, iterativeAttackBonusOverride))
                 {
                     return new SpecialAttackResult
                     {
@@ -3465,6 +3607,7 @@ public class CharacterController : MonoBehaviour
                     }
                 }
 
+                int usedGrappleModifier = GetGrappleModifier(iterativeAttackBonusOverride);
                 string damageTypeLabel = dealNonlethalDamage ? "nonlethal" : "lethal";
                 string penaltySuffix = grappleCheckPenalty != 0 ? $" (includes {grappleCheckPenalty} lethal damage penalty)" : string.Empty;
                 string defaultDamageRuleSummary = grappleDamageRuleReason != null
@@ -3487,17 +3630,17 @@ public class CharacterController : MonoBehaviour
                     DamageDealt = finalDamageDealt,
                     TargetKilled = opponent.Stats.IsDead,
                     Log = success
-                        ? $"{Stats.CharacterName} wins opposed grapple check ({myRoll}+{GetGrappleModifier()}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals {finalDamageDealt} {damageTypeLabel} unarmed grapple damage to {opponent.Stats.CharacterName} (rolled {damageDiceCount}d{damageDiceSides}{bonusDamage:+#;-#;0} => {rawDamage}). {defaultDamageRuleSummary} {penaltyRuleSummary}"
-                        : $"{Stats.CharacterName} loses opposed grapple check ({myRoll}+{GetGrappleModifier()}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals no grapple damage. {defaultDamageRuleSummary} {penaltyRuleSummary}"
+                        ? $"{Stats.CharacterName} wins opposed grapple check ({myRoll}+{usedGrappleModifier}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals {finalDamageDealt} {damageTypeLabel} unarmed grapple damage to {opponent.Stats.CharacterName} (rolled {damageDiceCount}d{damageDiceSides}{bonusDamage:+#;-#;0} => {rawDamage}). {defaultDamageRuleSummary} {penaltyRuleSummary}"
+                        : $"{Stats.CharacterName} loses opposed grapple check ({myRoll}+{usedGrappleModifier}{(grappleCheckPenalty != 0 ? $"{grappleCheckPenalty:+#;-#;0}" : string.Empty)}={myTotal} vs {oppRoll}+{opponent.GetGrappleModifier()}={oppTotal}{penaltySuffix}) and deals no grapple damage. {defaultDamageRuleSummary} {penaltyRuleSummary}"
                 };
             }
             case GrappleActionType.AttackWithLightWeapon:
             {
-                return ResolveLightWeaponAttackWhileGrappling(opponent, isPinned);
+                return ResolveLightWeaponAttackWhileGrappling(opponent, isPinned, iterativeAttackBonusOverride);
             }
             case GrappleActionType.AttackUnarmed:
             {
-                return ResolveUnarmedAttackWhileGrappling(opponent, isPinned);
+                return ResolveUnarmedAttackWhileGrappling(opponent, isPinned, iterativeAttackBonusOverride);
             }
             case GrappleActionType.PinOpponent:
             {
@@ -3520,7 +3663,7 @@ public class CharacterController : MonoBehaviour
                         Log = "Cannot pin another character while pinning"
                     };
                 }
-                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
+                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, 0, iterativeAttackBonusOverride))
                 {
                     return new SpecialAttackResult
                     {
@@ -3573,7 +3716,7 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal))
+                if (!TryResolveOpposedGrappleCheck(opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, 0, iterativeAttackBonusOverride))
                 {
                     return new SpecialAttackResult
                     {
@@ -3689,7 +3832,7 @@ public class CharacterController : MonoBehaviour
                 };
             }
             case GrappleActionType.UseOpponentWeapon:
-                return ResolveUseOpponentWeapon(opponent, isPinned, opponentWeaponHandSlotOverride);
+                return ResolveUseOpponentWeapon(opponent, isPinned, opponentWeaponHandSlotOverride, iterativeAttackBonusOverride);
 
             case GrappleActionType.DrawLightWeapon:
                 return ResolveDrawLightWeaponDuringGrappleStub();
@@ -3731,10 +3874,11 @@ public class CharacterController : MonoBehaviour
         }
     }
 
-    private int GetStrictOpposedGrappleModifierForUseOpponentWeapon()
+    private int GetStrictOpposedGrappleModifierForUseOpponentWeapon(int? baseAttackBonusOverride = null)
     {
         int sizeMod = Stats != null ? Stats.CurrentSizeCategory.GetGrappleModifier() : 0;
-        return (Stats != null ? Stats.BaseAttackBonus : 0) + (Stats != null ? Stats.STRMod : 0) + sizeMod;
+        int bab = baseAttackBonusOverride ?? (Stats != null ? Stats.BaseAttackBonus : 0);
+        return bab + (Stats != null ? Stats.STRMod : 0) + sizeMod;
     }
 
     private bool TryResolveStrictOpposedGrappleCheckForUseOpponentWeapon(
@@ -3744,7 +3888,8 @@ public class CharacterController : MonoBehaviour
         out int oppRoll,
         out int oppTotal,
         out int myModifier,
-        out int oppModifier)
+        out int oppModifier,
+        int? myBaseAttackBonusOverride)
     {
         myRoll = 0;
         myTotal = 0;
@@ -3756,7 +3901,7 @@ public class CharacterController : MonoBehaviour
         if (opponent == null || opponent.Stats == null || Stats == null)
             return false;
 
-        myModifier = GetStrictOpposedGrappleModifierForUseOpponentWeapon();
+        myModifier = GetStrictOpposedGrappleModifierForUseOpponentWeapon(myBaseAttackBonusOverride);
         oppModifier = opponent.GetStrictOpposedGrappleModifierForUseOpponentWeapon();
 
         myRoll = Random.Range(1, 21);
@@ -3802,7 +3947,7 @@ public class CharacterController : MonoBehaviour
         return fallbackWeapon;
     }
 
-    private SpecialAttackResult ResolveUseOpponentWeapon(CharacterController opponent, bool isPinned, EquipSlot? opponentWeaponHandSlotOverride)
+    private SpecialAttackResult ResolveUseOpponentWeapon(CharacterController opponent, bool isPinned, EquipSlot? opponentWeaponHandSlotOverride, int? iterativeAttackBonusOverride)
     {
         const int useOpponentWeaponAttackPenalty = -4;
 
@@ -3839,7 +3984,8 @@ public class CharacterController : MonoBehaviour
                 out int oppRoll,
                 out int oppTotal,
                 out int myModifier,
-                out int oppModifier))
+                out int oppModifier,
+                iterativeAttackBonusOverride))
         {
             return new SpecialAttackResult
             {
@@ -3864,7 +4010,8 @@ public class CharacterController : MonoBehaviour
         {
             int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(opponentWeapon);
             int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
-            int attackMod = Stats.BaseAttackBonus
+            int attackBaseBonus = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
+            int attackMod = attackBaseBonus
                             + Stats.STRMod
                             + Stats.SizeModifier
                             + Stats.ConditionAttackPenalty
@@ -3899,7 +4046,7 @@ public class CharacterController : MonoBehaviour
                 damageModeAttackPenalty: 0,
                 damageModePenaltySource: string.Empty);
 
-            attackResult.BreakdownBAB = Stats.BaseAttackBonus;
+            attackResult.BreakdownBAB = attackBaseBonus;
             attackResult.BreakdownAbilityMod = Stats.STRMod;
             attackResult.BreakdownAbilityName = "STR";
             attackResult.SizeAttackBonus = Stats.SizeModifier;
@@ -3940,7 +4087,7 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    private SpecialAttackResult ResolveLightWeaponAttackWhileGrappling(CharacterController opponent, bool isPinned)
+    private SpecialAttackResult ResolveLightWeaponAttackWhileGrappling(CharacterController opponent, bool isPinned, int? iterativeAttackBonusOverride)
     {
         if (!CanAttackWithLightWeaponWhileGrappling(out ItemData mainHandLightWeapon, out string reason))
         {
@@ -3957,10 +4104,11 @@ public class CharacterController : MonoBehaviour
             mainHandLightWeapon,
             maneuverName: "Grapple Light Weapon Attack",
             isPinned: isPinned,
-            enforceMainHandLightWeaponOnly: true);
+            enforceMainHandLightWeaponOnly: true,
+            iterativeAttackBonusOverride: iterativeAttackBonusOverride);
     }
 
-    private SpecialAttackResult ResolveUnarmedAttackWhileGrappling(CharacterController opponent, bool isPinned)
+    private SpecialAttackResult ResolveUnarmedAttackWhileGrappling(CharacterController opponent, bool isPinned, int? iterativeAttackBonusOverride)
     {
         if (!CanAttackUnarmedWhileGrappling(out string reason))
         {
@@ -3977,7 +4125,8 @@ public class CharacterController : MonoBehaviour
             null,
             maneuverName: "Grapple Unarmed Attack",
             isPinned: isPinned,
-            enforceMainHandLightWeaponOnly: false);
+            enforceMainHandLightWeaponOnly: false,
+            iterativeAttackBonusOverride: iterativeAttackBonusOverride);
     }
 
     private SpecialAttackResult ResolveAttackWhileGrappling(
@@ -3985,7 +4134,8 @@ public class CharacterController : MonoBehaviour
         ItemData weapon,
         string maneuverName,
         bool isPinned,
-        bool enforceMainHandLightWeaponOnly)
+        bool enforceMainHandLightWeaponOnly,
+        int? iterativeAttackBonusOverride)
     {
         const int grappleAttackPenalty = -4;
 
@@ -4038,7 +4188,8 @@ public class CharacterController : MonoBehaviour
 
         int weaponNonProfPenalty = isUnarmed ? 0 : Stats.GetWeaponNonProficiencyPenalty(weapon);
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
-        int attackMod = Stats.BaseAttackBonus
+        int attackBaseBonus = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
+        int attackMod = attackBaseBonus
                         + Stats.STRMod
                         + Stats.SizeModifier
                         + Stats.ConditionAttackPenalty
@@ -4248,6 +4399,10 @@ public class CharacterController : MonoBehaviour
         IsFightingDefensively = false; // lasts until start of this character's next turn
         Actions.Reset();
         Actions.SingleActionOnly = (_currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered);
+        _grappleAttackBonusesThisTurn.Clear();
+        _grappleAttacksUsedThisTurn = 0;
+        _grappleAttackBudgetThisTurn = 0;
+        _grappleAttackSequenceStarted = false;
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
         // They are player-controlled and reset only when the player changes them
 
@@ -4257,7 +4412,7 @@ public class CharacterController : MonoBehaviour
 
     // ========== SPECIAL ATTACK MANEUVERS ==========
 
-    public SpecialAttackResult ExecuteSpecialAttack(SpecialAttackType type, CharacterController target, EquipSlot? disarmTargetSlot = null)
+    public SpecialAttackResult ExecuteSpecialAttack(SpecialAttackType type, CharacterController target, EquipSlot? disarmTargetSlot = null, int? grappleAttackBonusOverride = null)
     {
         if (target == null || target.Stats == null)
         {
@@ -4273,7 +4428,7 @@ public class CharacterController : MonoBehaviour
         {
             case SpecialAttackType.Trip: return ResolveTrip(target);
             case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot);
-            case SpecialAttackType.Grapple: return ResolveGrapple(target);
+            case SpecialAttackType.Grapple: return ResolveGrapple(target, grappleAttackBonusOverride);
             case SpecialAttackType.Sunder: return ResolveSunder(target);
             case SpecialAttackType.BullRush: return ResolveBullRush(target);
             case SpecialAttackType.Overrun: return ResolveOverrun(target, defenderBlocks: true);
@@ -4448,7 +4603,7 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    private SpecialAttackResult ResolveGrapple(CharacterController target)
+    private SpecialAttackResult ResolveGrapple(CharacterController target, int? iterativeAttackBonusOverride = null)
     {
         if (target == null || target.Stats == null)
         {
@@ -4481,7 +4636,8 @@ public class CharacterController : MonoBehaviour
         }
 
         int touchRoll = Random.Range(1, 21);
-        int touchTotal = touchRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty;
+        int attackBab = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
+        int touchTotal = touchRoll + attackBab + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty;
         int touchAC = 10 + target.Stats.DEXMod + target.Stats.SizeModifier;
         if (touchTotal < touchAC)
         {
@@ -4498,7 +4654,7 @@ public class CharacterController : MonoBehaviour
 
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + GetGrappleModifier();
+        int atkTotal = atkRoll + GetGrappleModifier(attackBab);
         int defTotal = defRoll + target.GetGrappleModifier();
 
         bool success = atkTotal >= defTotal;
@@ -4695,10 +4851,11 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    public int GetGrappleModifier()
+    public int GetGrappleModifier(int? baseAttackBonusOverride = null)
     {
         int sizeMod = Stats != null ? Stats.CurrentSizeCategory.GetGrappleModifier() : 0;
-        return Stats.BaseAttackBonus + Stats.STRMod + sizeMod + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Grapple") ? 4 : 0);
+        int bab = baseAttackBonusOverride ?? (Stats != null ? Stats.BaseAttackBonus : 0);
+        return bab + Stats.STRMod + sizeMod + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Grapple") ? 4 : 0);
     }
 
     private struct DisarmCheckResult

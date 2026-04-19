@@ -4514,6 +4514,12 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
+        if (CharacterController.IsIterativeGrappleAttackAction(actionType) && !pc.CanUseIterativeGrappleAttackAction())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no iterative grapple attacks remaining this turn.");
+            ShowActionChoices();
+            return false;
+        }
         if (actionType == GrappleActionType.DamageOpponent)
         {
             ShowGrappleDamageModeMenu(pc);
@@ -9793,13 +9799,6 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (!actor.Actions.HasStandardAction)
-        {
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot take a grapple action: no standard action remaining.");
-            ShowActionChoices();
-            return;
-        }
-
         if (!actor.TryGetGrappleState(out CharacterController liveOpponent, out _, out bool isPinned, out bool opponentPinned))
         {
             CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is no longer in a grapple.");
@@ -9838,10 +9837,28 @@ public class GameManager : MonoBehaviour
             void AddOption(GrappleActionType actionType, string label)
             {
                 bool enabled = CanWhilePinning(actionType, out string blockedMessage);
+                string disabledReason = blockedMessage;
+
+                if (enabled)
+                {
+                    if (CharacterController.IsIterativeGrappleAttackAction(actionType))
+                    {
+                        enabled = actor.CanUseIterativeGrappleAttackAction();
+                        if (!enabled)
+                            disabledReason = "No iterative grapple attacks remaining.";
+                    }
+                    else if (actionType != GrappleActionType.ReleasePinnedOpponent)
+                    {
+                        enabled = actor.Actions != null && actor.Actions.HasStandardAction;
+                        if (!enabled)
+                            disabledReason = "Standard action already spent.";
+                    }
+                }
+
                 string displayLabel = enabled
                     ? label
-                    : $"{label} (Cannot do while pinning)";
-                options.Add((actionType, displayLabel, enabled, blockedMessage));
+                    : $"{label} (Unavailable)";
+                options.Add((actionType, displayLabel, enabled, disabledReason));
             }
 
             AddOption(GrappleActionType.DamageOpponent, "Deal grapple damage (opposed check + unarmed strike damage; choose lethal/nonlethal)");
@@ -9850,8 +9867,10 @@ public class GameManager : MonoBehaviour
             string actorLightWeaponLabel = actorHasMainHandLightWeapon
                 ? $"Attack with Light Weapon: {actorMainHandLightWeapon.Name} (-4 attack roll, no grapple check)"
                 : $"Attack with Light Weapon (Unavailable: {actorLightWeaponReason})";
-            bool actorLightWeaponEnabled = actorHasMainHandLightWeapon;
-            string actorLightWeaponDisabledMessage = actorHasMainHandLightWeapon ? string.Empty : actorLightWeaponReason;
+            bool actorLightWeaponEnabled = actorHasMainHandLightWeapon && actor.CanUseIterativeGrappleAttackAction();
+            string actorLightWeaponDisabledMessage = actorHasMainHandLightWeapon
+                ? (actor.CanUseIterativeGrappleAttackAction() ? string.Empty : "No iterative grapple attacks remaining.")
+                : actorLightWeaponReason;
 
             if (isPinning && actor.IsGrappleActionBlockedWhilePinning(GrappleActionType.AttackWithLightWeapon, out string pinningBlockForLightWeaponAttack))
             {
@@ -9866,8 +9885,10 @@ public class GameManager : MonoBehaviour
             string actorUnarmedLabel = actorCanAttackUnarmed
                 ? "Attack Unarmed (-4 attack roll, no grapple check)"
                 : $"Attack Unarmed (Unavailable: {actorUnarmedReason})";
-            bool actorUnarmedEnabled = actorCanAttackUnarmed;
-            string actorUnarmedDisabledMessage = actorCanAttackUnarmed ? string.Empty : actorUnarmedReason;
+            bool actorUnarmedEnabled = actorCanAttackUnarmed && actor.CanUseIterativeGrappleAttackAction();
+            string actorUnarmedDisabledMessage = actorCanAttackUnarmed
+                ? (actor.CanUseIterativeGrappleAttackAction() ? string.Empty : "No iterative grapple attacks remaining.")
+                : actorUnarmedReason;
 
             if (isPinning && actor.IsGrappleActionBlockedWhilePinning(GrappleActionType.AttackUnarmed, out string pinningBlockForUnarmedAttack))
             {
@@ -9881,8 +9902,10 @@ public class GameManager : MonoBehaviour
             string useWeaponLabel = hasOpponentLightWeapon
                 ? "Use Opponent's Weapon (opposed grapple check, then immediate attack at -4; choose weapon hand)"
                 : $"Use Opponent's Weapon (Unavailable: {opponent.Stats.CharacterName} has no equipped light weapon)";
-            bool useWeaponEnabled = hasOpponentLightWeapon;
-            string useWeaponDisabledMessage = hasOpponentLightWeapon ? string.Empty : $"{opponent.Stats.CharacterName} has no equipped light weapon.";
+            bool useWeaponEnabled = hasOpponentLightWeapon && actor.CanUseIterativeGrappleAttackAction();
+            string useWeaponDisabledMessage = hasOpponentLightWeapon
+                ? (actor.CanUseIterativeGrappleAttackAction() ? string.Empty : "No iterative grapple attacks remaining.")
+                : $"{opponent.Stats.CharacterName} has no equipped light weapon.";
 
             if (isPinning && actor.IsGrappleActionBlockedWhilePinning(GrappleActionType.UseOpponentWeapon, out string pinningBlockForUseWeapon))
             {
@@ -9957,13 +9980,6 @@ public class GameManager : MonoBehaviour
     {
         if (actor == null || actor.Stats == null)
         {
-            ShowActionChoices();
-            return;
-        }
-
-        if (!actor.Actions.HasStandardAction)
-        {
-            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot use grapple action: standard action already spent.");
             ShowActionChoices();
             return;
         }
@@ -10093,6 +10109,26 @@ public class GameManager : MonoBehaviour
             onCancel: ShowActionChoices);
     }
 
+    private bool TryConsumeIterativeGrappleAttack(CharacterController actor, GrappleActionType actionType, out int attackBonusUsed, out int attacksRemaining)
+    {
+        attackBonusUsed = 0;
+        attacksRemaining = 0;
+
+        if (actor == null || actor.Stats == null)
+            return false;
+
+        if (!actor.TryConsumeIterativeGrappleAttackAction(out attackBonusUsed, out attacksRemaining, out string reason))
+        {
+            string fallback = string.IsNullOrWhiteSpace(reason)
+                ? "no iterative grapple attacks remain"
+                : reason;
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot use {actionType}: {fallback}");
+            return false;
+        }
+
+        return true;
+    }
+
     private void ExecuteGrappleAction(
         CharacterController actor,
         GrappleActionType actionType,
@@ -10113,7 +10149,19 @@ public class GameManager : MonoBehaviour
         }
 
         bool isFreeAction = actionType == GrappleActionType.ReleasePinnedOpponent;
-        if (!isFreeAction && !actor.CommitStandardAction())
+        bool usesIterativeAttack = CharacterController.IsIterativeGrappleAttackAction(actionType);
+        int attackBonusUsed = 0;
+        int attacksRemaining = 0;
+
+        if (usesIterativeAttack)
+        {
+            if (!TryConsumeIterativeGrappleAttack(actor, actionType, out attackBonusUsed, out attacksRemaining))
+            {
+                ShowActionChoices();
+                return;
+            }
+        }
+        else if (!isFreeAction && !actor.CommitStandardAction())
         {
             CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot use grapple action: standard action already spent.");
             ShowActionChoices();
@@ -10121,8 +10169,17 @@ public class GameManager : MonoBehaviour
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        SpecialAttackResult result = actor.ResolveGrappleAction(actionType, grappleDamageModeOverride, opponentWeaponHandSlotOverride);
-        string actionCostLabel = isFreeAction ? " [Free Action]" : string.Empty;
+        SpecialAttackResult result = actor.ResolveGrappleAction(
+            actionType,
+            grappleDamageModeOverride,
+            opponentWeaponHandSlotOverride,
+            usesIterativeAttack ? attackBonusUsed : (int?)null);
+
+        string actionCostLabel = isFreeAction
+            ? " [Free Action]"
+            : (usesIterativeAttack
+                ? $" [Attack BAB {CharacterStats.FormatMod(attackBonusUsed)} | {attacksRemaining} left]"
+                : " [Standard Action]");
         CombatUI?.ShowCombatLog($"⚔ GRAPPLE [{actionType}]{actionCostLabel}: {result.Log}");
 
         UpdateAllStatsUI();
@@ -10136,7 +10193,8 @@ public class GameManager : MonoBehaviour
         if (TryOfferFreeAdjacentMovementAfterGrappleEnds(actor, actionType, result))
             return;
 
-        StartCoroutine(AfterAttackDelay(actor, isFreeAction ? 0.35f : 0.8f));
+        float delay = isFreeAction ? 0.35f : (usesIterativeAttack ? 0.45f : 0.8f);
+        StartCoroutine(AfterAttackDelay(actor, delay));
     }
     private void HandleOverrunTargetClick(CharacterController attacker, CharacterController target)
     {
@@ -10363,6 +10421,8 @@ public class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.Animating;
 
         string actionLabel = "standard action";
+        int? grappleAttackBonusOverride = null;
+
         if (type == SpecialAttackType.Feint)
         {
             if (!TryConsumeFeintAction(attacker, out actionLabel))
@@ -10371,6 +10431,17 @@ public class GameManager : MonoBehaviour
                 ShowActionChoices();
                 return;
             }
+        }
+        else if (type == SpecialAttackType.Grapple)
+        {
+            if (!TryConsumeIterativeGrappleAttack(attacker, GrappleActionType.PinOpponent, out int attackBonusUsed, out int attacksRemaining))
+            {
+                ShowActionChoices();
+                return;
+            }
+
+            grappleAttackBonusOverride = attackBonusUsed;
+            actionLabel = $"grapple attack (BAB {CharacterStats.FormatMod(attackBonusUsed)}, {attacksRemaining} remaining)";
         }
         else
         {
@@ -10419,7 +10490,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        SpecialAttackResult result = attacker.ExecuteSpecialAttack(type, target, disarmTargetSlot);
+        SpecialAttackResult result = attacker.ExecuteSpecialAttack(type, target, disarmTargetSlot, grappleAttackBonusOverride);
         CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}] ({actionLabel}): {result.Log}");
 
         if (result.Success)
@@ -11428,6 +11499,11 @@ public class GameManager : MonoBehaviour
     private bool ShouldAutoEndTurn(CharacterController character)
     {
         if (character == null) return true;
+
+        bool hasRemainingIterativeGrappleAttacks = character.IsGrappling() && character.CanUseIterativeGrappleAttackAction();
+        if (hasRemainingIterativeGrappleAttacks)
+            return false;
+
         return !character.Actions.HasAnyActionLeft && !IsHoldingTouchCharge(character);
     }
 
@@ -11581,49 +11657,83 @@ public class GameManager : MonoBehaviour
         if (npc == null || npc.Stats == null)
             yield break;
 
-        if (!npc.TryGetGrappleState(out CharacterController opponent, out _, out bool actorPinned, out bool opponentPinned) || opponent == null || opponent.Stats == null)
+        const int maxAttemptsPerTurn = 8;
+        int attempts = 0;
+
+        while (attempts < maxAttemptsPerTurn)
         {
-            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} is in an invalid grapple state and cannot pick a grapple action.");
-            yield return new WaitForSeconds(0.35f);
-            yield break;
-        }
+            attempts++;
 
-        GrappleActionType? chosenAction = ChooseNPCGrappleAction(npc, opponent, actorPinned, opponentPinned);
-        if (chosenAction == null)
-        {
-            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no legal grapple actions available.");
-            yield return new WaitForSeconds(0.35f);
-            yield break;
-        }
-
-        bool isFreeAction = chosenAction.Value == GrappleActionType.ReleasePinnedOpponent;
-        if (!isFreeAction && !npc.CommitStandardAction())
-        {
-            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} cannot use grapple action: standard action already spent.");
-            yield return new WaitForSeconds(0.35f);
-            yield break;
-        }
-
-        SpecialAttackResult result = npc.ResolveGrappleAction(chosenAction.Value);
-        CombatUI?.ShowCombatLog($"☠ {npc.Stats.CharacterName} chooses grapple action [{chosenAction.Value}] against {opponent.Stats.CharacterName}: {result.Log}");
-        UpdateAllStatsUI();
-
-        TryOfferFreeAdjacentMovementAfterGrappleEnds(npc, chosenAction.Value, result);
-
-        if (result != null && result.TargetKilled)
-        {
-            HandleSummonDeathCleanup(opponent);
-
-            if (AreAllPCsDead())
+            if (!npc.TryGetGrappleState(out CharacterController opponent, out _, out bool actorPinned, out bool opponentPinned) || opponent == null || opponent.Stats == null)
             {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-                CombatUI?.SetActionButtonsVisible(false);
+                CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} is in an invalid grapple state and cannot pick a grapple action.");
+                yield return new WaitForSeconds(0.35f);
                 yield break;
             }
-        }
 
-        yield return new WaitForSeconds(isFreeAction ? 0.35f : 0.8f);
+            GrappleActionType? chosenAction = ChooseNPCGrappleAction(npc, opponent, actorPinned, opponentPinned);
+            if (chosenAction == null)
+            {
+                CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no legal grapple actions available.");
+                yield return new WaitForSeconds(0.35f);
+                yield break;
+            }
+
+            bool isFreeAction = chosenAction.Value == GrappleActionType.ReleasePinnedOpponent;
+            bool usesIterativeAttack = CharacterController.IsIterativeGrappleAttackAction(chosenAction.Value);
+            int? iterativeAttackBonusOverride = null;
+            int remainingAttacks = 0;
+
+            if (usesIterativeAttack)
+            {
+                if (!TryConsumeIterativeGrappleAttack(npc, chosenAction.Value, out int attackBonusUsed, out remainingAttacks))
+                    break;
+
+                iterativeAttackBonusOverride = attackBonusUsed;
+            }
+            else if (!isFreeAction && !npc.CommitStandardAction())
+            {
+                CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} cannot use grapple action: standard action already spent.");
+                break;
+            }
+
+            SpecialAttackResult result = npc.ResolveGrappleAction(chosenAction.Value, null, null, iterativeAttackBonusOverride);
+            string iterativeLabel = usesIterativeAttack
+                ? $" [BAB {CharacterStats.FormatMod(iterativeAttackBonusOverride ?? 0)} | {remainingAttacks} left]"
+                : string.Empty;
+            CombatUI?.ShowCombatLog($"☠ {npc.Stats.CharacterName} chooses grapple action [{chosenAction.Value}]{iterativeLabel} against {opponent.Stats.CharacterName}: {result.Log}");
+            UpdateAllStatsUI();
+
+            TryOfferFreeAdjacentMovementAfterGrappleEnds(npc, chosenAction.Value, result);
+
+            if (result != null && result.TargetKilled)
+            {
+                HandleSummonDeathCleanup(opponent);
+
+                if (AreAllPCsDead())
+                {
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI?.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+                    CombatUI?.SetActionButtonsVisible(false);
+                    yield break;
+                }
+
+                break;
+            }
+
+            float pause = isFreeAction ? 0.35f : (usesIterativeAttack ? 0.45f : 0.8f);
+            yield return new WaitForSeconds(pause);
+
+            // Non-iterative grapple actions end AI grapple sequence for the turn.
+            if (!usesIterativeAttack)
+                break;
+
+            if (remainingAttacks <= 0)
+                break;
+
+            if (UnityEngine.Random.value < 0.2f)
+                break;
+        }
     }
 
     private GrappleActionType? ChooseNPCGrappleAction(CharacterController npc, CharacterController opponent, bool actorPinned, bool opponentPinned)
@@ -11694,8 +11804,15 @@ public class GameManager : MonoBehaviour
 
         void TryAdd(GrappleActionType actionType, bool requiresStandardAction = true)
         {
-            if (requiresStandardAction && !hasStandardAction)
+            if (CharacterController.IsIterativeGrappleAttackAction(actionType))
+            {
+                if (!npc.CanUseIterativeGrappleAttackAction())
+                    return;
+            }
+            else if (requiresStandardAction && !hasStandardAction)
+            {
                 return;
+            }
 
             if (npc.IsGrappleActionBlockedWhilePinning(actionType, out _))
                 return;

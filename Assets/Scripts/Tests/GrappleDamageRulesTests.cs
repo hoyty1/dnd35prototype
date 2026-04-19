@@ -45,6 +45,8 @@ public static class GrappleDamageRulesTests
         TestPinnerBlockedActionsReturnExpectedMessages();
         TestReleasePinnedOpponentEndsEntireGrapple();
         TestSilentAndStillMetamagicRemoveVerbalAndSomaticComponents();
+        TestIterativeGrappleAttackBonusesConsumeInOrder();
+        TestStandardOnlyAllowsSingleIterativeGrappleAttack();
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
 
@@ -559,5 +561,42 @@ public static class GrappleDamageRulesTests
 
         Assert(spell.HasVerbalComponent, "Original spell data verbal component remains unchanged after metamagic clone mutation");
         Assert(spell.HasSomaticComponent, "Original spell data somatic component remains unchanged after metamagic clone mutation");
+    }
+
+    private static void TestIterativeGrappleAttackBonusesConsumeInOrder()
+    {
+        var attacker = CreateTestCharacter("IterativeGrappleBonuses", "Fighter");
+        attacker.Stats.BaseAttackBonus = 11;
+        attacker.StartNewTurn();
+
+        bool first = attacker.TryConsumeIterativeGrappleAttackAction(out int bab1, out int remaining1, out string reason1);
+        bool second = attacker.TryConsumeIterativeGrappleAttackAction(out int bab2, out int remaining2, out string reason2);
+        bool third = attacker.TryConsumeIterativeGrappleAttackAction(out int bab3, out int remaining3, out string reason3);
+        bool fourth = attacker.TryConsumeIterativeGrappleAttackAction(out int bab4, out int remaining4, out string reason4);
+
+        Assert(first && second && third, "BAB +11 character can consume 3 iterative grapple attacks in one sequence");
+        Assert(bab1 == 11 && bab2 == 6 && bab3 == 1, "Iterative grapple attacks use BAB progression +11/+6/+1");
+        Assert(remaining1 == 2 && remaining2 == 1 && remaining3 == 0, "Iterative grapple attack remaining counter decreases each use");
+        Assert(!fourth && !string.IsNullOrEmpty(reason4), "No additional iterative grapple attack is available after budget is exhausted");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestStandardOnlyAllowsSingleIterativeGrappleAttack()
+    {
+        var attacker = CreateTestCharacter("StandardSingleIterative", "Fighter");
+        attacker.Stats.BaseAttackBonus = 11;
+        attacker.StartNewTurn();
+
+        attacker.Actions.UseMoveAction(); // Spend move first: only standard action remains.
+
+        bool first = attacker.TryConsumeIterativeGrappleAttackAction(out int bab1, out int remaining1, out _);
+        bool second = attacker.TryConsumeIterativeGrappleAttackAction(out int bab2, out int remaining2, out string reason2);
+
+        Assert(first, "Character can consume one iterative grapple attack with standard action only");
+        Assert(bab1 == 11 && remaining1 == 0, "Standard-action grapple uses first BAB only and leaves no iterative attacks");
+        Assert(!second && !string.IsNullOrEmpty(reason2), "Additional iterative grapple attacks are unavailable after standard-only use");
+
+        Cleanup(attacker);
     }
 }
