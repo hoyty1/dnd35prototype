@@ -532,7 +532,8 @@ public static class GrappleDamageRulesTests
         Assert(pinResult != null && pinResult.Success, "Pin succeeds before Escape Artist pin-break validation");
 
         // Ensure deterministic success for the pinned character's Escape Artist check.
-        pinned.Stats.SkillRanksEscapeArtist = 40;
+        pinned.Stats.InitializeSkills(pinned.Stats.CharacterClass, pinned.Stats.Level);
+        pinned.Stats.Skills["Escape Artist"].Ranks = 40;
         SpecialAttackResult escapeResult = pinned.ResolveGrappleAction(GrappleActionType.EscapeArtist);
 
         Assert(escapeResult != null && escapeResult.Success, "Pinned character succeeds Escape Artist check");
