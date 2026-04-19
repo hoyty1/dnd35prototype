@@ -618,9 +618,28 @@ public class CombatUI : MonoBehaviour
     private GameObject _dropEquippedItemSelectionPanel;
     private bool _dischargeTouchHooked;
     private GameObject _summonContextMenuRoot;
+    private bool _specialStyleMenuWasActiveLastFrame;
 
     private GameObject _confirmationPanel;
 
+    private void LogSpecialStyleMenuLifecycle(string eventName, string details = null)
+    {
+        string suffix = string.IsNullOrEmpty(details) ? string.Empty : $" | {details}";
+        Debug.Log($"[CombatUI][SpecialStyleMenu] {eventName}{suffix}\nStackTrace:\n{System.Environment.StackTrace}");
+    }
+
+    private void Update()
+    {
+        bool isActive = _specialStyleSelectionPanel != null && _specialStyleSelectionPanel.activeSelf;
+        if (_specialStyleMenuWasActiveLastFrame && !isActive)
+        {
+            LogSpecialStyleMenuLifecycle(
+                "MENU_DISAPPEARED_BETWEEN_FRAMES",
+                $"frame={Time.frameCount}");
+        }
+
+        _specialStyleMenuWasActiveLastFrame = isActive;
+    }
     private void EnsureDischargeTouchButtonExists()
     {
         if (DischargeTouchButton == null)
@@ -1432,6 +1451,11 @@ public class CombatUI : MonoBehaviour
         System.Action<int> onSelect,
         System.Action onCancel)
     {
+        string optionSummary = optionLabels == null ? "<null>" : string.Join(", ", optionLabels);
+        LogSpecialStyleMenuLifecycle(
+            "SHOW_MENU_CALLED",
+            $"name={menuName}, options=[{optionSummary}], frame={Time.frameCount}");
+
         HideSpecialStyleSelectionMenu();
 
         if (ActionPanel == null)
@@ -1492,6 +1516,7 @@ public class CombatUI : MonoBehaviour
             {
                 optionButton.onClick.AddListener(() =>
                 {
+                    LogSpecialStyleMenuLifecycle("OPTION_CLICKED", $"index={optionIndex}, label={optionLabels[optionIndex]}, frame={Time.frameCount}");
                     HideSpecialStyleSelectionMenu();
                     onSelect?.Invoke(optionIndex);
                 });
@@ -1509,23 +1534,37 @@ public class CombatUI : MonoBehaviour
         {
             cancelButton.onClick.AddListener(() =>
             {
+                LogSpecialStyleMenuLifecycle("CANCEL_CLICKED", $"frame={Time.frameCount}");
                 HideSpecialStyleSelectionMenu();
                 onCancel?.Invoke();
             });
         }
 
         _specialStyleSelectionPanel.SetActive(true);
+        _specialStyleMenuWasActiveLastFrame = true;
+        LogSpecialStyleMenuLifecycle("MENU_PANEL_ACTIVATED", $"name={_specialStyleSelectionPanel.name}, frame={Time.frameCount}");
     }
 
     public void HideSpecialStyleSelectionMenu()
     {
         if (_specialStyleSelectionPanel != null)
         {
+            LogSpecialStyleMenuLifecycle("HIDE_MENU_CALLED", $"name={_specialStyleSelectionPanel.name}, active={_specialStyleSelectionPanel.activeSelf}, frame={Time.frameCount}");
             Destroy(_specialStyleSelectionPanel);
             _specialStyleSelectionPanel = null;
+            _specialStyleMenuWasActiveLastFrame = false;
+            LogSpecialStyleMenuLifecycle("MENU_PANEL_DEACTIVATED", $"frame={Time.frameCount}");
+        }
+        else
+        {
+            LogSpecialStyleMenuLifecycle("HIDE_MENU_CALLED_WITH_NULL_PANEL", $"frame={Time.frameCount}");
         }
     }
 
+    public bool IsSpecialStyleSelectionMenuOpen()
+    {
+        return _specialStyleSelectionPanel != null && _specialStyleSelectionPanel.activeSelf;
+    }
     private Button CreateSpecialStyleSelectionButton(Transform parent, string name, string label, Color backgroundColor, bool isInteractable)
     {
         if (parent == null)

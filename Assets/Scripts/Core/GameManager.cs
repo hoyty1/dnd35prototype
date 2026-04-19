@@ -2277,6 +2277,14 @@ public class GameManager : MonoBehaviour
             AdvanceToNextTurn();
     }
 
+    private void LogMenuFlow(string marker, CharacterController actor = null, string details = null)
+    {
+        string actorName = actor != null && actor.Stats != null ? actor.Stats.CharacterName : "<null>";
+        bool menuOpen = CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen();
+        string suffix = string.IsNullOrEmpty(details) ? string.Empty : $" | {details}";
+        Debug.Log($"[GameManager][MenuFlow] {marker} | actor={actorName} | phase={CurrentPhase} | subPhase={CurrentSubPhase} | menuOpen={menuOpen} | frame={Time.frameCount}{suffix}\nStackTrace:\n{System.Environment.StackTrace}");
+    }
+
     /// <summary>
     /// Show the action choice UI for the current PC.
     /// </summary>
@@ -2284,6 +2292,8 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) return;
+
+        LogMenuFlow("ShowActionChoices:ENTER", pc, $"isGrappling={pc.IsGrappling()}, isPinned={pc.IsPinned()}");
 
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
         EndGrappleContextMenuDisplayLock();
@@ -2296,6 +2306,7 @@ public class GameManager : MonoBehaviour
         _pendingAoOAction = null;
         _spellcastProvocationCancelled = false;
         ClearSpellcastResourceSnapshot();
+        LogMenuFlow("ShowActionChoices:HIDE_TRANSIENT_PANELS", pc);
         ClearOverrunContinuationState();
         CombatUI.HideAoOConfirmationPrompt();
         CombatUI.HideDisarmWeaponSelection();
@@ -2375,6 +2386,7 @@ public class GameManager : MonoBehaviour
                 StartCoroutine(DelayedEndActivePCTurn(1.0f));
             }
         }
+        LogMenuFlow("ShowActionChoices:EXIT", pc, $"hasAnyActionLeft={pc.Actions.HasAnyActionLeft}");
     }
 
     private bool IsCombatEncounterRunning()
@@ -4471,14 +4483,18 @@ public class GameManager : MonoBehaviour
     public void ShowGrappleActionMenu()
     {
         CharacterController pc = ActivePC;
+        LogMenuFlow("ShowGrappleActionMenu(PUBLIC):ENTER", pc);
+
         if (pc == null)
         {
+            LogMenuFlow("ShowGrappleActionMenu(PUBLIC):NO_ACTIVE_PC", pc);
             ShowActionChoices();
             return;
         }
 
         if (!pc.IsGrappling())
         {
+            LogMenuFlow("ShowGrappleActionMenu(PUBLIC):PC_NOT_GRAPPLING", pc);
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is not currently grappling.");
             ShowActionChoices();
             return;
@@ -4486,6 +4502,7 @@ public class GameManager : MonoBehaviour
 
         if (!pc.TryGetGrappleState(out CharacterController opponent, out _, out _, out _))
         {
+            LogMenuFlow("ShowGrappleActionMenu(PUBLIC):NO_GRAPPLE_STATE", pc);
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is no longer in a grapple.");
             ShowActionChoices();
             return;
@@ -9885,14 +9902,18 @@ public class GameManager : MonoBehaviour
 
     private void ShowGrappleActionMenu(CharacterController actor, CharacterController opponent)
     {
+        LogMenuFlow("ShowGrappleActionMenu:ENTER", actor, $"opponent={(opponent != null && opponent.Stats != null ? opponent.Stats.CharacterName : "<null>")}");
+
         if (actor == null || opponent == null)
         {
+            LogMenuFlow("ShowGrappleActionMenu:NULL_ACTOR_OR_OPPONENT", actor);
             ShowActionChoices();
             return;
         }
 
         if (!actor.TryGetGrappleState(out CharacterController liveOpponent, out _, out bool isPinned, out bool opponentPinned))
         {
+            LogMenuFlow("ShowGrappleActionMenu:NO_LONGER_GRAPPLING", actor);
             CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is no longer in a grapple.");
             ShowActionChoices();
             return;
@@ -10021,6 +10042,8 @@ public class GameManager : MonoBehaviour
             optionEnabledStates.Add(option.Enabled);
         }
 
+        LogMenuFlow("ShowGrappleActionMenu:SHOW_MENU", actor, $"optionCount={options.Count}, isPinned={isPinned}, opponentPinned={opponentPinned}, isPinning={isPinning}");
+
         CurrentSubPhase = PlayerSubPhase.Animating;
         CombatUI?.ShowSpecialStyleSelectionMenu(
             menuName: "GrappleActionMenu",
@@ -10028,8 +10051,11 @@ public class GameManager : MonoBehaviour
             optionEnabledStates: optionEnabledStates,
             onSelect: selectedIndex =>
             {
+                LogMenuFlow("ShowGrappleActionMenu:OPTION_SELECTED", actor, $"selectedIndex={selectedIndex}");
+
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
+                    LogMenuFlow("ShowGrappleActionMenu:OPTION_INVALID", actor, $"selectedIndex={selectedIndex}");
                     ShowActionChoices();
                     return;
                 }
@@ -10039,6 +10065,7 @@ public class GameManager : MonoBehaviour
                     string blockedMessage = string.IsNullOrEmpty(options[selectedIndex].DisabledMessage)
                         ? options[selectedIndex].Label
                         : options[selectedIndex].DisabledMessage;
+                    LogMenuFlow("ShowGrappleActionMenu:OPTION_BLOCKED", actor, $"selectedIndex={selectedIndex}, reason={blockedMessage}");
                     CombatUI?.ShowCombatLog($"⚠ {blockedMessage}");
                     ShowGrappleActionMenu(actor, opponent);
                     return;
@@ -10046,13 +10073,20 @@ public class GameManager : MonoBehaviour
 
                 ResolveGrappleActionSelection(actor, options[selectedIndex].Action);
             },
-            onCancel: ShowActionChoices);
+            onCancel: () =>
+            {
+                LogMenuFlow("ShowGrappleActionMenu:CANCEL", actor);
+                ShowActionChoices();
+            });
     }
 
     private void ResolveGrappleActionSelection(CharacterController actor, GrappleActionType actionType)
     {
+        LogMenuFlow("ResolveGrappleActionSelection:ENTER", actor, $"actionType={actionType}");
+
         if (actor == null || actor.Stats == null)
         {
+            LogMenuFlow("ResolveGrappleActionSelection:NULL_ACTOR", actor, $"actionType={actionType}");
             ShowActionChoices();
             return;
         }
@@ -10074,14 +10108,18 @@ public class GameManager : MonoBehaviour
 
     private void ShowUseOpponentWeaponHandSelectionMenu(CharacterController actor)
     {
+        LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:ENTER", actor);
+
         if (actor == null || actor.Stats == null)
         {
+            LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:NULL_ACTOR", actor);
             ShowActionChoices();
             return;
         }
 
         if (!actor.TryGetGrappleState(out CharacterController opponent, out _, out bool isPinned, out _))
         {
+            LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:NO_LONGER_GRAPPLING", actor);
             CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is no longer in a grapple.");
             ShowActionChoices();
             return;
@@ -10089,6 +10127,7 @@ public class GameManager : MonoBehaviour
 
         if (isPinned)
         {
+            LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:ACTOR_PINNED", actor);
             CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is pinned and cannot use opponent's weapon.");
             ShowActionChoices();
             return;
@@ -10099,6 +10138,7 @@ public class GameManager : MonoBehaviour
         List<DisarmableHeldItemOption> options = opponent.GetEquippedLightHandWeaponOptions();
         if (options == null || options.Count == 0)
         {
+            LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:NO_OPTIONS", actor, $"opponent={opponent.Stats.CharacterName}");
             CombatUI?.ShowCombatLog($"⚠ {opponent.Stats.CharacterName} has no equipped light weapon to use.");
             ShowActionChoices();
             return;
@@ -10115,6 +10155,8 @@ public class GameManager : MonoBehaviour
         for (int i = 0; i < labels.Count; i++)
             enabledStates.Add(true);
 
+        LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:SHOW_MENU", actor, $"optionCount={options.Count}");
+
         CurrentSubPhase = PlayerSubPhase.Animating;
         CombatUI?.ShowSpecialStyleSelectionMenu(
             menuName: "GrappleUseWeaponMenu",
@@ -10122,26 +10164,37 @@ public class GameManager : MonoBehaviour
             optionEnabledStates: enabledStates,
             onSelect: selectedIndex =>
             {
+                LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:OPTION_SELECTED", actor, $"selectedIndex={selectedIndex}");
+
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
+                    LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:OPTION_INVALID", actor, $"selectedIndex={selectedIndex}");
                     ShowActionChoices();
                     return;
                 }
 
                 ExecuteGrappleAction(actor, GrappleActionType.UseOpponentWeapon, null, options[selectedIndex].HandSlot);
             },
-            onCancel: ShowActionChoices);
+            onCancel: () =>
+            {
+                LogMenuFlow("ShowUseOpponentWeaponHandSelectionMenu:CANCEL", actor);
+                ShowActionChoices();
+            });
     }
     private void ShowGrappleDamageModeMenu(CharacterController actor)
     {
+        LogMenuFlow("ShowGrappleDamageModeMenu:ENTER", actor);
+
         if (actor == null || actor.Stats == null)
         {
+            LogMenuFlow("ShowGrappleDamageModeMenu:NULL_ACTOR", actor);
             ShowActionChoices();
             return;
         }
 
         if (!actor.TryGetGrappleState(out CharacterController opponent, out _, out _, out _))
         {
+            LogMenuFlow("ShowGrappleDamageModeMenu:NO_LONGER_GRAPPLING", actor);
             CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is no longer in a grapple.");
             ShowActionChoices();
             return;
@@ -10168,6 +10221,8 @@ public class GameManager : MonoBehaviour
         for (int i = 0; i < labels.Count; i++)
             enabledStates.Add(true);
 
+        LogMenuFlow("ShowGrappleDamageModeMenu:SHOW_MENU", actor, $"optionCount={options.Count}");
+
         CurrentSubPhase = PlayerSubPhase.Animating;
         CombatUI?.ShowSpecialStyleSelectionMenu(
             menuName: "GrappleDamageModeMenu",
@@ -10175,15 +10230,49 @@ public class GameManager : MonoBehaviour
             optionEnabledStates: enabledStates,
             onSelect: selectedIndex =>
             {
+                LogMenuFlow("ShowGrappleDamageModeMenu:OPTION_SELECTED", actor, $"selectedIndex={selectedIndex}");
+
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
+                    LogMenuFlow("ShowGrappleDamageModeMenu:OPTION_INVALID", actor, $"selectedIndex={selectedIndex}");
                     ShowActionChoices();
                     return;
                 }
 
                 ExecuteGrappleAction(actor, GrappleActionType.DamageOpponent, options[selectedIndex].mode);
             },
-            onCancel: ShowActionChoices);
+            onCancel: () =>
+            {
+                LogMenuFlow("ShowGrappleDamageModeMenu:CANCEL", actor);
+                ShowActionChoices();
+            });
+    }
+
+    [ContextMenu("Debug/Test Menu Stability")]
+    private void TestMenuStability()
+    {
+        LogMenuFlow("TestMenuStability:START", ActivePC);
+
+        CombatUI?.ShowSpecialStyleSelectionMenu(
+            menuName: "DebugTestMenu",
+            optionLabels: new List<string> { "Option 1", "Option 2" },
+            optionEnabledStates: new List<bool> { true, true },
+            onSelect: index => Debug.Log($"[GameManager][MenuFlow] TestMenuStability:SELECTED index={index}"),
+            onCancel: () => Debug.Log("[GameManager][MenuFlow] TestMenuStability:CANCELLED"));
+
+        StartCoroutine(CheckMenuAfterDelay());
+    }
+
+    private IEnumerator CheckMenuAfterDelay()
+    {
+        yield return new WaitForSeconds(0.1f);
+        LogMenuFlow("TestMenuStability:CHECK", ActivePC, $"t=0.1s, visible={CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen()}");
+
+        yield return new WaitForSeconds(0.5f);
+        LogMenuFlow("TestMenuStability:CHECK", ActivePC, $"t=0.6s, visible={CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen()}");
+
+        yield return new WaitForSeconds(1.0f);
+        LogMenuFlow("TestMenuStability:CHECK", ActivePC, $"t=1.6s, visible={CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen()}");
     }
 
     private bool TryConsumeIterativeGrappleAttack(CharacterController actor, GrappleActionType actionType, out int attackBonusUsed, out int attacksRemaining)
@@ -10212,8 +10301,11 @@ public class GameManager : MonoBehaviour
         AttackDamageMode? grappleDamageModeOverride = null,
         EquipSlot? opponentWeaponHandSlotOverride = null)
     {
+        LogMenuFlow("ExecuteGrappleAction:ENTER", actor, $"actionType={actionType}, damageMode={grappleDamageModeOverride}, handOverride={opponentWeaponHandSlotOverride}");
+
         if (actor == null || actor.Stats == null)
         {
+            LogMenuFlow("ExecuteGrappleAction:NULL_ACTOR", actor, $"actionType={actionType}");
             ShowActionChoices();
             return;
         }
@@ -10280,6 +10372,7 @@ public class GameManager : MonoBehaviour
             return;
 
         float delay = isFreeAction ? 0.35f : (usesIterativeAttack ? 0.45f : 0.8f);
+        LogMenuFlow("ExecuteGrappleAction:SCHEDULE_AFTER_ATTACK_DELAY", actor, $"actionType={actionType}, delay={delay:0.00}");
         StartCoroutine(AfterAttackDelay(actor, delay));
     }
     private void HandleOverrunTargetClick(CharacterController attacker, CharacterController target)
@@ -11595,11 +11688,21 @@ public class GameManager : MonoBehaviour
 
     private IEnumerator AfterAttackDelay(CharacterController pc, float delay)
     {
+        LogMenuFlow("AfterAttackDelay:START", pc, $"delay={delay:0.00}");
         yield return new WaitForSeconds(delay);
 
-        if (CurrentPhase == TurnPhase.CombatOver) yield break;
+        LogMenuFlow("AfterAttackDelay:AFTER_WAIT", pc, $"delay={delay:0.00}");
 
-        if (ShouldAutoEndTurn(pc))
+        if (CurrentPhase == TurnPhase.CombatOver)
+        {
+            LogMenuFlow("AfterAttackDelay:ABORT_COMBAT_OVER", pc);
+            yield break;
+        }
+
+        bool shouldEndTurn = ShouldAutoEndTurn(pc);
+        LogMenuFlow("AfterAttackDelay:DECISION", pc, $"shouldAutoEndTurn={shouldEndTurn}");
+
+        if (shouldEndTurn)
         {
             EndActivePCTurn();
         }
