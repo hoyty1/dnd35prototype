@@ -10623,14 +10623,17 @@ public class GameManager : MonoBehaviour
         }
         else if (type == SpecialAttackType.Grapple)
         {
-            if (!TryConsumeIterativeGrappleAttack(attacker, GrappleActionType.PinOpponent, out int attackBonusUsed, out int attacksRemaining))
+            // Grapple initiation is always a standard action in this flow.
+            // Do not consume a full-round iterative grapple attack budget here,
+            // otherwise an AoO interruption can incorrectly end the turn immediately.
+            if (!attacker.CommitStandardAction())
             {
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot use {type}: standard action already spent.");
                 ShowActionChoices();
                 return;
             }
 
-            grappleAttackBonusOverride = attackBonusUsed;
-            actionLabel = $"grapple attack (BAB {CharacterStats.FormatMod(attackBonusUsed)}, {attacksRemaining} remaining)";
+            actionLabel = "standard action";
         }
         else
         {
