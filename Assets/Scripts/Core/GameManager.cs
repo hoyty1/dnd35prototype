@@ -4488,7 +4488,9 @@ public class GameManager : MonoBehaviour
     public void OnSpecialAttackButtonPressed()
     {
         CharacterController pc = ActivePC;
-        if (pc == null || !CanOpenSpecialAttackMenu(pc)) return;
+        bool canOpen = pc != null && CanOpenSpecialAttackMenu(pc);
+        Debug.Log($"[GameManager][SpecialAttack] ButtonPressed actor={(pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>")} canOpen={canOpen} phase={CurrentPhase} subPhase={CurrentSubPhase} std={(pc != null ? pc.Actions.HasStandardAction : false)} iterativeGrapple={(pc != null ? pc.HasRemainingIterativeGrappleAttacksInSequence() : false)}");
+        if (!canOpen) return;
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "special attacks"))
             return;
@@ -4663,11 +4665,14 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null) { ShowActionChoices(); return; }
 
+        bool hasIterativeGrappleAttackInSequence = pc.HasRemainingIterativeGrappleAttacksInSequence();
         bool hasAction = type == SpecialAttackType.Feint
             ? (pc.Actions.HasStandardAction || CanUseImprovedFeintAsMove(pc))
             : (type == SpecialAttackType.Grapple
-                ? (pc.Actions.HasStandardAction || pc.HasRemainingIterativeGrappleAttacksInSequence())
+                ? (pc.Actions.HasStandardAction || hasIterativeGrappleAttackInSequence)
                 : pc.Actions.HasStandardAction);
+
+        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} iterativeGrapple={hasIterativeGrappleAttackInSequence}");
 
         if (!hasAction)
         {
@@ -10643,11 +10648,13 @@ public class GameManager : MonoBehaviour
         }
         else if (type == SpecialAttackType.Grapple)
         {
+            Debug.Log($"[GameManager][Grapple] Attempting consume actor={attacker.Stats.CharacterName} phase={CurrentPhase} subPhase={CurrentSubPhase} std={attacker.Actions.HasStandardAction} iterativeRemaining={attacker.GetRemainingGrappleAttackActions()}");
             if (!attacker.TryConsumeIterativeGrappleAttackAction(out int grappleAttackBonusUsed, out int grappleAttacksRemaining, out string grappleConsumeReason))
             {
                 string reason = string.IsNullOrWhiteSpace(grappleConsumeReason)
                     ? "no eligible attack remaining"
                     : grappleConsumeReason;
+                Debug.LogWarning($"[GameManager][Grapple] Consume failed actor={attacker.Stats.CharacterName} reason={reason}");
                 CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot initiate grapple: {reason}.");
                 ShowActionChoices();
                 return;
@@ -10655,6 +10662,7 @@ public class GameManager : MonoBehaviour
 
             grappleAttackBonusOverride = grappleAttackBonusUsed;
             actionLabel = $"attack BAB {CharacterStats.FormatMod(grappleAttackBonusUsed)} ({grappleAttacksRemaining} remaining)";
+            Debug.Log($"[GameManager][Grapple] Consume success actor={attacker.Stats.CharacterName} usedBAB={grappleAttackBonusUsed} remaining={grappleAttacksRemaining}");
         }
         else
         {
@@ -10708,9 +10716,11 @@ public class GameManager : MonoBehaviour
         if (type == SpecialAttackType.Grapple)
         {
             int attacksRemaining = attacker.GetRemainingGrappleAttackActions();
+            int nextBab = attacker.GetCurrentGrappleAttackBonus();
+            Debug.Log($"[GameManager][Grapple] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingIterative={attacksRemaining} nextBAB={nextBab} phase={CurrentPhase} subPhase={CurrentSubPhase}");
+
             if (attacksRemaining > 0)
             {
-                int nextBab = attacker.GetCurrentGrappleAttackBonus();
                 CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} iterative attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
             }
             else

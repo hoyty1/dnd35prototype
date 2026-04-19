@@ -1425,26 +1425,60 @@ public class CombatUI : MonoBehaviour
 
         if (_specialAttackPanel == null) return;
 
+        bool hasStandardAction = pc != null && pc.Actions.HasStandardAction;
+        bool hasIterativeGrappleAttackInSequence = pc != null && pc.HasRemainingIterativeGrappleAttacksInSequence();
+        bool canImprovedFeintMove = pc != null
+            && pc.Stats != null
+            && pc.Stats.HasFeat("Improved Feint")
+            && (pc.Actions.HasMoveAction || pc.Actions.CanConvertStandardToMove);
+
+        GameManager gm = GameManager.Instance;
+        string actorName = pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>";
+        Debug.Log($"[CombatUI][SpecialAttackMenu] SHOW actor={actorName} phase={(gm != null ? gm.CurrentPhase.ToString() : "<no-gm>")} subPhase={(gm != null ? gm.CurrentSubPhase.ToString() : "<no-gm>")} std={hasStandardAction} iterativeGrapple={hasIterativeGrappleAttackInSequence} improvedFeintMove={canImprovedFeintMove}");
+
         _specialAttackPanel.SetActive(true);
 
         var buttons = _specialAttackPanel.GetComponentsInChildren<Button>(true);
         foreach (var btn in buttons)
         {
-            if (btn.name == "Cancel") continue;
-            bool enabled = pc != null && pc.Actions.HasStandardAction;
+            if (btn == null) continue;
 
-            if (pc != null)
-            {
-                if (btn.name == "Disarm" || btn.name == "Sunder")
-                    enabled &= pc.HasMeleeWeaponEquipped();
-                if (btn.name == "Bull Rush" || btn.name == "Overrun" || btn.name == "Trip")
-                    enabled &= pc.HasMeleeWeaponEquipped();
-            }
-
+            bool enabled = IsSpecialAttackButtonEnabled(btn.name, pc, hasStandardAction, hasIterativeGrappleAttackInSequence, canImprovedFeintMove);
             btn.interactable = enabled;
+            Debug.Log($"[CombatUI][SpecialAttackMenu] button={btn.name} active={btn.gameObject.activeSelf} interactable={btn.interactable}");
         }
 
         WireSpecialAttackMenu(onSelect, onCancel);
+    }
+
+    private bool IsSpecialAttackButtonEnabled(string buttonName, CharacterController pc, bool hasStandardAction, bool hasIterativeGrappleAttackInSequence, bool canImprovedFeintMove)
+    {
+        if (buttonName == "Cancel")
+            return true;
+
+        bool enabled;
+        switch (buttonName)
+        {
+            case "Grapple":
+                enabled = hasStandardAction || hasIterativeGrappleAttackInSequence;
+                break;
+            case "Feint":
+                enabled = hasStandardAction || canImprovedFeintMove;
+                break;
+            default:
+                enabled = hasStandardAction;
+                break;
+        }
+
+        if (pc != null)
+        {
+            if (buttonName == "Disarm" || buttonName == "Sunder")
+                enabled &= pc.HasMeleeWeaponEquipped();
+            if (buttonName == "Bull Rush" || buttonName == "Overrun" || buttonName == "Trip")
+                enabled &= pc.HasMeleeWeaponEquipped();
+        }
+
+        return enabled;
     }
 
     public void HideSpecialAttackMenu()
@@ -1652,17 +1686,26 @@ public class CombatUI : MonoBehaviour
 
         foreach (var btn in _specialAttackPanel.GetComponentsInChildren<Button>(true))
         {
+            if (btn == null) continue;
+
             btn.onClick.RemoveAllListeners();
             switch (btn.name)
             {
-                case "Trip": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Trip)); break;
-                case "Disarm": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Disarm)); break;
-                case "Grapple": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Grapple)); break;
-                case "Sunder": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Sunder)); break;
-                case "Bull Rush": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.BullRush)); break;
-                case "Overrun": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Overrun)); break;
-                case "Feint": btn.onClick.AddListener(() => onSelect?.Invoke(SpecialAttackType.Feint)); break;
-                case "Cancel": btn.onClick.AddListener(() => { HideSpecialAttackMenu(); onCancel?.Invoke(); }); break;
+                case "Trip": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Trip"); onSelect?.Invoke(SpecialAttackType.Trip); }); break;
+                case "Disarm": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Disarm"); onSelect?.Invoke(SpecialAttackType.Disarm); }); break;
+                case "Grapple": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Grapple"); onSelect?.Invoke(SpecialAttackType.Grapple); }); break;
+                case "Sunder": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Sunder"); onSelect?.Invoke(SpecialAttackType.Sunder); }); break;
+                case "Bull Rush": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush"); onSelect?.Invoke(SpecialAttackType.BullRush); }); break;
+                case "Overrun": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Overrun"); onSelect?.Invoke(SpecialAttackType.Overrun); }); break;
+                case "Feint": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Feint"); onSelect?.Invoke(SpecialAttackType.Feint); }); break;
+                case "Cancel":
+                    btn.onClick.AddListener(() =>
+                    {
+                        Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Cancel");
+                        HideSpecialAttackMenu();
+                        onCancel?.Invoke();
+                    });
+                    break;
             }
         }
     }
