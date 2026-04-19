@@ -109,6 +109,7 @@ public class CombatUI : MonoBehaviour
     public Button GrappleEscapeCheckButton;     // Grapple: escape via opposed grapple (Standard Action)
     public Button GrappleMoveButton;            // Grapple: move while grappling (Standard Action)
     public Button GrappleUseOpponentWeaponButton; // Grapple: use opponent weapon (Standard Action)
+    public Button GrappleDisarmSmallObjectButton; // Grapple: disarm small object (Stub)
     public Button GrappleReleasePinnedButton;   // Grapple: release pinned opponent (Free Action)
     public Button AidAnotherButton;     // Aid Another (Standard Action)
     public Button OverrunButton;        // Overrun (Standard Action)
@@ -1066,10 +1067,14 @@ public class CombatUI : MonoBehaviour
 
         // Grapple-only action buttons (shown only while grappling)
         bool showOnlyPinnedEscapeActions = isGrappling && (isPinned || actorPinnedInGrappleState);
+        bool showOnlyPinnerActions = isGrappling && isPinningOpponent && !showOnlyPinnedEscapeActions;
         bool hasIterativeGrappleAttack = pc.CanUseIterativeGrappleAttackAction();
         int grappleAttacksRemaining = pc.GetRemainingGrappleAttackActions();
         int currentGrappleAttackBonus = pc.GetCurrentGrappleAttackBonus();
         string iterativeTag = $"BAB {CharacterStats.FormatMod(currentGrappleAttackBonus)} | {grappleAttacksRemaining} left";
+        string grappleOpponentName = grappleOpponent != null && grappleOpponent.Stats != null
+            ? grappleOpponent.Stats.CharacterName
+            : "Opponent";
 
         if (GrappleDamageButton != null)
         {
@@ -1078,7 +1083,10 @@ public class CombatUI : MonoBehaviour
             GrappleDamageButton.interactable = canUse;
             Text label = GrappleDamageButton.GetComponentInChildren<Text>();
             if (label != null)
-                label.text = canUse ? $"Grapple: Damage ({iterativeTag})" : "Grapple: Damage (No attacks left)";
+            {
+                string baseLabel = showOnlyPinnerActions ? $"Damage {grappleOpponentName}" : "Grapple: Damage";
+                label.text = canUse ? $"{baseLabel} ({iterativeTag})" : $"{baseLabel} (No attacks left)";
+            }
         }
 
         if (GrappleLightWeaponAttackButton != null)
@@ -1089,7 +1097,7 @@ public class CombatUI : MonoBehaviour
                           && hasIterativeGrappleAttack
                           && hasMainHandLightWeapon
                           && CanUseWhilePinning(GrappleActionType.AttackWithLightWeapon);
-            GrappleLightWeaponAttackButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions);
+            GrappleLightWeaponAttackButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions && !showOnlyPinnerActions);
             GrappleLightWeaponAttackButton.interactable = canUse;
             Text label = GrappleLightWeaponAttackButton.GetComponentInChildren<Text>();
             if (label != null)
@@ -1109,7 +1117,7 @@ public class CombatUI : MonoBehaviour
                           && hasIterativeGrappleAttack
                           && canUnarmedByRule
                           && CanUseWhilePinning(GrappleActionType.AttackUnarmed);
-            GrappleUnarmedAttackButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions);
+            GrappleUnarmedAttackButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions && !showOnlyPinnerActions);
             GrappleUnarmedAttackButton.interactable = canUse;
             Text label = GrappleUnarmedAttackButton.GetComponentInChildren<Text>();
             if (label != null)
@@ -1119,8 +1127,8 @@ public class CombatUI : MonoBehaviour
         if (GrapplePinButton != null)
         {
             bool canUse = isGrappling && !showOnlyPinnedEscapeActions && hasIterativeGrappleAttack && CanUseWhilePinning(GrappleActionType.PinOpponent);
-            string pinLabel = opponentPinnedByActor ? "Grapple: Maintain Pin" : "Grapple: Pin Opponent";
-            GrapplePinButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions);
+            string pinLabel = "Grapple: Pin Opponent";
+            GrapplePinButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions && !showOnlyPinnerActions);
             GrapplePinButton.interactable = canUse;
             Text label = GrapplePinButton.GetComponentInChildren<Text>();
             if (label != null)
@@ -1129,18 +1137,14 @@ public class CombatUI : MonoBehaviour
 
         if (GrappleBreakPinButton != null)
         {
-            bool canUse = isGrappling && hasIterativeGrappleAttack && (showOnlyPinnedEscapeActions || CanUseWhilePinning(GrappleActionType.BreakPin));
-            GrappleBreakPinButton.gameObject.SetActive(isGrappling);
-            GrappleBreakPinButton.interactable = canUse;
-            Text label = GrappleBreakPinButton.GetComponentInChildren<Text>();
-            if (label != null)
-                label.text = canUse ? $"Grapple: Break Pin ({iterativeTag})" : "Grapple: Break Pin (No attacks left)";
+            // Deprecated for current pin model: pinned creatures now use escape actions only.
+            GrappleBreakPinButton.gameObject.SetActive(false);
         }
 
         if (GrappleEscapeArtistButton != null)
         {
             bool canUse = isGrappling && actions.HasStandardAction;
-            GrappleEscapeArtistButton.gameObject.SetActive(isGrappling);
+            GrappleEscapeArtistButton.gameObject.SetActive(isGrappling && !showOnlyPinnerActions);
             GrappleEscapeArtistButton.interactable = canUse;
             Text label = GrappleEscapeArtistButton.GetComponentInChildren<Text>();
             if (label != null)
@@ -1150,7 +1154,7 @@ public class CombatUI : MonoBehaviour
         if (GrappleEscapeCheckButton != null)
         {
             bool canUse = isGrappling && hasIterativeGrappleAttack;
-            GrappleEscapeCheckButton.gameObject.SetActive(isGrappling);
+            GrappleEscapeCheckButton.gameObject.SetActive(isGrappling && !showOnlyPinnerActions);
             GrappleEscapeCheckButton.interactable = canUse;
             Text label = GrappleEscapeCheckButton.GetComponentInChildren<Text>();
             if (label != null)
@@ -1164,7 +1168,9 @@ public class CombatUI : MonoBehaviour
             GrappleMoveButton.interactable = canUse;
             Text label = GrappleMoveButton.GetComponentInChildren<Text>();
             if (label != null)
-                label.text = canUse ? "Grapple: Move (Std)" : "Grapple: Move (Used/Blocked)";
+                label.text = canUse
+                    ? (showOnlyPinnerActions ? $"Move (dragging {grappleOpponentName})" : "Grapple: Move (Std)")
+                    : "Grapple: Move (Used/Blocked)";
         }
 
         if (GrappleUseOpponentWeaponButton != null)
@@ -1181,17 +1187,36 @@ public class CombatUI : MonoBehaviour
             GrappleUseOpponentWeaponButton.interactable = canUse;
             Text label = GrappleUseOpponentWeaponButton.GetComponentInChildren<Text>();
             if (label != null)
-                label.text = canUse ? $"Grapple: Use Opponent Weapon ({iterativeTag})" : "Grapple: Use Opponent Weapon (Unavailable)";
+            {
+                string baseLabel = showOnlyPinnerActions
+                    ? $"Use {grappleOpponentName}'s Weapon"
+                    : "Grapple: Use Opponent Weapon";
+                label.text = canUse ? $"{baseLabel} ({iterativeTag})" : $"{baseLabel} (Unavailable)";
+            }
+        }
+
+        if (GrappleDisarmSmallObjectButton != null)
+        {
+            bool canUse = isGrappling && showOnlyPinnerActions && actions.HasStandardAction && CanUseWhilePinning(GrappleActionType.DisarmSmallObject);
+            GrappleDisarmSmallObjectButton.gameObject.SetActive(isGrappling && showOnlyPinnerActions);
+            GrappleDisarmSmallObjectButton.interactable = canUse;
+            Text label = GrappleDisarmSmallObjectButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = canUse
+                    ? $"Disarm Small Object ({grappleOpponentName})"
+                    : "Disarm Small Object (Used/Blocked)";
         }
 
         if (GrappleReleasePinnedButton != null)
         {
-            bool canUse = isGrappling && !showOnlyPinnedEscapeActions && isPinningOpponent && opponentPinnedByActor;
-            GrappleReleasePinnedButton.gameObject.SetActive(isGrappling && !showOnlyPinnedEscapeActions);
+            bool canUse = isGrappling && showOnlyPinnerActions && opponentPinnedByActor;
+            GrappleReleasePinnedButton.gameObject.SetActive(isGrappling && showOnlyPinnerActions);
             GrappleReleasePinnedButton.interactable = canUse;
             Text label = GrappleReleasePinnedButton.GetComponentInChildren<Text>();
             if (label != null)
-                label.text = canUse ? "Grapple: Release Pin (Free)" : "Grapple: Release Pin (N/A)";
+                label.text = canUse
+                    ? $"Release {grappleOpponentName} from Pin"
+                    : "Release Pin (N/A)";
         }
 
         if (RageStatusText != null)

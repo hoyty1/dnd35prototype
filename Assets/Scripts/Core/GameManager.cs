@@ -4491,6 +4491,67 @@ public class GameManager : MonoBehaviour
         ShowGrappleActionMenu(pc, opponent);
     }
 
+    public bool CanUseGrappleAction(CharacterController character, GrappleActionType action)
+    {
+        if (character == null)
+            return false;
+
+        if (character.IsPinningOpponent())
+        {
+            return action == GrappleActionType.DamageOpponent
+                || action == GrappleActionType.UseOpponentWeapon
+                || action == GrappleActionType.MoveHalfSpeed
+                || action == GrappleActionType.DisarmSmallObject
+                || action == GrappleActionType.ReleasePinnedOpponent;
+        }
+
+        if (character.IsPinned())
+        {
+            return action == GrappleActionType.OpposedGrappleEscape
+                || action == GrappleActionType.EscapeArtist;
+        }
+
+        return true;
+    }
+
+    public List<GrappleActionType> GetAvailableGrappleActions(CharacterController character)
+    {
+        var actions = new List<GrappleActionType>();
+        if (character == null)
+            return actions;
+
+        if (character.IsPinningOpponent())
+        {
+            actions.Add(GrappleActionType.DamageOpponent);
+            actions.Add(GrappleActionType.UseOpponentWeapon);
+            actions.Add(GrappleActionType.MoveHalfSpeed);
+            actions.Add(GrappleActionType.DisarmSmallObject);
+            actions.Add(GrappleActionType.ReleasePinnedOpponent);
+            return actions;
+        }
+
+        if (character.IsPinned())
+        {
+            actions.Add(GrappleActionType.OpposedGrappleEscape);
+            actions.Add(GrappleActionType.EscapeArtist);
+            return actions;
+        }
+
+        actions.Add(GrappleActionType.DamageOpponent);
+        actions.Add(GrappleActionType.AttackWithLightWeapon);
+        actions.Add(GrappleActionType.AttackUnarmed);
+        actions.Add(GrappleActionType.PinOpponent);
+        actions.Add(GrappleActionType.BreakPin);
+        actions.Add(GrappleActionType.MoveHalfSpeed);
+        actions.Add(GrappleActionType.UseOpponentWeapon);
+        actions.Add(GrappleActionType.OpposedGrappleEscape);
+        actions.Add(GrappleActionType.EscapeArtist);
+        actions.Add(GrappleActionType.DrawLightWeapon);
+        actions.Add(GrappleActionType.RetrieveSpellComponent);
+        actions.Add(GrappleActionType.ReleasePinnedOpponent);
+        return actions;
+    }
+
     private bool TryHandleDirectGrappleAction(GrappleActionType actionType)
     {
         CharacterController pc = ActivePC;
@@ -4500,16 +4561,16 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        if (!pc.IsGrappling() || !pc.TryGetGrappleState(out _, out _, out bool isPinned, out _))
+        if (!pc.IsGrappling() || !pc.TryGetGrappleState(out _, out _, out _, out _))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is not currently in a valid grapple state.");
             ShowActionChoices();
             return false;
         }
 
-        if (isPinned && actionType != GrappleActionType.EscapeArtist && actionType != GrappleActionType.OpposedGrappleEscape && actionType != GrappleActionType.BreakPin)
+        if (!CanUseGrappleAction(pc, actionType))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is pinned and can only attempt grapple escape actions.");
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use {actionType} in the current pin state.");
             ShowActionChoices();
             return false;
         }
@@ -4546,6 +4607,7 @@ public class GameManager : MonoBehaviour
     public void OnGrappleEscapeCheckButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.OpposedGrappleEscape);
     public void OnGrappleMoveButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.MoveHalfSpeed);
     public void OnGrappleUseOpponentWeaponButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.UseOpponentWeapon);
+    public void OnGrappleDisarmSmallObjectButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.DisarmSmallObject);
     public void OnGrappleReleasePinButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.ReleasePinnedOpponent);
 
     public void OnOverrunButtonPressed()
@@ -7736,8 +7798,7 @@ public class GameManager : MonoBehaviour
             return false;
 
         return actionType == GrappleActionType.EscapeArtist
-            || actionType == GrappleActionType.OpposedGrappleEscape
-            || actionType == GrappleActionType.ReleasePinnedOpponent;
+            || actionType == GrappleActionType.OpposedGrappleEscape;
     }
 
     private bool TryOfferFreeAdjacentMovementAfterGrappleEnds(CharacterController actor, GrappleActionType actionType, SpecialAttackResult result)
@@ -9815,29 +9876,16 @@ public class GameManager : MonoBehaviour
         {
             options.Add((GrappleActionType.EscapeArtist, $"Escape Artist check (d20 + Escape Artist) vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})", true, string.Empty));
             options.Add((GrappleActionType.OpposedGrappleEscape, $"Break grapple (opposed grapple check vs {opponent.Stats.CharacterName})", true, string.Empty));
-            options.Add((GrappleActionType.BreakPin, $"Break pin (opposed grapple check vs {opponent.Stats.CharacterName})", true, string.Empty));
         }
         else
         {
             List<DisarmableHeldItemOption> opponentLightWeaponOptions = opponent.GetEquippedLightHandWeaponOptions();
             bool hasOpponentLightWeapon = opponentLightWeaponOptions != null && opponentLightWeaponOptions.Count > 0;
 
-            bool CanWhilePinning(GrappleActionType actionType, out string blockedMessage)
+            void AddOption(GrappleActionType actionType, string label, bool requiresStandardAction = true)
             {
-                blockedMessage = string.Empty;
-                if (!isPinning)
-                    return true;
-
-                if (!actor.IsGrappleActionBlockedWhilePinning(actionType, out blockedMessage))
-                    return true;
-
-                return false;
-            }
-
-            void AddOption(GrappleActionType actionType, string label)
-            {
-                bool enabled = CanWhilePinning(actionType, out string blockedMessage);
-                string disabledReason = blockedMessage;
+                bool enabled = CanUseGrappleAction(actor, actionType);
+                string disabledReason = enabled ? string.Empty : "Action is not allowed in the current pin state.";
 
                 if (enabled)
                 {
@@ -9847,7 +9895,7 @@ public class GameManager : MonoBehaviour
                         if (!enabled)
                             disabledReason = "No iterative grapple attacks remaining.";
                     }
-                    else if (actionType != GrappleActionType.ReleasePinnedOpponent)
+                    else if (requiresStandardAction)
                     {
                         enabled = actor.Actions != null && actor.Actions.HasStandardAction;
                         if (!enabled)
@@ -9855,89 +9903,82 @@ public class GameManager : MonoBehaviour
                     }
                 }
 
-                string displayLabel = enabled
-                    ? label
-                    : $"{label} (Unavailable)";
+                string displayLabel = enabled ? label : $"{label} (Unavailable)";
                 options.Add((actionType, displayLabel, enabled, disabledReason));
             }
 
-            AddOption(GrappleActionType.DamageOpponent, "Deal grapple damage (opposed check + unarmed strike damage; choose lethal/nonlethal)");
-
-            bool actorHasMainHandLightWeapon = actor.CanAttackWithLightWeaponWhileGrappling(out ItemData actorMainHandLightWeapon, out string actorLightWeaponReason);
-            string actorLightWeaponLabel = actorHasMainHandLightWeapon
-                ? $"Attack with Light Weapon: {actorMainHandLightWeapon.Name} (-4 attack roll, no grapple check)"
-                : $"Attack with Light Weapon (Unavailable: {actorLightWeaponReason})";
-            bool actorLightWeaponEnabled = actorHasMainHandLightWeapon && actor.CanUseIterativeGrappleAttackAction();
-            string actorLightWeaponDisabledMessage = actorHasMainHandLightWeapon
-                ? (actor.CanUseIterativeGrappleAttackAction() ? string.Empty : "No iterative grapple attacks remaining.")
-                : actorLightWeaponReason;
-
-            if (isPinning && actor.IsGrappleActionBlockedWhilePinning(GrappleActionType.AttackWithLightWeapon, out string pinningBlockForLightWeaponAttack))
+            if (isPinning)
             {
-                actorLightWeaponEnabled = false;
-                actorLightWeaponDisabledMessage = pinningBlockForLightWeaponAttack;
-                actorLightWeaponLabel = $"{actorLightWeaponLabel} (Cannot do while pinning)";
+                AddOption(GrappleActionType.DamageOpponent, $"Damage {opponent.Stats.CharacterName} (opposed grapple check)");
+
+                string useWeaponLabel = hasOpponentLightWeapon
+                    ? $"Use {opponent.Stats.CharacterName}'s Weapon"
+                    : $"Use Opponent Weapon (Unavailable: {opponent.Stats.CharacterName} has no equipped light weapon)";
+                bool canUseOpponentWeapon = hasOpponentLightWeapon;
+                if (!canUseOpponentWeapon)
+                {
+                    options.Add((
+                        GrappleActionType.UseOpponentWeapon,
+                        useWeaponLabel,
+                        false,
+                        $"{opponent.Stats.CharacterName} has no equipped light weapon."));
+                }
+                else
+                {
+                    AddOption(GrappleActionType.UseOpponentWeapon, useWeaponLabel);
+                }
+
+                AddOption(GrappleActionType.MoveHalfSpeed, $"Move (dragging {opponent.Stats.CharacterName})");
+                AddOption(GrappleActionType.DisarmSmallObject, $"Disarm Small Object from {opponent.Stats.CharacterName} (stub)");
+
+                bool canReleasePinnedOpponent = opponentPinned;
+                options.Add((
+                    GrappleActionType.ReleasePinnedOpponent,
+                    canReleasePinnedOpponent
+                        ? $"Release {opponent.Stats.CharacterName} from pin (remain grappling)"
+                        : "Release Pinned Opponent (No pinned opponent)",
+                    canReleasePinnedOpponent,
+                    canReleasePinnedOpponent ? string.Empty : "No pinned opponent to release."));
             }
-
-            options.Add((GrappleActionType.AttackWithLightWeapon, actorLightWeaponLabel, actorLightWeaponEnabled, actorLightWeaponDisabledMessage));
-
-            bool actorCanAttackUnarmed = actor.CanAttackUnarmedWhileGrappling(out string actorUnarmedReason);
-            string actorUnarmedLabel = actorCanAttackUnarmed
-                ? "Attack Unarmed (-4 attack roll, no grapple check)"
-                : $"Attack Unarmed (Unavailable: {actorUnarmedReason})";
-            bool actorUnarmedEnabled = actorCanAttackUnarmed && actor.CanUseIterativeGrappleAttackAction();
-            string actorUnarmedDisabledMessage = actorCanAttackUnarmed
-                ? (actor.CanUseIterativeGrappleAttackAction() ? string.Empty : "No iterative grapple attacks remaining.")
-                : actorUnarmedReason;
-
-            if (isPinning && actor.IsGrappleActionBlockedWhilePinning(GrappleActionType.AttackUnarmed, out string pinningBlockForUnarmedAttack))
+            else
             {
-                actorUnarmedEnabled = false;
-                actorUnarmedDisabledMessage = pinningBlockForUnarmedAttack;
-                actorUnarmedLabel = $"{actorUnarmedLabel} (Cannot do while pinning)";
+                AddOption(GrappleActionType.DamageOpponent, "Deal grapple damage (opposed check + unarmed strike damage; choose lethal/nonlethal)");
+
+                bool actorHasMainHandLightWeapon = actor.CanAttackWithLightWeaponWhileGrappling(out ItemData actorMainHandLightWeapon, out string actorLightWeaponReason);
+                options.Add((
+                    GrappleActionType.AttackWithLightWeapon,
+                    actorHasMainHandLightWeapon
+                        ? $"Attack with Light Weapon: {actorMainHandLightWeapon.Name} (-4 attack roll, no grapple check)"
+                        : $"Attack with Light Weapon (Unavailable: {actorLightWeaponReason})",
+                    actorHasMainHandLightWeapon && actor.CanUseIterativeGrappleAttackAction(),
+                    actorHasMainHandLightWeapon ? string.Empty : actorLightWeaponReason));
+
+                bool actorCanAttackUnarmed = actor.CanAttackUnarmedWhileGrappling(out string actorUnarmedReason);
+                options.Add((
+                    GrappleActionType.AttackUnarmed,
+                    actorCanAttackUnarmed
+                        ? "Attack Unarmed (-4 attack roll, no grapple check)"
+                        : $"Attack Unarmed (Unavailable: {actorUnarmedReason})",
+                    actorCanAttackUnarmed && actor.CanUseIterativeGrappleAttackAction(),
+                    actorCanAttackUnarmed ? string.Empty : actorUnarmedReason));
+
+                string useWeaponLabel = hasOpponentLightWeapon
+                    ? "Use Opponent's Weapon (opposed grapple check, then immediate attack at -4; choose weapon hand)"
+                    : $"Use Opponent's Weapon (Unavailable: {opponent.Stats.CharacterName} has no equipped light weapon)";
+                options.Add((
+                    GrappleActionType.UseOpponentWeapon,
+                    useWeaponLabel,
+                    hasOpponentLightWeapon && actor.CanUseIterativeGrappleAttackAction(),
+                    hasOpponentLightWeapon ? string.Empty : $"{opponent.Stats.CharacterName} has no equipped light weapon."));
+
+                AddOption(GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)");
+                AddOption(GrappleActionType.BreakPin, $"Break pin (opposed grapple check vs {opponent.Stats.CharacterName})");
+                AddOption(GrappleActionType.DrawLightWeapon, "Draw a Light Weapon (Not yet implemented)");
+                AddOption(GrappleActionType.RetrieveSpellComponent, "Retrieve a Spell Component (Not yet implemented)");
+                AddOption(GrappleActionType.MoveHalfSpeed, "Move while grappling (standard action, beat opposed grapple check(s), then move at half speed)");
+                AddOption(GrappleActionType.OpposedGrappleEscape, $"Break grapple (opposed grapple check vs {opponent.Stats.CharacterName})");
+                AddOption(GrappleActionType.EscapeArtist, $"Escape Artist check (d20 + Escape Artist) vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})");
             }
-
-            options.Add((GrappleActionType.AttackUnarmed, actorUnarmedLabel, actorUnarmedEnabled, actorUnarmedDisabledMessage));
-
-            string useWeaponLabel = hasOpponentLightWeapon
-                ? "Use Opponent's Weapon (opposed grapple check, then immediate attack at -4; choose weapon hand)"
-                : $"Use Opponent's Weapon (Unavailable: {opponent.Stats.CharacterName} has no equipped light weapon)";
-            bool useWeaponEnabled = hasOpponentLightWeapon && actor.CanUseIterativeGrappleAttackAction();
-            string useWeaponDisabledMessage = hasOpponentLightWeapon
-                ? (actor.CanUseIterativeGrappleAttackAction() ? string.Empty : "No iterative grapple attacks remaining.")
-                : $"{opponent.Stats.CharacterName} has no equipped light weapon.";
-
-            if (isPinning && actor.IsGrappleActionBlockedWhilePinning(GrappleActionType.UseOpponentWeapon, out string pinningBlockForUseWeapon))
-            {
-                useWeaponEnabled = false;
-                useWeaponDisabledMessage = pinningBlockForUseWeapon;
-                useWeaponLabel = $"{useWeaponLabel} (Cannot do while pinning)";
-            }
-
-            options.Add((GrappleActionType.UseOpponentWeapon, useWeaponLabel, useWeaponEnabled, useWeaponDisabledMessage));
-
-            AddOption(GrappleActionType.PinOpponent,
-                opponentPinned
-                    ? $"Maintain pin on {opponent.Stats.CharacterName} (opposed grapple check)"
-                    : $"Pin {opponent.Stats.CharacterName} (opposed grapple check)");
-
-            bool canReleasePinnedOpponent = isPinning && opponentPinned;
-            string releaseLabel = canReleasePinnedOpponent
-                ? "Release Pinned Opponent (Free action, ends grapple)"
-                : "Release Pinned Opponent (Free action, ends grapple)";
-            if (!canReleasePinnedOpponent)
-                releaseLabel += isPinning ? " (No pinned opponent to release)" : " (Cannot do while not pinning)";
-            options.Add((
-                GrappleActionType.ReleasePinnedOpponent,
-                releaseLabel,
-                canReleasePinnedOpponent,
-                canReleasePinnedOpponent ? string.Empty : "No pinned opponent to release."));
-            AddOption(GrappleActionType.EscapeArtist, $"Escape Artist check (d20 + Escape Artist) vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})");
-            AddOption(GrappleActionType.OpposedGrappleEscape, $"Break grapple (opposed grapple check vs {opponent.Stats.CharacterName})");
-            AddOption(GrappleActionType.BreakPin, $"Break pin (opposed grapple check vs {opponent.Stats.CharacterName})");
-            AddOption(GrappleActionType.DrawLightWeapon, "Draw a Light Weapon (Not yet implemented)");
-            AddOption(GrappleActionType.RetrieveSpellComponent, "Retrieve a Spell Component (Not yet implemented)");
-            AddOption(GrappleActionType.MoveHalfSpeed, "Move while grappling (standard action, beat opposed grapple check(s), then move at half speed)");
         }
 
         List<string> optionLabels = new List<string>(options.Count);
@@ -10137,6 +10178,13 @@ public class GameManager : MonoBehaviour
     {
         if (actor == null || actor.Stats == null)
         {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!CanUseGrappleAction(actor, actionType))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot use {actionType} in the current pin state.");
             ShowActionChoices();
             return;
         }
@@ -11755,23 +11803,25 @@ public class GameManager : MonoBehaviour
         bool isPinning = npc.IsPinningOpponent();
         if (isPinning)
         {
-            if (opponentPinned && legalActions.Contains(GrappleActionType.PinOpponent) && UnityEngine.Random.value < 0.35f)
-                return GrappleActionType.PinOpponent; // maintain pin
+            CharacterController pinnedTarget = npc.GetPinnedOpponent();
 
-            if (legalActions.Contains(GrappleActionType.AttackWithLightWeapon) && UnityEngine.Random.value < 0.45f)
-                return GrappleActionType.AttackWithLightWeapon;
+            if (pinnedTarget != null && pinnedTarget.Stats != null && pinnedTarget.Stats.CurrentHP > 0 && legalActions.Contains(GrappleActionType.DamageOpponent))
+                return GrappleActionType.DamageOpponent;
 
-            if (legalActions.Contains(GrappleActionType.AttackUnarmed) && UnityEngine.Random.value < 0.25f)
-                return GrappleActionType.AttackUnarmed;
+            if (legalActions.Contains(GrappleActionType.UseOpponentWeapon))
+                return GrappleActionType.UseOpponentWeapon;
+
+            if (legalActions.Contains(GrappleActionType.DisarmSmallObject) && UnityEngine.Random.value < 0.5f)
+                return GrappleActionType.DisarmSmallObject;
+
+            if (legalActions.Contains(GrappleActionType.MoveHalfSpeed) && UnityEngine.Random.value < 0.2f)
+                return GrappleActionType.MoveHalfSpeed;
+
+            if (legalActions.Contains(GrappleActionType.ReleasePinnedOpponent) && UnityEngine.Random.value < 0.05f)
+                return GrappleActionType.ReleasePinnedOpponent;
 
             if (legalActions.Contains(GrappleActionType.DamageOpponent))
                 return GrappleActionType.DamageOpponent;
-
-            if (legalActions.Contains(GrappleActionType.UseOpponentWeapon) && UnityEngine.Random.value < 0.35f)
-                return GrappleActionType.UseOpponentWeapon;
-
-            if (opponentPinned && legalActions.Contains(GrappleActionType.ReleasePinnedOpponent) && UnityEngine.Random.value < 0.10f)
-                return GrappleActionType.ReleasePinnedOpponent;
         }
         else
         {
@@ -11830,6 +11880,7 @@ public class GameManager : MonoBehaviour
                 case GrappleActionType.PinOpponent:
                 case GrappleActionType.MoveHalfSpeed:
                 case GrappleActionType.UseOpponentWeapon:
+                case GrappleActionType.DisarmSmallObject:
                     if (actorPinned)
                         return;
                     break;
@@ -11863,9 +11914,18 @@ public class GameManager : MonoBehaviour
 
         if (actorPinned)
         {
-            TryAdd(GrappleActionType.BreakPin);
             TryAdd(GrappleActionType.OpposedGrappleEscape);
             TryAdd(GrappleActionType.EscapeArtist);
+            return actions;
+        }
+
+        if (npc.IsPinningOpponent())
+        {
+            TryAdd(GrappleActionType.DamageOpponent);
+            TryAdd(GrappleActionType.UseOpponentWeapon);
+            TryAdd(GrappleActionType.MoveHalfSpeed);
+            TryAdd(GrappleActionType.DisarmSmallObject);
+            TryAdd(GrappleActionType.ReleasePinnedOpponent, requiresStandardAction: false);
             return actions;
         }
 
@@ -11875,6 +11935,7 @@ public class GameManager : MonoBehaviour
         TryAdd(GrappleActionType.PinOpponent);
         TryAdd(GrappleActionType.UseOpponentWeapon);
         TryAdd(GrappleActionType.MoveHalfSpeed);
+        TryAdd(GrappleActionType.BreakPin);
         TryAdd(GrappleActionType.OpposedGrappleEscape);
         TryAdd(GrappleActionType.EscapeArtist);
         TryAdd(GrappleActionType.ReleasePinnedOpponent, requiresStandardAction: false);

@@ -775,6 +775,8 @@ public class SceneBootstrap : MonoBehaviour
             "Grapple: Move", new Color(0.28f, 0.42f, 0.6f));
         combatUI.GrappleUseOpponentWeaponButton = CreateGridButton(btnGrid.transform, "GrappleUseWeaponBtn",
             "Grapple: Use Opp Weapon", new Color(0.58f, 0.3f, 0.32f));
+        combatUI.GrappleDisarmSmallObjectButton = CreateGridButton(btnGrid.transform, "GrappleDisarmSmallObjectBtn",
+            "Grapple: Disarm Small Object", new Color(0.52f, 0.28f, 0.2f));
         combatUI.GrappleReleasePinnedButton = CreateGridButton(btnGrid.transform, "GrappleReleasePinBtn",
             "Grapple: Release Pin", new Color(0.4f, 0.44f, 0.2f));
         combatUI.AidAnotherButton = CreateGridButton(btnGrid.transform, "AidAnotherBtn",
@@ -1069,6 +1071,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.GrappleMoveButton.onClick.AddListener(() => GameManager.Instance.OnGrappleMoveButtonPressed());
         if (ui.GrappleUseOpponentWeaponButton != null)
             ui.GrappleUseOpponentWeaponButton.onClick.AddListener(() => GameManager.Instance.OnGrappleUseOpponentWeaponButtonPressed());
+        if (ui.GrappleDisarmSmallObjectButton != null)
+            ui.GrappleDisarmSmallObjectButton.onClick.AddListener(() => GameManager.Instance.OnGrappleDisarmSmallObjectButtonPressed());
         if (ui.GrappleReleasePinnedButton != null)
             ui.GrappleReleasePinnedButton.onClick.AddListener(() => GameManager.Instance.OnGrappleReleasePinButtonPressed());
         if (ui.AidAnotherButton != null)
