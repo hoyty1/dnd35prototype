@@ -695,6 +695,7 @@ public class CombatUI : MonoBehaviour
 
         bool hasGrappleState = pc.TryGetGrappleState(out CharacterController grappleOpponent, out _, out bool actorPinnedInGrappleState, out bool opponentPinnedByActor);
         bool isPinningOpponent = pc.IsPinningOpponent();
+        bool hasIterativeGrappleAttackInSequence = pc.HasRemainingIterativeGrappleAttacksInSequence();
 
         bool CanUseWhilePinning(GrappleActionType actionType)
         {
@@ -804,7 +805,9 @@ public class CombatUI : MonoBehaviour
                 && pc.Stats != null
                 && pc.Stats.HasFeat("Improved Feint")
                 && (actions.HasMoveAction || actions.CanConvertStandardToMove);
-            bool canSpecialAttack = isPinned ? actions.HasStandardAction : (actions.HasStandardAction || canImprovedFeintMove);
+            bool canSpecialAttack = isPinned
+                ? actions.HasStandardAction
+                : (actions.HasStandardAction || canImprovedFeintMove || hasIterativeGrappleAttackInSequence);
 
             SpecialAttackButton.gameObject.SetActive(true);
             SpecialAttackButton.interactable = canSpecialAttack;
@@ -815,6 +818,12 @@ public class CombatUI : MonoBehaviour
                     spLabel.text = actions.HasStandardAction ? "Grapple Escape Actions (Standard)" : "Grapple Escape Actions (Used)";
                 else if (actions.HasStandardAction)
                     spLabel.text = canImprovedFeintMove ? "Special Attack (Std / Feint Move)" : "Special Attack (Standard)";
+                else if (hasIterativeGrappleAttackInSequence)
+                {
+                    int nextBab = pc.GetCurrentGrappleAttackBonus();
+                    int remaining = pc.GetRemainingGrappleAttackActions();
+                    spLabel.text = $"Special Attack (Grapple Iterative {CharacterStats.FormatMod(nextBab)}, {remaining} left)";
+                }
                 else if (canImprovedFeintMove)
                     spLabel.text = "Special Attack (Feint Move)";
                 else
@@ -1172,12 +1181,12 @@ public class CombatUI : MonoBehaviour
 
         if (GrappleEscapeCheckButton != null)
         {
-            bool canUse = isGrappling && hasIterativeGrappleAttack;
+            bool canUse = isGrappling && actions.HasStandardAction;
             GrappleEscapeCheckButton.gameObject.SetActive(isGrappling && !showOnlyPinnerActions);
             GrappleEscapeCheckButton.interactable = canUse;
             Text label = GrappleEscapeCheckButton.GetComponentInChildren<Text>();
             if (label != null)
-                label.text = canUse ? $"Grapple: Escape Check ({iterativeTag})" : "Grapple: Escape Check (No attacks left)";
+                label.text = canUse ? "Grapple: Escape Check (Std)" : "Grapple: Escape Check (Used)";
         }
 
         if (GrappleMoveButton != null)

@@ -209,10 +209,8 @@ public class CharacterController : MonoBehaviour
             case GrappleActionType.DamageOpponent:
             case GrappleActionType.AttackWithLightWeapon:
             case GrappleActionType.AttackUnarmed:
-            case GrappleActionType.OpposedGrappleEscape:
             case GrappleActionType.PinOpponent:
             case GrappleActionType.UseOpponentWeapon:
-            case GrappleActionType.BreakPin:
                 return true;
             default:
                 return false;
@@ -279,6 +277,16 @@ public class CharacterController : MonoBehaviour
 
         List<int> bonuses = GetAttackBonuses();
         return bonuses.Count > 0 ? bonuses[0] : 0;
+    }
+
+    public bool HasActiveIterativeGrappleAttackSequence()
+    {
+        return _grappleAttackSequenceStarted;
+    }
+
+    public bool HasRemainingIterativeGrappleAttacksInSequence()
+    {
+        return _grappleAttackSequenceStarted && _grappleAttacksUsedThisTurn < _grappleAttackBudgetThisTurn;
     }
 
     public bool TryConsumeIterativeGrappleAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)

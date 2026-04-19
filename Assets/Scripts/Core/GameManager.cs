@@ -2379,7 +2379,13 @@ public class GameManager : MonoBehaviour
 
         if (!pc.Actions.HasAnyActionLeft)
         {
-            if (IsHoldingTouchCharge(pc))
+            if (pc.HasRemainingIterativeGrappleAttacksInSequence())
+            {
+                int attacksRemaining = pc.GetRemainingGrappleAttackActions();
+                int nextBab = pc.GetCurrentGrappleAttackBonus();
+                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Iterative attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use grapple-compatible attack actions or End Turn.");
+            }
+            else if (IsHoldingTouchCharge(pc))
             {
                 string heldSpellName = GetHeldTouchSpellName(pc);
                 CombatUI.SetTurnIndicator($"{pcName}'s Turn - No main actions left. You may still discharge {heldSpellName} (free action) or End Turn.");
@@ -4449,7 +4455,8 @@ public class GameManager : MonoBehaviour
         if (actor == null)
             return false;
 
-        return actor.Actions.HasStandardAction || CanUseImprovedFeintAsMove(actor);
+        bool hasIterativeGrappleAttackInSequence = actor.HasRemainingIterativeGrappleAttacksInSequence();
+        return actor.Actions.HasStandardAction || CanUseImprovedFeintAsMove(actor) || hasIterativeGrappleAttackInSequence;
     }
 
     private bool TryConsumeFeintAction(CharacterController attacker, out string actionLabel)
@@ -4658,13 +4665,17 @@ public class GameManager : MonoBehaviour
 
         bool hasAction = type == SpecialAttackType.Feint
             ? (pc.Actions.HasStandardAction || CanUseImprovedFeintAsMove(pc))
-            : pc.Actions.HasStandardAction;
+            : (type == SpecialAttackType.Grapple
+                ? (pc.Actions.HasStandardAction || pc.HasRemainingIterativeGrappleAttacksInSequence())
+                : pc.Actions.HasStandardAction);
 
         if (!hasAction)
         {
             string reason = type == SpecialAttackType.Feint
                 ? "Need a standard action, or a move action with Improved Feint"
-                : "Need a standard action";
+                : (type == SpecialAttackType.Grapple
+                    ? "Need a standard action or remaining iterative grapple attack"
+                    : "Need a standard action");
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use {type}: {reason}.");
             ShowActionChoices();
             return;
@@ -9937,8 +9948,17 @@ public class GameManager : MonoBehaviour
 
         if (isPinned)
         {
-            options.Add((GrappleActionType.EscapeArtist, $"Escape Artist check (d20 + Escape Artist) vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})", true, string.Empty));
-            options.Add((GrappleActionType.OpposedGrappleEscape, $"Break grapple (opposed grapple check vs {opponent.Stats.CharacterName})", true, string.Empty));
+            bool hasStandardAction = actor.Actions != null && actor.Actions.HasStandardAction;
+            options.Add((
+                GrappleActionType.EscapeArtist,
+                $"Escape Artist check (Std): d20 + Escape Artist vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})",
+                hasStandardAction,
+                hasStandardAction ? string.Empty : "Standard action already spent."));
+            options.Add((
+                GrappleActionType.OpposedGrappleEscape,
+                $"Break grapple (Std opposed grapple check vs {opponent.Stats.CharacterName})",
+                hasStandardAction,
+                hasStandardAction ? string.Empty : "Standard action already spent."));
         }
         else
         {
@@ -10623,17 +10643,18 @@ public class GameManager : MonoBehaviour
         }
         else if (type == SpecialAttackType.Grapple)
         {
-            // Grapple initiation is always a standard action in this flow.
-            // Do not consume a full-round iterative grapple attack budget here,
-            // otherwise an AoO interruption can incorrectly end the turn immediately.
-            if (!attacker.CommitStandardAction())
+            if (!attacker.TryConsumeIterativeGrappleAttackAction(out int grappleAttackBonusUsed, out int grappleAttacksRemaining, out string grappleConsumeReason))
             {
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot use {type}: standard action already spent.");
+                string reason = string.IsNullOrWhiteSpace(grappleConsumeReason)
+                    ? "no eligible attack remaining"
+                    : grappleConsumeReason;
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot initiate grapple: {reason}.");
                 ShowActionChoices();
                 return;
             }
 
-            actionLabel = "standard action";
+            grappleAttackBonusOverride = grappleAttackBonusUsed;
+            actionLabel = $"attack BAB {CharacterStats.FormatMod(grappleAttackBonusUsed)} ({grappleAttacksRemaining} remaining)";
         }
         else
         {
@@ -10684,6 +10705,19 @@ public class GameManager : MonoBehaviour
 
         SpecialAttackResult result = attacker.ExecuteSpecialAttack(type, target, disarmTargetSlot, grappleAttackBonusOverride);
         CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}] ({actionLabel}): {result.Log}");
+        if (type == SpecialAttackType.Grapple)
+        {
+            int attacksRemaining = attacker.GetRemainingGrappleAttackActions();
+            if (attacksRemaining > 0)
+            {
+                int nextBab = attacker.GetCurrentGrappleAttackBonus();
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} iterative attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
+            }
+            else
+            {
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no iterative attacks remaining this turn.");
+            }
+        }
 
         if (result.Success)
         {
@@ -11692,7 +11726,7 @@ public class GameManager : MonoBehaviour
     {
         if (character == null) return true;
 
-        bool hasRemainingIterativeGrappleAttacks = character.IsGrappling() && character.CanUseIterativeGrappleAttackAction();
+        bool hasRemainingIterativeGrappleAttacks = character.HasRemainingIterativeGrappleAttacksInSequence();
         if (hasRemainingIterativeGrappleAttacks)
             return false;
 
