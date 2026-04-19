@@ -7747,21 +7747,63 @@ public class GameManager : MonoBehaviour
         if (actor == null || actor.Stats == null)
             return;
 
-        List<SquareCell> candidateCells = Grid.GetCellsInRange(actor.GridPosition, _grappleMoveMaxRangeSquares);
-        foreach (SquareCell candidate in candidateCells)
+        List<CharacterController> temporarilyClearedOpponents = TemporarilyClearOccupancy(_grappleMoveOpponents);
+        try
         {
-            if (candidate == null || candidate.Coords == actor.GridPosition)
-                continue;
+            List<SquareCell> candidateCells = Grid.GetCellsInRange(actor.GridPosition, _grappleMoveMaxRangeSquares);
+            foreach (SquareCell candidate in candidateCells)
+            {
+                if (candidate == null || candidate.Coords == actor.GridPosition)
+                    continue;
 
-            if (!TryBuildGrappleMovePath(actor, candidate.Coords, out List<Vector2Int> path))
-                continue;
+                if (!TryBuildGrappleMovePath(actor, candidate.Coords, out List<Vector2Int> path))
+                    continue;
 
-            candidate.SetHighlight(HighlightType.Move);
-            _highlightedCells.Add(candidate);
-            _grappleMovePathsByDestination[candidate.Coords] = path;
+                candidate.SetHighlight(HighlightType.Move);
+                _highlightedCells.Add(candidate);
+                _grappleMovePathsByDestination[candidate.Coords] = path;
+            }
+        }
+        finally
+        {
+            RestoreOccupancy(temporarilyClearedOpponents);
         }
 
         HighlightCharacterFootprint(actor, HighlightType.Selected);
+    }
+
+    private List<CharacterController> TemporarilyClearOccupancy(List<CharacterController> characters)
+    {
+        var cleared = new List<CharacterController>();
+        if (Grid == null || characters == null)
+            return cleared;
+
+        for (int i = 0; i < characters.Count; i++)
+        {
+            CharacterController character = characters[i];
+            if (character == null || character.Stats == null || character.Stats.IsDead)
+                continue;
+
+            Grid.ClearCreatureOccupancy(character);
+            cleared.Add(character);
+        }
+
+        return cleared;
+    }
+
+    private void RestoreOccupancy(List<CharacterController> characters)
+    {
+        if (Grid == null || characters == null)
+            return;
+
+        for (int i = 0; i < characters.Count; i++)
+        {
+            CharacterController character = characters[i];
+            if (character == null || character.Stats == null || character.Stats.IsDead)
+                continue;
+
+            Grid.SetCreatureOccupancy(character, character.GridPosition, character.GetVisualSquaresOccupied());
+        }
     }
 
     private bool TryBuildGrappleMovePath(CharacterController actor, Vector2Int destination, out List<Vector2Int> path)
@@ -7795,12 +7837,7 @@ public class GameManager : MonoBehaviour
             return false;
 
         Vector2Int delta = actorDestination - actor.GridPosition;
-        var movingParticipants = new HashSet<CharacterController> { actor };
-
-        var finalPositions = new Dictionary<CharacterController, Vector2Int>
-        {
-            [actor] = actorDestination
-        };
+        var preferredOpponentDestinations = new Dictionary<CharacterController, Vector2Int>();
 
         for (int i = 0; i < _grappleMoveOpponents.Count; i++)
         {
@@ -7808,42 +7845,129 @@ public class GameManager : MonoBehaviour
             if (opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
                 continue;
 
-            movingParticipants.Add(opponent);
-            finalPositions[opponent] = opponent.GridPosition + delta;
+            preferredOpponentDestinations[opponent] = opponent.GridPosition + delta;
+        }
+
+        return TryResolveGrappleGroupDestinations(actor, actorDestination, preferredOpponentDestinations, out _);
+    }
+
+    private bool TryResolveGrappleGroupDestinations(
+        CharacterController actor,
+        Vector2Int actorDestination,
+        Dictionary<CharacterController, Vector2Int> preferredOpponentDestinations,
+        out Dictionary<CharacterController, Vector2Int> resolvedOpponentDestinations)
+    {
+        resolvedOpponentDestinations = new Dictionary<CharacterController, Vector2Int>();
+        if (actor == null || actor.Stats == null || Grid == null)
+            return false;
+
+        var movingParticipants = new HashSet<CharacterController> { actor };
+        if (preferredOpponentDestinations != null)
+        {
+            foreach (CharacterController opponent in preferredOpponentDestinations.Keys)
+            {
+                if (opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
+                    continue;
+                movingParticipants.Add(opponent);
+            }
         }
 
         var claimedSquares = new Dictionary<Vector2Int, CharacterController>();
+        if (!TryClaimDestinationSquares(actor, actorDestination, movingParticipants, claimedSquares))
+            return false;
 
-        foreach (KeyValuePair<CharacterController, Vector2Int> kvp in finalPositions)
+        if (preferredOpponentDestinations == null)
+            return true;
+
+        var neighborCandidates = new List<Vector2Int>(SquareGridUtils.GetNeighbors(actorDestination));
+
+        foreach (KeyValuePair<CharacterController, Vector2Int> kvp in preferredOpponentDestinations)
         {
-            CharacterController participant = kvp.Key;
-            Vector2Int participantDestination = kvp.Value;
-            int sizeSquares = participant.GetVisualSquaresOccupied();
+            CharacterController opponent = kvp.Key;
+            if (opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
+                continue;
 
-            if (!Grid.CanPlaceCreature(participantDestination, sizeSquares, participant, ignoreOtherOccupants: true))
+            Vector2Int preferredDestination = kvp.Value;
+            bool foundPlacement = false;
+
+            if (TryClaimDestinationSquares(opponent, preferredDestination, movingParticipants, claimedSquares))
+            {
+                resolvedOpponentDestinations[opponent] = preferredDestination;
+                continue;
+            }
+
+            int bestIndex = -1;
+            int bestDistance = int.MaxValue;
+            for (int i = 0; i < neighborCandidates.Count; i++)
+            {
+                Vector2Int candidate = neighborCandidates[i];
+                int distance = SquareGridUtils.GetDistance(candidate, preferredDestination);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestIndex = i;
+                }
+            }
+
+            if (bestIndex >= 0 && bestIndex < neighborCandidates.Count)
+            {
+                Vector2Int prioritized = neighborCandidates[bestIndex];
+                neighborCandidates.RemoveAt(bestIndex);
+                neighborCandidates.Insert(0, prioritized);
+            }
+
+            for (int i = 0; i < neighborCandidates.Count; i++)
+            {
+                Vector2Int fallbackDestination = neighborCandidates[i];
+                if (!TryClaimDestinationSquares(opponent, fallbackDestination, movingParticipants, claimedSquares))
+                    continue;
+
+                resolvedOpponentDestinations[opponent] = fallbackDestination;
+                foundPlacement = true;
+                break;
+            }
+
+            if (!foundPlacement)
+                return false;
+        }
+
+        return true;
+    }
+
+    private bool TryClaimDestinationSquares(
+        CharacterController participant,
+        Vector2Int destination,
+        HashSet<CharacterController> movingParticipants,
+        Dictionary<Vector2Int, CharacterController> claimedSquares)
+    {
+        if (participant == null || participant.Stats == null || Grid == null)
+            return false;
+
+        int sizeSquares = participant.GetVisualSquaresOccupied();
+        if (!Grid.CanPlaceCreature(destination, sizeSquares, participant, ignoreOtherOccupants: true))
+            return false;
+
+        List<Vector2Int> occupied = Grid.GetOccupiedSquares(destination, sizeSquares);
+        for (int squareIndex = 0; squareIndex < occupied.Count; squareIndex++)
+        {
+            Vector2Int square = occupied[squareIndex];
+            if (!Grid.IsValidPosition(square))
                 return false;
 
-            List<Vector2Int> occupied = Grid.GetOccupiedSquares(participantDestination, sizeSquares);
-            for (int squareIndex = 0; squareIndex < occupied.Count; squareIndex++)
-            {
-                Vector2Int square = occupied[squareIndex];
-                if (!Grid.IsValidPosition(square))
-                    return false;
+            if (claimedSquares.TryGetValue(square, out CharacterController existingOwner) && existingOwner != participant)
+                return false;
 
-                if (claimedSquares.TryGetValue(square, out CharacterController existingOwner) && existingOwner != participant)
-                    return false;
+            SquareCell cell = Grid.GetCell(square);
+            if (cell == null)
+                return false;
 
-                claimedSquares[square] = participant;
-
-                SquareCell cell = Grid.GetCell(square);
-                if (cell == null)
-                    return false;
-
-                CharacterController occupant = cell.Occupant;
-                if (cell.IsOccupied && occupant != null && !movingParticipants.Contains(occupant))
-                    return false;
-            }
+            CharacterController occupant = cell.Occupant;
+            if (cell.IsOccupied && occupant != null && !movingParticipants.Contains(occupant))
+                return false;
         }
+
+        for (int squareIndex = 0; squareIndex < occupied.Count; squareIndex++)
+            claimedSquares[occupied[squareIndex]] = participant;
 
         return true;
     }
@@ -7877,6 +8001,8 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        Vector2Int destination = selectedPath[selectedPath.Count - 1];
+        CombatUI?.ShowCombatLog($"↔ {actor.Stats.CharacterName} selects grapple move destination ({destination.x},{destination.y}).");
         StartCoroutine(ExecuteGrappleMovement(actor, selectedPath));
     }
 
@@ -7904,38 +8030,84 @@ public class GameManager : MonoBehaviour
             movedOpponents.Add(opponent);
         }
 
+        List<CharacterController> temporarilyClearedOpponents = TemporarilyClearOccupancy(movedOpponents);
+
         yield return StartCoroutine(actor.MoveAlongPath(actorPath, PlayerMoveSecondsPerStep, markAsMoved: true));
 
         Vector2Int movementDelta = actor.GridPosition - actorStart;
+        var draggedMessages = new List<string>();
 
-        if (movementDelta != Vector2Int.zero)
+        if (movementDelta != Vector2Int.zero && movedOpponents.Count > 0)
         {
-            for (int i = 0; i < movedOpponents.Count; i++)
-                Grid.ClearCreatureOccupancy(movedOpponents[i]);
-
+            var preferredOpponentDestinations = new Dictionary<CharacterController, Vector2Int>();
             for (int i = 0; i < movedOpponents.Count; i++)
             {
                 CharacterController opponent = movedOpponents[i];
                 if (!opponentStartPositions.TryGetValue(opponent, out Vector2Int opponentStart))
                     continue;
 
-                Vector2Int opponentDestination = opponentStart + movementDelta;
-                SquareCell destinationCell = Grid.GetCell(opponentDestination);
-                if (destinationCell == null)
+                preferredOpponentDestinations[opponent] = opponentStart + movementDelta;
+            }
+
+            if (TryResolveGrappleGroupDestinations(actor, actor.GridPosition, preferredOpponentDestinations, out Dictionary<CharacterController, Vector2Int> resolvedOpponentDestinations))
+            {
+                var movedSet = new HashSet<CharacterController>();
+                for (int i = 0; i < movedOpponents.Count; i++)
                 {
-                    CombatUI?.ShowCombatLog($"⚠ Grapple drag failed for {opponent.Stats.CharacterName}: invalid destination square.");
-                    continue;
+                    CharacterController opponent = movedOpponents[i];
+                    if (!resolvedOpponentDestinations.TryGetValue(opponent, out Vector2Int opponentDestination))
+                        continue;
+
+                    SquareCell destinationCell = Grid.GetCell(opponentDestination);
+                    if (destinationCell == null)
+                    {
+                        CombatUI?.ShowCombatLog($"⚠ Grapple drag failed for {opponent.Stats.CharacterName}: invalid destination square.");
+                        continue;
+                    }
+
+                    opponent.MoveToCell(destinationCell, markAsMoved: false);
+                    if (opponent.GridPosition == opponentDestination)
+                    {
+                        movedSet.Add(opponent);
+                        draggedMessages.Add($"{opponent.Stats.CharacterName} dragged to ({opponentDestination.x},{opponentDestination.y})");
+                    }
+                    else if (opponentStartPositions.TryGetValue(opponent, out Vector2Int failedStart))
+                    {
+                        Grid.SetCreatureOccupancy(opponent, failedStart, opponent.GetVisualSquaresOccupied());
+                        CombatUI?.ShowCombatLog($"⚠ Grapple drag failed for {opponent.Stats.CharacterName}: destination blocked.");
+                    }
                 }
 
-                opponent.MoveToCell(destinationCell, markAsMoved: false);
+                for (int i = 0; i < movedOpponents.Count; i++)
+                {
+                    CharacterController opponent = movedOpponents[i];
+                    if (movedSet.Contains(opponent))
+                        continue;
+
+                    if (opponentStartPositions.TryGetValue(opponent, out Vector2Int startPosition))
+                        Grid.SetCreatureOccupancy(opponent, startPosition, opponent.GetVisualSquaresOccupied());
+                }
+            }
+            else
+            {
+                for (int i = 0; i < movedOpponents.Count; i++)
+                {
+                    CharacterController opponent = movedOpponents[i];
+                    if (opponentStartPositions.TryGetValue(opponent, out Vector2Int startPosition))
+                        Grid.SetCreatureOccupancy(opponent, startPosition, opponent.GetVisualSquaresOccupied());
+                }
+
+                CombatUI?.ShowCombatLog("⚠ Grapple drag destination became invalid; opponents remain in place.");
             }
         }
+        else
+        {
+            RestoreOccupancy(temporarilyClearedOpponents);
+        }
 
-        string draggedList = movedOpponents.Count > 0
-            ? string.Join(", ", movedOpponents.ConvertAll(o => o.Stats.CharacterName))
-            : "no opponents";
-
-        CombatUI?.ShowCombatLog($"↔ {actor.Stats.CharacterName} moves while grappling from ({actorStart.x},{actorStart.y}) to ({actor.GridPosition.x},{actor.GridPosition.y}), dragging {draggedList}.");
+        CombatUI?.ShowCombatLog($"↔ {actor.Stats.CharacterName} moves while grappling from ({actorStart.x},{actorStart.y}) to ({actor.GridPosition.x},{actor.GridPosition.y}).");
+        for (int i = 0; i < draggedMessages.Count; i++)
+            CombatUI?.ShowCombatLog($"   • {draggedMessages[i]}");
 
         RefreshFlankedConditions();
         UpdateAllStatsUI();
