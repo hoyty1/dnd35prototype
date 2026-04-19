@@ -3554,8 +3554,22 @@ public class CharacterController : MonoBehaviour
                 int dc = 20 + opponent.GetGrappleModifier();
                 bool success = total >= dc;
 
+                bool escapedPinOnly = false;
                 if (success)
-                    ReleaseGrappleState("escaped with Escape Artist");
+                {
+                    if (isPinned)
+                    {
+                        if (TryGetGrappleLink(this, out GrappleLink link))
+                        {
+                            ClearPinnedState(link);
+                            escapedPinOnly = true;
+                        }
+                    }
+                    else
+                    {
+                        ReleaseGrappleState("escaped with Escape Artist");
+                    }
+                }
 
                 return new SpecialAttackResult
                 {
@@ -3565,7 +3579,9 @@ public class CharacterController : MonoBehaviour
                     CheckTotal = total,
                     OpposedTotal = dc,
                     Log = success
-                        ? $"{Stats.CharacterName} slips free of {opponent.Stats.CharacterName}'s hold! Escape Artist ({total}) vs DC {dc}."
+                        ? (escapedPinOnly
+                            ? $"{Stats.CharacterName} slips out of the pin by {opponent.Stats.CharacterName}! Escape Artist ({total}) vs DC {dc}. The grapple continues."
+                            : $"{Stats.CharacterName} slips free of {opponent.Stats.CharacterName}'s hold! Escape Artist ({total}) vs DC {dc}.")
                         : $"{Stats.CharacterName} fails to slip free. Escape Artist ({total}) vs DC {dc}."
                 };
             }
@@ -3582,8 +3598,22 @@ public class CharacterController : MonoBehaviour
                 }
 
                 bool success = myTotal >= oppTotal;
+                bool escapedPinOnly = false;
                 if (success)
-                    ReleaseGrappleState("escaped with grapple check");
+                {
+                    if (isPinned)
+                    {
+                        if (TryGetGrappleLink(this, out GrappleLink link))
+                        {
+                            ClearPinnedState(link);
+                            escapedPinOnly = true;
+                        }
+                    }
+                    else
+                    {
+                        ReleaseGrappleState("escaped with grapple check");
+                    }
+                }
 
                 return new SpecialAttackResult
                 {
@@ -3594,7 +3624,9 @@ public class CharacterController : MonoBehaviour
                     OpposedRoll = oppRoll,
                     OpposedTotal = oppTotal,
                     Log = success
-                        ? $"{Stats.CharacterName} breaks free from {opponent.Stats.CharacterName}! ({myTotal} vs {oppTotal})"
+                        ? (escapedPinOnly
+                            ? $"{Stats.CharacterName} breaks the pin from {opponent.Stats.CharacterName}! ({myTotal} vs {oppTotal}) The grapple continues."
+                            : $"{Stats.CharacterName} breaks free from {opponent.Stats.CharacterName}! ({myTotal} vs {oppTotal})")
                         : $"{Stats.CharacterName} fails to break free from {opponent.Stats.CharacterName}. ({myTotal} vs {oppTotal})"
                 };
             }

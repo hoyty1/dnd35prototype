@@ -43,6 +43,8 @@ public static class GrappleDamageRulesTests
         TestUseOpponentWeaponCanSelectLeftHandLightWeapon();
         TestIsPinningOpponentHelperTracksMaintainer();
         TestPinnerBlockedActionsReturnExpectedMessages();
+        TestEscapeFromPinMaintainsGrapple_EscapeArtist();
+        TestEscapeFromPinMaintainsGrapple_OpposedEscape();
         TestReleasePinnedOpponentEndsEntireGrapple();
         TestSilentAndStillMetamagicRemoveVerbalAndSomaticComponents();
         TestIterativeGrappleAttackBonusesConsumeInOrder();
@@ -518,6 +520,54 @@ public static class GrappleDamageRulesTests
         Cleanup(attacker, defender);
     }
 
+    private static void TestEscapeFromPinMaintainsGrapple_EscapeArtist()
+    {
+        var pinner = CreateTestCharacter("GrappleEscapePinEA_Pinner", "Fighter");
+        var pinned = CreateWeakDefender("GrappleEscapePinEA_Pinned");
+        ConfigureVeryStrongGrappler(pinner);
+        ConfigureVeryWeakGrappler(pinned);
+
+        ForceGrappleState(pinner, pinned);
+        SpecialAttackResult pinResult = pinner.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "Pin succeeds before Escape Artist pin-break validation");
+
+        // Ensure deterministic success for the pinned character's Escape Artist check.
+        pinned.Stats.SkillRanksEscapeArtist = 40;
+        SpecialAttackResult escapeResult = pinned.ResolveGrappleAction(GrappleActionType.EscapeArtist);
+
+        Assert(escapeResult != null && escapeResult.Success, "Pinned character succeeds Escape Artist check");
+        Assert(!pinned.HasCondition(CombatConditionType.Pinned), "Pinned condition is removed after successful Escape Artist from pin");
+        Assert(!pinner.IsPinningOpponent(), "Pinner no longer holds the pin after successful Escape Artist from pin");
+        Assert(pinned.IsGrappling(), "Escaping a pin with Escape Artist maintains grapple state for the pinned character");
+        Assert(pinner.IsGrappling(), "Escaping a pin with Escape Artist maintains grapple state for the former pinner");
+
+        Cleanup(pinner, pinned);
+    }
+
+    private static void TestEscapeFromPinMaintainsGrapple_OpposedEscape()
+    {
+        var pinner = CreateTestCharacter("GrappleEscapePinOpposed_Pinner", "Fighter");
+        var pinned = CreateWeakDefender("GrappleEscapePinOpposed_Pinned");
+        ConfigureVeryStrongGrappler(pinner);
+        ConfigureVeryWeakGrappler(pinned);
+
+        ForceGrappleState(pinner, pinned);
+        SpecialAttackResult pinResult = pinner.ResolveGrappleAction(GrappleActionType.PinOpponent);
+        Assert(pinResult != null && pinResult.Success, "Pin succeeds before opposed pin-break validation");
+
+        // Guarantee the pinned character wins the opposed grapple escape.
+        ConfigureVeryStrongGrappler(pinned);
+        ConfigureVeryWeakGrappler(pinner);
+        SpecialAttackResult escapeResult = pinned.ResolveGrappleAction(GrappleActionType.OpposedGrappleEscape);
+
+        Assert(escapeResult != null && escapeResult.Success, "Pinned character succeeds opposed grapple escape check");
+        Assert(!pinned.HasCondition(CombatConditionType.Pinned), "Pinned condition is removed after successful opposed escape from pin");
+        Assert(!pinner.IsPinningOpponent(), "Pinner no longer holds the pin after successful opposed escape from pin");
+        Assert(pinned.IsGrappling(), "Escaping a pin with opposed grapple check maintains grapple state for the pinned character");
+        Assert(pinner.IsGrappling(), "Escaping a pin with opposed grapple check maintains grapple state for the former pinner");
+
+        Cleanup(pinner, pinned);
+    }
     private static void TestReleasePinnedOpponentEndsEntireGrapple()
     {
         var attacker = CreateTestCharacter("GrappleReleasePin", "Fighter");

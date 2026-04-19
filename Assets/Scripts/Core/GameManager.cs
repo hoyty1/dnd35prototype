@@ -7792,18 +7792,23 @@ public class GameManager : MonoBehaviour
         return validSquares;
     }
 
-    private bool DidActorEndGrappleAndGainFreeAdjacentMove(GrappleActionType actionType, SpecialAttackResult result)
+    private bool DidActorEndGrappleAndGainFreeAdjacentMove(CharacterController actor, GrappleActionType actionType, SpecialAttackResult result)
     {
-        if (result == null || !result.Success)
+        if (actor == null || result == null || !result.Success)
             return false;
 
-        return actionType == GrappleActionType.EscapeArtist
+        bool wasEscapeAction = actionType == GrappleActionType.EscapeArtist
             || actionType == GrappleActionType.OpposedGrappleEscape;
+        if (!wasEscapeAction)
+            return false;
+
+        // Escape from pin only removes the pinned state; it does not end the grapple.
+        return !actor.IsGrappling();
     }
 
     private bool TryOfferFreeAdjacentMovementAfterGrappleEnds(CharacterController actor, GrappleActionType actionType, SpecialAttackResult result)
     {
-        if (!DidActorEndGrappleAndGainFreeAdjacentMove(actionType, result))
+        if (!DidActorEndGrappleAndGainFreeAdjacentMove(actor, actionType, result))
             return false;
 
         return OfferFreeAdjacentMovement(actor);
