@@ -9954,6 +9954,7 @@ public class GameManager : MonoBehaviour
         if (isPinned)
         {
             bool hasStandardAction = actor.Actions != null && actor.Actions.HasStandardAction;
+            bool hasIterativeAttack = actor.CanUseIterativeGrappleAttackAction();
             options.Add((
                 GrappleActionType.EscapeArtist,
                 $"Escape Artist check (Std): d20 + Escape Artist vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})",
@@ -9961,9 +9962,9 @@ public class GameManager : MonoBehaviour
                 hasStandardAction ? string.Empty : "Standard action already spent."));
             options.Add((
                 GrappleActionType.OpposedGrappleEscape,
-                $"Break grapple (Std opposed grapple check vs {opponent.Stats.CharacterName})",
-                hasStandardAction,
-                hasStandardAction ? string.Empty : "Standard action already spent."));
+                $"Break grapple (opposed grapple check, {CharacterStats.FormatMod(actor.GetCurrentGrappleAttackBonus())} BAB)",
+                hasIterativeAttack,
+                hasIterativeAttack ? string.Empty : "No iterative grapple attacks remaining."));
         }
         else
         {

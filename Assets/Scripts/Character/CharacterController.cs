@@ -211,6 +211,7 @@ public class CharacterController : MonoBehaviour
             case GrappleActionType.AttackUnarmed:
             case GrappleActionType.PinOpponent:
             case GrappleActionType.UseOpponentWeapon:
+            case GrappleActionType.OpposedGrappleEscape:
                 return true;
             default:
                 return false;

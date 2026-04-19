@@ -106,7 +106,7 @@ public class CombatUI : MonoBehaviour
     public Button GrapplePinButton;             // Grapple: pin/maintain pin (Standard Action)
     public Button GrappleBreakPinButton;        // Grapple: break pin (Standard Action)
     public Button GrappleEscapeArtistButton;    // Grapple: escape via Escape Artist (Standard Action)
-    public Button GrappleEscapeCheckButton;     // Grapple: escape via opposed grapple (Standard Action)
+    public Button GrappleEscapeCheckButton;     // Grapple: escape via opposed grapple (iterative grapple attack)
     public Button GrappleMoveButton;            // Grapple: move while grappling (Standard Action)
     public Button GrappleUseOpponentWeaponButton; // Grapple: use opponent weapon (Standard Action)
     public Button GrappleDisarmSmallObjectButton; // Grapple: disarm small object (Stub)
@@ -1181,12 +1181,16 @@ public class CombatUI : MonoBehaviour
 
         if (GrappleEscapeCheckButton != null)
         {
-            bool canUse = isGrappling && actions.HasStandardAction;
+            bool canUse = isGrappling
+                          && hasIterativeGrappleAttack
+                          && CanUseWhilePinning(GrappleActionType.OpposedGrappleEscape);
             GrappleEscapeCheckButton.gameObject.SetActive(isGrappling && !showOnlyPinnerActions);
             GrappleEscapeCheckButton.interactable = canUse;
             Text label = GrappleEscapeCheckButton.GetComponentInChildren<Text>();
             if (label != null)
-                label.text = canUse ? "Grapple: Escape Check (Std)" : "Grapple: Escape Check (Used)";
+                label.text = canUse
+                    ? $"Grapple: Escape Check ({iterativeTag})"
+                    : "Grapple: Escape Check (No attacks left)";
         }
 
         if (GrappleMoveButton != null)

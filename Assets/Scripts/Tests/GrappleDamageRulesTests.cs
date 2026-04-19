@@ -48,6 +48,7 @@ public static class GrappleDamageRulesTests
         TestReleasePinnedOpponentEndsEntireGrapple();
         TestSilentAndStillMetamagicRemoveVerbalAndSomaticComponents();
         TestIterativeGrappleAttackBonusesConsumeInOrder();
+        TestOpposedEscapeCountsAsIterativeGrappleAttackAction();
         TestStandardOnlyAllowsSingleIterativeGrappleAttack();
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
@@ -631,6 +632,15 @@ public static class GrappleDamageRulesTests
         Assert(!fourth && !string.IsNullOrEmpty(reason4), "No additional iterative grapple attack is available after budget is exhausted");
 
         Cleanup(attacker);
+    }
+
+    private static void TestOpposedEscapeCountsAsIterativeGrappleAttackAction()
+    {
+        bool opposedEscapeIsIterative = CharacterController.IsIterativeGrappleAttackAction(GrappleActionType.OpposedGrappleEscape);
+        bool escapeArtistIsIterative = CharacterController.IsIterativeGrappleAttackAction(GrappleActionType.EscapeArtist);
+
+        Assert(opposedEscapeIsIterative, "Opposed grapple escape is classified as an iterative grapple attack action");
+        Assert(!escapeArtistIsIterative, "Escape Artist remains a non-iterative standard-action grapple option");
     }
 
     private static void TestStandardOnlyAllowsSingleIterativeGrappleAttack()
