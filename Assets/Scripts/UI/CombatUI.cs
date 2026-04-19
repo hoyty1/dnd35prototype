@@ -1526,10 +1526,6 @@ public class CombatUI : MonoBehaviour
         }
     }
 
-    public bool IsSpecialStyleSelectionMenuOpen()
-    {
-        return _specialStyleSelectionPanel != null;
-    }
     private Button CreateSpecialStyleSelectionButton(Transform parent, string name, string label, Color backgroundColor, bool isInteractable)
     {
         if (parent == null)

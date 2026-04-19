@@ -146,10 +146,6 @@ public class GameManager : MonoBehaviour
 
     // Active grapple context menu lock (pauses token alternation while contextual menu is open).
     private CharacterController _grappleContextMenuLockOwner;
-    // Tracked delayed UI refresh for grapple actions to avoid stale coroutine races.
-    private Coroutine _activeAfterAttackDelayCoroutine;
-    private int _activeAfterAttackDelayToken;
-    private bool _isGrappleSubmenuOpen;
     // Free adjacent reposition after ending a grapple (escape/release).
     private bool _isFreeAdjacentGrappleMoveSelection;
     private CharacterController _freeAdjacentGrappleMoveActor;
@@ -2290,7 +2286,6 @@ public class GameManager : MonoBehaviour
         if (pc == null) return;
 
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
-        _isGrappleSubmenuOpen = false;
         EndGrappleContextMenuDisplayLock();
         CombatUI.HideSummonContextMenu();
 
@@ -9865,64 +9860,6 @@ public class GameManager : MonoBehaviour
             });
     }
 
-    private void CancelTrackedAfterAttackDelay(string reason)
-    {
-        if (_activeAfterAttackDelayCoroutine == null)
-            return;
-
-        Debug.Log($"[GrappleUI] Cancelling pending AfterAttackDelay ({reason})");
-        StopCoroutine(_activeAfterAttackDelayCoroutine);
-        _activeAfterAttackDelayCoroutine = null;
-        _activeAfterAttackDelayToken++;
-    }
-
-    private void StartTrackedAfterAttackDelay(CharacterController pc, float delay)
-    {
-        CancelTrackedAfterAttackDelay("starting replacement delay");
-        int token = ++_activeAfterAttackDelayToken;
-        _activeAfterAttackDelayCoroutine = StartCoroutine(AfterAttackDelayTracked(pc, delay, token));
-        Debug.Log($"[GrappleUI] Started tracked AfterAttackDelay token={token}, delay={delay:0.00}");
-    }
-
-    private IEnumerator AfterAttackDelayTracked(CharacterController pc, float delay, int token)
-    {
-        Debug.Log($"[GrappleUI] AfterAttackDelayTracked token={token} waiting {delay:0.00}s");
-        yield return new WaitForSeconds(delay);
-
-        if (token != _activeAfterAttackDelayToken)
-        {
-            Debug.Log($"[GrappleUI] Ignoring stale AfterAttackDelay token={token}, active={_activeAfterAttackDelayToken}");
-            yield break;
-        }
-
-        _activeAfterAttackDelayCoroutine = null;
-
-        bool submenuStillOpen = _isGrappleSubmenuOpen || (CombatUI != null && CombatUI.IsSpecialStyleSelectionMenuOpen());
-        if (submenuStillOpen)
-        {
-            Debug.Log($"[GrappleUI] Skipping delayed action refresh for token={token} because grapple submenu is open");
-            yield break;
-        }
-
-        yield return StartCoroutine(AfterAttackDelay(pc, delay));
-    }
-
-    private void SetGrappleSubmenuOpen(bool isOpen, CharacterController actor = null)
-    {
-        _isGrappleSubmenuOpen = isOpen;
-
-        if (isOpen)
-        {
-            CancelTrackedAfterAttackDelay("grapple submenu opened");
-            BeginGrappleContextMenuDisplayLock(actor);
-            Debug.Log($"[GrappleUI] Grapple submenu opened for {(actor != null ? actor.Stats.CharacterName : "unknown actor")}");
-        }
-        else
-        {
-            Debug.Log("[GrappleUI] Grapple submenu closed");
-            EndGrappleContextMenuDisplayLock();
-        }
-    }
     private void BeginGrappleContextMenuDisplayLock(CharacterController actor)
     {
         if (_grappleContextMenuLockOwner == actor)
@@ -9962,7 +9899,7 @@ public class GameManager : MonoBehaviour
         }
 
         opponent = liveOpponent;
-        SetGrappleSubmenuOpen(true, actor);
+        BeginGrappleContextMenuDisplayLock(actor);
         bool isPinning = actor.IsPinningOpponent();
 
         var options = new List<(GrappleActionType Action, string Label, bool Enabled, string DisabledMessage)>();
@@ -10091,7 +10028,6 @@ public class GameManager : MonoBehaviour
             optionEnabledStates: optionEnabledStates,
             onSelect: selectedIndex =>
             {
-                SetGrappleSubmenuOpen(false);
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
                     ShowActionChoices();
@@ -10110,11 +10046,7 @@ public class GameManager : MonoBehaviour
 
                 ResolveGrappleActionSelection(actor, options[selectedIndex].Action);
             },
-            onCancel: () =>
-            {
-                SetGrappleSubmenuOpen(false);
-                ShowActionChoices();
-            });
+            onCancel: ShowActionChoices);
     }
 
     private void ResolveGrappleActionSelection(CharacterController actor, GrappleActionType actionType)
@@ -10162,7 +10094,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        SetGrappleSubmenuOpen(true, actor);
+        BeginGrappleContextMenuDisplayLock(actor);
 
         List<DisarmableHeldItemOption> options = opponent.GetEquippedLightHandWeaponOptions();
         if (options == null || options.Count == 0)
@@ -10190,7 +10122,6 @@ public class GameManager : MonoBehaviour
             optionEnabledStates: enabledStates,
             onSelect: selectedIndex =>
             {
-                SetGrappleSubmenuOpen(false);
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
                     ShowActionChoices();
@@ -10199,11 +10130,7 @@ public class GameManager : MonoBehaviour
 
                 ExecuteGrappleAction(actor, GrappleActionType.UseOpponentWeapon, null, options[selectedIndex].HandSlot);
             },
-            onCancel: () =>
-            {
-                SetGrappleSubmenuOpen(false);
-                ShowActionChoices();
-            });
+            onCancel: ShowActionChoices);
     }
     private void ShowGrappleDamageModeMenu(CharacterController actor)
     {
@@ -10220,7 +10147,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        SetGrappleSubmenuOpen(true, actor);
+        BeginGrappleContextMenuDisplayLock(actor);
 
         bool isMonk = actor.Stats.IsMonk;
         var options = new List<(AttackDamageMode mode, string label)>
@@ -10248,7 +10175,6 @@ public class GameManager : MonoBehaviour
             optionEnabledStates: enabledStates,
             onSelect: selectedIndex =>
             {
-                SetGrappleSubmenuOpen(false);
                 if (selectedIndex < 0 || selectedIndex >= options.Count)
                 {
                     ShowActionChoices();
@@ -10257,11 +10183,7 @@ public class GameManager : MonoBehaviour
 
                 ExecuteGrappleAction(actor, GrappleActionType.DamageOpponent, options[selectedIndex].mode);
             },
-            onCancel: () =>
-            {
-                SetGrappleSubmenuOpen(false);
-                ShowActionChoices();
-            });
+            onCancel: ShowActionChoices);
     }
 
     private bool TryConsumeIterativeGrappleAttack(CharacterController actor, GrappleActionType actionType, out int attackBonusUsed, out int attacksRemaining)
@@ -10310,8 +10232,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        SetGrappleSubmenuOpen(false);
-        CancelTrackedAfterAttackDelay("new grapple action executing");
+        EndGrappleContextMenuDisplayLock();
 
         bool isFreeAction = actionType == GrappleActionType.ReleasePinnedOpponent;
         bool usesIterativeAttack = CharacterController.IsIterativeGrappleAttackAction(actionType);
@@ -10359,7 +10280,7 @@ public class GameManager : MonoBehaviour
             return;
 
         float delay = isFreeAction ? 0.35f : (usesIterativeAttack ? 0.45f : 0.8f);
-        StartTrackedAfterAttackDelay(actor, delay);
+        StartCoroutine(AfterAttackDelay(actor, delay));
     }
     private void HandleOverrunTargetClick(CharacterController attacker, CharacterController target)
     {
@@ -11695,10 +11616,6 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void EndActivePCTurn()
     {
-        CancelTrackedAfterAttackDelay("turn ending");
-        _isGrappleSubmenuOpen = false;
-        EndGrappleContextMenuDisplayLock();
-
         CharacterController pc = ActivePC;
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
