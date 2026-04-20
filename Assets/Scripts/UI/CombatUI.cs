@@ -1751,6 +1751,12 @@ public class CombatUI : MonoBehaviour
     private System.Action<int> _bullRushExtraPushOnSelect;
     private System.Action _bullRushExtraPushOnCancel;
 
+    private void LogBullRushExtraPushLifecycle(string eventName, string details = null)
+    {
+        string suffix = string.IsNullOrEmpty(details) ? string.Empty : $" | {details}";
+        Debug.Log($"[CombatUI][BullRushExtraPush] {eventName}{suffix}");
+    }
+
     public void ShowBullRushExtraPushChoice(
         CharacterController attacker,
         CharacterController target,
@@ -1758,9 +1764,15 @@ public class CombatUI : MonoBehaviour
         System.Action<int> onSelect,
         System.Action onCancel = null)
     {
+        string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "<null-attacker>";
+        string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "<null-target>";
+
         int maxExtra = Mathf.Max(0, maxExtraSquares);
+        LogBullRushExtraPushLifecycle("SHOW_CALLED", $"attacker={attackerName}, target={targetName}, requestedMaxExtra={maxExtraSquares}, clampedMaxExtra={maxExtra}, frame={Time.frameCount}");
+
         if (maxExtra <= 0)
         {
+            LogBullRushExtraPushLifecycle("AUTO_SELECT_ZERO", $"reason=maxExtra<=0, frame={Time.frameCount}");
             onSelect?.Invoke(0);
             return;
         }
@@ -1774,13 +1786,23 @@ public class CombatUI : MonoBehaviour
 
         if (ActionPanel == null)
         {
+            LogBullRushExtraPushLifecycle("ACTION_PANEL_NULL", $"fallbackSelect=0, frame={Time.frameCount}");
             _bullRushExtraPushOnSelect?.Invoke(0);
             HideBullRushExtraPushChoice();
             return;
         }
 
+        if (!ActionPanel.activeSelf)
+        {
+            LogBullRushExtraPushLifecycle("ACTION_PANEL_INACTIVE", $"Reactivating ActionPanel before creating prompt, frame={Time.frameCount}");
+            ActionPanel.SetActive(true);
+        }
+
+        LogBullRushExtraPushLifecycle("PANEL_CREATE_BEGIN", $"parent={ActionPanel.name}, parentActiveSelf={ActionPanel.activeSelf}, parentActiveInHierarchy={ActionPanel.activeInHierarchy}, frame={Time.frameCount}");
+
         _bullRushExtraPushPanel = new GameObject("BullRushExtraPushChoicePanel");
         _bullRushExtraPushPanel.transform.SetParent(ActionPanel.transform, false);
+        _bullRushExtraPushPanel.transform.SetAsLastSibling();
 
         RectTransform rt = _bullRushExtraPushPanel.AddComponent<RectTransform>();
         rt.anchorMin = new Vector2(0.02f, 0.35f);
@@ -1829,6 +1851,7 @@ public class CombatUI : MonoBehaviour
         var buttonContainerLE = buttonContainer.AddComponent<LayoutElement>();
         buttonContainerLE.minHeight = maxExtra > 5 ? 96f : 48f;
 
+        int createdOptionButtonCount = 0;
         for (int extra = 0; extra <= maxExtra; extra++)
         {
             int extraCopy = extra;
@@ -1844,6 +1867,7 @@ public class CombatUI : MonoBehaviour
 
             if (optionButton != null)
             {
+                createdOptionButtonCount++;
                 Text labelText = optionButton.GetComponentInChildren<Text>();
                 if (labelText != null)
                 {
@@ -1877,6 +1901,7 @@ public class CombatUI : MonoBehaviour
         {
             cancelButton.onClick.AddListener(() =>
             {
+                LogBullRushExtraPushLifecycle("CANCEL_CLICKED", $"hasCustomCancel={_bullRushExtraPushOnCancel != null}, frame={Time.frameCount}");
                 if (_bullRushExtraPushOnCancel != null)
                 {
                     System.Action cancelCallback = _bullRushExtraPushOnCancel;
@@ -1891,12 +1916,22 @@ public class CombatUI : MonoBehaviour
         }
 
         _bullRushExtraPushPanel.SetActive(true);
+        LogBullRushExtraPushLifecycle(
+            "PANEL_ACTIVATED",
+            $"buttons={createdOptionButtonCount}, panelActiveSelf={_bullRushExtraPushPanel.activeSelf}, panelActiveInHierarchy={_bullRushExtraPushPanel.activeInHierarchy}, anchoredMin={rt.anchorMin}, anchoredMax={rt.anchorMax}, frame={Time.frameCount}");
     }
 
     public void HideBullRushExtraPushChoice()
     {
         if (_bullRushExtraPushPanel != null)
+        {
+            LogBullRushExtraPushLifecycle("HIDE_PANEL", $"panelName={_bullRushExtraPushPanel.name}, activeSelf={_bullRushExtraPushPanel.activeSelf}, frame={Time.frameCount}");
             Destroy(_bullRushExtraPushPanel);
+        }
+        else
+        {
+            LogBullRushExtraPushLifecycle("HIDE_PANEL_NOOP", $"panelAlreadyNull=true, frame={Time.frameCount}");
+        }
 
         _bullRushExtraPushPanel = null;
         _bullRushExtraPushMaxExtraSquares = 0;
@@ -1907,6 +1942,7 @@ public class CombatUI : MonoBehaviour
     private void OnBullRushExtraPushSelected(int extraSquares)
     {
         int extra = Mathf.Clamp(extraSquares, 0, _bullRushExtraPushMaxExtraSquares);
+        LogBullRushExtraPushLifecycle("OPTION_SELECTED", $"requested={extraSquares}, clamped={extra}, maxExtra={_bullRushExtraPushMaxExtraSquares}, frame={Time.frameCount}");
         System.Action<int> callback = _bullRushExtraPushOnSelect;
         HideBullRushExtraPushChoice();
         callback?.Invoke(extra);

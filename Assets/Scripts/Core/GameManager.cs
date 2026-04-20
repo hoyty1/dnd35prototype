@@ -10879,6 +10879,7 @@ public class GameManager : MonoBehaviour
         {
             int clampedExtra = Mathf.Clamp(chosenExtraSquares, 0, maxExtraSquares);
             int totalSquares = 1 + clampedExtra;
+            Debug.Log($"[GameManager][BullRushExtraPush] ExecuteSelectedExtraDistance chosen={chosenExtraSquares}, clamped={clampedExtra}, totalSquares={totalSquares}, maxExtraSquares={maxExtraSquares}, frame={Time.frameCount}");
 
             if (clampedExtra <= 0)
                 CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} chooses to push 1 square (base only)");
@@ -10921,12 +10922,23 @@ public class GameManager : MonoBehaviour
 
             if (attacker.IsPlayerControlled && CombatUI != null)
             {
+                Debug.Log($"[GameManager][BullRushExtraPush] Showing player choice UI. attacker={attacker.Stats.CharacterName}, target={target.Stats.CharacterName}, maxExtraSquares={maxExtraSquares}, actionPanelExists={CombatUI.ActionPanel != null}, actionPanelActiveSelf={(CombatUI.ActionPanel != null && CombatUI.ActionPanel.activeSelf)}, actionPanelActiveInHierarchy={(CombatUI.ActionPanel != null && CombatUI.ActionPanel.activeInHierarchy)}, frame={Time.frameCount}");
+
                 CombatUI.ShowBullRushExtraPushChoice(attacker, target, maxExtraSquares,
-                    onSelect: ExecuteSelectedExtraDistance,
-                    onCancel: () => ExecuteSelectedExtraDistance(0));
+                    onSelect: selectedExtraSquares =>
+                    {
+                        Debug.Log($"[GameManager][BullRushExtraPush] Player selected extra={selectedExtraSquares}, frame={Time.frameCount}");
+                        ExecuteSelectedExtraDistance(selectedExtraSquares);
+                    },
+                    onCancel: () =>
+                    {
+                        Debug.Log($"[GameManager][BullRushExtraPush] Player cancelled selection. Defaulting to 0 extra squares, frame={Time.frameCount}");
+                        ExecuteSelectedExtraDistance(0);
+                    });
             }
             else
             {
+                Debug.Log($"[GameManager][BullRushExtraPush] Auto-selecting max extra for non-player attacker. attacker={attacker.Stats.CharacterName}, maxExtraSquares={maxExtraSquares}, frame={Time.frameCount}");
                 ExecuteSelectedExtraDistance(maxExtraSquares);
             }
         }
