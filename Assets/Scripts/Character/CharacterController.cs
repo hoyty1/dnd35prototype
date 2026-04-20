@@ -2401,7 +2401,8 @@ public class CharacterController : MonoBehaviour
             for (int i = 0; i < gm.PCs.Count; i++)
             {
                 var pc = gm.PCs[i];
-                if (pc != null) all.Add(pc);
+                if (pc == null || pc.Stats == null || pc.gameObject == null || !pc.gameObject.activeInHierarchy) continue;
+                all.Add(pc);
             }
         }
 
@@ -2410,7 +2411,8 @@ public class CharacterController : MonoBehaviour
             for (int i = 0; i < gm.NPCs.Count; i++)
             {
                 var npc = gm.NPCs[i];
-                if (npc != null) all.Add(npc);
+                if (npc == null || npc.Stats == null || npc.gameObject == null || !npc.gameObject.activeInHierarchy) continue;
+                all.Add(npc);
             }
         }
 
@@ -2427,6 +2429,9 @@ public class CharacterController : MonoBehaviour
         if (all.Count == 0) return false;
 
         List<CharacterController> threateningEnemies = ThreatSystem.GetThreateningEnemies(target.GridPosition, target, all);
+        if (threateningEnemies == null || threateningEnemies.Count == 0)
+            return false;
+
         for (int i = 0; i < threateningEnemies.Count; i++)
         {
             CharacterController threatener = threateningEnemies[i];

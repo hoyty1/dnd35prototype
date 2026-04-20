@@ -151,10 +151,19 @@ public static class ThreatSystem
     /// <returns>True if any living enemy threatens this square.</returns>
     public static bool IsSquareThreatened(Vector2Int square, CharacterController mover, List<CharacterController> allCharacters)
     {
+        if (mover == null || mover.Stats == null)
+        {
+            Debug.LogWarning($"[ThreatSystem] IsSquareThreatened called with invalid mover at ({square.x},{square.y}).");
+            return false;
+        }
+
+        if (allCharacters == null || allCharacters.Count == 0)
+            return false;
+
         foreach (var character in allCharacters)
         {
-            if (character == mover) continue;
-            if (character.Stats.IsDead) continue;
+            if (character == null || character == mover) continue;
+            if (character.Stats == null || character.Stats.IsDead) continue;
             if (character.IsPlayerControlled == mover.IsPlayerControlled) continue; // Same team
 
             if (GetThreatenedSquares(character).Contains(square))
@@ -173,10 +182,20 @@ public static class ThreatSystem
     public static List<CharacterController> GetThreateningEnemies(Vector2Int square, CharacterController mover, List<CharacterController> allCharacters)
     {
         var threateners = new List<CharacterController>();
+
+        if (mover == null || mover.Stats == null)
+        {
+            Debug.LogWarning($"[ThreatSystem] GetThreateningEnemies called with invalid mover at ({square.x},{square.y}).");
+            return threateners;
+        }
+
+        if (allCharacters == null || allCharacters.Count == 0)
+            return threateners;
+
         foreach (var character in allCharacters)
         {
-            if (character == mover) continue;
-            if (character.Stats.IsDead) continue;
+            if (character == null || character == mover) continue;
+            if (character.Stats == null || character.Stats.IsDead) continue;
             if (character.IsPlayerControlled == mover.IsPlayerControlled) continue;
 
             if (GetThreatenedSquares(character).Contains(square))
@@ -187,7 +206,7 @@ public static class ThreatSystem
 
         if (threateners.Count > 0)
         {
-            Debug.Log($"[ThreatSystem] Square ({square.x},{square.y}) threatened by: {string.Join(", ", threateners.ConvertAll(c => c.Stats.CharacterName))}");
+            Debug.Log($"[ThreatSystem] Square ({square.x},{square.y}) threatened by: {string.Join(", ", threateners.ConvertAll(c => c != null && c.Stats != null ? c.Stats.CharacterName : "<unknown>"))}");
         }
 
         return threateners;
