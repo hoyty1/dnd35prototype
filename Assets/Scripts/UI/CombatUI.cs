@@ -4019,18 +4019,35 @@ public class CombatUI : MonoBehaviour
         }
     }
 
-    private Sprite _defaultUiSpriteCache;
+    private Sprite _defaultWhiteSprite;
+
+    private Sprite GetOrCreateDefaultSprite()
+    {
+        if (_defaultWhiteSprite != null)
+            return _defaultWhiteSprite;
+
+        Texture2D texture = new Texture2D(1, 1, TextureFormat.RGBA32, false)
+        {
+            name = "AidUI_DefaultWhiteTexture"
+        };
+        texture.SetPixel(0, 0, Color.white);
+        texture.Apply();
+
+        _defaultWhiteSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, 1f, 1f),
+            new Vector2(0.5f, 0.5f),
+            100f);
+        _defaultWhiteSprite.name = "AidUI_DefaultWhiteSprite";
+
+        Debug.Log("[AidUI] Created default white sprite programmatically");
+
+        return _defaultWhiteSprite;
+    }
 
     private Sprite GetDefaultUISprite()
     {
-        if (_defaultUiSpriteCache != null)
-            return _defaultUiSpriteCache;
-
-        _defaultUiSpriteCache = Resources.GetBuiltinResource<Sprite>("UISprite.psd");
-        if (_defaultUiSpriteCache == null)
-            _defaultUiSpriteCache = Resources.GetBuiltinResource<Sprite>("Background.psd");
-
-        return _defaultUiSpriteCache;
+        return GetOrCreateDefaultSprite();
     }
 
     private void EnsureVisibleImage(Image image, Color fallbackColor, string contextLabel)
@@ -4041,18 +4058,10 @@ public class CombatUI : MonoBehaviour
             return;
         }
 
-        Sprite sprite = GetDefaultUISprite();
-        if (image.sprite == null && sprite != null)
-        {
-            image.sprite = sprite;
-            image.type = Image.Type.Sliced;
-        }
-
-        Color color = image.color;
-        color.a = Mathf.Max(color.a, fallbackColor.a);
-        if (color.a <= 0.01f)
-            color = fallbackColor;
-        image.color = color;
+        image.sprite = GetDefaultUISprite();
+        image.type = Image.Type.Simple;
+        image.color = fallbackColor;
+        image.raycastTarget = true;
 
         Debug.Log($"[AidUI] {contextLabel} image -> sprite={(image.sprite != null)}, color={image.color}, raycastTarget={image.raycastTarget}");
     }
