@@ -4087,6 +4087,137 @@ public class CombatUI : MonoBehaviour
             $"hasText={(text != null)} | text='{(text != null ? text.text : "<none>")}' | textColor={(text != null ? text.color.ToString() : "<none>")} | fontSize={(text != null ? text.fontSize : 0)}");
     }
 
+    private void LogFullUIHierarchy(GameObject root, string context)
+    {
+        if (root == null)
+        {
+            Debug.LogWarning($"[AidUI][Hierarchy] {context} root is null");
+            return;
+        }
+
+        Debug.Log($"[AidUI][Hierarchy] {context} - Full UI tree:");
+        LogUIHierarchyRecursive(root.transform, 0);
+    }
+
+    private void LogUIHierarchyRecursive(Transform transformNode, int depth)
+    {
+        if (transformNode == null)
+            return;
+
+        string indent = new string(' ', depth * 2);
+
+        RectTransform rectTransform = transformNode.GetComponent<RectTransform>();
+        CanvasGroup canvasGroup = transformNode.GetComponent<CanvasGroup>();
+        Image image = transformNode.GetComponent<Image>();
+        Canvas canvas = transformNode.GetComponent<Canvas>();
+
+        string info = $"{indent}├─ {transformNode.name}";
+        info += $" | active={transformNode.gameObject.activeInHierarchy}";
+
+        if (rectTransform != null)
+        {
+            info += $" | size={rectTransform.rect.width:F1}x{rectTransform.rect.height:F1}";
+            info += $" | pos={rectTransform.anchoredPosition}";
+        }
+
+        if (canvasGroup != null)
+        {
+            info += $" | CGalpha={canvasGroup.alpha:F2}";
+            info += $" | CGinteractable={canvasGroup.interactable}";
+            info += $" | CGblockRay={canvasGroup.blocksRaycasts}";
+        }
+
+        if (image != null)
+        {
+            info += $" | Image(sprite={image.sprite != null}, color={image.color}, enabled={image.enabled})";
+        }
+
+        if (canvas != null)
+        {
+            info += $" | Canvas(renderMode={canvas.renderMode}, sortOrder={canvas.sortingOrder})";
+        }
+
+        Debug.Log($"[AidUI][Hierarchy] {info}");
+
+        for (int i = 0; i < transformNode.childCount; i++)
+        {
+            LogUIHierarchyRecursive(transformNode.GetChild(i), depth + 1);
+        }
+    }
+
+    private void ForceUIVisibility(GameObject root)
+    {
+        if (root == null)
+        {
+            Debug.LogWarning("[AidUI] ForceUIVisibility called with null root");
+            return;
+        }
+
+        Debug.Log($"[AidUI] ForceUIVisibility on {root.name}");
+
+        CanvasGroup[] canvasGroups = root.GetComponentsInChildren<CanvasGroup>(true);
+        foreach (CanvasGroup group in canvasGroups)
+        {
+            group.alpha = 1f;
+            group.interactable = true;
+            group.blocksRaycasts = true;
+            Debug.Log($"[AidUI] Forced CanvasGroup on {group.gameObject.name} to alpha=1");
+        }
+
+        Image[] images = root.GetComponentsInChildren<Image>(true);
+        foreach (Image img in images)
+        {
+            img.enabled = true;
+            if (img.color.a < 1f)
+            {
+                Color c = img.color;
+                c.a = 1f;
+                img.color = c;
+                Debug.Log($"[AidUI] Forced Image on {img.gameObject.name} to alpha=1");
+            }
+        }
+
+        Transform[] transforms = root.GetComponentsInChildren<Transform>(true);
+        foreach (Transform t in transforms)
+        {
+            if (!t.gameObject.activeSelf)
+            {
+                t.gameObject.SetActive(true);
+                Debug.Log($"[AidUI] Forced {t.gameObject.name} to active");
+            }
+        }
+    }
+
+    private void VerifyCanvasSettings()
+    {
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) canvas = FindObjectOfType<Canvas>();
+
+        if (canvas == null)
+        {
+            Debug.LogError("[AidUI] Canvas not found!");
+            return;
+        }
+
+        Debug.Log("[AidUI] Canvas settings:");
+        Debug.Log($"[AidUI]   renderMode: {canvas.renderMode}");
+        Debug.Log($"[AidUI]   sortingOrder: {canvas.sortingOrder}");
+        Debug.Log($"[AidUI]   worldCamera: {canvas.worldCamera}");
+        Debug.Log($"[AidUI]   pixelPerfect: {canvas.pixelPerfect}");
+
+        CanvasScaler canvasScaler = canvas.GetComponent<CanvasScaler>();
+        if (canvasScaler != null)
+        {
+            Debug.Log($"[AidUI]   scaleMode: {canvasScaler.uiScaleMode}");
+            Debug.Log($"[AidUI]   referenceResolution: {canvasScaler.referenceResolution}");
+            Debug.Log($"[AidUI]   scaleFactor: {canvasScaler.scaleFactor}");
+        }
+
+        GraphicRaycaster graphicRaycaster = canvas.GetComponent<GraphicRaycaster>();
+        if (graphicRaycaster != null)
+            Debug.Log($"[AidUI]   raycaster enabled: {graphicRaycaster.enabled}");
+    }
+
     public void ShowPickUpItemSelection(
         string actorName,
         List<string> itemOptions,
@@ -4096,7 +4227,9 @@ public class CombatUI : MonoBehaviour
         string bodyOverride = null,
         Color? optionButtonColorOverride = null)
     {
+        Debug.Log("[AidUI] ========== ShowPickUpItemSelection START ==========");
         Debug.Log($"[AidUI] ShowPickUpItemSelection called | actor='{actorName}' | options={(itemOptions != null ? itemOptions.Count : 0)} | title='{titleOverride}'");
+        VerifyCanvasSettings();
 
         HidePickUpItemSelection();
 
@@ -4134,6 +4267,7 @@ public class CombatUI : MonoBehaviour
         cg.interactable = true;
 
         GameObject dialog = new GameObject("Dialog");
+        LogFullUIHierarchy(_pickUpItemSelectionPanel, "After overlay creation");
         dialog.transform.SetParent(_pickUpItemSelectionPanel.transform, false);
 
         RectTransform dialogRT = dialog.AddComponent<RectTransform>();
@@ -4209,7 +4343,9 @@ public class CombatUI : MonoBehaviour
         viewportRT.offsetMax = new Vector2(-4f, -4f);
 
         Image viewportImage = viewport.AddComponent<Image>();
-        viewportImage.color = new Color(0f, 0f, 0f, 0f);
+        // IMPORTANT: fully transparent viewport masks can clip all children on some Unity versions.
+        // Use opaque white mask graphic with showMaskGraphic=false so content remains visible.
+        EnsureVisibleImage(viewportImage, Color.white, "SelectionViewportMask");
         Mask viewportMask = viewport.AddComponent<Mask>();
         viewportMask.showMaskGraphic = false;
 
@@ -4307,6 +4443,21 @@ public class CombatUI : MonoBehaviour
         {
             Debug.LogError("[AidUI] Failed to create Cancel button for selection UI.");
         }
+
+        // Force a layout rebuild so VerticalLayoutGroup positions option buttons immediately.
+        LayoutRebuilder.ForceRebuildLayoutImmediate(contentRT);
+        LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)dialog.transform);
+        LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)_pickUpItemSelectionPanel.transform);
+        Canvas.ForceUpdateCanvases();
+
+        // Keep panel in front and force visibility for debugging and resilience.
+        _pickUpItemSelectionPanel.transform.SetAsLastSibling();
+        Debug.Log("[AidUI] About to show UI, forcing visibility:");
+        ForceUIVisibility(_pickUpItemSelectionPanel);
+
+        Debug.Log("[AidUI] UI shown, final hierarchy:");
+        LogFullUIHierarchy(_pickUpItemSelectionPanel, "Final state");
+        Debug.Log("[AidUI] ========== ShowPickUpItemSelection END ==========");
     }
 
     public void HidePickUpItemSelection()
