@@ -180,6 +180,10 @@ public class GameManager : MonoBehaviour
 
     public readonly List<AidBonus> ActiveAidBonuses = new List<AidBonus>();
 
+    // Aid Another multi-step selection state
+    private CharacterController _aidAnotherSelectedEnemy;
+    private AidType? _aidAnotherSelectedType;
+
     // Pending charge state
     private CharacterController _chargeTarget;
     private List<Vector2Int> _pendingChargePath = new List<Vector2Int>();
@@ -548,21 +552,24 @@ public class GameManager : MonoBehaviour
         if (!IsEnemyTeam(actor, enemy) || enemy.Stats.IsDead)
             return false;
 
-        int distance = actor.GetMinimumDistanceToTarget(enemy, chebyshev: true);
-        return actor.CanMeleeAttackDistance(distance);
+        ItemData weapon = actor.GetEquippedWeapon();
+        return actor.ThreatensWith(enemy, weapon);
     }
 
-    private List<CharacterController> GetAidAnotherAllies(CharacterController actor)
+    /// <summary>
+    /// Get all allies of the given character (excluding dead and self).
+    /// </summary>
+    private List<CharacterController> GetAllAllies(CharacterController character)
     {
         var allies = new List<CharacterController>();
-        if (actor == null)
+        if (character == null)
             return allies;
 
         foreach (CharacterController candidate in GetAllCharacters())
         {
-            if (candidate == null || candidate == actor || candidate.Stats == null || candidate.Stats.IsDead)
+            if (candidate == null || candidate == character || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!IsAllyTeam(actor, candidate))
+            if (!IsAllyTeam(character, candidate))
                 continue;
 
             allies.Add(candidate);
@@ -571,23 +578,76 @@ public class GameManager : MonoBehaviour
         return allies;
     }
 
-    private List<CharacterController> GetAidAnotherEnemyTargets(CharacterController actor)
+    /// <summary>
+    /// Get all enemies of the given character (excluding dead).
+    /// </summary>
+    private List<CharacterController> GetAllEnemies(CharacterController character)
     {
-        var targets = new List<CharacterController>();
-        if (actor == null)
-            return targets;
+        var enemies = new List<CharacterController>();
+        if (character == null)
+            return enemies;
 
         foreach (CharacterController candidate in GetAllCharacters())
         {
-            if (candidate == null || candidate == actor || candidate.Stats == null || candidate.Stats.IsDead)
+            if (candidate == null || candidate == character || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
-            if (!CanAttemptAidAnotherTouch(actor, candidate))
+            if (!IsEnemyTeam(character, candidate))
                 continue;
 
-            targets.Add(candidate);
+            enemies.Add(candidate);
         }
 
-        return targets;
+        return enemies;
+    }
+
+    /// <summary>
+    /// Get all enemies threatened by the initiator with the currently equipped melee weapon (or unarmed).
+    /// </summary>
+    private List<CharacterController> GetThreatenedEnemies(CharacterController initiator)
+    {
+        var threatenedEnemies = new List<CharacterController>();
+        if (initiator == null)
+            return threatenedEnemies;
+
+        ItemData weapon = initiator.GetEquippedWeapon();
+        List<CharacterController> allEnemies = GetAllEnemies(initiator);
+        for (int i = 0; i < allEnemies.Count; i++)
+        {
+            CharacterController enemy = allEnemies[i];
+            if (initiator.ThreatensWith(enemy, weapon))
+                threatenedEnemies.Add(enemy);
+        }
+
+        string initiatorName = initiator.Stats != null ? initiator.Stats.CharacterName : "Unknown";
+        string weaponName = weapon != null ? weapon.Name : "unarmed";
+        Debug.Log($"[AidAnother] {initiatorName} threatens {threatenedEnemies.Count} enemies with {weaponName}");
+        return threatenedEnemies;
+    }
+
+    /// <summary>
+    /// Get all allies (excluding initiator) that are within melee threat range of the selected enemy.
+    /// </summary>
+    private List<CharacterController> GetAlliesInMeleeRange(CharacterController target, CharacterController excludeInitiator)
+    {
+        var alliesInRange = new List<CharacterController>();
+        if (target == null)
+            return alliesInRange;
+
+        List<CharacterController> allAllies = GetAllAllies(excludeInitiator);
+        for (int i = 0; i < allAllies.Count; i++)
+        {
+            CharacterController ally = allAllies[i];
+            if (ally == null || ally == excludeInitiator)
+                continue;
+
+            ItemData allyWeapon = ally.GetEquippedWeapon();
+            if (ally.ThreatensWith(target, allyWeapon))
+                alliesInRange.Add(ally);
+        }
+
+        string targetName = target.Stats != null ? target.Stats.CharacterName : "Unknown";
+        Debug.Log($"[AidAnother] {alliesInRange.Count} allies in melee range of {targetName}");
+        return alliesInRange;
     }
 
     private static int GetAidAnotherTouchAttackModifier(CharacterController actor)
@@ -637,13 +697,13 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        if (GetAidAnotherAllies(actor).Count == 0)
+        if (GetAllAllies(actor).Count == 0)
         {
             reason = "No ally";
             return false;
         }
 
-        if (GetAidAnotherEnemyTargets(actor).Count == 0)
+        if (GetThreatenedEnemies(actor).Count == 0)
         {
             reason = "No target";
             return false;
@@ -4230,35 +4290,68 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        ShowAidAnotherAllySelection(pc);
+        _aidAnotherSelectedEnemy = null;
+        _aidAnotherSelectedType = null;
+        Debug.Log($"[AidAnother] {pc.Stats.CharacterName} initiating Aid Another");
+
+        // New D&D 3.5e flow: Enemy -> Aid Type -> Ally
+        ShowAidAnotherEnemySelection(pc);
     }
 
-    public void ShowAidAnotherAllySelection(CharacterController aider)
+    private void ShowAidAnotherEnemySelection(CharacterController initiator)
     {
-        List<CharacterController> allies = GetAidAnotherAllies(aider);
-        if (allies.Count == 0)
+        if (initiator == null || initiator.Stats == null)
         {
-            CombatUI?.ShowCombatLog($"⚠ {aider.Stats.CharacterName} has no valid allies to aid.");
             ShowActionChoices();
             return;
         }
+
+        List<CharacterController> threatenedEnemies = GetThreatenedEnemies(initiator);
+        if (threatenedEnemies.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {initiator.Stats.CharacterName} doesn't threaten any enemies!");
+            ShowActionChoices();
+            return;
+        }
+
+        Debug.Log($"[AidAnother] Showing enemy selection for {initiator.Stats.CharacterName} | threatenedCount={threatenedEnemies.Count}");
 
         CombatUI?.ShowCharacterSelectionUI(
-            title: "Aid Another - Select Ally",
-            body: $"{aider.Stats.CharacterName}, choose an ally to aid:",
-            characters: allies,
-            onSelect: ally => ShowAidTypeChoice(aider, ally),
-            onCancel: ShowActionChoices,
-            optionButtonColorOverride: new Color(0.34f, 0.28f, 0.56f, 1f));
+            title: "Aid Another - Select Enemy",
+            body: $"{initiator.Stats.CharacterName}, choose an enemy you threaten:",
+            characters: threatenedEnemies,
+            onSelect: enemy => OnAidAnotherEnemySelected(initiator, enemy),
+            onCancel: () =>
+            {
+                Debug.Log("[AidAnother] Enemy selection cancelled");
+                ShowActionChoices();
+            },
+            optionButtonColorOverride: new Color(0.6f, 0.2f, 0.2f, 1f));
     }
 
-    public void ShowAidTypeChoice(CharacterController aider, CharacterController ally)
+    private void OnAidAnotherEnemySelected(CharacterController initiator, CharacterController enemy)
     {
-        if (aider == null || ally == null)
+        if (initiator == null || enemy == null)
         {
             ShowActionChoices();
             return;
         }
+
+        _aidAnotherSelectedEnemy = enemy;
+        Debug.Log($"[AidAnother] Enemy selected: {enemy.Stats?.CharacterName ?? "Unknown"}");
+
+        ShowAidAnotherTypeSelection(initiator, enemy);
+    }
+
+    private void ShowAidAnotherTypeSelection(CharacterController initiator, CharacterController enemy)
+    {
+        if (initiator == null || enemy == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        Debug.Log($"[AidAnother] Showing aid type selection for {initiator.Stats.CharacterName} vs {enemy.Stats.CharacterName}");
 
         var options = new List<string>
         {
@@ -4267,46 +4360,82 @@ public class GameManager : MonoBehaviour
         };
 
         CombatUI?.ShowPickUpItemSelection(
-            aider.Stats.CharacterName,
+            initiator.Stats.CharacterName,
             options,
             onSelect: selectedIndex =>
             {
-                AidType aidType = selectedIndex == 0 ? AidType.Defense : AidType.Offense;
-                ShowAidEnemySelection(aider, ally, aidType);
+                AidType selectedType = selectedIndex == 0 ? AidType.Defense : AidType.Offense;
+                OnAidAnotherTypeSelected(initiator, enemy, selectedType);
             },
-            onCancel: () => ShowAidAnotherAllySelection(aider),
-            titleOverride: $"Aid Another - {ally.Stats.CharacterName}",
+            onCancel: () =>
+            {
+                Debug.Log("[AidAnother] Aid type selection cancelled");
+                ShowActionChoices();
+            },
+            titleOverride: $"Aid Another - {enemy.Stats.CharacterName}",
             bodyOverride: "Choose aid type:",
-            optionButtonColorOverride: new Color(0.32f, 0.24f, 0.56f, 1f));
+            optionButtonColorOverride: new Color(0.3f, 0.4f, 0.6f, 1f));
     }
 
-    public void ShowAidEnemySelection(CharacterController aider, CharacterController ally, AidType aidType)
+    private void OnAidAnotherTypeSelected(CharacterController initiator, CharacterController enemy, AidType aidType)
     {
-        if (aider == null || ally == null)
+        if (initiator == null || enemy == null)
         {
             ShowActionChoices();
             return;
         }
 
-        List<CharacterController> enemies = GetAidAnotherEnemyTargets(aider);
-        if (enemies.Count == 0)
+        _aidAnotherSelectedType = aidType;
+        Debug.Log($"[AidAnother] Aid type selected: {aidType}");
+
+        ShowAidAnotherAllySelection(initiator, enemy, aidType);
+    }
+
+    private void ShowAidAnotherAllySelection(CharacterController initiator, CharacterController enemy, AidType aidType)
+    {
+        if (initiator == null || enemy == null)
         {
-            CombatUI?.ShowCombatLog($"⚠ No enemies are in melee reach for {aider.Stats.CharacterName}'s Aid Another touch attack.");
             ShowActionChoices();
             return;
         }
+
+        List<CharacterController> alliesInRange = GetAlliesInMeleeRange(enemy, initiator);
+        if (alliesInRange.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ No allies in melee range of {enemy.Stats.CharacterName}!");
+            ShowActionChoices();
+            return;
+        }
+
+        Debug.Log($"[AidAnother] Showing ally selection for {initiator.Stats.CharacterName} | alliesInRange={alliesInRange.Count}");
 
         string body = aidType == AidType.Defense
-            ? "Select enemy: AC bonus applies vs this enemy's next attack."
-            : "Select enemy: Attack bonus applies on ally's next attack vs this enemy.";
+            ? $"Choose ally to gain +2 AC against {enemy.Stats.CharacterName}."
+            : $"Choose ally to gain +2 attack against {enemy.Stats.CharacterName}.";
 
         CombatUI?.ShowCharacterSelectionUI(
-            title: aidType == AidType.Defense ? "Aid Defense - Select Enemy" : "Aid Offense - Select Enemy",
+            title: $"Aid {aidType} - Select Ally",
             body: body,
-            characters: enemies,
-            onSelect: enemy => ExecuteAidAnother(aider, ally, enemy, aidType),
-            onCancel: () => ShowAidTypeChoice(aider, ally),
-            optionButtonColorOverride: new Color(0.3f, 0.24f, 0.55f, 1f));
+            characters: alliesInRange,
+            onSelect: ally => OnAidAnotherAllySelected(initiator, ally, enemy, aidType),
+            onCancel: () =>
+            {
+                Debug.Log("[AidAnother] Ally selection cancelled");
+                ShowActionChoices();
+            },
+            optionButtonColorOverride: new Color(0.34f, 0.28f, 0.56f, 1f));
+    }
+
+    private void OnAidAnotherAllySelected(CharacterController initiator, CharacterController ally, CharacterController enemy, AidType aidType)
+    {
+        if (initiator == null || ally == null || enemy == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        Debug.Log($"[AidAnother] Ally selected: {ally.Stats?.CharacterName ?? "Unknown"} | enemy={enemy.Stats?.CharacterName ?? "Unknown"} | type={aidType}");
+        ExecuteAidAnother(initiator, ally, enemy, aidType);
     }
 
     public void ExecuteAidAnother(CharacterController aider, CharacterController ally, CharacterController enemy, AidType aidType)
@@ -4320,6 +4449,13 @@ public class GameManager : MonoBehaviour
         if (!CanAttemptAidAnotherTouch(aider, enemy))
         {
             CombatUI?.ShowCombatLog($"⚠ {GetCombatantName(enemy)} is not in melee reach for Aid Another.");
+            ShowActionChoices();
+            return;
+        }
+
+        if (!ally.ThreatensWith(enemy, ally.GetEquippedWeapon()))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {GetCombatantName(ally)} is no longer in melee range of {GetCombatantName(enemy)}.");
             ShowActionChoices();
             return;
         }

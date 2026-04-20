@@ -3215,6 +3215,55 @@ public class CharacterController : MonoBehaviour
         return squareDistance >= minDist && squareDistance <= maxDist;
     }
 
+    /// <summary>
+    /// Get the currently equipped weapon used for primary attacks.
+    /// Alias retained for gameplay systems that expect a "GetEquippedWeapon" helper.
+    /// </summary>
+    public ItemData GetEquippedWeapon()
+    {
+        return GetEquippedMainWeapon();
+    }
+
+    /// <summary>
+    /// Check whether this character threatens a target with the provided (or currently equipped) weapon.
+    /// Uses melee min/max reach constraints (Chebyshev distance) to match D&D 3.5e adjacency/reach behavior.
+    /// </summary>
+    public bool ThreatensWith(CharacterController target, ItemData weapon = null)
+    {
+        if (target == null || Stats == null || target.Stats == null)
+            return false;
+
+        weapon ??= GetEquippedWeapon();
+
+        int distance = CalculateDistance(target);
+        int minReach = GetMeleeMinAttackDistance(weapon);
+        int maxReach = GetWeaponReach(weapon);
+        bool threatens = CanMeleeAttackDistance(distance, weapon);
+
+        string weaponName = weapon != null ? weapon.Name : "Unarmed Strike";
+        string selfName = Stats != null ? Stats.CharacterName : "Unknown";
+        string targetName = target.Stats != null ? target.Stats.CharacterName : "Unknown";
+        Debug.Log($"[AidAnother] {selfName} threatens {targetName} with {weaponName}? {threatens} (distance={distance}, minReach={minReach}, maxReach={maxReach})");
+
+        return threatens;
+    }
+
+    /// <summary>
+    /// Get the maximum melee threat distance in grid squares for the specified weapon.
+    /// </summary>
+    private int GetWeaponReach(ItemData weapon)
+    {
+        return GetMeleeMaxAttackDistance(weapon);
+    }
+
+    /// <summary>
+    /// Calculate Chebyshev grid distance to another character.
+    /// </summary>
+    private int CalculateDistance(CharacterController target)
+    {
+        return GetMinimumDistanceToTargetSquares(target, chebyshev: true);
+    }
+
     public int GetMinimumDistanceToTarget(CharacterController target, bool chebyshev = true)
     {
         return GetMinimumDistanceToTargetSquares(target, chebyshev);
