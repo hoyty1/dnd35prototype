@@ -591,6 +591,67 @@ public class CharacterSheetUI : MonoBehaviour
         }
     }
 
+    public void RefreshIfOpen()
+    {
+        if (!IsOpen)
+            return;
+
+        RefreshAll();
+    }
+
+    private void AppendAidAnotherSection(Transform content, CharacterController selectedPC)
+    {
+        if (content == null)
+            return;
+
+        AddSeparator(content);
+        AddLine(content, "AID ANOTHER BONUSES", 12, new Color(0.45f, 0.9f, 0.75f), FontStyle.Bold, 16);
+
+        if (selectedPC == null || GameManager.Instance == null)
+        {
+            AddLine(content, "  None", 10, DimText, FontStyle.Italic, 13);
+            return;
+        }
+
+        List<GameManager.AidBonus> bonuses = GameManager.Instance.GetAidBonusesForCharacter(selectedPC);
+        if (bonuses == null || bonuses.Count == 0)
+        {
+            AddLine(content, "  None", 10, DimText, FontStyle.Italic, 13);
+            return;
+        }
+
+        for (int i = 0; i < bonuses.Count; i++)
+        {
+            GameManager.AidBonus bonus = bonuses[i];
+            if (bonus == null)
+                continue;
+
+            AddLine(content, FormatAidAnotherBonus(bonus), 10, GetAidTypeColor(bonus.Type), FontStyle.Normal, 13);
+        }
+
+        Debug.Log($"[CharacterSheet] Updated Aid Another bonuses for {selectedPC.Stats?.CharacterName ?? "Unknown"}: {bonuses.Count} active");
+    }
+
+    private string FormatAidAnotherBonus(GameManager.AidBonus bonus)
+    {
+        string aiderName = bonus.Aider != null && bonus.Aider.Stats != null ? bonus.Aider.Stats.CharacterName : "Unknown";
+        string targetName = bonus.Target != null && bonus.Target.Stats != null ? bonus.Target.Stats.CharacterName : "Unknown";
+        bool isDefense = bonus.Type == GameManager.AidType.Defense;
+
+        string icon = isDefense ? "🛡" : "⚔";
+        string label = isDefense ? "Defense" : "Offense";
+        string value = isDefense ? "+2 AC" : "+2 Attack";
+
+        return $"  {icon} Aid {label} from {aiderName} vs {targetName} ({value})";
+    }
+
+    private Color GetAidTypeColor(GameManager.AidType aidType)
+    {
+        return aidType == GameManager.AidType.Defense
+            ? new Color(0.45f, 0.9f, 0.6f)
+            : new Color(0.45f, 0.72f, 1f);
+    }
+
     // ----- Stats Tab -----
 
     private void RefreshStatsTab()
@@ -760,6 +821,8 @@ public class CharacterSheetUI : MonoBehaviour
             AddLine(content, "  Attack Source: Unarmed strike", 11, LightText, FontStyle.Normal, 14);
             AddLine(content, $"  Damage: {unarmed.Item1}d{unarmed.Item2}{unarmedBonusStr}", 11, LightText, FontStyle.Normal, 14);
         }
+
+        AppendAidAnotherSection(content, selectedPC);
 
         // === Active Buffs ===
         // Use StatusEffectManager (present on ALL characters) for buff display,

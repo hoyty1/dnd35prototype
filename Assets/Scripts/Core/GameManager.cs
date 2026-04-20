@@ -693,6 +693,95 @@ public class GameManager : MonoBehaviour
             Debug.Log($"[AidBonus][Prune] Removed {removed} invalid/expired entries.");
     }
 
+    private void NotifyAidBonusStateChanged(params CharacterController[] affectedCharacters)
+    {
+        if (affectedCharacters == null || affectedCharacters.Length == 0)
+            return;
+
+        CharacterSheetUI sheet = CharacterSheetUI;
+        if (sheet == null || !sheet.IsOpen)
+            return;
+
+        var uniqueCharacters = new HashSet<CharacterController>();
+        for (int i = 0; i < affectedCharacters.Length; i++)
+        {
+            CharacterController c = affectedCharacters[i];
+            if (c != null)
+                uniqueCharacters.Add(c);
+        }
+
+        if (uniqueCharacters.Count > 0)
+            sheet.RefreshIfOpen();
+    }
+
+    /// <summary>
+    /// Get all active Aid Another bonuses where the given character is the beneficiary.
+    /// </summary>
+    public List<AidBonus> GetAidBonusesForCharacter(CharacterController character)
+    {
+        var bonuses = new List<AidBonus>();
+        if (character == null)
+            return bonuses;
+
+        PruneInvalidAidBonuses();
+
+        for (int i = 0; i < ActiveAidBonuses.Count; i++)
+        {
+            AidBonus bonus = ActiveAidBonuses[i];
+            if (bonus != null && bonus.Beneficiary == character)
+                bonuses.Add(bonus);
+        }
+
+        Debug.Log($"[AidBonus][Query] {GetCombatantName(character)} has {bonuses.Count} active Aid Another bonuses.");
+        return bonuses;
+    }
+
+    /// <summary>
+    /// Get active offense Aid Another bonuses for attacker against the specific target.
+    /// </summary>
+    public List<AidBonus> GetAidAnotherAttackBonuses(CharacterController attacker, CharacterController target)
+    {
+        var bonuses = new List<AidBonus>();
+        if (attacker == null || target == null)
+            return bonuses;
+
+        PruneInvalidAidBonuses();
+
+        for (int i = 0; i < ActiveAidBonuses.Count; i++)
+        {
+            AidBonus bonus = ActiveAidBonuses[i];
+            if (bonus == null)
+                continue;
+            if (bonus.Type == AidType.Offense && bonus.Beneficiary == attacker && bonus.Target == target)
+                bonuses.Add(bonus);
+        }
+
+        return bonuses;
+    }
+
+    /// <summary>
+    /// Get active defense Aid Another bonuses for defender against a specific attacker.
+    /// </summary>
+    public List<AidBonus> GetAidAnotherDefenseBonuses(CharacterController defender, CharacterController attacker)
+    {
+        var bonuses = new List<AidBonus>();
+        if (defender == null || attacker == null)
+            return bonuses;
+
+        PruneInvalidAidBonuses();
+
+        for (int i = 0; i < ActiveAidBonuses.Count; i++)
+        {
+            AidBonus bonus = ActiveAidBonuses[i];
+            if (bonus == null)
+                continue;
+            if (bonus.Type == AidType.Defense && bonus.Beneficiary == defender && bonus.Target == attacker)
+                bonuses.Add(bonus);
+        }
+
+        return bonuses;
+    }
+
     public bool CanUseAidAnother(CharacterController actor, out string reason)
     {
         reason = "Unavailable";
@@ -774,6 +863,8 @@ public class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog($"✅ {beneficiaryName} gains +{totalForPair} AC vs {targetName} (from {sourceList}; {expiryHint}).");
         else
             CombatUI?.ShowCombatLog($"✅ {beneficiaryName} gains +{totalForPair} attack vs {targetName} (from {sourceList}; {expiryHint}).");
+
+        NotifyAidBonusStateChanged(beneficiary);
     }
 
     public int ConsumeAidAnotherAttackBonus(CharacterController attacker, CharacterController defender)
@@ -806,6 +897,7 @@ public class GameManager : MonoBehaviour
             for (int i = 0; i < consumed.Count; i++)
                 ActiveAidBonuses.Remove(consumed[i]);
             Debug.Log($"[AidBonus][Attack] Consumed {consumed.Count} offense bonuses; total applied +{totalBonus}");
+            NotifyAidBonusStateChanged(attacker);
         }
         else
         {
@@ -845,6 +937,7 @@ public class GameManager : MonoBehaviour
             for (int i = 0; i < consumed.Count; i++)
                 ActiveAidBonuses.Remove(consumed[i]);
             Debug.Log($"[AidBonus][Defense] Consumed {consumed.Count} defense bonuses; total applied +{totalBonus}");
+            NotifyAidBonusStateChanged(defender);
         }
         else
         {
@@ -883,6 +976,9 @@ public class GameManager : MonoBehaviour
             Debug.Log($"[AidBonus][Expire] Removing expired bonus: {DescribeAidBonus(bonus)}");
             ActiveAidBonuses.Remove(bonus);
         }
+
+        if (expiring.Count > 0)
+            NotifyAidBonusStateChanged(beneficiary);
 
         LogAidBonusSnapshot("Expire-PostTurnStart");
     }
@@ -2138,8 +2234,10 @@ public class GameManager : MonoBehaviour
     {
         RefreshFlankedConditions();
 
-        if (CombatUI == null) return;
-        CombatUI.UpdateAllStats4PC(PCs, NPCs);
+        if (CombatUI != null)
+            CombatUI.UpdateAllStats4PC(PCs, NPCs);
+
+        CharacterSheetUI?.RefreshIfOpen();
     }
 
     /// <summary>
