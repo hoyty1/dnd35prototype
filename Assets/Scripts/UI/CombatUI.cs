@@ -4220,6 +4220,47 @@ public class CombatUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Generic character-selection dialog built on top of the existing selectable-list modal.
+    /// Useful for actions like Aid Another ally/enemy selection.
+    /// </summary>
+    public void ShowCharacterSelectionUI(
+        string title,
+        string body,
+        List<CharacterController> characters,
+        System.Action<CharacterController> onSelect,
+        System.Action onCancel,
+        Color? optionButtonColorOverride = null)
+    {
+        if (characters == null)
+            characters = new List<CharacterController>();
+
+        var labels = new List<string>(characters.Count);
+        for (int i = 0; i < characters.Count; i++)
+        {
+            CharacterController c = characters[i];
+            labels.Add(c != null && c.Stats != null ? c.Stats.CharacterName : "Unknown");
+        }
+
+        ShowPickUpItemSelection(
+            actorName: "Selection",
+            itemOptions: labels,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= characters.Count)
+                {
+                    onCancel?.Invoke();
+                    return;
+                }
+
+                onSelect?.Invoke(characters[selectedIndex]);
+            },
+            onCancel: onCancel,
+            titleOverride: string.IsNullOrEmpty(title) ? "Select Character" : title,
+            bodyOverride: string.IsNullOrEmpty(body) ? "Choose a character:" : body,
+            optionButtonColorOverride: optionButtonColorOverride ?? new Color(0.26f, 0.34f, 0.55f, 1f));
+    }
+
     public void ShowDropEquippedItemSelection(string actorName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
     {
         HideDropEquippedItemSelection();

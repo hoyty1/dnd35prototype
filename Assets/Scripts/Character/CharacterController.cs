@@ -1363,10 +1363,10 @@ public class CharacterController : MonoBehaviour
         return GameManager.Instance.ConsumeAidAnotherAttackBonus(this, target);
     }
 
-    private int GetAidAnotherAcBonus(CharacterController target)
+    private int ConsumeAidAnotherAcBonus(CharacterController target)
     {
         if (GameManager.Instance == null) return 0;
-        return GameManager.Instance.GetAidAnotherAcBonus(this, target);
+        return GameManager.Instance.ConsumeAidAnotherAcBonus(this, target);
     }
 
     /// <summary>
@@ -1486,7 +1486,7 @@ public class CharacterController : MonoBehaviour
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
         int conditionAttackPenalty = Stats.ConditionAttackPenalty;
         int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
-        int aidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
+        int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
 
         int totalAtkMod = Stats.BaseAttackBonus + abilityMod + Stats.SizeModifier
@@ -1729,7 +1729,7 @@ public class CharacterController : MonoBehaviour
 
             int baseBonus = allAttackBonuses[i];
             int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
-            int aidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
+            int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
             int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                          + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                          + rapidShotPenalty + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
@@ -2019,7 +2019,7 @@ public class CharacterController : MonoBehaviour
         if (canMainAttack)
         {
             int mainAidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
-            int mainAidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
+            int mainAidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
             int mainAtkMod = Stats.AttackBonus + mainPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                              + powerAtkPenalty + pbsAtkBonus + mainWFBonus + finesseAtkAdjust + combatExpertisePenalty
                              + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
@@ -2092,7 +2092,7 @@ public class CharacterController : MonoBehaviour
         if (!target.Stats.IsDead && canOffAttack)
         {
             int offAidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
-            int offAidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
+            int offAidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
             int offAtkMod = Stats.AttackBonus + offPenalty + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                             + powerAtkPenalty + pbsAtkBonus + offWFBonus + finesseAtkAdjust + combatExpertisePenalty
                             + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
@@ -5969,7 +5969,7 @@ public class CharacterController : MonoBehaviour
             }
 
             int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
-            int aidAnotherTargetAcBonus = GetAidAnotherAcBonus(target);
+            int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
             int atkMod = flurryBonuses[i] + (isFlanking ? flankingBonus : 0) + racialAtkBonus + proneAttackPenalty
                        + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty + aidAnotherAttackBonus
                        + damageModeProfile.AttackPenalty;
