@@ -964,42 +964,16 @@ public class CombatUI : MonoBehaviour
             }
         }
 
-        bool canTakeFullRoundAttack = fullAttackRelevant && actions.HasFullRoundAction && canAttackWithWeapon && !isPinned;
+        // Full Attack entry points are intentionally removed from the main Actions window
+        // while the new multi-attack flow is being reworked in follow-up tasks.
         if (FullAttackButton != null)
         {
-            FullAttackButton.gameObject.SetActive(fullAttackRelevant);
-            FullAttackButton.interactable = canTakeFullRoundAttack;
-            Text faLabel = FullAttackButton.GetComponentInChildren<Text>();
-            if (faLabel != null)
-            {
-                int atkCount = pc.Stats.IterativeAttackCount;
-                bool weaponIsRanged = pc.IsEquippedWeaponRanged();
-                bool rapidShotWillApply = hasRapidShot && pc.RapidShotEnabled && weaponIsRanged;
-
-                if (isPinned) faLabel.text = "Full Attack (Pinned: no)";
-                else if (!canAttackWithWeapon) faLabel.text = "Full Attack (Reload first)";
-                else if (!canTakeFullRoundAttack) faLabel.text = "Full Attack (N/A)";
-                else if (rapidShotWillApply) faLabel.text = $"Full Attack x{atkCount + 1} (Rapid Shot)";
-                else if (hasRapidShot && pc.RapidShotEnabled && !weaponIsRanged) faLabel.text = $"Full Attack x{atkCount} (RS: need ranged wpn)";
-                else if (hasIterativeAttacks) faLabel.text = usingUnarmedStrike ? $"Full Attack x{atkCount} (Unarmed strike)" : $"Full Attack x{atkCount} (Full-Round)";
-                else faLabel.text = usingUnarmedStrike ? "Full Attack (Unarmed strike)" : "Full Attack (Full-Round)";
-            }
+            FullAttackButton.gameObject.SetActive(false);
         }
 
         if (FullAttackDefensivelyButton != null)
         {
-            FullAttackDefensivelyButton.gameObject.SetActive(fullAttackRelevant);
-            bool canFullAttackDefensively = canTakeFullRoundAttack && canFightDefensively;
-            FullAttackDefensivelyButton.interactable = canFullAttackDefensively;
-            Text fullDefLabel = FullAttackDefensivelyButton.GetComponentInChildren<Text>();
-            if (fullDefLabel != null)
-            {
-                if (isPinned) fullDefLabel.text = "Full Attack (Def) [Pinned]";
-                else if (!canFightDefensively) fullDefLabel.text = "Full Attack (Def) [BAB +1]";
-                else if (!canAttackWithWeapon) fullDefLabel.text = "Full Attack (Def) [Reload first]";
-                else if (!canTakeFullRoundAttack) fullDefLabel.text = "Full Attack (Def) [N/A]";
-                else fullDefLabel.text = "Full Attack (Def)";
-            }
+            FullAttackDefensivelyButton.gameObject.SetActive(false);
         }
 
         if (DualWieldButton != null)

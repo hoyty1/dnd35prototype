@@ -785,10 +785,8 @@ public class SceneBootstrap : MonoBehaviour
             "Overrun", new Color(0.58f, 0.34f, 0.2f));
         combatUI.ChargeButton = CreateGridButton(btnGrid.transform, "ChargeBtn",
             "Charge", new Color(0.78f, 0.45f, 0.15f));
-        combatUI.FullAttackButton = CreateGridButton(btnGrid.transform, "FullAttackBtn",
-            "Full Attack", new Color(0.6f, 0.15f, 0.15f));
-        combatUI.FullAttackDefensivelyButton = CreateGridButton(btnGrid.transform, "FullAttackDefensivelyBtn",
-            "Full Attack (Def)", new Color(0.26f, 0.34f, 0.62f));
+        // Full Attack buttons are intentionally omitted from the main actions window
+        // while multi-attack flow is being reworked.
         combatUI.DualWieldButton = CreateGridButton(btnGrid.transform, "DualWieldBtn",
             "Dual Wield", new Color(0.5f, 0.25f, 0.5f));
         combatUI.FlurryOfBlowsButton = CreateGridButton(btnGrid.transform, "FlurryBtn",
@@ -1087,10 +1085,7 @@ public class SceneBootstrap : MonoBehaviour
         }
         if (ui.ChargeButton != null)
             ui.ChargeButton.onClick.AddListener(() => GameManager.Instance.OnChargeButtonPressed());
-        if (ui.FullAttackButton != null)
-            ui.FullAttackButton.onClick.AddListener(() => GameManager.Instance.OnFullAttackButtonPressed());
-        if (ui.FullAttackDefensivelyButton != null)
-            ui.FullAttackDefensivelyButton.onClick.AddListener(() => GameManager.Instance.OnFullAttackDefensivelyButtonPressed());
+        // Full Attack actions are intentionally not wired from the main action window.
         if (ui.DualWieldButton != null)
             ui.DualWieldButton.onClick.AddListener(() => GameManager.Instance.OnDualWieldButtonPressed());
         if (ui.FlurryOfBlowsButton != null)
