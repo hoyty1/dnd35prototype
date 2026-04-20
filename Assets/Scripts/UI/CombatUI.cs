@@ -894,7 +894,7 @@ public class CombatUI : MonoBehaviour
                 else if (blockedByProne) chargeLabel.text = "Charge (Prone)";
                 else if (blockedByFiveFootStep) chargeLabel.text = "Charge (After 5-ft step: no)";
                 else if (!hasFullRound) chargeLabel.text = "Charge (Used)";
-                else if (!hasAnyChargeTarget) chargeLabel.text = "Charge (No lane)";
+                else if (!hasAnyChargeTarget) chargeLabel.text = "Charge (No path)";
                 else chargeLabel.text = "Charge (Full-Round)";
             }
         }

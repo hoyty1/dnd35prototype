@@ -226,7 +226,7 @@ public class SquareGrid : MonoBehaviour
     /// <param name="maxRange">Maximum path length in D&D 3.5 squares.</param>
     /// <returns>AoOPathResult with the computed path and provoked AoOs.</returns>
     public AoOPathResult FindPathAoOAware(Vector2Int start, Vector2Int destination,
-        HashSet<Vector2Int> threatenedSquares, int maxRange, int moverSizeSquares = 1, CharacterController mover = null)
+        HashSet<Vector2Int> threatenedSquares, int maxRange, int moverSizeSquares = 1, CharacterController mover = null, bool allowThroughAllies = true)
     {
         var result = new AoOPathResult();
         if (start == destination) return result;
@@ -318,7 +318,7 @@ public class SquareGrid : MonoBehaviour
                 if (cell == null) continue;
 
                 bool isDestinationNode = neighbor == destination;
-                bool canTraverseHere = CanTraversePathNode(neighbor, moverSizeSquares, mover, isDestinationNode);
+                bool canTraverseHere = CanTraversePathNode(neighbor, moverSizeSquares, mover, isDestinationNode, allowThroughAllies);
 
                 if (!canTraverseHere) continue;
 
@@ -359,7 +359,7 @@ public class SquareGrid : MonoBehaviour
         {
             Vector2Int step = result.Path[i];
             bool isDestinationStep = step == destination;
-            bool canTraverse = CanTraversePathNode(step, moverSizeSquares, mover, isDestinationStep);
+            bool canTraverse = CanTraversePathNode(step, moverSizeSquares, mover, isDestinationStep, allowThroughAllies);
             if (!canTraverse)
             {
                 firstInvalidIndex = i;
@@ -384,7 +384,7 @@ public class SquareGrid : MonoBehaviour
     /// - Destination node must be fully unoccupied by anyone except the mover itself.
     /// - Enemy-occupied nodes are never traversable.
     /// </summary>
-    public bool CanTraversePathNode(Vector2Int basePosition, int moverSizeSquares, CharacterController mover, bool isDestinationNode)
+    public bool CanTraversePathNode(Vector2Int basePosition, int moverSizeSquares, CharacterController mover, bool isDestinationNode, bool allowThroughAllies = true)
     {
         // Validate footprint bounds/cell existence first while ignoring occupancy.
         if (!CanPlaceCreature(basePosition, moverSizeSquares, mover, ignoreOtherOccupants: true))
@@ -413,7 +413,7 @@ public class SquareGrid : MonoBehaviour
 
                 // During traversal, allies are pass-through, enemies are blocking.
                 bool isAllyOccupant = mover != null && occupant.IsPlayerControlled == mover.IsPlayerControlled;
-                if (!isAllyOccupant)
+                if (!allowThroughAllies || !isAllyOccupant)
                     return false;
             }
         }

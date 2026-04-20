@@ -10912,7 +10912,7 @@ public class GameManager : MonoBehaviour
         if (!CanChargeTarget(ActivePC, target, logFailures: false))
             return;
 
-        var previewPath = GetChargePath(ActivePC.GridPosition, target.GridPosition, Mathf.Max(1, ActivePC.Stats.AttackRange));
+        var previewPath = GetChargePath(ActivePC, target);
         int pathCost = SquareGridUtils.CalculatePathCost(ActivePC.GridPosition, previewPath);
         CombatUI.SetTurnIndicator($"CHARGE ready: {target.Stats.CharacterName} ({pathCost * 5} ft). Click target to preview and confirm.");
     }
@@ -10996,9 +10996,17 @@ public class GameManager : MonoBehaviour
         }
 
         if (logFailures && list.Count == 0)
-            CombatUI?.ShowCombatLog("⚠ No enemies meet charge requirements (distance, straight path, clear lane, line of sight).");
+            CombatUI?.ShowCombatLog("⚠ No enemies meet charge requirements (distance, clear path, reachable endpoint).");
 
         return list;
+    }
+
+    private enum ChargePathFailureReason
+    {
+        None,
+        NoPath,
+        TooClose,
+        TooFar
     }
 
     public bool CanChargeTarget(CharacterController charger, CharacterController target, bool logFailures = true)
@@ -11036,140 +11044,172 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        if (!IsStraightLinePath(charger.GridPosition, target.GridPosition))
+        if (!TryBuildChargePath(charger, target, out _, out _, out ChargePathFailureReason failureReason))
         {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ Must charge in a straight cardinal or diagonal line.");
+            if (logFailures)
+            {
+                int maxDistanceFeet = Mathf.Max(2, charger.Stats.MoveRange * 2) * 5;
+                switch (failureReason)
+                {
+                    case ChargePathFailureReason.TooClose:
+                        CombatUI?.ShowCombatLog("⚠ Target is too close to charge (minimum 10 ft / 2 squares).");
+                        break;
+                    case ChargePathFailureReason.TooFar:
+                        CombatUI?.ShowCombatLog($"⚠ Target is too far to charge (max {maxDistanceFeet} ft).");
+                        break;
+                    default:
+                        CombatUI?.ShowCombatLog("⚠ No valid charge path to target.");
+                        break;
+                }
+            }
             return false;
         }
 
-        List<Vector2Int> path = GetChargePath(charger.GridPosition, target.GridPosition, Mathf.Max(1, charger.Stats.AttackRange));
-        if (path == null || path.Count == 0)
-        {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ Cannot find a legal endpoint for this charge.");
-            return false;
-        }
+        return true;
+    }
 
-        int minDistance = 2; // 10 ft
+    public List<Vector2Int> GetChargePath(CharacterController charger, CharacterController target)
+    {
+        if (TryBuildChargePath(charger, target, out List<Vector2Int> path, out _, out _))
+            return path;
+
+        return new List<Vector2Int>();
+    }
+
+    private bool TryBuildChargePath(
+        CharacterController charger,
+        CharacterController target,
+        out List<Vector2Int> bestPath,
+        out int bestPathCost,
+        out ChargePathFailureReason failureReason)
+    {
+        bestPath = null;
+        bestPathCost = int.MaxValue;
+        failureReason = ChargePathFailureReason.NoPath;
+
+        if (charger == null || target == null || charger.Stats == null || target.Stats == null || Grid == null)
+            return false;
+
+        int minDistance = 2; // 10 feet
         int maxDistance = Mathf.Max(minDistance, charger.Stats.MoveRange * 2);
-        int pathCost = SquareGridUtils.CalculatePathCost(charger.GridPosition, path);
+        int moverSizeSquares = Mathf.Max(1, charger.GetVisualSquaresOccupied());
+        int searchRange = Mathf.Max(maxDistance, (Grid.Width + Grid.Height) * 2);
 
-        if (pathCost < minDistance)
+        bool foundReachableEndpoint = false;
+        int shortestReachableCost = int.MaxValue;
+        Vector2Int bestEndpoint = default;
+
+        foreach (Vector2Int endpoint in GetChargeEndpointCandidates(charger, target, moverSizeSquares))
         {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ Target is too close to charge (minimum 10 ft / 2 squares). ");
+            AoOPathResult pathResult = Grid.FindPathAoOAware(
+                charger.GridPosition,
+                endpoint,
+                threatenedSquares: null,
+                maxRange: searchRange,
+                moverSizeSquares: moverSizeSquares,
+                mover: charger,
+                allowThroughAllies: true);
+
+            if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
+                continue;
+
+            List<Vector2Int> candidatePath = pathResult.Path;
+            if (candidatePath[candidatePath.Count - 1] != endpoint)
+                continue;
+
+            if (ContainsChargeBlockingTerrain(candidatePath))
+                continue;
+
+            int pathCost = SquareGridUtils.CalculatePathCost(charger.GridPosition, candidatePath);
+            foundReachableEndpoint = true;
+            if (pathCost < shortestReachableCost)
+                shortestReachableCost = pathCost;
+
+            if (pathCost < minDistance || pathCost > maxDistance)
+                continue;
+
+            bool isBetterPath = bestPath == null
+                || pathCost < bestPathCost
+                || (pathCost == bestPathCost && IsBetterChargeEndpoint(endpoint, bestEndpoint, target.GridPosition));
+
+            if (!isBetterPath)
+                continue;
+
+            bestPath = new List<Vector2Int>(candidatePath);
+            bestPathCost = pathCost;
+            bestEndpoint = endpoint;
+        }
+
+        if (bestPath != null)
+        {
+            failureReason = ChargePathFailureReason.None;
+            return true;
+        }
+
+        if (!foundReachableEndpoint)
+        {
+            failureReason = ChargePathFailureReason.NoPath;
             return false;
         }
 
-        if (pathCost > maxDistance)
-        {
-            if (logFailures) CombatUI?.ShowCombatLog($"⚠ Target is too far to charge (max {maxDistance * 5} ft).");
-            return false;
-        }
+        if (shortestReachableCost < minDistance)
+            failureReason = ChargePathFailureReason.TooClose;
+        else if (shortestReachableCost > maxDistance)
+            failureReason = ChargePathFailureReason.TooFar;
+        else
+            failureReason = ChargePathFailureReason.NoPath;
 
-        if (!HasChargeLineOfSight(charger, target, path))
-        {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ No line of sight to charge target.");
-            return false;
-        }
-
-        if (!IsPathClear(path, charger, target))
-        {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ Charge path is blocked.");
-            return false;
-        }
-
-        foreach (Vector2Int p in path)
-        {
-            if (IsDifficultTerrain(p))
-            {
-                if (logFailures) CombatUI?.ShowCombatLog("⚠ Cannot charge through difficult terrain.");
-                return false;
-            }
-        }
-
-        Vector2Int finalPos = path[path.Count - 1];
-        if (!CombatUtils.CanThreatenTargetFromPosition(charger, finalPos, target))
-        {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ Charge must end in legal melee reach ring of the target.");
-            return false;
-        }
-
-        return true;
+        return false;
     }
 
-    public List<Vector2Int> GetChargePath(Vector2Int start, Vector2Int targetPos, int attackRange = 1)
+    private IEnumerable<Vector2Int> GetChargeEndpointCandidates(CharacterController charger, CharacterController target, int moverSizeSquares)
     {
-        var path = new List<Vector2Int>();
-        if (!IsStraightLinePath(start, targetPos)) return path;
+        if (charger == null || target == null || Grid == null)
+            yield break;
 
-        Vector2Int delta = targetPos - start;
-        Vector2Int direction = new Vector2Int(Mathf.Clamp(delta.x, -1, 1), Mathf.Clamp(delta.y, -1, 1));
-        if (direction == Vector2Int.zero) return path;
-
-        Vector2Int current = start;
-        int safety = 0;
-        while (safety++ < 100)
+        foreach (var kvp in Grid.Cells)
         {
-            current += direction;
-            SquareCell cell = Grid.GetCell(current);
-            if (cell == null) break;
+            Vector2Int endpoint = kvp.Key;
 
-            path.Add(current);
+            if (endpoint == charger.GridPosition)
+                continue;
 
-            int distToTarget = SquareGridUtils.GetChebyshevDistance(current, targetPos);
-            if (distToTarget <= Mathf.Max(1, attackRange) && distToTarget > 0)
-                break;
+            if (!CombatUtils.CanThreatenTargetFromPosition(charger, endpoint, target))
+                continue;
 
-            if (current == targetPos)
-                break;
+            if (!Grid.CanTraversePathNode(endpoint, moverSizeSquares, charger, isDestinationNode: true, allowThroughAllies: true))
+                continue;
+
+            yield return endpoint;
+        }
+    }
+
+    private static bool IsBetterChargeEndpoint(Vector2Int candidate, Vector2Int currentBest, Vector2Int targetPos)
+    {
+        int candidateChebyshev = SquareGridUtils.GetChebyshevDistance(candidate, targetPos);
+        int currentChebyshev = SquareGridUtils.GetChebyshevDistance(currentBest, targetPos);
+
+        if (candidateChebyshev != currentChebyshev)
+            return candidateChebyshev < currentChebyshev;
+
+        if (candidate.y != currentBest.y)
+            return candidate.y < currentBest.y;
+
+        return candidate.x < currentBest.x;
+    }
+
+    private bool ContainsChargeBlockingTerrain(List<Vector2Int> path)
+    {
+        if (path == null || path.Count == 0)
+            return true;
+
+        for (int i = 0; i < path.Count; i++)
+        {
+            if (IsDifficultTerrain(path[i]))
+                return true;
         }
 
-        if (path.Count == 0) return path;
-
-        Vector2Int end = path[path.Count - 1];
-        int endDist = SquareGridUtils.GetChebyshevDistance(end, targetPos);
-        if (endDist < 1 || endDist > Mathf.Max(1, attackRange))
-            path.Clear();
-
-        return path;
-    }
-
-    public bool IsStraightLinePath(Vector2Int start, Vector2Int end)
-    {
-        Vector2Int delta = end - start;
-        if (delta == Vector2Int.zero) return false;
-
-        if (delta.x == 0 || delta.y == 0) return true; // cardinal
-        return Mathf.Abs(delta.x) == Mathf.Abs(delta.y); // diagonal
-    }
-
-    public bool IsPathClear(List<Vector2Int> path, CharacterController charger, CharacterController target)
-    {
-        if (path == null || charger == null) return false;
-
-        foreach (Vector2Int pos in path)
-        {
-            SquareCell cell = Grid.GetCell(pos);
-            if (cell == null) return false;
-
-            CharacterController occupant = GetCharacterAtPosition(pos);
-            if (occupant != null && occupant != charger)
-            {
-                if (target == null || occupant != target)
-                    return false;
-            }
-        }
-
-        return true;
-    }
-
-    private bool HasChargeLineOfSight(CharacterController charger, CharacterController target, List<Vector2Int> path)
-    {
-        if (charger == null || target == null) return false;
-        if (Grid.GetCell(target.GridPosition) == null) return false;
-        if (path == null || path.Count == 0) return false;
-
-        // Prototype LOS: no wall/cover system yet, so straight unobstructed charge lane is treated as LOS.
-        return IsStraightLinePath(charger.GridPosition, target.GridPosition);
+        return false;
     }
 
     private bool IsDifficultTerrain(Vector2Int pos)
@@ -11179,15 +11219,6 @@ public class GameManager : MonoBehaviour
         return false;
     }
 
-    private CharacterController GetCharacterAtPosition(Vector2Int pos)
-    {
-        foreach (var c in GetAllCharacters())
-        {
-            if (c != null && c.GridPosition == pos && c.Stats != null && !c.Stats.IsDead)
-                return c;
-        }
-        return null;
-    }
 
     private void HandleChargeTargetClick(CharacterController charger, SquareCell cell)
     {
@@ -11201,7 +11232,7 @@ public class GameManager : MonoBehaviour
             return;
 
         _chargeTarget = target;
-        _pendingChargePath = GetChargePath(charger.GridPosition, target.GridPosition, Mathf.Max(1, charger.Stats.AttackRange));
+        _pendingChargePath = GetChargePath(charger, target);
 
         CurrentSubPhase = PlayerSubPhase.ConfirmingChargePath;
         ShowChargePathPreview(charger, target);
@@ -11266,7 +11297,7 @@ public class GameManager : MonoBehaviour
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        List<Vector2Int> path = GetChargePath(charger.GridPosition, target.GridPosition, Mathf.Max(1, charger.Stats.AttackRange));
+        List<Vector2Int> path = GetChargePath(charger, target);
         if (path == null || path.Count == 0)
         {
             CombatUI?.ShowCombatLog("⚠ Charge aborted: invalid path.");
@@ -12599,7 +12630,7 @@ public class GameManager : MonoBehaviour
         if (target.Stats == null || target.Stats.IsDead) return false;
 
         int dist = npc.GetMinimumDistanceToTarget(target, chebyshev: true);
-        // Prefer charge when out of melee reach but still reachable in a charge lane.
+        // Prefer charge when out of melee reach but still reachable via a valid charge path.
         if (npc.CanMeleeAttackDistance(dist)) return false;
 
         return CanChargeTarget(npc, target, logFailures: false);
@@ -12610,7 +12641,7 @@ public class GameManager : MonoBehaviour
         if (!CanChargeTarget(npc, target, logFailures: false))
             yield break;
 
-        List<Vector2Int> path = GetChargePath(npc.GridPosition, target.GridPosition, Mathf.Max(1, npc.Stats.AttackRange));
+        List<Vector2Int> path = GetChargePath(npc, target);
         if (path == null || path.Count == 0)
             yield break;
 
