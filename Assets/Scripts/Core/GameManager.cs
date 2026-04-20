@@ -10200,27 +10200,27 @@ public class GameManager : MonoBehaviour
         _disarmAttemptNumber = 0;
     }
 
-    private bool ShouldContinueDisarmSequence(CharacterController attacker, CharacterController target, SpecialAttackResult result)
+    private bool ShouldAutoContinueDisarmSequence(CharacterController attacker, CharacterController target, SpecialAttackResult result)
     {
         if (attacker == null || target == null || result == null)
         {
-            Debug.Log("[Disarm][Flow] ShouldContinueDisarmSequence -> false (missing attacker/target/result).");
+            Debug.Log("[Disarm][Flow] ShouldAutoContinueDisarmSequence -> false (missing attacker/target/result).");
             return false;
         }
 
         if (!attacker.IsPlayerControlled)
         {
-            Debug.Log($"[Disarm][Flow] ShouldContinueDisarmSequence -> false (attacker {attacker.Stats.CharacterName} is NPC-controlled).");
+            Debug.Log($"[Disarm][Flow] ShouldAutoContinueDisarmSequence -> false (attacker {attacker.Stats.CharacterName} is NPC-controlled).");
             return false;
         }
 
         int remainingAttacks = attacker.GetRemainingDisarmAttackActions();
         bool hasIterativeSequenceAttacks = attacker.HasRemainingIterativeDisarmAttacksInSequence();
         int targetDisarmableItems = target.GetDisarmableHeldItemOptions().Count;
+        bool shouldContinue = !result.Success && hasIterativeSequenceAttacks && targetDisarmableItems > 0;
 
-        bool shouldContinue = hasIterativeSequenceAttacks && targetDisarmableItems > 0;
         Debug.Log(
-            $"[Disarm][Flow] ShouldContinueDisarmSequence attacker={attacker.Stats.CharacterName} " +
+            $"[Disarm][Flow] ShouldAutoContinueDisarmSequence attacker={attacker.Stats.CharacterName} " +
             $"target={target.Stats.CharacterName} resultSuccess={result.Success} " +
             $"remainingAttacks={remainingAttacks} hasIterativeSequenceAttacks={hasIterativeSequenceAttacks} " +
             $"targetDisarmableItems={targetDisarmableItems} => shouldContinue={shouldContinue}");
@@ -10228,11 +10228,11 @@ public class GameManager : MonoBehaviour
         return shouldContinue;
     }
 
-    private void PromptContinueDisarmSequence(CharacterController attacker, CharacterController target)
+    private void ContinueDisarmSequenceAutomatically(CharacterController attacker, CharacterController target)
     {
         if (attacker == null || target == null)
         {
-            Debug.Log("[Disarm][Flow] PromptContinueDisarmSequence aborted: attacker or target is null.");
+            Debug.Log("[Disarm][Flow] ContinueDisarmSequenceAutomatically aborted: attacker or target is null.");
             ClearDisarmSequenceState();
             ShowActionChoices();
             return;
@@ -10241,51 +10241,18 @@ public class GameManager : MonoBehaviour
         int nextAttackBonus = attacker.GetCurrentDisarmAttackBonus();
         int remainingAttacks = attacker.GetRemainingDisarmAttackActions();
 
-        Debug.Log($"[Disarm][Flow] PromptContinueDisarmSequence attacker={attacker.Stats.CharacterName} target={target.Stats.CharacterName} nextBAB={CharacterStats.FormatMod(nextAttackBonus)} remaining={remainingAttacks}");
-        CombatUI?.ShowCombatLog($"Continue with next disarm attempt? (BAB {CharacterStats.FormatMod(nextAttackBonus)})");
+        if (target.GetDisarmableHeldItemOptions().Count <= 0)
+        {
+            Debug.Log($"[Disarm][Flow] Auto-continue denied: target {target.Stats.CharacterName} has no disarmable held item.");
+            CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} has no held item to disarm.");
+            ClearDisarmSequenceState();
+            ShowActionChoices();
+            return;
+        }
 
-        CombatUI?.ShowPickUpItemSelection(
-            actorName: attacker.Stats.CharacterName,
-            itemOptions: new List<string>
-            {
-                $"Continue Disarm (BAB {CharacterStats.FormatMod(nextAttackBonus)})",
-                "Stop Disarming"
-            },
-            onSelect: selectedIndex =>
-            {
-                Debug.Log($"[Disarm][Flow] PromptContinueDisarmSequence selection={selectedIndex} attacker={attacker.Stats.CharacterName} target={target.Stats.CharacterName}");
-
-                if (selectedIndex == 0)
-                {
-                    if (target.GetDisarmableHeldItemOptions().Count <= 0)
-                    {
-                        Debug.Log($"[Disarm][Flow] Continue denied: target {target.Stats.CharacterName} has no disarmable held item.");
-                        CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} has no held item to disarm.");
-                        ClearDisarmSequenceState();
-                        ShowActionChoices();
-                        return;
-                    }
-
-                    Debug.Log($"[Disarm][Flow] Continuing disarm sequence attempt #{_disarmAttemptNumber + 1} (remaining={remainingAttacks}).");
-                    ExecuteSpecialAttack(attacker, target, SpecialAttackType.Disarm, _disarmTargetSlot);
-                }
-                else
-                {
-                    Debug.Log($"[Disarm][Flow] Player selected Stop Disarming for attacker={attacker.Stats.CharacterName}.");
-                    CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} stops disarming.");
-                    ClearDisarmSequenceState();
-                    ShowActionChoices();
-                }
-            },
-            onCancel: () =>
-            {
-                Debug.Log($"[Disarm][Flow] PromptContinueDisarmSequence cancelled by player for attacker={attacker.Stats.CharacterName}.");
-                CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} stops disarming.");
-                ClearDisarmSequenceState();
-                ShowActionChoices();
-            },
-            titleOverride: "Disarm - Continue?",
-            bodyOverride: $"Choose whether to continue iterative disarm attempts ({remainingAttacks} remaining).");
+        Debug.Log($"[Disarm][Flow] Automatically continuing disarm sequence with attempt #{_disarmAttemptNumber + 1} (nextBAB={CharacterStats.FormatMod(nextAttackBonus)}, remaining={remainingAttacks}).");
+        CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} continues disarm automatically (next BAB {CharacterStats.FormatMod(nextAttackBonus)}).");
+        ExecuteSpecialAttack(attacker, target, SpecialAttackType.Disarm, _disarmTargetSlot);
     }
 
     private void BeginGrappleContextMenuDisplayLock(CharacterController actor)
@@ -11207,14 +11174,14 @@ public class GameManager : MonoBehaviour
 
             CombatUI?.ShowCombatLog($"[Disarm] Attempt #{_disarmAttemptNumber} used BAB {CharacterStats.FormatMod(disarmAttackBonusUsed)}.");
 
-            if (ShouldContinueDisarmSequence(attacker, target, result))
+            if (ShouldAutoContinueDisarmSequence(attacker, target, result))
             {
-                Debug.Log("[Disarm][Flow] More attempts available. Prompting for continuation.");
+                Debug.Log("[Disarm][Flow] More attempts available. Continuing automatically.");
                 Grid.ClearAllHighlights();
                 _highlightedCells.Clear();
                 _isSelectingSpecialAttack = false;
                 UpdateAllStatsUI();
-                PromptContinueDisarmSequence(attacker, target);
+                ContinueDisarmSequenceAutomatically(attacker, target);
                 return;
             }
 
