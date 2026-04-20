@@ -374,6 +374,49 @@ public class CharacterController : MonoBehaviour
         return bonuses;
     }
 
+    public int GetIterativeAttackCount()
+    {
+        return GetAttackBonuses().Count;
+    }
+
+    public int GetIterativeAttackBAB(int attackIndex)
+    {
+        List<int> bonuses = GetAttackBonuses();
+        if (attackIndex < 0 || attackIndex >= bonuses.Count)
+            return 0;
+
+        return bonuses[attackIndex];
+    }
+
+    public int GetOffHandAttackCount()
+    {
+        if (Stats == null || !Stats.HasFeat("Two-Weapon Fighting"))
+            return 0;
+
+        if (!CanDualWield())
+            return 0;
+
+        int count = 1;
+        int bab = Stats.BaseAttackBonus;
+
+        if (Stats.HasFeat("Improved Two-Weapon Fighting") && bab >= 6)
+            count++;
+
+        if (Stats.HasFeat("Greater Two-Weapon Fighting") && bab >= 11)
+            count++;
+
+        return count;
+    }
+
+    public int GetOffHandAttackBAB(int attackIndex)
+    {
+        int bab = Stats != null ? Stats.BaseAttackBonus : 0;
+        if (attackIndex < 0)
+            attackIndex = 0;
+
+        return bab - (attackIndex * 5);
+    }
+
     public bool CanUseIterativeGrappleAttackAction()
     {
         if (_grappleAttackSequenceStarted)
@@ -1462,7 +1505,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public CombatResult Attack(CharacterController target)
     {
-        return Attack(target, false, 0, null, null);
+        return Attack(target, false, 0, null, null, null, null, 0, false);
     }
 
     private int ConsumeAidAnotherAttackBonus(CharacterController target)
@@ -1498,14 +1541,23 @@ public class CharacterController : MonoBehaviour
     /// Integrates: Power Attack, Point Blank Shot, Weapon Focus, Weapon Specialization,
     /// Weapon Finesse, Combat Expertise, Improved Critical, Dodge.
     /// </summary>
-    public CombatResult Attack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
+    public CombatResult Attack(
+        CharacterController target,
+        bool isFlanking,
+        int flankingBonus,
+        string flankingPartnerName,
+        RangeInfo rangeInfo = null,
+        int? baseAttackBonusOverride = null,
+        ItemData attackWeaponOverride = null,
+        int additionalAttackModifier = 0,
+        bool isOffHandAttack = false)
     {
         // Calculate racial attack bonus against target
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
         int rangePenalty = (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange) ? rangeInfo.Penalty : 0;
 
         // Get equipped weapon for damage modifier and feat calculations
-        ItemData equippedWeapon = GetEquippedMainWeapon();
+        ItemData equippedWeapon = attackWeaponOverride ?? GetEquippedMainWeapon();
         if (!CanAttackWithWeapon(equippedWeapon, out string cannotAttackReason))
         {
             Debug.LogWarning($"[Combat] {Stats.CharacterName} cannot attack: {cannotAttackReason}");
@@ -1611,12 +1663,14 @@ public class CharacterController : MonoBehaviour
         int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
 
-        int totalAtkMod = Stats.BaseAttackBonus + abilityMod + Stats.SizeModifier
+        int baseAttackBonusUsed = baseAttackBonusOverride ?? Stats.BaseAttackBonus;
+
+        int totalAtkMod = baseAttackBonusUsed + abilityMod + Stats.SizeModifier
                           + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                           + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                           + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
                           + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty
-                          + aidAnotherAttackBonus + damageModeProfile.AttackPenalty;
+                          + aidAnotherAttackBonus + damageModeProfile.AttackPenalty + additionalAttackModifier;
 
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
         // === FEAT: Improved Critical (double threat range) ===
@@ -1656,11 +1710,14 @@ public class CharacterController : MonoBehaviour
         result.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
 
         // Breakdown fields for detailed logging
-        result.BreakdownBAB = Stats.BaseAttackBonus;
+        result.BreakdownBAB = baseAttackBonusUsed;
         result.BreakdownAbilityMod = abilityMod;
         result.BreakdownAbilityName = abilityName;
         result.WeaponNonProficiencyPenalty = weaponNonProfPenalty;
         result.ArmorNonProficiencyPenalty = armorNonProfPenalty;
+        result.IsDualWieldAttack = isOffHandAttack || additionalAttackModifier != 0;
+        result.IsOffHandAttack = isOffHandAttack;
+        result.BreakdownDualWieldPenalty = additionalAttackModifier;
 
         // Store range info on result
         if (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange)

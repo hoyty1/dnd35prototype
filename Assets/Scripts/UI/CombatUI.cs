@@ -758,6 +758,9 @@ public class CombatUI : MonoBehaviour
         ItemData equippedWeapon = pc.GetEquippedMainWeapon();
         bool usingUnarmedStrike = equippedWeapon == null;
         string attackSourceLabel = usingUnarmedStrike ? "Unarmed strike" : equippedWeapon.Name;
+        GameManager gm = GameManager.Instance;
+        bool iterativeWeaponSequenceActive = gm != null && gm.IsIterativeAttackSequenceActiveFor(pc);
+        bool iterativeWeaponFullRoundStage = gm != null && gm.IsIterativeAttackInFullRoundStage(pc);
 
         bool hasGrappleState = pc.TryGetGrappleState(out CharacterController grappleOpponent, out _, out bool actorPinnedInGrappleState, out bool opponentPinnedByActor);
         bool isPinningOpponent = pc.IsPinningOpponent();
@@ -774,7 +777,8 @@ public class CombatUI : MonoBehaviour
         {
             bool canMoveByActions = actions.HasMoveAction || actions.CanConvertStandardToMove;
             bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
-            bool canMove = canMoveByActions && !blockedByFiveFootStep && !isProne && !isPinned;
+            bool blockedByIterativeAttackSequence = iterativeWeaponFullRoundStage;
+            bool canMove = canMoveByActions && !blockedByFiveFootStep && !blockedByIterativeAttackSequence && !isProne && !isPinned;
 
             MoveButton.gameObject.SetActive(true);
             MoveButton.interactable = canMove;
@@ -784,6 +788,7 @@ public class CombatUI : MonoBehaviour
                 if (isPinned) moveLabel.text = "Move (Pinned: grapple escape only)";
                 else if (isProne) moveLabel.text = "Move (Stand up first)";
                 else if (blockedByFiveFootStep) moveLabel.text = "Move (After 5-ft step: no)";
+                else if (blockedByIterativeAttackSequence) moveLabel.text = "Move (Consumed by Full Round Attack)";
                 else if (actions.HasMoveAction) moveLabel.text = "Move (Move Action)";
                 else if (actions.CanConvertStandardToMove) moveLabel.text = "Move (Std→Move)";
                 else moveLabel.text = "Move (Used)";
@@ -838,16 +843,32 @@ public class CombatUI : MonoBehaviour
 
         if (AttackButton != null)
         {
-            bool canSingleAttack = actions.HasStandardAction && canAttackWithWeapon && !isPinned;
-            AttackButton.gameObject.SetActive(true);
+            bool hasStandardAttack = actions.HasStandardAction;
+            bool canContinueIterativeAttack = iterativeWeaponSequenceActive;
+            bool canSingleAttack = (hasStandardAttack || canContinueIterativeAttack) && canAttackWithWeapon && !isPinned;
+
+            AttackButton.gameObject.SetActive(isPinned || hasStandardAttack || canContinueIterativeAttack);
             AttackButton.interactable = canSingleAttack;
+
             Text atkLabel = AttackButton.GetComponentInChildren<Text>();
             if (atkLabel != null)
             {
-                if (isPinned) atkLabel.text = "Attack (Pinned: grapple escape only)";
-                else if (!actions.HasStandardAction) atkLabel.text = "Attack (Used)";
-                else if (!canAttackWithWeapon) atkLabel.text = "Attack (Reload first)";
-                else atkLabel.text = usingUnarmedStrike ? $"Attack (Standard, {attackSourceLabel})" : "Attack (Standard)";
+                if (isPinned)
+                {
+                    atkLabel.text = "Attack (Pinned: grapple escape only)";
+                }
+                else if (!canAttackWithWeapon)
+                {
+                    atkLabel.text = "Attack (Reload first)";
+                }
+                else if (gm != null)
+                {
+                    atkLabel.text = gm.GetIterativeAttackButtonLabel(pc, usingUnarmedStrike, attackSourceLabel);
+                }
+                else
+                {
+                    atkLabel.text = usingUnarmedStrike ? $"Attack (Standard, {attackSourceLabel})" : "Attack (Standard)";
+                }
             }
         }
 
