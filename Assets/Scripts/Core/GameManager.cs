@@ -10870,18 +10870,22 @@ public class GameManager : MonoBehaviour
         }
 
         int difference = Mathf.Max(0, bullRushResult.CheckTotal - bullRushResult.OpposedTotal);
-        int minSquares = 1;
-        int maxSquares = Mathf.Max(minSquares, GetBullRushMaxPushSquares(bullRushResult));
+        int maxExtraSquares = difference / 5;
 
         CombatUI?.ShowCombatLog($"Result: {attacker.Stats.CharacterName} wins ({bullRushResult.CheckTotal} vs {bullRushResult.OpposedTotal})");
         CombatUI?.ShowCombatLog($"Difference: {difference}");
 
-        void ExecuteSelectedDistance(int chosenSquares)
+        void ExecuteSelectedExtraDistance(int chosenExtraSquares)
         {
-            int clampedChoice = Mathf.Clamp(chosenSquares, minSquares, maxSquares);
-            CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} chooses to push {clampedChoice} square{(clampedChoice == 1 ? string.Empty : "s")}");
+            int clampedExtra = Mathf.Clamp(chosenExtraSquares, 0, maxExtraSquares);
+            int totalSquares = 1 + clampedExtra;
 
-            BullRushPushResolution pushResolution = ExecuteBullRushPush(attacker, target, clampedChoice);
+            if (clampedExtra <= 0)
+                CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} chooses to push 1 square (base only)");
+            else
+                CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} chooses to push {clampedExtra} extra square{(clampedExtra == 1 ? string.Empty : "s")} ({totalSquares} total)");
+
+            BullRushPushResolution pushResolution = ExecuteBullRushPush(attacker, target, totalSquares);
             UpdateAllStatsUI();
 
             if (!pushResolution.TargetMoved)
@@ -10911,26 +10915,25 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        if (maxSquares > minSquares)
+        if (maxExtraSquares > 0)
         {
-            CombatUI?.ShowCombatLog($"Can push {minSquares} to {maxSquares} squares ({minSquares * 5}-{maxSquares * 5} feet)");
+            CombatUI?.ShowCombatLog($"Can push 0 to {maxExtraSquares} extra squares (base 1 + extra)");
 
             if (attacker.IsPlayerControlled && CombatUI != null)
             {
-                CombatUI.ShowBullRushPushChoice(attacker, target, minSquares, maxSquares,
-                    onSelect: ExecuteSelectedDistance,
-                    onCancel: () => ExecuteSelectedDistance(minSquares));
+                CombatUI.ShowBullRushExtraPushChoice(attacker, target, maxExtraSquares,
+                    onSelect: ExecuteSelectedExtraDistance,
+                    onCancel: () => ExecuteSelectedExtraDistance(0));
             }
             else
             {
-                int defaultSquares = attacker.IsPlayerControlled ? minSquares : maxSquares;
-                ExecuteSelectedDistance(defaultSquares);
+                ExecuteSelectedExtraDistance(maxExtraSquares);
             }
         }
         else
         {
-            CombatUI?.ShowCombatLog("Push 1 square (5 feet)");
-            ExecuteSelectedDistance(minSquares);
+            CombatUI?.ShowCombatLog("Push 1 square (5 feet) - no extra available");
+            ExecuteSelectedExtraDistance(0);
         }
     }
 

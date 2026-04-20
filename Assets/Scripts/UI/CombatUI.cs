@@ -567,6 +567,7 @@ public class CombatUI : MonoBehaviour
             if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
             HideSpecialAttackMenu();
             HideSpecialStyleSelectionMenu();
+            HideBullRushExtraPushChoice();
             HidePickUpItemSelection();
             HideDropEquippedItemSelection();
             ResetDamageModeToggleVisual();
@@ -639,6 +640,71 @@ public class CombatUI : MonoBehaviour
         }
 
         _specialStyleMenuWasActiveLastFrame = isActive;
+        HandleBullRushExtraPushKeyboardInput();
+    }
+
+    private void HandleBullRushExtraPushKeyboardInput()
+    {
+        if (_bullRushExtraPushPanel == null || !_bullRushExtraPushPanel.activeSelf)
+            return;
+
+        // Escape defaults to 0 extra squares.
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            OnBullRushExtraPushSelected(0);
+            return;
+        }
+
+        for (int i = 0; i <= 9; i++)
+        {
+            KeyCode alphaKey = (KeyCode)((int)KeyCode.Alpha0 + i);
+            KeyCode keypadKey = (KeyCode)((int)KeyCode.Keypad0 + i);
+            if ((Input.GetKeyDown(alphaKey) || Input.GetKeyDown(keypadKey)) && i <= _bullRushExtraPushMaxExtraSquares)
+            {
+                OnBullRushExtraPushSelected(i);
+                return;
+            }
+        }
+#endif
+#if ENABLE_INPUT_SYSTEM
+        var keyboard = UnityEngine.InputSystem.Keyboard.current;
+        if (keyboard != null)
+        {
+            if (keyboard.escapeKey.wasPressedThisFrame)
+            {
+                OnBullRushExtraPushSelected(0);
+                return;
+            }
+
+            for (int i = 0; i <= 9; i++)
+            {
+                if (i > _bullRushExtraPushMaxExtraSquares)
+                    continue;
+
+                bool pressed = false;
+                switch (i)
+                {
+                    case 0: pressed = keyboard.digit0Key.wasPressedThisFrame || keyboard.numpad0Key.wasPressedThisFrame; break;
+                    case 1: pressed = keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame; break;
+                    case 2: pressed = keyboard.digit2Key.wasPressedThisFrame || keyboard.numpad2Key.wasPressedThisFrame; break;
+                    case 3: pressed = keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame; break;
+                    case 4: pressed = keyboard.digit4Key.wasPressedThisFrame || keyboard.numpad4Key.wasPressedThisFrame; break;
+                    case 5: pressed = keyboard.digit5Key.wasPressedThisFrame || keyboard.numpad5Key.wasPressedThisFrame; break;
+                    case 6: pressed = keyboard.digit6Key.wasPressedThisFrame || keyboard.numpad6Key.wasPressedThisFrame; break;
+                    case 7: pressed = keyboard.digit7Key.wasPressedThisFrame || keyboard.numpad7Key.wasPressedThisFrame; break;
+                    case 8: pressed = keyboard.digit8Key.wasPressedThisFrame || keyboard.numpad8Key.wasPressedThisFrame; break;
+                    case 9: pressed = keyboard.digit9Key.wasPressedThisFrame || keyboard.numpad9Key.wasPressedThisFrame; break;
+                }
+
+                if (pressed)
+                {
+                    OnBullRushExtraPushSelected(i);
+                    return;
+                }
+            }
+        }
+#endif
     }
     private void EnsureDischargeTouchButtonExists()
     {
@@ -1430,6 +1496,7 @@ public class CombatUI : MonoBehaviour
     public void ShowSpecialAttackMenu(CharacterController pc, System.Action<SpecialAttackType> onSelect, System.Action onCancel)
     {
         HideSpecialStyleSelectionMenu();
+        HideBullRushExtraPushChoice();
 
         if (_specialAttackPanel == null)
             BuildSpecialAttackPanel();
@@ -1664,46 +1731,215 @@ public class CombatUI : MonoBehaviour
         System.Action<int> onSelect,
         System.Action onCancel = null)
     {
+        // Backward-compatible wrapper: old API chose total squares, new UI chooses extra squares.
         int min = Mathf.Max(1, minSquares);
         int max = Mathf.Max(min, maxSquares);
+        int maxExtra = Mathf.Max(0, max - 1);
 
-        if (max <= min)
+        ShowBullRushExtraPushChoice(attacker, target, maxExtra,
+            onSelect: extraSquares =>
+            {
+                int totalSquares = 1 + Mathf.Max(0, extraSquares);
+                totalSquares = Mathf.Clamp(totalSquares, min, max);
+                onSelect?.Invoke(totalSquares);
+            },
+            onCancel: onCancel);
+    }
+
+    private GameObject _bullRushExtraPushPanel;
+    private int _bullRushExtraPushMaxExtraSquares;
+    private System.Action<int> _bullRushExtraPushOnSelect;
+    private System.Action _bullRushExtraPushOnCancel;
+
+    public void ShowBullRushExtraPushChoice(
+        CharacterController attacker,
+        CharacterController target,
+        int maxExtraSquares,
+        System.Action<int> onSelect,
+        System.Action onCancel = null)
+    {
+        int maxExtra = Mathf.Max(0, maxExtraSquares);
+        if (maxExtra <= 0)
         {
-            onSelect?.Invoke(min);
+            onSelect?.Invoke(0);
             return;
         }
 
-        string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "Attacker";
-        string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "target";
+        HideSpecialStyleSelectionMenu();
+        HideBullRushExtraPushChoice();
 
-        var optionLabels = new List<string>();
-        var optionEnabled = new List<bool>();
+        _bullRushExtraPushMaxExtraSquares = maxExtra;
+        _bullRushExtraPushOnSelect = onSelect;
+        _bullRushExtraPushOnCancel = onCancel;
 
-        for (int squares = min; squares <= max; squares++)
+        if (ActionPanel == null)
         {
-            int feet = squares * 5;
-            string maxTag = squares == max ? " [Maximum]" : string.Empty;
-            optionLabels.Add($"Push {squares} square{(squares == 1 ? string.Empty : "s")} ({feet} feet){maxTag}");
-            optionEnabled.Add(true);
+            _bullRushExtraPushOnSelect?.Invoke(0);
+            HideBullRushExtraPushChoice();
+            return;
         }
 
-        ShowSpecialStyleSelectionMenu(
-            menuName: "BullRushPushChoicePanel",
-            optionLabels: optionLabels,
-            optionEnabledStates: optionEnabled,
-            onSelect: selectedIndex =>
+        _bullRushExtraPushPanel = new GameObject("BullRushExtraPushChoicePanel");
+        _bullRushExtraPushPanel.transform.SetParent(ActionPanel.transform, false);
+
+        RectTransform rt = _bullRushExtraPushPanel.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.02f, 0.35f);
+        rt.anchorMax = new Vector2(0.58f, 0.98f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        Image bg = _bullRushExtraPushPanel.AddComponent<Image>();
+        bg.color = new Color(0.08f, 0.08f, 0.1f, 0.95f);
+
+        VerticalLayoutGroup rootLayout = _bullRushExtraPushPanel.AddComponent<VerticalLayoutGroup>();
+        rootLayout.spacing = 6f;
+        rootLayout.padding = new RectOffset(10, 10, 10, 10);
+        rootLayout.childControlHeight = true;
+        rootLayout.childControlWidth = true;
+        rootLayout.childForceExpandHeight = false;
+        rootLayout.childForceExpandWidth = true;
+
+        _bullRushExtraPushPanel.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        CreateBullRushExtraPushText(
+            _bullRushExtraPushPanel.transform,
+            "Header",
+            "How many extra squares would you like to push the target?",
+            14,
+            FontStyle.Bold,
+            TextAnchor.MiddleLeft,
+            Color.white);
+
+        CreateBullRushExtraPushText(
+            _bullRushExtraPushPanel.transform,
+            "Info",
+            $"Base push: 1 square (5 feet)\nAdditional available: 0 to {maxExtra} squares",
+            12,
+            FontStyle.Normal,
+            TextAnchor.MiddleLeft,
+            new Color(0.85f, 0.85f, 0.9f, 1f));
+
+        GameObject buttonContainer = new GameObject("ButtonContainer");
+        buttonContainer.transform.SetParent(_bullRushExtraPushPanel.transform, false);
+        var grid = buttonContainer.AddComponent<GridLayoutGroup>();
+        grid.cellSize = new Vector2(52f, 42f);
+        grid.spacing = new Vector2(6f, 6f);
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = Mathf.Clamp(maxExtra + 1, 3, 8);
+        var buttonContainerLE = buttonContainer.AddComponent<LayoutElement>();
+        buttonContainerLE.minHeight = maxExtra > 5 ? 96f : 48f;
+
+        for (int extra = 0; extra <= maxExtra; extra++)
+        {
+            int extraCopy = extra;
+            int totalSquares = 1 + extraCopy;
+            int totalFeet = totalSquares * 5;
+
+            Button optionButton = CreateSpecialStyleSelectionButton(
+                parent: buttonContainer.transform,
+                name: $"Extra_{extraCopy}",
+                label: extraCopy.ToString(),
+                backgroundColor: extraCopy == 0 ? new Color(0.3f, 0.3f, 0.34f, 1f) : new Color(0.45f, 0.33f, 0.12f, 1f),
+                isInteractable: true);
+
+            if (optionButton != null)
             {
-                int selectedSquares = min + Mathf.Clamp(selectedIndex, 0, optionLabels.Count - 1);
-                onSelect?.Invoke(selectedSquares);
-            },
-            onCancel: () =>
+                Text labelText = optionButton.GetComponentInChildren<Text>();
+                if (labelText != null)
+                {
+                    labelText.fontSize = 24;
+                    labelText.fontStyle = FontStyle.Bold;
+                    labelText.color = Color.white;
+                }
+
+                optionButton.onClick.AddListener(() => OnBullRushExtraPushSelected(extraCopy));
+                optionButton.gameObject.name = $"Extra_{extraCopy}_{totalSquares}sq_{totalFeet}ft";
+            }
+        }
+
+        CreateBullRushExtraPushText(
+            _bullRushExtraPushPanel.transform,
+            "Footer",
+            "(Total push = 1 + extra squares)",
+            11,
+            FontStyle.Italic,
+            TextAnchor.MiddleLeft,
+            new Color(0.72f, 0.72f, 0.78f, 1f));
+
+        Button cancelButton = CreateSpecialStyleSelectionButton(
+            parent: _bullRushExtraPushPanel.transform,
+            name: "Cancel",
+            label: "Cancel (default 0)",
+            backgroundColor: new Color(0.35f, 0.16f, 0.16f, 1f),
+            isInteractable: true);
+
+        if (cancelButton != null)
+        {
+            cancelButton.onClick.AddListener(() =>
             {
-                ShowCombatLog($"{attackerName} cancels push selection against {targetName}; defaulting to {min} square{(min == 1 ? string.Empty : "s")}.");
-                if (onCancel != null)
-                    onCancel();
+                if (_bullRushExtraPushOnCancel != null)
+                {
+                    System.Action cancelCallback = _bullRushExtraPushOnCancel;
+                    HideBullRushExtraPushChoice();
+                    cancelCallback.Invoke();
+                }
                 else
-                    onSelect?.Invoke(min);
+                {
+                    OnBullRushExtraPushSelected(0);
+                }
             });
+        }
+
+        _bullRushExtraPushPanel.SetActive(true);
+    }
+
+    public void HideBullRushExtraPushChoice()
+    {
+        if (_bullRushExtraPushPanel != null)
+            Destroy(_bullRushExtraPushPanel);
+
+        _bullRushExtraPushPanel = null;
+        _bullRushExtraPushMaxExtraSquares = 0;
+        _bullRushExtraPushOnSelect = null;
+        _bullRushExtraPushOnCancel = null;
+    }
+
+    private void OnBullRushExtraPushSelected(int extraSquares)
+    {
+        int extra = Mathf.Clamp(extraSquares, 0, _bullRushExtraPushMaxExtraSquares);
+        System.Action<int> callback = _bullRushExtraPushOnSelect;
+        HideBullRushExtraPushChoice();
+        callback?.Invoke(extra);
+    }
+
+    private Text CreateBullRushExtraPushText(
+        Transform parent,
+        string name,
+        string text,
+        int fontSize,
+        FontStyle style,
+        TextAnchor alignment,
+        Color color)
+    {
+        GameObject textGo = new GameObject(name);
+        textGo.transform.SetParent(parent, false);
+
+        Text txt = textGo.AddComponent<Text>();
+        txt.text = text;
+        txt.alignment = alignment;
+        txt.fontSize = fontSize;
+        txt.fontStyle = style;
+        txt.color = color;
+        txt.supportRichText = true;
+        txt.horizontalOverflow = HorizontalWrapMode.Wrap;
+        txt.verticalOverflow = VerticalWrapMode.Overflow;
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
+
+        LayoutElement le = textGo.AddComponent<LayoutElement>();
+        le.minHeight = Mathf.Max(24f, fontSize + 8f);
+
+        return txt;
     }
 
     public void ShowBullRushFollowChoice(
