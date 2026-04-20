@@ -4019,6 +4019,65 @@ public class CombatUI : MonoBehaviour
         }
     }
 
+    private Sprite _defaultUiSpriteCache;
+
+    private Sprite GetDefaultUISprite()
+    {
+        if (_defaultUiSpriteCache != null)
+            return _defaultUiSpriteCache;
+
+        _defaultUiSpriteCache = Resources.GetBuiltinResource<Sprite>("UISprite.psd");
+        if (_defaultUiSpriteCache == null)
+            _defaultUiSpriteCache = Resources.GetBuiltinResource<Sprite>("Background.psd");
+
+        return _defaultUiSpriteCache;
+    }
+
+    private void EnsureVisibleImage(Image image, Color fallbackColor, string contextLabel)
+    {
+        if (image == null)
+        {
+            Debug.LogWarning($"[AidUI] Missing Image component for {contextLabel}");
+            return;
+        }
+
+        Sprite sprite = GetDefaultUISprite();
+        if (image.sprite == null && sprite != null)
+        {
+            image.sprite = sprite;
+            image.type = Image.Type.Sliced;
+        }
+
+        Color color = image.color;
+        color.a = Mathf.Max(color.a, fallbackColor.a);
+        if (color.a <= 0.01f)
+            color = fallbackColor;
+        image.color = color;
+
+        Debug.Log($"[AidUI] {contextLabel} image -> sprite={(image.sprite != null)}, color={image.color}, raycastTarget={image.raycastTarget}");
+    }
+
+    private void LogAidSelectionButtonDiagnostics(GameObject buttonObject, string characterLabel)
+    {
+        if (buttonObject == null)
+        {
+            Debug.LogError($"[AidUI] Button object is null for '{characterLabel}'");
+            return;
+        }
+
+        RectTransform rectTransform = buttonObject.GetComponent<RectTransform>();
+        Image image = buttonObject.GetComponent<Image>();
+        Text text = buttonObject.GetComponentInChildren<Text>();
+
+        Debug.Log(
+            $"[AidUI] Button diagnostics for '{characterLabel}' | " +
+            $"activeInHierarchy={buttonObject.activeInHierarchy} | " +
+            $"size={(rectTransform != null ? rectTransform.rect.size.ToString() : "<none>")} | " +
+            $"anchoredPos={(rectTransform != null ? rectTransform.anchoredPosition.ToString() : "<none>")} | " +
+            $"hasImage={(image != null)} | imageColor={(image != null ? image.color.ToString() : "<none>")} | hasSprite={(image != null && image.sprite != null)} | " +
+            $"hasText={(text != null)} | text='{(text != null ? text.text : "<none>")}' | textColor={(text != null ? text.color.ToString() : "<none>")} | fontSize={(text != null ? text.fontSize : 0)}");
+    }
+
     public void ShowPickUpItemSelection(
         string actorName,
         List<string> itemOptions,
@@ -4028,21 +4087,27 @@ public class CombatUI : MonoBehaviour
         string bodyOverride = null,
         Color? optionButtonColorOverride = null)
     {
+        Debug.Log($"[AidUI] ShowPickUpItemSelection called | actor='{actorName}' | options={(itemOptions != null ? itemOptions.Count : 0)} | title='{titleOverride}'");
+
         HidePickUpItemSelection();
 
         Canvas canvas = GetComponentInParent<Canvas>();
         if (canvas == null) canvas = FindObjectOfType<Canvas>();
         if (canvas == null)
         {
+            Debug.LogError("[AidUI] No Canvas found for selection UI.");
             onCancel?.Invoke();
             return;
         }
+
+        Debug.Log($"[AidUI] Canvas located | name='{canvas.name}' | renderMode={canvas.renderMode} | sortingOrder={canvas.sortingOrder}");
 
         if (itemOptions == null)
             itemOptions = new List<string>();
 
         _pickUpItemSelectionPanel = new GameObject("PickUpItemSelectionPanel");
         _pickUpItemSelectionPanel.transform.SetParent(canvas.transform, false);
+        _pickUpItemSelectionPanel.transform.SetAsLastSibling();
 
         RectTransform panelRT = _pickUpItemSelectionPanel.AddComponent<RectTransform>();
         panelRT.anchorMin = Vector2.zero;
@@ -4052,8 +4117,10 @@ public class CombatUI : MonoBehaviour
 
         Image overlay = _pickUpItemSelectionPanel.AddComponent<Image>();
         overlay.color = new Color(0f, 0f, 0f, 0.75f);
+        EnsureVisibleImage(overlay, new Color(0f, 0f, 0f, 0.75f), "SelectionOverlay");
 
         CanvasGroup cg = _pickUpItemSelectionPanel.AddComponent<CanvasGroup>();
+        cg.alpha = 1f;
         cg.blocksRaycasts = true;
         cg.interactable = true;
 
@@ -4068,6 +4135,7 @@ public class CombatUI : MonoBehaviour
 
         Image dialogBg = dialog.AddComponent<Image>();
         dialogBg.color = new Color(0.1f, 0.14f, 0.2f, 0.98f);
+        EnsureVisibleImage(dialogBg, new Color(0.1f, 0.14f, 0.2f, 0.98f), "SelectionDialog");
         Outline outline = dialog.AddComponent<Outline>();
         outline.effectColor = new Color(0.4f, 0.8f, 0.95f, 1f);
         outline.effectDistance = new Vector2(2f, 2f);
@@ -4116,6 +4184,7 @@ public class CombatUI : MonoBehaviour
 
         Image listBg = listRoot.AddComponent<Image>();
         listBg.color = new Color(0.06f, 0.08f, 0.12f, 0.95f);
+        EnsureVisibleImage(listBg, new Color(0.06f, 0.08f, 0.12f, 0.95f), "SelectionListBackground");
 
         ScrollRect scrollRect = listRoot.AddComponent<ScrollRect>();
         scrollRect.horizontal = false;
@@ -4169,12 +4238,18 @@ public class CombatUI : MonoBehaviour
             layoutElement.preferredHeight = 92f;
 
             Image btnImg = btnObj.AddComponent<Image>();
-            btnImg.color = optionButtonColorOverride ?? new Color(0.2f, 0.36f, 0.5f, 1f);
+            Color buttonColor = optionButtonColorOverride ?? new Color(0.2f, 0.36f, 0.5f, 1f);
+            btnImg.color = buttonColor;
+            EnsureVisibleImage(btnImg, buttonColor, $"OptionButton[{optionIndex}] '{optionLabel}'");
 
             Button optionBtn = btnObj.AddComponent<Button>();
+            optionBtn.targetGraphic = btnImg;
             ColorBlock colors = optionBtn.colors;
+            colors.normalColor = Color.white;
             colors.highlightedColor = new Color(0.32f, 0.48f, 0.62f, 1f);
             colors.pressedColor = new Color(0.13f, 0.24f, 0.36f, 1f);
+            colors.selectedColor = colors.highlightedColor;
+            colors.disabledColor = new Color(0.4f, 0.4f, 0.4f, 0.9f);
             optionBtn.colors = colors;
 
             GameObject txtObj = new GameObject("Text");
@@ -4187,12 +4262,16 @@ public class CombatUI : MonoBehaviour
 
             Text txt = txtObj.AddComponent<Text>();
             txt.font = titleText.font;
+            if (txt.font == null) txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 12);
             txt.fontSize = 12;
-            txt.alignment = TextAnchor.UpperLeft;
+            txt.alignment = TextAnchor.MiddleLeft;
             txt.horizontalOverflow = HorizontalWrapMode.Wrap;
             txt.verticalOverflow = VerticalWrapMode.Overflow;
-            txt.color = Color.white;
+            txt.color = new Color(1f, 1f, 1f, 1f);
             txt.text = optionLabel;
+
+            LogAidSelectionButtonDiagnostics(btnObj, optionLabel);
 
             optionBtn.onClick.AddListener(() =>
             {
@@ -4201,14 +4280,24 @@ public class CombatUI : MonoBehaviour
             });
         }
 
+        Debug.Log($"[AidUI] Created {itemOptions.Count} option buttons for selection UI.");
+
         Button cancelBtn = CreateTouchPromptButton(dialog, "Cancel", "Cancel",
             new Vector2(0.34f, 0.06f), new Vector2(0.66f, 0.15f),
             new Color(0.45f, 0.2f, 0.2f, 1f));
-        cancelBtn.onClick.AddListener(() =>
+        if (cancelBtn != null)
         {
-            HidePickUpItemSelection();
-            onCancel?.Invoke();
-        });
+            LogAidSelectionButtonDiagnostics(cancelBtn.gameObject, "Cancel");
+            cancelBtn.onClick.AddListener(() =>
+            {
+                HidePickUpItemSelection();
+                onCancel?.Invoke();
+            });
+        }
+        else
+        {
+            Debug.LogError("[AidUI] Failed to create Cancel button for selection UI.");
+        }
     }
 
     public void HidePickUpItemSelection()
@@ -4232,6 +4321,8 @@ public class CombatUI : MonoBehaviour
         System.Action onCancel,
         Color? optionButtonColorOverride = null)
     {
+        Debug.Log($"[AidUI] ShowCharacterSelectionUI called | title='{title}' | characterCount={(characters != null ? characters.Count : 0)}");
+
         if (characters == null)
             characters = new List<CharacterController>();
 
@@ -4239,7 +4330,9 @@ public class CombatUI : MonoBehaviour
         for (int i = 0; i < characters.Count; i++)
         {
             CharacterController c = characters[i];
-            labels.Add(c != null && c.Stats != null ? c.Stats.CharacterName : "Unknown");
+            string label = c != null && c.Stats != null ? c.Stats.CharacterName : "Unknown";
+            labels.Add(label);
+            Debug.Log($"[AidUI] Character option [{i}] -> '{label}'");
         }
 
         ShowPickUpItemSelection(
@@ -4247,15 +4340,26 @@ public class CombatUI : MonoBehaviour
             itemOptions: labels,
             onSelect: selectedIndex =>
             {
+                Debug.Log($"[AidUI] Character selection clicked index={selectedIndex}");
                 if (selectedIndex < 0 || selectedIndex >= characters.Count)
                 {
+                    Debug.LogWarning($"[AidUI] Invalid character selection index={selectedIndex}; cancelling.");
                     onCancel?.Invoke();
                     return;
                 }
 
-                onSelect?.Invoke(characters[selectedIndex]);
+                CharacterController selectedCharacter = characters[selectedIndex];
+                string selectedName = selectedCharacter != null && selectedCharacter.Stats != null
+                    ? selectedCharacter.Stats.CharacterName
+                    : "Unknown";
+                Debug.Log($"[AidUI] Character selected -> '{selectedName}'");
+                onSelect?.Invoke(selectedCharacter);
             },
-            onCancel: onCancel,
+            onCancel: () =>
+            {
+                Debug.Log("[AidUI] Character selection cancelled.");
+                onCancel?.Invoke();
+            },
             titleOverride: string.IsNullOrEmpty(title) ? "Select Character" : title,
             bodyOverride: string.IsNullOrEmpty(body) ? "Choose a character:" : body,
             optionButtonColorOverride: optionButtonColorOverride ?? new Color(0.26f, 0.34f, 0.55f, 1f));
@@ -4523,11 +4627,16 @@ public class CombatUI : MonoBehaviour
 
         Image btnImg = btnObj.AddComponent<Image>();
         btnImg.color = bgColor;
+        EnsureVisibleImage(btnImg, bgColor, $"PromptButton '{name}'");
 
         Button btn = btnObj.AddComponent<Button>();
+        btn.targetGraphic = btnImg;
         var colors = btn.colors;
+        colors.normalColor = Color.white;
         colors.highlightedColor = new Color(Mathf.Min(bgColor.r + 0.15f, 1f), Mathf.Min(bgColor.g + 0.15f, 1f), Mathf.Min(bgColor.b + 0.15f, 1f), 1f);
         colors.pressedColor = new Color(Mathf.Max(bgColor.r - 0.1f, 0f), Mathf.Max(bgColor.g - 0.1f, 0f), Mathf.Max(bgColor.b - 0.1f, 0f), 1f);
+        colors.selectedColor = colors.highlightedColor;
+        colors.disabledColor = new Color(0.4f, 0.4f, 0.4f, 0.9f);
         btn.colors = colors;
 
         GameObject txtObj = new GameObject("Text");
