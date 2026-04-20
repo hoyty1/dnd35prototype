@@ -1656,6 +1656,76 @@ public class CombatUI : MonoBehaviour
         }
     }
 
+    public void ShowBullRushPushChoice(
+        CharacterController attacker,
+        CharacterController target,
+        int minSquares,
+        int maxSquares,
+        System.Action<int> onSelect,
+        System.Action onCancel = null)
+    {
+        int min = Mathf.Max(1, minSquares);
+        int max = Mathf.Max(min, maxSquares);
+
+        if (max <= min)
+        {
+            onSelect?.Invoke(min);
+            return;
+        }
+
+        string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "Attacker";
+        string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "target";
+
+        var optionLabels = new List<string>();
+        var optionEnabled = new List<bool>();
+
+        for (int squares = min; squares <= max; squares++)
+        {
+            int feet = squares * 5;
+            string maxTag = squares == max ? " [Maximum]" : string.Empty;
+            optionLabels.Add($"Push {squares} square{(squares == 1 ? string.Empty : "s")} ({feet} feet){maxTag}");
+            optionEnabled.Add(true);
+        }
+
+        ShowSpecialStyleSelectionMenu(
+            menuName: "BullRushPushChoicePanel",
+            optionLabels: optionLabels,
+            optionEnabledStates: optionEnabled,
+            onSelect: selectedIndex =>
+            {
+                int selectedSquares = min + Mathf.Clamp(selectedIndex, 0, optionLabels.Count - 1);
+                onSelect?.Invoke(selectedSquares);
+            },
+            onCancel: () =>
+            {
+                ShowCombatLog($"{attackerName} cancels push selection against {targetName}; defaulting to {min} square{(min == 1 ? string.Empty : "s")}.");
+                if (onCancel != null)
+                    onCancel();
+                else
+                    onSelect?.Invoke(min);
+            });
+    }
+
+    public void ShowBullRushFollowChoice(
+        CharacterController attacker,
+        CharacterController target,
+        int pushedSquares,
+        System.Action<bool> onDecision)
+    {
+        string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "Attacker";
+        string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "target";
+        int squares = Mathf.Max(1, pushedSquares);
+        int feet = squares * 5;
+
+        ShowConfirmationDialog(
+            title: "Bull Rush Follow",
+            message: $"{attackerName} pushed {targetName} {squares} square{(squares == 1 ? string.Empty : "s")} ({feet} feet).\nFollow into the vacated squares?",
+            confirmLabel: "Follow",
+            cancelLabel: "Stay",
+            onConfirm: () => onDecision?.Invoke(true),
+            onCancel: () => onDecision?.Invoke(false));
+    }
+
     public bool IsSpecialStyleSelectionMenuOpen()
     {
         return _specialStyleSelectionPanel != null && _specialStyleSelectionPanel.activeSelf;

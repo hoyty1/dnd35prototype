@@ -5358,14 +5358,15 @@ public class CharacterController : MonoBehaviour
 
         string resultLine = BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total);
         int margin = Mathf.Max(0, attackerCheck.Total - defenderCheck.Total);
-        int pushFeet = success ? (5 + (margin / 5) * 5) : 0;
+        int maxPushSquares = success ? 1 + (margin / 5) : 0;
+        int pushFeet = success ? maxPushSquares * 5 : 0;
 
         string header = chargeBonus > 0
             ? $"{Stats.CharacterName} charges and attempts to bull rush {target.Stats.CharacterName}"
             : $"{Stats.CharacterName} attempts to bull rush {target.Stats.CharacterName}";
 
         string outcome = success
-            ? $"{Stats.CharacterName} successfully bull rushes {target.Stats.CharacterName}, pushing them back {pushFeet} ft!"
+            ? $"{Stats.CharacterName} successfully bull rushes {target.Stats.CharacterName}. Can push 1 to {maxPushSquares} square{(maxPushSquares == 1 ? string.Empty : "s")} (5 to {pushFeet} ft)."
             : $"{Stats.CharacterName} fails to bull rush {target.Stats.CharacterName}";
 
         string log = string.Join("\n\n", new[]

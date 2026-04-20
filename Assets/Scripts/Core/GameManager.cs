@@ -10808,20 +10808,26 @@ public class GameManager : MonoBehaviour
         {
             if (type == SpecialAttackType.BullRushAttack || type == SpecialAttackType.BullRushCharge)
             {
-                int pushSquares = Mathf.Max(1, result.DamageDealt / 5);
-                TryPushTargetAway(attacker, target, pushSquares, allowAttackerFollow: true);
+                ResolveBullRushPushAndFollow(attacker, target, result, () => FinalizeSpecialAttackResolution(attacker, target));
+                return;
             }
-            else if (type == SpecialAttackType.Overrun)
+
+            if (type == SpecialAttackType.Overrun)
                 TryPushTargetAway(attacker, target, 1, allowAttackerFollow: true);
         }
 
+        FinalizeSpecialAttackResolution(attacker, target);
+    }
+
+    private void FinalizeSpecialAttackResolution(CharacterController attacker, CharacterController target)
+    {
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
         _isSelectingSpecialAttack = false;
 
         UpdateAllStatsUI();
 
-        if (target.Stats.IsDead && !target.IsPlayerControlled && AreAllNPCsDead())
+        if (target != null && target.Stats != null && target.Stats.IsDead && !target.IsPlayerControlled && AreAllNPCsDead())
         {
             CurrentPhase = TurnPhase.CombatOver;
             CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
@@ -10829,45 +10835,209 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        StartCoroutine(AfterAttackDelay(attacker, 1.0f));
+        if (attacker != null)
+            StartCoroutine(AfterAttackDelay(attacker, 1.0f));
+    }
+
+    private struct BullRushPushResolution
+    {
+        public Vector2Int Direction;
+        public Vector2Int OriginalTargetPosition;
+        public Vector2Int FinalTargetPosition;
+        public int RequestedSquares;
+        public int ActualSquares;
+        public bool Obstructed;
+
+        public bool TargetMoved => ActualSquares > 0;
+    }
+
+    private int GetBullRushMaxPushSquares(SpecialAttackResult bullRushResult)
+    {
+        if (bullRushResult == null || !bullRushResult.Success)
+            return 0;
+
+        int difference = Mathf.Max(0, bullRushResult.CheckTotal - bullRushResult.OpposedTotal);
+        int additionalSquares = difference / 5;
+        return 1 + additionalSquares;
+    }
+
+    private void ResolveBullRushPushAndFollow(CharacterController attacker, CharacterController target, SpecialAttackResult bullRushResult, System.Action onComplete)
+    {
+        if (attacker == null || target == null || bullRushResult == null || !bullRushResult.Success)
+        {
+            onComplete?.Invoke();
+            return;
+        }
+
+        int difference = Mathf.Max(0, bullRushResult.CheckTotal - bullRushResult.OpposedTotal);
+        int minSquares = 1;
+        int maxSquares = Mathf.Max(minSquares, GetBullRushMaxPushSquares(bullRushResult));
+
+        CombatUI?.ShowCombatLog($"Result: {attacker.Stats.CharacterName} wins ({bullRushResult.CheckTotal} vs {bullRushResult.OpposedTotal})");
+        CombatUI?.ShowCombatLog($"Difference: {difference}");
+
+        void ExecuteSelectedDistance(int chosenSquares)
+        {
+            int clampedChoice = Mathf.Clamp(chosenSquares, minSquares, maxSquares);
+            CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} chooses to push {clampedChoice} square{(clampedChoice == 1 ? string.Empty : "s")}");
+
+            BullRushPushResolution pushResolution = ExecuteBullRushPush(attacker, target, clampedChoice);
+            UpdateAllStatsUI();
+
+            if (!pushResolution.TargetMoved)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            if (attacker.IsPlayerControlled && CombatUI != null)
+            {
+                CombatUI.ShowBullRushFollowChoice(attacker, target, pushResolution.ActualSquares, shouldFollow =>
+                {
+                    if (shouldFollow)
+                        ExecuteBullRushFollow(attacker, pushResolution);
+                    else
+                        CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} chooses not to follow.");
+
+                    UpdateAllStatsUI();
+                    onComplete?.Invoke();
+                });
+            }
+            else
+            {
+                ExecuteBullRushFollow(attacker, pushResolution);
+                UpdateAllStatsUI();
+                onComplete?.Invoke();
+            }
+        }
+
+        if (maxSquares > minSquares)
+        {
+            CombatUI?.ShowCombatLog($"Can push {minSquares} to {maxSquares} squares ({minSquares * 5}-{maxSquares * 5} feet)");
+
+            if (attacker.IsPlayerControlled && CombatUI != null)
+            {
+                CombatUI.ShowBullRushPushChoice(attacker, target, minSquares, maxSquares,
+                    onSelect: ExecuteSelectedDistance,
+                    onCancel: () => ExecuteSelectedDistance(minSquares));
+            }
+            else
+            {
+                int defaultSquares = attacker.IsPlayerControlled ? minSquares : maxSquares;
+                ExecuteSelectedDistance(defaultSquares);
+            }
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog("Push 1 square (5 feet)");
+            ExecuteSelectedDistance(minSquares);
+        }
+    }
+
+    private IEnumerator ResolveBullRushPushAndFollowCoroutine(CharacterController attacker, CharacterController target, SpecialAttackResult bullRushResult)
+    {
+        bool finished = false;
+        ResolveBullRushPushAndFollow(attacker, target, bullRushResult, () => finished = true);
+
+        while (!finished)
+            yield return null;
+    }
+
+    private BullRushPushResolution ExecuteBullRushPush(CharacterController attacker, CharacterController target, int squares)
+    {
+        var resolution = new BullRushPushResolution
+        {
+            RequestedSquares = Mathf.Max(1, squares),
+            OriginalTargetPosition = target.GridPosition,
+            FinalTargetPosition = target.GridPosition,
+            Direction = target.GridPosition - attacker.GridPosition
+        };
+
+        resolution.Direction.x = Mathf.Clamp(resolution.Direction.x, -1, 1);
+        resolution.Direction.y = Mathf.Clamp(resolution.Direction.y, -1, 1);
+        if (resolution.Direction == Vector2Int.zero)
+            resolution.Direction = Vector2Int.right;
+
+        Vector2Int destination = target.GridPosition;
+        for (int i = 0; i < resolution.RequestedSquares; i++)
+        {
+            Vector2Int next = destination + resolution.Direction;
+            SquareCell nextCell = Grid.GetCell(next);
+            if (nextCell == null || nextCell.IsOccupied)
+            {
+                resolution.Obstructed = true;
+                break;
+            }
+
+            destination = next;
+            resolution.ActualSquares++;
+        }
+
+        resolution.FinalTargetPosition = destination;
+
+        if (resolution.ActualSquares <= 0)
+        {
+            CombatUI?.ShowCombatLog($"{target.Stats.CharacterName} cannot be pushed; path is blocked.");
+            return resolution;
+        }
+
+        SquareCell destinationCell = Grid.GetCell(destination);
+        if (destinationCell == null)
+        {
+            CombatUI?.ShowCombatLog($"{target.Stats.CharacterName} cannot be pushed; no valid destination.");
+            resolution.ActualSquares = 0;
+            resolution.FinalTargetPosition = resolution.OriginalTargetPosition;
+            return resolution;
+        }
+
+        target.MoveToCell(destinationCell);
+        int feet = resolution.ActualSquares * 5;
+        CombatUI?.ShowCombatLog($"↗ {target.Stats.CharacterName} is pushed back {resolution.ActualSquares} square{(resolution.ActualSquares == 1 ? string.Empty : "s")} ({feet} feet).");
+
+        if (resolution.Obstructed && resolution.ActualSquares < resolution.RequestedSquares)
+            CombatUI?.ShowCombatLog($"⚠ Obstacle reached: push stops after {resolution.ActualSquares} square{(resolution.ActualSquares == 1 ? string.Empty : "s")}.");
+
+        return resolution;
+    }
+
+    private void ExecuteBullRushFollow(CharacterController attacker, BullRushPushResolution pushResolution)
+    {
+        if (attacker == null || pushResolution.ActualSquares <= 0)
+            return;
+
+        Vector2Int current = attacker.GridPosition;
+        int movedSquares = 0;
+
+        for (int i = 0; i < pushResolution.ActualSquares; i++)
+        {
+            Vector2Int next = current + pushResolution.Direction;
+            SquareCell nextCell = Grid.GetCell(next);
+            if (nextCell == null || nextCell.IsOccupied)
+                break;
+
+            current = next;
+            movedSquares++;
+        }
+
+        if (movedSquares <= 0)
+        {
+            CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} cannot follow due to blocked path.");
+            return;
+        }
+
+        SquareCell followDestination = Grid.GetCell(current);
+        if (followDestination == null)
+            return;
+
+        attacker.MoveToCell(followDestination);
+        CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} follows {movedSquares} square{(movedSquares == 1 ? string.Empty : "s")}.");
     }
 
     private void TryPushTargetAway(CharacterController attacker, CharacterController target, int squares, bool allowAttackerFollow)
     {
-        Vector2Int dir = target.GridPosition - attacker.GridPosition;
-        dir.x = Mathf.Clamp(dir.x, -1, 1);
-        dir.y = Mathf.Clamp(dir.y, -1, 1);
-        if (dir == Vector2Int.zero) dir = Vector2Int.right;
-
-        Vector2Int destination = target.GridPosition;
-        for (int i = 0; i < squares; i++)
-        {
-            Vector2Int next = destination + dir;
-            SquareCell nextCell = Grid.GetCell(next);
-            if (nextCell == null || nextCell.IsOccupied) break;
-            destination = next;
-        }
-
-        if (destination != target.GridPosition)
-        {
-            SquareCell destCell = Grid.GetCell(destination);
-            if (destCell != null)
-            {
-                Vector2Int oldTargetPos = target.GridPosition;
-                target.MoveToCell(destCell);
-                CombatUI.ShowCombatLog($"↗ {target.Stats.CharacterName} is pushed to ({destination.x},{destination.y}).");
-
-                if (allowAttackerFollow)
-                {
-                    SquareCell followCell = Grid.GetCell(oldTargetPos);
-                    if (followCell != null && !followCell.IsOccupied)
-                    {
-                        attacker.MoveToCell(followCell);
-                        CombatUI.ShowCombatLog($"{attacker.Stats.CharacterName} follows through into ({oldTargetPos.x},{oldTargetPos.y}).");
-                    }
-                }
-            }
-        }
+        BullRushPushResolution pushResolution = ExecuteBullRushPush(attacker, target, squares);
+        if (allowAttackerFollow)
+            ExecuteBullRushFollow(attacker, pushResolution);
     }
 
     private void CancelSpecialAttackTargeting()
@@ -11349,10 +11519,7 @@ public class GameManager : MonoBehaviour
             CombatUI.ShowCombatLog($"⚡ Charge Bull Rush (+2): {bullRushResult.Log}");
 
             if (bullRushResult.Success)
-            {
-                int pushSquares = Mathf.Max(1, bullRushResult.DamageDealt / 5);
-                TryPushTargetAway(charger, target, pushSquares, allowAttackerFollow: true);
-            }
+                yield return StartCoroutine(ResolveBullRushPushAndFollowCoroutine(charger, target, bullRushResult));
         }
         else
         {
@@ -12726,7 +12893,7 @@ public class GameManager : MonoBehaviour
         if (result.Success)
         {
             if (choice.Value == SpecialAttackType.BullRushAttack || choice.Value == SpecialAttackType.BullRushCharge)
-                TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);
+                ResolveBullRushPushAndFollow(npc, target, result, onComplete: null);
             else if (choice.Value == SpecialAttackType.Overrun)
                 TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);
         }
