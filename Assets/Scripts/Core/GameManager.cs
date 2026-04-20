@@ -10226,7 +10226,7 @@ public class GameManager : MonoBehaviour
 
         CombatUI?.ShowPickUpItemSelection(
             actorName: attacker.Stats.CharacterName,
-            options: new List<string>
+            itemOptions: new List<string>
             {
                 $"Continue Disarm (BAB {CharacterStats.FormatMod(nextAttackBonus)})",
                 "Stop Disarming"
@@ -10259,8 +10259,8 @@ public class GameManager : MonoBehaviour
                 ClearDisarmSequenceState();
                 ShowActionChoices();
             },
-            title: "Disarm - Continue?",
-            cancelText: "Stop");
+            titleOverride: "Disarm - Continue?",
+            bodyOverride: $"Choose whether to continue iterative disarm attempts ({remainingAttacks} remaining).");
     }
 
     private void BeginGrappleContextMenuDisplayLock(CharacterController actor)
