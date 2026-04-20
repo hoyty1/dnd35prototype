@@ -1360,13 +1360,27 @@ public class CharacterController : MonoBehaviour
     private int ConsumeAidAnotherAttackBonus(CharacterController target)
     {
         if (GameManager.Instance == null) return 0;
-        return GameManager.Instance.ConsumeAidAnotherAttackBonus(this, target);
+
+        string attackerName = Stats != null ? Stats.CharacterName : "Unknown";
+        string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "Unknown";
+        Debug.Log($"[AidBonus][Attack] {attackerName} requesting Aid Another offense bonus vs {targetName}");
+
+        int bonus = GameManager.Instance.ConsumeAidAnotherAttackBonus(this, target);
+        Debug.Log($"[AidBonus][Attack] {attackerName} received Aid Another offense bonus: +{bonus}");
+        return bonus;
     }
 
     private int ConsumeAidAnotherAcBonus(CharacterController target)
     {
         if (GameManager.Instance == null) return 0;
-        return GameManager.Instance.ConsumeAidAnotherAcBonus(this, target);
+
+        string attackerName = Stats != null ? Stats.CharacterName : "Unknown";
+        string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "Unknown";
+        Debug.Log($"[AidBonus][Defense] {attackerName} requesting defender Aid Another AC adjustment vs {targetName}");
+
+        int bonus = GameManager.Instance.ConsumeAidAnotherAcBonus(this, target);
+        Debug.Log($"[AidBonus][Defense] {attackerName} received defender Aid Another AC adjustment: +{bonus}");
+        return bonus;
     }
 
     /// <summary>
@@ -1515,6 +1529,11 @@ public class CharacterController : MonoBehaviour
         result.RacialAttackBonus = racialAtkBonus;
         result.SizeAttackBonus = Stats.SizeModifier;
         result.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
+
+        int baseAttackWithoutAid = totalAtkMod - aidAnotherAttackBonus;
+        string attackerNameForLog = Stats != null ? Stats.CharacterName : "Unknown";
+        string targetNameForLog = target != null && target.Stats != null ? target.Stats.CharacterName : "Unknown";
+        Debug.Log($"[Attack] {attackerNameForLog} attacks {targetNameForLog}: d20={result.DieRoll} + base={baseAttackWithoutAid} + aid={aidAnotherAttackBonus} => total={result.TotalRoll} vs AC {result.TargetAC}");
         result.PowerAttackDamageBonus = powerAtkDmgBonus;
         result.PointBlankShotActive = pointBlankActive;
         result.FeatDamageBonus = totalFeatDmgBonus;
