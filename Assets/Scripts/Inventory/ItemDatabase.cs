@@ -196,17 +196,19 @@ public static class ItemDatabase
             IconChar = "\u2502", IconColor = new Color(0.6f, 0.5f, 0.3f)
         });
 
-        // Spear: 1d8, 20/×3, piercing, two-handed
+        // Spear: 1d8, 20/×3, piercing, two-handed (can be thrown)
         Register(new ItemData
         {
             Id = "spear", Name = "Spear", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
-            Description = "A long thrusting weapon with a pointed tip. Two-handed.",
+            Description = "A long thrusting weapon with a pointed tip. Two-handed. Can be thrown.",
             DamageDice = 8, DamageCount = 1, BonusDamage = 0, AttackRange = 1,
             IsTwoHanded = true,
             DamageType = "piercing",
             DmgModType = DamageModifierType.StrengthOneAndHalf,
+            IsThrown = true,
+            RangeIncrement = 20,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 6f,
             IconChar = "\u2191", IconColor = new Color(0.6f, 0.6f, 0.5f)

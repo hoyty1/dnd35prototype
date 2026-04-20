@@ -111,7 +111,16 @@ public class GameManager : MonoBehaviour
 
     // Current attack mode being selected for
     private enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell }
+
+    public enum AttackType
+    {
+        Melee,
+        Thrown,
+        Ranged
+    }
+
     private PendingAttackMode _pendingAttackMode;
+    private AttackType _currentAttackType = AttackType.Melee;
     private bool _pendingDefensiveAttackSelection; // Set when targeting for a defensive attack action
     private SpellData _pendingSpell; // Spell selected for casting
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
@@ -144,6 +153,7 @@ public class GameManager : MonoBehaviour
     private int _currentIterativeAttackBAB;
     private bool _currentIterativeAttackIsMainHand = true;
     private int _currentIterativeAttackIndex;
+    private bool _skipNextSingleAttackStandardActionCommit;
 
     // Iterative disarm flow state
     private bool _isDisarmSequenceActive;
@@ -2625,6 +2635,8 @@ public class GameManager : MonoBehaviour
         }
 
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
+        _currentAttackType = GetDefaultAttackType(pc);
+        _skipNextSingleAttackStandardActionCommit = false;
         EndGrappleContextMenuDisplayLock();
         CombatUI.HideSummonContextMenu();
 
@@ -4689,7 +4701,8 @@ public class GameManager : MonoBehaviour
         if (pc == null)
             return;
 
-        Debug.Log($"[Attack][Flow] Attack button pressed actor={pc.Stats.CharacterName} active={_isIterativeAttackSequenceActive} used={_iterativeAttackNumber}");
+        _currentAttackType = GetDefaultAttackType(pc);
+        Debug.Log($"[Attack][Flow] Attack ({_currentAttackType}) button pressed actor={pc.Stats.CharacterName} active={_isIterativeAttackSequenceActive} used={_iterativeAttackNumber}");
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "attacks"))
             return;
@@ -4719,6 +4732,60 @@ public class GameManager : MonoBehaviour
         {
             ContinueAttackSequence(pc);
         }
+    }
+
+    public void OnThrownAttackButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null)
+            return;
+
+        _currentAttackType = AttackType.Thrown;
+        Debug.Log($"[Attack][Thrown] Attack (Thrown) button pressed actor={pc.Stats.CharacterName} active={_isIterativeAttackSequenceActive} used={_iterativeAttackNumber}");
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "thrown attacks"))
+            return;
+
+        ItemData weapon = pc.GetEquippedWeapon();
+        if (weapon == null || !weapon.IsThrown || weapon.RangeIncrement <= 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no throwable weapon equipped.");
+            CombatUI?.UpdateActionButtons(pc);
+            ShowActionChoices();
+            return;
+        }
+
+        if (!pc.CanAttackWithWeapon(weapon, out string cannotAttackReason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot throw: {cannotAttackReason}");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        bool consumingIterativeRemainder = _isIterativeAttackSequenceActive
+            && _iterativeAttackInitiator == pc
+            && HasMoreAttacksAvailable();
+
+        if (consumingIterativeRemainder)
+        {
+            Debug.Log($"[Attack][Thrown] Ending melee iterative sequence to switch to thrown attack.");
+            EndAttackSequence();
+            _skipNextSingleAttackStandardActionCommit = true;
+        }
+        else if (!CanThrowWeapon(pc))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no standard action available to throw.");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        _pendingDefensiveAttackSelection = false;
+        pc.SetFightingDefensively(false);
+        _pendingAttackMode = PendingAttackMode.Single;
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+
+        Debug.Log($"[Attack][Thrown] {pc.Stats.CharacterName} is selecting a target to throw {weapon.Name}.");
+        ShowAttackTargets(pc);
     }
 
     public bool IsIterativeAttackSequenceActiveFor(CharacterController actor)
@@ -4751,6 +4818,47 @@ public class GameManager : MonoBehaviour
             return HasMoreAttacksAvailable();
 
         return actor.Actions != null && actor.Actions.HasStandardAction;
+    }
+
+    private bool CanThrowWeapon(CharacterController actor)
+    {
+        if (actor == null)
+            return false;
+
+        ItemData weapon = actor.GetEquippedWeapon();
+        if (weapon == null || !weapon.IsThrown || weapon.RangeIncrement <= 0)
+            return false;
+
+        return actor.Actions != null && actor.Actions.HasStandardAction;
+    }
+
+    public bool CanUseThrownAttackOption(CharacterController actor)
+    {
+        if (actor == null)
+            return false;
+
+        bool inIterativeSequence = _isIterativeAttackSequenceActive
+            && _iterativeAttackInitiator == actor
+            && HasMoreAttacksAvailable();
+
+        return inIterativeSequence || CanThrowWeapon(actor);
+    }
+
+    public bool HasThrowableMeleeWeaponEquipped(CharacterController actor)
+    {
+        return actor != null && actor.HasThrowableWeaponEquipped();
+    }
+
+    private AttackType GetDefaultAttackType(CharacterController actor)
+    {
+        if (actor == null)
+            return AttackType.Melee;
+
+        ItemData weapon = actor.GetEquippedMainWeapon();
+        if (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged)
+            return AttackType.Ranged;
+
+        return AttackType.Melee;
     }
 
     private void StartAttackSequence(CharacterController attacker)
@@ -5185,6 +5293,7 @@ public class GameManager : MonoBehaviour
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
         EndAttackSequence();
+        _currentAttackType = GetDefaultAttackType(pc);
 
         _pendingAttackMode = PendingAttackMode.FullAttack;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
@@ -5215,6 +5324,7 @@ public class GameManager : MonoBehaviour
         _pendingDefensiveAttackSelection = true;
         pc.SetFightingDefensively(true);
         EndAttackSequence();
+        _currentAttackType = GetDefaultAttackType(pc);
 
         _pendingAttackMode = PendingAttackMode.Single;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
@@ -5248,6 +5358,7 @@ public class GameManager : MonoBehaviour
         _pendingDefensiveAttackSelection = true;
         pc.SetFightingDefensively(true);
         EndAttackSequence();
+        _currentAttackType = GetDefaultAttackType(pc);
 
         _pendingAttackMode = PendingAttackMode.FullAttack;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
@@ -7288,6 +7399,7 @@ public class GameManager : MonoBehaviour
 
         _pendingDefensiveAttackSelection = false;
         _pendingAttackMode = PendingAttackMode.Single;
+        _skipNextSingleAttackStandardActionCommit = false;
 
         Grid.ClearAllHighlights();
         ShowActionChoices();
@@ -9441,6 +9553,36 @@ public class GameManager : MonoBehaviour
 
     // ========== ATTACK TARGET SELECTION ==========
 
+    private bool IsUsingThrownAttackMode(CharacterController attacker, ItemData weapon = null)
+    {
+        if (_currentAttackType != AttackType.Thrown)
+            return false;
+
+        if (attacker == null)
+            return false;
+
+        weapon ??= attacker.GetEquippedMainWeapon();
+        return weapon != null
+            && weapon.WeaponCat == WeaponCategory.Melee
+            && weapon.IsThrown
+            && weapon.RangeIncrement > 0;
+    }
+
+    private bool IsAttackModeRanged(CharacterController attacker, ItemData weapon = null)
+    {
+        if (attacker == null)
+            return false;
+
+        weapon ??= attacker.GetEquippedMainWeapon();
+        if (weapon == null)
+            return false;
+
+        if (weapon.WeaponCat == WeaponCategory.Ranged)
+            return true;
+
+        return IsUsingThrownAttackMode(attacker, weapon);
+    }
+
     private void ShowAttackTargets(CharacterController pc)
     {
         Grid.ClearAllHighlights();
@@ -9450,11 +9592,17 @@ public class GameManager : MonoBehaviour
         // All combatants are considered for flanking checks (team and threat filtering happens in CombatUtils).
         List<CharacterController> allCombatants = GetAllCharacters();
 
-        // Determine the equipped weapon's range semantics.
+        // Determine the equipped weapon's range semantics based on selected attack type.
         ItemData weapon = pc.GetEquippedMainWeapon();
-        int rangeIncrement = (weapon != null) ? weapon.RangeIncrement : 0;
-        bool isThrownWeapon = (weapon != null) && weapon.IsThrown;
-        bool isRangedWeapon = (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged) || rangeIncrement > 0;
+        bool usingThrownAttack = IsUsingThrownAttackMode(pc, weapon);
+        bool isRangedWeapon = IsAttackModeRanged(pc, weapon);
+        bool isThrownWeapon = usingThrownAttack || (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
+        int rangeIncrement = (weapon != null && isRangedWeapon) ? weapon.RangeIncrement : 0;
+
+        if (usingThrownAttack && weapon != null)
+        {
+            Debug.Log($"[Attack][Thrown] Showing thrown target selection for {pc.Stats.CharacterName} using {weapon.Name} (increment {weapon.RangeIncrement} ft)");
+        }
 
         int meleeMinDistance = 1;
         int meleeMaxDistance = 1;
@@ -9527,6 +9675,9 @@ public class GameManager : MonoBehaviour
                 case PendingAttackMode.CastSpell: modeStr = "CAST SPELL"; break;
             }
 
+            if (_pendingAttackMode == PendingAttackMode.Single && _currentAttackType == AttackType.Thrown)
+                modeStr = "THROWN ATTACK";
+
             string rangeMsg = "";
             if (isRangedWeapon && rangeIncrement > 0)
             {
@@ -9554,12 +9705,12 @@ public class GameManager : MonoBehaviour
     private List<CharacterController> GetValidRangedTargets(CharacterController attacker)
     {
         var valid = new List<CharacterController>();
-        if (attacker == null || !attacker.IsEquippedWeaponRanged())
+        if (attacker == null || !IsAttackModeRanged(attacker))
             return valid;
 
         ItemData weapon = attacker.GetEquippedMainWeapon();
         int rangeIncrement = weapon != null ? weapon.RangeIncrement : 0;
-        bool isThrownWeapon = weapon != null && weapon.IsThrown;
+        bool isThrownWeapon = IsUsingThrownAttackMode(attacker, weapon) || (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
 
         int maxRangeSquares = (rangeIncrement > 0)
             ? RangeCalculator.GetMaxRangeSquares(rangeIncrement, isThrownWeapon)
@@ -9610,7 +9761,7 @@ public class GameManager : MonoBehaviour
         if (attacker == null)
             return new List<CharacterController>();
 
-        return attacker.IsEquippedWeaponRanged()
+        return IsAttackModeRanged(attacker)
             ? GetValidRangedTargets(attacker)
             : GetValidMeleeTargets(attacker);
     }
@@ -9619,6 +9770,9 @@ public class GameManager : MonoBehaviour
     {
         if (attacker == null || target == null || target.Stats == null || target.Stats.IsDead)
             return false;
+
+        if (IsUsingThrownAttackMode(attacker))
+            return attacker.IsTargetInThrownWeaponRange(target);
 
         return attacker.IsTargetInCurrentWeaponRange(target);
     }
@@ -9630,7 +9784,7 @@ public class GameManager : MonoBehaviour
 
         ItemData weapon = attacker.GetEquippedMainWeapon();
         int rangeIncrement = weapon != null ? weapon.RangeIncrement : 0;
-        bool isThrownWeapon = weapon != null && weapon.IsThrown;
+        bool isThrownWeapon = IsUsingThrownAttackMode(attacker, weapon) || (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
         List<Vector2Int> attackerSquares = attacker.GetOccupiedSquaresAt(attackerPosition);
 
         foreach (CharacterController candidate in GetAllCharacters())
@@ -12182,6 +12336,11 @@ public class GameManager : MonoBehaviour
             CombatUI.SetTurnIndicator($"{attacker.Stats.CharacterName} attacks {target.Stats.CharacterName}{flankIndicator}");
         }
         RangeInfo rangeInfo = CalculateRangeInfo(attacker, target);
+        if (_currentAttackType == AttackType.Thrown && rangeInfo != null)
+        {
+            Debug.Log($"[Attack][Thrown] {attacker.Stats.CharacterName} -> {target.Stats.CharacterName}: distance={rangeInfo.DistanceFeet} ft, increment={rangeInfo.IncrementNumber}, penalty={rangeInfo.Penalty}, inRange={rangeInfo.IsInRange}");
+        }
+
         // Targeting is resolved; clear pending declaration marker.
         _pendingDefensiveAttackSelection = false;
 
@@ -12212,10 +12371,19 @@ public class GameManager : MonoBehaviour
     private RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target)
     {
         ItemData weapon = attacker.GetEquippedMainWeapon();
-        int rangeIncrement = (weapon != null) ? weapon.RangeIncrement : 0;
-        bool isThrownWeapon = (weapon != null) && weapon.IsThrown;
+        bool usingThrownAttack = IsUsingThrownAttackMode(attacker, weapon);
+        bool isRangedAttack = IsAttackModeRanged(attacker, weapon);
+
         int sqDist = attacker.GetMinimumDistanceToTarget(target, chebyshev: false);
-        return RangeCalculator.GetRangeInfo(sqDist, rangeIncrement, isThrownWeapon);
+
+        if (isRangedAttack && weapon != null && weapon.RangeIncrement > 0)
+        {
+            bool isThrownWeapon = usingThrownAttack || (weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
+            return RangeCalculator.GetRangeInfo(sqDist, weapon.RangeIncrement, isThrownWeapon);
+        }
+
+        // Melee-mode attack (including throwable melee weapons when using melee attack button)
+        return RangeCalculator.GetRangeInfo(sqDist, 0, false);
     }
 
     private string BuildAttackLog(CharacterController attacker, bool isFlanking, string partnerName, CombatResult result)
@@ -12336,7 +12504,22 @@ public class GameManager : MonoBehaviour
     private void PerformSingleAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        attacker.CommitStandardAction();
+        bool skipStandardCommit = _skipNextSingleAttackStandardActionCommit;
+        _skipNextSingleAttackStandardActionCommit = false;
+
+        if (!skipStandardCommit)
+        {
+            if (!attacker.CommitStandardAction())
+            {
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available.");
+                ShowActionChoices();
+                return;
+            }
+        }
+        else
+        {
+            Debug.Log($"[Attack][Thrown] Skipping standard action consumption for follow-up thrown attack after ending iterative melee sequence.");
+        }
 
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
@@ -12388,7 +12571,7 @@ public class GameManager : MonoBehaviour
 
         attacker.Actions.UseFullRoundAction();
 
-        bool rangedMode = attacker.IsEquippedWeaponRanged();
+        bool rangedMode = IsAttackModeRanged(attacker);
         string modeLabel = rangedMode ? "ranged" : "melee";
 
         RangeInfo initialRangeInfo = CalculateRangeInfo(attacker, initialTarget);

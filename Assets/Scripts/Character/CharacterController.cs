@@ -1576,9 +1576,20 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        if (!IsTargetInCurrentWeaponRange(target))
+        bool useThrownRange = equippedWeapon != null
+            && equippedWeapon.IsThrown
+            && equippedWeapon.RangeIncrement > 0
+            && rangeInfo != null
+            && !rangeInfo.IsMelee;
+
+        bool targetInRange = useThrownRange
+            ? IsTargetInThrownWeaponRange(target, equippedWeapon)
+            : IsTargetInCurrentWeaponRange(target);
+
+        if (!targetInRange)
         {
-            Debug.LogWarning($"[Combat] {Stats.CharacterName} cannot attack {target?.Stats?.CharacterName}: target out of weapon range.");
+            string rangeMode = useThrownRange ? "thrown" : "default";
+            Debug.LogWarning($"[Combat] {Stats.CharacterName} cannot attack {target?.Stats?.CharacterName}: target out of {rangeMode} weapon range.");
             return new CombatResult
             {
                 Attacker = this,
@@ -1594,7 +1605,8 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || equippedWeapon.RangeIncrement > 0))
+        bool isRanged = equippedWeapon != null
+                        && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || useThrownRange)
                         && rangeInfo != null && !rangeInfo.IsMelee;
         bool isMelee = !isRanged;
         // === FEAT: Power Attack (melee only) ===
@@ -1756,7 +1768,12 @@ public class CharacterController : MonoBehaviour
         int count = attackBonuses != null ? attackBonuses.Length : 0;
 
         ItemData equippedWeapon = GetEquippedMainWeapon();
-        bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || equippedWeapon.RangeIncrement > 0))
+        bool useThrownRange = equippedWeapon != null
+            && equippedWeapon.IsThrown
+            && equippedWeapon.RangeIncrement > 0
+            && rangeInfo != null
+            && !rangeInfo.IsMelee;
+        bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || useThrownRange))
                         && rangeInfo != null && !rangeInfo.IsMelee;
 
         bool hasRapidShotFeat = Stats.HasFeat("Rapid Shot");
@@ -1800,7 +1817,12 @@ public class CharacterController : MonoBehaviour
             return result;
         }
 
-        bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || equippedWeapon.RangeIncrement > 0))
+        bool useThrownRange = equippedWeapon != null
+            && equippedWeapon.IsThrown
+            && equippedWeapon.RangeIncrement > 0
+            && rangeInfo != null
+            && !rangeInfo.IsMelee;
+        bool isRanged = (equippedWeapon != null && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || useThrownRange))
                         && rangeInfo != null && !rangeInfo.IsMelee;
         bool isMelee = !isRanged;
         int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
@@ -2989,14 +3011,30 @@ public class CharacterController : MonoBehaviour
         return $"{weapon.Name}: {state} (Reload: {actionLabel})";
     }
     /// <summary>
-    /// Check if the equipped main weapon is a ranged weapon.
-    /// Used by UI to determine if Rapid Shot can actually apply.
+    /// Check if the equipped main weapon is an inherent ranged weapon.
+    /// Thrown-capable melee weapons are still treated as melee by default
+    /// unless a thrown attack mode is explicitly selected.
     /// </summary>
     public bool IsEquippedWeaponRanged()
     {
         ItemData weapon = GetEquippedMainWeapon();
         if (weapon == null) return false;
-        return weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0;
+        return weapon.WeaponCat == WeaponCategory.Ranged;
+    }
+
+    /// <summary>
+    /// Returns true when the currently equipped primary weapon can be used in both melee and thrown modes.
+    /// This is used for dual-action button presentation (Attack (Melee) + Attack (Thrown)).
+    /// </summary>
+    public bool HasThrowableWeaponEquipped()
+    {
+        ItemData weapon = GetEquippedWeapon();
+        if (weapon == null)
+            return false;
+
+        return weapon.WeaponCat == WeaponCategory.Melee
+            && weapon.IsThrown
+            && weapon.RangeIncrement > 0;
     }
 
     /// <summary>
@@ -3478,7 +3516,8 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
-    /// Check if this target is in range of the currently equipped weapon.
+    /// Check if this target is in range of the currently equipped weapon in default mode
+    /// (melee for melee weapons, ranged for ranged weapons).
     /// </summary>
     public bool IsTargetInCurrentWeaponRange(CharacterController target)
     {
@@ -3486,7 +3525,7 @@ public class CharacterController : MonoBehaviour
 
         ItemData weapon = GetEquippedMainWeapon();
 
-        bool isRanged = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
+        bool isRanged = weapon != null && weapon.WeaponCat == WeaponCategory.Ranged;
         if (isRanged)
         {
             // For multi-square creatures, use nearest occupied-square pair.
@@ -3506,6 +3545,23 @@ public class CharacterController : MonoBehaviour
         // Reach/threat uses Chebyshev distance so diagonals count the same as orthogonal squares.
         int meleeDistance = GetMinimumDistanceToTargetSquares(target, chebyshev: true);
         return CanMeleeAttackDistance(meleeDistance, weapon);
+    }
+
+    /// <summary>
+    /// Check if this target is in thrown range for a thrown-capable weapon.
+    /// </summary>
+    public bool IsTargetInThrownWeaponRange(CharacterController target, ItemData thrownWeapon = null)
+    {
+        if (target == null || target.Stats == null || Stats == null)
+            return false;
+
+        ItemData weapon = thrownWeapon ?? GetEquippedMainWeapon();
+        if (weapon == null || !weapon.IsThrown || weapon.RangeIncrement <= 0)
+            return false;
+
+        int distance = GetMinimumDistanceToTargetSquares(target, chebyshev: false);
+        int distFeet = RangeCalculator.SquaresToFeet(distance);
+        return RangeCalculator.IsWithinMaxRange(distFeet, weapon.RangeIncrement, true);
     }
 
     /// <summary>

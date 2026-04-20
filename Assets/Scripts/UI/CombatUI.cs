@@ -97,6 +97,7 @@ public class CombatUI : MonoBehaviour
     public Button StandUpButton;        // Stand up (Move Action, provokes AoO)
     public Button CrawlButton;          // Crawl 5 ft (Move Action, provokes AoO)
     public Button AttackButton;         // Single attack (Standard Action)
+    public Button AttackThrownButton;   // Thrown attack (Standard, or sequence continuation for throwable melee)
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
     public Button GrappleActionsButton; // Legacy grapple menu button (deprecated)
@@ -841,10 +842,12 @@ public class CombatUI : MonoBehaviour
 
         bool canFightDefensively = pc.Stats.BaseAttackBonus >= 1;
 
+        bool hasStandardAttack = actions.HasStandardAction;
+        bool canContinueIterativeAttack = iterativeWeaponSequenceActive;
+        bool hasThrowableMeleeWeapon = gm != null && gm.HasThrowableMeleeWeaponEquipped(pc);
+
         if (AttackButton != null)
         {
-            bool hasStandardAttack = actions.HasStandardAction;
-            bool canContinueIterativeAttack = iterativeWeaponSequenceActive;
             bool canSingleAttack = (hasStandardAttack || canContinueIterativeAttack) && canAttackWithWeapon && !isPinned;
 
             AttackButton.gameObject.SetActive(isPinned || hasStandardAttack || canContinueIterativeAttack);
@@ -863,12 +866,37 @@ public class CombatUI : MonoBehaviour
                 }
                 else if (gm != null)
                 {
-                    atkLabel.text = gm.GetIterativeAttackButtonLabel(pc, usingUnarmedStrike, attackSourceLabel);
+                    if (hasThrowableMeleeWeapon)
+                    {
+                        atkLabel.text = iterativeWeaponFullRoundStage ? "Attack (Melee - Full Round)" : "Attack (Melee)";
+                    }
+                    else
+                    {
+                        atkLabel.text = gm.GetIterativeAttackButtonLabel(pc, usingUnarmedStrike, attackSourceLabel);
+                    }
                 }
                 else
                 {
                     atkLabel.text = usingUnarmedStrike ? $"Attack (Standard, {attackSourceLabel})" : "Attack (Standard)";
                 }
+            }
+        }
+
+        if (AttackThrownButton != null)
+        {
+            bool showThrownButton = hasThrowableMeleeWeapon && (hasStandardAttack || canContinueIterativeAttack) && !isPinned;
+            bool canThrowAttack = showThrownButton
+                && gm != null
+                && gm.CanUseThrownAttackOption(pc)
+                && canAttackWithWeapon;
+
+            AttackThrownButton.gameObject.SetActive(showThrownButton);
+            AttackThrownButton.interactable = canThrowAttack;
+
+            Text thrownLabel = AttackThrownButton.GetComponentInChildren<Text>();
+            if (thrownLabel != null)
+            {
+                thrownLabel.text = canAttackWithWeapon ? "Attack (Thrown)" : "Attack (Thrown - Reload first)";
             }
         }
 
@@ -1346,6 +1374,7 @@ public class CombatUI : MonoBehaviour
             if (StandUpButton != null) StandUpButton.gameObject.SetActive(false);
             if (CrawlButton != null) CrawlButton.gameObject.SetActive(false);
             if (AttackButton != null) AttackButton.gameObject.SetActive(false);
+            if (AttackThrownButton != null) AttackThrownButton.gameObject.SetActive(false);
             if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
             if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
             if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);

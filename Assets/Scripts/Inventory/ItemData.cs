@@ -178,6 +178,10 @@ public class ItemData
     // Max range = 5 × RangeIncrement for thrown weapons (IsThrown), 10 × RangeIncrement for projectile weapons.
     public int RangeIncrement;             // Range increment in feet (0 = melee only).
 
+    // Compatibility aliases for gameplay/UI code that still uses explicit throwable naming.
+    public bool IsThrowable { get => IsThrown; set => IsThrown = value; }
+    public int ThrowRangeIncrement { get => RangeIncrement; set => RangeIncrement = value; }
+
     // --- Critical Hit (D&D 3.5) ---
     public int CritThreatMin;   // Minimum natural d20 roll to threaten a crit (e.g., 19 for 19-20, 20 for 20 only)
     public int CritMultiplier;  // Damage multiplier on confirmed crit (e.g., 2 for ×2, 3 for ×3)

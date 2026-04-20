@@ -264,12 +264,16 @@ public static class DamageModifierTests
                 $"{id} has None DmgModType", w == null ? "null" : w.DmgModType.ToString());
         }
 
-        string[] thrownWeapons = { "javelin", "dart", "dagger", "handaxe", "shortspear", "trident" };
+        string[] thrownWeapons = { "javelin", "dart", "dagger", "handaxe", "shortspear", "trident", "spear" };
         foreach (var id in thrownWeapons)
         {
             var w = ItemDatabase.Get(id);
             Assert(w != null && w.IsThrown,
                 $"{id} is marked as thrown", w == null ? "null" : w.IsThrown.ToString());
+            Assert(w != null && w.IsThrowable,
+                $"{id} IsThrowable alias mirrors IsThrown", w == null ? "null" : w.IsThrowable.ToString());
+            Assert(w != null && w.ThrowRangeIncrement == w.RangeIncrement,
+                $"{id} ThrowRangeIncrement alias mirrors RangeIncrement", w == null ? "null" : $"{w.ThrowRangeIncrement} vs {w.RangeIncrement}");
         }
 
         // Composite bow variants exist

@@ -751,6 +751,8 @@ public class SceneBootstrap : MonoBehaviour
             "Crawl", new Color(0.22f, 0.38f, 0.65f));
         combatUI.AttackButton = CreateGridButton(btnGrid.transform, "AttackBtn",
             "Attack", new Color(0.7f, 0.2f, 0.2f));
+        combatUI.AttackThrownButton = CreateGridButton(btnGrid.transform, "AttackThrownBtn",
+            "Attack (Thrown)", new Color(0.65f, 0.22f, 0.22f));
         combatUI.AttackDefensivelyButton = CreateGridButton(btnGrid.transform, "AttackDefensivelyBtn",
             "Fighting Defensively (Std)", new Color(0.22f, 0.38f, 0.62f));
         combatUI.SpecialAttackButton = CreateGridButton(btnGrid.transform, "SpecialAttackBtn",
@@ -1042,6 +1044,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.CrawlButton.onClick.AddListener(() => GameManager.Instance.OnCrawlButtonPressed());
         if (ui.AttackButton != null)
             ui.AttackButton.onClick.AddListener(() => GameManager.Instance.OnAttackButtonPressed());
+        if (ui.AttackThrownButton != null)
+            ui.AttackThrownButton.onClick.AddListener(() => GameManager.Instance.OnThrownAttackButtonPressed());
         if (ui.AttackDefensivelyButton != null)
             ui.AttackDefensivelyButton.onClick.AddListener(() => GameManager.Instance.OnAttackDefensivelyButtonPressed());
         if (ui.SpecialAttackButton != null)
