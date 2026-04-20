@@ -4894,6 +4894,21 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null) { ShowActionChoices(); return; }
 
+        if (type == SpecialAttackType.AidAnother)
+        {
+            if (!CanUseAidAnother(pc, out string aidAnotherReason))
+            {
+                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot Aid Another: {aidAnotherReason}.");
+                ShowActionChoices();
+                return;
+            }
+
+            Debug.Log($"[GameManager][SpecialAttack] Redirecting {pc.Stats.CharacterName} to Aid Another flow from special attack menu.");
+            CombatUI.HideSpecialAttackMenu();
+            OnAidAnotherButtonPressed();
+            return;
+        }
+
         bool hasIterativeGrappleAttackInSequence = pc.HasRemainingIterativeGrappleAttacksInSequence();
         bool hasIterativeBullRushAttackInSequence = pc.HasRemainingIterativeBullRushAttacksInSequence();
         bool hasAction = type == SpecialAttackType.Feint

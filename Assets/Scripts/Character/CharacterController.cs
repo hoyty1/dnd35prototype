@@ -12,7 +12,8 @@ public enum SpecialAttackType
     BullRushAttack,
     BullRushCharge,
     Overrun,
-    Feint
+    Feint,
+    AidAnother
 }
 
 public enum GrappleActionType

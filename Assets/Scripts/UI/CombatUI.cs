@@ -917,16 +917,8 @@ public class CombatUI : MonoBehaviour
 
         if (AidAnotherButton != null)
         {
-            bool canAidAnother = false;
-            string aidAnotherReason = "Unavailable";
-            if (GameManager.Instance != null)
-                canAidAnother = GameManager.Instance.CanUseAidAnother(pc, out aidAnotherReason);
-
-            AidAnotherButton.gameObject.SetActive(true);
-            AidAnotherButton.interactable = canAidAnother;
-            Text aidLabel = AidAnotherButton.GetComponentInChildren<Text>();
-            if (aidLabel != null)
-                aidLabel.text = canAidAnother ? "Aid Another (Standard)" : $"Aid Another ({aidAnotherReason})";
+            // Aid Another is now surfaced through the Special Attack submenu.
+            AidAnotherButton.gameObject.SetActive(false);
         }
 
         if (OverrunButton != null)
@@ -1552,6 +1544,9 @@ public class CombatUI : MonoBehaviour
             case "Feint":
                 enabled = hasStandardAction || canImprovedFeintMove;
                 break;
+            case "Aid Another":
+                enabled = GameManager.Instance != null && GameManager.Instance.CanUseAidAnother(pc, out _);
+                break;
             default:
                 enabled = hasStandardAction;
                 break;
@@ -1596,6 +1591,12 @@ public class CombatUI : MonoBehaviour
                 label.text = isEnabled
                     ? "Bull Rush (Charge) (+2 bonus)"
                     : "Bull Rush (Charge) (Not available)";
+                break;
+
+            case "Aid Another":
+                string aidReason = "Unavailable";
+                bool canAidAnother = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseAidAnother(pc, out aidReason);
+                label.text = canAidAnother ? "Aid Another (Standard)" : $"Aid Another ({aidReason})";
                 break;
         }
     }
@@ -2070,6 +2071,7 @@ public class CombatUI : MonoBehaviour
         CreateSpecialButton("Bull Rush (Charge)", "Bull Rush (Charge)");
         CreateSpecialButton("Overrun", "Overrun");
         CreateSpecialButton("Feint", "Feint");
+        CreateSpecialButton("Aid Another", "Aid Another");
         CreateSpecialCancelButton();
 
         _specialAttackPanel.SetActive(false);
@@ -2094,6 +2096,7 @@ public class CombatUI : MonoBehaviour
                 case "Bull Rush (Charge)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Charge)"); onSelect?.Invoke(SpecialAttackType.BullRushCharge); }); break;
                 case "Overrun": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Overrun"); onSelect?.Invoke(SpecialAttackType.Overrun); }); break;
                 case "Feint": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Feint"); onSelect?.Invoke(SpecialAttackType.Feint); }); break;
+                case "Aid Another": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Aid Another"); onSelect?.Invoke(SpecialAttackType.AidAnother); }); break;
                 case "Cancel":
                     btn.onClick.AddListener(() =>
                     {
