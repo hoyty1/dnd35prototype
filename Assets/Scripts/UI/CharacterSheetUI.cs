@@ -604,21 +604,28 @@ public class CharacterSheetUI : MonoBehaviour
         if (content == null)
             return;
 
-        AddSeparator(content);
-        AddLine(content, "AID ANOTHER BONUSES", 12, new Color(0.45f, 0.9f, 0.75f), FontStyle.Bold, 16);
-
         if (selectedPC == null || GameManager.Instance == null)
         {
-            AddLine(content, "  None", 10, DimText, FontStyle.Italic, 13);
+            Debug.Log("[CharacterSheet] Hiding Aid Another section (no selected character or GameManager unavailable)");
             return;
         }
 
         List<GameManager.AidBonus> bonuses = GameManager.Instance.GetAidBonusesForCharacter(selectedPC);
-        if (bonuses == null || bonuses.Count == 0)
+        int activeBonusCount = bonuses?.Count ?? 0;
+
+        Debug.Log($"[CharacterSheet] Updating Aid Another bonuses for {selectedPC.Stats?.CharacterName ?? "Unknown"}: {activeBonusCount} active");
+
+        // Hide entire section when no active bonuses.
+        if (activeBonusCount == 0)
         {
-            AddLine(content, "  None", 10, DimText, FontStyle.Italic, 13);
+            Debug.Log("[CharacterSheet] Hiding Aid Another section (no active bonuses)");
             return;
         }
+
+        Debug.Log($"[CharacterSheet] Showing Aid Another section ({activeBonusCount} active bonuses)");
+
+        AddSeparator(content);
+        AddLine(content, "AID ANOTHER BONUSES", 12, new Color(0.45f, 0.9f, 0.75f), FontStyle.Bold, 16);
 
         for (int i = 0; i < bonuses.Count; i++)
         {
@@ -626,10 +633,10 @@ public class CharacterSheetUI : MonoBehaviour
             if (bonus == null)
                 continue;
 
-            AddLine(content, FormatAidAnotherBonus(bonus), 10, GetAidTypeColor(bonus.Type), FontStyle.Normal, 13);
+            string displayText = FormatAidAnotherBonus(bonus);
+            AddLine(content, displayText, 10, GetAidTypeColor(bonus.Type), FontStyle.Normal, 13);
+            Debug.Log($"[CharacterSheet] Displaying: {displayText.Trim()}");
         }
-
-        Debug.Log($"[CharacterSheet] Updated Aid Another bonuses for {selectedPC.Stats?.CharacterName ?? "Unknown"}: {bonuses.Count} active");
     }
 
     private string FormatAidAnotherBonus(GameManager.AidBonus bonus)
