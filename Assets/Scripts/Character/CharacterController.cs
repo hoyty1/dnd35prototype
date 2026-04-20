@@ -9,7 +9,8 @@ public enum SpecialAttackType
     Disarm,
     Grapple,
     Sunder,
-    BullRush,
+    BullRushAttack,
+    BullRushCharge,
     Overrun,
     Feint
 }
@@ -84,6 +85,73 @@ public class GrappleCheckResult
         sb.AppendLine($"  BAB: {FormatSigned(BaseAttackBonus)}");
         sb.AppendLine($"  STR modifier: {FormatSigned(StrengthModifier)}");
         sb.AppendLine($"  Size modifier: {FormatSigned(SizeModifier)}");
+
+        if (MiscModifier != 0)
+        {
+            if (MiscBreakdown.Count == 1)
+                sb.AppendLine($"  Misc modifiers: {FormatSigned(MiscModifier)} ({MiscBreakdown[0]})");
+            else
+            {
+                sb.AppendLine($"  Misc modifiers: {FormatSigned(MiscModifier)}");
+                for (int i = 0; i < MiscBreakdown.Count; i++)
+                    sb.AppendLine($"    - {MiscBreakdown[i]}");
+            }
+        }
+
+        sb.AppendLine($"  Total: {Total}");
+        return sb.ToString().TrimEnd();
+    }
+}
+
+public class BullRushCheckResult
+{
+    public int BaseRoll;
+    public int BaseAttackBonus;
+    public int StrengthModifier;
+    public int StrengthOrDexterityModifier;
+    public int SizeModifier;
+    public int ChargeBonus;
+    public int StabilityBonus;
+    public int MiscModifier;
+    public int Total;
+    public string CharacterName;
+    public bool UsesBestStrengthOrDexterity;
+    public readonly List<string> MiscBreakdown = new List<string>();
+
+    public void AddMiscModifier(int value, string source)
+    {
+        if (value == 0)
+            return;
+
+        MiscModifier += value;
+        if (!string.IsNullOrEmpty(source))
+            MiscBreakdown.Add(source);
+    }
+
+    private static string FormatSigned(int value)
+    {
+        return value >= 0 ? $"+{value}" : value.ToString();
+    }
+
+    public string GetBreakdown()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"{CharacterName}'s bull rush check:");
+        sb.AppendLine($"  Base roll: 1d20 = {BaseRoll}");
+        sb.AppendLine($"  BAB: {FormatSigned(BaseAttackBonus)}");
+
+        if (UsesBestStrengthOrDexterity)
+            sb.AppendLine($"  STR/DEX modifier: {FormatSigned(StrengthOrDexterityModifier)}");
+        else
+            sb.AppendLine($"  STR modifier: {FormatSigned(StrengthModifier)}");
+
+        sb.AppendLine($"  Size modifier: {FormatSigned(SizeModifier)}");
+
+        if (ChargeBonus != 0)
+            sb.AppendLine($"  Charge bonus: {FormatSigned(ChargeBonus)}");
+
+        if (StabilityBonus != 0)
+            sb.AppendLine($"  Stability bonus: {FormatSigned(StabilityBonus)}");
 
         if (MiscModifier != 0)
         {
@@ -181,6 +249,12 @@ public class CharacterController : MonoBehaviour
     private int _grappleAttacksUsedThisTurn;
     private int _grappleAttackBudgetThisTurn;
     private bool _grappleAttackSequenceStarted;
+
+    // Iterative bull rush attack tracking (bull rush as attack action).
+    private readonly List<int> _bullRushAttackBonusesThisTurn = new List<int>();
+    private int _bullRushAttacksUsedThisTurn;
+    private int _bullRushAttackBudgetThisTurn;
+    private bool _bullRushAttackSequenceStarted;
 
     // Pin state tracking (D&D 3.5e):
     // - A character can be pinning one opponent.
@@ -396,6 +470,107 @@ public class CharacterController : MonoBehaviour
         attackBonusUsed = _grappleAttackBonusesThisTurn[_grappleAttacksUsedThisTurn];
         _grappleAttacksUsedThisTurn++;
         attacksRemaining = Mathf.Max(0, _grappleAttackBudgetThisTurn - _grappleAttacksUsedThisTurn);
+        return true;
+    }
+
+    public bool CanUseIterativeBullRushAttackAction()
+    {
+        if (_bullRushAttackSequenceStarted)
+            return _bullRushAttacksUsedThisTurn < _bullRushAttackBudgetThisTurn;
+
+        return Actions != null && (Actions.HasFullRoundAction || Actions.HasStandardAction);
+    }
+
+    public int GetRemainingBullRushAttackActions()
+    {
+        if (_bullRushAttackSequenceStarted)
+            return Mathf.Max(0, _bullRushAttackBudgetThisTurn - _bullRushAttacksUsedThisTurn);
+
+        if (Actions == null)
+            return 0;
+
+        if (Actions.HasFullRoundAction)
+            return GetAttackBonuses().Count;
+
+        if (Actions.HasStandardAction)
+            return 1;
+
+        return 0;
+    }
+
+    public int GetCurrentBullRushAttackBonus()
+    {
+        if (_bullRushAttackSequenceStarted)
+        {
+            if (_bullRushAttacksUsedThisTurn >= _bullRushAttackBudgetThisTurn || _bullRushAttacksUsedThisTurn >= _bullRushAttackBonusesThisTurn.Count)
+                return 0;
+            return _bullRushAttackBonusesThisTurn[_bullRushAttacksUsedThisTurn];
+        }
+
+        if (Actions != null && !Actions.HasFullRoundAction && Actions.HasStandardAction)
+            return Stats != null ? Stats.BaseAttackBonus : 0;
+
+        List<int> bonuses = GetAttackBonuses();
+        return bonuses.Count > 0 ? bonuses[0] : 0;
+    }
+
+    public bool HasRemainingIterativeBullRushAttacksInSequence()
+    {
+        return _bullRushAttackSequenceStarted && _bullRushAttacksUsedThisTurn < _bullRushAttackBudgetThisTurn;
+    }
+
+    public bool TryConsumeIterativeBullRushAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
+    {
+        attackBonusUsed = 0;
+        attacksRemaining = 0;
+        reason = string.Empty;
+
+        if (Actions == null)
+        {
+            reason = "No action economy available.";
+            return false;
+        }
+
+        if (!_bullRushAttackSequenceStarted)
+        {
+            _bullRushAttackBonusesThisTurn.Clear();
+            _bullRushAttackBonusesThisTurn.AddRange(GetAttackBonuses());
+
+            if (Actions.HasFullRoundAction)
+            {
+                Actions.UseFullRoundAction();
+                _bullRushAttackBudgetThisTurn = _bullRushAttackBonusesThisTurn.Count;
+            }
+            else if (CommitStandardAction())
+            {
+                _bullRushAttackBudgetThisTurn = Mathf.Min(1, _bullRushAttackBonusesThisTurn.Count);
+            }
+            else
+            {
+                reason = "No standard or full-round action remaining.";
+                return false;
+            }
+
+            _bullRushAttackBudgetThisTurn = Mathf.Max(0, _bullRushAttackBudgetThisTurn);
+            _bullRushAttacksUsedThisTurn = 0;
+            _bullRushAttackSequenceStarted = true;
+        }
+
+        if (_bullRushAttacksUsedThisTurn >= _bullRushAttackBudgetThisTurn)
+        {
+            reason = "No bull rush attacks remaining this turn.";
+            return false;
+        }
+
+        if (_bullRushAttacksUsedThisTurn >= _bullRushAttackBonusesThisTurn.Count)
+        {
+            reason = "No iterative attack bonus available for this bull rush attack.";
+            return false;
+        }
+
+        attackBonusUsed = _bullRushAttackBonusesThisTurn[_bullRushAttacksUsedThisTurn];
+        _bullRushAttacksUsedThisTurn++;
+        attacksRemaining = Mathf.Max(0, _bullRushAttackBudgetThisTurn - _bullRushAttacksUsedThisTurn);
         return true;
     }
 
@@ -4736,6 +4911,10 @@ public class CharacterController : MonoBehaviour
         _grappleAttacksUsedThisTurn = 0;
         _grappleAttackBudgetThisTurn = 0;
         _grappleAttackSequenceStarted = false;
+        _bullRushAttackBonusesThisTurn.Clear();
+        _bullRushAttacksUsedThisTurn = 0;
+        _bullRushAttackBudgetThisTurn = 0;
+        _bullRushAttackSequenceStarted = false;
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
         // They are player-controlled and reset only when the player changes them
 
@@ -4745,7 +4924,13 @@ public class CharacterController : MonoBehaviour
 
     // ========== SPECIAL ATTACK MANEUVERS ==========
 
-    public SpecialAttackResult ExecuteSpecialAttack(SpecialAttackType type, CharacterController target, EquipSlot? disarmTargetSlot = null, int? grappleAttackBonusOverride = null)
+    public SpecialAttackResult ExecuteSpecialAttack(
+        SpecialAttackType type,
+        CharacterController target,
+        EquipSlot? disarmTargetSlot = null,
+        int? grappleAttackBonusOverride = null,
+        int? bullRushAttackBonusOverride = null,
+        int bullRushChargeBonusOverride = 0)
     {
         if (target == null || target.Stats == null)
         {
@@ -4763,7 +4948,10 @@ public class CharacterController : MonoBehaviour
             case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot);
             case SpecialAttackType.Grapple: return ResolveGrapple(target, grappleAttackBonusOverride);
             case SpecialAttackType.Sunder: return ResolveSunder(target);
-            case SpecialAttackType.BullRush: return ResolveBullRush(target);
+            case SpecialAttackType.BullRushAttack:
+                return ResolveBullRush(target, bullRushAttackBonusOverride ?? (Stats != null ? Stats.BaseAttackBonus : 0), chargeBonus: 0);
+            case SpecialAttackType.BullRushCharge:
+                return ResolveBullRush(target, Stats != null ? Stats.BaseAttackBonus : 0, chargeBonus: bullRushChargeBonusOverride == 0 ? 2 : bullRushChargeBonusOverride);
             case SpecialAttackType.Overrun: return ResolveOverrun(target, defenderBlocks: true);
             case SpecialAttackType.Feint: return ResolveFeint(target);
             default:
@@ -5109,25 +5297,95 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    private SpecialAttackResult ResolveBullRush(CharacterController target)
+    public BullRushCheckResult RollBullRushAttackerCheck(int bab, int chargeBonus = 0, int? fixedRoll = null)
     {
-        int atkRoll = Random.Range(1, 21);
-        int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Bull Rush") ? 4 : 0);
-        int defTotal = defRoll + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty;
-        bool success = atkTotal >= defTotal;
+        var result = new BullRushCheckResult
+        {
+            CharacterName = Stats != null ? Stats.CharacterName : name,
+            BaseRoll = fixedRoll ?? Random.Range(1, 21),
+            BaseAttackBonus = bab,
+            StrengthModifier = Stats != null ? Stats.STRMod : 0,
+            SizeModifier = GetGrappleSizeModifier(),
+            ChargeBonus = chargeBonus,
+            UsesBestStrengthOrDexterity = false
+        };
+
+        if (Stats != null && Stats.HasFeat("Improved Bull Rush"))
+            result.AddMiscModifier(4, "Improved Bull Rush feat");
+
+        result.Total = result.BaseRoll
+            + result.BaseAttackBonus
+            + result.StrengthModifier
+            + result.SizeModifier
+            + result.ChargeBonus
+            + result.MiscModifier;
+
+        return result;
+    }
+
+    public BullRushCheckResult RollBullRushDefenderCheck(int? fixedRoll = null)
+    {
+        int strengthMod = Stats != null ? Stats.STRMod : 0;
+        int dexterityMod = Stats != null ? Stats.DEXMod : 0;
+        int bestAbility = Mathf.Max(strengthMod, dexterityMod);
+        int stabilityBonus = (Stats != null && Stats.Race != null) ? Stats.Race.StabilityBonus : 0;
+
+        var result = new BullRushCheckResult
+        {
+            CharacterName = Stats != null ? Stats.CharacterName : name,
+            BaseRoll = fixedRoll ?? Random.Range(1, 21),
+            BaseAttackBonus = Stats != null ? Stats.BaseAttackBonus : 0,
+            StrengthOrDexterityModifier = bestAbility,
+            SizeModifier = GetGrappleSizeModifier(),
+            StabilityBonus = stabilityBonus,
+            UsesBestStrengthOrDexterity = true
+        };
+
+        result.Total = result.BaseRoll
+            + result.BaseAttackBonus
+            + result.StrengthOrDexterityModifier
+            + result.SizeModifier
+            + result.StabilityBonus;
+
+        return result;
+    }
+
+    private SpecialAttackResult ResolveBullRush(CharacterController target, int attackBab, int chargeBonus)
+    {
+        BullRushCheckResult attackerCheck = RollBullRushAttackerCheck(attackBab, chargeBonus);
+        BullRushCheckResult defenderCheck = target.RollBullRushDefenderCheck();
+        bool success = attackerCheck.Total > defenderCheck.Total;
+
+        string resultLine = BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total);
+        int margin = Mathf.Max(0, attackerCheck.Total - defenderCheck.Total);
+        int pushFeet = success ? (5 + (margin / 5) * 5) : 0;
+
+        string header = chargeBonus > 0
+            ? $"{Stats.CharacterName} charges and attempts to bull rush {target.Stats.CharacterName}"
+            : $"{Stats.CharacterName} attempts to bull rush {target.Stats.CharacterName}";
+
+        string outcome = success
+            ? $"{Stats.CharacterName} successfully bull rushes {target.Stats.CharacterName}, pushing them back {pushFeet} ft!"
+            : $"{Stats.CharacterName} fails to bull rush {target.Stats.CharacterName}";
+
+        string log = string.Join("\n\n", new[]
+        {
+            header,
+            attackerCheck.GetBreakdown(),
+            defenderCheck.GetBreakdown(),
+            resultLine + "\n" + outcome
+        });
 
         return new SpecialAttackResult
         {
             ManeuverName = "Bull Rush",
             Success = success,
-            CheckRoll = atkRoll,
-            CheckTotal = atkTotal,
-            OpposedRoll = defRoll,
-            OpposedTotal = defTotal,
-            Log = success
-                ? $"{Stats.CharacterName} wins Bull Rush against {target.Stats.CharacterName} ({atkTotal} vs {defTotal})."
-                : $"{Stats.CharacterName} fails Bull Rush against {target.Stats.CharacterName} ({atkTotal} vs {defTotal})."
+            CheckRoll = attackerCheck.BaseRoll,
+            CheckTotal = attackerCheck.Total,
+            OpposedRoll = defenderCheck.BaseRoll,
+            OpposedTotal = defenderCheck.Total,
+            DamageDealt = pushFeet,
+            Log = log
         };
     }
 

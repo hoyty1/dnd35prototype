@@ -50,6 +50,10 @@ public static class GrappleDamageRulesTests
         TestIterativeGrappleAttackBonusesConsumeInOrder();
         TestOpposedEscapeCountsAsIterativeGrappleAttackAction();
         TestStandardOnlyAllowsSingleIterativeGrappleAttack();
+        TestIterativeBullRushAttackBonusesConsumeInOrder();
+        TestBullRushChargeAppliesPlus2ToAttackerCheck();
+        TestBullRushImprovedFeatAddsPlus4();
+        TestBullRushDefenderUsesBestStrengthOrDexAndDwarfStability();
         Debug.Log($"========== RESULTS: {_passed} passed, {_failed} failed ==========");
     }
 
@@ -660,4 +664,75 @@ public static class GrappleDamageRulesTests
 
         Cleanup(attacker);
     }
+
+    private static void TestIterativeBullRushAttackBonusesConsumeInOrder()
+    {
+        var attacker = CreateTestCharacter("IterativeBullRushBonuses", "Fighter");
+        attacker.Stats.BaseAttackBonus = 11;
+        attacker.StartNewTurn();
+
+        bool first = attacker.TryConsumeIterativeBullRushAttackAction(out int bab1, out int remaining1, out string reason1);
+        bool second = attacker.TryConsumeIterativeBullRushAttackAction(out int bab2, out int remaining2, out string reason2);
+        bool third = attacker.TryConsumeIterativeBullRushAttackAction(out int bab3, out int remaining3, out string reason3);
+        bool fourth = attacker.TryConsumeIterativeBullRushAttackAction(out int bab4, out int remaining4, out string reason4);
+
+        Assert(first && second && third, "BAB +11 character can consume 3 iterative bull rush attacks in one sequence");
+        Assert(bab1 == 11 && bab2 == 6 && bab3 == 1, "Iterative bull rush attacks use BAB progression +11/+6/+1");
+        Assert(remaining1 == 2 && remaining2 == 1 && remaining3 == 0, "Iterative bull rush attack remaining counter decreases each use");
+        Assert(!fourth && !string.IsNullOrEmpty(reason4), "No additional iterative bull rush attack is available after budget is exhausted");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestBullRushChargeAppliesPlus2ToAttackerCheck()
+    {
+        var attacker = CreateTestCharacter("BullRushChargeBonus", "Fighter");
+        attacker.Stats.BaseAttackBonus = 11;
+        attacker.Stats.STR = 18;
+        attacker.StartNewTurn();
+
+        BullRushCheckResult noCharge = attacker.RollBullRushAttackerCheck(11, chargeBonus: 0, fixedRoll: 10);
+        BullRushCheckResult withCharge = attacker.RollBullRushAttackerCheck(11, chargeBonus: 2, fixedRoll: 10);
+
+        Assert(withCharge.Total == noCharge.Total + 2, "Bull Rush (Charge) applies +2 bonus to attacker opposed check");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestBullRushImprovedFeatAddsPlus4()
+    {
+        var attacker = CreateTestCharacter("BullRushFeatBonus", "Fighter");
+        attacker.Stats.BaseAttackBonus = 11;
+        attacker.Stats.STR = 18;
+        attacker.StartNewTurn();
+
+        BullRushCheckResult baseline = attacker.RollBullRushAttackerCheck(11, chargeBonus: 0, fixedRoll: 10);
+        attacker.Stats.Feats.Add("Improved Bull Rush");
+        BullRushCheckResult withFeat = attacker.RollBullRushAttackerCheck(11, chargeBonus: 0, fixedRoll: 10);
+
+        Assert(withFeat.Total == baseline.Total + 4, "Improved Bull Rush adds +4 to attacker opposed check");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestBullRushDefenderUsesBestStrengthOrDexAndDwarfStability()
+    {
+        var defender = CreateTestCharacter("BullRushDefender", "Fighter");
+        defender.Stats.BaseAttackBonus = 6;
+        defender.Stats.STR = 8;  // -1
+        defender.Stats.DEX = 18; // +4
+        defender.Stats.Race = RaceDatabase.GetRace("Dwarf");
+        defender.StartNewTurn();
+
+        BullRushCheckResult check = defender.RollBullRushDefenderCheck(fixedRoll: 10);
+
+        int expected = 10 + 6 + 4 + defender.GetGrappleSizeModifier() + 4;
+        Assert(check.UsesBestStrengthOrDexterity, "Bull rush defender check tracks STR/DEX best-of mode");
+        Assert(check.StrengthOrDexterityModifier == 4, "Bull rush defender uses higher of STR or DEX modifier");
+        Assert(check.StabilityBonus == 4, "Dwarf defender gains +4 stability bonus against bull rush");
+        Assert(check.Total == expected, "Bull rush defender total includes roll + BAB + best ability + size + stability");
+
+        Cleanup(defender);
+    }
+
 }

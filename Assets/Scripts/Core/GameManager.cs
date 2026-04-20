@@ -181,6 +181,7 @@ public class GameManager : MonoBehaviour
     // Pending charge state
     private CharacterController _chargeTarget;
     private List<Vector2Int> _pendingChargePath = new List<Vector2Int>();
+    private bool _pendingChargeBullRush;
 
     // ========== AOE TARGETING STATE ==========
     private bool _isAoETargeting;                          // Currently in AoE targeting mode
@@ -2330,6 +2331,7 @@ public class GameManager : MonoBehaviour
         // Reset transient charge state whenever we return to action menu
         _chargeTarget = null;
         _pendingChargePath.Clear();
+        _pendingChargeBullRush = false;
 
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
@@ -2384,6 +2386,12 @@ public class GameManager : MonoBehaviour
                 int attacksRemaining = pc.GetRemainingGrappleAttackActions();
                 int nextBab = pc.GetCurrentGrappleAttackBonus();
                 CombatUI.SetTurnIndicator($"{pcName}'s Turn - Iterative attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use grapple-compatible attack actions or End Turn.");
+            }
+            else if (pc.HasRemainingIterativeBullRushAttacksInSequence())
+            {
+                int attacksRemaining = pc.GetRemainingBullRushAttackActions();
+                int nextBab = pc.GetCurrentBullRushAttackBonus();
+                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Bull Rush (Attack) iterative attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Bull Rush (Attack) or End Turn.");
             }
             else if (IsHoldingTouchCharge(pc))
             {
@@ -4456,7 +4464,12 @@ public class GameManager : MonoBehaviour
             return false;
 
         bool hasIterativeGrappleAttackInSequence = actor.HasRemainingIterativeGrappleAttacksInSequence();
-        return actor.Actions.HasStandardAction || CanUseImprovedFeintAsMove(actor) || hasIterativeGrappleAttackInSequence;
+        bool hasIterativeBullRushAttackInSequence = actor.HasRemainingIterativeBullRushAttacksInSequence();
+        return actor.Actions.HasStandardAction
+            || actor.Actions.HasFullRoundAction
+            || CanUseImprovedFeintAsMove(actor)
+            || hasIterativeGrappleAttackInSequence
+            || hasIterativeBullRushAttackInSequence;
     }
 
     private bool TryConsumeFeintAction(CharacterController attacker, out string actionLabel)
@@ -4489,7 +4502,7 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         bool canOpen = pc != null && CanOpenSpecialAttackMenu(pc);
-        Debug.Log($"[GameManager][SpecialAttack] ButtonPressed actor={(pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>")} canOpen={canOpen} phase={CurrentPhase} subPhase={CurrentSubPhase} std={(pc != null ? pc.Actions.HasStandardAction : false)} iterativeGrapple={(pc != null ? pc.HasRemainingIterativeGrappleAttacksInSequence() : false)}");
+        Debug.Log($"[GameManager][SpecialAttack] ButtonPressed actor={(pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>")} canOpen={canOpen} phase={CurrentPhase} subPhase={CurrentSubPhase} std={(pc != null ? pc.Actions.HasStandardAction : false)} iterativeGrapple={(pc != null ? pc.HasRemainingIterativeGrappleAttacksInSequence() : false)} iterativeBullRush={(pc != null ? pc.HasRemainingIterativeBullRushAttacksInSequence() : false)}");
         if (!canOpen) return;
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "special attacks"))
@@ -4666,13 +4679,18 @@ public class GameManager : MonoBehaviour
         if (pc == null) { ShowActionChoices(); return; }
 
         bool hasIterativeGrappleAttackInSequence = pc.HasRemainingIterativeGrappleAttacksInSequence();
+        bool hasIterativeBullRushAttackInSequence = pc.HasRemainingIterativeBullRushAttacksInSequence();
         bool hasAction = type == SpecialAttackType.Feint
             ? (pc.Actions.HasStandardAction || CanUseImprovedFeintAsMove(pc))
             : (type == SpecialAttackType.Grapple
                 ? (pc.Actions.HasStandardAction || hasIterativeGrappleAttackInSequence)
-                : pc.Actions.HasStandardAction);
+                : (type == SpecialAttackType.BullRushAttack
+                    ? (pc.Actions.HasStandardAction || pc.Actions.HasFullRoundAction || hasIterativeBullRushAttackInSequence)
+                    : (type == SpecialAttackType.BullRushCharge
+                        ? pc.Actions.HasFullRoundAction
+                        : pc.Actions.HasStandardAction)));
 
-        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} iterativeGrapple={hasIterativeGrappleAttackInSequence}");
+        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} iterativeGrapple={hasIterativeGrappleAttackInSequence} iterativeBullRush={hasIterativeBullRushAttackInSequence}");
 
         if (!hasAction)
         {
@@ -4680,13 +4698,23 @@ public class GameManager : MonoBehaviour
                 ? "Need a standard action, or a move action with Improved Feint"
                 : (type == SpecialAttackType.Grapple
                     ? "Need a standard action or remaining iterative grapple attack"
-                    : "Need a standard action");
+                    : (type == SpecialAttackType.BullRushAttack
+                        ? "Need a standard/full-round action or remaining iterative bull rush attack"
+                        : (type == SpecialAttackType.BullRushCharge
+                            ? "Need a full-round action and valid charge movement"
+                            : "Need a standard action")));
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use {type}: {reason}.");
             ShowActionChoices();
             return;
         }
 
         CombatUI.HideSpecialAttackMenu();
+
+        if (type == SpecialAttackType.BullRushCharge)
+        {
+            EnterBullRushChargeMode(pc);
+            return;
+        }
 
         if (type == SpecialAttackType.Grapple
             && pc.TryGetGrappleState(out _, out _, out _, out _))
@@ -4710,6 +4738,7 @@ public class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "charging"))
             return;
 
+        _pendingChargeBullRush = false;
         EnterChargeMode(pc);
     }
 
@@ -10646,6 +10675,7 @@ public class GameManager : MonoBehaviour
 
         string actionLabel = "standard action";
         int? grappleAttackBonusOverride = null;
+        int? bullRushAttackBonusOverride = null;
 
         if (type == SpecialAttackType.Feint)
         {
@@ -10673,6 +10703,24 @@ public class GameManager : MonoBehaviour
             grappleAttackBonusOverride = grappleAttackBonusUsed;
             actionLabel = $"attack BAB {CharacterStats.FormatMod(grappleAttackBonusUsed)} ({grappleAttacksRemaining} remaining)";
             Debug.Log($"[GameManager][Grapple] Consume success actor={attacker.Stats.CharacterName} usedBAB={grappleAttackBonusUsed} remaining={grappleAttacksRemaining}");
+        }
+        else if (type == SpecialAttackType.BullRushAttack)
+        {
+            Debug.Log($"[GameManager][BullRushAttack] Attempting consume actor={attacker.Stats.CharacterName} phase={CurrentPhase} subPhase={CurrentSubPhase} std={attacker.Actions.HasStandardAction} full={attacker.Actions.HasFullRoundAction} iterativeRemaining={attacker.GetRemainingBullRushAttackActions()}");
+            if (!attacker.TryConsumeIterativeBullRushAttackAction(out int bullRushBabUsed, out int bullRushAttacksRemaining, out string bullRushConsumeReason))
+            {
+                string reason = string.IsNullOrWhiteSpace(bullRushConsumeReason)
+                    ? "no eligible attack remaining"
+                    : bullRushConsumeReason;
+                Debug.LogWarning($"[GameManager][BullRushAttack] Consume failed actor={attacker.Stats.CharacterName} reason={reason}");
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Bull Rush (Attack): {reason}.");
+                ShowActionChoices();
+                return;
+            }
+
+            bullRushAttackBonusOverride = bullRushBabUsed;
+            actionLabel = $"attack BAB {CharacterStats.FormatMod(bullRushBabUsed)} ({bullRushAttacksRemaining} remaining)";
+            Debug.Log($"[GameManager][BullRushAttack] Consume success actor={attacker.Stats.CharacterName} usedBAB={bullRushBabUsed} remaining={bullRushAttacksRemaining}");
         }
         else
         {
@@ -10721,7 +10769,13 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        SpecialAttackResult result = attacker.ExecuteSpecialAttack(type, target, disarmTargetSlot, grappleAttackBonusOverride);
+        SpecialAttackResult result = attacker.ExecuteSpecialAttack(
+            type,
+            target,
+            disarmTargetSlot,
+            grappleAttackBonusOverride,
+            bullRushAttackBonusOverride,
+            bullRushChargeBonusOverride: type == SpecialAttackType.BullRushCharge ? 2 : 0);
         CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}] ({actionLabel}): {result.Log}");
         if (type == SpecialAttackType.Grapple)
         {
@@ -10738,11 +10792,25 @@ public class GameManager : MonoBehaviour
                 CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no iterative attacks remaining this turn.");
             }
         }
+        else if (type == SpecialAttackType.BullRushAttack)
+        {
+            int attacksRemaining = attacker.GetRemainingBullRushAttackActions();
+            int nextBab = attacker.GetCurrentBullRushAttackBonus();
+            Debug.Log($"[GameManager][BullRushAttack] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingIterative={attacksRemaining} nextBAB={nextBab} phase={CurrentPhase} subPhase={CurrentSubPhase}");
+
+            if (attacksRemaining > 0)
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} Bull Rush (Attack) iterative attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
+            else
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no Bull Rush (Attack) iterative attacks remaining this turn.");
+        }
 
         if (result.Success)
         {
-            if (type == SpecialAttackType.BullRush)
-                TryPushTargetAway(attacker, target, 1, allowAttackerFollow: true);
+            if (type == SpecialAttackType.BullRushAttack || type == SpecialAttackType.BullRushCharge)
+            {
+                int pushSquares = Mathf.Max(1, result.DamageDealt / 5);
+                TryPushTargetAway(attacker, target, pushSquares, allowAttackerFollow: true);
+            }
             else if (type == SpecialAttackType.Overrun)
                 TryPushTargetAway(attacker, target, 1, allowAttackerFollow: true);
         }
@@ -10856,6 +10924,12 @@ public class GameManager : MonoBehaviour
         return validTargets.Count > 0;
     }
 
+    private void EnterBullRushChargeMode(CharacterController charger)
+    {
+        _pendingChargeBullRush = true;
+        EnterChargeMode(charger);
+    }
+
     public void EnterChargeMode(CharacterController charger)
     {
         if (charger == null) return;
@@ -10900,7 +10974,9 @@ public class GameManager : MonoBehaviour
 
         HighlightCharacterFootprint(charger, HighlightType.Selected);
 
-        CombatUI.SetTurnIndicator("CHARGE: Select a target. Right-click/Esc to cancel.");
+        CombatUI.SetTurnIndicator(_pendingChargeBullRush
+            ? "BULL RUSH (CHARGE): Select a target. Right-click/Esc to cancel."
+            : "CHARGE: Select a target. Right-click/Esc to cancel.");
     }
 
     private List<CharacterController> GetValidChargeTargets(CharacterController charger, bool logFailures)
@@ -11176,7 +11252,9 @@ public class GameManager : MonoBehaviour
         HighlightCharacterFootprint(charger, HighlightType.Selected);
         HighlightCharacterFootprint(target, HighlightType.Attack);
 
-        CombatUI.SetTurnIndicator($"CHARGE: {target.Stats.CharacterName} | +2 attack, -2 AC until next turn. Click target/endpoint to confirm.");
+        CombatUI.SetTurnIndicator(_pendingChargeBullRush
+            ? $"BULL RUSH CHARGE: {target.Stats.CharacterName} | +2 check, -2 AC until next turn. Click target/endpoint to confirm."
+            : $"CHARGE: {target.Stats.CharacterName} | +2 attack, -2 AC until next turn. Click target/endpoint to confirm.");
     }
 
     private IEnumerator ExecuteCharge(CharacterController charger, CharacterController target)
@@ -11196,7 +11274,9 @@ public class GameManager : MonoBehaviour
             yield break;
         }
 
-        CombatUI?.ShowCombatLog($"🏇 {charger.Stats.CharacterName} charges {target.Stats.CharacterName}!");
+        CombatUI?.ShowCombatLog(_pendingChargeBullRush
+            ? $"🏇 {charger.Stats.CharacterName} charges and attempts a bull rush on {target.Stats.CharacterName}!"
+            : $"🏇 {charger.Stats.CharacterName} charges {target.Stats.CharacterName}!");
 
         // Resolve provoked AoOs during charge movement.
         var provokedAoOs = ThreatSystem.AnalyzePathForAoOs(charger, path, GetAllCharacters());
@@ -11229,23 +11309,40 @@ public class GameManager : MonoBehaviour
 
         InvalidatePreviewThreats();
 
-        // Apply +2 charge attack bonus to this attack only.
-        charger.Stats.MoraleAttackBonus += 2;
-        CombatResult result;
-        try
+        if (_pendingChargeBullRush)
         {
-            result = charger.Attack(target, false, 0, null, null);
-        }
-        finally
-        {
-            charger.Stats.MoraleAttackBonus -= 2;
-        }
+            SpecialAttackResult bullRushResult = charger.ExecuteSpecialAttack(
+                SpecialAttackType.BullRushCharge,
+                target,
+                bullRushChargeBonusOverride: 2);
+            CombatUI.ShowCombatLog($"⚡ Charge Bull Rush (+2): {bullRushResult.Log}");
 
-        if (result != null)
+            if (bullRushResult.Success)
+            {
+                int pushSquares = Mathf.Max(1, bullRushResult.DamageDealt / 5);
+                TryPushTargetAway(charger, target, pushSquares, allowAttackerFollow: true);
+            }
+        }
+        else
         {
-            CombatUI.ShowCombatLog($"⚡ Charge Attack (+2): {result.GetDetailedSummary()}");
-            if (result.Hit && result.TotalDamage > 0)
-                CheckConcentrationOnDamage(target, result.TotalDamage);
+            // Apply +2 charge attack bonus to this attack only.
+            charger.Stats.MoraleAttackBonus += 2;
+            CombatResult result;
+            try
+            {
+                result = charger.Attack(target, false, 0, null, null);
+            }
+            finally
+            {
+                charger.Stats.MoraleAttackBonus -= 2;
+            }
+
+            if (result != null)
+            {
+                CombatUI.ShowCombatLog($"⚡ Charge Attack (+2): {result.GetDetailedSummary()}");
+                if (result.Hit && result.TotalDamage > 0)
+                    CheckConcentrationOnDamage(target, result.TotalDamage);
+            }
         }
 
         // Apply AC penalty until next turn.
@@ -11258,6 +11355,7 @@ public class GameManager : MonoBehaviour
         _highlightedCells.Clear();
         _chargeTarget = null;
         _pendingChargePath.Clear();
+        _pendingChargeBullRush = false;
 
         UpdateAllStatsUI();
 
@@ -11276,6 +11374,7 @@ public class GameManager : MonoBehaviour
     {
         _chargeTarget = null;
         _pendingChargePath.Clear();
+        _pendingChargeBullRush = false;
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
         ShowActionChoices();
@@ -12595,7 +12694,7 @@ public class GameManager : MonoBehaviour
 
         if (result.Success)
         {
-            if (choice.Value == SpecialAttackType.BullRush)
+            if (choice.Value == SpecialAttackType.BullRushAttack || choice.Value == SpecialAttackType.BullRushCharge)
                 TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);
             else if (choice.Value == SpecialAttackType.Overrun)
                 TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);

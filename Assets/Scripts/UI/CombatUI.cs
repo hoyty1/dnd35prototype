@@ -696,6 +696,7 @@ public class CombatUI : MonoBehaviour
         bool hasGrappleState = pc.TryGetGrappleState(out CharacterController grappleOpponent, out _, out bool actorPinnedInGrappleState, out bool opponentPinnedByActor);
         bool isPinningOpponent = pc.IsPinningOpponent();
         bool hasIterativeGrappleAttackInSequence = pc.HasRemainingIterativeGrappleAttacksInSequence();
+        bool hasIterativeBullRushAttackInSequence = pc.HasRemainingIterativeBullRushAttacksInSequence();
 
         bool CanUseWhilePinning(GrappleActionType actionType)
         {
@@ -807,7 +808,7 @@ public class CombatUI : MonoBehaviour
                 && (actions.HasMoveAction || actions.CanConvertStandardToMove);
             bool canSpecialAttack = isPinned
                 ? actions.HasStandardAction
-                : (actions.HasStandardAction || canImprovedFeintMove || hasIterativeGrappleAttackInSequence);
+                : (actions.HasStandardAction || canImprovedFeintMove || hasIterativeGrappleAttackInSequence || hasIterativeBullRushAttackInSequence);
 
             SpecialAttackButton.gameObject.SetActive(true);
             SpecialAttackButton.interactable = canSpecialAttack;
@@ -823,6 +824,12 @@ public class CombatUI : MonoBehaviour
                     int nextBab = pc.GetCurrentGrappleAttackBonus();
                     int remaining = pc.GetRemainingGrappleAttackActions();
                     spLabel.text = $"Special Attack (Grapple Iterative {CharacterStats.FormatMod(nextBab)}, {remaining} left)";
+                }
+                else if (hasIterativeBullRushAttackInSequence)
+                {
+                    int nextBab = pc.GetCurrentBullRushAttackBonus();
+                    int remaining = pc.GetRemainingBullRushAttackActions();
+                    spLabel.text = $"Special Attack (Bull Rush Iterative {CharacterStats.FormatMod(nextBab)}, {remaining} left)";
                 }
                 else if (canImprovedFeintMove)
                     spLabel.text = "Special Attack (Feint Move)";
@@ -1430,7 +1437,9 @@ public class CombatUI : MonoBehaviour
         if (_specialAttackPanel == null) return;
 
         bool hasStandardAction = pc != null && pc.Actions.HasStandardAction;
+        bool hasFullRoundAction = pc != null && pc.Actions.HasFullRoundAction;
         bool hasIterativeGrappleAttackInSequence = pc != null && pc.HasRemainingIterativeGrappleAttacksInSequence();
+        bool hasIterativeBullRushAttackInSequence = pc != null && pc.HasRemainingIterativeBullRushAttacksInSequence();
         bool canImprovedFeintMove = pc != null
             && pc.Stats != null
             && pc.Stats.HasFeat("Improved Feint")
@@ -1438,7 +1447,7 @@ public class CombatUI : MonoBehaviour
 
         GameManager gm = GameManager.Instance;
         string actorName = pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>";
-        Debug.Log($"[CombatUI][SpecialAttackMenu] SHOW actor={actorName} phase={(gm != null ? gm.CurrentPhase.ToString() : "<no-gm>")} subPhase={(gm != null ? gm.CurrentSubPhase.ToString() : "<no-gm>")} std={hasStandardAction} iterativeGrapple={hasIterativeGrappleAttackInSequence} improvedFeintMove={canImprovedFeintMove}");
+        Debug.Log($"[CombatUI][SpecialAttackMenu] SHOW actor={actorName} phase={(gm != null ? gm.CurrentPhase.ToString() : "<no-gm>")} subPhase={(gm != null ? gm.CurrentSubPhase.ToString() : "<no-gm>")} std={hasStandardAction} full={hasFullRoundAction} iterativeGrapple={hasIterativeGrappleAttackInSequence} iterativeBullRush={hasIterativeBullRushAttackInSequence} improvedFeintMove={canImprovedFeintMove}");
 
         _specialAttackPanel.SetActive(true);
 
@@ -1447,15 +1456,16 @@ public class CombatUI : MonoBehaviour
         {
             if (btn == null) continue;
 
-            bool enabled = IsSpecialAttackButtonEnabled(btn.name, pc, hasStandardAction, hasIterativeGrappleAttackInSequence, canImprovedFeintMove);
+            bool enabled = IsSpecialAttackButtonEnabled(btn.name, pc, hasStandardAction, hasFullRoundAction, hasIterativeGrappleAttackInSequence, hasIterativeBullRushAttackInSequence, canImprovedFeintMove);
             btn.interactable = enabled;
+            UpdateSpecialAttackButtonLabel(btn, pc, enabled);
             Debug.Log($"[CombatUI][SpecialAttackMenu] button={btn.name} active={btn.gameObject.activeSelf} interactable={btn.interactable}");
         }
 
         WireSpecialAttackMenu(onSelect, onCancel);
     }
 
-    private bool IsSpecialAttackButtonEnabled(string buttonName, CharacterController pc, bool hasStandardAction, bool hasIterativeGrappleAttackInSequence, bool canImprovedFeintMove)
+    private bool IsSpecialAttackButtonEnabled(string buttonName, CharacterController pc, bool hasStandardAction, bool hasFullRoundAction, bool hasIterativeGrappleAttackInSequence, bool hasIterativeBullRushAttackInSequence, bool canImprovedFeintMove)
     {
         if (buttonName == "Cancel")
             return true;
@@ -1465,6 +1475,12 @@ public class CombatUI : MonoBehaviour
         {
             case "Grapple":
                 enabled = hasStandardAction || hasIterativeGrappleAttackInSequence;
+                break;
+            case "Bull Rush (Attack)":
+                enabled = hasStandardAction || hasFullRoundAction || hasIterativeBullRushAttackInSequence;
+                break;
+            case "Bull Rush (Charge)":
+                enabled = hasFullRoundAction;
                 break;
             case "Feint":
                 enabled = hasStandardAction || canImprovedFeintMove;
@@ -1478,11 +1494,43 @@ public class CombatUI : MonoBehaviour
         {
             if (buttonName == "Disarm" || buttonName == "Sunder")
                 enabled &= pc.HasMeleeWeaponEquipped();
-            if (buttonName == "Bull Rush" || buttonName == "Overrun" || buttonName == "Trip")
+            if (buttonName == "Bull Rush (Attack)" || buttonName == "Bull Rush (Charge)" || buttonName == "Overrun" || buttonName == "Trip")
                 enabled &= pc.HasMeleeWeaponEquipped();
         }
 
         return enabled;
+    }
+
+    private void UpdateSpecialAttackButtonLabel(Button button, CharacterController pc, bool isEnabled)
+    {
+        if (button == null)
+            return;
+
+        Text label = button.GetComponentInChildren<Text>(true);
+        if (label == null)
+            return;
+
+        switch (button.name)
+        {
+            case "Bull Rush (Attack)":
+                if (pc != null && isEnabled)
+                {
+                    int remaining = pc.GetRemainingBullRushAttackActions();
+                    int currentBab = pc.GetCurrentBullRushAttackBonus();
+                    label.text = $"Bull Rush (Attack) (BAB {CharacterStats.FormatMod(currentBab)}, {remaining} left)";
+                }
+                else
+                {
+                    label.text = "Bull Rush (Attack) (No attacks)";
+                }
+                break;
+
+            case "Bull Rush (Charge)":
+                label.text = isEnabled
+                    ? "Bull Rush (Charge) (+2 bonus)"
+                    : "Bull Rush (Charge) (Not available)";
+                break;
+        }
     }
 
     public void HideSpecialAttackMenu()
@@ -1676,7 +1724,8 @@ public class CombatUI : MonoBehaviour
         CreateSpecialButton("Disarm", "Disarm");
         CreateSpecialButton("Grapple", "Grapple");
         CreateSpecialButton("Sunder", "Sunder");
-        CreateSpecialButton("Bull Rush", "Bull Rush");
+        CreateSpecialButton("Bull Rush (Attack)", "Bull Rush (Attack)");
+        CreateSpecialButton("Bull Rush (Charge)", "Bull Rush (Charge)");
         CreateSpecialButton("Overrun", "Overrun");
         CreateSpecialButton("Feint", "Feint");
         CreateSpecialCancelButton();
@@ -1699,7 +1748,8 @@ public class CombatUI : MonoBehaviour
                 case "Disarm": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Disarm"); onSelect?.Invoke(SpecialAttackType.Disarm); }); break;
                 case "Grapple": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Grapple"); onSelect?.Invoke(SpecialAttackType.Grapple); }); break;
                 case "Sunder": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Sunder"); onSelect?.Invoke(SpecialAttackType.Sunder); }); break;
-                case "Bull Rush": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush"); onSelect?.Invoke(SpecialAttackType.BullRush); }); break;
+                case "Bull Rush (Attack)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Attack)"); onSelect?.Invoke(SpecialAttackType.BullRushAttack); }); break;
+                case "Bull Rush (Charge)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Charge)"); onSelect?.Invoke(SpecialAttackType.BullRushCharge); }); break;
                 case "Overrun": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Overrun"); onSelect?.Invoke(SpecialAttackType.Overrun); }); break;
                 case "Feint": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Feint"); onSelect?.Invoke(SpecialAttackType.Feint); }); break;
                 case "Cancel":
