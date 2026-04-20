@@ -257,6 +257,12 @@ public class CharacterController : MonoBehaviour
     private int _bullRushAttackBudgetThisTurn;
     private bool _bullRushAttackSequenceStarted;
 
+    // Iterative disarm attack tracking (disarm as attack action during a full attack sequence).
+    private readonly List<int> _disarmAttackBonusesThisTurn = new List<int>();
+    private int _disarmAttacksUsedThisTurn;
+    private int _disarmAttackBudgetThisTurn;
+    private bool _disarmAttackSequenceStarted;
+
     // Pin state tracking (D&D 3.5e):
     // - A character can be pinning one opponent.
     // - A character can be pinned by one opponent.
@@ -572,6 +578,107 @@ public class CharacterController : MonoBehaviour
         attackBonusUsed = _bullRushAttackBonusesThisTurn[_bullRushAttacksUsedThisTurn];
         _bullRushAttacksUsedThisTurn++;
         attacksRemaining = Mathf.Max(0, _bullRushAttackBudgetThisTurn - _bullRushAttacksUsedThisTurn);
+        return true;
+    }
+
+    public bool CanUseIterativeDisarmAttackAction()
+    {
+        if (_disarmAttackSequenceStarted)
+            return _disarmAttacksUsedThisTurn < _disarmAttackBudgetThisTurn;
+
+        return Actions != null && (Actions.HasFullRoundAction || Actions.HasStandardAction);
+    }
+
+    public int GetRemainingDisarmAttackActions()
+    {
+        if (_disarmAttackSequenceStarted)
+            return Mathf.Max(0, _disarmAttackBudgetThisTurn - _disarmAttacksUsedThisTurn);
+
+        if (Actions == null)
+            return 0;
+
+        if (Actions.HasFullRoundAction)
+            return GetAttackBonuses().Count;
+
+        if (Actions.HasStandardAction)
+            return 1;
+
+        return 0;
+    }
+
+    public int GetCurrentDisarmAttackBonus()
+    {
+        if (_disarmAttackSequenceStarted)
+        {
+            if (_disarmAttacksUsedThisTurn >= _disarmAttackBudgetThisTurn || _disarmAttacksUsedThisTurn >= _disarmAttackBonusesThisTurn.Count)
+                return 0;
+            return _disarmAttackBonusesThisTurn[_disarmAttacksUsedThisTurn];
+        }
+
+        if (Actions != null && !Actions.HasFullRoundAction && Actions.HasStandardAction)
+            return Stats != null ? Stats.BaseAttackBonus : 0;
+
+        List<int> bonuses = GetAttackBonuses();
+        return bonuses.Count > 0 ? bonuses[0] : 0;
+    }
+
+    public bool HasRemainingIterativeDisarmAttacksInSequence()
+    {
+        return _disarmAttackSequenceStarted && _disarmAttacksUsedThisTurn < _disarmAttackBudgetThisTurn;
+    }
+
+    public bool TryConsumeIterativeDisarmAttackAction(out int attackBonusUsed, out int attacksRemaining, out string reason)
+    {
+        attackBonusUsed = 0;
+        attacksRemaining = 0;
+        reason = string.Empty;
+
+        if (Actions == null)
+        {
+            reason = "No action economy available.";
+            return false;
+        }
+
+        if (!_disarmAttackSequenceStarted)
+        {
+            _disarmAttackBonusesThisTurn.Clear();
+            _disarmAttackBonusesThisTurn.AddRange(GetAttackBonuses());
+
+            if (Actions.HasFullRoundAction)
+            {
+                Actions.UseFullRoundAction();
+                _disarmAttackBudgetThisTurn = _disarmAttackBonusesThisTurn.Count;
+            }
+            else if (CommitStandardAction())
+            {
+                _disarmAttackBudgetThisTurn = Mathf.Min(1, _disarmAttackBonusesThisTurn.Count);
+            }
+            else
+            {
+                reason = "No standard or full-round action remaining.";
+                return false;
+            }
+
+            _disarmAttackBudgetThisTurn = Mathf.Max(0, _disarmAttackBudgetThisTurn);
+            _disarmAttacksUsedThisTurn = 0;
+            _disarmAttackSequenceStarted = true;
+        }
+
+        if (_disarmAttacksUsedThisTurn >= _disarmAttackBudgetThisTurn)
+        {
+            reason = "No disarm attacks remaining this turn.";
+            return false;
+        }
+
+        if (_disarmAttacksUsedThisTurn >= _disarmAttackBonusesThisTurn.Count)
+        {
+            reason = "No iterative attack bonus available for this disarm attack.";
+            return false;
+        }
+
+        attackBonusUsed = _disarmAttackBonusesThisTurn[_disarmAttacksUsedThisTurn];
+        _disarmAttacksUsedThisTurn++;
+        attacksRemaining = Mathf.Max(0, _disarmAttackBudgetThisTurn - _disarmAttacksUsedThisTurn);
         return true;
     }
 
@@ -4984,6 +5091,10 @@ public class CharacterController : MonoBehaviour
         _bullRushAttacksUsedThisTurn = 0;
         _bullRushAttackBudgetThisTurn = 0;
         _bullRushAttackSequenceStarted = false;
+        _disarmAttackBonusesThisTurn.Clear();
+        _disarmAttacksUsedThisTurn = 0;
+        _disarmAttackBudgetThisTurn = 0;
+        _disarmAttackSequenceStarted = false;
         // Note: PowerAttackValue and RapidShotEnabled persist between turns
         // They are player-controlled and reset only when the player changes them
 
@@ -4997,6 +5108,7 @@ public class CharacterController : MonoBehaviour
         SpecialAttackType type,
         CharacterController target,
         EquipSlot? disarmTargetSlot = null,
+        int? disarmAttackBonusOverride = null,
         int? grappleAttackBonusOverride = null,
         int? bullRushAttackBonusOverride = null,
         int bullRushChargeBonusOverride = 0)
@@ -5014,7 +5126,7 @@ public class CharacterController : MonoBehaviour
         switch (type)
         {
             case SpecialAttackType.Trip: return ResolveTrip(target);
-            case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot);
+            case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot, disarmAttackBonusOverride);
             case SpecialAttackType.Grapple: return ResolveGrapple(target, grappleAttackBonusOverride);
             case SpecialAttackType.Sunder: return ResolveSunder(target);
             case SpecialAttackType.BullRushAttack:
@@ -5059,7 +5171,7 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    private SpecialAttackResult ResolveDisarm(CharacterController target, EquipSlot? preferredTargetSlot)
+    private SpecialAttackResult ResolveDisarm(CharacterController target, EquipSlot? preferredTargetSlot, int? iterativeAttackBonusOverride = null)
     {
         if (!TryGetDisarmTargetHeldItem(target, preferredTargetSlot, out ItemData targetHeldItem, out EquipSlot targetHeldItemSlot))
         {
@@ -5083,7 +5195,8 @@ public class CharacterController : MonoBehaviour
             targetHeldItem,
             targetHeldItemSlot,
             defenderLockedGauntletBonus,
-            lockedGauntletReason: defenderHasLockedGauntlet ? "Locked Gauntlet" : string.Empty);
+            lockedGauntletReason: defenderHasLockedGauntlet ? "Locked Gauntlet" : string.Empty,
+            attackerBaseAttackBonusOverride: iterativeAttackBonusOverride);
 
         bool success = primaryCheck.Success;
         var logLines = new List<string>
@@ -5592,7 +5705,8 @@ public class CharacterController : MonoBehaviour
         ItemData defenderHeldItem,
         EquipSlot defenderHeldSlot,
         int defenderSpecialResistBonus,
-        string lockedGauntletReason)
+        string lockedGauntletReason,
+        int? attackerBaseAttackBonusOverride = null)
     {
         int atkHeldItemMod = GetDisarmHeldItemModifier(attackerHeldItem, treatUnarmedAsLight: true);
         int atkSizeDiffMod = GetDisarmSizeDifferenceModifier(attacker, defender);
@@ -5606,7 +5720,9 @@ public class CharacterController : MonoBehaviour
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
 
-        int atkTotal = atkRoll + attacker.Stats.BaseAttackBonus + attacker.Stats.STRMod + attacker.Stats.SizeModifier + attacker.Stats.ConditionAttackPenalty
+        int attackerBaseAttackBonus = attackerBaseAttackBonusOverride ?? attacker.Stats.BaseAttackBonus;
+
+        int atkTotal = atkRoll + attackerBaseAttackBonus + attacker.Stats.STRMod + attacker.Stats.SizeModifier + attacker.Stats.ConditionAttackPenalty
                        + atkHeldItemMod + atkSizeDiffMod + atkImprovedDisarmMod;
         int defTotal = defRoll + defender.Stats.BaseAttackBonus + defender.Stats.STRMod + defender.Stats.SizeModifier + defender.Stats.ConditionAttackPenalty
                        + defHeldItemMod + defNonMeleeHeldItemPenalty + defSizeDiffMod + defImprovedDisarmMod + defenderSpecialResistBonus;

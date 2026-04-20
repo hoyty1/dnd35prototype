@@ -133,6 +133,13 @@ public class GameManager : MonoBehaviour
     private SpecialAttackType _pendingSpecialAttackType;
     private bool _isSelectingSpecialAttack;
 
+    // Iterative disarm flow state
+    private bool _isDisarmSequenceActive;
+    private CharacterController _disarmInitiator;
+    private CharacterController _disarmTarget;
+    private EquipSlot? _disarmTargetSlot;
+    private int _disarmAttemptNumber;
+
     // Player-only constrained movement continuation after a successful overrun avoid.
     private bool _isOverrunContinuationSelection;
     private CharacterController _overrunContinuationAttacker;
@@ -2612,6 +2619,7 @@ public class GameManager : MonoBehaviour
         _pendingAoOAction = null;
         _spellcastProvocationCancelled = false;
         ClearSpellcastResourceSnapshot();
+        ClearDisarmSequenceState();
         LogMenuFlow("ShowActionChoices:HIDE_TRANSIENT_PANELS", pc);
         ClearOverrunContinuationState();
         CombatUI.HideAoOConfirmationPrompt();
@@ -2687,6 +2695,12 @@ public class GameManager : MonoBehaviour
                 int attacksRemaining = pc.GetRemainingBullRushAttackActions();
                 int nextBab = pc.GetCurrentBullRushAttackBonus();
                 CombatUI.SetTurnIndicator($"{pcName}'s Turn - Bull Rush (Attack) iterative attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Bull Rush (Attack) or End Turn.");
+            }
+            else if (pc.HasRemainingIterativeDisarmAttacksInSequence())
+            {
+                int attacksRemaining = pc.GetRemainingDisarmAttackActions();
+                int nextBab = pc.GetCurrentDisarmAttackBonus();
+                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Disarm iterative attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Disarm or End Turn.");
             }
             else if (IsHoldingTouchCharge(pc))
             {
@@ -4911,17 +4925,20 @@ public class GameManager : MonoBehaviour
 
         bool hasIterativeGrappleAttackInSequence = pc.HasRemainingIterativeGrappleAttacksInSequence();
         bool hasIterativeBullRushAttackInSequence = pc.HasRemainingIterativeBullRushAttacksInSequence();
+        bool hasIterativeDisarmAttackInSequence = pc.HasRemainingIterativeDisarmAttacksInSequence();
         bool hasAction = type == SpecialAttackType.Feint
             ? (pc.Actions.HasStandardAction || CanUseImprovedFeintAsMove(pc))
             : (type == SpecialAttackType.Grapple
                 ? (pc.Actions.HasStandardAction || hasIterativeGrappleAttackInSequence)
                 : (type == SpecialAttackType.BullRushAttack
                     ? (pc.Actions.HasStandardAction || pc.Actions.HasFullRoundAction || hasIterativeBullRushAttackInSequence)
-                    : (type == SpecialAttackType.BullRushCharge
-                        ? pc.Actions.HasFullRoundAction
-                        : pc.Actions.HasStandardAction)));
+                    : (type == SpecialAttackType.Disarm
+                        ? (pc.Actions.HasStandardAction || pc.Actions.HasFullRoundAction || hasIterativeDisarmAttackInSequence)
+                        : (type == SpecialAttackType.BullRushCharge
+                            ? pc.Actions.HasFullRoundAction
+                            : pc.Actions.HasStandardAction))));
 
-        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} iterativeGrapple={hasIterativeGrappleAttackInSequence} iterativeBullRush={hasIterativeBullRushAttackInSequence}");
+        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} iterativeGrapple={hasIterativeGrappleAttackInSequence} iterativeBullRush={hasIterativeBullRushAttackInSequence} iterativeDisarm={hasIterativeDisarmAttackInSequence}");
 
         if (!hasAction)
         {
@@ -4931,9 +4948,11 @@ public class GameManager : MonoBehaviour
                     ? "Need a standard action or remaining iterative grapple attack"
                     : (type == SpecialAttackType.BullRushAttack
                         ? "Need a standard/full-round action or remaining iterative bull rush attack"
-                        : (type == SpecialAttackType.BullRushCharge
-                            ? "Need a full-round action and valid charge movement"
-                            : "Need a standard action")));
+                        : (type == SpecialAttackType.Disarm
+                            ? "Need a standard/full-round action or remaining iterative disarm attack"
+                            : (type == SpecialAttackType.BullRushCharge
+                                ? "Need a full-round action and valid charge movement"
+                                : "Need a standard action"))));
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use {type}: {reason}.");
             ShowActionChoices();
             return;
@@ -10112,6 +10131,7 @@ public class GameManager : MonoBehaviour
         if (options.Count <= 1)
         {
             EquipSlot? selectedSlot = options.Count == 1 ? options[0].HandSlot : null;
+            BeginDisarmSequence(attacker, target, selectedSlot);
             ExecuteSpecialAttack(attacker, target, SpecialAttackType.Disarm, selectedSlot);
             return;
         }
@@ -10146,6 +10166,7 @@ public class GameManager : MonoBehaviour
                     return;
                 }
 
+                BeginDisarmSequence(attacker, target, selectedSlot);
                 ExecuteSpecialAttack(attacker, target, SpecialAttackType.Disarm, selectedSlot);
             },
             onCancel: () =>
@@ -10155,6 +10176,91 @@ public class GameManager : MonoBehaviour
                 else
                     ShowActionChoices();
             });
+    }
+
+    private void BeginDisarmSequence(CharacterController attacker, CharacterController target, EquipSlot? targetSlot)
+    {
+        _isDisarmSequenceActive = attacker != null && target != null;
+        _disarmInitiator = attacker;
+        _disarmTarget = target;
+        _disarmTargetSlot = targetSlot;
+        _disarmAttemptNumber = 0;
+    }
+
+    private void ClearDisarmSequenceState()
+    {
+        _isDisarmSequenceActive = false;
+        _disarmInitiator = null;
+        _disarmTarget = null;
+        _disarmTargetSlot = null;
+        _disarmAttemptNumber = 0;
+    }
+
+    private bool ShouldContinueDisarmSequence(CharacterController attacker, CharacterController target, SpecialAttackResult result)
+    {
+        if (attacker == null || target == null || result == null)
+            return false;
+
+        if (!attacker.IsPlayerControlled)
+            return false;
+
+        if (!result.Success && attacker.HasRemainingIterativeDisarmAttacksInSequence())
+            return target.GetDisarmableHeldItemOptions().Count > 0;
+
+        return false;
+    }
+
+    private void PromptContinueDisarmSequence(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null)
+        {
+            ClearDisarmSequenceState();
+            ShowActionChoices();
+            return;
+        }
+
+        int nextAttackBonus = attacker.GetCurrentDisarmAttackBonus();
+        int remainingAttacks = attacker.GetRemainingDisarmAttackActions();
+
+        CombatUI?.ShowCombatLog($"Continue with next disarm attempt? (BAB {CharacterStats.FormatMod(nextAttackBonus)})");
+
+        CombatUI?.ShowPickUpItemSelection(
+            actorName: attacker.Stats.CharacterName,
+            options: new List<string>
+            {
+                $"Continue Disarm (BAB {CharacterStats.FormatMod(nextAttackBonus)})",
+                "Stop Disarming"
+            },
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex == 0)
+                {
+                    if (target.GetDisarmableHeldItemOptions().Count <= 0)
+                    {
+                        CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} has no held item to disarm.");
+                        ClearDisarmSequenceState();
+                        ShowActionChoices();
+                        return;
+                    }
+
+                    Debug.Log($"[Disarm] Continuing disarm sequence attempt #{_disarmAttemptNumber + 1} (remaining={remainingAttacks}).");
+                    ExecuteSpecialAttack(attacker, target, SpecialAttackType.Disarm, _disarmTargetSlot);
+                }
+                else
+                {
+                    CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} stops disarming.");
+                    ClearDisarmSequenceState();
+                    ShowActionChoices();
+                }
+            },
+            onCancel: () =>
+            {
+                CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} stops disarming.");
+                ClearDisarmSequenceState();
+                ShowActionChoices();
+            },
+            title: "Disarm - Continue?",
+            cancelText: "Stop");
     }
 
     private void BeginGrappleContextMenuDisplayLock(CharacterController actor)
@@ -10899,6 +11005,8 @@ public class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.Animating;
 
         string actionLabel = "standard action";
+        int? disarmAttackBonusOverride = null;
+        int disarmAttackBonusUsed = 0;
         int? grappleAttackBonusOverride = null;
         int? bullRushAttackBonusOverride = null;
 
@@ -10910,6 +11018,27 @@ public class GameManager : MonoBehaviour
                 ShowActionChoices();
                 return;
             }
+        }
+        else if (type == SpecialAttackType.Disarm)
+        {
+            if (!_isDisarmSequenceActive || _disarmInitiator != attacker || _disarmTarget != target)
+                BeginDisarmSequence(attacker, target, disarmTargetSlot);
+
+            if (!attacker.TryConsumeIterativeDisarmAttackAction(out disarmAttackBonusUsed, out int disarmAttacksRemaining, out string disarmConsumeReason))
+            {
+                string reason = string.IsNullOrWhiteSpace(disarmConsumeReason)
+                    ? "no eligible disarm attack remaining"
+                    : disarmConsumeReason;
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Disarm: {reason}.");
+                ClearDisarmSequenceState();
+                ShowActionChoices();
+                return;
+            }
+
+            disarmAttackBonusOverride = disarmAttackBonusUsed;
+            _disarmAttemptNumber++;
+            actionLabel = $"disarm attempt #{_disarmAttemptNumber}, BAB {CharacterStats.FormatMod(disarmAttackBonusUsed)} ({disarmAttacksRemaining} remaining)";
+            Debug.Log($"[GameManager][Disarm] Consume success actor={attacker.Stats.CharacterName} attempt={_disarmAttemptNumber} usedBAB={disarmAttackBonusUsed} remaining={disarmAttacksRemaining}");
         }
         else if (type == SpecialAttackType.Grapple)
         {
@@ -10998,6 +11127,7 @@ public class GameManager : MonoBehaviour
             type,
             target,
             disarmTargetSlot,
+            disarmAttackBonusOverride,
             grappleAttackBonusOverride,
             bullRushAttackBonusOverride,
             bullRushChargeBonusOverride: type == SpecialAttackType.BullRushCharge ? 2 : 0);
@@ -11027,6 +11157,29 @@ public class GameManager : MonoBehaviour
                 CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} Bull Rush (Attack) iterative attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
             else
                 CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no Bull Rush (Attack) iterative attacks remaining this turn.");
+        }
+        else if (type == SpecialAttackType.Disarm)
+        {
+            int attacksRemaining = attacker.GetRemainingDisarmAttackActions();
+            int nextBab = attacker.GetCurrentDisarmAttackBonus();
+            CombatUI?.ShowCombatLog($"[Disarm] Attempt #{_disarmAttemptNumber} used BAB {CharacterStats.FormatMod(disarmAttackBonusUsed)}.");
+
+            if (ShouldContinueDisarmSequence(attacker, target, result))
+            {
+                Grid.ClearAllHighlights();
+                _highlightedCells.Clear();
+                _isSelectingSpecialAttack = false;
+                UpdateAllStatsUI();
+                PromptContinueDisarmSequence(attacker, target);
+                return;
+            }
+
+            if (attacksRemaining > 0)
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} disarm iterative attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
+            else
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no disarm iterative attacks remaining this turn.");
+
+            ClearDisarmSequenceState();
         }
 
         if (result.Success)
@@ -11283,6 +11436,7 @@ public class GameManager : MonoBehaviour
     private void CancelSpecialAttackTargeting()
     {
         _isSelectingSpecialAttack = false;
+        ClearDisarmSequenceState();
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
         ShowActionChoices();

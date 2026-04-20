@@ -51,6 +51,8 @@ public static class GrappleDamageRulesTests
         TestOpposedEscapeCountsAsIterativeGrappleAttackAction();
         TestStandardOnlyAllowsSingleIterativeGrappleAttack();
         TestIterativeBullRushAttackBonusesConsumeInOrder();
+        TestIterativeDisarmAttackBonusesConsumeInOrder();
+        TestStandardOnlyAllowsSingleIterativeDisarmAttack();
         TestBullRushChargeAppliesPlus2ToAttackerCheck();
         TestBullRushImprovedFeatAddsPlus4();
         TestBullRushDefenderUsesBestStrengthOrDexAndDwarfStability();
@@ -680,6 +682,43 @@ public static class GrappleDamageRulesTests
         Assert(bab1 == 11 && bab2 == 6 && bab3 == 1, "Iterative bull rush attacks use BAB progression +11/+6/+1");
         Assert(remaining1 == 2 && remaining2 == 1 && remaining3 == 0, "Iterative bull rush attack remaining counter decreases each use");
         Assert(!fourth && !string.IsNullOrEmpty(reason4), "No additional iterative bull rush attack is available after budget is exhausted");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestIterativeDisarmAttackBonusesConsumeInOrder()
+    {
+        var attacker = CreateTestCharacter("IterativeDisarmBonuses", "Fighter");
+        attacker.Stats.BaseAttackBonus = 11;
+        attacker.StartNewTurn();
+
+        bool first = attacker.TryConsumeIterativeDisarmAttackAction(out int bab1, out int remaining1, out string reason1);
+        bool second = attacker.TryConsumeIterativeDisarmAttackAction(out int bab2, out int remaining2, out string reason2);
+        bool third = attacker.TryConsumeIterativeDisarmAttackAction(out int bab3, out int remaining3, out string reason3);
+        bool fourth = attacker.TryConsumeIterativeDisarmAttackAction(out int bab4, out int remaining4, out string reason4);
+
+        Assert(first && second && third, "BAB +11 character can consume 3 iterative disarm attacks in one sequence");
+        Assert(bab1 == 11 && bab2 == 6 && bab3 == 1, "Iterative disarm attacks use BAB progression +11/+6/+1");
+        Assert(remaining1 == 2 && remaining2 == 1 && remaining3 == 0, "Iterative disarm attack remaining counter decreases each use");
+        Assert(!fourth && !string.IsNullOrEmpty(reason4), "No additional iterative disarm attack is available after budget is exhausted");
+
+        Cleanup(attacker);
+    }
+
+    private static void TestStandardOnlyAllowsSingleIterativeDisarmAttack()
+    {
+        var attacker = CreateTestCharacter("StandardSingleDisarmIterative", "Fighter");
+        attacker.Stats.BaseAttackBonus = 11;
+        attacker.StartNewTurn();
+
+        attacker.Actions.UseMoveAction(); // Spend move first: only standard action remains.
+
+        bool first = attacker.TryConsumeIterativeDisarmAttackAction(out int bab1, out int remaining1, out _);
+        bool second = attacker.TryConsumeIterativeDisarmAttackAction(out int bab2, out int remaining2, out string reason2);
+
+        Assert(first, "Character can consume one iterative disarm attack with standard action only");
+        Assert(bab1 == 11 && remaining1 == 0, "Standard-action disarm uses first BAB only and leaves no iterative attacks");
+        Assert(!second && !string.IsNullOrEmpty(reason2), "Additional iterative disarm attacks are unavailable after standard-only use");
 
         Cleanup(attacker);
     }

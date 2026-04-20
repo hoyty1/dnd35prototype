@@ -763,6 +763,7 @@ public class CombatUI : MonoBehaviour
         bool isPinningOpponent = pc.IsPinningOpponent();
         bool hasIterativeGrappleAttackInSequence = pc.HasRemainingIterativeGrappleAttacksInSequence();
         bool hasIterativeBullRushAttackInSequence = pc.HasRemainingIterativeBullRushAttacksInSequence();
+        bool hasIterativeDisarmAttackInSequence = pc.HasRemainingIterativeDisarmAttacksInSequence();
 
         bool CanUseWhilePinning(GrappleActionType actionType)
         {
@@ -874,7 +875,7 @@ public class CombatUI : MonoBehaviour
                 && (actions.HasMoveAction || actions.CanConvertStandardToMove);
             bool canSpecialAttack = isPinned
                 ? actions.HasStandardAction
-                : (actions.HasStandardAction || canImprovedFeintMove || hasIterativeGrappleAttackInSequence || hasIterativeBullRushAttackInSequence);
+                : (actions.HasStandardAction || canImprovedFeintMove || hasIterativeGrappleAttackInSequence || hasIterativeBullRushAttackInSequence || hasIterativeDisarmAttackInSequence);
 
             SpecialAttackButton.gameObject.SetActive(true);
             SpecialAttackButton.interactable = canSpecialAttack;
@@ -896,6 +897,12 @@ public class CombatUI : MonoBehaviour
                     int nextBab = pc.GetCurrentBullRushAttackBonus();
                     int remaining = pc.GetRemainingBullRushAttackActions();
                     spLabel.text = $"Special Attack (Bull Rush Iterative {CharacterStats.FormatMod(nextBab)}, {remaining} left)";
+                }
+                else if (hasIterativeDisarmAttackInSequence)
+                {
+                    int nextBab = pc.GetCurrentDisarmAttackBonus();
+                    int remaining = pc.GetRemainingDisarmAttackActions();
+                    spLabel.text = $"Special Attack (Disarm Iterative {CharacterStats.FormatMod(nextBab)}, {remaining} left)";
                 }
                 else if (canImprovedFeintMove)
                     spLabel.text = "Special Attack (Feint Move)";
@@ -1499,6 +1506,7 @@ public class CombatUI : MonoBehaviour
         bool hasFullRoundAction = pc != null && pc.Actions.HasFullRoundAction;
         bool hasIterativeGrappleAttackInSequence = pc != null && pc.HasRemainingIterativeGrappleAttacksInSequence();
         bool hasIterativeBullRushAttackInSequence = pc != null && pc.HasRemainingIterativeBullRushAttacksInSequence();
+        bool hasIterativeDisarmAttackInSequence = pc != null && pc.HasRemainingIterativeDisarmAttacksInSequence();
         bool canImprovedFeintMove = pc != null
             && pc.Stats != null
             && pc.Stats.HasFeat("Improved Feint")
@@ -1506,7 +1514,7 @@ public class CombatUI : MonoBehaviour
 
         GameManager gm = GameManager.Instance;
         string actorName = pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>";
-        Debug.Log($"[CombatUI][SpecialAttackMenu] SHOW actor={actorName} phase={(gm != null ? gm.CurrentPhase.ToString() : "<no-gm>")} subPhase={(gm != null ? gm.CurrentSubPhase.ToString() : "<no-gm>")} std={hasStandardAction} full={hasFullRoundAction} iterativeGrapple={hasIterativeGrappleAttackInSequence} iterativeBullRush={hasIterativeBullRushAttackInSequence} improvedFeintMove={canImprovedFeintMove}");
+        Debug.Log($"[CombatUI][SpecialAttackMenu] SHOW actor={actorName} phase={(gm != null ? gm.CurrentPhase.ToString() : "<no-gm>")} subPhase={(gm != null ? gm.CurrentSubPhase.ToString() : "<no-gm>")} std={hasStandardAction} full={hasFullRoundAction} iterativeGrapple={hasIterativeGrappleAttackInSequence} iterativeBullRush={hasIterativeBullRushAttackInSequence} iterativeDisarm={hasIterativeDisarmAttackInSequence} improvedFeintMove={canImprovedFeintMove}");
 
         _specialAttackPanel.SetActive(true);
 
@@ -1515,7 +1523,7 @@ public class CombatUI : MonoBehaviour
         {
             if (btn == null) continue;
 
-            bool enabled = IsSpecialAttackButtonEnabled(btn.name, pc, hasStandardAction, hasFullRoundAction, hasIterativeGrappleAttackInSequence, hasIterativeBullRushAttackInSequence, canImprovedFeintMove);
+            bool enabled = IsSpecialAttackButtonEnabled(btn.name, pc, hasStandardAction, hasFullRoundAction, hasIterativeGrappleAttackInSequence, hasIterativeBullRushAttackInSequence, hasIterativeDisarmAttackInSequence, canImprovedFeintMove);
             btn.interactable = enabled;
             UpdateSpecialAttackButtonLabel(btn, pc, enabled);
             Debug.Log($"[CombatUI][SpecialAttackMenu] button={btn.name} active={btn.gameObject.activeSelf} interactable={btn.interactable}");
@@ -1524,7 +1532,7 @@ public class CombatUI : MonoBehaviour
         WireSpecialAttackMenu(onSelect, onCancel);
     }
 
-    private bool IsSpecialAttackButtonEnabled(string buttonName, CharacterController pc, bool hasStandardAction, bool hasFullRoundAction, bool hasIterativeGrappleAttackInSequence, bool hasIterativeBullRushAttackInSequence, bool canImprovedFeintMove)
+    private bool IsSpecialAttackButtonEnabled(string buttonName, CharacterController pc, bool hasStandardAction, bool hasFullRoundAction, bool hasIterativeGrappleAttackInSequence, bool hasIterativeBullRushAttackInSequence, bool hasIterativeDisarmAttackInSequence, bool canImprovedFeintMove)
     {
         if (buttonName == "Cancel")
             return true;
@@ -1540,6 +1548,9 @@ public class CombatUI : MonoBehaviour
                 break;
             case "Bull Rush (Charge)":
                 enabled = hasFullRoundAction;
+                break;
+            case "Disarm":
+                enabled = hasStandardAction || hasFullRoundAction || hasIterativeDisarmAttackInSequence;
                 break;
             case "Feint":
                 enabled = hasStandardAction || canImprovedFeintMove;
@@ -1591,6 +1602,19 @@ public class CombatUI : MonoBehaviour
                 label.text = isEnabled
                     ? "Bull Rush (Charge) (+2 bonus)"
                     : "Bull Rush (Charge) (Not available)";
+                break;
+
+            case "Disarm":
+                if (pc != null && isEnabled)
+                {
+                    int remaining = pc.GetRemainingDisarmAttackActions();
+                    int currentBab = pc.GetCurrentDisarmAttackBonus();
+                    label.text = $"Disarm (BAB {CharacterStats.FormatMod(currentBab)}, {remaining} left)";
+                }
+                else
+                {
+                    label.text = "Disarm (No attacks)";
+                }
                 break;
 
             case "Aid Another":
