@@ -10208,22 +10208,14 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        if (!attacker.IsPlayerControlled)
-        {
-            Debug.Log($"[Disarm][Flow] ShouldAutoContinueDisarmSequence -> false (attacker {attacker.Stats.CharacterName} is NPC-controlled).");
-            return false;
-        }
-
         int remainingAttacks = attacker.GetRemainingDisarmAttackActions();
-        bool hasIterativeSequenceAttacks = attacker.HasRemainingIterativeDisarmAttacksInSequence();
         int targetDisarmableItems = target.GetDisarmableHeldItemOptions().Count;
-        bool shouldContinue = !result.Success && hasIterativeSequenceAttacks && targetDisarmableItems > 0;
+        bool shouldContinue = !result.Success && remainingAttacks > 0 && targetDisarmableItems > 0;
 
         Debug.Log(
             $"[Disarm][Flow] ShouldAutoContinueDisarmSequence attacker={attacker.Stats.CharacterName} " +
             $"target={target.Stats.CharacterName} resultSuccess={result.Success} " +
-            $"remainingAttacks={remainingAttacks} hasIterativeSequenceAttacks={hasIterativeSequenceAttacks} " +
-            $"targetDisarmableItems={targetDisarmableItems} => shouldContinue={shouldContinue}");
+            $"remainingAttacks={remainingAttacks} targetDisarmableItems={targetDisarmableItems} => shouldContinue={shouldContinue}");
 
         return shouldContinue;
     }
@@ -10236,6 +10228,13 @@ public class GameManager : MonoBehaviour
             ClearDisarmSequenceState();
             ShowActionChoices();
             return;
+        }
+
+        if (!_isDisarmSequenceActive || _disarmInitiator != attacker || _disarmTarget != target)
+        {
+            _isDisarmSequenceActive = true;
+            _disarmInitiator = attacker;
+            _disarmTarget = target;
         }
 
         int nextAttackBonus = attacker.GetCurrentDisarmAttackBonus();
