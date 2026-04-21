@@ -6134,6 +6134,8 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null) return;
 
+        Debug.Log($"[Overrun][UI] Overrun button pressed by {pc.Stats.CharacterName}. Forwarding to destination-based flow.");
+
         if (!CanUseOverrun(pc, out string reason))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use Overrun: {reason}.");
@@ -6168,6 +6170,8 @@ public class GameManager : MonoBehaviour
 
         if (type == SpecialAttackType.Overrun)
         {
+            Debug.Log($"[Overrun][UI] Special Attack menu selected Overrun for {pc.Stats.CharacterName}. Using destination selection flow.");
+
             if (!CanUseOverrun(pc, out string overrunReason))
             {
                 CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use Overrun: {overrunReason}.");
@@ -9375,6 +9379,8 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        Debug.Log($"[Overrun][Flow] Entering destination selection for {attacker.Stats.CharacterName}.");
+
         ClearOverrunContinuationState();
         _isSelectingOverrunDestination = true;
         _overrunAttacker = attacker;
@@ -12005,6 +12011,13 @@ public class GameManager : MonoBehaviour
 
     private void ShowSpecialAttackTargets(CharacterController attacker, SpecialAttackType type)
     {
+        if (type == SpecialAttackType.Overrun)
+        {
+            Debug.LogWarning("[Overrun][LegacyGuard] ShowSpecialAttackTargets(Overrun) was invoked; redirecting to destination selection.");
+            StartOverrunDestinationSelection(attacker);
+            return;
+        }
+
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
@@ -12072,7 +12085,8 @@ public class GameManager : MonoBehaviour
 
         if (_pendingSpecialAttackType == SpecialAttackType.Overrun)
         {
-            HandleOverrunTargetClick(attacker, target);
+            Debug.LogWarning("[Overrun][LegacyGuard] Received special-target click while pending overrun; restarting destination selection flow.");
+            StartOverrunDestinationSelection(attacker);
             return;
         }
 
@@ -12812,39 +12826,15 @@ public class GameManager : MonoBehaviour
 
     private void HandleOverrunTargetClick(CharacterController attacker, CharacterController target)
     {
-        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null)
+        Debug.LogWarning("[Overrun][LegacyGuard] HandleOverrunTargetClick invoked. Target-based overrun is deprecated; redirecting to destination selection.");
+
+        if (attacker == null || attacker.Stats == null)
         {
             ShowActionChoices();
             return;
         }
 
-        Debug.Log($"[Overrun] Attempt: {attacker.Stats.CharacterName} (player={attacker.IsPlayerControlled}) -> {target.Stats.CharacterName} (player={target.IsPlayerControlled})");
-
-        if (!IsValidOverrunTarget(attacker, target, out string invalidReason, requireAdjacency: true))
-        {
-            CombatUI.ShowCombatLog($"⚠ Overrun invalid target: {invalidReason}.");
-            ShowSpecialAttackTargets(attacker, SpecialAttackType.Overrun);
-            return;
-        }
-
-        bool attackerHasImprovedOverrun = attacker.Stats.HasFeat("Improved Overrun");
-        if (attackerHasImprovedOverrun)
-        {
-            CombatUI.ShowCombatLog($"⚔ {attacker.Stats.CharacterName} has Improved Overrun — {target.Stats.CharacterName} cannot avoid and must block.");
-            ResolveOverrunSpecialAttack(attacker, target, defenderBlocks: true);
-            return;
-        }
-
-        if (ShouldShowOverrunResponsePrompt(target))
-        {
-            Debug.Log($"[Overrun] Prompting player response: {attacker.Stats.CharacterName} overruns {target.Stats.CharacterName}.");
-            ShowOverrunResponsePrompt(attacker, target);
-            return;
-        }
-
-        Debug.Log($"[Overrun] Auto-resolving NPC response: {attacker.Stats.CharacterName} overruns {target.Stats.CharacterName} -> Block.");
-        CombatUI.ShowCombatLog($"⚔ {target.Stats.CharacterName} automatically attempts to block the overrun.");
-        ResolveOverrunSpecialAttack(attacker, target, defenderBlocks: true);
+        StartOverrunDestinationSelection(attacker);
     }
 
     private bool ShouldShowOverrunResponsePrompt(CharacterController target)
