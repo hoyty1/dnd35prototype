@@ -1051,12 +1051,10 @@ public class CombatUI : MonoBehaviour
 
         if (OverrunButton != null)
         {
-            bool showOverrun = actions.HasStandardAction;
-            OverrunButton.gameObject.SetActive(showOverrun);
-            OverrunButton.interactable = showOverrun && !isPinned;
-            Text overrunLabel = OverrunButton.GetComponentInChildren<Text>();
-            if (overrunLabel != null)
-                overrunLabel.text = isPinned ? "Overrun (Pinned: no)" : "Overrun (Standard)";
+            // Overrun is intentionally only available from the Special Attack submenu.
+            OverrunButton.gameObject.SetActive(false);
+            OverrunButton.interactable = false;
+            Debug.Log($"[CombatUI][Actions] Hiding main-menu Overrun button for {pc.Stats.CharacterName}; use Special Attack submenu instead.");
         }
 
         if (ChargeButton != null)

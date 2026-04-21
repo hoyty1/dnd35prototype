@@ -837,11 +837,10 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
+        // D&D 3.5e: Aid Another is a standard action and is allowed while prone.
+        // Intentionally no prone block here.
         if (actor.HasCondition(CombatConditionType.Prone))
-        {
-            reason = "Prone";
-            return false;
-        }
+            Debug.Log($"[AidAnother][Availability] {actor.Stats.CharacterName} is prone but still allowed to attempt Aid Another.");
 
         if (actor.HasCondition(CombatConditionType.Pinned))
         {
