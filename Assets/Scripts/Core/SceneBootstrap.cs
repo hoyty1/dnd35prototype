@@ -1047,13 +1047,25 @@ public class SceneBootstrap : MonoBehaviour
         if (ui.CrawlButton != null)
             ui.CrawlButton.onClick.AddListener(() => GameManager.Instance.OnCrawlButtonPressed());
         if (ui.AttackButton != null)
+        {
+            ui.AttackButton.onClick.RemoveAllListeners();
             ui.AttackButton.onClick.AddListener(() => GameManager.Instance.OnAttackButtonPressed());
+        }
         if (ui.AttackThrownButton != null)
+        {
+            ui.AttackThrownButton.onClick.RemoveAllListeners();
             ui.AttackThrownButton.onClick.AddListener(() => GameManager.Instance.OnThrownAttackButtonPressed());
+        }
         if (ui.AttackOffHandButton != null)
+        {
+            ui.AttackOffHandButton.onClick.RemoveAllListeners();
             ui.AttackOffHandButton.onClick.AddListener(() => GameManager.Instance.OnOffHandAttackButtonPressed());
+        }
         if (ui.AttackOffHandThrownButton != null)
+        {
+            ui.AttackOffHandThrownButton.onClick.RemoveAllListeners();
             ui.AttackOffHandThrownButton.onClick.AddListener(() => GameManager.Instance.OnOffHandThrownAttackButtonPressed());
+        }
         if (ui.AttackDefensivelyButton != null)
             ui.AttackDefensivelyButton.onClick.AddListener(() => GameManager.Instance.OnAttackDefensivelyButtonPressed());
         if (ui.SpecialAttackButton != null)

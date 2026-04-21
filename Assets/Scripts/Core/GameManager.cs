@@ -5375,6 +5375,7 @@ public class GameManager : MonoBehaviour
         _currentAttackType = attackType;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
 
+        Debug.Log($"[Attack][OffHand] Begin target selection attacker={attacker.Stats.CharacterName} attackType={attackType} selectingThrown={_isSelectingOffHandThrownTarget} weapon={_currentOffHandWeapon?.Name ?? "none"}");
         ShowOffHandAttackTargets(attacker, _currentOffHandWeapon, _isSelectingOffHandThrownTarget);
     }
 
@@ -5427,6 +5428,8 @@ public class GameManager : MonoBehaviour
             hasTarget = true;
             anyFlanking |= flanking;
         }
+
+        Debug.Log($"[Attack][OffHand] Target scan complete attacker={attacker.Stats.CharacterName} mode={(useThrownRange ? "Thrown" : "Melee")} highlightedTargets={_highlightedCells.Count} weapon={offHandWeapon?.Name ?? "none"}");
 
         if (hasTarget)
         {
@@ -11260,6 +11263,8 @@ public class GameManager : MonoBehaviour
 
         bool useThrownRange = _isSelectingOffHandThrownTarget
             || (offHandWeapon.IsThrown && _currentAttackType == AttackType.Thrown);
+
+        Debug.Log($"[Attack][OffHand] Resolving target click attacker={attacker.Stats.CharacterName} target={target.Stats.CharacterName} selectingThrown={_isSelectingOffHandThrownTarget} currentAttackType={_currentAttackType} resolvedMode={(useThrownRange ? "Thrown" : "Melee")} weapon={offHandWeapon.Name}");
 
         bool isFlanking = false;
         int flankBonus = 0;
