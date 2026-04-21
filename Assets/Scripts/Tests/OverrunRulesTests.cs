@@ -128,7 +128,7 @@ public static class OverrunRulesTests
         var setup = BuildScenario(new Vector2Int(2, 2), new Vector2Int(3, 2));
         try
         {
-            setup.attacker.AddCondition(CombatConditionType.Prone);
+            setup.attacker.ApplyCondition(CombatConditionType.Prone, -1, "OverrunRulesTests");
             bool canUse = setup.gm.CanUseOverrun(setup.attacker, out string reason);
             Assert(!canUse, "Overrun blocked while prone", $"reason='{reason}'");
         }

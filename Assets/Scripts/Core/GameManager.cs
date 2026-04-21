@@ -9725,10 +9725,10 @@ public class GameManager : MonoBehaviour
 
     private bool ResolveOverrunOpposedCheck(CharacterController attacker, CharacterController defender)
     {
-        int attackerRoll = Random.Range(1, 21);
+        int attackerRoll = UnityEngine.Random.Range(1, 21);
         int attackerTotal = attackerRoll + attacker.Stats.STRMod + GetOverrunSizeModifier(attacker.Stats.CurrentSizeCategory);
 
-        int defenderRoll = Random.Range(1, 21);
+        int defenderRoll = UnityEngine.Random.Range(1, 21);
         int defenderAbility = Mathf.Max(defender.Stats.STRMod, defender.Stats.DEXMod);
         int defenderTotal = defenderRoll + defenderAbility + GetOverrunSizeModifier(defender.Stats.CurrentSizeCategory);
 
