@@ -916,6 +916,7 @@ public class CombatUI : MonoBehaviour
         bool hasThrowableOffHandWeapon = pc.HasThrowableOffHandWeaponEquipped();
         bool offHandUsed = gm != null && gm.IsOffHandAttackUsedThisTurn(pc);
         bool offHandAvailableThisTurn = gm == null || gm.IsOffHandAttackAvailableThisTurn(pc);
+        Debug.Log($"[UI] Updating off-hand buttons for {pc.Stats.CharacterName}: hasOffHandWeapon={hasOffHandWeapon}, hasThrowableOffHandWeapon={hasThrowableOffHandWeapon}, offHandUsed={offHandUsed}, offHandAvailableThisTurn={offHandAvailableThisTurn}");
 
         if (AttackOffHandButton != null)
         {
@@ -924,17 +925,22 @@ public class CombatUI : MonoBehaviour
 
             AttackOffHandButton.gameObject.SetActive(showOffHandButton);
             AttackOffHandButton.interactable = canOffHandAttack;
+            Debug.Log($"[UI] Off-hand melee button: show={showOffHandButton}, enabled={canOffHandAttack}, pinned={isPinned}");
 
             Text offHandLabel = AttackOffHandButton.GetComponentInChildren<Text>();
             if (offHandLabel != null)
             {
                 if (isPinned)
                     offHandLabel.text = "Attack (Off-Hand - Pinned)";
-                else if (!canOffHandAttack)
+                else if (offHandUsed)
                     offHandLabel.text = "Attack (Off-Hand - Used)";
+                else if (!canOffHandAttack)
+                    offHandLabel.text = "Attack (Off-Hand - Unavailable)";
                 else
                     offHandLabel.text = "Attack (Off-Hand)";
             }
+
+            Debug.Log($"[UI] Off-hand melee button label: {(offHandLabel != null ? offHandLabel.text : "<missing text>")}");
         }
 
         if (AttackOffHandThrownButton != null)
@@ -944,17 +950,22 @@ public class CombatUI : MonoBehaviour
 
             AttackOffHandThrownButton.gameObject.SetActive(showOffHandThrownButton);
             AttackOffHandThrownButton.interactable = canOffHandThrownAttack;
+            Debug.Log($"[UI] Off-hand thrown button: show={showOffHandThrownButton}, enabled={canOffHandThrownAttack}, pinned={isPinned}");
 
             Text offHandThrownLabel = AttackOffHandThrownButton.GetComponentInChildren<Text>();
             if (offHandThrownLabel != null)
             {
                 if (isPinned)
                     offHandThrownLabel.text = "Attack (Off-Hand Thrown - Pinned)";
-                else if (!canOffHandThrownAttack)
+                else if (offHandUsed)
                     offHandThrownLabel.text = "Attack (Off-Hand Thrown - Used)";
+                else if (!canOffHandThrownAttack)
+                    offHandThrownLabel.text = "Attack (Off-Hand Thrown - Unavailable)";
                 else
                     offHandThrownLabel.text = "Attack (Off-Hand Thrown)";
             }
+
+            Debug.Log($"[UI] Off-hand thrown button label: {(offHandThrownLabel != null ? offHandThrownLabel.text : "<missing text>")}");
         }
 
         if (AttackDefensivelyButton != null)
