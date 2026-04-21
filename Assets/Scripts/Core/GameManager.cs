@@ -1544,8 +1544,15 @@ public class GameManager : MonoBehaviour
         if (UnityEngine.EventSystems.EventSystem.current != null &&
             UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
         {
-            Debug.Log("[Grid] Click blocked by UI element (IsPointerOverGameObject)");
-            return;
+            // Off-hand targeting can occasionally be blocked by hidden/stale UI raycast targets.
+            // In this very specific state we allow the click to continue to grid raycast.
+            if (!ShouldAllowGridClickThroughUIBlock())
+            {
+                Debug.Log("[Grid] Click blocked by UI element (IsPointerOverGameObject)");
+                return;
+            }
+
+            Debug.Log("[Grid] Pointer reports UI overlap, but allowing click-through for off-hand target selection.");
         }
 
         Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
@@ -1564,6 +1571,12 @@ public class GameManager : MonoBehaviour
         {
             Debug.Log("[Grid] Click detected but no cell hit by raycast");
         }
+    }
+
+    private bool ShouldAllowGridClickThroughUIBlock()
+    {
+        return CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget
+            && _isSelectingOffHandTarget;
     }
 
     private bool TryHandleSummonRightClick()
@@ -11262,11 +11275,17 @@ public class GameManager : MonoBehaviour
 
     private void HandleOffHandTargetClick(CharacterController attacker, SquareCell cell)
     {
+        Debug.Log($"[OffHand] Target clicked at cell ({cell?.X},{cell?.Y}) selecting={_isSelectingOffHandTarget} highlightedCount={_highlightedCells.Count}");
+
         if (!_isSelectingOffHandTarget)
+        {
+            Debug.Log("[OffHand] Ignoring click because off-hand target selection is not active.");
             return;
+        }
 
         if (!cell.IsOccupied || cell.Occupant == null || cell.Occupant == attacker || cell.Occupant.Stats == null || cell.Occupant.Stats.IsDead || !_highlightedCells.Contains(cell) || !IsEnemyTeam(attacker, cell.Occupant))
         {
+            Debug.Log($"[OffHand] Invalid target click. occupied={cell.IsOccupied} occupant={(cell.Occupant != null ? cell.Occupant.Stats.CharacterName : "none")} highlighted={_highlightedCells.Contains(cell)} enemy={(cell.Occupant != null ? IsEnemyTeam(attacker, cell.Occupant) : false)}");
             _isSelectingOffHandTarget = false;
             _isSelectingOffHandThrownTarget = false;
             _currentOffHandBAB = 0;
@@ -11276,10 +11295,10 @@ public class GameManager : MonoBehaviour
         }
 
         CharacterController target = cell.Occupant;
-
         ItemData offHandWeapon = _currentOffHandWeapon;
         if (offHandWeapon == null)
         {
+            Debug.Log("[OffHand] Early return: current off-hand weapon is null.");
             CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no off-hand weapon available.");
             _isSelectingOffHandTarget = false;
             _isSelectingOffHandThrownTarget = false;
@@ -11292,6 +11311,8 @@ public class GameManager : MonoBehaviour
         bool useThrownRange = _isSelectingOffHandThrownTarget
             || (offHandWeapon.IsThrown && _currentAttackType == AttackType.Thrown);
 
+        Debug.Log($"[OffHand] HandleOffHandTargetClick attacker={attacker.Stats.CharacterName} target={target.Stats.CharacterName} mode={(useThrownRange ? "Thrown" : "Melee")} weapon={offHandWeapon.Name} BAB={_currentOffHandBAB}");
+
         if (!_isInAttackSequence)
         {
             bool shouldConsumeStandardAction = !attacker.Actions.FullRoundActionUsed;
@@ -11299,6 +11320,7 @@ public class GameManager : MonoBehaviour
             {
                 if (!attacker.CommitStandardAction())
                 {
+                    Debug.Log("[OffHand] Early return: no standard action available at confirm-time.");
                     string modeLabel = useThrownRange ? "off-hand thrown attack" : "off-hand attack";
                     CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available for an {modeLabel}.");
                     _isSelectingOffHandTarget = false;
@@ -11319,51 +11341,9 @@ public class GameManager : MonoBehaviour
 
         CurrentSubPhase = PlayerSubPhase.Animating;
 
-        Debug.Log($"[Attack][OffHand] Resolving target click attacker={attacker.Stats.CharacterName} target={target.Stats.CharacterName} selectingThrown={_isSelectingOffHandThrownTarget} currentAttackType={_currentAttackType} resolvedMode={(useThrownRange ? "Thrown" : "Melee")} weapon={offHandWeapon.Name}");
-
-        bool isFlanking = false;
-        int flankBonus = 0;
-        string partnerName = string.Empty;
-        if (!useThrownRange)
-        {
-            List<CharacterController> allCombatants = GetAllCharacters();
-            isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out CharacterController flankPartner);
-            flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-            partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : string.Empty;
-        }
-
-        int sqDist = attacker.GetMinimumDistanceToTarget(target, chebyshev: false);
-        RangeInfo rangeInfo = useThrownRange
-            ? RangeCalculator.GetRangeInfo(sqDist, offHandWeapon.RangeIncrement, true)
-            : RangeCalculator.GetRangeInfo(sqDist, 0, false);
-
-        CombatResult result = attacker.Attack(
-            target,
-            isFlanking,
-            flankBonus,
-            partnerName,
-            rangeInfo,
-            _currentOffHandBAB,
-            offHandWeapon,
-            0,
-            true);
-
-        string babLabel = CharacterStats.FormatMod(_currentOffHandBAB);
-        string offHandPenaltyInfo = _isDualWielding
-            ? $", dual-wield penalty {CharacterStats.FormatMod(_offHandPenalty)}"
-            : string.Empty;
-        string offHandModeLabel = useThrownRange ? "Off-Hand Thrown Attack" : "Off-Hand Attack";
-        CombatUI?.ShowCombatLog($"↻ {offHandModeLabel} (BAB {babLabel}{offHandPenaltyInfo}) with {offHandWeapon.Name}");
-
-        _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
-        CombatUI?.ShowCombatLog(_lastCombatLog);
-
-        if (LogAttacksToConsole)
-            Debug.Log("[Combat] " + _lastCombatLog);
-
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-        _highlightedCells.Clear();
+        Debug.Log("[OffHand] Calling ExecuteOffHandAttack...");
+        CombatResult result = ExecuteOffHandAttack(attacker, target, _currentOffHandBAB, offHandWeapon, useThrownRange);
+        Debug.Log("[OffHand] ExecuteOffHandAttack returned.");
 
         if (result != null && result.Hit && result.TotalDamage > 0)
             CheckConcentrationOnDamage(target, result.TotalDamage);
@@ -11402,6 +11382,80 @@ public class GameManager : MonoBehaviour
         Debug.Log($"[Attack][OffHand] Off-hand attack resolved. inSequence={_isInAttackSequence} mainAttacksUsed={_totalAttacksUsed}/{_totalAttackBudget} thrown={useThrownRange}");
 
         StartCoroutine(AfterAttackDelay(attacker, 1.2f));
+    }
+
+    private CombatResult ExecuteOffHandAttack(CharacterController attacker, CharacterController target, int attackBab, ItemData offHandWeapon, bool useThrownRange)
+    {
+        if (attacker == null || target == null || offHandWeapon == null)
+        {
+            Debug.Log("[OffHand] ExecuteOffHandAttack aborted due to null attacker/target/weapon.");
+            return null;
+        }
+
+        Debug.Log("[OffHand] ExecuteOffHandAttack START");
+        Debug.Log($"[OffHand] Attacker: {attacker.Stats.CharacterName}");
+        Debug.Log($"[OffHand] Target: {target.Stats.CharacterName}");
+        Debug.Log($"[OffHand] Weapon: {offHandWeapon.Name}");
+        Debug.Log($"[OffHand] Attack BAB: {attackBab}");
+        Debug.Log($"[OffHand] STR modifier: {attacker.Stats.GetAbilityModifier(AbilityType.Strength)}");
+        Debug.Log($"[OffHand] Penalty: {_offHandPenalty}");
+
+        bool isFlanking = false;
+        int flankBonus = 0;
+        string partnerName = string.Empty;
+        if (!useThrownRange)
+        {
+            List<CharacterController> allCombatants = GetAllCharacters();
+            isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out CharacterController flankPartner);
+            flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+            partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : string.Empty;
+        }
+
+        int sqDist = attacker.GetMinimumDistanceToTarget(target, chebyshev: false);
+        RangeInfo rangeInfo = useThrownRange
+            ? RangeCalculator.GetRangeInfo(sqDist, offHandWeapon.RangeIncrement, true)
+            : RangeCalculator.GetRangeInfo(sqDist, 0, false);
+
+        CombatResult result = attacker.Attack(
+            target,
+            isFlanking,
+            flankBonus,
+            partnerName,
+            rangeInfo,
+            attackBab,
+            offHandWeapon,
+            0,
+            true);
+
+        string babLabel = CharacterStats.FormatMod(attackBab);
+        string offHandPenaltyInfo = _isDualWielding
+            ? $", dual-wield penalty {CharacterStats.FormatMod(_offHandPenalty)}"
+            : string.Empty;
+        string offHandModeLabel = useThrownRange ? "Off-Hand Thrown Attack" : "Off-Hand Attack";
+        CombatUI?.ShowCombatLog($"↻ {offHandModeLabel} (BAB {babLabel}{offHandPenaltyInfo}) with {offHandWeapon.Name}");
+
+        _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
+        CombatUI?.ShowCombatLog(_lastCombatLog);
+
+        if (LogAttacksToConsole)
+            Debug.Log("[Combat] " + _lastCombatLog);
+
+        UpdateAllStatsUI();
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        if (result == null)
+        {
+            Debug.Log("[OffHand] ExecuteOffHandAttack END (null result)");
+            return null;
+        }
+
+        Debug.Log($"[OffHand] Attack total: {result.TotalRoll} vs AC {result.TargetAC}");
+        Debug.Log(result.Hit
+            ? $"[OffHand] HIT! Damage={result.TotalDamage}"
+            : "[OffHand] MISS!");
+        Debug.Log("[OffHand] ExecuteOffHandAttack END");
+        return result;
     }
 
     private void ResolveOffHandThrownWeaponAfterAttack(CharacterController thrower, CharacterController target, ItemData thrownWeapon)
