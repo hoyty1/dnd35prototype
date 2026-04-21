@@ -176,10 +176,16 @@ public class GameManager : MonoBehaviour
     private EquipSlot? _disarmTargetSlot;
     private int _disarmAttemptNumber;
 
-    // Player-only constrained movement continuation after a successful overrun avoid.
+    // Destination-based overrun selection/execution state.
+    private bool _isSelectingOverrunDestination;
+    private CharacterController _overrunAttacker;
+    private Vector2Int _overrunDestination;
+
+    // Legacy continuation fields (unused in destination-based overrun flow, retained for backward compatibility).
     private bool _isOverrunContinuationSelection;
     private CharacterController _overrunContinuationAttacker;
     private readonly Dictionary<Vector2Int, List<Vector2Int>> _overrunContinuationPathsByDestination = new Dictionary<Vector2Int, List<Vector2Int>>();
+
     // Player grapple movement selection state (after winning Move While Grappling opposed check).
     private bool _isGrappleMoveSelection;
     private CharacterController _grappleMoveActor;
@@ -870,50 +876,31 @@ public class GameManager : MonoBehaviour
         if (actor == null || actor.Stats == null)
             return false;
 
-        Debug.Log($"[Overrun] Checking availability for {actor.Stats.CharacterName}");
-
-        if (actor.HasCondition(CombatConditionType.Prone))
+        if (!actor.Actions.HasMoveAction)
         {
-            reason = "Prone";
-            Debug.Log($"[Overrun] Cannot use while prone ({actor.Stats.CharacterName})");
+            reason = "No move action";
+            return false;
+        }
+
+        if (!actor.Actions.HasStandardAction)
+        {
+            reason = "No standard action";
             return false;
         }
 
         if (actor.HasTakenFiveFootStep)
         {
             reason = "After 5-ft step";
-            Debug.Log($"[Overrun] Cannot use after 5-foot step ({actor.Stats.CharacterName})");
             return false;
         }
 
-        if (!actor.Actions.HasStandardAction)
+        if (actor.HasCondition(CombatConditionType.Prone))
         {
-            reason = "Used";
-            Debug.Log($"[Overrun] No standard action available ({actor.Stats.CharacterName})");
-            return false;
-        }
-
-        // Overrun is a movement-based special attack and does not require a weapon.
-        // Validate that at least one adjacent enemy is a legal overrun target.
-        bool hasValidTarget = false;
-        foreach (CharacterController candidate in GetAllCharacters())
-        {
-            if (IsValidOverrunTarget(actor, candidate, out _, requireAdjacency: true))
-            {
-                hasValidTarget = true;
-                break;
-            }
-        }
-
-        if (!hasValidTarget)
-        {
-            reason = "No legal target";
-            Debug.Log($"[Overrun] No legal adjacent target ({actor.Stats.CharacterName})");
+            reason = "Prone";
             return false;
         }
 
         reason = string.Empty;
-        Debug.Log($"[Overrun] Available ✅ ({actor.Stats.CharacterName})");
         return true;
     }
 
@@ -2773,6 +2760,7 @@ public class GameManager : MonoBehaviour
         ClearSpellcastResourceSnapshot();
         ClearDisarmSequenceState();
         LogMenuFlow("ShowActionChoices:HIDE_TRANSIENT_PANELS", pc);
+        ClearOverrunDestinationSelectionState();
         ClearOverrunContinuationState();
         CombatUI.HideAoOConfirmationPrompt();
         CombatUI.HideDisarmWeaponSelection();
@@ -6182,11 +6170,13 @@ public class GameManager : MonoBehaviour
         {
             if (!CanUseOverrun(pc, out string overrunReason))
             {
-                Debug.Log($"[SpecialAttacks] Overrun not available ({overrunReason}) for {pc.Stats.CharacterName}");
                 CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use Overrun: {overrunReason}.");
                 ShowActionChoices();
                 return;
             }
+
+            StartOverrunDestinationSelection(pc);
+            return;
         }
 
         bool hasIterativeGrappleAttackInSequence = pc.HasRemainingIterativeGrappleAttacksInSequence();
@@ -9370,6 +9360,393 @@ public class GameManager : MonoBehaviour
         HighlightCharacterFootprint(pc, HighlightType.Selected);
     }
 
+    private void ClearOverrunDestinationSelectionState()
+    {
+        _isSelectingOverrunDestination = false;
+        _overrunAttacker = null;
+        _overrunDestination = Vector2Int.zero;
+    }
+
+    private void StartOverrunDestinationSelection(CharacterController attacker)
+    {
+        if (attacker == null || attacker.Stats == null || Grid == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        ClearOverrunContinuationState();
+        _isSelectingOverrunDestination = true;
+        _overrunAttacker = attacker;
+        CurrentSubPhase = PlayerSubPhase.Moving;
+
+        ShowOverrunDestinationOptions(attacker);
+        CombatUI?.SetActionButtonsVisible(false);
+        CombatUI?.SetTurnIndicator($"{attacker.Stats.CharacterName} - Select destination for overrun");
+        CombatUI?.ShowCombatLog("Select destination for overrun.");
+    }
+
+    private void ShowOverrunDestinationOptions(CharacterController attacker)
+    {
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        if (attacker == null || attacker.Stats == null)
+            return;
+
+        int movementSpeed = Mathf.Max(0, attacker.Stats.MoveRange);
+        int moverSize = attacker.GetVisualSquaresOccupied();
+        List<SquareCell> candidateCells = Grid.GetCellsInRange(attacker.GridPosition, movementSpeed);
+
+        for (int i = 0; i < candidateCells.Count; i++)
+        {
+            SquareCell cell = candidateCells[i];
+            if (cell == null)
+                continue;
+
+            if (cell.Coords == attacker.GridPosition)
+                continue;
+
+            AoOPathResult pathResult = Grid.FindPathAoOAware(
+                attacker.GridPosition,
+                cell.Coords,
+                threatenedSquares: null,
+                maxRange: movementSpeed,
+                moverSizeSquares: moverSize,
+                mover: attacker,
+                allowThroughAllies: true,
+                allowThroughEnemies: true);
+
+            if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
+                continue;
+
+            if (pathResult.Path[pathResult.Path.Count - 1] != cell.Coords)
+                continue;
+
+            cell.SetHighlight(HighlightType.Move);
+            _highlightedCells.Add(cell);
+        }
+
+        HighlightCharacterFootprint(attacker, HighlightType.Selected);
+
+        if (_highlightedCells.Count <= 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no reachable overrun destination.");
+            ShowActionChoices();
+        }
+    }
+
+    private void HandleOverrunDestinationClick(CharacterController pc, SquareCell cell)
+    {
+        if (!_isSelectingOverrunDestination || pc == null || cell == null)
+            return;
+
+        if (_overrunAttacker != pc)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (cell.Coords == pc.GridPosition)
+        {
+            CancelMovementSelection();
+            return;
+        }
+
+        if (!_highlightedCells.Contains(cell))
+            return;
+
+        _overrunDestination = cell.Coords;
+        AnalyzeOverrunPath(pc, _overrunDestination);
+    }
+
+    private void AnalyzeOverrunPath(CharacterController attacker, Vector2Int destination)
+    {
+        if (attacker == null || attacker.Stats == null || Grid == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        int movementSpeed = Mathf.Max(0, attacker.Stats.MoveRange);
+        int moverSize = attacker.GetVisualSquaresOccupied();
+
+        AoOPathResult overrunPathResult = Grid.FindPathAoOAware(
+            attacker.GridPosition,
+            destination,
+            threatenedSquares: null,
+            maxRange: movementSpeed,
+            moverSizeSquares: moverSize,
+            mover: attacker,
+            allowThroughAllies: true,
+            allowThroughEnemies: true);
+
+        List<Vector2Int> overrunPath = overrunPathResult != null && overrunPathResult.Path != null
+            ? new List<Vector2Int>(overrunPathResult.Path)
+            : new List<Vector2Int>();
+
+        if (overrunPath.Count == 0 || overrunPath[overrunPath.Count - 1] != destination)
+        {
+            CombatUI?.ShowCombatLog("⚠ No valid overrun path to that destination.");
+            ShowOverrunDestinationOptions(attacker);
+            return;
+        }
+
+        AoOPathResult normalPathResult = Grid.FindPathAoOAware(
+            attacker.GridPosition,
+            destination,
+            threatenedSquares: null,
+            maxRange: movementSpeed,
+            moverSizeSquares: moverSize,
+            mover: attacker,
+            allowThroughAllies: true,
+            allowThroughEnemies: false);
+
+        List<Vector2Int> normalPath = normalPathResult != null && normalPathResult.Path != null
+            ? new List<Vector2Int>(normalPathResult.Path)
+            : new List<Vector2Int>();
+
+        bool canAvoidEnemies = normalPath.Count > 0 && normalPath[normalPath.Count - 1] == destination;
+        if (canAvoidEnemies)
+        {
+            CombatUI?.ShowConfirmationDialog(
+                "OVERRUN CHOICE",
+                "You can reach this destination without overrunning. Still overrun?",
+                "Overrun",
+                "Normal Move",
+                onConfirm: () => ExecuteOverrunMovementPath(attacker, overrunPath),
+                onCancel: () => ExecuteNormalMovementPath(attacker, normalPath));
+            return;
+        }
+
+        ExecuteOverrunMovementPath(attacker, overrunPath);
+    }
+
+    private void ExecuteNormalMovementPath(CharacterController attacker, List<Vector2Int> path)
+    {
+        ClearOverrunDestinationSelectionState();
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        if (path == null || path.Count == 0)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        StartCoroutine(ExecuteMovement(attacker, path));
+    }
+
+    private void ExecuteOverrunMovementPath(CharacterController attacker, List<Vector2Int> path)
+    {
+        if (attacker == null || attacker.Stats == null || path == null || path.Count == 0)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!attacker.Actions.HasMoveAction)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} no longer has a move action for overrun.");
+            ShowActionChoices();
+            return;
+        }
+
+        ClearOverrunDestinationSelectionState();
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CurrentSubPhase = PlayerSubPhase.Animating;
+
+        attacker.Actions.UseMoveAction();
+        attacker.HasMovedThisTurn = true;
+
+        bool standardActionConsumed = false;
+        Vector2Int lastSafePosition = attacker.GridPosition;
+
+        void ProcessStep(int stepIndex)
+        {
+            if (stepIndex >= path.Count)
+            {
+                CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} completes the overrun!");
+                UpdateAllStatsUI();
+                ShowActionChoices();
+                return;
+            }
+
+            Vector2Int stepPosition = path[stepIndex];
+            CharacterController enemy = GetEnemyAtPositionForOverrun(attacker, stepPosition);
+            if (enemy != null)
+            {
+                if (ThreatSystem.CanMakeAoO(enemy) && !enemy.Stats.IsDead)
+                {
+                    CombatUI?.ShowCombatLog($"{enemy.Stats.CharacterName} gets an attack of opportunity!");
+                    CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, attacker);
+                    if (aooResult != null)
+                    {
+                        CombatUI?.ShowCombatLog($"⚔ Overrun AoO: {aooResult.GetDetailedSummary()}");
+                        UpdateAllStatsUI();
+                    }
+
+                    if (attacker.Stats.IsDead)
+                    {
+                        CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} is dropped before completing the overrun.");
+                        ShowActionChoices();
+                        return;
+                    }
+                }
+
+                ResolveEnemyOverrunResponse(enemy, enemyBlocks =>
+                {
+                    if (!enemyBlocks)
+                    {
+                        CombatUI?.ShowCombatLog($"{enemy.Stats.CharacterName} avoids the overrun!");
+                        ProcessStep(stepIndex + 1);
+                        return;
+                    }
+
+                    CombatUI?.ShowCombatLog($"{enemy.Stats.CharacterName} attempts to block!");
+                    if (!standardActionConsumed)
+                    {
+                        if (!attacker.CommitStandardAction())
+                        {
+                            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot spend a standard action to resolve overrun block.");
+                            ShowActionChoices();
+                            return;
+                        }
+                        standardActionConsumed = true;
+                    }
+
+                    bool attackerWon = ResolveOverrunOpposedCheck(attacker, enemy);
+                    if (!attackerWon)
+                    {
+                        CombatUI?.ShowCombatLog($"{enemy.Stats.CharacterName} stops the overrun!");
+                        SquareCell lastSafeCell = Grid.GetCell(lastSafePosition);
+                        if (lastSafeCell != null)
+                            attacker.MoveToCell(lastSafeCell, markAsMoved: true);
+
+                        UpdateAllStatsUI();
+                        ShowActionChoices();
+                        return;
+                    }
+
+                    CombatUI?.ShowCombatLog($"{attacker.Stats.CharacterName} pushes through!");
+                    ProcessStep(stepIndex + 1);
+                });
+
+                return;
+            }
+
+            SquareCell destinationCell = Grid.GetCell(stepPosition);
+            if (destinationCell == null)
+            {
+                ShowActionChoices();
+                return;
+            }
+
+            // For occupied intermediate squares (ally overlap), continue logical traversal.
+            bool occupiedByOther = false;
+            if (destinationCell.IsOccupied)
+            {
+                IReadOnlyList<CharacterController> occupants = destinationCell.Occupants;
+                for (int occIndex = 0; occIndex < occupants.Count; occIndex++)
+                {
+                    CharacterController occupant = occupants[occIndex];
+                    if (occupant == null || occupant == attacker)
+                        continue;
+
+                    occupiedByOther = true;
+                    break;
+                }
+            }
+
+            if (!occupiedByOther)
+            {
+                attacker.MoveToCell(destinationCell, markAsMoved: true);
+                lastSafePosition = attacker.GridPosition;
+            }
+
+            ProcessStep(stepIndex + 1);
+        }
+
+        ProcessStep(0);
+    }
+
+    private CharacterController GetEnemyAtPositionForOverrun(CharacterController attacker, Vector2Int position)
+    {
+        if (attacker == null || Grid == null)
+            return null;
+
+        SquareCell cell = Grid.GetCell(position);
+        if (cell == null || !cell.IsOccupied)
+            return null;
+
+        IReadOnlyList<CharacterController> occupants = cell.Occupants;
+        for (int i = 0; i < occupants.Count; i++)
+        {
+            CharacterController occupant = occupants[i];
+            if (occupant == null || occupant == attacker || occupant.Stats == null || occupant.Stats.IsDead)
+                continue;
+
+            if (IsEnemyTeam(attacker, occupant))
+                return occupant;
+        }
+
+        return null;
+    }
+
+    private void ResolveEnemyOverrunResponse(CharacterController enemy, Action<bool> onResolved)
+    {
+        if (enemy == null)
+        {
+            onResolved?.Invoke(true);
+            return;
+        }
+
+        if (!enemy.IsPlayerControlled)
+        {
+            onResolved?.Invoke(true);
+            return;
+        }
+
+        CombatUI?.ShowConfirmationDialog(
+            $"OVERRUN RESPONSE - {enemy.Stats.CharacterName}",
+            $"{enemy.Stats.CharacterName}: choose response.",
+            "Block",
+            "Avoid",
+            onConfirm: () => onResolved?.Invoke(true),
+            onCancel: () => onResolved?.Invoke(false));
+    }
+
+    private bool ResolveOverrunOpposedCheck(CharacterController attacker, CharacterController defender)
+    {
+        int attackerRoll = Random.Range(1, 21);
+        int attackerTotal = attackerRoll + attacker.Stats.STRMod + GetOverrunSizeModifier(attacker.Stats.CurrentSizeCategory);
+
+        int defenderRoll = Random.Range(1, 21);
+        int defenderAbility = Mathf.Max(defender.Stats.STRMod, defender.Stats.DEXMod);
+        int defenderTotal = defenderRoll + defenderAbility + GetOverrunSizeModifier(defender.Stats.CurrentSizeCategory);
+
+        CombatUI?.ShowCombatLog($"Overrun: {attacker.Stats.CharacterName} ({attackerTotal}) vs {defender.Stats.CharacterName} ({defenderTotal})");
+        return attackerTotal > defenderTotal;
+    }
+
+    private int GetOverrunSizeModifier(SizeCategory size)
+    {
+        switch (size)
+        {
+            case SizeCategory.Fine: return -16;
+            case SizeCategory.Diminutive: return -12;
+            case SizeCategory.Tiny: return -8;
+            case SizeCategory.Small: return -4;
+            case SizeCategory.Medium: return 0;
+            case SizeCategory.Large: return 4;
+            case SizeCategory.Huge: return 8;
+            case SizeCategory.Gargantuan: return 12;
+            case SizeCategory.Colossal: return 16;
+            default: return 0;
+        }
+    }
+
     private List<Vector2Int> GetAdjacentSquares(Vector2Int origin)
     {
         Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(origin);
@@ -10226,6 +10603,9 @@ public class GameManager : MonoBehaviour
 
         _waitingForAoOConfirmation = false;
         _pendingAoOAction = null;
+
+        bool wasOverrunDestinationSelection = _isSelectingOverrunDestination;
+        ClearOverrunDestinationSelectionState();
         ClearOverrunContinuationState();
 
         bool wasFreeAdjacentGrappleMoveSelection = _isFreeAdjacentGrappleMoveSelection;
@@ -10245,9 +10625,12 @@ public class GameManager : MonoBehaviour
             }
             else
             {
-                CombatUI?.ShowCombatLog(wasGrappleMoveSelection
-                    ? $"↩ {pc.Stats.CharacterName} chooses not to move after winning grapple control."
-                    : $"↩ {pc.Stats.CharacterName} cancels movement.");
+                if (wasOverrunDestinationSelection)
+                    CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} cancels overrun destination selection.");
+                else
+                    CombatUI?.ShowCombatLog(wasGrappleMoveSelection
+                        ? $"↩ {pc.Stats.CharacterName} chooses not to move after winning grapple control."
+                        : $"↩ {pc.Stats.CharacterName} cancels movement.");
             }
         }
 
@@ -10367,7 +10750,16 @@ public class GameManager : MonoBehaviour
         int previewMaxRange = _isGrappleMoveSelection
             ? Mathf.Max(1, _grappleMoveMaxRangeSquares)
             : (_isFreeAdjacentGrappleMoveSelection ? 1 : pc.Stats.MoveRange);
-        var pathResult = Grid.FindPathAoOAware(pc.GridPosition, gridCoord, threatenedSquares, previewMaxRange, pc.GetVisualSquaresOccupied(), pc);
+        bool previewAllowThroughEnemies = _isSelectingOverrunDestination;
+        var pathResult = Grid.FindPathAoOAware(
+            pc.GridPosition,
+            gridCoord,
+            threatenedSquares,
+            previewMaxRange,
+            pc.GetVisualSquaresOccupied(),
+            pc,
+            allowThroughAllies: true,
+            allowThroughEnemies: previewAllowThroughEnemies);
 
         if (pathResult.Path != null && pathResult.Path.Count > 0)
         {
@@ -11070,6 +11462,12 @@ public class GameManager : MonoBehaviour
     private void HandleMovementClick(CharacterController pc, SquareCell cell)
     {
         if (_waitingForAoOConfirmation) return;
+
+        if (_isSelectingOverrunDestination)
+        {
+            HandleOverrunDestinationClick(pc, cell);
+            return;
+        }
 
         if (_isFreeAdjacentGrappleMoveSelection)
         {

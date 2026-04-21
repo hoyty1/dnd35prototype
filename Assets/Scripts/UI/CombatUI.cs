@@ -1666,7 +1666,7 @@ public class CombatUI : MonoBehaviour
         {
             if (buttonName == "Disarm" || buttonName == "Sunder")
                 enabled &= pc.HasMeleeWeaponEquipped();
-            if (buttonName == "Bull Rush (Attack)" || buttonName == "Bull Rush (Charge)" || buttonName == "Overrun" || buttonName == "Trip")
+            if (buttonName == "Bull Rush (Attack)" || buttonName == "Bull Rush (Charge)" || buttonName == "Trip")
                 enabled &= pc.HasMeleeWeaponEquipped();
         }
 
@@ -1725,7 +1725,7 @@ public class CombatUI : MonoBehaviour
             case "Overrun":
                 string overrunReason = "Unavailable";
                 bool canOverrun = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseOverrun(pc, out overrunReason);
-                label.text = canOverrun ? "Overrun (Standard)" : $"Overrun ({overrunReason})";
+                label.text = canOverrun ? "Overrun (Move+Standard)" : $"Overrun ({overrunReason})";
                 break;
         }
     }

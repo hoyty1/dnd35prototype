@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Runtime tests for D&D 3.5e overrun targeting availability rules.
+/// Runtime tests for destination-based overrun prerequisites.
 /// Run with OverrunRulesTests.RunAll().
 /// </summary>
 public static class OverrunRulesTests
@@ -21,9 +21,9 @@ public static class OverrunRulesTests
         ItemDatabase.Init();
         FeatDefinitions.Init();
 
-        TestCanUseOverrun_AllowsAdjacentLegalTargetWithoutWeapon();
-        TestCanUseOverrun_RejectsTargetMoreThanOneSizeLarger();
-        TestCanUseOverrun_RequiresAdjacentLegalTarget();
+        TestCanUseOverrun_RequiresBothMoveAndStandardAction();
+        TestCanUseOverrun_DoesNotRequireAdjacentEnemyTarget();
+        TestCanUseOverrun_BlockedWhileProne();
 
         Debug.Log($"====== Overrun Rules Results: {_passed} passed, {_failed} failed ======");
     }
@@ -71,7 +71,6 @@ public static class OverrunRulesTests
         gm.PCs.Add(attacker);
         gm.NPCs.Add(defender);
 
-        // Register occupancy so space-validation checks are realistic.
         grid.SetCreatureOccupancy(attacker, attacker.GridPosition, attacker.GetVisualSquaresOccupied());
         grid.SetCreatureOccupancy(defender, defender.GridPosition, defender.GetVisualSquaresOccupied());
 
@@ -90,13 +89,19 @@ public static class OverrunRulesTests
         }
     }
 
-    private static void TestCanUseOverrun_AllowsAdjacentLegalTargetWithoutWeapon()
+    private static void TestCanUseOverrun_RequiresBothMoveAndStandardAction()
     {
-        var setup = BuildScenario(new Vector2Int(2, 2), new Vector2Int(3, 2));
+        var setup = BuildScenario(new Vector2Int(2, 2), new Vector2Int(5, 2));
         try
         {
-            bool canUse = setup.gm.CanUseOverrun(setup.attacker, out string reason);
-            Assert(canUse, "Overrun allowed with adjacent legal target (weapon not required)", $"reason='{reason}'");
+            setup.attacker.Actions.UseMoveAction();
+            bool canUseAfterMove = setup.gm.CanUseOverrun(setup.attacker, out string reasonAfterMove);
+            Assert(!canUseAfterMove, "Overrun blocked when move action is already spent", $"reason='{reasonAfterMove}'");
+
+            setup.attacker.Actions.Reset();
+            setup.attacker.Actions.UseStandardAction();
+            bool canUseAfterStandard = setup.gm.CanUseOverrun(setup.attacker, out string reasonAfterStandard);
+            Assert(!canUseAfterStandard, "Overrun blocked when standard action is already spent", $"reason='{reasonAfterStandard}'");
         }
         finally
         {
@@ -104,16 +109,13 @@ public static class OverrunRulesTests
         }
     }
 
-    private static void TestCanUseOverrun_RejectsTargetMoreThanOneSizeLarger()
+    private static void TestCanUseOverrun_DoesNotRequireAdjacentEnemyTarget()
     {
-        var setup = BuildScenario(new Vector2Int(2, 2), new Vector2Int(3, 2));
+        var setup = BuildScenario(new Vector2Int(2, 2), new Vector2Int(8, 8));
         try
         {
-            setup.attacker.Stats.SetBaseSizeCategory(SizeCategory.Small);
-            setup.defender.Stats.SetBaseSizeCategory(SizeCategory.Huge);
-
             bool canUse = setup.gm.CanUseOverrun(setup.attacker, out string reason);
-            Assert(!canUse, "Overrun blocked when only target is more than one size larger", $"reason='{reason}'");
+            Assert(canUse, "Overrun available without adjacent enemy target", $"reason='{reason}'");
         }
         finally
         {
@@ -121,13 +123,14 @@ public static class OverrunRulesTests
         }
     }
 
-    private static void TestCanUseOverrun_RequiresAdjacentLegalTarget()
+    private static void TestCanUseOverrun_BlockedWhileProne()
     {
-        var setup = BuildScenario(new Vector2Int(2, 2), new Vector2Int(6, 2));
+        var setup = BuildScenario(new Vector2Int(2, 2), new Vector2Int(3, 2));
         try
         {
+            setup.attacker.AddCondition(CombatConditionType.Prone);
             bool canUse = setup.gm.CanUseOverrun(setup.attacker, out string reason);
-            Assert(!canUse, "Overrun blocked when no adjacent legal target exists", $"reason='{reason}'");
+            Assert(!canUse, "Overrun blocked while prone", $"reason='{reason}'");
         }
         finally
         {
