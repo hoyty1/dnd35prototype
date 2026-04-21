@@ -10705,7 +10705,25 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (_mainCam == null) return;
+        if (_mainCam == null)
+        {
+            Debug.LogWarning("[PathPreview] Main camera is null; skipping preview update.");
+            return;
+        }
+
+        if (Grid == null)
+        {
+            Debug.LogWarning("[PathPreview] Grid is null; skipping preview update.");
+            if (_pathPreview.IsVisible) _pathPreview.HidePath();
+            return;
+        }
+
+        if (_highlightedCells == null)
+        {
+            Debug.LogWarning("[PathPreview] Highlighted cell set is null; skipping preview update.");
+            if (_pathPreview.IsVisible) _pathPreview.HidePath();
+            return;
+        }
 
         // Get mouse position in world space
         Vector3 mouseScreenPos = Vector3.zero;
@@ -10778,13 +10796,15 @@ public class GameManager : MonoBehaviour
 
         if (pathResult.Path != null && pathResult.Path.Count > 0)
         {
-            // Build per-segment threat flags for visual feedback
+            // Build per-segment threat flags for visual feedback.
+            // Overrun mode intentionally disables threat-avoidance, so threatenedSquares may be null.
             var segmentThreatened = new List<bool>();
+            bool hasThreatData = threatenedSquares != null;
             Vector2Int prev = pc.GridPosition;
             foreach (var step in pathResult.Path)
             {
-                // A segment is "dangerous" if we're leaving a threatened square
-                bool leaving = threatenedSquares.Contains(prev);
+                // A segment is "dangerous" if we're leaving a threatened square.
+                bool leaving = hasThreatData && threatenedSquares.Contains(prev);
                 segmentThreatened.Add(leaving);
                 prev = step;
             }
