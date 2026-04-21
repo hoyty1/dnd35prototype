@@ -152,8 +152,9 @@ public class GameManager : MonoBehaviour
     private int _currentAttackBAB;
 
     // Flexible off-hand attack flow state
-    private bool _offHandAttackUsed;
-    private bool _offHandAttackAvailable;
+    // Dedicated off-hand flags, intentionally independent from main-hand sequence tracking.
+    private bool _offHandAttackAvailableThisTurn;
+    private bool _offHandAttackUsedThisTurn;
     private bool _isSelectingOffHandTarget;
     private bool _isSelectingOffHandThrownTarget;
     private int _currentOffHandBAB;
@@ -164,8 +165,6 @@ public class GameManager : MonoBehaviour
     private bool _isDualWielding;
     private int _mainHandPenalty;
     private int _offHandPenalty;
-    // Tracks that main-hand iterative attacks were exhausted this turn (used to keep off-hand action available after sequence teardown).
-    private bool _mainHandAttacksCompletedThisTurn;
     private AttackType _pendingAttackType = AttackType.Melee;
 
     private bool _skipNextSingleAttackStandardActionCommit;
@@ -2579,8 +2578,8 @@ public class GameManager : MonoBehaviour
         }
 
         // Reset off-hand attack state for this turn.
-        _offHandAttackUsed = false;
-        _offHandAttackAvailable = pc.HasOffHandWeaponEquipped();
+        _offHandAttackUsedThisTurn = false;
+        _offHandAttackAvailableThisTurn = pc.HasOffHandWeaponEquipped();
         _isSelectingOffHandTarget = false;
         _isSelectingOffHandThrownTarget = false;
         _currentOffHandBAB = 0;
@@ -2591,10 +2590,9 @@ public class GameManager : MonoBehaviour
         _isDualWielding = false;
         _mainHandPenalty = 0;
         _offHandPenalty = 0;
-        _mainHandAttacksCompletedThisTurn = false;
         _pendingAttackType = AttackType.Melee;
 
-        Debug.Log($"[Turn][OffHand] Turn start for {pc.Stats.CharacterName}: used={_offHandAttackUsed}, available={_offHandAttackAvailable}, mainHandComplete={_mainHandAttacksCompletedThisTurn}");
+        Debug.Log($"[Turn][OffHand] Flags reset for {pc.Stats.CharacterName}: available={_offHandAttackAvailableThisTurn}, used={_offHandAttackUsedThisTurn}");
         Debug.Log($"[Turn][DualWield] Turn start reset: choiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}, mainPenalty={_mainHandPenalty}, offPenalty={_offHandPenalty}");
 
         // Log turn start in combat log
@@ -2666,15 +2664,13 @@ public class GameManager : MonoBehaviour
         bool hasOffHandWeapon = pc.HasOffHandWeaponEquipped();
         bool hasThrowableOffHandWeapon = pc.HasThrowableOffHandWeaponEquipped();
 
-        // Preserve explicit per-turn disable (e.g., player chose "No" on dual-wield prompt).
+        // Keep simple off-hand gate synced with equipment presence.
         if (!hasOffHandWeapon)
-            _offHandAttackAvailable = false;
-        else if (!_dualWieldingChoiceMade && !_offHandAttackUsed)
-            _offHandAttackAvailable = true;
+            _offHandAttackAvailableThisTurn = false;
 
         bool hasMoreAttacks = _isInAttackSequence && _attackingCharacter == pc && HasMoreAttacksAvailable();
-        bool offHandAvailable = CanUseOffHandAttackOption(pc);
-        Debug.Log($"[Actions] Showing choices for {pc.Stats.CharacterName}: hasThrowableWeapon={hasThrowableWeapon}, hasOffHandWeapon={hasOffHandWeapon}, hasThrowableOffHandWeapon={hasThrowableOffHandWeapon}, offHandAvailable={offHandAvailable}, offHandGate={_offHandAttackAvailable}, inSequence={_isInAttackSequence}, hasMoreAttacks={hasMoreAttacks}, offHandUsed={_offHandAttackUsed}, mainHandComplete={_mainHandAttacksCompletedThisTurn}, dwChoiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}, selectingOffHandThrown={_isSelectingOffHandThrownTarget}");
+        bool offHandAvailable = IsOffHandAttackAvailable();
+        Debug.Log($"[Actions] Showing choices for {pc.Stats.CharacterName}: hasThrowableWeapon={hasThrowableWeapon}, hasOffHandWeapon={hasOffHandWeapon}, hasThrowableOffHandWeapon={hasThrowableOffHandWeapon}, offHandAvailable={offHandAvailable}, offHandGate={_offHandAttackAvailableThisTurn}, inSequence={_isInAttackSequence}, hasMoreAttacks={hasMoreAttacks}, offHandUsed={_offHandAttackUsedThisTurn}, dwChoiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}, selectingOffHandThrown={_isSelectingOffHandThrownTarget}");
 
         LogMenuFlow("ShowActionChoices:ENTER", pc, $"isGrappling={pc.IsGrappling()}, isPinned={pc.IsPinned()}");
 
@@ -5172,9 +5168,12 @@ public class GameManager : MonoBehaviour
         {
             _isDualWielding = true;
             CalculateDualWieldingPenalties(attacker);
-            _offHandAttackAvailable = attacker.HasOffHandWeaponEquipped();
 
-            Debug.Log("[Attack][DualWield] Dual wielding enabled");
+            _offHandAttackAvailableThisTurn = attacker.HasOffHandWeaponEquipped();
+            _offHandAttackUsedThisTurn = false;
+
+            Debug.Log("[DualWield] Dual wielding enabled");
+            Debug.Log($"[DualWield] Off-hand attack available this turn: {_offHandAttackAvailableThisTurn}");
             Debug.Log($"[Attack][DualWield] Main hand penalty: {_mainHandPenalty}");
             Debug.Log($"[Attack][DualWield] Off-hand penalty: {_offHandPenalty}");
 
@@ -5185,10 +5184,12 @@ public class GameManager : MonoBehaviour
             _isDualWielding = false;
             _mainHandPenalty = 0;
             _offHandPenalty = 0;
-            _offHandAttackAvailable = false;
 
-            Debug.Log("[Attack][DualWield] Dual wielding disabled");
-            Debug.Log("[Attack][DualWield] Off-hand attack unavailable this round");
+            _offHandAttackAvailableThisTurn = false;
+            _offHandAttackUsedThisTurn = false;
+
+            Debug.Log("[DualWield] Dual wielding disabled");
+            Debug.Log("[DualWield] Off-hand attack available this turn: false");
 
             CombatUI?.ShowCombatLog($"⚔ {attacker.Stats.CharacterName} fights with main hand only (no dual-wield penalties). Off-hand attack disabled for this round.");
         }
@@ -5239,14 +5240,14 @@ public class GameManager : MonoBehaviour
             return;
 
         Debug.Log("[Attack][OffHand] Off-hand attack button pressed");
-        Debug.Log($"[Attack][OffHand] used={_offHandAttackUsed} inSequence={_isInAttackSequence} attacksUsed={_totalAttacksUsed}");
+        Debug.Log($"[Attack][OffHand] used={_offHandAttackUsedThisTurn} inSequence={_isInAttackSequence} attacksUsed={_totalAttacksUsed}");
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "off-hand attacks"))
             return;
 
         if (!CanUseOffHandAttackOption(pc))
         {
-            Debug.Log($"[Attack][OffHand] Attack denied actor={pc.Stats.CharacterName} hasStandard={pc.Actions.HasStandardAction} hasMove={pc.Actions.HasMoveAction} inSequence={_isInAttackSequence} offHandUsed={_offHandAttackUsed}");
+            Debug.Log($"[Attack][OffHand] Attack denied actor={pc.Stats.CharacterName} hasStandard={pc.Actions.HasStandardAction} hasMove={pc.Actions.HasMoveAction} inSequence={_isInAttackSequence} offHandUsed={_offHandAttackUsedThisTurn}");
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -5276,7 +5277,9 @@ public class GameManager : MonoBehaviour
             _dualWieldingChoiceMade = true;
             _isDualWielding = true;
             CalculateDualWieldingPenalties(pc);
-            _offHandAttackAvailable = true;
+            _offHandAttackAvailableThisTurn = true;
+            _offHandAttackUsedThisTurn = false;
+            Debug.Log("[OffHand] Off-hand attack available this turn: true");
             CombatUI?.ShowCombatLog($"⚔ {pc.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty}).");
         }
 
@@ -5302,14 +5305,14 @@ public class GameManager : MonoBehaviour
             return;
 
         Debug.Log("[Attack][OffHand][Thrown] Off-hand thrown attack button pressed");
-        Debug.Log($"[Attack][OffHand][Thrown] offHandUsed={_offHandAttackUsed} inSequence={_isInAttackSequence} mainHandAttacksUsed={_totalAttacksUsed}");
+        Debug.Log($"[Attack][OffHand][Thrown] offHandUsed={_offHandAttackUsedThisTurn} inSequence={_isInAttackSequence} mainHandAttacksUsed={_totalAttacksUsed}");
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "off-hand thrown attacks"))
             return;
 
         if (!CanUseOffHandThrownAttackOption(pc))
         {
-            Debug.Log($"[Attack][OffHand][Thrown] Attack denied actor={pc.Stats.CharacterName} hasStandard={pc.Actions.HasStandardAction} hasMove={pc.Actions.HasMoveAction} inSequence={_isInAttackSequence} offHandUsed={_offHandAttackUsed}");
+            Debug.Log($"[Attack][OffHand][Thrown] Attack denied actor={pc.Stats.CharacterName} hasStandard={pc.Actions.HasStandardAction} hasMove={pc.Actions.HasMoveAction} inSequence={_isInAttackSequence} offHandUsed={_offHandAttackUsedThisTurn}");
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
@@ -5338,7 +5341,9 @@ public class GameManager : MonoBehaviour
             _dualWieldingChoiceMade = true;
             _isDualWielding = true;
             CalculateDualWieldingPenalties(pc);
-            _offHandAttackAvailable = true;
+            _offHandAttackAvailableThisTurn = true;
+            _offHandAttackUsedThisTurn = false;
+            Debug.Log("[OffHand][Thrown] Off-hand attack available this turn: true");
             CombatUI?.ShowCombatLog($"⚔ {pc.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty}).");
         }
 
@@ -5515,7 +5520,7 @@ public class GameManager : MonoBehaviour
 
         // Off-hand-first flow: if off-hand already consumed the standard action,
         // allow starting the main-hand iterative sequence by consuming move as full-round conversion.
-        if (_offHandAttackUsed && _offHandAttackAvailable && actor == ActivePC && actor.Actions.HasMoveAction)
+        if (_offHandAttackUsedThisTurn && _offHandAttackAvailableThisTurn && actor == ActivePC && actor.Actions.HasMoveAction)
             return true;
 
         return actor.Actions.HasStandardAction;
@@ -5536,7 +5541,7 @@ public class GameManager : MonoBehaviour
         if (actor.Actions == null)
             return false;
 
-        if (_offHandAttackUsed && _offHandAttackAvailable && actor == ActivePC && actor.Actions.HasMoveAction)
+        if (_offHandAttackUsedThisTurn && _offHandAttackAvailableThisTurn && actor == ActivePC && actor.Actions.HasMoveAction)
             return true;
 
         return actor.Actions.HasStandardAction;
@@ -5555,46 +5560,41 @@ public class GameManager : MonoBehaviour
         return actor != null && actor.HasThrowableWeaponEquipped();
     }
 
+    private bool IsOffHandAttackAvailable()
+    {
+        bool available = _offHandAttackAvailableThisTurn && !_offHandAttackUsedThisTurn;
+
+        Debug.Log("[OffHand] Checking availability");
+        Debug.Log($"[OffHand] _offHandAttackAvailableThisTurn: {_offHandAttackAvailableThisTurn}");
+        Debug.Log($"[OffHand] _offHandAttackUsedThisTurn: {_offHandAttackUsedThisTurn}");
+        Debug.Log($"[OffHand] Available: {available}");
+
+        return available;
+    }
+
     public bool CanUseOffHandAttackOption(CharacterController actor)
     {
         if (actor == null || actor.Actions == null)
             return false;
 
+        if (actor != ActivePC)
+            return false;
+
         if (actor.HasCondition(CombatConditionType.Pinned))
+            return false;
+
+        if (!actor.HasOffHandWeaponEquipped())
+            return false;
+
+        bool availableByFlag = IsOffHandAttackAvailable();
+        if (!availableByFlag)
             return false;
 
         if (_isInAttackSequence && _attackingCharacter != actor)
             return false;
 
-        bool hasOffHandWeapon = actor.HasOffHandWeaponEquipped();
-        if (!hasOffHandWeapon)
-            return false;
-
-        if (_offHandAttackUsed)
-            return false;
-
-        if (!_offHandAttackAvailable)
-            return false;
-
-        if (_isInAttackSequence && _attackingCharacter == actor)
-            return true;
-
-        // Dual-wield full-round flow: after main-hand iterative attacks finish,
-        // still allow one off-hand attack even though standard/move are consumed.
-        bool fullRoundMainHandSequenceCompleted = actor == ActivePC
-            && actor.Actions.FullRoundActionUsed
-            && _dualWieldingChoiceMade
-            && _isDualWielding
-            && _mainHandAttacksCompletedThisTurn;
-
-        if (fullRoundMainHandSequenceCompleted)
-        {
-            Debug.Log($"[Attack][OffHand] Allowing off-hand after main-hand full-round completion for {actor.Stats.CharacterName}. used={_offHandAttackUsed} available={_offHandAttackAvailable} mainHandComplete={_mainHandAttacksCompletedThisTurn} fullRoundUsed={actor.Actions.FullRoundActionUsed}");
-            return true;
-        }
-
-        // When not in iterative sequence, off-hand consumes a standard action.
-        return actor.Actions.HasStandardAction;
+        // Dedicated flag controls availability. Action-economy checks are intentionally excluded.
+        return true;
     }
 
     public bool CanUseOffHandThrownAttackOption(CharacterController actor)
@@ -5613,15 +5613,15 @@ public class GameManager : MonoBehaviour
 
     public bool IsOffHandAttackUsedThisTurn(CharacterController actor)
     {
-        return actor != null && actor == ActivePC && _offHandAttackUsed;
+        return actor != null && actor == ActivePC && _offHandAttackUsedThisTurn;
     }
 
     public bool IsOffHandAttackAvailableThisTurn(CharacterController actor)
     {
         return actor != null
             && actor == ActivePC
-            && _offHandAttackAvailable
-            && actor.HasOffHandWeaponEquipped();
+            && actor.HasOffHandWeaponEquipped()
+            && IsOffHandAttackAvailable();
     }
 
     private AttackType GetDefaultAttackType(CharacterController actor)
@@ -5652,15 +5652,14 @@ public class GameManager : MonoBehaviour
         _totalAttackBudget = Mathf.Max(1, attacker.GetIterativeAttackCount());
         _totalAttacksUsed = 0;
         _attackSequenceConsumesFullRound = false;
-        _mainHandAttacksCompletedThisTurn = false;
         _isInAttackSequence = true;
 
         Debug.Log($"[Attack][Sequence] {attacker.Stats.CharacterName} starting attack sequence");
         Debug.Log($"[Attack][Sequence] Total attacks available: {_totalAttackBudget}");
         Debug.Log($"[Attack][Sequence] First attack type: {attackType}");
-        Debug.Log($"[Attack][Sequence] Off-hand already used this turn: {_offHandAttackUsed}");
+        Debug.Log($"[Attack][Sequence] Off-hand already used this turn: {_offHandAttackUsedThisTurn}");
 
-        bool offHandOpenedTurn = _offHandAttackUsed && !attacker.Actions.HasStandardAction;
+        bool offHandOpenedTurn = _offHandAttackUsedThisTurn && !attacker.Actions.HasStandardAction;
         if (offHandOpenedTurn)
         {
             if (attacker.Actions.HasMoveAction)
@@ -5788,7 +5787,7 @@ public class GameManager : MonoBehaviour
     private void EndAttackSequence()
     {
         Debug.Log("[Attack][Sequence] Ending attack sequence");
-        Debug.Log($"[Attack][Sequence] Final state before teardown: attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}, offHandUsed={_offHandAttackUsed}, offHandAvailable={_offHandAttackAvailable}, mainHandComplete={_mainHandAttacksCompletedThisTurn}");
+        Debug.Log($"[Attack][Sequence] Final state before teardown: attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}, offHandUsed={_offHandAttackUsedThisTurn}, offHandAvailable={_offHandAttackAvailableThisTurn}");
 
         _totalAttacksUsed = 0;
         _totalAttackBudget = 0;
@@ -5812,8 +5811,8 @@ public class GameManager : MonoBehaviour
 
     private void ResetOffHandTurnState()
     {
-        _offHandAttackUsed = false;
-        _offHandAttackAvailable = false;
+        _offHandAttackUsedThisTurn = false;
+        _offHandAttackAvailableThisTurn = false;
         _isSelectingOffHandTarget = false;
         _isSelectingOffHandThrownTarget = false;
         _currentOffHandBAB = 0;
@@ -5823,7 +5822,6 @@ public class GameManager : MonoBehaviour
         _isDualWielding = false;
         _mainHandPenalty = 0;
         _offHandPenalty = 0;
-        _mainHandAttacksCompletedThisTurn = false;
         _pendingAttackType = AttackType.Melee;
     }
 
@@ -11296,19 +11294,27 @@ public class GameManager : MonoBehaviour
 
         if (!_isInAttackSequence)
         {
-            if (!attacker.CommitStandardAction())
+            bool shouldConsumeStandardAction = !attacker.Actions.FullRoundActionUsed;
+            if (shouldConsumeStandardAction)
             {
-                string modeLabel = useThrownRange ? "off-hand thrown attack" : "off-hand attack";
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available for an {modeLabel}.");
-                _isSelectingOffHandTarget = false;
-                _isSelectingOffHandThrownTarget = false;
-                _currentOffHandBAB = 0;
-                _currentOffHandWeapon = null;
-                ShowActionChoices();
-                return;
-            }
+                if (!attacker.CommitStandardAction())
+                {
+                    string modeLabel = useThrownRange ? "off-hand thrown attack" : "off-hand attack";
+                    CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available for an {modeLabel}.");
+                    _isSelectingOffHandTarget = false;
+                    _isSelectingOffHandThrownTarget = false;
+                    _currentOffHandBAB = 0;
+                    _currentOffHandWeapon = null;
+                    ShowActionChoices();
+                    return;
+                }
 
-            Debug.Log($"[Attack][OffHand] Consumed standard action on confirm for {(useThrownRange ? "thrown" : "melee")} off-hand attack.");
+                Debug.Log($"[Attack][OffHand] Consumed standard action on confirm for {(useThrownRange ? "thrown" : "melee")} off-hand attack.");
+            }
+            else
+            {
+                Debug.Log($"[Attack][OffHand] Skipping standard action consumption because full-round action is already committed for {attacker.Stats.CharacterName}.");
+            }
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
@@ -11371,7 +11377,7 @@ public class GameManager : MonoBehaviour
                 UpdateAllStatsUI();
                 if (AreAllNPCsDead())
                 {
-                    _offHandAttackUsed = true;
+                    _offHandAttackUsedThisTurn = true;
                     _isSelectingOffHandTarget = false;
                     _isSelectingOffHandThrownTarget = false;
                     CurrentPhase = TurnPhase.CombatOver;
@@ -11385,13 +11391,15 @@ public class GameManager : MonoBehaviour
         if (useThrownRange)
             ResolveOffHandThrownWeaponAfterAttack(attacker, target, offHandWeapon);
 
-        _offHandAttackUsed = true;
-        _offHandAttackAvailable = attacker.HasOffHandWeaponEquipped();
-        _mainHandAttacksCompletedThisTurn = false;
+        _offHandAttackUsedThisTurn = true;
+        _offHandAttackAvailableThisTurn = attacker.HasOffHandWeaponEquipped();
         _isSelectingOffHandTarget = false;
         _isSelectingOffHandThrownTarget = false;
 
-        Debug.Log($"[Attack][OffHand] Off-hand attack resolved. used={_offHandAttackUsed} available={_offHandAttackAvailable} mainHandComplete={_mainHandAttacksCompletedThisTurn} inSequence={_isInAttackSequence} mainAttacksUsed={_totalAttacksUsed}/{_totalAttackBudget} thrown={useThrownRange}");
+        Debug.Log("[OffHand] Off-hand attack used this turn");
+        Debug.Log($"[OffHand] _offHandAttackAvailableThisTurn: {_offHandAttackAvailableThisTurn}");
+        Debug.Log($"[OffHand] _offHandAttackUsedThisTurn: {_offHandAttackUsedThisTurn}");
+        Debug.Log($"[Attack][OffHand] Off-hand attack resolved. inSequence={_isInAttackSequence} mainAttacksUsed={_totalAttacksUsed}/{_totalAttackBudget} thrown={useThrownRange}");
 
         StartCoroutine(AfterAttackDelay(attacker, 1.2f));
     }
@@ -13518,7 +13526,7 @@ public class GameManager : MonoBehaviour
 
         _totalAttacksUsed++;
         Debug.Log($"[Attack][Sequence] Attacks used: {_totalAttacksUsed}/{_totalAttackBudget}");
-        Debug.Log($"[OffHand] After main hand attack #{_totalAttacksUsed}: used={_offHandAttackUsed}, available={_offHandAttackAvailable}, mainHandComplete={_mainHandAttacksCompletedThisTurn}");
+        Debug.Log($"[OffHand] After main hand attack #{_totalAttacksUsed}: used={_offHandAttackUsedThisTurn}, available={_offHandAttackAvailableThisTurn}");
 
         if (_totalAttacksUsed == 1 && !_attackSequenceConsumesFullRound && _totalAttackBudget > 1)
         {
@@ -13549,14 +13557,11 @@ public class GameManager : MonoBehaviour
         {
             Debug.Log("[Attack][Sequence] All attacks exhausted");
 
-            _mainHandAttacksCompletedThisTurn = true;
-
             bool offHandAvailableNow = CanUseOffHandAttackOption(attacker);
             bool offHandThrownAvailableNow = CanUseOffHandThrownAttackOption(attacker);
             Debug.Log($"[Attack] All main hand attacks used ({_totalAttacksUsed}/{_totalAttackBudget})");
-            Debug.Log($"[OffHand] _offHandAttackUsed: {_offHandAttackUsed}");
-            Debug.Log($"[OffHand] _offHandAttackAvailable: {_offHandAttackAvailable}");
-            Debug.Log($"[OffHand] _mainHandAttacksCompletedThisTurn: {_mainHandAttacksCompletedThisTurn}");
+            Debug.Log($"[OffHand] _offHandAttackUsedThisTurn: {_offHandAttackUsedThisTurn}");
+            Debug.Log($"[OffHand] _offHandAttackAvailableThisTurn: {_offHandAttackAvailableThisTurn}");
             Debug.Log($"[Attack] Off-hand attack available: {offHandAvailableNow}");
             Debug.Log($"[Attack] Off-hand thrown attack available: {offHandThrownAvailableNow}");
 
@@ -13990,7 +13995,7 @@ public class GameManager : MonoBehaviour
             bool offHandThrownAvailable = CanUseOffHandThrownAttackOption(character);
             Debug.Log($"[TurnFlow] ShouldAutoEndTurn=false for player {character.Stats.CharacterName}. " +
                       $"Manual End Turn required. offHandAvailable={offHandAvailable} offHandThrownAvailable={offHandThrownAvailable} " +
-                      $"offHandGate={_offHandAttackAvailable} offHandUsed={_offHandAttackUsed} attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}");
+                      $"offHandGate={_offHandAttackAvailableThisTurn} offHandUsed={_offHandAttackUsedThisTurn} attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}");
             return false;
         }
 
