@@ -864,6 +864,47 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
+    public bool CanUseOverrun(CharacterController actor, out string reason)
+    {
+        reason = "Unavailable";
+        if (actor == null || actor.Stats == null)
+            return false;
+
+        Debug.Log($"[Overrun] Checking availability for {actor.Stats.CharacterName}");
+
+        if (actor.HasCondition(CombatConditionType.Prone))
+        {
+            reason = "Prone";
+            Debug.Log($"[Overrun] Cannot use while prone ({actor.Stats.CharacterName})");
+            return false;
+        }
+
+        if (actor.HasTakenFiveFootStep)
+        {
+            reason = "After 5-ft step";
+            Debug.Log($"[Overrun] Cannot use after 5-foot step ({actor.Stats.CharacterName})");
+            return false;
+        }
+
+        if (!actor.Actions.HasStandardAction)
+        {
+            reason = "Used";
+            Debug.Log($"[Overrun] No standard action available ({actor.Stats.CharacterName})");
+            return false;
+        }
+
+        if (!actor.HasMeleeWeaponEquipped())
+        {
+            reason = "Need melee weapon";
+            Debug.Log($"[Overrun] Requires melee weapon ({actor.Stats.CharacterName})");
+            return false;
+        }
+
+        reason = string.Empty;
+        Debug.Log($"[Overrun] Available ✅ ({actor.Stats.CharacterName})");
+        return true;
+    }
+
     private void AddAidBonus(CharacterController aider, CharacterController beneficiary, CharacterController target, AidType aidType)
     {
         var aidBonus = new AidBonus
@@ -4319,6 +4360,9 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
+        Debug.Log($"[Movement] 5 foot step taken - blocking overrun for {pc.Stats.CharacterName}");
+        Debug.Log($"[Movement] HasTakenFiveFootStep={pc.HasTakenFiveFootStep}");
+
         RefreshFlankedConditions();
         UpdateAllStatsUI();
         InvalidatePreviewThreats();
@@ -6088,7 +6132,13 @@ public class GameManager : MonoBehaviour
     public void OnOverrunButtonPressed()
     {
         CharacterController pc = ActivePC;
-        if (pc == null || !pc.Actions.HasStandardAction) return;
+        if (pc == null) return;
+
+        if (!CanUseOverrun(pc, out string reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use Overrun: {reason}.");
+            return;
+        }
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "overrun"))
             return;
@@ -6114,6 +6164,17 @@ public class GameManager : MonoBehaviour
             CombatUI.HideSpecialAttackMenu();
             OnAidAnotherButtonPressed();
             return;
+        }
+
+        if (type == SpecialAttackType.Overrun)
+        {
+            if (!CanUseOverrun(pc, out string overrunReason))
+            {
+                Debug.Log($"[SpecialAttacks] Overrun not available ({overrunReason}) for {pc.Stats.CharacterName}");
+                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use Overrun: {overrunReason}.");
+                ShowActionChoices();
+                return;
+            }
         }
 
         bool hasIterativeGrappleAttackInSequence = pc.HasRemainingIterativeGrappleAttacksInSequence();

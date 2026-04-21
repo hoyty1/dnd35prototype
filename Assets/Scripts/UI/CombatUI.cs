@@ -1654,6 +1654,9 @@ public class CombatUI : MonoBehaviour
             case "Aid Another":
                 enabled = GameManager.Instance != null && GameManager.Instance.CanUseAidAnother(pc, out _);
                 break;
+            case "Overrun":
+                enabled = GameManager.Instance != null && GameManager.Instance.CanUseOverrun(pc, out _);
+                break;
             default:
                 enabled = hasStandardAction;
                 break;
@@ -1717,6 +1720,12 @@ public class CombatUI : MonoBehaviour
                 string aidReason = "Unavailable";
                 bool canAidAnother = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseAidAnother(pc, out aidReason);
                 label.text = canAidAnother ? "Aid Another (Standard)" : $"Aid Another ({aidReason})";
+                break;
+
+            case "Overrun":
+                string overrunReason = "Unavailable";
+                bool canOverrun = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseOverrun(pc, out overrunReason);
+                label.text = canOverrun ? "Overrun (Standard)" : $"Overrun ({overrunReason})";
                 break;
         }
     }
