@@ -5306,7 +5306,8 @@ public class CharacterController : MonoBehaviour
         int? disarmAttackBonusOverride = null,
         int? grappleAttackBonusOverride = null,
         int? bullRushAttackBonusOverride = null,
-        int bullRushChargeBonusOverride = 0)
+        int bullRushChargeBonusOverride = 0,
+        ItemData disarmAttackerWeaponOverride = null)
     {
         if (target == null || target.Stats == null)
         {
@@ -5321,7 +5322,7 @@ public class CharacterController : MonoBehaviour
         switch (type)
         {
             case SpecialAttackType.Trip: return ResolveTrip(target);
-            case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot, disarmAttackBonusOverride);
+            case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot, disarmAttackBonusOverride, disarmAttackerWeaponOverride);
             case SpecialAttackType.Grapple: return ResolveGrapple(target, grappleAttackBonusOverride);
             case SpecialAttackType.Sunder: return ResolveSunder(target);
             case SpecialAttackType.BullRushAttack:
@@ -5366,7 +5367,7 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    private SpecialAttackResult ResolveDisarm(CharacterController target, EquipSlot? preferredTargetSlot, int? iterativeAttackBonusOverride = null)
+    private SpecialAttackResult ResolveDisarm(CharacterController target, EquipSlot? preferredTargetSlot, int? iterativeAttackBonusOverride = null, ItemData attackerWeaponOverride = null)
     {
         if (!TryGetDisarmTargetHeldItem(target, preferredTargetSlot, out ItemData targetHeldItem, out EquipSlot targetHeldItemSlot))
         {
@@ -5378,7 +5379,7 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        ItemData attackerHeldWeapon = GetEquippedMainWeapon();
+        ItemData attackerHeldWeapon = attackerWeaponOverride ?? GetEquippedMainWeapon();
 
         bool defenderHasLockedGauntlet = HasLockedGauntletEquipped(target);
         int defenderLockedGauntletBonus = defenderHasLockedGauntlet ? 10 : 0;

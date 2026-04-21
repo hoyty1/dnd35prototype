@@ -769,7 +769,7 @@ public class CombatUI : MonoBehaviour
         bool isPinningOpponent = pc.IsPinningOpponent();
         bool hasIterativeGrappleAttackInSequence = pc.HasRemainingIterativeGrappleAttacksInSequence();
         bool hasIterativeBullRushAttackInSequence = pc.HasRemainingIterativeBullRushAttacksInSequence();
-        bool hasIterativeDisarmAttackInSequence = pc.HasRemainingIterativeDisarmAttacksInSequence();
+        bool hasIterativeDisarmAttackInSequence = gm != null && gm.CanUseDisarmAttackOption(pc);
 
         bool CanUseWhilePinning(GrappleActionType actionType)
         {
@@ -1019,10 +1019,10 @@ public class CombatUI : MonoBehaviour
                     int remaining = pc.GetRemainingBullRushAttackActions();
                     spLabel.text = $"Special Attack (Bull Rush Iterative {CharacterStats.FormatMod(nextBab)}, {remaining} left)";
                 }
-                else if (hasIterativeDisarmAttackInSequence)
+                else if (hasIterativeDisarmAttackInSequence && gm != null)
                 {
-                    int nextBab = pc.GetCurrentDisarmAttackBonus();
-                    int remaining = pc.GetRemainingDisarmAttackActions();
+                    int nextBab = gm.GetCurrentDisarmAttackBonus(pc);
+                    int remaining = gm.GetRemainingDisarmAttackActions(pc);
                     spLabel.text = $"Special Attack (Disarm Iterative {CharacterStats.FormatMod(nextBab)}, {remaining} left)";
                 }
                 else if (canImprovedFeintMove)
@@ -1602,7 +1602,7 @@ public class CombatUI : MonoBehaviour
         bool hasFullRoundAction = pc != null && pc.Actions.HasFullRoundAction;
         bool hasIterativeGrappleAttackInSequence = pc != null && pc.HasRemainingIterativeGrappleAttacksInSequence();
         bool hasIterativeBullRushAttackInSequence = pc != null && pc.HasRemainingIterativeBullRushAttacksInSequence();
-        bool hasIterativeDisarmAttackInSequence = pc != null && pc.HasRemainingIterativeDisarmAttacksInSequence();
+        bool hasIterativeDisarmAttackInSequence = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseDisarmAttackOption(pc);
         bool canImprovedFeintMove = pc != null
             && pc.Stats != null
             && pc.Stats.HasFeat("Improved Feint")
@@ -1664,7 +1664,9 @@ public class CombatUI : MonoBehaviour
 
         if (pc != null)
         {
-            if (buttonName == "Disarm" || buttonName == "Sunder")
+            if (buttonName == "Disarm")
+                enabled &= (pc.HasMeleeWeaponEquipped() || pc.HasOffHandWeaponEquipped());
+            else if (buttonName == "Sunder")
                 enabled &= pc.HasMeleeWeaponEquipped();
             if (buttonName == "Bull Rush (Attack)" || buttonName == "Bull Rush (Charge)" || buttonName == "Trip")
                 enabled &= pc.HasMeleeWeaponEquipped();
@@ -1704,10 +1706,10 @@ public class CombatUI : MonoBehaviour
                 break;
 
             case "Disarm":
-                if (pc != null && isEnabled)
+                if (pc != null && isEnabled && GameManager.Instance != null)
                 {
-                    int remaining = pc.GetRemainingDisarmAttackActions();
-                    int currentBab = pc.GetCurrentDisarmAttackBonus();
+                    int remaining = GameManager.Instance.GetRemainingDisarmAttackActions(pc);
+                    int currentBab = GameManager.Instance.GetCurrentDisarmAttackBonus(pc);
                     label.text = $"Disarm (BAB {CharacterStats.FormatMod(currentBab)}, {remaining} left)";
                 }
                 else
