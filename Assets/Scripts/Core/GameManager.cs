@@ -2621,6 +2621,10 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null) return;
 
+        bool hasThrowableWeapon = pc.HasThrowableWeaponEquipped();
+        bool hasMoreAttacks = _isInAttackSequence && _attackingCharacter == pc && HasMoreAttacksAvailable();
+        Debug.Log($"[Actions] Showing choices for {pc.Stats.CharacterName}: hasThrowableWeapon={hasThrowableWeapon}, inSequence={_isInAttackSequence}, hasMoreAttacks={hasMoreAttacks}");
+
         LogMenuFlow("ShowActionChoices:ENTER", pc, $"isGrappling={pc.IsGrappling()}, isPinned={pc.IsPinned()}");
 
         // SAFETY CHECK: A delayed coroutine from a previous action can fire while a submenu is open.
@@ -3383,6 +3387,221 @@ public class GameManager : MonoBehaviour
         cell.AddGroundItem(droppedItem);
         inv.RecalculateStats();
         return true;
+    }
+
+    private void ResolveThrownWeaponAfterAttack(CharacterController thrower, CharacterController target, ItemData thrownWeapon)
+    {
+        if (_currentAttackType != AttackType.Thrown)
+            return;
+
+        if (!IsThrowableMeleeWeapon(thrownWeapon))
+            return;
+
+        if (thrower == null || thrower.Stats == null)
+            return;
+
+        Vector2Int landingPosition = target != null ? target.GridPosition : thrower.GridPosition;
+        if (!TryDropThrownWeaponToGround(thrower, thrownWeapon, landingPosition, out string dropFeedback))
+        {
+            Debug.LogWarning($"[Attack][Thrown] {dropFeedback}");
+            CombatUI?.ShowCombatLog($"⚠ {dropFeedback}");
+            return;
+        }
+
+        CombatUI?.ShowCombatLog($"→ {thrownWeapon.Name} lands on ground at ({landingPosition.x},{landingPosition.y}).");
+
+        if (TryEquipNextThrowableWeapon(thrower, out ItemData nextWeapon, out string equipFeedback))
+        {
+            Debug.Log($"[Attack][Thrown] {equipFeedback}");
+            CombatUI?.ShowCombatLog($"↻ {thrower.Stats.CharacterName} auto-equips {nextWeapon.Name}.");
+            _equippedWeapon = nextWeapon;
+            return;
+        }
+
+        Debug.Log($"[Attack][Thrown] {equipFeedback}");
+        _equippedWeapon = thrower.GetEquippedMainWeapon();
+
+        if (!thrower.HasThrowableWeaponEquipped())
+        {
+            Debug.Log($"[Attack][Thrown] {thrower.Stats.CharacterName} has no throwable weapon equipped after the throw.");
+            CombatUI?.ShowCombatLog($"⚠ {thrower.Stats.CharacterName} has no more throwable weapons equipped.");
+        }
+    }
+
+    private bool TryDropThrownWeaponToGround(CharacterController thrower, ItemData thrownWeapon, Vector2Int targetPosition, out string feedback)
+    {
+        feedback = string.Empty;
+
+        if (thrower == null || thrower.Stats == null)
+        {
+            feedback = "Thrown weapon drop failed: no active thrower.";
+            return false;
+        }
+
+        if (thrownWeapon == null)
+        {
+            feedback = $"{thrower.Stats.CharacterName} has no thrown weapon to drop.";
+            return false;
+        }
+
+        Inventory inv = thrower.GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+        {
+            feedback = $"Thrown weapon drop failed: {thrower.Stats.CharacterName} has no inventory.";
+            return false;
+        }
+
+        bool removed = false;
+        string removedFrom = string.Empty;
+        EquipSlot removedEquipSlot = EquipSlot.None;
+        int removedInventorySlot = -1;
+
+        if (inv.RightHandSlot == thrownWeapon)
+        {
+            inv.RightHandSlot = null;
+            removed = true;
+            removedFrom = EquipSlot.RightHand.ToString();
+            removedEquipSlot = EquipSlot.RightHand;
+        }
+        else if (inv.LeftHandSlot == thrownWeapon)
+        {
+            inv.LeftHandSlot = null;
+            removed = true;
+            removedFrom = EquipSlot.LeftHand.ToString();
+            removedEquipSlot = EquipSlot.LeftHand;
+        }
+        else if (inv.HandsSlot == thrownWeapon)
+        {
+            inv.HandsSlot = null;
+            removed = true;
+            removedFrom = EquipSlot.Hands.ToString();
+            removedEquipSlot = EquipSlot.Hands;
+        }
+        else
+        {
+            for (int i = 0; i < inv.GeneralSlots.Length; i++)
+            {
+                if (inv.GeneralSlots[i] != thrownWeapon)
+                    continue;
+
+                inv.GeneralSlots[i] = null;
+                removed = true;
+                removedFrom = $"Inventory slot {i}";
+                removedInventorySlot = i;
+                break;
+            }
+        }
+
+        if (!removed)
+        {
+            feedback = $"Thrown weapon drop failed: {thrownWeapon.Name} is no longer in {thrower.Stats.CharacterName}'s inventory.";
+            return false;
+        }
+
+        SquareGrid grid = Grid != null ? Grid : SquareGrid.Instance;
+        SquareCell targetCell = grid != null ? grid.GetCell(targetPosition) : null;
+        if (targetCell == null)
+        {
+            targetCell = GetCharacterCurrentCell(thrower);
+            if (targetCell != null)
+                targetPosition = targetCell.Coords;
+        }
+
+        if (targetCell == null)
+        {
+            if (removedEquipSlot == EquipSlot.RightHand)
+                inv.RightHandSlot = thrownWeapon;
+            else if (removedEquipSlot == EquipSlot.LeftHand)
+                inv.LeftHandSlot = thrownWeapon;
+            else if (removedEquipSlot == EquipSlot.Hands)
+                inv.HandsSlot = thrownWeapon;
+            else if (removedInventorySlot >= 0 && removedInventorySlot < inv.GeneralSlots.Length)
+                inv.GeneralSlots[removedInventorySlot] = thrownWeapon;
+
+            inv.RecalculateStats();
+            feedback = $"Thrown weapon drop failed: no valid ground square for {thrownWeapon.Name}.";
+            return false;
+        }
+
+        targetCell.AddGroundItem(thrownWeapon);
+        inv.RecalculateStats();
+        InvalidatePreviewThreats();
+
+        feedback = $"[Attack][Thrown] {thrower.Stats.CharacterName} throws {thrownWeapon.Name}; removed from {removedFrom} and dropped at ({targetPosition.x},{targetPosition.y}).";
+        Debug.Log(feedback);
+        return true;
+    }
+
+    private bool TryEquipNextThrowableWeapon(CharacterController character, out ItemData equippedWeapon, out string feedback)
+    {
+        equippedWeapon = null;
+        feedback = string.Empty;
+
+        if (character == null || character.Stats == null)
+        {
+            feedback = "No active character for throwable auto-equip.";
+            return false;
+        }
+
+        Inventory inv = character.GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+        {
+            feedback = $"{character.Stats.CharacterName} has no inventory for throwable auto-equip.";
+            return false;
+        }
+
+        bool rightAvailable = inv.RightHandSlot == null;
+        bool leftAvailable = inv.LeftHandSlot == null;
+        if (!rightAvailable && !leftAvailable)
+        {
+            feedback = $"{character.Stats.CharacterName} has no free hand for auto-equip after throw.";
+            return false;
+        }
+
+        for (int i = 0; i < inv.GeneralSlots.Length; i++)
+        {
+            ItemData candidate = inv.GeneralSlots[i];
+            if (!IsThrowableMeleeWeapon(candidate))
+                continue;
+
+            EquipSlot slotToUse = EquipSlot.None;
+            if (rightAvailable && candidate.CanEquipIn(EquipSlot.RightHand))
+                slotToUse = EquipSlot.RightHand;
+            else if (leftAvailable && candidate.CanEquipIn(EquipSlot.LeftHand))
+                slotToUse = EquipSlot.LeftHand;
+
+            if (slotToUse == EquipSlot.None)
+                continue;
+
+            inv.GeneralSlots[i] = null;
+            if (slotToUse == EquipSlot.RightHand)
+            {
+                inv.RightHandSlot = candidate;
+                rightAvailable = false;
+            }
+            else
+            {
+                inv.LeftHandSlot = candidate;
+                leftAvailable = false;
+            }
+
+            inv.RecalculateStats();
+            equippedWeapon = candidate;
+            feedback = $"[Attack][Thrown] Auto-equipped {candidate.Name} into {slotToUse}.";
+            return true;
+        }
+
+        feedback = $"[Attack][Thrown] No more throwable melee weapons available for {character.Stats.CharacterName}.";
+        return false;
+    }
+
+    private static bool IsThrowableMeleeWeapon(ItemData item)
+    {
+        return item != null
+            && item.IsWeapon
+            && item.WeaponCat == WeaponCategory.Melee
+            && item.IsThrown
+            && item.RangeIncrement > 0;
     }
 
     private bool TryPickUpGroundItem(CharacterController actor, SquareCell cell, ItemData item, out string feedback)
@@ -12453,6 +12672,8 @@ public class GameManager : MonoBehaviour
             _currentAttackBAB,
             attackWeapon);
 
+        ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
+
         int attackNumber = _totalAttacksUsed + 1;
         string modeLabel = _currentAttackType == AttackType.Thrown ? "Thrown" : "Melee";
         CombatUI?.ShowCombatLog($"↻ Attack #{attackNumber}/{_totalAttackBudget} ({modeLabel}) at BAB {CharacterStats.FormatMod(_currentAttackBAB)}");
@@ -12542,7 +12763,13 @@ public class GameManager : MonoBehaviour
             Debug.Log($"[Attack][Thrown] Skipping standard action consumption for follow-up thrown attack after ending iterative melee sequence.");
         }
 
-        CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo);
+        ItemData attackWeapon = _currentAttackType == AttackType.Thrown
+            ? (_equippedWeapon ?? attacker.GetEquippedMainWeapon())
+            : attacker.GetEquippedMainWeapon();
+
+        CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
+        ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
+
         _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
 
         if (LogAttacksToConsole)
