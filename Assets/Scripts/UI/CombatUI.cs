@@ -97,8 +97,9 @@ public class CombatUI : MonoBehaviour
     public Button StandUpButton;        // Stand up (Move Action, provokes AoO)
     public Button CrawlButton;          // Crawl 5 ft (Move Action, provokes AoO)
     public Button AttackButton;         // Single attack (Standard Action)
-    public Button AttackThrownButton;   // Thrown attack (Standard, or sequence continuation for throwable melee)
-    public Button AttackOffHandButton;  // Off-hand attack (once/turn; can be used in iterative sequence)
+    public Button AttackThrownButton;          // Thrown attack (Standard, or sequence continuation for throwable melee)
+    public Button AttackOffHandButton;         // Off-hand attack (once/turn; can be used in iterative sequence)
+    public Button AttackOffHandThrownButton;   // Off-hand thrown attack (once/turn; can be used in iterative sequence)
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
     public Button GrappleActionsButton; // Legacy grapple menu button (deprecated)
@@ -911,11 +912,13 @@ public class CombatUI : MonoBehaviour
             }
         }
 
+        bool hasOffHandWeapon = pc.HasOffHandWeaponEquipped();
+        bool hasThrowableOffHandWeapon = pc.HasThrowableOffHandWeaponEquipped();
+        bool offHandUsed = gm != null && gm.IsOffHandAttackUsedThisTurn(pc);
+        bool offHandAvailableThisTurn = gm == null || gm.IsOffHandAttackAvailableThisTurn(pc);
+
         if (AttackOffHandButton != null)
         {
-            bool hasOffHandWeapon = pc.HasOffHandWeaponEquipped();
-            bool offHandUsed = gm != null && gm.IsOffHandAttackUsedThisTurn(pc);
-            bool offHandAvailableThisTurn = gm == null || gm.IsOffHandAttackAvailableThisTurn(pc);
             bool showOffHandButton = hasOffHandWeapon && !offHandUsed && offHandAvailableThisTurn;
             bool canOffHandAttack = showOffHandButton && gm != null && gm.CanUseOffHandAttackOption(pc) && !isPinned;
 
@@ -931,6 +934,26 @@ public class CombatUI : MonoBehaviour
                     offHandLabel.text = "Attack (Off-Hand - Used)";
                 else
                     offHandLabel.text = "Attack (Off-Hand)";
+            }
+        }
+
+        if (AttackOffHandThrownButton != null)
+        {
+            bool showOffHandThrownButton = hasThrowableOffHandWeapon && !offHandUsed && offHandAvailableThisTurn;
+            bool canOffHandThrownAttack = showOffHandThrownButton && gm != null && gm.CanUseOffHandThrownAttackOption(pc) && !isPinned;
+
+            AttackOffHandThrownButton.gameObject.SetActive(showOffHandThrownButton);
+            AttackOffHandThrownButton.interactable = canOffHandThrownAttack;
+
+            Text offHandThrownLabel = AttackOffHandThrownButton.GetComponentInChildren<Text>();
+            if (offHandThrownLabel != null)
+            {
+                if (isPinned)
+                    offHandThrownLabel.text = "Attack (Off-Hand Thrown - Pinned)";
+                else if (!canOffHandThrownAttack)
+                    offHandThrownLabel.text = "Attack (Off-Hand Thrown - Used)";
+                else
+                    offHandThrownLabel.text = "Attack (Off-Hand Thrown)";
             }
         }
 
@@ -1410,6 +1433,7 @@ public class CombatUI : MonoBehaviour
             if (AttackButton != null) AttackButton.gameObject.SetActive(false);
             if (AttackThrownButton != null) AttackThrownButton.gameObject.SetActive(false);
             if (AttackOffHandButton != null) AttackOffHandButton.gameObject.SetActive(false);
+            if (AttackOffHandThrownButton != null) AttackOffHandThrownButton.gameObject.SetActive(false);
             if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
             if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
             if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);

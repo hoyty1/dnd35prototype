@@ -155,6 +155,7 @@ public class GameManager : MonoBehaviour
     private bool _offHandAttackUsed;
     private bool _offHandAttackAvailable;
     private bool _isSelectingOffHandTarget;
+    private bool _isSelectingOffHandThrownTarget;
     private int _currentOffHandBAB;
     private ItemData _currentOffHandWeapon;
 
@@ -163,6 +164,7 @@ public class GameManager : MonoBehaviour
     private bool _isDualWielding;
     private int _mainHandPenalty;
     private int _offHandPenalty;
+    private AttackType _pendingAttackType = AttackType.Melee;
 
     private bool _skipNextSingleAttackStandardActionCommit;
 
@@ -2573,6 +2575,7 @@ public class GameManager : MonoBehaviour
         _offHandAttackUsed = false;
         _offHandAttackAvailable = pc.HasOffHandWeaponEquipped();
         _isSelectingOffHandTarget = false;
+        _isSelectingOffHandThrownTarget = false;
         _currentOffHandBAB = 0;
         _currentOffHandWeapon = null;
 
@@ -2581,6 +2584,7 @@ public class GameManager : MonoBehaviour
         _isDualWielding = false;
         _mainHandPenalty = 0;
         _offHandPenalty = 0;
+        _pendingAttackType = AttackType.Melee;
 
         Debug.Log($"[Turn][OffHand] Turn start for {pc.Stats.CharacterName}: available={_offHandAttackAvailable}");
         Debug.Log($"[Turn][DualWield] Turn start reset: choiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}, mainPenalty={_mainHandPenalty}, offPenalty={_offHandPenalty}");
@@ -2652,6 +2656,7 @@ public class GameManager : MonoBehaviour
 
         bool hasThrowableWeapon = pc.HasThrowableWeaponEquipped();
         bool hasOffHandWeapon = pc.HasOffHandWeaponEquipped();
+        bool hasThrowableOffHandWeapon = pc.HasThrowableOffHandWeaponEquipped();
 
         // Preserve explicit per-turn disable (e.g., player chose "No" on dual-wield prompt).
         if (!hasOffHandWeapon)
@@ -2661,7 +2666,7 @@ public class GameManager : MonoBehaviour
 
         bool hasMoreAttacks = _isInAttackSequence && _attackingCharacter == pc && HasMoreAttacksAvailable();
         bool offHandAvailable = CanUseOffHandAttackOption(pc);
-        Debug.Log($"[Actions] Showing choices for {pc.Stats.CharacterName}: hasThrowableWeapon={hasThrowableWeapon}, hasOffHandWeapon={hasOffHandWeapon}, offHandAvailable={offHandAvailable}, offHandGate={_offHandAttackAvailable}, inSequence={_isInAttackSequence}, hasMoreAttacks={hasMoreAttacks}, offHandUsed={_offHandAttackUsed}, dwChoiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}");
+        Debug.Log($"[Actions] Showing choices for {pc.Stats.CharacterName}: hasThrowableWeapon={hasThrowableWeapon}, hasOffHandWeapon={hasOffHandWeapon}, hasThrowableOffHandWeapon={hasThrowableOffHandWeapon}, offHandAvailable={offHandAvailable}, offHandGate={_offHandAttackAvailable}, inSequence={_isInAttackSequence}, hasMoreAttacks={hasMoreAttacks}, offHandUsed={_offHandAttackUsed}, dwChoiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}, selectingOffHandThrown={_isSelectingOffHandThrownTarget}");
 
         LogMenuFlow("ShowActionChoices:ENTER", pc, $"isGrappling={pc.IsGrappling()}, isPinned={pc.IsPinned()}");
 
@@ -3439,7 +3444,7 @@ public class GameManager : MonoBehaviour
             return;
 
         Vector2Int landingPosition = target != null ? target.GridPosition : thrower.GridPosition;
-        if (!TryDropThrownWeaponToGround(thrower, thrownWeapon, landingPosition, out string dropFeedback))
+        if (!TryDropThrownWeaponToGround(thrower, thrownWeapon, landingPosition, EquipSlot.RightHand, out string dropFeedback))
         {
             Debug.LogWarning($"[Attack][Thrown] {dropFeedback}");
             CombatUI?.ShowCombatLog($"⚠ {dropFeedback}");
@@ -3466,7 +3471,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private bool TryDropThrownWeaponToGround(CharacterController thrower, ItemData thrownWeapon, Vector2Int targetPosition, out string feedback)
+    private bool TryDropThrownWeaponToGround(CharacterController thrower, ItemData thrownWeapon, Vector2Int targetPosition, EquipSlot preferredSlot, out string feedback)
     {
         feedback = string.Empty;
 
@@ -3494,7 +3499,24 @@ public class GameManager : MonoBehaviour
         EquipSlot removedEquipSlot = EquipSlot.None;
         int removedInventorySlot = -1;
 
-        if (inv.RightHandSlot == thrownWeapon)
+        bool preferLeft = preferredSlot == EquipSlot.LeftHand;
+        bool preferRight = preferredSlot == EquipSlot.RightHand;
+
+        if (preferLeft && inv.LeftHandSlot == thrownWeapon)
+        {
+            inv.LeftHandSlot = null;
+            removed = true;
+            removedFrom = EquipSlot.LeftHand.ToString();
+            removedEquipSlot = EquipSlot.LeftHand;
+        }
+        else if (preferRight && inv.RightHandSlot == thrownWeapon)
+        {
+            inv.RightHandSlot = null;
+            removed = true;
+            removedFrom = EquipSlot.RightHand.ToString();
+            removedEquipSlot = EquipSlot.RightHand;
+        }
+        else if (inv.RightHandSlot == thrownWeapon)
         {
             inv.RightHandSlot = null;
             removed = true;
@@ -3630,6 +3652,48 @@ public class GameManager : MonoBehaviour
         }
 
         feedback = $"[Attack][Thrown] No more throwable melee weapons available for {character.Stats.CharacterName}.";
+        return false;
+    }
+
+    private bool TryEquipNextThrowableOffHandWeapon(CharacterController character, out ItemData equippedWeapon, out string feedback)
+    {
+        equippedWeapon = null;
+        feedback = string.Empty;
+
+        if (character == null || character.Stats == null)
+        {
+            feedback = "No active character for off-hand throwable auto-equip.";
+            return false;
+        }
+
+        Inventory inv = character.GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+        {
+            feedback = $"{character.Stats.CharacterName} has no inventory for off-hand throwable auto-equip.";
+            return false;
+        }
+
+        if (inv.LeftHandSlot != null)
+        {
+            feedback = $"{character.Stats.CharacterName} has no free off-hand slot for auto-equip after throw.";
+            return false;
+        }
+
+        for (int i = 0; i < inv.GeneralSlots.Length; i++)
+        {
+            ItemData candidate = inv.GeneralSlots[i];
+            if (!IsThrowableMeleeWeapon(candidate) || !candidate.CanEquipIn(EquipSlot.LeftHand))
+                continue;
+
+            inv.GeneralSlots[i] = null;
+            inv.LeftHandSlot = candidate;
+            inv.RecalculateStats();
+            equippedWeapon = candidate;
+            feedback = $"[Attack][OffHand][Thrown] Auto-equipped {candidate.Name} into {EquipSlot.LeftHand}.";
+            return true;
+        }
+
+        feedback = $"[Attack][OffHand][Thrown] No more throwable melee weapons available for off-hand on {character.Stats.CharacterName}.";
         return false;
     }
 
@@ -4984,6 +5048,7 @@ public class GameManager : MonoBehaviour
         if (isFirstMainHandAttack && !_dualWieldingChoiceMade && NeedsDualWieldingPrompt(pc))
         {
             Debug.Log("[Attack][DualWield] Showing dual wielding prompt before first main-hand attack.");
+            _pendingAttackType = AttackType.Melee;
             ShowDualWieldingPrompt(pc);
             return;
         }
@@ -5012,9 +5077,27 @@ public class GameManager : MonoBehaviour
         Debug.Log("[Attack][Thrown] Thrown attack button pressed");
         Debug.Log($"[Attack][Sequence] isInSequence: {_isInAttackSequence}");
         Debug.Log($"[Attack][Sequence] attacksUsed: {_totalAttacksUsed}");
+        Debug.Log($"[Attack][DualWield] choiceMade: {_dualWieldingChoiceMade}");
+        Debug.Log($"[Attack][DualWield] isDualWielding: {_isDualWielding}");
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "thrown attacks"))
             return;
+
+        if (!CanThrowWeapon(pc))
+        {
+            Debug.Log($"[Attack][Thrown] Attack denied actor={pc.Stats.CharacterName} hasStandard={pc.Actions.HasStandardAction} hasMove={pc.Actions.HasMoveAction} inSequence={_isInAttackSequence}");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        bool isFirstMainHandAttack = !_isInAttackSequence && _totalAttacksUsed == 0;
+        if (isFirstMainHandAttack && !_dualWieldingChoiceMade && NeedsDualWieldingPrompt(pc))
+        {
+            Debug.Log("[Attack][DualWield] Showing dual wielding prompt for thrown attack");
+            _pendingAttackType = AttackType.Thrown;
+            ShowDualWieldingPrompt(pc);
+            return;
+        }
 
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
@@ -5104,7 +5187,8 @@ public class GameManager : MonoBehaviour
 
         _pendingDefensiveAttackSelection = false;
         attacker.SetFightingDefensively(false);
-        StartAttackSequence(attacker, AttackType.Melee);
+        Debug.Log($"[Attack][DualWield] Continuing with pending attack type: {_pendingAttackType}");
+        StartAttackSequence(attacker, _pendingAttackType);
     }
 
     private void CalculateDualWieldingPenalties(CharacterController attacker)
@@ -5199,23 +5283,97 @@ public class GameManager : MonoBehaviour
 
         Debug.Log($"[Attack][OffHand] weapon={offHandWeapon.Name} baseBAB={baseBab} penalty={offHandPenalty} attackBAB={_currentOffHandBAB}");
 
-        BeginOffHandTargetSelection(pc);
+        BeginOffHandTargetSelection(pc, AttackType.Melee);
     }
 
-    private void BeginOffHandTargetSelection(CharacterController attacker)
+    public void OnOffHandThrownAttackButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null)
+            return;
+
+        Debug.Log("[Attack][OffHand][Thrown] Off-hand thrown attack button pressed");
+        Debug.Log($"[Attack][OffHand][Thrown] offHandUsed={_offHandAttackUsed} inSequence={_isInAttackSequence} mainHandAttacksUsed={_totalAttacksUsed}");
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "off-hand thrown attacks"))
+            return;
+
+        if (!CanUseOffHandThrownAttackOption(pc))
+        {
+            Debug.Log($"[Attack][OffHand][Thrown] Attack denied actor={pc.Stats.CharacterName} hasStandard={pc.Actions.HasStandardAction} hasMove={pc.Actions.HasMoveAction} inSequence={_isInAttackSequence} offHandUsed={_offHandAttackUsed}");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        ItemData offHandWeapon = pc.GetOffHandAttackWeapon();
+        if (offHandWeapon == null || !offHandWeapon.IsThrown || offHandWeapon.RangeIncrement <= 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no throwable off-hand weapon.");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        if (!pc.CanAttackWithWeapon(offHandWeapon, out string cannotAttackReason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot off-hand throw: {cannotAttackReason}");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        _pendingDefensiveAttackSelection = false;
+        pc.SetFightingDefensively(false);
+
+        if (!_dualWieldingChoiceMade)
+        {
+            Debug.Log("[Attack][OffHand][Thrown] First attack is off-hand thrown, automatically enabling dual wielding.");
+            _dualWieldingChoiceMade = true;
+            _isDualWielding = true;
+            CalculateDualWieldingPenalties(pc);
+            _offHandAttackAvailable = true;
+            CombatUI?.ShowCombatLog($"⚔ {pc.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty}).");
+        }
+
+        if (!_isInAttackSequence)
+        {
+            if (!pc.CommitStandardAction())
+            {
+                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no standard action available for an off-hand thrown attack.");
+                CombatUI?.UpdateActionButtons(pc);
+                return;
+            }
+
+            Debug.Log("[Attack][OffHand][Thrown] Consumed standard action for standalone off-hand thrown attack.");
+        }
+        else
+        {
+            Debug.Log("[Attack][OffHand][Thrown] Executing during iterative sequence; no additional action cost.");
+        }
+
+        int baseBab = pc.Stats != null ? pc.Stats.BaseAttackBonus : 0;
+        int offHandPenalty = _isDualWielding ? _offHandPenalty : 0;
+        _currentOffHandBAB = baseBab + offHandPenalty;
+        _currentOffHandWeapon = offHandWeapon;
+
+        Debug.Log($"[Attack][OffHand][Thrown] weapon={offHandWeapon.Name} baseBAB={baseBab} penalty={offHandPenalty} attackBAB={_currentOffHandBAB}");
+
+        BeginOffHandTargetSelection(pc, AttackType.Thrown);
+    }
+
+    private void BeginOffHandTargetSelection(CharacterController attacker, AttackType attackType)
     {
         if (attacker == null)
             return;
 
         _isSelectingOffHandTarget = true;
+        _isSelectingOffHandThrownTarget = attackType == AttackType.Thrown;
         _pendingAttackMode = PendingAttackMode.Single;
-        _currentAttackType = AttackType.Melee;
+        _currentAttackType = attackType;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
 
-        ShowOffHandAttackTargets(attacker, _currentOffHandWeapon);
+        ShowOffHandAttackTargets(attacker, _currentOffHandWeapon, _isSelectingOffHandThrownTarget);
     }
 
-    private void ShowOffHandAttackTargets(CharacterController attacker, ItemData offHandWeapon)
+    private void ShowOffHandAttackTargets(CharacterController attacker, ItemData offHandWeapon, bool useThrownRange)
     {
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
@@ -5232,16 +5390,34 @@ public class GameManager : MonoBehaviour
             if (!IsEnemyTeam(attacker, candidate))
                 continue;
 
-            int distance = attacker.GetMinimumDistanceToTarget(candidate, chebyshev: true);
-            if (!attacker.CanMeleeAttackDistance(distance, offHandWeapon))
+            bool inRange;
+            if (useThrownRange)
+            {
+                if (offHandWeapon == null || !offHandWeapon.IsThrown || offHandWeapon.RangeIncrement <= 0)
+                    continue;
+
+                int sqDist = attacker.GetMinimumDistanceToTarget(candidate, chebyshev: false);
+                RangeInfo rangeInfo = RangeCalculator.GetRangeInfo(sqDist, offHandWeapon.RangeIncrement, true);
+                inRange = rangeInfo != null && rangeInfo.IsInRange;
+            }
+            else
+            {
+                int distance = attacker.GetMinimumDistanceToTarget(candidate, chebyshev: true);
+                inRange = attacker.CanMeleeAttackDistance(distance, offHandWeapon);
+            }
+
+            if (!inRange)
                 continue;
 
             SquareCell targetCell = Grid.GetCell(candidate.GridPosition);
             if (targetCell == null)
                 continue;
 
-            bool flanking = CombatUtils.IsAttackerFlanking(attacker, candidate, allCombatants, out _);
-            targetCell.SetHighlight(flanking ? HighlightType.Flanking : HighlightType.AttackRange);
+            bool flanking = !useThrownRange && CombatUtils.IsAttackerFlanking(attacker, candidate, allCombatants, out _);
+            HighlightType highlightType = useThrownRange
+                ? HighlightType.Attack
+                : (flanking ? HighlightType.Flanking : HighlightType.AttackRange);
+            targetCell.SetHighlight(highlightType);
             _highlightedCells.Add(targetCell);
             hasTarget = true;
             anyFlanking |= flanking;
@@ -5250,13 +5426,25 @@ public class GameManager : MonoBehaviour
         if (hasTarget)
         {
             string weaponName = offHandWeapon != null ? offHandWeapon.Name : "Off-hand";
-            string flankText = anyFlanking ? " (FLANKING available! +2 to hit)" : string.Empty;
-            CombatUI.SetTurnIndicator($"OFF-HAND ATTACK ({weaponName}): Click an enemy to attack!{flankText}");
+            if (useThrownRange)
+            {
+                string rangeText = offHandWeapon != null
+                    ? $" ({offHandWeapon.RangeIncrement} ft increment)"
+                    : string.Empty;
+                CombatUI.SetTurnIndicator($"OFF-HAND THROWN ATTACK ({weaponName}){rangeText}: Click an enemy to attack!");
+            }
+            else
+            {
+                string flankText = anyFlanking ? " (FLANKING available! +2 to hit)" : string.Empty;
+                CombatUI.SetTurnIndicator($"OFF-HAND ATTACK ({weaponName}): Click an enemy to attack!{flankText}");
+            }
         }
         else
         {
             _isSelectingOffHandTarget = false;
-            CombatUI.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no enemies in off-hand melee range.");
+            _isSelectingOffHandThrownTarget = false;
+            string mode = useThrownRange ? "throw" : "melee";
+            CombatUI.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no enemies in off-hand {mode} range.");
             StartCoroutine(ReturnToActionChoicesAfterDelay(0.9f));
         }
     }
@@ -5327,7 +5515,13 @@ public class GameManager : MonoBehaviour
         if (_isInAttackSequence)
             return _attackingCharacter == actor && HasMoreAttacksAvailable();
 
-        return actor.Actions != null && actor.Actions.HasStandardAction;
+        if (actor.Actions == null)
+            return false;
+
+        if (_offHandAttackUsed && _offHandAttackAvailable && actor == ActivePC && actor.Actions.HasMoveAction)
+            return true;
+
+        return actor.Actions.HasStandardAction;
     }
 
     public bool CanUseThrownAttackOption(CharacterController actor)
@@ -5369,6 +5563,20 @@ public class GameManager : MonoBehaviour
 
         // When not in iterative sequence, off-hand consumes a standard action.
         return actor.Actions.HasStandardAction;
+    }
+
+    public bool CanUseOffHandThrownAttackOption(CharacterController actor)
+    {
+        if (actor == null)
+            return false;
+
+        if (!CanUseOffHandAttackOption(actor))
+            return false;
+
+        ItemData offHandWeapon = actor.GetOffHandAttackWeapon();
+        return offHandWeapon != null
+            && offHandWeapon.IsThrown
+            && offHandWeapon.RangeIncrement > 0;
     }
 
     public bool IsOffHandAttackUsedThisTurn(CharacterController actor)
@@ -5558,6 +5766,7 @@ public class GameManager : MonoBehaviour
 
         // Keep per-turn off-hand usage flag, but clear transient targeting state.
         _isSelectingOffHandTarget = false;
+        _isSelectingOffHandThrownTarget = false;
         _currentOffHandBAB = 0;
         _currentOffHandWeapon = null;
     }
@@ -5572,6 +5781,7 @@ public class GameManager : MonoBehaviour
         _offHandAttackUsed = false;
         _offHandAttackAvailable = false;
         _isSelectingOffHandTarget = false;
+        _isSelectingOffHandThrownTarget = false;
         _currentOffHandBAB = 0;
         _currentOffHandWeapon = null;
 
@@ -5579,6 +5789,7 @@ public class GameManager : MonoBehaviour
         _isDualWielding = false;
         _mainHandPenalty = 0;
         _offHandPenalty = 0;
+        _pendingAttackType = AttackType.Melee;
     }
 
     private bool CanUseImprovedFeintAsMove(CharacterController actor)
@@ -8021,6 +8232,7 @@ public class GameManager : MonoBehaviour
         _pendingAttackMode = PendingAttackMode.Single;
         _skipNextSingleAttackStandardActionCommit = false;
         _isSelectingOffHandTarget = false;
+        _isSelectingOffHandThrownTarget = false;
         _currentOffHandBAB = 0;
         _currentOffHandWeapon = null;
 
@@ -11023,6 +11235,7 @@ public class GameManager : MonoBehaviour
         if (!cell.IsOccupied || cell.Occupant == null || cell.Occupant == attacker || cell.Occupant.Stats == null || cell.Occupant.Stats.IsDead || !_highlightedCells.Contains(cell) || !IsEnemyTeam(attacker, cell.Occupant))
         {
             _isSelectingOffHandTarget = false;
+            _isSelectingOffHandThrownTarget = false;
             ShowActionChoices();
             return;
         }
@@ -11035,18 +11248,29 @@ public class GameManager : MonoBehaviour
         {
             CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no off-hand weapon available.");
             _isSelectingOffHandTarget = false;
+            _isSelectingOffHandThrownTarget = false;
             ShowActionChoices();
             return;
         }
 
-        // Check flanking against all combatants (team/threat rules applied by CombatUtils).
-        List<CharacterController> allCombatants = GetAllCharacters();
-        bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out CharacterController flankPartner);
-        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-        string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : string.Empty;
+        bool useThrownRange = _isSelectingOffHandThrownTarget
+            || (offHandWeapon.IsThrown && _currentAttackType == AttackType.Thrown);
+
+        bool isFlanking = false;
+        int flankBonus = 0;
+        string partnerName = string.Empty;
+        if (!useThrownRange)
+        {
+            List<CharacterController> allCombatants = GetAllCharacters();
+            isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out CharacterController flankPartner);
+            flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+            partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : string.Empty;
+        }
 
         int sqDist = attacker.GetMinimumDistanceToTarget(target, chebyshev: false);
-        RangeInfo rangeInfo = RangeCalculator.GetRangeInfo(sqDist, 0, false);
+        RangeInfo rangeInfo = useThrownRange
+            ? RangeCalculator.GetRangeInfo(sqDist, offHandWeapon.RangeIncrement, true)
+            : RangeCalculator.GetRangeInfo(sqDist, 0, false);
 
         CombatResult result = attacker.Attack(
             target,
@@ -11063,7 +11287,8 @@ public class GameManager : MonoBehaviour
         string offHandPenaltyInfo = _isDualWielding
             ? $", dual-wield penalty {CharacterStats.FormatMod(_offHandPenalty)}"
             : string.Empty;
-        CombatUI?.ShowCombatLog($"↻ Off-Hand Attack (BAB {babLabel}{offHandPenaltyInfo}) with {offHandWeapon.Name}");
+        string offHandModeLabel = useThrownRange ? "Off-Hand Thrown Attack" : "Off-Hand Attack";
+        CombatUI?.ShowCombatLog($"↻ {offHandModeLabel} (BAB {babLabel}{offHandPenaltyInfo}) with {offHandWeapon.Name}");
 
         _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
         CombatUI?.ShowCombatLog(_lastCombatLog);
@@ -11089,6 +11314,7 @@ public class GameManager : MonoBehaviour
                 {
                     _offHandAttackUsed = true;
                     _isSelectingOffHandTarget = false;
+                    _isSelectingOffHandThrownTarget = false;
                     CurrentPhase = TurnPhase.CombatOver;
                     CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
                     CombatUI.SetActionButtonsVisible(false);
@@ -11097,13 +11323,53 @@ public class GameManager : MonoBehaviour
             }
         }
 
+        if (useThrownRange)
+            ResolveOffHandThrownWeaponAfterAttack(attacker, target, offHandWeapon);
+
         _offHandAttackUsed = true;
         _offHandAttackAvailable = attacker.HasOffHandWeaponEquipped();
         _isSelectingOffHandTarget = false;
+        _isSelectingOffHandThrownTarget = false;
 
-        Debug.Log($"[Attack][OffHand] Off-hand attack resolved. used={_offHandAttackUsed} inSequence={_isInAttackSequence} mainAttacksUsed={_totalAttacksUsed}/{_totalAttackBudget}");
+        Debug.Log($"[Attack][OffHand] Off-hand attack resolved. used={_offHandAttackUsed} inSequence={_isInAttackSequence} mainAttacksUsed={_totalAttacksUsed}/{_totalAttackBudget} thrown={useThrownRange}");
 
         StartCoroutine(AfterAttackDelay(attacker, 1.2f));
+    }
+
+    private void ResolveOffHandThrownWeaponAfterAttack(CharacterController thrower, CharacterController target, ItemData thrownWeapon)
+    {
+        if (!IsThrowableMeleeWeapon(thrownWeapon))
+            return;
+
+        if (thrower == null || thrower.Stats == null)
+            return;
+
+        Vector2Int landingPosition = target != null ? target.GridPosition : thrower.GridPosition;
+        if (!TryDropThrownWeaponToGround(thrower, thrownWeapon, landingPosition, EquipSlot.LeftHand, out string dropFeedback))
+        {
+            Debug.LogWarning($"[Attack][OffHand][Thrown] {dropFeedback}");
+            CombatUI?.ShowCombatLog($"⚠ {dropFeedback}");
+            return;
+        }
+
+        CombatUI?.ShowCombatLog($"→ {thrownWeapon.Name} lands on ground at ({landingPosition.x},{landingPosition.y}).");
+
+        if (TryEquipNextThrowableOffHandWeapon(thrower, out ItemData nextWeapon, out string equipFeedback))
+        {
+            Debug.Log($"[Attack][OffHand][Thrown] {equipFeedback}");
+            CombatUI?.ShowCombatLog($"↻ {thrower.Stats.CharacterName} auto-equips {nextWeapon.Name} to off-hand.");
+            _currentOffHandWeapon = nextWeapon;
+            return;
+        }
+
+        Debug.Log($"[Attack][OffHand][Thrown] {equipFeedback}");
+        _currentOffHandWeapon = thrower.GetOffHandAttackWeapon();
+
+        if (!thrower.HasThrowableOffHandWeaponEquipped())
+        {
+            Debug.Log($"[Attack][OffHand][Thrown] {thrower.Stats.CharacterName} has no throwable off-hand weapon equipped after the throw.");
+            CombatUI?.ShowCombatLog($"⚠ {thrower.Stats.CharacterName} has no more throwable off-hand weapons equipped.");
+        }
     }
 
     private void ShowSpecialAttackTargets(CharacterController attacker, SpecialAttackType type)

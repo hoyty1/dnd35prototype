@@ -2061,6 +2061,18 @@ public class CharacterController : MonoBehaviour
         return TryGetDualWieldWeapons(out _, out ItemData offWeapon, out _) && offWeapon != null;
     }
 
+    public bool HasThrowableOffHandWeaponEquipped()
+    {
+        ItemData offWeapon = GetOffHandAttackWeapon();
+        bool isThrowable = offWeapon != null
+            && offWeapon.IsWeapon
+            && offWeapon.IsThrown
+            && offWeapon.RangeIncrement > 0;
+
+        Debug.Log($"[Character] {Stats?.CharacterName ?? name} has throwable off-hand weapon: {isThrowable} ({offWeapon?.Name ?? "none"})");
+        return isThrowable;
+    }
+
     /// <summary>
     /// Returns the concrete weapon profile used for a separate off-hand attack button.
     /// </summary>
