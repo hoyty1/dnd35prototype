@@ -12321,6 +12321,8 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        Debug.Log($"[Overrun] Attempt: {attacker.Stats.CharacterName} (player={attacker.IsPlayerControlled}) -> {target.Stats.CharacterName} (player={target.IsPlayerControlled})");
+
         bool attackerHasImprovedOverrun = attacker.Stats.HasFeat("Improved Overrun");
         if (attackerHasImprovedOverrun)
         {
@@ -12329,6 +12331,27 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        if (ShouldShowOverrunResponsePrompt(target))
+        {
+            Debug.Log($"[Overrun] Prompting player response: {attacker.Stats.CharacterName} overruns {target.Stats.CharacterName}.");
+            ShowOverrunResponsePrompt(attacker, target);
+            return;
+        }
+
+        Debug.Log($"[Overrun] Auto-resolving NPC response: {attacker.Stats.CharacterName} overruns {target.Stats.CharacterName} -> Block.");
+        CombatUI.ShowCombatLog($"⚔ {target.Stats.CharacterName} automatically attempts to block the overrun.");
+        ResolveOverrunSpecialAttack(attacker, target, defenderBlocks: true);
+    }
+
+    private bool ShouldShowOverrunResponsePrompt(CharacterController target)
+    {
+        bool shouldPrompt = target != null && target.IsPlayerControlled;
+        Debug.Log($"[Overrun] Target response mode: {(shouldPrompt ? "PlayerPrompt" : "NPC-AutoBlock")}");
+        return shouldPrompt;
+    }
+
+    private void ShowOverrunResponsePrompt(CharacterController attacker, CharacterController target)
+    {
         CombatUI.ShowPickUpItemSelection(
             actorName: target.Stats.CharacterName,
             itemOptions: new List<string>
@@ -12339,10 +12362,12 @@ public class GameManager : MonoBehaviour
             onSelect: selectedIndex =>
             {
                 bool defenderBlocks = selectedIndex == 1;
+                Debug.Log($"[Overrun] Player selected {(defenderBlocks ? "Block" : "Avoid")} for {target.Stats.CharacterName}.");
                 ResolveOverrunSpecialAttack(attacker, target, defenderBlocks);
             },
             onCancel: () =>
             {
+                Debug.Log($"[Overrun] Response prompt cancelled for {target.Stats.CharacterName}; returning to selection UI.");
                 if (CurrentPhase == TurnPhase.PCTurn && ActivePC == attacker && attacker.Actions.HasStandardAction)
                     ShowSpecialAttackTargets(attacker, SpecialAttackType.Overrun);
                 else
