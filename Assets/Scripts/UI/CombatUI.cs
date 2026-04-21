@@ -916,6 +916,9 @@ public class CombatUI : MonoBehaviour
         bool hasThrowableOffHandWeapon = pc.HasThrowableOffHandWeaponEquipped();
         bool offHandUsed = gm != null && gm.IsOffHandAttackUsedThisTurn(pc);
         bool offHandAvailableThisTurn = gm == null || gm.IsOffHandAttackAvailableThisTurn(pc);
+
+        Debug.Log("=== UPDATE ACTION BUTTONS ===");
+        Debug.Log($"[UI] Character: {pc.Stats.CharacterName}");
         Debug.Log($"[UI] Updating off-hand buttons for {pc.Stats.CharacterName}: hasOffHandWeapon={hasOffHandWeapon}, hasThrowableOffHandWeapon={hasThrowableOffHandWeapon}, offHandUsed={offHandUsed}, offHandAvailableThisTurn={offHandAvailableThisTurn}");
 
         if (AttackOffHandButton != null)
@@ -923,6 +926,7 @@ public class CombatUI : MonoBehaviour
             bool showOffHandButton = hasOffHandWeapon && !offHandUsed && offHandAvailableThisTurn;
             bool canOffHandAttack = showOffHandButton && gm != null && gm.CanUseOffHandAttackOption(pc) && !isPinned;
 
+            Debug.Log($"[UI] Off-hand available: {offHandAvailableThisTurn}");
             AttackOffHandButton.gameObject.SetActive(showOffHandButton);
             AttackOffHandButton.interactable = canOffHandAttack;
             Debug.Log($"[UI] Off-hand melee button: show={showOffHandButton}, enabled={canOffHandAttack}, pinned={isPinned}");
