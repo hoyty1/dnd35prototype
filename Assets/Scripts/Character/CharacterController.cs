@@ -2147,9 +2147,29 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// Returns true when the currently equipped off-hand weapon counts as a light weapon.
+    /// D&D 3.5e rule support: a light-category off-hand weapon reduces TWF penalties.
+    /// </summary>
+    public bool IsOffHandWeaponLight()
+    {
+        if (!TryGetDualWieldWeapons(out _, out ItemData offHandItem, out _))
+            return false;
+
+        return IsWeaponLightForWielder(offHandItem);
+    }
+
+    private bool IsWeaponLightForWielder(ItemData weapon)
+    {
+        if (weapon == null)
+            return false;
+
+        // In this prototype we use item category/size metadata.
+        return weapon.IsLightWeapon || weapon.WeaponSize == WeaponSizeCategory.Light;
+    }
+
+    /// <summary>
     /// Get the dual wield penalty information.
     /// Returns (mainHandPenalty, offHandPenalty, isLightOffHand).
-    /// Uses FeatManager to account for Two-Weapon Fighting feat.
     /// Without TWF feat: -6/-10 (normal) or -4/-8 (light off-hand).
     /// With TWF feat: -4/-4 (normal) or -2/-2 (light off-hand).
     /// </summary>
@@ -2158,12 +2178,14 @@ public class CharacterController : MonoBehaviour
         if (!TryGetDualWieldWeapons(out _, out ItemData offHandItem, out _))
             return (-6, -10, false);
 
-        bool lightOffHand = offHandItem != null && offHandItem.IsLightWeapon;
+        bool lightOffHand = IsWeaponLightForWielder(offHandItem);
+        bool hasTWF = Stats != null && Stats.HasFeat("Two-Weapon Fighting");
 
-        var (mainPen, offPen) = FeatManager.GetTWFPenalties(Stats, lightOffHand);
-        Debug.Log($"[TWF] {Stats.CharacterName}: TWF penalties = {mainPen}/{offPen}" +
-                  (Stats.HasFeat("Two-Weapon Fighting") ? " (TWF feat)" : " (no TWF feat)") +
-                  (lightOffHand ? " (light off-hand)" : ""));
+        (int mainPen, int offPen) = Stats != null
+            ? FeatManager.GetTWFPenalties(Stats, lightOffHand)
+            : (lightOffHand ? (-4, -8) : (-6, -10));
+
+        Debug.Log($"[DualWield] {Stats?.CharacterName ?? "Unknown"}: TWF feat={hasTWF}, light off-hand={lightOffHand}, penalties={mainPen}/{offPen}");
         return (mainPen, offPen, lightOffHand);
     }
 

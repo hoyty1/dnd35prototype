@@ -5198,22 +5198,35 @@ public class GameManager : MonoBehaviour
 
     private void CalculateDualWieldingPenalties(CharacterController attacker)
     {
+        Debug.Log("[DualWield] Calculating penalties");
+
         if (attacker == null)
         {
             _mainHandPenalty = 0;
             _offHandPenalty = 0;
+            Debug.Log("[DualWield] No attacker. Penalties reset to 0/0.");
             return;
         }
 
-        var (mainPenalty, offPenalty, lightOffHand) = attacker.GetDualWieldPenalties();
+        ItemData mainWeapon = attacker.GetDualWieldMainWeapon();
+        ItemData offWeapon = attacker.GetDualWieldOffHandWeapon();
         bool hasTWF = attacker.Stats != null && attacker.Stats.HasFeat("Two-Weapon Fighting");
+        bool lightOffHand = attacker.IsOffHandWeaponLight();
 
+        (int mainPenalty, int offPenalty) = attacker.Stats != null
+            ? FeatManager.GetTWFPenalties(attacker.Stats, lightOffHand)
+            : (lightOffHand ? (-4, -8) : (-6, -10));
         _mainHandPenalty = mainPenalty;
         _offHandPenalty = offPenalty;
 
-        Debug.Log($"[Attack][DualWield] hasTWF: {hasTWF}");
-        Debug.Log($"[Attack][DualWield] isLightOffHand: {lightOffHand}");
-        Debug.Log($"[Attack][DualWield] Penalties computed: main={_mainHandPenalty}, off={_offHandPenalty}");
+        string mainType = (mainWeapon != null && (mainWeapon.IsLightWeapon || mainWeapon.WeaponSize == WeaponSizeCategory.Light)) ? "light" : "normal";
+        string offType = lightOffHand ? "light" : "normal";
+
+        Debug.Log($"[DualWield] Main hand weapon: {mainWeapon?.Name ?? "None"} ({mainType})");
+        Debug.Log($"[DualWield] Off-hand weapon: {offWeapon?.Name ?? "None"} ({offType})");
+        Debug.Log($"[DualWield] TWF feat: {hasTWF}");
+        Debug.Log($"[DualWield] Light off-hand: {lightOffHand}");
+        Debug.Log($"[DualWield] Penalties: Main {_mainHandPenalty}, Off-hand {_offHandPenalty}");
     }
 
     public void OnOffHandAttackButtonPressed()
