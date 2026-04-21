@@ -98,6 +98,7 @@ public class CombatUI : MonoBehaviour
     public Button CrawlButton;          // Crawl 5 ft (Move Action, provokes AoO)
     public Button AttackButton;         // Single attack (Standard Action)
     public Button AttackThrownButton;   // Thrown attack (Standard, or sequence continuation for throwable melee)
+    public Button AttackOffHandButton;  // Off-hand attack (once/turn; can be used in iterative sequence)
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
     public Button GrappleActionsButton; // Legacy grapple menu button (deprecated)
@@ -842,7 +843,8 @@ public class CombatUI : MonoBehaviour
 
         bool canFightDefensively = pc.Stats.BaseAttackBonus >= 1;
 
-        bool hasStandardAttack = actions.HasStandardAction;
+        bool canStartMainAfterOffHand = gm != null && gm.IsOffHandAttackUsedThisTurn(pc) && actions.HasMoveAction && !iterativeWeaponSequenceActive;
+        bool hasStandardAttack = actions.HasStandardAction || canStartMainAfterOffHand;
         bool canContinueIterativeAttack = iterativeWeaponSequenceActive;
         bool hasThrowableMeleeWeapon = gm != null && gm.HasThrowableMeleeWeaponEquipped(pc);
         bool iterativeThrownSequenceActive = gm != null && gm.IsIterativeThrownAttackSequenceActiveFor(pc);
@@ -865,6 +867,10 @@ public class CombatUI : MonoBehaviour
                 else if (!canAttackWithWeapon)
                 {
                     atkLabel.text = "Attack (Reload first)";
+                }
+                else if (canStartMainAfterOffHand)
+                {
+                    atkLabel.text = hasThrowableMeleeWeapon ? "Attack (Melee - Full Round)" : "Attack (Full Round)";
                 }
                 else if (gm != null)
                 {
@@ -902,6 +908,28 @@ public class CombatUI : MonoBehaviour
                     thrownLabel.text = "Attack (Thrown - Reload first)";
                 else
                     thrownLabel.text = iterativeThrownFullRoundStage ? "Attack (Thrown - Full Round)" : "Attack (Thrown)";
+            }
+        }
+
+        if (AttackOffHandButton != null)
+        {
+            bool hasOffHandWeapon = pc.HasOffHandWeaponEquipped();
+            bool offHandUsed = gm != null && gm.IsOffHandAttackUsedThisTurn(pc);
+            bool showOffHandButton = hasOffHandWeapon && !offHandUsed;
+            bool canOffHandAttack = showOffHandButton && gm != null && gm.CanUseOffHandAttackOption(pc) && !isPinned;
+
+            AttackOffHandButton.gameObject.SetActive(showOffHandButton);
+            AttackOffHandButton.interactable = canOffHandAttack;
+
+            Text offHandLabel = AttackOffHandButton.GetComponentInChildren<Text>();
+            if (offHandLabel != null)
+            {
+                if (isPinned)
+                    offHandLabel.text = "Attack (Off-Hand - Pinned)";
+                else if (!canOffHandAttack)
+                    offHandLabel.text = "Attack (Off-Hand - Used)";
+                else
+                    offHandLabel.text = "Attack (Off-Hand)";
             }
         }
 
@@ -1380,6 +1408,7 @@ public class CombatUI : MonoBehaviour
             if (CrawlButton != null) CrawlButton.gameObject.SetActive(false);
             if (AttackButton != null) AttackButton.gameObject.SetActive(false);
             if (AttackThrownButton != null) AttackThrownButton.gameObject.SetActive(false);
+            if (AttackOffHandButton != null) AttackOffHandButton.gameObject.SetActive(false);
             if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
             if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
             if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);

@@ -1582,9 +1582,7 @@ public class CharacterController : MonoBehaviour
             && rangeInfo != null
             && !rangeInfo.IsMelee;
 
-        bool targetInRange = useThrownRange
-            ? IsTargetInThrownWeaponRange(target, equippedWeapon)
-            : IsTargetInCurrentWeaponRange(target);
+        bool targetInRange = IsTargetInWeaponRange(target, equippedWeapon, useThrownRange);
 
         if (!targetInRange)
         {
@@ -2052,6 +2050,23 @@ public class CharacterController : MonoBehaviour
     public ItemData GetDualWieldOffHandWeapon()
     {
         return TryGetDualWieldWeapons(out _, out ItemData offWeapon, out _) ? offWeapon : null;
+    }
+
+    /// <summary>
+    /// Returns true if this character currently has a valid off-hand attack option.
+    /// Valid options: off-hand weapon, shield bash profile, or hands-slot spiked gauntlet.
+    /// </summary>
+    public bool HasOffHandWeaponEquipped()
+    {
+        return TryGetDualWieldWeapons(out _, out ItemData offWeapon, out _) && offWeapon != null;
+    }
+
+    /// <summary>
+    /// Returns the concrete weapon profile used for a separate off-hand attack button.
+    /// </summary>
+    public ItemData GetOffHandAttackWeapon()
+    {
+        return GetDualWieldOffHandWeapon();
     }
 
     /// <summary>
@@ -3518,6 +3533,34 @@ public class CharacterController : MonoBehaviour
         }
 
         return minDist == int.MaxValue ? 0 : minDist;
+    }
+
+    private bool IsTargetInWeaponRange(CharacterController target, ItemData weapon, bool useThrownRange)
+    {
+        if (target == null || target.Stats == null || Stats == null)
+            return false;
+
+        if (useThrownRange)
+            return IsTargetInThrownWeaponRange(target, weapon);
+
+        bool isRanged = weapon != null && weapon.WeaponCat == WeaponCategory.Ranged;
+        if (isRanged)
+        {
+            int distance = GetMinimumDistanceToTargetSquares(target, chebyshev: false);
+            int rangeIncrement = weapon.RangeIncrement;
+            bool isThrownWeapon = weapon.IsThrown;
+
+            if (rangeIncrement > 0)
+            {
+                int distFeet = RangeCalculator.SquaresToFeet(distance);
+                return RangeCalculator.IsWithinMaxRange(distFeet, rangeIncrement, isThrownWeapon);
+            }
+
+            return distance <= Mathf.Max(1, Stats.AttackRange);
+        }
+
+        int meleeDistance = GetMinimumDistanceToTargetSquares(target, chebyshev: true);
+        return CanMeleeAttackDistance(meleeDistance, weapon);
     }
 
     /// <summary>
