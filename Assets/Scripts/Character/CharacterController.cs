@@ -5789,8 +5789,13 @@ public class CharacterController : MonoBehaviour
 
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Overrun") ? 4 : 0);
-        int defTotal = defRoll + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty;
+
+        // D&D 3.5 overrun blocking check: opposed STR checks with size modifiers.
+        // Use grapple-size scale (+/-4 per size category step), not attack/AC size modifier.
+        int atkSizeMod = GetGrappleSizeModifier();
+        int defSizeMod = target.GetGrappleSizeModifier();
+        int atkTotal = atkRoll + Stats.STRMod + atkSizeMod + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Overrun") ? 4 : 0);
+        int defTotal = defRoll + target.Stats.STRMod + defSizeMod + target.Stats.ConditionAttackPenalty;
         bool success = atkTotal >= defTotal;
 
         if (success)

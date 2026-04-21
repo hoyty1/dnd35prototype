@@ -893,10 +893,22 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        if (!actor.HasMeleeWeaponEquipped())
+        // Overrun is a movement-based special attack and does not require a weapon.
+        // Validate that at least one adjacent enemy is a legal overrun target.
+        bool hasValidTarget = false;
+        foreach (CharacterController candidate in GetAllCharacters())
         {
-            reason = "Need melee weapon";
-            Debug.Log($"[Overrun] Requires melee weapon ({actor.Stats.CharacterName})");
+            if (IsValidOverrunTarget(actor, candidate, out _, requireAdjacency: true))
+            {
+                hasValidTarget = true;
+                break;
+            }
+        }
+
+        if (!hasValidTarget)
+        {
+            reason = "No legal target";
+            Debug.Log($"[Overrun] No legal adjacent target ({actor.Stats.CharacterName})");
             return false;
         }
 
@@ -11618,6 +11630,14 @@ public class GameManager : MonoBehaviour
                 ? distance == 1
                 : attacker.CanMeleeAttackDistance(distance);
 
+            if (type == SpecialAttackType.Overrun)
+            {
+                if (!IsValidOverrunTarget(attacker, c.Occupant, out _, requireAdjacency: true))
+                    continue;
+
+                inRange = distance == 1;
+            }
+
             if (inRange)
             {
                 c.SetHighlight(HighlightType.Attack);
@@ -12313,6 +12333,85 @@ public class GameManager : MonoBehaviour
         LogMenuFlow("ExecuteGrappleAction:SCHEDULE_AFTER_ATTACK_DELAY", actor, $"actionType={actionType}, delay={delay:0.00}");
         StartCoroutine(AfterAttackDelay(actor, delay));
     }
+    private bool IsOverrunTargetSizeLegal(CharacterController attacker, CharacterController target, out string reason)
+    {
+        reason = string.Empty;
+        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null)
+        {
+            reason = "Invalid";
+            return false;
+        }
+
+        int sizeDelta = (int)target.GetCurrentSizeCategory() - (int)attacker.GetCurrentSizeCategory();
+        if (sizeDelta > 1)
+        {
+            reason = "Target too large";
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool CanAttackerOccupyDefenderSquareIfVacated(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null || Grid == null)
+            return false;
+
+        Vector2Int destination = target.GridPosition;
+        int attackerSizeSquares = attacker.GetVisualSquaresOccupied();
+
+        // Treat target's occupied footprint as temporarily vacated for legality checks.
+        return Grid.CanPlaceCreature(
+            destination,
+            attackerSizeSquares,
+            ignoreOccupant: attacker,
+            ignoreOtherOccupants: false,
+            additionalIgnoredOccupants: new List<CharacterController> { target });
+    }
+
+    private bool IsValidOverrunTarget(CharacterController attacker, CharacterController target, out string reason, bool requireAdjacency)
+    {
+        reason = string.Empty;
+        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null)
+        {
+            reason = "Invalid";
+            return false;
+        }
+
+        if (attacker == target || target.Stats.IsDead)
+        {
+            reason = "Invalid target";
+            return false;
+        }
+
+        if (!IsEnemyTeam(attacker, target))
+        {
+            reason = "Not enemy";
+            return false;
+        }
+
+        if (!IsOverrunTargetSizeLegal(attacker, target, out reason))
+            return false;
+
+        if (requireAdjacency)
+        {
+            int distance = attacker.GetMinimumDistanceToTarget(target, chebyshev: true);
+            if (distance != 1)
+            {
+                reason = "Not adjacent";
+                return false;
+            }
+        }
+
+        if (!CanAttackerOccupyDefenderSquareIfVacated(attacker, target))
+        {
+            reason = "No room to pass";
+            return false;
+        }
+
+        return true;
+    }
+
     private void HandleOverrunTargetClick(CharacterController attacker, CharacterController target)
     {
         if (attacker == null || target == null || attacker.Stats == null || target.Stats == null)
@@ -12322,6 +12421,13 @@ public class GameManager : MonoBehaviour
         }
 
         Debug.Log($"[Overrun] Attempt: {attacker.Stats.CharacterName} (player={attacker.IsPlayerControlled}) -> {target.Stats.CharacterName} (player={target.IsPlayerControlled})");
+
+        if (!IsValidOverrunTarget(attacker, target, out string invalidReason, requireAdjacency: true))
+        {
+            CombatUI.ShowCombatLog($"⚠ Overrun invalid target: {invalidReason}.");
+            ShowSpecialAttackTargets(attacker, SpecialAttackType.Overrun);
+            return;
+        }
 
         bool attackerHasImprovedOverrun = attacker.Stats.HasFeat("Improved Overrun");
         if (attackerHasImprovedOverrun)
@@ -12382,6 +12488,13 @@ public class GameManager : MonoBehaviour
     {
         if (attacker == null || target == null || attacker.Stats == null || target.Stats == null)
         {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!IsValidOverrunTarget(attacker, target, out string invalidReason, requireAdjacency: true))
+        {
+            CombatUI?.ShowCombatLog($"⚠ Overrun aborted: {invalidReason}.");
             ShowActionChoices();
             return;
         }
