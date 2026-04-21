@@ -11397,7 +11397,7 @@ public class GameManager : MonoBehaviour
         Debug.Log($"[OffHand] Target: {target.Stats.CharacterName}");
         Debug.Log($"[OffHand] Weapon: {offHandWeapon.Name}");
         Debug.Log($"[OffHand] Attack BAB: {attackBab}");
-        Debug.Log($"[OffHand] STR modifier: {attacker.Stats.GetAbilityModifier(AbilityType.Strength)}");
+        Debug.Log($"[OffHand] STR modifier: {attacker.Stats.STRMod}");
         Debug.Log($"[OffHand] Penalty: {_offHandPenalty}");
 
         bool isFlanking = false;
