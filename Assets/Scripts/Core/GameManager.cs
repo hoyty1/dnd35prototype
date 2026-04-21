@@ -5264,22 +5264,10 @@ public class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog($"⚔ {pc.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty}).");
         }
 
-        // Standalone off-hand attack uses standard action.
-        if (!_isInAttackSequence)
-        {
-            if (!pc.CommitStandardAction())
-            {
-                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no standard action available for an off-hand attack.");
-                CombatUI?.UpdateActionButtons(pc);
-                return;
-            }
-
-            Debug.Log("[Attack][OffHand] Consumed standard action for standalone off-hand attack.");
-        }
-        else
-        {
+        // NOTE: Do not consume standard action yet. We consume only after a valid target is selected
+        // so cancelling target selection does not spend the off-hand attack.
+        if (_isInAttackSequence)
             Debug.Log("[Attack][OffHand] Executing during iterative sequence; no additional action cost.");
-        }
 
         int baseBab = pc.Stats != null ? pc.Stats.BaseAttackBonus : 0;
         int offHandPenalty = _isDualWielding ? _offHandPenalty : 0;
@@ -5338,21 +5326,10 @@ public class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog($"⚔ {pc.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty}).");
         }
 
-        if (!_isInAttackSequence)
-        {
-            if (!pc.CommitStandardAction())
-            {
-                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no standard action available for an off-hand thrown attack.");
-                CombatUI?.UpdateActionButtons(pc);
-                return;
-            }
-
-            Debug.Log("[Attack][OffHand][Thrown] Consumed standard action for standalone off-hand thrown attack.");
-        }
-        else
-        {
+        // NOTE: Do not consume standard action yet. We consume only after a valid target is selected
+        // so cancelling target selection does not spend the off-hand thrown attack.
+        if (_isInAttackSequence)
             Debug.Log("[Attack][OffHand][Thrown] Executing during iterative sequence; no additional action cost.");
-        }
 
         int baseBab = pc.Stats != null ? pc.Stats.BaseAttackBonus : 0;
         int offHandPenalty = _isDualWielding ? _offHandPenalty : 0;
@@ -5466,6 +5443,8 @@ public class GameManager : MonoBehaviour
         {
             _isSelectingOffHandTarget = false;
             _isSelectingOffHandThrownTarget = false;
+            _currentOffHandBAB = 0;
+            _currentOffHandWeapon = null;
             string mode = useThrownRange ? "throw" : "melee";
             CombatUI.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no enemies in off-hand {mode} range.");
             StartCoroutine(ReturnToActionChoicesAfterDelay(0.9f));
@@ -11259,12 +11238,13 @@ public class GameManager : MonoBehaviour
         {
             _isSelectingOffHandTarget = false;
             _isSelectingOffHandThrownTarget = false;
+            _currentOffHandBAB = 0;
+            _currentOffHandWeapon = null;
             ShowActionChoices();
             return;
         }
 
         CharacterController target = cell.Occupant;
-        CurrentSubPhase = PlayerSubPhase.Animating;
 
         ItemData offHandWeapon = _currentOffHandWeapon;
         if (offHandWeapon == null)
@@ -11272,12 +11252,33 @@ public class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no off-hand weapon available.");
             _isSelectingOffHandTarget = false;
             _isSelectingOffHandThrownTarget = false;
+            _currentOffHandBAB = 0;
+            _currentOffHandWeapon = null;
             ShowActionChoices();
             return;
         }
 
         bool useThrownRange = _isSelectingOffHandThrownTarget
             || (offHandWeapon.IsThrown && _currentAttackType == AttackType.Thrown);
+
+        if (!_isInAttackSequence)
+        {
+            if (!attacker.CommitStandardAction())
+            {
+                string modeLabel = useThrownRange ? "off-hand thrown attack" : "off-hand attack";
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available for an {modeLabel}.");
+                _isSelectingOffHandTarget = false;
+                _isSelectingOffHandThrownTarget = false;
+                _currentOffHandBAB = 0;
+                _currentOffHandWeapon = null;
+                ShowActionChoices();
+                return;
+            }
+
+            Debug.Log($"[Attack][OffHand] Consumed standard action on confirm for {(useThrownRange ? "thrown" : "melee")} off-hand attack.");
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
 
         Debug.Log($"[Attack][OffHand] Resolving target click attacker={attacker.Stats.CharacterName} target={target.Stats.CharacterName} selectingThrown={_isSelectingOffHandThrownTarget} currentAttackType={_currentAttackType} resolvedMode={(useThrownRange ? "Thrown" : "Melee")} weapon={offHandWeapon.Name}");
 
