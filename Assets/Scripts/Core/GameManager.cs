@@ -10748,15 +10748,22 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // Build threatened squares for AoO-aware pathfinding
-        var threatenedSquares = GetPreviewThreatenedSquares(pc);
+        bool previewAllowThroughEnemies = _isSelectingOverrunDestination;
 
-        // Use AoO-aware A* pathfinder — routes around threatened squares when possible.
+        // Build threatened squares for AoO-aware pathfinding.
+        // Overrun destination preview must show the true overrun path (through enemies),
+        // so we intentionally disable threat-avoidance weighting in that mode.
+        HashSet<Vector2Int> threatenedSquares = previewAllowThroughEnemies
+            ? null
+            : GetPreviewThreatenedSquares(pc);
+
+        // Use AoO-aware A* pathfinder.
+        // - Normal movement preview: avoids threats/enemies when possible.
+        // - Overrun destination preview: allows moving through enemies.
         // Grapple move selection is capped at half speed; post-grapple free reposition is adjacent only.
         int previewMaxRange = _isGrappleMoveSelection
             ? Mathf.Max(1, _grappleMoveMaxRangeSquares)
             : (_isFreeAdjacentGrappleMoveSelection ? 1 : pc.Stats.MoveRange);
-        bool previewAllowThroughEnemies = _isSelectingOverrunDestination;
         var pathResult = Grid.FindPathAoOAware(
             pc.GridPosition,
             gridCoord,
@@ -10766,6 +10773,8 @@ public class GameManager : MonoBehaviour
             pc,
             allowThroughAllies: true,
             allowThroughEnemies: previewAllowThroughEnemies);
+
+        Debug.Log($"[PathPreview] mode={(previewAllowThroughEnemies ? "OverrunThroughEnemies" : "NormalMove")}, from=({pc.GridPosition.x},{pc.GridPosition.y}) to=({gridCoord.x},{gridCoord.y}), threatAware={(threatenedSquares != null)}");
 
         if (pathResult.Path != null && pathResult.Path.Count > 0)
         {
