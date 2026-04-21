@@ -1781,6 +1781,11 @@ public class GameManager : MonoBehaviour
 
         // Grapple test loadout: force a dagger in main hand to validate light-weapon grapple attacks.
         fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.RightHand);
+
+        // Add spare daggers for thrown/off-hand testing so auto-equip has inventory ammo to draw from.
+        for (int i = 0; i < 5; i++)
+            fighterInventory.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
+
         fighterInventory.CharacterInventory.RecalculateStats();
 
         // Keep only one player combatant active for a focused grapple scenario.
