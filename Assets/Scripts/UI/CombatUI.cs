@@ -915,7 +915,8 @@ public class CombatUI : MonoBehaviour
         {
             bool hasOffHandWeapon = pc.HasOffHandWeaponEquipped();
             bool offHandUsed = gm != null && gm.IsOffHandAttackUsedThisTurn(pc);
-            bool showOffHandButton = hasOffHandWeapon && !offHandUsed;
+            bool offHandAvailableThisTurn = gm == null || gm.IsOffHandAttackAvailableThisTurn(pc);
+            bool showOffHandButton = hasOffHandWeapon && !offHandUsed && offHandAvailableThisTurn;
             bool canOffHandAttack = showOffHandButton && gm != null && gm.CanUseOffHandAttackOption(pc) && !isPinned;
 
             AttackOffHandButton.gameObject.SetActive(showOffHandButton);

@@ -158,6 +158,12 @@ public class GameManager : MonoBehaviour
     private int _currentOffHandBAB;
     private ItemData _currentOffHandWeapon;
 
+    // Turn-scoped dual-wield choice state (first main-hand attack prompt)
+    private bool _dualWieldingChoiceMade;
+    private bool _isDualWielding;
+    private int _mainHandPenalty;
+    private int _offHandPenalty;
+
     private bool _skipNextSingleAttackStandardActionCommit;
 
     // Iterative disarm flow state
@@ -2569,7 +2575,15 @@ public class GameManager : MonoBehaviour
         _isSelectingOffHandTarget = false;
         _currentOffHandBAB = 0;
         _currentOffHandWeapon = null;
+
+        // Reset dual-wielding prompt state for this turn.
+        _dualWieldingChoiceMade = false;
+        _isDualWielding = false;
+        _mainHandPenalty = 0;
+        _offHandPenalty = 0;
+
         Debug.Log($"[Turn][OffHand] Turn start for {pc.Stats.CharacterName}: available={_offHandAttackAvailable}");
+        Debug.Log($"[Turn][DualWield] Turn start reset: choiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}, mainPenalty={_mainHandPenalty}, offPenalty={_offHandPenalty}");
 
         // Log turn start in combat log
         CombatUI.ShowCombatLog($"<color=#FFD700>⚔ {pc.Stats.CharacterName}'s turn begins</color>");
@@ -2638,10 +2652,16 @@ public class GameManager : MonoBehaviour
 
         bool hasThrowableWeapon = pc.HasThrowableWeaponEquipped();
         bool hasOffHandWeapon = pc.HasOffHandWeaponEquipped();
-        _offHandAttackAvailable = hasOffHandWeapon;
+
+        // Preserve explicit per-turn disable (e.g., player chose "No" on dual-wield prompt).
+        if (!hasOffHandWeapon)
+            _offHandAttackAvailable = false;
+        else if (!_dualWieldingChoiceMade && !_offHandAttackUsed)
+            _offHandAttackAvailable = true;
+
         bool hasMoreAttacks = _isInAttackSequence && _attackingCharacter == pc && HasMoreAttacksAvailable();
         bool offHandAvailable = CanUseOffHandAttackOption(pc);
-        Debug.Log($"[Actions] Showing choices for {pc.Stats.CharacterName}: hasThrowableWeapon={hasThrowableWeapon}, hasOffHandWeapon={hasOffHandWeapon}, offHandAvailable={offHandAvailable}, inSequence={_isInAttackSequence}, hasMoreAttacks={hasMoreAttacks}, offHandUsed={_offHandAttackUsed}");
+        Debug.Log($"[Actions] Showing choices for {pc.Stats.CharacterName}: hasThrowableWeapon={hasThrowableWeapon}, hasOffHandWeapon={hasOffHandWeapon}, offHandAvailable={offHandAvailable}, offHandGate={_offHandAttackAvailable}, inSequence={_isInAttackSequence}, hasMoreAttacks={hasMoreAttacks}, offHandUsed={_offHandAttackUsed}, dwChoiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}");
 
         LogMenuFlow("ShowActionChoices:ENTER", pc, $"isGrappling={pc.IsGrappling()}, isPinned={pc.IsPinned()}");
 
@@ -4940,6 +4960,8 @@ public class GameManager : MonoBehaviour
         Debug.Log("[Attack][Melee] Melee attack button pressed");
         Debug.Log($"[Attack][Sequence] isInSequence: {_isInAttackSequence}");
         Debug.Log($"[Attack][Sequence] attacksUsed: {_totalAttacksUsed}");
+        Debug.Log($"[Attack][DualWield] choiceMade: {_dualWieldingChoiceMade}");
+        Debug.Log($"[Attack][DualWield] isDualWielding: {_isDualWielding}");
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "attacks"))
             return;
@@ -4955,6 +4977,14 @@ public class GameManager : MonoBehaviour
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot attack: {cannotAttackReason}");
             CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        bool isFirstMainHandAttack = !_isInAttackSequence && _totalAttacksUsed == 0;
+        if (isFirstMainHandAttack && !_dualWieldingChoiceMade && NeedsDualWieldingPrompt(pc))
+        {
+            Debug.Log("[Attack][DualWield] Showing dual wielding prompt before first main-hand attack.");
+            ShowDualWieldingPrompt(pc);
             return;
         }
 
@@ -5001,6 +5031,102 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    private bool NeedsDualWieldingPrompt(CharacterController attacker)
+    {
+        if (attacker == null)
+            return false;
+
+        ItemData mainHandWeapon = attacker.GetEquippedMainWeapon();
+        ItemData offHandWeapon = attacker.GetOffHandAttackWeapon();
+
+        bool hasMainHandWeapon = mainHandWeapon != null;
+        bool hasOffHandWeapon = offHandWeapon != null;
+        bool needsPrompt = hasMainHandWeapon && hasOffHandWeapon;
+
+        Debug.Log($"[Attack][DualWield] hasMainHandWeapon: {hasMainHandWeapon} ({mainHandWeapon?.Name ?? "none"})");
+        Debug.Log($"[Attack][DualWield] hasOffHandWeapon: {hasOffHandWeapon} ({offHandWeapon?.Name ?? "none"})");
+        Debug.Log($"[Attack][DualWield] needsPrompt: {needsPrompt}");
+
+        return needsPrompt;
+    }
+
+    private void ShowDualWieldingPrompt(CharacterController attacker)
+    {
+        if (attacker == null)
+            return;
+
+        string message = "You have weapons in both hands.\nDo you want to dual wield?\n\n"
+            + "Yes: Apply dual-wield penalties, off-hand attack available\n"
+            + "No: No penalties, off-hand attack unavailable this round";
+
+        CombatUI?.ShowConfirmationDialog(
+            title: "Dual wield?",
+            message: message,
+            confirmLabel: "Yes",
+            cancelLabel: "No",
+            onConfirm: () => OnDualWieldingChoiceSelected(attacker, true),
+            onCancel: () => OnDualWieldingChoiceSelected(attacker, false));
+    }
+
+    private void OnDualWieldingChoiceSelected(CharacterController attacker, bool dualWield)
+    {
+        if (attacker == null)
+            return;
+
+        Debug.Log($"[Attack][DualWield] Choice selected: {(dualWield ? "Yes" : "No")}");
+
+        _dualWieldingChoiceMade = true;
+
+        if (dualWield)
+        {
+            _isDualWielding = true;
+            CalculateDualWieldingPenalties(attacker);
+            _offHandAttackAvailable = attacker.HasOffHandWeaponEquipped();
+
+            Debug.Log("[Attack][DualWield] Dual wielding enabled");
+            Debug.Log($"[Attack][DualWield] Main hand penalty: {_mainHandPenalty}");
+            Debug.Log($"[Attack][DualWield] Off-hand penalty: {_offHandPenalty}");
+
+            CombatUI?.ShowCombatLog($"⚔ {attacker.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty}).");
+        }
+        else
+        {
+            _isDualWielding = false;
+            _mainHandPenalty = 0;
+            _offHandPenalty = 0;
+            _offHandAttackAvailable = false;
+
+            Debug.Log("[Attack][DualWield] Dual wielding disabled");
+            Debug.Log("[Attack][DualWield] Off-hand attack unavailable this round");
+
+            CombatUI?.ShowCombatLog($"⚔ {attacker.Stats.CharacterName} fights with main hand only (no dual-wield penalties). Off-hand attack disabled for this round.");
+        }
+
+        _pendingDefensiveAttackSelection = false;
+        attacker.SetFightingDefensively(false);
+        StartAttackSequence(attacker, AttackType.Melee);
+    }
+
+    private void CalculateDualWieldingPenalties(CharacterController attacker)
+    {
+        if (attacker == null)
+        {
+            _mainHandPenalty = 0;
+            _offHandPenalty = 0;
+            return;
+        }
+
+        var (mainPenalty, offPenalty, lightOffHand) = attacker.GetDualWieldPenalties();
+        bool hasTWF = attacker.Stats != null && attacker.Stats.HasFeat("Two-Weapon Fighting");
+
+        _mainHandPenalty = mainPenalty;
+        _offHandPenalty = offPenalty;
+
+        Debug.Log($"[Attack][DualWield] hasTWF: {hasTWF}");
+        Debug.Log($"[Attack][DualWield] isLightOffHand: {lightOffHand}");
+        Debug.Log($"[Attack][DualWield] Penalties computed: main={_mainHandPenalty}, off={_offHandPenalty}");
+    }
+
     public void OnOffHandAttackButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -5038,6 +5164,17 @@ public class GameManager : MonoBehaviour
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
 
+        // If off-hand is the first attack this turn, auto-enable dual wielding.
+        if (!_dualWieldingChoiceMade)
+        {
+            Debug.Log("[Attack][OffHand] First attack is off-hand, automatically enabling dual wielding.");
+            _dualWieldingChoiceMade = true;
+            _isDualWielding = true;
+            CalculateDualWieldingPenalties(pc);
+            _offHandAttackAvailable = true;
+            CombatUI?.ShowCombatLog($"⚔ {pc.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty}).");
+        }
+
         // Standalone off-hand attack uses standard action.
         if (!_isInAttackSequence)
         {
@@ -5056,23 +5193,13 @@ public class GameManager : MonoBehaviour
         }
 
         int baseBab = pc.Stats != null ? pc.Stats.BaseAttackBonus : 0;
-        int offHandPenalty = GetOffHandAttackPenalty(pc, offHandWeapon);
+        int offHandPenalty = _isDualWielding ? _offHandPenalty : 0;
         _currentOffHandBAB = baseBab + offHandPenalty;
         _currentOffHandWeapon = offHandWeapon;
 
         Debug.Log($"[Attack][OffHand] weapon={offHandWeapon.Name} baseBAB={baseBab} penalty={offHandPenalty} attackBAB={_currentOffHandBAB}");
 
         BeginOffHandTargetSelection(pc);
-    }
-
-    private int GetOffHandAttackPenalty(CharacterController attacker, ItemData offHandWeapon)
-    {
-        bool hasTwoWeaponFighting = attacker != null && attacker.Stats != null && attacker.Stats.HasFeat("Two-Weapon Fighting");
-        bool isLightWeapon = offHandWeapon != null && offHandWeapon.IsLightWeapon;
-        int penalty = hasTwoWeaponFighting ? -2 : -5;
-
-        Debug.Log($"[Attack][OffHand] Penalty calc: hasTWF={hasTwoWeaponFighting}, isLightWeapon={isLightWeapon}, penalty={penalty}");
-        return penalty;
     }
 
     private void BeginOffHandTargetSelection(CharacterController attacker)
@@ -5235,7 +5362,7 @@ public class GameManager : MonoBehaviour
             return false;
 
         if (!_offHandAttackAvailable)
-            _offHandAttackAvailable = hasOffHandWeapon;
+            return false;
 
         if (_isInAttackSequence && _attackingCharacter == actor)
             return true;
@@ -5247,6 +5374,14 @@ public class GameManager : MonoBehaviour
     public bool IsOffHandAttackUsedThisTurn(CharacterController actor)
     {
         return actor != null && actor == ActivePC && _offHandAttackUsed;
+    }
+
+    public bool IsOffHandAttackAvailableThisTurn(CharacterController actor)
+    {
+        return actor != null
+            && actor == ActivePC
+            && _offHandAttackAvailable
+            && actor.HasOffHandWeaponEquipped();
     }
 
     private AttackType GetDefaultAttackType(CharacterController actor)
@@ -5373,12 +5508,21 @@ public class GameManager : MonoBehaviour
         }
 
         int attackNumber = _totalAttacksUsed + 1;
-        int attackBab = attacker.GetIterativeAttackBAB(_totalAttacksUsed);
+        int baseBab = attacker.GetIterativeAttackBAB(_totalAttacksUsed);
+        int attackBab = baseBab;
+
+        // Apply dual-wield penalty to main-hand iterative attacks.
+        if (_isDualWielding && (attackType == AttackType.Melee || attackType == AttackType.Thrown))
+        {
+            attackBab += _mainHandPenalty;
+            Debug.Log($"[Attack][DualWield] Applying main-hand penalty: {_mainHandPenalty}");
+        }
+
         _currentAttackBAB = attackBab;
         _currentAttackType = attackType;
 
         Debug.Log($"[Attack][Sequence] Performing attack #{attackNumber}/{_totalAttackBudget}");
-        Debug.Log($"[Attack][Sequence] Attack type: {attackType}, BAB: {attackBab}");
+        Debug.Log($"[Attack][Sequence] Attack type: {attackType}, Base BAB: {baseBab}, Final BAB: {attackBab}");
 
         _pendingAttackMode = PendingAttackMode.Single;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
@@ -5430,6 +5574,11 @@ public class GameManager : MonoBehaviour
         _isSelectingOffHandTarget = false;
         _currentOffHandBAB = 0;
         _currentOffHandWeapon = null;
+
+        _dualWieldingChoiceMade = false;
+        _isDualWielding = false;
+        _mainHandPenalty = 0;
+        _offHandPenalty = 0;
     }
 
     private bool CanUseImprovedFeintAsMove(CharacterController actor)
@@ -10911,7 +11060,10 @@ public class GameManager : MonoBehaviour
             true);
 
         string babLabel = CharacterStats.FormatMod(_currentOffHandBAB);
-        CombatUI?.ShowCombatLog($"↻ Off-Hand Attack (BAB {babLabel}) with {offHandWeapon.Name}");
+        string offHandPenaltyInfo = _isDualWielding
+            ? $", dual-wield penalty {CharacterStats.FormatMod(_offHandPenalty)}"
+            : string.Empty;
+        CombatUI?.ShowCombatLog($"↻ Off-Hand Attack (BAB {babLabel}{offHandPenaltyInfo}) with {offHandWeapon.Name}");
 
         _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
         CombatUI?.ShowCombatLog(_lastCombatLog);
@@ -13001,7 +13153,10 @@ public class GameManager : MonoBehaviour
 
         int attackNumber = _totalAttacksUsed + 1;
         string modeLabel = _currentAttackType == AttackType.Thrown ? "Thrown" : "Melee";
-        CombatUI?.ShowCombatLog($"↻ Attack #{attackNumber}/{_totalAttackBudget} ({modeLabel}) at BAB {CharacterStats.FormatMod(_currentAttackBAB)}");
+        string dwPenaltyInfo = _isDualWielding && (_currentAttackType == AttackType.Melee || _currentAttackType == AttackType.Thrown)
+            ? $", dual-wield penalty {CharacterStats.FormatMod(_mainHandPenalty)}"
+            : string.Empty;
+        CombatUI?.ShowCombatLog($"↻ Attack #{attackNumber}/{_totalAttackBudget} ({modeLabel}) at BAB {CharacterStats.FormatMod(_currentAttackBAB)}{dwPenaltyInfo}");
 
         _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
 
@@ -13055,8 +13210,12 @@ public class GameManager : MonoBehaviour
 
         if (HasMoreAttacksAvailable())
         {
-            _currentAttackBAB = attacker.GetIterativeAttackBAB(_totalAttacksUsed);
-            Debug.Log($"[Attack][Sequence] Next attack BAB prepared: {_currentAttackBAB}");
+            int nextBaseBab = attacker.GetIterativeAttackBAB(_totalAttacksUsed);
+            _currentAttackBAB = nextBaseBab;
+            if (_isDualWielding && (_currentAttackType == AttackType.Melee || _currentAttackType == AttackType.Thrown))
+                _currentAttackBAB += _mainHandPenalty;
+
+            Debug.Log($"[Attack][Sequence] Next attack BAB prepared: base={nextBaseBab}, final={_currentAttackBAB}");
             Debug.Log("[Attack][Sequence] More attacks available, returning to action menu");
         }
         else
