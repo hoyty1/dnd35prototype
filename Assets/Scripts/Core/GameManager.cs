@@ -5389,6 +5389,17 @@ public class GameManager : MonoBehaviour
         bool anyFlanking = false;
         List<CharacterController> allCombatants = GetAllCharacters();
 
+        bool hasValidThrownWeapon = useThrownRange
+            && offHandWeapon != null
+            && offHandWeapon.IsThrown
+            && offHandWeapon.RangeIncrement > 0;
+
+        if (hasValidThrownWeapon)
+        {
+            int maxRangeSquares = RangeCalculator.GetMaxRangeSquares(offHandWeapon.RangeIncrement, true);
+            ShowRangeZoneHighlights(attacker, offHandWeapon.RangeIncrement, maxRangeSquares, true);
+        }
+
         foreach (CharacterController candidate in allCombatants)
         {
             if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
@@ -5399,7 +5410,7 @@ public class GameManager : MonoBehaviour
             bool inRange;
             if (useThrownRange)
             {
-                if (offHandWeapon == null || !offHandWeapon.IsThrown || offHandWeapon.RangeIncrement <= 0)
+                if (!hasValidThrownWeapon)
                     continue;
 
                 int sqDist = attacker.GetMinimumDistanceToTarget(candidate, chebyshev: false);
@@ -5436,9 +5447,13 @@ public class GameManager : MonoBehaviour
             string weaponName = offHandWeapon != null ? offHandWeapon.Name : "Off-hand";
             if (useThrownRange)
             {
-                string rangeText = offHandWeapon != null
-                    ? $" ({offHandWeapon.RangeIncrement} ft increment)"
-                    : string.Empty;
+                string rangeText = string.Empty;
+                if (hasValidThrownWeapon)
+                {
+                    int maxRangeFeet = RangeCalculator.GetMaxRangeFeet(offHandWeapon.RangeIncrement, true);
+                    rangeText = $" ({offHandWeapon.RangeIncrement} ft increment, max {maxRangeFeet} ft)";
+                }
+
                 CombatUI.SetTurnIndicator($"OFF-HAND THROWN ATTACK ({weaponName}){rangeText}: Click an enemy to attack!");
             }
             else
