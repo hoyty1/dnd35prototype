@@ -11351,14 +11351,17 @@ public class GameManager : MonoBehaviour
 
         if (!_isInAttackSequence)
         {
-            bool shouldConsumeStandardAction = !attacker.Actions.FullRoundActionUsed;
+            // Off-hand attacks are controlled by the dedicated off-hand availability gate.
+            // Do not hard-block confirmation if no standard action remains after a completed
+            // main-hand full-attack sequence.
+            bool shouldConsumeStandardAction = attacker.Actions.HasStandardAction && !attacker.Actions.FullRoundActionUsed;
             if (shouldConsumeStandardAction)
             {
                 if (!attacker.CommitStandardAction())
                 {
-                    Debug.Log("[OffHand] Early return: no standard action available at confirm-time.");
+                    Debug.Log("[OffHand] Early return: failed to consume standard action at confirm-time.");
                     string modeLabel = useThrownRange ? "off-hand thrown attack" : "off-hand attack";
-                    CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available for an {modeLabel}.");
+                    CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} could not commit a standard action for an {modeLabel}.");
                     _isSelectingOffHandTarget = false;
                     _isSelectingOffHandThrownTarget = false;
                     _currentOffHandBAB = 0;
@@ -11371,7 +11374,7 @@ public class GameManager : MonoBehaviour
             }
             else
             {
-                Debug.Log($"[Attack][OffHand] Skipping standard action consumption because full-round action is already committed for {attacker.Stats.CharacterName}.");
+                Debug.Log($"[Attack][OffHand] Skipping standard action consumption (hasStandard={attacker.Actions.HasStandardAction}, fullRoundUsed={attacker.Actions.FullRoundActionUsed}, offHandAvailable={_offHandAttackAvailableThisTurn}, offHandUsed={_offHandAttackUsedThisTurn}).");
             }
         }
 
