@@ -742,6 +742,42 @@ public class CombatUI : MonoBehaviour
     }
     // ========== ACTION ECONOMY UI ==========
 
+    private bool HideStandaloneDisarmButtonsInMainActions()
+    {
+        if (ActionPanel == null)
+            return false;
+
+        bool standaloneDisarmWasVisible = false;
+        Button[] allButtons = ActionPanel.GetComponentsInChildren<Button>(true);
+        foreach (Button button in allButtons)
+        {
+            if (button == null)
+                continue;
+
+            bool isLikelyDisarmButton = button.name == "Disarm"
+                || button.name == "DisarmBtn"
+                || button.name == "DisarmButton"
+                || button.name.Contains("StandaloneDisarm");
+            if (!isLikelyDisarmButton)
+                continue;
+
+            bool isSpecialAttackMenuDisarm = _specialAttackPanel != null && button.transform.IsChildOf(_specialAttackPanel.transform);
+            if (isSpecialAttackMenuDisarm)
+                continue;
+
+            if (button.gameObject.activeSelf || button.interactable)
+            {
+                standaloneDisarmWasVisible = true;
+                Debug.LogWarning($"[CombatUI][Actions] Suppressing standalone Disarm button '{button.name}' from main actions. Disarm must be chosen via Special Attack menu.");
+            }
+
+            button.gameObject.SetActive(false);
+            button.interactable = false;
+        }
+
+        return standaloneDisarmWasVisible;
+    }
+
     /// <summary>
     /// Update the action panel buttons based on the current action economy state.
     /// </summary>
@@ -1031,6 +1067,9 @@ public class CombatUI : MonoBehaviour
                     spLabel.text = "Special Attack (Used)";
             }
         }
+
+        bool standaloneDisarmWasVisible = HideStandaloneDisarmButtonsInMainActions();
+        Debug.Log($"[CombatUI][Actions] actor={pc.Stats.CharacterName} specialAttackVisible={(SpecialAttackButton != null && SpecialAttackButton.gameObject.activeSelf)} specialAttackInteractable={(SpecialAttackButton != null && SpecialAttackButton.interactable)} disarmViaSpecialAvailable={hasIterativeDisarmAttackInSequence} standaloneDisarmSuppressed={standaloneDisarmWasVisible}");
 
         if (GrappleActionsButton != null)
         {

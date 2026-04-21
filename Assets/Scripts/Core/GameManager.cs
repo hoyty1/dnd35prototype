@@ -2852,7 +2852,7 @@ public class GameManager : MonoBehaviour
             {
                 int attacksRemaining = GetRemainingDisarmAttackActions(pc);
                 int nextBab = GetCurrentDisarmAttackBonus(pc);
-                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Disarm-capable attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Disarm or End Turn.");
+                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Disarm-capable attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Special Attack → Disarm, or End Turn.");
             }
             else if (IsHoldingTouchCharge(pc))
             {
@@ -6157,11 +6157,13 @@ public class GameManager : MonoBehaviour
 
         bool hasIterativeGrappleAttackInSequence = actor.HasRemainingIterativeGrappleAttacksInSequence();
         bool hasIterativeBullRushAttackInSequence = actor.HasRemainingIterativeBullRushAttacksInSequence();
+        bool hasDisarmAttackAvailable = CanUseDisarmAttackOption(actor);
         return actor.Actions.HasStandardAction
             || actor.Actions.HasFullRoundAction
             || CanUseImprovedFeintAsMove(actor)
             || hasIterativeGrappleAttackInSequence
-            || hasIterativeBullRushAttackInSequence;
+            || hasIterativeBullRushAttackInSequence
+            || hasDisarmAttackAvailable;
     }
 
     private bool TryConsumeFeintAction(CharacterController attacker, out string actionLabel)
@@ -6194,7 +6196,7 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         bool canOpen = pc != null && CanOpenSpecialAttackMenu(pc);
-        Debug.Log($"[GameManager][SpecialAttack] ButtonPressed actor={(pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>")} canOpen={canOpen} phase={CurrentPhase} subPhase={CurrentSubPhase} std={(pc != null ? pc.Actions.HasStandardAction : false)} iterativeGrapple={(pc != null ? pc.HasRemainingIterativeGrappleAttacksInSequence() : false)} iterativeBullRush={(pc != null ? pc.HasRemainingIterativeBullRushAttacksInSequence() : false)}");
+        Debug.Log($"[GameManager][SpecialAttack] ButtonPressed actor={(pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>")} canOpen={canOpen} phase={CurrentPhase} subPhase={CurrentSubPhase} std={(pc != null ? pc.Actions.HasStandardAction : false)} full={(pc != null ? pc.Actions.HasFullRoundAction : false)} iterativeGrapple={(pc != null ? pc.HasRemainingIterativeGrappleAttacksInSequence() : false)} iterativeBullRush={(pc != null ? pc.HasRemainingIterativeBullRushAttacksInSequence() : false)} disarmAvailable={(pc != null ? CanUseDisarmAttackOption(pc) : false)}");
         if (!canOpen) return;
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "special attacks"))
