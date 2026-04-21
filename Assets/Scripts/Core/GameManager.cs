@@ -2803,8 +2803,8 @@ public class GameManager : MonoBehaviour
             }
             else
             {
-                CombatUI.SetTurnIndicator($"{pcName}'s Turn - No actions remaining");
-                StartCoroutine(DelayedEndActivePCTurn(1.0f));
+                CombatUI.SetTurnIndicator($"{pcName}'s Turn - No actions remaining. Click End Turn when ready.");
+                Debug.Log($"[TurnFlow] {pcName} has no main actions left; waiting for manual End Turn.");
             }
         }
         LogMenuFlow("ShowActionChoices:EXIT", pc, $"hasAnyActionLeft={pc.Actions.HasAnyActionLeft}");
@@ -5575,6 +5575,21 @@ public class GameManager : MonoBehaviour
 
         if (_isInAttackSequence && _attackingCharacter == actor)
             return true;
+
+        // Dual-wield full-round flow: after main-hand iterative attacks finish,
+        // still allow one off-hand attack even though standard/move are consumed.
+        bool fullRoundMainHandSequenceCompleted = actor == ActivePC
+            && actor.Actions.FullRoundActionUsed
+            && _dualWieldingChoiceMade
+            && _isDualWielding
+            && _totalAttackBudget > 0
+            && _totalAttacksUsed >= _totalAttackBudget;
+
+        if (fullRoundMainHandSequenceCompleted)
+        {
+            Debug.Log($"[Attack][OffHand] Allowing off-hand after main-hand full-round completion for {actor.Stats.CharacterName}.");
+            return true;
+        }
 
         // When not in iterative sequence, off-hand consumes a standard action.
         return actor.Actions.HasStandardAction;
@@ -13526,6 +13541,14 @@ public class GameManager : MonoBehaviour
         else
         {
             Debug.Log("[Attack][Sequence] All attacks exhausted");
+
+            bool offHandAvailableNow = CanUseOffHandAttackOption(attacker);
+            bool offHandThrownAvailableNow = CanUseOffHandThrownAttackOption(attacker);
+            Debug.Log($"[Attack] All main hand attacks used ({_totalAttacksUsed}/{_totalAttackBudget})");
+            Debug.Log($"[Attack] Off-hand attack available: {offHandAvailableNow}");
+            Debug.Log($"[Attack] Off-hand thrown attack available: {offHandThrownAvailableNow}");
+            Debug.Log($"[Attack] Off-hand attack used: {_offHandAttackUsed}");
+
             EndAttackSequence();
         }
 
@@ -13949,6 +13972,16 @@ public class GameManager : MonoBehaviour
     {
         if (character == null)
             return true;
+
+        if (character.IsPlayerControlled)
+        {
+            bool offHandAvailable = CanUseOffHandAttackOption(character);
+            bool offHandThrownAvailable = CanUseOffHandThrownAttackOption(character);
+            Debug.Log($"[TurnFlow] ShouldAutoEndTurn=false for player {character.Stats.CharacterName}. " +
+                      $"Manual End Turn required. offHandAvailable={offHandAvailable} offHandThrownAvailable={offHandThrownAvailable} " +
+                      $"offHandGate={_offHandAttackAvailable} offHandUsed={_offHandAttackUsed} attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}");
+            return false;
+        }
 
         bool hasRemainingIterativeGrappleAttacks = character.HasRemainingIterativeGrappleAttacksInSequence();
         bool hasRemainingIterativeBullRushAttacks = character.HasRemainingIterativeBullRushAttacksInSequence();
