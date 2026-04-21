@@ -778,7 +778,7 @@ public class CombatUI : MonoBehaviour
         {
             bool canMoveByActions = actions.HasMoveAction || actions.CanConvertStandardToMove;
             bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
-            bool blockedByIterativeAttackSequence = iterativeWeaponFullRoundStage;
+            bool blockedByIterativeAttackSequence = iterativeWeaponFullRoundStage || (gm != null && gm.IsIterativeThrownAttackInFullRoundStage(pc));
             bool canMove = canMoveByActions && !blockedByFiveFootStep && !blockedByIterativeAttackSequence && !isProne && !isPinned;
 
             MoveButton.gameObject.SetActive(true);
@@ -845,6 +845,8 @@ public class CombatUI : MonoBehaviour
         bool hasStandardAttack = actions.HasStandardAction;
         bool canContinueIterativeAttack = iterativeWeaponSequenceActive;
         bool hasThrowableMeleeWeapon = gm != null && gm.HasThrowableMeleeWeaponEquipped(pc);
+        bool iterativeThrownSequenceActive = gm != null && gm.IsIterativeThrownAttackSequenceActiveFor(pc);
+        bool iterativeThrownFullRoundStage = gm != null && gm.IsIterativeThrownAttackInFullRoundStage(pc);
 
         if (AttackButton != null)
         {
@@ -884,7 +886,7 @@ public class CombatUI : MonoBehaviour
 
         if (AttackThrownButton != null)
         {
-            bool showThrownButton = hasThrowableMeleeWeapon && (hasStandardAttack || canContinueIterativeAttack) && !isPinned;
+            bool showThrownButton = hasThrowableMeleeWeapon && (hasStandardAttack || iterativeThrownSequenceActive) && !isPinned;
             bool canThrowAttack = showThrownButton
                 && gm != null
                 && gm.CanUseThrownAttackOption(pc)
@@ -896,7 +898,10 @@ public class CombatUI : MonoBehaviour
             Text thrownLabel = AttackThrownButton.GetComponentInChildren<Text>();
             if (thrownLabel != null)
             {
-                thrownLabel.text = canAttackWithWeapon ? "Attack (Thrown)" : "Attack (Thrown - Reload first)";
+                if (!canAttackWithWeapon)
+                    thrownLabel.text = "Attack (Thrown - Reload first)";
+                else
+                    thrownLabel.text = iterativeThrownFullRoundStage ? "Attack (Thrown - Full Round)" : "Attack (Thrown)";
             }
         }
 

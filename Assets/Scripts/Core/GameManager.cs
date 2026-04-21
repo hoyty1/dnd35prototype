@@ -153,6 +153,16 @@ public class GameManager : MonoBehaviour
     private int _currentIterativeAttackBAB;
     private bool _currentIterativeAttackIsMainHand = true;
     private int _currentIterativeAttackIndex;
+
+    // Iterative thrown-attack flow state (Thrown button only)
+    private bool _isIterativeThrownAttackSequenceActive;
+    private CharacterController _iterativeThrownAttackInitiator;
+    private ItemData _iterativeThrownWeapon;
+    private int _iterativeThrownAttackNumber; // 0-based throws already performed
+    private int _iterativeThrownAttackBudget;
+    private bool _iterativeThrownAttackConsumesFullRound;
+    private int _currentThrownAttackBAB;
+
     private bool _skipNextSingleAttackStandardActionCommit;
 
     // Iterative disarm flow state
@@ -2579,6 +2589,7 @@ public class GameManager : MonoBehaviour
         }
 
         EndAttackSequence();
+        EndThrownAttackSequence();
         pc.StartNewTurn();
         _loggedHeldChargeNoActionsReminder = false;
 
@@ -2719,6 +2730,18 @@ public class GameManager : MonoBehaviour
                 else
                 {
                     CombatUI.SetTurnIndicator($"{pcName}'s Turn - Iterative attack sequence complete. You may still use free actions/special toggles or End Turn.");
+                }
+            }
+            else if (_isIterativeThrownAttackSequenceActive && _iterativeThrownAttackInitiator == pc)
+            {
+                if (HasMoreThrowsAvailable())
+                {
+                    int throwsRemaining = _iterativeThrownAttackBudget - _iterativeThrownAttackNumber;
+                    CombatUI.SetTurnIndicator($"{pcName}'s Turn - Thrown iterative attacks remaining: {throwsRemaining} (next BAB {CharacterStats.FormatMod(_currentThrownAttackBAB)}). Use Attack (Thrown - Full Round) or End Turn.");
+                }
+                else
+                {
+                    CombatUI.SetTurnIndicator($"{pcName}'s Turn - Thrown sequence complete. You may still use free actions/special toggles or End Turn.");
                 }
             }
             else if (pc.HasRemainingIterativeGrappleAttacksInSequence())
@@ -4701,6 +4724,12 @@ public class GameManager : MonoBehaviour
         if (pc == null)
             return;
 
+        if (_isIterativeThrownAttackSequenceActive)
+        {
+            Debug.Log("[Attack][Melee] Ending thrown sequence to start melee attack sequence.");
+            EndThrownAttackSequence();
+        }
+
         _currentAttackType = GetDefaultAttackType(pc);
         Debug.Log($"[Attack][Flow] Attack ({_currentAttackType}) button pressed actor={pc.Stats.CharacterName} active={_isIterativeAttackSequenceActive} used={_iterativeAttackNumber}");
 
@@ -4740,52 +4769,34 @@ public class GameManager : MonoBehaviour
         if (pc == null)
             return;
 
+        if (_isIterativeAttackSequenceActive)
+        {
+            Debug.Log("[Attack][Thrown] Ending melee sequence to start thrown sequence.");
+            EndAttackSequence();
+        }
+
         _currentAttackType = AttackType.Thrown;
-        Debug.Log($"[Attack][Thrown] Attack (Thrown) button pressed actor={pc.Stats.CharacterName} active={_isIterativeAttackSequenceActive} used={_iterativeAttackNumber}");
+        Debug.Log("[Attack][Thrown] Thrown attack button pressed");
+        Debug.Log($"[Attack][Thrown] actor={pc.Stats.CharacterName}");
+        Debug.Log($"[Attack][Thrown] isInSequence={_isIterativeThrownAttackSequenceActive}");
+        Debug.Log($"[Attack][Thrown] attacksUsed={_iterativeThrownAttackNumber}");
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "thrown attacks"))
             return;
 
-        ItemData weapon = pc.GetEquippedWeapon();
-        if (weapon == null || !weapon.IsThrown || weapon.RangeIncrement <= 0)
-        {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no throwable weapon equipped.");
-            CombatUI?.UpdateActionButtons(pc);
-            ShowActionChoices();
-            return;
-        }
-
-        if (!pc.CanAttackWithWeapon(weapon, out string cannotAttackReason))
-        {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot throw: {cannotAttackReason}");
-            CombatUI?.UpdateActionButtons(pc);
-            return;
-        }
-
-        bool consumingIterativeRemainder = _isIterativeAttackSequenceActive
-            && _iterativeAttackInitiator == pc
-            && HasMoreAttacksAvailable();
-
-        if (consumingIterativeRemainder)
-        {
-            Debug.Log($"[Attack][Thrown] Ending melee iterative sequence to switch to thrown attack.");
-            EndAttackSequence();
-            _skipNextSingleAttackStandardActionCommit = true;
-        }
-        else if (!CanThrowWeapon(pc))
-        {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no standard action available to throw.");
-            CombatUI?.UpdateActionButtons(pc);
-            return;
-        }
-
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
-        _pendingAttackMode = PendingAttackMode.Single;
-        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
 
-        Debug.Log($"[Attack][Thrown] {pc.Stats.CharacterName} is selecting a target to throw {weapon.Name}.");
-        ShowAttackTargets(pc);
+        if (!_isIterativeThrownAttackSequenceActive)
+        {
+            Debug.Log("[Attack][Thrown] Starting new thrown attack sequence");
+            StartThrownAttackSequence(pc);
+        }
+        else
+        {
+            Debug.Log("[Attack][Thrown] Continuing thrown attack sequence");
+            ContinueThrownAttackSequence(pc);
+        }
     }
 
     public bool IsIterativeAttackSequenceActiveFor(CharacterController actor)
@@ -4809,6 +4820,19 @@ public class GameManager : MonoBehaviour
         return usingUnarmedStrike ? $"Attack (Standard, {attackSourceLabel})" : "Attack (Standard)";
     }
 
+    public bool IsIterativeThrownAttackSequenceActiveFor(CharacterController actor)
+    {
+        return actor != null
+            && _isIterativeThrownAttackSequenceActive
+            && _iterativeThrownAttackInitiator == actor
+            && HasMoreThrowsAvailable();
+    }
+
+    public bool IsIterativeThrownAttackInFullRoundStage(CharacterController actor)
+    {
+        return IsIterativeThrownAttackSequenceActiveFor(actor) && _iterativeThrownAttackConsumesFullRound;
+    }
+
     private bool CanAttack(CharacterController actor)
     {
         if (actor == null)
@@ -4829,6 +4853,9 @@ public class GameManager : MonoBehaviour
         if (weapon == null || !weapon.IsThrown || weapon.RangeIncrement <= 0)
             return false;
 
+        if (_isIterativeThrownAttackSequenceActive)
+            return _iterativeThrownAttackInitiator == actor && HasMoreThrowsAvailable();
+
         return actor.Actions != null && actor.Actions.HasStandardAction;
     }
 
@@ -4837,11 +4864,7 @@ public class GameManager : MonoBehaviour
         if (actor == null)
             return false;
 
-        bool inIterativeSequence = _isIterativeAttackSequenceActive
-            && _iterativeAttackInitiator == actor
-            && HasMoreAttacksAvailable();
-
-        return inIterativeSequence || CanThrowWeapon(actor);
+        return CanThrowWeapon(actor);
     }
 
     public bool HasThrowableMeleeWeaponEquipped(CharacterController actor)
@@ -4961,6 +4984,112 @@ public class GameManager : MonoBehaviour
         _currentIterativeAttackBAB = 0;
         _currentIterativeAttackIsMainHand = true;
         _currentIterativeAttackIndex = 0;
+    }
+
+    private void StartThrownAttackSequence(CharacterController attacker)
+    {
+        if (attacker == null)
+            return;
+
+        _iterativeThrownAttackInitiator = attacker;
+        _iterativeThrownWeapon = attacker.GetEquippedWeapon();
+
+        if (_iterativeThrownWeapon == null || !_iterativeThrownWeapon.IsThrown || _iterativeThrownWeapon.RangeIncrement <= 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no throwable weapon equipped!");
+            EndThrownAttackSequence();
+            ShowActionChoices();
+            return;
+        }
+
+        if (!attacker.CanAttackWithWeapon(_iterativeThrownWeapon, out string cannotAttackReason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot throw: {cannotAttackReason}");
+            EndThrownAttackSequence();
+            ShowActionChoices();
+            return;
+        }
+
+        if (!attacker.CommitStandardAction())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available to throw.");
+            EndThrownAttackSequence();
+            ShowActionChoices();
+            return;
+        }
+
+        _iterativeThrownAttackBudget = Mathf.Max(1, attacker.GetIterativeAttackCount());
+        _iterativeThrownAttackNumber = 0;
+        _isIterativeThrownAttackSequenceActive = true;
+        _iterativeThrownAttackConsumesFullRound = false;
+
+        Debug.Log($"[Attack][Thrown] {attacker.Stats.CharacterName} starting thrown attack sequence");
+        Debug.Log($"[Attack][Thrown] Total throws available={_iterativeThrownAttackBudget}");
+
+        PerformSingleThrow(attacker);
+    }
+
+    private void ContinueThrownAttackSequence(CharacterController attacker)
+    {
+        if (attacker == null)
+            return;
+
+        if (!_isIterativeThrownAttackSequenceActive || _iterativeThrownAttackInitiator != attacker)
+        {
+            Debug.LogWarning($"[Attack][Thrown] Continue requested with stale thrown sequence for {attacker.Stats.CharacterName}; restarting.");
+            StartThrownAttackSequence(attacker);
+            return;
+        }
+
+        Debug.Log($"[Attack][Thrown] {attacker.Stats.CharacterName} continuing thrown sequence used={_iterativeThrownAttackNumber}/{_iterativeThrownAttackBudget}");
+        PerformSingleThrow(attacker);
+    }
+
+    private void PerformSingleThrow(CharacterController attacker)
+    {
+        if (attacker == null)
+            return;
+
+        if (!HasMoreThrowsAvailable())
+        {
+            Debug.Log("[Attack][Thrown] No throws available while preparing; ending sequence.");
+            EndThrownAttackSequence();
+            ShowActionChoices();
+            return;
+        }
+
+        int attackNumber = _iterativeThrownAttackNumber + 1;
+        int attackBab = attacker.GetIterativeAttackBAB(_iterativeThrownAttackNumber);
+        _currentThrownAttackBAB = attackBab;
+
+        Debug.Log($"[Attack][Thrown] Performing throw #{attackNumber}/{_iterativeThrownAttackBudget}");
+        Debug.Log($"[Attack][Thrown] Throw #{attackNumber} at BAB {CharacterStats.FormatMod(attackBab)}");
+
+        _pendingAttackMode = PendingAttackMode.Single;
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+        ShowAttackTargets(attacker);
+    }
+
+    private bool HasMoreThrowsAvailable()
+    {
+        if (!_isIterativeThrownAttackSequenceActive || _iterativeThrownAttackInitiator == null)
+            return false;
+
+        bool hasMore = _iterativeThrownAttackNumber < _iterativeThrownAttackBudget;
+        Debug.Log($"[Attack][Thrown] Throws used: {_iterativeThrownAttackNumber}/{_iterativeThrownAttackBudget}, hasMore={hasMore}");
+        return hasMore;
+    }
+
+    private void EndThrownAttackSequence()
+    {
+        Debug.Log($"[Attack][Thrown] Ending thrown attack sequence actor={(_iterativeThrownAttackInitiator != null && _iterativeThrownAttackInitiator.Stats != null ? _iterativeThrownAttackInitiator.Stats.CharacterName : "<null>")} used={_iterativeThrownAttackNumber}/{_iterativeThrownAttackBudget}");
+        _iterativeThrownAttackNumber = 0;
+        _iterativeThrownAttackBudget = 0;
+        _isIterativeThrownAttackSequenceActive = false;
+        _iterativeThrownAttackInitiator = null;
+        _iterativeThrownWeapon = null;
+        _iterativeThrownAttackConsumesFullRound = false;
+        _currentThrownAttackBAB = 0;
     }
 
     private bool CanUseImprovedFeintAsMove(CharacterController actor)
@@ -5425,6 +5554,7 @@ public class GameManager : MonoBehaviour
         }
 
         EndAttackSequence();
+        EndThrownAttackSequence();
         EndActivePCTurn();
     }
 
@@ -12351,6 +12481,10 @@ public class GameManager : MonoBehaviour
                 {
                     PerformIterativeSequenceAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
                 }
+                else if (_isIterativeThrownAttackSequenceActive && _iterativeThrownAttackInitiator == attacker)
+                {
+                    PerformIterativeThrownSequenceAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+                }
                 else
                 {
                     PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
@@ -12497,6 +12631,88 @@ public class GameManager : MonoBehaviour
         bool hasMoreAttacks = HasMoreAttacksAvailable();
         if (!hasMoreAttacks)
             Debug.Log($"[Attack][Flow] All iterative attacks exhausted for {attacker.Stats.CharacterName}.");
+
+        StartCoroutine(AfterAttackDelay(attacker, 1.5f));
+    }
+
+    private void PerformIterativeThrownSequenceAttack(CharacterController attacker, CharacterController target,
+        bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
+    {
+        if (!_isIterativeThrownAttackSequenceActive || _iterativeThrownAttackInitiator != attacker)
+        {
+            Debug.LogWarning("[Attack][Thrown] Iterative thrown attack requested without active sequence; falling back to single attack.");
+            PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            return;
+        }
+
+        ItemData attackWeapon = _iterativeThrownWeapon ?? attacker.GetEquippedMainWeapon();
+        CombatResult result = attacker.Attack(
+            target,
+            isFlanking,
+            flankBonus,
+            partnerName,
+            rangeInfo,
+            _currentThrownAttackBAB,
+            attackWeapon);
+
+        int throwNumber = _iterativeThrownAttackNumber + 1;
+        CombatUI?.ShowCombatLog($"↻ Thrown attack #{throwNumber}/{_iterativeThrownAttackBudget} at BAB {CharacterStats.FormatMod(_currentThrownAttackBAB)}");
+
+        _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
+
+        if (LogAttacksToConsole)
+            Debug.Log("[Combat] " + _lastCombatLog);
+
+        CombatUI.ShowCombatLog(_lastCombatLog);
+        UpdateAllStatsUI();
+        Grid.ClearAllHighlights();
+
+        if (result.Hit && result.TotalDamage > 0)
+            CheckConcentrationOnDamage(target, result.TotalDamage);
+
+        if (result.TargetKilled)
+        {
+            HandleSummonDeathCleanup(target);
+
+            if (!target.IsPlayerControlled)
+            {
+                UpdateAllStatsUI();
+                if (AreAllNPCsDead())
+                {
+                    EndThrownAttackSequence();
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+                    CombatUI.SetActionButtonsVisible(false);
+                    return;
+                }
+
+                CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
+            }
+        }
+
+        _iterativeThrownAttackNumber++;
+
+        if (_iterativeThrownAttackNumber == 1 && !_iterativeThrownAttackConsumesFullRound && _iterativeThrownAttackBudget > 1)
+        {
+            if (attacker.Actions != null && attacker.Actions.HasMoveAction)
+            {
+                attacker.Actions.UseMoveAction();
+                _iterativeThrownAttackConsumesFullRound = true;
+                Debug.Log($"[Attack][Thrown] Converted to full-round action for {attacker.Stats.CharacterName}; move action consumed.");
+            }
+            else
+            {
+                Debug.LogWarning($"[Attack][Thrown] Could not consume move action for full-round conversion; trimming thrown budget to used count.");
+                _iterativeThrownAttackBudget = _iterativeThrownAttackNumber;
+            }
+        }
+
+        bool hasMoreThrows = HasMoreThrowsAvailable();
+        if (!hasMoreThrows)
+        {
+            Debug.Log($"[Attack][Thrown] All iterative thrown attacks exhausted for {attacker.Stats.CharacterName}.");
+            EndThrownAttackSequence();
+        }
 
         StartCoroutine(AfterAttackDelay(attacker, 1.5f));
     }
@@ -12918,12 +13134,13 @@ public class GameManager : MonoBehaviour
         bool hasRemainingIterativeDisarmAttacks = character.HasRemainingIterativeDisarmAttacksInSequence();
 
         bool hasIterativeWeaponAttackSequence = _isIterativeAttackSequenceActive && _iterativeAttackInitiator == character;
+        bool hasIterativeThrownAttackSequence = _isIterativeThrownAttackSequenceActive && _iterativeThrownAttackInitiator == character;
 
-        if (hasRemainingIterativeGrappleAttacks || hasRemainingIterativeBullRushAttacks || hasRemainingIterativeDisarmAttacks || hasIterativeWeaponAttackSequence)
+        if (hasRemainingIterativeGrappleAttacks || hasRemainingIterativeBullRushAttacks || hasRemainingIterativeDisarmAttacks || hasIterativeWeaponAttackSequence || hasIterativeThrownAttackSequence)
         {
             Debug.Log(
                 $"[TurnFlow] ShouldAutoEndTurn=false for {character.Stats.CharacterName}: " +
-                $"iterativeRemaining(g={hasRemainingIterativeGrappleAttacks}, br={hasRemainingIterativeBullRushAttacks}, d={hasRemainingIterativeDisarmAttacks}, atk={hasIterativeWeaponAttackSequence})");
+                $"iterativeRemaining(g={hasRemainingIterativeGrappleAttacks}, br={hasRemainingIterativeBullRushAttacks}, d={hasRemainingIterativeDisarmAttacks}, atk={hasIterativeWeaponAttackSequence}, thr={hasIterativeThrownAttackSequence})");
             return false;
         }
 
@@ -12967,6 +13184,7 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         EndAttackSequence();
+        EndThrownAttackSequence();
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
