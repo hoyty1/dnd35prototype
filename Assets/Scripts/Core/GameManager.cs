@@ -6560,7 +6560,7 @@ public class GameManager : MonoBehaviour
                             ? hasDisarmAttackAvailable
                             : (type == SpecialAttackType.BullRushCharge
                                 ? pc.Actions.HasFullRoundAction
-                                : pc.Actions.HasStandardAction))));
+                                : pc.Actions.HasStandardAction)))));
 
         Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} disarmAvailable={hasDisarmAttackAvailable}");
 
@@ -6578,7 +6578,7 @@ public class GameManager : MonoBehaviour
                                 ? "Need at least one remaining disarm-capable attack"
                                 : (type == SpecialAttackType.BullRushCharge
                                     ? "Need a full-round action and valid charge movement"
-                                    : "Need a standard action"))));
+                                    : "Need a standard action")))));
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use {type}: {reason}.");
             ShowActionChoices();
             return;
