@@ -1179,10 +1179,7 @@ public class GameManager : MonoBehaviour
         WaitingForEncounterSelection = true;
         var presets = EnemyDatabase.ListEncounterPresets();
 
-        // Keep the pre-combat picker compact: show exactly three curated options.
-        if (presets.Count > 3)
-            presets = presets.GetRange(0, 3);
-
+        // Show all available encounters so the player can scroll and select any scenario.
         EncounterSelectionUI.Open(presets,
             onSelect: presetId =>
             {

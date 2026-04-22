@@ -4,13 +4,30 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Lightweight modal used before combat to choose an enemy encounter preset.
+/// Modal used before combat to choose an encounter preset.
+/// Now uses a categorized, scrollable, card-based layout.
 /// </summary>
 public class EncounterSelectionUI : MonoBehaviour
 {
     private GameObject _panel;
     private Text _descriptionText;
-    private RectTransform _buttonContainer;
+    private Text _selectionHintText;
+    private ScrollRect _scrollRect;
+    private RectTransform _contentContainer;
+    private Button _confirmButton;
+
+    private Action<string> _onSelect;
+    private Action _onCancel;
+    private string _selectedPresetId;
+
+    private readonly Dictionary<string, Image> _cardImages = new Dictionary<string, Image>();
+    private readonly Dictionary<string, Outline> _cardOutlines = new Dictionary<string, Outline>();
+
+    private static readonly Color PanelColor = new Color(0.08f, 0.08f, 0.12f, 0.97f);
+    private static readonly Color ScrollAreaColor = new Color(0.05f, 0.06f, 0.1f, 0.95f);
+    private static readonly Color CardColor = new Color(0.17f, 0.2f, 0.3f, 0.96f);
+    private static readonly Color CardSelectedColor = new Color(0.26f, 0.34f, 0.52f, 1f);
+    private static readonly Color CategoryColor = new Color(0.98f, 0.83f, 0.35f, 1f);
 
     public bool IsOpen => _panel != null && _panel.activeSelf;
 
@@ -19,76 +36,16 @@ public class EncounterSelectionUI : MonoBehaviour
         EnsureBuilt();
         if (_panel == null) return;
 
+        _onSelect = onSelect;
+        _onCancel = onCancel;
+
         _panel.SetActive(true);
-        _descriptionText.text = "Choose an encounter preset, or launch a dedicated mechanics test (Grapple / Feint / Turn Undead).";
+        _descriptionText.text = "Select an encounter. Scroll to view all mechanics tests and full scenarios.";
 
-        if (_buttonContainer != null)
-        {
-            for (int i = _buttonContainer.childCount - 1; i >= 0; i--)
-            {
-                Destroy(_buttonContainer.GetChild(i).gameObject);
-            }
+        BuildEncounterCards(presets);
 
-            // Dedicated quick launcher for the grappling test encounter.
-            CreateActionButton("🧪 Grapple Test", new Color(0.38f, 0.16f, 0.5f, 0.98f), () =>
-            {
-                Close();
-                onSelect?.Invoke("grapple_test");
-            });
-
-            // Dedicated quick launcher for feint/sneak-attack mechanics validation.
-            CreateActionButton("🗡️ Feint & Sneak Test", new Color(0.2f, 0.24f, 0.44f, 0.98f), () =>
-            {
-                Close();
-                onSelect?.Invoke("feint_sneak_test");
-            });
-
-            // Dedicated quick launcher for Turn Undead mechanics validation.
-            CreateActionButton("✝️ Turn Undead Test", new Color(0.46f, 0.36f, 0.14f, 0.98f), () =>
-            {
-                Close();
-                onSelect?.Invoke("turn_undead_test");
-            });
-
-            if (presets != null)
-            {
-                foreach (var preset in presets)
-                {
-                    // Avoid duplicate cards when test encounters are already exposed as quick-launch actions.
-                    if (preset != null && (preset.Id == "grapple_test" || preset.Id == "feint_sneak_test" || preset.Id == "turn_undead_test"))
-                        continue;
-
-                    CreatePresetButton(preset, onSelect);
-                }
-            }
-            CreateActionButton("Use Default", new Color(0.2f, 0.35f, 0.6f, 0.95f), () =>
-            {
-                string fallbackId = "goblin_raiders";
-                if (presets != null)
-                {
-                    for (int i = 0; i < presets.Count; i++)
-                    {
-                        if (presets[i] != null && presets[i].Id != "grapple_test" && presets[i].Id != "feint_sneak_test" && presets[i].Id != "turn_undead_test")
-                        {
-                            fallbackId = presets[i].Id;
-                            break;
-                        }
-                    }
-                }
-
-                Close();
-                onSelect?.Invoke(fallbackId);
-            });
-
-            if (onCancel != null)
-            {
-                CreateActionButton("Cancel", new Color(0.35f, 0.2f, 0.2f, 0.95f), () =>
-                {
-                    Close();
-                    onCancel.Invoke();
-                });
-            }
-        }
+        if (_scrollRect != null)
+            _scrollRect.verticalNormalizedPosition = 1f;
     }
 
     public void Close()
@@ -112,107 +69,508 @@ public class EncounterSelectionUI : MonoBehaviour
         _panel = new GameObject("EncounterSelectionPanel", typeof(RectTransform), typeof(Image));
         _panel.transform.SetParent(canvas.transform, false);
 
-        var rt = (RectTransform)_panel.transform;
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(640f, 520f);
+        RectTransform panelRect = (RectTransform)_panel.transform;
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = new Vector2(760f, 640f);
 
-        var bg = _panel.GetComponent<Image>();
-        bg.color = new Color(0.08f, 0.08f, 0.12f, 0.97f);
+        Image panelImage = _panel.GetComponent<Image>();
+        panelImage.color = PanelColor;
 
-        CreateText(_panel.transform, "Encounter Selection", 28, FontStyle.Bold,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -24f), new Vector2(580f, 40f), TextAnchor.MiddleCenter, out _);
+        Outline panelOutline = _panel.AddComponent<Outline>();
+        panelOutline.effectColor = new Color(0f, 0f, 0f, 0.55f);
+        panelOutline.effectDistance = new Vector2(2f, -2f);
 
-        CreateText(_panel.transform, "", 18, FontStyle.Normal,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -64f), new Vector2(580f, 32f), TextAnchor.MiddleCenter, out _descriptionText);
+        CreateText(
+            _panel.transform,
+            "SELECT ENCOUNTER",
+            30,
+            FontStyle.Bold,
+            Color.white,
+            new Vector2(0.5f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0f, -30f),
+            new Vector2(680f, 42f),
+            TextAnchor.MiddleCenter,
+            out _
+        );
 
-        GameObject content = new GameObject("Buttons", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
-        content.transform.SetParent(_panel.transform, false);
-        _buttonContainer = content.GetComponent<RectTransform>();
-        _buttonContainer.anchorMin = new Vector2(0.5f, 0.5f);
-        _buttonContainer.anchorMax = new Vector2(0.5f, 0.5f);
-        _buttonContainer.pivot = new Vector2(0.5f, 0.5f);
-        _buttonContainer.sizeDelta = new Vector2(580f, 380f);
-        _buttonContainer.anchoredPosition = new Vector2(0f, -30f);
+        CreateText(
+            _panel.transform,
+            "",
+            16,
+            FontStyle.Normal,
+            new Color(0.85f, 0.89f, 0.95f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0f, -68f),
+            new Vector2(690f, 30f),
+            TextAnchor.MiddleCenter,
+            out _descriptionText
+        );
 
-        var vlg = content.GetComponent<VerticalLayoutGroup>();
-        vlg.spacing = 10f;
-        vlg.childAlignment = TextAnchor.UpperCenter;
-        vlg.childControlHeight = false;
-        vlg.childForceExpandHeight = false;
-        vlg.childControlWidth = true;
+        CreateText(
+            _panel.transform,
+            "",
+            14,
+            FontStyle.Italic,
+            new Color(0.75f, 0.82f, 0.95f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0f, -96f),
+            new Vector2(690f, 26f),
+            TextAnchor.MiddleCenter,
+            out _selectionHintText
+        );
 
-        var csf = content.GetComponent<ContentSizeFitter>();
-        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        CreateText(
+            _panel.transform,
+            "▲ Scroll Up",
+            13,
+            FontStyle.Bold,
+            new Color(0.82f, 0.88f, 1f, 0.95f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0f, -124f),
+            new Vector2(220f, 20f),
+            TextAnchor.MiddleCenter,
+            out _
+        );
+
+        GameObject scrollRoot = new GameObject("ScrollRoot", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+        scrollRoot.transform.SetParent(_panel.transform, false);
+        RectTransform scrollRootRect = scrollRoot.GetComponent<RectTransform>();
+        scrollRootRect.anchorMin = new Vector2(0.05f, 0.18f);
+        scrollRootRect.anchorMax = new Vector2(0.95f, 0.8f);
+        scrollRootRect.offsetMin = Vector2.zero;
+        scrollRootRect.offsetMax = Vector2.zero;
+
+        Image scrollRootImage = scrollRoot.GetComponent<Image>();
+        scrollRootImage.color = ScrollAreaColor;
+
+        _scrollRect = scrollRoot.GetComponent<ScrollRect>();
+        _scrollRect.horizontal = false;
+        _scrollRect.vertical = true;
+        _scrollRect.movementType = ScrollRect.MovementType.Clamped;
+        _scrollRect.scrollSensitivity = 24f;
+
+        GameObject viewport = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+        viewport.transform.SetParent(scrollRoot.transform, false);
+        RectTransform viewportRect = viewport.GetComponent<RectTransform>();
+        viewportRect.anchorMin = new Vector2(0f, 0f);
+        viewportRect.anchorMax = new Vector2(1f, 1f);
+        viewportRect.offsetMin = new Vector2(8f, 8f);
+        viewportRect.offsetMax = new Vector2(-24f, -8f);
+
+        Image viewportImage = viewport.GetComponent<Image>();
+        viewportImage.color = new Color(0f, 0f, 0f, 0.1f);
+        Mask mask = viewport.GetComponent<Mask>();
+        mask.showMaskGraphic = false;
+
+        GameObject content = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+        content.transform.SetParent(viewport.transform, false);
+        _contentContainer = content.GetComponent<RectTransform>();
+        _contentContainer.anchorMin = new Vector2(0f, 1f);
+        _contentContainer.anchorMax = new Vector2(1f, 1f);
+        _contentContainer.pivot = new Vector2(0.5f, 1f);
+        _contentContainer.anchoredPosition = Vector2.zero;
+        _contentContainer.sizeDelta = new Vector2(0f, 0f);
+
+        VerticalLayoutGroup layoutGroup = content.GetComponent<VerticalLayoutGroup>();
+        layoutGroup.spacing = 8f;
+        layoutGroup.padding = new RectOffset(8, 8, 8, 8);
+        layoutGroup.childAlignment = TextAnchor.UpperCenter;
+        layoutGroup.childControlHeight = false;
+        layoutGroup.childControlWidth = true;
+        layoutGroup.childForceExpandWidth = true;
+        layoutGroup.childForceExpandHeight = false;
+
+        ContentSizeFitter sizeFitter = content.GetComponent<ContentSizeFitter>();
+        sizeFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        sizeFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+        _scrollRect.viewport = viewportRect;
+        _scrollRect.content = _contentContainer;
+
+        BuildVerticalScrollbar(scrollRoot.transform, out Scrollbar scrollbar);
+        _scrollRect.verticalScrollbar = scrollbar;
+        _scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+
+        CreateText(
+            _panel.transform,
+            "▼ Scroll Down",
+            13,
+            FontStyle.Bold,
+            new Color(0.82f, 0.88f, 1f, 0.95f),
+            new Vector2(0.5f, 0f),
+            new Vector2(0.5f, 0f),
+            new Vector2(0.5f, 0f),
+            new Vector2(0f, 122f),
+            new Vector2(220f, 20f),
+            TextAnchor.MiddleCenter,
+            out _
+        );
+
+        BuildFooterButtons();
 
         _panel.SetActive(false);
     }
 
-    private void CreatePresetButton(EncounterPreset preset, Action<string> onSelect)
+    private void BuildVerticalScrollbar(Transform parent, out Scrollbar scrollbar)
     {
-        if (preset == null) return;
+        GameObject scrollbarObj = new GameObject("VerticalScrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+        scrollbarObj.transform.SetParent(parent, false);
+        RectTransform scrollbarRect = scrollbarObj.GetComponent<RectTransform>();
+        scrollbarRect.anchorMin = new Vector2(1f, 0f);
+        scrollbarRect.anchorMax = new Vector2(1f, 1f);
+        scrollbarRect.pivot = new Vector2(1f, 1f);
+        scrollbarRect.offsetMin = new Vector2(-16f, 8f);
+        scrollbarRect.offsetMax = new Vector2(-4f, -8f);
 
-        GameObject btnGo = new GameObject($"Preset_{preset.Id}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
-        btnGo.transform.SetParent(_buttonContainer, false);
+        Image scrollbarBg = scrollbarObj.GetComponent<Image>();
+        scrollbarBg.color = new Color(0.15f, 0.17f, 0.24f, 0.95f);
 
-        var le = btnGo.GetComponent<LayoutElement>();
-        le.preferredHeight = 72f;
+        GameObject slidingArea = new GameObject("SlidingArea", typeof(RectTransform));
+        slidingArea.transform.SetParent(scrollbarObj.transform, false);
+        RectTransform slidingRect = slidingArea.GetComponent<RectTransform>();
+        slidingRect.anchorMin = Vector2.zero;
+        slidingRect.anchorMax = Vector2.one;
+        slidingRect.offsetMin = new Vector2(0f, 6f);
+        slidingRect.offsetMax = new Vector2(0f, -6f);
 
-        var img = btnGo.GetComponent<Image>();
-        img.color = new Color(0.18f, 0.2f, 0.28f, 0.95f);
+        GameObject handleObj = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+        handleObj.transform.SetParent(slidingArea.transform, false);
+        RectTransform handleRect = handleObj.GetComponent<RectTransform>();
+        handleRect.anchorMin = new Vector2(0f, 1f);
+        handleRect.anchorMax = new Vector2(1f, 1f);
+        handleRect.pivot = new Vector2(0.5f, 1f);
+        handleRect.sizeDelta = new Vector2(0f, 52f);
 
-        var btn = btnGo.GetComponent<Button>();
-        btn.targetGraphic = img;
-        btn.onClick.AddListener(() =>
-        {
-            Close();
-            onSelect?.Invoke(preset.Id);
-        });
+        Image handleImage = handleObj.GetComponent<Image>();
+        handleImage.color = new Color(0.54f, 0.67f, 0.95f, 0.95f);
 
-        CreateText(btnGo.transform,
-            $"{preset.DisplayName}\n<size=16>{preset.Description}</size>",
-            20,
+        scrollbar = scrollbarObj.GetComponent<Scrollbar>();
+        scrollbar.direction = Scrollbar.Direction.BottomToTop;
+        scrollbar.targetGraphic = handleImage;
+        scrollbar.handleRect = handleRect;
+        scrollbar.size = 0.24f;
+    }
+
+    private void BuildFooterButtons()
+    {
+        GameObject footer = new GameObject("Footer", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+        footer.transform.SetParent(_panel.transform, false);
+        RectTransform footerRect = footer.GetComponent<RectTransform>();
+        footerRect.anchorMin = new Vector2(0.08f, 0.04f);
+        footerRect.anchorMax = new Vector2(0.92f, 0.13f);
+        footerRect.offsetMin = Vector2.zero;
+        footerRect.offsetMax = Vector2.zero;
+
+        HorizontalLayoutGroup footerLayout = footer.GetComponent<HorizontalLayoutGroup>();
+        footerLayout.spacing = 14f;
+        footerLayout.childAlignment = TextAnchor.MiddleCenter;
+        footerLayout.childControlWidth = true;
+        footerLayout.childControlHeight = true;
+        footerLayout.childForceExpandWidth = true;
+        footerLayout.childForceExpandHeight = true;
+
+        CreateFooterButton(footer.transform, "Cancel", new Color(0.45f, 0.2f, 0.2f, 1f), OnCancelPressed, out _);
+        CreateFooterButton(footer.transform, "Select", new Color(0.2f, 0.45f, 0.28f, 1f), OnConfirmPressed, out _confirmButton);
+        _confirmButton.interactable = false;
+    }
+
+    private void CreateFooterButton(Transform parent, string label, Color color, Action onClick, out Button button)
+    {
+        GameObject buttonObj = new GameObject($"Footer_{label}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+        buttonObj.transform.SetParent(parent, false);
+
+        LayoutElement le = buttonObj.GetComponent<LayoutElement>();
+        le.preferredWidth = 180f;
+        le.preferredHeight = 44f;
+        le.minHeight = 44f;
+
+        Image image = buttonObj.GetComponent<Image>();
+        image.color = color;
+
+        button = buttonObj.GetComponent<Button>();
+        button.targetGraphic = image;
+        button.transition = Selectable.Transition.ColorTint;
+        ColorBlock colors = button.colors;
+        colors.normalColor = color;
+        colors.highlightedColor = Color.Lerp(color, Color.white, 0.2f);
+        colors.pressedColor = Color.Lerp(color, Color.black, 0.2f);
+        colors.selectedColor = colors.highlightedColor;
+        colors.disabledColor = new Color(0.22f, 0.22f, 0.22f, 0.9f);
+        colors.fadeDuration = 0.08f;
+        button.colors = colors;
+
+        button.onClick.AddListener(() => onClick?.Invoke());
+
+        CreateText(
+            buttonObj.transform,
+            label,
+            18,
             FontStyle.Bold,
+            Color.white,
             new Vector2(0.5f, 0.5f),
             new Vector2(0.5f, 0.5f),
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
-            new Vector2(540f, 64f),
+            new Vector2(140f, 30f),
             TextAnchor.MiddleCenter,
-            out _);
+            out _
+        );
     }
 
-    private void CreateActionButton(string label, Color color, Action onClick)
+    private void BuildEncounterCards(List<EncounterPreset> presets)
     {
-        GameObject btnGo = new GameObject($"Action_{label}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
-        btnGo.transform.SetParent(_buttonContainer, false);
+        if (_contentContainer == null)
+            return;
 
-        var le = btnGo.GetComponent<LayoutElement>();
-        le.preferredHeight = 46f;
+        _cardImages.Clear();
+        _cardOutlines.Clear();
 
-        var img = btnGo.GetComponent<Image>();
-        img.color = color;
+        for (int i = _contentContainer.childCount - 1; i >= 0; i--)
+            Destroy(_contentContainer.GetChild(i).gameObject);
 
-        var btn = btnGo.GetComponent<Button>();
-        btn.targetGraphic = img;
-        btn.onClick.AddListener(() => onClick?.Invoke());
+        List<EncounterPreset> validPresets = new List<EncounterPreset>();
+        if (presets != null)
+        {
+            for (int i = 0; i < presets.Count; i++)
+            {
+                if (presets[i] != null)
+                    validPresets.Add(presets[i]);
+            }
+        }
 
-        CreateText(btnGo.transform, label, 18, FontStyle.Bold,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(500f, 36f), TextAnchor.MiddleCenter, out _);
+        List<EncounterPreset> mechanicsTests = new List<EncounterPreset>();
+        List<EncounterPreset> fullScenarios = new List<EncounterPreset>();
+
+        for (int i = 0; i < validPresets.Count; i++)
+        {
+            EncounterPreset preset = validPresets[i];
+            if (IsMechanicsPreset(preset))
+                mechanicsTests.Add(preset);
+            else
+                fullScenarios.Add(preset);
+        }
+
+        if (mechanicsTests.Count > 0)
+        {
+            CreateCategoryHeader("MECHANICS TESTS");
+            for (int i = 0; i < mechanicsTests.Count; i++)
+                CreatePresetCard(mechanicsTests[i]);
+        }
+
+        if (fullScenarios.Count > 0)
+        {
+            CreateCategoryHeader("FULL SCENARIOS");
+            for (int i = 0; i < fullScenarios.Count; i++)
+                CreatePresetCard(fullScenarios[i]);
+        }
+
+        if (validPresets.Count == 0)
+        {
+            CreateCategoryHeader("NO ENCOUNTERS AVAILABLE");
+            _selectionHintText.text = "No encounter presets were provided.";
+            _selectedPresetId = null;
+            if (_confirmButton != null)
+                _confirmButton.interactable = false;
+            return;
+        }
+
+        bool selectedStillExists = false;
+        for (int i = 0; i < validPresets.Count; i++)
+        {
+            if (validPresets[i].Id == _selectedPresetId)
+            {
+                selectedStillExists = true;
+                break;
+            }
+        }
+
+        if (!selectedStillExists)
+            _selectedPresetId = validPresets[0].Id;
+
+        RefreshSelectionVisuals();
     }
 
-    private void CreateText(Transform parent, string value, int fontSize, FontStyle style,
-        Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
-        Vector2 anchoredPos, Vector2 size,
-        TextAnchor alignment, out Text text)
+    private bool IsMechanicsPreset(EncounterPreset preset)
     {
-        var go = new GameObject("Text", typeof(RectTransform), typeof(Text));
+        if (preset == null) return false;
+
+        string id = (preset.Id ?? string.Empty).ToLowerInvariant();
+        string display = (preset.DisplayName ?? string.Empty).ToLowerInvariant();
+        string desc = (preset.Description ?? string.Empty).ToLowerInvariant();
+
+        return id.Contains("test") || display.Contains("test") || desc.Contains("validate") || desc.Contains("mechanic");
+    }
+
+    private void CreateCategoryHeader(string title)
+    {
+        GameObject header = new GameObject($"Category_{title}", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+        header.transform.SetParent(_contentContainer, false);
+
+        Image headerImage = header.GetComponent<Image>();
+        headerImage.color = new Color(0.12f, 0.13f, 0.17f, 0.92f);
+
+        LayoutElement le = header.GetComponent<LayoutElement>();
+        le.preferredHeight = 34f;
+        le.minHeight = 34f;
+
+        CreateText(
+            header.transform,
+            title,
+            18,
+            FontStyle.Bold,
+            CategoryColor,
+            new Vector2(0f, 0.5f),
+            new Vector2(1f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            TextAnchor.MiddleLeft,
+            out Text categoryText
+        );
+
+        RectTransform textRect = categoryText.rectTransform;
+        textRect.offsetMin = new Vector2(12f, -14f);
+        textRect.offsetMax = new Vector2(-12f, 14f);
+    }
+
+    private void CreatePresetCard(EncounterPreset preset)
+    {
+        GameObject card = new GameObject($"Preset_{preset.Id}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement), typeof(Outline));
+        card.transform.SetParent(_contentContainer, false);
+
+        Image cardImage = card.GetComponent<Image>();
+        cardImage.color = CardColor;
+
+        LayoutElement le = card.GetComponent<LayoutElement>();
+        le.preferredHeight = 80f;
+        le.minHeight = 80f;
+
+        Outline outline = card.GetComponent<Outline>();
+        outline.effectColor = new Color(0.95f, 0.87f, 0.45f, 0.95f);
+        outline.effectDistance = new Vector2(2f, -2f);
+        outline.enabled = false;
+
+        Button button = card.GetComponent<Button>();
+        button.targetGraphic = cardImage;
+        button.transition = Selectable.Transition.ColorTint;
+
+        ColorBlock colors = button.colors;
+        colors.normalColor = CardColor;
+        colors.highlightedColor = new Color(0.24f, 0.29f, 0.42f, 0.98f);
+        colors.pressedColor = new Color(0.14f, 0.17f, 0.26f, 1f);
+        colors.selectedColor = colors.highlightedColor;
+        colors.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.85f);
+        colors.fadeDuration = 0.08f;
+        button.colors = colors;
+
+        button.onClick.AddListener(() =>
+        {
+            _selectedPresetId = preset.Id;
+            RefreshSelectionVisuals();
+        });
+
+        CreateText(
+            card.transform,
+            preset.DisplayName,
+            19,
+            FontStyle.Bold,
+            Color.white,
+            new Vector2(0f, 0.5f),
+            new Vector2(1f, 1f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            TextAnchor.MiddleLeft,
+            out Text titleText
+        );
+        titleText.rectTransform.offsetMin = new Vector2(12f, -36f);
+        titleText.rectTransform.offsetMax = new Vector2(-12f, -8f);
+
+        CreateText(
+            card.transform,
+            preset.Description,
+            14,
+            FontStyle.Normal,
+            new Color(0.85f, 0.88f, 0.94f, 1f),
+            new Vector2(0f, 0f),
+            new Vector2(1f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            TextAnchor.UpperLeft,
+            out Text descText
+        );
+        descText.rectTransform.offsetMin = new Vector2(12f, 8f);
+        descText.rectTransform.offsetMax = new Vector2(-12f, 18f);
+        descText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        descText.verticalOverflow = VerticalWrapMode.Truncate;
+
+        _cardImages[preset.Id] = cardImage;
+        _cardOutlines[preset.Id] = outline;
+    }
+
+    private void RefreshSelectionVisuals()
+    {
+        foreach (KeyValuePair<string, Image> kv in _cardImages)
+        {
+            bool selected = kv.Key == _selectedPresetId;
+            kv.Value.color = selected ? CardSelectedColor : CardColor;
+
+            if (_cardOutlines.TryGetValue(kv.Key, out Outline outline))
+                outline.enabled = selected;
+        }
+
+        bool hasSelection = !string.IsNullOrEmpty(_selectedPresetId);
+        if (_confirmButton != null)
+            _confirmButton.interactable = hasSelection;
+
+        if (_selectionHintText != null)
+            _selectionHintText.text = hasSelection ? $"Selected: {_selectedPresetId}" : "Select an encounter card to continue.";
+    }
+
+    private void OnConfirmPressed()
+    {
+        if (string.IsNullOrEmpty(_selectedPresetId))
+            return;
+
+        string selection = _selectedPresetId;
+        Close();
+        _onSelect?.Invoke(selection);
+    }
+
+    private void OnCancelPressed()
+    {
+        Close();
+        _onCancel?.Invoke();
+    }
+
+    private void CreateText(
+        Transform parent,
+        string value,
+        int fontSize,
+        FontStyle style,
+        Color color,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        Vector2 pivot,
+        Vector2 anchoredPos,
+        Vector2 size,
+        TextAnchor alignment,
+        out Text text)
+    {
+        GameObject go = new GameObject("Text", typeof(RectTransform), typeof(Text));
         go.transform.SetParent(parent, false);
-        var rt = go.GetComponent<RectTransform>();
+        RectTransform rt = go.GetComponent<RectTransform>();
         rt.anchorMin = anchorMin;
         rt.anchorMax = anchorMax;
         rt.pivot = pivot;
@@ -225,7 +583,9 @@ public class EncounterSelectionUI : MonoBehaviour
         text.fontSize = fontSize;
         text.fontStyle = style;
         text.alignment = alignment;
-        text.color = Color.white;
+        text.color = color;
         text.supportRichText = true;
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        text.verticalOverflow = VerticalWrapMode.Truncate;
     }
 }
