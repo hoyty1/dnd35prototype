@@ -167,8 +167,8 @@ public class ActionButtonPanel : MonoBehaviour
             return;
 
         GameManager gm = GameManager.Instance;
-        if (gm != null && gm.ActiveCharacter != null)
-            UpdateActionButtons(gm.ActiveCharacter);
+        if (gm != null && gm.CurrentCharacter != null)
+            UpdateActionButtons(gm.CurrentCharacter);
     }
 
     private ActionButtonContext BuildActionButtonContext(CharacterController pc)

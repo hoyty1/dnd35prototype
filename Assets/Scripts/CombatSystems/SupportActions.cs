@@ -334,7 +334,7 @@ public partial class GameManager
             Target = target,
             Type = aidType,
             Bonus = 2,
-            RoundGranted = _currentRound,
+            RoundGranted = CurrentRound,
             BeneficiaryTurnStartsRemainingBeforeExpiry = 2
         };
 

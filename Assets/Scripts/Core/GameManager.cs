@@ -3845,7 +3845,9 @@ public partial class GameManager : MonoBehaviour
 
     public string GetFiveFootStepDisabledReason(CharacterController character)
     {
-        if (_movementService != null && _movementService.CanTake5FootStep(character, out string reason))
+        string reason = string.Empty;
+
+        if (_movementService != null && _movementService.CanTake5FootStep(character, out reason))
             return string.Empty;
 
         if (_movementService != null)
