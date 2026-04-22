@@ -6895,6 +6895,58 @@ public class GameManager : MonoBehaviour
         return Mathf.Max(0, actor.Stats.MaxTurnUndeadAttemptsPerDay - actor.Stats.TurnUndeadAttemptsUsedToday);
     }
 
+    public bool IsTurnedUndead(CharacterController undead)
+    {
+        if (undead == null || undead.Stats == null || undead.Stats.IsDead)
+            return false;
+
+        StatusEffect turnedCondition = GetActiveTurnedCondition(undead);
+        if (turnedCondition == null)
+            return false;
+
+        if (turnedCondition.RemainingRounds == 0)
+            return false;
+
+        return ConditionRules.Normalize(turnedCondition.Type) == CombatConditionType.Turned;
+    }
+
+    public int GetTurnedRoundsRemaining(CharacterController undead)
+    {
+        if (!IsTurnedUndead(undead))
+            return 0;
+
+        StatusEffect turnedCondition = GetActiveTurnedCondition(undead);
+        return turnedCondition != null ? Mathf.Max(0, turnedCondition.RemainingRounds) : 0;
+    }
+
+    public CharacterController GetTurningCleric(CharacterController undead)
+    {
+        if (!IsTurnedUndead(undead))
+            return null;
+
+        CharacterController recorded = GetTurnUndeadTurner(undead);
+        if (recorded != null)
+            return recorded;
+
+        StatusEffect turnedCondition = GetActiveTurnedCondition(undead);
+        if (turnedCondition == null || string.IsNullOrWhiteSpace(turnedCondition.SourceName))
+            return null;
+
+        foreach (CharacterController candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+
+            if (string.Equals(candidate.Stats.CharacterName, turnedCondition.SourceName, StringComparison.Ordinal))
+            {
+                RegisterTurnUndeadTracker(undead, candidate);
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
     private void RegisterTurnUndeadTracker(CharacterController undead, CharacterController turner)
     {
         if (undead == null)
@@ -7427,7 +7479,15 @@ public class GameManager : MonoBehaviour
             if (option == null || option.Target == null || option.Target.Stats == null || option.Target.Stats.IsDead)
                 continue;
 
-            _activeTurnUndeadSelectionPanel.AddTarget(option.Target, option.HitDice, option.CanDestroy ? "Destroyed" : "Turned");
+            bool isAlreadyTurned = IsTurnedUndead(option.Target);
+            int roundsRemaining = isAlreadyTurned ? GetTurnedRoundsRemaining(option.Target) : 0;
+
+            _activeTurnUndeadSelectionPanel.AddTarget(
+                option.Target,
+                option.HitDice,
+                option.CanDestroy ? "Destroyed" : "Turned",
+                isAlreadyTurned,
+                roundsRemaining);
         }
 
         CombatUI?.SetActionButtonsVisible(false);
@@ -7444,6 +7504,14 @@ public class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog(selected
             ? $"   Selected {target.Stats.CharacterName}."
             : $"   Deselected {target.Stats.CharacterName}.");
+
+        if (selected && IsTurnedUndead(target))
+        {
+            int roundsLeft = GetTurnedRoundsRemaining(target);
+            CombatUI?.ShowCombatLog(
+                $"   [Turn Undead] Note: {target.Stats.CharacterName} is already turned ({roundsLeft} rounds left). " +
+                "Selecting this target will refresh the timer to 10 rounds.");
+        }
     }
 
     private void OnTurnUndeadSelectionConfirmed(List<CharacterController> selectedTargets, int spentHd, int remainingHd)

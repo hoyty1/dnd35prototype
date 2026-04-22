@@ -13,8 +13,11 @@ public class TurnUndeadTargetSelectionPanel : MonoBehaviour
         public CharacterController Target;
         public Toggle Toggle;
         public Text Label;
+        public Image RowImage;
         public int HdCost;
         public bool IsSelected;
+        public bool IsAlreadyTurned;
+        public int TurnedRoundsRemaining;
     }
 
     private static Sprite _cachedDefaultSprite;
@@ -81,7 +84,7 @@ public class TurnUndeadTargetSelectionPanel : MonoBehaviour
         }
     }
 
-    public void AddTarget(CharacterController target, int hdCost, string effectText)
+    public void AddTarget(CharacterController target, int hdCost, string effectText, bool isAlreadyTurned = false, int roundsRemaining = 0)
     {
         if (target == null || target.Stats == null || _targetListContainer == null)
             return;
@@ -92,7 +95,35 @@ public class TurnUndeadTargetSelectionPanel : MonoBehaviour
         string effect = string.IsNullOrEmpty(effectText) ? "Turned" : effectText;
         int clampedHdCost = Mathf.Max(1, hdCost);
 
-        label.text = $"{name} ({clampedHdCost} HD) - {effect}";
+        string baseText = $"{name} ({clampedHdCost} HD) - {effect}";
+        if (isAlreadyTurned)
+        {
+            int clampedRounds = Mathf.Max(1, roundsRemaining);
+            Color statusColor = GetTurnStatusColor(clampedRounds);
+            string colorHex = ColorUtility.ToHtmlStringRGB(statusColor);
+            label.alignment = TextAnchor.UpperLeft;
+            label.text = $"{baseText}\n<size=11><color=#{colorHex}>[ALREADY TURNED - {clampedRounds} rounds left]</color></size>";
+
+            LayoutElement rowLayout = row.GetComponent<LayoutElement>();
+            if (rowLayout != null)
+                rowLayout.preferredHeight = 52f;
+
+            RectTransform rowRT = row.GetComponent<RectTransform>();
+            if (rowRT != null)
+                rowRT.sizeDelta = new Vector2(0f, 52f);
+
+            RectTransform labelRT = label.rectTransform;
+            if (labelRT != null)
+            {
+                labelRT.offsetMin = new Vector2(36f, 4f);
+                labelRT.offsetMax = new Vector2(-8f, -4f);
+            }
+        }
+        else
+        {
+            label.alignment = TextAnchor.MiddleLeft;
+            label.text = baseText;
+        }
 
         ColorBlock colors = toggle.colors;
         colors.normalColor = new Color(0.14f, 0.18f, 0.24f, 0.96f);
@@ -107,8 +138,11 @@ public class TurnUndeadTargetSelectionPanel : MonoBehaviour
             Target = target,
             Toggle = toggle,
             Label = label,
+            RowImage = rowImage,
             HdCost = clampedHdCost,
             IsSelected = false,
+            IsAlreadyTurned = isAlreadyTurned,
+            TurnedRoundsRemaining = Mathf.Max(0, roundsRemaining),
         };
 
         _targetData[target] = data;
@@ -153,6 +187,17 @@ public class TurnUndeadTargetSelectionPanel : MonoBehaviour
 
         if (gameObject != null)
             Destroy(gameObject);
+    }
+
+    private static Color GetTurnStatusColor(int roundsRemaining)
+    {
+        if (roundsRemaining <= 2)
+            return new Color(1f, 0.35f, 0.35f, 1f);
+
+        if (roundsRemaining <= 5)
+            return new Color(1f, 0.74f, 0.35f, 1f);
+
+        return new Color(0.65f, 1f, 0.65f, 1f);
     }
 
     private void OnTargetToggledInternal(TargetToggleData data, Image rowImage, bool selected)
