@@ -1846,12 +1846,11 @@ public class GameManager : MonoBehaviour
         fighterInventory.Init(fighterStats);
         SetupStartingEquipment(fighterInventory, "Fighter");
 
-        // Grapple test loadout: force a dagger in main hand to validate light-weapon grapple attacks.
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.RightHand);
+        // Grapple test loadout: equip a greatsword for two-handed weapon grapple validation.
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("greatsword"), EquipSlot.RightHand);
 
-        // Add spare daggers for thrown/off-hand testing so auto-equip has inventory ammo to draw from.
-        for (int i = 0; i < 5; i++)
-            fighterInventory.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
+        // Greatsword is two-handed; explicitly clear off-hand to avoid stale setup state.
+        fighterInventory.CharacterInventory.LeftHandSlot = null;
 
         fighterInventory.CharacterInventory.RecalculateStats();
 
