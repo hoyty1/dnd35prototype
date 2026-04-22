@@ -188,35 +188,49 @@ public class StatusEffectIndicator : MonoBehaviour
         if (StatusEffectTooltipUI.Instance == null)
             return;
 
-        if (iconData == null || iconData.Count == 0 || !IsPointerOverThisCharacter())
+        if (iconData == null || iconData.Count == 0)
             return;
 
+        int hoveredIconIndex = GetHoveredIconIndex();
+        if (hoveredIconIndex < 0 || hoveredIconIndex >= iconData.Count)
+            return;
+
+        IconData hoveredIcon = iconData[hoveredIconIndex];
         StringBuilder sb = new StringBuilder();
         sb.Append(_character.Stats.CharacterName);
-        for (int i = 0; i < iconData.Count; i++)
-        {
-            sb.Append("\n• ");
-            sb.Append(iconData[i].Tooltip);
-        }
+        sb.Append("\n• ");
+        sb.Append(hoveredIcon.Tooltip);
 
         StatusEffectTooltipUI.Instance.ShowTooltip(sb.ToString(), GetMouseScreenPosition());
     }
 
-    private bool IsPointerOverThisCharacter()
+    private int GetHoveredIconIndex()
     {
         Camera cam = Camera.main;
-        if (cam == null || GameManager.Instance == null || GameManager.Instance.Grid == null)
-            return false;
+        if (cam == null || _activeIcons == null || _activeIcons.Count == 0)
+            return -1;
 
         Vector3 mouseScreen = GetMouseScreenPosition();
-        Vector3 world = cam.ScreenToWorldPoint(mouseScreen);
-        Vector2Int coord = SquareGridUtils.WorldToGrid(world);
+        Vector3 mouseWorld = cam.ScreenToWorldPoint(mouseScreen);
 
-        if (coord != _character.GridPosition)
-            return false;
+        for (int i = 0; i < _activeIcons.Count; i++)
+        {
+            GameObject icon = _activeIcons[i];
+            if (icon == null)
+                continue;
 
-        SquareCell cell = GameManager.Instance.Grid.GetCell(coord);
-        return cell != null && cell.ContainsOccupant(_character);
+            SpriteRenderer iconRenderer = icon.GetComponent<SpriteRenderer>();
+            if (iconRenderer == null || !iconRenderer.enabled)
+                continue;
+
+            Bounds iconBounds = iconRenderer.bounds;
+            Vector3 testPoint = mouseWorld;
+            testPoint.z = iconBounds.center.z;
+            if (iconBounds.Contains(testPoint))
+                return i;
+        }
+
+        return -1;
     }
 
     private static Vector3 GetMouseScreenPosition()
