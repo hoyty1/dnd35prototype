@@ -1307,9 +1307,9 @@ public class CombatUI : MonoBehaviour
         // Grapple-only action buttons (shown only while grappling)
         bool showOnlyPinnedEscapeActions = isGrappling && (isPinned || actorPinnedInGrappleState);
         bool showOnlyPinnerActions = isGrappling && isPinningOpponent && !showOnlyPinnedEscapeActions;
-        bool hasIterativeGrappleAttack = pc.CanUseIterativeGrappleAttackAction();
-        int grappleAttacksRemaining = pc.GetRemainingGrappleAttackActions();
-        int currentGrappleAttackBonus = pc.GetCurrentGrappleAttackBonus();
+        bool hasIterativeGrappleAttack = gm != null && gm.CanUseGrappleAttackOption(pc);
+        int grappleAttacksRemaining = gm != null ? gm.GetRemainingGrappleAttackActions(pc) : 0;
+        int currentGrappleAttackBonus = gm != null ? gm.GetCurrentGrappleAttackBonus(pc) : 0;
         string iterativeTag = $"BAB {CharacterStats.FormatMod(currentGrappleAttackBonus)} | {grappleAttacksRemaining} left";
         string grappleOpponentName = grappleOpponent != null && grappleOpponent.Stats != null
             ? grappleOpponent.Stats.CharacterName
@@ -1342,9 +1342,12 @@ public class CombatUI : MonoBehaviour
             if (label != null)
             {
                 string weaponLabel = hasMainHandLightWeapon ? mainHandLightWeapon.Name : "Main-hand light weapon";
-                label.text = canUse
-                    ? $"Grapple: Attack {weaponLabel} (-4, {iterativeTag})"
-                    : $"Grapple: Attack {weaponLabel} (-4, N/A)";
+                if (canUse)
+                    label.text = $"Grapple: Attack {weaponLabel} (-4, {iterativeTag})";
+                else if (hasMainHandLightWeapon && !hasIterativeGrappleAttack)
+                    label.text = $"Grapple: Attack {weaponLabel} (-4, No attacks left)";
+                else
+                    label.text = $"Grapple: Attack {weaponLabel} (-4, N/A)";
             }
         }
 
@@ -1360,7 +1363,14 @@ public class CombatUI : MonoBehaviour
             GrappleUnarmedAttackButton.interactable = canUse;
             Text label = GrappleUnarmedAttackButton.GetComponentInChildren<Text>();
             if (label != null)
-                label.text = canUse ? $"Grapple: Attack Unarmed (-4, {iterativeTag})" : "Grapple: Attack Unarmed (-4, N/A)";
+            {
+                if (canUse)
+                    label.text = $"Grapple: Attack Unarmed (-4, {iterativeTag})";
+                else if (canUnarmedByRule && !hasIterativeGrappleAttack)
+                    label.text = "Grapple: Attack Unarmed (-4, No attacks left)";
+                else
+                    label.text = "Grapple: Attack Unarmed (-4, N/A)";
+            }
         }
 
         if (GrapplePinButton != null)
@@ -1434,7 +1444,12 @@ public class CombatUI : MonoBehaviour
                 string baseLabel = showOnlyPinnerActions
                     ? $"Use {grappleOpponentName}'s Weapon"
                     : "Grapple: Use Opponent Weapon";
-                label.text = canUse ? $"{baseLabel} ({iterativeTag})" : $"{baseLabel} (Unavailable)";
+                if (canUse)
+                    label.text = $"{baseLabel} ({iterativeTag})";
+                else if (opponentHasLightWeapon && !hasIterativeGrappleAttack)
+                    label.text = $"{baseLabel} (No attacks left)";
+                else
+                    label.text = $"{baseLabel} (Unavailable)";
             }
         }
 

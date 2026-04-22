@@ -6523,9 +6523,9 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        if (CharacterController.IsIterativeGrappleAttackAction(actionType) && !pc.CanUseIterativeGrappleAttackAction())
+        if (CharacterController.IsIterativeGrappleAttackAction(actionType) && !CanUseGrappleAttackOption(pc))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no iterative grapple attacks remaining this turn.");
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no grapple attacks remaining in the shared attack pool this turn.");
             ShowActionChoices();
             return false;
         }
@@ -12725,7 +12725,7 @@ public class GameManager : MonoBehaviour
         if (isPinned)
         {
             bool hasStandardAction = actor.Actions != null && actor.Actions.HasStandardAction;
-            bool hasIterativeAttack = actor.CanUseIterativeGrappleAttackAction();
+            bool hasIterativeAttack = CanUseGrappleAttackOption(actor);
             options.Add((
                 GrappleActionType.EscapeArtist,
                 $"Escape Artist check (Std): d20 + Escape Artist vs DC 20 + {opponent.Stats.CharacterName}'s grapple mod ({opponent.GetGrappleModifier():+#;-#;0})",
@@ -12733,9 +12733,9 @@ public class GameManager : MonoBehaviour
                 hasStandardAction ? string.Empty : "Standard action already spent."));
             options.Add((
                 GrappleActionType.OpposedGrappleEscape,
-                $"Break grapple (opposed grapple check, {CharacterStats.FormatMod(actor.GetCurrentGrappleAttackBonus())} BAB)",
+                $"Break grapple (opposed grapple check, {CharacterStats.FormatMod(GetCurrentGrappleAttackBonus(actor))} BAB)",
                 hasIterativeAttack,
-                hasIterativeAttack ? string.Empty : "No iterative grapple attacks remaining."));
+                hasIterativeAttack ? string.Empty : "No shared grapple attacks remaining."));
         }
         else
         {
@@ -12751,9 +12751,9 @@ public class GameManager : MonoBehaviour
                 {
                     if (CharacterController.IsIterativeGrappleAttackAction(actionType))
                     {
-                        enabled = actor.CanUseIterativeGrappleAttackAction();
+                        enabled = CanUseGrappleAttackOption(actor);
                         if (!enabled)
-                            disabledReason = "No iterative grapple attacks remaining.";
+                            disabledReason = "No shared grapple attacks remaining.";
                     }
                     else if (requiresStandardAction)
                     {
@@ -12810,7 +12810,7 @@ public class GameManager : MonoBehaviour
                     actorHasMainHandLightWeapon
                         ? $"Attack with Light Weapon: {actorMainHandLightWeapon.Name} (-4 attack roll, no grapple check)"
                         : $"Attack with Light Weapon (Unavailable: {actorLightWeaponReason})",
-                    actorHasMainHandLightWeapon && actor.CanUseIterativeGrappleAttackAction(),
+                    actorHasMainHandLightWeapon && CanUseGrappleAttackOption(actor),
                     actorHasMainHandLightWeapon ? string.Empty : actorLightWeaponReason));
 
                 bool actorCanAttackUnarmed = actor.CanAttackUnarmedWhileGrappling(out string actorUnarmedReason);
@@ -12819,7 +12819,7 @@ public class GameManager : MonoBehaviour
                     actorCanAttackUnarmed
                         ? "Attack Unarmed (-4 attack roll, no grapple check)"
                         : $"Attack Unarmed (Unavailable: {actorUnarmedReason})",
-                    actorCanAttackUnarmed && actor.CanUseIterativeGrappleAttackAction(),
+                    actorCanAttackUnarmed && CanUseGrappleAttackOption(actor),
                     actorCanAttackUnarmed ? string.Empty : actorUnarmedReason));
 
                 string useWeaponLabel = hasOpponentLightWeapon
@@ -12828,7 +12828,7 @@ public class GameManager : MonoBehaviour
                 options.Add((
                     GrappleActionType.UseOpponentWeapon,
                     useWeaponLabel,
-                    hasOpponentLightWeapon && actor.CanUseIterativeGrappleAttackAction(),
+                    hasOpponentLightWeapon && CanUseGrappleAttackOption(actor),
                     hasOpponentLightWeapon ? string.Empty : $"{opponent.Stats.CharacterName} has no equipped light weapon."));
 
                 AddOption(GrappleActionType.PinOpponent, $"Pin {opponent.Stats.CharacterName} (opposed grapple check)");
@@ -13090,15 +13090,17 @@ public class GameManager : MonoBehaviour
         if (actor == null || actor.Stats == null)
             return false;
 
-        if (!actor.TryConsumeIterativeGrappleAttackAction(out attackBonusUsed, out attacksRemaining, out string reason))
+        if (!TryConsumeGrappleAttackAction(actor, out attackBonusUsed, out attacksRemaining, out string reason))
         {
             string fallback = string.IsNullOrWhiteSpace(reason)
-                ? "no iterative grapple attacks remain"
+                ? "no grapple attacks remain in the shared pool"
                 : reason;
             CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} cannot use {actionType}: {fallback}");
+            Debug.LogWarning($"[GameManager][Grapple] Shared-pool consume failed for {actor.Stats.CharacterName} action={actionType} reason={fallback}");
             return false;
         }
 
+        Debug.Log($"[GameManager][Grapple] Shared-pool consume success actor={actor.Stats.CharacterName} action={actionType} usedBAB={CharacterStats.FormatMod(attackBonusUsed)} remaining={attacksRemaining}");
         return true;
     }
 
@@ -15162,7 +15164,6 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        bool hasRemainingIterativeGrappleActions = character.HasRemainingIterativeGrappleAttacksInSequence();
         bool hasRemainingGrappleAttempts = CanUseGrappleAttackOption(character);
         bool hasRemainingBullRushAttempts = CanUseBullRushAttackOption(character);
         bool hasRemainingTripAttempts = CanUseTripAttackOption(character);
@@ -15170,11 +15171,11 @@ public class GameManager : MonoBehaviour
 
         bool hasIterativeWeaponAttackSequence = _isInAttackSequence && _attackingCharacter == character;
 
-        if (hasRemainingIterativeGrappleActions || hasRemainingGrappleAttempts || hasRemainingBullRushAttempts || hasRemainingTripAttempts || hasRemainingDisarmAttempts || hasIterativeWeaponAttackSequence)
+        if (hasRemainingGrappleAttempts || hasRemainingBullRushAttempts || hasRemainingTripAttempts || hasRemainingDisarmAttempts || hasIterativeWeaponAttackSequence)
         {
             Debug.Log(
                 $"[TurnFlow] ShouldAutoEndTurn=false for {character.Stats.CharacterName}: " +
-                $"iterativeRemaining(gAction={hasRemainingIterativeGrappleActions}, g={hasRemainingGrappleAttempts}, br={hasRemainingBullRushAttempts}, trip={hasRemainingTripAttempts}, d={hasRemainingDisarmAttempts}, atk={hasIterativeWeaponAttackSequence})");
+                $"iterativeRemaining(g={hasRemainingGrappleAttempts}, br={hasRemainingBullRushAttempts}, trip={hasRemainingTripAttempts}, d={hasRemainingDisarmAttempts}, atk={hasIterativeWeaponAttackSequence})");
             return false;
         }
 
@@ -15523,7 +15524,7 @@ public class GameManager : MonoBehaviour
         {
             if (CharacterController.IsIterativeGrappleAttackAction(actionType))
             {
-                if (!npc.CanUseIterativeGrappleAttackAction())
+                if (!CanUseGrappleAttackOption(npc))
                     return;
             }
             else if (requiresStandardAction && !hasStandardAction)
