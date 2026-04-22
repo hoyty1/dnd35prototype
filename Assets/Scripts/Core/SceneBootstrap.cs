@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using System.Collections.Generic;
 
 /// <summary>
@@ -1372,11 +1373,36 @@ public class SceneBootstrap : MonoBehaviour
         img.color = bgColor;
 
         Button btn = btnGO.AddComponent<Button>();
+        btn.targetGraphic = img;
+
+        Color brightHover = Color.Lerp(bgColor, new Color(1f, 0.92f, 0.35f, 1f), 0.8f);
         ColorBlock colors = btn.colors;
         colors.normalColor = bgColor;
-        colors.highlightedColor = bgColor * 1.2f;
-        colors.pressedColor = bgColor * 0.8f;
+        colors.highlightedColor = brightHover;
+        colors.selectedColor = brightHover;
+        colors.pressedColor = Color.Lerp(brightHover, Color.black, 0.3f);
+        colors.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.65f);
+        colors.colorMultiplier = 1.55f;
+        colors.fadeDuration = 0.05f;
         btn.colors = colors;
+
+        EventTrigger trigger = btnGO.AddComponent<EventTrigger>();
+
+        EventTrigger.Entry hoverEnter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+        hoverEnter.callback.AddListener(_ => btnGO.transform.localScale = new Vector3(1.08f, 1.08f, 1f));
+        trigger.triggers.Add(hoverEnter);
+
+        EventTrigger.Entry hoverExit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+        hoverExit.callback.AddListener(_ => btnGO.transform.localScale = Vector3.one);
+        trigger.triggers.Add(hoverExit);
+
+        EventTrigger.Entry pointerDown = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
+        pointerDown.callback.AddListener(_ => btnGO.transform.localScale = new Vector3(0.97f, 0.97f, 1f));
+        trigger.triggers.Add(pointerDown);
+
+        EventTrigger.Entry pointerUp = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
+        pointerUp.callback.AddListener(_ => btnGO.transform.localScale = new Vector3(1.08f, 1.08f, 1f));
+        trigger.triggers.Add(pointerUp);
 
         // Label text child - stretches to fill button
         GameObject txtGO = new GameObject(name + "Label");
