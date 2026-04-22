@@ -94,7 +94,6 @@ public class ActionButtonPanel : MonoBehaviour
     {
         public GameManager Gm;
         public ActionEconomy Actions;
-        public bool CanDualWield;
         public bool HasIterativeAttacks;
         public bool HasRapidShot;
         public bool IsGrappling;
@@ -177,7 +176,6 @@ public class ActionButtonPanel : MonoBehaviour
 
         context.Gm = GameManager.Instance;
         context.Actions = pc.Actions;
-        context.CanDualWield = pc.CanDualWield();
         context.HasIterativeAttacks = pc.Stats.IterativeAttackCount > 1;
         context.HasRapidShot = pc.Stats.HasFeat("Rapid Shot");
         context.IsGrappling = pc.IsGrappling();
@@ -387,30 +385,8 @@ public class ActionButtonPanel : MonoBehaviour
 
     private void ComputeDualWieldAndFullAttackStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
     {
-        bool canDW = context.CanDualWield && context.Actions.HasFullRoundAction && !context.IsPinned && !context.IsTurned;
-        bool canDualWieldAttack = true;
-        bool offHandIsSpikedGauntlet = false;
-        bool offHandIsShieldBash = false;
-        if (context.CanDualWield)
-        {
-            ItemData mainWeapon = pc.GetDualWieldMainWeapon();
-            ItemData offWeapon = pc.GetDualWieldOffHandWeapon();
-            bool canMainAttack = pc.CanAttackWithWeapon(mainWeapon, out _);
-            bool canOffAttack = pc.CanAttackWithWeapon(offWeapon, out _);
-            canDualWieldAttack = canMainAttack || canOffAttack;
-            offHandIsSpikedGauntlet = pc.IsDualWieldOffHandSpikedGauntlet();
-            offHandIsShieldBash = pc.IsDualWieldOffHandShieldBash();
-        }
-
-        string dualWieldLabel;
-        if (context.IsPinned) dualWieldLabel = "Dual Wield (Pinned: no)";
-        else if (context.IsTurned) dualWieldLabel = "Dual Wield (Turned: no)";
-        else if (!canDualWieldAttack) dualWieldLabel = "Dual Wield (Reload first)";
-        else if (canDW && offHandIsSpikedGauntlet) dualWieldLabel = "Dual Wield (Spiked Gauntlet Off-Hand)";
-        else if (canDW && offHandIsShieldBash) dualWieldLabel = "Dual Wield (Shield Bash Off-Hand)";
-        else dualWieldLabel = canDW ? "Dual Wield (Full-Round)" : "Dual Wield (N/A)";
-
-        states.Set(DualWieldButton, new ActionButtonState(context.CanDualWield, canDW && canDualWieldAttack, dualWieldLabel));
+        // Dual Wield entry point is intentionally removed from the main Actions window.
+        states.Set(DualWieldButton, new ActionButtonState(false, false));
 
         // Full Attack entry points are intentionally removed from the main Actions window.
         states.Set(FullAttackButton, new ActionButtonState(false, false));
