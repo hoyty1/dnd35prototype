@@ -16457,7 +16457,10 @@ public class GameManager : MonoBehaviour
 
                 if (atk.SneakAttackApplied)
                 {
-                    Debug.Log($"[Combat]     + {atk.SneakAttackDamage} sneak attack ({atk.SneakAttackDice}d6)");
+                    string trigger = string.IsNullOrEmpty(atk.SneakAttackTriggerReason)
+                        ? ""
+                        : $" [{atk.SneakAttackTriggerReason}]";
+                    Debug.Log($"[Combat]     + {atk.SneakAttackDamage} sneak attack ({atk.SneakAttackDice}d6){trigger}");
                     Debug.Log($"[Combat]     = {atk.TotalDamage} total damage");
                 }
             }

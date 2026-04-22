@@ -2714,10 +2714,11 @@ public class CharacterController : MonoBehaviour
         target.SetIncomingFeintIndicator(this, active: true);
     }
 
-    private bool TryConsumeFeintDexDenial(CharacterController target, bool isMeleeAttack, out int deniedDexBonus, out string note)
+    private bool TryConsumeFeintDexDenial(CharacterController target, bool isMeleeAttack, out int deniedDexBonus, out string note, out bool feintWindowConsumed)
     {
         deniedDexBonus = 0;
         note = string.Empty;
+        feintWindowConsumed = false;
 
         if (!isMeleeAttack || target == null || target.Stats == null)
             return false;
@@ -2734,6 +2735,8 @@ public class CharacterController : MonoBehaviour
         if (consumed != null && consumed.Target != null)
             consumed.Target.SetIncomingFeintIndicator(this, active: false);
 
+        feintWindowConsumed = true;
+
         if (target.HasCondition(CombatConditionType.FlatFooted))
         {
             note = "Feint window consumed: target already flat-footed (no extra DEX denial).";
@@ -2749,6 +2752,55 @@ public class CharacterController : MonoBehaviour
 
         note = $"Feint: denied +{deniedDexBonus} DEX bonus to AC on this melee attack.";
         return true;
+    }
+
+    private bool IsTargetImmuneToSneakAttackDamage(CharacterController target)
+    {
+        if (target == null || target.Stats == null)
+            return false;
+
+        string creatureType = string.IsNullOrEmpty(target.Stats.CreatureType)
+            ? string.Empty
+            : target.Stats.CreatureType.Trim().ToLowerInvariant();
+
+        // D&D 3.5 precision-damage immunity (minimum implemented set requested by design task).
+        return creatureType == "undead"
+            || creatureType == "construct"
+            || creatureType == "ooze";
+    }
+
+    private bool IsTargetDeniedDexForSneakAttack(CharacterController target, bool isMeleeAttack, bool feintWindowConsumed, out string reason)
+    {
+        reason = string.Empty;
+
+        if (target == null)
+            return false;
+
+        if (isMeleeAttack && feintWindowConsumed)
+        {
+            reason = "feinted target (DEX denied)";
+            return true;
+        }
+
+        if (target.HasCondition(CombatConditionType.FlatFooted))
+        {
+            reason = "target is flat-footed";
+            return true;
+        }
+
+        if (target.HasCondition(CombatConditionType.Stunned))
+        {
+            reason = "target is stunned";
+            return true;
+        }
+
+        if (target.HasCondition(CombatConditionType.Paralyzed) || target.HasCondition(CombatConditionType.Helpless))
+        {
+            reason = "target is paralyzed/helpless";
+            return true;
+        }
+
+        return false;
     }
 
     // ========== INTERNAL: Single attack with critical hit support ==========
@@ -2813,7 +2865,8 @@ public class CharacterController : MonoBehaviour
 
         int feintDexDenied = 0;
         string feintNote;
-        if (TryConsumeFeintDexDenial(target, !isRangedAttack, out feintDexDenied, out feintNote))
+        bool feintWindowConsumed;
+        if (TryConsumeFeintDexDenial(target, !isRangedAttack, out feintDexDenied, out feintNote, out feintWindowConsumed))
         {
             targetAC -= feintDexDenied;
             result.FeintDexDeniedToAc = feintDexDenied;
@@ -2894,16 +2947,39 @@ public class CharacterController : MonoBehaviour
             result.Damage = rawWeaponDamage;
             result.BaseDamageRoll = baseDmgRoll;
 
-            // Sneak attack: applies if attacker is Rogue and is flanking
+            // Sneak attack: applies if attacker is Rogue and target is either flanked
+            // or denied DEX to AC (feint, flat-footed, stunned, etc.).
             // Sneak attack is NOT multiplied on critical hits (D&D 3.5 rule)
             int rawSneakDamage = 0;
-            if (Stats.IsRogue && isFlanking)
+            bool deniedDexForSneak = IsTargetDeniedDexForSneakAttack(target, !isRangedAttack, feintWindowConsumed, out string dexDeniedReason);
+            bool sneakAttackEligible = Stats.IsRogue && (isFlanking || deniedDexForSneak);
+
+            if (sneakAttackEligible)
             {
-                int sneakDice = CombatUtils.GetSneakAttackDice(Stats.Level);
-                rawSneakDamage = CombatUtils.RollSneakAttackDamage(Stats.Level);
-                result.SneakAttackApplied = true;
-                result.SneakAttackDice = sneakDice;
-                result.SneakAttackDamage = rawSneakDamage;
+                if (IsTargetImmuneToSneakAttackDamage(target))
+                {
+                    string immunityReason = $"target creature type '{target.Stats.CreatureType}' is immune to sneak attack precision damage";
+                    result.SneakAttackTriggerReason = immunityReason;
+                    Debug.Log($"[Sneak Attack] {Stats.CharacterName} cannot sneak attack {target.Stats.CharacterName}: {immunityReason}.");
+                }
+                else
+                {
+                    int sneakDice = CombatUtils.GetSneakAttackDice(Stats.Level);
+                    rawSneakDamage = CombatUtils.RollSneakAttackDamage(Stats.Level);
+                    result.SneakAttackApplied = true;
+                    result.SneakAttackDice = sneakDice;
+                    result.SneakAttackDamage = rawSneakDamage;
+                    result.SneakAttackByFlanking = isFlanking;
+                    result.SneakAttackByDexDenied = deniedDexForSneak;
+                    result.SneakAttackTriggerReason = isFlanking
+                        ? "target is flanked"
+                        : dexDeniedReason;
+
+                    string triggerReason = string.IsNullOrEmpty(result.SneakAttackTriggerReason)
+                        ? "qualifying condition met"
+                        : result.SneakAttackTriggerReason;
+                    Debug.Log($"[Sneak Attack] {Stats.CharacterName} triggered sneak attack vs {target.Stats.CharacterName}: {triggerReason}. +{rawSneakDamage} ({sneakDice}d6)");
+                }
             }
 
             int rawTotalDamage = rawWeaponDamage + rawSneakDamage;

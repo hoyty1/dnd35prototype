@@ -26,6 +26,9 @@ public class CombatResult
     public bool SneakAttackApplied;
     public int SneakAttackDice;
     public int SneakAttackDamage;
+    public bool SneakAttackByFlanking;
+    public bool SneakAttackByDexDenied;
+    public string SneakAttackTriggerReason = "";
 
     public bool IsCritThreat;
     public bool CritConfirmed;
@@ -228,7 +231,10 @@ public class CombatResult
             if (WeaponSpecBonus > 0) sb.AppendLine($"    {FormatModLine(WeaponSpecBonus, "Weapon Spec")}");
 
             if (SneakAttackApplied)
-                sb.AppendLine($"    Includes sneak attack: +{SneakAttackDamage} ({SneakAttackDice}d6)");
+            {
+                string trigger = string.IsNullOrEmpty(SneakAttackTriggerReason) ? "" : $" [{SneakAttackTriggerReason}]";
+                sb.AppendLine($"    Includes sneak attack: +{SneakAttackDamage} ({SneakAttackDice}d6){trigger}");
+            }
             int rawSubtotal = RawTotalDamage > 0 ? RawTotalDamage : (Damage + SneakAttackDamage);
             sb.AppendLine($"    = {rawSubtotal} raw damage{(string.IsNullOrEmpty(DamageTypeSummary) ? "" : $" ({DamageTypeSummary})")}");
             if (!string.IsNullOrEmpty(MitigationSummary)) sb.AppendLine($"    Mitigation: {MitigationSummary}");
@@ -293,7 +299,10 @@ public class CombatResult
             else
                 sb.AppendLine($"    Damage: {(!string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?")} = {BaseDamageRoll}");
             if (SneakAttackApplied)
-                sb.AppendLine($"      Includes sneak attack: +{SneakAttackDamage} ({SneakAttackDice}d6)");
+            {
+                string trigger = string.IsNullOrEmpty(SneakAttackTriggerReason) ? "" : $" [{SneakAttackTriggerReason}]";
+                sb.AppendLine($"      Includes sneak attack: +{SneakAttackDamage} ({SneakAttackDice}d6){trigger}");
+            }
 
             int rawSubtotal = RawTotalDamage > 0 ? RawTotalDamage : (Damage + SneakAttackDamage);
             sb.AppendLine($"      = {rawSubtotal} raw damage{(string.IsNullOrEmpty(DamageTypeSummary) ? "" : $" ({DamageTypeSummary})")}");
