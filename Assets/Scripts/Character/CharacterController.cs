@@ -244,6 +244,10 @@ public class CharacterController : MonoBehaviour
     private readonly List<FeintWindow> _activeFeintWindows = new List<FeintWindow>();
     private int _turnsStartedCount;
 
+    // Tracks attackers that currently have an active feint window against this defender.
+    // Used only for visual/status indication on the defender token.
+    private readonly HashSet<CharacterController> _incomingFeintSources = new HashSet<CharacterController>();
+
     // Iterative grapple attack tracking (D&D 3.5):
     // Some grapple actions can be used multiple times as attacks during a full attack sequence.
     private readonly List<int> _grappleAttackBonusesThisTurn = new List<int>();
@@ -914,6 +918,8 @@ public class CharacterController : MonoBehaviour
             Stats.NonlethalDamageChanged -= OnNonlethalDamageChanged;
         }
 
+        ClearOwnedFeintWindowsAndIndicators();
+        ClearIncomingFeintIndicators();
         ReleaseGrappleState("character removed");
     }
     /// <summary>
@@ -2614,14 +2620,73 @@ public class CharacterController : MonoBehaviour
         return deniedDexBonus;
     }
 
+    private void SetIncomingFeintIndicator(CharacterController attacker, bool active)
+    {
+        if (attacker == null || attacker == this)
+            return;
+
+        if (active)
+        {
+            _incomingFeintSources.Add(attacker);
+            if (!HasCondition(CombatConditionType.Feinted))
+                ApplyCondition(CombatConditionType.Feinted, -1, attacker.Stats != null ? attacker.Stats.CharacterName : "Feint");
+            return;
+        }
+
+        _incomingFeintSources.Remove(attacker);
+
+        // Trim dead/null references to avoid stale marker state.
+        _incomingFeintSources.RemoveWhere(src => src == null || src.Stats == null || src.Stats.IsDead);
+
+        if (_incomingFeintSources.Count == 0)
+            RemoveCondition(CombatConditionType.Feinted);
+    }
+
+    private void ClearIncomingFeintIndicators()
+    {
+        if (_incomingFeintSources.Count > 0)
+            _incomingFeintSources.Clear();
+
+        RemoveCondition(CombatConditionType.Feinted);
+    }
+
+    private void ClearOwnedFeintWindowsAndIndicators()
+    {
+        if (_activeFeintWindows.Count == 0)
+            return;
+
+        for (int i = _activeFeintWindows.Count - 1; i >= 0; i--)
+        {
+            FeintWindow window = _activeFeintWindows[i];
+            if (window != null && window.Target != null)
+                window.Target.SetIncomingFeintIndicator(this, active: false);
+        }
+
+        _activeFeintWindows.Clear();
+    }
+
     private void PruneExpiredFeintWindows()
     {
-        _activeFeintWindows.RemoveAll(w =>
-            w == null
-            || w.Target == null
-            || w.Target.Stats == null
-            || w.Target.Stats.IsDead
-            || _turnsStartedCount > w.ExpiresAfterTurnStartCount);
+        if (_activeFeintWindows.Count == 0)
+            return;
+
+        for (int i = _activeFeintWindows.Count - 1; i >= 0; i--)
+        {
+            FeintWindow window = _activeFeintWindows[i];
+            bool expired = window == null
+                || window.Target == null
+                || window.Target.Stats == null
+                || window.Target.Stats.IsDead
+                || _turnsStartedCount > window.ExpiresAfterTurnStartCount;
+
+            if (!expired)
+                continue;
+
+            if (window != null && window.Target != null)
+                window.Target.SetIncomingFeintIndicator(this, active: false);
+
+            _activeFeintWindows.RemoveAt(i);
+        }
     }
 
     private void RegisterSuccessfulFeint(CharacterController target)
@@ -2645,6 +2710,8 @@ public class CharacterController : MonoBehaviour
         {
             existing.ExpiresAfterTurnStartCount = _turnsStartedCount + 1;
         }
+
+        target.SetIncomingFeintIndicator(this, active: true);
     }
 
     private bool TryConsumeFeintDexDenial(CharacterController target, bool isMeleeAttack, out int deniedDexBonus, out string note)
@@ -2662,7 +2729,10 @@ public class CharacterController : MonoBehaviour
 
         // D&D 3.5: the effect is for your next melee attack against the feinted target.
         // Consume the window regardless of whether it yields a numerical AC reduction.
+        FeintWindow consumed = _activeFeintWindows[idx];
         _activeFeintWindows.RemoveAt(idx);
+        if (consumed != null && consumed.Target != null)
+            consumed.Target.SetIncomingFeintIndicator(this, active: false);
 
         if (target.HasCondition(CombatConditionType.FlatFooted))
         {
@@ -5258,6 +5328,8 @@ public class CharacterController : MonoBehaviour
             spellComp.ClearHeldTouchCharge("caster incapacitated");
         }
 
+        ClearOwnedFeintWindowsAndIndicators();
+        ClearIncomingFeintIndicators();
         ReleaseGrappleState("death");
     }
 
