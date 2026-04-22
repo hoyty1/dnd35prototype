@@ -60,20 +60,23 @@ public partial class GameManager
         if (undead == null || undead.Stats == null || undead.Stats.IsDead)
             return false;
 
-        StatusEffect turnedCondition = GetActiveTurnedCondition(undead);
-        if (turnedCondition == null)
-            return false;
+        int rounds = _conditionService != null
+            ? _conditionService.GetConditionDuration(undead, CombatConditionType.Turned)
+            : 0;
 
-        if (turnedCondition.RemainingRounds == 0)
-            return false;
+        if (rounds == 0)
+            return undead.HasCondition(CombatConditionType.Turned);
 
-        return ConditionRules.Normalize(turnedCondition.Type) == CombatConditionType.Turned;
+        return rounds > 0 || rounds < 0;
     }
 
     public int GetTurnedRoundsRemaining(CharacterController undead)
     {
         if (!IsTurnedUndead(undead))
             return 0;
+
+        if (_conditionService != null)
+            return Mathf.Max(0, _conditionService.GetConditionDuration(undead, CombatConditionType.Turned));
 
         StatusEffect turnedCondition = GetActiveTurnedCondition(undead);
         return turnedCondition != null ? Mathf.Max(0, turnedCondition.RemainingRounds) : 0;
@@ -83,6 +86,12 @@ public partial class GameManager
     {
         if (!IsTurnedUndead(undead))
             return null;
+
+        CharacterController trackedSource = _conditionService != null
+            ? _conditionService.GetConditionSource(undead, CombatConditionType.Turned)
+            : null;
+        if (trackedSource != null)
+            return trackedSource;
 
         CharacterController recorded = GetTurnUndeadTurner(undead);
         if (recorded != null)
@@ -168,7 +177,9 @@ public partial class GameManager
 
         _activeTurnUndeadTrackers.Remove(undead);
 
-        bool removed = undead.RemoveCondition(CombatConditionType.Turned);
+        bool removed = _conditionService != null
+            ? _conditionService.RemoveCondition(undead, CombatConditionType.Turned)
+            : undead.RemoveCondition(CombatConditionType.Turned);
         if (removed)
         {
             Debug.Log($"[Turn Undead] Cleared turned condition on {undead.Stats?.CharacterName ?? "Unknown"}");
@@ -832,7 +843,11 @@ public partial class GameManager
                 }
                 else
                 {
-                    option.Target.ApplyCondition(CombatConditionType.Turned, 10, context.Turner.Stats.CharacterName);
+                    if (_conditionService != null)
+                        _conditionService.ApplyCondition(option.Target, CombatConditionType.Turned, 10, context.Turner);
+                    else
+                        option.Target.ApplyCondition(CombatConditionType.Turned, 10, context.Turner.Stats.CharacterName);
+
                     RegisterTurnUndeadTracker(option.Target, context.Turner);
                     turnedCount++;
                     CombatUI?.ShowCombatLog($"   ↩ {option.Target.Stats.CharacterName} is turned for 10 rounds and flees! ({option.HitDice} HD)");

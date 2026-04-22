@@ -104,6 +104,7 @@ public partial class GameManager : MonoBehaviour
     [SerializeField] private TurnService _turnService;
     [SerializeField] private MovementService _movementService;
     [SerializeField] private InputService _inputService;
+    [SerializeField] private ConditionService _conditionService;
 
     /// <summary>Current combatant in initiative order (PC or NPC).</summary>
     public CharacterController CurrentCharacter => _turnService != null ? _turnService.CurrentCharacter : null;
@@ -507,6 +508,11 @@ public partial class GameManager : MonoBehaviour
         _inputService.OnSkillsToggleRequested += HandleSkillsInput;
         _inputService.OnCharacterSheetToggleRequested += HandleCharacterSheetInput;
 
+        _conditionService ??= gameObject.GetComponent<ConditionService>() ?? gameObject.AddComponent<ConditionService>();
+        _conditionService.Initialize(GetAllCharacters);
+        _conditionService.BindTurnService(_turnService);
+        _conditionService.OnConditionExpired += HandleConditionExpired;
+
         turnUndeadSystem ??= gameObject.GetComponent<TurnUndeadSystem>() ?? gameObject.AddComponent<TurnUndeadSystem>();
         grappleSystem ??= gameObject.GetComponent<GrappleSystem>() ?? gameObject.AddComponent<GrappleSystem>();
         overrunSystem ??= gameObject.GetComponent<OverrunSystem>() ?? gameObject.AddComponent<OverrunSystem>();
@@ -534,6 +540,12 @@ public partial class GameManager : MonoBehaviour
             _inputService.OnInventoryToggleRequested -= HandleInventoryInput;
             _inputService.OnSkillsToggleRequested -= HandleSkillsInput;
             _inputService.OnCharacterSheetToggleRequested -= HandleCharacterSheetInput;
+        }
+
+        if (_conditionService != null)
+        {
+            _conditionService.OnConditionExpired -= HandleConditionExpired;
+            _conditionService.UnbindTurnService();
         }
 
         turnUndeadSystem?.Cleanup();
@@ -1996,43 +2008,22 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private void RefreshFlankedConditions()
     {
-        var allCharacters = GetAllCharacters();
+        _conditionService?.RefreshFlankedConditions(GetAllCharacters());
+    }
 
-        foreach (var character in allCharacters)
-        {
-            if (character == null || character.Stats == null)
-                continue;
+    private void HandleConditionExpired(CharacterController character, ConditionService.ActiveCondition condition)
+    {
+        if (character == null || character.Stats == null || condition == null)
+            return;
 
-            bool hasFlanked = character.HasCondition(CombatConditionType.Flanked);
+        CombatConditionType normalizedType = ConditionRules.Normalize(condition.Type);
+        if (normalizedType == CombatConditionType.Turned)
+            _activeTurnUndeadTrackers.Remove(character);
 
-            // Dead units should not retain tactical flanking condition badges.
-            if (character.Stats.IsDead)
-            {
-                if (hasFlanked)
-                    character.RemoveCondition(CombatConditionType.Flanked);
-                continue;
-            }
-
-            bool shouldBeFlanked = false;
-            foreach (var enemy in allCharacters)
-            {
-                if (enemy == null || enemy == character || enemy.Stats == null) continue;
-                if (enemy.Stats.IsDead) continue;
-                if (enemy.IsPlayerControlled == character.IsPlayerControlled) continue;
-
-                CharacterController partner;
-                if (CombatUtils.IsAttackerFlanking(enemy, character, allCharacters, out partner))
-                {
-                    shouldBeFlanked = true;
-                    break;
-                }
-            }
-
-            if (shouldBeFlanked && !hasFlanked)
-                character.ApplyCondition(CombatConditionType.Flanked, -1, "Flanking");
-            else if (!shouldBeFlanked && hasFlanked)
-                character.RemoveCondition(CombatConditionType.Flanked);
-        }
+        string conditionLabel = condition.Type.ToString();
+        string msg = $"⏱ {character.Stats.CharacterName} is no longer {conditionLabel}.";
+        Debug.Log($"[Condition] {msg}");
+        CombatUI?.ShowCombatLog($"<color=#99CCFF>{msg}</color>");
     }
 
     private bool IsActiveCombatant(CharacterController c)
@@ -2174,8 +2165,9 @@ public partial class GameManager : MonoBehaviour
         ResetQuickenedSpellTrackingForAllCharacters();
         ResetAttackDamageModesForAllCharacters();
 
-        // Tick all spell effect durations at the start of each new round
+        // Tick all spell + condition effect durations at the start of each new round.
         TickAllSpellDurations();
+        _conditionService?.OnRoundEnd();
 
         // Tick summon durations (Summon Monster: 1 round/level)
         TickSummonDurations();
@@ -2188,6 +2180,7 @@ public partial class GameManager : MonoBehaviour
     private void OnCombatEnded()
     {
         CurrentPhase = TurnPhase.CombatOver;
+        _conditionService?.CleanupOnCombatEnd(GetAllCharacters());
         CombatUI.SetTurnIndicator("Combat has ended.");
         CombatUI.SetActionButtonsVisible(false);
         UpdateInitiativeUI();
@@ -2201,7 +2194,10 @@ public partial class GameManager : MonoBehaviour
         character.ProcessEndOfTurnHPState();
 
         if (character.CurrentHPState == HPState.Dead)
+        {
+            _conditionService?.CleanupOnDeath(character);
             HandleSummonDeathCleanup(character);
+        }
 
         UpdateAllStatsUI();
     }
@@ -2215,6 +2211,7 @@ public partial class GameManager : MonoBehaviour
     {
         CharacterController endingCharacter = CurrentCharacter;
         endingCharacter?.ProcessPinnedDurationAtTurnEnd();
+        _conditionService?.OnTurnEnd(endingCharacter);
         ProcessEndOfTurnHPState(endingCharacter);
 
         // Threat map may have changed (NPC moved, character died, etc.)
@@ -2233,6 +2230,7 @@ public partial class GameManager : MonoBehaviour
     {
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
+        _conditionService?.OnTurnStart(pc);
         CloseInventoryIfOpen();
 
         // Tick Aid Another expiry counters before actions; this keeps bonuses available for one full beneficiary turn.
@@ -8065,18 +8063,6 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
-        var expiredConditions = character.TickConditions();
-        foreach (var cond in expiredConditions)
-        {
-            CombatConditionType normalizedType = cond != null ? ConditionRules.Normalize(cond.Type) : CombatConditionType.None;
-            if (normalizedType == CombatConditionType.Turned)
-                _activeTurnUndeadTrackers.Remove(character);
-
-            string conditionLabel = cond != null ? cond.Type.ToString() : "a condition";
-            string msg = $"⏱ {character.Stats.CharacterName} is no longer {conditionLabel}.";
-            Debug.Log($"[Condition] {msg}");
-            CombatUI?.ShowCombatLog($"<color=#99CCFF>{msg}</color>");
-        }
     }
 
 
@@ -8566,6 +8552,20 @@ public partial class GameManager : MonoBehaviour
         => _movementService != null ? _movementService.TriggerAoO(threatener, target) : ThreatSystem.ExecuteAoO(threatener, target);
     public bool CanTake5FootStep(CharacterController character, Vector2Int destination)
         => _movementService != null && _movementService.CanTake5FootStep(character, destination);
+
+    // Public delegation helpers for condition-aware systems.
+    public void ApplyCondition(CharacterController target, CombatConditionType type, int rounds, CharacterController source = null, object data = null, bool expiresAtEndOfTurn = false, bool expiresAtStartOfTurn = false)
+        => _conditionService?.ApplyCondition(target, type, rounds, source, data, expiresAtEndOfTurn, expiresAtStartOfTurn);
+    public bool RemoveCondition(CharacterController target, CombatConditionType type)
+        => _conditionService != null && _conditionService.RemoveCondition(target, type);
+    public int RemoveAllConditions(CharacterController target)
+        => _conditionService != null ? _conditionService.RemoveAllConditions(target) : 0;
+    public bool HasCondition(CharacterController target, CombatConditionType type)
+        => _conditionService != null && _conditionService.HasCondition(target, type);
+    public int GetConditionDuration(CharacterController target, CombatConditionType type)
+        => _conditionService != null ? _conditionService.GetConditionDuration(target, type) : 0;
+    public List<ConditionService.ActiveCondition> GetActiveConditions(CharacterController target)
+        => _conditionService != null ? _conditionService.GetActiveConditions(target) : new List<ConditionService.ActiveCondition>();
 
     private void CancelMovementSelection()
     {
@@ -11362,6 +11362,7 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private IEnumerator SingleNPCTurn(CharacterController npc, EnemyAIBehavior behavior)
     {
+        _conditionService?.OnTurnStart(npc);
         npc.StartNewTurn();
         PruneTurnUndeadTrackers();
         CheckTurnUndeadProximityBreakingForMover(npc);
