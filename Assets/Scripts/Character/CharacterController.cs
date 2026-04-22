@@ -263,11 +263,6 @@ public class CharacterController : MonoBehaviour
         public string PenaltySource;
     }
 
-    // Shield bash AC suppression state:
-    // while active, this character's equipped shield bonus is removed until next StartNewTurn().
-    private bool _shieldBashAcSuppressed;
-    private int _suppressedShieldBonusAmount;
-
     // Feint windows keyed by this attacker.
     // A successful feint lets this attacker deny DEX-to-AC against that target on the next melee attack,
     // usable before the end of this attacker's next turn.
@@ -854,6 +849,9 @@ public class CharacterController : MonoBehaviour
     private SpriteRenderer _sr;
     private ConditionManager _conditionManager;
     private CharacterCombatStats _combatStats;
+    private CharacterEquipment _equipment;
+    private CharacterInventory _inventory;
+    private CharacterConditions _conditions;
     private Coroutine _currentScaleAnimation;
     private Coroutine _grappleAlternateVisibilityCoroutine;
     private int _grappleDisplayPauseLocks;
@@ -900,6 +898,61 @@ public class CharacterController : MonoBehaviour
         return _combatStats;
     }
 
+    private CharacterEquipment EnsureEquipment()
+    {
+        if (_equipment == null)
+        {
+            _equipment = GetComponent<CharacterEquipment>();
+            if (_equipment == null)
+                _equipment = gameObject.AddComponent<CharacterEquipment>();
+
+            _equipment.Initialize(this);
+        }
+
+        return _equipment;
+    }
+
+    private CharacterInventory EnsureInventory()
+    {
+        if (_inventory == null)
+        {
+            _inventory = GetComponent<CharacterInventory>();
+            if (_inventory == null)
+                _inventory = gameObject.AddComponent<CharacterInventory>();
+
+            _inventory.Initialize(this);
+        }
+
+        return _inventory;
+    }
+
+    private CharacterConditions EnsureConditions()
+    {
+        if (_conditions == null)
+        {
+            _conditions = GetComponent<CharacterConditions>();
+            if (_conditions == null)
+                _conditions = gameObject.AddComponent<CharacterConditions>();
+
+            ConditionService conditionService = GameManager.Instance != null
+                ? GameManager.Instance.GetComponent<ConditionService>()
+                : null;
+
+            _conditions.Initialize(this, conditionService);
+        }
+        else if (GameManager.Instance != null)
+        {
+            // Keep the reference fresh if services were created after this character.
+            ConditionService conditionService = GameManager.Instance.GetComponent<ConditionService>();
+            _conditions.SetConditionService(conditionService);
+        }
+
+        return _conditions;
+    }
+
+    public CharacterInventory Inventory => EnsureInventory();
+    public CharacterConditions Conditions => EnsureConditions();
+
     private void Awake()
     {
         _sr = GetComponent<SpriteRenderer>();
@@ -915,6 +968,9 @@ public class CharacterController : MonoBehaviour
             _conditionManager = gameObject.AddComponent<ConditionManager>();
 
         EnsureCombatStats();
+        EnsureEquipment();
+        EnsureInventory();
+        EnsureConditions();
     }
 
     private void OnDisable()
@@ -966,6 +1022,8 @@ public class CharacterController : MonoBehaviour
         if (_conditionManager == null)
             _conditionManager = GetComponent<ConditionManager>() ?? gameObject.AddComponent<ConditionManager>();
         _conditionManager.Init(Stats);
+
+        EnsureConditions();
 
         SyncHPStateFromCurrentHP(emitLog: false);
         _sr.sprite = (_currentHPState == HPState.Dead && DeadSprite != null) ? DeadSprite : AliveSprite;
@@ -1232,6 +1290,11 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public List<StatusEffect> GetActiveConditions()
     {
+        return EnsureConditions().GetActiveConditions();
+    }
+
+    public List<StatusEffect> GetActiveConditionsDirect()
+    {
         if (Stats == null || Stats.ActiveConditions == null)
             return new List<StatusEffect>();
 
@@ -1243,6 +1306,11 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool HasCondition(CombatConditionType type)
     {
+        return EnsureConditions().HasCondition(type);
+    }
+
+    public bool HasConditionDirect(CombatConditionType type)
+    {
         if (Stats == null) return false;
 
         if (_conditionManager != null)
@@ -1253,8 +1321,12 @@ public class CharacterController : MonoBehaviour
             && Stats.ActiveConditions.Exists(c => ConditionRules.Normalize(c.Type) == normalized);
     }
 
-
     public void ApplyCondition(CombatConditionType type, int rounds, string sourceName)
+    {
+        EnsureConditions().ApplyCondition(type, rounds, sourceName);
+    }
+
+    public void ApplyConditionDirect(CombatConditionType type, int rounds, string sourceName)
     {
         if (Stats == null) return;
 
@@ -1269,6 +1341,11 @@ public class CharacterController : MonoBehaviour
 
     public bool RemoveCondition(CombatConditionType type)
     {
+        return EnsureConditions().RemoveCondition(type);
+    }
+
+    public bool RemoveConditionDirect(CombatConditionType type)
+    {
         if (Stats == null) return false;
 
         if (_conditionManager != null)
@@ -1279,12 +1356,76 @@ public class CharacterController : MonoBehaviour
 
     public List<StatusEffect> TickConditions()
     {
+        return EnsureConditions().TickConditions();
+    }
+
+    public List<StatusEffect> TickConditionsDirect()
+    {
         if (Stats == null) return new List<StatusEffect>();
 
         if (_conditionManager != null)
             return _conditionManager.TickConditions();
 
         return Stats.TickConditions();
+    }
+
+    public bool IsProneCondition => EnsureConditions().IsProne;
+    public bool IsGrappledCondition => EnsureConditions().IsGrappled;
+    public bool IsPinnedCondition => EnsureConditions().IsPinned;
+    public bool IsPinningCondition => EnsureConditions().IsPinning;
+    public bool IsStunnedCondition => EnsureConditions().IsStunned;
+    public bool IsInvisibleCondition => EnsureConditions().IsInvisible;
+    public bool IsTurnedCondition => EnsureConditions().IsTurned;
+    public bool IsFeintedCondition => EnsureConditions().IsFeinted;
+    public bool IsFlatFootedCondition => EnsureConditions().IsFlatFooted;
+    public bool IsDexDenied => EnsureConditions().IsDexDenied;
+
+    public void SetProne(bool prone)
+    {
+        if (prone)
+            ApplyCondition(CombatConditionType.Prone, -1, Stats != null ? Stats.CharacterName : "Prone");
+        else
+            RemoveCondition(CombatConditionType.Prone);
+    }
+
+    public void StandUp()
+    {
+        SetProne(false);
+    }
+
+    public int GetConditionACModifier()
+    {
+        return EnsureConditions().GetConditionACModifier();
+    }
+
+    public int GetConditionAttackModifier()
+    {
+        return EnsureConditions().GetConditionAttackModifier();
+    }
+
+    public bool CanTakeActions()
+    {
+        return EnsureConditions().CanTakeActions();
+    }
+
+    public bool CanMove()
+    {
+        return EnsureConditions().CanMove();
+    }
+
+    public bool CanAttack()
+    {
+        return EnsureConditions().CanAttack();
+    }
+
+    public string GetConditionSummary()
+    {
+        return EnsureConditions().GetConditionSummary();
+    }
+
+    public int ClearAllConditions()
+    {
+        return EnsureConditions().ClearAllConditions();
     }
 
     private void OnCurrentHPChanged(int oldHP, int newHP)
@@ -2051,12 +2192,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool CanDualWield()
     {
-        // D&D 3.5: You can't attack with two weapons while grappling,
-        // even if both weapons are light.
-        if (HasCondition(CombatConditionType.Grappled))
-            return false;
-
-        return TryGetDualWieldWeapons(out _, out _, out _);
+        return EnsureEquipment().CanDualWield();
     }
 
     /// <summary>
@@ -2064,7 +2200,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public ItemData GetDualWieldMainWeapon()
     {
-        return TryGetDualWieldWeapons(out ItemData mainWeapon, out _, out _) ? mainWeapon : null;
+        return EnsureEquipment().GetDualWieldMainWeapon();
     }
 
     /// <summary>
@@ -2074,7 +2210,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public ItemData GetDualWieldOffHandWeapon()
     {
-        return TryGetDualWieldWeapons(out _, out ItemData offWeapon, out _) ? offWeapon : null;
+        return EnsureEquipment().GetDualWieldOffHandWeapon();
     }
 
     /// <summary>
@@ -2083,19 +2219,12 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool HasOffHandWeaponEquipped()
     {
-        return TryGetDualWieldWeapons(out _, out ItemData offWeapon, out _) && offWeapon != null;
+        return EnsureEquipment().HasOffHandWeaponEquipped();
     }
 
     public bool HasThrowableOffHandWeaponEquipped()
     {
-        ItemData offWeapon = GetOffHandAttackWeapon();
-        bool isThrowable = offWeapon != null
-            && offWeapon.IsWeapon
-            && offWeapon.IsThrown
-            && offWeapon.RangeIncrement > 0;
-
-        Debug.Log($"[Character] {Stats?.CharacterName ?? name} has throwable off-hand weapon: {isThrowable} ({offWeapon?.Name ?? "none"})");
-        return isThrowable;
+        return EnsureEquipment().HasThrowableOffHandWeaponEquipped();
     }
 
     /// <summary>
@@ -2103,7 +2232,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public ItemData GetOffHandAttackWeapon()
     {
-        return GetDualWieldOffHandWeapon();
+        return EnsureEquipment().GetOffHandAttackWeapon();
     }
 
     /// <summary>
@@ -2111,7 +2240,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool IsDualWieldOffHandSpikedGauntlet()
     {
-        return TryGetDualWieldWeapons(out _, out _, out bool offHandFromSpikedGauntlet) && offHandFromSpikedGauntlet;
+        return EnsureEquipment().IsDualWieldOffHandSpikedGauntlet();
     }
 
     /// <summary>
@@ -2119,56 +2248,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool IsDualWieldOffHandShieldBash()
     {
-        return TryGetDualWieldWeapons(out _, out ItemData offWeapon, out _) && IsShieldBashWeapon(offWeapon);
-    }
-
-    private bool TryGetDualWieldWeapons(out ItemData mainWeapon, out ItemData offWeapon, out bool offHandFromSpikedGauntlet)
-    {
-        mainWeapon = null;
-        offWeapon = null;
-        offHandFromSpikedGauntlet = false;
-
-        var invComp = GetComponent<InventoryComponent>();
-        var inv = invComp != null ? invComp.CharacterInventory : null;
-        if (inv == null)
-            return false;
-
-        bool hasHeldWeapon = (inv.RightHandSlot != null && inv.RightHandSlot.IsWeapon)
-            || (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon);
-
-        // Off-hand options only apply when another weapon is actively equipped.
-        if (!hasHeldWeapon)
-            return false;
-
-        mainWeapon = GetEquippedMainWeapon();
-        if (mainWeapon == null)
-            return false;
-
-        if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon && inv.LeftHandSlot != mainWeapon)
-        {
-            offWeapon = inv.LeftHandSlot;
-            return true;
-        }
-
-        bool canShieldBashOffHand = inv.RightHandSlot != null
-            && inv.RightHandSlot == mainWeapon
-            && !mainWeapon.IsTwoHanded
-            && IsShieldBashWeapon(inv.LeftHandSlot);
-        if (canShieldBashOffHand)
-        {
-            offWeapon = inv.LeftHandSlot;
-            return true;
-        }
-
-        ItemData handsItem = inv.HandsSlot;
-        if (IsSpikedGauntletItem(handsItem))
-        {
-            offWeapon = handsItem;
-            offHandFromSpikedGauntlet = true;
-            return true;
-        }
-
-        return false;
+        return EnsureEquipment().IsDualWieldOffHandShieldBash();
     }
 
     /// <summary>
@@ -2177,19 +2257,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool IsOffHandWeaponLight()
     {
-        if (!TryGetDualWieldWeapons(out _, out ItemData offHandItem, out _))
-            return false;
-
-        return IsWeaponLightForWielder(offHandItem);
-    }
-
-    private bool IsWeaponLightForWielder(ItemData weapon)
-    {
-        if (weapon == null)
-            return false;
-
-        // In this prototype we use item category/size metadata.
-        return weapon.IsLightWeapon || weapon.WeaponSize == WeaponSizeCategory.Light;
+        return EnsureEquipment().IsOffHandWeaponLight();
     }
 
     /// <summary>
@@ -2200,18 +2268,44 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public (int mainPenalty, int offPenalty, bool lightOffHand) GetDualWieldPenalties()
     {
-        if (!TryGetDualWieldWeapons(out _, out ItemData offHandItem, out _))
-            return (-6, -10, false);
+        return EnsureEquipment().GetDualWieldPenalties();
+    }
 
-        bool lightOffHand = IsWeaponLightForWielder(offHandItem);
-        bool hasTWF = Stats != null && Stats.HasFeat("Two-Weapon Fighting");
+    // ========== INVENTORY WRAPPERS ==========
 
-        (int mainPen, int offPen) = Stats != null
-            ? FeatManager.GetTWFPenalties(Stats, lightOffHand)
-            : (lightOffHand ? (-4, -8) : (-6, -10));
+    public Inventory GetInventoryData()
+    {
+        return EnsureInventory().GetInventory();
+    }
 
-        Debug.Log($"[DualWield] {Stats?.CharacterName ?? "Unknown"}: TWF feat={hasTWF}, light off-hand={lightOffHand}, penalties={mainPen}/{offPen}");
-        return (mainPen, offPen, lightOffHand);
+    public bool AddItem(ItemData item)
+    {
+        return EnsureInventory().AddItem(item);
+    }
+
+    public bool RemoveItem(ItemData item)
+    {
+        return EnsureInventory().RemoveItem(item);
+    }
+
+    public List<ItemData> GetAllInventoryItems()
+    {
+        return EnsureInventory().GetAllItems();
+    }
+
+    public int GetGeneralInventoryItemCount()
+    {
+        return EnsureInventory().GetGeneralInventoryItemCount();
+    }
+
+    public float GetTotalCarriedWeightLbs()
+    {
+        return EnsureInventory().GetTotalCarriedWeightLbs();
+    }
+
+    public int GetConsumableInventoryCount()
+    {
+        return EnsureInventory().GetConsumableCount();
     }
 
     public FullAttackResult DualWieldAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
@@ -2228,7 +2322,13 @@ public class CharacterController : MonoBehaviour
             return result;
         }
 
-        if (!TryGetDualWieldWeapons(out ItemData mainWeapon, out ItemData offWeapon, out bool offHandFromSpikedGauntlet))
+        if (!CanDualWield())
+            return result;
+
+        ItemData mainWeapon = GetDualWieldMainWeapon();
+        ItemData offWeapon = GetDualWieldOffHandWeapon();
+        bool offHandFromSpikedGauntlet = IsDualWieldOffHandSpikedGauntlet();
+        if (mainWeapon == null || offWeapon == null)
             return result;
 
         bool canMainAttack = CanAttackWithWeapon(mainWeapon, out string mainBlockedReason);
@@ -3052,33 +3152,11 @@ public class CharacterController : MonoBehaviour
     // ========== WEAPON HELPERS ==========
 
     /// <summary>
-    /// Returns the equipped item from the Hands slot, if any.
-    /// </summary>
-    private ItemData GetEquippedHandsItem()
-    {
-        var invComp = GetComponent<InventoryComponent>();
-        var inv = invComp != null ? invComp.CharacterInventory : null;
-        if (inv == null)
-            return null;
-
-        return inv.HandsSlot;
-    }
-
-    /// <summary>
-    /// Returns the equipped spiked gauntlet from the Hands slot, if present.
-    /// </summary>
-    private ItemData GetEquippedHandsSpikedGauntlet()
-    {
-        ItemData handsItem = GetEquippedHandsItem();
-        return IsSpikedGauntletItem(handsItem) ? handsItem : null;
-    }
-
-    /// <summary>
     /// True if a spiked gauntlet is equipped in the Hands slot.
     /// </summary>
     public bool HasSpikedGauntletEquipped()
     {
-        return GetEquippedHandsSpikedGauntlet() != null;
+        return EnsureEquipment().HasSpikedGauntletEquipped();
     }
 
     /// <summary>
@@ -3086,7 +3164,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool HasGauntletEquipped()
     {
-        return IsGauntletItem(GetEquippedHandsItem());
+        return EnsureEquipment().HasGauntletEquipped();
     }
 
     /// <summary>
@@ -3096,13 +3174,13 @@ public class CharacterController : MonoBehaviour
     {
         return FeatManager.HasImprovedUnarmedStrike(Stats);
     }
+
     /// <summary>
     /// Returns true if the provided weapon (or current main weapon) is a reload-based crossbow and currently unloaded.
     /// </summary>
     public bool IsCrossbowUnloaded(ItemData weapon = null)
     {
-        weapon ??= GetEquippedMainWeapon();
-        return weapon != null && weapon.RequiresReload && !weapon.IsLoaded;
+        return EnsureEquipment().IsCrossbowUnloaded(weapon);
     }
 
     /// <summary>
@@ -3129,7 +3207,7 @@ public class CharacterController : MonoBehaviour
         if (HasCondition(CombatConditionType.Grappled))
         {
             bool usingUnarmed = weapon == null;
-            bool usingLightWeapon = weapon != null && weapon.IsLightWeapon;
+            bool usingLightWeapon = weapon != null && EnsureEquipment().IsWeaponLightForWielder(weapon);
             if (!usingUnarmed && !usingLightWeapon)
             {
                 reason = "While grappled, only unarmed strikes or light weapons can be used.";
@@ -3153,11 +3231,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool HasRapidReloadForWeapon(ItemData weapon)
     {
-        if (Stats == null || weapon == null || !weapon.RequiresReload) return false;
-
-        string featName = weapon.GetRapidReloadFeatName();
-        if (string.IsNullOrEmpty(featName)) return false;
-        return Stats.HasFeat(featName);
+        return EnsureEquipment().HasRapidReloadForWeapon(weapon);
     }
 
     /// <summary>
@@ -3165,9 +3239,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public ReloadActionType GetEffectiveReloadAction(ItemData weapon)
     {
-        if (weapon == null || !weapon.RequiresReload) return ReloadActionType.None;
-        bool hasRapidReload = HasRapidReloadForWeapon(weapon);
-        return weapon.GetEffectiveReloadAction(hasRapidReload);
+        return EnsureEquipment().GetEffectiveReloadAction(weapon);
     }
 
     /// <summary>
@@ -3176,19 +3248,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public string OnWeaponFired(ItemData weapon)
     {
-        if (weapon == null || !weapon.RequiresReload)
-            return string.Empty;
-
-        weapon.IsLoaded = false;
-
-        ReloadActionType effectiveReload = GetEffectiveReloadAction(weapon);
-        if (effectiveReload == ReloadActionType.FreeAction)
-        {
-            weapon.IsLoaded = true;
-            return $"{weapon.Name} is reloaded (free action via Rapid Reload).";
-        }
-
-        return $"{weapon.Name} is now unloaded and must be reloaded.";
+        return EnsureEquipment().OnWeaponFired(weapon);
     }
 
     /// <summary>
@@ -3196,10 +3256,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool ReloadWeapon(ItemData weapon)
     {
-        if (weapon == null || !weapon.RequiresReload) return false;
-        if (weapon.IsLoaded) return false;
-        weapon.IsLoaded = true;
-        return true;
+        return EnsureEquipment().ReloadWeapon(weapon);
     }
 
     /// <summary>
@@ -3221,14 +3278,9 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public string GetWeaponLoadStateLabel(ItemData weapon = null)
     {
-        weapon ??= GetEquippedMainWeapon();
-        if (weapon == null || !weapon.RequiresReload) return string.Empty;
-
-        string state = weapon.IsLoaded ? "LOADED" : "UNLOADED";
-        ReloadActionType action = GetEffectiveReloadAction(weapon);
-        string actionLabel = GetReloadActionLabel(action);
-        return $"{weapon.Name}: {state} (Reload: {actionLabel})";
+        return EnsureEquipment().GetWeaponLoadStateLabel(weapon);
     }
+
     /// <summary>
     /// Check if the equipped main weapon is an inherent ranged weapon.
     /// Thrown-capable melee weapons are still treated as melee by default
@@ -3236,9 +3288,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool IsEquippedWeaponRanged()
     {
-        ItemData weapon = GetEquippedMainWeapon();
-        if (weapon == null) return false;
-        return weapon.WeaponCat == WeaponCategory.Ranged;
+        return EnsureEquipment().IsEquippedWeaponRanged();
     }
 
     /// <summary>
@@ -3247,13 +3297,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool HasThrowableWeaponEquipped()
     {
-        ItemData weapon = GetEquippedWeapon();
-        if (weapon == null)
-            return false;
-
-        return weapon.WeaponCat == WeaponCategory.Melee
-            && weapon.IsThrown
-            && weapon.RangeIncrement > 0;
+        return EnsureEquipment().HasThrowableWeaponEquipped();
     }
 
     /// <summary>
@@ -3263,24 +3307,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool HasMeleeWeaponEquipped()
     {
-        ItemData weapon = GetEquippedMainWeapon();
-
-        // Unarmed counts as melee — unarmed strikes threaten in D&D 3.5
-        // (characters always have at least an unarmed strike available)
-        if (weapon == null) return true;
-
-        // Explicitly check weapon category
-        if (weapon.WeaponCat == WeaponCategory.Melee) return true;
-
-        // Ranged weapons do NOT grant melee threat
-        // Even thrown weapons (javelin, dagger) use ranged rules when equipped as primary
-        if (weapon.WeaponCat == WeaponCategory.Ranged) return false;
-
-        // Fallback: if weapon has no category set, check AttackRange
-        // AttackRange 1 = melee, >1 with RangeIncrement = ranged
-        if (weapon.RangeIncrement > 0) return false;
-
-        return true; // Default to melee if unclear
+        return EnsureEquipment().HasMeleeWeaponEquipped();
     }
 
     /// <summary>
@@ -3662,7 +3689,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public ItemData GetEquippedWeapon()
     {
-        return GetEquippedMainWeapon();
+        return EnsureEquipment().GetEquippedWeapon();
     }
 
     /// <summary>
@@ -3830,20 +3857,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public ItemData GetEquippedMainWeapon()
     {
-        var invComp = GetComponent<InventoryComponent>();
-        var inv = invComp != null ? invComp.CharacterInventory : null;
-        if (inv == null) return null;
-
-        var rightHand = inv.RightHandSlot;
-        if (rightHand != null && rightHand.IsWeapon) return rightHand;
-
-        var leftHand = inv.LeftHandSlot;
-        if (leftHand != null && leftHand.IsWeapon) return leftHand;
-
-        ItemData handsGauntlet = GetEquippedHandsSpikedGauntlet();
-        if (handsGauntlet != null) return handsGauntlet;
-
-        return null; // Unarmed
+        return EnsureEquipment().GetEquippedMainWeapon();
     }
 
     /// <summary>
@@ -3851,7 +3865,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool HasWeaponEquipped()
     {
-        return GetEquippedMainWeapon() != null;
+        return EnsureEquipment().HasWeaponEquipped();
     }
 
     /// <summary>
@@ -3859,7 +3873,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool HasDisarmableWeaponEquipped()
     {
-        return GetDisarmableHeldItemOptions().Count > 0;
+        return EnsureEquipment().HasDisarmableWeaponEquipped();
     }
 
     /// <summary>
@@ -3867,45 +3881,17 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public List<DisarmableHeldItemOption> GetDisarmableHeldItemOptions()
     {
-        var options = new List<DisarmableHeldItemOption>(2);
-        var inv = GetComponent<InventoryComponent>()?.CharacterInventory;
-        if (inv == null)
-            return options;
-
-        if (inv.RightHandSlot != null && !IsSpikedGauntletItem(inv.RightHandSlot))
-            options.Add(new DisarmableHeldItemOption(EquipSlot.RightHand, inv.RightHandSlot));
-
-        if (inv.LeftHandSlot != null && !IsSpikedGauntletItem(inv.LeftHandSlot))
-            options.Add(new DisarmableHeldItemOption(EquipSlot.LeftHand, inv.LeftHandSlot));
-
-        return options;
+        return EnsureEquipment().GetDisarmableHeldItemOptions();
     }
 
     public bool HasSunderableItemEquipped()
     {
-        return GetSunderableItemOptions().Count > 0;
+        return EnsureEquipment().HasSunderableItemEquipped();
     }
 
     public List<SunderableItemOption> GetSunderableItemOptions()
     {
-        var options = new List<SunderableItemOption>(4);
-        var inv = GetComponent<InventoryComponent>()?.CharacterInventory;
-        if (inv == null)
-            return options;
-
-        if (inv.RightHandSlot != null && inv.RightHandSlot.IsSunderable)
-            options.Add(new SunderableItemOption(EquipSlot.RightHand, inv.RightHandSlot, SunderTargetKind.MainHand));
-
-        if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsSunderable)
-        {
-            SunderTargetKind kind = inv.LeftHandSlot.IsShield ? SunderTargetKind.Shield : SunderTargetKind.OffHand;
-            options.Add(new SunderableItemOption(EquipSlot.LeftHand, inv.LeftHandSlot, kind));
-        }
-
-        if (inv.ArmorRobeSlot != null && inv.ArmorRobeSlot.IsArmor)
-            options.Add(new SunderableItemOption(EquipSlot.ArmorRobe, inv.ArmorRobeSlot, SunderTargetKind.Armor));
-
-        return options;
+        return EnsureEquipment().GetSunderableItemOptions();
     }
 
     /// <summary>
@@ -3914,26 +3900,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public List<DisarmableHeldItemOption> GetEquippedLightHandWeaponOptions()
     {
-        var options = new List<DisarmableHeldItemOption>(2);
-        var inv = GetComponent<InventoryComponent>()?.CharacterInventory;
-        if (inv == null)
-            return options;
-
-        if (IsLightHandWeapon(inv.RightHandSlot))
-            options.Add(new DisarmableHeldItemOption(EquipSlot.RightHand, inv.RightHandSlot));
-
-        if (IsLightHandWeapon(inv.LeftHandSlot))
-            options.Add(new DisarmableHeldItemOption(EquipSlot.LeftHand, inv.LeftHandSlot));
-
-        return options;
-    }
-
-    private static bool IsLightHandWeapon(ItemData item)
-    {
-        if (item == null || !item.IsWeapon)
-            return false;
-
-        return item.IsLightWeapon || item.WeaponSize == WeaponSizeCategory.Light;
+        return EnsureEquipment().GetEquippedLightHandWeaponOptions();
     }
 
     /// <summary>
@@ -3942,12 +3909,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public ItemData GetEquippedMainHandWeapon()
     {
-        var inv = GetComponent<InventoryComponent>()?.CharacterInventory;
-        if (inv == null)
-            return null;
-
-        ItemData rightHand = inv.RightHandSlot;
-        return rightHand != null && rightHand.IsWeapon ? rightHand : null;
+        return EnsureEquipment().GetEquippedMainHandWeapon();
     }
 
     /// <summary>
@@ -3956,29 +3918,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool CanAttackWithLightWeaponWhileGrappling(out ItemData mainHandLightWeapon, out string reason)
     {
-        reason = string.Empty;
-        mainHandLightWeapon = GetEquippedMainHandWeapon();
-
-        if (mainHandLightWeapon == null)
-        {
-            reason = "No main-hand weapon equipped.";
-            return false;
-        }
-
-        bool isLight = mainHandLightWeapon.IsLightWeapon || mainHandLightWeapon.WeaponSize == WeaponSizeCategory.Light;
-        if (!isLight)
-        {
-            reason = $"{mainHandLightWeapon.Name} is not a light weapon.";
-            return false;
-        }
-
-        if (mainHandLightWeapon.RequiresReload && !mainHandLightWeapon.IsLoaded)
-        {
-            reason = $"{mainHandLightWeapon.Name} is unloaded and must be reloaded.";
-            return false;
-        }
-
-        return true;
+        return EnsureEquipment().CanAttackWithLightWeaponWhileGrappling(out mainHandLightWeapon, out reason);
     }
 
     /// <summary>
@@ -3997,19 +3937,7 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public string GetDualWieldDescription()
     {
-        if (!TryGetDualWieldWeapons(out ItemData mainWeapon, out ItemData offWeapon, out bool offHandFromSpikedGauntlet))
-            return "";
-
-        var (mainPen, offPen, lightOff) = GetDualWieldPenalties();
-
-        string offSource = offHandFromSpikedGauntlet
-            ? " (Hands slot)"
-            : IsShieldBashWeapon(offWeapon)
-                ? " (Shield Bash)"
-                : "";
-        string lightStr = lightOff ? " (light)" : "";
-        return $"Dual Wield: {mainWeapon.Name} / {offWeapon.Name}{offSource}{lightStr}\n" +
-               $"Penalties: Main {mainPen}, Off-hand {offPen}";
+        return EnsureEquipment().GetDualWieldDescription();
     }
 
     // ========== GRAPPLE STATE ==========
@@ -6417,71 +6345,27 @@ public class CharacterController : MonoBehaviour
 
     private static bool IsSpikedGauntletItem(ItemData item)
     {
-        if (item == null)
-            return false;
-
-        string id = (item.Id ?? string.Empty).ToLowerInvariant();
-        string name = (item.Name ?? string.Empty).ToLowerInvariant();
-        return id == "spiked_gauntlet" || name.Contains("spiked gauntlet");
+        return CharacterEquipment.IsSpikedGauntletItem(item);
     }
 
     private static bool IsShieldBashWeapon(ItemData item)
     {
-        return item != null
-            && item.IsShield
-            && item.DamageDice > 0
-            && item.DamageCount > 0;
+        return CharacterEquipment.IsShieldBashWeapon(item);
     }
 
     private static bool IsGauntletItem(ItemData item)
     {
-        if (item == null)
-            return false;
-
-        string id = (item.Id ?? string.Empty).ToLowerInvariant();
-        string name = (item.Name ?? string.Empty).ToLowerInvariant();
-        return id == "gauntlet" || name == "gauntlet";
+        return CharacterEquipment.IsGauntletItem(item);
     }
 
     private void SuppressShieldBonusForShieldBash(ItemData shield)
     {
-        if (!IsShieldBashWeapon(shield) || Stats == null)
-            return;
-
-        if (FeatManager.HasImprovedShieldBash(Stats))
-        {
-            _shieldBashAcSuppressed = false;
-            _suppressedShieldBonusAmount = 0;
-            Debug.Log($"[ShieldBash] {Stats.CharacterName}: Improved Shield Bash active, shield AC bonus retained.");
-            GameManager.Instance?.CombatUI?.ShowCombatLog($"🛡 {Stats.CharacterName} uses Improved Shield Bash and keeps shield AC while bashing.");
-            return;
-        }
-
-        int shieldBonus = Mathf.Max(0, shield.ShieldBonus);
-        _shieldBashAcSuppressed = shieldBonus > 0;
-        _suppressedShieldBonusAmount = shieldBonus;
-
-        if (_shieldBashAcSuppressed)
-        {
-            Stats.ShieldBonus = 0;
-            Debug.Log($"[ShieldBash] {Stats.CharacterName}: Shield bonus suppressed (+{_suppressedShieldBonusAmount} AC) until next turn.");
-        }
+        EnsureEquipment().SuppressShieldBonusForShieldBash(shield);
     }
 
     private void RestoreShieldBonusAfterShieldBash()
     {
-        if (!_shieldBashAcSuppressed || Stats == null)
-            return;
-
-        var inv = GetComponent<InventoryComponent>()?.CharacterInventory;
-        ItemData leftHandShield = inv != null ? inv.LeftHandSlot : null;
-        int restoredShieldBonus = IsShieldBashWeapon(leftHandShield) ? Mathf.Max(0, leftHandShield.ShieldBonus) : 0;
-
-        Stats.ShieldBonus = restoredShieldBonus;
-        _shieldBashAcSuppressed = false;
-        _suppressedShieldBonusAmount = 0;
-
-        Debug.Log($"[ShieldBash] {Stats.CharacterName}: Shield bonus restored (+{restoredShieldBonus} AC).");
+        EnsureEquipment().RestoreShieldBonusAfterShieldBash();
     }
 
     private static bool HasLockedGauntletEquipped(CharacterController character)
@@ -6497,42 +6381,13 @@ public class CharacterController : MonoBehaviour
 
     private static ItemData GetEquippedHandsItem(CharacterController character)
     {
-        if (character == null)
-            return null;
-
-        InventoryComponent invComp = character.GetComponent<InventoryComponent>();
-        Inventory inv = invComp != null ? invComp.CharacterInventory : null;
-        return inv != null ? inv.HandsSlot : null;
+        return character != null ? character.EnsureInventory().GetEquippedHandsItem() : null;
     }
 
     private static bool TryEquipDisarmedItem(CharacterController receiver, ItemData disarmedItem, out EquipSlot equippedSlot)
     {
         equippedSlot = EquipSlot.None;
-        if (receiver == null || disarmedItem == null)
-            return false;
-
-        InventoryComponent invComp = receiver.GetComponent<InventoryComponent>();
-        Inventory inv = invComp != null ? invComp.CharacterInventory : null;
-        if (inv == null)
-            return false;
-
-        if (inv.RightHandSlot == null && disarmedItem.CanEquipIn(EquipSlot.RightHand))
-        {
-            inv.RightHandSlot = disarmedItem;
-            inv.RecalculateStats();
-            equippedSlot = EquipSlot.RightHand;
-            return true;
-        }
-
-        if (inv.LeftHandSlot == null && disarmedItem.CanEquipIn(EquipSlot.LeftHand))
-        {
-            inv.LeftHandSlot = disarmedItem;
-            inv.RecalculateStats();
-            equippedSlot = EquipSlot.LeftHand;
-            return true;
-        }
-
-        return false;
+        return receiver != null && receiver.EnsureInventory().TryEquipDisarmedItem(disarmedItem, out equippedSlot);
     }
 
     private static void DropItemToGround(CharacterController owner, ItemData item)
@@ -6654,20 +6509,16 @@ public class CharacterController : MonoBehaviour
 
     private static void DestroyEquippedItem(CharacterController target, EquipSlot slot)
     {
-        var invComp = target != null ? target.GetComponent<InventoryComponent>() : null;
-        if (invComp == null || invComp.CharacterInventory == null)
+        if (target == null)
             return;
 
-        var inv = invComp.CharacterInventory;
-        ItemData destroyedItem = inv.GetEquipped(slot);
-
+        bool removed = target.EnsureInventory().DestroyEquippedItem(slot, out ItemData destroyedItem);
         if (destroyedItem == null)
             return;
 
-        bool removed = inv.RemoveItem(destroyedItem);
         if (removed)
         {
-            string ownerName = target != null && target.Stats != null ? target.Stats.CharacterName : "Unknown";
+            string ownerName = target.Stats != null ? target.Stats.CharacterName : "Unknown";
             Debug.Log($"[Sunder] Destroyed item removed from inventory: {destroyedItem.Name} (owner: {ownerName})");
         }
         else
@@ -6678,39 +6529,7 @@ public class CharacterController : MonoBehaviour
 
     private static ItemData RemoveEquippedHeldItem(CharacterController target, EquipSlot? handSlot)
     {
-        var invComp = target != null ? target.GetComponent<InventoryComponent>() : null;
-        if (invComp == null || invComp.CharacterInventory == null)
-            return null;
-
-        var inv = invComp.CharacterInventory;
-        ItemData removedItem = null;
-
-        if (handSlot == EquipSlot.RightHand)
-        {
-            removedItem = inv.RightHandSlot;
-            inv.RightHandSlot = null;
-        }
-        else if (handSlot == EquipSlot.LeftHand)
-        {
-            removedItem = inv.LeftHandSlot;
-            inv.LeftHandSlot = null;
-        }
-        else
-        {
-            if (inv.RightHandSlot != null)
-            {
-                removedItem = inv.RightHandSlot;
-                inv.RightHandSlot = null;
-            }
-            else if (inv.LeftHandSlot != null)
-            {
-                removedItem = inv.LeftHandSlot;
-                inv.LeftHandSlot = null;
-            }
-        }
-
-        inv.RecalculateStats();
-        return removedItem;
+        return target != null ? target.EnsureInventory().RemoveEquippedHeldItem(handSlot) : null;
     }
 
     // ========== 5-FOOT STEP ==========
@@ -6798,8 +6617,7 @@ public class CharacterController : MonoBehaviour
         int bonusDamage = Stats.BonusDamage;
 
         // Check for equipped weapon (quarterstaff is a monk weapon)
-        var inv = GetComponent<InventoryComponent>();
-        ItemData equippedWeapon = inv != null ? inv.CharacterInventory.RightHandSlot : null;
+        ItemData equippedWeapon = EnsureInventory().GetRightHandEquippedWeapon();
         int critThreatMin = 20;
         int critMult = 2;
 

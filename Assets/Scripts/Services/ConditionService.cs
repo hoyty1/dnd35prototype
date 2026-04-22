@@ -87,7 +87,7 @@ public class ConditionService : MonoBehaviour
                 ? source.Stats.CharacterName
                 : (target.Stats != null ? target.Stats.CharacterName : "Unknown"));
 
-        target.ApplyCondition(type, rounds, sourceName);
+        target.ApplyConditionDirect(type, rounds, sourceName);
         SyncCharacter(target);
 
         ActiveCondition tracked = FindActiveCondition(target, type);
@@ -105,7 +105,7 @@ public class ConditionService : MonoBehaviour
         if (!IsValidCharacter(target))
             return false;
 
-        bool removed = target.RemoveCondition(type);
+        bool removed = target.RemoveConditionDirect(type);
         SyncCharacter(target);
         return removed;
     }
@@ -124,7 +124,7 @@ public class ConditionService : MonoBehaviour
         List<ActiveCondition> snapshot = new List<ActiveCondition>(activeList);
         for (int i = 0; i < snapshot.Count; i++)
         {
-            if (target.RemoveCondition(snapshot[i].Type))
+            if (target.RemoveConditionDirect(snapshot[i].Type))
                 removed++;
         }
 
@@ -138,7 +138,7 @@ public class ConditionService : MonoBehaviour
         if (!IsValidCharacter(target))
             return expired;
 
-        List<StatusEffect> expiredEffects = target.TickConditions();
+        List<StatusEffect> expiredEffects = target.TickConditionsDirect();
         if (expiredEffects == null || expiredEffects.Count == 0)
         {
             SyncCharacter(target);
@@ -187,7 +187,7 @@ public class ConditionService : MonoBehaviour
             return false;
 
         SyncCharacter(target);
-        return target.HasCondition(type);
+        return target.HasConditionDirect(type);
     }
 
     public int GetConditionDuration(CharacterController target, CombatConditionType type)
