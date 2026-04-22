@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -16,6 +17,12 @@ public class CharacterHoverTooltipUI : MonoBehaviour
     private Text _text;
     private Canvas _canvas;
     private int _lastShowFrame = -1;
+
+    // Tooltip text caching to avoid expensive/redundant rebuilds and UI relayout flicker.
+    private CharacterController _lastTooltipCharacter;
+    private int _lastTooltipStateHash;
+    private string _lastTooltipText;
+    private bool _hasTooltipCache;
 
     public static void EnsureInstance()
     {
@@ -86,7 +93,10 @@ public class CharacterHoverTooltipUI : MonoBehaviour
     private void LateUpdate()
     {
         if (_panel != null && _panel.gameObject.activeSelf && _lastShowFrame != Time.frameCount)
+        {
             _panel.gameObject.SetActive(false);
+            ResetTooltipCache();
+        }
     }
 
     public void ShowTooltip(CharacterController character, Vector2 screenPosition)
@@ -94,11 +104,28 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         if (_panel == null || _text == null || _canvas == null || character == null || character.Stats == null)
             return;
 
-        _text.text = BuildTooltipText(character);
+        int currentStateHash = CalculateCharacterStateHash(character);
+        bool requiresRebuild = !_hasTooltipCache
+            || character != _lastTooltipCharacter
+            || currentStateHash != _lastTooltipStateHash;
 
-        float width = Mathf.Clamp(_text.preferredWidth + 20f, 180f, 420f);
-        float height = Mathf.Clamp(_text.preferredHeight + 16f, 64f, 320f);
-        _panel.sizeDelta = new Vector2(width, height);
+        if (requiresRebuild)
+        {
+            string rebuiltTooltipText = BuildTooltipText(character);
+            if (!string.Equals(_lastTooltipText, rebuiltTooltipText, StringComparison.Ordinal))
+            {
+                _lastTooltipText = rebuiltTooltipText;
+                _text.text = rebuiltTooltipText;
+
+                float width = Mathf.Clamp(_text.preferredWidth + 20f, 180f, 420f);
+                float height = Mathf.Clamp(_text.preferredHeight + 16f, 64f, 320f);
+                _panel.sizeDelta = new Vector2(width, height);
+            }
+
+            _lastTooltipCharacter = character;
+            _lastTooltipStateHash = currentStateHash;
+            _hasTooltipCache = true;
+        }
 
         RectTransform canvasRT = _canvas.transform as RectTransform;
         Camera uiCamera = _canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _canvas.worldCamera;
@@ -113,11 +140,68 @@ public class CharacterHoverTooltipUI : MonoBehaviour
     {
         if (_panel != null)
             _panel.gameObject.SetActive(false);
+
+        ResetTooltipCache();
+    }
+
+    private void ResetTooltipCache()
+    {
+        _lastTooltipCharacter = null;
+        _lastTooltipStateHash = 0;
+        _lastTooltipText = null;
+        _hasTooltipCache = false;
+    }
+
+    private static int CalculateCharacterStateHash(CharacterController character)
+    {
+        if (character == null)
+            return 0;
+
+        unchecked
+        {
+            int hash = 17;
+
+            hash = (hash * 31) + character.GetInstanceID();
+
+            if (character.Stats != null)
+            {
+                hash = (hash * 31) + character.Stats.CurrentHP;
+                hash = (hash * 31) + character.Stats.MaxHP;
+            }
+
+            InventoryComponent inventoryComponent = character.GetComponent<InventoryComponent>();
+            Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
+            if (inventory != null)
+            {
+                hash = (hash * 31) + (inventory.RightHandSlot != null ? inventory.RightHandSlot.GetHashCode() : 0);
+                hash = (hash * 31) + (inventory.LeftHandSlot != null ? inventory.LeftHandSlot.GetHashCode() : 0);
+                hash = (hash * 31) + (inventory.ArmorRobeSlot != null ? inventory.ArmorRobeSlot.GetHashCode() : 0);
+                hash = (hash * 31) + (inventory.HandsSlot != null ? inventory.HandsSlot.GetHashCode() : 0);
+            }
+
+            if (character.Tags != null)
+            {
+                List<string> sortedTags = character.Tags.GetAllTags()
+                    .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                    .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                for (int i = 0; i < sortedTags.Count; i++)
+                    hash = (hash * 31) + sortedTags[i].GetHashCode();
+            }
+
+            if (character.Conditions != null)
+                hash = (hash * 31) + character.Conditions.GetActiveConditionsCount();
+
+            return hash;
+        }
     }
 
     private static string BuildTooltipText(CharacterController character)
     {
-        var tags = character.Tags.GetAllTags().ToList();
+        var tags = character.Tags.GetAllTags()
+            .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+            .ToList();
         StringBuilder sb = new StringBuilder();
 
         string displayName = !string.IsNullOrWhiteSpace(character.Stats.CharacterName)
@@ -148,6 +232,8 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         List<string> statuses = character.Tags.GetTagsByPrefix("Status: ")
             .Where(tag => tag.Length > "Status: ".Length)
             .Select(tag => tag.Substring("Status: ".Length))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         if (statuses.Count > 0)
@@ -162,7 +248,8 @@ public class CharacterHoverTooltipUI : MonoBehaviour
             .Where(tag => tag.StartsWith("Wielding: "))
             .Select(tag => tag.Substring("Wielding: ".Length))
             .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         if (wielding.Count > 0)
@@ -175,7 +262,8 @@ public class CharacterHoverTooltipUI : MonoBehaviour
                           || tag.Equals("Unarmed")
                           || tag.Equals("Shield Equipped")
                           || tag.Equals("Two-Handed Weapon"))
-            .Distinct()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
@@ -185,7 +273,8 @@ public class CharacterHoverTooltipUI : MonoBehaviour
             .Where(tag => tag.StartsWith("Armor: "))
             .Select(tag => tag.Substring("Armor: ".Length))
             .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         if (armor.Count > 0)
@@ -198,7 +287,8 @@ public class CharacterHoverTooltipUI : MonoBehaviour
                           || tag.Equals("Medium Armor")
                           || tag.Equals("Heavy Armor")
                           || tag.EndsWith(" Armor"))
-            .Distinct()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 

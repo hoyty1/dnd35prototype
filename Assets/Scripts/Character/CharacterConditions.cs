@@ -41,6 +41,11 @@ public class CharacterConditions : MonoBehaviour
         return _character.GetActiveConditionsDirect();
     }
 
+    public int GetActiveConditionsCount()
+    {
+        return GetActiveConditions().Count;
+    }
+
     public bool HasCondition(CombatConditionType type)
     {
         if (_character == null)
