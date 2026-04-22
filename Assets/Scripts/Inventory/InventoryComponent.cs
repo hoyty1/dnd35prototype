@@ -15,6 +15,7 @@ public class InventoryComponent : MonoBehaviour
     {
         CharacterInventory = new Inventory();
         CharacterInventory.OwnerStats = stats;
+        CharacterInventory.OwnerCharacter = GetComponent<CharacterController>();
     }
 
     /// <summary>

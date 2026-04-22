@@ -196,6 +196,11 @@ public class ItemData
     public int ArcaneSpellFailure;  // Percentage chance of arcane spell failure (0-100)
     public float WeightLbs;         // Weight in pounds
 
+    // --- Extensible tag metadata ---
+    // Tags inherited by characters while this item is equipped.
+    // Examples: "Light Armor", "Chain Shirt".
+    public HashSet<string> VisualTags = new HashSet<string>();
+
     // --- Item durability (used by Sunder) ---
     public int EnhancementBonus;    // Magic enhancement bonus to durability (+2 hardness, +10 HP per +1)
     public int Hardness;            // Effective hardness after enhancement

@@ -65,6 +65,7 @@ public class Inventory
 
     // Reference to the owning character's stats for recalculation
     [NonSerialized] public CharacterStats OwnerStats;
+    [NonSerialized] public CharacterController OwnerCharacter;
     [NonSerialized] private bool _isRecalculating;
 
     public Inventory()
@@ -365,6 +366,8 @@ public class Inventory
                 OwnerStats.CritThreatMin = 20;
                 OwnerStats.CritMultiplier = 2;
             }
+
+            OwnerCharacter?.RefreshEquipmentTags();
         }
         finally
         {

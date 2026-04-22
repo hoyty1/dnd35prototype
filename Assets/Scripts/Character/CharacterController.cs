@@ -852,6 +852,8 @@ public class CharacterController : MonoBehaviour
     private CharacterEquipment _equipment;
     private CharacterInventory _inventory;
     private CharacterConditions _conditions;
+    private CharacterTags _tags;
+    private readonly HashSet<string> _appliedArmorTags = new HashSet<string>();
     private Coroutine _currentScaleAnimation;
     private Coroutine _grappleAlternateVisibilityCoroutine;
     private int _grappleDisplayPauseLocks;
@@ -950,8 +952,17 @@ public class CharacterController : MonoBehaviour
         return _conditions;
     }
 
+    private CharacterTags EnsureTags()
+    {
+        if (_tags == null)
+            _tags = new CharacterTags(this);
+
+        return _tags;
+    }
+
     public CharacterInventory Inventory => EnsureInventory();
     public CharacterConditions Conditions => EnsureConditions();
+    public CharacterTags Tags => EnsureTags();
 
     private void Awake()
     {
@@ -971,6 +982,54 @@ public class CharacterController : MonoBehaviour
         EnsureEquipment();
         EnsureInventory();
         EnsureConditions();
+        EnsureTags();
+        RefreshEquipmentTags();
+    }
+
+    /// <summary>
+    /// Refreshes armor-derived character tags from currently equipped armor.
+    /// Called automatically after inventory stat recalculation.
+    /// </summary>
+    public void RefreshEquipmentTags()
+    {
+        CharacterTags tags = EnsureTags();
+
+        foreach (string oldTag in _appliedArmorTags)
+            tags.RemoveTag(oldTag);
+        _appliedArmorTags.Clear();
+
+        Inventory inv = Inventory != null ? Inventory.GetInventory() : null;
+        ItemData armor = inv != null ? inv.ArmorRobeSlot : null;
+
+        if (armor != null && armor.VisualTags != null && armor.VisualTags.Count > 0)
+        {
+            foreach (string tag in armor.VisualTags)
+            {
+                if (tags.AddTag(tag))
+                    _appliedArmorTags.Add(tag);
+            }
+
+            tags.RemoveTag("Unarmored");
+            return;
+        }
+
+        tags.AddTag("Unarmored");
+        _appliedArmorTags.Add("Unarmored");
+    }
+
+    public string GetArmorTag()
+    {
+        if (Tags.HasTag("Light Armor")) return "Light Armor";
+        if (Tags.HasTag("Medium Armor")) return "Medium Armor";
+        if (Tags.HasTag("Heavy Armor")) return "Heavy Armor";
+        if (Tags.HasTag("Unarmored")) return "Unarmored";
+        return "Unknown";
+    }
+
+    public void DebugPrintTags()
+    {
+        string charName = Stats != null ? Stats.CharacterName : name;
+        Debug.Log($"[Tags] {charName}: {Tags.GetTagsDebugString()}");
     }
 
     private void OnDisable()

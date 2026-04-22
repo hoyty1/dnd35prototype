@@ -849,6 +849,7 @@ public static class ItemDatabase
             Description = "Layers of quilted cloth. The lightest armor available.",
             ArmorBonus = 1, MaxDexBonus = 8, ArmorCheckPenalty = 0,
             ArcaneSpellFailure = 5, WeightLbs = 10f,
+            VisualTags = new HashSet<string> { "Light Armor", "Padded Armor" },
             IconChar = "\u26E8", IconColor = new Color(0.7f, 0.7f, 0.6f)
         });
 
@@ -860,6 +861,7 @@ public static class ItemDatabase
             Description = "Light armor made from hardened leather.",
             ArmorBonus = 2, MaxDexBonus = 6, ArmorCheckPenalty = 0,
             ArcaneSpellFailure = 10, WeightLbs = 15f,
+            VisualTags = new HashSet<string> { "Light Armor", "Leather Armor" },
             IconChar = "\u26E8", IconColor = new Color(0.6f, 0.4f, 0.2f)
         });
 
@@ -871,6 +873,7 @@ public static class ItemDatabase
             Description = "Leather armor reinforced with metal studs.",
             ArmorBonus = 3, MaxDexBonus = 5, ArmorCheckPenalty = 1,
             ArcaneSpellFailure = 15, WeightLbs = 20f,
+            VisualTags = new HashSet<string> { "Light Armor", "Studded Leather" },
             IconChar = "\u26E8", IconColor = new Color(0.5f, 0.35f, 0.2f)
         });
 
@@ -882,6 +885,7 @@ public static class ItemDatabase
             Description = "A shirt of interlocking metal rings. Best light armor.",
             ArmorBonus = 4, MaxDexBonus = 4, ArmorCheckPenalty = 2,
             ArcaneSpellFailure = 20, WeightLbs = 25f,
+            VisualTags = new HashSet<string> { "Light Armor", "Chain Shirt" },
             IconChar = "\u26E8", IconColor = new Color(0.6f, 0.6f, 0.7f)
         });
     }
@@ -899,6 +903,7 @@ public static class ItemDatabase
             Description = "Thick furs and pelts of animals, crudely prepared.",
             ArmorBonus = 3, MaxDexBonus = 4, ArmorCheckPenalty = 3,
             ArcaneSpellFailure = 20, WeightLbs = 25f,
+            VisualTags = new HashSet<string> { "Medium Armor", "Hide Armor" },
             IconChar = "\u26E8", IconColor = new Color(0.6f, 0.5f, 0.3f)
         });
 
@@ -910,6 +915,7 @@ public static class ItemDatabase
             Description = "Overlapping metal scales on a leather coat.",
             ArmorBonus = 4, MaxDexBonus = 3, ArmorCheckPenalty = 4,
             ArcaneSpellFailure = 25, WeightLbs = 30f,
+            VisualTags = new HashSet<string> { "Medium Armor", "Scale Mail" },
             IconChar = "\u26E8", IconColor = new Color(0.5f, 0.6f, 0.5f)
         });
 
@@ -921,6 +927,7 @@ public static class ItemDatabase
             Description = "A full suit of interlocking metal rings covering the body.",
             ArmorBonus = 5, MaxDexBonus = 2, ArmorCheckPenalty = 5,
             ArcaneSpellFailure = 30, WeightLbs = 40f,
+            VisualTags = new HashSet<string> { "Medium Armor", "Chainmail" },
             IconChar = "\u26E8", IconColor = new Color(0.5f, 0.5f, 0.6f)
         });
 
@@ -932,6 +939,7 @@ public static class ItemDatabase
             Description = "A fitted metal chest plate. Best medium armor for most characters.",
             ArmorBonus = 5, MaxDexBonus = 3, ArmorCheckPenalty = 4,
             ArcaneSpellFailure = 25, WeightLbs = 30f,
+            VisualTags = new HashSet<string> { "Medium Armor", "Breastplate" },
             IconChar = "\u26E8", IconColor = new Color(0.7f, 0.7f, 0.75f)
         });
     }
@@ -949,6 +957,7 @@ public static class ItemDatabase
             Description = "Strips of metal between layers of leather and chain.",
             ArmorBonus = 6, MaxDexBonus = 0, ArmorCheckPenalty = 7,
             ArcaneSpellFailure = 40, WeightLbs = 45f,
+            VisualTags = new HashSet<string> { "Heavy Armor", "Splint Mail" },
             IconChar = "\u26E8", IconColor = new Color(0.5f, 0.5f, 0.55f)
         });
 
@@ -960,6 +969,7 @@ public static class ItemDatabase
             Description = "Overlapping strips of metal banded over chain and leather.",
             ArmorBonus = 6, MaxDexBonus = 1, ArmorCheckPenalty = 6,
             ArcaneSpellFailure = 35, WeightLbs = 35f,
+            VisualTags = new HashSet<string> { "Heavy Armor", "Banded Mail" },
             IconChar = "\u26E8", IconColor = new Color(0.55f, 0.55f, 0.6f)
         });
 
@@ -971,6 +981,7 @@ public static class ItemDatabase
             Description = "Plate armor covering most of the body with chain and leather.",
             ArmorBonus = 7, MaxDexBonus = 0, ArmorCheckPenalty = 7,
             ArcaneSpellFailure = 40, WeightLbs = 50f,
+            VisualTags = new HashSet<string> { "Heavy Armor", "Half-Plate" },
             IconChar = "\u26E8", IconColor = new Color(0.6f, 0.6f, 0.65f)
         });
 
@@ -982,6 +993,7 @@ public static class ItemDatabase
             Description = "A complete suit of heavy plate armor. The finest protection available.",
             ArmorBonus = 8, MaxDexBonus = 1, ArmorCheckPenalty = 6,
             ArcaneSpellFailure = 35, WeightLbs = 50f,
+            VisualTags = new HashSet<string> { "Heavy Armor", "Full Plate" },
             IconChar = "\u26E8", IconColor = new Color(0.7f, 0.7f, 0.75f)
         });
     }
@@ -1404,6 +1416,7 @@ public static class ItemDatabase
             ArmorCat = src.ArmorCat, MaxDexBonus = src.MaxDexBonus,
             ArmorCheckPenalty = src.ArmorCheckPenalty,
             ArcaneSpellFailure = src.ArcaneSpellFailure, WeightLbs = src.WeightLbs,
+            VisualTags = src.VisualTags != null ? new HashSet<string>(src.VisualTags) : new HashSet<string>(),
             EnhancementBonus = src.EnhancementBonus,
             Hardness = src.Hardness,
             MaxHitPoints = src.MaxHitPoints,
