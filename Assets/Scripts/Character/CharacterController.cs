@@ -395,66 +395,32 @@ public class CharacterController : MonoBehaviour
 
     public int GetNumberOfAttacks()
     {
-        int bab = Stats != null ? Stats.BaseAttackBonus : 0;
-        if (bab >= 16) return 4;
-        if (bab >= 11) return 3;
-        if (bab >= 6) return 2;
-        return 1;
+        return EnsureCombatStats().GetNumberOfAttacks();
     }
 
     public List<int> GetAttackBonuses()
     {
-        int bab = Stats != null ? Stats.BaseAttackBonus : 0;
-        var bonuses = new List<int> { bab };
-
-        if (bab >= 6) bonuses.Add(bab - 5);
-        if (bab >= 11) bonuses.Add(bab - 10);
-        if (bab >= 16) bonuses.Add(bab - 15);
-
-        return bonuses;
+        return EnsureCombatStats().GetAttackBonuses();
     }
 
     public int GetIterativeAttackCount()
     {
-        return GetAttackBonuses().Count;
+        return EnsureCombatStats().GetIterativeAttackCount();
     }
 
     public int GetIterativeAttackBAB(int attackIndex)
     {
-        List<int> bonuses = GetAttackBonuses();
-        if (attackIndex < 0 || attackIndex >= bonuses.Count)
-            return 0;
-
-        return bonuses[attackIndex];
+        return EnsureCombatStats().GetIterativeAttackBAB(attackIndex);
     }
 
     public int GetOffHandAttackCount()
     {
-        if (Stats == null || !Stats.HasFeat("Two-Weapon Fighting"))
-            return 0;
-
-        if (!CanDualWield())
-            return 0;
-
-        int count = 1;
-        int bab = Stats.BaseAttackBonus;
-
-        if (Stats.HasFeat("Improved Two-Weapon Fighting") && bab >= 6)
-            count++;
-
-        if (Stats.HasFeat("Greater Two-Weapon Fighting") && bab >= 11)
-            count++;
-
-        return count;
+        return EnsureCombatStats().GetOffHandAttackCount();
     }
 
     public int GetOffHandAttackBAB(int attackIndex)
     {
-        int bab = Stats != null ? Stats.BaseAttackBonus : 0;
-        if (attackIndex < 0)
-            attackIndex = 0;
-
-        return bab - (attackIndex * 5);
+        return EnsureCombatStats().GetOffHandAttackBAB(attackIndex);
     }
 
     public bool CanUseIterativeGrappleAttackAction()
@@ -887,6 +853,7 @@ public class CharacterController : MonoBehaviour
 
     private SpriteRenderer _sr;
     private ConditionManager _conditionManager;
+    private CharacterCombatStats _combatStats;
     private Coroutine _currentScaleAnimation;
     private Coroutine _grappleAlternateVisibilityCoroutine;
     private int _grappleDisplayPauseLocks;
@@ -919,6 +886,20 @@ public class CharacterController : MonoBehaviour
         EaseOutElastic
     }
 
+    private CharacterCombatStats EnsureCombatStats()
+    {
+        if (_combatStats == null)
+        {
+            _combatStats = GetComponent<CharacterCombatStats>();
+            if (_combatStats == null)
+                _combatStats = gameObject.AddComponent<CharacterCombatStats>();
+
+            _combatStats.Initialize(this);
+        }
+
+        return _combatStats;
+    }
+
     private void Awake()
     {
         _sr = GetComponent<SpriteRenderer>();
@@ -932,6 +913,8 @@ public class CharacterController : MonoBehaviour
         _conditionManager = GetComponent<ConditionManager>();
         if (_conditionManager == null)
             _conditionManager = gameObject.AddComponent<ConditionManager>();
+
+        EnsureCombatStats();
     }
 
     private void OnDisable()
@@ -4386,7 +4369,7 @@ public class CharacterController : MonoBehaviour
 
     public int GetGrappleSizeModifier()
     {
-        return Stats != null ? Stats.CurrentSizeCategory.GetGrappleModifier() : 0;
+        return EnsureCombatStats().GetGrappleSizeModifier();
     }
 
     private GrappleCheckResult RollGrappleCheck(int? baseAttackBonusOverride = null, int additionalModifier = 0, string additionalModifierLabel = null)
@@ -6246,9 +6229,7 @@ public class CharacterController : MonoBehaviour
 
     public int GetGrappleModifier(int? baseAttackBonusOverride = null)
     {
-        int sizeMod = Stats != null ? Stats.CurrentSizeCategory.GetGrappleModifier() : 0;
-        int bab = baseAttackBonusOverride ?? (Stats != null ? Stats.BaseAttackBonus : 0);
-        return bab + Stats.STRMod + sizeMod + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Grapple") ? 4 : 0);
+        return EnsureCombatStats().GetGrappleModifier(baseAttackBonusOverride);
     }
 
     private struct DisarmCheckResult
