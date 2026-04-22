@@ -98,6 +98,47 @@ public class Inventory
         return item;
     }
 
+    /// <summary>
+    /// Removes a specific item instance from all inventory locations (equipped + general slots).
+    /// Returns true when at least one reference to the item was removed.
+    /// </summary>
+    public bool RemoveItem(ItemData item)
+    {
+        if (item == null)
+            return false;
+
+        bool removed = false;
+
+        if (ReferenceEquals(HeadSlot, item)) { HeadSlot = null; removed = true; }
+        if (ReferenceEquals(FaceEyesSlot, item)) { FaceEyesSlot = null; removed = true; }
+        if (ReferenceEquals(NeckSlot, item)) { NeckSlot = null; removed = true; }
+        if (ReferenceEquals(TorsoSlot, item)) { TorsoSlot = null; removed = true; }
+        if (ReferenceEquals(ArmorRobeSlot, item)) { ArmorRobeSlot = null; removed = true; }
+        if (ReferenceEquals(WaistSlot, item)) { WaistSlot = null; removed = true; }
+        if (ReferenceEquals(BackSlot, item)) { BackSlot = null; removed = true; }
+        if (ReferenceEquals(WristsSlot, item)) { WristsSlot = null; removed = true; }
+        if (ReferenceEquals(HandsSlot, item)) { HandsSlot = null; removed = true; }
+        if (ReferenceEquals(LeftRingSlot, item)) { LeftRingSlot = null; removed = true; }
+        if (ReferenceEquals(RightRingSlot, item)) { RightRingSlot = null; removed = true; }
+        if (ReferenceEquals(FeetSlot, item)) { FeetSlot = null; removed = true; }
+        if (ReferenceEquals(LeftHandSlot, item)) { LeftHandSlot = null; removed = true; }
+        if (ReferenceEquals(RightHandSlot, item)) { RightHandSlot = null; removed = true; }
+
+        for (int i = 0; i < GeneralSlots.Length; i++)
+        {
+            if (ReferenceEquals(GeneralSlots[i], item))
+            {
+                GeneralSlots[i] = null;
+                removed = true;
+            }
+        }
+
+        if (removed && !_isRecalculating)
+            RecalculateStats();
+
+        return removed;
+    }
+
     /// <summary>Get the equipped item in a given slot.</summary>
     public ItemData GetEquipped(EquipSlot slot)
     {

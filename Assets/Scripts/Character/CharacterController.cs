@@ -5953,6 +5953,7 @@ public class CharacterController : MonoBehaviour
                 target.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
 
             logLines.Add($"💥 {target.Stats.CharacterName}'s {targetItem.Name} is destroyed!");
+            logLines.Add($"{targetItem.Name} is removed from inventory.");
             return new SpecialAttackResult
             {
                 ManeuverName = "Sunder",
@@ -6669,22 +6670,21 @@ public class CharacterController : MonoBehaviour
             return;
 
         var inv = invComp.CharacterInventory;
+        ItemData destroyedItem = inv.GetEquipped(slot);
 
-        switch (slot)
+        if (destroyedItem == null)
+            return;
+
+        bool removed = inv.RemoveItem(destroyedItem);
+        if (removed)
         {
-            case EquipSlot.RightHand:
-                inv.RightHandSlot = null;
-                break;
-            case EquipSlot.LeftHand:
-                inv.LeftHandSlot = null;
-                break;
-            case EquipSlot.Armor:
-            case EquipSlot.ArmorRobe:
-                inv.ArmorRobeSlot = null;
-                break;
+            string ownerName = target != null && target.Stats != null ? target.Stats.CharacterName : "Unknown";
+            Debug.Log($"[Sunder] Destroyed item removed from inventory: {destroyedItem.Name} (owner: {ownerName})");
         }
-
-        inv.RecalculateStats();
+        else
+        {
+            Debug.LogWarning($"[Sunder] Failed to remove destroyed item reference: {destroyedItem.Name}");
+        }
     }
 
     private static ItemData RemoveEquippedHeldItem(CharacterController target, EquipSlot? handSlot)
