@@ -1404,6 +1404,150 @@ public partial class GameManager
         return true;
     }
 
+    private bool ShouldPromptPlayerForGrappleEscapeOpposition(CharacterController escaper, out CharacterController grappler)
+    {
+        grappler = null;
+        if (escaper == null || escaper.Stats == null)
+            return false;
+
+        if (!escaper.TryGetGrappleState(out CharacterController opponent, out _, out _, out _))
+            return false;
+
+        if (opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
+            return false;
+
+        if (!opponent.IsPlayerControlled)
+            return false;
+
+        grappler = opponent;
+        return true;
+    }
+
+    private string BuildGrappleEscapeOppositionPromptMessage(CharacterController escaper, CharacterController grappler)
+    {
+        string escaperName = escaper != null && escaper.Stats != null ? escaper.Stats.CharacterName : "Escaper";
+        string grapplerName = grappler != null && grappler.Stats != null ? grappler.Stats.CharacterName : "Grappler";
+        int escaperGrappleMod = escaper != null ? escaper.GetGrappleModifier() : 0;
+        int escaperEscapeArtistMod = escaper != null && escaper.Stats != null ? escaper.Stats.GetSkillBonus("Escape Artist") : 0;
+        int grapplerGrappleMod = grappler != null ? grappler.GetGrappleModifier() : 0;
+
+        return $"{escaperName} is attempting to escape your grapple!\n\n"
+            + "Choose whether to oppose the escape or let them go.\n\n"
+            + $"{escaperName} grapple mod: {CharacterStats.FormatMod(escaperGrappleMod)}\n"
+            + $"{escaperName} Escape Artist: {CharacterStats.FormatMod(escaperEscapeArtistMod)}\n"
+            + $"{grapplerName} grapple mod: {CharacterStats.FormatMod(grapplerGrappleMod)}";
+    }
+
+    private SpecialAttackResult BuildAllowedGrappleEscapeResult(CharacterController escaper, CharacterController grappler)
+    {
+        string escaperName = escaper != null && escaper.Stats != null ? escaper.Stats.CharacterName : "Escaper";
+        string grapplerName = grappler != null && grappler.Stats != null ? grappler.Stats.CharacterName : "Grappler";
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Grapple Escape (Allowed)",
+            Success = true,
+            Log = string.Join("\n\n", new[]
+            {
+                $"{escaperName} attempts to escape from grapple",
+                $"{grapplerName} chooses not to oppose the escape.",
+                $"{escaperName} escapes from grapple without an opposed check."
+            })
+        };
+    }
+
+    private bool TryResolveOpposedGrappleEscapeWithPrompt(
+        CharacterController escaper,
+        int? iterativeAttackBonusOverride,
+        Action<SpecialAttackResult> onResolved)
+    {
+        if (!ShouldPromptPlayerForGrappleEscapeOpposition(escaper, out CharacterController grappler))
+            return false;
+
+        if (escaper == null || escaper.Stats == null || grappler == null || grappler.Stats == null)
+            return false;
+
+        if (CombatUI == null)
+            return false;
+
+        string escaperName = escaper.Stats.CharacterName;
+        string grapplerName = grappler.Stats.CharacterName;
+
+        CombatUI?.ShowCombatLog($"{escaperName} attempts to escape {grapplerName}'s grapple!");
+        CombatUI?.ShowCombatLog($"Waiting for {grapplerName}'s decision...");
+
+        CombatUI?.ShowConfirmationDialog(
+            title: "Escape Attempt",
+            message: BuildGrappleEscapeOppositionPromptMessage(escaper, grappler),
+            confirmLabel: "Oppose Escape",
+            cancelLabel: "Allow Escape",
+            onConfirm: () =>
+            {
+                CombatUI?.ShowCombatLog($"{grapplerName} opposes the escape attempt!");
+                SpecialAttackResult opposedResult = escaper.ResolveGrappleAction(
+                    GrappleActionType.OpposedGrappleEscape,
+                    null,
+                    null,
+                    iterativeAttackBonusOverride);
+                onResolved?.Invoke(opposedResult);
+            },
+            onCancel: () =>
+            {
+                CombatUI?.ShowCombatLog($"{grapplerName} allows {escaperName} to escape.");
+                escaper.ReleaseGrappleState("escape allowed by grappler");
+                onResolved?.Invoke(BuildAllowedGrappleEscapeResult(escaper, grappler));
+            });
+
+        return true;
+    }
+
+    private void FinalizeGrappleActionResolution(
+        CharacterController actor,
+        GrappleActionType actionType,
+        SpecialAttackResult result,
+        bool isFreeAction,
+        bool usesIterativeAttack,
+        int attackBonusUsed,
+        int attacksRemaining)
+    {
+        if (actor == null || actor.Stats == null || result == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        string actionCostLabel = isFreeAction
+            ? " [Free Action]"
+            : (usesIterativeAttack
+                ? $" [Attack BAB {CharacterStats.FormatMod(attackBonusUsed)} | {attacksRemaining} left]"
+                : " [Standard Action]");
+        string grappleHeader = $"⚔ GRAPPLE [{actionType}]{actionCostLabel}";
+        if (!string.IsNullOrEmpty(result.Log) && result.Log.Contains("\n"))
+        {
+            CombatUI?.ShowCombatLog(grappleHeader);
+            CombatUI?.ShowCombatLog(result.Log);
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog($"{grappleHeader}: {result.Log}");
+        }
+
+        UpdateAllStatsUI();
+
+        if (actionType == GrappleActionType.MoveHalfSpeed && result.Success)
+        {
+            BeginGrappleMoveSelection(actor);
+            return;
+        }
+
+        if (TryOfferFreeAdjacentMovementAfterGrappleEnds(actor, actionType, result))
+            return;
+
+        float delay = isFreeAction ? 0.35f : (usesIterativeAttack ? 0.45f : 0.8f);
+        LogMenuFlow("ExecuteGrappleAction:SCHEDULE_AFTER_ATTACK_DELAY", actor, $"actionType={actionType}, delay={delay:0.00}");
+        StartCoroutine(AfterAttackDelay(actor, delay));
+    }
+
     private void ExecuteGrappleAction(
         CharacterController actor,
         GrappleActionType actionType,
@@ -1456,42 +1600,23 @@ public partial class GameManager
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-        SpecialAttackResult result = actor.ResolveGrappleAction(
+
+        if (actionType == GrappleActionType.OpposedGrappleEscape
+            && TryResolveOpposedGrappleEscapeWithPrompt(
+                actor,
+                usesIterativeAttack ? attackBonusUsed : (int?)null,
+                onResolved: result => FinalizeGrappleActionResolution(actor, actionType, result, isFreeAction, usesIterativeAttack, attackBonusUsed, attacksRemaining)))
+        {
+            return;
+        }
+
+        SpecialAttackResult directResult = actor.ResolveGrappleAction(
             actionType,
             grappleDamageModeOverride,
             opponentWeaponHandSlotOverride,
             usesIterativeAttack ? attackBonusUsed : (int?)null);
 
-        string actionCostLabel = isFreeAction
-            ? " [Free Action]"
-            : (usesIterativeAttack
-                ? $" [Attack BAB {CharacterStats.FormatMod(attackBonusUsed)} | {attacksRemaining} left]"
-                : " [Standard Action]");
-        string grappleHeader = $"⚔ GRAPPLE [{actionType}]{actionCostLabel}";
-        if (!string.IsNullOrEmpty(result.Log) && result.Log.Contains("\n"))
-        {
-            CombatUI?.ShowCombatLog(grappleHeader);
-            CombatUI?.ShowCombatLog(result.Log);
-        }
-        else
-        {
-            CombatUI?.ShowCombatLog($"{grappleHeader}: {result.Log}");
-        }
-
-        UpdateAllStatsUI();
-
-        if (actionType == GrappleActionType.MoveHalfSpeed && result.Success)
-        {
-            BeginGrappleMoveSelection(actor);
-            return;
-        }
-
-        if (TryOfferFreeAdjacentMovementAfterGrappleEnds(actor, actionType, result))
-            return;
-
-        float delay = isFreeAction ? 0.35f : (usesIterativeAttack ? 0.45f : 0.8f);
-        LogMenuFlow("ExecuteGrappleAction:SCHEDULE_AFTER_ATTACK_DELAY", actor, $"actionType={actionType}, delay={delay:0.00}");
-        StartCoroutine(AfterAttackDelay(actor, delay));
+        FinalizeGrappleActionResolution(actor, actionType, directResult, isFreeAction, usesIterativeAttack, attackBonusUsed, attacksRemaining);
     }
 
     private IEnumerator AI_GrappleRestrictedTurn(CharacterController npc)
@@ -1539,7 +1664,25 @@ public partial class GameManager
                 break;
             }
 
-            SpecialAttackResult result = npc.ResolveGrappleAction(chosenAction.Value, null, null, iterativeAttackBonusOverride);
+            SpecialAttackResult result = null;
+            bool usedEscapePrompt = false;
+            if (chosenAction.Value == GrappleActionType.OpposedGrappleEscape)
+            {
+                usedEscapePrompt = TryResolveOpposedGrappleEscapeWithPrompt(
+                    npc,
+                    iterativeAttackBonusOverride,
+                    onResolved: resolved => result = resolved);
+            }
+
+            if (!usedEscapePrompt)
+            {
+                result = npc.ResolveGrappleAction(chosenAction.Value, null, null, iterativeAttackBonusOverride);
+            }
+            else
+            {
+                yield return new WaitUntil(() => result != null);
+            }
+
             string iterativeLabel = usesIterativeAttack
                 ? $" [BAB {CharacterStats.FormatMod(iterativeAttackBonusOverride ?? 0)} | {remainingAttacks} left]"
                 : string.Empty;
