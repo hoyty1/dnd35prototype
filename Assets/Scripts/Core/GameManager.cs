@@ -1993,12 +1993,57 @@ public class GameManager : MonoBehaviour
         clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
         clericInventory.CharacterInventory.RecalculateStats();
 
+        CharacterStats fighterStats = new CharacterStats(
+            name: "Gareth",
+            level: 6,
+            characterClass: "Fighter",
+            str: 18, dex: 14, con: 16, wis: 12, intelligence: 10, cha: 8,
+            bab: 6,
+            armorBonus: 5,
+            shieldBonus: 2,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 5,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 58,
+            raceName: "Human"
+        );
+
+        fighterStats.CharacterAlignment = Alignment.LawfulGood;
+
+        Vector2Int fighterStart = new Vector2Int(9, 7); // 10 feet south of Brother Marcus.
+        Sprite fighterAlive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+        PC2.Init(fighterStats, fighterStart, fighterAlive, pcDead);
+
+        InventoryComponent fighterInventory = PC2.gameObject.GetComponent<InventoryComponent>();
+        if (fighterInventory == null)
+            fighterInventory = PC2.gameObject.AddComponent<InventoryComponent>();
+        fighterInventory.Init(fighterStats);
+
+        ItemData longsword = ItemDatabase.CloneItem("longsword");
+        if (longsword != null)
+            fighterInventory.CharacterInventory.DirectEquip(longsword, EquipSlot.RightHand);
+
+        ItemData chainmail = ItemDatabase.CloneItem("chainmail");
+        if (chainmail != null)
+            fighterInventory.CharacterInventory.DirectEquip(chainmail, EquipSlot.Armor);
+
+        ItemData heavyShield = ItemDatabase.CloneItem("shield_heavy_steel")
+            ?? ItemDatabase.CloneItem("shield_heavy_wooden")
+            ?? ItemDatabase.CloneItem("shield_light_wooden");
+        if (heavyShield != null)
+            fighterInventory.CharacterInventory.DirectEquip(heavyShield, EquipSlot.LeftHand);
+
+        fighterInventory.CharacterInventory.RecalculateStats();
+
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
-        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC2, true, CombatUI != null ? CombatUI.PC2Panel : null);
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("✝️ Turn Undead Test: Brother Marcus (Cleric 6, light crossbow + mace) vs 2 skeletons + 1 wight. Use Special Attack -> Turn Undead to validate fleeing, proximity break, and melee break behavior.");
+        CombatUI?.ShowCombatLog("✝️ Turn Undead Test (Enhanced): Brother Marcus (Cleric 6) + Gareth (Fighter 6) vs 2 skeletons + 1 wight.");
+        CombatUI?.ShowCombatLog("   Goals: Cleric ranged attacks do NOT break Turn Undead, cleric melee DOES break it, fighter melee does NOT break it.");
     }
 
     private void RestoreStandardPartyLayout()
@@ -6929,6 +6974,31 @@ public class GameManager : MonoBehaviour
 
         if (IsTurnedBy(target, attacker))
             BreakTurnUndeadFear(target, attacker, "melee");
+    }
+
+    private bool IsMeleeAttackForTurnUndeadFearBreak(
+        CharacterController attacker,
+        ItemData weapon,
+        RangeInfo rangeInfo,
+        bool treatAsThrownAttack = false)
+    {
+        if (attacker == null)
+            return false;
+
+        if (treatAsThrownAttack)
+            return false;
+
+        weapon ??= attacker.GetEquippedMainWeapon();
+
+        // Projectile weapons (bows/crossbows/etc.) never break Turn Undead fear.
+        if (weapon != null && weapon.WeaponCat == WeaponCategory.Ranged)
+            return false;
+
+        if (rangeInfo != null)
+            return rangeInfo.IsMelee;
+
+        // Fallback when range info is unavailable.
+        return !IsAttackModeRanged(attacker, weapon);
     }
 
     private void PruneTurnUndeadTrackers()
@@ -13311,7 +13381,12 @@ public class GameManager : MonoBehaviour
             ? RangeCalculator.GetRangeInfo(sqDist, offHandWeapon.RangeIncrement, true)
             : RangeCalculator.GetRangeInfo(sqDist, 0, false);
 
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeAttack: !useThrownRange);
+        bool isOffHandMeleeFearBreak = IsMeleeAttackForTurnUndeadFearBreak(
+            attacker,
+            offHandWeapon,
+            rangeInfo,
+            treatAsThrownAttack: useThrownRange);
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, isOffHandMeleeFearBreak);
 
         CombatResult result = attacker.Attack(
             target,
@@ -15751,8 +15826,12 @@ public class GameManager : MonoBehaviour
             ? (_equippedWeapon ?? attacker.GetEquippedMainWeapon())
             : attacker.GetEquippedMainWeapon();
 
-        bool isMeleeAttack = _currentAttackType == AttackType.Melee || (rangeInfo != null && rangeInfo.IsMelee);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeAttack);
+        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
+            attacker,
+            attackWeapon,
+            rangeInfo,
+            treatAsThrownAttack: _currentAttackType == AttackType.Thrown);
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
 
         CombatResult result = attacker.Attack(
             target,
@@ -15879,8 +15958,12 @@ public class GameManager : MonoBehaviour
             ? (_equippedWeapon ?? attacker.GetEquippedMainWeapon())
             : attacker.GetEquippedMainWeapon();
 
-        bool isMeleeAttack = _currentAttackType == AttackType.Melee || (rangeInfo != null && rangeInfo.IsMelee);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeAttack);
+        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
+            attacker,
+            attackWeapon,
+            rangeInfo,
+            treatAsThrownAttack: _currentAttackType == AttackType.Thrown);
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
 
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
         ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
@@ -16027,7 +16110,12 @@ public class GameManager : MonoBehaviour
             string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
             RangeInfo rangeInfo = CalculateRangeInfo(attacker, currentTarget);
 
-            ProcessTurnUndeadMeleeFearBreak(attacker, currentTarget, rangeInfo != null && rangeInfo.IsMelee);
+            bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
+                attacker,
+                attacker.GetEquippedMainWeapon(),
+                rangeInfo,
+                treatAsThrownAttack: false);
+            ProcessTurnUndeadMeleeFearBreak(attacker, currentTarget, isMeleeFearBreakAttack);
 
             FullAttackResult stepResult = attacker.FullAttack(
                 currentTarget,
@@ -16117,7 +16205,12 @@ public class GameManager : MonoBehaviour
     {
         attacker.Actions.UseFullRoundAction();
 
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, rangeInfo == null || rangeInfo.IsMelee);
+        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
+            attacker,
+            attacker.GetEquippedMainWeapon(),
+            rangeInfo,
+            treatAsThrownAttack: false);
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
         FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         string flankLogPrefix = isFlanking
             ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
@@ -16166,7 +16259,12 @@ public class GameManager : MonoBehaviour
     {
         attacker.Actions.UseFullRoundAction();
 
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, rangeInfo == null || rangeInfo.IsMelee);
+        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
+            attacker,
+            attacker.GetEquippedMainWeapon(),
+            rangeInfo,
+            treatAsThrownAttack: false);
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
         FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         string flankLogPrefix = isFlanking
             ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
@@ -16215,7 +16313,12 @@ public class GameManager : MonoBehaviour
     {
         attacker.Actions.UseFullRoundAction();
 
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, rangeInfo == null || rangeInfo.IsMelee);
+        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
+            attacker,
+            attacker.GetEquippedMainWeapon(),
+            rangeInfo,
+            treatAsThrownAttack: false);
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
         FullAttackResult result = attacker.FlurryOfBlows(target, isFlanking, flankBonus, partnerName, rangeInfo);
         string flankLogPrefix = isFlanking
             ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
@@ -17262,7 +17365,12 @@ public class GameManager : MonoBehaviour
         bool isFlanking = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
         int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
 
-        ProcessTurnUndeadMeleeFearBreak(npc, target, npcRangeInfo != null && npcRangeInfo.IsMelee);
+        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
+            npc,
+            npc.GetEquippedMainWeapon(),
+            npcRangeInfo,
+            treatAsThrownAttack: false);
+        ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeFearBreakAttack);
 
         CombatResult result = npc.Attack(target, isFlanking, flankBonus,
             flankPartner != null ? flankPartner.Stats.CharacterName : null, npcRangeInfo);
