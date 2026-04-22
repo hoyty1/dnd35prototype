@@ -103,6 +103,7 @@ public partial class GameManager : MonoBehaviour
     // ========== INITIATIVE / TURN SERVICE ==========
     [SerializeField] private TurnService _turnService;
     [SerializeField] private MovementService _movementService;
+    [SerializeField] private InputService _inputService;
 
     /// <summary>Current combatant in initiative order (PC or NPC).</summary>
     public CharacterController CurrentCharacter => _turnService != null ? _turnService.CurrentCharacter : null;
@@ -490,6 +491,22 @@ public partial class GameManager : MonoBehaviour
         _movementService ??= gameObject.GetComponent<MovementService>() ?? gameObject.AddComponent<MovementService>();
         _movementService.Initialize(Grid, GetAllCharacters);
 
+        _inputService ??= gameObject.GetComponent<InputService>() ?? gameObject.AddComponent<InputService>();
+        _inputService.Initialize(
+            mainCamera: _mainCam,
+            canProcessInput: CanProcessWorldInput,
+            shouldAllowGridClickThroughUi: ShouldAllowGridClickThroughUIBlock,
+            secondaryClickHandler: HandleInputSecondaryClick,
+            cancelActionHandler: HandleInputCancelRequested);
+        _inputService.RegisterClickHandler(InputService.InputMode.Normal, HandleInputModeLeftClick);
+        _inputService.RegisterClickHandler(InputService.InputMode.SelectingTarget, HandleInputModeLeftClick);
+        _inputService.RegisterClickHandler(InputService.InputMode.SelectingMovement, HandleInputModeLeftClick);
+        _inputService.RegisterClickHandler(InputService.InputMode.SelectingArea, HandleInputModeLeftClick);
+        _inputService.RegisterClickHandler(InputService.InputMode.PlacingSummon, HandleInputModeLeftClick);
+        _inputService.OnInventoryToggleRequested += HandleInventoryInput;
+        _inputService.OnSkillsToggleRequested += HandleSkillsInput;
+        _inputService.OnCharacterSheetToggleRequested += HandleCharacterSheetInput;
+
         turnUndeadSystem ??= gameObject.GetComponent<TurnUndeadSystem>() ?? gameObject.AddComponent<TurnUndeadSystem>();
         grappleSystem ??= gameObject.GetComponent<GrappleSystem>() ?? gameObject.AddComponent<GrappleSystem>();
         overrunSystem ??= gameObject.GetComponent<OverrunSystem>() ?? gameObject.AddComponent<OverrunSystem>();
@@ -512,6 +529,13 @@ public partial class GameManager : MonoBehaviour
             _turnService.OnCombatEnded -= OnCombatEnded;
         }
 
+        if (_inputService != null)
+        {
+            _inputService.OnInventoryToggleRequested -= HandleInventoryInput;
+            _inputService.OnSkillsToggleRequested -= HandleSkillsInput;
+            _inputService.OnCharacterSheetToggleRequested -= HandleCharacterSheetInput;
+        }
+
         turnUndeadSystem?.Cleanup();
         grappleSystem?.Cleanup();
         overrunSystem?.Cleanup();
@@ -528,6 +552,8 @@ public partial class GameManager : MonoBehaviour
         Grid.GenerateGrid();
         CenterCamera();
         _mainCam = Camera.main;
+        _inputService ??= gameObject.GetComponent<InputService>() ?? gameObject.AddComponent<InputService>();
+        _inputService.SetCamera(_mainCam);
 
         // Initialize path preview for movement hover
         var previewGO = new GameObject("PathPreview");
@@ -923,23 +949,19 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Handle input every frame - inventory toggle and cell clicks.
+    /// Handle player and UI input every frame via InputService.
     /// </summary>
     private void Update()
     {
         // Skip all game input during character creation / encounter selection.
-        if (WaitingForCharacterCreation || WaitingForEncounterSelection) return;
+        if (WaitingForCharacterCreation || WaitingForEncounterSelection)
+            return;
 
-        HandleInventoryInput();
-        HandleSkillsInput();
-        HandleCharacterSheetInput();
+        _inputService?.SetInputMode(ResolveInputMode());
+        _inputService?.ProcessInput();
 
-        if (!IsPlayerTurn) return;
-        if (CurrentSubPhase == PlayerSubPhase.Animating) return;
-        if (_waitingForAoOConfirmation) return;
-        if (InventoryUI != null && InventoryUI.IsOpen && !InventoryUI.IsEmbedded) return;
-        if (SkillsUI != null && SkillsUI.IsOpen) return;
-        if (CharacterSheetUI != null && CharacterSheetUI.IsOpen) return;
+        if (!CanProcessWorldInput())
+            return;
 
         // Update path preview during movement phase (runs every frame, not just on click)
         UpdatePathPreview();
@@ -953,218 +975,182 @@ public partial class GameManager : MonoBehaviour
 
         if (CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
             UpdateChargeHoverPreview();
+    }
 
-        // Right-click / Escape to cancel targeting in various states
-        if (CurrentSubPhase == PlayerSubPhase.Moving
-            || CurrentSubPhase == PlayerSubPhase.TakingFiveFootStep
-            || CurrentSubPhase == PlayerSubPhase.Crawling
-            || CurrentSubPhase == PlayerSubPhase.SelectingAoETarget
-            || CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE
-            || CurrentSubPhase == PlayerSubPhase.ConfirmingTurnUndead
-            || CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget
-            || CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget
-            || CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget
-            || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
+    private InputService.InputMode ResolveInputMode()
+    {
+        if (InventoryUI != null && InventoryUI.IsOpen && !InventoryUI.IsEmbedded)
+            return InputService.InputMode.MenuOpen;
+
+        if (SkillsUI != null && SkillsUI.IsOpen)
+            return InputService.InputMode.MenuOpen;
+
+        if (CharacterSheetUI != null && CharacterSheetUI.IsOpen)
+            return InputService.InputMode.MenuOpen;
+
+        switch (CurrentSubPhase)
         {
-            bool rightClicked = false;
-#if ENABLE_LEGACY_INPUT_MANAGER
-            if (Input.GetMouseButtonDown(1))
-                rightClicked = true;
-#endif
-#if ENABLE_INPUT_SYSTEM
-            if (!rightClicked)
-            {
-                var rmouse = UnityEngine.InputSystem.Mouse.current;
-                if (rmouse != null && rmouse.rightButton.wasPressedThisFrame)
-                    rightClicked = true;
-            }
-#endif
-            // Also cancel with Escape key
-#if ENABLE_LEGACY_INPUT_MANAGER
-            if (Input.GetKeyDown(KeyCode.Escape))
-                rightClicked = true;
-#endif
-#if ENABLE_INPUT_SYSTEM
-            if (!rightClicked)
-            {
-                var kbd = UnityEngine.InputSystem.Keyboard.current;
-                if (kbd != null && kbd.escapeKey.wasPressedThisFrame)
-                    rightClicked = true;
-            }
-#endif
-            if (rightClicked)
-            {
-                if (CurrentSubPhase == PlayerSubPhase.Moving)
-                {
-                    CancelMovementSelection();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.TakingFiveFootStep)
-                {
-                    CancelFiveFootStepSelection();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.Crawling)
-                {
-                    CancelCrawlSelection();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
-                {
-                    OnSelfAoECancelled();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget && _isAoETargeting)
-                {
-                    CancelAoETargeting();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.ConfirmingTurnUndead)
-                {
-                    CancelTurnUndeadTargeting();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget)
-                {
-                    CancelSpecialAttackTargeting();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
-                {
-                    CancelChargeTargeting();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget)
-                {
-                    if (_pendingAttackMode == PendingAttackMode.CastSpell)
-                        CancelSpellTargeting();
-                    else
-                        CancelPendingAttackTargeting();
-                }
-                return;
-            }
+            case PlayerSubPhase.Moving:
+            case PlayerSubPhase.TakingFiveFootStep:
+            case PlayerSubPhase.Crawling:
+                return InputService.InputMode.SelectingMovement;
+
+            case PlayerSubPhase.SelectingAttackTarget:
+            case PlayerSubPhase.SelectingSpecialTarget:
+            case PlayerSubPhase.SelectingChargeTarget:
+            case PlayerSubPhase.ConfirmingChargePath:
+            case PlayerSubPhase.ConfirmingTurnUndead:
+                return InputService.InputMode.SelectingTarget;
+
+            case PlayerSubPhase.SelectingAoETarget:
+            case PlayerSubPhase.ConfirmingSelfAoE:
+                return InputService.InputMode.SelectingArea;
+
+            case PlayerSubPhase.ChoosingAction:
+                return InputService.InputMode.Normal;
+
+            default:
+                return InputService.InputMode.Normal;
+        }
+    }
+
+    private bool CanProcessWorldInput()
+    {
+        if (!IsPlayerTurn)
+            return false;
+
+        if (CurrentSubPhase == PlayerSubPhase.Animating)
+            return false;
+
+        if (_waitingForAoOConfirmation)
+            return false;
+
+        if (InventoryUI != null && InventoryUI.IsOpen && !InventoryUI.IsEmbedded)
+            return false;
+
+        if (SkillsUI != null && SkillsUI.IsOpen)
+            return false;
+
+        if (CharacterSheetUI != null && CharacterSheetUI.IsOpen)
+            return false;
+
+        return true;
+    }
+
+    private bool HandleInputCancelRequested(InputService.InputClickContext context)
+    {
+        if (CurrentSubPhase == PlayerSubPhase.Moving)
+        {
+            CancelMovementSelection();
+            return true;
         }
 
-        // Right-click summon command menu (player-owned summons only, during player action phase).
-        if (CurrentSubPhase == PlayerSubPhase.ChoosingAction)
+        if (CurrentSubPhase == PlayerSubPhase.TakingFiveFootStep)
         {
-            if (TryHandleSummonRightClick())
-                return;
+            CancelFiveFootStepSelection();
+            return true;
         }
 
-        // Left-click to confirm self-centered AoE spell
+        if (CurrentSubPhase == PlayerSubPhase.Crawling)
+        {
+            CancelCrawlSelection();
+            return true;
+        }
+
         if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
         {
-            bool leftClicked = false;
-#if ENABLE_LEGACY_INPUT_MANAGER
-            if (Input.GetMouseButtonDown(0))
-                leftClicked = true;
-#endif
-#if ENABLE_INPUT_SYSTEM
-            if (!leftClicked)
-            {
-                var mouse = UnityEngine.InputSystem.Mouse.current;
-                if (mouse != null && mouse.leftButton.wasPressedThisFrame)
-                    leftClicked = true;
-            }
-#endif
-            if (leftClicked)
-            {
-                OnSelfAoEConfirmed();
-                return;
-            }
-            return; // Block all other input while confirming
+            OnSelfAoECancelled();
+            return true;
         }
 
-        bool clicked = false;
-        Vector3 mouseScreenPos = Vector3.zero;
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetMouseButtonDown(0))
+        if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget && _isAoETargeting)
         {
-            clicked = true;
-            mouseScreenPos = Input.mousePosition;
+            CancelAoETargeting();
+            return true;
         }
-#endif
 
-#if ENABLE_INPUT_SYSTEM
-        if (!clicked)
+        if (CurrentSubPhase == PlayerSubPhase.ConfirmingTurnUndead)
         {
-            var mouse = UnityEngine.InputSystem.Mouse.current;
-            if (mouse != null && mouse.leftButton.wasPressedThisFrame)
-            {
-                clicked = true;
-                mouseScreenPos = mouse.position.ReadValue();
-            }
+            CancelTurnUndeadTargeting();
+            return true;
         }
-#endif
 
-        if (!clicked || _mainCam == null) return;
-
-        // Check if pointer is over a UI element
-        if (UnityEngine.EventSystems.EventSystem.current != null &&
-            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        if (CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget)
         {
-            // Off-hand targeting can occasionally be blocked by hidden/stale UI raycast targets.
-            // In this very specific state we allow the click to continue to grid raycast.
-            if (!ShouldAllowGridClickThroughUIBlock())
-            {
-                Debug.Log("[Grid] Click blocked by UI element (IsPointerOverGameObject)");
-                return;
-            }
+            CancelSpecialAttackTargeting();
+            return true;
+        }
 
+        if (CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
+        {
+            CancelChargeTargeting();
+            return true;
+        }
+
+        if (CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget)
+        {
+            if (_pendingAttackMode == PendingAttackMode.CastSpell)
+                CancelSpellTargeting();
+            else
+                CancelPendingAttackTargeting();
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool HandleInputSecondaryClick(InputService.InputClickContext context)
+    {
+        if (CurrentSubPhase != PlayerSubPhase.ChoosingAction)
+            return false;
+
+        return TryHandleSummonRightClick(context.ScreenPosition);
+    }
+
+    private bool HandleInputModeLeftClick(InputService.InputClickContext context)
+    {
+        if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
+        {
+            OnSelfAoEConfirmed();
+            return true;
+        }
+
+        if (context.IsPointerOverUI && ShouldAllowGridClickThroughUIBlock())
+        {
             Debug.Log("[Grid] Pointer reports UI overlap, but allowing click-through for off-hand target selection.");
         }
 
-        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
-        RaycastHit2D hit = Physics2D.Raycast(worldPoint, Vector2.zero);
-
-        if (hit.collider != null)
+        SquareCell cell = context.GetSquareCell();
+        if (cell != null)
         {
-            SquareCell cell = hit.collider.GetComponent<SquareCell>();
-            if (cell != null)
-            {
-                Debug.Log($"[Grid] Raycast hit cell at ({cell.X}, {cell.Y}) Phase={CurrentPhase} Sub={CurrentSubPhase}");
-                OnCellClicked(cell);
-            }
+            Debug.Log($"[Grid] Raycast hit cell at ({cell.X}, {cell.Y}) Phase={CurrentPhase} Sub={CurrentSubPhase}");
+            OnCellClicked(cell);
         }
         else
         {
             Debug.Log("[Grid] Click detected but no cell hit by raycast");
         }
+
+        return true;
     }
 
     private bool ShouldAllowGridClickThroughUIBlock()
     {
+        if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
+            return true;
+
         return CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget
             && _isSelectingOffHandTarget;
     }
 
-    private bool TryHandleSummonRightClick()
+    private bool TryHandleSummonRightClick(Vector3 mouseScreenPos)
     {
-        bool rightClicked = false;
-        Vector3 mouseScreenPos = Vector3.zero;
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetMouseButtonDown(1))
-        {
-            rightClicked = true;
-            mouseScreenPos = Input.mousePosition;
-        }
-#endif
-
-#if ENABLE_INPUT_SYSTEM
-        if (!rightClicked)
-        {
-            var mouse = UnityEngine.InputSystem.Mouse.current;
-            if (mouse != null && mouse.rightButton.wasPressedThisFrame)
-            {
-                rightClicked = true;
-                mouseScreenPos = mouse.position.ReadValue();
-            }
-        }
-#endif
-
-        if (!rightClicked || _mainCam == null)
+        if (_mainCam == null)
             return false;
 
-        if (UnityEngine.EventSystems.EventSystem.current != null &&
-            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
-        {
+        if (_inputService != null && _inputService.IsPointerOverUI())
             return false;
-        }
 
         Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
         RaycastHit2D hit = Physics2D.Raycast(worldPoint, Vector2.zero);
@@ -1201,102 +1187,54 @@ public partial class GameManager : MonoBehaviour
 
     private void HandleInventoryInput()
     {
-        bool iPressed = false;
+        if (InventoryUI == null || InventoryUI.IsEmbedded)
+            return;
 
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetKeyDown(KeyCode.I))
-            iPressed = true;
-#endif
-
-#if ENABLE_INPUT_SYSTEM
-        if (!iPressed)
+        if (InventoryUI.IsOpen)
         {
-            var keyboard = UnityEngine.InputSystem.Keyboard.current;
-            if (keyboard != null && keyboard.iKey.wasPressedThisFrame)
-                iPressed = true;
+            InventoryUI.Close();
+            if (IsPlayerTurn && ActivePC != null && CurrentSubPhase == PlayerSubPhase.ChoosingAction)
+                ShowActionChoices();
         }
-#endif
-
-        if (iPressed && InventoryUI != null && !InventoryUI.IsEmbedded)
+        else if (IsPlayerTurn && ActivePC != null)
         {
-            if (InventoryUI.IsOpen)
-            {
-                InventoryUI.Close();
-                if (IsPlayerTurn && ActivePC != null && CurrentSubPhase == PlayerSubPhase.ChoosingAction)
-                    ShowActionChoices();
-            }
-            else if (IsPlayerTurn && ActivePC != null)
-            {
-                InventoryUI.Toggle(ActivePC);
-            }
+            InventoryUI.Toggle(ActivePC);
         }
     }
 
     private void HandleSkillsInput()
     {
-        bool kPressed = false;
+        if (SkillsUI == null)
+            return;
 
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetKeyDown(KeyCode.K))
-            kPressed = true;
-#endif
-
-#if ENABLE_INPUT_SYSTEM
-        if (!kPressed)
+        if (SkillsUI.IsOpen)
         {
-            var keyboard = UnityEngine.InputSystem.Keyboard.current;
-            if (keyboard != null && keyboard.kKey.wasPressedThisFrame)
-                kPressed = true;
+            Debug.Log("[UI] K pressed - closing Skills panel");
+            SkillsUI.Close();
         }
-#endif
-
-        if (kPressed && SkillsUI != null)
+        else if (IsPlayerTurn && ActivePC != null)
         {
-            if (SkillsUI.IsOpen)
-            {
-                Debug.Log("[UI] K pressed - closing Skills panel");
-                SkillsUI.Close();
-            }
-            else if (IsPlayerTurn && ActivePC != null)
-            {
-                Debug.Log("[UI] K pressed - opening Skills panel");
-                SkillsUI.OpenForDisplay(ActivePC.Stats);
-            }
+            Debug.Log("[UI] K pressed - opening Skills panel");
+            SkillsUI.OpenForDisplay(ActivePC.Stats);
         }
     }
 
     private void HandleCharacterSheetInput()
     {
-        bool cPressed = false;
+        if (CharacterSheetUI == null)
+            return;
 
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetKeyDown(KeyCode.C))
-            cPressed = true;
-#endif
-
-#if ENABLE_INPUT_SYSTEM
-        if (!cPressed)
+        if (CharacterSheetUI.IsOpen)
         {
-            var keyboard = UnityEngine.InputSystem.Keyboard.current;
-            if (keyboard != null && keyboard.cKey.wasPressedThisFrame)
-                cPressed = true;
+            Debug.Log("[UI] C pressed - closing Character Sheet");
+            CharacterSheetUI.Close();
+            if (IsPlayerTurn && ActivePC != null && CurrentSubPhase == PlayerSubPhase.ChoosingAction)
+                ShowActionChoices();
         }
-#endif
-
-        if (cPressed && CharacterSheetUI != null)
+        else if (IsPlayerTurn && ActivePC != null)
         {
-            if (CharacterSheetUI.IsOpen)
-            {
-                Debug.Log("[UI] C pressed - closing Character Sheet");
-                CharacterSheetUI.Close();
-                if (IsPlayerTurn && ActivePC != null && CurrentSubPhase == PlayerSubPhase.ChoosingAction)
-                    ShowActionChoices();
-            }
-            else if (IsPlayerTurn && ActivePC != null)
-            {
-                Debug.Log("[UI] C pressed - opening Character Sheet");
-                CharacterSheetUI.Toggle(ActivePC);
-            }
+            Debug.Log("[UI] C pressed - opening Character Sheet");
+            CharacterSheetUI.Toggle(ActivePC);
         }
     }
 
@@ -7313,17 +7251,13 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private Vector2 GetMouseWorldPosition()
     {
-        Vector3 mouseScreenPos = Vector3.zero;
-#if ENABLE_LEGACY_INPUT_MANAGER
-        mouseScreenPos = Input.mousePosition;
-#endif
-#if ENABLE_INPUT_SYSTEM
-        var mouse = UnityEngine.InputSystem.Mouse.current;
-        if (mouse != null)
-            mouseScreenPos = (Vector3)(Vector2)mouse.position.ReadValue();
-#endif
-        if (_mainCam == null) return Vector2.zero;
-        return _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        if (_inputService != null)
+            return _inputService.GetMouseWorldPosition();
+
+        if (_mainCam == null)
+            return Vector2.zero;
+
+        return _mainCam.ScreenToWorldPoint(Input.mousePosition);
     }
 
     /// <summary>
@@ -8761,26 +8695,16 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        // Get mouse position in world space
-        Vector3 mouseScreenPos = Vector3.zero;
-#if ENABLE_LEGACY_INPUT_MANAGER
-        mouseScreenPos = Input.mousePosition;
-#endif
-#if ENABLE_INPUT_SYSTEM
-        var mouseDev = UnityEngine.InputSystem.Mouse.current;
-        if (mouseDev != null)
-            mouseScreenPos = mouseDev.position.ReadValue();
-#endif
-
         // Don't show preview if pointer is over UI
-        if (UnityEngine.EventSystems.EventSystem.current != null &&
-            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        if (_inputService != null && _inputService.IsPointerOverUI())
         {
             if (_pathPreview.IsVisible) _pathPreview.HidePath();
             return;
         }
 
-        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        Vector2 worldPoint = _inputService != null
+            ? _inputService.GetMouseWorldPosition()
+            : (Vector2)_mainCam.ScreenToWorldPoint(Input.mousePosition);
         Vector2Int gridCoord = SquareGridUtils.WorldToGrid(worldPoint);
 
         // Skip recalculation if hovering over the same cell
@@ -8876,20 +8800,8 @@ public partial class GameManager : MonoBehaviour
 
         if (_mainCam == null) return;
 
-        // Get mouse position in world space
-        Vector3 mouseScreenPos = Vector3.zero;
-#if ENABLE_LEGACY_INPUT_MANAGER
-        mouseScreenPos = Input.mousePosition;
-#endif
-#if ENABLE_INPUT_SYSTEM
-        var mouseDev = UnityEngine.InputSystem.Mouse.current;
-        if (mouseDev != null)
-            mouseScreenPos = mouseDev.position.ReadValue();
-#endif
-
         // Hide if pointer is over UI
-        if (UnityEngine.EventSystems.EventSystem.current != null &&
-            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        if (_inputService != null && _inputService.IsPointerOverUI())
         {
             if (_hoverMarker.IsVisible)
             {
@@ -8899,7 +8811,9 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        Vector2 worldPoint = _inputService != null
+            ? _inputService.GetMouseWorldPosition()
+            : (Vector2)_mainCam.ScreenToWorldPoint(Input.mousePosition);
         Vector2Int gridCoord = SquareGridUtils.WorldToGrid(worldPoint);
 
         // Skip if same cell as last frame
