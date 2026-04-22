@@ -257,6 +257,9 @@ public partial class GameManager : MonoBehaviour
     private HoverMarker _hoverMarker;
     private Vector2Int _lastHoverMarkerCoord = new Vector2Int(-999, -999);
 
+    // ========== CHARACTER HOVER TOOLTIP ==========
+    private CharacterController _lastHoveredCharacter;
+
     // ========== SUMMONING STATE ==========
     private readonly HashSet<CharacterController> _summonedAllies = new HashSet<CharacterController>();
     private readonly HashSet<CharacterController> _summonedEnemies = new HashSet<CharacterController>();
@@ -590,6 +593,7 @@ public partial class GameManager : MonoBehaviour
 
         // Initialize icon system
         IconManager.Init();
+        CharacterHoverTooltipUI.EnsureInstance();
 
         // Check if character creation UI exists
         if (CharacterCreationUI != null)
@@ -983,13 +987,21 @@ public partial class GameManager : MonoBehaviour
     {
         // Skip all game input during character creation / encounter selection.
         if (WaitingForCharacterCreation || WaitingForEncounterSelection)
+        {
+            HideCharacterHoverTooltip();
             return;
+        }
 
         _inputService?.SetInputMode(ResolveInputMode());
         _inputService?.ProcessInput();
 
         if (!CanProcessWorldInput())
+        {
+            HideCharacterHoverTooltip();
             return;
+        }
+
+        UpdateCharacterHoverTooltip();
 
         // Update path preview during movement phase (runs every frame, not just on click)
         UpdatePathPreview();
@@ -8984,6 +8996,71 @@ public partial class GameManager : MonoBehaviour
     }
 
     // ========== HOVER MARKER ==========
+
+    /// <summary>
+    /// Shows a compact battlefield tooltip when hovering over a character token.
+    /// </summary>
+    private void UpdateCharacterHoverTooltip()
+    {
+        if (_mainCam == null || Grid == null)
+        {
+            HideCharacterHoverTooltip();
+            return;
+        }
+
+        if (_inputService != null && _inputService.IsPointerOverUI())
+        {
+            HideCharacterHoverTooltip();
+            return;
+        }
+
+        Vector2 worldPoint = _inputService != null
+            ? _inputService.GetMouseWorldPosition()
+            : (Vector2)_mainCam.ScreenToWorldPoint(Input.mousePosition);
+
+        Vector2Int gridCoord = SquareGridUtils.WorldToGrid(worldPoint);
+        SquareCell hoveredCell = Grid.GetCell(gridCoord);
+        if (hoveredCell == null)
+        {
+            HideCharacterHoverTooltip();
+            return;
+        }
+
+        CharacterController hoveredCharacter = hoveredCell.Occupant;
+        if (!IsActiveCombatant(hoveredCharacter))
+        {
+            HideCharacterHoverTooltip();
+            return;
+        }
+
+        hoveredCharacter.RefreshAllTags();
+
+        CharacterHoverTooltipUI tooltip = CharacterHoverTooltipUI.Instance;
+        if (tooltip == null)
+        {
+            CharacterHoverTooltipUI.EnsureInstance();
+            tooltip = CharacterHoverTooltipUI.Instance;
+        }
+
+        if (tooltip == null)
+            return;
+
+        Vector3 mouseScreenPos;
+        if (_inputService != null && _inputService.TryGetMouseScreenPosition(out mouseScreenPos))
+            tooltip.ShowTooltip(hoveredCharacter, mouseScreenPos);
+        else
+            tooltip.ShowTooltip(hoveredCharacter, Input.mousePosition);
+
+        _lastHoveredCharacter = hoveredCharacter;
+    }
+
+    private void HideCharacterHoverTooltip()
+    {
+        if (_lastHoveredCharacter != null)
+            _lastHoveredCharacter = null;
+
+        CharacterHoverTooltipUI.Instance?.HideTooltip();
+    }
 
     /// <summary>
     /// Updates the X hover marker to show which grid square the mouse is over

@@ -853,7 +853,7 @@ public class CharacterController : MonoBehaviour
     private CharacterInventory _inventory;
     private CharacterConditions _conditions;
     private CharacterTags _tags;
-    private readonly HashSet<string> _appliedArmorTags = new HashSet<string>();
+    private StatusTagManager _statusTagManager;
     private Coroutine _currentScaleAnimation;
     private Coroutine _grappleAlternateVisibilityCoroutine;
     private int _grappleDisplayPauseLocks;
@@ -960,6 +960,14 @@ public class CharacterController : MonoBehaviour
         return _tags;
     }
 
+    private StatusTagManager EnsureStatusTagManager()
+    {
+        if (_statusTagManager == null)
+            _statusTagManager = new StatusTagManager(this);
+
+        return _statusTagManager;
+    }
+
     public CharacterInventory Inventory => EnsureInventory();
     public CharacterConditions Conditions => EnsureConditions();
     public CharacterTags Tags => EnsureTags();
@@ -983,38 +991,25 @@ public class CharacterController : MonoBehaviour
         EnsureInventory();
         EnsureConditions();
         EnsureTags();
-        RefreshEquipmentTags();
+        EnsureStatusTagManager();
+        RefreshAllTags();
     }
 
     /// <summary>
-    /// Refreshes armor-derived character tags from currently equipped armor.
+    /// Refreshes equipment-derived tags (armor and wielding state).
     /// Called automatically after inventory stat recalculation.
     /// </summary>
     public void RefreshEquipmentTags()
     {
-        CharacterTags tags = EnsureTags();
+        EnsureStatusTagManager().RefreshEquipmentTags();
+    }
 
-        foreach (string oldTag in _appliedArmorTags)
-            tags.RemoveTag(oldTag);
-        _appliedArmorTags.Clear();
-
-        Inventory inv = Inventory != null ? Inventory.GetInventory() : null;
-        ItemData armor = inv != null ? inv.ArmorRobeSlot : null;
-
-        if (armor != null && armor.VisualTags != null && armor.VisualTags.Count > 0)
-        {
-            foreach (string tag in armor.VisualTags)
-            {
-                if (tags.AddTag(tag))
-                    _appliedArmorTags.Add(tag);
-            }
-
-            tags.RemoveTag("Unarmored");
-            return;
-        }
-
-        tags.AddTag("Unarmored");
-        _appliedArmorTags.Add("Unarmored");
+    /// <summary>
+    /// Refreshes all dynamic tags (identity, HP state, conditions, and equipment).
+    /// </summary>
+    public void RefreshAllTags()
+    {
+        EnsureStatusTagManager().RefreshAllTags();
     }
 
     public string GetArmorTag()
@@ -1090,6 +1085,7 @@ public class CharacterController : MonoBehaviour
 
         RefreshGridOccupancy();
         UpdateVisualSize(false);
+        RefreshAllTags();
     }
 
     private SquareGrid CurrentGrid => GameManager.Instance != null ? GameManager.Instance.Grid : SquareGrid.Instance;
@@ -1390,12 +1386,11 @@ public class CharacterController : MonoBehaviour
         if (Stats == null) return;
 
         if (_conditionManager != null)
-        {
             _conditionManager.ApplyCondition(type, rounds, sourceName);
-            return;
-        }
+        else
+            Stats.ApplyCondition(type, rounds, sourceName);
 
-        Stats.ApplyCondition(type, rounds, sourceName);
+        EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
     }
 
     public bool RemoveCondition(CombatConditionType type)
@@ -1407,10 +1402,14 @@ public class CharacterController : MonoBehaviour
     {
         if (Stats == null) return false;
 
-        if (_conditionManager != null)
-            return _conditionManager.RemoveCondition(type);
+        bool removed = _conditionManager != null
+            ? _conditionManager.RemoveCondition(type)
+            : Stats.RemoveCondition(type);
 
-        return Stats.RemoveCondition(type);
+        if (removed)
+            EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
+
+        return removed;
     }
 
     public List<StatusEffect> TickConditions()
@@ -1422,10 +1421,12 @@ public class CharacterController : MonoBehaviour
     {
         if (Stats == null) return new List<StatusEffect>();
 
-        if (_conditionManager != null)
-            return _conditionManager.TickConditions();
+        List<StatusEffect> expired = _conditionManager != null
+            ? _conditionManager.TickConditions()
+            : Stats.TickConditions();
 
-        return Stats.TickConditions();
+        EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
+        return expired;
     }
 
     public bool IsProneCondition => EnsureConditions().IsProne;
@@ -1561,6 +1562,7 @@ public class CharacterController : MonoBehaviour
         Debug.Log($"[HPState] {(Stats != null ? Stats.CharacterName : name)}: {oldState} -> {newState} (HP {(Stats != null ? Stats.CurrentHP : 0)})");
 
         UpdateConditionsForHPState(newState);
+        EnsureStatusTagManager().UpdateHPStateTags(newState);
 
         Actions.SingleActionOnly = (newState == HPState.Disabled || newState == HPState.Staggered);
 
