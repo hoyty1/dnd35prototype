@@ -2836,17 +2836,23 @@ public class GameManager : MonoBehaviour
                     CombatUI.SetTurnIndicator($"{pcName}'s Turn - Iterative attack sequence complete. You may still use free actions/special toggles or End Turn.");
                 }
             }
-            else if (pc.HasRemainingIterativeGrappleAttacksInSequence())
+            else if (CanUseGrappleAttackOption(pc))
             {
-                int attacksRemaining = pc.GetRemainingGrappleAttackActions();
-                int nextBab = pc.GetCurrentGrappleAttackBonus();
-                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Iterative attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use grapple-compatible attack actions or End Turn.");
+                int attacksRemaining = GetRemainingGrappleAttackActions(pc);
+                int nextBab = GetCurrentGrappleAttackBonus(pc);
+                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Grapple attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Special Attack → Grapple, or End Turn.");
             }
-            else if (pc.HasRemainingIterativeBullRushAttacksInSequence())
+            else if (CanUseBullRushAttackOption(pc))
             {
-                int attacksRemaining = pc.GetRemainingBullRushAttackActions();
-                int nextBab = pc.GetCurrentBullRushAttackBonus();
-                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Bull Rush (Attack) iterative attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Bull Rush (Attack) or End Turn.");
+                int attacksRemaining = GetRemainingBullRushAttackActions(pc);
+                int nextBab = GetCurrentBullRushAttackBonus(pc);
+                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Bull Rush (Attack) attempts remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Special Attack → Bull Rush (Attack), or End Turn.");
+            }
+            else if (CanUseTripAttackOption(pc))
+            {
+                int attacksRemaining = GetRemainingTripAttackActions(pc);
+                int nextBab = GetCurrentTripAttackBonus(pc);
+                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Trip attempts remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Special Attack → Trip, or End Turn.");
             }
             else if (CanUseDisarmAttackOption(pc))
             {
@@ -5959,7 +5965,7 @@ public class GameManager : MonoBehaviour
         return GetCurrentDisarmAttackBonusForUI(attacker);
     }
 
-    private bool TryStartMainHandDisarmSequence(CharacterController attacker, out string reason)
+    private bool TryStartMainHandSpecialManeuverSequence(CharacterController attacker, string maneuverLabel, out string reason)
     {
         reason = string.Empty;
 
@@ -6007,17 +6013,17 @@ public class GameManager : MonoBehaviour
 
         int firstBaseBab = attacker.GetIterativeAttackBAB(0);
         _currentAttackBAB = _isDualWielding ? firstBaseBab + _mainHandPenalty : firstBaseBab;
-        Debug.Log($"[Disarm][Flow] Started shared attack sequence for disarm: actor={attacker.Stats.CharacterName}, budget={_totalAttackBudget}, firstBAB={CharacterStats.FormatMod(_currentAttackBAB)}");
+        Debug.Log($"[{maneuverLabel}][Flow] Started shared attack sequence: actor={attacker.Stats.CharacterName}, budget={_totalAttackBudget}, firstBAB={CharacterStats.FormatMod(_currentAttackBAB)}");
         return true;
     }
 
-    private void AdvanceMainHandSequenceAfterDisarmUse(CharacterController attacker)
+    private void AdvanceMainHandSequenceAfterSpecialManeuverUse(CharacterController attacker, string maneuverLabel)
     {
         if (!_isInAttackSequence || _attackingCharacter != attacker)
             return;
 
         _totalAttacksUsed++;
-        Debug.Log($"[Disarm][Flow] Main-hand disarm consumed iterative attack {_totalAttacksUsed}/{_totalAttackBudget}.");
+        Debug.Log($"[{maneuverLabel}][Flow] Main-hand maneuver consumed iterative attack {_totalAttacksUsed}/{_totalAttackBudget}.");
 
         if (_totalAttacksUsed == 1 && !_attackSequenceConsumesFullRound && _totalAttackBudget > 1)
         {
@@ -6025,12 +6031,12 @@ public class GameManager : MonoBehaviour
             {
                 attacker.Actions.UseMoveAction();
                 _attackSequenceConsumesFullRound = true;
-                Debug.Log("[Disarm][Flow] Converted shared sequence to full-round after first disarm attack.");
+                Debug.Log($"[{maneuverLabel}][Flow] Converted shared sequence to full-round after first maneuver attack.");
             }
             else
             {
                 _totalAttackBudget = _totalAttacksUsed;
-                Debug.LogWarning("[Disarm][Flow] Could not convert to full-round; trimming disarm attack budget.");
+                Debug.LogWarning($"[{maneuverLabel}][Flow] Could not convert to full-round; trimming maneuver attack budget.");
             }
         }
 
@@ -6038,14 +6044,140 @@ public class GameManager : MonoBehaviour
         {
             int nextBaseBab = attacker.GetIterativeAttackBAB(_totalAttacksUsed);
             _currentAttackBAB = _isDualWielding ? nextBaseBab + _mainHandPenalty : nextBaseBab;
-            Debug.Log($"[Disarm][Flow] Prepared next main-hand disarm BAB {CharacterStats.FormatMod(_currentAttackBAB)}.");
+            Debug.Log($"[{maneuverLabel}][Flow] Prepared next main-hand maneuver BAB {CharacterStats.FormatMod(_currentAttackBAB)}.");
         }
         else
         {
-            Debug.Log("[Disarm][Flow] Main-hand disarm iterative attacks exhausted; ending shared sequence.");
+            Debug.Log($"[{maneuverLabel}][Flow] Main-hand maneuver iterative attacks exhausted; ending shared sequence.");
             EndAttackSequence();
         }
     }
+
+    private bool CanUseMainHandManeuverAttackOption(CharacterController attacker, string maneuverLabel)
+    {
+        if (attacker == null || attacker.Actions == null)
+            return false;
+
+        if (_isInAttackSequence && _attackingCharacter != null && _attackingCharacter != attacker)
+        {
+            Debug.Log($"[{maneuverLabel}][Flow] Cannot use maneuver: another actor owns the current attack sequence.");
+            return false;
+        }
+
+        return GetRemainingMainHandManeuverAttackActions(attacker) > 0;
+    }
+
+    private int GetRemainingMainHandManeuverAttackActions(CharacterController attacker)
+    {
+        if (attacker == null || attacker.Actions == null)
+            return 0;
+
+        if (_isInAttackSequence && _attackingCharacter == attacker)
+            return Mathf.Max(0, _totalAttackBudget - _totalAttacksUsed);
+
+        if (attacker.Actions.HasFullRoundAction)
+            return Mathf.Max(1, attacker.GetIterativeAttackCount());
+
+        if (attacker.Actions.HasStandardAction)
+            return 1;
+
+        return 0;
+    }
+
+    private int GetCurrentMainHandManeuverAttackBonusForUI(CharacterController attacker)
+    {
+        if (attacker == null || attacker.Stats == null)
+            return 0;
+
+        if (_isInAttackSequence && _attackingCharacter == attacker && HasMoreAttacksAvailable())
+            return _currentAttackBAB;
+
+        if (attacker.Actions == null)
+            return attacker.Stats.BaseAttackBonus;
+
+        if (attacker.Actions.HasFullRoundAction)
+        {
+            int firstBaseBab = attacker.GetIterativeAttackBAB(0);
+            if (_isDualWielding)
+                firstBaseBab += _mainHandPenalty;
+            return firstBaseBab;
+        }
+
+        if (attacker.Actions.HasStandardAction)
+            return attacker.Stats.BaseAttackBonus;
+
+        return 0;
+    }
+
+    private bool TryConsumeMainHandManeuverAttackAction(CharacterController attacker, string maneuverLabel, out int attackBonusUsed, out int attacksRemaining, out string reason)
+    {
+        attackBonusUsed = 0;
+        attacksRemaining = 0;
+        reason = string.Empty;
+
+        if (attacker == null || attacker.Actions == null)
+        {
+            reason = "No action economy available.";
+            return false;
+        }
+
+        bool hasActiveOwnedSequence = _isInAttackSequence
+            && _attackingCharacter == attacker
+            && HasMoreAttacksAvailable();
+
+        bool canStartSequence = !_isInAttackSequence
+            && TryStartMainHandSpecialManeuverSequence(attacker, maneuverLabel, out reason)
+            && HasMoreAttacksAvailable();
+
+        if (!hasActiveOwnedSequence && !canStartSequence)
+        {
+            if (string.IsNullOrWhiteSpace(reason))
+                reason = $"No {maneuverLabel.ToLowerInvariant()} attacks remaining this turn.";
+            return false;
+        }
+
+        attackBonusUsed = _currentAttackBAB;
+        AdvanceMainHandSequenceAfterSpecialManeuverUse(attacker, maneuverLabel);
+        attacksRemaining = GetRemainingMainHandManeuverAttackActions(attacker);
+        Debug.Log($"[{maneuverLabel}][Flow] Consumed main-hand maneuver attack at BAB {CharacterStats.FormatMod(attackBonusUsed)}; remaining={attacksRemaining}");
+        return true;
+    }
+
+    public bool CanUseGrappleAttackOption(CharacterController attacker)
+        => CanUseMainHandManeuverAttackOption(attacker, "Grapple");
+
+    public int GetRemainingGrappleAttackActions(CharacterController attacker)
+        => GetRemainingMainHandManeuverAttackActions(attacker);
+
+    public int GetCurrentGrappleAttackBonus(CharacterController attacker)
+        => GetCurrentMainHandManeuverAttackBonusForUI(attacker);
+
+    private bool TryConsumeGrappleAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason)
+        => TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out attacksRemaining, out reason);
+
+    public bool CanUseBullRushAttackOption(CharacterController attacker)
+        => CanUseMainHandManeuverAttackOption(attacker, "BullRushAttack");
+
+    public int GetRemainingBullRushAttackActions(CharacterController attacker)
+        => GetRemainingMainHandManeuverAttackActions(attacker);
+
+    public int GetCurrentBullRushAttackBonus(CharacterController attacker)
+        => GetCurrentMainHandManeuverAttackBonusForUI(attacker);
+
+    private bool TryConsumeBullRushAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason)
+        => TryConsumeMainHandManeuverAttackAction(attacker, "BullRushAttack", out attackBonusUsed, out attacksRemaining, out reason);
+
+    public bool CanUseTripAttackOption(CharacterController attacker)
+        => CanUseMainHandManeuverAttackOption(attacker, "Trip");
+
+    public int GetRemainingTripAttackActions(CharacterController attacker)
+        => GetRemainingMainHandManeuverAttackActions(attacker);
+
+    public int GetCurrentTripAttackBonus(CharacterController attacker)
+        => GetCurrentMainHandManeuverAttackBonusForUI(attacker);
+
+    private bool TryConsumeTripAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason)
+        => TryConsumeMainHandManeuverAttackAction(attacker, "Trip", out attackBonusUsed, out attacksRemaining, out reason);
 
     private bool TryConsumeDisarmAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason, out bool usedOffHand, out ItemData disarmWeapon)
     {
@@ -6062,12 +6194,12 @@ public class GameManager : MonoBehaviour
         }
 
         if ((_isInAttackSequence && _attackingCharacter == attacker && HasMoreAttacksAvailable())
-            || (!_isInAttackSequence && TryStartMainHandDisarmSequence(attacker, out reason) && HasMoreAttacksAvailable()))
+            || (!_isInAttackSequence && TryStartMainHandSpecialManeuverSequence(attacker, "Disarm", out reason) && HasMoreAttacksAvailable()))
         {
             attackBonusUsed = _currentAttackBAB;
             usedOffHand = false;
             disarmWeapon = attacker.GetEquippedMainWeapon();
-            AdvanceMainHandSequenceAfterDisarmUse(attacker);
+            AdvanceMainHandSequenceAfterSpecialManeuverUse(attacker, "Disarm");
             attacksRemaining = GetRemainingDisarmAttempts(attacker);
             return true;
         }
@@ -6155,14 +6287,16 @@ public class GameManager : MonoBehaviour
         if (actor == null)
             return false;
 
-        bool hasIterativeGrappleAttackInSequence = actor.HasRemainingIterativeGrappleAttacksInSequence();
-        bool hasIterativeBullRushAttackInSequence = actor.HasRemainingIterativeBullRushAttacksInSequence();
+        bool hasGrappleAttackAvailable = CanUseGrappleAttackOption(actor);
+        bool hasBullRushAttackAvailable = CanUseBullRushAttackOption(actor);
+        bool hasTripAttackAvailable = CanUseTripAttackOption(actor);
         bool hasDisarmAttackAvailable = CanUseDisarmAttackOption(actor);
         return actor.Actions.HasStandardAction
             || actor.Actions.HasFullRoundAction
             || CanUseImprovedFeintAsMove(actor)
-            || hasIterativeGrappleAttackInSequence
-            || hasIterativeBullRushAttackInSequence
+            || hasGrappleAttackAvailable
+            || hasBullRushAttackAvailable
+            || hasTripAttackAvailable
             || hasDisarmAttackAvailable;
     }
 
@@ -6196,7 +6330,7 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         bool canOpen = pc != null && CanOpenSpecialAttackMenu(pc);
-        Debug.Log($"[GameManager][SpecialAttack] ButtonPressed actor={(pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>")} canOpen={canOpen} phase={CurrentPhase} subPhase={CurrentSubPhase} std={(pc != null ? pc.Actions.HasStandardAction : false)} full={(pc != null ? pc.Actions.HasFullRoundAction : false)} iterativeGrapple={(pc != null ? pc.HasRemainingIterativeGrappleAttacksInSequence() : false)} iterativeBullRush={(pc != null ? pc.HasRemainingIterativeBullRushAttacksInSequence() : false)} disarmAvailable={(pc != null ? CanUseDisarmAttackOption(pc) : false)}");
+        Debug.Log($"[GameManager][SpecialAttack] ButtonPressed actor={(pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>")} canOpen={canOpen} phase={CurrentPhase} subPhase={CurrentSubPhase} std={(pc != null ? pc.Actions.HasStandardAction : false)} full={(pc != null ? pc.Actions.HasFullRoundAction : false)} grappleAvailable={(pc != null ? CanUseGrappleAttackOption(pc) : false)} bullRushAvailable={(pc != null ? CanUseBullRushAttackOption(pc) : false)} tripAvailable={(pc != null ? CanUseTripAttackOption(pc) : false)} disarmAvailable={(pc != null ? CanUseDisarmAttackOption(pc) : false)}");
         if (!canOpen) return;
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "special attacks"))
@@ -6410,36 +6544,41 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        bool hasIterativeGrappleAttackInSequence = pc.HasRemainingIterativeGrappleAttacksInSequence();
-        bool hasIterativeBullRushAttackInSequence = pc.HasRemainingIterativeBullRushAttacksInSequence();
+        bool hasGrappleAttackAvailable = CanUseGrappleAttackOption(pc);
+        bool hasBullRushAttackAvailable = CanUseBullRushAttackOption(pc);
+        bool hasTripAttackAvailable = CanUseTripAttackOption(pc);
         bool hasDisarmAttackAvailable = CanUseDisarmAttackOption(pc);
         bool hasAction = type == SpecialAttackType.Feint
             ? (pc.Actions.HasStandardAction || CanUseImprovedFeintAsMove(pc))
             : (type == SpecialAttackType.Grapple
-                ? (pc.Actions.HasStandardAction || hasIterativeGrappleAttackInSequence)
+                ? hasGrappleAttackAvailable
                 : (type == SpecialAttackType.BullRushAttack
-                    ? (pc.Actions.HasStandardAction || pc.Actions.HasFullRoundAction || hasIterativeBullRushAttackInSequence)
-                    : (type == SpecialAttackType.Disarm
-                        ? hasDisarmAttackAvailable
-                        : (type == SpecialAttackType.BullRushCharge
-                            ? pc.Actions.HasFullRoundAction
-                            : pc.Actions.HasStandardAction))));
+                    ? hasBullRushAttackAvailable
+                    : (type == SpecialAttackType.Trip
+                        ? hasTripAttackAvailable
+                        : (type == SpecialAttackType.Disarm
+                            ? hasDisarmAttackAvailable
+                            : (type == SpecialAttackType.BullRushCharge
+                                ? pc.Actions.HasFullRoundAction
+                                : pc.Actions.HasStandardAction))));
 
-        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} iterativeGrapple={hasIterativeGrappleAttackInSequence} iterativeBullRush={hasIterativeBullRushAttackInSequence} disarmAvailable={hasDisarmAttackAvailable}");
+        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} disarmAvailable={hasDisarmAttackAvailable}");
 
         if (!hasAction)
         {
             string reason = type == SpecialAttackType.Feint
                 ? "Need a standard action, or a move action with Improved Feint"
                 : (type == SpecialAttackType.Grapple
-                    ? "Need a standard action or remaining iterative grapple attack"
+                    ? "Need at least one remaining grapple attack"
                     : (type == SpecialAttackType.BullRushAttack
-                        ? "Need a standard/full-round action or remaining iterative bull rush attack"
-                        : (type == SpecialAttackType.Disarm
-                            ? "Need at least one remaining disarm-capable attack"
-                            : (type == SpecialAttackType.BullRushCharge
-                                ? "Need a full-round action and valid charge movement"
-                                : "Need a standard action"))));
+                        ? "Need at least one remaining bull rush attack"
+                        : (type == SpecialAttackType.Trip
+                            ? "Need at least one remaining trip attack"
+                            : (type == SpecialAttackType.Disarm
+                                ? "Need at least one remaining disarm-capable attack"
+                                : (type == SpecialAttackType.BullRushCharge
+                                    ? "Need a full-round action and valid charge movement"
+                                    : "Need a standard action"))));
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use {type}: {reason}.");
             ShowActionChoices();
             return;
@@ -13272,6 +13411,7 @@ public class GameManager : MonoBehaviour
         ItemData disarmAttackerWeaponOverride = null;
         int? grappleAttackBonusOverride = null;
         int? bullRushAttackBonusOverride = null;
+        int? tripAttackBonusOverride = null;
 
         if (type == SpecialAttackType.Feint)
         {
@@ -13318,13 +13458,13 @@ public class GameManager : MonoBehaviour
         }
         else if (type == SpecialAttackType.Grapple)
         {
-            Debug.Log($"[GameManager][Grapple] Attempting consume actor={attacker.Stats.CharacterName} phase={CurrentPhase} subPhase={CurrentSubPhase} std={attacker.Actions.HasStandardAction} iterativeRemaining={attacker.GetRemainingGrappleAttackActions()}");
-            if (!attacker.TryConsumeIterativeGrappleAttackAction(out int grappleAttackBonusUsed, out int grappleAttacksRemaining, out string grappleConsumeReason))
+            Debug.Log($"[GameManager][Grapple] Attempting shared-pool consume actor={attacker.Stats.CharacterName} phase={CurrentPhase} subPhase={CurrentSubPhase} std={attacker.Actions.HasStandardAction} full={attacker.Actions.HasFullRoundAction} remaining={GetRemainingGrappleAttackActions(attacker)}");
+            if (!TryConsumeGrappleAttackAction(attacker, out int grappleAttackBonusUsed, out int grappleAttacksRemaining, out string grappleConsumeReason))
             {
                 string reason = string.IsNullOrWhiteSpace(grappleConsumeReason)
                     ? "no eligible attack remaining"
                     : grappleConsumeReason;
-                Debug.LogWarning($"[GameManager][Grapple] Consume failed actor={attacker.Stats.CharacterName} reason={reason}");
+                Debug.LogWarning($"[GameManager][Grapple] Shared-pool consume failed actor={attacker.Stats.CharacterName} reason={reason}");
                 CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot initiate grapple: {reason}.");
                 ShowActionChoices();
                 return;
@@ -13332,17 +13472,17 @@ public class GameManager : MonoBehaviour
 
             grappleAttackBonusOverride = grappleAttackBonusUsed;
             actionLabel = $"attack BAB {CharacterStats.FormatMod(grappleAttackBonusUsed)} ({grappleAttacksRemaining} remaining)";
-            Debug.Log($"[GameManager][Grapple] Consume success actor={attacker.Stats.CharacterName} usedBAB={grappleAttackBonusUsed} remaining={grappleAttacksRemaining}");
+            Debug.Log($"[GameManager][Grapple] Shared-pool consume success actor={attacker.Stats.CharacterName} usedBAB={CharacterStats.FormatMod(grappleAttackBonusUsed)} remaining={grappleAttacksRemaining}");
         }
         else if (type == SpecialAttackType.BullRushAttack)
         {
-            Debug.Log($"[GameManager][BullRushAttack] Attempting consume actor={attacker.Stats.CharacterName} phase={CurrentPhase} subPhase={CurrentSubPhase} std={attacker.Actions.HasStandardAction} full={attacker.Actions.HasFullRoundAction} iterativeRemaining={attacker.GetRemainingBullRushAttackActions()}");
-            if (!attacker.TryConsumeIterativeBullRushAttackAction(out int bullRushBabUsed, out int bullRushAttacksRemaining, out string bullRushConsumeReason))
+            Debug.Log($"[GameManager][BullRushAttack] Attempting shared-pool consume actor={attacker.Stats.CharacterName} phase={CurrentPhase} subPhase={CurrentSubPhase} std={attacker.Actions.HasStandardAction} full={attacker.Actions.HasFullRoundAction} remaining={GetRemainingBullRushAttackActions(attacker)}");
+            if (!TryConsumeBullRushAttackAction(attacker, out int bullRushBabUsed, out int bullRushAttacksRemaining, out string bullRushConsumeReason))
             {
                 string reason = string.IsNullOrWhiteSpace(bullRushConsumeReason)
                     ? "no eligible attack remaining"
                     : bullRushConsumeReason;
-                Debug.LogWarning($"[GameManager][BullRushAttack] Consume failed actor={attacker.Stats.CharacterName} reason={reason}");
+                Debug.LogWarning($"[GameManager][BullRushAttack] Shared-pool consume failed actor={attacker.Stats.CharacterName} reason={reason}");
                 CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Bull Rush (Attack): {reason}.");
                 ShowActionChoices();
                 return;
@@ -13350,7 +13490,25 @@ public class GameManager : MonoBehaviour
 
             bullRushAttackBonusOverride = bullRushBabUsed;
             actionLabel = $"attack BAB {CharacterStats.FormatMod(bullRushBabUsed)} ({bullRushAttacksRemaining} remaining)";
-            Debug.Log($"[GameManager][BullRushAttack] Consume success actor={attacker.Stats.CharacterName} usedBAB={bullRushBabUsed} remaining={bullRushAttacksRemaining}");
+            Debug.Log($"[GameManager][BullRushAttack] Shared-pool consume success actor={attacker.Stats.CharacterName} usedBAB={CharacterStats.FormatMod(bullRushBabUsed)} remaining={bullRushAttacksRemaining}");
+        }
+        else if (type == SpecialAttackType.Trip)
+        {
+            Debug.Log($"[GameManager][Trip] Attempting shared-pool consume actor={attacker.Stats.CharacterName} phase={CurrentPhase} subPhase={CurrentSubPhase} std={attacker.Actions.HasStandardAction} full={attacker.Actions.HasFullRoundAction} remaining={GetRemainingTripAttackActions(attacker)}");
+            if (!TryConsumeTripAttackAction(attacker, out int tripBabUsed, out int tripAttacksRemaining, out string tripConsumeReason))
+            {
+                string reason = string.IsNullOrWhiteSpace(tripConsumeReason)
+                    ? "no eligible attack remaining"
+                    : tripConsumeReason;
+                Debug.LogWarning($"[GameManager][Trip] Shared-pool consume failed actor={attacker.Stats.CharacterName} reason={reason}");
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Trip: {reason}.");
+                ShowActionChoices();
+                return;
+            }
+
+            tripAttackBonusOverride = tripBabUsed;
+            actionLabel = $"attack BAB {CharacterStats.FormatMod(tripBabUsed)} ({tripAttacksRemaining} remaining)";
+            Debug.Log($"[GameManager][Trip] Shared-pool consume success actor={attacker.Stats.CharacterName} usedBAB={CharacterStats.FormatMod(tripBabUsed)} remaining={tripAttacksRemaining}");
         }
         else
         {
@@ -13407,33 +13565,41 @@ public class GameManager : MonoBehaviour
             grappleAttackBonusOverride,
             bullRushAttackBonusOverride,
             bullRushChargeBonusOverride: type == SpecialAttackType.BullRushCharge ? 2 : 0,
-            disarmAttackerWeaponOverride: disarmAttackerWeaponOverride);
+            disarmAttackerWeaponOverride: disarmAttackerWeaponOverride,
+            tripAttackBonusOverride: tripAttackBonusOverride);
         CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}] ({actionLabel}): {result.Log}");
         if (type == SpecialAttackType.Grapple)
         {
-            int attacksRemaining = attacker.GetRemainingGrappleAttackActions();
-            int nextBab = attacker.GetCurrentGrappleAttackBonus();
-            Debug.Log($"[GameManager][Grapple] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingIterative={attacksRemaining} nextBAB={nextBab} phase={CurrentPhase} subPhase={CurrentSubPhase}");
+            int attacksRemaining = GetRemainingGrappleAttackActions(attacker);
+            int nextBab = GetCurrentGrappleAttackBonus(attacker);
+            Debug.Log($"[GameManager][Grapple] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingSharedPool={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} phase={CurrentPhase} subPhase={CurrentSubPhase}");
 
             if (attacksRemaining > 0)
-            {
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} iterative attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
-            }
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} grapple attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
             else
-            {
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no iterative attacks remaining this turn.");
-            }
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no grapple attacks remaining this turn.");
         }
         else if (type == SpecialAttackType.BullRushAttack)
         {
-            int attacksRemaining = attacker.GetRemainingBullRushAttackActions();
-            int nextBab = attacker.GetCurrentBullRushAttackBonus();
-            Debug.Log($"[GameManager][BullRushAttack] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingIterative={attacksRemaining} nextBAB={nextBab} phase={CurrentPhase} subPhase={CurrentSubPhase}");
+            int attacksRemaining = GetRemainingBullRushAttackActions(attacker);
+            int nextBab = GetCurrentBullRushAttackBonus(attacker);
+            Debug.Log($"[GameManager][BullRushAttack] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingSharedPool={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} phase={CurrentPhase} subPhase={CurrentSubPhase}");
 
             if (attacksRemaining > 0)
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} Bull Rush (Attack) iterative attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} Bull Rush (Attack) attempt(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
             else
-                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no Bull Rush (Attack) iterative attacks remaining this turn.");
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no Bull Rush (Attack) attempts remaining this turn.");
+        }
+        else if (type == SpecialAttackType.Trip)
+        {
+            int attacksRemaining = GetRemainingTripAttackActions(attacker);
+            int nextBab = GetCurrentTripAttackBonus(attacker);
+            Debug.Log($"[GameManager][Trip] Result success={result.Success} actor={attacker.Stats.CharacterName} remainingSharedPool={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} phase={CurrentPhase} subPhase={CurrentSubPhase}");
+
+            if (attacksRemaining > 0)
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} trip attempt(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
+            else
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no trip attempts remaining this turn.");
         }
         else if (type == SpecialAttackType.Disarm)
         {
@@ -14879,17 +15045,19 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        bool hasRemainingIterativeGrappleAttacks = character.HasRemainingIterativeGrappleAttacksInSequence();
-        bool hasRemainingIterativeBullRushAttacks = character.HasRemainingIterativeBullRushAttacksInSequence();
-        bool hasRemainingIterativeDisarmAttacks = CanUseDisarmAttackOption(character);
+        bool hasRemainingIterativeGrappleActions = character.HasRemainingIterativeGrappleAttacksInSequence();
+        bool hasRemainingGrappleAttempts = CanUseGrappleAttackOption(character);
+        bool hasRemainingBullRushAttempts = CanUseBullRushAttackOption(character);
+        bool hasRemainingTripAttempts = CanUseTripAttackOption(character);
+        bool hasRemainingDisarmAttempts = CanUseDisarmAttackOption(character);
 
         bool hasIterativeWeaponAttackSequence = _isInAttackSequence && _attackingCharacter == character;
 
-        if (hasRemainingIterativeGrappleAttacks || hasRemainingIterativeBullRushAttacks || hasRemainingIterativeDisarmAttacks || hasIterativeWeaponAttackSequence)
+        if (hasRemainingIterativeGrappleActions || hasRemainingGrappleAttempts || hasRemainingBullRushAttempts || hasRemainingTripAttempts || hasRemainingDisarmAttempts || hasIterativeWeaponAttackSequence)
         {
             Debug.Log(
                 $"[TurnFlow] ShouldAutoEndTurn=false for {character.Stats.CharacterName}: " +
-                $"iterativeRemaining(g={hasRemainingIterativeGrappleAttacks}, br={hasRemainingIterativeBullRushAttacks}, d={hasRemainingIterativeDisarmAttacks}, atk={hasIterativeWeaponAttackSequence})");
+                $"iterativeRemaining(gAction={hasRemainingIterativeGrappleActions}, g={hasRemainingGrappleAttempts}, br={hasRemainingBullRushAttempts}, trip={hasRemainingTripAttempts}, d={hasRemainingDisarmAttempts}, atk={hasIterativeWeaponAttackSequence})");
             return false;
         }
 

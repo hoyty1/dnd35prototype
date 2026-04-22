@@ -5307,7 +5307,8 @@ public class CharacterController : MonoBehaviour
         int? grappleAttackBonusOverride = null,
         int? bullRushAttackBonusOverride = null,
         int bullRushChargeBonusOverride = 0,
-        ItemData disarmAttackerWeaponOverride = null)
+        ItemData disarmAttackerWeaponOverride = null,
+        int? tripAttackBonusOverride = null)
     {
         if (target == null || target.Stats == null)
         {
@@ -5321,7 +5322,7 @@ public class CharacterController : MonoBehaviour
 
         switch (type)
         {
-            case SpecialAttackType.Trip: return ResolveTrip(target);
+            case SpecialAttackType.Trip: return ResolveTrip(target, tripAttackBonusOverride);
             case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot, disarmAttackBonusOverride, disarmAttackerWeaponOverride);
             case SpecialAttackType.Grapple: return ResolveGrapple(target, grappleAttackBonusOverride);
             case SpecialAttackType.Sunder: return ResolveSunder(target);
@@ -5341,11 +5342,12 @@ public class CharacterController : MonoBehaviour
         }
     }
 
-    private SpecialAttackResult ResolveTrip(CharacterController target)
+    private SpecialAttackResult ResolveTrip(CharacterController target, int? attackBonusOverride = null)
     {
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Trip") ? 4 : 0);
+        int attackBonus = attackBonusOverride ?? Stats.BaseAttackBonus;
+        int atkTotal = atkRoll + attackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Trip") ? 4 : 0);
         int defAbility = Mathf.Max(target.Stats.STRMod, target.Stats.DEXMod);
         int defTotal = defRoll + target.Stats.BaseAttackBonus + defAbility + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + (target.Stats.HasFeat("Improved Trip") ? 4 : 0);
 
@@ -5362,8 +5364,8 @@ public class CharacterController : MonoBehaviour
             OpposedRoll = defRoll,
             OpposedTotal = defTotal,
             Log = success
-                ? $"{Stats.CharacterName} trips {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) → PRONE (until standing)."
-                : $"{Stats.CharacterName} fails to trip {target.Stats.CharacterName}. ({atkTotal} vs {defTotal})"
+                ? $"{Stats.CharacterName} trips {target.Stats.CharacterName}! ({atkTotal} vs {defTotal}) → PRONE (until standing). [BAB {CharacterStats.FormatMod(attackBonus)}]"
+                : $"{Stats.CharacterName} fails to trip {target.Stats.CharacterName}. ({atkTotal} vs {defTotal}) [BAB {CharacterStats.FormatMod(attackBonus)}]"
         };
     }
 
