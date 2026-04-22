@@ -72,7 +72,6 @@ public static class SunderInventoryRemovalTests
     private static ItemData CreateFragileItem(string id)
     {
         ItemData item = ItemDatabase.CloneItem(id);
-        item.IsSunderable = true;
         item.Hardness = 0;
         item.MaxHitPoints = 1;
         item.CurrentHitPoints = 1;
