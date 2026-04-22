@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+namespace Tests.Combat
+{
 /// <summary>
 /// Verifies D&D 3.5e two-weapon fighting penalties for all core cases.
 /// Run with DualWieldPenaltyTests.RunAll().
@@ -177,4 +179,6 @@ public static class DualWieldPenaltyTests
             expectedOff: -2,
             expectedLight: true);
     }
+}
+
 }

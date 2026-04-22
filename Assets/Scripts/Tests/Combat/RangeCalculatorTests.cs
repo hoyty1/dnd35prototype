@@ -1,12 +1,14 @@
 using UnityEngine;
 
+namespace Tests.Combat
+{
 /// <summary>
 /// Test script to verify D&D 3.5 range increment calculations.
 /// Includes tests for both projectile weapons (10 increment max) and
 /// thrown weapons (5 increment max) per D&D 3.5 rules.
-/// Attach to a GameObject or call RangeCalculatorTest.RunAllTests() from any script.
+/// Attach to a GameObject or call RangeCalculatorTests.RunAllTests() from any script.
 /// </summary>
-public class RangeCalculatorTest : MonoBehaviour
+public class RangeCalculatorTests : MonoBehaviour
 {
     private void Start()
     {
@@ -211,4 +213,6 @@ public class RangeCalculatorTest : MonoBehaviour
             Debug.LogError($"[RangeTest] FAIL: {name} - expected out of range but got inc={info.IncrementNumber}, inRange={info.IsInRange}");
         }
     }
+}
+
 }

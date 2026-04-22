@@ -1,5 +1,7 @@
 using UnityEngine;
 
+namespace Tests.Maneuvers
+{
 /// <summary>
 /// Runtime tests for destination-based overrun prerequisites.
 /// Run with OverrunRulesTests.RunAll().
@@ -137,4 +139,6 @@ public static class OverrunRulesTests
             Cleanup(setup.attacker.gameObject, setup.defender.gameObject, setup.grid.gameObject, setup.gm.gameObject);
         }
     }
+}
+
 }

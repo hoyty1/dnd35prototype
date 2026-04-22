@@ -1,6 +1,8 @@
 using System.Reflection;
 using UnityEngine;
 
+namespace Tests.Maneuvers
+{
 /// <summary>
 /// Tests for D&D 3.5 grapple damage behavior:
 /// opposed grapple check, unarmed damage, lethal/nonlethal defaults, and monk exception.
@@ -773,5 +775,7 @@ public static class GrappleDamageRulesTests
 
         Cleanup(defender);
     }
+
+}
 
 }

@@ -1,10 +1,12 @@
 using UnityEngine;
 
+namespace Tests.Combat
+{
 /// <summary>
 /// Lightweight runtime checks for melee reach metadata and D&D 3.5 reach-ring semantics.
-/// Attach to a GameObject or call ReachWeaponRulesTest.RunAllTests().
+/// Attach to a GameObject or call ReachWeaponRulesTests.RunAllTests().
 /// </summary>
-public class ReachWeaponRulesTest : MonoBehaviour
+public class ReachWeaponRulesTests : MonoBehaviour
 {
     private void Start()
     {
@@ -77,4 +79,6 @@ public class ReachWeaponRulesTest : MonoBehaviour
             Debug.LogError($"[ReachTest] FAIL: {item.Name} got reach={item.ReachSquares}, adjacent={item.CanAttackAdjacent}, isReach={item.IsReachWeapon}, atkRange={item.AttackRange} | expected reach={expectedReach}, adjacent={expectedAdjacent}, isReach={expectedReachWeapon}");
         }
     }
+}
+
 }

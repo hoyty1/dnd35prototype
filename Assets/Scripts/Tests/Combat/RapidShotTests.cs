@@ -1,6 +1,8 @@
 using UnityEngine;
 using System.Collections.Generic;
 
+namespace Tests.Combat
+{
 /// <summary>
 /// Tests for the Rapid Shot feat implementation.
 /// Validates D&D 3.5 rules: extra attack at highest BAB, -2 penalty to all attacks,
@@ -190,4 +192,6 @@ public static class RapidShotTests
         // Verified by code inspection: Attack() method has no Rapid Shot logic.
         Assert(true, "Single Attack (standard action) does not include Rapid Shot logic");
     }
+}
+
 }

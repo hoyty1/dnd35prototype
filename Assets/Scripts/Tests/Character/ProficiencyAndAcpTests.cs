@@ -1,5 +1,7 @@
 using UnityEngine;
 
+namespace Tests.Character
+{
 /// <summary>
 /// Tests for D&D 3.5 proficiency penalties and armor check penalty (ACP) skill handling.
 /// Run by calling ProficiencyAndAcpTests.RunAll() from any MonoBehaviour.
@@ -202,4 +204,6 @@ public static class ProficiencyAndAcpTests
         Assert(!wizard.IsProficientWithWeaponByName("Longsword"),
             "Wizard proficiency lookup by display name returns false for longsword");
     }
+}
+
 }

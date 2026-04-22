@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+namespace Tests.Combat
+{
 /// <summary>
 /// Focused checks for nonlethal damage tracking and HP-state transitions.
 /// Run via NonlethalDamageTests.RunAll() from any runtime MonoBehaviour test hook.
@@ -121,4 +123,6 @@ public static class NonlethalDamageTests
 
         Cleanup(c);
     }
+}
+
 }

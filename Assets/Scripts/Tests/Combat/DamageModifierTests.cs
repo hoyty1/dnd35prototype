@@ -1,5 +1,7 @@
 using UnityEngine;
 
+namespace Tests.Combat
+{
 /// <summary>
 /// Test suite for D&D 3.5 damage modifier calculations.
 /// Run by calling DamageModifierTests.RunAll() from any MonoBehaviour.
@@ -288,4 +290,6 @@ public static class DamageModifierTests
             Assert(cs != null && cs.CompositeRating == r, $"composite_shortbow_{r} has rating {r}");
         }
     }
+}
+
 }

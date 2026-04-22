@@ -1,5 +1,7 @@
 using UnityEngine;
 
+namespace Tests.Maneuvers
+{
 /// <summary>
 /// Verifies that sunder-destroyed items are removed from inventory completely
 /// (equipped slot and any general-slot references).
@@ -160,4 +162,6 @@ public static class SunderInventoryRemovalTests
     {
         ValidateDestroyedItemRemoval(EquipSlot.LeftHand, "shield_light_wooden", "Shield destroyed");
     }
+}
+
 }

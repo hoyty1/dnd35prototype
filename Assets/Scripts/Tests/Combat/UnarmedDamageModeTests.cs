@@ -1,6 +1,8 @@
 using System.Reflection;
 using UnityEngine;
 
+namespace Tests.Combat
+{
 /// <summary>
 /// Tests for attack damage mode defaults and D&D 3.5 mismatch penalties.
 /// Run via UnarmedDamageModeTests.RunAll() from a runtime test hook.
@@ -283,4 +285,6 @@ public static class UnarmedDamageModeTests
         Cleanup(attacker);
         Cleanup(defender);
     }
+}
+
 }

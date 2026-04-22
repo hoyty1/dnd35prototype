@@ -1,5 +1,7 @@
 using UnityEngine;
 
+namespace Tests.Character
+{
 /// <summary>
 /// Tests for carrying capacity, encumbrance tiers, and derived penalties.
 /// Run by calling EncumbranceTests.RunAll() from any MonoBehaviour.
@@ -154,4 +156,6 @@ public static class EncumbranceTests
             "Most restrictive ACP wins (armor 6 vs load 3)",
             $"got {stats.ArmorCheckPenalty}");
     }
+}
+
 }

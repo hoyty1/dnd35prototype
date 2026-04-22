@@ -1,10 +1,12 @@
 using UnityEngine;
 
+namespace Tests.Combat
+{
 /// <summary>
 /// Lightweight runtime checks for reach-aware flanking geometry and threat-distance semantics.
-/// Attach to any GameObject or call FlankingReachRulesTest.RunAllTests().
+/// Attach to any GameObject or call FlankingReachRulesTests.RunAllTests().
 /// </summary>
-public class FlankingReachRulesTest : MonoBehaviour
+public class FlankingReachRulesTests : MonoBehaviour
 {
     private void Start()
     {
@@ -66,4 +68,6 @@ public class FlankingReachRulesTest : MonoBehaviour
             Debug.LogError($"[FlankReachTest] FAIL: {label}");
         }
     }
+}
+
 }
