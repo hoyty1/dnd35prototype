@@ -120,9 +120,9 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         var tags = character.Tags.GetAllTags().ToList();
         StringBuilder sb = new StringBuilder();
 
-        string displayName = !string.IsNullOrWhiteSpace(character.CharacterName)
-            ? character.CharacterName
-            : character.Stats.CharacterName;
+        string displayName = !string.IsNullOrWhiteSpace(character.Stats.CharacterName)
+            ? character.Stats.CharacterName
+            : character.name;
         sb.Append(displayName);
 
         string race = ExtractTagValue(character, "Race: ");
