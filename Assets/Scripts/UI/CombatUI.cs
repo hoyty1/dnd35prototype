@@ -2368,32 +2368,20 @@ public class CombatUI : MonoBehaviour
         if (parent == null)
             return null;
 
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
+        Button button = UIFactory.CreateButton(
+            parent,
+            label,
+            null,
+            new Vector2(0f, 24f),
+            backgroundColor,
+            name,
+            UIFactory.GetDefaultFont(),
+            12,
+            Color.white);
 
-        Image img = go.AddComponent<Image>();
-        img.color = backgroundColor;
-
-        Button button = go.AddComponent<Button>();
         button.interactable = isInteractable;
 
-        GameObject txtGo = new GameObject("Text");
-        txtGo.transform.SetParent(go.transform, false);
-        RectTransform txtRt = txtGo.AddComponent<RectTransform>();
-        txtRt.anchorMin = Vector2.zero;
-        txtRt.anchorMax = Vector2.one;
-        txtRt.offsetMin = Vector2.zero;
-        txtRt.offsetMax = Vector2.zero;
-
-        Text txt = txtGo.AddComponent<Text>();
-        txt.text = label;
-        txt.alignment = TextAnchor.MiddleCenter;
-        txt.fontSize = 12;
-        txt.color = Color.white;
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 12);
-
-        LayoutElement le = go.AddComponent<LayoutElement>();
+        LayoutElement le = button.gameObject.AddComponent<LayoutElement>();
         le.minHeight = 24;
 
         return button;
@@ -2475,57 +2463,35 @@ public class CombatUI : MonoBehaviour
 
     private void CreateSpecialButton(string name, string label)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(_specialAttackPanel.transform, false);
-        var img = go.AddComponent<Image>();
-        img.color = new Color(0.22f, 0.22f, 0.28f, 1f);
-        go.AddComponent<Button>();
+        Button button = UIFactory.CreateButton(
+            _specialAttackPanel.transform,
+            label,
+            null,
+            new Vector2(0f, 24f),
+            new Color(0.22f, 0.22f, 0.28f, 1f),
+            name,
+            UIFactory.GetDefaultFont(),
+            12,
+            Color.white);
 
-        GameObject txtGo = new GameObject("Text");
-        txtGo.transform.SetParent(go.transform, false);
-        var txtRt = txtGo.AddComponent<RectTransform>();
-        txtRt.anchorMin = Vector2.zero;
-        txtRt.anchorMax = Vector2.one;
-        txtRt.offsetMin = Vector2.zero;
-        txtRt.offsetMax = Vector2.zero;
-
-        var txt = txtGo.AddComponent<Text>();
-        txt.text = label;
-        txt.alignment = TextAnchor.MiddleCenter;
-        txt.fontSize = 12;
-        txt.color = Color.white;
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 12);
-
-        var le = go.AddComponent<LayoutElement>();
+        LayoutElement le = button.gameObject.AddComponent<LayoutElement>();
         le.minHeight = 24;
     }
 
     private void CreateSpecialCancelButton()
     {
-        GameObject go = new GameObject("Cancel");
-        go.transform.SetParent(_specialAttackPanel.transform, false);
-        var img = go.AddComponent<Image>();
-        img.color = new Color(0.35f, 0.16f, 0.16f, 1f);
-        go.AddComponent<Button>();
+        Button button = UIFactory.CreateButton(
+            _specialAttackPanel.transform,
+            "Cancel",
+            null,
+            new Vector2(0f, 24f),
+            new Color(0.35f, 0.16f, 0.16f, 1f),
+            "Cancel",
+            UIFactory.GetDefaultFont(),
+            12,
+            Color.white);
 
-        GameObject txtGo = new GameObject("Text");
-        txtGo.transform.SetParent(go.transform, false);
-        var txtRt = txtGo.AddComponent<RectTransform>();
-        txtRt.anchorMin = Vector2.zero;
-        txtRt.anchorMax = Vector2.one;
-        txtRt.offsetMin = Vector2.zero;
-        txtRt.offsetMax = Vector2.zero;
-
-        var txt = txtGo.AddComponent<Text>();
-        txt.text = "Cancel";
-        txt.alignment = TextAnchor.MiddleCenter;
-        txt.fontSize = 12;
-        txt.color = Color.white;
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 12);
-
-        var le = go.AddComponent<LayoutElement>();
+        LayoutElement le = button.gameObject.AddComponent<LayoutElement>();
         le.minHeight = 24;
     }
 
@@ -2788,20 +2754,21 @@ public class CombatUI : MonoBehaviour
 
     private Text CreatePanelText(GameObject parent, string name, Vector2 anchorMin, Vector2 anchorMax, int fontSize, TextAnchor alignment, FontStyle style)
     {
-        GameObject textObj = new GameObject(name);
-        textObj.transform.SetParent(parent.transform, false);
-        RectTransform textRT = textObj.AddComponent<RectTransform>();
+        Text txt = UIFactory.CreateLabel(
+            parent.transform,
+            string.Empty,
+            fontSize,
+            alignment,
+            new Color(0.95f, 0.95f, 1f, 1f),
+            name,
+            UIFactory.GetDefaultFont());
+
+        RectTransform textRT = txt.GetComponent<RectTransform>();
         textRT.anchorMin = anchorMin;
         textRT.anchorMax = anchorMax;
         textRT.offsetMin = Vector2.zero;
         textRT.offsetMax = Vector2.zero;
 
-        Text txt = textObj.AddComponent<Text>();
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
-        txt.fontSize = fontSize;
-        txt.color = new Color(0.95f, 0.95f, 1f, 1f);
-        txt.alignment = alignment;
         txt.fontStyle = style;
         txt.supportRichText = true;
         txt.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -2811,32 +2778,36 @@ public class CombatUI : MonoBehaviour
 
     private GameObject CreatePromptButtonObject(GameObject parent, string name, Vector2 anchorMin, Vector2 anchorMax, Color bgColor, out Button button, out Text text)
     {
-        GameObject btnObj = new GameObject(name);
-        btnObj.transform.SetParent(parent.transform, false);
-        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
+        button = UIFactory.CreateButton(
+            parent.transform,
+            string.Empty,
+            null,
+            null,
+            bgColor,
+            name,
+            UIFactory.GetDefaultFont(),
+            12,
+            Color.white);
+
+        GameObject btnObj = button.gameObject;
+        RectTransform btnRT = btnObj.GetComponent<RectTransform>();
         btnRT.anchorMin = anchorMin;
         btnRT.anchorMax = anchorMax;
         btnRT.offsetMin = Vector2.zero;
         btnRT.offsetMax = Vector2.zero;
 
-        Image btnImg = btnObj.AddComponent<Image>();
-        btnImg.color = bgColor;
+        text = btnObj.transform.Find("Text")?.GetComponent<Text>();
+        if (text == null)
+        {
+            text = UIFactory.CreateLabel(btnObj.transform, string.Empty, 12, TextAnchor.UpperLeft, Color.white, "Text", UIFactory.GetDefaultFont());
+        }
 
-        button = btnObj.AddComponent<Button>();
-
-        GameObject txtObj = new GameObject("Text");
-        txtObj.transform.SetParent(btnObj.transform, false);
-        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
+        RectTransform txtRT = text.GetComponent<RectTransform>();
         txtRT.anchorMin = new Vector2(0.04f, 0.08f);
         txtRT.anchorMax = new Vector2(0.96f, 0.92f);
         txtRT.offsetMin = Vector2.zero;
         txtRT.offsetMax = Vector2.zero;
 
-        text = txtObj.AddComponent<Text>();
-        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (text.font == null) text.font = Font.CreateDynamicFontFromOSFont("Arial", 13);
-        text.fontSize = 12;
-        text.color = Color.white;
         text.alignment = TextAnchor.UpperLeft;
         text.supportRichText = true;
 
@@ -2845,7 +2816,7 @@ public class CombatUI : MonoBehaviour
 
     private Button CreatePromptButton(GameObject parent, string name, Vector2 anchorMin, Vector2 anchorMax, Color bgColor, out Text text)
     {
-        GameObject btnObj = CreatePromptButtonObject(parent, name, anchorMin, anchorMax, bgColor, out Button btn, out text);
+        CreatePromptButtonObject(parent, name, anchorMin, anchorMax, bgColor, out Button btn, out text);
         text.alignment = TextAnchor.UpperLeft;
         return btn;
     }
@@ -4202,51 +4173,37 @@ public class CombatUI : MonoBehaviour
 
     private Text CreateMenuText(GameObject parent, string name, string textValue, int fontSize, FontStyle fontStyle, Color color, TextAnchor align)
     {
-        GameObject textObj = new GameObject(name);
-        textObj.transform.SetParent(parent.transform, false);
-
-        Text txt = textObj.AddComponent<Text>();
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", fontSize);
-        txt.fontSize = fontSize;
+        Text txt = UIFactory.CreateLabel(parent.transform, textValue, fontSize, align, color, name, UIFactory.GetDefaultFont());
         txt.fontStyle = fontStyle;
-        txt.color = color;
-        txt.alignment = align;
         txt.horizontalOverflow = HorizontalWrapMode.Wrap;
         txt.verticalOverflow = VerticalWrapMode.Overflow;
-        txt.text = textValue;
-
         return txt;
     }
 
     private Button CreateContextMenuButton(GameObject parent, string label, Color bgColor)
     {
-        GameObject btnObj = new GameObject($"CtxBtn_{label}");
-        btnObj.transform.SetParent(parent.transform, false);
+        Button btn = UIFactory.CreateButton(
+            parent.transform,
+            label,
+            null,
+            new Vector2(0f, 30f),
+            bgColor,
+            $"CtxBtn_{label}",
+            UIFactory.GetDefaultFont(),
+            13,
+            new Color(0.94f, 0.97f, 1f, 1f));
 
-        Image img = btnObj.AddComponent<Image>();
-        img.color = bgColor;
-
-        Button btn = btnObj.AddComponent<Button>();
-
-        LayoutElement le = btnObj.AddComponent<LayoutElement>();
+        LayoutElement le = btn.gameObject.AddComponent<LayoutElement>();
         le.preferredHeight = 30f;
 
-        GameObject txtObj = new GameObject("Text");
-        txtObj.transform.SetParent(btnObj.transform, false);
-        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
-        txtRT.anchorMin = Vector2.zero;
-        txtRT.anchorMax = Vector2.one;
-        txtRT.offsetMin = new Vector2(8f, 0f);
-        txtRT.offsetMax = new Vector2(-8f, 0f);
-
-        Text txt = txtObj.AddComponent<Text>();
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        txt.fontSize = 13;
-        txt.alignment = TextAnchor.MiddleLeft;
-        txt.color = new Color(0.94f, 0.97f, 1f, 1f);
-        txt.text = label;
+        Text txt = btn.transform.Find("Text")?.GetComponent<Text>();
+        if (txt != null)
+        {
+            txt.alignment = TextAnchor.MiddleLeft;
+            RectTransform txtRT = txt.GetComponent<RectTransform>();
+            txtRT.offsetMin = new Vector2(8f, 0f);
+            txtRT.offsetMax = new Vector2(-8f, 0f);
+        }
 
         return btn;
     }
@@ -5167,20 +5124,26 @@ public class CombatUI : MonoBehaviour
 
     private Button CreateTouchPromptButton(GameObject parent, string name, string label, Vector2 anchorMin, Vector2 anchorMax, Color bgColor)
     {
-        GameObject btnObj = new GameObject(name);
-        btnObj.transform.SetParent(parent.transform, false);
+        Button btn = UIFactory.CreateButton(
+            parent.transform,
+            label,
+            null,
+            null,
+            bgColor,
+            name,
+            UIFactory.GetDefaultFont(),
+            13,
+            Color.white);
 
-        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
+        RectTransform btnRT = btn.GetComponent<RectTransform>();
         btnRT.anchorMin = anchorMin;
         btnRT.anchorMax = anchorMax;
         btnRT.offsetMin = Vector2.zero;
         btnRT.offsetMax = Vector2.zero;
 
-        Image btnImg = btnObj.AddComponent<Image>();
-        btnImg.color = bgColor;
+        Image btnImg = btn.GetComponent<Image>();
         EnsureVisibleImage(btnImg, bgColor, $"PromptButton '{name}'");
 
-        Button btn = btnObj.AddComponent<Button>();
         btn.targetGraphic = btnImg;
         var colors = btn.colors;
         colors.normalColor = Color.white;
@@ -5190,23 +5153,15 @@ public class CombatUI : MonoBehaviour
         colors.disabledColor = new Color(0.4f, 0.4f, 0.4f, 0.9f);
         btn.colors = colors;
 
-        GameObject txtObj = new GameObject("Text");
-        txtObj.transform.SetParent(btnObj.transform, false);
-
-        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
-        txtRT.anchorMin = Vector2.zero;
-        txtRT.anchorMax = Vector2.one;
-        txtRT.offsetMin = new Vector2(4, 2);
-        txtRT.offsetMax = new Vector2(-4, -2);
-
-        Text txt = txtObj.AddComponent<Text>();
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        txt.fontSize = 13;
-        txt.alignment = TextAnchor.MiddleCenter;
-        txt.fontStyle = FontStyle.Bold;
-        txt.color = Color.white;
-        txt.text = label;
+        Text txt = btn.transform.Find("Text")?.GetComponent<Text>();
+        if (txt != null)
+        {
+            RectTransform txtRT = txt.GetComponent<RectTransform>();
+            txtRT.offsetMin = new Vector2(4, 2);
+            txtRT.offsetMax = new Vector2(-4, -2);
+            txt.alignment = TextAnchor.MiddleCenter;
+            txt.fontStyle = FontStyle.Bold;
+        }
 
         return btn;
     }
@@ -5214,39 +5169,37 @@ public class CombatUI : MonoBehaviour
     private Button CreateSpellDialogButton(GameObject parent, string name, string label,
         Vector2 anchorMin, Vector2 anchorMax, Color bgColor)
     {
-        GameObject btnObj = new GameObject(name);
-        btnObj.transform.SetParent(parent.transform, false);
-        RectTransform btnRT = btnObj.AddComponent<RectTransform>();
+        Button btn = UIFactory.CreateButton(
+            parent.transform,
+            label,
+            null,
+            null,
+            bgColor,
+            name,
+            UIFactory.GetDefaultFont(),
+            14,
+            Color.white);
+
+        RectTransform btnRT = btn.GetComponent<RectTransform>();
         btnRT.anchorMin = anchorMin;
         btnRT.anchorMax = anchorMax;
         btnRT.offsetMin = Vector2.zero;
         btnRT.offsetMax = Vector2.zero;
 
-        Image btnImg = btnObj.AddComponent<Image>();
-        btnImg.color = bgColor;
-
-        Button btn = btnObj.AddComponent<Button>();
         var colors = btn.colors;
         colors.highlightedColor = new Color(bgColor.r + 0.15f, bgColor.g + 0.15f, bgColor.b + 0.15f, 1f);
         colors.pressedColor = new Color(bgColor.r - 0.1f, bgColor.g - 0.1f, bgColor.b - 0.1f, 1f);
         btn.colors = colors;
 
-        GameObject txtObj = new GameObject("Text");
-        txtObj.transform.SetParent(btnObj.transform, false);
-        RectTransform txtRT = txtObj.AddComponent<RectTransform>();
-        txtRT.anchorMin = Vector2.zero;
-        txtRT.anchorMax = Vector2.one;
-        txtRT.offsetMin = new Vector2(5, 2);
-        txtRT.offsetMax = new Vector2(-5, -2);
-
-        Text txt = txtObj.AddComponent<Text>();
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (txt.font == null) txt.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        txt.fontSize = 14;
-        txt.color = Color.white;
-        txt.alignment = TextAnchor.MiddleCenter;
-        txt.text = label;
-        txt.fontStyle = FontStyle.Bold;
+        Text txt = btn.transform.Find("Text")?.GetComponent<Text>();
+        if (txt != null)
+        {
+            RectTransform txtRT = txt.GetComponent<RectTransform>();
+            txtRT.offsetMin = new Vector2(5, 2);
+            txtRT.offsetMax = new Vector2(-5, -2);
+            txt.alignment = TextAnchor.MiddleCenter;
+            txt.fontStyle = FontStyle.Bold;
+        }
 
         return btn;
     }

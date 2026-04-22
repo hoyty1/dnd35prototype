@@ -1319,58 +1319,48 @@ public class CharacterSheetUI : MonoBehaviour
     private void AddLine(Transform parent, string text, int fontSize, Color color,
                          FontStyle style = FontStyle.Normal, float height = 18f)
     {
-        var go = new GameObject("Line");
-        go.transform.SetParent(parent, false);
-        var le = go.AddComponent<LayoutElement>();
-        le.preferredHeight = height;
-        le.minHeight = height;
-
-        var txt = go.AddComponent<Text>();
-        txt.text = text;
-        txt.font = _uiFont;
-        txt.fontSize = fontSize;
-        txt.color = color;
+        Text txt = UIFactory.CreateLabel(parent, text, fontSize, TextAnchor.MiddleLeft, color, "Line", _uiFont);
         txt.fontStyle = style;
-        txt.alignment = TextAnchor.MiddleLeft;
         txt.horizontalOverflow = HorizontalWrapMode.Overflow;
         txt.verticalOverflow = VerticalWrapMode.Truncate;
+
+        LayoutElement le = txt.gameObject.AddComponent<LayoutElement>();
+        le.preferredHeight = height;
+        le.minHeight = height;
     }
 
     private void AddColoredLine(Transform parent, string prefix, Color prefixColor,
                                 string text, Color textColor, int fontSize, float height)
     {
-        // Unity UI Text doesn't support multiple colors easily, so use rich text
-        var go = new GameObject("ColorLine");
-        go.transform.SetParent(parent, false);
-        var le = go.AddComponent<LayoutElement>();
-        le.preferredHeight = height;
-        le.minHeight = height;
-
-        var txt = go.AddComponent<Text>();
         string pHex = ColorUtility.ToHtmlStringRGB(prefixColor);
         string tHex = ColorUtility.ToHtmlStringRGB(textColor);
-        txt.text = $"<color=#{pHex}>{prefix}</color><color=#{tHex}>{text}</color>";
-        txt.font = _uiFont;
-        txt.fontSize = fontSize;
-        txt.color = Color.white;
+
+        Text txt = UIFactory.CreateLabel(
+            parent,
+            $"<color=#{pHex}>{prefix}</color><color=#{tHex}>{text}</color>",
+            fontSize,
+            TextAnchor.MiddleLeft,
+            Color.white,
+            "ColorLine",
+            _uiFont);
+
         txt.supportRichText = true;
-        txt.alignment = TextAnchor.MiddleLeft;
         txt.horizontalOverflow = HorizontalWrapMode.Overflow;
         txt.verticalOverflow = VerticalWrapMode.Truncate;
+
+        LayoutElement le = txt.gameObject.AddComponent<LayoutElement>();
+        le.preferredHeight = height;
+        le.minHeight = height;
     }
 
     private void AddSeparator(Transform parent)
     {
-        var go = new GameObject("Separator");
-        go.transform.SetParent(parent, false);
-        var le = go.AddComponent<LayoutElement>();
+        GameObject go = UIFactory.CreatePanel(parent, "Separator", SeparatorColor);
+        LayoutElement le = go.AddComponent<LayoutElement>();
         le.preferredHeight = 3;
         le.minHeight = 3;
 
-        var img = go.AddComponent<Image>();
-        img.color = SeparatorColor;
-
-        var rt = go.GetComponent<RectTransform>();
+        RectTransform rt = go.GetComponent<RectTransform>();
         rt.sizeDelta = new Vector2(0, 1);
     }
 
@@ -1398,16 +1388,9 @@ public class CharacterSheetUI : MonoBehaviour
         Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
         Vector2 anchoredPos, Vector2 sizeDelta, Color bgColor)
     {
-        var go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        var rt = go.AddComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.pivot = pivot;
-        rt.anchoredPosition = anchoredPos;
-        rt.sizeDelta = sizeDelta;
-        var img = go.AddComponent<Image>();
-        img.color = bgColor;
+        GameObject go = UIFactory.CreatePanel(parent, name, bgColor);
+        RectTransform rt = go.GetComponent<RectTransform>();
+        UIFactory.SetRectTransform(rt, anchorMin, anchorMax, pivot, anchoredPos, sizeDelta);
         return go;
     }
 
@@ -1417,20 +1400,10 @@ public class CharacterSheetUI : MonoBehaviour
         string text, int fontSize, Color color, TextAnchor alignment,
         FontStyle style = FontStyle.Normal)
     {
-        var go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        var rt = go.AddComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.pivot = pivot;
-        rt.anchoredPosition = anchoredPos;
-        rt.sizeDelta = sizeDelta;
-        var t = go.AddComponent<Text>();
-        t.text = text;
-        t.font = _uiFont;
-        t.fontSize = fontSize;
-        t.color = color;
-        t.alignment = alignment;
+        Text t = UIFactory.CreateLabel(parent, text, fontSize, alignment, color, name, _uiFont);
+        RectTransform rt = t.GetComponent<RectTransform>();
+        UIFactory.SetRectTransform(rt, anchorMin, anchorMax, pivot, anchoredPos, sizeDelta);
+
         t.fontStyle = style;
         t.supportRichText = true;
         t.horizontalOverflow = HorizontalWrapMode.Overflow;

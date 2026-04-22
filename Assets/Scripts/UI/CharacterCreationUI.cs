@@ -3057,21 +3057,14 @@ public class CharacterCreationUI : MonoBehaviour
     private Text MakeText(Transform parent, string name, Vector2 pos, Vector2 size,
         string text, int fontSize, Color color, TextAnchor align)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        RectTransform rt = go.AddComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = pos;
-        rt.sizeDelta = size;
-
-        Text t = go.AddComponent<Text>();
-        t.text = text;
-        t.fontSize = fontSize;
-        t.color = color;
-        t.alignment = align;
-        t.font = _font;
+        Text t = UIFactory.CreateLabel(parent, text, fontSize, align, color, name, _font);
+        RectTransform rt = t.GetComponent<RectTransform>();
+        UIFactory.SetRectTransform(rt,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            pos,
+            size);
         t.supportRichText = true;
         return t;
     }
@@ -3079,29 +3072,22 @@ public class CharacterCreationUI : MonoBehaviour
     private Button MakeButton(Transform parent, string name, Vector2 pos, Vector2 size,
         string label, Color bgColor, Color textColor, int fontSize)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        RectTransform rt = go.AddComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = pos;
-        rt.sizeDelta = size;
+        Button btn = UIFactory.CreateButton(parent, label, null, size, bgColor, name, _font, fontSize, textColor);
 
-        Image img = go.AddComponent<Image>();
-        img.color = bgColor;
+        RectTransform rt = btn.GetComponent<RectTransform>();
+        UIFactory.SetRectTransform(rt,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            pos,
+            size);
 
-        Button btn = go.AddComponent<Button>();
         ColorBlock cb = btn.colors;
         cb.normalColor = bgColor;
         cb.highlightedColor = bgColor * 1.3f;
         cb.pressedColor = bgColor * 0.7f;
         cb.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.5f);
         btn.colors = cb;
-
-        // Label text
-        MakeText(go.transform, name + "Label", Vector2.zero, size,
-            label, fontSize, textColor, TextAnchor.MiddleCenter);
 
         return btn;
     }
@@ -3110,20 +3096,20 @@ public class CharacterCreationUI : MonoBehaviour
         Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
         Vector2 pos, Vector2 size, Color color)
     {
-        GameObject go = new GameObject(name);
-        go.transform.SetParent(parent, false);
-        RectTransform rt = go.AddComponent<RectTransform>();
-        rt.anchorMin = anchorMin;
-        rt.anchorMax = anchorMax;
-        rt.pivot = pivot;
-        rt.anchoredPosition = pos;
-        rt.sizeDelta = size;
-
+        GameObject go;
         if (color.a > 0)
         {
-            Image img = go.AddComponent<Image>();
-            img.color = color;
+            go = UIFactory.CreatePanel(parent, name, color);
         }
+        else
+        {
+            go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.AddComponent<RectTransform>();
+        }
+
+        RectTransform rt = go.GetComponent<RectTransform>();
+        UIFactory.SetRectTransform(rt, anchorMin, anchorMax, pivot, pos, size);
 
         return go;
     }
