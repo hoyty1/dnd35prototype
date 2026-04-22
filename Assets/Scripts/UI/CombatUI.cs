@@ -1094,7 +1094,8 @@ public class CombatUI : MonoBehaviour
 
         if (TurnUndeadButton != null)
         {
-            bool canUseTurnUndead = gm != null && gm.CanUseTurnUndead(pc, out string turnUndeadReason);
+            string turnUndeadReason = string.Empty;
+            bool canUseTurnUndead = gm != null && gm.CanUseTurnUndead(pc, out turnUndeadReason);
             bool canEverUseTurnUndead = pc != null && pc.Stats != null && (pc.Stats.IsCleric || (pc.Stats.IsPaladin && pc.Stats.Level >= 4));
 
             TurnUndeadButton.gameObject.SetActive(canEverUseTurnUndead);
