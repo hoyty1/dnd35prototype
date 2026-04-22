@@ -851,6 +851,7 @@ public class CharacterController : MonoBehaviour
     private CharacterCombatStats _combatStats;
     private CharacterEquipment _equipment;
     private CharacterInventory _inventory;
+    private CharacterConditions _conditions;
     private Coroutine _currentScaleAnimation;
     private Coroutine _grappleAlternateVisibilityCoroutine;
     private int _grappleDisplayPauseLocks;
@@ -925,7 +926,32 @@ public class CharacterController : MonoBehaviour
         return _inventory;
     }
 
+    private CharacterConditions EnsureConditions()
+    {
+        if (_conditions == null)
+        {
+            _conditions = GetComponent<CharacterConditions>();
+            if (_conditions == null)
+                _conditions = gameObject.AddComponent<CharacterConditions>();
+
+            ConditionService conditionService = GameManager.Instance != null
+                ? GameManager.Instance.GetComponent<ConditionService>()
+                : null;
+
+            _conditions.Initialize(this, conditionService);
+        }
+        else if (GameManager.Instance != null)
+        {
+            // Keep the reference fresh if services were created after this character.
+            ConditionService conditionService = GameManager.Instance.GetComponent<ConditionService>();
+            _conditions.SetConditionService(conditionService);
+        }
+
+        return _conditions;
+    }
+
     public CharacterInventory Inventory => EnsureInventory();
+    public CharacterConditions Conditions => EnsureConditions();
 
     private void Awake()
     {
@@ -944,6 +970,7 @@ public class CharacterController : MonoBehaviour
         EnsureCombatStats();
         EnsureEquipment();
         EnsureInventory();
+        EnsureConditions();
     }
 
     private void OnDisable()
@@ -995,6 +1022,8 @@ public class CharacterController : MonoBehaviour
         if (_conditionManager == null)
             _conditionManager = GetComponent<ConditionManager>() ?? gameObject.AddComponent<ConditionManager>();
         _conditionManager.Init(Stats);
+
+        EnsureConditions();
 
         SyncHPStateFromCurrentHP(emitLog: false);
         _sr.sprite = (_currentHPState == HPState.Dead && DeadSprite != null) ? DeadSprite : AliveSprite;
@@ -1261,6 +1290,11 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public List<StatusEffect> GetActiveConditions()
     {
+        return EnsureConditions().GetActiveConditions();
+    }
+
+    public List<StatusEffect> GetActiveConditionsDirect()
+    {
         if (Stats == null || Stats.ActiveConditions == null)
             return new List<StatusEffect>();
 
@@ -1272,6 +1306,11 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool HasCondition(CombatConditionType type)
     {
+        return EnsureConditions().HasCondition(type);
+    }
+
+    public bool HasConditionDirect(CombatConditionType type)
+    {
         if (Stats == null) return false;
 
         if (_conditionManager != null)
@@ -1282,8 +1321,12 @@ public class CharacterController : MonoBehaviour
             && Stats.ActiveConditions.Exists(c => ConditionRules.Normalize(c.Type) == normalized);
     }
 
-
     public void ApplyCondition(CombatConditionType type, int rounds, string sourceName)
+    {
+        EnsureConditions().ApplyCondition(type, rounds, sourceName);
+    }
+
+    public void ApplyConditionDirect(CombatConditionType type, int rounds, string sourceName)
     {
         if (Stats == null) return;
 
@@ -1298,6 +1341,11 @@ public class CharacterController : MonoBehaviour
 
     public bool RemoveCondition(CombatConditionType type)
     {
+        return EnsureConditions().RemoveCondition(type);
+    }
+
+    public bool RemoveConditionDirect(CombatConditionType type)
+    {
         if (Stats == null) return false;
 
         if (_conditionManager != null)
@@ -1308,12 +1356,76 @@ public class CharacterController : MonoBehaviour
 
     public List<StatusEffect> TickConditions()
     {
+        return EnsureConditions().TickConditions();
+    }
+
+    public List<StatusEffect> TickConditionsDirect()
+    {
         if (Stats == null) return new List<StatusEffect>();
 
         if (_conditionManager != null)
             return _conditionManager.TickConditions();
 
         return Stats.TickConditions();
+    }
+
+    public bool IsProneCondition => EnsureConditions().IsProne;
+    public bool IsGrappledCondition => EnsureConditions().IsGrappled;
+    public bool IsPinnedCondition => EnsureConditions().IsPinned;
+    public bool IsPinningCondition => EnsureConditions().IsPinning;
+    public bool IsStunnedCondition => EnsureConditions().IsStunned;
+    public bool IsInvisibleCondition => EnsureConditions().IsInvisible;
+    public bool IsTurnedCondition => EnsureConditions().IsTurned;
+    public bool IsFeintedCondition => EnsureConditions().IsFeinted;
+    public bool IsFlatFootedCondition => EnsureConditions().IsFlatFooted;
+    public bool IsDexDenied => EnsureConditions().IsDexDenied;
+
+    public void SetProne(bool prone)
+    {
+        if (prone)
+            ApplyCondition(CombatConditionType.Prone, -1, Stats != null ? Stats.CharacterName : "Prone");
+        else
+            RemoveCondition(CombatConditionType.Prone);
+    }
+
+    public void StandUp()
+    {
+        SetProne(false);
+    }
+
+    public int GetConditionACModifier()
+    {
+        return EnsureConditions().GetConditionACModifier();
+    }
+
+    public int GetConditionAttackModifier()
+    {
+        return EnsureConditions().GetConditionAttackModifier();
+    }
+
+    public bool CanTakeActions()
+    {
+        return EnsureConditions().CanTakeActions();
+    }
+
+    public bool CanMove()
+    {
+        return EnsureConditions().CanMove();
+    }
+
+    public bool CanAttack()
+    {
+        return EnsureConditions().CanAttack();
+    }
+
+    public string GetConditionSummary()
+    {
+        return EnsureConditions().GetConditionSummary();
+    }
+
+    public int ClearAllConditions()
+    {
+        return EnsureConditions().ClearAllConditions();
     }
 
     private void OnCurrentHPChanged(int oldHP, int newHP)
