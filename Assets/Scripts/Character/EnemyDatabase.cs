@@ -22,6 +22,7 @@ public static class EnemyDatabase
         RegisterGoblinWarchief();
         RegisterGoblinFeintDrill();
         RegisterSkeletonArcher();
+        RegisterWightDreadwalker();
         RegisterOrcBerserker();
         RegisterOrcGrappleDrill();
         RegisterHobgoblinSergeant();
@@ -53,7 +54,7 @@ public static class EnemyDatabase
         {
             new EncounterPreset("grapple_test", "🧪 Grapple Test Encounter", "Fighter vs orc in adjacent squares for dedicated grappling checks.", new List<string> { "orc_grapple_drill" }),
             new EncounterPreset("feint_sneak_test", "🗡️ Feint & Sneak Attack Test", "Level 6 rogue vs one goblin tuned for Bluff feints and sneak attack validation.", new List<string> { "goblin_feint_drill" }),
-            new EncounterPreset("turn_undead_test", "✝️ Turn Undead Test", "Cleric-focused test versus clustered undead to validate turning and destruction thresholds.", new List<string> { "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer" }),
+            new EncounterPreset("turn_undead_test", "✝️ Turn Undead Test", "Cleric-focused test with two skeletons plus a stronger wight to showcase both destruction and turning/fleeing.", new List<string> { "skeleton_archer", "skeleton_archer", "wight_dreadwalker" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
@@ -210,6 +211,45 @@ public static class EnemyDatabase
             PanelColor = new Color(0.2f, 0.2f, 0.3f, 0.85f),   // dark grey-blue
             NameColor = new Color(0.7f, 0.85f, 1f),             // pale blue
             Description = "An animated skeleton with hollow eye sockets that glow faintly. Fires arrows with eerie precision."
+        });
+    }
+
+    /// <summary>
+    /// Wight Dreadwalker (CR 3-ish) — stronger undead used to validate
+    /// Turn Undead's "turned and fleeing" outcome when not outright destroyed.
+    /// </summary>
+    private static void RegisterWightDreadwalker()
+    {
+        Register(new EnemyDefinition
+        {
+            Id = "wight_dreadwalker",
+            Name = "Wight Dreadwalker",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            SizeCategory = SizeCategory.Medium,
+            NaturalArmorBonus = 4,
+            STR = 12, DEX = 12, CON = 10, WIS = 13, INT = 11, CHA = 15,
+            BAB = 2,
+            ArmorBonus = 0,
+            ShieldBonus = 0,
+            DamageDice = 4,   // slam 1d4
+            DamageCount = 1,
+            BonusDamage = 1,
+            BaseSpeed = 6,
+            AttackRange = 1,
+            BaseHitDieHP = 26,
+            CreatureTags = new List<string> { "Undead" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            DamageReductionAmount = 5,
+            DamageReductionBypass = DamageBypassTag.Silver,
+            DamageImmunities = new List<DamageType> { DamageType.Cold },
+            AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            SpriteColor = new Color(0.78f, 0.82f, 0.9f, 1f),
+            PanelColor = new Color(0.19f, 0.18f, 0.3f, 0.85f),
+            NameColor = new Color(0.72f, 0.9f, 1f),
+            Description = "A malevolent wight animated by hunger and shadow. Tough enough to be turned but not instantly destroyed in cleric test encounters."
         });
     }
 

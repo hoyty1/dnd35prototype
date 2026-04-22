@@ -1973,7 +1973,7 @@ public class GameManager : MonoBehaviour
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("✝️ Turn Undead Test: Brother Caldus (Cleric 6) faces undead. Use Special Attack -> Turn Undead.");
+        CombatUI?.ShowCombatLog("✝️ Turn Undead Test: Brother Caldus (Cleric 6) vs 2 skeletons + 1 wight. Use Special Attack -> Turn Undead to observe both destruction and fleeing.");
     }
 
     private void RestoreStandardPartyLayout()
@@ -2258,6 +2258,12 @@ public class GameManager : MonoBehaviour
         new Vector2Int(13, 12),
     };
 
+    private static readonly Vector2Int[] TurnUndeadTestSpawnPositions = {
+        new Vector2Int(12, 8),  // Skeleton (front left) ~15 ft from cleric start (9,9)
+        new Vector2Int(12, 10), // Skeleton (front right) ~15 ft from cleric start (9,9)
+        new Vector2Int(14, 9),  // Wight (behind) ~25 ft from cleric start (9,9)
+    };
+
     private void SetupEnemyEncounter(List<string> enemyIds)
     {
         EnemyDatabase.Init();
@@ -2301,6 +2307,11 @@ public class GameManager : MonoBehaviour
             {
                 // Spawn adjacent in dedicated mechanics test encounters.
                 pos = PC1.GridPosition + Vector2Int.right;
+            }
+            else if (_isTurnUndeadTestEncounter && i < TurnUndeadTestSpawnPositions.Length)
+            {
+                // Explicit front-line skeletons + rear wight layout for clear Turn Undead validation.
+                pos = TurnUndeadTestSpawnPositions[i];
             }
             else
             {

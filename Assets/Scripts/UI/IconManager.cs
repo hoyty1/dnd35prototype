@@ -63,6 +63,8 @@ public static class IconManager
     {
         { "skeleton_archer", "skeleton_archer_icon" },
         { "Skeleton Archer", "skeleton_archer_icon" },
+        { "wight_dreadwalker", "skeleton_token" },
+        { "Wight Dreadwalker", "skeleton_token" },
         { "orc_berserker", "orc_berserker_icon" },
         { "Orc Berserker", "orc_berserker_icon" },
         { "hobgoblin_sergeant", "hobgoblin_sergeant_icon" },
