@@ -290,6 +290,17 @@ public static class ItemDatabase
             IconChar = "\u2732", IconColor = new Color(0.5f, 0.5f, 0.5f)
         });
 
+        // Ammo bundle placeholder used by Turn Undead mechanics test scenarios.
+        // (No per-shot ammo consumption yet; this exists for inventory visibility/logging.)
+        Register(new ItemData
+        {
+            Id = "crossbow_bolts_20", Name = "Crossbow Bolts (20)", Type = ItemType.Misc,
+            Slot = EquipSlot.None,
+            Description = "A bundle of 20 crossbow bolts.",
+            WeightLbs = 2f,
+            IconChar = "\u2022", IconColor = new Color(0.7f, 0.65f, 0.45f)
+        });
+
         // Dart: 1d4, 20/×2, piercing, range 20 ft
         Register(new ItemData
         {

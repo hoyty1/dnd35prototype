@@ -69,6 +69,17 @@ public class GameManager : MonoBehaviour
     private bool _isFeintSneakTestEncounter;
     private bool _isTurnUndeadTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
+
+    private const int TurnUndeadFearBreakDistanceSquares = 2; // 10 ft in D&D 3.5e square grid.
+
+    private sealed class TurnUndeadTracker
+    {
+        public CharacterController Turner;
+        public float AppliedTime;
+    }
+
+    // Tracks which cleric is the source of an active Turned condition for each undead target.
+    private readonly Dictionary<CharacterController, TurnUndeadTracker> _activeTurnUndeadTrackers = new Dictionary<CharacterController, TurnUndeadTracker>();
     // Game state
     public enum TurnPhase { PCTurn, NPCTurn, CombatOver }
 
@@ -1936,7 +1947,7 @@ public class GameManager : MonoBehaviour
         Sprite pcDead = LoadSprite("Sprites/pc_dead");
 
         CharacterStats clericStats = new CharacterStats(
-            name: "Brother Caldus",
+            name: "Brother Marcus",
             level: 6,
             characterClass: "Cleric",
             str: 12, dex: 10, con: 14, wis: 16, intelligence: 10, cha: 16,
@@ -1963,8 +1974,22 @@ public class GameManager : MonoBehaviour
             clericInventory = PC1.gameObject.AddComponent<InventoryComponent>();
         clericInventory.Init(clericStats);
 
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        // Turn Undead test loadout:
+        // - Light crossbow equipped for ranged validation
+        // - Heavy mace in inventory as melee backup
+        // - 20 bolts as a placeholder ammo bundle (display/logging)
+        ItemData lightCrossbow = ItemDatabase.CloneItem("crossbow_light");
+        if (lightCrossbow != null)
+            clericInventory.CharacterInventory.DirectEquip(lightCrossbow, EquipSlot.RightHand);
+
+        ItemData heavyMace = ItemDatabase.CloneItem("mace_heavy");
+        if (heavyMace != null)
+            clericInventory.CharacterInventory.AddItem(heavyMace);
+
+        ItemData crossbowBolts = ItemDatabase.CloneItem("crossbow_bolts_20");
+        if (crossbowBolts != null)
+            clericInventory.CharacterInventory.AddItem(crossbowBolts);
+
         clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
         clericInventory.CharacterInventory.RecalculateStats();
 
@@ -1973,7 +1998,7 @@ public class GameManager : MonoBehaviour
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("✝️ Turn Undead Test: Brother Caldus (Cleric 6) vs 2 skeletons + 1 wight. Use Special Attack -> Turn Undead to observe both destruction and fleeing.");
+        CombatUI?.ShowCombatLog("✝️ Turn Undead Test: Brother Marcus (Cleric 6, light crossbow + mace) vs 2 skeletons + 1 wight. Use Special Attack -> Turn Undead to validate fleeing, proximity break, and melee break behavior.");
     }
 
     private void RestoreStandardPartyLayout()
@@ -2270,6 +2295,7 @@ public class GameManager : MonoBehaviour
         ItemDatabase.Init();
 
         _npcAIBehaviors.Clear();
+        _activeTurnUndeadTrackers.Clear();
 
         Sprite npcAliveFallback = LoadSprite("Sprites/npc_enemy_alive");
         Sprite npcDead = LoadSprite("Sprites/npc_enemy_dead");
@@ -2746,6 +2772,10 @@ public class GameManager : MonoBehaviour
 
             // Tick summon durations (Summon Monster: 1 round/level)
             TickSummonDurations();
+
+            // Keep Turn Undead tracker table aligned with condition expiration.
+            PruneTurnUndeadTrackers();
+            LogOngoingTurnUndeadStatusAtRoundStart();
         }
 
         // Tick Aid Another expiry counters before actions; this keeps bonuses available for one full beneficiary turn.
@@ -2814,6 +2844,10 @@ public class GameManager : MonoBehaviour
         EndAttackSequence();
         EndThrownAttackSequence();
         pc.StartNewTurn();
+
+        PruneTurnUndeadTrackers();
+        CheckTurnUndeadProximityBreakingForCleric(pc);
+
         _loggedHeldChargeNoActionsReminder = false;
 
         CurrentPhase = TurnPhase.PCTurn;
@@ -6763,6 +6797,186 @@ public class GameManager : MonoBehaviour
         return Mathf.Max(0, actor.Stats.MaxTurnUndeadAttemptsPerDay - actor.Stats.TurnUndeadAttemptsUsedToday);
     }
 
+    private void RegisterTurnUndeadTracker(CharacterController undead, CharacterController turner)
+    {
+        if (undead == null)
+            return;
+
+        if (turner == null)
+        {
+            _activeTurnUndeadTrackers.Remove(undead);
+            return;
+        }
+
+        _activeTurnUndeadTrackers[undead] = new TurnUndeadTracker
+        {
+            Turner = turner,
+            AppliedTime = Time.time
+        };
+    }
+
+    private CharacterController GetTurnUndeadTurner(CharacterController undead)
+    {
+        if (undead == null)
+            return null;
+
+        if (_activeTurnUndeadTrackers.TryGetValue(undead, out TurnUndeadTracker tracker))
+            return tracker != null ? tracker.Turner : null;
+
+        return null;
+    }
+
+    private bool IsTurnedBy(CharacterController undead, CharacterController candidateTurner)
+    {
+        if (undead == null || candidateTurner == null)
+            return false;
+
+        CharacterController recordedTurner = GetTurnUndeadTurner(undead);
+        return recordedTurner != null && recordedTurner == candidateTurner;
+    }
+
+    private StatusEffect GetActiveTurnedCondition(CharacterController undead)
+    {
+        if (undead == null)
+            return null;
+
+        List<StatusEffect> conditions = undead.GetActiveConditions();
+        for (int i = 0; i < conditions.Count; i++)
+        {
+            StatusEffect condition = conditions[i];
+            if (condition != null && ConditionRules.Normalize(condition.Type) == CombatConditionType.Turned)
+                return condition;
+        }
+
+        return null;
+    }
+
+    private void ClearTurnUndeadEffect(CharacterController undead, string logMessage = null)
+    {
+        if (undead == null)
+            return;
+
+        _activeTurnUndeadTrackers.Remove(undead);
+
+        bool removed = undead.RemoveCondition(CombatConditionType.Turned);
+        if (removed)
+        {
+            Debug.Log($"[Turn Undead] Cleared turned condition on {undead.Stats?.CharacterName ?? "Unknown"}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(logMessage))
+            CombatUI?.ShowCombatLog(logMessage);
+    }
+
+    private void BreakTurnUndeadFear(CharacterController undead, CharacterController turner, string reason)
+    {
+        if (undead == null || turner == null || !undead.HasCondition(CombatConditionType.Turned) || !IsTurnedBy(undead, turner))
+            return;
+
+        string reasonText = reason == "melee"
+            ? $"{turner.Stats.CharacterName} made a melee attack"
+            : $"{turner.Stats.CharacterName} approached within 10 feet";
+
+        ClearTurnUndeadEffect(undead, $"[Turn Undead] {undead.Stats.CharacterName}'s fear breaks! ({reasonText})");
+        UpdateAllStatsUI();
+        Debug.Log($"[Turn Undead] Fear broken for {undead.Stats?.CharacterName ?? "Unknown"} ({reasonText})");
+    }
+
+    private void CheckTurnUndeadProximityBreakingForCleric(CharacterController cleric)
+    {
+        if (cleric == null || cleric.Stats == null || cleric.Stats.IsDead)
+            return;
+
+        var toBreak = new List<CharacterController>();
+
+        foreach (var kvp in _activeTurnUndeadTrackers)
+        {
+            CharacterController undead = kvp.Key;
+            TurnUndeadTracker tracker = kvp.Value;
+
+            if (undead == null || tracker == null)
+                continue;
+            if (!undead.HasCondition(CombatConditionType.Turned))
+                continue;
+            if (tracker.Turner != cleric)
+                continue;
+
+            int distanceSquares = cleric.GetMinimumDistanceToTarget(undead, chebyshev: true);
+            if (distanceSquares <= TurnUndeadFearBreakDistanceSquares)
+                toBreak.Add(undead);
+        }
+
+        for (int i = 0; i < toBreak.Count; i++)
+            BreakTurnUndeadFear(toBreak[i], cleric, "proximity");
+    }
+
+    private void CheckTurnUndeadProximityBreakingForMover(CharacterController mover)
+    {
+        if (mover == null || mover.Stats == null || mover.Stats.IsDead)
+            return;
+
+        // Rule: only the specific turning cleric can break their own turning effect by proximity.
+        CheckTurnUndeadProximityBreakingForCleric(mover);
+    }
+
+    private void ProcessTurnUndeadMeleeFearBreak(CharacterController attacker, CharacterController target, bool isMeleeAttack)
+    {
+        if (!isMeleeAttack || attacker == null || target == null)
+            return;
+
+        if (!target.HasCondition(CombatConditionType.Turned))
+            return;
+
+        if (IsTurnedBy(target, attacker))
+            BreakTurnUndeadFear(target, attacker, "melee");
+    }
+
+    private void PruneTurnUndeadTrackers()
+    {
+        if (_activeTurnUndeadTrackers.Count == 0)
+            return;
+
+        var keysToRemove = new List<CharacterController>();
+        foreach (var kvp in _activeTurnUndeadTrackers)
+        {
+            CharacterController undead = kvp.Key;
+            TurnUndeadTracker tracker = kvp.Value;
+
+            bool invalid = undead == null
+                || undead.Stats == null
+                || undead.Stats.IsDead
+                || !undead.HasCondition(CombatConditionType.Turned)
+                || tracker == null
+                || tracker.Turner == null;
+
+            if (invalid)
+                keysToRemove.Add(undead);
+        }
+
+        for (int i = 0; i < keysToRemove.Count; i++)
+            _activeTurnUndeadTrackers.Remove(keysToRemove[i]);
+    }
+
+    private void LogOngoingTurnUndeadStatusAtRoundStart()
+    {
+        if (_activeTurnUndeadTrackers.Count == 0)
+            return;
+
+        foreach (var kvp in _activeTurnUndeadTrackers)
+        {
+            CharacterController undead = kvp.Key;
+            TurnUndeadTracker tracker = kvp.Value;
+            if (undead == null || tracker == null || tracker.Turner == null)
+                continue;
+
+            StatusEffect turnedCondition = GetActiveTurnedCondition(undead);
+            if (turnedCondition == null)
+                continue;
+
+            CombatUI?.ShowCombatLog($"[Turn Undead] {undead.Stats.CharacterName} continues fleeing ({Mathf.Max(0, turnedCondition.RemainingRounds)} rounds remaining)");
+        }
+    }
+
     public bool CanUseTurnUndead(CharacterController actor, out string reason)
     {
         reason = "Unavailable";
@@ -6948,6 +7162,7 @@ public class GameManager : MonoBehaviour
             else
             {
                 undead.ApplyCondition(CombatConditionType.Turned, 10, cleric.Stats.CharacterName);
+                RegisterTurnUndeadTracker(undead, cleric);
                 turnedCount++;
                 CombatUI?.ShowCombatLog($"   ↩ {undead.Stats.CharacterName} is turned for 10 rounds and flees! ({undeadHd} HD)");
             }
@@ -10033,7 +10248,12 @@ public class GameManager : MonoBehaviour
         var expiredConditions = character.TickConditions();
         foreach (var cond in expiredConditions)
         {
-            string msg = $"⏱ {character.Stats.CharacterName} is no longer {cond.Type}.";
+            CombatConditionType normalizedType = cond != null ? ConditionRules.Normalize(cond.Type) : CombatConditionType.None;
+            if (normalizedType == CombatConditionType.Turned)
+                _activeTurnUndeadTrackers.Remove(character);
+
+            string conditionLabel = cond != null ? cond.Type.ToString() : "a condition";
+            string msg = $"⏱ {character.Stats.CharacterName} is no longer {conditionLabel}.";
             Debug.Log($"[Condition] {msg}");
             CombatUI?.ShowCombatLog($"<color=#99CCFF>{msg}</color>");
         }
@@ -12787,6 +13007,8 @@ public class GameManager : MonoBehaviour
         }
 
         yield return StartCoroutine(pc.MoveAlongPath(path, PlayerMoveSecondsPerStep, markAsMoved: true));
+        CheckTurnUndeadProximityBreakingForMover(pc);
+        PruneTurnUndeadTrackers();
         UpdateAllStatsUI();
 
         // Invalidate threat cache since positions changed
@@ -12810,6 +13032,8 @@ public class GameManager : MonoBehaviour
             : new List<Vector2Int> { destination };
 
         yield return StartCoroutine(mover.MoveAlongPath(path, secondsPerStep, markAsMoved: true));
+        CheckTurnUndeadProximityBreakingForMover(mover);
+        PruneTurnUndeadTrackers();
     }
 
     private void HandleAttackTargetClick(CharacterController pc, SquareCell cell)
@@ -13086,6 +13310,8 @@ public class GameManager : MonoBehaviour
         RangeInfo rangeInfo = useThrownRange
             ? RangeCalculator.GetRangeInfo(sqDist, offHandWeapon.RangeIncrement, true)
             : RangeCalculator.GetRangeInfo(sqDist, 0, false);
+
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeAttack: !useThrownRange);
 
         CombatResult result = attacker.Attack(
             target,
@@ -14297,6 +14523,15 @@ public class GameManager : MonoBehaviour
 
         CurrentSubPhase = PlayerSubPhase.Animating;
 
+        bool specialAttackCountsAsMeleeFearBreak = type == SpecialAttackType.Trip
+            || type == SpecialAttackType.Disarm
+            || type == SpecialAttackType.Grapple
+            || type == SpecialAttackType.Sunder
+            || type == SpecialAttackType.BullRushAttack
+            || type == SpecialAttackType.BullRushCharge
+            || type == SpecialAttackType.Overrun;
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, specialAttackCountsAsMeleeFearBreak);
+
         string actionLabel = "standard action";
         int? disarmAttackBonusOverride = null;
         int disarmAttackBonusUsed = 0;
@@ -15338,6 +15573,8 @@ public class GameManager : MonoBehaviour
         }
 
         yield return StartCoroutine(charger.MoveAlongPath(path, PlayerMoveSecondsPerStep, markAsMoved: true));
+        CheckTurnUndeadProximityBreakingForMover(charger);
+        PruneTurnUndeadTrackers();
 
         InvalidatePreviewThreats();
 
@@ -15359,6 +15596,7 @@ public class GameManager : MonoBehaviour
             CombatResult result;
             try
             {
+                ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
                 result = charger.Attack(target, false, 0, null, null);
             }
             finally
@@ -15513,6 +15751,9 @@ public class GameManager : MonoBehaviour
             ? (_equippedWeapon ?? attacker.GetEquippedMainWeapon())
             : attacker.GetEquippedMainWeapon();
 
+        bool isMeleeAttack = _currentAttackType == AttackType.Melee || (rangeInfo != null && rangeInfo.IsMelee);
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeAttack);
+
         CombatResult result = attacker.Attack(
             target,
             isFlanking,
@@ -15637,6 +15878,9 @@ public class GameManager : MonoBehaviour
         ItemData attackWeapon = _currentAttackType == AttackType.Thrown
             ? (_equippedWeapon ?? attacker.GetEquippedMainWeapon())
             : attacker.GetEquippedMainWeapon();
+
+        bool isMeleeAttack = _currentAttackType == AttackType.Melee || (rangeInfo != null && rangeInfo.IsMelee);
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeAttack);
 
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
         ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
@@ -15783,6 +16027,8 @@ public class GameManager : MonoBehaviour
             string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
             RangeInfo rangeInfo = CalculateRangeInfo(attacker, currentTarget);
 
+            ProcessTurnUndeadMeleeFearBreak(attacker, currentTarget, rangeInfo != null && rangeInfo.IsMelee);
+
             FullAttackResult stepResult = attacker.FullAttack(
                 currentTarget,
                 isFlanking,
@@ -15871,6 +16117,7 @@ public class GameManager : MonoBehaviour
     {
         attacker.Actions.UseFullRoundAction();
 
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, rangeInfo == null || rangeInfo.IsMelee);
         FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         string flankLogPrefix = isFlanking
             ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
@@ -15919,6 +16166,7 @@ public class GameManager : MonoBehaviour
     {
         attacker.Actions.UseFullRoundAction();
 
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, rangeInfo == null || rangeInfo.IsMelee);
         FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
         string flankLogPrefix = isFlanking
             ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
@@ -15967,6 +16215,7 @@ public class GameManager : MonoBehaviour
     {
         attacker.Actions.UseFullRoundAction();
 
+        ProcessTurnUndeadMeleeFearBreak(attacker, target, rangeInfo == null || rangeInfo.IsMelee);
         FullAttackResult result = attacker.FlurryOfBlows(target, isFlanking, flankBonus, partnerName, rangeInfo);
         string flankLogPrefix = isFlanking
             ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
@@ -16196,6 +16445,8 @@ public class GameManager : MonoBehaviour
     private IEnumerator SingleNPCTurn(CharacterController npc, EnemyAIBehavior behavior)
     {
         npc.StartNewTurn();
+        PruneTurnUndeadTrackers();
+        CheckTurnUndeadProximityBreakingForMover(npc);
 
         bool isSummon = IsSummonedCreature(npc);
         string turnColor = isSummon ? "#66E8FF" : "#FF6666";
@@ -16248,29 +16499,35 @@ public class GameManager : MonoBehaviour
         if (npc == null || npc.Stats == null)
             yield break;
 
-        CharacterController source = null;
-        List<StatusEffect> activeConditions = npc.GetActiveConditions();
-        for (int i = 0; i < activeConditions.Count; i++)
+        CharacterController source = GetTurnUndeadTurner(npc);
+
+        if (source == null)
         {
-            StatusEffect condition = activeConditions[i];
-            if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Turned)
-                continue;
-
-            if (string.IsNullOrWhiteSpace(condition.SourceName))
-                break;
-
-            foreach (CharacterController candidate in GetAllCharacters())
+            // Fallback for legacy turned effects created before source tracking was added.
+            List<StatusEffect> activeConditions = npc.GetActiveConditions();
+            for (int i = 0; i < activeConditions.Count; i++)
             {
-                if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                StatusEffect condition = activeConditions[i];
+                if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Turned)
                     continue;
 
-                if (string.Equals(candidate.Stats.CharacterName, condition.SourceName, StringComparison.Ordinal))
-                {
-                    source = candidate;
+                if (string.IsNullOrWhiteSpace(condition.SourceName))
                     break;
+
+                foreach (CharacterController candidate in GetAllCharacters())
+                {
+                    if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                        continue;
+
+                    if (string.Equals(candidate.Stats.CharacterName, condition.SourceName, StringComparison.Ordinal))
+                    {
+                        source = candidate;
+                        RegisterTurnUndeadTracker(npc, source);
+                        break;
+                    }
                 }
+                break;
             }
-            break;
         }
 
         if (source == null)
@@ -16912,6 +17169,8 @@ public class GameManager : MonoBehaviour
             yield break;
 
         yield return StartCoroutine(npc.MoveAlongPath(path, NpcChargeMoveSecondsPerStep, markAsMoved: true));
+        CheckTurnUndeadProximityBreakingForMover(npc);
+        PruneTurnUndeadTrackers();
 
         CharacterController flankPartner;
         bool isFlankingCharge = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
@@ -16921,6 +17180,7 @@ public class GameManager : MonoBehaviour
         CombatResult result;
         try
         {
+            ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeAttack: true);
             result = npc.Attack(target, isFlankingCharge, flankingBonus,
                 flankPartner != null ? flankPartner.Stats.CharacterName : null, null);
         }
@@ -17001,6 +17261,8 @@ public class GameManager : MonoBehaviour
         CharacterController flankPartner;
         bool isFlanking = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
         int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+
+        ProcessTurnUndeadMeleeFearBreak(npc, target, npcRangeInfo != null && npcRangeInfo.IsMelee);
 
         CombatResult result = npc.Attack(target, isFlanking, flankBonus,
             flankPartner != null ? flankPartner.Stats.CharacterName : null, npcRangeInfo);
