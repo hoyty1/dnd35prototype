@@ -203,6 +203,14 @@ public class CombatFlowService : MonoBehaviour
             return null;
         }
 
+        if (attacker.IsTwoHanding())
+        {
+            Debug.Log($"[OffHand] ExecuteOffHandAttack blocked: {attacker.Stats?.CharacterName ?? "Unknown"} is using a two-handed weapon.");
+            string attackerName = attacker.Stats?.CharacterName ?? "Attacker";
+            _gameManager.CombatUI?.ShowCombatLog($"⚠ {attackerName} cannot make an off-hand attack while wielding a two-handed weapon.");
+            return null;
+        }
+
         bool isFlanking = false;
         int flankBonus = 0;
         string partnerName = string.Empty;

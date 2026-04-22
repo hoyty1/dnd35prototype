@@ -27,6 +27,7 @@ public static class DualWieldPenaltyTests
         TestNoFeatLightOffHand();
         TestTWFNormalOffHand();
         TestTWFLightOffHand();
+        TestTwoHandedMainWeaponBlocksOffHand();
 
         Debug.Log($"====== Dual Wield Results: {_passed} passed, {_failed} failed ======");
     }
@@ -178,6 +179,41 @@ public static class DualWieldPenaltyTests
             expectedMain: -2,
             expectedOff: -2,
             expectedLight: true);
+    }
+
+    // 5) Two-handed main weapon + hands-slot spiked gauntlet should NOT grant off-hand attacks.
+    private static void TestTwoHandedMainWeaponBlocksOffHand()
+    {
+        CharacterController controller = null;
+        try
+        {
+            controller = BuildDualWieldCharacter("Two-handed blocks off-hand", hasTWF: true, mainWeaponId: "greatsword", offWeaponId: "dagger");
+
+            // Mirror in-game setup where a spiked gauntlet can be equipped in Hands.
+            Inventory inv = controller.GetInventoryData();
+            inv.DirectEquip(ItemDatabase.CloneItem("spiked_gauntlet"), EquipSlot.Hands);
+            inv.RecalculateStats();
+
+            Assert(controller.IsTwoHanding(),
+                "Two-handed blocks off-hand: is two-handing state",
+                "expected true for greatsword");
+
+            Assert(!controller.CanDualWield(),
+                "Two-handed blocks off-hand: CanDualWield",
+                "expected false while two-handing main weapon");
+
+            Assert(!controller.HasOffHandWeaponEquipped(),
+                "Two-handed blocks off-hand: HasOffHandWeaponEquipped",
+                "expected false while two-handing main weapon");
+
+            Assert(controller.GetOffHandAttackWeapon() == null,
+                "Two-handed blocks off-hand: GetOffHandAttackWeapon",
+                "expected null while two-handing main weapon");
+        }
+        finally
+        {
+            DestroyTestCharacter(controller);
+        }
     }
 }
 

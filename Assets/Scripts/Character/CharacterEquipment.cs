@@ -157,6 +157,11 @@ public class CharacterEquipment : MonoBehaviour
         if (mainWeapon == null)
             return false;
 
+        // D&D 3.5e: A two-handed main weapon occupies both hands.
+        // This blocks all off-hand attack options (including shield bash and spiked gauntlet).
+        if (IsTwoHanding(mainWeapon))
+            return false;
+
         if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsWeapon && inv.LeftHandSlot != mainWeapon)
         {
             offWeapon = inv.LeftHandSlot;
@@ -221,6 +226,20 @@ public class CharacterEquipment : MonoBehaviour
     public bool HasWeaponEquipped()
     {
         return GetEquippedMainWeapon() != null;
+    }
+
+    /// <summary>
+    /// Returns true if the currently resolved main weapon requires two hands to wield.
+    /// </summary>
+    public bool IsTwoHanding()
+    {
+        return IsTwoHanding(GetEquippedMainWeapon());
+    }
+
+    private static bool IsTwoHanding(ItemData weapon)
+    {
+        return CharacterController.IsWeaponTwoHanded(weapon)
+            || (weapon != null && weapon.WeaponSize == WeaponSizeCategory.TwoHanded);
     }
 
     public bool HasDisarmableWeaponEquipped()

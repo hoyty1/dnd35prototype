@@ -4594,12 +4594,14 @@ public partial class GameManager : MonoBehaviour
         ItemData mainHandWeapon = attacker.GetEquippedMainWeapon();
         ItemData offHandWeapon = attacker.GetOffHandAttackWeapon();
 
+        bool isTwoHanding = attacker.IsTwoHanding();
         bool hasMainHandWeapon = mainHandWeapon != null;
         bool hasOffHandWeapon = offHandWeapon != null;
-        bool needsPrompt = hasMainHandWeapon && hasOffHandWeapon;
+        bool needsPrompt = !isTwoHanding && hasMainHandWeapon && hasOffHandWeapon;
 
         Debug.Log($"[Attack][DualWield] hasMainHandWeapon: {hasMainHandWeapon} ({mainHandWeapon?.Name ?? "none"})");
         Debug.Log($"[Attack][DualWield] hasOffHandWeapon: {hasOffHandWeapon} ({offHandWeapon?.Name ?? "none"})");
+        Debug.Log($"[Attack][DualWield] isTwoHanding: {isTwoHanding}");
         Debug.Log($"[Attack][DualWield] needsPrompt: {needsPrompt}");
 
         return needsPrompt;
@@ -5099,6 +5101,12 @@ public partial class GameManager : MonoBehaviour
         if (actor.HasCondition(CombatConditionType.Pinned))
         {
             Debug.Log($"[OffHand][CanUse] Denied: {actor.Stats?.CharacterName ?? "<null>"} is pinned.");
+            return false;
+        }
+
+        if (actor.IsTwoHanding())
+        {
+            Debug.Log($"[OffHand][CanUse] Denied: {actor.Stats?.CharacterName ?? "<null>"} is using a two-handed weapon.");
             return false;
         }
 

@@ -2196,6 +2196,14 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// Returns true when the currently resolved main weapon is being used two-handed.
+    /// </summary>
+    public bool IsTwoHanding()
+    {
+        return EnsureEquipment().IsTwoHanding();
+    }
+
+    /// <summary>
     /// Returns the resolved primary weapon for dual-wield style attacks, if any.
     /// </summary>
     public ItemData GetDualWieldMainWeapon()
