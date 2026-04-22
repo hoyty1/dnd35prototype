@@ -71,10 +71,12 @@ public partial class GameManager : MonoBehaviour
     private const string GrappleTestPresetId = "grapple_test";
     private const string FeintSneakTestPresetId = "feint_sneak_test";
     private const string TurnUndeadTestPresetId = "turn_undead_test";
+    private const string ArmorTargetingTestPresetId = "armor_targeting_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
     private bool _isFeintSneakTestEncounter;
     private bool _isTurnUndeadTestEncounter;
+    private bool _isArmorTargetingTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
 
     // Game state
@@ -746,6 +748,7 @@ public partial class GameManager : MonoBehaviour
         _isGrappleTestEncounter = string.Equals(presetId, GrappleTestPresetId, StringComparison.Ordinal);
         _isFeintSneakTestEncounter = string.Equals(presetId, FeintSneakTestPresetId, StringComparison.Ordinal);
         _isTurnUndeadTestEncounter = string.Equals(presetId, TurnUndeadTestPresetId, StringComparison.Ordinal);
+        _isArmorTargetingTestEncounter = string.Equals(presetId, ArmorTargetingTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.EnemyIds != null && preset.EnemyIds.Count > 0)
         {
@@ -766,6 +769,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureFeintSneakTestParty();
         else if (_isTurnUndeadTestEncounter)
             ConfigureTurnUndeadTestParty();
+        else if (_isArmorTargetingTestEncounter)
+            ConfigureArmorTargetingTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -1495,6 +1500,102 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   Goals: validate HD pool target selection, destruction vs turning choices, and that fighter attacks do NOT break Turn Undead.");
     }
 
+    private void ConfigureArmorTargetingTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats wizardStats = new CharacterStats(
+            name: "Aria",
+            level: 5,
+            characterClass: "Wizard",
+            str: 8, dex: 14, con: 12, wis: 13, intelligence: 18, cha: 10,
+            bab: 2,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 24,
+            raceName: "Human"
+        );
+
+        CharacterStats rogueStats = new CharacterStats(
+            name: "Shade",
+            level: 5,
+            characterClass: "Rogue",
+            str: 12, dex: 18, con: 14, wis: 10, intelligence: 13, cha: 12,
+            bab: 3,
+            armorBonus: 2,
+            shieldBonus: 0,
+            damageDice: 6,
+            damageCount: 1,
+            bonusDamage: 1,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 34,
+            raceName: "Human"
+        );
+
+        CharacterStats fighterStats = new CharacterStats(
+            name: "Brom",
+            level: 5,
+            characterClass: "Fighter",
+            str: 18, dex: 12, con: 16, wis: 12, intelligence: 10, cha: 8,
+            bab: 5,
+            armorBonus: 8,
+            shieldBonus: 2,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 4,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 52,
+            raceName: "Human"
+        );
+
+        PC1.Init(wizardStats, new Vector2Int(6, 8), IconLoader.GetToken("Wizard") ?? pcAliveFallback, pcDead);
+        PC2.Init(rogueStats, new Vector2Int(8, 8), IconLoader.GetToken("Rogue") ?? pcAliveFallback, pcDead);
+        PC3.Init(fighterStats, new Vector2Int(10, 8), IconLoader.GetToken("Fighter") ?? pcAliveFallback, pcDead);
+
+        InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        wizardInventory.Init(wizardStats);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.RecalculateStats();
+
+        InventoryComponent rogueInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
+        rogueInventory.Init(rogueStats);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("short_sword"), EquipSlot.RightHand);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("short_sword"), EquipSlot.LeftHand);
+        rogueInventory.CharacterInventory.RecalculateStats();
+
+        InventoryComponent fighterInventory = PC3.gameObject.GetComponent<InventoryComponent>() ?? PC3.gameObject.AddComponent<InventoryComponent>();
+        fighterInventory.Init(fighterStats);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("full_plate"), EquipSlot.Armor);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        fighterInventory.CharacterInventory.RecalculateStats();
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, true, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, true, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        PC1.DebugPrintTags();
+        PC2.DebugPrintTags();
+        PC3.DebugPrintTags();
+
+        CombatUI?.ShowCombatLog("🏹 Armor Targeting Test: Skeleton archers prioritize Unarmored > Light > Medium > Heavy when targets are in range.");
+        CombatUI?.ShowCombatLog($"   {PC1.Stats.CharacterName}: {PC1.GetArmorTag()} | {PC2.Stats.CharacterName}: {PC2.GetArmorTag()} | {PC3.Stats.CharacterName}: {PC3.GetArmorTag()}");
+    }
+
     private void RestoreStandardPartyLayout()
     {
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -1800,6 +1901,11 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(17, 11),
     };
 
+    private static readonly Vector2Int[] ArmorTargetingTestSpawnPositions = {
+        new Vector2Int(7, 15),
+        new Vector2Int(9, 15),
+    };
+
     private void SetupEnemyEncounter(List<string> enemyIds)
     {
         EnemyDatabase.Init();
@@ -1850,6 +1956,11 @@ public partial class GameManager : MonoBehaviour
                 // Explicit 15-undead test formation (front skeletons, mid wights, back skeletons).
                 pos = TurnUndeadTestSpawnPositions[i];
             }
+            else if (_isArmorTargetingTestEncounter && i < ArmorTargetingTestSpawnPositions.Length)
+            {
+                // Position skeleton archers at range so armor-priority targeting is easy to observe.
+                pos = ArmorTargetingTestSpawnPositions[i];
+            }
             else
             {
                 pos = (i < EncounterSpawnPositions.Length)
@@ -1867,6 +1978,12 @@ public partial class GameManager : MonoBehaviour
 
             InitializeNPCFromDefinition(npc, def, pos, npcAlive, npcDead);
             _npcAIBehaviors.Add(def.AIBehavior);
+
+            if (_isArmorTargetingTestEncounter && string.Equals(enemyId, "skeleton_archer", StringComparison.Ordinal))
+            {
+                npc.Tags.AddTag("Uses Armor-Based Targeting");
+                Debug.Log($"[ArmorTargetingTest] Enabled armor-priority AI for {npc.Stats.CharacterName}");
+            }
 
             // Only apply color tint if using the generic fallback sprite
             SpriteRenderer sr = npc.GetComponent<SpriteRenderer>();

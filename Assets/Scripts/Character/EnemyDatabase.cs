@@ -59,6 +59,7 @@ public static class EnemyDatabase
                 "wight_dreadwalker", "wight_dreadwalker", "wight_dreadwalker",
                 "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer"
             }),
+            new EncounterPreset("armor_targeting_test", "🏹 Armor Priority Targeting Test", "Wizard (unarmored), rogue (light), fighter (heavy) vs 2 skeleton archers that prioritize weakest armor in range.", new List<string> { "skeleton_archer", "skeleton_archer" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),

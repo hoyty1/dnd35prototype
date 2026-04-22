@@ -291,11 +291,25 @@ public class AIService : MonoBehaviour
         }
     }
 
+    private const string ArmorPriorityBehaviorTag = "Uses Armor-Based Targeting";
+
     public CharacterController SelectBestTarget(CharacterController npc, List<CharacterController> allCombatants)
     {
         if (npc == null || allCombatants == null)
             return null;
 
+        if (UsesArmorPriorityTargeting(npc))
+        {
+            CharacterController prioritized = SelectBestArmorPriorityTarget(npc, allCombatants);
+            if (prioritized != null)
+                return prioritized;
+        }
+
+        return SelectBestTargetDefault(npc, allCombatants);
+    }
+
+    private CharacterController SelectBestTargetDefault(CharacterController npc, List<CharacterController> allCombatants)
+    {
         CharacterController best = null;
         float bestScore = float.NegativeInfinity;
 
@@ -316,6 +330,87 @@ public class AIService : MonoBehaviour
         }
 
         return best;
+    }
+
+    private CharacterController SelectBestArmorPriorityTarget(CharacterController npc, List<CharacterController> allCombatants)
+    {
+        CharacterController best = null;
+        float bestScore = float.NegativeInfinity;
+
+        int maxRange = GetMaximumAttackRangeInSquares(npc);
+
+        for (int i = 0; i < allCombatants.Count; i++)
+        {
+            CharacterController candidate = allCombatants[i];
+            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+                continue;
+
+            int distance = SquareGridUtils.GetDistance(npc.GridPosition, candidate.GridPosition);
+            if (distance > maxRange)
+                continue;
+
+            float armorScore = GetArmorPriorityScore(candidate);
+            float distanceBonus = Mathf.Max(0f, maxRange - distance) * 2f;
+            float woundedBonus = Mathf.Clamp01(1f - ((float)candidate.Stats.CurrentHP / Mathf.Max(1f, candidate.Stats.TotalMaxHP))) * 1.5f;
+            float totalScore = armorScore + distanceBonus + woundedBonus;
+
+            if (totalScore > bestScore)
+            {
+                bestScore = totalScore;
+                best = candidate;
+            }
+        }
+
+        if (best != null)
+        {
+            Debug.Log($"[AI][ArmorPriority] {npc.Stats.CharacterName} targets {best.Stats.CharacterName} ({best.GetArmorTag()}) score={bestScore:F1}");
+        }
+
+        return best;
+    }
+
+    private bool UsesArmorPriorityTargeting(CharacterController npc)
+    {
+        if (npc == null)
+            return false;
+
+        if (npc.Tags != null && npc.Tags.HasTag(ArmorPriorityBehaviorTag))
+            return true;
+
+        if (npc.Stats != null && npc.Stats.CreatureTags != null)
+        {
+            for (int i = 0; i < npc.Stats.CreatureTags.Count; i++)
+            {
+                if (string.Equals(npc.Stats.CreatureTags[i], ArmorPriorityBehaviorTag, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private float GetArmorPriorityScore(CharacterController target)
+    {
+        if (target == null)
+            return 0f;
+
+        if (target.Tags != null)
+        {
+            if (target.Tags.HasTag("Unarmored")) return 100f;
+            if (target.Tags.HasTag("Light Armor")) return 75f;
+            if (target.Tags.HasTag("Medium Armor")) return 50f;
+            if (target.Tags.HasTag("Heavy Armor")) return 25f;
+        }
+
+        string armorTag = target.GetArmorTag();
+        if (string.Equals(armorTag, "Unarmored", StringComparison.OrdinalIgnoreCase)) return 100f;
+        if (string.Equals(armorTag, "Light Armor", StringComparison.OrdinalIgnoreCase)) return 75f;
+        if (string.Equals(armorTag, "Medium Armor", StringComparison.OrdinalIgnoreCase)) return 50f;
+        if (string.Equals(armorTag, "Heavy Armor", StringComparison.OrdinalIgnoreCase)) return 25f;
+
+        return 10f;
     }
 
     public float GetTargetPriority(CharacterController npc, CharacterController target)
