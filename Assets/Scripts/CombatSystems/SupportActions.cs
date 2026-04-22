@@ -967,14 +967,13 @@ public partial class GameManager
 
         foreach (Vector2Int endpoint in GetChargeEndpointCandidates(charger, target, moverSizeSquares))
         {
-            AoOPathResult pathResult = Grid.FindPathAoOAware(
-                charger.GridPosition,
+            AoOPathResult pathResult = FindPath(
+                charger,
                 endpoint,
-                threatenedSquares: null,
-                maxRange: searchRange,
-                moverSizeSquares: moverSizeSquares,
-                mover: charger,
-                allowThroughAllies: true);
+                avoidThreats: false,
+                maxRangeOverride: searchRange,
+                allowThroughAllies: true,
+                allowThroughEnemies: false);
 
             if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
                 continue;
@@ -1080,6 +1079,9 @@ public partial class GameManager
 
     private bool IsDifficultTerrain(Vector2Int pos)
     {
+        if (_movementService != null)
+            return _movementService.IsDifficultTerrain(pos);
+
         // Difficult terrain is not data-driven in this prototype yet.
         // Keep hook for future implementation.
         return false;
@@ -1176,13 +1178,13 @@ public partial class GameManager
             : $"🏇 {charger.Stats.CharacterName} charges {target.Stats.CharacterName}!");
 
         // Resolve provoked AoOs during charge movement.
-        var provokedAoOs = ThreatSystem.AnalyzePathForAoOs(charger, path, GetAllCharacters());
+        var provokedAoOs = CheckForAoO(charger, path);
         foreach (var aooInfo in provokedAoOs)
         {
             if (charger.Stats.IsDead) break;
             if (aooInfo == null || aooInfo.Threatener == null || aooInfo.Threatener.Stats.IsDead) continue;
 
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(aooInfo.Threatener, charger);
+            CombatResult aooResult = TriggerAoO(aooInfo.Threatener, charger);
             if (aooResult == null) continue;
 
             CombatUI.ShowCombatLog($"⚔ AoO during charge: {aooResult.GetDetailedSummary()}");
@@ -1302,13 +1304,13 @@ public partial class GameManager
 
         CombatUI.ShowCombatLog($"🏇 {npc.Stats.CharacterName} charges {target.Stats.CharacterName}!");
 
-        var provokedAoOs = ThreatSystem.AnalyzePathForAoOs(npc, path, GetAllCharacters());
+        var provokedAoOs = CheckForAoO(npc, path);
         foreach (var aooInfo in provokedAoOs)
         {
             if (npc.Stats.IsDead) break;
             if (aooInfo == null || aooInfo.Threatener == null || aooInfo.Threatener.Stats.IsDead) continue;
 
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(aooInfo.Threatener, npc);
+            CombatResult aooResult = TriggerAoO(aooInfo.Threatener, npc);
             if (aooResult == null) continue;
 
             CombatUI.ShowCombatLog($"⚔ AoO vs {npc.Stats.CharacterName}: {aooResult.GetDetailedSummary()}");

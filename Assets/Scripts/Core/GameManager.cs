@@ -102,6 +102,7 @@ public partial class GameManager : MonoBehaviour
 
     // ========== INITIATIVE / TURN SERVICE ==========
     [SerializeField] private TurnService _turnService;
+    [SerializeField] private MovementService _movementService;
 
     /// <summary>Current combatant in initiative order (PC or NPC).</summary>
     public CharacterController CurrentCharacter => _turnService != null ? _turnService.CurrentCharacter : null;
@@ -486,6 +487,9 @@ public partial class GameManager : MonoBehaviour
         _turnService.OnNewRound += OnNewRound;
         _turnService.OnCombatEnded += OnCombatEnded;
 
+        _movementService ??= gameObject.GetComponent<MovementService>() ?? gameObject.AddComponent<MovementService>();
+        _movementService.Initialize(Grid, GetAllCharacters);
+
         turnUndeadSystem ??= gameObject.GetComponent<TurnUndeadSystem>() ?? gameObject.AddComponent<TurnUndeadSystem>();
         grappleSystem ??= gameObject.GetComponent<GrappleSystem>() ?? gameObject.AddComponent<GrappleSystem>();
         overrunSystem ??= gameObject.GetComponent<OverrunSystem>() ?? gameObject.AddComponent<OverrunSystem>();
@@ -517,6 +521,10 @@ public partial class GameManager : MonoBehaviour
 
     private void Start()
     {
+        _movementService ??= gameObject.GetComponent<MovementService>() ?? gameObject.AddComponent<MovementService>();
+        _movementService.SetGrid(Grid);
+        _movementService.Initialize(Grid, GetAllCharacters);
+
         Grid.GenerateGrid();
         CenterCamera();
         _mainCam = Camera.main;
@@ -3890,32 +3898,13 @@ public partial class GameManager : MonoBehaviour
 
     public string GetFiveFootStepDisabledReason(CharacterController character)
     {
-        if (character == null || character.Stats == null)
-            return "No active character";
+        if (_movementService != null && _movementService.CanTake5FootStep(character, out string reason))
+            return string.Empty;
 
-        if (character.HasMovedThisTurn)
-            return "Already moved this turn";
+        if (_movementService != null)
+            return reason;
 
-        if (character.HasTakenFiveFootStep)
-            return "Already used 5-foot step this turn";
-
-        if (character.HasCondition(CombatConditionType.Prone))
-            return "Cannot 5-foot step while prone";
-
-        if (character.HasCondition(CombatConditionType.Pinned))
-            return "Cannot 5-foot step while pinned";
-
-        if (character.HasCondition(CombatConditionType.Grappled))
-            return "Cannot 5-foot step while grappled";
-
-        // Must have at least one legal adjacent destination.
-        foreach (var neighbor in SquareGridUtils.GetNeighbors(character.GridPosition))
-        {
-            if (IsValidFiveFootStepDestination(character, neighbor))
-                return string.Empty;
-        }
-
-        return "No valid adjacent square";
+        return "Movement service unavailable";
     }
 
     public void OnFiveFootStepButtonPressed()
@@ -3962,20 +3951,10 @@ public partial class GameManager : MonoBehaviour
 
     private bool IsValidFiveFootStepDestination(CharacterController pc, Vector2Int destination)
     {
-        if (!SquareGridUtils.IsAdjacent(pc.GridPosition, destination))
-            return false;
+        if (_movementService != null)
+            return _movementService.CanTake5FootStep(pc, destination);
 
-        SquareCell cell = Grid.GetCell(destination);
-        if (cell == null)
-            return false;
-
-        if (!Grid.CanPlaceCreature(destination, pc.GetVisualSquaresOccupied(), pc))
-            return false;
-
-        if (IsDifficultTerrain(destination))
-            return false;
-
-        return true;
+        return false;
     }
 
     private void HandleFiveFootStepClick(CharacterController pc, SquareCell cell)
@@ -4018,7 +3997,11 @@ public partial class GameManager : MonoBehaviour
         Vector2Int oldPos = pc.GridPosition;
 
         // 5-foot step does NOT consume move/standard/full-round actions and does NOT provoke AoO.
-        if (!pc.FiveFootStep(destination))
+        bool fiveFootStepSucceeded = _movementService != null
+            ? _movementService.Execute5FootStep(pc, destination)
+            : pc.FiveFootStep(destination);
+
+        if (!fiveFootStepSucceeded)
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} failed to take a 5-foot step.");
             return false;
@@ -4247,7 +4230,9 @@ public partial class GameManager : MonoBehaviour
                 if (pc.Stats.IsDead) break;
                 if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead) continue;
 
-                CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, pc);
+                CombatResult aooResult = _movementService != null
+                    ? _movementService.TriggerAoO(enemy, pc)
+                    : ThreatSystem.ExecuteAoO(enemy, pc);
                 if (aooResult != null)
                 {
                     CombatUI?.ShowCombatLog($"⚔ AoO (standing up): {aooResult.GetDetailedSummary()}");
@@ -4307,21 +4292,15 @@ public partial class GameManager : MonoBehaviour
 
     private bool IsValidCrawlDestination(CharacterController pc, Vector2Int destination)
     {
-        if (pc == null) return false;
-        if (!SquareGridUtils.IsAdjacent(pc.GridPosition, destination))
+        if (pc == null)
             return false;
 
-        SquareCell cell = Grid.GetCell(destination);
-        if (cell == null)
+        if (_movementService == null)
             return false;
 
-        if (!Grid.CanPlaceCreature(destination, pc.GetVisualSquaresOccupied(), pc))
-            return false;
-
-        if (IsDifficultTerrain(destination))
-            return false;
-
-        return true;
+        // Crawl is an adjacent 5-ft movement while prone; destination occupancy/terrain constraints mirror step movement,
+        // but crawl itself has separate condition rules validated by GetCrawlDisabledReason.
+        return _movementService.IsValidAdjacentStepDestination(pc, destination, disallowDifficultTerrain: true);
     }
 
     private void HandleCrawlClick(CharacterController pc, SquareCell cell)
@@ -4354,7 +4333,9 @@ public partial class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.Animating;
 
         var crawlPath = new List<Vector2Int> { destination.Coords };
-        var provokedAoOs = ThreatSystem.AnalyzePathForAoOs(pc, crawlPath, GetAllCharacters());
+        var provokedAoOs = _movementService != null
+            ? _movementService.CheckForAoO(pc, crawlPath)
+            : ThreatSystem.AnalyzePathForAoOs(pc, crawlPath, GetAllCharacters());
 
         if (provokedAoOs.Count > 0)
         {
@@ -4366,7 +4347,9 @@ public partial class GameManager : MonoBehaviour
                 CharacterController threatener = aooInfo.Threatener;
                 if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead) continue;
 
-                CombatResult aooResult = ThreatSystem.ExecuteAoO(threatener, pc);
+                CombatResult aooResult = _movementService != null
+                    ? _movementService.TriggerAoO(threatener, pc)
+                    : ThreatSystem.ExecuteAoO(threatener, pc);
                 if (aooResult != null)
                 {
                     CombatUI?.ShowCombatLog($"⚔ AoO (crawling): {aooResult.GetDetailedSummary()}");
@@ -4390,7 +4373,12 @@ public partial class GameManager : MonoBehaviour
 
         Vector2Int oldPos = pc.GridPosition;
         ConsumeMoveAction(pc);
-        yield return StartCoroutine(pc.MoveAlongPath(new List<Vector2Int> { destination.Coords }, PlayerMoveSecondsPerStep, markAsMoved: true));
+
+        List<Vector2Int> crawlMovePath = new List<Vector2Int> { destination.Coords };
+        if (_movementService != null)
+            yield return StartCoroutine(_movementService.ExecuteMovement(pc, crawlMovePath, PlayerMoveSecondsPerStep, markAsMoved: true));
+        else
+            yield return StartCoroutine(pc.MoveAlongPath(crawlMovePath, PlayerMoveSecondsPerStep, markAsMoved: true));
 
         RefreshFlankedConditions();
         UpdateAllStatsUI();
@@ -8595,15 +8583,18 @@ public partial class GameManager : MonoBehaviour
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
 
-        int sizeSquares = pc.GetVisualSquaresOccupied();
-        List<SquareCell> moveCells = Grid.GetCellsInRange(pc.GridPosition, pc.Stats.MoveRange);
-        foreach (var cell in moveCells)
+        if (_movementService == null || pc == null)
+            return;
+
+        List<SquareCell> moveCells = _movementService.CalculateMovementRange(pc);
+        for (int i = 0; i < moveCells.Count; i++)
         {
-            if (Grid.CanPlaceCreature(cell.Coords, sizeSquares, pc))
-            {
-                cell.SetHighlight(HighlightType.Move);
-                _highlightedCells.Add(cell);
-            }
+            SquareCell cell = moveCells[i];
+            if (cell == null)
+                continue;
+
+            cell.SetHighlight(HighlightType.Move);
+            _highlightedCells.Add(cell);
         }
 
         HighlightCharacterFootprint(pc, HighlightType.Selected);
@@ -8612,13 +8603,35 @@ public partial class GameManager : MonoBehaviour
 
     private List<Vector2Int> GetAdjacentSquares(Vector2Int origin)
     {
+        if (_movementService != null)
+            return _movementService.GetAdjacentSquares(origin);
+
         Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(origin);
-        var adjacent = new List<Vector2Int>(neighbors.Length);
-        for (int i = 0; i < neighbors.Length; i++)
-            adjacent.Add(neighbors[i]);
-        return adjacent;
+        return new List<Vector2Int>(neighbors);
     }
 
+    // Public delegation helpers for movement-aware systems.
+    public bool ValidateGridPosition(Vector2Int position) => _movementService != null && _movementService.ValidateGridPosition(position);
+    public bool IsSquareOccupied(Vector2Int position, CharacterController ignore = null) => _movementService != null && _movementService.IsSquareOccupied(position, ignore);
+    public CharacterController GetCharacterAtPosition(Vector2Int position, CharacterController ignore = null) => _movementService != null ? _movementService.GetCharacterAtPosition(position, ignore) : null;
+    public bool IsPositionBlocked(Vector2Int position, int moverSizeSquares = 1, CharacterController mover = null) => _movementService == null || _movementService.IsPositionBlocked(position, moverSizeSquares, mover);
+    public int CalculateDistance(Vector2Int from, Vector2Int to, bool chebyshev = false) => _movementService != null ? _movementService.CalculateDistance(from, to, chebyshev) : (chebyshev ? SquareGridUtils.GetChebyshevDistance(from, to) : SquareGridUtils.GetDistance(from, to));
+    public List<Vector2Int> GetSquaresInRange(Vector2Int origin, int range, bool includeOrigin = false) => _movementService != null ? _movementService.GetSquaresInRange(origin, range, includeOrigin) : new List<Vector2Int>();
+    public int GetMovementCost(Vector2Int start, List<Vector2Int> path) => _movementService != null ? _movementService.GetMovementCost(start, path) : SquareGridUtils.CalculatePathCost(start, path ?? new List<Vector2Int>());
+    public AoOPathResult FindPath(CharacterController mover, Vector2Int destination, bool avoidThreats = true, int? maxRangeOverride = null, bool allowThroughAllies = true, bool allowThroughEnemies = false)
+        => _movementService != null
+            ? _movementService.FindPath(mover, destination, avoidThreats, maxRangeOverride, allowThroughAllies, allowThroughEnemies)
+            : new AoOPathResult();
+    public AoOPathResult FindPath(CharacterController mover, Vector2Int destination, HashSet<Vector2Int> threatenedSquares, int maxRangeOverride, bool allowThroughAllies = true, bool allowThroughEnemies = false)
+        => _movementService != null
+            ? _movementService.FindPath(mover, destination, threatenedSquares, maxRangeOverride, allowThroughAllies, allowThroughEnemies)
+            : new AoOPathResult();
+    public List<AoOThreatInfo> CheckForAoO(CharacterController mover, List<Vector2Int> path)
+        => _movementService != null ? _movementService.CheckForAoO(mover, path) : new List<AoOThreatInfo>();
+    public CombatResult TriggerAoO(CharacterController threatener, CharacterController target)
+        => _movementService != null ? _movementService.TriggerAoO(threatener, target) : ThreatSystem.ExecuteAoO(threatener, target);
+    public bool CanTake5FootStep(CharacterController character, Vector2Int destination)
+        => _movementService != null && _movementService.CanTake5FootStep(character, destination);
 
     private void CancelMovementSelection()
     {
@@ -9558,8 +9571,9 @@ public partial class GameManager : MonoBehaviour
         if (!_highlightedCells.Contains(cell) || !Grid.CanPlaceCreature(cell.Coords, pc.GetVisualSquaresOccupied(), pc))
             return;
 
-        var allCharacters = GetAllCharacters();
-        var pathResult = Grid.FindSafePath(pc.GridPosition, cell.Coords, pc, allCharacters);
+        var pathResult = _movementService != null
+            ? _movementService.FindPath(pc, cell.Coords, avoidThreats: true)
+            : Grid.FindSafePath(pc.GridPosition, cell.Coords, pc, GetAllCharacters());
 
         if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
         {
@@ -9619,7 +9633,9 @@ public partial class GameManager : MonoBehaviour
             var threatener = aooInfo.Threatener;
             if (threatener.Stats.IsDead) continue;
 
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(threatener, pc);
+            CombatResult aooResult = _movementService != null
+                ? _movementService.TriggerAoO(threatener, pc)
+                : ThreatSystem.ExecuteAoO(threatener, pc);
             if (aooResult != null)
             {
                 string aooLog = $"⚔ AoO: {aooResult.GetDetailedSummary()}";
@@ -9686,7 +9702,10 @@ public partial class GameManager : MonoBehaviour
             pc.Actions.ConvertStandardToMove();
         }
 
-        yield return StartCoroutine(pc.MoveAlongPath(path, PlayerMoveSecondsPerStep, markAsMoved: true));
+        if (_movementService != null)
+            yield return StartCoroutine(_movementService.ExecuteMovement(pc, path, PlayerMoveSecondsPerStep, markAsMoved: true));
+        else
+            yield return StartCoroutine(pc.MoveAlongPath(path, PlayerMoveSecondsPerStep, markAsMoved: true));
         CheckTurnUndeadProximityBreakingForMover(pc);
         PruneTurnUndeadTrackers();
         UpdateAllStatsUI();
@@ -9706,12 +9725,18 @@ public partial class GameManager : MonoBehaviour
             yield break;
 
         int maxRange = Mathf.Max(1, mover.Stats.MoveRange);
-        AoOPathResult pathResult = Grid.FindPathAoOAware(mover.GridPosition, destination, null, maxRange, mover.GetVisualSquaresOccupied(), mover);
+        AoOPathResult pathResult = _movementService != null
+            ? _movementService.FindPath(mover, destination, avoidThreats: false, maxRangeOverride: maxRange)
+            : Grid.FindPathAoOAware(mover.GridPosition, destination, null, maxRange, mover.GetVisualSquaresOccupied(), mover);
+
         List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
             ? pathResult.Path
             : new List<Vector2Int> { destination };
 
-        yield return StartCoroutine(mover.MoveAlongPath(path, secondsPerStep, markAsMoved: true));
+        if (_movementService != null)
+            yield return StartCoroutine(_movementService.ExecuteMovement(mover, path, secondsPerStep, markAsMoved: true));
+        else
+            yield return StartCoroutine(mover.MoveAlongPath(path, secondsPerStep, markAsMoved: true));
         CheckTurnUndeadProximityBreakingForMover(mover);
         PruneTurnUndeadTrackers();
     }
