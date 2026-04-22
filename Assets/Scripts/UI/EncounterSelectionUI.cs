@@ -20,7 +20,7 @@ public class EncounterSelectionUI : MonoBehaviour
         if (_panel == null) return;
 
         _panel.SetActive(true);
-        _descriptionText.text = "Choose an encounter preset, or launch the dedicated Grapple Test.";
+        _descriptionText.text = "Choose an encounter preset, or launch a dedicated mechanics test (Grapple / Feint).";
 
         if (_buttonContainer != null)
         {
@@ -36,12 +36,19 @@ public class EncounterSelectionUI : MonoBehaviour
                 onSelect?.Invoke("grapple_test");
             });
 
+            // Dedicated quick launcher for feint/sneak-attack mechanics validation.
+            CreateActionButton("🗡️ Feint & Sneak Test", new Color(0.2f, 0.24f, 0.44f, 0.98f), () =>
+            {
+                Close();
+                onSelect?.Invoke("feint_sneak_test");
+            });
+
             if (presets != null)
             {
                 foreach (var preset in presets)
                 {
-                    // Avoid duplicate button if grapple preset is also listed as a normal encounter card.
-                    if (preset != null && preset.Id == "grapple_test")
+                    // Avoid duplicate cards when test encounters are already exposed as quick-launch actions.
+                    if (preset != null && (preset.Id == "grapple_test" || preset.Id == "feint_sneak_test"))
                         continue;
 
                     CreatePresetButton(preset, onSelect);
@@ -54,7 +61,7 @@ public class EncounterSelectionUI : MonoBehaviour
                 {
                     for (int i = 0; i < presets.Count; i++)
                     {
-                        if (presets[i] != null && presets[i].Id != "grapple_test")
+                        if (presets[i] != null && presets[i].Id != "grapple_test" && presets[i].Id != "feint_sneak_test")
                         {
                             fallbackId = presets[i].Id;
                             break;

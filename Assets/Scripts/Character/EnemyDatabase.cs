@@ -20,6 +20,7 @@ public static class EnemyDatabase
         _enemies.Clear();
 
         RegisterGoblinWarchief();
+        RegisterGoblinFeintDrill();
         RegisterSkeletonArcher();
         RegisterOrcBerserker();
         RegisterOrcGrappleDrill();
@@ -51,6 +52,7 @@ public static class EnemyDatabase
         return new List<EncounterPreset>
         {
             new EncounterPreset("grapple_test", "🧪 Grapple Test Encounter", "Fighter vs orc in adjacent squares for dedicated grappling checks.", new List<string> { "orc_grapple_drill" }),
+            new EncounterPreset("feint_sneak_test", "🗡️ Feint & Sneak Attack Test", "Level 6 rogue vs one goblin tuned for Bluff feints and sneak attack validation.", new List<string> { "goblin_feint_drill" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
@@ -117,6 +119,46 @@ public static class EnemyDatabase
             PanelColor = new Color(0.4f, 0.1f, 0.1f, 0.85f), // dark red
             NameColor = new Color(1f, 0.4f, 0.4f),
             Description = "A cunning goblin leader who rallies lesser goblins. Fights with a morningstar and shield."
+        });
+    }
+
+    /// <summary>
+    /// Goblin Feint Drill (CR 1/3-ish) — stripped-down goblin target used for
+    /// Feint + Sneak Attack validation scenarios.
+    /// </summary>
+    private static void RegisterGoblinFeintDrill()
+    {
+        Register(new EnemyDefinition
+        {
+            Id = "goblin_feint_drill",
+            Name = "Goblin Warrior",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            SizeCategory = SizeCategory.Small,
+            STR = 11, DEX = 13, CON = 12, WIS = 9, INT = 10, CHA = 6,
+            BAB = 1,
+            ArmorBonus = 2,   // leather armor
+            ShieldBonus = 1,  // small wooden shield equivalent
+            DamageDice = 6,   // morningstar 1d6 (small wielder)
+            DamageCount = 1,
+            BonusDamage = 0,
+            BaseSpeed = 3,
+            AttackRange = 1,
+            BaseHitDieHP = 6,
+            CreatureTags = new List<string> { "Goblinoid" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
+                new EquipmentSlotPair("morningstar", EquipSlot.RightHand),
+                new EquipmentSlotPair("shield_light_wooden", EquipSlot.LeftHand)
+            },
+            BackpackItemIds = new List<string>(),
+            AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            SpriteColor = new Color(0.58f, 0.8f, 0.3f, 1f),
+            PanelColor = new Color(0.36f, 0.1f, 0.1f, 0.85f),
+            NameColor = new Color(1f, 0.45f, 0.45f),
+            Description = "A basic goblin melee trainee used to validate feint-driven sneak attacks."
         });
     }
 

@@ -62,8 +62,10 @@ public class GameManager : MonoBehaviour
     public bool WaitingForEncounterSelection { get; private set; }
 
     private const string GrappleTestPresetId = "grapple_test";
+    private const string FeintSneakTestPresetId = "feint_sneak_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
+    private bool _isFeintSneakTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
     // Game state
     public enum TurnPhase { PCTurn, NPCTurn, CombatOver }
@@ -1193,6 +1195,7 @@ public class GameManager : MonoBehaviour
         EncounterPreset preset = EnemyDatabase.GetEncounterPreset(presetId);
         _activeEncounterEnemyIds.Clear();
         _isGrappleTestEncounter = string.Equals(presetId, GrappleTestPresetId, StringComparison.Ordinal);
+        _isFeintSneakTestEncounter = string.Equals(presetId, FeintSneakTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.EnemyIds != null && preset.EnemyIds.Count > 0)
         {
@@ -1209,6 +1212,8 @@ public class GameManager : MonoBehaviour
 
         if (_isGrappleTestEncounter)
             ConfigureGrappleTestParty();
+        else if (_isFeintSneakTestEncounter)
+            ConfigureFeintSneakTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -1851,6 +1856,67 @@ public class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("🧪 Grapple Test: Fighter and target start adjacent. Use Special Attack -> Grapple.");
     }
 
+    private void ConfigureFeintSneakTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats rogueStats = new CharacterStats(
+            name: "Shadow",
+            level: 6,
+            characterClass: "Rogue",
+            str: 10, dex: 18, con: 14, wis: 10, intelligence: 12, cha: 14,
+            bab: 4,
+            armorBonus: 3,
+            shieldBonus: 0,
+            damageDice: 6,
+            damageCount: 1,
+            bonusDamage: 1,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 36,
+            raceName: "Human"
+        );
+
+        rogueStats.CharacterAlignment = Alignment.ChaoticNeutral;
+        rogueStats.InitFeats();
+        rogueStats.AddFeats(new List<string> { "Weapon Finesse", "Combat Expertise", "Improved Feint", "Dodge" });
+
+        rogueStats.InitializeSkills("Rogue", 6);
+        for (int i = 0; i < 9; i++) rogueStats.AddSkillRank("Bluff");
+        for (int i = 0; i < 9; i++) rogueStats.AddSkillRank("Hide");
+        for (int i = 0; i < 9; i++) rogueStats.AddSkillRank("Move Silently");
+        for (int i = 0; i < 9; i++) rogueStats.AddSkillRank("Tumble");
+        for (int i = 0; i < 2; i++) rogueStats.AddSkillRank("Sense Motive");
+
+        Vector2Int rogueStart = new Vector2Int(9, 9);
+        Sprite rogueAlive = IconLoader.GetToken("Rogue") ?? pcAliveFallback;
+        PC1.Init(rogueStats, rogueStart, rogueAlive, pcDead);
+
+        InventoryComponent rogueInventory = PC1.gameObject.GetComponent<InventoryComponent>();
+        if (rogueInventory == null)
+            rogueInventory = PC1.gameObject.AddComponent<InventoryComponent>();
+        rogueInventory.Init(rogueStats);
+
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("rapier"), EquipSlot.RightHand);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.LeftHand);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("studded_leather"), EquipSlot.Armor);
+
+        rogueInventory.CharacterInventory.RecalculateStats();
+
+        // Focus this scenario on one rogue actor.
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("🗡️ Feint Test: Shadow (Rogue 6) starts adjacent to a goblin. Use Special Attack -> Feint, then attack for sneak damage.");
+    }
+
     private void RestoreStandardPartyLayout()
     {
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2172,9 +2238,9 @@ public class GameManager : MonoBehaviour
                 CombatUI.NPCPanels[i].Panel.SetActive(true);
 
             Vector2Int pos;
-            if (_isGrappleTestEncounter && i == 0 && PC1 != null)
+            if ((_isGrappleTestEncounter || _isFeintSneakTestEncounter) && i == 0 && PC1 != null)
             {
-                // Spawn adjacent to the fighter to begin immediate grapple testing.
+                // Spawn adjacent in dedicated mechanics test encounters.
                 pos = PC1.GridPosition + Vector2Int.right;
             }
             else
