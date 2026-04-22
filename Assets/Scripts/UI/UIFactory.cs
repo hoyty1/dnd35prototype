@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
@@ -87,6 +88,76 @@ public static class UIFactory
         }
 
         return button;
+    }
+
+    public static ColorBlock GetEnhancedCombatButtonColors(Color baseColor)
+    {
+        Color brightHover = Color.Lerp(baseColor, new Color(1f, 0.92f, 0.35f, 1f), 0.8f);
+
+        ColorBlock colors = ColorBlock.defaultColorBlock;
+        colors.normalColor = baseColor;
+        colors.highlightedColor = brightHover;
+        colors.selectedColor = brightHover;
+        colors.pressedColor = Color.Lerp(brightHover, Color.black, 0.3f);
+        colors.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.65f);
+        colors.colorMultiplier = 1.55f;
+        colors.fadeDuration = 0.05f;
+        return colors;
+    }
+
+    public static void ApplyEnhancedCombatButtonStyle(Button button, Color baseColor, bool addHoverScale = true)
+    {
+        if (button == null)
+            return;
+
+        Image image = button.GetComponent<Image>();
+        if (image != null)
+        {
+            image.color = baseColor;
+            button.targetGraphic = image;
+        }
+
+        button.colors = GetEnhancedCombatButtonColors(baseColor);
+
+        if (addHoverScale)
+            EnsureHoverScaleEventTriggers(button.gameObject);
+    }
+
+    private static void EnsureHoverScaleEventTriggers(GameObject buttonObj)
+    {
+        if (buttonObj == null)
+            return;
+
+        EventTrigger trigger = buttonObj.GetComponent<EventTrigger>();
+        if (trigger == null)
+            trigger = buttonObj.AddComponent<EventTrigger>();
+
+        if (trigger.triggers == null)
+            trigger.triggers = new System.Collections.Generic.List<EventTrigger.Entry>();
+
+        AddHoverScaleEventTriggerEntry(trigger, EventTriggerType.PointerEnter, () => buttonObj.transform.localScale = new Vector3(1.08f, 1.08f, 1f));
+        AddHoverScaleEventTriggerEntry(trigger, EventTriggerType.PointerExit, () => buttonObj.transform.localScale = Vector3.one);
+        AddHoverScaleEventTriggerEntry(trigger, EventTriggerType.PointerDown, () => buttonObj.transform.localScale = new Vector3(0.97f, 0.97f, 1f));
+        AddHoverScaleEventTriggerEntry(trigger, EventTriggerType.PointerUp, () => buttonObj.transform.localScale = new Vector3(1.08f, 1.08f, 1f));
+    }
+
+    private static void AddHoverScaleEventTriggerEntry(EventTrigger trigger, EventTriggerType eventType, UnityAction action)
+    {
+        if (trigger == null || action == null)
+            return;
+
+        if (trigger.triggers != null)
+        {
+            for (int i = 0; i < trigger.triggers.Count; i++)
+            {
+                if (trigger.triggers[i] != null && trigger.triggers[i].eventID == eventType)
+                    return;
+            }
+        }
+
+        EventTrigger.Entry entry = new EventTrigger.Entry { eventID = eventType };
+        entry.callback.AddListener(_ => action());
+        trigger.triggers.Add(entry);
     }
 
     public static Button CreateSpecialButton(

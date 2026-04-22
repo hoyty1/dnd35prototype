@@ -1403,6 +1403,7 @@ public class CombatUI : MonoBehaviour
             12,
             Color.white);
 
+        UIFactory.ApplyEnhancedCombatButtonStyle(button, backgroundColor);
         button.interactable = isInteractable;
 
         LayoutElement le = button.gameObject.AddComponent<LayoutElement>();
@@ -1487,16 +1488,19 @@ public class CombatUI : MonoBehaviour
 
     private void CreateSpecialButton(string name, string label)
     {
+        Color baseColor = new Color(0.22f, 0.22f, 0.28f, 1f);
         Button button = UIFactory.CreateButton(
             _specialAttackPanel.transform,
             label,
             null,
             new Vector2(0f, 24f),
-            new Color(0.22f, 0.22f, 0.28f, 1f),
+            baseColor,
             name,
             UIFactory.GetDefaultFont(),
             12,
             Color.white);
+
+        UIFactory.ApplyEnhancedCombatButtonStyle(button, baseColor);
 
         LayoutElement le = button.gameObject.AddComponent<LayoutElement>();
         le.minHeight = 24;
@@ -1504,16 +1508,19 @@ public class CombatUI : MonoBehaviour
 
     private void CreateSpecialCancelButton()
     {
+        Color baseColor = new Color(0.35f, 0.16f, 0.16f, 1f);
         Button button = UIFactory.CreateButton(
             _specialAttackPanel.transform,
             "Cancel",
             null,
             new Vector2(0f, 24f),
-            new Color(0.35f, 0.16f, 0.16f, 1f),
+            baseColor,
             "Cancel",
             UIFactory.GetDefaultFont(),
             12,
             Color.white);
+
+        UIFactory.ApplyEnhancedCombatButtonStyle(button, baseColor);
 
         LayoutElement le = button.gameObject.AddComponent<LayoutElement>();
         le.minHeight = 24;
@@ -1772,6 +1779,8 @@ public class CombatUI : MonoBehaviour
             12,
             Color.white);
 
+        UIFactory.ApplyEnhancedCombatButtonStyle(button, bgColor);
+
         GameObject btnObj = button.gameObject;
         RectTransform btnRT = btnObj.GetComponent<RectTransform>();
         btnRT.anchorMin = anchorMin;
@@ -1964,10 +1973,7 @@ public class CombatUI : MonoBehaviour
         cancelImg.color = new Color(0.5f, 0.2f, 0.2f, 1f);
 
         Button cancelBtn = cancelObj.AddComponent<Button>();
-        var cancelColors = cancelBtn.colors;
-        cancelColors.highlightedColor = new Color(0.65f, 0.35f, 0.35f, 1f);
-        cancelColors.pressedColor = new Color(0.4f, 0.1f, 0.1f, 1f);
-        cancelBtn.colors = cancelColors;
+        UIFactory.ApplyEnhancedCombatButtonStyle(cancelBtn, cancelImg.color);
 
         GameObject cancelTxtObj = new GameObject("Text");
         cancelTxtObj.transform.SetParent(cancelObj.transform, false);
@@ -2201,10 +2207,7 @@ public class CombatUI : MonoBehaviour
         btnImg.color = btnColor;
 
         Button btn = btnObj.AddComponent<Button>();
-        var colors = btn.colors;
-        colors.highlightedColor = new Color(btnColor.r + 0.15f, btnColor.g + 0.15f, btnColor.b + 0.15f, 1f);
-        colors.pressedColor = new Color(btnColor.r - 0.1f, btnColor.g - 0.1f, btnColor.b - 0.1f, 1f);
-        btn.colors = colors;
+        UIFactory.ApplyEnhancedCombatButtonStyle(btn, btnColor);
 
         GameObject txtObj = new GameObject("Text");
         txtObj.transform.SetParent(btnObj.transform, false);
@@ -2315,10 +2318,7 @@ public class CombatUI : MonoBehaviour
         spellBtnImg.color = btnColor;
 
         Button spellBtn = spellBtnObj.AddComponent<Button>();
-        var spellColors = spellBtn.colors;
-        spellColors.highlightedColor = new Color(btnColor.r + 0.15f, btnColor.g + 0.15f, btnColor.b + 0.15f, 1f);
-        spellColors.pressedColor = new Color(btnColor.r - 0.1f, btnColor.g - 0.1f, btnColor.b - 0.1f, 1f);
-        spellBtn.colors = spellColors;
+        UIFactory.ApplyEnhancedCombatButtonStyle(spellBtn, btnColor);
 
         GameObject spellTxtObj = new GameObject("Text");
         spellTxtObj.transform.SetParent(spellBtnObj.transform, false);
@@ -2380,10 +2380,7 @@ public class CombatUI : MonoBehaviour
         convertBtnImg.color = convertColor;
 
         Button convertBtn = convertBtnObj.AddComponent<Button>();
-        var convertColors = convertBtn.colors;
-        convertColors.highlightedColor = new Color(convertColor.r + 0.15f, convertColor.g + 0.15f, convertColor.b + 0.15f, 1f);
-        convertColors.pressedColor = new Color(convertColor.r - 0.1f, convertColor.g - 0.1f, convertColor.b - 0.1f, 1f);
-        convertBtn.colors = convertColors;
+        UIFactory.ApplyEnhancedCombatButtonStyle(convertBtn, convertColor);
 
         GameObject convertTxtObj = new GameObject("Text");
         convertTxtObj.transform.SetParent(convertBtnObj.transform, false);
@@ -2692,10 +2689,7 @@ public class CombatUI : MonoBehaviour
         if (applicable)
         {
             Button btn = btnObj.AddComponent<Button>();
-            var colors = btn.colors;
-            colors.highlightedColor = new Color(btnColor.r + 0.1f, btnColor.g + 0.1f, btnColor.b + 0.15f, 1f);
-            colors.pressedColor = new Color(btnColor.r - 0.05f, btnColor.g - 0.05f, btnColor.b - 0.05f, 1f);
-            btn.colors = colors;
+            UIFactory.ApplyEnhancedCombatButtonStyle(btn, btnColor);
 
             MetamagicFeatId capturedId = mmId;
             SpellData capturedSpell = spell;
@@ -3175,6 +3169,8 @@ public class CombatUI : MonoBehaviour
             UIFactory.GetDefaultFont(),
             13,
             new Color(0.94f, 0.97f, 1f, 1f));
+
+        UIFactory.ApplyEnhancedCombatButtonStyle(btn, bgColor);
 
         LayoutElement le = btn.gameObject.AddComponent<LayoutElement>();
         le.preferredHeight = 30f;
@@ -3696,13 +3692,7 @@ public class CombatUI : MonoBehaviour
 
             Button optionBtn = btnObj.AddComponent<Button>();
             optionBtn.targetGraphic = btnImg;
-            ColorBlock colors = optionBtn.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(0.32f, 0.48f, 0.62f, 1f);
-            colors.pressedColor = new Color(0.13f, 0.24f, 0.36f, 1f);
-            colors.selectedColor = colors.highlightedColor;
-            colors.disabledColor = new Color(0.4f, 0.4f, 0.4f, 0.9f);
-            optionBtn.colors = colors;
+            UIFactory.ApplyEnhancedCombatButtonStyle(optionBtn, buttonColor);
 
             GameObject txtObj = new GameObject("Text");
             txtObj.transform.SetParent(btnObj.transform, false);
@@ -4128,13 +4118,7 @@ public class CombatUI : MonoBehaviour
         EnsureVisibleImage(btnImg, bgColor, $"PromptButton '{name}'");
 
         btn.targetGraphic = btnImg;
-        var colors = btn.colors;
-        colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(Mathf.Min(bgColor.r + 0.15f, 1f), Mathf.Min(bgColor.g + 0.15f, 1f), Mathf.Min(bgColor.b + 0.15f, 1f), 1f);
-        colors.pressedColor = new Color(Mathf.Max(bgColor.r - 0.1f, 0f), Mathf.Max(bgColor.g - 0.1f, 0f), Mathf.Max(bgColor.b - 0.1f, 0f), 1f);
-        colors.selectedColor = colors.highlightedColor;
-        colors.disabledColor = new Color(0.4f, 0.4f, 0.4f, 0.9f);
-        btn.colors = colors;
+        UIFactory.ApplyEnhancedCombatButtonStyle(btn, bgColor);
 
         Text txt = btn.transform.Find("Text")?.GetComponent<Text>();
         if (txt != null)
@@ -4169,10 +4153,7 @@ public class CombatUI : MonoBehaviour
         btnRT.offsetMin = Vector2.zero;
         btnRT.offsetMax = Vector2.zero;
 
-        var colors = btn.colors;
-        colors.highlightedColor = new Color(bgColor.r + 0.15f, bgColor.g + 0.15f, bgColor.b + 0.15f, 1f);
-        colors.pressedColor = new Color(bgColor.r - 0.1f, bgColor.g - 0.1f, bgColor.b - 0.1f, 1f);
-        btn.colors = colors;
+        UIFactory.ApplyEnhancedCombatButtonStyle(btn, bgColor);
 
         Text txt = btn.transform.Find("Text")?.GetComponent<Text>();
         if (txt != null)
