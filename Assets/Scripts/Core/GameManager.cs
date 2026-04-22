@@ -105,6 +105,7 @@ public partial class GameManager : MonoBehaviour
     [SerializeField] private MovementService _movementService;
     [SerializeField] private InputService _inputService;
     [SerializeField] private ConditionService _conditionService;
+    [SerializeField] private AIService _aiService;
 
     /// <summary>Current combatant in initiative order (PC or NPC).</summary>
     public CharacterController CurrentCharacter => _turnService != null ? _turnService.CurrentCharacter : null;
@@ -513,6 +514,9 @@ public partial class GameManager : MonoBehaviour
         _conditionService.BindTurnService(_turnService);
         _conditionService.OnConditionExpired += HandleConditionExpired;
 
+        _aiService ??= gameObject.GetComponent<AIService>() ?? gameObject.AddComponent<AIService>();
+        _aiService.Initialize(this);
+
         turnUndeadSystem ??= gameObject.GetComponent<TurnUndeadSystem>() ?? gameObject.AddComponent<TurnUndeadSystem>();
         grappleSystem ??= gameObject.GetComponent<GrappleSystem>() ?? gameObject.AddComponent<GrappleSystem>();
         overrunSystem ??= gameObject.GetComponent<OverrunSystem>() ?? gameObject.AddComponent<OverrunSystem>();
@@ -547,6 +551,8 @@ public partial class GameManager : MonoBehaviour
             _conditionService.OnConditionExpired -= HandleConditionExpired;
             _conditionService.UnbindTurnService();
         }
+
+        _aiService?.Cleanup();
 
         turnUndeadSystem?.Cleanup();
         grappleSystem?.Cleanup();
@@ -8567,6 +8573,74 @@ public partial class GameManager : MonoBehaviour
     public List<ConditionService.ActiveCondition> GetActiveConditions(CharacterController target)
         => _conditionService != null ? _conditionService.GetActiveConditions(target) : new List<ConditionService.ActiveCondition>();
 
+    // Public delegation helpers for AIService.
+    public EnemyAIBehavior GetNPCBehaviorForAI(CharacterController npc)
+    {
+        int npcIdx = NPCs.IndexOf(npc);
+        return (npcIdx >= 0 && npcIdx < _npcAIBehaviors.Count)
+            ? _npcAIBehaviors[npcIdx]
+            : EnemyAIBehavior.AggressiveMelee;
+    }
+
+    public void BeginNPCTurnForAI(CharacterController npc)
+    {
+        if (npc == null)
+            return;
+
+        _conditionService?.OnTurnStart(npc);
+        npc.StartNewTurn();
+        PruneTurnUndeadTrackers();
+        CheckTurnUndeadProximityBreakingForMover(npc);
+    }
+
+    public IEnumerator ExecuteGrappleRestrictedTurnForAI(CharacterController npc)
+        => AI_GrappleRestrictedTurn(npc);
+
+    public IEnumerator ExecuteSummonedCreatureTurnForAI(CharacterController npc)
+        => AI_SummonedCreature(npc);
+
+    public bool ShouldNPCUseChargeForAI(CharacterController npc, CharacterController target)
+        => ShouldNPCUseCharge(npc, target);
+
+    public IEnumerator NPCExecuteChargeForAI(CharacterController npc, CharacterController target)
+        => NPCExecuteCharge(npc, target);
+
+    public IEnumerator MoveCharacterAlongComputedPathForAI(CharacterController mover, Vector2Int destination, float secondsPerStep)
+        => MoveCharacterAlongComputedPath(mover, destination, secondsPerStep);
+
+    public bool TryNPCSpecialAttackIfBeneficialForAI(CharacterController npc, CharacterController target)
+        => TryNPCSpecialAttackIfBeneficial(npc, target);
+
+    public IEnumerator NPCPerformAttackForAI(CharacterController npc, CharacterController target)
+        => NPCPerformAttack(npc, target);
+
+    public List<CharacterController> GetAllCharactersForAI()
+        => GetAllCharacters();
+
+    public bool IsEnemyTeamForAI(CharacterController source, CharacterController target)
+        => IsEnemyTeam(source, target);
+
+    public bool IsUndeadCharacterForAI(CharacterController character)
+        => IsUndeadCharacter(character);
+
+    public CharacterController GetTurnUndeadTurnerForAI(CharacterController undead)
+        => GetTurnUndeadTurner(undead);
+
+    public void RegisterTurnUndeadTrackerForAI(CharacterController undead, CharacterController turner)
+        => RegisterTurnUndeadTracker(undead, turner);
+
+    public CharacterController GetClosestAliveEnemyToForAI(CharacterController source)
+        => GetClosestAliveEnemyTo(source);
+
+    public void PruneTurnUndeadTrackersForAI()
+        => PruneTurnUndeadTrackers();
+
+    public void CheckTurnUndeadProximityBreakingForMoverForAI(CharacterController mover)
+        => CheckTurnUndeadProximityBreakingForMover(mover);
+
+    public float GetPlayerMoveSecondsPerStepForAI()
+        => PlayerMoveSecondsPerStep;
+
     private void CancelMovementSelection()
     {
         CharacterController pc = ActivePC;
@@ -11338,11 +11412,9 @@ public partial class GameManager : MonoBehaviour
         }
 
         // Determine AI behavior for this NPC
-        int npcIdx = NPCs.IndexOf(npc);
-        EnemyAIBehavior behavior = (npcIdx >= 0 && npcIdx < _npcAIBehaviors.Count)
-            ? _npcAIBehaviors[npcIdx] : EnemyAIBehavior.AggressiveMelee;
-
-        yield return StartCoroutine(SingleNPCTurn(npc, behavior));
+        EnemyAIBehavior behavior = GetNPCBehaviorForAI(npc);
+        if (_aiService != null)
+            yield return StartCoroutine(_aiService.ExecuteNPCTurn(npc, behavior));
 
         // Check if all PCs are dead after NPC turn
         if (AreAllPCsDead())
@@ -11355,253 +11427,6 @@ public partial class GameManager : MonoBehaviour
 
         // Advance to next in initiative
         NextInitiativeTurn();
-    }
-
-    /// <summary>
-    /// Execute a single NPC's turn with behavior-specific AI logic.
-    /// </summary>
-    private IEnumerator SingleNPCTurn(CharacterController npc, EnemyAIBehavior behavior)
-    {
-        _conditionService?.OnTurnStart(npc);
-        npc.StartNewTurn();
-        PruneTurnUndeadTrackers();
-        CheckTurnUndeadProximityBreakingForMover(npc);
-
-        bool isSummon = IsSummonedCreature(npc);
-        string turnColor = isSummon ? "#66E8FF" : "#FF6666";
-        string turnIcon = isSummon ? "✶" : "💀";
-
-        CombatUI.SetTurnIndicator($"{GetSummonDisplayName(npc)}'s turn...");
-        CombatUI.ShowCombatLog($"<color={turnColor}>{turnIcon} {GetSummonDisplayName(npc)}'s turn begins</color>");
-        yield return new WaitForSeconds(0.6f);
-
-        CharacterController targetPC = GetClosestAlivePCTo(npc);
-        if (targetPC == null) yield break;
-
-        if (npc.HasCondition(CombatConditionType.Turned) && IsUndeadCharacter(npc))
-        {
-            yield return StartCoroutine(AI_TurnedUndead(npc));
-            yield break;
-        }
-
-        if (npc.IsGrappling())
-        {
-            yield return StartCoroutine(AI_GrappleRestrictedTurn(npc));
-            yield break;
-        }
-
-        if (isSummon)
-        {
-            yield return StartCoroutine(AI_SummonedCreature(npc));
-            yield break;
-        }
-
-        switch (behavior)
-        {
-            case EnemyAIBehavior.AggressiveMelee:
-                yield return StartCoroutine(AI_AggressiveMelee(npc, targetPC));
-                break;
-            case EnemyAIBehavior.RangedKiter:
-                yield return StartCoroutine(AI_RangedKiter(npc));
-                break;
-            case EnemyAIBehavior.DefensiveMelee:
-                yield return StartCoroutine(AI_DefensiveMelee(npc, targetPC));
-                break;
-            default:
-                yield return StartCoroutine(AI_AggressiveMelee(npc, targetPC));
-                break;
-        }
-    }
-
-    private IEnumerator AI_TurnedUndead(CharacterController npc)
-    {
-        if (npc == null || npc.Stats == null)
-            yield break;
-
-        CharacterController source = GetTurnUndeadTurner(npc);
-
-        if (source == null)
-        {
-            // Fallback for legacy turned effects created before source tracking was added.
-            List<StatusEffect> activeConditions = npc.GetActiveConditions();
-            for (int i = 0; i < activeConditions.Count; i++)
-            {
-                StatusEffect condition = activeConditions[i];
-                if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Turned)
-                    continue;
-
-                if (string.IsNullOrWhiteSpace(condition.SourceName))
-                    break;
-
-                foreach (CharacterController candidate in GetAllCharacters())
-                {
-                    if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
-                        continue;
-
-                    if (string.Equals(candidate.Stats.CharacterName, condition.SourceName, StringComparison.Ordinal))
-                    {
-                        source = candidate;
-                        RegisterTurnUndeadTracker(npc, source);
-                        break;
-                    }
-                }
-                break;
-            }
-        }
-
-        if (source == null)
-            source = GetClosestAliveEnemyTo(npc);
-
-        if (source != null && npc.Actions.HasMoveAction && !npc.Stats.MovementBlockedByCondition)
-        {
-            SquareCell retreatCell = FindBestMoveAwayFrom(npc, source.GridPosition);
-            if (retreatCell != null && retreatCell.Coords != npc.GridPosition)
-            {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, retreatCell.Coords, PlayerMoveSecondsPerStep));
-                npc.Actions.UseMoveAction();
-                CombatUI?.ShowCombatLog($"↩ {npc.Stats.CharacterName} flees from divine turning!");
-                yield return new WaitForSeconds(0.45f);
-                yield break;
-            }
-        }
-
-        CombatUI?.ShowCombatLog($"↩ {npc.Stats.CharacterName} is turned and cowers, unable to attack.");
-        yield return new WaitForSeconds(0.35f);
-    }
-
-    private IEnumerator AI_AggressiveMelee(CharacterController npc, CharacterController targetPC)
-    {
-        if (npc == null || targetPC == null || targetPC.Stats == null || targetPC.Stats.IsDead)
-            yield break;
-
-        if (ShouldNPCUseCharge(npc, targetPC))
-        {
-            yield return StartCoroutine(NPCExecuteCharge(npc, targetPC));
-            yield break;
-        }
-
-        if (!npc.IsTargetInCurrentWeaponRange(targetPC))
-        {
-            SquareCell bestCell = FindBestMoveToward(npc, targetPC);
-            if (bestCell != null)
-            {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, bestCell.Coords, PlayerMoveSecondsPerStep));
-                npc.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances toward {targetPC.Stats.CharacterName}!");
-                yield return new WaitForSeconds(0.5f);
-            }
-        }
-
-        targetPC = GetClosestAlivePCTo(npc);
-        if (targetPC == null) yield break;
-
-        if (npc.IsTargetInCurrentWeaponRange(targetPC) && !targetPC.Stats.IsDead)
-        {
-            if (!TryNPCSpecialAttackIfBeneficial(npc, targetPC))
-                yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
-            else
-                yield return new WaitForSeconds(0.8f);
-        }
-        else
-        {
-            yield return new WaitForSeconds(0.3f);
-        }
-    }
-
-    private IEnumerator AI_RangedKiter(CharacterController npc)
-    {
-        CharacterController closestPC = GetClosestAlivePCTo(npc);
-        if (closestPC == null) yield break;
-
-        int distToClosestPC = SquareGridUtils.GetDistance(npc.GridPosition, closestPC.GridPosition);
-
-        if (distToClosestPC <= 2)
-        {
-            SquareCell retreatCell = FindBestMoveAwayFrom(npc, closestPC.GridPosition);
-            if (retreatCell != null)
-            {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, retreatCell.Coords, PlayerMoveSecondsPerStep));
-                npc.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} retreats to maintain distance!");
-                yield return new WaitForSeconds(0.5f);
-            }
-        }
-
-        CharacterController rangedTarget = GetClosestAlivePCTo(npc);
-        if (rangedTarget == null) yield break;
-
-        ItemData weapon = npc.GetEquippedMainWeapon();
-        int maxRange = 1;
-        if (weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0))
-        {
-            bool isThrown = weapon.IsThrown;
-            maxRange = RangeCalculator.GetMaxRangeSquares(weapon.RangeIncrement, isThrown);
-        }
-
-        int distToRangedTarget = SquareGridUtils.GetDistance(npc.GridPosition, rangedTarget.GridPosition);
-        if (distToRangedTarget <= maxRange && !rangedTarget.Stats.IsDead)
-        {
-            if (!TryNPCSpecialAttackIfBeneficial(npc, rangedTarget))
-                yield return StartCoroutine(NPCPerformAttack(npc, rangedTarget));
-            else
-                yield return new WaitForSeconds(0.8f);
-        }
-        else if (distToRangedTarget > maxRange && npc.Actions.HasMoveAction)
-        {
-            SquareCell approachCell = FindBestMoveToward(npc, rangedTarget.GridPosition);
-            if (approachCell != null)
-            {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, approachCell.Coords, PlayerMoveSecondsPerStep));
-                npc.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} moves to get a better shot.");
-                yield return new WaitForSeconds(0.5f);
-            }
-        }
-        else
-        {
-            yield return new WaitForSeconds(0.3f);
-        }
-    }
-
-    private IEnumerator AI_DefensiveMelee(CharacterController npc, CharacterController targetPC)
-    {
-        CharacterController weakerPC = GetWeakerAlivePC(npc);
-        if (weakerPC != null) targetPC = weakerPC;
-        if (npc == null || targetPC == null || targetPC.Stats == null || targetPC.Stats.IsDead)
-            yield break;
-
-        if (ShouldNPCUseCharge(npc, targetPC))
-        {
-            yield return StartCoroutine(NPCExecuteCharge(npc, targetPC));
-            yield break;
-        }
-
-        if (!npc.IsTargetInCurrentWeaponRange(targetPC))
-        {
-            SquareCell bestCell = FindBestMoveToward(npc, targetPC);
-            if (bestCell != null)
-            {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, bestCell.Coords, PlayerMoveSecondsPerStep));
-                npc.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances methodically toward {targetPC.Stats.CharacterName}.");
-                yield return new WaitForSeconds(0.5f);
-            }
-        }
-
-        targetPC = GetClosestAlivePCTo(npc);
-        if (targetPC == null) yield break;
-
-        if (npc.IsTargetInCurrentWeaponRange(targetPC) && !targetPC.Stats.IsDead)
-        {
-            if (!TryNPCSpecialAttackIfBeneficial(npc, targetPC))
-                yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
-            else
-                yield return new WaitForSeconds(0.8f);
-        }
-        else
-        {
-            yield return new WaitForSeconds(0.3f);
-        }
     }
 
     private IEnumerator AI_SummonedCreature(CharacterController summon)
@@ -11621,9 +11446,9 @@ public partial class GameManager : MonoBehaviour
 
         bool lowHP = summon.Stats != null && summon.Stats.TotalMaxHP > 0 && summon.Stats.CurrentHP <= Mathf.CeilToInt(summon.Stats.TotalMaxHP * 0.30f);
 
-        if (lowHP)
+        if (lowHP && _aiService != null)
         {
-            SquareCell retreat = FindBestMoveAwayFrom(summon, target.GridPosition);
+            SquareCell retreat = _aiService.EvaluateMovementOptions(summon, target.GridPosition, retreat: true);
             if (retreat != null && retreat.Coords != summon.GridPosition)
             {
                 yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, retreat.Coords, PlayerMoveSecondsPerStep));
@@ -11634,9 +11459,9 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
-        if (!summon.IsTargetInCurrentWeaponRange(target) && summon.Actions.HasMoveAction)
+        if (!summon.IsTargetInCurrentWeaponRange(target) && summon.Actions.HasMoveAction && _aiService != null)
         {
-            SquareCell bestCell = FindBestMoveToward(summon, target);
+            SquareCell bestCell = _aiService.EvaluateMovementOptions(summon, target.GridPosition, retreat: false, target);
             if (bestCell != null)
             {
                 yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, bestCell.Coords, PlayerMoveSecondsPerStep));
@@ -11672,6 +11497,7 @@ public partial class GameManager : MonoBehaviour
 
         yield return StartCoroutine(NPCPerformAttack(summon, target));
     }
+
     private CharacterController SelectSummonTargetByCommand(CharacterController summon, ActiveSummonInstance summonData)
     {
         if (summon == null)
@@ -11825,6 +11651,7 @@ public partial class GameManager : MonoBehaviour
         UpdateAllStatsUI();
         return true;
     }
+
     private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
     {
         if (!npc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
@@ -11870,11 +11697,8 @@ public partial class GameManager : MonoBehaviour
         CombatUI.ShowCombatLog(_lastCombatLog);
         UpdateAllStatsUI();
 
-        // Check concentration for NPC attack damage on target (usually a PC)
         if (result.Hit && result.TotalDamage > 0)
-        {
             CheckConcentrationOnDamage(target, result.TotalDamage);
-        }
 
         if (result.TargetKilled)
         {
@@ -11894,133 +11718,6 @@ public partial class GameManager : MonoBehaviour
         }
 
         yield return new WaitForSeconds(1.0f);
-    }
-
-    /// <summary>Find closest alive enemy to a specific combatant.</summary>
-    private CharacterController GetClosestAlivePCTo(CharacterController npc)
-    {
-        return GetClosestAliveEnemyTo(npc);
-    }
-
-    /// <summary>Legacy wrapper for backward compat.</summary>
-    private CharacterController GetClosestAlivePC()
-    {
-        return (NPC != null) ? GetClosestAlivePCTo(NPC) : null;
-    }
-
-    /// <summary>Get the alive enemy with the lowest current HP (for defensive AI targeting).</summary>
-    private CharacterController GetWeakerAlivePC(CharacterController npc)
-    {
-        CharacterController weakest = null;
-        int lowestHP = int.MaxValue;
-
-        foreach (var candidate in GetAllCharacters())
-        {
-            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
-                continue;
-            if (!IsEnemyTeam(npc, candidate))
-                continue;
-
-            if (candidate.Stats.CurrentHP < lowestHP)
-            {
-                lowestHP = candidate.Stats.CurrentHP;
-                weakest = candidate;
-            }
-        }
-        return weakest;
-    }
-
-    private SquareCell FindBestMoveAwayFrom(CharacterController mover, Vector2Int threatPos)
-    {
-        List<SquareCell> moveCells = Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);
-        SquareCell bestCell = null;
-        int bestDist = 0;
-
-        foreach (var cell in moveCells)
-        {
-            if (!Grid.CanPlaceCreature(cell.Coords, mover.GetVisualSquaresOccupied(), mover)) continue;
-
-            int dist = SquareGridUtils.GetDistance(cell.Coords, threatPos);
-            if (dist > bestDist)
-            {
-                bestDist = dist;
-                bestCell = cell;
-            }
-        }
-
-        return bestCell;
-    }
-
-    private SquareCell FindBestMoveToward(CharacterController mover, CharacterController target)
-    {
-        if (target == null)
-            return null;
-
-        return FindBestMoveToward(mover, target.GridPosition, target);
-    }
-
-    private SquareCell FindBestMoveToward(CharacterController mover, Vector2Int targetPos)
-    {
-        return FindBestMoveToward(mover, targetPos, null);
-    }
-
-    private SquareCell FindBestMoveToward(CharacterController mover, Vector2Int targetPos, CharacterController targetCharacter)
-    {
-        List<SquareCell> moveCells = Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);
-        SquareCell bestCell = null;
-        int bestDist = int.MaxValue;
-        bool bestCanThreaten = false;
-        bool bestWouldFlank = false;
-
-        List<CharacterController> allCombatants = null;
-        if (targetCharacter != null)
-            allCombatants = GetAllCharacters();
-
-        foreach (var cell in moveCells)
-        {
-            if (!Grid.CanPlaceCreature(cell.Coords, mover.GetVisualSquaresOccupied(), mover)) continue;
-
-            int dist = SquareGridUtils.GetDistance(cell.Coords, targetPos);
-
-            bool canThreatenFromCell = false;
-            bool wouldFlankFromCell = false;
-
-            if (targetCharacter != null)
-            {
-                canThreatenFromCell = CombatUtils.CanThreatenTargetFromPosition(mover, cell.Coords, targetCharacter);
-                if (canThreatenFromCell)
-                {
-                    CharacterController flankPartner;
-                    wouldFlankFromCell = CombatUtils.IsAttackerFlankingFromPosition(
-                        mover,
-                        cell.Coords,
-                        targetCharacter,
-                        allCombatants,
-                        out flankPartner);
-                }
-            }
-
-            bool better = false;
-
-            // Tactical priority: prefer valid flanking setups first, then threatening squares,
-            // then shortest approach distance.
-            if (wouldFlankFromCell != bestWouldFlank)
-                better = wouldFlankFromCell;
-            else if (canThreatenFromCell != bestCanThreaten)
-                better = canThreatenFromCell;
-            else if (dist < bestDist)
-                better = true;
-
-            if (better)
-            {
-                bestDist = dist;
-                bestCell = cell;
-                bestCanThreaten = canThreatenFromCell;
-                bestWouldFlank = wouldFlankFromCell;
-            }
-        }
-
-        return bestCell;
     }
 
     // ========== DETAILED CONSOLE LOGGING ==========
