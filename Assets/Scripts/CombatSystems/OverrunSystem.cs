@@ -90,7 +90,6 @@ public partial class GameManager
             return;
 
         int movementSpeed = Mathf.Max(0, attacker.Stats.MoveRange);
-        int moverSize = attacker.GetVisualSquaresOccupied();
         List<SquareCell> candidateCells = Grid.GetCellsInRange(attacker.GridPosition, movementSpeed);
 
         for (int i = 0; i < candidateCells.Count; i++)
@@ -102,13 +101,11 @@ public partial class GameManager
             if (cell.Coords == attacker.GridPosition)
                 continue;
 
-            AoOPathResult pathResult = Grid.FindPathAoOAware(
-                attacker.GridPosition,
+            AoOPathResult pathResult = FindPath(
+                attacker,
                 cell.Coords,
-                threatenedSquares: null,
-                maxRange: movementSpeed,
-                moverSizeSquares: moverSize,
-                mover: attacker,
+                avoidThreats: false,
+                maxRangeOverride: movementSpeed,
                 allowThroughAllies: true,
                 allowThroughEnemies: true);
 
@@ -164,15 +161,12 @@ public partial class GameManager
         }
 
         int movementSpeed = Mathf.Max(0, attacker.Stats.MoveRange);
-        int moverSize = attacker.GetVisualSquaresOccupied();
 
-        AoOPathResult overrunPathResult = Grid.FindPathAoOAware(
-            attacker.GridPosition,
+        AoOPathResult overrunPathResult = FindPath(
+            attacker,
             destination,
-            threatenedSquares: null,
-            maxRange: movementSpeed,
-            moverSizeSquares: moverSize,
-            mover: attacker,
+            avoidThreats: false,
+            maxRangeOverride: movementSpeed,
             allowThroughAllies: true,
             allowThroughEnemies: true);
 
@@ -187,13 +181,11 @@ public partial class GameManager
             return;
         }
 
-        AoOPathResult normalPathResult = Grid.FindPathAoOAware(
-            attacker.GridPosition,
+        AoOPathResult normalPathResult = FindPath(
+            attacker,
             destination,
-            threatenedSquares: null,
-            maxRange: movementSpeed,
-            moverSizeSquares: moverSize,
-            mover: attacker,
+            avoidThreats: false,
+            maxRangeOverride: movementSpeed,
             allowThroughAllies: true,
             allowThroughEnemies: false);
 
@@ -275,7 +267,7 @@ public partial class GameManager
                 if (ThreatSystem.CanMakeAoO(enemy) && !enemy.Stats.IsDead)
                 {
                     CombatUI?.ShowCombatLog($"{enemy.Stats.CharacterName} gets an attack of opportunity!");
-                    CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, attacker);
+                    CombatResult aooResult = TriggerAoO(enemy, attacker);
                     if (aooResult != null)
                     {
                         CombatUI?.ShowCombatLog($"⚔ Overrun AoO: {aooResult.GetDetailedSummary()}");
@@ -598,7 +590,7 @@ public partial class GameManager
         AoOPathResult pathResult = new AoOPathResult
         {
             Path = new List<Vector2Int>(selectedPath),
-            ProvokedAoOs = ThreatSystem.AnalyzePathForAoOs(pc, selectedPath, GetAllCharacters())
+            ProvokedAoOs = CheckForAoO(pc, selectedPath)
         };
 
         if (!pathResult.ProvokesAoOs)
@@ -790,7 +782,7 @@ public partial class GameManager
         if (!attackerHasImprovedOverrun && ThreatSystem.CanMakeAoO(target) && !target.Stats.IsDead)
         {
             provokedAoO = true;
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(target, attacker);
+            CombatResult aooResult = TriggerAoO(target, attacker);
             if (aooResult != null)
             {
                 CombatUI.ShowCombatLog($"⚔ Overrun AoO: {aooResult.GetDetailedSummary()}");

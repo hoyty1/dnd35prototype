@@ -100,22 +100,28 @@ public partial class GameManager : MonoBehaviour
     public TurnPhase CurrentPhase { get; private set; }
     public PlayerSubPhase CurrentSubPhase { get; private set; }
 
-    // ========== INITIATIVE SYSTEM ==========
-    /// <summary>Sorted initiative order for all combatants.</summary>
-    private List<InitiativeSystem.InitiativeEntry> _initiativeOrder = new List<InitiativeSystem.InitiativeEntry>();
-    /// <summary>Current index in initiative order (whose turn it is).</summary>
-    private int _currentInitiativeIndex;
+    // ========== INITIATIVE / TURN SERVICE ==========
+    [SerializeField] private TurnService _turnService;
+    [SerializeField] private MovementService _movementService;
+    [SerializeField] private InputService _inputService;
+    [SerializeField] private ConditionService _conditionService;
+    [SerializeField] private AIService _aiService;
+    [SerializeField] private CombatFlowService _combatFlowService;
 
-    /// <summary>The character currently taking their turn (PC or NPC).</summary>
-    private CharacterController _activeTurnCharacter;
+    /// <summary>Current combatant in initiative order (PC or NPC).</summary>
+    public CharacterController CurrentCharacter => _turnService != null ? _turnService.CurrentCharacter : null;
+
+    /// <summary>Current combat round number (starts at 1 once combat begins).</summary>
+    public int CurrentRound => _turnService != null ? _turnService.CurrentRound : 0;
 
     /// <summary>Returns the PC whose turn it currently is (null during NPC turns).</summary>
     public CharacterController ActivePC
     {
         get
         {
-            if (CurrentPhase == TurnPhase.PCTurn && _activeTurnCharacter != null && IsPC(_activeTurnCharacter))
-                return _activeTurnCharacter;
+            CharacterController current = CurrentCharacter;
+            if (CurrentPhase == TurnPhase.PCTurn && current != null && IsPC(current))
+                return current;
             return null;
         }
     }
@@ -123,7 +129,7 @@ public partial class GameManager : MonoBehaviour
     public bool IsPlayerTurn => ActivePC != null;
 
     // Current attack mode being selected for
-    private enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell }
+    public enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell }
 
     public enum AttackType
     {
@@ -248,9 +254,6 @@ public partial class GameManager : MonoBehaviour
     // ========== HOVER MARKER ==========
     private HoverMarker _hoverMarker;
     private Vector2Int _lastHoverMarkerCoord = new Vector2Int(-999, -999);
-
-    /// <summary>Current combat round number (starts at 1).</summary>
-    private int _currentRound = 0;
 
     // ========== SUMMONING STATE ==========
     private readonly HashSet<CharacterController> _summonedAllies = new HashSet<CharacterController>();
@@ -483,6 +486,41 @@ public partial class GameManager : MonoBehaviour
         }
         Instance = this;
 
+        _turnService ??= gameObject.GetComponent<TurnService>() ?? gameObject.AddComponent<TurnService>();
+        _turnService.OnTurnStarted += OnTurnStarted;
+        _turnService.OnNewRound += OnNewRound;
+        _turnService.OnCombatEnded += OnCombatEnded;
+
+        _movementService ??= gameObject.GetComponent<MovementService>() ?? gameObject.AddComponent<MovementService>();
+        _movementService.Initialize(Grid, GetAllCharacters);
+
+        _inputService ??= gameObject.GetComponent<InputService>() ?? gameObject.AddComponent<InputService>();
+        _inputService.Initialize(
+            mainCamera: _mainCam,
+            canProcessInput: CanProcessWorldInput,
+            shouldAllowGridClickThroughUi: ShouldAllowGridClickThroughUIBlock,
+            secondaryClickHandler: HandleInputSecondaryClick,
+            cancelActionHandler: HandleInputCancelRequested);
+        _inputService.RegisterClickHandler(InputService.InputMode.Normal, HandleInputModeLeftClick);
+        _inputService.RegisterClickHandler(InputService.InputMode.SelectingTarget, HandleInputModeLeftClick);
+        _inputService.RegisterClickHandler(InputService.InputMode.SelectingMovement, HandleInputModeLeftClick);
+        _inputService.RegisterClickHandler(InputService.InputMode.SelectingArea, HandleInputModeLeftClick);
+        _inputService.RegisterClickHandler(InputService.InputMode.PlacingSummon, HandleInputModeLeftClick);
+        _inputService.OnInventoryToggleRequested += HandleInventoryInput;
+        _inputService.OnSkillsToggleRequested += HandleSkillsInput;
+        _inputService.OnCharacterSheetToggleRequested += HandleCharacterSheetInput;
+
+        _conditionService ??= gameObject.GetComponent<ConditionService>() ?? gameObject.AddComponent<ConditionService>();
+        _conditionService.Initialize(GetAllCharacters);
+        _conditionService.BindTurnService(_turnService);
+        _conditionService.OnConditionExpired += HandleConditionExpired;
+
+        _aiService ??= gameObject.GetComponent<AIService>() ?? gameObject.AddComponent<AIService>();
+        _aiService.Initialize(this);
+
+        _combatFlowService ??= gameObject.GetComponent<CombatFlowService>() ?? gameObject.AddComponent<CombatFlowService>();
+        _combatFlowService.Initialize(this);
+
         turnUndeadSystem ??= gameObject.GetComponent<TurnUndeadSystem>() ?? gameObject.AddComponent<TurnUndeadSystem>();
         grappleSystem ??= gameObject.GetComponent<GrappleSystem>() ?? gameObject.AddComponent<GrappleSystem>();
         overrunSystem ??= gameObject.GetComponent<OverrunSystem>() ?? gameObject.AddComponent<OverrunSystem>();
@@ -498,6 +536,29 @@ public partial class GameManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (_turnService != null)
+        {
+            _turnService.OnTurnStarted -= OnTurnStarted;
+            _turnService.OnNewRound -= OnNewRound;
+            _turnService.OnCombatEnded -= OnCombatEnded;
+        }
+
+        if (_inputService != null)
+        {
+            _inputService.OnInventoryToggleRequested -= HandleInventoryInput;
+            _inputService.OnSkillsToggleRequested -= HandleSkillsInput;
+            _inputService.OnCharacterSheetToggleRequested -= HandleCharacterSheetInput;
+        }
+
+        if (_conditionService != null)
+        {
+            _conditionService.OnConditionExpired -= HandleConditionExpired;
+            _conditionService.UnbindTurnService();
+        }
+
+        _aiService?.Cleanup();
+        _combatFlowService?.Cleanup();
+
         turnUndeadSystem?.Cleanup();
         grappleSystem?.Cleanup();
         overrunSystem?.Cleanup();
@@ -507,9 +568,15 @@ public partial class GameManager : MonoBehaviour
 
     private void Start()
     {
+        _movementService ??= gameObject.GetComponent<MovementService>() ?? gameObject.AddComponent<MovementService>();
+        _movementService.SetGrid(Grid);
+        _movementService.Initialize(Grid, GetAllCharacters);
+
         Grid.GenerateGrid();
         CenterCamera();
         _mainCam = Camera.main;
+        _inputService ??= gameObject.GetComponent<InputService>() ?? gameObject.AddComponent<InputService>();
+        _inputService.SetCamera(_mainCam);
 
         // Initialize path preview for movement hover
         var previewGO = new GameObject("PathPreview");
@@ -905,23 +972,19 @@ public partial class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Handle input every frame - inventory toggle and cell clicks.
+    /// Handle player and UI input every frame via InputService.
     /// </summary>
     private void Update()
     {
         // Skip all game input during character creation / encounter selection.
-        if (WaitingForCharacterCreation || WaitingForEncounterSelection) return;
+        if (WaitingForCharacterCreation || WaitingForEncounterSelection)
+            return;
 
-        HandleInventoryInput();
-        HandleSkillsInput();
-        HandleCharacterSheetInput();
+        _inputService?.SetInputMode(ResolveInputMode());
+        _inputService?.ProcessInput();
 
-        if (!IsPlayerTurn) return;
-        if (CurrentSubPhase == PlayerSubPhase.Animating) return;
-        if (_waitingForAoOConfirmation) return;
-        if (InventoryUI != null && InventoryUI.IsOpen && !InventoryUI.IsEmbedded) return;
-        if (SkillsUI != null && SkillsUI.IsOpen) return;
-        if (CharacterSheetUI != null && CharacterSheetUI.IsOpen) return;
+        if (!CanProcessWorldInput())
+            return;
 
         // Update path preview during movement phase (runs every frame, not just on click)
         UpdatePathPreview();
@@ -935,218 +998,182 @@ public partial class GameManager : MonoBehaviour
 
         if (CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
             UpdateChargeHoverPreview();
+    }
 
-        // Right-click / Escape to cancel targeting in various states
-        if (CurrentSubPhase == PlayerSubPhase.Moving
-            || CurrentSubPhase == PlayerSubPhase.TakingFiveFootStep
-            || CurrentSubPhase == PlayerSubPhase.Crawling
-            || CurrentSubPhase == PlayerSubPhase.SelectingAoETarget
-            || CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE
-            || CurrentSubPhase == PlayerSubPhase.ConfirmingTurnUndead
-            || CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget
-            || CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget
-            || CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget
-            || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
+    private InputService.InputMode ResolveInputMode()
+    {
+        if (InventoryUI != null && InventoryUI.IsOpen && !InventoryUI.IsEmbedded)
+            return InputService.InputMode.MenuOpen;
+
+        if (SkillsUI != null && SkillsUI.IsOpen)
+            return InputService.InputMode.MenuOpen;
+
+        if (CharacterSheetUI != null && CharacterSheetUI.IsOpen)
+            return InputService.InputMode.MenuOpen;
+
+        switch (CurrentSubPhase)
         {
-            bool rightClicked = false;
-#if ENABLE_LEGACY_INPUT_MANAGER
-            if (Input.GetMouseButtonDown(1))
-                rightClicked = true;
-#endif
-#if ENABLE_INPUT_SYSTEM
-            if (!rightClicked)
-            {
-                var rmouse = UnityEngine.InputSystem.Mouse.current;
-                if (rmouse != null && rmouse.rightButton.wasPressedThisFrame)
-                    rightClicked = true;
-            }
-#endif
-            // Also cancel with Escape key
-#if ENABLE_LEGACY_INPUT_MANAGER
-            if (Input.GetKeyDown(KeyCode.Escape))
-                rightClicked = true;
-#endif
-#if ENABLE_INPUT_SYSTEM
-            if (!rightClicked)
-            {
-                var kbd = UnityEngine.InputSystem.Keyboard.current;
-                if (kbd != null && kbd.escapeKey.wasPressedThisFrame)
-                    rightClicked = true;
-            }
-#endif
-            if (rightClicked)
-            {
-                if (CurrentSubPhase == PlayerSubPhase.Moving)
-                {
-                    CancelMovementSelection();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.TakingFiveFootStep)
-                {
-                    CancelFiveFootStepSelection();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.Crawling)
-                {
-                    CancelCrawlSelection();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
-                {
-                    OnSelfAoECancelled();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget && _isAoETargeting)
-                {
-                    CancelAoETargeting();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.ConfirmingTurnUndead)
-                {
-                    CancelTurnUndeadTargeting();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget)
-                {
-                    CancelSpecialAttackTargeting();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
-                {
-                    CancelChargeTargeting();
-                }
-                else if (CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget)
-                {
-                    if (_pendingAttackMode == PendingAttackMode.CastSpell)
-                        CancelSpellTargeting();
-                    else
-                        CancelPendingAttackTargeting();
-                }
-                return;
-            }
+            case PlayerSubPhase.Moving:
+            case PlayerSubPhase.TakingFiveFootStep:
+            case PlayerSubPhase.Crawling:
+                return InputService.InputMode.SelectingMovement;
+
+            case PlayerSubPhase.SelectingAttackTarget:
+            case PlayerSubPhase.SelectingSpecialTarget:
+            case PlayerSubPhase.SelectingChargeTarget:
+            case PlayerSubPhase.ConfirmingChargePath:
+            case PlayerSubPhase.ConfirmingTurnUndead:
+                return InputService.InputMode.SelectingTarget;
+
+            case PlayerSubPhase.SelectingAoETarget:
+            case PlayerSubPhase.ConfirmingSelfAoE:
+                return InputService.InputMode.SelectingArea;
+
+            case PlayerSubPhase.ChoosingAction:
+                return InputService.InputMode.Normal;
+
+            default:
+                return InputService.InputMode.Normal;
+        }
+    }
+
+    private bool CanProcessWorldInput()
+    {
+        if (!IsPlayerTurn)
+            return false;
+
+        if (CurrentSubPhase == PlayerSubPhase.Animating)
+            return false;
+
+        if (_waitingForAoOConfirmation)
+            return false;
+
+        if (InventoryUI != null && InventoryUI.IsOpen && !InventoryUI.IsEmbedded)
+            return false;
+
+        if (SkillsUI != null && SkillsUI.IsOpen)
+            return false;
+
+        if (CharacterSheetUI != null && CharacterSheetUI.IsOpen)
+            return false;
+
+        return true;
+    }
+
+    private bool HandleInputCancelRequested(InputService.InputClickContext context)
+    {
+        if (CurrentSubPhase == PlayerSubPhase.Moving)
+        {
+            CancelMovementSelection();
+            return true;
         }
 
-        // Right-click summon command menu (player-owned summons only, during player action phase).
-        if (CurrentSubPhase == PlayerSubPhase.ChoosingAction)
+        if (CurrentSubPhase == PlayerSubPhase.TakingFiveFootStep)
         {
-            if (TryHandleSummonRightClick())
-                return;
+            CancelFiveFootStepSelection();
+            return true;
         }
 
-        // Left-click to confirm self-centered AoE spell
+        if (CurrentSubPhase == PlayerSubPhase.Crawling)
+        {
+            CancelCrawlSelection();
+            return true;
+        }
+
         if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
         {
-            bool leftClicked = false;
-#if ENABLE_LEGACY_INPUT_MANAGER
-            if (Input.GetMouseButtonDown(0))
-                leftClicked = true;
-#endif
-#if ENABLE_INPUT_SYSTEM
-            if (!leftClicked)
-            {
-                var mouse = UnityEngine.InputSystem.Mouse.current;
-                if (mouse != null && mouse.leftButton.wasPressedThisFrame)
-                    leftClicked = true;
-            }
-#endif
-            if (leftClicked)
-            {
-                OnSelfAoEConfirmed();
-                return;
-            }
-            return; // Block all other input while confirming
+            OnSelfAoECancelled();
+            return true;
         }
 
-        bool clicked = false;
-        Vector3 mouseScreenPos = Vector3.zero;
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetMouseButtonDown(0))
+        if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget && _isAoETargeting)
         {
-            clicked = true;
-            mouseScreenPos = Input.mousePosition;
+            CancelAoETargeting();
+            return true;
         }
-#endif
 
-#if ENABLE_INPUT_SYSTEM
-        if (!clicked)
+        if (CurrentSubPhase == PlayerSubPhase.ConfirmingTurnUndead)
         {
-            var mouse = UnityEngine.InputSystem.Mouse.current;
-            if (mouse != null && mouse.leftButton.wasPressedThisFrame)
-            {
-                clicked = true;
-                mouseScreenPos = mouse.position.ReadValue();
-            }
+            CancelTurnUndeadTargeting();
+            return true;
         }
-#endif
 
-        if (!clicked || _mainCam == null) return;
-
-        // Check if pointer is over a UI element
-        if (UnityEngine.EventSystems.EventSystem.current != null &&
-            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        if (CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget)
         {
-            // Off-hand targeting can occasionally be blocked by hidden/stale UI raycast targets.
-            // In this very specific state we allow the click to continue to grid raycast.
-            if (!ShouldAllowGridClickThroughUIBlock())
-            {
-                Debug.Log("[Grid] Click blocked by UI element (IsPointerOverGameObject)");
-                return;
-            }
+            CancelSpecialAttackTargeting();
+            return true;
+        }
 
+        if (CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
+        {
+            CancelChargeTargeting();
+            return true;
+        }
+
+        if (CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget)
+        {
+            if (_pendingAttackMode == PendingAttackMode.CastSpell)
+                CancelSpellTargeting();
+            else
+                CancelPendingAttackTargeting();
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool HandleInputSecondaryClick(InputService.InputClickContext context)
+    {
+        if (CurrentSubPhase != PlayerSubPhase.ChoosingAction)
+            return false;
+
+        return TryHandleSummonRightClick(context.ScreenPosition);
+    }
+
+    private bool HandleInputModeLeftClick(InputService.InputClickContext context)
+    {
+        if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
+        {
+            OnSelfAoEConfirmed();
+            return true;
+        }
+
+        if (context.IsPointerOverUI && ShouldAllowGridClickThroughUIBlock())
+        {
             Debug.Log("[Grid] Pointer reports UI overlap, but allowing click-through for off-hand target selection.");
         }
 
-        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
-        RaycastHit2D hit = Physics2D.Raycast(worldPoint, Vector2.zero);
-
-        if (hit.collider != null)
+        SquareCell cell = context.GetSquareCell();
+        if (cell != null)
         {
-            SquareCell cell = hit.collider.GetComponent<SquareCell>();
-            if (cell != null)
-            {
-                Debug.Log($"[Grid] Raycast hit cell at ({cell.X}, {cell.Y}) Phase={CurrentPhase} Sub={CurrentSubPhase}");
-                OnCellClicked(cell);
-            }
+            Debug.Log($"[Grid] Raycast hit cell at ({cell.X}, {cell.Y}) Phase={CurrentPhase} Sub={CurrentSubPhase}");
+            OnCellClicked(cell);
         }
         else
         {
             Debug.Log("[Grid] Click detected but no cell hit by raycast");
         }
+
+        return true;
     }
 
     private bool ShouldAllowGridClickThroughUIBlock()
     {
+        if (CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE)
+            return true;
+
         return CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget
             && _isSelectingOffHandTarget;
     }
 
-    private bool TryHandleSummonRightClick()
+    private bool TryHandleSummonRightClick(Vector3 mouseScreenPos)
     {
-        bool rightClicked = false;
-        Vector3 mouseScreenPos = Vector3.zero;
-
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetMouseButtonDown(1))
-        {
-            rightClicked = true;
-            mouseScreenPos = Input.mousePosition;
-        }
-#endif
-
-#if ENABLE_INPUT_SYSTEM
-        if (!rightClicked)
-        {
-            var mouse = UnityEngine.InputSystem.Mouse.current;
-            if (mouse != null && mouse.rightButton.wasPressedThisFrame)
-            {
-                rightClicked = true;
-                mouseScreenPos = mouse.position.ReadValue();
-            }
-        }
-#endif
-
-        if (!rightClicked || _mainCam == null)
+        if (_mainCam == null)
             return false;
 
-        if (UnityEngine.EventSystems.EventSystem.current != null &&
-            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
-        {
+        if (_inputService != null && _inputService.IsPointerOverUI())
             return false;
-        }
 
         Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
         RaycastHit2D hit = Physics2D.Raycast(worldPoint, Vector2.zero);
@@ -1183,102 +1210,54 @@ public partial class GameManager : MonoBehaviour
 
     private void HandleInventoryInput()
     {
-        bool iPressed = false;
+        if (InventoryUI == null || InventoryUI.IsEmbedded)
+            return;
 
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetKeyDown(KeyCode.I))
-            iPressed = true;
-#endif
-
-#if ENABLE_INPUT_SYSTEM
-        if (!iPressed)
+        if (InventoryUI.IsOpen)
         {
-            var keyboard = UnityEngine.InputSystem.Keyboard.current;
-            if (keyboard != null && keyboard.iKey.wasPressedThisFrame)
-                iPressed = true;
+            InventoryUI.Close();
+            if (IsPlayerTurn && ActivePC != null && CurrentSubPhase == PlayerSubPhase.ChoosingAction)
+                ShowActionChoices();
         }
-#endif
-
-        if (iPressed && InventoryUI != null && !InventoryUI.IsEmbedded)
+        else if (IsPlayerTurn && ActivePC != null)
         {
-            if (InventoryUI.IsOpen)
-            {
-                InventoryUI.Close();
-                if (IsPlayerTurn && ActivePC != null && CurrentSubPhase == PlayerSubPhase.ChoosingAction)
-                    ShowActionChoices();
-            }
-            else if (IsPlayerTurn && ActivePC != null)
-            {
-                InventoryUI.Toggle(ActivePC);
-            }
+            InventoryUI.Toggle(ActivePC);
         }
     }
 
     private void HandleSkillsInput()
     {
-        bool kPressed = false;
+        if (SkillsUI == null)
+            return;
 
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetKeyDown(KeyCode.K))
-            kPressed = true;
-#endif
-
-#if ENABLE_INPUT_SYSTEM
-        if (!kPressed)
+        if (SkillsUI.IsOpen)
         {
-            var keyboard = UnityEngine.InputSystem.Keyboard.current;
-            if (keyboard != null && keyboard.kKey.wasPressedThisFrame)
-                kPressed = true;
+            Debug.Log("[UI] K pressed - closing Skills panel");
+            SkillsUI.Close();
         }
-#endif
-
-        if (kPressed && SkillsUI != null)
+        else if (IsPlayerTurn && ActivePC != null)
         {
-            if (SkillsUI.IsOpen)
-            {
-                Debug.Log("[UI] K pressed - closing Skills panel");
-                SkillsUI.Close();
-            }
-            else if (IsPlayerTurn && ActivePC != null)
-            {
-                Debug.Log("[UI] K pressed - opening Skills panel");
-                SkillsUI.OpenForDisplay(ActivePC.Stats);
-            }
+            Debug.Log("[UI] K pressed - opening Skills panel");
+            SkillsUI.OpenForDisplay(ActivePC.Stats);
         }
     }
 
     private void HandleCharacterSheetInput()
     {
-        bool cPressed = false;
+        if (CharacterSheetUI == null)
+            return;
 
-#if ENABLE_LEGACY_INPUT_MANAGER
-        if (Input.GetKeyDown(KeyCode.C))
-            cPressed = true;
-#endif
-
-#if ENABLE_INPUT_SYSTEM
-        if (!cPressed)
+        if (CharacterSheetUI.IsOpen)
         {
-            var keyboard = UnityEngine.InputSystem.Keyboard.current;
-            if (keyboard != null && keyboard.cKey.wasPressedThisFrame)
-                cPressed = true;
+            Debug.Log("[UI] C pressed - closing Character Sheet");
+            CharacterSheetUI.Close();
+            if (IsPlayerTurn && ActivePC != null && CurrentSubPhase == PlayerSubPhase.ChoosingAction)
+                ShowActionChoices();
         }
-#endif
-
-        if (cPressed && CharacterSheetUI != null)
+        else if (IsPlayerTurn && ActivePC != null)
         {
-            if (CharacterSheetUI.IsOpen)
-            {
-                Debug.Log("[UI] C pressed - closing Character Sheet");
-                CharacterSheetUI.Close();
-                if (IsPlayerTurn && ActivePC != null && CurrentSubPhase == PlayerSubPhase.ChoosingAction)
-                    ShowActionChoices();
-            }
-            else if (IsPlayerTurn && ActivePC != null)
-            {
-                Debug.Log("[UI] C pressed - opening Character Sheet");
-                CharacterSheetUI.Toggle(ActivePC);
-            }
+            Debug.Log("[UI] C pressed - opening Character Sheet");
+            CharacterSheetUI.Toggle(ActivePC);
         }
     }
 
@@ -2040,43 +2019,22 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private void RefreshFlankedConditions()
     {
-        var allCharacters = GetAllCharacters();
+        _conditionService?.RefreshFlankedConditions(GetAllCharacters());
+    }
 
-        foreach (var character in allCharacters)
-        {
-            if (character == null || character.Stats == null)
-                continue;
+    private void HandleConditionExpired(CharacterController character, ConditionService.ActiveCondition condition)
+    {
+        if (character == null || character.Stats == null || condition == null)
+            return;
 
-            bool hasFlanked = character.HasCondition(CombatConditionType.Flanked);
+        CombatConditionType normalizedType = ConditionRules.Normalize(condition.Type);
+        if (normalizedType == CombatConditionType.Turned)
+            _activeTurnUndeadTrackers.Remove(character);
 
-            // Dead units should not retain tactical flanking condition badges.
-            if (character.Stats.IsDead)
-            {
-                if (hasFlanked)
-                    character.RemoveCondition(CombatConditionType.Flanked);
-                continue;
-            }
-
-            bool shouldBeFlanked = false;
-            foreach (var enemy in allCharacters)
-            {
-                if (enemy == null || enemy == character || enemy.Stats == null) continue;
-                if (enemy.Stats.IsDead) continue;
-                if (enemy.IsPlayerControlled == character.IsPlayerControlled) continue;
-
-                CharacterController partner;
-                if (CombatUtils.IsAttackerFlanking(enemy, character, allCharacters, out partner))
-                {
-                    shouldBeFlanked = true;
-                    break;
-                }
-            }
-
-            if (shouldBeFlanked && !hasFlanked)
-                character.ApplyCondition(CombatConditionType.Flanked, -1, "Flanking");
-            else if (!shouldBeFlanked && hasFlanked)
-                character.RemoveCondition(CombatConditionType.Flanked);
-        }
+        string conditionLabel = condition.Type.ToString();
+        string msg = $"⏱ {character.Stats.CharacterName} is no longer {conditionLabel}.";
+        Debug.Log($"[Condition] {msg}");
+        CombatUI?.ShowCombatLog($"<color=#99CCFF>{msg}</color>");
     }
 
     private bool IsActiveCombatant(CharacterController c)
@@ -2182,71 +2140,62 @@ public partial class GameManager : MonoBehaviour
                 activeNPCs.Add(npc);
         }
 
-        _initiativeOrder = InitiativeSystem.RollInitiative(activePCs, activeNPCs);
-        _currentInitiativeIndex = 0;
+        _turnService?.StartCombat(activePCs, activeNPCs, IsPC);
 
-        // Log initiative order
-        string orderStr = InitiativeSystem.GetInitiativeOrderString(_initiativeOrder);
+        string orderStr = _turnService != null ? _turnService.GetInitiativeOrderString() : "No combatants";
         Debug.Log($"[Initiative] Combat begins! Initiative order:\n{orderStr}");
 
-        // Update initiative display in UI
         UpdateInitiativeUI();
-
-        // Start the first turn
-        AdvanceToNextTurn();
     }
 
     /// <summary>Update the initiative panel in the UI.</summary>
     private void UpdateInitiativeUI()
     {
-        if (CombatUI == null) return;
-        string display = InitiativeSystem.GetInitiativeDisplayString(_initiativeOrder, _currentInitiativeIndex);
+        if (CombatUI == null)
+            return;
+
+        string display = _turnService != null ? _turnService.GetInitiativeDisplayString() : string.Empty;
         CombatUI.UpdateInitiativeDisplay(display);
     }
 
-    /// <summary>
-    /// Advance to the next combatant in initiative order.
-    /// Skips dead characters. Wraps around to the beginning for a new round.
-    /// </summary>
-    private void AdvanceToNextTurn()
+    private void OnTurnStarted(CharacterController character)
     {
-        if (CurrentPhase == TurnPhase.CombatOver) return;
+        if (CurrentPhase == TurnPhase.CombatOver || character == null)
+            return;
 
-        // Find next alive character
-        int attempts = 0;
-        while (attempts < _initiativeOrder.Count)
-        {
-            if (_currentInitiativeIndex >= _initiativeOrder.Count)
-                _currentInitiativeIndex = 0; // New round
-
-            var entry = _initiativeOrder[_currentInitiativeIndex];
-
-            if (entry.Character != null && !entry.Character.Stats.IsDead)
-            {
-                _activeTurnCharacter = entry.Character;
-
-                if (entry.IsPC)
-                {
-                    StartPCTurn(entry.Character);
-                }
-                else
-                {
-                    StartCoroutine(SingleNPCTurnFromInitiative(entry.Character));
-                }
-                return;
-            }
-
-            // This character is dead, skip
-            _currentInitiativeIndex++;
-            attempts++;
-        }
-
-        // All characters are dead somehow
-        CurrentPhase = TurnPhase.CombatOver;
-        CombatUI.SetTurnIndicator("Combat has ended.");
-        CombatUI.SetActionButtonsVisible(false);
+        if (IsPC(character))
+            StartPCTurn(character);
+        else
+            StartCoroutine(SingleNPCTurnFromInitiative(character));
     }
 
+    private void OnNewRound(int round)
+    {
+        Debug.Log($"[GameManager] ═══ ROUND {round} BEGINS ═══");
+        CombatUI.AddTurnSeparator(round);
+        ResetQuickenedSpellTrackingForAllCharacters();
+        ResetAttackDamageModesForAllCharacters();
+
+        // Tick all spell + condition effect durations at the start of each new round.
+        TickAllSpellDurations();
+        _conditionService?.OnRoundEnd();
+
+        // Tick summon durations (Summon Monster: 1 round/level)
+        TickSummonDurations();
+
+        // Keep Turn Undead tracker table aligned with condition expiration.
+        PruneTurnUndeadTrackers();
+        LogOngoingTurnUndeadStatusAtRoundStart();
+    }
+
+    private void OnCombatEnded()
+    {
+        CurrentPhase = TurnPhase.CombatOver;
+        _conditionService?.CleanupOnCombatEnd(GetAllCharacters());
+        CombatUI.SetTurnIndicator("Combat has ended.");
+        CombatUI.SetActionButtonsVisible(false);
+        UpdateInitiativeUI();
+    }
 
     private void ProcessEndOfTurnHPState(CharacterController character)
     {
@@ -2256,7 +2205,10 @@ public partial class GameManager : MonoBehaviour
         character.ProcessEndOfTurnHPState();
 
         if (character.CurrentHPState == HPState.Dead)
+        {
+            _conditionService?.CleanupOnDeath(character);
             HandleSummonDeathCleanup(character);
+        }
 
         UpdateAllStatsUI();
     }
@@ -2268,14 +2220,16 @@ public partial class GameManager : MonoBehaviour
     /// <summary>Move to the next initiative slot and start that turn.</summary>
     private void NextInitiativeTurn()
     {
-        _activeTurnCharacter?.ProcessPinnedDurationAtTurnEnd();
-        ProcessEndOfTurnHPState(_activeTurnCharacter);
+        CharacterController endingCharacter = CurrentCharacter;
+        endingCharacter?.ProcessPinnedDurationAtTurnEnd();
+        _conditionService?.OnTurnEnd(endingCharacter);
+        ProcessEndOfTurnHPState(endingCharacter);
 
-        _currentInitiativeIndex++;
-        UpdateInitiativeUI();
         // Threat map may have changed (NPC moved, character died, etc.)
         InvalidatePreviewThreats();
-        AdvanceToNextTurn();
+
+        _turnService?.EndTurn();
+        UpdateInitiativeUI();
     }
 
     // ========== TURN MANAGEMENT WITH ACTION ECONOMY ==========
@@ -2287,28 +2241,8 @@ public partial class GameManager : MonoBehaviour
     {
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
+        _conditionService?.OnTurnStart(pc);
         CloseInventoryIfOpen();
-
-        // ===== NEW ROUND DETECTION =====
-        // A new round begins when PC1's turn starts (turn order: PC1 → PC2 → NPC → repeat)
-        if (pc == PC1)
-        {
-            _currentRound++;
-            Debug.Log($"[GameManager] ═══ ROUND {_currentRound} BEGINS ═══");
-            CombatUI.AddTurnSeparator(_currentRound);
-            ResetQuickenedSpellTrackingForAllCharacters();
-            ResetAttackDamageModesForAllCharacters();
-
-            // Tick all spell effect durations at the start of each new round
-            TickAllSpellDurations();
-
-            // Tick summon durations (Summon Monster: 1 round/level)
-            TickSummonDurations();
-
-            // Keep Turn Undead tracker table aligned with condition expiration.
-            PruneTurnUndeadTrackers();
-            LogOngoingTurnUndeadStatusAtRoundStart();
-        }
 
         // Tick Aid Another expiry counters before actions; this keeps bonuses available for one full beneficiary turn.
         ExpireAidBonusesAtTurnStart(pc);
@@ -2383,7 +2317,6 @@ public partial class GameManager : MonoBehaviour
         _loggedHeldChargeNoActionsReminder = false;
 
         CurrentPhase = TurnPhase.PCTurn;
-        _activeTurnCharacter = pc;
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
 
         int pcIdx = GetPCIndex(pc);
@@ -2400,10 +2333,10 @@ public partial class GameManager : MonoBehaviour
     public void StartPlayerTurn()
     {
         // Start combat from beginning if no initiative order
-        if (_initiativeOrder.Count == 0)
+        if (_turnService == null || !_turnService.HasInitiativeEntries())
             StartCombat();
         else
-            AdvanceToNextTurn();
+            _turnService.StartTurnAtCurrentIndex();
     }
 
     private void LogMenuFlow(string marker, CharacterController actor = null, string details = null)
@@ -2597,7 +2530,7 @@ public partial class GameManager : MonoBehaviour
 
     private bool IsCombatEncounterRunning()
     {
-        return _initiativeOrder != null && _initiativeOrder.Count > 0 && CurrentPhase != TurnPhase.CombatOver;
+        return _turnService != null && _turnService.HasInitiativeEntries() && CurrentPhase != TurnPhase.CombatOver;
     }
 
     /// <summary>
@@ -3912,32 +3845,13 @@ public partial class GameManager : MonoBehaviour
 
     public string GetFiveFootStepDisabledReason(CharacterController character)
     {
-        if (character == null || character.Stats == null)
-            return "No active character";
+        if (_movementService != null && _movementService.CanTake5FootStep(character, out string reason))
+            return string.Empty;
 
-        if (character.HasMovedThisTurn)
-            return "Already moved this turn";
+        if (_movementService != null)
+            return reason;
 
-        if (character.HasTakenFiveFootStep)
-            return "Already used 5-foot step this turn";
-
-        if (character.HasCondition(CombatConditionType.Prone))
-            return "Cannot 5-foot step while prone";
-
-        if (character.HasCondition(CombatConditionType.Pinned))
-            return "Cannot 5-foot step while pinned";
-
-        if (character.HasCondition(CombatConditionType.Grappled))
-            return "Cannot 5-foot step while grappled";
-
-        // Must have at least one legal adjacent destination.
-        foreach (var neighbor in SquareGridUtils.GetNeighbors(character.GridPosition))
-        {
-            if (IsValidFiveFootStepDestination(character, neighbor))
-                return string.Empty;
-        }
-
-        return "No valid adjacent square";
+        return "Movement service unavailable";
     }
 
     public void OnFiveFootStepButtonPressed()
@@ -3984,20 +3898,10 @@ public partial class GameManager : MonoBehaviour
 
     private bool IsValidFiveFootStepDestination(CharacterController pc, Vector2Int destination)
     {
-        if (!SquareGridUtils.IsAdjacent(pc.GridPosition, destination))
-            return false;
+        if (_movementService != null)
+            return _movementService.CanTake5FootStep(pc, destination);
 
-        SquareCell cell = Grid.GetCell(destination);
-        if (cell == null)
-            return false;
-
-        if (!Grid.CanPlaceCreature(destination, pc.GetVisualSquaresOccupied(), pc))
-            return false;
-
-        if (IsDifficultTerrain(destination))
-            return false;
-
-        return true;
+        return false;
     }
 
     private void HandleFiveFootStepClick(CharacterController pc, SquareCell cell)
@@ -4040,7 +3944,11 @@ public partial class GameManager : MonoBehaviour
         Vector2Int oldPos = pc.GridPosition;
 
         // 5-foot step does NOT consume move/standard/full-round actions and does NOT provoke AoO.
-        if (!pc.FiveFootStep(destination))
+        bool fiveFootStepSucceeded = _movementService != null
+            ? _movementService.Execute5FootStep(pc, destination)
+            : pc.FiveFootStep(destination);
+
+        if (!fiveFootStepSucceeded)
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} failed to take a 5-foot step.");
             return false;
@@ -4269,7 +4177,9 @@ public partial class GameManager : MonoBehaviour
                 if (pc.Stats.IsDead) break;
                 if (enemy == null || enemy.Stats == null || enemy.Stats.IsDead) continue;
 
-                CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, pc);
+                CombatResult aooResult = _movementService != null
+                    ? _movementService.TriggerAoO(enemy, pc)
+                    : ThreatSystem.ExecuteAoO(enemy, pc);
                 if (aooResult != null)
                 {
                     CombatUI?.ShowCombatLog($"⚔ AoO (standing up): {aooResult.GetDetailedSummary()}");
@@ -4329,21 +4239,15 @@ public partial class GameManager : MonoBehaviour
 
     private bool IsValidCrawlDestination(CharacterController pc, Vector2Int destination)
     {
-        if (pc == null) return false;
-        if (!SquareGridUtils.IsAdjacent(pc.GridPosition, destination))
+        if (pc == null)
             return false;
 
-        SquareCell cell = Grid.GetCell(destination);
-        if (cell == null)
+        if (_movementService == null)
             return false;
 
-        if (!Grid.CanPlaceCreature(destination, pc.GetVisualSquaresOccupied(), pc))
-            return false;
-
-        if (IsDifficultTerrain(destination))
-            return false;
-
-        return true;
+        // Crawl is an adjacent 5-ft movement while prone; destination occupancy/terrain constraints mirror step movement,
+        // but crawl itself has separate condition rules validated by GetCrawlDisabledReason.
+        return _movementService.IsValidAdjacentStepDestination(pc, destination, disallowDifficultTerrain: true);
     }
 
     private void HandleCrawlClick(CharacterController pc, SquareCell cell)
@@ -4376,7 +4280,9 @@ public partial class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.Animating;
 
         var crawlPath = new List<Vector2Int> { destination.Coords };
-        var provokedAoOs = ThreatSystem.AnalyzePathForAoOs(pc, crawlPath, GetAllCharacters());
+        var provokedAoOs = _movementService != null
+            ? _movementService.CheckForAoO(pc, crawlPath)
+            : ThreatSystem.AnalyzePathForAoOs(pc, crawlPath, GetAllCharacters());
 
         if (provokedAoOs.Count > 0)
         {
@@ -4388,7 +4294,9 @@ public partial class GameManager : MonoBehaviour
                 CharacterController threatener = aooInfo.Threatener;
                 if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead) continue;
 
-                CombatResult aooResult = ThreatSystem.ExecuteAoO(threatener, pc);
+                CombatResult aooResult = _movementService != null
+                    ? _movementService.TriggerAoO(threatener, pc)
+                    : ThreatSystem.ExecuteAoO(threatener, pc);
                 if (aooResult != null)
                 {
                     CombatUI?.ShowCombatLog($"⚔ AoO (crawling): {aooResult.GetDetailedSummary()}");
@@ -4412,7 +4320,12 @@ public partial class GameManager : MonoBehaviour
 
         Vector2Int oldPos = pc.GridPosition;
         ConsumeMoveAction(pc);
-        yield return StartCoroutine(pc.MoveAlongPath(new List<Vector2Int> { destination.Coords }, PlayerMoveSecondsPerStep, markAsMoved: true));
+
+        List<Vector2Int> crawlMovePath = new List<Vector2Int> { destination.Coords };
+        if (_movementService != null)
+            yield return StartCoroutine(_movementService.ExecuteMovement(pc, crawlMovePath, PlayerMoveSecondsPerStep, markAsMoved: true));
+        else
+            yield return StartCoroutine(pc.MoveAlongPath(crawlMovePath, PlayerMoveSecondsPerStep, markAsMoved: true));
 
         RefreshFlankedConditions();
         UpdateAllStatsUI();
@@ -5799,7 +5712,18 @@ public partial class GameManager : MonoBehaviour
         EndAttackSequence();
         EndThrownAttackSequence();
         ResetOffHandTurnState();
-        EndActivePCTurn();
+        EndCurrentTurn();
+    }
+
+    public void EndCurrentTurn()
+    {
+        if (CurrentPhase == TurnPhase.CombatOver)
+            return;
+
+        if (IsPlayerTurn)
+            EndActivePCTurn();
+        else
+            NextInitiativeTurn();
     }
 
     public void OnPowerAttackSliderChanged(float value)
@@ -6314,54 +6238,11 @@ public partial class GameManager : MonoBehaviour
 
     private void InsertIntoInitiative(CharacterController combatant, CharacterController summoner)
     {
-        if (combatant == null || combatant.Stats == null) return;
+        if (combatant == null || combatant.Stats == null)
+            return;
 
         bool isPCTeam = IsPC(combatant);
-        var entry = new InitiativeSystem.InitiativeEntry(combatant, isPCTeam);
-
-        int insertIdx = -1;
-        if (summoner != null)
-        {
-            int summonerIdx = _initiativeOrder.FindIndex(e => e.Character == summoner);
-            if (summonerIdx >= 0)
-            {
-                entry.Roll = _initiativeOrder[summonerIdx].Roll;
-                entry.Modifier = _initiativeOrder[summonerIdx].Modifier;
-                entry.Total = _initiativeOrder[summonerIdx].Total;
-
-                insertIdx = summonerIdx + 1;
-                while (insertIdx < _initiativeOrder.Count)
-                {
-                    var e = _initiativeOrder[insertIdx];
-                    if (e.Total != entry.Total || e.Character == summoner)
-                        break;
-
-                    if (!IsSummonedCreature(e.Character))
-                        break;
-
-                    insertIdx++;
-                }
-            }
-        }
-
-        if (insertIdx < 0)
-        {
-            insertIdx = 0;
-            while (insertIdx < _initiativeOrder.Count)
-            {
-                var cur = _initiativeOrder[insertIdx];
-                if (entry.Total > cur.Total) break;
-                if (entry.Total == cur.Total && entry.Modifier > cur.Modifier) break;
-                insertIdx++;
-            }
-        }
-
-        _initiativeOrder.Insert(insertIdx, entry);
-
-        if (insertIdx <= _currentInitiativeIndex)
-            _currentInitiativeIndex++;
-
-        Debug.Log($"[Initiative] Added {combatant.Stats.CharacterName} to initiative at position {insertIdx + 1}: {entry.Total}");
+        _turnService?.AddToInitiative(combatant, isPCTeam, summoner);
         UpdateInitiativeUI();
     }
 
@@ -6465,18 +6346,7 @@ public partial class GameManager : MonoBehaviour
         _summonedAllies.Remove(cc);
         _summonedEnemies.Remove(cc);
 
-        int initIdx = _initiativeOrder.FindIndex(e => e.Character == cc);
-        if (initIdx >= 0)
-        {
-            _initiativeOrder.RemoveAt(initIdx);
-            if (initIdx < _currentInitiativeIndex)
-                _currentInitiativeIndex = Mathf.Max(0, _currentInitiativeIndex - 1);
-            else if (_currentInitiativeIndex >= _initiativeOrder.Count)
-                _currentInitiativeIndex = 0;
-        }
-
-        if (cc == _activeTurnCharacter)
-            _activeTurnCharacter = null;
+        _turnService?.RemoveFromInitiative(cc);
 
         string despawnMessage;
         if (reason == "duration expired")
@@ -7390,17 +7260,13 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private Vector2 GetMouseWorldPosition()
     {
-        Vector3 mouseScreenPos = Vector3.zero;
-#if ENABLE_LEGACY_INPUT_MANAGER
-        mouseScreenPos = Input.mousePosition;
-#endif
-#if ENABLE_INPUT_SYSTEM
-        var mouse = UnityEngine.InputSystem.Mouse.current;
-        if (mouse != null)
-            mouseScreenPos = (Vector3)(Vector2)mouse.position.ReadValue();
-#endif
-        if (_mainCam == null) return Vector2.zero;
-        return _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        if (_inputService != null)
+            return _inputService.GetMouseWorldPosition();
+
+        if (_mainCam == null)
+            return Vector2.zero;
+
+        return _mainCam.ScreenToWorldPoint(Input.mousePosition);
     }
 
     /// <summary>
@@ -8161,7 +8027,7 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private void TickAllSpellDurations()
     {
-        Debug.Log($"[SpellDuration] Ticking spell durations for round {_currentRound}...");
+        Debug.Log($"[SpellDuration] Ticking spell durations for round {CurrentRound}...");
 
         // Tick active, living PCs
         foreach (var pc in PCs)
@@ -8208,18 +8074,6 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
-        var expiredConditions = character.TickConditions();
-        foreach (var cond in expiredConditions)
-        {
-            CombatConditionType normalizedType = cond != null ? ConditionRules.Normalize(cond.Type) : CombatConditionType.None;
-            if (normalizedType == CombatConditionType.Turned)
-                _activeTurnUndeadTrackers.Remove(character);
-
-            string conditionLabel = cond != null ? cond.Type.ToString() : "a condition";
-            string msg = $"⏱ {character.Stats.CharacterName} is no longer {conditionLabel}.";
-            Debug.Log($"[Condition] {msg}");
-            CombatUI?.ShowCombatLog($"<color=#99CCFF>{msg}</color>");
-        }
     }
 
 
@@ -8660,15 +8514,18 @@ public partial class GameManager : MonoBehaviour
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
 
-        int sizeSquares = pc.GetVisualSquaresOccupied();
-        List<SquareCell> moveCells = Grid.GetCellsInRange(pc.GridPosition, pc.Stats.MoveRange);
-        foreach (var cell in moveCells)
+        if (_movementService == null || pc == null)
+            return;
+
+        List<SquareCell> moveCells = _movementService.CalculateMovementRange(pc);
+        for (int i = 0; i < moveCells.Count; i++)
         {
-            if (Grid.CanPlaceCreature(cell.Coords, sizeSquares, pc))
-            {
-                cell.SetHighlight(HighlightType.Move);
-                _highlightedCells.Add(cell);
-            }
+            SquareCell cell = moveCells[i];
+            if (cell == null)
+                continue;
+
+            cell.SetHighlight(HighlightType.Move);
+            _highlightedCells.Add(cell);
         }
 
         HighlightCharacterFootprint(pc, HighlightType.Selected);
@@ -8677,13 +8534,117 @@ public partial class GameManager : MonoBehaviour
 
     private List<Vector2Int> GetAdjacentSquares(Vector2Int origin)
     {
+        if (_movementService != null)
+            return _movementService.GetAdjacentSquares(origin);
+
         Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(origin);
-        var adjacent = new List<Vector2Int>(neighbors.Length);
-        for (int i = 0; i < neighbors.Length; i++)
-            adjacent.Add(neighbors[i]);
-        return adjacent;
+        return new List<Vector2Int>(neighbors);
     }
 
+    // Public delegation helpers for movement-aware systems.
+    public bool ValidateGridPosition(Vector2Int position) => _movementService != null && _movementService.ValidateGridPosition(position);
+    public bool IsSquareOccupied(Vector2Int position, CharacterController ignore = null) => _movementService != null && _movementService.IsSquareOccupied(position, ignore);
+    public CharacterController GetCharacterAtPosition(Vector2Int position, CharacterController ignore = null) => _movementService != null ? _movementService.GetCharacterAtPosition(position, ignore) : null;
+    public bool IsPositionBlocked(Vector2Int position, int moverSizeSquares = 1, CharacterController mover = null) => _movementService == null || _movementService.IsPositionBlocked(position, moverSizeSquares, mover);
+    public int CalculateDistance(Vector2Int from, Vector2Int to, bool chebyshev = false) => _movementService != null ? _movementService.CalculateDistance(from, to, chebyshev) : (chebyshev ? SquareGridUtils.GetChebyshevDistance(from, to) : SquareGridUtils.GetDistance(from, to));
+    public List<Vector2Int> GetSquaresInRange(Vector2Int origin, int range, bool includeOrigin = false) => _movementService != null ? _movementService.GetSquaresInRange(origin, range, includeOrigin) : new List<Vector2Int>();
+    public int GetMovementCost(Vector2Int start, List<Vector2Int> path) => _movementService != null ? _movementService.GetMovementCost(start, path) : SquareGridUtils.CalculatePathCost(start, path ?? new List<Vector2Int>());
+    public AoOPathResult FindPath(CharacterController mover, Vector2Int destination, bool avoidThreats = true, int? maxRangeOverride = null, bool allowThroughAllies = true, bool allowThroughEnemies = false)
+        => _movementService != null
+            ? _movementService.FindPath(mover, destination, avoidThreats, maxRangeOverride, allowThroughAllies, allowThroughEnemies)
+            : new AoOPathResult();
+    public AoOPathResult FindPath(CharacterController mover, Vector2Int destination, HashSet<Vector2Int> threatenedSquares, int maxRangeOverride, bool allowThroughAllies = true, bool allowThroughEnemies = false)
+        => _movementService != null
+            ? _movementService.FindPath(mover, destination, threatenedSquares, maxRangeOverride, allowThroughAllies, allowThroughEnemies)
+            : new AoOPathResult();
+    public List<AoOThreatInfo> CheckForAoO(CharacterController mover, List<Vector2Int> path)
+        => _movementService != null ? _movementService.CheckForAoO(mover, path) : new List<AoOThreatInfo>();
+    public CombatResult TriggerAoO(CharacterController threatener, CharacterController target)
+        => _movementService != null ? _movementService.TriggerAoO(threatener, target) : ThreatSystem.ExecuteAoO(threatener, target);
+    public bool CanTake5FootStep(CharacterController character, Vector2Int destination)
+        => _movementService != null && _movementService.CanTake5FootStep(character, destination);
+
+    // Public delegation helpers for condition-aware systems.
+    public void ApplyCondition(CharacterController target, CombatConditionType type, int rounds, CharacterController source = null, object data = null, bool expiresAtEndOfTurn = false, bool expiresAtStartOfTurn = false)
+        => _conditionService?.ApplyCondition(target, type, rounds, source, data, expiresAtEndOfTurn, expiresAtStartOfTurn);
+    public bool RemoveCondition(CharacterController target, CombatConditionType type)
+        => _conditionService != null && _conditionService.RemoveCondition(target, type);
+    public int RemoveAllConditions(CharacterController target)
+        => _conditionService != null ? _conditionService.RemoveAllConditions(target) : 0;
+    public bool HasCondition(CharacterController target, CombatConditionType type)
+        => _conditionService != null && _conditionService.HasCondition(target, type);
+    public int GetConditionDuration(CharacterController target, CombatConditionType type)
+        => _conditionService != null ? _conditionService.GetConditionDuration(target, type) : 0;
+    public List<ConditionService.ActiveCondition> GetActiveConditions(CharacterController target)
+        => _conditionService != null ? _conditionService.GetActiveConditions(target) : new List<ConditionService.ActiveCondition>();
+
+    // Public delegation helpers for AIService.
+    public EnemyAIBehavior GetNPCBehaviorForAI(CharacterController npc)
+    {
+        int npcIdx = NPCs.IndexOf(npc);
+        return (npcIdx >= 0 && npcIdx < _npcAIBehaviors.Count)
+            ? _npcAIBehaviors[npcIdx]
+            : EnemyAIBehavior.AggressiveMelee;
+    }
+
+    public void BeginNPCTurnForAI(CharacterController npc)
+    {
+        if (npc == null)
+            return;
+
+        _conditionService?.OnTurnStart(npc);
+        npc.StartNewTurn();
+        PruneTurnUndeadTrackers();
+        CheckTurnUndeadProximityBreakingForMover(npc);
+    }
+
+    public IEnumerator ExecuteGrappleRestrictedTurnForAI(CharacterController npc)
+        => AI_GrappleRestrictedTurn(npc);
+
+    public IEnumerator ExecuteSummonedCreatureTurnForAI(CharacterController npc)
+        => AI_SummonedCreature(npc);
+
+    public bool ShouldNPCUseChargeForAI(CharacterController npc, CharacterController target)
+        => ShouldNPCUseCharge(npc, target);
+
+    public IEnumerator NPCExecuteChargeForAI(CharacterController npc, CharacterController target)
+        => NPCExecuteCharge(npc, target);
+
+    public IEnumerator MoveCharacterAlongComputedPathForAI(CharacterController mover, Vector2Int destination, float secondsPerStep)
+        => MoveCharacterAlongComputedPath(mover, destination, secondsPerStep);
+
+    public bool TryNPCSpecialAttackIfBeneficialForAI(CharacterController npc, CharacterController target)
+        => TryNPCSpecialAttackIfBeneficial(npc, target);
+
+    public IEnumerator NPCPerformAttackForAI(CharacterController npc, CharacterController target)
+        => NPCPerformAttack(npc, target);
+
+    public List<CharacterController> GetAllCharactersForAI()
+        => GetAllCharacters();
+
+    public bool IsEnemyTeamForAI(CharacterController source, CharacterController target)
+        => IsEnemyTeam(source, target);
+
+    public bool IsUndeadCharacterForAI(CharacterController character)
+        => IsUndeadCharacter(character);
+
+    public CharacterController GetTurnUndeadTurnerForAI(CharacterController undead)
+        => GetTurnUndeadTurner(undead);
+
+    public void RegisterTurnUndeadTrackerForAI(CharacterController undead, CharacterController turner)
+        => RegisterTurnUndeadTracker(undead, turner);
+
+    public CharacterController GetClosestAliveEnemyToForAI(CharacterController source)
+        => GetClosestAliveEnemyTo(source);
+
+    public void PruneTurnUndeadTrackersForAI()
+        => PruneTurnUndeadTrackers();
+
+    public void CheckTurnUndeadProximityBreakingForMoverForAI(CharacterController mover)
+        => CheckTurnUndeadProximityBreakingForMover(mover);
+
+    public float GetPlayerMoveSecondsPerStepForAI()
+        => PlayerMoveSecondsPerStep;
 
     private void CancelMovementSelection()
     {
@@ -8813,26 +8774,16 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        // Get mouse position in world space
-        Vector3 mouseScreenPos = Vector3.zero;
-#if ENABLE_LEGACY_INPUT_MANAGER
-        mouseScreenPos = Input.mousePosition;
-#endif
-#if ENABLE_INPUT_SYSTEM
-        var mouseDev = UnityEngine.InputSystem.Mouse.current;
-        if (mouseDev != null)
-            mouseScreenPos = mouseDev.position.ReadValue();
-#endif
-
         // Don't show preview if pointer is over UI
-        if (UnityEngine.EventSystems.EventSystem.current != null &&
-            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        if (_inputService != null && _inputService.IsPointerOverUI())
         {
             if (_pathPreview.IsVisible) _pathPreview.HidePath();
             return;
         }
 
-        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        Vector2 worldPoint = _inputService != null
+            ? _inputService.GetMouseWorldPosition()
+            : (Vector2)_mainCam.ScreenToWorldPoint(Input.mousePosition);
         Vector2Int gridCoord = SquareGridUtils.WorldToGrid(worldPoint);
 
         // Skip recalculation if hovering over the same cell
@@ -8928,20 +8879,8 @@ public partial class GameManager : MonoBehaviour
 
         if (_mainCam == null) return;
 
-        // Get mouse position in world space
-        Vector3 mouseScreenPos = Vector3.zero;
-#if ENABLE_LEGACY_INPUT_MANAGER
-        mouseScreenPos = Input.mousePosition;
-#endif
-#if ENABLE_INPUT_SYSTEM
-        var mouseDev = UnityEngine.InputSystem.Mouse.current;
-        if (mouseDev != null)
-            mouseScreenPos = mouseDev.position.ReadValue();
-#endif
-
         // Hide if pointer is over UI
-        if (UnityEngine.EventSystems.EventSystem.current != null &&
-            UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+        if (_inputService != null && _inputService.IsPointerOverUI())
         {
             if (_hoverMarker.IsVisible)
             {
@@ -8951,7 +8890,9 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        Vector2 worldPoint = _mainCam.ScreenToWorldPoint(mouseScreenPos);
+        Vector2 worldPoint = _inputService != null
+            ? _inputService.GetMouseWorldPosition()
+            : (Vector2)_mainCam.ScreenToWorldPoint(Input.mousePosition);
         Vector2Int gridCoord = SquareGridUtils.WorldToGrid(worldPoint);
 
         // Skip if same cell as last frame
@@ -9623,8 +9564,9 @@ public partial class GameManager : MonoBehaviour
         if (!_highlightedCells.Contains(cell) || !Grid.CanPlaceCreature(cell.Coords, pc.GetVisualSquaresOccupied(), pc))
             return;
 
-        var allCharacters = GetAllCharacters();
-        var pathResult = Grid.FindSafePath(pc.GridPosition, cell.Coords, pc, allCharacters);
+        var pathResult = _movementService != null
+            ? _movementService.FindPath(pc, cell.Coords, avoidThreats: true)
+            : Grid.FindSafePath(pc.GridPosition, cell.Coords, pc, GetAllCharacters());
 
         if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
         {
@@ -9684,7 +9626,9 @@ public partial class GameManager : MonoBehaviour
             var threatener = aooInfo.Threatener;
             if (threatener.Stats.IsDead) continue;
 
-            CombatResult aooResult = ThreatSystem.ExecuteAoO(threatener, pc);
+            CombatResult aooResult = _movementService != null
+                ? _movementService.TriggerAoO(threatener, pc)
+                : ThreatSystem.ExecuteAoO(threatener, pc);
             if (aooResult != null)
             {
                 string aooLog = $"⚔ AoO: {aooResult.GetDetailedSummary()}";
@@ -9751,7 +9695,10 @@ public partial class GameManager : MonoBehaviour
             pc.Actions.ConvertStandardToMove();
         }
 
-        yield return StartCoroutine(pc.MoveAlongPath(path, PlayerMoveSecondsPerStep, markAsMoved: true));
+        if (_movementService != null)
+            yield return StartCoroutine(_movementService.ExecuteMovement(pc, path, PlayerMoveSecondsPerStep, markAsMoved: true));
+        else
+            yield return StartCoroutine(pc.MoveAlongPath(path, PlayerMoveSecondsPerStep, markAsMoved: true));
         CheckTurnUndeadProximityBreakingForMover(pc);
         PruneTurnUndeadTrackers();
         UpdateAllStatsUI();
@@ -9771,12 +9718,18 @@ public partial class GameManager : MonoBehaviour
             yield break;
 
         int maxRange = Mathf.Max(1, mover.Stats.MoveRange);
-        AoOPathResult pathResult = Grid.FindPathAoOAware(mover.GridPosition, destination, null, maxRange, mover.GetVisualSquaresOccupied(), mover);
+        AoOPathResult pathResult = _movementService != null
+            ? _movementService.FindPath(mover, destination, avoidThreats: false, maxRangeOverride: maxRange)
+            : Grid.FindPathAoOAware(mover.GridPosition, destination, null, maxRange, mover.GetVisualSquaresOccupied(), mover);
+
         List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
             ? pathResult.Path
             : new List<Vector2Int> { destination };
 
-        yield return StartCoroutine(mover.MoveAlongPath(path, secondsPerStep, markAsMoved: true));
+        if (_movementService != null)
+            yield return StartCoroutine(_movementService.ExecuteMovement(mover, path, secondsPerStep, markAsMoved: true));
+        else
+            yield return StartCoroutine(mover.MoveAlongPath(path, secondsPerStep, markAsMoved: true));
         CheckTurnUndeadProximityBreakingForMover(mover);
         PruneTurnUndeadTrackers();
     }
@@ -10026,83 +9979,10 @@ public partial class GameManager : MonoBehaviour
 
     private CombatResult ExecuteOffHandAttack(CharacterController attacker, CharacterController target, int attackBab, ItemData offHandWeapon, bool useThrownRange)
     {
-        if (attacker == null || target == null || offHandWeapon == null)
-        {
-            Debug.Log("[OffHand] ExecuteOffHandAttack aborted due to null attacker/target/weapon.");
-            return null;
-        }
+        if (_combatFlowService != null)
+            return _combatFlowService.ExecuteOffHandAttack(attacker, target, attackBab, offHandWeapon, useThrownRange);
 
-        Debug.Log("[OffHand] ExecuteOffHandAttack START");
-        Debug.Log($"[OffHand] Attacker: {attacker.Stats.CharacterName}");
-        Debug.Log($"[OffHand] Target: {target.Stats.CharacterName}");
-        Debug.Log($"[OffHand] Weapon: {offHandWeapon.Name}");
-        Debug.Log($"[OffHand] Attack BAB: {attackBab}");
-        Debug.Log($"[OffHand] STR modifier: {attacker.Stats.STRMod}");
-        Debug.Log($"[OffHand] Penalty: {_offHandPenalty}");
-
-        bool isFlanking = false;
-        int flankBonus = 0;
-        string partnerName = string.Empty;
-        if (!useThrownRange)
-        {
-            List<CharacterController> allCombatants = GetAllCharacters();
-            isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out CharacterController flankPartner);
-            flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-            partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : string.Empty;
-        }
-
-        int sqDist = attacker.GetMinimumDistanceToTarget(target, chebyshev: false);
-        RangeInfo rangeInfo = useThrownRange
-            ? RangeCalculator.GetRangeInfo(sqDist, offHandWeapon.RangeIncrement, true)
-            : RangeCalculator.GetRangeInfo(sqDist, 0, false);
-
-        bool isOffHandMeleeFearBreak = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            offHandWeapon,
-            rangeInfo,
-            treatAsThrownAttack: useThrownRange);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isOffHandMeleeFearBreak);
-
-        CombatResult result = attacker.Attack(
-            target,
-            isFlanking,
-            flankBonus,
-            partnerName,
-            rangeInfo,
-            attackBab,
-            offHandWeapon,
-            0,
-            true);
-
-        string babLabel = CharacterStats.FormatMod(attackBab);
-        string offHandPenaltyInfo = _isDualWielding
-            ? $", dual-wield penalty {CharacterStats.FormatMod(_offHandPenalty)}"
-            : string.Empty;
-        string offHandModeLabel = useThrownRange ? "Off-Hand Thrown Attack" : "Off-Hand Attack";
-        CombatUI?.ShowCombatLog($"↻ {offHandModeLabel} (BAB {babLabel}{offHandPenaltyInfo}) with {offHandWeapon.Name}");
-
-        _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
-        CombatUI?.ShowCombatLog(_lastCombatLog);
-
-        if (LogAttacksToConsole)
-            Debug.Log("[Combat] " + _lastCombatLog);
-
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-        _highlightedCells.Clear();
-
-        if (result == null)
-        {
-            Debug.Log("[OffHand] ExecuteOffHandAttack END (null result)");
-            return null;
-        }
-
-        Debug.Log($"[OffHand] Attack total: {result.TotalRoll} vs AC {result.TargetAC}");
-        Debug.Log(result.Hit
-            ? $"[OffHand] HIT! Damage={result.TotalDamage}"
-            : "[OffHand] MISS!");
-        Debug.Log("[OffHand] ExecuteOffHandAttack END");
-        return result;
+        return null;
     }
 
     private void ResolveOffHandThrownWeaponAfterAttack(CharacterController thrower, CharacterController target, ItemData thrownWeapon)
@@ -10668,285 +10548,49 @@ public partial class GameManager : MonoBehaviour
 
     private void PerformPlayerAttack(CharacterController attacker, CharacterController target)
     {
+        if (_combatFlowService != null)
+        {
+            _combatFlowService.PerformPlayerAttack(attacker, target);
+            return;
+        }
+
         CurrentSubPhase = PlayerSubPhase.Animating;
-
-        // Check flanking against all combatants (team/threat rules applied by CombatUtils).
-        var allCombatants = GetAllCharacters();
-
-        CharacterController flankPartner;
-        bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out flankPartner);
-        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-        string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
-
-        if (CombatUI != null)
-        {
-            string flankIndicator = CombatUI.BuildFlankingIndicator(isFlanking, flankPartner);
-            CombatUI.SetTurnIndicator($"{attacker.Stats.CharacterName} attacks {target.Stats.CharacterName}{flankIndicator}");
-        }
-        RangeInfo rangeInfo = CalculateRangeInfo(attacker, target);
-        if (_currentAttackType == AttackType.Thrown && rangeInfo != null)
-        {
-            Debug.Log($"[Attack][Thrown] {attacker.Stats.CharacterName} -> {target.Stats.CharacterName}: distance={rangeInfo.DistanceFeet} ft, increment={rangeInfo.IncrementNumber}, penalty={rangeInfo.Penalty}, inRange={rangeInfo.IsInRange}");
-        }
-
-        // Targeting is resolved; clear pending declaration marker.
-        _pendingDefensiveAttackSelection = false;
-
-        switch (_pendingAttackMode)
-        {
-            case PendingAttackMode.Single:
-                if (_isInAttackSequence && _attackingCharacter == attacker)
-                {
-                    PerformIterativeSequenceAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-                }
-                else
-                {
-                    PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-                }
-                break;
-            case PendingAttackMode.FullAttack:
-                StartCoroutine(PerformFullAttackWithRetargetingAndFiveFootStep(attacker, target));
-                break;
-            case PendingAttackMode.DualWield:
-                PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-                break;
-            case PendingAttackMode.FlurryOfBlows:
-                PerformFlurryOfBlows(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-                break;
-        }
     }
 
     private RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target)
     {
-        ItemData weapon = attacker.GetEquippedMainWeapon();
-        bool usingThrownAttack = IsUsingThrownAttackMode(attacker, weapon);
-        bool isRangedAttack = IsAttackModeRanged(attacker, weapon);
+        if (_combatFlowService != null)
+            return _combatFlowService.CalculateRangeInfo(attacker, target);
 
-        int sqDist = attacker.GetMinimumDistanceToTarget(target, chebyshev: false);
-
-        if (isRangedAttack && weapon != null && weapon.RangeIncrement > 0)
-        {
-            bool isThrownWeapon = usingThrownAttack || (weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
-            return RangeCalculator.GetRangeInfo(sqDist, weapon.RangeIncrement, isThrownWeapon);
-        }
-
-        // Melee-mode attack (including throwable melee weapons when using melee attack button)
-        return RangeCalculator.GetRangeInfo(sqDist, 0, false);
+        return RangeCalculator.GetRangeInfo(0, 0, false);
     }
 
     private string BuildAttackLog(CharacterController attacker, bool isFlanking, string partnerName, CombatResult result)
     {
-        if (result == null)
-            return string.Empty;
+        if (_combatFlowService != null)
+            return _combatFlowService.BuildAttackLog(attacker, isFlanking, partnerName, result);
 
-        string attackerName = attacker != null && attacker.Stats != null
-            ? attacker.Stats.CharacterName
-            : "Attacker";
-        string flankLogPrefix = isFlanking
-            ? $"⚔ {attackerName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-
-        string damageModeLabel = result.AttackDamageMode == AttackDamageMode.Nonlethal ? "nonlethal" : "lethal";
-        string damageModePrefix = result.DamageModeAttackPenalty != 0
-            ? $"🗡 Attacking with {damageModeLabel} damage ({result.DamageModeAttackPenalty} penalty).\n"
-            : $"🗡 Attacking with {damageModeLabel} damage.\n";
-
-        return flankLogPrefix + damageModePrefix + result.GetDetailedSummary();
+        return result != null ? result.GetDetailedSummary() : string.Empty;
     }
 
     private void PerformIterativeSequenceAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        if (!_isInAttackSequence || _attackingCharacter != attacker)
+        if (_combatFlowService != null)
         {
-            Debug.LogWarning("[Attack][Sequence] Iterative attack requested without active sequence; falling back to single attack.");
-            PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            _combatFlowService.PerformIterativeSequenceAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
             return;
         }
-
-        ItemData attackWeapon = _currentAttackType == AttackType.Thrown
-            ? (_equippedWeapon ?? attacker.GetEquippedMainWeapon())
-            : attacker.GetEquippedMainWeapon();
-
-        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            attackWeapon,
-            rangeInfo,
-            treatAsThrownAttack: _currentAttackType == AttackType.Thrown);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
-
-        CombatResult result = attacker.Attack(
-            target,
-            isFlanking,
-            flankBonus,
-            partnerName,
-            rangeInfo,
-            _currentAttackBAB,
-            attackWeapon);
-
-        ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
-
-        int attackNumber = _totalAttacksUsed + 1;
-        string modeLabel = _currentAttackType == AttackType.Thrown ? "Thrown" : "Melee";
-        string dwPenaltyInfo = _isDualWielding && (_currentAttackType == AttackType.Melee || _currentAttackType == AttackType.Thrown)
-            ? $", dual-wield penalty {CharacterStats.FormatMod(_mainHandPenalty)}"
-            : string.Empty;
-        CombatUI?.ShowCombatLog($"↻ Attack #{attackNumber}/{_totalAttackBudget} ({modeLabel}) at BAB {CharacterStats.FormatMod(_currentAttackBAB)}{dwPenaltyInfo}");
-
-        _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
-
-        if (LogAttacksToConsole)
-            Debug.Log("[Combat] " + _lastCombatLog);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        if (result.Hit && result.TotalDamage > 0)
-            CheckConcentrationOnDamage(target, result.TotalDamage);
-
-        if (result.TargetKilled)
-        {
-            HandleSummonDeathCleanup(target);
-
-            if (!target.IsPlayerControlled)
-            {
-                UpdateAllStatsUI();
-                if (AreAllNPCsDead())
-                {
-                    EndAttackSequence();
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    return;
-                }
-
-                CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
-            }
-        }
-
-        _totalAttacksUsed++;
-        Debug.Log($"=== MAIN HAND ATTACK #{_totalAttacksUsed} ===");
-        Debug.Log($"[Attack][Sequence] Attacks used: {_totalAttacksUsed}/{_totalAttackBudget}");
-        Debug.Log($"[OffHand] _offHandAttackAvailableThisTurn: {_offHandAttackAvailableThisTurn}");
-        Debug.Log($"[OffHand] _offHandAttackUsedThisTurn: {_offHandAttackUsedThisTurn}");
-        Debug.Log($"[OffHand] After main hand attack #{_totalAttacksUsed}: used={_offHandAttackUsedThisTurn}, available={_offHandAttackAvailableThisTurn}");
-
-        if (_totalAttacksUsed == 1 && !_attackSequenceConsumesFullRound && _totalAttackBudget > 1)
-        {
-            if (attacker.Actions != null && attacker.Actions.HasMoveAction)
-            {
-                attacker.Actions.UseMoveAction();
-                _attackSequenceConsumesFullRound = true;
-                Debug.Log("[Attack][Sequence] Converted to full-round action");
-            }
-            else
-            {
-                _totalAttackBudget = _totalAttacksUsed;
-                Debug.LogWarning("[Attack][Sequence] Could not consume move action for full-round conversion; trimming attack budget.");
-            }
-        }
-
-        if (HasMoreAttacksAvailable())
-        {
-            int nextBaseBab = attacker.GetIterativeAttackBAB(_totalAttacksUsed);
-            _currentAttackBAB = nextBaseBab;
-            if (_isDualWielding && (_currentAttackType == AttackType.Melee || _currentAttackType == AttackType.Thrown))
-                _currentAttackBAB += _mainHandPenalty;
-
-            Debug.Log($"[Attack][Sequence] Next attack BAB prepared: base={nextBaseBab}, final={_currentAttackBAB}");
-            Debug.Log("[Attack][Sequence] More attacks available, returning to action menu");
-        }
-        else
-        {
-            Debug.Log("[Attack][Sequence] All attacks exhausted");
-            Debug.Log("=== ALL MAIN HAND ATTACKS COMPLETE ===");
-
-            bool offHandAvailableNow = CanUseOffHandAttackOption(attacker);
-            bool offHandThrownAvailableNow = CanUseOffHandThrownAttackOption(attacker);
-            Debug.Log($"[Attack] All main hand attacks used ({_totalAttacksUsed}/{_totalAttackBudget})");
-            Debug.Log($"[OffHand] _offHandAttackAvailableThisTurn: {_offHandAttackAvailableThisTurn}");
-            Debug.Log($"[OffHand] _offHandAttackUsedThisTurn: {_offHandAttackUsedThisTurn}");
-            Debug.Log($"[Attack] Off-hand attack available: {offHandAvailableNow}");
-            Debug.Log($"[Attack] Off-hand thrown attack available: {offHandThrownAvailableNow}");
-
-            EndAttackSequence();
-        }
-
-        StartCoroutine(AfterAttackDelay(attacker, 1.5f));
     }
 
     private void PerformSingleAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        bool skipStandardCommit = _skipNextSingleAttackStandardActionCommit;
-        _skipNextSingleAttackStandardActionCommit = false;
-
-        if (!skipStandardCommit)
+        if (_combatFlowService != null)
         {
-            if (!attacker.CommitStandardAction())
-            {
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available.");
-                ShowActionChoices();
-                return;
-            }
+            _combatFlowService.PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            return;
         }
-        else
-        {
-            Debug.Log($"[Attack][Thrown] Skipping standard action consumption for follow-up thrown attack after ending iterative melee sequence.");
-        }
-
-        ItemData attackWeapon = _currentAttackType == AttackType.Thrown
-            ? (_equippedWeapon ?? attacker.GetEquippedMainWeapon())
-            : attacker.GetEquippedMainWeapon();
-
-        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            attackWeapon,
-            rangeInfo,
-            treatAsThrownAttack: _currentAttackType == AttackType.Thrown);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
-
-        CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
-        ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
-
-        _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
-
-        if (LogAttacksToConsole)
-            Debug.Log("[Combat] " + _lastCombatLog);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        // Check concentration for the target if they took damage
-        if (result.Hit && result.TotalDamage > 0)
-        {
-            CheckConcentrationOnDamage(target, result.TotalDamage);
-        }
-
-        if (result.TargetKilled)
-        {
-            HandleSummonDeathCleanup(target);
-
-            if (!target.IsPlayerControlled)
-            {
-                UpdateAllStatsUI();
-                if (AreAllNPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    return;
-                }
-                else
-                {
-                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
-                }
-            }
-        }
-
-        StartCoroutine(AfterAttackDelay(attacker, 1.5f));
     }
 
     private IEnumerator PerformFullAttackWithRetargetingAndFiveFootStep(CharacterController attacker, CharacterController initialTarget)
@@ -11145,163 +10789,31 @@ public partial class GameManager : MonoBehaviour
     private void PerformFullAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        attacker.Actions.UseFullRoundAction();
-
-        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            attacker.GetEquippedMainWeapon(),
-            rangeInfo,
-            treatAsThrownAttack: false);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
-        FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        string flankLogPrefix = isFlanking
-            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-        _lastCombatLog = flankLogPrefix + result.GetFullSummary();
-
-        if (LogAttacksToConsole)
-            LogFullAttackToConsole(result);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        // Check concentration for total damage from full attack
-        if (result.TotalDamageDealt > 0)
+        if (_combatFlowService != null)
         {
-            CheckConcentrationOnDamage(target, result.TotalDamageDealt);
+            _combatFlowService.PerformFullAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            return;
         }
-
-        if (result.TargetKilled)
-        {
-            HandleSummonDeathCleanup(target);
-
-            if (!target.IsPlayerControlled)
-            {
-                UpdateAllStatsUI();
-                if (AreAllNPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    return;
-                }
-                else
-                {
-                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
-                }
-            }
-        }
-
-        StartCoroutine(DelayedEndActivePCTurn(2.0f));
     }
 
     private void PerformDualWieldAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        attacker.Actions.UseFullRoundAction();
-
-        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            attacker.GetEquippedMainWeapon(),
-            rangeInfo,
-            treatAsThrownAttack: false);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
-        FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        string flankLogPrefix = isFlanking
-            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-        _lastCombatLog = flankLogPrefix + result.GetFullSummary();
-
-        if (LogAttacksToConsole)
-            LogFullAttackToConsole(result);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        // Check concentration for total damage from dual-wield attack
-        if (result.TotalDamageDealt > 0)
+        if (_combatFlowService != null)
         {
-            CheckConcentrationOnDamage(target, result.TotalDamageDealt);
+            _combatFlowService.PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            return;
         }
-
-        if (result.TargetKilled)
-        {
-            HandleSummonDeathCleanup(target);
-
-            if (!target.IsPlayerControlled)
-            {
-                UpdateAllStatsUI();
-                if (AreAllNPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    return;
-                }
-                else
-                {
-                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
-                }
-            }
-        }
-
-        StartCoroutine(DelayedEndActivePCTurn(2.0f));
     }
 
     private void PerformFlurryOfBlows(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        attacker.Actions.UseFullRoundAction();
-
-        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            attacker.GetEquippedMainWeapon(),
-            rangeInfo,
-            treatAsThrownAttack: false);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
-        FullAttackResult result = attacker.FlurryOfBlows(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        string flankLogPrefix = isFlanking
-            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-        _lastCombatLog = flankLogPrefix + result.GetFullSummary();
-
-        if (LogAttacksToConsole)
-            LogFullAttackToConsole(result);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        // Check concentration for total damage from flurry of blows
-        if (result.TotalDamageDealt > 0)
+        if (_combatFlowService != null)
         {
-            CheckConcentrationOnDamage(target, result.TotalDamageDealt);
+            _combatFlowService.PerformFlurryOfBlows(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            return;
         }
-
-        if (result.TargetKilled)
-        {
-            HandleSummonDeathCleanup(target);
-
-            if (!target.IsPlayerControlled)
-            {
-                UpdateAllStatsUI();
-                if (AreAllNPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    return;
-                }
-                else
-                {
-                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
-                }
-            }
-        }
-
-        StartCoroutine(DelayedEndActivePCTurn(2.0f));
     }
 
     private bool IsHoldingTouchCharge(CharacterController character)
@@ -11441,7 +10953,6 @@ public partial class GameManager : MonoBehaviour
     private IEnumerator SingleNPCTurnFromInitiative(CharacterController npc)
     {
         CurrentPhase = TurnPhase.NPCTurn;
-        _activeTurnCharacter = npc;
         CombatUI.SetActivePC(0); // No PC active
         CombatUI.SetActiveNPC(NPCs.IndexOf(npc)); // Highlight active NPC
         CombatUI.SetActionButtonsVisible(false);
@@ -11465,11 +10976,9 @@ public partial class GameManager : MonoBehaviour
         }
 
         // Determine AI behavior for this NPC
-        int npcIdx = NPCs.IndexOf(npc);
-        EnemyAIBehavior behavior = (npcIdx >= 0 && npcIdx < _npcAIBehaviors.Count)
-            ? _npcAIBehaviors[npcIdx] : EnemyAIBehavior.AggressiveMelee;
-
-        yield return StartCoroutine(SingleNPCTurn(npc, behavior));
+        EnemyAIBehavior behavior = GetNPCBehaviorForAI(npc);
+        if (_aiService != null)
+            yield return StartCoroutine(_aiService.ExecuteNPCTurn(npc, behavior));
 
         // Check if all PCs are dead after NPC turn
         if (AreAllPCsDead())
@@ -11482,252 +10991,6 @@ public partial class GameManager : MonoBehaviour
 
         // Advance to next in initiative
         NextInitiativeTurn();
-    }
-
-    /// <summary>
-    /// Execute a single NPC's turn with behavior-specific AI logic.
-    /// </summary>
-    private IEnumerator SingleNPCTurn(CharacterController npc, EnemyAIBehavior behavior)
-    {
-        npc.StartNewTurn();
-        PruneTurnUndeadTrackers();
-        CheckTurnUndeadProximityBreakingForMover(npc);
-
-        bool isSummon = IsSummonedCreature(npc);
-        string turnColor = isSummon ? "#66E8FF" : "#FF6666";
-        string turnIcon = isSummon ? "✶" : "💀";
-
-        CombatUI.SetTurnIndicator($"{GetSummonDisplayName(npc)}'s turn...");
-        CombatUI.ShowCombatLog($"<color={turnColor}>{turnIcon} {GetSummonDisplayName(npc)}'s turn begins</color>");
-        yield return new WaitForSeconds(0.6f);
-
-        CharacterController targetPC = GetClosestAlivePCTo(npc);
-        if (targetPC == null) yield break;
-
-        if (npc.HasCondition(CombatConditionType.Turned) && IsUndeadCharacter(npc))
-        {
-            yield return StartCoroutine(AI_TurnedUndead(npc));
-            yield break;
-        }
-
-        if (npc.IsGrappling())
-        {
-            yield return StartCoroutine(AI_GrappleRestrictedTurn(npc));
-            yield break;
-        }
-
-        if (isSummon)
-        {
-            yield return StartCoroutine(AI_SummonedCreature(npc));
-            yield break;
-        }
-
-        switch (behavior)
-        {
-            case EnemyAIBehavior.AggressiveMelee:
-                yield return StartCoroutine(AI_AggressiveMelee(npc, targetPC));
-                break;
-            case EnemyAIBehavior.RangedKiter:
-                yield return StartCoroutine(AI_RangedKiter(npc));
-                break;
-            case EnemyAIBehavior.DefensiveMelee:
-                yield return StartCoroutine(AI_DefensiveMelee(npc, targetPC));
-                break;
-            default:
-                yield return StartCoroutine(AI_AggressiveMelee(npc, targetPC));
-                break;
-        }
-    }
-
-    private IEnumerator AI_TurnedUndead(CharacterController npc)
-    {
-        if (npc == null || npc.Stats == null)
-            yield break;
-
-        CharacterController source = GetTurnUndeadTurner(npc);
-
-        if (source == null)
-        {
-            // Fallback for legacy turned effects created before source tracking was added.
-            List<StatusEffect> activeConditions = npc.GetActiveConditions();
-            for (int i = 0; i < activeConditions.Count; i++)
-            {
-                StatusEffect condition = activeConditions[i];
-                if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Turned)
-                    continue;
-
-                if (string.IsNullOrWhiteSpace(condition.SourceName))
-                    break;
-
-                foreach (CharacterController candidate in GetAllCharacters())
-                {
-                    if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
-                        continue;
-
-                    if (string.Equals(candidate.Stats.CharacterName, condition.SourceName, StringComparison.Ordinal))
-                    {
-                        source = candidate;
-                        RegisterTurnUndeadTracker(npc, source);
-                        break;
-                    }
-                }
-                break;
-            }
-        }
-
-        if (source == null)
-            source = GetClosestAliveEnemyTo(npc);
-
-        if (source != null && npc.Actions.HasMoveAction && !npc.Stats.MovementBlockedByCondition)
-        {
-            SquareCell retreatCell = FindBestMoveAwayFrom(npc, source.GridPosition);
-            if (retreatCell != null && retreatCell.Coords != npc.GridPosition)
-            {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, retreatCell.Coords, PlayerMoveSecondsPerStep));
-                npc.Actions.UseMoveAction();
-                CombatUI?.ShowCombatLog($"↩ {npc.Stats.CharacterName} flees from divine turning!");
-                yield return new WaitForSeconds(0.45f);
-                yield break;
-            }
-        }
-
-        CombatUI?.ShowCombatLog($"↩ {npc.Stats.CharacterName} is turned and cowers, unable to attack.");
-        yield return new WaitForSeconds(0.35f);
-    }
-
-    private IEnumerator AI_AggressiveMelee(CharacterController npc, CharacterController targetPC)
-    {
-        if (npc == null || targetPC == null || targetPC.Stats == null || targetPC.Stats.IsDead)
-            yield break;
-
-        if (ShouldNPCUseCharge(npc, targetPC))
-        {
-            yield return StartCoroutine(NPCExecuteCharge(npc, targetPC));
-            yield break;
-        }
-
-        if (!npc.IsTargetInCurrentWeaponRange(targetPC))
-        {
-            SquareCell bestCell = FindBestMoveToward(npc, targetPC);
-            if (bestCell != null)
-            {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, bestCell.Coords, PlayerMoveSecondsPerStep));
-                npc.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances toward {targetPC.Stats.CharacterName}!");
-                yield return new WaitForSeconds(0.5f);
-            }
-        }
-
-        targetPC = GetClosestAlivePCTo(npc);
-        if (targetPC == null) yield break;
-
-        if (npc.IsTargetInCurrentWeaponRange(targetPC) && !targetPC.Stats.IsDead)
-        {
-            if (!TryNPCSpecialAttackIfBeneficial(npc, targetPC))
-                yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
-            else
-                yield return new WaitForSeconds(0.8f);
-        }
-        else
-        {
-            yield return new WaitForSeconds(0.3f);
-        }
-    }
-
-    private IEnumerator AI_RangedKiter(CharacterController npc)
-    {
-        CharacterController closestPC = GetClosestAlivePCTo(npc);
-        if (closestPC == null) yield break;
-
-        int distToClosestPC = SquareGridUtils.GetDistance(npc.GridPosition, closestPC.GridPosition);
-
-        if (distToClosestPC <= 2)
-        {
-            SquareCell retreatCell = FindBestMoveAwayFrom(npc, closestPC.GridPosition);
-            if (retreatCell != null)
-            {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, retreatCell.Coords, PlayerMoveSecondsPerStep));
-                npc.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} retreats to maintain distance!");
-                yield return new WaitForSeconds(0.5f);
-            }
-        }
-
-        CharacterController rangedTarget = GetClosestAlivePCTo(npc);
-        if (rangedTarget == null) yield break;
-
-        ItemData weapon = npc.GetEquippedMainWeapon();
-        int maxRange = 1;
-        if (weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0))
-        {
-            bool isThrown = weapon.IsThrown;
-            maxRange = RangeCalculator.GetMaxRangeSquares(weapon.RangeIncrement, isThrown);
-        }
-
-        int distToRangedTarget = SquareGridUtils.GetDistance(npc.GridPosition, rangedTarget.GridPosition);
-        if (distToRangedTarget <= maxRange && !rangedTarget.Stats.IsDead)
-        {
-            if (!TryNPCSpecialAttackIfBeneficial(npc, rangedTarget))
-                yield return StartCoroutine(NPCPerformAttack(npc, rangedTarget));
-            else
-                yield return new WaitForSeconds(0.8f);
-        }
-        else if (distToRangedTarget > maxRange && npc.Actions.HasMoveAction)
-        {
-            SquareCell approachCell = FindBestMoveToward(npc, rangedTarget.GridPosition);
-            if (approachCell != null)
-            {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, approachCell.Coords, PlayerMoveSecondsPerStep));
-                npc.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} moves to get a better shot.");
-                yield return new WaitForSeconds(0.5f);
-            }
-        }
-        else
-        {
-            yield return new WaitForSeconds(0.3f);
-        }
-    }
-
-    private IEnumerator AI_DefensiveMelee(CharacterController npc, CharacterController targetPC)
-    {
-        CharacterController weakerPC = GetWeakerAlivePC(npc);
-        if (weakerPC != null) targetPC = weakerPC;
-        if (npc == null || targetPC == null || targetPC.Stats == null || targetPC.Stats.IsDead)
-            yield break;
-
-        if (ShouldNPCUseCharge(npc, targetPC))
-        {
-            yield return StartCoroutine(NPCExecuteCharge(npc, targetPC));
-            yield break;
-        }
-
-        if (!npc.IsTargetInCurrentWeaponRange(targetPC))
-        {
-            SquareCell bestCell = FindBestMoveToward(npc, targetPC);
-            if (bestCell != null)
-            {
-                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, bestCell.Coords, PlayerMoveSecondsPerStep));
-                npc.Actions.UseMoveAction();
-                CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} advances methodically toward {targetPC.Stats.CharacterName}.");
-                yield return new WaitForSeconds(0.5f);
-            }
-        }
-
-        targetPC = GetClosestAlivePCTo(npc);
-        if (targetPC == null) yield break;
-
-        if (npc.IsTargetInCurrentWeaponRange(targetPC) && !targetPC.Stats.IsDead)
-        {
-            if (!TryNPCSpecialAttackIfBeneficial(npc, targetPC))
-                yield return StartCoroutine(NPCPerformAttack(npc, targetPC));
-            else
-                yield return new WaitForSeconds(0.8f);
-        }
-        else
-        {
-            yield return new WaitForSeconds(0.3f);
-        }
     }
 
     private IEnumerator AI_SummonedCreature(CharacterController summon)
@@ -11747,9 +11010,9 @@ public partial class GameManager : MonoBehaviour
 
         bool lowHP = summon.Stats != null && summon.Stats.TotalMaxHP > 0 && summon.Stats.CurrentHP <= Mathf.CeilToInt(summon.Stats.TotalMaxHP * 0.30f);
 
-        if (lowHP)
+        if (lowHP && _aiService != null)
         {
-            SquareCell retreat = FindBestMoveAwayFrom(summon, target.GridPosition);
+            SquareCell retreat = _aiService.EvaluateMovementOptions(summon, target.GridPosition, retreat: true);
             if (retreat != null && retreat.Coords != summon.GridPosition)
             {
                 yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, retreat.Coords, PlayerMoveSecondsPerStep));
@@ -11760,9 +11023,9 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
-        if (!summon.IsTargetInCurrentWeaponRange(target) && summon.Actions.HasMoveAction)
+        if (!summon.IsTargetInCurrentWeaponRange(target) && summon.Actions.HasMoveAction && _aiService != null)
         {
-            SquareCell bestCell = FindBestMoveToward(summon, target);
+            SquareCell bestCell = _aiService.EvaluateMovementOptions(summon, target.GridPosition, retreat: false, target);
             if (bestCell != null)
             {
                 yield return StartCoroutine(MoveCharacterAlongComputedPath(summon, bestCell.Coords, PlayerMoveSecondsPerStep));
@@ -11798,6 +11061,7 @@ public partial class GameManager : MonoBehaviour
 
         yield return StartCoroutine(NPCPerformAttack(summon, target));
     }
+
     private CharacterController SelectSummonTargetByCommand(CharacterController summon, ActiveSummonInstance summonData)
     {
         if (summon == null)
@@ -11951,6 +11215,7 @@ public partial class GameManager : MonoBehaviour
         UpdateAllStatsUI();
         return true;
     }
+
     private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
     {
         if (!npc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
@@ -11996,11 +11261,8 @@ public partial class GameManager : MonoBehaviour
         CombatUI.ShowCombatLog(_lastCombatLog);
         UpdateAllStatsUI();
 
-        // Check concentration for NPC attack damage on target (usually a PC)
         if (result.Hit && result.TotalDamage > 0)
-        {
             CheckConcentrationOnDamage(target, result.TotalDamage);
-        }
 
         if (result.TargetKilled)
         {
@@ -12022,309 +11284,15 @@ public partial class GameManager : MonoBehaviour
         yield return new WaitForSeconds(1.0f);
     }
 
-    /// <summary>Find closest alive enemy to a specific combatant.</summary>
-    private CharacterController GetClosestAlivePCTo(CharacterController npc)
-    {
-        return GetClosestAliveEnemyTo(npc);
-    }
-
-    /// <summary>Legacy wrapper for backward compat.</summary>
-    private CharacterController GetClosestAlivePC()
-    {
-        return (NPC != null) ? GetClosestAlivePCTo(NPC) : null;
-    }
-
-    /// <summary>Get the alive enemy with the lowest current HP (for defensive AI targeting).</summary>
-    private CharacterController GetWeakerAlivePC(CharacterController npc)
-    {
-        CharacterController weakest = null;
-        int lowestHP = int.MaxValue;
-
-        foreach (var candidate in GetAllCharacters())
-        {
-            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
-                continue;
-            if (!IsEnemyTeam(npc, candidate))
-                continue;
-
-            if (candidate.Stats.CurrentHP < lowestHP)
-            {
-                lowestHP = candidate.Stats.CurrentHP;
-                weakest = candidate;
-            }
-        }
-        return weakest;
-    }
-
-    private SquareCell FindBestMoveAwayFrom(CharacterController mover, Vector2Int threatPos)
-    {
-        List<SquareCell> moveCells = Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);
-        SquareCell bestCell = null;
-        int bestDist = 0;
-
-        foreach (var cell in moveCells)
-        {
-            if (!Grid.CanPlaceCreature(cell.Coords, mover.GetVisualSquaresOccupied(), mover)) continue;
-
-            int dist = SquareGridUtils.GetDistance(cell.Coords, threatPos);
-            if (dist > bestDist)
-            {
-                bestDist = dist;
-                bestCell = cell;
-            }
-        }
-
-        return bestCell;
-    }
-
-    private SquareCell FindBestMoveToward(CharacterController mover, CharacterController target)
-    {
-        if (target == null)
-            return null;
-
-        return FindBestMoveToward(mover, target.GridPosition, target);
-    }
-
-    private SquareCell FindBestMoveToward(CharacterController mover, Vector2Int targetPos)
-    {
-        return FindBestMoveToward(mover, targetPos, null);
-    }
-
-    private SquareCell FindBestMoveToward(CharacterController mover, Vector2Int targetPos, CharacterController targetCharacter)
-    {
-        List<SquareCell> moveCells = Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);
-        SquareCell bestCell = null;
-        int bestDist = int.MaxValue;
-        bool bestCanThreaten = false;
-        bool bestWouldFlank = false;
-
-        List<CharacterController> allCombatants = null;
-        if (targetCharacter != null)
-            allCombatants = GetAllCharacters();
-
-        foreach (var cell in moveCells)
-        {
-            if (!Grid.CanPlaceCreature(cell.Coords, mover.GetVisualSquaresOccupied(), mover)) continue;
-
-            int dist = SquareGridUtils.GetDistance(cell.Coords, targetPos);
-
-            bool canThreatenFromCell = false;
-            bool wouldFlankFromCell = false;
-
-            if (targetCharacter != null)
-            {
-                canThreatenFromCell = CombatUtils.CanThreatenTargetFromPosition(mover, cell.Coords, targetCharacter);
-                if (canThreatenFromCell)
-                {
-                    CharacterController flankPartner;
-                    wouldFlankFromCell = CombatUtils.IsAttackerFlankingFromPosition(
-                        mover,
-                        cell.Coords,
-                        targetCharacter,
-                        allCombatants,
-                        out flankPartner);
-                }
-            }
-
-            bool better = false;
-
-            // Tactical priority: prefer valid flanking setups first, then threatening squares,
-            // then shortest approach distance.
-            if (wouldFlankFromCell != bestWouldFlank)
-                better = wouldFlankFromCell;
-            else if (canThreatenFromCell != bestCanThreaten)
-                better = canThreatenFromCell;
-            else if (dist < bestDist)
-                better = true;
-
-            if (better)
-            {
-                bestDist = dist;
-                bestCell = cell;
-                bestCanThreaten = canThreatenFromCell;
-                bestWouldFlank = wouldFlankFromCell;
-            }
-        }
-
-        return bestCell;
-    }
-
     // ========== DETAILED CONSOLE LOGGING ==========
 
     private void LogFullAttackToConsole(FullAttackResult result)
     {
-        string attackerName = result.Attacker.Stats.CharacterName;
-        string defenderName = result.Defender.Stats.CharacterName;
-
-        Debug.Log("[Combat] ═══════════════════════════════════════");
-
-        string actionLabel = result.Type == FullAttackResult.AttackType.FullAttack
-            ? "full attacks"
-            : result.Type == FullAttackResult.AttackType.DualWield
-                ? "dual wields against"
-                : "attacks";
-        Debug.Log($"[Combat] {attackerName} {actionLabel} {defenderName}");
-
-        if (result.Type == FullAttackResult.AttackType.DualWield
-            && !string.IsNullOrEmpty(result.MainWeaponName)
-            && !string.IsNullOrEmpty(result.OffWeaponName))
+        if (_combatFlowService != null)
         {
-            Debug.Log($"[Combat] Main Hand: {result.MainWeaponName}");
-            Debug.Log($"[Combat] Off Hand: {result.OffWeaponName}");
+            _combatFlowService.LogFullAttackToConsole(result);
+            return;
         }
-        else if (!string.IsNullOrEmpty(result.MainWeaponName))
-        {
-            bool isRanged = result.Attacks.Count > 0 && result.Attacks[0].IsRangedAttack;
-            string wpnType = isRanged ? "ranged" : "melee";
-            Debug.Log($"[Combat] Weapon: {result.MainWeaponName} ({wpnType})");
-        }
-
-        if (result.Attacks.Count > 0)
-        {
-            var first = result.Attacks[0];
-            var feats = new List<string>();
-            if (first.PowerAttackValue > 0) feats.Add($"Power Attack (-{first.PowerAttackValue} atk/+{first.PowerAttackDamageBonus} dmg)");
-            if (first.RapidShotActive) feats.Add("Rapid Shot");
-            if (first.PointBlankShotActive) feats.Add("Point Blank Shot");
-            if (first.FightingDefensivelyAttackPenalty != 0) feats.Add("Fighting Defensively");
-            if (first.ShootingIntoMeleePenalty != 0) feats.Add("Shooting into melee");
-            if (first.PreciseShotNegated) feats.Add("Precise Shot");
-            if (feats.Count > 0)
-                Debug.Log($"[Combat] Active Feats: {string.Join(", ", feats)}");
-
-            if (first.IsFlanking)
-                Debug.Log($"[Combat] Flanking: Yes (with {first.FlankingPartnerName}, +{first.FlankingBonus})");
-
-            if (first.IsRangedAttack)
-            {
-                string penaltyStr = first.RangePenalty == 0 ? "no penalty" : $"{first.RangePenalty} penalty";
-                Debug.Log($"[Combat] Range: {first.RangeDistanceFeet} ft ({first.RangeDistanceSquares} sq) - Increment {first.RangeIncrementNumber}, {penaltyStr}");
-            }
-        }
-
-        Debug.Log("[Combat]");
-
-        for (int i = 0; i < result.Attacks.Count; i++)
-        {
-            Debug.Log("[Combat] ─────────────────────────────────────");
-
-            CombatResult atk = result.Attacks[i];
-
-            string label = (i < result.AttackLabels.Count) ? result.AttackLabels[i] : $"Attack {i + 1}";
-            Debug.Log($"[Combat] {label}:");
-
-            Debug.Log("[Combat]   ATTACK ROLL:");
-            Debug.Log($"[Combat]     d20 roll: {atk.DieRoll}");
-
-            if (atk.BreakdownBAB != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.BreakdownBAB, "BAB")}");
-
-            string abilName = !string.IsNullOrEmpty(atk.BreakdownAbilityName) ? atk.BreakdownAbilityName : "STR";
-            if (atk.BreakdownAbilityMod != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.BreakdownAbilityMod, $"{abilName} modifier")}");
-
-            if (atk.SizeAttackBonus != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.SizeAttackBonus, "size")}");
-
-            if (atk.IsFlanking && atk.FlankingBonus != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.FlankingBonus, "flanking")}");
-
-            if (atk.RacialAttackBonus != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.RacialAttackBonus, "racial")}");
-
-            if (atk.PowerAttackValue > 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(-atk.PowerAttackValue, "Power Attack")}");
-
-            if (atk.RapidShotActive)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(-2, "Rapid Shot")}");
-
-            if (atk.PointBlankShotActive)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(1, "Point Blank Shot")}");
-
-            if (atk.FightingDefensivelyAttackPenalty != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.FightingDefensivelyAttackPenalty, "Fighting Defensively")}");
-
-            if (atk.ShootingIntoMeleePenalty != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.ShootingIntoMeleePenalty, "shooting into melee")}");
-            else if (atk.PreciseShotNegated)
-                Debug.Log("[Combat]     + 0 (Precise Shot negates shooting into melee penalty)");
-
-            if (atk.IsRangedAttack && atk.RangePenalty != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.RangePenalty, "range")}");
-
-            if (atk.IsDualWieldAttack && atk.BreakdownDualWieldPenalty != 0)
-            {
-                string dwLabel = atk.IsOffHandAttack ? "off-hand penalty" : "dual wield penalty";
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.BreakdownDualWieldPenalty, dwLabel)}");
-            }
-
-            string critNote = "";
-            if (atk.NaturalTwenty) critNote = " (NATURAL 20!)";
-            else if (atk.NaturalOne) critNote = " (NATURAL 1!)";
-            string hitMiss = atk.Hit ? "HIT!" : "MISS!";
-            Debug.Log($"[Combat]     = {atk.TotalRoll} vs AC {atk.TargetAC} - {hitMiss}{critNote}");
-
-            if (atk.IsCritThreat)
-            {
-                string threatRange = atk.CritThreatMin < 20 ? $"{atk.CritThreatMin}-20" : "20";
-                string confModStr = CharacterStats.FormatMod(atk.ConfirmationTotal - atk.ConfirmationRoll);
-                if (atk.CritConfirmed)
-                    Debug.Log($"[Combat]   *** CRITICAL THREAT ({threatRange})! Confirm: {atk.ConfirmationRoll} {confModStr} = {atk.ConfirmationTotal} vs AC {atk.TargetAC} - CONFIRMED! (×{atk.CritMultiplier}) ***");
-                else
-                    Debug.Log($"[Combat]   *** Critical Threat ({threatRange})! Confirm: {atk.ConfirmationRoll} {confModStr} = {atk.ConfirmationTotal} vs AC {atk.TargetAC} - Not confirmed ***");
-            }
-
-            if (atk.Hit)
-            {
-                Debug.Log("[Combat]   DAMAGE ROLL:");
-                string diceStr = !string.IsNullOrEmpty(atk.BaseDamageDiceStr) ? atk.BaseDamageDiceStr : "?";
-
-                if (atk.CritConfirmed)
-                {
-                    Debug.Log($"[Combat]     CRITICAL HIT! (×{atk.CritMultiplier})");
-                    Debug.Log($"[Combat]     {atk.CritDamageDice} = {atk.Damage - atk.FeatDamageBonus} (crit weapon + mods)");
-                }
-                else
-                {
-                    Debug.Log($"[Combat]     {diceStr} roll: {atk.BaseDamageRoll}");
-
-                    if (atk.DamageModifier != 0)
-                    {
-                        string dmgModLabel = !string.IsNullOrEmpty(atk.DamageModifierDesc) ? atk.DamageModifierDesc : abilName;
-                        Debug.Log($"[Combat]     {FormatConsoleModLine(atk.DamageModifier, dmgModLabel)}");
-                    }
-                }
-
-                if (atk.PowerAttackDamageBonus > 0)
-                    Debug.Log($"[Combat]     {FormatConsoleModLine(atk.PowerAttackDamageBonus, "Power Attack")}");
-
-                if (atk.PointBlankShotActive)
-                    Debug.Log($"[Combat]     {FormatConsoleModLine(1, "Point Blank Shot")}");
-
-                Debug.Log($"[Combat]     = {atk.Damage} damage");
-
-                if (atk.SneakAttackApplied)
-                {
-                    string trigger = string.IsNullOrEmpty(atk.SneakAttackTriggerReason)
-                        ? ""
-                        : $" [{atk.SneakAttackTriggerReason}]";
-                    Debug.Log($"[Combat]     + {atk.SneakAttackDamage} sneak attack ({atk.SneakAttackDice}d6){trigger}");
-                    Debug.Log($"[Combat]     = {atk.TotalDamage} total damage");
-                }
-            }
-
-            Debug.Log("[Combat]");
-        }
-
-        Debug.Log("[Combat] ─────────────────────────────────────");
-        string critSummary = result.CritCount > 0 ? $", {result.CritCount} critical(s)!" : "";
-        Debug.Log($"[Combat] SUMMARY: {result.HitCount}/{result.Attacks.Count} hits{critSummary}, {result.TotalDamageDealt} total damage");
-        Debug.Log($"[Combat] {defenderName}: {result.DefenderHPBefore} → {result.DefenderHPAfter} HP");
-
-        if (result.TargetKilled)
-            Debug.Log($"[Combat] {defenderName} has been slain!");
-
-        Debug.Log("[Combat] ═══════════════════════════════════════");
     }
 
     private void ResetAttackDamageModesForAllCharacters()

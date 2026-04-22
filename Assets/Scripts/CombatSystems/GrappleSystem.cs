@@ -657,13 +657,13 @@ public partial class GameManager
             return false;
 
         HashSet<Vector2Int> threatenedSquares = GetPreviewThreatenedSquares(actor);
-        AoOPathResult pathResult = Grid.FindPathAoOAware(
-            actor.GridPosition,
+        AoOPathResult pathResult = FindPath(
+            actor,
             destination,
             threatenedSquares,
             _grappleMoveMaxRangeSquares,
-            actor.GetVisualSquaresOccupied(),
-            actor);
+            allowThroughAllies: true,
+            allowThroughEnemies: false);
 
         if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
             return false;
