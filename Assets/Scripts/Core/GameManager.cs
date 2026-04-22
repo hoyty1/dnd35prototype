@@ -141,6 +141,7 @@ public class GameManager : MonoBehaviour
     // Pending special attack state
     private SpecialAttackType _pendingSpecialAttackType;
     private bool _isSelectingSpecialAttack;
+    private bool _pendingDisarmUseOffHandSelection;
 
     // Unified iterative attack flow state (melee + thrown share one sequence)
     private bool _isInAttackSequence;
@@ -2648,6 +2649,7 @@ public class GameManager : MonoBehaviour
         _mainHandPenalty = 0;
         _offHandPenalty = 0;
         _pendingAttackType = AttackType.Melee;
+        _pendingDisarmUseOffHandSelection = false;
 
         Debug.Log($"[Turn][OffHand] Flags reset for {pc.Stats.CharacterName}: available={_offHandAttackAvailableThisTurn}, used={_offHandAttackUsedThisTurn}");
         Debug.Log($"[Turn][DualWield] Turn start reset: choiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}, mainPenalty={_mainHandPenalty}, offPenalty={_offHandPenalty}");
@@ -5229,13 +5231,13 @@ public class GameManager : MonoBehaviour
             onCancel: () => OnDualWieldingChoiceSelected(attacker, false));
     }
 
-    private void OnDualWieldingChoiceSelected(CharacterController attacker, bool dualWield)
+    private void ApplyDualWieldingChoiceState(CharacterController attacker, bool dualWield, string contextTag)
     {
         if (attacker == null)
             return;
 
-        Debug.Log("=== DUAL WIELD PROMPT ===");
-        Debug.Log($"[Attack][DualWield] Choice selected: {(dualWield ? "Yes" : "No")}");
+        Debug.Log($"=== DUAL WIELD PROMPT [{contextTag}] ===");
+        Debug.Log($"[{contextTag}][DualWield] Choice selected: {(dualWield ? "Yes" : "No")}");
 
         _dualWieldingChoiceMade = true;
 
@@ -5247,10 +5249,10 @@ public class GameManager : MonoBehaviour
             _offHandAttackAvailableThisTurn = attacker.HasOffHandWeaponEquipped();
             _offHandAttackUsedThisTurn = false;
 
-            Debug.Log("[DualWield] Dual wielding enabled");
-            Debug.Log($"[DualWield] Off-hand attack available this turn: {_offHandAttackAvailableThisTurn}");
-            Debug.Log($"[Attack][DualWield] Main hand penalty: {_mainHandPenalty}");
-            Debug.Log($"[Attack][DualWield] Off-hand penalty: {_offHandPenalty}");
+            Debug.Log($"[{contextTag}][DualWield] Dual wielding enabled");
+            Debug.Log($"[{contextTag}][DualWield] Off-hand attack available this turn: {_offHandAttackAvailableThisTurn}");
+            Debug.Log($"[{contextTag}][DualWield] Main hand penalty: {_mainHandPenalty}");
+            Debug.Log($"[{contextTag}][DualWield] Off-hand penalty: {_offHandPenalty}");
 
             CombatUI?.ShowCombatLog($"⚔ {attacker.Stats.CharacterName} dual wields (Main hand penalty: {_mainHandPenalty}, Off-hand penalty: {_offHandPenalty}).");
         }
@@ -5263,20 +5265,67 @@ public class GameManager : MonoBehaviour
             _offHandAttackAvailableThisTurn = false;
             _offHandAttackUsedThisTurn = false;
 
-            Debug.Log("[DualWield] Dual wielding disabled");
-            Debug.Log("[DualWield] Off-hand attack available this turn: false");
+            Debug.Log($"[{contextTag}][DualWield] Dual wielding disabled");
+            Debug.Log($"[{contextTag}][DualWield] Off-hand attack available this turn: false");
 
             CombatUI?.ShowCombatLog($"⚔ {attacker.Stats.CharacterName} fights with main hand only (no dual-wield penalties). Off-hand attack disabled for this round.");
         }
 
-        Debug.Log($"[DualWield] Choice: {(dualWield ? "Yes" : "No")}");
-        Debug.Log($"[OffHand] _offHandAttackAvailableThisTurn: {_offHandAttackAvailableThisTurn}");
-        Debug.Log($"[OffHand] _offHandAttackUsedThisTurn: {_offHandAttackUsedThisTurn}");
+        Debug.Log($"[{contextTag}][DualWield] Choice: {(dualWield ? "Yes" : "No")}");
+        Debug.Log($"[{contextTag}][OffHand] _offHandAttackAvailableThisTurn: {_offHandAttackAvailableThisTurn}");
+        Debug.Log($"[{contextTag}][OffHand] _offHandAttackUsedThisTurn: {_offHandAttackUsedThisTurn}");
+    }
+
+    private void OnDualWieldingChoiceSelected(CharacterController attacker, bool dualWield)
+    {
+        if (attacker == null)
+            return;
+
+        ApplyDualWieldingChoiceState(attacker, dualWield, "Attack");
 
         _pendingDefensiveAttackSelection = false;
         attacker.SetFightingDefensively(false);
         Debug.Log($"[Attack][DualWield] Continuing with pending attack type: {_pendingAttackType}");
         StartAttackSequence(attacker, _pendingAttackType);
+    }
+
+    private void ShowDualWieldingPromptForDisarm(CharacterController attacker)
+    {
+        if (attacker == null)
+            return;
+
+        string message = "You have weapons in both hands.\nUse dual wielding for this disarm?\n\n"
+            + "Yes: Apply dual-wield penalties, off-hand disarm available\n"
+            + "No: No penalties, off-hand disarm unavailable this round";
+
+        CombatUI?.ShowConfirmationDialog(
+            title: "Dual wield disarm?",
+            message: message,
+            confirmLabel: "Yes",
+            cancelLabel: "No",
+            onConfirm: () => OnDisarmDualWieldingChoiceSelected(attacker, true),
+            onCancel: () => OnDisarmDualWieldingChoiceSelected(attacker, false));
+    }
+
+    private void OnDisarmDualWieldingChoiceSelected(CharacterController attacker, bool dualWield)
+    {
+        if (attacker == null)
+            return;
+
+        ApplyDualWieldingChoiceState(attacker, dualWield, "Disarm");
+
+        if (!CanUseMainHandDisarmAttackOption(attacker))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Disarm: no main-hand disarm attacks remaining.");
+            ShowActionChoices();
+            return;
+        }
+
+        _pendingSpecialAttackType = SpecialAttackType.Disarm;
+        _pendingDisarmUseOffHandSelection = false;
+        _isSelectingSpecialAttack = true;
+        CurrentSubPhase = PlayerSubPhase.SelectingSpecialTarget;
+        ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
     }
 
     private void CalculateDualWieldingPenalties(CharacterController attacker)
@@ -5884,75 +5933,77 @@ public class GameManager : MonoBehaviour
 
     private int GetRemainingDisarmAttempts(CharacterController attacker)
     {
-        if (attacker == null || attacker.Actions == null)
-            return 0;
-
-        int mainHandRemaining = 0;
-        if (_isInAttackSequence && _attackingCharacter == attacker)
-            mainHandRemaining = Mathf.Max(0, _totalAttackBudget - _totalAttacksUsed);
-        else if (attacker.Actions.HasFullRoundAction)
-            mainHandRemaining = Mathf.Max(1, attacker.GetIterativeAttackCount());
-        else if (attacker.Actions.HasStandardAction)
-            mainHandRemaining = 1;
-
-        int offHandRemaining = 0;
-        if (CanUseOffHandAttackOption(attacker))
-        {
-            bool standardOnlyNoSequence = !_isInAttackSequence
-                && attacker.Actions.HasStandardAction
-                && !attacker.Actions.HasFullRoundAction;
-            offHandRemaining = standardOnlyNoSequence ? 0 : 1;
-        }
-
-        return Mathf.Max(0, mainHandRemaining + offHandRemaining);
+        return GetRemainingMainHandDisarmAttackActions(attacker) + GetRemainingOffHandDisarmAttackActions(attacker);
     }
 
-    private int GetCurrentDisarmAttackBonusForUI(CharacterController attacker)
+    public bool CanUseMainHandDisarmAttackOption(CharacterController attacker)
     {
-        if (attacker == null || attacker.Stats == null)
+        if (attacker == null || attacker.Actions == null)
+            return false;
+
+        if (!attacker.HasMeleeWeaponEquipped())
+            return false;
+
+        return CanUseMainHandManeuverAttackOption(attacker, "Disarm");
+    }
+
+    public int GetRemainingMainHandDisarmAttackActions(CharacterController attacker)
+    {
+        if (!CanUseMainHandDisarmAttackOption(attacker))
             return 0;
 
-        if (_isInAttackSequence && _attackingCharacter == attacker && HasMoreAttacksAvailable())
-            return _currentAttackBAB;
+        return GetRemainingMainHandManeuverAttackActions(attacker);
+    }
 
-        if (attacker.Actions != null)
-        {
-            if (attacker.Actions.HasFullRoundAction)
-            {
-                int mainBab = attacker.GetIterativeAttackBAB(0);
-                if (_isDualWielding)
-                    mainBab += _mainHandPenalty;
-                return mainBab;
-            }
+    public int GetCurrentMainHandDisarmAttackBonus(CharacterController attacker)
+    {
+        if (!CanUseMainHandDisarmAttackOption(attacker))
+            return 0;
 
-            if (attacker.Actions.HasStandardAction)
-                return attacker.Stats.BaseAttackBonus;
-        }
+        return GetCurrentMainHandManeuverAttackBonusForUI(attacker);
+    }
 
-        if (CanUseOffHandAttackOption(attacker))
-        {
-            int offHandBab = attacker.Stats.BaseAttackBonus;
-            if (_isDualWielding)
-                offHandBab += _offHandPenalty;
-            return offHandBab;
-        }
+    public bool ShouldShowOffHandDisarmButton(CharacterController attacker)
+    {
+        return attacker != null
+            && _dualWieldingChoiceMade
+            && _isDualWielding
+            && attacker.HasOffHandWeaponEquipped();
+    }
 
-        return 0;
+    public bool CanUseOffHandDisarmAttackOption(CharacterController attacker)
+    {
+        if (!ShouldShowOffHandDisarmButton(attacker))
+            return false;
+
+        if (attacker == null || attacker.Actions == null)
+            return false;
+
+        if (!CanUseOffHandAttackOption(attacker))
+            return false;
+
+        return attacker.GetOffHandAttackWeapon() != null;
+    }
+
+    public int GetRemainingOffHandDisarmAttackActions(CharacterController attacker)
+    {
+        return CanUseOffHandDisarmAttackOption(attacker) ? 1 : 0;
+    }
+
+    public int GetCurrentOffHandDisarmAttackBonus(CharacterController attacker)
+    {
+        if (!CanUseOffHandDisarmAttackOption(attacker) || attacker == null || attacker.Stats == null)
+            return 0;
+
+        int offHandBab = attacker.Stats.BaseAttackBonus;
+        if (_isDualWielding)
+            offHandBab += _offHandPenalty;
+        return offHandBab;
     }
 
     public bool CanUseDisarmAttackOption(CharacterController attacker)
     {
-        if (attacker == null || attacker.Actions == null)
-            return false;
-
-        bool hasAnyDisarmWeapon = attacker.HasMeleeWeaponEquipped() || attacker.HasOffHandWeaponEquipped();
-        if (!hasAnyDisarmWeapon)
-            return false;
-
-        if (_isInAttackSequence && _attackingCharacter != null && _attackingCharacter != attacker)
-            return false;
-
-        return GetRemainingDisarmAttempts(attacker) > 0;
+        return CanUseMainHandDisarmAttackOption(attacker) || CanUseOffHandDisarmAttackOption(attacker);
     }
 
     public int GetRemainingDisarmAttackActions(CharacterController attacker)
@@ -5962,7 +6013,10 @@ public class GameManager : MonoBehaviour
 
     public int GetCurrentDisarmAttackBonus(CharacterController attacker)
     {
-        return GetCurrentDisarmAttackBonusForUI(attacker);
+        if (CanUseMainHandDisarmAttackOption(attacker))
+            return GetCurrentMainHandDisarmAttackBonus(attacker);
+
+        return GetCurrentOffHandDisarmAttackBonus(attacker);
     }
 
     private bool TryStartMainHandSpecialManeuverSequence(CharacterController attacker, string maneuverLabel, out string reason)
@@ -6179,7 +6233,7 @@ public class GameManager : MonoBehaviour
     private bool TryConsumeTripAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason)
         => TryConsumeMainHandManeuverAttackAction(attacker, "Trip", out attackBonusUsed, out attacksRemaining, out reason);
 
-    private bool TryConsumeDisarmAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason, out bool usedOffHand, out ItemData disarmWeapon)
+    private bool TryConsumeDisarmAttackAction(CharacterController attacker, bool useOffHand, out int attackBonusUsed, out int attacksRemaining, out string reason, out bool usedOffHand, out ItemData disarmWeapon)
     {
         attackBonusUsed = 0;
         attacksRemaining = 0;
@@ -6193,44 +6247,57 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        if ((_isInAttackSequence && _attackingCharacter == attacker && HasMoreAttacksAvailable())
-            || (!_isInAttackSequence && TryStartMainHandSpecialManeuverSequence(attacker, "Disarm", out reason) && HasMoreAttacksAvailable()))
+        if (!useOffHand)
         {
+            bool hasActiveMainHandSequence = _isInAttackSequence
+                && _attackingCharacter == attacker
+                && HasMoreAttacksAvailable();
+
+            bool canStartMainHandSequence = !_isInAttackSequence
+                && TryStartMainHandSpecialManeuverSequence(attacker, "Disarm", out reason)
+                && HasMoreAttacksAvailable();
+
+            if (!hasActiveMainHandSequence && !canStartMainHandSequence)
+            {
+                if (string.IsNullOrWhiteSpace(reason))
+                    reason = "No main-hand disarm attacks remaining this turn.";
+                return false;
+            }
+
             attackBonusUsed = _currentAttackBAB;
             usedOffHand = false;
             disarmWeapon = attacker.GetEquippedMainWeapon();
             AdvanceMainHandSequenceAfterSpecialManeuverUse(attacker, "Disarm");
             attacksRemaining = GetRemainingDisarmAttempts(attacker);
+            Debug.Log($"[Disarm][Flow] Consumed main-hand disarm attack at BAB {CharacterStats.FormatMod(attackBonusUsed)}.");
             return true;
         }
 
-        if (CanUseOffHandAttackOption(attacker))
+        if (!CanUseOffHandDisarmAttackOption(attacker))
         {
-            ItemData offHandWeapon = attacker.GetOffHandAttackWeapon();
-            if (offHandWeapon == null)
-            {
-                reason = "No valid off-hand weapon equipped.";
-                return false;
-            }
-
-            int offHandBab = attacker.Stats != null ? attacker.Stats.BaseAttackBonus : 0;
-            if (_isDualWielding)
-                offHandBab += _offHandPenalty;
-
-            attackBonusUsed = offHandBab;
-            usedOffHand = true;
-            disarmWeapon = offHandWeapon;
-            _offHandAttackUsedThisTurn = true;
-            _offHandAttackAvailableThisTurn = attacker.HasOffHandWeaponEquipped();
-            attacksRemaining = GetRemainingDisarmAttempts(attacker);
-            Debug.Log($"[Disarm][Flow] Consumed off-hand disarm attack at BAB {CharacterStats.FormatMod(attackBonusUsed)}.");
-            return true;
+            reason = "No off-hand disarm attacks remaining this turn.";
+            return false;
         }
 
-        if (string.IsNullOrWhiteSpace(reason))
-            reason = "No disarm attacks remaining this turn.";
+        ItemData offHandWeapon = attacker.GetOffHandAttackWeapon();
+        if (offHandWeapon == null)
+        {
+            reason = "No valid off-hand weapon equipped.";
+            return false;
+        }
 
-        return false;
+        int offHandBab = attacker.Stats != null ? attacker.Stats.BaseAttackBonus : 0;
+        if (_isDualWielding)
+            offHandBab += _offHandPenalty;
+
+        attackBonusUsed = offHandBab;
+        usedOffHand = true;
+        disarmWeapon = offHandWeapon;
+        _offHandAttackUsedThisTurn = true;
+        _offHandAttackAvailableThisTurn = attacker.HasOffHandWeaponEquipped();
+        attacksRemaining = GetRemainingDisarmAttempts(attacker);
+        Debug.Log($"[Disarm][Flow] Consumed off-hand disarm attack at BAB {CharacterStats.FormatMod(attackBonusUsed)}.");
+        return true;
     }
 
     private void EndAttackSequence()
@@ -6272,6 +6339,7 @@ public class GameManager : MonoBehaviour
         _mainHandPenalty = 0;
         _offHandPenalty = 0;
         _pendingAttackType = AttackType.Melee;
+        _pendingDisarmUseOffHandSelection = false;
     }
 
     private bool CanUseImprovedFeintAsMove(CharacterController actor)
@@ -6506,10 +6574,10 @@ public class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "overrun"))
             return;
 
-        OnSpecialAttackSelected(SpecialAttackType.Overrun);
+        OnSpecialAttackSelected(SpecialAttackType.Overrun, false);
     }
 
-    private void OnSpecialAttackSelected(SpecialAttackType type)
+    private void OnSpecialAttackSelected(SpecialAttackType type, bool useOffHandDisarm)
     {
         CharacterController pc = ActivePC;
         if (pc == null) { ShowActionChoices(); return; }
@@ -6547,7 +6615,18 @@ public class GameManager : MonoBehaviour
         bool hasGrappleAttackAvailable = CanUseGrappleAttackOption(pc);
         bool hasBullRushAttackAvailable = CanUseBullRushAttackOption(pc);
         bool hasTripAttackAvailable = CanUseTripAttackOption(pc);
-        bool hasDisarmAttackAvailable = CanUseDisarmAttackOption(pc);
+        bool hasMainHandDisarmAttackAvailable = CanUseMainHandDisarmAttackOption(pc);
+        bool hasOffHandDisarmAttackAvailable = CanUseOffHandDisarmAttackOption(pc);
+        bool hasDisarmAttackAvailable = useOffHandDisarm ? hasOffHandDisarmAttackAvailable : hasMainHandDisarmAttackAvailable;
+
+        if (type == SpecialAttackType.Disarm && !useOffHandDisarm && !_dualWieldingChoiceMade && NeedsDualWieldingPrompt(pc))
+        {
+            Debug.Log($"[Disarm][DualWield] Showing dual wield prompt before main-hand disarm for {pc.Stats.CharacterName}.");
+            CombatUI.HideSpecialAttackMenu();
+            ShowDualWieldingPromptForDisarm(pc);
+            return;
+        }
+
         bool hasAction = type == SpecialAttackType.Feint
             ? (pc.Actions.HasStandardAction || CanUseImprovedFeintAsMove(pc))
             : (type == SpecialAttackType.Grapple
@@ -6562,7 +6641,7 @@ public class GameManager : MonoBehaviour
                                 ? pc.Actions.HasFullRoundAction
                                 : pc.Actions.HasStandardAction)))));
 
-        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} disarmAvailable={hasDisarmAttackAvailable}");
+        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} mainDisarmAvailable={hasMainHandDisarmAttackAvailable} offHandDisarmAvailable={hasOffHandDisarmAttackAvailable} requestedOffHandDisarm={useOffHandDisarm}");
 
         if (!hasAction)
         {
@@ -6575,7 +6654,7 @@ public class GameManager : MonoBehaviour
                         : (type == SpecialAttackType.Trip
                             ? "Need at least one remaining trip attack"
                             : (type == SpecialAttackType.Disarm
-                                ? "Need at least one remaining disarm-capable attack"
+                                ? (useOffHandDisarm ? "Need an available off-hand disarm attack" : "Need at least one remaining main-hand disarm attack")
                                 : (type == SpecialAttackType.BullRushCharge
                                     ? "Need a full-round action and valid charge movement"
                                     : "Need a standard action")))));
@@ -6601,6 +6680,7 @@ public class GameManager : MonoBehaviour
         }
 
         _pendingSpecialAttackType = type;
+        _pendingDisarmUseOffHandSelection = type == SpecialAttackType.Disarm && useOffHandDisarm;
         _isSelectingSpecialAttack = true;
         CurrentSubPhase = PlayerSubPhase.SelectingSpecialTarget;
         ShowSpecialAttackTargets(pc, type);
@@ -13433,15 +13513,17 @@ public class GameManager : MonoBehaviour
                 $"target={target.Stats.CharacterName} stdAction={attacker.Actions.HasStandardAction} " +
                 $"moveAction={attacker.Actions.HasMoveAction} fullRound={attacker.Actions.HasFullRoundAction} " +
                 $"sharedSequenceActive={_isInAttackSequence} sequenceOwner={(_attackingCharacter != null && _attackingCharacter.Stats != null ? _attackingCharacter.Stats.CharacterName : "<null>")} " +
-                $"disarmAttemptsBefore={disarmAttemptsBefore} offHandAvailable={CanUseOffHandAttackOption(attacker)}");
+                $"disarmAttemptsBefore={disarmAttemptsBefore} offHandAvailable={CanUseOffHandAttackOption(attacker)} requestedOffHand={_pendingDisarmUseOffHandSelection}");
 
-            if (!TryConsumeDisarmAttackAction(attacker, out disarmAttackBonusUsed, out int disarmAttacksRemaining, out string disarmConsumeReason, out disarmUsedOffHand, out disarmAttackerWeaponOverride))
+            bool useOffHandDisarm = _pendingDisarmUseOffHandSelection;
+            if (!TryConsumeDisarmAttackAction(attacker, useOffHandDisarm, out disarmAttackBonusUsed, out int disarmAttacksRemaining, out string disarmConsumeReason, out disarmUsedOffHand, out disarmAttackerWeaponOverride))
             {
                 string reason = string.IsNullOrWhiteSpace(disarmConsumeReason)
                     ? "no eligible disarm attack remaining"
                     : disarmConsumeReason;
                 Debug.LogWarning($"[Disarm][Flow] Consume failed for {attacker.Stats.CharacterName}: {reason}");
                 CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Disarm: {reason}.");
+                _pendingDisarmUseOffHandSelection = false;
                 ClearDisarmSequenceState();
                 ShowActionChoices();
                 return;
@@ -13621,6 +13703,7 @@ public class GameManager : MonoBehaviour
             else
                 CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no disarm-capable attacks remaining this turn.");
 
+            _pendingDisarmUseOffHandSelection = false;
             ClearDisarmSequenceState();
         }
 

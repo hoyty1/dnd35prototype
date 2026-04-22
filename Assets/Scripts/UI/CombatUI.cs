@@ -1634,7 +1634,7 @@ public class CombatUI : MonoBehaviour
     }
 
 
-    public void ShowSpecialAttackMenu(CharacterController pc, System.Action<SpecialAttackType> onSelect, System.Action onCancel)
+    public void ShowSpecialAttackMenu(CharacterController pc, System.Action<SpecialAttackType, bool> onSelect, System.Action onCancel)
     {
         HideSpecialStyleSelectionMenu();
         HideBullRushExtraPushChoice();
@@ -1666,6 +1666,23 @@ public class CombatUI : MonoBehaviour
         {
             if (btn == null) continue;
 
+            if (btn.name == "Disarm (Off-Hand)")
+            {
+                bool showOffHandDisarm = pc != null
+                    && GameManager.Instance != null
+                    && GameManager.Instance.ShouldShowOffHandDisarmButton(pc);
+                btn.gameObject.SetActive(showOffHandDisarm);
+                if (!showOffHandDisarm)
+                {
+                    Debug.Log($"[CombatUI][SpecialAttackMenu] button={btn.name} active=false (dual wield disarm not enabled)");
+                    continue;
+                }
+            }
+            else
+            {
+                btn.gameObject.SetActive(true);
+            }
+
             bool enabled = IsSpecialAttackButtonEnabled(btn.name, pc, hasStandardAction, hasFullRoundAction, hasGrappleAttackAvailable, hasBullRushAttackAvailable, hasTripAttackAvailable, hasDisarmAttackAvailable, canImprovedFeintMove);
             btn.interactable = enabled;
             UpdateSpecialAttackButtonLabel(btn, pc, enabled);
@@ -1693,7 +1710,10 @@ public class CombatUI : MonoBehaviour
                 enabled = hasFullRoundAction;
                 break;
             case "Disarm":
-                enabled = hasDisarmAttackAvailable;
+                enabled = GameManager.Instance != null && GameManager.Instance.CanUseMainHandDisarmAttackOption(pc);
+                break;
+            case "Disarm (Off-Hand)":
+                enabled = GameManager.Instance != null && GameManager.Instance.CanUseOffHandDisarmAttackOption(pc);
                 break;
             case "Feint":
                 enabled = hasStandardAction || canImprovedFeintMove;
@@ -1715,7 +1735,9 @@ public class CombatUI : MonoBehaviour
         if (pc != null)
         {
             if (buttonName == "Disarm")
-                enabled &= (pc.HasMeleeWeaponEquipped() || pc.HasOffHandWeaponEquipped());
+                enabled &= pc.HasMeleeWeaponEquipped();
+            else if (buttonName == "Disarm (Off-Hand)")
+                enabled &= pc.HasOffHandWeaponEquipped();
             else if (buttonName == "Sunder")
                 enabled &= pc.HasMeleeWeaponEquipped();
             if (buttonName == "Bull Rush (Attack)" || buttonName == "Bull Rush (Charge)" || buttonName == "Trip")
@@ -1784,13 +1806,26 @@ public class CombatUI : MonoBehaviour
             case "Disarm":
                 if (pc != null && isEnabled && GameManager.Instance != null)
                 {
-                    int remaining = GameManager.Instance.GetRemainingDisarmAttackActions(pc);
-                    int currentBab = GameManager.Instance.GetCurrentDisarmAttackBonus(pc);
+                    int remaining = GameManager.Instance.GetRemainingMainHandDisarmAttackActions(pc);
+                    int currentBab = GameManager.Instance.GetCurrentMainHandDisarmAttackBonus(pc);
                     label.text = $"Disarm (BAB {CharacterStats.FormatMod(currentBab)}, {remaining} left)";
                 }
                 else
                 {
-                    label.text = "Disarm (No attacks)";
+                    label.text = "Disarm (No main-hand attacks)";
+                }
+                break;
+
+            case "Disarm (Off-Hand)":
+                if (pc != null && isEnabled && GameManager.Instance != null)
+                {
+                    int remaining = GameManager.Instance.GetRemainingOffHandDisarmAttackActions(pc);
+                    int currentBab = GameManager.Instance.GetCurrentOffHandDisarmAttackBonus(pc);
+                    label.text = $"Disarm (Off-Hand) (BAB {CharacterStats.FormatMod(currentBab)}, {remaining} left)";
+                }
+                else
+                {
+                    label.text = "Disarm (Off-Hand) (No attacks)";
                 }
                 break;
 
@@ -2272,6 +2307,7 @@ public class CombatUI : MonoBehaviour
 
         CreateSpecialButton("Trip", "Trip");
         CreateSpecialButton("Disarm", "Disarm");
+        CreateSpecialButton("Disarm (Off-Hand)", "Disarm (Off-Hand)");
         CreateSpecialButton("Grapple", "Grapple");
         CreateSpecialButton("Sunder", "Sunder");
         CreateSpecialButton("Bull Rush (Attack)", "Bull Rush (Attack)");
@@ -2284,7 +2320,7 @@ public class CombatUI : MonoBehaviour
         _specialAttackPanel.SetActive(false);
     }
 
-    private void WireSpecialAttackMenu(System.Action<SpecialAttackType> onSelect, System.Action onCancel)
+    private void WireSpecialAttackMenu(System.Action<SpecialAttackType, bool> onSelect, System.Action onCancel)
     {
         if (_specialAttackPanel == null) return;
 
@@ -2295,15 +2331,16 @@ public class CombatUI : MonoBehaviour
             btn.onClick.RemoveAllListeners();
             switch (btn.name)
             {
-                case "Trip": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Trip"); onSelect?.Invoke(SpecialAttackType.Trip); }); break;
-                case "Disarm": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Disarm"); onSelect?.Invoke(SpecialAttackType.Disarm); }); break;
-                case "Grapple": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Grapple"); onSelect?.Invoke(SpecialAttackType.Grapple); }); break;
-                case "Sunder": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Sunder"); onSelect?.Invoke(SpecialAttackType.Sunder); }); break;
-                case "Bull Rush (Attack)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Attack)"); onSelect?.Invoke(SpecialAttackType.BullRushAttack); }); break;
-                case "Bull Rush (Charge)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Charge)"); onSelect?.Invoke(SpecialAttackType.BullRushCharge); }); break;
-                case "Overrun": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Overrun"); onSelect?.Invoke(SpecialAttackType.Overrun); }); break;
-                case "Feint": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Feint"); onSelect?.Invoke(SpecialAttackType.Feint); }); break;
-                case "Aid Another": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Aid Another"); onSelect?.Invoke(SpecialAttackType.AidAnother); }); break;
+                case "Trip": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Trip"); onSelect?.Invoke(SpecialAttackType.Trip, false); }); break;
+                case "Disarm": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Disarm"); onSelect?.Invoke(SpecialAttackType.Disarm, false); }); break;
+                case "Disarm (Off-Hand)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Disarm (Off-Hand)"); onSelect?.Invoke(SpecialAttackType.Disarm, true); }); break;
+                case "Grapple": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Grapple"); onSelect?.Invoke(SpecialAttackType.Grapple, false); }); break;
+                case "Sunder": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Sunder"); onSelect?.Invoke(SpecialAttackType.Sunder, false); }); break;
+                case "Bull Rush (Attack)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Attack)"); onSelect?.Invoke(SpecialAttackType.BullRushAttack, false); }); break;
+                case "Bull Rush (Charge)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Charge)"); onSelect?.Invoke(SpecialAttackType.BullRushCharge, false); }); break;
+                case "Overrun": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Overrun"); onSelect?.Invoke(SpecialAttackType.Overrun, false); }); break;
+                case "Feint": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Feint"); onSelect?.Invoke(SpecialAttackType.Feint, false); }); break;
+                case "Aid Another": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Aid Another"); onSelect?.Invoke(SpecialAttackType.AidAnother, false); }); break;
                 case "Cancel":
                     btn.onClick.AddListener(() =>
                     {
