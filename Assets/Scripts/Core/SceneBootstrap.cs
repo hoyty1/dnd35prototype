@@ -761,6 +761,8 @@ public class SceneBootstrap : MonoBehaviour
             "Fighting Defensively (Std)", new Color(0.22f, 0.38f, 0.62f));
         combatUI.SpecialAttackButton = CreateGridButton(btnGrid.transform, "SpecialAttackBtn",
             "Special Attack", new Color(0.55f, 0.35f, 0.15f));
+        combatUI.TurnUndeadButton = CreateGridButton(btnGrid.transform, "TurnUndeadBtn",
+            "Turn Undead", new Color(0.72f, 0.68f, 0.2f));
         combatUI.GrappleActionsButton = CreateGridButton(btnGrid.transform, "GrappleActionsBtn",
             "Grapple Actions (Legacy)", new Color(0.45f, 0.24f, 0.6f));
         combatUI.GrappleDamageButton = CreateGridButton(btnGrid.transform, "GrappleDamageBtn",
@@ -1070,6 +1072,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.AttackDefensivelyButton.onClick.AddListener(() => GameManager.Instance.OnAttackDefensivelyButtonPressed());
         if (ui.SpecialAttackButton != null)
             ui.SpecialAttackButton.onClick.AddListener(() => GameManager.Instance.OnSpecialAttackButtonPressed());
+        if (ui.TurnUndeadButton != null)
+            ui.TurnUndeadButton.onClick.AddListener(() => GameManager.Instance.OnTurnUndeadButtonPressed());
         if (ui.GrappleActionsButton != null)
         {
             ui.GrappleActionsButton.onClick.RemoveAllListeners();

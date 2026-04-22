@@ -96,6 +96,7 @@ public class GameManager : MonoBehaviour
         ConfirmingChargePath,
         SelectingAoETarget,
         ConfirmingSelfAoE,
+        ConfirmingTurnUndead,
         Animating
     }
 
@@ -158,6 +159,10 @@ public class GameManager : MonoBehaviour
     private bool _isSelectingSpecialAttack;
     private bool _pendingDisarmUseOffHandSelection;
     private bool _pendingSunderUseOffHandSelection;
+
+    // Turn Undead targeted-confirmation state
+    private bool _isSelectingTurnUndead;
+    private CharacterController _turnUndeadPendingInvoker;
 
     // Unified iterative attack flow state (melee + thrown share one sequence)
     private bool _isInAttackSequence;
@@ -1478,6 +1483,7 @@ public class GameManager : MonoBehaviour
             || CurrentSubPhase == PlayerSubPhase.Crawling
             || CurrentSubPhase == PlayerSubPhase.SelectingAoETarget
             || CurrentSubPhase == PlayerSubPhase.ConfirmingSelfAoE
+            || CurrentSubPhase == PlayerSubPhase.ConfirmingTurnUndead
             || CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget
             || CurrentSubPhase == PlayerSubPhase.SelectingAttackTarget
             || CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget
@@ -1530,6 +1536,10 @@ public class GameManager : MonoBehaviour
                 else if (CurrentSubPhase == PlayerSubPhase.SelectingAoETarget && _isAoETargeting)
                 {
                     CancelAoETargeting();
+                }
+                else if (CurrentSubPhase == PlayerSubPhase.ConfirmingTurnUndead)
+                {
+                    CancelTurnUndeadTargeting();
                 }
                 else if (CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget)
                 {
@@ -2974,6 +2984,8 @@ public class GameManager : MonoBehaviour
 
         _waitingForAoOConfirmation = false;
         _pendingAoOAction = null;
+        _isSelectingTurnUndead = false;
+        _turnUndeadPendingInvoker = null;
         _spellcastProvocationCancelled = false;
         ClearSpellcastResourceSnapshot();
         ClearDisarmSequenceState();
@@ -6814,9 +6826,8 @@ public class GameManager : MonoBehaviour
         if (actor == null)
             return false;
 
-        bool hasTurnUndeadAvailable = CanUseTurnUndead(actor, out _);
         if (actor.HasCondition(CombatConditionType.Turned))
-            return hasTurnUndeadAvailable;
+            return false;
 
         bool hasGrappleAttackAvailable = CanUseGrappleAttackOption(actor);
         bool hasBullRushAttackAvailable = CanUseBullRushAttackOption(actor);
@@ -6830,8 +6841,7 @@ public class GameManager : MonoBehaviour
             || hasBullRushAttackAvailable
             || hasTripAttackAvailable
             || hasDisarmAttackAvailable
-            || hasSunderAttackAvailable
-            || hasTurnUndeadAvailable;
+            || hasSunderAttackAvailable;
     }
 
     public int GetRemainingTurnUndeadAttempts(CharacterController actor)
@@ -7056,9 +7066,11 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        if (!actor.Stats.IsCleric)
+        bool isCleric = actor.Stats.IsCleric;
+        bool isEligiblePaladin = actor.Stats.IsPaladin && actor.Stats.Level >= 4;
+        if (!isCleric && !isEligiblePaladin)
         {
-            reason = "Cleric only";
+            reason = actor.Stats.IsPaladin ? "Paladin level 4 required" : "Cleric or Paladin (Lv4+) only";
             return false;
         }
 
@@ -7136,6 +7148,21 @@ public class GameManager : MonoBehaviour
         return result;
     }
 
+    private static int GetTurnUndeadEffectiveLevel(CharacterController turner)
+    {
+        if (turner == null || turner.Stats == null)
+            return 0;
+
+        if (turner.Stats.IsCleric)
+            return Mathf.Max(1, turner.Stats.Level);
+
+        // D&D 3.5e: Paladin turns undead as a cleric three levels lower.
+        if (turner.Stats.IsPaladin)
+            return Mathf.Max(0, turner.Stats.Level - 3);
+
+        return 0;
+    }
+
     private static int ComputeTurnUndeadMaxHitDice(int turningCheckTotal, int clericLevel)
     {
         int level = Mathf.Max(1, clericLevel);
@@ -7176,12 +7203,20 @@ public class GameManager : MonoBehaviour
         cleric.Stats.TurnUndeadAttemptsUsedToday++;
         int attemptsRemaining = GetRemainingTurnUndeadAttempts(cleric);
 
+        int effectiveTurnLevel = GetTurnUndeadEffectiveLevel(cleric);
+        if (effectiveTurnLevel <= 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Turn Undead: insufficient effective turning level.");
+            ShowActionChoices();
+            return;
+        }
+
         int checkRoll = UnityEngine.Random.Range(1, 21);
         int checkTotal = checkRoll + cleric.Stats.CHAMod;
-        int maxAffectedHd = ComputeTurnUndeadMaxHitDice(checkTotal, cleric.Stats.Level);
+        int maxAffectedHd = ComputeTurnUndeadMaxHitDice(checkTotal, effectiveTurnLevel);
 
         int turnDamageRoll = UnityEngine.Random.Range(1, 7) + UnityEngine.Random.Range(1, 7);
-        int turnPoolHd = Mathf.Max(0, turnDamageRoll + cleric.Stats.Level + cleric.Stats.CHAMod);
+        int turnPoolHd = Mathf.Max(0, turnDamageRoll + effectiveTurnLevel + cleric.Stats.CHAMod);
 
         List<CharacterController> candidates = GetTurnableUndeadInRange(cleric, maxRangeSquares: 12);
 
@@ -7191,7 +7226,7 @@ public class GameManager : MonoBehaviour
 
         CombatUI?.ShowCombatLog($"✝️ {cleric.Stats.CharacterName} invokes Turn Undead! (Attempt {cleric.Stats.TurnUndeadAttemptsUsedToday}/{cleric.Stats.MaxTurnUndeadAttemptsPerDay})");
         CombatUI?.ShowCombatLog($"   Turning Check: d20 ({checkRoll}) + CHA {CharacterStats.FormatMod(cleric.Stats.CHAMod)} = {checkTotal} → affects undead up to {maxAffectedHd} HD");
-        CombatUI?.ShowCombatLog($"   Turning Damage: 2d6 ({turnDamageRoll}) + level {cleric.Stats.Level} + CHA {CharacterStats.FormatMod(cleric.Stats.CHAMod)} = {turnPoolHd} total HD");
+        CombatUI?.ShowCombatLog($"   Turning Damage: 2d6 ({turnDamageRoll}) + turning level {effectiveTurnLevel} + CHA {CharacterStats.FormatMod(cleric.Stats.CHAMod)} = {turnPoolHd} total HD");
 
         if (candidates.Count == 0)
         {
@@ -7255,6 +7290,114 @@ public class GameManager : MonoBehaviour
         }
 
         StartCoroutine(AfterAttackDelay(cleric, 0.9f));
+    }
+
+    public void OnTurnUndeadButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null)
+            return;
+
+        if (!CanUseTurnUndead(pc, out string reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use Turn Undead: {reason}.");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        EnterTurnUndeadTargeting(pc);
+    }
+
+    private void EnterTurnUndeadTargeting(CharacterController turner)
+    {
+        if (turner == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        _isSelectingTurnUndead = true;
+        _turnUndeadPendingInvoker = turner;
+        _isSelectingSpecialAttack = false;
+        CurrentSubPhase = PlayerSubPhase.ConfirmingTurnUndead;
+
+        CombatUI?.HideSpecialAttackMenu();
+        CombatUI?.SetActionButtonsVisible(false);
+
+        ShowTurnUndeadTargetingPreview(turner);
+
+        int inRangeUndead = GetTurnableUndeadInRange(turner, 12).Count;
+        CombatUI?.SetTurnIndicator($"TURN UNDEAD: {inRangeUndead} undead in 60 ft. Left-click any cell to invoke, Right-click/Esc to cancel.");
+    }
+
+    private void ShowTurnUndeadTargetingPreview(CharacterController turner)
+    {
+        if (turner == null)
+            return;
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        int maxRangeSquares = 12;
+        int sizePadding = Mathf.Max(0, turner.GetVisualSquaresOccupied() - 1);
+        List<SquareCell> rangeCells = GetCellsInChebyshevRange(turner.GridPosition, maxRangeSquares + sizePadding);
+        for (int i = 0; i < rangeCells.Count; i++)
+        {
+            SquareCell cell = rangeCells[i];
+            if (cell == null)
+                continue;
+
+            cell.SetHighlight(HighlightType.SpellRange);
+            _highlightedCells.Add(cell);
+        }
+
+        List<CharacterController> undeadInRange = GetTurnableUndeadInRange(turner, maxRangeSquares);
+        for (int i = 0; i < undeadInRange.Count; i++)
+        {
+            CharacterController undead = undeadInRange[i];
+            if (undead == null || undead.Stats == null || undead.Stats.IsDead)
+                continue;
+
+            HighlightCharacterFootprint(undead, HighlightType.Attack, addToSelectableCells: true);
+        }
+
+        HighlightCharacterFootprint(turner, HighlightType.Selected, addToSelectableCells: true);
+    }
+
+    private void ConfirmTurnUndeadTargeting()
+    {
+        if (!_isSelectingTurnUndead)
+            return;
+
+        CharacterController turner = _turnUndeadPendingInvoker;
+        _isSelectingTurnUndead = false;
+        _turnUndeadPendingInvoker = null;
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI?.SetActionButtonsVisible(true);
+
+        if (turner == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        ExecuteTurnUndead(turner);
+    }
+
+    private void CancelTurnUndeadTargeting()
+    {
+        if (!_isSelectingTurnUndead && CurrentSubPhase != PlayerSubPhase.ConfirmingTurnUndead)
+            return;
+
+        _isSelectingTurnUndead = false;
+        _turnUndeadPendingInvoker = null;
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI?.ShowCombatLog("↩ Turn Undead cancelled.");
+        ShowActionChoices();
     }
 
     private bool TryConsumeFeintAction(CharacterController attacker, out string actionLabel)
@@ -7517,7 +7660,7 @@ public class GameManager : MonoBehaviour
         if (type == SpecialAttackType.TurnUndead)
         {
             CombatUI.HideSpecialAttackMenu();
-            ExecuteTurnUndead(pc);
+            EnterTurnUndeadTargeting(pc);
             return;
         }
 
@@ -12889,6 +13032,10 @@ public class GameManager : MonoBehaviour
 
             case PlayerSubPhase.SelectingSpecialTarget:
                 HandleSpecialAttackTargetClick(pc, cell);
+                break;
+
+            case PlayerSubPhase.ConfirmingTurnUndead:
+                ConfirmTurnUndeadTargeting();
                 break;
 
             case PlayerSubPhase.SelectingChargeTarget:

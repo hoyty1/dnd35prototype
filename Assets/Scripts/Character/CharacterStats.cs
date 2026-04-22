@@ -92,6 +92,9 @@ public class CharacterStats
     /// <summary>Whether this character is a Cleric.</summary>
     public bool IsCleric => CharacterClass == "Cleric";
 
+    /// <summary>Whether this character is a Paladin.</summary>
+    public bool IsPaladin => CharacterClass == "Paladin";
+
     private static readonly HashSet<string> ArcaneSpellcastingClasses = new HashSet<string>
     {
         "Wizard", "Sorcerer", "Bard"
@@ -226,9 +229,23 @@ public class CharacterStats
     public int TurnUndeadAttemptsUsedToday;
 
     /// <summary>
-    /// D&D 3.5e Turn Undead attempts per day (Cleric baseline): 3 + CHA modifier (minimum 1).
+    /// D&D 3.5e Turn Undead attempts per day:
+    /// - Cleric: 3 + CHA modifier (minimum 1)
+    /// - Paladin: 3 + CHA modifier (minimum 1), gained at class level 4+
     /// </summary>
-    public int MaxTurnUndeadAttemptsPerDay => IsCleric ? Mathf.Max(1, 3 + CHAMod) : 0;
+    public int MaxTurnUndeadAttemptsPerDay
+    {
+        get
+        {
+            if (IsCleric)
+                return Mathf.Max(1, 3 + CHAMod);
+
+            if (IsPaladin && Level >= 4)
+                return Mathf.Max(1, 3 + CHAMod);
+
+            return 0;
+        }
+    }
 
     /// <summary>Whether the barbarian is fatigued (after rage ends).</summary>
     public bool IsFatigued;
