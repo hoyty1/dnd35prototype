@@ -3682,6 +3682,22 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// True when any weapon-equivalent item is equipped (including weapons/shields in hand slots and hands-slot spiked gauntlet).
+    /// </summary>
+    public bool HasWeaponEquipped()
+    {
+        return GetEquippedMainWeapon() != null;
+    }
+
+    /// <summary>
+    /// True when this character currently has at least one disarmable held item in right/left hand.
+    /// </summary>
+    public bool HasDisarmableWeaponEquipped()
+    {
+        return GetDisarmableHeldItemOptions().Count > 0;
+    }
+
+    /// <summary>
     /// Returns equipped held items in the hand slots that are valid disarm targets (right, then left).
     /// </summary>
     public List<DisarmableHeldItemOption> GetDisarmableHeldItemOptions()

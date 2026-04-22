@@ -12524,18 +12524,32 @@ public class GameManager : MonoBehaviour
                 inRange = distance == 1;
             }
 
-            if (inRange)
+            if (!inRange)
+                continue;
+
+            if (type == SpecialAttackType.Disarm)
             {
-                c.SetHighlight(HighlightType.Attack);
+                bool hasDisarmableWeapon = c.Occupant.HasDisarmableWeaponEquipped();
+                c.SetHighlight(hasDisarmableWeapon ? HighlightType.Attack : HighlightType.AttackDeadZone);
                 _highlightedCells.Add(c);
                 hasTarget = true;
+                continue;
             }
+
+            c.SetHighlight(HighlightType.Attack);
+            _highlightedCells.Add(c);
+            hasTarget = true;
         }
 
         HighlightCharacterFootprint(attacker, HighlightType.Selected);
 
         if (hasTarget)
-            CombatUI.SetTurnIndicator($"SPECIAL: {type} - select target (Right-click/Esc to cancel)");
+        {
+            if (type == SpecialAttackType.Disarm)
+                CombatUI.SetTurnIndicator("SPECIAL: Disarm - red targets are valid, gray targets have no disarmable weapon (Right-click/Esc to cancel)");
+            else
+                CombatUI.SetTurnIndicator($"SPECIAL: {type} - select target (Right-click/Esc to cancel)");
+        }
         else
         {
             CombatUI.SetTurnIndicator($"No targets in range for {type}.");
@@ -12573,6 +12587,17 @@ public class GameManager : MonoBehaviour
         if (attacker == null || target == null)
         {
             ShowActionChoices();
+            return;
+        }
+
+        if (!target.HasDisarmableWeaponEquipped())
+        {
+            string targetName = target.Stats != null ? target.Stats.CharacterName : "Target";
+            Debug.Log($"[Disarm][Flow] Invalid target selected: {targetName} has no disarmable weapon equipped.");
+            CombatUI?.ShowCombatLog($"{targetName} has no weapon to disarm!");
+
+            // Do not consume any attack action; allow selecting another target.
+            ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
             return;
         }
 
