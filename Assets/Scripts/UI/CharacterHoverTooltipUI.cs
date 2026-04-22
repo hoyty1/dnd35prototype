@@ -1,11 +1,12 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
 /// Lightweight screen-space tooltip for battlefield character hover details.
-/// Displays name, class/race, current HP, and active statuses.
+/// Displays name, race, equipment tags, HP condition state, and active statuses.
 /// </summary>
 public class CharacterHoverTooltipUI : MonoBehaviour
 {
@@ -61,7 +62,7 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         _panel.pivot = new Vector2(0f, 1f);
         _panel.anchorMin = new Vector2(0f, 1f);
         _panel.anchorMax = new Vector2(0f, 1f);
-        _panel.sizeDelta = new Vector2(260f, 100f);
+        _panel.sizeDelta = new Vector2(280f, 120f);
 
         GameObject textGO = new GameObject("Text");
         textGO.transform.SetParent(panelGO.transform, false);
@@ -95,8 +96,8 @@ public class CharacterHoverTooltipUI : MonoBehaviour
 
         _text.text = BuildTooltipText(character);
 
-        float width = Mathf.Clamp(_text.preferredWidth + 20f, 180f, 380f);
-        float height = Mathf.Clamp(_text.preferredHeight + 16f, 64f, 280f);
+        float width = Mathf.Clamp(_text.preferredWidth + 20f, 180f, 420f);
+        float height = Mathf.Clamp(_text.preferredHeight + 16f, 64f, 320f);
         _panel.sizeDelta = new Vector2(width, height);
 
         RectTransform canvasRT = _canvas.transform as RectTransform;
@@ -116,31 +117,89 @@ public class CharacterHoverTooltipUI : MonoBehaviour
 
     private static string BuildTooltipText(CharacterController character)
     {
-        CharacterStats stats = character.Stats;
+        var tags = character.Tags.GetAllTags().ToList();
         StringBuilder sb = new StringBuilder();
 
-        sb.Append(stats.CharacterName);
+        string displayName = !string.IsNullOrWhiteSpace(character.CharacterName)
+            ? character.CharacterName
+            : character.Stats.CharacterName;
+        sb.Append(displayName);
 
         string race = ExtractTagValue(character, "Race: ");
-        string characterClass = ExtractTagValue(character, "Class: ");
-        sb.Append("\n").Append(characterClass).Append(" • ").Append(race);
+        if (!string.IsNullOrWhiteSpace(race) && race != "Unknown")
+            sb.Append("\nRace: ").Append(race);
+
+        List<string> wielding = GetWieldingTags(tags);
+        if (wielding.Count > 0)
+            sb.Append("\nWielding: ").Append(string.Join(", ", wielding));
+        else
+            Debug.LogWarning($"[Tooltip] No wielding tags found for {displayName}. Tags: {character.Tags.GetTagsDebugString()}");
+
+        List<string> armor = GetArmorTags(tags);
+        if (armor.Count > 0)
+            sb.Append("\nArmor: ").Append(string.Join(", ", armor));
+        else
+            Debug.LogWarning($"[Tooltip] No armor tags found for {displayName}. Tags: {character.Tags.GetTagsDebugString()}");
 
         string hpState = ExtractTagValue(character, "HP State: ");
-        sb.Append("\nHP: ").Append(stats.CurrentHP).Append("/").Append(stats.TotalMaxHP);
-        if (!string.IsNullOrWhiteSpace(hpState))
-            sb.Append(" (").Append(hpState).Append(")");
+        if (!string.IsNullOrWhiteSpace(hpState) && hpState != "Unknown")
+            sb.Append("\nCondition: ").Append(hpState);
 
-        List<string> statuses = new List<string>();
-        foreach (string tag in character.Tags.GetTagsByPrefix("Status: "))
-        {
-            if (tag.Length > 8)
-                statuses.Add(tag.Substring(8));
-        }
+        List<string> statuses = character.Tags.GetTagsByPrefix("Status: ")
+            .Where(tag => tag.Length > "Status: ".Length)
+            .Select(tag => tag.Substring("Status: ".Length))
+            .ToList();
 
-        sb.Append("\nStatus: ");
-        sb.Append(statuses.Count > 0 ? string.Join(", ", statuses) : "None");
+        if (statuses.Count > 0)
+            sb.Append("\nStatus: ").Append(string.Join(", ", statuses));
 
         return sb.ToString();
+    }
+
+    private static List<string> GetWieldingTags(List<string> tags)
+    {
+        List<string> wielding = tags
+            .Where(tag => tag.StartsWith("Wielding: "))
+            .Select(tag => tag.Substring("Wielding: ".Length))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct()
+            .ToList();
+
+        if (wielding.Count > 0)
+            return wielding;
+
+        // Backward-compatible fallback for older tag format.
+        return tags
+            .Where(tag => tag.Equals("Dual-Wielding")
+                          || tag.Equals("Single Weapon")
+                          || tag.Equals("Unarmed")
+                          || tag.Equals("Shield Equipped")
+                          || tag.Equals("Two-Handed Weapon"))
+            .Distinct()
+            .ToList();
+    }
+
+    private static List<string> GetArmorTags(List<string> tags)
+    {
+        List<string> armor = tags
+            .Where(tag => tag.StartsWith("Armor: "))
+            .Select(tag => tag.Substring("Armor: ".Length))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct()
+            .ToList();
+
+        if (armor.Count > 0)
+            return armor;
+
+        // Backward-compatible fallback for older armor tags.
+        return tags
+            .Where(tag => tag.Equals("Unarmored")
+                          || tag.Equals("Light Armor")
+                          || tag.Equals("Medium Armor")
+                          || tag.Equals("Heavy Armor")
+                          || tag.EndsWith(" Armor"))
+            .Distinct()
+            .ToList();
     }
 
     private static string ExtractTagValue(CharacterController character, string prefix)

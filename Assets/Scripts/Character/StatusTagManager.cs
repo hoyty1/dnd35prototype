@@ -11,6 +11,8 @@ public class StatusTagManager
     private const string ClassPrefix = "Class: ";
     private const string HpStatePrefix = "HP State: ";
     private const string StatusPrefix = "Status: ";
+    private const string WieldingPrefix = "Wielding: ";
+    private const string ArmorPrefix = "Armor: ";
 
     private readonly CharacterController _character;
     private readonly HashSet<string> _appliedArmorTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -80,6 +82,16 @@ public class StatusTagManager
 
         if ((rightHandItem != null && rightHandItem.IsTwoHanded) || (leftHandItem != null && leftHandItem.IsTwoHanded))
             AddTrackedTag(tags, _appliedWieldingTags, "Two-Handed Weapon");
+
+        // Explicit tooltip-facing equipment tags.
+        if (rightHandItem != null && !string.IsNullOrWhiteSpace(rightHandItem.Name))
+            AddTrackedTag(tags, _appliedWieldingTags, $"{WieldingPrefix}{rightHandItem.Name}");
+
+        if (leftHandItem != null && !string.IsNullOrWhiteSpace(leftHandItem.Name))
+            AddTrackedTag(tags, _appliedWieldingTags, $"{WieldingPrefix}{leftHandItem.Name}");
+
+        if (rightHandItem == null && leftHandItem == null)
+            AddTrackedTag(tags, _appliedWieldingTags, $"{WieldingPrefix}Unarmed");
     }
 
     public void UpdateStatusEffectTags(IEnumerable<StatusEffect> activeEffects)
@@ -148,13 +160,18 @@ public class StatusTagManager
         if (armor != null && armor.VisualTags != null && armor.VisualTags.Count > 0)
         {
             foreach (string armorTag in armor.VisualTags)
+            {
                 AddTrackedTag(tags, _appliedArmorTags, armorTag);
+                AddTrackedTag(tags, _appliedArmorTags, $"{ArmorPrefix}{armorTag}");
+            }
 
             tags.RemoveTag("Unarmored");
+            tags.RemoveTag($"{ArmorPrefix}Unarmored");
             return;
         }
 
         AddTrackedTag(tags, _appliedArmorTags, "Unarmored");
+        AddTrackedTag(tags, _appliedArmorTags, $"{ArmorPrefix}Unarmored");
     }
 
     private static void ClearTagSet(CharacterTags tags, HashSet<string> tracked)
