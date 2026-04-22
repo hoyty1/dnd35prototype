@@ -86,8 +86,6 @@ public class CombatUI : MonoBehaviour
     public Text CombatLogText;  // Legacy single-text reference (kept for backward compat)
     public GameObject CombatLogContent;     // Content container for scrollable log messages
     public ScrollRect CombatLogScrollRect;  // ScrollRect for auto-scrolling
-    private List<string> _combatLogMessages = new List<string>();
-    private const int MaxLogMessages = 200; // Prevent unbounded growth
 
     [Header("Action Buttons - Action Economy")]
     public GameObject ActionPanel;
@@ -178,9 +176,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void UpdateAllStats(CharacterController pc1, CharacterController pc2, CharacterController npc)
     {
-        UpdateCharacterStats(pc1, PC1NameText, PC1HPText, PC1ACText, PC1AtkText, PC1SpeedText, PC1AbilityText, PC1HPBar);
-        UpdateCharacterStats(pc2, PC2NameText, PC2HPText, PC2ACText, PC2AtkText, PC2SpeedText, PC2AbilityText, PC2HPBar);
-        UpdateCharacterStats(npc, NPCNameText, NPCHPText, NPCACText, NPCAtkText, NPCSpeedText, NPCAbilityText, NPCHPBar);
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.UpdateAllStats(pc1, pc2, npc);
     }
 
     /// <summary>
@@ -188,28 +185,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void UpdateAllStats4PC(List<CharacterController> pcs, List<CharacterController> npcs)
     {
-        // Update PC panels
-        if (pcs.Count > 0) UpdateCharacterStats(pcs[0], PC1NameText, PC1HPText, PC1ACText, PC1AtkText, PC1SpeedText, PC1AbilityText, PC1HPBar);
-        if (pcs.Count > 1) UpdateCharacterStats(pcs[1], PC2NameText, PC2HPText, PC2ACText, PC2AtkText, PC2SpeedText, PC2AbilityText, PC2HPBar);
-        if (pcs.Count > 2) UpdateCharacterStats(pcs[2], PC3NameText, PC3HPText, PC3ACText, PC3AtkText, PC3SpeedText, PC3AbilityText, PC3HPBar);
-        if (pcs.Count > 3) UpdateCharacterStats(pcs[3], PC4NameText, PC4HPText, PC4ACText, PC4AtkText, PC4SpeedText, PC4AbilityText, PC4HPBar);
-
-        // Update buff displays for PCs
-        if (pcs.Count > 0) UpdateBuffDisplay(pcs[0], PC1BuffText);
-        if (pcs.Count > 1) UpdateBuffDisplay(pcs[1], PC2BuffText);
-        if (pcs.Count > 2) UpdateBuffDisplay(pcs[2], PC3BuffText);
-        if (pcs.Count > 3) UpdateBuffDisplay(pcs[3], PC4BuffText);
-
-        // Update each NPC panel
-        for (int i = 0; i < NPCPanels.Count && i < npcs.Count; i++)
-        {
-            var p = NPCPanels[i];
-            UpdateCharacterStats(npcs[i], p.NameText, p.HPText, p.ACText, p.AtkText, p.SpeedText, p.AbilityText, p.HPBar);
-        }
-
-        // Also update legacy single-NPC fields if they exist (backward compat)
-        if (npcs.Count > 0)
-            UpdateCharacterStats(npcs[0], NPCNameText, NPCHPText, NPCACText, NPCAtkText, NPCSpeedText, NPCAbilityText, NPCHPBar);
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.UpdateAllStats4PC(pcs, npcs);
     }
 
     /// <summary>
@@ -217,158 +194,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void UpdateAllStatsMultiNPC(CharacterController pc1, CharacterController pc2, List<CharacterController> npcs)
     {
-        UpdateCharacterStats(pc1, PC1NameText, PC1HPText, PC1ACText, PC1AtkText, PC1SpeedText, PC1AbilityText, PC1HPBar);
-        UpdateCharacterStats(pc2, PC2NameText, PC2HPText, PC2ACText, PC2AtkText, PC2SpeedText, PC2AbilityText, PC2HPBar);
-
-        // Update each NPC panel
-        for (int i = 0; i < NPCPanels.Count && i < npcs.Count; i++)
-        {
-            var p = NPCPanels[i];
-            UpdateCharacterStats(npcs[i], p.NameText, p.HPText, p.ACText, p.AtkText, p.SpeedText, p.AbilityText, p.HPBar);
-        }
-
-        // Also update legacy single-NPC fields if they exist (backward compat)
-        if (npcs.Count > 0)
-            UpdateCharacterStats(npcs[0], NPCNameText, NPCHPText, NPCACText, NPCAtkText, NPCSpeedText, NPCAbilityText, NPCHPBar);
-    }
-
-    private void UpdateCharacterStats(CharacterController ch,
-        Text nameText, Text hpText, Text acText, Text atkText, Text speedText, Text abilityText, Image hpBar)
-    {
-        if (ch == null || ch.Stats == null) return;
-
-        var s = ch.Stats;
-
-        if (nameText != null)
-        {
-            string raceStr = !string.IsNullOrEmpty(s.RaceName) ? $"{s.RaceName} " : "";
-            string sizeStr = (s.SizeCategoryName != "Medium") ? $" [{s.SizeCategoryName}]" : "";
-            string displayName = s.CharacterName;
-            if (GameManager.Instance != null)
-                displayName = GameManager.Instance.GetSummonDisplayName(ch);
-
-            nameText.text = $"{displayName} (Lv {s.Level} {raceStr}{s.CharacterClass}){sizeStr}";
-            if (ch.CurrentHPState == HPState.Dead) nameText.text += " (DEAD)";
-        }
-
-        // Use TotalMaxHP (includes feat bonuses like Toughness and spell-based BonusMaxHP)
-        int totalMax = s.TotalMaxHP;
-        if (totalMax <= 0) totalMax = 1; // Guard against division by zero
-
-        if (hpText != null)
-        {
-            string hpStateTag = ch.CurrentHPState == HPState.Healthy ? string.Empty : $" [{ch.CurrentHPState}]";
-            hpText.text = $"HP: {s.CurrentHP}/{totalMax}{hpStateTag}";
-        }
-        if (acText != null)
-        {
-            int effectiveDex = s.DEXMod;
-            if (s.MaxDexBonus >= 0 && effectiveDex > s.MaxDexBonus)
-                effectiveDex = s.MaxDexBonus;
-            string dexLabel = (s.MaxDexBonus >= 0 && s.DEXMod > s.MaxDexBonus)
-                ? $"DEX*" : "DEX";
-            string sizeDetail = FormatBonusDetail(s.SizeModifier, "Size");
-            string defensiveDetail = ch.IsFightingDefensively ? " +2 Fighting Defensively" : "";
-            string acDetails = $"AC: {s.ArmorClass + (ch.IsFightingDefensively ? 2 : 0)} (10{FormatBonusDetail(effectiveDex, dexLabel)}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")}{sizeDetail}{defensiveDetail})";
-            if (s.ArmorCheckPenalty > 0)
-                acDetails += $" ACP:-{s.ArmorCheckPenalty}";
-            acText.text = acDetails;
-        }
-
-        if (atkText != null)
-        {
-            string sizeAtkStr = s.SizeModifier != 0 ? $" {CharacterStats.FormatMod(s.SizeModifier)} Size" : "";
-            atkText.text = $"Atk: {CharacterStats.FormatMod(s.AttackBonus)} (BAB {CharacterStats.FormatMod(s.BaseAttackBonus)} {CharacterStats.FormatMod(s.STRMod)} STR{sizeAtkStr})";
-        }
-
-        if (speedText != null)
-        {
-            string speedExtra = $" | Load: {s.EncumbranceSummary}";
-            if (s.SpeedNotReducedByArmor)
-                speedExtra += " (no armor speed reduction)";
-            speedText.text = $"Speed: {s.MoveRange} sq ({s.SpeedInFeet} ft){speedExtra}";
-        }
-
-        if (abilityText != null)
-        {
-            abilityText.supportRichText = true;
-            abilityText.text =
-                $"{s.GetAbilityStringWithRacial("STR", s.STR, s.GetRacialModifier("STR"))} " +
-                $"{s.GetAbilityStringWithRacial("DEX", s.DEX, s.GetRacialModifier("DEX"))} " +
-                $"{s.GetAbilityStringWithRacial("CON", s.CON, s.GetRacialModifier("CON"))}\n" +
-                $"{s.GetAbilityStringWithRacial("WIS", s.WIS, s.GetRacialModifier("WIS"))} " +
-                $"{s.GetAbilityStringWithRacial("INT", s.INT, s.GetRacialModifier("INT"))} " +
-                $"{s.GetAbilityStringWithRacial("CHA", s.CHA, s.GetRacialModifier("CHA"))}";
-        }
-
-        if (hpBar != null)
-        {
-            // Update fill amount based on HP percentage using TotalMaxHP.
-            float hpPercent = totalMax > 0 ? Mathf.Clamp01((float)Mathf.Max(0, s.CurrentHP) / totalMax) : 0f;
-            hpBar.fillAmount = hpPercent;
-
-            // Update HP bar color based on HP percentage:
-            //   > 50%  → Green
-            //   > 25%  → Yellow
-            //   ≤ 25%  → Red
-            Color hpColor;
-            if (hpPercent > 0.5f)
-                hpColor = new Color(0.2f, 0.8f, 0.2f, 1f);  // Green
-            else if (hpPercent > 0.25f)
-                hpColor = new Color(0.8f, 0.8f, 0.2f, 1f);  // Yellow
-            else
-                hpColor = new Color(0.8f, 0.2f, 0.2f, 1f);  // Red
-
-            hpBar.color = hpColor;
-        }
-    }
-
-    /// <summary>
-    /// Update the buff display text for a character, showing active spell effects.
-    /// </summary>
-    private void UpdateBuffDisplay(CharacterController ch, Text buffText)
-    {
-        if (buffText == null) return;
-        if (ch == null || ch.Stats == null)
-        {
-            buffText.text = "";
-            return;
-        }
-
-        var statusMgr = ch.GetComponent<StatusEffectManager>();
-        var concMgr = ch.GetComponent<ConcentrationManager>();
-        var spellComp = ch.GetComponent<SpellcastingComponent>();
-
-        string buffStr = (statusMgr != null && statusMgr.ActiveEffectCount > 0)
-            ? statusMgr.GetBuffSummaryString() : "";
-        string concStr = (concMgr != null && concMgr.IsConcentrating)
-            ? concMgr.GetConcentrationDisplayString() : "";
-        string heldStr = (spellComp != null && spellComp.HasHeldTouchCharge && spellComp.HeldTouchSpell != null)
-            ? $"✋ Holding: {spellComp.HeldTouchSpell.Name}" : "";
-        string condStr = ch.Stats.GetConditionSummary();
-
-        if (string.IsNullOrEmpty(buffStr) && string.IsNullOrEmpty(concStr) && string.IsNullOrEmpty(heldStr) && string.IsNullOrEmpty(condStr))
-        {
-            buffText.text = "";
-            buffText.gameObject.SetActive(false);
-            return;
-        }
-
-        buffText.gameObject.SetActive(true);
-        buffText.supportRichText = true;
-
-        var parts = new List<string>();
-        if (!string.IsNullOrEmpty(concStr)) parts.Add(concStr);
-        if (!string.IsNullOrEmpty(heldStr)) parts.Add(heldStr);
-        if (!string.IsNullOrEmpty(condStr)) parts.Add(condStr);
-        if (!string.IsNullOrEmpty(buffStr)) parts.Add(buffStr);
-        buffText.text = string.Join(" ", parts);
-    }
-
-    private string FormatBonusDetail(int value, string label)
-    {
-        if (value == 0) return "";
-        return value > 0 ? $"+{value} {label}" : $"{value} {label}";
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.UpdateAllStatsMultiNPC(pc1, pc2, npcs);
     }
 
     /// <summary>
@@ -390,15 +217,28 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public string BuildFlankingIndicator(bool isFlanking, CharacterController flankingAlly)
     {
-        if (!isFlanking) return string.Empty;
-
-        string allyName = flankingAlly != null && flankingAlly.Stats != null
-            ? flankingAlly.Stats.CharacterName
+        EnsureTargetSelectionPanel();
+        return _targetSelectionPanel != null
+            ? _targetSelectionPanel.BuildFlankingIndicator(isFlanking, flankingAlly)
             : string.Empty;
+    }
 
-        return string.IsNullOrEmpty(allyName)
-            ? " (FLANKING +2)"
-            : $" (FLANKING +2 with {allyName})";
+    public void SetCurrentTarget(CharacterController target)
+    {
+        EnsureTargetSelectionPanel();
+        _targetSelectionPanel?.SetTarget(target);
+    }
+
+    public CharacterController GetCurrentTarget()
+    {
+        EnsureTargetSelectionPanel();
+        return _targetSelectionPanel != null ? _targetSelectionPanel.GetCurrentTarget() : null;
+    }
+
+    public void ClearCurrentTarget()
+    {
+        EnsureTargetSelectionPanel();
+        _targetSelectionPanel?.ClearTarget();
     }
 
     /// <summary>
@@ -406,13 +246,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void UpdateInitiativeDisplay(string initiativeText)
     {
-        if (InitiativeOrderText != null)
-        {
-            InitiativeOrderText.supportRichText = true;
-            InitiativeOrderText.text = initiativeText;
-        }
-        if (InitiativePanel != null)
-            InitiativePanel.SetActive(!string.IsNullOrEmpty(initiativeText));
+        EnsureInitiativePanel();
+        _initiativePanel?.UpdateInitiativeDisplay(initiativeText);
     }
 
     /// <summary>
@@ -421,53 +256,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void ShowCombatLog(string message)
     {
-        // --- New scrollable log path ---
-        if (CombatLogContent != null)
-        {
-            string formatted = HighlightCriticalHits(message);
-            _combatLogMessages.Add(formatted);
-
-            // Create a new Text element as a child of the content container
-            GameObject msgObj = new GameObject($"LogMsg_{_combatLogMessages.Count}");
-            msgObj.transform.SetParent(CombatLogContent.transform, false);
-
-            Text text = msgObj.AddComponent<Text>();
-            text.supportRichText = true;
-            text.text = formatted;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (text.font == null) text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            if (text.font == null) text.font = Font.CreateDynamicFontFromOSFont("Arial", 11);
-            text.fontSize = 22; // Doubled from 11 for better combat log readability
-            text.color = Color.white;
-            text.alignment = TextAnchor.UpperLeft;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.raycastTarget = false;
-
-            // Let VerticalLayoutGroup + ContentSizeFitter handle sizing
-            LayoutElement le = msgObj.AddComponent<LayoutElement>();
-            le.flexibleWidth = 1;
-
-            // Trim oldest messages if over limit
-            if (_combatLogMessages.Count > MaxLogMessages && CombatLogContent.transform.childCount > MaxLogMessages)
-            {
-                Transform oldest = CombatLogContent.transform.GetChild(0);
-                Destroy(oldest.gameObject);
-                _combatLogMessages.RemoveAt(0);
-            }
-
-            // Auto-scroll to bottom next frame (let layout recalculate)
-            StartCoroutine(ScrollToBottomNextFrame());
-            return;
-        }
-
-        // --- Fallback: legacy single-text field ---
-        if (CombatLogText != null)
-        {
-            CombatLogText.supportRichText = true;
-            string formatted = HighlightCriticalHits(message);
-            CombatLogText.text = formatted;
-        }
+        EnsureCombatLogPanel();
+        _combatLogPanel?.AddMessage(message);
     }
 
     /// <summary>
@@ -475,7 +265,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void AddTurnSeparator(int turnNumber)
     {
-        ShowCombatLog($"<color=#888888>─────── Turn {turnNumber} ───────</color>");
+        EnsureCombatLogPanel();
+        _combatLogPanel?.AddTurnSeparator(turnNumber);
     }
 
     /// <summary>
@@ -483,80 +274,32 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void ClearCombatLog()
     {
-        _combatLogMessages.Clear();
-
-        if (CombatLogContent != null)
-        {
-            foreach (Transform child in CombatLogContent.transform)
-            {
-                Destroy(child.gameObject);
-            }
-        }
-
-        // Also clear legacy text
-        if (CombatLogText != null)
-            CombatLogText.text = "";
+        EnsureCombatLogPanel();
+        _combatLogPanel?.ClearLog();
     }
 
-    /// <summary>
-    /// Coroutine that scrolls the combat log to the bottom after one frame,
-    /// giving layout groups time to recalculate content size.
-    /// </summary>
-    private IEnumerator ScrollToBottomNextFrame()
+    public void AddCombatMessage(string message, MessageType type = MessageType.Normal)
     {
-        yield return null; // Wait one frame for layout update
-        if (CombatLogScrollRect != null)
-        {
-            Canvas.ForceUpdateCanvases();
-            CombatLogScrollRect.verticalNormalizedPosition = 0f; // 0 = bottom
-        }
+        EnsureCombatLogPanel();
+        _combatLogPanel?.AddMessage(message, type);
     }
 
-    /// <summary>
-    /// Apply rich-text color highlights for combat log text.
-    /// </summary>
-    private string HighlightCriticalHits(string text)
+    public void LogAttack(string attacker, string target, int roll, int mod, int total, int ac, bool hit)
     {
-        text = text.Replace("- HIT!", "- <color=#66FF66><b>HIT!</b></color>");
-        text = text.Replace("- MISS!", "- <color=#FF4444><b>MISS!</b></color>");
-        text = text.Replace("CRITICAL HIT!", "<color=#FFD700><b>CRITICAL HIT!</b></color>");
-        text = text.Replace("CRIT!", "<color=#FFD700><b>CRIT!</b></color>");
-        text = text.Replace("*** Critical Threat", "<color=#FFA500><b>*** Critical Threat</b></color>");
-        text = text.Replace("CONFIRMED!", "<color=#FFD700><b>CONFIRMED!</b></color>");
-        text = text.Replace("Not confirmed", "<color=#AAAAAA>Not confirmed</color>");
-        text = text.Replace("(NATURAL 20!)", "<color=#FFD700><b>(NATURAL 20!)</b></color>");
-        text = text.Replace("(NAT 20!)", "<color=#FFD700><b>(NAT 20!)</b></color>");
-        text = text.Replace("(NATURAL 1!)", "<color=#FF4444><b>(NATURAL 1!)</b></color>");
-        text = text.Replace("(NAT 1!)", "<color=#FF4444><b>(NAT 1!)</b></color>");
-        text = text.Replace("has been slain!", "<color=#FF6666><b>has been slain!</b></color>");
-        text = text.Replace("no penalty", "<color=#66FF66>no penalty</color>");
-        text = text.Replace("beyond maximum range!", "<color=#FF4444><b>beyond maximum range!</b></color>");
-        text = text.Replace("Power Attack", "<color=#FF9933>Power Attack</color>");
-        text = text.Replace("Rapid Shot", "<color=#66CCFF>Rapid Shot</color>");
-        text = text.Replace("Point Blank Shot", "<color=#66FF66>Point Blank Shot</color>");
-        text = text.Replace("Fighting Defensively", "<color=#99CCFF>Fighting Defensively</color>");
-        text = text.Replace("Shooting into melee", "<color=#FFCC66>Shooting into melee</color>");
-        text = text.Replace("Precise Shot", "<color=#99FF99>Precise Shot</color>");
+        EnsureCombatLogPanel();
+        _combatLogPanel?.LogAttack(attacker, target, roll, mod, total, ac, hit);
+    }
 
-        // Highlight spellcasting and metamagic
-        text = text.Replace("SPELL CAST!", "<color=#BB88FF><b>SPELL CAST!</b></color>");
-        text = text.Replace("Metamagic:", "<color=#FFB833><b>Metamagic:</b></color>");
-        text = text.Replace("Empower:", "<color=#FFB833>Empower:</color>");
-        text = text.Replace("QUICKENED", "<color=#FFD700><b>QUICKENED</b></color>");
-        text = text.Replace("⚡", "<color=#FFB833>⚡</color>");
-        text = text.Replace("healed!", "<color=#66FF66><b>healed!</b></color>");
-        text = text.Replace("BUFF APPLIED!", "<color=#6699FF><b>BUFF APPLIED!</b></color>");
-        text = text.Replace("RESISTED!", "<color=#AAAAAA><b>RESISTED!</b></color>");
-        text = text.Replace("Touch Attack", "<color=#BB88FF>Touch Attack</color>");
-        text = text.Replace("Fortitude save", "<color=#FFAA44>Fortitude save</color>");
-        text = text.Replace("Reflex save", "<color=#FFAA44>Reflex save</color>");
-        text = text.Replace("Will save", "<color=#FFAA44>Will save</color>");
+    public void LogDamage(string target, int damage, string damageType = "")
+    {
+        EnsureCombatLogPanel();
+        _combatLogPanel?.LogDamage(target, damage, damageType);
+    }
 
-        text = text.Replace("═══════════════════════════════════", "<color=#888888>═══════════════════════════════════</color>");
-        text = text.Replace("total damage", "<color=#FFAA44><b>total damage</b></color>");
-        text = text.Replace(" damage", " <color=#FFAA44>damage</color>");
-        text = text.Replace(" → ", " <color=#FFFF66>→</color> ");
-        return text;
+    public string ExportCombatLog()
+    {
+        EnsureCombatLogPanel();
+        return _combatLogPanel != null ? _combatLogPanel.ExportLog() : string.Empty;
     }
 
     public void SetActionButtonsVisible(bool visible)
@@ -626,6 +369,11 @@ public class CombatUI : MonoBehaviour
     private bool _specialStyleMenuWasActiveLastFrame;
 
     private GameObject _confirmationPanel;
+    private ActionButtonPanel _actionButtonPanel;
+    private CombatLogPanel _combatLogPanel;
+    private CharacterInfoPanel _characterInfoPanel;
+    private TargetSelectionPanel _targetSelectionPanel;
+    private InitiativePanel _initiativePanel;
 
     private void LogSpecialStyleMenuLifecycle(string eventName, string details = null)
     {
@@ -779,85 +527,69 @@ public class CombatUI : MonoBehaviour
         return standaloneDisarmWasVisible;
     }
 
-    /// <summary>
-    /// Update the action panel buttons based on the current action economy state.
-    /// </summary>
-    private sealed class ActionButtonState
+    private void EnsureCombatLogPanel()
     {
-        public bool Visible;
-        public bool Enabled;
-        public string Label;
+        if (_combatLogPanel == null)
+            _combatLogPanel = GetComponent<CombatLogPanel>();
 
-        public ActionButtonState(bool visible, bool enabled, string label = null)
-        {
-            Visible = visible;
-            Enabled = enabled;
-            Label = label;
-        }
+        if (_combatLogPanel == null)
+            _combatLogPanel = gameObject.AddComponent<CombatLogPanel>();
+
+        _combatLogPanel.Initialize(this, CombatLogText, CombatLogContent, CombatLogScrollRect);
     }
 
-    private sealed class ActionButtonStates
+    private void EnsureActionButtonPanel()
     {
-        private readonly Dictionary<Button, ActionButtonState> _states = new Dictionary<Button, ActionButtonState>();
+        if (_actionButtonPanel == null)
+            _actionButtonPanel = GetComponent<ActionButtonPanel>();
 
-        public void Set(Button button, ActionButtonState state)
-        {
-            if (button == null || state == null)
-                return;
+        if (_actionButtonPanel == null)
+            _actionButtonPanel = gameObject.AddComponent<ActionButtonPanel>();
 
-            _states[button] = state;
-        }
-
-        public IEnumerable<KeyValuePair<Button, ActionButtonState>> Enumerate()
-        {
-            return _states;
-        }
+        _actionButtonPanel.Initialize(this);
     }
 
-    private sealed class ActionButtonContext
+    private void EnsureCharacterInfoPanel()
     {
-        public GameManager Gm;
-        public ActionEconomy Actions;
-        public bool CanDualWield;
-        public bool HasIterativeAttacks;
-        public bool HasRapidShot;
-        public bool IsGrappling;
-        public bool IsProne;
-        public bool IsPinned;
-        public bool IsTurned;
-        public bool CanAttackWithWeapon;
-        public ItemData EquippedWeapon;
-        public bool UsingUnarmedStrike;
-        public string AttackSourceLabel;
-        public bool IterativeWeaponSequenceActive;
-        public bool IterativeWeaponFullRoundStage;
-        public bool HasGrappleState;
-        public CharacterController GrappleOpponent;
-        public bool ActorPinnedInGrappleState;
-        public bool OpponentPinnedByActor;
-        public bool IsPinningOpponent;
-        public bool HasGrappleAttackAvailable;
-        public bool HasBullRushAttackAvailable;
-        public bool HasTripAttackAvailable;
-        public bool HasDisarmAttackAvailable;
-        public bool HasThrowableMeleeWeapon;
-        public bool IterativeThrownSequenceActive;
-        public bool IterativeThrownFullRoundStage;
-        public bool CanFightDefensively;
-        public bool CanStartMainAfterOffHand;
-        public bool HasStandardAttack;
-        public bool CanContinueIterativeAttack;
-        public bool HasOffHandWeapon;
-        public bool HasThrowableOffHandWeapon;
-        public bool OffHandUsed;
-        public bool OffHandAvailableThisTurn;
-        public bool ShowOnlyPinnedEscapeActions;
-        public bool ShowOnlyPinnerActions;
-        public bool HasIterativeGrappleAttack;
-        public int GrappleAttacksRemaining;
-        public int CurrentGrappleAttackBonus;
-        public string IterativeTag;
-        public string GrappleOpponentName;
+        if (_characterInfoPanel == null)
+            _characterInfoPanel = GetComponent<CharacterInfoPanel>();
+
+        if (_characterInfoPanel == null)
+            _characterInfoPanel = gameObject.AddComponent<CharacterInfoPanel>();
+
+        _characterInfoPanel.Initialize(this);
+    }
+
+    private void EnsureTargetSelectionPanel()
+    {
+        if (_targetSelectionPanel == null)
+            _targetSelectionPanel = GetComponent<TargetSelectionPanel>();
+
+        if (_targetSelectionPanel == null)
+            _targetSelectionPanel = gameObject.AddComponent<TargetSelectionPanel>();
+
+        _targetSelectionPanel.Initialize(this);
+    }
+
+    private void EnsureInitiativePanel()
+    {
+        if (_initiativePanel == null)
+            _initiativePanel = GetComponent<InitiativePanel>();
+
+        if (_initiativePanel == null)
+            _initiativePanel = gameObject.AddComponent<InitiativePanel>();
+
+        _initiativePanel.Initialize(this);
+    }
+
+    internal bool HideStandaloneDisarmButtonsInMainActionsForActionPanel()
+    {
+        return HideStandaloneDisarmButtonsInMainActions();
+    }
+
+    internal void EnsureDischargeTouchButtonExistsForActionPanel()
+    {
+        EnsureDischargeTouchButtonExists();
     }
 
     /// <summary>
@@ -865,643 +597,14 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void UpdateActionButtons(CharacterController pc)
     {
-        if (pc == null || ActionPanel == null)
-        {
-            HideAllActionButtons();
-            return;
-        }
-
-        ActionButtonContext context = BuildActionButtonContext(pc);
-        ActionButtonStates states = ComputeActionButtonStates(pc, context);
-        ApplyButtonStates(states);
-
-        UpdateRageStatus(pc);
-        UpdateDamageModeToggle(pc);
-
-        if (context.IsGrappling)
-            HideNonGrappleActionButtons();
-
-        if (ActionStatusText != null)
-            ActionStatusText.text = context.Actions.GetStatusString();
+        EnsureActionButtonPanel();
+        _actionButtonPanel.UpdateActionButtons(pc);
     }
 
-    private ActionButtonContext BuildActionButtonContext(CharacterController pc)
+    public void RefreshActionButtons()
     {
-        ActionButtonContext context = new ActionButtonContext();
-
-        context.Gm = GameManager.Instance;
-        context.Actions = pc.Actions;
-        context.CanDualWield = pc.CanDualWield();
-        context.HasIterativeAttacks = pc.Stats.IterativeAttackCount > 1;
-        context.HasRapidShot = pc.Stats.HasFeat("Rapid Shot");
-        context.IsGrappling = pc.IsGrappling();
-        context.IsProne = pc.HasCondition(CombatConditionType.Prone);
-        context.IsPinned = pc.HasCondition(CombatConditionType.Pinned);
-        context.IsTurned = pc.HasCondition(CombatConditionType.Turned);
-        context.CanAttackWithWeapon = pc.CanAttackWithEquippedWeapon(out _);
-        context.EquippedWeapon = pc.GetEquippedMainWeapon();
-        context.UsingUnarmedStrike = context.EquippedWeapon == null;
-        context.AttackSourceLabel = context.UsingUnarmedStrike ? "Unarmed strike" : context.EquippedWeapon.Name;
-
-        context.IterativeWeaponSequenceActive = context.Gm != null && context.Gm.IsIterativeAttackSequenceActiveFor(pc);
-        context.IterativeWeaponFullRoundStage = context.Gm != null && context.Gm.IsIterativeAttackInFullRoundStage(pc);
-
-        context.HasGrappleState = pc.TryGetGrappleState(out CharacterController grappleOpponent, out _, out bool actorPinnedInGrappleState, out bool opponentPinnedByActor);
-        context.GrappleOpponent = grappleOpponent;
-        context.ActorPinnedInGrappleState = actorPinnedInGrappleState;
-        context.OpponentPinnedByActor = opponentPinnedByActor;
-        context.IsPinningOpponent = pc.IsPinningOpponent();
-
-        context.HasGrappleAttackAvailable = context.Gm != null && context.Gm.CanUseGrappleAttackOption(pc);
-        context.HasBullRushAttackAvailable = context.Gm != null && context.Gm.CanUseBullRushAttackOption(pc);
-        context.HasTripAttackAvailable = context.Gm != null && context.Gm.CanUseTripAttackOption(pc);
-        context.HasDisarmAttackAvailable = context.Gm != null && context.Gm.CanUseDisarmAttackOption(pc);
-
-        context.HasThrowableMeleeWeapon = context.Gm != null && context.Gm.HasThrowableMeleeWeaponEquipped(pc);
-        context.IterativeThrownSequenceActive = context.Gm != null && context.Gm.IsIterativeThrownAttackSequenceActiveFor(pc);
-        context.IterativeThrownFullRoundStage = context.Gm != null && context.Gm.IsIterativeThrownAttackInFullRoundStage(pc);
-
-        context.CanFightDefensively = pc.Stats.BaseAttackBonus >= 1;
-        context.CanStartMainAfterOffHand = context.Gm != null && context.Gm.IsOffHandAttackUsedThisTurn(pc) && context.Actions.HasMoveAction && !context.IterativeWeaponSequenceActive;
-        context.HasStandardAttack = context.Actions.HasStandardAction || context.CanStartMainAfterOffHand;
-        context.CanContinueIterativeAttack = context.IterativeWeaponSequenceActive;
-
-        context.HasOffHandWeapon = pc.HasOffHandWeaponEquipped();
-        context.HasThrowableOffHandWeapon = pc.HasThrowableOffHandWeaponEquipped();
-        context.OffHandUsed = context.Gm != null && context.Gm.IsOffHandAttackUsedThisTurn(pc);
-        context.OffHandAvailableThisTurn = context.Gm == null || context.Gm.IsOffHandAttackAvailableThisTurn(pc);
-
-        context.ShowOnlyPinnedEscapeActions = context.IsGrappling && (context.IsPinned || context.ActorPinnedInGrappleState);
-        context.ShowOnlyPinnerActions = context.IsGrappling && context.IsPinningOpponent && !context.ShowOnlyPinnedEscapeActions;
-        context.HasIterativeGrappleAttack = context.Gm != null && context.Gm.CanUseGrappleAttackOption(pc);
-        context.GrappleAttacksRemaining = context.Gm != null ? context.Gm.GetRemainingGrappleAttackActions(pc) : 0;
-        context.CurrentGrappleAttackBonus = context.Gm != null ? context.Gm.GetCurrentGrappleAttackBonus(pc) : 0;
-        context.IterativeTag = $"BAB {CharacterStats.FormatMod(context.CurrentGrappleAttackBonus)} | {context.GrappleAttacksRemaining} left";
-        context.GrappleOpponentName = context.GrappleOpponent != null && context.GrappleOpponent.Stats != null
-            ? context.GrappleOpponent.Stats.CharacterName
-            : "Opponent";
-
-        return context;
-    }
-
-    private ActionButtonStates ComputeActionButtonStates(CharacterController pc, ActionButtonContext context)
-    {
-        ActionButtonStates states = new ActionButtonStates();
-
-        ComputeMovementActionStates(pc, context, states);
-        ComputeAttackActionStates(pc, context, states);
-        ComputeSpecialActionStates(pc, context, states);
-        ComputeClassAndSpellActionStates(pc, context, states);
-        ComputeEquipmentActionStates(pc, context, states);
-        ComputeGrappleActionStates(pc, context, states);
-        ComputeAlwaysAvailableStates(states);
-
-        return states;
-    }
-
-    private void ComputeMovementActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        bool canMoveByActions = context.Actions.HasMoveAction || context.Actions.CanConvertStandardToMove;
-        bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
-        bool blockedByIterativeAttackSequence = context.IterativeWeaponFullRoundStage || (context.Gm != null && context.Gm.IsIterativeThrownAttackInFullRoundStage(pc));
-        bool canMove = canMoveByActions && !blockedByFiveFootStep && !blockedByIterativeAttackSequence && !context.IsProne && !context.IsPinned;
-
-        string moveLabel = "Move (Used)";
-        if (context.IsPinned) moveLabel = "Move (Pinned: grapple escape only)";
-        else if (context.IsProne) moveLabel = "Move (Stand up first)";
-        else if (blockedByFiveFootStep) moveLabel = "Move (After 5-ft step: no)";
-        else if (blockedByIterativeAttackSequence) moveLabel = "Move (Consumed by Full Round Attack)";
-        else if (context.Actions.HasMoveAction) moveLabel = "Move (Move Action)";
-        else if (context.Actions.CanConvertStandardToMove) moveLabel = "Move (Std→Move)";
-
-        states.Set(MoveButton, new ActionButtonState(true, canMove, moveLabel));
-
-        string fiveFootDisabledReason = context.Gm != null ? context.Gm.GetFiveFootStepDisabledReason(pc) : "Unavailable";
-        bool canFiveFootStep = string.IsNullOrEmpty(fiveFootDisabledReason);
-        states.Set(FiveFootStepButton, new ActionButtonState(true, canFiveFootStep, canFiveFootStep ? "5-Foot Step (Free)" : $"5-Foot Step ({fiveFootDisabledReason})"));
-
-        string dropProneDisabledReason = context.Gm != null ? context.Gm.GetDropProneDisabledReason(pc) : "Unavailable";
-        bool canDropProne = string.IsNullOrEmpty(dropProneDisabledReason);
-        states.Set(DropProneButton, new ActionButtonState(!context.IsProne, canDropProne, canDropProne ? "Drop Prone (Free)" : $"Drop Prone ({dropProneDisabledReason})"));
-
-        string standUpDisabledReason = context.Gm != null ? context.Gm.GetStandUpDisabledReason(pc) : "Unavailable";
-        bool canStandUp = string.IsNullOrEmpty(standUpDisabledReason);
-        states.Set(StandUpButton, new ActionButtonState(context.IsProne, canStandUp, canStandUp ? "Stand Up (Move, AoO)" : $"Stand Up ({standUpDisabledReason})"));
-
-        string crawlDisabledReason = context.Gm != null ? context.Gm.GetCrawlDisabledReason(pc) : "Unavailable";
-        bool canCrawl = string.IsNullOrEmpty(crawlDisabledReason);
-        states.Set(CrawlButton, new ActionButtonState(context.IsProne, canCrawl, canCrawl ? "Crawl 5 ft (Move, AoO)" : $"Crawl ({crawlDisabledReason})"));
-    }
-
-    private void ComputeAttackActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        ComputePrimaryAttackStates(pc, context, states);
-        ComputeOffHandAttackStates(pc, context, states);
-        ComputeDefensiveAndChargeStates(pc, context, states);
-        ComputeDualWieldAndFullAttackStates(pc, context, states);
-    }
-
-    private void ComputePrimaryAttackStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        bool canSingleAttack = (context.HasStandardAttack || context.CanContinueIterativeAttack) && context.CanAttackWithWeapon && !context.IsPinned && !context.IsTurned;
-        bool showAttackButton = context.IsPinned || context.HasStandardAttack || context.CanContinueIterativeAttack;
-
-        string attackLabel;
-        if (context.IsPinned)
-            attackLabel = "Attack (Pinned: grapple escape only)";
-        else if (context.IsTurned)
-            attackLabel = "Attack (Turned: must flee)";
-        else if (!context.CanAttackWithWeapon)
-            attackLabel = "Attack (Reload first)";
-        else if (context.CanStartMainAfterOffHand)
-            attackLabel = context.HasThrowableMeleeWeapon ? "Attack (Melee - Full Round)" : "Attack (Full Round)";
-        else if (context.Gm != null)
-            attackLabel = context.HasThrowableMeleeWeapon
-                ? (context.IterativeWeaponFullRoundStage ? "Attack (Melee - Full Round)" : "Attack (Melee)")
-                : context.Gm.GetIterativeAttackButtonLabel(pc, context.UsingUnarmedStrike, context.AttackSourceLabel);
-        else
-            attackLabel = context.UsingUnarmedStrike ? $"Attack (Standard, {context.AttackSourceLabel})" : "Attack (Standard)";
-
-        states.Set(AttackButton, new ActionButtonState(showAttackButton, canSingleAttack, attackLabel));
-
-        bool showThrownButton = context.HasThrowableMeleeWeapon && (context.HasStandardAttack || context.IterativeThrownSequenceActive) && !context.IsPinned;
-        bool canThrowAttack = showThrownButton && context.Gm != null && context.Gm.CanUseThrownAttackOption(pc) && context.CanAttackWithWeapon && !context.IsTurned;
-        string thrownLabel = context.IsTurned
-            ? "Attack (Thrown - Turned)"
-            : (!context.CanAttackWithWeapon ? "Attack (Thrown - Reload first)" : (context.IterativeThrownFullRoundStage ? "Attack (Thrown - Full Round)" : "Attack (Thrown)"));
-        states.Set(AttackThrownButton, new ActionButtonState(showThrownButton, canThrowAttack, thrownLabel));
-    }
-
-    private void ComputeOffHandAttackStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        Debug.Log("=== UPDATE ACTION BUTTONS ===");
-        Debug.Log($"[UI] Character: {pc.Stats.CharacterName}");
-        Debug.Log($"[UI] Updating off-hand buttons for {pc.Stats.CharacterName}: hasOffHandWeapon={context.HasOffHandWeapon}, hasThrowableOffHandWeapon={context.HasThrowableOffHandWeapon}, offHandUsed={context.OffHandUsed}, offHandAvailableThisTurn={context.OffHandAvailableThisTurn}");
-
-        bool showOffHandButton = context.HasOffHandWeapon && !context.OffHandUsed && context.OffHandAvailableThisTurn;
-        bool canOffHandAttack = showOffHandButton && context.Gm != null && context.Gm.CanUseOffHandAttackOption(pc) && !context.IsPinned && !context.IsTurned;
-        string offHandLabel = context.IsPinned
-            ? "Attack (Off-Hand - Pinned)"
-            : (context.IsTurned
-                ? "Attack (Off-Hand - Turned)"
-                : (context.OffHandUsed
-                    ? "Attack (Off-Hand - Used)"
-                    : (!canOffHandAttack ? "Attack (Off-Hand - Unavailable)" : "Attack (Off-Hand)")));
-        Debug.Log($"[UI] Off-hand available: {context.OffHandAvailableThisTurn}");
-        Debug.Log($"[UI] Off-hand melee button: show={showOffHandButton}, enabled={canOffHandAttack}, pinned={context.IsPinned}");
-        Debug.Log($"[UI] Off-hand melee button label: {offHandLabel}");
-        states.Set(AttackOffHandButton, new ActionButtonState(showOffHandButton, canOffHandAttack, offHandLabel));
-
-        bool showOffHandThrownButton = context.HasThrowableOffHandWeapon && !context.OffHandUsed && context.OffHandAvailableThisTurn;
-        bool canOffHandThrownAttack = showOffHandThrownButton && context.Gm != null && context.Gm.CanUseOffHandThrownAttackOption(pc) && !context.IsPinned && !context.IsTurned;
-        string offHandThrownLabel = context.IsPinned
-            ? "Attack (Off-Hand Thrown - Pinned)"
-            : (context.IsTurned
-                ? "Attack (Off-Hand Thrown - Turned)"
-                : (context.OffHandUsed
-                    ? "Attack (Off-Hand Thrown - Used)"
-                    : (!canOffHandThrownAttack ? "Attack (Off-Hand Thrown - Unavailable)" : "Attack (Off-Hand Thrown)")));
-        Debug.Log($"[UI] Off-hand thrown button: show={showOffHandThrownButton}, enabled={canOffHandThrownAttack}, pinned={context.IsPinned}");
-        Debug.Log($"[UI] Off-hand thrown button label: {offHandThrownLabel}");
-        states.Set(AttackOffHandThrownButton, new ActionButtonState(showOffHandThrownButton, canOffHandThrownAttack, offHandThrownLabel));
-    }
-
-    private void ComputeDefensiveAndChargeStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        bool canAttackDefensively = context.Actions.HasStandardAction && context.CanFightDefensively && context.CanAttackWithWeapon && !context.IsPinned && !context.IsTurned;
-        string attackDefensivelyLabel;
-        if (context.IsPinned) attackDefensivelyLabel = "Fighting Defensively (Pinned: no)";
-        else if (context.IsTurned) attackDefensivelyLabel = "Fighting Defensively (Turned: no)";
-        else if (!context.CanFightDefensively) attackDefensivelyLabel = "Fighting Defensively (Std) [BAB +1]";
-        else if (!context.Actions.HasStandardAction) attackDefensivelyLabel = "Fighting Defensively (Std) [Used]";
-        else if (!context.CanAttackWithWeapon) attackDefensivelyLabel = "Fighting Defensively (Std) [Reload first]";
-        else attackDefensivelyLabel = context.UsingUnarmedStrike ? $"Fighting Defensively (Std, {context.AttackSourceLabel})" : "Fighting Defensively (Std)";
-        states.Set(AttackDefensivelyButton, new ActionButtonState(true, canAttackDefensively, attackDefensivelyLabel));
-
-        bool hasFullRound = context.Actions.HasFullRoundAction;
-        bool hasMeleeThreat = pc.HasMeleeWeaponEquipped();
-        bool fatigued = pc.Stats != null && pc.Stats.IsFatigued;
-        bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
-        bool blockedByProne = context.IsProne;
-        bool hasAnyChargeTarget = context.Gm != null && context.Gm.HasAnyValidChargeTarget(pc);
-        bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigued && !blockedByFiveFootStep && !blockedByProne && !context.IsPinned && !context.IsTurned && hasAnyChargeTarget;
-
-        string chargeLabel;
-        if (context.IsPinned) chargeLabel = "Charge (Pinned: no)";
-        else if (context.IsTurned) chargeLabel = "Charge (Turned: no)";
-        else if (!hasMeleeThreat) chargeLabel = "Charge (Need melee)";
-        else if (fatigued) chargeLabel = "Charge (Fatigued)";
-        else if (blockedByProne) chargeLabel = "Charge (Prone)";
-        else if (blockedByFiveFootStep) chargeLabel = "Charge (After 5-ft step: no)";
-        else if (!hasFullRound) chargeLabel = "Charge (Used)";
-        else if (!hasAnyChargeTarget) chargeLabel = "Charge (No path)";
-        else chargeLabel = "Charge (Full-Round)";
-        states.Set(ChargeButton, new ActionButtonState(hasMeleeThreat || fatigued || blockedByFiveFootStep || blockedByProne, canChargeTarget, chargeLabel));
-    }
-
-    private void ComputeDualWieldAndFullAttackStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        bool canDW = context.CanDualWield && context.Actions.HasFullRoundAction && !context.IsPinned && !context.IsTurned;
-        bool canDualWieldAttack = true;
-        bool offHandIsSpikedGauntlet = false;
-        bool offHandIsShieldBash = false;
-        if (context.CanDualWield)
-        {
-            ItemData mainWeapon = pc.GetDualWieldMainWeapon();
-            ItemData offWeapon = pc.GetDualWieldOffHandWeapon();
-            bool canMainAttack = pc.CanAttackWithWeapon(mainWeapon, out _);
-            bool canOffAttack = pc.CanAttackWithWeapon(offWeapon, out _);
-            canDualWieldAttack = canMainAttack || canOffAttack;
-            offHandIsSpikedGauntlet = pc.IsDualWieldOffHandSpikedGauntlet();
-            offHandIsShieldBash = pc.IsDualWieldOffHandShieldBash();
-        }
-
-        string dualWieldLabel;
-        if (context.IsPinned) dualWieldLabel = "Dual Wield (Pinned: no)";
-        else if (context.IsTurned) dualWieldLabel = "Dual Wield (Turned: no)";
-        else if (!canDualWieldAttack) dualWieldLabel = "Dual Wield (Reload first)";
-        else if (canDW && offHandIsSpikedGauntlet) dualWieldLabel = "Dual Wield (Spiked Gauntlet Off-Hand)";
-        else if (canDW && offHandIsShieldBash) dualWieldLabel = "Dual Wield (Shield Bash Off-Hand)";
-        else dualWieldLabel = canDW ? "Dual Wield (Full-Round)" : "Dual Wield (N/A)";
-
-        states.Set(DualWieldButton, new ActionButtonState(context.CanDualWield, canDW && canDualWieldAttack, dualWieldLabel));
-
-        // Full Attack entry points are intentionally removed from the main Actions window.
-        states.Set(FullAttackButton, new ActionButtonState(false, false));
-        states.Set(FullAttackDefensivelyButton, new ActionButtonState(false, false));
-    }
-
-    private void ComputeSpecialActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        bool canImprovedFeintMove = pc != null
-            && pc.Stats != null
-            && pc.Stats.HasFeat("Improved Feint")
-            && (context.Actions.HasMoveAction || context.Actions.CanConvertStandardToMove);
-
-        bool canSpecialAttack = !context.IsTurned
-            && (context.IsPinned
-                ? context.Actions.HasStandardAction
-                : (context.Actions.HasStandardAction || canImprovedFeintMove || context.HasGrappleAttackAvailable || context.HasBullRushAttackAvailable || context.HasTripAttackAvailable || context.HasDisarmAttackAvailable));
-
-        string specialAttackLabel;
-        if (context.IsPinned)
-            specialAttackLabel = context.Actions.HasStandardAction ? "Grapple Escape Actions (Standard)" : "Grapple Escape Actions (Used)";
-        else if (context.IsTurned)
-            specialAttackLabel = "Special Attack (Turned: no actions)";
-        else if (context.Actions.HasStandardAction)
-            specialAttackLabel = canImprovedFeintMove ? "Special Attack (Std / Feint Move)" : "Special Attack (Standard)";
-        else if (context.HasGrappleAttackAvailable && context.Gm != null)
-            specialAttackLabel = $"Special Attack (Grapple BAB {CharacterStats.FormatMod(context.Gm.GetCurrentGrappleAttackBonus(pc))}, {context.Gm.GetRemainingGrappleAttackActions(pc)} left)";
-        else if (context.HasBullRushAttackAvailable && context.Gm != null)
-            specialAttackLabel = $"Special Attack (Bull Rush BAB {CharacterStats.FormatMod(context.Gm.GetCurrentBullRushAttackBonus(pc))}, {context.Gm.GetRemainingBullRushAttackActions(pc)} left)";
-        else if (context.HasTripAttackAvailable && context.Gm != null)
-            specialAttackLabel = $"Special Attack (Trip BAB {CharacterStats.FormatMod(context.Gm.GetCurrentTripAttackBonus(pc))}, {context.Gm.GetRemainingTripAttackActions(pc)} left)";
-        else if (context.HasDisarmAttackAvailable && context.Gm != null)
-            specialAttackLabel = $"Special Attack (Disarm BAB {CharacterStats.FormatMod(context.Gm.GetCurrentDisarmAttackBonus(pc))}, {context.Gm.GetRemainingDisarmAttackActions(pc)} left)";
-        else if (canImprovedFeintMove)
-            specialAttackLabel = "Special Attack (Feint Move)";
-        else
-            specialAttackLabel = "Special Attack (Used)";
-
-        states.Set(SpecialAttackButton, new ActionButtonState(true, canSpecialAttack, specialAttackLabel));
-
-        string turnUndeadReason = string.Empty;
-        bool canUseTurnUndead = context.Gm != null && context.Gm.CanUseTurnUndead(pc, out turnUndeadReason);
-        bool canEverUseTurnUndead = pc != null && pc.Stats != null && (pc.Stats.IsCleric || (pc.Stats.IsPaladin && pc.Stats.Level >= 4));
-        int remaining = context.Gm != null ? context.Gm.GetRemainingTurnUndeadAttempts(pc) : 0;
-        int maxAttempts = pc != null && pc.Stats != null ? pc.Stats.MaxTurnUndeadAttemptsPerDay : 0;
-
-        string turnUndeadLabel;
-        if (!canEverUseTurnUndead)
-            turnUndeadLabel = "Turn Undead (Class feature locked)";
-        else if (canUseTurnUndead)
-            turnUndeadLabel = $"Turn Undead ({remaining}/{maxAttempts} left)";
-        else
-            turnUndeadLabel = $"Turn Undead ({turnUndeadReason}; {remaining}/{maxAttempts})";
-
-        states.Set(TurnUndeadButton, new ActionButtonState(canEverUseTurnUndead, canUseTurnUndead, turnUndeadLabel));
-
-        bool standaloneDisarmWasVisible = HideStandaloneDisarmButtonsInMainActions();
-        Debug.Log($"[CombatUI][Actions] actor={pc.Stats.CharacterName} specialAttackVisible=true specialAttackInteractable={canSpecialAttack} grappleAvailable={context.HasGrappleAttackAvailable} bullRushAvailable={context.HasBullRushAttackAvailable} tripAvailable={context.HasTripAttackAvailable} disarmViaSpecialAvailable={context.HasDisarmAttackAvailable} standaloneDisarmSuppressed={standaloneDisarmWasVisible}");
-
-        bool canUseLegacyGrappleButton = context.IsGrappling && context.Actions.HasStandardAction;
-        states.Set(GrappleActionsButton, new ActionButtonState(context.IsGrappling, canUseLegacyGrappleButton, canUseLegacyGrappleButton ? "Grapple Actions" : "Grapple Actions (Used)"));
-
-        // Aid Another and Overrun are surfaced via the Special Attack submenu.
-        states.Set(AidAnotherButton, new ActionButtonState(false, false));
-        states.Set(OverrunButton, new ActionButtonState(false, false));
-        Debug.Log($"[CombatUI][Actions] Hiding main-menu Overrun button for {pc.Stats.CharacterName}; use Special Attack submenu instead.");
-    }
-
-    private void ComputeClassAndSpellActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        bool isMonk = pc.Stats.IsMonk;
-        bool canFlurry = isMonk && context.Actions.HasFullRoundAction && !context.IsPinned && !context.IsTurned;
-        string flurryLabel = "Flurry of Blows (N/A)";
-        if (context.IsPinned)
-            flurryLabel = "Flurry of Blows (Pinned: no)";
-        else if (context.IsTurned)
-            flurryLabel = "Flurry of Blows (Turned: no)";
-        else if (canFlurry)
-        {
-            int[] bonuses = pc.Stats.GetFlurryOfBlowsBonuses();
-            string bonusStr = string.Join("/", System.Array.ConvertAll(bonuses, b => CharacterStats.FormatMod(b)));
-            flurryLabel = $"Flurry of Blows x{bonuses.Length} ({bonusStr})";
-        }
-        states.Set(FlurryOfBlowsButton, new ActionButtonState(isMonk, canFlurry, flurryLabel));
-
-        bool isBarbarian = pc.Stats.IsBarbarian;
-        bool canRage = isBarbarian && !pc.Stats.IsRaging && !pc.Stats.IsFatigued && pc.Stats.RagesUsedToday < pc.Stats.MaxRagesPerDay;
-        string rageLabel;
-        if (pc.Stats.IsRaging) rageLabel = $"RAGING ({pc.Stats.RageRoundsRemaining} rds)";
-        else if (pc.Stats.IsFatigued) rageLabel = "Rage (Fatigued)";
-        else if (canRage) rageLabel = $"Rage ({pc.Stats.MaxRagesPerDay - pc.Stats.RagesUsedToday}/day)";
-        else rageLabel = "Rage (Used)";
-        states.Set(RageButton, new ActionButtonState(isBarbarian, canRage, rageLabel));
-
-        bool isSpellcaster = pc.Stats.IsSpellcaster;
-        SpellcastingComponent spellComp = pc.GetComponent<SpellcastingComponent>();
-        bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnyCastablePreparedSpell();
-        bool canCast = context.Actions.HasStandardAction && hasCastableSpells && !context.IsTurned;
-        string castBaseLabel;
-        if (!canCast)
-            castBaseLabel = context.IsTurned ? "Cast Spell (Turned: no)" : "Cast Spell (N/A)";
-        else if (context.IsPinned)
-            castBaseLabel = "Cast Spell (Std, pinned: concentration/components apply)";
-        else if (context.IsGrappling)
-            castBaseLabel = "Cast Spell (Std, grappled: concentration/components apply)";
-        else
-            castBaseLabel = "Cast Spell (Standard)";
-
-        int asfChance = (pc.Stats != null && pc.Stats.IsAffectedByArcaneSpellFailure)
-            ? Mathf.Clamp(pc.Stats.ArcaneSpellFailure, 0, 100)
-            : 0;
-        string castSpellLabel = asfChance > 0 ? $"{castBaseLabel}
-⚠ ASF {asfChance}%" : castBaseLabel;
-
-        states.Set(CastSpellButton, new ActionButtonState(hasCastableSpells, canCast, castSpellLabel));
-
-        EnsureDischargeTouchButtonExists();
-        SpellcastingComponent touchSpellComp = pc.GetComponent<SpellcastingComponent>();
-        bool hasHeldTouchCharge = pc.Stats.IsSpellcaster && touchSpellComp != null && touchSpellComp.HasHeldTouchCharge && touchSpellComp.HeldTouchSpell != null;
-        string heldName = hasHeldTouchCharge ? touchSpellComp.HeldTouchSpell.Name : "Touch";
-        states.Set(DischargeTouchButton, new ActionButtonState(hasHeldTouchCharge, hasHeldTouchCharge, $"Discharge {heldName}"));
-    }
-
-    private void ComputeEquipmentActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        ItemData weapon = pc.GetEquippedMainWeapon();
-        bool hasReloadableWeaponEquipped = weapon != null && weapon.RequiresReload;
-        bool isWeaponLoaded = !hasReloadableWeaponEquipped || weapon.IsLoaded;
-        string reloadDisabledReason = "Unavailable";
-        ReloadActionType reloadAction = ReloadActionType.None;
-        bool canReload = hasReloadableWeaponEquipped && context.Gm != null
-                         && context.Gm.CanReloadEquippedWeapon(pc, out reloadDisabledReason, out reloadAction);
-
-        string actionLabel = hasReloadableWeaponEquipped ? CharacterController.GetReloadActionLabel(pc.GetEffectiveReloadAction(weapon)) : "Move";
-        string reloadLabel;
-        if (isWeaponLoaded) reloadLabel = $"Reload ({actionLabel}) [Loaded]";
-        else if (canReload) reloadLabel = $"Reload ({actionLabel})";
-        else reloadLabel = $"Reload ({actionLabel}) [{reloadDisabledReason}]";
-
-        states.Set(ReloadButton, new ActionButtonState(hasReloadableWeaponEquipped, canReload, reloadLabel));
-
-        string dropDisabledReason = context.Gm != null ? context.Gm.GetDropEquippedItemDisabledReason(pc) : "Unavailable";
-        bool canDropEquipped = string.IsNullOrEmpty(dropDisabledReason);
-        states.Set(DropEquippedItemButton, new ActionButtonState(true, canDropEquipped, canDropEquipped ? "Drop Equipped (Free)" : $"Drop Equipped ({dropDisabledReason})"));
-
-        bool hasNearbyGroundItem = context.Gm != null && context.Gm.HasGroundItemInPickupRange(pc);
-        string pickupDisabledReason = context.Gm != null ? context.Gm.GetPickUpItemDisabledReason(pc) : "Unavailable";
-        bool canPickUp = string.IsNullOrEmpty(pickupDisabledReason);
-        states.Set(PickUpItemButton, new ActionButtonState(hasNearbyGroundItem, canPickUp, canPickUp ? "Pick Up Item (Move, AoO)" : $"Pick Up Item ({pickupDisabledReason})"));
-    }
-
-    private void ComputeGrappleActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        ComputeGrappleOffenseStates(pc, context, states);
-        ComputeGrappleEscapeStates(pc, context, states);
-        ComputeGrappleControlStates(pc, context, states);
-    }
-
-    private void ComputeGrappleOffenseStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        bool canGrappleDamage = context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && context.HasIterativeGrappleAttack && CanUseGrappleActionWhilePinning(pc, GrappleActionType.DamageOpponent);
-        string grappleDamageBaseLabel = context.ShowOnlyPinnerActions ? $"Damage {context.GrappleOpponentName}" : "Grapple: Damage";
-        states.Set(GrappleDamageButton, new ActionButtonState(
-            context.IsGrappling && !context.ShowOnlyPinnedEscapeActions,
-            canGrappleDamage,
-            canGrappleDamage ? $"{grappleDamageBaseLabel} ({context.IterativeTag})" : $"{grappleDamageBaseLabel} (No attacks left)"));
-
-        bool hasMainHandLightWeapon = pc.CanAttackWithLightWeaponWhileGrappling(out ItemData mainHandLightWeapon, out _);
-        bool canLightWeaponAttack = context.IsGrappling
-            && !context.ShowOnlyPinnedEscapeActions
-            && context.HasIterativeGrappleAttack
-            && hasMainHandLightWeapon
-            && CanUseGrappleActionWhilePinning(pc, GrappleActionType.AttackWithLightWeapon);
-        string lightWeaponLabel = hasMainHandLightWeapon ? mainHandLightWeapon.Name : "Main-hand light weapon";
-        string grappleLightLabel = canLightWeaponAttack
-            ? $"Grapple: Attack {lightWeaponLabel} (-4, {context.IterativeTag})"
-            : (hasMainHandLightWeapon && !context.HasIterativeGrappleAttack
-                ? $"Grapple: Attack {lightWeaponLabel} (-4, No attacks left)"
-                : $"Grapple: Attack {lightWeaponLabel} (-4, N/A)");
-        states.Set(GrappleLightWeaponAttackButton, new ActionButtonState(context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && !context.ShowOnlyPinnerActions, canLightWeaponAttack, grappleLightLabel));
-
-        bool canUnarmedByRule = pc.CanAttackUnarmedWhileGrappling(out _);
-        bool canUnarmedAttack = context.IsGrappling
-            && !context.ShowOnlyPinnedEscapeActions
-            && context.HasIterativeGrappleAttack
-            && canUnarmedByRule
-            && CanUseGrappleActionWhilePinning(pc, GrappleActionType.AttackUnarmed);
-        string grappleUnarmedLabel = canUnarmedAttack
-            ? $"Grapple: Attack Unarmed (-4, {context.IterativeTag})"
-            : (canUnarmedByRule && !context.HasIterativeGrappleAttack
-                ? "Grapple: Attack Unarmed (-4, No attacks left)"
-                : "Grapple: Attack Unarmed (-4, N/A)");
-        states.Set(GrappleUnarmedAttackButton, new ActionButtonState(context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && !context.ShowOnlyPinnerActions, canUnarmedAttack, grappleUnarmedLabel));
-
-        bool canPin = context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && context.HasIterativeGrappleAttack && CanUseGrappleActionWhilePinning(pc, GrappleActionType.PinOpponent);
-        states.Set(GrapplePinButton, new ActionButtonState(
-            context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && !context.ShowOnlyPinnerActions,
-            canPin,
-            canPin ? $"Grapple: Pin Opponent ({context.IterativeTag})" : "Grapple: Pin Opponent (No attacks left)"));
-
-        // Deprecated for current pin model: pinned creatures now use escape actions only.
-        states.Set(GrappleBreakPinButton, new ActionButtonState(false, false));
-    }
-
-    private void ComputeGrappleEscapeStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        bool canEscapeArtist = context.IsGrappling && context.Actions.HasStandardAction;
-        states.Set(GrappleEscapeArtistButton, new ActionButtonState(
-            context.IsGrappling && !context.ShowOnlyPinnerActions,
-            canEscapeArtist,
-            canEscapeArtist ? "Grapple: Escape Artist (Std)" : "Grapple: Escape Artist (Used)"));
-
-        bool canEscapeCheck = context.IsGrappling
-            && context.HasIterativeGrappleAttack
-            && CanUseGrappleActionWhilePinning(pc, GrappleActionType.OpposedGrappleEscape);
-        states.Set(GrappleEscapeCheckButton, new ActionButtonState(
-            context.IsGrappling && !context.ShowOnlyPinnerActions,
-            canEscapeCheck,
-            canEscapeCheck ? $"Grapple: Escape Check ({context.IterativeTag})" : "Grapple: Escape Check (No attacks left)"));
-
-        bool canGrappleMove = context.IsGrappling && !context.ShowOnlyPinnedEscapeActions && context.Actions.HasStandardAction && CanUseGrappleActionWhilePinning(pc, GrappleActionType.MoveHalfSpeed);
-        string grappleMoveLabel = canGrappleMove
-            ? (context.ShowOnlyPinnerActions ? $"Move (dragging {context.GrappleOpponentName})" : "Grapple: Move (Std)")
-            : "Grapple: Move (Used/Blocked)";
-        states.Set(GrappleMoveButton, new ActionButtonState(context.IsGrappling && !context.ShowOnlyPinnedEscapeActions, canGrappleMove, grappleMoveLabel));
-    }
-
-    private void ComputeGrappleControlStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
-    {
-        bool opponentHasLightWeapon = context.HasGrappleState && context.GrappleOpponent != null
-            && context.GrappleOpponent.GetEquippedLightHandWeaponOptions() != null
-            && context.GrappleOpponent.GetEquippedLightHandWeaponOptions().Count > 0;
-        bool canUseOpponentWeapon = context.IsGrappling
-            && !context.ShowOnlyPinnedEscapeActions
-            && context.HasIterativeGrappleAttack
-            && opponentHasLightWeapon
-            && CanUseGrappleActionWhilePinning(pc, GrappleActionType.UseOpponentWeapon);
-        string useOpponentBaseLabel = context.ShowOnlyPinnerActions
-            ? $"Use {context.GrappleOpponentName}'s Weapon"
-            : "Grapple: Use Opponent Weapon";
-        string useOpponentLabel = canUseOpponentWeapon
-            ? $"{useOpponentBaseLabel} ({context.IterativeTag})"
-            : (opponentHasLightWeapon && !context.HasIterativeGrappleAttack
-                ? $"{useOpponentBaseLabel} (No attacks left)"
-                : $"{useOpponentBaseLabel} (Unavailable)");
-        states.Set(GrappleUseOpponentWeaponButton, new ActionButtonState(context.IsGrappling && !context.ShowOnlyPinnedEscapeActions, canUseOpponentWeapon, useOpponentLabel));
-
-        bool canDisarmSmallObject = context.IsGrappling && context.ShowOnlyPinnerActions && context.Actions.HasStandardAction && CanUseGrappleActionWhilePinning(pc, GrappleActionType.DisarmSmallObject);
-        states.Set(GrappleDisarmSmallObjectButton, new ActionButtonState(
-            context.IsGrappling && context.ShowOnlyPinnerActions,
-            canDisarmSmallObject,
-            canDisarmSmallObject ? $"Disarm Small Object ({context.GrappleOpponentName})" : "Disarm Small Object (Used/Blocked)"));
-
-        bool canReleasePin = context.IsGrappling && context.ShowOnlyPinnerActions && context.OpponentPinnedByActor;
-        states.Set(GrappleReleasePinnedButton, new ActionButtonState(
-            context.IsGrappling && context.ShowOnlyPinnerActions,
-            canReleasePin,
-            canReleasePin ? $"Release {context.GrappleOpponentName} from Pin" : "Release Pin (N/A)"));
-    }
-
-    private bool CanUseGrappleActionWhilePinning(CharacterController pc, GrappleActionType actionType)
-    {
-        return !pc.IsGrappleActionBlockedWhilePinning(actionType, out _);
-    }
-
-    private void ComputeAlwaysAvailableStates(ActionButtonStates states)
-    {
-        states.Set(EndTurnButton, new ActionButtonState(true, true));
-    }
-
-    private void ApplyButtonStates(ActionButtonStates states)
-    {
-        foreach (KeyValuePair<Button, ActionButtonState> kv in states.Enumerate())
-        {
-            ApplyButtonState(kv.Key, kv.Value);
-        }
-    }
-
-    private void ApplyButtonState(Button button, ActionButtonState state)
-    {
-        if (button == null || state == null)
-            return;
-
-        button.gameObject.SetActive(state.Visible);
-        button.interactable = state.Enabled;
-
-        if (!string.IsNullOrEmpty(state.Label))
-        {
-            Text label = button.GetComponentInChildren<Text>();
-            if (label != null)
-                label.text = state.Label;
-        }
-    }
-
-    private void UpdateRageStatus(CharacterController pc)
-    {
-        if (RageStatusText == null)
-            return;
-
-        bool isBarbarian = pc.Stats.IsBarbarian;
-        RageStatusText.gameObject.SetActive(isBarbarian && (pc.Stats.IsRaging || pc.Stats.IsFatigued));
-        if (pc.Stats.IsRaging)
-            RageStatusText.text = $"⚡ RAGING! {pc.Stats.RageRoundsRemaining} rounds left | -2 AC | +4 STR/CON | +2 Will";
-        else if (pc.Stats.IsFatigued)
-            RageStatusText.text = "😫 FATIGUED: -2 STR, -2 DEX";
-    }
-
-    private void HideNonGrappleActionButtons()
-    {
-        if (MoveButton != null) MoveButton.gameObject.SetActive(false);
-        if (FiveFootStepButton != null) FiveFootStepButton.gameObject.SetActive(false);
-        if (DropProneButton != null) DropProneButton.gameObject.SetActive(false);
-        if (StandUpButton != null) StandUpButton.gameObject.SetActive(false);
-        if (CrawlButton != null) CrawlButton.gameObject.SetActive(false);
-        if (AttackButton != null) AttackButton.gameObject.SetActive(false);
-        if (AttackThrownButton != null) AttackThrownButton.gameObject.SetActive(false);
-        if (AttackOffHandButton != null) AttackOffHandButton.gameObject.SetActive(false);
-        if (AttackOffHandThrownButton != null) AttackOffHandThrownButton.gameObject.SetActive(false);
-        if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
-        if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
-        if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);
-        if (AidAnotherButton != null) AidAnotherButton.gameObject.SetActive(false);
-        if (OverrunButton != null) OverrunButton.gameObject.SetActive(false);
-        if (ChargeButton != null) ChargeButton.gameObject.SetActive(false);
-        if (FullAttackButton != null) FullAttackButton.gameObject.SetActive(false);
-        if (FullAttackDefensivelyButton != null) FullAttackDefensivelyButton.gameObject.SetActive(false);
-        if (DualWieldButton != null) DualWieldButton.gameObject.SetActive(false);
-        if (FlurryOfBlowsButton != null) FlurryOfBlowsButton.gameObject.SetActive(false);
-        if (RageButton != null) RageButton.gameObject.SetActive(false);
-        if (ReloadButton != null) ReloadButton.gameObject.SetActive(false);
-        if (DropEquippedItemButton != null) DropEquippedItemButton.gameObject.SetActive(false);
-        if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
-        if (DamageModeToggleButton != null) DamageModeToggleButton.gameObject.SetActive(false);
-        if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
-    }
-
-    private void HideAllActionButtons()
-    {
-        if (MoveButton != null) MoveButton.gameObject.SetActive(false);
-        if (FiveFootStepButton != null) FiveFootStepButton.gameObject.SetActive(false);
-        if (DropProneButton != null) DropProneButton.gameObject.SetActive(false);
-        if (StandUpButton != null) StandUpButton.gameObject.SetActive(false);
-        if (CrawlButton != null) CrawlButton.gameObject.SetActive(false);
-        if (AttackButton != null) AttackButton.gameObject.SetActive(false);
-        if (AttackThrownButton != null) AttackThrownButton.gameObject.SetActive(false);
-        if (AttackOffHandButton != null) AttackOffHandButton.gameObject.SetActive(false);
-        if (AttackOffHandThrownButton != null) AttackOffHandThrownButton.gameObject.SetActive(false);
-        if (FullAttackButton != null) FullAttackButton.gameObject.SetActive(false);
-        if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
-        if (TurnUndeadButton != null) TurnUndeadButton.gameObject.SetActive(false);
-        if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);
-        if (GrappleDamageButton != null) GrappleDamageButton.gameObject.SetActive(false);
-        if (GrappleLightWeaponAttackButton != null) GrappleLightWeaponAttackButton.gameObject.SetActive(false);
-        if (GrappleUnarmedAttackButton != null) GrappleUnarmedAttackButton.gameObject.SetActive(false);
-        if (GrapplePinButton != null) GrapplePinButton.gameObject.SetActive(false);
-        if (GrappleBreakPinButton != null) GrappleBreakPinButton.gameObject.SetActive(false);
-        if (GrappleEscapeArtistButton != null) GrappleEscapeArtistButton.gameObject.SetActive(false);
-        if (GrappleEscapeCheckButton != null) GrappleEscapeCheckButton.gameObject.SetActive(false);
-        if (GrappleMoveButton != null) GrappleMoveButton.gameObject.SetActive(false);
-        if (GrappleUseOpponentWeaponButton != null) GrappleUseOpponentWeaponButton.gameObject.SetActive(false);
-        if (GrappleDisarmSmallObjectButton != null) GrappleDisarmSmallObjectButton.gameObject.SetActive(false);
-        if (GrappleReleasePinnedButton != null) GrappleReleasePinnedButton.gameObject.SetActive(false);
-        if (AidAnotherButton != null) AidAnotherButton.gameObject.SetActive(false);
-        if (OverrunButton != null) OverrunButton.gameObject.SetActive(false);
-        if (ChargeButton != null) ChargeButton.gameObject.SetActive(false);
-        if (DualWieldButton != null) DualWieldButton.gameObject.SetActive(false);
-        if (EndTurnButton != null) EndTurnButton.gameObject.SetActive(false);
-        if (ReloadButton != null) ReloadButton.gameObject.SetActive(false);
-        if (DropEquippedItemButton != null) DropEquippedItemButton.gameObject.SetActive(false);
-        if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
-        if (DamageModeToggleButton != null) DamageModeToggleButton.gameObject.SetActive(false);
-        if (FlurryOfBlowsButton != null) FlurryOfBlowsButton.gameObject.SetActive(false);
-        if (RageButton != null) RageButton.gameObject.SetActive(false);
-        if (CastSpellButton != null) CastSpellButton.gameObject.SetActive(false);
-        if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
-        if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
-        if (FullAttackDefensivelyButton != null) FullAttackDefensivelyButton.gameObject.SetActive(false);
+        EnsureActionButtonPanel();
+        _actionButtonPanel.RefreshActionButtons();
     }
 
     public void OnGrappleActionsClicked()
@@ -2421,16 +1524,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void SetActivePC(int pcNumber)
     {
-        if (PC1ActiveIndicator != null) PC1ActiveIndicator.enabled = (pcNumber == 1);
-        if (PC2ActiveIndicator != null) PC2ActiveIndicator.enabled = (pcNumber == 2);
-        if (PC3ActiveIndicator != null) PC3ActiveIndicator.enabled = (pcNumber == 3);
-        if (PC4ActiveIndicator != null) PC4ActiveIndicator.enabled = (pcNumber == 4);
-
-        // Dim inactive panels, brighten active
-        SetPanelActiveState(PC1Panel, pcNumber == 1, new Color(0.1f, 0.3f, 0.5f, 0.95f), new Color(0.1f, 0.2f, 0.4f, 0.65f));
-        SetPanelActiveState(PC2Panel, pcNumber == 2, new Color(0.1f, 0.2f, 0.5f, 0.95f), new Color(0.1f, 0.15f, 0.35f, 0.65f));
-        SetPanelActiveState(PC3Panel, pcNumber == 3, new Color(0.15f, 0.3f, 0.4f, 0.95f), new Color(0.1f, 0.2f, 0.3f, 0.65f));
-        SetPanelActiveState(PC4Panel, pcNumber == 4, new Color(0.3f, 0.15f, 0.15f, 0.95f), new Color(0.25f, 0.1f, 0.1f, 0.65f));
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.SetActivePC(pcNumber);
     }
 
     /// <summary>
@@ -2438,27 +1533,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void SetActiveNPC(int npcIndex)
     {
-        for (int i = 0; i < NPCPanels.Count; i++)
-        {
-            var p = NPCPanels[i];
-            bool isActive = (i == npcIndex);
-
-            if (p.ActiveIndicator != null)
-                p.ActiveIndicator.enabled = isActive;
-
-            // Dim inactive NPC panels, brighten active
-            SetPanelActiveState(p.Panel, isActive,
-                new Color(0.4f, 0.15f, 0.15f, 0.95f),  // Brighter red when active
-                new Color(0.3f, 0.1f, 0.1f, 0.65f));    // Dimmed when inactive
-        }
-    }
-
-    private void SetPanelActiveState(GameObject panel, bool active, Color activeColor, Color inactiveColor)
-    {
-        if (panel == null) return;
-        Image panelImg = panel.GetComponent<Image>();
-        if (panelImg != null)
-            panelImg.color = active ? activeColor : inactiveColor;
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.SetActiveNPC(npcIndex);
     }
 
     /// <summary>
@@ -2466,19 +1542,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void SetPCIcon(int pcNumber, Sprite icon)
     {
-        Image target = null;
-        switch (pcNumber)
-        {
-            case 1: target = PC1Icon; break;
-            case 2: target = PC2Icon; break;
-            case 3: target = PC3Icon; break;
-            case 4: target = PC4Icon; break;
-        }
-        if (target != null && icon != null)
-        {
-            target.sprite = icon;
-            target.enabled = true;
-        }
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.SetPCIcon(pcNumber, icon);
     }
 
     /// <summary>
@@ -2486,11 +1551,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void SetNPCIcon(int npcIndex, Sprite icon)
     {
-        if (npcIndex < NPCPanels.Count && NPCPanels[npcIndex].IconImage != null)
-        {
-            NPCPanels[npcIndex].IconImage.sprite = icon;
-            NPCPanels[npcIndex].IconImage.enabled = icon != null;
-        }
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.SetNPCIcon(npcIndex, icon);
     }
 
     // ========================================================================
