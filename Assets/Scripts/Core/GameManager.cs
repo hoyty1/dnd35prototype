@@ -13488,6 +13488,7 @@ public class GameManager : MonoBehaviour
         int? disarmAttackBonusOverride = null;
         int disarmAttackBonusUsed = 0;
         bool disarmUsedOffHand = false;
+        int disarmDualWieldPenaltyForLog = 0;
         ItemData disarmAttackerWeaponOverride = null;
         int? grappleAttackBonusOverride = null;
         int? bullRushAttackBonusOverride = null;
@@ -13530,6 +13531,9 @@ public class GameManager : MonoBehaviour
             }
 
             disarmAttackBonusOverride = disarmAttackBonusUsed;
+            if (_isDualWielding)
+                disarmDualWieldPenaltyForLog = disarmUsedOffHand ? _offHandPenalty : _mainHandPenalty;
+
             _disarmAttemptNumber++;
             string handLabel = disarmUsedOffHand ? "off-hand" : "main-hand";
             actionLabel = $"disarm attempt #{_disarmAttemptNumber} ({handLabel}), BAB {CharacterStats.FormatMod(disarmAttackBonusUsed)} ({disarmAttacksRemaining} remaining)";
@@ -13648,8 +13652,13 @@ public class GameManager : MonoBehaviour
             bullRushAttackBonusOverride,
             bullRushChargeBonusOverride: type == SpecialAttackType.BullRushCharge ? 2 : 0,
             disarmAttackerWeaponOverride: disarmAttackerWeaponOverride,
-            tripAttackBonusOverride: tripAttackBonusOverride);
-        CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}] ({actionLabel}): {result.Log}");
+            tripAttackBonusOverride: tripAttackBonusOverride,
+            disarmUsedOffHand: disarmUsedOffHand,
+            disarmDualWieldPenaltyForLog: disarmDualWieldPenaltyForLog);
+        if (type == SpecialAttackType.Disarm)
+            CombatUI.ShowCombatLog(result.Log);
+        else
+            CombatUI.ShowCombatLog($"⚔ SPECIAL [{type}] ({actionLabel}): {result.Log}");
         if (type == SpecialAttackType.Grapple)
         {
             int attacksRemaining = GetRemainingGrappleAttackActions(attacker);

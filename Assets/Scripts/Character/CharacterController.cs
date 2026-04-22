@@ -5308,7 +5308,9 @@ public class CharacterController : MonoBehaviour
         int? bullRushAttackBonusOverride = null,
         int bullRushChargeBonusOverride = 0,
         ItemData disarmAttackerWeaponOverride = null,
-        int? tripAttackBonusOverride = null)
+        int? tripAttackBonusOverride = null,
+        bool disarmUsedOffHand = false,
+        int disarmDualWieldPenaltyForLog = 0)
     {
         if (target == null || target.Stats == null)
         {
@@ -5323,7 +5325,7 @@ public class CharacterController : MonoBehaviour
         switch (type)
         {
             case SpecialAttackType.Trip: return ResolveTrip(target, tripAttackBonusOverride);
-            case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot, disarmAttackBonusOverride, disarmAttackerWeaponOverride);
+            case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot, disarmAttackBonusOverride, disarmAttackerWeaponOverride, disarmUsedOffHand, disarmDualWieldPenaltyForLog);
             case SpecialAttackType.Grapple: return ResolveGrapple(target, grappleAttackBonusOverride);
             case SpecialAttackType.Sunder: return ResolveSunder(target);
             case SpecialAttackType.BullRushAttack:
@@ -5369,7 +5371,7 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    private SpecialAttackResult ResolveDisarm(CharacterController target, EquipSlot? preferredTargetSlot, int? iterativeAttackBonusOverride = null, ItemData attackerWeaponOverride = null)
+    private SpecialAttackResult ResolveDisarm(CharacterController target, EquipSlot? preferredTargetSlot, int? iterativeAttackBonusOverride = null, ItemData attackerWeaponOverride = null, bool usedOffHand = false, int attackerDualWieldPenaltyForLog = 0)
     {
         if (!TryGetDisarmTargetHeldItem(target, preferredTargetSlot, out ItemData targetHeldItem, out EquipSlot targetHeldItemSlot))
         {
@@ -5394,15 +5396,18 @@ public class CharacterController : MonoBehaviour
             targetHeldItemSlot,
             defenderLockedGauntletBonus,
             lockedGauntletReason: defenderHasLockedGauntlet ? "Locked Gauntlet" : string.Empty,
-            attackerBaseAttackBonusOverride: iterativeAttackBonusOverride);
+            attackerBaseAttackBonusOverride: iterativeAttackBonusOverride,
+            attackerDualWieldPenaltyForLog: attackerDualWieldPenaltyForLog);
 
         bool success = primaryCheck.Success;
+        string handLabel = usedOffHand ? "Off-Hand" : "Main Hand";
+        string resultLabel = success ? "SUCCESS" : "FAILURE";
+
         var logLines = new List<string>
         {
-            success
-                ? $"{Stats.CharacterName} disarms {target.Stats.CharacterName}! ({primaryCheck.AttackerTotal} vs {primaryCheck.DefenderTotal})"
-                : $"{Stats.CharacterName} fails to disarm {target.Stats.CharacterName}. ({primaryCheck.AttackerTotal} vs {primaryCheck.DefenderTotal})",
-            primaryCheck.BreakdownLog
+            $"{Stats.CharacterName} attempts to disarm {target.Stats.CharacterName} ({handLabel})",
+            primaryCheck.BreakdownLog,
+            $"Result: {primaryCheck.AttackerTotal} vs {primaryCheck.DefenderTotal} - {resultLabel}!"
         };
 
         if (success)
@@ -5886,8 +5891,6 @@ public class CharacterController : MonoBehaviour
         {
             string attackerHeldLabel = attackerHeldItem != null ? attackerHeldItem.Name : "Unarmed Strike";
             string defenderHeldLabel = defenderHeldItem != null ? defenderHeldItem.Name : $"Held Item ({defenderHeldSlot})";
-            string atkBreakdown = BuildDisarmModifierBreakdown("ATK", attackerHeldLabel, 0, 0, 0, 0);
-            string defBreakdown = BuildDisarmModifierBreakdown("DEF", defenderHeldLabel, 0, 0, 0, 0, 0, reason);
 
             return new DisarmCheckResult
             {
@@ -5896,7 +5899,7 @@ public class CharacterController : MonoBehaviour
                 AttackerTotal = 0,
                 DefenderRoll = 0,
                 DefenderTotal = 99,
-                BreakdownLog = $"{reason} {atkBreakdown} | {defBreakdown}"
+                BreakdownLog = $"Attacker Roll:\n  Held Item: {attackerHeldLabel}\n  Total: automatic failure\n\nDefender Roll:\n  Held Item: {defenderHeldLabel}\n  Total: automatic success\n  Reason: {reason}"
             };
         }
     }
@@ -5909,7 +5912,8 @@ public class CharacterController : MonoBehaviour
         EquipSlot defenderHeldSlot,
         int defenderSpecialResistBonus,
         string lockedGauntletReason,
-        int? attackerBaseAttackBonusOverride = null)
+        int? attackerBaseAttackBonusOverride = null,
+        int attackerDualWieldPenaltyForLog = 0)
     {
         int atkHeldItemMod = GetDisarmHeldItemModifier(attackerHeldItem, treatUnarmedAsLight: true);
         int atkSizeDiffMod = GetDisarmSizeDifferenceModifier(attacker, defender);
@@ -5923,9 +5927,11 @@ public class CharacterController : MonoBehaviour
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
 
-        int attackerBaseAttackBonus = attackerBaseAttackBonusOverride ?? attacker.Stats.BaseAttackBonus;
+        int attackerBaseAttackBonusUsed = attackerBaseAttackBonusOverride ?? attacker.Stats.BaseAttackBonus;
+        int attackerBaseAttackBonusRaw = attacker.Stats.BaseAttackBonus;
+        int attackerIterativeAdjustment = attackerBaseAttackBonusUsed - attackerBaseAttackBonusRaw - attackerDualWieldPenaltyForLog;
 
-        int atkTotal = atkRoll + attackerBaseAttackBonus + attacker.Stats.STRMod + attacker.Stats.SizeModifier + attacker.Stats.ConditionAttackPenalty
+        int atkTotal = atkRoll + attackerBaseAttackBonusUsed + attacker.Stats.STRMod + attacker.Stats.SizeModifier + attacker.Stats.ConditionAttackPenalty
                        + atkHeldItemMod + atkSizeDiffMod + atkImprovedDisarmMod;
         int defTotal = defRoll + defender.Stats.BaseAttackBonus + defender.Stats.STRMod + defender.Stats.SizeModifier + defender.Stats.ConditionAttackPenalty
                        + defHeldItemMod + defNonMeleeHeldItemPenalty + defSizeDiffMod + defImprovedDisarmMod + defenderSpecialResistBonus;
@@ -5933,23 +5939,41 @@ public class CharacterController : MonoBehaviour
         string attackerHeldLabel = attackerHeldItem != null ? attackerHeldItem.Name : "Unarmed Strike";
         string defenderHeldLabel = defenderHeldItem != null ? defenderHeldItem.Name : $"Held Item ({defenderHeldSlot})";
 
-        string atkBreakdown = BuildDisarmModifierBreakdown(
-            "ATK",
-            attackerHeldLabel,
-            atkHeldItemMod,
-            atkSizeDiffMod,
-            0,
-            atkImprovedDisarmMod);
+        string atkBreakdown = BuildDisarmDetailedRollSection(
+            title: "Attacker Roll:",
+            d20Roll: atkRoll,
+            baseAttackBonus: attackerBaseAttackBonusRaw,
+            iterativeAdjustment: attackerIterativeAdjustment,
+            dualWieldPenalty: attackerDualWieldPenaltyForLog,
+            strengthModifier: attacker.Stats.STRMod,
+            sizeModifier: attacker.Stats.SizeModifier,
+            conditionModifier: attacker.Stats.ConditionAttackPenalty,
+            weaponModifier: atkHeldItemMod,
+            sizeDifferenceModifier: atkSizeDiffMod,
+            nonMeleePenalty: 0,
+            improvedDisarmModifier: atkImprovedDisarmMod,
+            specialModifier: 0,
+            specialModifierLabel: string.Empty,
+            heldItemLabel: attackerHeldLabel,
+            total: atkTotal);
 
-        string defBreakdown = BuildDisarmModifierBreakdown(
-            "DEF",
-            defenderHeldLabel,
-            defHeldItemMod,
-            defSizeDiffMod,
-            defNonMeleeHeldItemPenalty,
-            defImprovedDisarmMod,
-            defenderSpecialResistBonus,
-            lockedGauntletReason);
+        string defBreakdown = BuildDisarmDetailedRollSection(
+            title: "Defender Roll:",
+            d20Roll: defRoll,
+            baseAttackBonus: defender.Stats.BaseAttackBonus,
+            iterativeAdjustment: 0,
+            dualWieldPenalty: 0,
+            strengthModifier: defender.Stats.STRMod,
+            sizeModifier: defender.Stats.SizeModifier,
+            conditionModifier: defender.Stats.ConditionAttackPenalty,
+            weaponModifier: defHeldItemMod,
+            sizeDifferenceModifier: defSizeDiffMod,
+            nonMeleePenalty: defNonMeleeHeldItemPenalty,
+            improvedDisarmModifier: defImprovedDisarmMod,
+            specialModifier: defenderSpecialResistBonus,
+            specialModifierLabel: lockedGauntletReason,
+            heldItemLabel: defenderHeldLabel,
+            total: defTotal);
 
         return new DisarmCheckResult
         {
@@ -5958,8 +5982,79 @@ public class CharacterController : MonoBehaviour
             AttackerTotal = atkTotal,
             DefenderRoll = defRoll,
             DefenderTotal = defTotal,
-            BreakdownLog = $"{atkBreakdown} | {defBreakdown}"
+            BreakdownLog = $"{atkBreakdown}\n\n{defBreakdown}"
         };
+    }
+
+    private static string BuildDisarmDetailedRollSection(
+        string title,
+        int d20Roll,
+        int baseAttackBonus,
+        int iterativeAdjustment,
+        int dualWieldPenalty,
+        int strengthModifier,
+        int sizeModifier,
+        int conditionModifier,
+        int weaponModifier,
+        int sizeDifferenceModifier,
+        int nonMeleePenalty,
+        int improvedDisarmModifier,
+        int specialModifier,
+        string specialModifierLabel,
+        string heldItemLabel,
+        int total)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(title);
+        if (!string.IsNullOrEmpty(heldItemLabel))
+            sb.AppendLine($"  Held Item: {heldItemLabel}");
+
+        sb.AppendLine($"  d20: {d20Roll}");
+        sb.AppendLine($"  BAB: {FormatSignedDisarmModifier(baseAttackBonus)}");
+        if (iterativeAdjustment != 0)
+            sb.AppendLine($"  Iterative: {FormatSignedDisarmModifier(iterativeAdjustment)}");
+        if (dualWieldPenalty != 0)
+            sb.AppendLine($"  Dual Wield: {FormatSignedDisarmModifier(dualWieldPenalty)}");
+        sb.AppendLine($"  STR: {FormatSignedDisarmModifier(strengthModifier)}");
+        sb.AppendLine($"  Size: {FormatSignedDisarmModifier(sizeModifier)}");
+        if (conditionModifier != 0)
+            sb.AppendLine($"  Condition: {FormatSignedDisarmModifier(conditionModifier)}");
+        sb.AppendLine($"  Weapon: {FormatSignedDisarmModifier(weaponModifier)}");
+        if (nonMeleePenalty != 0)
+            sb.AppendLine($"  Non-Melee Item: {FormatSignedDisarmModifier(nonMeleePenalty)}");
+        if (sizeDifferenceModifier != 0)
+            sb.AppendLine($"  Size Difference: {FormatSignedDisarmModifier(sizeDifferenceModifier)}");
+        if (improvedDisarmModifier != 0)
+            sb.AppendLine($"  Improved Disarm: {FormatSignedDisarmModifier(improvedDisarmModifier)}");
+        if (specialModifier != 0)
+        {
+            string specialLabel = string.IsNullOrWhiteSpace(specialModifierLabel) ? "Special" : specialModifierLabel;
+            sb.AppendLine($"  {specialLabel}: {FormatSignedDisarmModifier(specialModifier)}");
+        }
+
+        sb.AppendLine($"  Total: {BuildDisarmEquation(d20Roll, baseAttackBonus, iterativeAdjustment, dualWieldPenalty, strengthModifier, sizeModifier, conditionModifier, weaponModifier, nonMeleePenalty, sizeDifferenceModifier, improvedDisarmModifier, specialModifier)} = {total}");
+        return sb.ToString().TrimEnd();
+    }
+
+    private static string BuildDisarmEquation(int d20Roll, params int[] modifiers)
+    {
+        var sb = new StringBuilder();
+        sb.Append(d20Roll);
+        for (int i = 0; i < modifiers.Length; i++)
+        {
+            int value = modifiers[i];
+            if (value >= 0)
+                sb.Append($" + {value}");
+            else
+                sb.Append($" - {Mathf.Abs(value)}");
+        }
+
+        return sb.ToString();
+    }
+
+    private static string FormatSignedDisarmModifier(int value)
+    {
+        return value >= 0 ? $"+{value}" : value.ToString();
     }
 
     private static bool IsSpikedGauntletItem(ItemData item)
