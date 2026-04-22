@@ -106,6 +106,7 @@ public partial class GameManager : MonoBehaviour
     [SerializeField] private InputService _inputService;
     [SerializeField] private ConditionService _conditionService;
     [SerializeField] private AIService _aiService;
+    [SerializeField] private CombatFlowService _combatFlowService;
 
     /// <summary>Current combatant in initiative order (PC or NPC).</summary>
     public CharacterController CurrentCharacter => _turnService != null ? _turnService.CurrentCharacter : null;
@@ -128,7 +129,7 @@ public partial class GameManager : MonoBehaviour
     public bool IsPlayerTurn => ActivePC != null;
 
     // Current attack mode being selected for
-    private enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell }
+    public enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell }
 
     public enum AttackType
     {
@@ -517,6 +518,9 @@ public partial class GameManager : MonoBehaviour
         _aiService ??= gameObject.GetComponent<AIService>() ?? gameObject.AddComponent<AIService>();
         _aiService.Initialize(this);
 
+        _combatFlowService ??= gameObject.GetComponent<CombatFlowService>() ?? gameObject.AddComponent<CombatFlowService>();
+        _combatFlowService.Initialize(this);
+
         turnUndeadSystem ??= gameObject.GetComponent<TurnUndeadSystem>() ?? gameObject.AddComponent<TurnUndeadSystem>();
         grappleSystem ??= gameObject.GetComponent<GrappleSystem>() ?? gameObject.AddComponent<GrappleSystem>();
         overrunSystem ??= gameObject.GetComponent<OverrunSystem>() ?? gameObject.AddComponent<OverrunSystem>();
@@ -553,6 +557,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         _aiService?.Cleanup();
+        _combatFlowService?.Cleanup();
 
         turnUndeadSystem?.Cleanup();
         grappleSystem?.Cleanup();
@@ -9974,83 +9979,10 @@ public partial class GameManager : MonoBehaviour
 
     private CombatResult ExecuteOffHandAttack(CharacterController attacker, CharacterController target, int attackBab, ItemData offHandWeapon, bool useThrownRange)
     {
-        if (attacker == null || target == null || offHandWeapon == null)
-        {
-            Debug.Log("[OffHand] ExecuteOffHandAttack aborted due to null attacker/target/weapon.");
-            return null;
-        }
+        if (_combatFlowService != null)
+            return _combatFlowService.ExecuteOffHandAttack(attacker, target, attackBab, offHandWeapon, useThrownRange);
 
-        Debug.Log("[OffHand] ExecuteOffHandAttack START");
-        Debug.Log($"[OffHand] Attacker: {attacker.Stats.CharacterName}");
-        Debug.Log($"[OffHand] Target: {target.Stats.CharacterName}");
-        Debug.Log($"[OffHand] Weapon: {offHandWeapon.Name}");
-        Debug.Log($"[OffHand] Attack BAB: {attackBab}");
-        Debug.Log($"[OffHand] STR modifier: {attacker.Stats.STRMod}");
-        Debug.Log($"[OffHand] Penalty: {_offHandPenalty}");
-
-        bool isFlanking = false;
-        int flankBonus = 0;
-        string partnerName = string.Empty;
-        if (!useThrownRange)
-        {
-            List<CharacterController> allCombatants = GetAllCharacters();
-            isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out CharacterController flankPartner);
-            flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-            partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : string.Empty;
-        }
-
-        int sqDist = attacker.GetMinimumDistanceToTarget(target, chebyshev: false);
-        RangeInfo rangeInfo = useThrownRange
-            ? RangeCalculator.GetRangeInfo(sqDist, offHandWeapon.RangeIncrement, true)
-            : RangeCalculator.GetRangeInfo(sqDist, 0, false);
-
-        bool isOffHandMeleeFearBreak = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            offHandWeapon,
-            rangeInfo,
-            treatAsThrownAttack: useThrownRange);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isOffHandMeleeFearBreak);
-
-        CombatResult result = attacker.Attack(
-            target,
-            isFlanking,
-            flankBonus,
-            partnerName,
-            rangeInfo,
-            attackBab,
-            offHandWeapon,
-            0,
-            true);
-
-        string babLabel = CharacterStats.FormatMod(attackBab);
-        string offHandPenaltyInfo = _isDualWielding
-            ? $", dual-wield penalty {CharacterStats.FormatMod(_offHandPenalty)}"
-            : string.Empty;
-        string offHandModeLabel = useThrownRange ? "Off-Hand Thrown Attack" : "Off-Hand Attack";
-        CombatUI?.ShowCombatLog($"↻ {offHandModeLabel} (BAB {babLabel}{offHandPenaltyInfo}) with {offHandWeapon.Name}");
-
-        _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
-        CombatUI?.ShowCombatLog(_lastCombatLog);
-
-        if (LogAttacksToConsole)
-            Debug.Log("[Combat] " + _lastCombatLog);
-
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-        _highlightedCells.Clear();
-
-        if (result == null)
-        {
-            Debug.Log("[OffHand] ExecuteOffHandAttack END (null result)");
-            return null;
-        }
-
-        Debug.Log($"[OffHand] Attack total: {result.TotalRoll} vs AC {result.TargetAC}");
-        Debug.Log(result.Hit
-            ? $"[OffHand] HIT! Damage={result.TotalDamage}"
-            : "[OffHand] MISS!");
-        Debug.Log("[OffHand] ExecuteOffHandAttack END");
-        return result;
+        return null;
     }
 
     private void ResolveOffHandThrownWeaponAfterAttack(CharacterController thrower, CharacterController target, ItemData thrownWeapon)
@@ -10616,285 +10548,49 @@ public partial class GameManager : MonoBehaviour
 
     private void PerformPlayerAttack(CharacterController attacker, CharacterController target)
     {
+        if (_combatFlowService != null)
+        {
+            _combatFlowService.PerformPlayerAttack(attacker, target);
+            return;
+        }
+
         CurrentSubPhase = PlayerSubPhase.Animating;
-
-        // Check flanking against all combatants (team/threat rules applied by CombatUtils).
-        var allCombatants = GetAllCharacters();
-
-        CharacterController flankPartner;
-        bool isFlanking = CombatUtils.IsAttackerFlanking(attacker, target, allCombatants, out flankPartner);
-        int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
-        string partnerName = flankPartner != null ? flankPartner.Stats.CharacterName : "";
-
-        if (CombatUI != null)
-        {
-            string flankIndicator = CombatUI.BuildFlankingIndicator(isFlanking, flankPartner);
-            CombatUI.SetTurnIndicator($"{attacker.Stats.CharacterName} attacks {target.Stats.CharacterName}{flankIndicator}");
-        }
-        RangeInfo rangeInfo = CalculateRangeInfo(attacker, target);
-        if (_currentAttackType == AttackType.Thrown && rangeInfo != null)
-        {
-            Debug.Log($"[Attack][Thrown] {attacker.Stats.CharacterName} -> {target.Stats.CharacterName}: distance={rangeInfo.DistanceFeet} ft, increment={rangeInfo.IncrementNumber}, penalty={rangeInfo.Penalty}, inRange={rangeInfo.IsInRange}");
-        }
-
-        // Targeting is resolved; clear pending declaration marker.
-        _pendingDefensiveAttackSelection = false;
-
-        switch (_pendingAttackMode)
-        {
-            case PendingAttackMode.Single:
-                if (_isInAttackSequence && _attackingCharacter == attacker)
-                {
-                    PerformIterativeSequenceAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-                }
-                else
-                {
-                    PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-                }
-                break;
-            case PendingAttackMode.FullAttack:
-                StartCoroutine(PerformFullAttackWithRetargetingAndFiveFootStep(attacker, target));
-                break;
-            case PendingAttackMode.DualWield:
-                PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-                break;
-            case PendingAttackMode.FlurryOfBlows:
-                PerformFlurryOfBlows(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
-                break;
-        }
     }
 
     private RangeInfo CalculateRangeInfo(CharacterController attacker, CharacterController target)
     {
-        ItemData weapon = attacker.GetEquippedMainWeapon();
-        bool usingThrownAttack = IsUsingThrownAttackMode(attacker, weapon);
-        bool isRangedAttack = IsAttackModeRanged(attacker, weapon);
+        if (_combatFlowService != null)
+            return _combatFlowService.CalculateRangeInfo(attacker, target);
 
-        int sqDist = attacker.GetMinimumDistanceToTarget(target, chebyshev: false);
-
-        if (isRangedAttack && weapon != null && weapon.RangeIncrement > 0)
-        {
-            bool isThrownWeapon = usingThrownAttack || (weapon.WeaponCat == WeaponCategory.Ranged && weapon.IsThrown);
-            return RangeCalculator.GetRangeInfo(sqDist, weapon.RangeIncrement, isThrownWeapon);
-        }
-
-        // Melee-mode attack (including throwable melee weapons when using melee attack button)
-        return RangeCalculator.GetRangeInfo(sqDist, 0, false);
+        return RangeCalculator.GetRangeInfo(0, 0, false);
     }
 
     private string BuildAttackLog(CharacterController attacker, bool isFlanking, string partnerName, CombatResult result)
     {
-        if (result == null)
-            return string.Empty;
+        if (_combatFlowService != null)
+            return _combatFlowService.BuildAttackLog(attacker, isFlanking, partnerName, result);
 
-        string attackerName = attacker != null && attacker.Stats != null
-            ? attacker.Stats.CharacterName
-            : "Attacker";
-        string flankLogPrefix = isFlanking
-            ? $"⚔ {attackerName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-
-        string damageModeLabel = result.AttackDamageMode == AttackDamageMode.Nonlethal ? "nonlethal" : "lethal";
-        string damageModePrefix = result.DamageModeAttackPenalty != 0
-            ? $"🗡 Attacking with {damageModeLabel} damage ({result.DamageModeAttackPenalty} penalty).\n"
-            : $"🗡 Attacking with {damageModeLabel} damage.\n";
-
-        return flankLogPrefix + damageModePrefix + result.GetDetailedSummary();
+        return result != null ? result.GetDetailedSummary() : string.Empty;
     }
 
     private void PerformIterativeSequenceAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        if (!_isInAttackSequence || _attackingCharacter != attacker)
+        if (_combatFlowService != null)
         {
-            Debug.LogWarning("[Attack][Sequence] Iterative attack requested without active sequence; falling back to single attack.");
-            PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            _combatFlowService.PerformIterativeSequenceAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
             return;
         }
-
-        ItemData attackWeapon = _currentAttackType == AttackType.Thrown
-            ? (_equippedWeapon ?? attacker.GetEquippedMainWeapon())
-            : attacker.GetEquippedMainWeapon();
-
-        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            attackWeapon,
-            rangeInfo,
-            treatAsThrownAttack: _currentAttackType == AttackType.Thrown);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
-
-        CombatResult result = attacker.Attack(
-            target,
-            isFlanking,
-            flankBonus,
-            partnerName,
-            rangeInfo,
-            _currentAttackBAB,
-            attackWeapon);
-
-        ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
-
-        int attackNumber = _totalAttacksUsed + 1;
-        string modeLabel = _currentAttackType == AttackType.Thrown ? "Thrown" : "Melee";
-        string dwPenaltyInfo = _isDualWielding && (_currentAttackType == AttackType.Melee || _currentAttackType == AttackType.Thrown)
-            ? $", dual-wield penalty {CharacterStats.FormatMod(_mainHandPenalty)}"
-            : string.Empty;
-        CombatUI?.ShowCombatLog($"↻ Attack #{attackNumber}/{_totalAttackBudget} ({modeLabel}) at BAB {CharacterStats.FormatMod(_currentAttackBAB)}{dwPenaltyInfo}");
-
-        _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
-
-        if (LogAttacksToConsole)
-            Debug.Log("[Combat] " + _lastCombatLog);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        if (result.Hit && result.TotalDamage > 0)
-            CheckConcentrationOnDamage(target, result.TotalDamage);
-
-        if (result.TargetKilled)
-        {
-            HandleSummonDeathCleanup(target);
-
-            if (!target.IsPlayerControlled)
-            {
-                UpdateAllStatsUI();
-                if (AreAllNPCsDead())
-                {
-                    EndAttackSequence();
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    return;
-                }
-
-                CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
-            }
-        }
-
-        _totalAttacksUsed++;
-        Debug.Log($"=== MAIN HAND ATTACK #{_totalAttacksUsed} ===");
-        Debug.Log($"[Attack][Sequence] Attacks used: {_totalAttacksUsed}/{_totalAttackBudget}");
-        Debug.Log($"[OffHand] _offHandAttackAvailableThisTurn: {_offHandAttackAvailableThisTurn}");
-        Debug.Log($"[OffHand] _offHandAttackUsedThisTurn: {_offHandAttackUsedThisTurn}");
-        Debug.Log($"[OffHand] After main hand attack #{_totalAttacksUsed}: used={_offHandAttackUsedThisTurn}, available={_offHandAttackAvailableThisTurn}");
-
-        if (_totalAttacksUsed == 1 && !_attackSequenceConsumesFullRound && _totalAttackBudget > 1)
-        {
-            if (attacker.Actions != null && attacker.Actions.HasMoveAction)
-            {
-                attacker.Actions.UseMoveAction();
-                _attackSequenceConsumesFullRound = true;
-                Debug.Log("[Attack][Sequence] Converted to full-round action");
-            }
-            else
-            {
-                _totalAttackBudget = _totalAttacksUsed;
-                Debug.LogWarning("[Attack][Sequence] Could not consume move action for full-round conversion; trimming attack budget.");
-            }
-        }
-
-        if (HasMoreAttacksAvailable())
-        {
-            int nextBaseBab = attacker.GetIterativeAttackBAB(_totalAttacksUsed);
-            _currentAttackBAB = nextBaseBab;
-            if (_isDualWielding && (_currentAttackType == AttackType.Melee || _currentAttackType == AttackType.Thrown))
-                _currentAttackBAB += _mainHandPenalty;
-
-            Debug.Log($"[Attack][Sequence] Next attack BAB prepared: base={nextBaseBab}, final={_currentAttackBAB}");
-            Debug.Log("[Attack][Sequence] More attacks available, returning to action menu");
-        }
-        else
-        {
-            Debug.Log("[Attack][Sequence] All attacks exhausted");
-            Debug.Log("=== ALL MAIN HAND ATTACKS COMPLETE ===");
-
-            bool offHandAvailableNow = CanUseOffHandAttackOption(attacker);
-            bool offHandThrownAvailableNow = CanUseOffHandThrownAttackOption(attacker);
-            Debug.Log($"[Attack] All main hand attacks used ({_totalAttacksUsed}/{_totalAttackBudget})");
-            Debug.Log($"[OffHand] _offHandAttackAvailableThisTurn: {_offHandAttackAvailableThisTurn}");
-            Debug.Log($"[OffHand] _offHandAttackUsedThisTurn: {_offHandAttackUsedThisTurn}");
-            Debug.Log($"[Attack] Off-hand attack available: {offHandAvailableNow}");
-            Debug.Log($"[Attack] Off-hand thrown attack available: {offHandThrownAvailableNow}");
-
-            EndAttackSequence();
-        }
-
-        StartCoroutine(AfterAttackDelay(attacker, 1.5f));
     }
 
     private void PerformSingleAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        bool skipStandardCommit = _skipNextSingleAttackStandardActionCommit;
-        _skipNextSingleAttackStandardActionCommit = false;
-
-        if (!skipStandardCommit)
+        if (_combatFlowService != null)
         {
-            if (!attacker.CommitStandardAction())
-            {
-                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} has no standard action available.");
-                ShowActionChoices();
-                return;
-            }
+            _combatFlowService.PerformSingleAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            return;
         }
-        else
-        {
-            Debug.Log($"[Attack][Thrown] Skipping standard action consumption for follow-up thrown attack after ending iterative melee sequence.");
-        }
-
-        ItemData attackWeapon = _currentAttackType == AttackType.Thrown
-            ? (_equippedWeapon ?? attacker.GetEquippedMainWeapon())
-            : attacker.GetEquippedMainWeapon();
-
-        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            attackWeapon,
-            rangeInfo,
-            treatAsThrownAttack: _currentAttackType == AttackType.Thrown);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
-
-        CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
-        ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
-
-        _lastCombatLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
-
-        if (LogAttacksToConsole)
-            Debug.Log("[Combat] " + _lastCombatLog);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        // Check concentration for the target if they took damage
-        if (result.Hit && result.TotalDamage > 0)
-        {
-            CheckConcentrationOnDamage(target, result.TotalDamage);
-        }
-
-        if (result.TargetKilled)
-        {
-            HandleSummonDeathCleanup(target);
-
-            if (!target.IsPlayerControlled)
-            {
-                UpdateAllStatsUI();
-                if (AreAllNPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    return;
-                }
-                else
-                {
-                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
-                }
-            }
-        }
-
-        StartCoroutine(AfterAttackDelay(attacker, 1.5f));
     }
 
     private IEnumerator PerformFullAttackWithRetargetingAndFiveFootStep(CharacterController attacker, CharacterController initialTarget)
@@ -11093,163 +10789,31 @@ public partial class GameManager : MonoBehaviour
     private void PerformFullAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        attacker.Actions.UseFullRoundAction();
-
-        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            attacker.GetEquippedMainWeapon(),
-            rangeInfo,
-            treatAsThrownAttack: false);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
-        FullAttackResult result = attacker.FullAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        string flankLogPrefix = isFlanking
-            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-        _lastCombatLog = flankLogPrefix + result.GetFullSummary();
-
-        if (LogAttacksToConsole)
-            LogFullAttackToConsole(result);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        // Check concentration for total damage from full attack
-        if (result.TotalDamageDealt > 0)
+        if (_combatFlowService != null)
         {
-            CheckConcentrationOnDamage(target, result.TotalDamageDealt);
+            _combatFlowService.PerformFullAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            return;
         }
-
-        if (result.TargetKilled)
-        {
-            HandleSummonDeathCleanup(target);
-
-            if (!target.IsPlayerControlled)
-            {
-                UpdateAllStatsUI();
-                if (AreAllNPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    return;
-                }
-                else
-                {
-                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
-                }
-            }
-        }
-
-        StartCoroutine(DelayedEndActivePCTurn(2.0f));
     }
 
     private void PerformDualWieldAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        attacker.Actions.UseFullRoundAction();
-
-        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            attacker.GetEquippedMainWeapon(),
-            rangeInfo,
-            treatAsThrownAttack: false);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
-        FullAttackResult result = attacker.DualWieldAttack(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        string flankLogPrefix = isFlanking
-            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-        _lastCombatLog = flankLogPrefix + result.GetFullSummary();
-
-        if (LogAttacksToConsole)
-            LogFullAttackToConsole(result);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        // Check concentration for total damage from dual-wield attack
-        if (result.TotalDamageDealt > 0)
+        if (_combatFlowService != null)
         {
-            CheckConcentrationOnDamage(target, result.TotalDamageDealt);
+            _combatFlowService.PerformDualWieldAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            return;
         }
-
-        if (result.TargetKilled)
-        {
-            HandleSummonDeathCleanup(target);
-
-            if (!target.IsPlayerControlled)
-            {
-                UpdateAllStatsUI();
-                if (AreAllNPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    return;
-                }
-                else
-                {
-                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
-                }
-            }
-        }
-
-        StartCoroutine(DelayedEndActivePCTurn(2.0f));
     }
 
     private void PerformFlurryOfBlows(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
-        attacker.Actions.UseFullRoundAction();
-
-        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
-            attacker,
-            attacker.GetEquippedMainWeapon(),
-            rangeInfo,
-            treatAsThrownAttack: false);
-        ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
-        FullAttackResult result = attacker.FlurryOfBlows(target, isFlanking, flankBonus, partnerName, rangeInfo);
-        string flankLogPrefix = isFlanking
-            ? $"⚔ {attacker.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
-            : string.Empty;
-        _lastCombatLog = flankLogPrefix + result.GetFullSummary();
-
-        if (LogAttacksToConsole)
-            LogFullAttackToConsole(result);
-
-        CombatUI.ShowCombatLog(_lastCombatLog);
-        UpdateAllStatsUI();
-        Grid.ClearAllHighlights();
-
-        // Check concentration for total damage from flurry of blows
-        if (result.TotalDamageDealt > 0)
+        if (_combatFlowService != null)
         {
-            CheckConcentrationOnDamage(target, result.TotalDamageDealt);
+            _combatFlowService.PerformFlurryOfBlows(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            return;
         }
-
-        if (result.TargetKilled)
-        {
-            HandleSummonDeathCleanup(target);
-
-            if (!target.IsPlayerControlled)
-            {
-                UpdateAllStatsUI();
-                if (AreAllNPCsDead())
-                {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
-                    return;
-                }
-                else
-                {
-                    CombatUI.ShowCombatLog(_lastCombatLog + $"\n⚔️ {target.Stats.CharacterName} is slain! {GetAliveNPCCount()} enemies remain.");
-                }
-            }
-        }
-
-        StartCoroutine(DelayedEndActivePCTurn(2.0f));
     }
 
     private bool IsHoldingTouchCharge(CharacterController character)
@@ -11724,178 +11288,11 @@ public partial class GameManager : MonoBehaviour
 
     private void LogFullAttackToConsole(FullAttackResult result)
     {
-        string attackerName = result.Attacker.Stats.CharacterName;
-        string defenderName = result.Defender.Stats.CharacterName;
-
-        Debug.Log("[Combat] ═══════════════════════════════════════");
-
-        string actionLabel = result.Type == FullAttackResult.AttackType.FullAttack
-            ? "full attacks"
-            : result.Type == FullAttackResult.AttackType.DualWield
-                ? "dual wields against"
-                : "attacks";
-        Debug.Log($"[Combat] {attackerName} {actionLabel} {defenderName}");
-
-        if (result.Type == FullAttackResult.AttackType.DualWield
-            && !string.IsNullOrEmpty(result.MainWeaponName)
-            && !string.IsNullOrEmpty(result.OffWeaponName))
+        if (_combatFlowService != null)
         {
-            Debug.Log($"[Combat] Main Hand: {result.MainWeaponName}");
-            Debug.Log($"[Combat] Off Hand: {result.OffWeaponName}");
+            _combatFlowService.LogFullAttackToConsole(result);
+            return;
         }
-        else if (!string.IsNullOrEmpty(result.MainWeaponName))
-        {
-            bool isRanged = result.Attacks.Count > 0 && result.Attacks[0].IsRangedAttack;
-            string wpnType = isRanged ? "ranged" : "melee";
-            Debug.Log($"[Combat] Weapon: {result.MainWeaponName} ({wpnType})");
-        }
-
-        if (result.Attacks.Count > 0)
-        {
-            var first = result.Attacks[0];
-            var feats = new List<string>();
-            if (first.PowerAttackValue > 0) feats.Add($"Power Attack (-{first.PowerAttackValue} atk/+{first.PowerAttackDamageBonus} dmg)");
-            if (first.RapidShotActive) feats.Add("Rapid Shot");
-            if (first.PointBlankShotActive) feats.Add("Point Blank Shot");
-            if (first.FightingDefensivelyAttackPenalty != 0) feats.Add("Fighting Defensively");
-            if (first.ShootingIntoMeleePenalty != 0) feats.Add("Shooting into melee");
-            if (first.PreciseShotNegated) feats.Add("Precise Shot");
-            if (feats.Count > 0)
-                Debug.Log($"[Combat] Active Feats: {string.Join(", ", feats)}");
-
-            if (first.IsFlanking)
-                Debug.Log($"[Combat] Flanking: Yes (with {first.FlankingPartnerName}, +{first.FlankingBonus})");
-
-            if (first.IsRangedAttack)
-            {
-                string penaltyStr = first.RangePenalty == 0 ? "no penalty" : $"{first.RangePenalty} penalty";
-                Debug.Log($"[Combat] Range: {first.RangeDistanceFeet} ft ({first.RangeDistanceSquares} sq) - Increment {first.RangeIncrementNumber}, {penaltyStr}");
-            }
-        }
-
-        Debug.Log("[Combat]");
-
-        for (int i = 0; i < result.Attacks.Count; i++)
-        {
-            Debug.Log("[Combat] ─────────────────────────────────────");
-
-            CombatResult atk = result.Attacks[i];
-
-            string label = (i < result.AttackLabels.Count) ? result.AttackLabels[i] : $"Attack {i + 1}";
-            Debug.Log($"[Combat] {label}:");
-
-            Debug.Log("[Combat]   ATTACK ROLL:");
-            Debug.Log($"[Combat]     d20 roll: {atk.DieRoll}");
-
-            if (atk.BreakdownBAB != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.BreakdownBAB, "BAB")}");
-
-            string abilName = !string.IsNullOrEmpty(atk.BreakdownAbilityName) ? atk.BreakdownAbilityName : "STR";
-            if (atk.BreakdownAbilityMod != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.BreakdownAbilityMod, $"{abilName} modifier")}");
-
-            if (atk.SizeAttackBonus != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.SizeAttackBonus, "size")}");
-
-            if (atk.IsFlanking && atk.FlankingBonus != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.FlankingBonus, "flanking")}");
-
-            if (atk.RacialAttackBonus != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.RacialAttackBonus, "racial")}");
-
-            if (atk.PowerAttackValue > 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(-atk.PowerAttackValue, "Power Attack")}");
-
-            if (atk.RapidShotActive)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(-2, "Rapid Shot")}");
-
-            if (atk.PointBlankShotActive)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(1, "Point Blank Shot")}");
-
-            if (atk.FightingDefensivelyAttackPenalty != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.FightingDefensivelyAttackPenalty, "Fighting Defensively")}");
-
-            if (atk.ShootingIntoMeleePenalty != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.ShootingIntoMeleePenalty, "shooting into melee")}");
-            else if (atk.PreciseShotNegated)
-                Debug.Log("[Combat]     + 0 (Precise Shot negates shooting into melee penalty)");
-
-            if (atk.IsRangedAttack && atk.RangePenalty != 0)
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.RangePenalty, "range")}");
-
-            if (atk.IsDualWieldAttack && atk.BreakdownDualWieldPenalty != 0)
-            {
-                string dwLabel = atk.IsOffHandAttack ? "off-hand penalty" : "dual wield penalty";
-                Debug.Log($"[Combat]     {FormatConsoleModLine(atk.BreakdownDualWieldPenalty, dwLabel)}");
-            }
-
-            string critNote = "";
-            if (atk.NaturalTwenty) critNote = " (NATURAL 20!)";
-            else if (atk.NaturalOne) critNote = " (NATURAL 1!)";
-            string hitMiss = atk.Hit ? "HIT!" : "MISS!";
-            Debug.Log($"[Combat]     = {atk.TotalRoll} vs AC {atk.TargetAC} - {hitMiss}{critNote}");
-
-            if (atk.IsCritThreat)
-            {
-                string threatRange = atk.CritThreatMin < 20 ? $"{atk.CritThreatMin}-20" : "20";
-                string confModStr = CharacterStats.FormatMod(atk.ConfirmationTotal - atk.ConfirmationRoll);
-                if (atk.CritConfirmed)
-                    Debug.Log($"[Combat]   *** CRITICAL THREAT ({threatRange})! Confirm: {atk.ConfirmationRoll} {confModStr} = {atk.ConfirmationTotal} vs AC {atk.TargetAC} - CONFIRMED! (×{atk.CritMultiplier}) ***");
-                else
-                    Debug.Log($"[Combat]   *** Critical Threat ({threatRange})! Confirm: {atk.ConfirmationRoll} {confModStr} = {atk.ConfirmationTotal} vs AC {atk.TargetAC} - Not confirmed ***");
-            }
-
-            if (atk.Hit)
-            {
-                Debug.Log("[Combat]   DAMAGE ROLL:");
-                string diceStr = !string.IsNullOrEmpty(atk.BaseDamageDiceStr) ? atk.BaseDamageDiceStr : "?";
-
-                if (atk.CritConfirmed)
-                {
-                    Debug.Log($"[Combat]     CRITICAL HIT! (×{atk.CritMultiplier})");
-                    Debug.Log($"[Combat]     {atk.CritDamageDice} = {atk.Damage - atk.FeatDamageBonus} (crit weapon + mods)");
-                }
-                else
-                {
-                    Debug.Log($"[Combat]     {diceStr} roll: {atk.BaseDamageRoll}");
-
-                    if (atk.DamageModifier != 0)
-                    {
-                        string dmgModLabel = !string.IsNullOrEmpty(atk.DamageModifierDesc) ? atk.DamageModifierDesc : abilName;
-                        Debug.Log($"[Combat]     {FormatConsoleModLine(atk.DamageModifier, dmgModLabel)}");
-                    }
-                }
-
-                if (atk.PowerAttackDamageBonus > 0)
-                    Debug.Log($"[Combat]     {FormatConsoleModLine(atk.PowerAttackDamageBonus, "Power Attack")}");
-
-                if (atk.PointBlankShotActive)
-                    Debug.Log($"[Combat]     {FormatConsoleModLine(1, "Point Blank Shot")}");
-
-                Debug.Log($"[Combat]     = {atk.Damage} damage");
-
-                if (atk.SneakAttackApplied)
-                {
-                    string trigger = string.IsNullOrEmpty(atk.SneakAttackTriggerReason)
-                        ? ""
-                        : $" [{atk.SneakAttackTriggerReason}]";
-                    Debug.Log($"[Combat]     + {atk.SneakAttackDamage} sneak attack ({atk.SneakAttackDice}d6){trigger}");
-                    Debug.Log($"[Combat]     = {atk.TotalDamage} total damage");
-                }
-            }
-
-            Debug.Log("[Combat]");
-        }
-
-        Debug.Log("[Combat] ─────────────────────────────────────");
-        string critSummary = result.CritCount > 0 ? $", {result.CritCount} critical(s)!" : "";
-        Debug.Log($"[Combat] SUMMARY: {result.HitCount}/{result.Attacks.Count} hits{critSummary}, {result.TotalDamageDealt} total damage");
-        Debug.Log($"[Combat] {defenderName}: {result.DefenderHPBefore} → {result.DefenderHPAfter} HP");
-
-        if (result.TargetKilled)
-            Debug.Log($"[Combat] {defenderName} has been slain!");
-
-        Debug.Log("[Combat] ═══════════════════════════════════════");
     }
 
     private void ResetAttackDamageModesForAllCharacters()
