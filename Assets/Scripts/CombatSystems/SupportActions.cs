@@ -51,6 +51,12 @@ public partial class GameManager
     private List<Vector2Int> _pendingChargePath = new List<Vector2Int>();
     private bool _pendingChargeBullRush;
 
+    // Charge distance guardrails (grid squares; 1 square = 5 ft)
+    // Requested behavior: characters within 2 squares (inclusive) cannot charge,
+    // so minimum charge movement must be 3+ squares.
+    private const int ChargeBlockedDistanceSquares = 2;
+    private const int MinChargeMovementSquares = ChargeBlockedDistanceSquares + 1;
+
     private bool CanAttemptAidAnotherTouch(CharacterController actor, CharacterController enemy)
     {
         if (actor == null || enemy == null || actor.Stats == null || enemy.Stats == null)
@@ -914,11 +920,11 @@ public partial class GameManager
         {
             if (logFailures)
             {
-                int maxDistanceFeet = Mathf.Max(2, charger.Stats.MoveRange * 2) * 5;
+                int maxDistanceFeet = Mathf.Max(MinChargeMovementSquares, charger.Stats.MoveRange * 2) * 5;
                 switch (failureReason)
                 {
                     case ChargePathFailureReason.TooClose:
-                        CombatUI?.ShowCombatLog("⚠ Target is too close to charge (minimum 10 ft / 2 squares).");
+                        CombatUI?.ShowCombatLog($"⚠ Cannot charge targets within {ChargeBlockedDistanceSquares} squares ({ChargeBlockedDistanceSquares * 5} ft). Move at least {MinChargeMovementSquares} squares ({MinChargeMovementSquares * 5} ft).");
                         break;
                     case ChargePathFailureReason.TooFar:
                         CombatUI?.ShowCombatLog($"⚠ Target is too far to charge (max {maxDistanceFeet} ft).");
@@ -956,7 +962,7 @@ public partial class GameManager
         if (charger == null || target == null || charger.Stats == null || target.Stats == null || Grid == null)
             return false;
 
-        int minDistance = 2; // 10 feet
+        int minDistance = MinChargeMovementSquares; // Must move beyond 2 squares (3+ squares)
         int maxDistance = Mathf.Max(minDistance, charger.Stats.MoveRange * 2);
         int moverSizeSquares = Mathf.Max(1, charger.GetVisualSquaresOccupied());
         int searchRange = Mathf.Max(maxDistance, (Grid.Width + Grid.Height) * 2);

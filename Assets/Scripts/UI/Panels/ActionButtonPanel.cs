@@ -380,7 +380,7 @@ public class ActionButtonPanel : MonoBehaviour
         else if (blockedByProne) chargeLabel = "Charge (Prone)";
         else if (blockedByFiveFootStep) chargeLabel = "Charge (After 5-ft step: no)";
         else if (!hasFullRound) chargeLabel = "Charge (Used)";
-        else if (!hasAnyChargeTarget) chargeLabel = "Charge (No path)";
+        else if (!hasAnyChargeTarget) chargeLabel = "Charge (No valid target)";
         else chargeLabel = "Charge (Full-Round)";
         states.Set(ChargeButton, new ActionButtonState(hasMeleeThreat || fatigued || blockedByFiveFootStep || blockedByProne, canChargeTarget, chargeLabel));
     }
