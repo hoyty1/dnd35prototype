@@ -86,8 +86,6 @@ public class CombatUI : MonoBehaviour
     public Text CombatLogText;  // Legacy single-text reference (kept for backward compat)
     public GameObject CombatLogContent;     // Content container for scrollable log messages
     public ScrollRect CombatLogScrollRect;  // ScrollRect for auto-scrolling
-    private List<string> _combatLogMessages = new List<string>();
-    private const int MaxLogMessages = 200; // Prevent unbounded growth
 
     [Header("Action Buttons - Action Economy")]
     public GameObject ActionPanel;
@@ -421,53 +419,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void ShowCombatLog(string message)
     {
-        // --- New scrollable log path ---
-        if (CombatLogContent != null)
-        {
-            string formatted = HighlightCriticalHits(message);
-            _combatLogMessages.Add(formatted);
-
-            // Create a new Text element as a child of the content container
-            GameObject msgObj = new GameObject($"LogMsg_{_combatLogMessages.Count}");
-            msgObj.transform.SetParent(CombatLogContent.transform, false);
-
-            Text text = msgObj.AddComponent<Text>();
-            text.supportRichText = true;
-            text.text = formatted;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (text.font == null) text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            if (text.font == null) text.font = Font.CreateDynamicFontFromOSFont("Arial", 11);
-            text.fontSize = 22; // Doubled from 11 for better combat log readability
-            text.color = Color.white;
-            text.alignment = TextAnchor.UpperLeft;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.raycastTarget = false;
-
-            // Let VerticalLayoutGroup + ContentSizeFitter handle sizing
-            LayoutElement le = msgObj.AddComponent<LayoutElement>();
-            le.flexibleWidth = 1;
-
-            // Trim oldest messages if over limit
-            if (_combatLogMessages.Count > MaxLogMessages && CombatLogContent.transform.childCount > MaxLogMessages)
-            {
-                Transform oldest = CombatLogContent.transform.GetChild(0);
-                Destroy(oldest.gameObject);
-                _combatLogMessages.RemoveAt(0);
-            }
-
-            // Auto-scroll to bottom next frame (let layout recalculate)
-            StartCoroutine(ScrollToBottomNextFrame());
-            return;
-        }
-
-        // --- Fallback: legacy single-text field ---
-        if (CombatLogText != null)
-        {
-            CombatLogText.supportRichText = true;
-            string formatted = HighlightCriticalHits(message);
-            CombatLogText.text = formatted;
-        }
+        EnsureCombatLogPanel();
+        _combatLogPanel?.AddMessage(message);
     }
 
     /// <summary>
@@ -475,7 +428,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void AddTurnSeparator(int turnNumber)
     {
-        ShowCombatLog($"<color=#888888>─────── Turn {turnNumber} ───────</color>");
+        EnsureCombatLogPanel();
+        _combatLogPanel?.AddTurnSeparator(turnNumber);
     }
 
     /// <summary>
@@ -483,80 +437,32 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void ClearCombatLog()
     {
-        _combatLogMessages.Clear();
-
-        if (CombatLogContent != null)
-        {
-            foreach (Transform child in CombatLogContent.transform)
-            {
-                Destroy(child.gameObject);
-            }
-        }
-
-        // Also clear legacy text
-        if (CombatLogText != null)
-            CombatLogText.text = "";
+        EnsureCombatLogPanel();
+        _combatLogPanel?.ClearLog();
     }
 
-    /// <summary>
-    /// Coroutine that scrolls the combat log to the bottom after one frame,
-    /// giving layout groups time to recalculate content size.
-    /// </summary>
-    private IEnumerator ScrollToBottomNextFrame()
+    public void AddCombatMessage(string message, MessageType type = MessageType.Normal)
     {
-        yield return null; // Wait one frame for layout update
-        if (CombatLogScrollRect != null)
-        {
-            Canvas.ForceUpdateCanvases();
-            CombatLogScrollRect.verticalNormalizedPosition = 0f; // 0 = bottom
-        }
+        EnsureCombatLogPanel();
+        _combatLogPanel?.AddMessage(message, type);
     }
 
-    /// <summary>
-    /// Apply rich-text color highlights for combat log text.
-    /// </summary>
-    private string HighlightCriticalHits(string text)
+    public void LogAttack(string attacker, string target, int roll, int mod, int total, int ac, bool hit)
     {
-        text = text.Replace("- HIT!", "- <color=#66FF66><b>HIT!</b></color>");
-        text = text.Replace("- MISS!", "- <color=#FF4444><b>MISS!</b></color>");
-        text = text.Replace("CRITICAL HIT!", "<color=#FFD700><b>CRITICAL HIT!</b></color>");
-        text = text.Replace("CRIT!", "<color=#FFD700><b>CRIT!</b></color>");
-        text = text.Replace("*** Critical Threat", "<color=#FFA500><b>*** Critical Threat</b></color>");
-        text = text.Replace("CONFIRMED!", "<color=#FFD700><b>CONFIRMED!</b></color>");
-        text = text.Replace("Not confirmed", "<color=#AAAAAA>Not confirmed</color>");
-        text = text.Replace("(NATURAL 20!)", "<color=#FFD700><b>(NATURAL 20!)</b></color>");
-        text = text.Replace("(NAT 20!)", "<color=#FFD700><b>(NAT 20!)</b></color>");
-        text = text.Replace("(NATURAL 1!)", "<color=#FF4444><b>(NATURAL 1!)</b></color>");
-        text = text.Replace("(NAT 1!)", "<color=#FF4444><b>(NAT 1!)</b></color>");
-        text = text.Replace("has been slain!", "<color=#FF6666><b>has been slain!</b></color>");
-        text = text.Replace("no penalty", "<color=#66FF66>no penalty</color>");
-        text = text.Replace("beyond maximum range!", "<color=#FF4444><b>beyond maximum range!</b></color>");
-        text = text.Replace("Power Attack", "<color=#FF9933>Power Attack</color>");
-        text = text.Replace("Rapid Shot", "<color=#66CCFF>Rapid Shot</color>");
-        text = text.Replace("Point Blank Shot", "<color=#66FF66>Point Blank Shot</color>");
-        text = text.Replace("Fighting Defensively", "<color=#99CCFF>Fighting Defensively</color>");
-        text = text.Replace("Shooting into melee", "<color=#FFCC66>Shooting into melee</color>");
-        text = text.Replace("Precise Shot", "<color=#99FF99>Precise Shot</color>");
+        EnsureCombatLogPanel();
+        _combatLogPanel?.LogAttack(attacker, target, roll, mod, total, ac, hit);
+    }
 
-        // Highlight spellcasting and metamagic
-        text = text.Replace("SPELL CAST!", "<color=#BB88FF><b>SPELL CAST!</b></color>");
-        text = text.Replace("Metamagic:", "<color=#FFB833><b>Metamagic:</b></color>");
-        text = text.Replace("Empower:", "<color=#FFB833>Empower:</color>");
-        text = text.Replace("QUICKENED", "<color=#FFD700><b>QUICKENED</b></color>");
-        text = text.Replace("⚡", "<color=#FFB833>⚡</color>");
-        text = text.Replace("healed!", "<color=#66FF66><b>healed!</b></color>");
-        text = text.Replace("BUFF APPLIED!", "<color=#6699FF><b>BUFF APPLIED!</b></color>");
-        text = text.Replace("RESISTED!", "<color=#AAAAAA><b>RESISTED!</b></color>");
-        text = text.Replace("Touch Attack", "<color=#BB88FF>Touch Attack</color>");
-        text = text.Replace("Fortitude save", "<color=#FFAA44>Fortitude save</color>");
-        text = text.Replace("Reflex save", "<color=#FFAA44>Reflex save</color>");
-        text = text.Replace("Will save", "<color=#FFAA44>Will save</color>");
+    public void LogDamage(string target, int damage, string damageType = "")
+    {
+        EnsureCombatLogPanel();
+        _combatLogPanel?.LogDamage(target, damage, damageType);
+    }
 
-        text = text.Replace("═══════════════════════════════════", "<color=#888888>═══════════════════════════════════</color>");
-        text = text.Replace("total damage", "<color=#FFAA44><b>total damage</b></color>");
-        text = text.Replace(" damage", " <color=#FFAA44>damage</color>");
-        text = text.Replace(" → ", " <color=#FFFF66>→</color> ");
-        return text;
+    public string ExportCombatLog()
+    {
+        EnsureCombatLogPanel();
+        return _combatLogPanel != null ? _combatLogPanel.ExportLog() : string.Empty;
     }
 
     public void SetActionButtonsVisible(bool visible)
@@ -627,6 +533,7 @@ public class CombatUI : MonoBehaviour
 
     private GameObject _confirmationPanel;
     private ActionButtonPanel _actionButtonPanel;
+    private CombatLogPanel _combatLogPanel;
 
     private void LogSpecialStyleMenuLifecycle(string eventName, string details = null)
     {
@@ -778,6 +685,17 @@ public class CombatUI : MonoBehaviour
         }
 
         return standaloneDisarmWasVisible;
+    }
+
+    private void EnsureCombatLogPanel()
+    {
+        if (_combatLogPanel == null)
+            _combatLogPanel = GetComponent<CombatLogPanel>();
+
+        if (_combatLogPanel == null)
+            _combatLogPanel = gameObject.AddComponent<CombatLogPanel>();
+
+        _combatLogPanel.Initialize(this, CombatLogText, CombatLogContent, CombatLogScrollRect);
     }
 
     private void EnsureActionButtonPanel()
