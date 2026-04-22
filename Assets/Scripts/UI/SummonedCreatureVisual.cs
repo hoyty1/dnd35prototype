@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections;
 
 /// <summary>
-/// Visual treatment and tooltip augmentation for summoned creatures.
+/// Visual treatment for summoned creatures.
 /// Adds summoned badge, aura, duration bar, and summon/despawn effects.
 /// </summary>
 public class SummonedCreatureVisual : MonoBehaviour
@@ -93,19 +93,6 @@ public class SummonedCreatureVisual : MonoBehaviour
             return;
 
         UpdateDurationVisuals();
-
-        if (StatusEffectTooltipUI.Instance == null)
-            return;
-
-        if (!IsPointerOverThisCharacter())
-            return;
-
-        string tooltip = GameManager.Instance != null
-            ? GameManager.Instance.GetSummonTooltip(_character)
-            : null;
-
-        if (!string.IsNullOrEmpty(tooltip))
-            StatusEffectTooltipUI.Instance.ShowTooltip(tooltip, GetMouseScreenPosition());
     }
 
     private void BuildVisuals()
@@ -210,37 +197,6 @@ public class SummonedCreatureVisual : MonoBehaviour
         }
 
         Destroy(fx);
-    }
-
-    private bool IsPointerOverThisCharacter()
-    {
-        Camera cam = Camera.main;
-        if (cam == null || GameManager.Instance == null || GameManager.Instance.Grid == null)
-            return false;
-
-        Vector3 mouseScreen = GetMouseScreenPosition();
-        Vector3 world = cam.ScreenToWorldPoint(mouseScreen);
-        Vector2Int coord = SquareGridUtils.WorldToGrid(world);
-
-        if (coord != _character.GridPosition)
-            return false;
-
-        SquareCell cell = GameManager.Instance.Grid.GetCell(coord);
-        return cell != null && cell.ContainsOccupant(_character);
-    }
-
-    private static Vector3 GetMouseScreenPosition()
-    {
-        Vector3 mouseScreenPos = Vector3.zero;
-#if ENABLE_LEGACY_INPUT_MANAGER
-        mouseScreenPos = Input.mousePosition;
-#endif
-#if ENABLE_INPUT_SYSTEM
-        var mouse = UnityEngine.InputSystem.Mouse.current;
-        if (mouse != null)
-            mouseScreenPos = mouse.position.ReadValue();
-#endif
-        return mouseScreenPos;
     }
 
     private static Sprite CreateSquareSprite(int size, int border)

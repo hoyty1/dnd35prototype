@@ -6135,41 +6135,6 @@ public partial class GameManager : MonoBehaviour
         return $"{character.Stats.CharacterName} [S] ({remaining} {roundsWord})";
     }
 
-    public string GetSummonTooltip(CharacterController character)
-    {
-        var summon = GetActiveSummon(character);
-        if (summon == null || character == null || character.Stats == null)
-            return null;
-
-        CharacterStats s = character.Stats;
-        string typeLine = summon.Template != null && !string.IsNullOrEmpty(summon.Template.CreatureTypeLine)
-            ? summon.Template.CreatureTypeLine
-            : "Summoned Creature";
-
-        string attackName = summon.Template != null && !string.IsNullOrEmpty(summon.Template.AttackLabel)
-            ? summon.Template.AttackLabel
-            : "Attack";
-
-        string special = "None";
-        if (summon.Template != null && summon.Template.SpecialTraits != null && summon.Template.SpecialTraits.Count > 0)
-            special = string.Join("\n• ", summon.Template.SpecialTraits);
-
-        string casterName = summon.Caster != null && summon.Caster.Stats != null
-            ? summon.Caster.Stats.CharacterName
-            : "Unknown";
-
-        string roundsWord = summon.RemainingRounds == 1 ? "round" : "rounds";
-        string commandText = summon.CurrentCommand != null
-            ? summon.CurrentCommand.Description
-            : SummonCommand.AttackNearest().Description;
-
-        return $"{GetSummonDisplayName(character)}\n{typeLine}\n\nHP: {s.CurrentHP}/{Mathf.Max(1, s.TotalMaxHP)}   AC: {s.ArmorClass}   Speed: {s.SpeedInFeet} ft\n" +
-               $"STR {s.STR}  DEX {s.DEX}  CON {s.CON}\nINT {s.INT}  WIS {s.WIS}  CHA {s.CHA}\n\n" +
-               $"Attack: {attackName} {CharacterStats.FormatMod(s.AttackBonus)} ({s.BaseDamageCount}d{s.BaseDamageDice}{CharacterStats.FormatMod(s.BonusDamage)})\n\n" +
-               $"Special:\n• {special}\n\nCommand: {commandText}\nDuration: {summon.RemainingRounds} {roundsWord} remaining\nSummoned by: {casterName}";
-    }
-
-
     public void RequestDismissSummon(CharacterController summon)
     {
         if (!IsPlayerTurn || summon == null || !summon.IsPlayerControlled)
