@@ -863,6 +863,9 @@ public partial class GameManager
 
             if (!IsEnemyTeam(charger, candidate)) continue;
 
+            if (GetChargeStartingDistanceSquares(charger, candidate) <= ChargeBlockedDistanceSquares)
+                continue;
+
             if (CanChargeTarget(charger, candidate, logFailures: false))
                 list.Add(candidate);
         }
@@ -881,6 +884,14 @@ public partial class GameManager
         TooFar
     }
 
+    private int GetChargeStartingDistanceSquares(CharacterController charger, CharacterController target)
+    {
+        if (charger == null || target == null)
+            return int.MaxValue;
+
+        return charger.GetMinimumDistanceToTarget(target, chebyshev: true);
+    }
+
     public bool CanChargeTarget(CharacterController charger, CharacterController target, bool logFailures = true)
     {
         if (charger == null || target == null || charger == target) return false;
@@ -889,6 +900,16 @@ public partial class GameManager
         if (!IsEnemyTeam(charger, target))
         {
             if (logFailures) CombatUI?.ShowCombatLog("⚠ You can only charge an enemy target.");
+            return false;
+        }
+
+        int startingDistanceSquares = GetChargeStartingDistanceSquares(charger, target);
+        if (startingDistanceSquares <= ChargeBlockedDistanceSquares)
+        {
+            if (logFailures)
+            {
+                CombatUI?.ShowCombatLog($"⚠ Cannot charge {target.Stats.CharacterName}: target is within {ChargeBlockedDistanceSquares} squares ({startingDistanceSquares} squares away) from your starting position.");
+            }
             return false;
         }
 
@@ -961,6 +982,13 @@ public partial class GameManager
 
         if (charger == null || target == null || charger.Stats == null || target.Stats == null || Grid == null)
             return false;
+
+        int startingDistanceSquares = GetChargeStartingDistanceSquares(charger, target);
+        if (startingDistanceSquares <= ChargeBlockedDistanceSquares)
+        {
+            failureReason = ChargePathFailureReason.TooClose;
+            return false;
+        }
 
         int minDistance = MinChargeMovementSquares; // Must move beyond 2 squares (3+ squares)
         int maxDistance = Mathf.Max(minDistance, charger.Stats.MoveRange * 2);
