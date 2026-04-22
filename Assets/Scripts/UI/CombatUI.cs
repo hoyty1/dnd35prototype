@@ -176,9 +176,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void UpdateAllStats(CharacterController pc1, CharacterController pc2, CharacterController npc)
     {
-        UpdateCharacterStats(pc1, PC1NameText, PC1HPText, PC1ACText, PC1AtkText, PC1SpeedText, PC1AbilityText, PC1HPBar);
-        UpdateCharacterStats(pc2, PC2NameText, PC2HPText, PC2ACText, PC2AtkText, PC2SpeedText, PC2AbilityText, PC2HPBar);
-        UpdateCharacterStats(npc, NPCNameText, NPCHPText, NPCACText, NPCAtkText, NPCSpeedText, NPCAbilityText, NPCHPBar);
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.UpdateAllStats(pc1, pc2, npc);
     }
 
     /// <summary>
@@ -186,28 +185,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void UpdateAllStats4PC(List<CharacterController> pcs, List<CharacterController> npcs)
     {
-        // Update PC panels
-        if (pcs.Count > 0) UpdateCharacterStats(pcs[0], PC1NameText, PC1HPText, PC1ACText, PC1AtkText, PC1SpeedText, PC1AbilityText, PC1HPBar);
-        if (pcs.Count > 1) UpdateCharacterStats(pcs[1], PC2NameText, PC2HPText, PC2ACText, PC2AtkText, PC2SpeedText, PC2AbilityText, PC2HPBar);
-        if (pcs.Count > 2) UpdateCharacterStats(pcs[2], PC3NameText, PC3HPText, PC3ACText, PC3AtkText, PC3SpeedText, PC3AbilityText, PC3HPBar);
-        if (pcs.Count > 3) UpdateCharacterStats(pcs[3], PC4NameText, PC4HPText, PC4ACText, PC4AtkText, PC4SpeedText, PC4AbilityText, PC4HPBar);
-
-        // Update buff displays for PCs
-        if (pcs.Count > 0) UpdateBuffDisplay(pcs[0], PC1BuffText);
-        if (pcs.Count > 1) UpdateBuffDisplay(pcs[1], PC2BuffText);
-        if (pcs.Count > 2) UpdateBuffDisplay(pcs[2], PC3BuffText);
-        if (pcs.Count > 3) UpdateBuffDisplay(pcs[3], PC4BuffText);
-
-        // Update each NPC panel
-        for (int i = 0; i < NPCPanels.Count && i < npcs.Count; i++)
-        {
-            var p = NPCPanels[i];
-            UpdateCharacterStats(npcs[i], p.NameText, p.HPText, p.ACText, p.AtkText, p.SpeedText, p.AbilityText, p.HPBar);
-        }
-
-        // Also update legacy single-NPC fields if they exist (backward compat)
-        if (npcs.Count > 0)
-            UpdateCharacterStats(npcs[0], NPCNameText, NPCHPText, NPCACText, NPCAtkText, NPCSpeedText, NPCAbilityText, NPCHPBar);
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.UpdateAllStats4PC(pcs, npcs);
     }
 
     /// <summary>
@@ -215,158 +194,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void UpdateAllStatsMultiNPC(CharacterController pc1, CharacterController pc2, List<CharacterController> npcs)
     {
-        UpdateCharacterStats(pc1, PC1NameText, PC1HPText, PC1ACText, PC1AtkText, PC1SpeedText, PC1AbilityText, PC1HPBar);
-        UpdateCharacterStats(pc2, PC2NameText, PC2HPText, PC2ACText, PC2AtkText, PC2SpeedText, PC2AbilityText, PC2HPBar);
-
-        // Update each NPC panel
-        for (int i = 0; i < NPCPanels.Count && i < npcs.Count; i++)
-        {
-            var p = NPCPanels[i];
-            UpdateCharacterStats(npcs[i], p.NameText, p.HPText, p.ACText, p.AtkText, p.SpeedText, p.AbilityText, p.HPBar);
-        }
-
-        // Also update legacy single-NPC fields if they exist (backward compat)
-        if (npcs.Count > 0)
-            UpdateCharacterStats(npcs[0], NPCNameText, NPCHPText, NPCACText, NPCAtkText, NPCSpeedText, NPCAbilityText, NPCHPBar);
-    }
-
-    private void UpdateCharacterStats(CharacterController ch,
-        Text nameText, Text hpText, Text acText, Text atkText, Text speedText, Text abilityText, Image hpBar)
-    {
-        if (ch == null || ch.Stats == null) return;
-
-        var s = ch.Stats;
-
-        if (nameText != null)
-        {
-            string raceStr = !string.IsNullOrEmpty(s.RaceName) ? $"{s.RaceName} " : "";
-            string sizeStr = (s.SizeCategoryName != "Medium") ? $" [{s.SizeCategoryName}]" : "";
-            string displayName = s.CharacterName;
-            if (GameManager.Instance != null)
-                displayName = GameManager.Instance.GetSummonDisplayName(ch);
-
-            nameText.text = $"{displayName} (Lv {s.Level} {raceStr}{s.CharacterClass}){sizeStr}";
-            if (ch.CurrentHPState == HPState.Dead) nameText.text += " (DEAD)";
-        }
-
-        // Use TotalMaxHP (includes feat bonuses like Toughness and spell-based BonusMaxHP)
-        int totalMax = s.TotalMaxHP;
-        if (totalMax <= 0) totalMax = 1; // Guard against division by zero
-
-        if (hpText != null)
-        {
-            string hpStateTag = ch.CurrentHPState == HPState.Healthy ? string.Empty : $" [{ch.CurrentHPState}]";
-            hpText.text = $"HP: {s.CurrentHP}/{totalMax}{hpStateTag}";
-        }
-        if (acText != null)
-        {
-            int effectiveDex = s.DEXMod;
-            if (s.MaxDexBonus >= 0 && effectiveDex > s.MaxDexBonus)
-                effectiveDex = s.MaxDexBonus;
-            string dexLabel = (s.MaxDexBonus >= 0 && s.DEXMod > s.MaxDexBonus)
-                ? $"DEX*" : "DEX";
-            string sizeDetail = FormatBonusDetail(s.SizeModifier, "Size");
-            string defensiveDetail = ch.IsFightingDefensively ? " +2 Fighting Defensively" : "";
-            string acDetails = $"AC: {s.ArmorClass + (ch.IsFightingDefensively ? 2 : 0)} (10{FormatBonusDetail(effectiveDex, dexLabel)}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")}{sizeDetail}{defensiveDetail})";
-            if (s.ArmorCheckPenalty > 0)
-                acDetails += $" ACP:-{s.ArmorCheckPenalty}";
-            acText.text = acDetails;
-        }
-
-        if (atkText != null)
-        {
-            string sizeAtkStr = s.SizeModifier != 0 ? $" {CharacterStats.FormatMod(s.SizeModifier)} Size" : "";
-            atkText.text = $"Atk: {CharacterStats.FormatMod(s.AttackBonus)} (BAB {CharacterStats.FormatMod(s.BaseAttackBonus)} {CharacterStats.FormatMod(s.STRMod)} STR{sizeAtkStr})";
-        }
-
-        if (speedText != null)
-        {
-            string speedExtra = $" | Load: {s.EncumbranceSummary}";
-            if (s.SpeedNotReducedByArmor)
-                speedExtra += " (no armor speed reduction)";
-            speedText.text = $"Speed: {s.MoveRange} sq ({s.SpeedInFeet} ft){speedExtra}";
-        }
-
-        if (abilityText != null)
-        {
-            abilityText.supportRichText = true;
-            abilityText.text =
-                $"{s.GetAbilityStringWithRacial("STR", s.STR, s.GetRacialModifier("STR"))} " +
-                $"{s.GetAbilityStringWithRacial("DEX", s.DEX, s.GetRacialModifier("DEX"))} " +
-                $"{s.GetAbilityStringWithRacial("CON", s.CON, s.GetRacialModifier("CON"))}\n" +
-                $"{s.GetAbilityStringWithRacial("WIS", s.WIS, s.GetRacialModifier("WIS"))} " +
-                $"{s.GetAbilityStringWithRacial("INT", s.INT, s.GetRacialModifier("INT"))} " +
-                $"{s.GetAbilityStringWithRacial("CHA", s.CHA, s.GetRacialModifier("CHA"))}";
-        }
-
-        if (hpBar != null)
-        {
-            // Update fill amount based on HP percentage using TotalMaxHP.
-            float hpPercent = totalMax > 0 ? Mathf.Clamp01((float)Mathf.Max(0, s.CurrentHP) / totalMax) : 0f;
-            hpBar.fillAmount = hpPercent;
-
-            // Update HP bar color based on HP percentage:
-            //   > 50%  → Green
-            //   > 25%  → Yellow
-            //   ≤ 25%  → Red
-            Color hpColor;
-            if (hpPercent > 0.5f)
-                hpColor = new Color(0.2f, 0.8f, 0.2f, 1f);  // Green
-            else if (hpPercent > 0.25f)
-                hpColor = new Color(0.8f, 0.8f, 0.2f, 1f);  // Yellow
-            else
-                hpColor = new Color(0.8f, 0.2f, 0.2f, 1f);  // Red
-
-            hpBar.color = hpColor;
-        }
-    }
-
-    /// <summary>
-    /// Update the buff display text for a character, showing active spell effects.
-    /// </summary>
-    private void UpdateBuffDisplay(CharacterController ch, Text buffText)
-    {
-        if (buffText == null) return;
-        if (ch == null || ch.Stats == null)
-        {
-            buffText.text = "";
-            return;
-        }
-
-        var statusMgr = ch.GetComponent<StatusEffectManager>();
-        var concMgr = ch.GetComponent<ConcentrationManager>();
-        var spellComp = ch.GetComponent<SpellcastingComponent>();
-
-        string buffStr = (statusMgr != null && statusMgr.ActiveEffectCount > 0)
-            ? statusMgr.GetBuffSummaryString() : "";
-        string concStr = (concMgr != null && concMgr.IsConcentrating)
-            ? concMgr.GetConcentrationDisplayString() : "";
-        string heldStr = (spellComp != null && spellComp.HasHeldTouchCharge && spellComp.HeldTouchSpell != null)
-            ? $"✋ Holding: {spellComp.HeldTouchSpell.Name}" : "";
-        string condStr = ch.Stats.GetConditionSummary();
-
-        if (string.IsNullOrEmpty(buffStr) && string.IsNullOrEmpty(concStr) && string.IsNullOrEmpty(heldStr) && string.IsNullOrEmpty(condStr))
-        {
-            buffText.text = "";
-            buffText.gameObject.SetActive(false);
-            return;
-        }
-
-        buffText.gameObject.SetActive(true);
-        buffText.supportRichText = true;
-
-        var parts = new List<string>();
-        if (!string.IsNullOrEmpty(concStr)) parts.Add(concStr);
-        if (!string.IsNullOrEmpty(heldStr)) parts.Add(heldStr);
-        if (!string.IsNullOrEmpty(condStr)) parts.Add(condStr);
-        if (!string.IsNullOrEmpty(buffStr)) parts.Add(buffStr);
-        buffText.text = string.Join(" ", parts);
-    }
-
-    private string FormatBonusDetail(int value, string label)
-    {
-        if (value == 0) return "";
-        return value > 0 ? $"+{value} {label}" : $"{value} {label}";
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.UpdateAllStatsMultiNPC(pc1, pc2, npcs);
     }
 
     /// <summary>
@@ -388,15 +217,28 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public string BuildFlankingIndicator(bool isFlanking, CharacterController flankingAlly)
     {
-        if (!isFlanking) return string.Empty;
-
-        string allyName = flankingAlly != null && flankingAlly.Stats != null
-            ? flankingAlly.Stats.CharacterName
+        EnsureTargetSelectionPanel();
+        return _targetSelectionPanel != null
+            ? _targetSelectionPanel.BuildFlankingIndicator(isFlanking, flankingAlly)
             : string.Empty;
+    }
 
-        return string.IsNullOrEmpty(allyName)
-            ? " (FLANKING +2)"
-            : $" (FLANKING +2 with {allyName})";
+    public void SetCurrentTarget(CharacterController target)
+    {
+        EnsureTargetSelectionPanel();
+        _targetSelectionPanel?.SetTarget(target);
+    }
+
+    public CharacterController GetCurrentTarget()
+    {
+        EnsureTargetSelectionPanel();
+        return _targetSelectionPanel != null ? _targetSelectionPanel.GetCurrentTarget() : null;
+    }
+
+    public void ClearCurrentTarget()
+    {
+        EnsureTargetSelectionPanel();
+        _targetSelectionPanel?.ClearTarget();
     }
 
     /// <summary>
@@ -404,13 +246,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void UpdateInitiativeDisplay(string initiativeText)
     {
-        if (InitiativeOrderText != null)
-        {
-            InitiativeOrderText.supportRichText = true;
-            InitiativeOrderText.text = initiativeText;
-        }
-        if (InitiativePanel != null)
-            InitiativePanel.SetActive(!string.IsNullOrEmpty(initiativeText));
+        EnsureInitiativePanel();
+        _initiativePanel?.UpdateInitiativeDisplay(initiativeText);
     }
 
     /// <summary>
@@ -534,6 +371,9 @@ public class CombatUI : MonoBehaviour
     private GameObject _confirmationPanel;
     private ActionButtonPanel _actionButtonPanel;
     private CombatLogPanel _combatLogPanel;
+    private CharacterInfoPanel _characterInfoPanel;
+    private TargetSelectionPanel _targetSelectionPanel;
+    private InitiativePanel _initiativePanel;
 
     private void LogSpecialStyleMenuLifecycle(string eventName, string details = null)
     {
@@ -707,6 +547,39 @@ public class CombatUI : MonoBehaviour
             _actionButtonPanel = gameObject.AddComponent<ActionButtonPanel>();
 
         _actionButtonPanel.Initialize(this);
+    }
+
+    private void EnsureCharacterInfoPanel()
+    {
+        if (_characterInfoPanel == null)
+            _characterInfoPanel = GetComponent<CharacterInfoPanel>();
+
+        if (_characterInfoPanel == null)
+            _characterInfoPanel = gameObject.AddComponent<CharacterInfoPanel>();
+
+        _characterInfoPanel.Initialize(this);
+    }
+
+    private void EnsureTargetSelectionPanel()
+    {
+        if (_targetSelectionPanel == null)
+            _targetSelectionPanel = GetComponent<TargetSelectionPanel>();
+
+        if (_targetSelectionPanel == null)
+            _targetSelectionPanel = gameObject.AddComponent<TargetSelectionPanel>();
+
+        _targetSelectionPanel.Initialize(this);
+    }
+
+    private void EnsureInitiativePanel()
+    {
+        if (_initiativePanel == null)
+            _initiativePanel = GetComponent<InitiativePanel>();
+
+        if (_initiativePanel == null)
+            _initiativePanel = gameObject.AddComponent<InitiativePanel>();
+
+        _initiativePanel.Initialize(this);
     }
 
     internal bool HideStandaloneDisarmButtonsInMainActionsForActionPanel()
@@ -1651,16 +1524,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void SetActivePC(int pcNumber)
     {
-        if (PC1ActiveIndicator != null) PC1ActiveIndicator.enabled = (pcNumber == 1);
-        if (PC2ActiveIndicator != null) PC2ActiveIndicator.enabled = (pcNumber == 2);
-        if (PC3ActiveIndicator != null) PC3ActiveIndicator.enabled = (pcNumber == 3);
-        if (PC4ActiveIndicator != null) PC4ActiveIndicator.enabled = (pcNumber == 4);
-
-        // Dim inactive panels, brighten active
-        SetPanelActiveState(PC1Panel, pcNumber == 1, new Color(0.1f, 0.3f, 0.5f, 0.95f), new Color(0.1f, 0.2f, 0.4f, 0.65f));
-        SetPanelActiveState(PC2Panel, pcNumber == 2, new Color(0.1f, 0.2f, 0.5f, 0.95f), new Color(0.1f, 0.15f, 0.35f, 0.65f));
-        SetPanelActiveState(PC3Panel, pcNumber == 3, new Color(0.15f, 0.3f, 0.4f, 0.95f), new Color(0.1f, 0.2f, 0.3f, 0.65f));
-        SetPanelActiveState(PC4Panel, pcNumber == 4, new Color(0.3f, 0.15f, 0.15f, 0.95f), new Color(0.25f, 0.1f, 0.1f, 0.65f));
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.SetActivePC(pcNumber);
     }
 
     /// <summary>
@@ -1668,27 +1533,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void SetActiveNPC(int npcIndex)
     {
-        for (int i = 0; i < NPCPanels.Count; i++)
-        {
-            var p = NPCPanels[i];
-            bool isActive = (i == npcIndex);
-
-            if (p.ActiveIndicator != null)
-                p.ActiveIndicator.enabled = isActive;
-
-            // Dim inactive NPC panels, brighten active
-            SetPanelActiveState(p.Panel, isActive,
-                new Color(0.4f, 0.15f, 0.15f, 0.95f),  // Brighter red when active
-                new Color(0.3f, 0.1f, 0.1f, 0.65f));    // Dimmed when inactive
-        }
-    }
-
-    private void SetPanelActiveState(GameObject panel, bool active, Color activeColor, Color inactiveColor)
-    {
-        if (panel == null) return;
-        Image panelImg = panel.GetComponent<Image>();
-        if (panelImg != null)
-            panelImg.color = active ? activeColor : inactiveColor;
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.SetActiveNPC(npcIndex);
     }
 
     /// <summary>
@@ -1696,19 +1542,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void SetPCIcon(int pcNumber, Sprite icon)
     {
-        Image target = null;
-        switch (pcNumber)
-        {
-            case 1: target = PC1Icon; break;
-            case 2: target = PC2Icon; break;
-            case 3: target = PC3Icon; break;
-            case 4: target = PC4Icon; break;
-        }
-        if (target != null && icon != null)
-        {
-            target.sprite = icon;
-            target.enabled = true;
-        }
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.SetPCIcon(pcNumber, icon);
     }
 
     /// <summary>
@@ -1716,11 +1551,8 @@ public class CombatUI : MonoBehaviour
     /// </summary>
     public void SetNPCIcon(int npcIndex, Sprite icon)
     {
-        if (npcIndex < NPCPanels.Count && NPCPanels[npcIndex].IconImage != null)
-        {
-            NPCPanels[npcIndex].IconImage.sprite = icon;
-            NPCPanels[npcIndex].IconImage.enabled = icon != null;
-        }
+        EnsureCharacterInfoPanel();
+        _characterInfoPanel?.SetNPCIcon(npcIndex, icon);
     }
 
     // ========================================================================
