@@ -115,10 +115,10 @@ public class SceneBootstrap : MonoBehaviour
         var npcList = new List<CharacterController>();
         npcList.Add(npc);
 
-        string[] enemyNames = { "NPC_Enemy_1", "NPC_Enemy_2" };
-        for (int i = 0; i < enemyNames.Length; i++)
+        const int totalEnemySlots = 15; // Supports expanded Turn Undead stress test (12 skeletons + 3 wights).
+        for (int i = 1; i < totalEnemySlots; i++)
         {
-            GameObject go = new GameObject(enemyNames[i]);
+            GameObject go = new GameObject($"NPC_Enemy_{i}");
             go.AddComponent<SpriteRenderer>();
             CharacterController cc = go.AddComponent<CharacterController>();
             cc.IsPlayerControlled = false;

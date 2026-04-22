@@ -2075,8 +2075,9 @@ public class GameManager : MonoBehaviour
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("✝️ Turn Undead Test (Enhanced): Brother Marcus (Cleric 6) + Gareth (Fighter 6) vs 2 skeletons + 1 wight.");
-        CombatUI?.ShowCombatLog("   Goals: Cleric ranged attacks do NOT break Turn Undead, cleric melee DOES break it, fighter melee does NOT break it.");
+        CombatUI?.ShowCombatLog("✝️ Turn Undead Test (Expanded): Brother Marcus (Cleric 6) + Gareth (Fighter 6) vs 12 skeletons + 3 wights (24 HD total).");
+        CombatUI?.ShowCombatLog("   Turn HD pool at L6 cleric + CHA 16 averages ~15 (range 10-20), so the HD selection menu should appear consistently.");
+        CombatUI?.ShowCombatLog("   Goals: validate HD pool target selection, destruction vs turning choices, and that fighter attacks do NOT break Turn Undead.");
     }
 
     private void RestoreStandardPartyLayout()
@@ -2362,9 +2363,26 @@ public class GameManager : MonoBehaviour
     };
 
     private static readonly Vector2Int[] TurnUndeadTestSpawnPositions = {
-        new Vector2Int(12, 8),  // Skeleton (front left) ~15 ft from cleric start (9,9)
-        new Vector2Int(12, 10), // Skeleton (front right) ~15 ft from cleric start (9,9)
-        new Vector2Int(14, 9),  // Wight (behind) ~25 ft from cleric start (9,9)
+        // Front line (6 skeletons) - ~15 ft from cleric start (9,9)
+        new Vector2Int(12, 6),
+        new Vector2Int(12, 7),
+        new Vector2Int(12, 8),
+        new Vector2Int(12, 9),
+        new Vector2Int(12, 10),
+        new Vector2Int(12, 11),
+
+        // Mid line (3 wights) - ~30 ft from cleric start (9,9)
+        new Vector2Int(15, 7),
+        new Vector2Int(15, 9),
+        new Vector2Int(15, 11),
+
+        // Back line (6 skeletons) - ~40 ft from cleric start (9,9)
+        new Vector2Int(17, 6),
+        new Vector2Int(17, 7),
+        new Vector2Int(17, 8),
+        new Vector2Int(17, 9),
+        new Vector2Int(17, 10),
+        new Vector2Int(17, 11),
     };
 
     private void SetupEnemyEncounter(List<string> enemyIds)
@@ -2414,7 +2432,7 @@ public class GameManager : MonoBehaviour
             }
             else if (_isTurnUndeadTestEncounter && i < TurnUndeadTestSpawnPositions.Length)
             {
-                // Explicit front-line skeletons + rear wight layout for clear Turn Undead validation.
+                // Explicit 15-undead test formation (front skeletons, mid wights, back skeletons).
                 pos = TurnUndeadTestSpawnPositions[i];
             }
             else

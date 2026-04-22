@@ -54,7 +54,11 @@ public static class EnemyDatabase
         {
             new EncounterPreset("grapple_test", "🧪 Grapple Test Encounter", "Fighter vs orc in adjacent squares for dedicated grappling checks.", new List<string> { "orc_grapple_drill" }),
             new EncounterPreset("feint_sneak_test", "🗡️ Feint & Sneak Attack Test", "Level 6 rogue vs one goblin tuned for Bluff feints and sneak attack validation.", new List<string> { "goblin_feint_drill" }),
-            new EncounterPreset("turn_undead_test", "✝️ Turn Undead Test", "Cleric-focused test with two skeletons plus a stronger wight to showcase both destruction and turning/fleeing.", new List<string> { "skeleton_archer", "skeleton_archer", "wight_dreadwalker" }),
+            new EncounterPreset("turn_undead_test", "✝️ Turn Undead Test", "Expanded cleric stress test with 12 skeletons and 3 wights to force HD-pool target selection.", new List<string> {
+                "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer",
+                "wight_dreadwalker", "wight_dreadwalker", "wight_dreadwalker",
+                "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer"
+            }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
