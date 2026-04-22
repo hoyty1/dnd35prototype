@@ -436,7 +436,7 @@ public class CombatUI : MonoBehaviour
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (text.font == null) text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             if (text.font == null) text.font = Font.CreateDynamicFontFromOSFont("Arial", 11);
-            text.fontSize = 11;
+            text.fontSize = 22; // Doubled from 11 for better combat log readability
             text.color = Color.white;
             text.alignment = TextAnchor.UpperLeft;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
