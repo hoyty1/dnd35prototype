@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -195,6 +196,14 @@ public class ItemData
     public int ArcaneSpellFailure;  // Percentage chance of arcane spell failure (0-100)
     public float WeightLbs;         // Weight in pounds
 
+    // --- Item durability (used by Sunder) ---
+    public int EnhancementBonus;    // Magic enhancement bonus to durability (+2 hardness, +10 HP per +1)
+    public int Hardness;            // Effective hardness after enhancement
+    public int MaxHitPoints;        // Maximum object HP after enhancement
+    public int CurrentHitPoints;    // Runtime durability HP
+    public bool IsBroken;           // Broken at <= half max HP (until repaired)
+    public bool IsDestroyed;        // Destroyed at <= 0 HP
+
     // --- Consumable ---
     public ConsumableEffectType ConsumableEffect; // Generic effect type for extensibility
     public string ConsumableSpellName;            // Spell name this consumable emulates (e.g., "Cure Light Wounds")
@@ -264,6 +273,125 @@ public class ItemData
     public bool IsArmor => Type == ItemType.Armor;
     public bool IsShield => Type == ItemType.Shield;
     public bool IsConsumable => Type == ItemType.Consumable;
+
+    public bool IsSunderable => IsWeapon || IsArmor || IsShield;
+
+    /// <summary>
+    /// Ensure durability stats are initialized for sunderable items.
+    /// Durability persists on the item once initialized.
+    /// </summary>
+    public void EnsureDurabilityInitialized()
+    {
+        if (!IsSunderable)
+            return;
+
+        if (MaxHitPoints > 0 && Hardness > 0)
+        {
+            if (CurrentHitPoints <= 0 && !IsDestroyed)
+                CurrentHitPoints = MaxHitPoints;
+            return;
+        }
+
+        int baseHardness = GetBaseHardness();
+        int baseHp = GetBaseHitPoints();
+        int enhancement = Mathf.Max(0, ResolveEnhancementBonus());
+
+        Hardness = baseHardness + (enhancement * 2);
+        MaxHitPoints = baseHp + (enhancement * 10);
+        CurrentHitPoints = Mathf.Clamp(CurrentHitPoints <= 0 ? MaxHitPoints : CurrentHitPoints, 0, MaxHitPoints);
+        IsBroken = CurrentHitPoints > 0 && CurrentHitPoints <= Mathf.Max(1, MaxHitPoints / 2);
+        IsDestroyed = CurrentHitPoints <= 0;
+    }
+
+    public int ResolveEnhancementBonus()
+    {
+        if (EnhancementBonus > 0)
+            return EnhancementBonus;
+
+        if (string.IsNullOrEmpty(Name))
+            return 0;
+
+        int plusIndex = Name.IndexOf('+');
+        if (plusIndex < 0 || plusIndex >= Name.Length - 1)
+            return 0;
+
+        int cursor = plusIndex + 1;
+        int parsed = 0;
+        while (cursor < Name.Length && char.IsDigit(Name[cursor]))
+        {
+            parsed = (parsed * 10) + (Name[cursor] - '0');
+            cursor++;
+        }
+
+        return Mathf.Max(0, parsed);
+    }
+
+    public int ApplySunderDamage(int incomingDamage, out int effectiveDamage, out int hpBefore, out int hpAfter)
+    {
+        EnsureDurabilityInitialized();
+
+        hpBefore = CurrentHitPoints;
+        effectiveDamage = Mathf.Max(0, incomingDamage - Mathf.Max(0, Hardness));
+
+        if (effectiveDamage > 0)
+            CurrentHitPoints = Mathf.Max(0, CurrentHitPoints - effectiveDamage);
+
+        hpAfter = CurrentHitPoints;
+        IsDestroyed = CurrentHitPoints <= 0;
+        IsBroken = !IsDestroyed && CurrentHitPoints <= Mathf.Max(1, MaxHitPoints / 2);
+
+        return effectiveDamage;
+    }
+
+    private int GetBaseHardness()
+    {
+        if (IsWeapon || IsShield)
+            return 10;
+
+        if (IsArmor)
+            return ArmorCat == ArmorCategory.Heavy ? 10 : 5;
+
+        return 0;
+    }
+
+    private int GetBaseHitPoints()
+    {
+        if (IsWeapon)
+        {
+            if (WeaponSize == WeaponSizeCategory.Light || IsLightWeapon)
+                return 2;
+            if (WeaponSize == WeaponSizeCategory.TwoHanded || IsTwoHanded)
+                return 10;
+            return 5;
+        }
+
+        if (IsShield)
+        {
+            string id = (Id ?? string.Empty).ToLowerInvariant();
+            string n = (Name ?? string.Empty).ToLowerInvariant();
+
+            if (id.Contains("buckler") || n.Contains("buckler"))
+                return 5;
+            if (id.Contains("tower") || n.Contains("tower"))
+                return 20;
+            if (id.Contains("heavy") || n.Contains("heavy") || ShieldBonus >= 2)
+                return 10;
+            return 5;
+        }
+
+        if (IsArmor)
+        {
+            switch (ArmorCat)
+            {
+                case ArmorCategory.Light: return 10;
+                case ArmorCategory.Medium: return 20;
+                case ArmorCategory.Heavy: return 30;
+                default: return 10;
+            }
+        }
+
+        return 0;
+    }
 
     /// <summary>Can this item be equipped in the given slot?</summary>
     public bool CanEquipIn(EquipSlot targetSlot)
@@ -448,6 +576,18 @@ public class ItemData
                 // Backward-compatible fallback for legacy consumables.
                 stats = $"Heals: {HealAmount} HP";
             }
+        }
+
+        if (IsSunderable)
+        {
+            EnsureDurabilityInitialized();
+            string durabilityLine = $"Hardness: {Hardness} | HP: {CurrentHitPoints}/{MaxHitPoints}";
+            if (IsDestroyed)
+                durabilityLine += " (Destroyed)";
+            else if (IsBroken)
+                durabilityLine += " (Broken)";
+
+            stats = string.IsNullOrEmpty(stats) ? durabilityLine : $"{stats}\n{durabilityLine}";
         }
 
         if (WeightLbs > 0f)

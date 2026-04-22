@@ -144,6 +144,7 @@ public class GameManager : MonoBehaviour
     private SpecialAttackType _pendingSpecialAttackType;
     private bool _isSelectingSpecialAttack;
     private bool _pendingDisarmUseOffHandSelection;
+    private bool _pendingSunderUseOffHandSelection;
 
     // Unified iterative attack flow state (melee + thrown share one sequence)
     private bool _isInAttackSequence;
@@ -178,6 +179,13 @@ public class GameManager : MonoBehaviour
     private CharacterController _disarmTarget;
     private EquipSlot? _disarmTargetSlot;
     private int _disarmAttemptNumber;
+
+    // Iterative sunder flow state
+    private bool _isSunderSequenceActive;
+    private CharacterController _sunderInitiator;
+    private CharacterController _sunderTarget;
+    private EquipSlot? _sunderTargetSlot;
+    private int _sunderAttemptNumber;
 
     // Destination-based overrun selection/execution state.
     private bool _isSelectingOverrunDestination;
@@ -2716,6 +2724,7 @@ public class GameManager : MonoBehaviour
         _offHandPenalty = 0;
         _pendingAttackType = AttackType.Melee;
         _pendingDisarmUseOffHandSelection = false;
+        _pendingSunderUseOffHandSelection = false;
 
         Debug.Log($"[Turn][OffHand] Flags reset for {pc.Stats.CharacterName}: available={_offHandAttackAvailableThisTurn}, used={_offHandAttackUsedThisTurn}");
         Debug.Log($"[Turn][DualWield] Turn start reset: choiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}, mainPenalty={_mainHandPenalty}, offPenalty={_offHandPenalty}");
@@ -2927,6 +2936,12 @@ public class GameManager : MonoBehaviour
                 int attacksRemaining = GetRemainingDisarmAttackActions(pc);
                 int nextBab = GetCurrentDisarmAttackBonus(pc);
                 CombatUI.SetTurnIndicator($"{pcName}'s Turn - Disarm-capable attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Special Attack → Disarm, or End Turn.");
+            }
+            else if (CanUseSunderAttackOption(pc))
+            {
+                int attacksRemaining = GetRemainingSunderAttackActions(pc);
+                int nextBab = GetCurrentSunderAttackBonus(pc);
+                CombatUI.SetTurnIndicator($"{pcName}'s Turn - Sunder-capable attacks remaining: {attacksRemaining} (next BAB {CharacterStats.FormatMod(nextBab)}). Use Special Attack → Sunder, or End Turn.");
             }
             else if (IsHoldingTouchCharge(pc))
             {
@@ -5389,9 +5404,50 @@ public class GameManager : MonoBehaviour
 
         _pendingSpecialAttackType = SpecialAttackType.Disarm;
         _pendingDisarmUseOffHandSelection = false;
+        _pendingSunderUseOffHandSelection = false;
         _isSelectingSpecialAttack = true;
         CurrentSubPhase = PlayerSubPhase.SelectingSpecialTarget;
         ShowSpecialAttackTargets(attacker, SpecialAttackType.Disarm);
+    }
+
+    private void ShowDualWieldingPromptForSunder(CharacterController attacker)
+    {
+        if (attacker == null)
+            return;
+
+        string message = "You have weapons in both hands.\nUse dual wielding for this sunder?\n\n"
+            + "Yes: Apply dual-wield penalties, off-hand sunder available\n"
+            + "No: No penalties, off-hand sunder unavailable this round";
+
+        CombatUI?.ShowConfirmationDialog(
+            title: "Dual wield sunder?",
+            message: message,
+            confirmLabel: "Yes",
+            cancelLabel: "No",
+            onConfirm: () => OnSunderDualWieldingChoiceSelected(attacker, true),
+            onCancel: () => OnSunderDualWieldingChoiceSelected(attacker, false));
+    }
+
+    private void OnSunderDualWieldingChoiceSelected(CharacterController attacker, bool dualWield)
+    {
+        if (attacker == null)
+            return;
+
+        ApplyDualWieldingChoiceState(attacker, dualWield, "Sunder");
+
+        if (!CanUseMainHandSunderAttackOption(attacker))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Sunder: no main-hand sunder attacks remaining.");
+            ShowActionChoices();
+            return;
+        }
+
+        _pendingSpecialAttackType = SpecialAttackType.Sunder;
+        _pendingDisarmUseOffHandSelection = false;
+        _pendingSunderUseOffHandSelection = false;
+        _isSelectingSpecialAttack = true;
+        CurrentSubPhase = PlayerSubPhase.SelectingSpecialTarget;
+        ShowSpecialAttackTargets(attacker, SpecialAttackType.Sunder);
     }
 
     private void CalculateDualWieldingPenalties(CharacterController attacker)
@@ -6085,6 +6141,94 @@ public class GameManager : MonoBehaviour
         return GetCurrentOffHandDisarmAttackBonus(attacker);
     }
 
+    private int GetRemainingSunderAttempts(CharacterController attacker)
+    {
+        return GetRemainingMainHandSunderAttackActions(attacker) + GetRemainingOffHandSunderAttackActions(attacker);
+    }
+
+    public bool CanUseMainHandSunderAttackOption(CharacterController attacker)
+    {
+        if (attacker == null || attacker.Actions == null)
+            return false;
+
+        if (!attacker.HasMeleeWeaponEquipped())
+            return false;
+
+        return CanUseMainHandManeuverAttackOption(attacker, "Sunder");
+    }
+
+    public int GetRemainingMainHandSunderAttackActions(CharacterController attacker)
+    {
+        if (!CanUseMainHandSunderAttackOption(attacker))
+            return 0;
+
+        return GetRemainingMainHandManeuverAttackActions(attacker);
+    }
+
+    public int GetCurrentMainHandSunderAttackBonus(CharacterController attacker)
+    {
+        if (!CanUseMainHandSunderAttackOption(attacker))
+            return 0;
+
+        return GetCurrentMainHandManeuverAttackBonusForUI(attacker);
+    }
+
+    public bool ShouldShowOffHandSunderButton(CharacterController attacker)
+    {
+        return attacker != null
+            && _dualWieldingChoiceMade
+            && _isDualWielding
+            && attacker.HasOffHandWeaponEquipped();
+    }
+
+    public bool CanUseOffHandSunderAttackOption(CharacterController attacker)
+    {
+        if (!ShouldShowOffHandSunderButton(attacker))
+            return false;
+
+        if (attacker == null || attacker.Actions == null)
+            return false;
+
+        if (!CanUseOffHandAttackOption(attacker))
+            return false;
+
+        return attacker.GetOffHandAttackWeapon() != null;
+    }
+
+    public int GetRemainingOffHandSunderAttackActions(CharacterController attacker)
+    {
+        return CanUseOffHandSunderAttackOption(attacker) ? 1 : 0;
+    }
+
+    public int GetCurrentOffHandSunderAttackBonus(CharacterController attacker)
+    {
+        if (!CanUseOffHandSunderAttackOption(attacker) || attacker == null || attacker.Stats == null)
+            return 0;
+
+        int offHandBab = attacker.Stats.BaseAttackBonus;
+        if (_isDualWielding)
+            offHandBab += _offHandPenalty;
+        return offHandBab;
+    }
+
+    public bool CanUseSunderAttackOption(CharacterController attacker)
+    {
+        return CanUseMainHandSunderAttackOption(attacker) || CanUseOffHandSunderAttackOption(attacker);
+    }
+
+    public int GetRemainingSunderAttackActions(CharacterController attacker)
+    {
+        return GetRemainingSunderAttempts(attacker);
+    }
+
+    public int GetCurrentSunderAttackBonus(CharacterController attacker)
+    {
+        if (CanUseMainHandSunderAttackOption(attacker))
+            return GetCurrentMainHandSunderAttackBonus(attacker);
+
+        return GetCurrentOffHandSunderAttackBonus(attacker);
+    }
+
     private bool TryStartMainHandSpecialManeuverSequence(CharacterController attacker, string maneuverLabel, out string reason)
     {
         reason = string.Empty;
@@ -6366,6 +6510,73 @@ public class GameManager : MonoBehaviour
         return true;
     }
 
+    private bool TryConsumeSunderAttackAction(CharacterController attacker, bool useOffHand, out int attackBonusUsed, out int attacksRemaining, out string reason, out bool usedOffHand, out ItemData sunderWeapon)
+    {
+        attackBonusUsed = 0;
+        attacksRemaining = 0;
+        reason = string.Empty;
+        usedOffHand = false;
+        sunderWeapon = null;
+
+        if (attacker == null || attacker.Actions == null)
+        {
+            reason = "No action economy available.";
+            return false;
+        }
+
+        if (!useOffHand)
+        {
+            bool hasActiveMainHandSequence = _isInAttackSequence
+                && _attackingCharacter == attacker
+                && HasMoreAttacksAvailable();
+
+            bool canStartMainHandSequence = !_isInAttackSequence
+                && TryStartMainHandSpecialManeuverSequence(attacker, "Sunder", out reason)
+                && HasMoreAttacksAvailable();
+
+            if (!hasActiveMainHandSequence && !canStartMainHandSequence)
+            {
+                if (string.IsNullOrWhiteSpace(reason))
+                    reason = "No main-hand sunder attacks remaining this turn.";
+                return false;
+            }
+
+            attackBonusUsed = _currentAttackBAB;
+            usedOffHand = false;
+            sunderWeapon = attacker.GetEquippedMainWeapon();
+            AdvanceMainHandSequenceAfterSpecialManeuverUse(attacker, "Sunder");
+            attacksRemaining = GetRemainingSunderAttempts(attacker);
+            Debug.Log($"[Sunder][Flow] Consumed main-hand sunder attack at BAB {CharacterStats.FormatMod(attackBonusUsed)}.");
+            return true;
+        }
+
+        if (!CanUseOffHandSunderAttackOption(attacker))
+        {
+            reason = "No off-hand sunder attacks remaining this turn.";
+            return false;
+        }
+
+        ItemData offHandWeapon = attacker.GetOffHandAttackWeapon();
+        if (offHandWeapon == null)
+        {
+            reason = "No valid off-hand weapon equipped.";
+            return false;
+        }
+
+        int offHandBab = attacker.Stats != null ? attacker.Stats.BaseAttackBonus : 0;
+        if (_isDualWielding)
+            offHandBab += _offHandPenalty;
+
+        attackBonusUsed = offHandBab;
+        usedOffHand = true;
+        sunderWeapon = offHandWeapon;
+        _offHandAttackUsedThisTurn = true;
+        _offHandAttackAvailableThisTurn = attacker.HasOffHandWeaponEquipped();
+        attacksRemaining = GetRemainingSunderAttempts(attacker);
+        Debug.Log($"[Sunder][Flow] Consumed off-hand sunder attack at BAB {CharacterStats.FormatMod(attackBonusUsed)}.");
+        return true;
+    }
+
     private void EndAttackSequence()
     {
         Debug.Log("[Attack][Sequence] Ending attack sequence");
@@ -6406,6 +6617,7 @@ public class GameManager : MonoBehaviour
         _offHandPenalty = 0;
         _pendingAttackType = AttackType.Melee;
         _pendingDisarmUseOffHandSelection = false;
+        _pendingSunderUseOffHandSelection = false;
     }
 
     private bool CanUseImprovedFeintAsMove(CharacterController actor)
@@ -6425,13 +6637,15 @@ public class GameManager : MonoBehaviour
         bool hasBullRushAttackAvailable = CanUseBullRushAttackOption(actor);
         bool hasTripAttackAvailable = CanUseTripAttackOption(actor);
         bool hasDisarmAttackAvailable = CanUseDisarmAttackOption(actor);
+        bool hasSunderAttackAvailable = CanUseSunderAttackOption(actor);
         return actor.Actions.HasStandardAction
             || actor.Actions.HasFullRoundAction
             || CanUseImprovedFeintAsMove(actor)
             || hasGrappleAttackAvailable
             || hasBullRushAttackAvailable
             || hasTripAttackAvailable
-            || hasDisarmAttackAvailable;
+            || hasDisarmAttackAvailable
+            || hasSunderAttackAvailable;
     }
 
     private bool TryConsumeFeintAction(CharacterController attacker, out string actionLabel)
@@ -6464,7 +6678,7 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         bool canOpen = pc != null && CanOpenSpecialAttackMenu(pc);
-        Debug.Log($"[GameManager][SpecialAttack] ButtonPressed actor={(pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>")} canOpen={canOpen} phase={CurrentPhase} subPhase={CurrentSubPhase} std={(pc != null ? pc.Actions.HasStandardAction : false)} full={(pc != null ? pc.Actions.HasFullRoundAction : false)} grappleAvailable={(pc != null ? CanUseGrappleAttackOption(pc) : false)} bullRushAvailable={(pc != null ? CanUseBullRushAttackOption(pc) : false)} tripAvailable={(pc != null ? CanUseTripAttackOption(pc) : false)} disarmAvailable={(pc != null ? CanUseDisarmAttackOption(pc) : false)}");
+        Debug.Log($"[GameManager][SpecialAttack] ButtonPressed actor={(pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>")} canOpen={canOpen} phase={CurrentPhase} subPhase={CurrentSubPhase} std={(pc != null ? pc.Actions.HasStandardAction : false)} full={(pc != null ? pc.Actions.HasFullRoundAction : false)} grappleAvailable={(pc != null ? CanUseGrappleAttackOption(pc) : false)} bullRushAvailable={(pc != null ? CanUseBullRushAttackOption(pc) : false)} tripAvailable={(pc != null ? CanUseTripAttackOption(pc) : false)} disarmAvailable={(pc != null ? CanUseDisarmAttackOption(pc) : false)} sunderAvailable={(pc != null ? CanUseSunderAttackOption(pc) : false)}");
         if (!canOpen) return;
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "special attacks"))
@@ -6684,12 +6898,23 @@ public class GameManager : MonoBehaviour
         bool hasMainHandDisarmAttackAvailable = CanUseMainHandDisarmAttackOption(pc);
         bool hasOffHandDisarmAttackAvailable = CanUseOffHandDisarmAttackOption(pc);
         bool hasDisarmAttackAvailable = useOffHandDisarm ? hasOffHandDisarmAttackAvailable : hasMainHandDisarmAttackAvailable;
+        bool hasMainHandSunderAttackAvailable = CanUseMainHandSunderAttackOption(pc);
+        bool hasOffHandSunderAttackAvailable = CanUseOffHandSunderAttackOption(pc);
+        bool hasSunderAttackAvailable = useOffHandDisarm ? hasOffHandSunderAttackAvailable : hasMainHandSunderAttackAvailable;
 
         if (type == SpecialAttackType.Disarm && !useOffHandDisarm && !_dualWieldingChoiceMade && NeedsDualWieldingPrompt(pc))
         {
             Debug.Log($"[Disarm][DualWield] Showing dual wield prompt before main-hand disarm for {pc.Stats.CharacterName}.");
             CombatUI.HideSpecialAttackMenu();
             ShowDualWieldingPromptForDisarm(pc);
+            return;
+        }
+
+        if (type == SpecialAttackType.Sunder && !useOffHandDisarm && !_dualWieldingChoiceMade && NeedsDualWieldingPrompt(pc))
+        {
+            Debug.Log($"[Sunder][DualWield] Showing dual wield prompt before main-hand sunder for {pc.Stats.CharacterName}.");
+            CombatUI.HideSpecialAttackMenu();
+            ShowDualWieldingPromptForSunder(pc);
             return;
         }
 
@@ -6703,11 +6928,13 @@ public class GameManager : MonoBehaviour
                         ? hasTripAttackAvailable
                         : (type == SpecialAttackType.Disarm
                             ? hasDisarmAttackAvailable
-                            : (type == SpecialAttackType.BullRushCharge
-                                ? pc.Actions.HasFullRoundAction
-                                : pc.Actions.HasStandardAction)))));
+                            : (type == SpecialAttackType.Sunder
+                                ? hasSunderAttackAvailable
+                                : (type == SpecialAttackType.BullRushCharge
+                                    ? pc.Actions.HasFullRoundAction
+                                    : pc.Actions.HasStandardAction))))));
 
-        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} mainDisarmAvailable={hasMainHandDisarmAttackAvailable} offHandDisarmAvailable={hasOffHandDisarmAttackAvailable} requestedOffHandDisarm={useOffHandDisarm}");
+        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} mainDisarmAvailable={hasMainHandDisarmAttackAvailable} offHandDisarmAvailable={hasOffHandDisarmAttackAvailable} mainSunderAvailable={hasMainHandSunderAttackAvailable} offHandSunderAvailable={hasOffHandSunderAttackAvailable} requestedOffHand={useOffHandDisarm}");
 
         if (!hasAction)
         {
@@ -6721,9 +6948,11 @@ public class GameManager : MonoBehaviour
                             ? "Need at least one remaining trip attack"
                             : (type == SpecialAttackType.Disarm
                                 ? (useOffHandDisarm ? "Need an available off-hand disarm attack" : "Need at least one remaining main-hand disarm attack")
-                                : (type == SpecialAttackType.BullRushCharge
-                                    ? "Need a full-round action and valid charge movement"
-                                    : "Need a standard action")))));
+                                : (type == SpecialAttackType.Sunder
+                                    ? (useOffHandDisarm ? "Need an available off-hand sunder attack" : "Need at least one remaining main-hand sunder attack")
+                                    : (type == SpecialAttackType.BullRushCharge
+                                        ? "Need a full-round action and valid charge movement"
+                                        : "Need a standard action"))))));
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use {type}: {reason}.");
             ShowActionChoices();
             return;
@@ -6747,6 +6976,7 @@ public class GameManager : MonoBehaviour
 
         _pendingSpecialAttackType = type;
         _pendingDisarmUseOffHandSelection = type == SpecialAttackType.Disarm && useOffHandDisarm;
+        _pendingSunderUseOffHandSelection = type == SpecialAttackType.Sunder && useOffHandDisarm;
         _isSelectingSpecialAttack = true;
         CurrentSubPhase = PlayerSubPhase.SelectingSpecialTarget;
         ShowSpecialAttackTargets(pc, type);
@@ -12602,6 +12832,15 @@ public class GameManager : MonoBehaviour
                 continue;
             }
 
+            if (type == SpecialAttackType.Sunder)
+            {
+                bool hasSunderableItem = c.Occupant.HasSunderableItemEquipped();
+                c.SetHighlight(hasSunderableItem ? HighlightType.Attack : HighlightType.AttackDeadZone);
+                _highlightedCells.Add(c);
+                hasTarget = true;
+                continue;
+            }
+
             c.SetHighlight(HighlightType.Attack);
             _highlightedCells.Add(c);
             hasTarget = true;
@@ -12613,6 +12852,8 @@ public class GameManager : MonoBehaviour
         {
             if (type == SpecialAttackType.Disarm)
                 CombatUI.SetTurnIndicator("SPECIAL: Disarm - red targets are valid, gray targets have no disarmable weapon (Right-click/Esc to cancel)");
+            else if (type == SpecialAttackType.Sunder)
+                CombatUI.SetTurnIndicator("SPECIAL: Sunder - red targets are valid, gray targets have no sunderable item (Right-click/Esc to cancel)");
             else
                 CombatUI.SetTurnIndicator($"SPECIAL: {type} - select target (Right-click/Esc to cancel)");
         }
@@ -12635,6 +12876,12 @@ public class GameManager : MonoBehaviour
         if (_pendingSpecialAttackType == SpecialAttackType.Disarm)
         {
             HandleDisarmTargetClick(attacker, target);
+            return;
+        }
+
+        if (_pendingSpecialAttackType == SpecialAttackType.Sunder)
+        {
+            HandleSunderTargetClick(attacker, target);
             return;
         }
 
@@ -12718,6 +12965,72 @@ public class GameManager : MonoBehaviour
             });
     }
 
+    private void HandleSunderTargetClick(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!target.HasSunderableItemEquipped())
+        {
+            string targetName = target.Stats != null ? target.Stats.CharacterName : "Target";
+            Debug.Log($"[Sunder][Flow] Invalid target selected: {targetName} has no sunderable item equipped.");
+            CombatUI?.ShowCombatLog($"{targetName} has no item to sunder!");
+
+            // Do not consume any attack action; allow selecting another target.
+            ShowSpecialAttackTargets(attacker, SpecialAttackType.Sunder);
+            return;
+        }
+
+        List<SunderableItemOption> options = target.GetSunderableItemOptions();
+        if (options.Count <= 1)
+        {
+            EquipSlot? selectedSlot = options.Count == 1 ? options[0].Slot : null;
+            BeginSunderSequence(attacker, target, selectedSlot);
+            ExecuteSpecialAttack(attacker, target, SpecialAttackType.Sunder, sunderTargetSlot: selectedSlot);
+            return;
+        }
+
+        List<string> optionLabels = new List<string>(options.Count);
+        for (int i = 0; i < options.Count; i++)
+            optionLabels.Add(options[i].GetLabel());
+
+        CombatUI.ShowSunderItemSelection(
+            target.Stats.CharacterName,
+            optionLabels,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                {
+                    ShowSpecialAttackTargets(attacker, SpecialAttackType.Sunder);
+                    return;
+                }
+
+                // Re-validate in case gear changed while prompt was open.
+                List<SunderableItemOption> latestOptions = target.GetSunderableItemOptions();
+                EquipSlot selectedSlot = options[selectedIndex].Slot;
+                bool slotStillValid = latestOptions.Exists(o => o.Slot == selectedSlot);
+                if (!slotStillValid)
+                {
+                    CombatUI.ShowCombatLog($"⚠ {target.Stats.CharacterName}'s selected item is no longer equipped.");
+                    ShowSpecialAttackTargets(attacker, SpecialAttackType.Sunder);
+                    return;
+                }
+
+                BeginSunderSequence(attacker, target, selectedSlot);
+                ExecuteSpecialAttack(attacker, target, SpecialAttackType.Sunder, sunderTargetSlot: selectedSlot);
+            },
+            onCancel: () =>
+            {
+                if (CurrentPhase == TurnPhase.PCTurn && ActivePC == attacker && attacker.Actions.HasStandardAction)
+                    ShowSpecialAttackTargets(attacker, SpecialAttackType.Sunder);
+                else
+                    ShowActionChoices();
+            });
+    }
+
     private void BeginDisarmSequence(CharacterController attacker, CharacterController target, EquipSlot? targetSlot)
     {
         _isDisarmSequenceActive = attacker != null && target != null;
@@ -12738,6 +13051,28 @@ public class GameManager : MonoBehaviour
         _disarmTarget = null;
         _disarmTargetSlot = null;
         _disarmAttemptNumber = 0;
+    }
+
+    private void BeginSunderSequence(CharacterController attacker, CharacterController target, EquipSlot? targetSlot)
+    {
+        _isSunderSequenceActive = attacker != null && target != null;
+        _sunderInitiator = attacker;
+        _sunderTarget = target;
+        _sunderTargetSlot = targetSlot;
+        _sunderAttemptNumber = 0;
+
+        Debug.Log($"[Sunder][Flow] BeginSunderSequence attacker={(attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "<null>")} target={(target != null && target.Stats != null ? target.Stats.CharacterName : "<null>")} slot={(targetSlot.HasValue ? targetSlot.Value.ToString() : "Auto")}");
+    }
+
+    private void ClearSunderSequenceState()
+    {
+        Debug.Log($"[Sunder][Flow] ClearSunderSequenceState previousState active={_isSunderSequenceActive} attempt={_sunderAttemptNumber} attacker={(_sunderInitiator != null && _sunderInitiator.Stats != null ? _sunderInitiator.Stats.CharacterName : "<null>")} target={(_sunderTarget != null && _sunderTarget.Stats != null ? _sunderTarget.Stats.CharacterName : "<null>")}");
+
+        _isSunderSequenceActive = false;
+        _sunderInitiator = null;
+        _sunderTarget = null;
+        _sunderTargetSlot = null;
+        _sunderAttemptNumber = 0;
     }
 
     private void BeginGrappleContextMenuDisplayLock(CharacterController actor)
@@ -13571,7 +13906,7 @@ public class GameManager : MonoBehaviour
         return null;
     }
 
-    private void ExecuteSpecialAttack(CharacterController attacker, CharacterController target, SpecialAttackType type, EquipSlot? disarmTargetSlot = null)
+    private void ExecuteSpecialAttack(CharacterController attacker, CharacterController target, SpecialAttackType type, EquipSlot? disarmTargetSlot = null, EquipSlot? sunderTargetSlot = null)
     {
         if (attacker == null || target == null) { ShowActionChoices(); return; }
 
@@ -13586,6 +13921,11 @@ public class GameManager : MonoBehaviour
         int? grappleAttackBonusOverride = null;
         int? bullRushAttackBonusOverride = null;
         int? tripAttackBonusOverride = null;
+        int? sunderAttackBonusOverride = null;
+        int sunderAttackBonusUsed = 0;
+        bool sunderUsedOffHand = false;
+        int sunderDualWieldPenaltyForLog = 0;
+        ItemData sunderAttackerWeaponOverride = null;
 
         if (type == SpecialAttackType.Feint)
         {
@@ -13633,6 +13973,45 @@ public class GameManager : MonoBehaviour
             Debug.Log(
                 $"[Disarm][Flow] Consume success actor={attacker.Stats.CharacterName} attempt={_disarmAttemptNumber} " +
                 $"hand={handLabel} usedBAB={CharacterStats.FormatMod(disarmAttackBonusUsed)} remaining={disarmAttacksRemaining} " +
+                $"stdActionNow={attacker.Actions.HasStandardAction} moveActionNow={attacker.Actions.HasMoveAction} fullRoundNow={attacker.Actions.HasFullRoundAction}");
+        }
+        else if (type == SpecialAttackType.Sunder)
+        {
+            if (!_isSunderSequenceActive || _sunderInitiator != attacker || _sunderTarget != target)
+                BeginSunderSequence(attacker, target, sunderTargetSlot);
+
+            int sunderAttemptsBefore = GetRemainingSunderAttackActions(attacker);
+            Debug.Log(
+                $"[Sunder][Flow] Starting attempt {_sunderAttemptNumber + 1} attacker={attacker.Stats.CharacterName} " +
+                $"target={target.Stats.CharacterName} stdAction={attacker.Actions.HasStandardAction} " +
+                $"moveAction={attacker.Actions.HasMoveAction} fullRound={attacker.Actions.HasFullRoundAction} " +
+                $"sharedSequenceActive={_isInAttackSequence} sequenceOwner={(_attackingCharacter != null && _attackingCharacter.Stats != null ? _attackingCharacter.Stats.CharacterName : "<null>")} " +
+                $"sunderAttemptsBefore={sunderAttemptsBefore} offHandAvailable={CanUseOffHandAttackOption(attacker)} requestedOffHand={_pendingSunderUseOffHandSelection}");
+
+            bool useOffHandSunder = _pendingSunderUseOffHandSelection;
+            if (!TryConsumeSunderAttackAction(attacker, useOffHandSunder, out sunderAttackBonusUsed, out int sunderAttacksRemaining, out string sunderConsumeReason, out sunderUsedOffHand, out sunderAttackerWeaponOverride))
+            {
+                string reason = string.IsNullOrWhiteSpace(sunderConsumeReason)
+                    ? "no eligible sunder attack remaining"
+                    : sunderConsumeReason;
+                Debug.LogWarning($"[Sunder][Flow] Consume failed for {attacker.Stats.CharacterName}: {reason}");
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Sunder: {reason}.");
+                _pendingSunderUseOffHandSelection = false;
+                ClearSunderSequenceState();
+                ShowActionChoices();
+                return;
+            }
+
+            sunderAttackBonusOverride = sunderAttackBonusUsed;
+            if (_isDualWielding)
+                sunderDualWieldPenaltyForLog = sunderUsedOffHand ? _offHandPenalty : _mainHandPenalty;
+
+            _sunderAttemptNumber++;
+            string handLabel = sunderUsedOffHand ? "off-hand" : "main-hand";
+            actionLabel = $"sunder attempt #{_sunderAttemptNumber} ({handLabel}), BAB {CharacterStats.FormatMod(sunderAttackBonusUsed)} ({sunderAttacksRemaining} remaining)";
+            Debug.Log(
+                $"[Sunder][Flow] Consume success actor={attacker.Stats.CharacterName} attempt={_sunderAttemptNumber} " +
+                $"hand={handLabel} usedBAB={CharacterStats.FormatMod(sunderAttackBonusUsed)} remaining={sunderAttacksRemaining} " +
                 $"stdActionNow={attacker.Actions.HasStandardAction} moveActionNow={attacker.Actions.HasMoveAction} fullRoundNow={attacker.Actions.HasFullRoundAction}");
         }
         else if (type == SpecialAttackType.Grapple)
@@ -13700,25 +14079,37 @@ public class GameManager : MonoBehaviour
             actionLabel = "standard action";
         }
 
-        if (type == SpecialAttackType.Grapple)
+        bool maneuverProvokesAoO = type == SpecialAttackType.Grapple || type == SpecialAttackType.Sunder;
+        if (maneuverProvokesAoO)
         {
-            bool attackerHasImprovedGrapple = attacker.Stats != null && attacker.Stats.HasFeat("Improved Grapple");
-            bool targetCanAoO = target != null && !target.Stats.IsDead && ThreatSystem.CanMakeAoO(target);
+            bool attackerIgnoresAoO = false;
+            string maneuverLabel = type == SpecialAttackType.Grapple ? "Grapple" : "Sunder";
 
-            if (!attackerHasImprovedGrapple && targetCanAoO)
+            if (type == SpecialAttackType.Grapple)
+                attackerIgnoresAoO = attacker.Stats != null && attacker.Stats.HasFeat("Improved Grapple");
+            else if (type == SpecialAttackType.Sunder)
+                attackerIgnoresAoO = attacker.Stats != null && attacker.Stats.HasFeat("Improved Sunder");
+
+            bool targetCanAoO = target != null && !target.Stats.IsDead && ThreatSystem.CanMakeAoO(target);
+            if (!attackerIgnoresAoO && targetCanAoO)
             {
-                CombatResult grappleAoO = ThreatSystem.ExecuteAoO(target, attacker);
-                if (grappleAoO != null)
+                CombatResult maneuverAoO = ThreatSystem.ExecuteAoO(target, attacker);
+                if (maneuverAoO != null)
                 {
-                    CombatUI.ShowCombatLog($"⚔ Grapple initiation AoO: {grappleAoO.GetDetailedSummary()}");
+                    CombatUI.ShowCombatLog($"⚔ {maneuverLabel} initiation AoO: {maneuverAoO.GetDetailedSummary()}");
                     UpdateAllStatsUI();
 
-                    if (grappleAoO.Hit)
+                    if (maneuverAoO.Hit)
                     {
-                        CombatUI.ShowCombatLog("Grapple attempt disrupted by attack of opportunity");
+                        CombatUI.ShowCombatLog($"{maneuverLabel} attempt disrupted by attack of opportunity");
                         Grid.ClearAllHighlights();
                         _highlightedCells.Clear();
                         _isSelectingSpecialAttack = false;
+                        if (type == SpecialAttackType.Sunder)
+                        {
+                            _pendingSunderUseOffHandSelection = false;
+                            ClearSunderSequenceState();
+                        }
                         StartCoroutine(AfterAttackDelay(attacker, 0.8f));
                         return;
                     }
@@ -13726,10 +14117,15 @@ public class GameManager : MonoBehaviour
 
                 if (attacker.Stats.IsDead)
                 {
-                    CombatUI.ShowCombatLog($"💀 {attacker.Stats.CharacterName} is dropped while attempting to start a grapple.");
+                    CombatUI.ShowCombatLog($"💀 {attacker.Stats.CharacterName} is dropped while attempting to start {maneuverLabel.ToLowerInvariant()}.");
                     Grid.ClearAllHighlights();
                     _highlightedCells.Clear();
                     _isSelectingSpecialAttack = false;
+                    if (type == SpecialAttackType.Sunder)
+                    {
+                        _pendingSunderUseOffHandSelection = false;
+                        ClearSunderSequenceState();
+                    }
                     StartCoroutine(AfterAttackDelay(attacker, 0.8f));
                     return;
                 }
@@ -13747,7 +14143,12 @@ public class GameManager : MonoBehaviour
             disarmAttackerWeaponOverride: disarmAttackerWeaponOverride,
             tripAttackBonusOverride: tripAttackBonusOverride,
             disarmUsedOffHand: disarmUsedOffHand,
-            disarmDualWieldPenaltyForLog: disarmDualWieldPenaltyForLog);
+            disarmDualWieldPenaltyForLog: disarmDualWieldPenaltyForLog,
+            sunderTargetSlot: sunderTargetSlot,
+            sunderAttackBonusOverride: sunderAttackBonusOverride,
+            sunderAttackerWeaponOverride: sunderAttackerWeaponOverride,
+            sunderUsedOffHand: sunderUsedOffHand,
+            sunderDualWieldPenaltyForLog: sunderDualWieldPenaltyForLog);
         if (type == SpecialAttackType.Disarm)
             CombatUI.ShowCombatLog(result.Log);
         else
@@ -13807,6 +14208,29 @@ public class GameManager : MonoBehaviour
 
             _pendingDisarmUseOffHandSelection = false;
             ClearDisarmSequenceState();
+        }
+        else if (type == SpecialAttackType.Sunder)
+        {
+            int attacksRemaining = GetRemainingSunderAttackActions(attacker);
+            int nextBab = GetCurrentSunderAttackBonus(attacker);
+            int targetSunderableItems = target != null ? target.GetSunderableItemOptions().Count : 0;
+            string handLabel = sunderUsedOffHand ? "off-hand" : "main-hand";
+
+            Debug.Log(
+                $"[Sunder][Flow] Completed attempt {_sunderAttemptNumber} attacker={attacker.Stats.CharacterName} " +
+                $"target={(target != null && target.Stats != null ? target.Stats.CharacterName : "<null>")} " +
+                $"success={result.Success} hand={handLabel} usedBAB={CharacterStats.FormatMod(sunderAttackBonusUsed)} " +
+                $"attacksRemaining={attacksRemaining} nextBAB={CharacterStats.FormatMod(nextBab)} targetSunderableItems={targetSunderableItems}");
+
+            CombatUI?.ShowCombatLog($"[Sunder] Attempt #{_sunderAttemptNumber} ({handLabel}) used BAB {CharacterStats.FormatMod(sunderAttackBonusUsed)}.");
+
+            if (attacksRemaining > 0)
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has {attacksRemaining} sunder-capable attack(s) remaining (next BAB {CharacterStats.FormatMod(nextBab)}).");
+            else
+                CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} has no sunder-capable attacks remaining this turn.");
+
+            _pendingSunderUseOffHandSelection = false;
+            ClearSunderSequenceState();
         }
 
         if (result.Success)
@@ -14063,7 +14487,10 @@ public class GameManager : MonoBehaviour
     private void CancelSpecialAttackTargeting()
     {
         _isSelectingSpecialAttack = false;
+        _pendingDisarmUseOffHandSelection = false;
+        _pendingSunderUseOffHandSelection = false;
         ClearDisarmSequenceState();
+        ClearSunderSequenceState();
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
         ShowActionChoices();

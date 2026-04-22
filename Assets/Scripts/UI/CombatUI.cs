@@ -1665,6 +1665,7 @@ public class CombatUI : MonoBehaviour
         bool hasBullRushAttackAvailable = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseBullRushAttackOption(pc);
         bool hasTripAttackAvailable = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseTripAttackOption(pc);
         bool hasDisarmAttackAvailable = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseDisarmAttackOption(pc);
+        bool hasSunderAttackAvailable = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseSunderAttackOption(pc);
         bool canImprovedFeintMove = pc != null
             && pc.Stats != null
             && pc.Stats.HasFeat("Improved Feint")
@@ -1672,7 +1673,7 @@ public class CombatUI : MonoBehaviour
 
         GameManager gm = GameManager.Instance;
         string actorName = pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>";
-        Debug.Log($"[CombatUI][SpecialAttackMenu] SHOW actor={actorName} phase={(gm != null ? gm.CurrentPhase.ToString() : "<no-gm>")} subPhase={(gm != null ? gm.CurrentSubPhase.ToString() : "<no-gm>")} std={hasStandardAction} full={hasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} disarmAvailable={hasDisarmAttackAvailable} improvedFeintMove={canImprovedFeintMove}");
+        Debug.Log($"[CombatUI][SpecialAttackMenu] SHOW actor={actorName} phase={(gm != null ? gm.CurrentPhase.ToString() : "<no-gm>")} subPhase={(gm != null ? gm.CurrentSubPhase.ToString() : "<no-gm>")} std={hasStandardAction} full={hasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} disarmAvailable={hasDisarmAttackAvailable} sunderAvailable={hasSunderAttackAvailable} improvedFeintMove={canImprovedFeintMove}");
 
         _specialAttackPanel.SetActive(true);
 
@@ -1693,12 +1694,24 @@ public class CombatUI : MonoBehaviour
                     continue;
                 }
             }
+            else if (btn.name == "Sunder (Off-Hand)")
+            {
+                bool showOffHandSunder = pc != null
+                    && GameManager.Instance != null
+                    && GameManager.Instance.ShouldShowOffHandSunderButton(pc);
+                btn.gameObject.SetActive(showOffHandSunder);
+                if (!showOffHandSunder)
+                {
+                    Debug.Log($"[CombatUI][SpecialAttackMenu] button={btn.name} active=false (dual wield sunder not enabled)");
+                    continue;
+                }
+            }
             else
             {
                 btn.gameObject.SetActive(true);
             }
 
-            bool enabled = IsSpecialAttackButtonEnabled(btn.name, pc, hasStandardAction, hasFullRoundAction, hasGrappleAttackAvailable, hasBullRushAttackAvailable, hasTripAttackAvailable, hasDisarmAttackAvailable, canImprovedFeintMove);
+            bool enabled = IsSpecialAttackButtonEnabled(btn.name, pc, hasStandardAction, hasFullRoundAction, hasGrappleAttackAvailable, hasBullRushAttackAvailable, hasTripAttackAvailable, hasDisarmAttackAvailable, hasSunderAttackAvailable, canImprovedFeintMove);
             btn.interactable = enabled;
             UpdateSpecialAttackButtonLabel(btn, pc, enabled);
             Debug.Log($"[CombatUI][SpecialAttackMenu] button={btn.name} active={btn.gameObject.activeSelf} interactable={btn.interactable}");
@@ -1707,7 +1720,7 @@ public class CombatUI : MonoBehaviour
         WireSpecialAttackMenu(onSelect, onCancel);
     }
 
-    private bool IsSpecialAttackButtonEnabled(string buttonName, CharacterController pc, bool hasStandardAction, bool hasFullRoundAction, bool hasGrappleAttackAvailable, bool hasBullRushAttackAvailable, bool hasTripAttackAvailable, bool hasDisarmAttackAvailable, bool canImprovedFeintMove)
+    private bool IsSpecialAttackButtonEnabled(string buttonName, CharacterController pc, bool hasStandardAction, bool hasFullRoundAction, bool hasGrappleAttackAvailable, bool hasBullRushAttackAvailable, bool hasTripAttackAvailable, bool hasDisarmAttackAvailable, bool hasSunderAttackAvailable, bool canImprovedFeintMove)
     {
         if (buttonName == "Cancel")
             return true;
@@ -1729,6 +1742,12 @@ public class CombatUI : MonoBehaviour
                 break;
             case "Disarm (Off-Hand)":
                 enabled = GameManager.Instance != null && GameManager.Instance.CanUseOffHandDisarmAttackOption(pc);
+                break;
+            case "Sunder":
+                enabled = GameManager.Instance != null && GameManager.Instance.CanUseMainHandSunderAttackOption(pc);
+                break;
+            case "Sunder (Off-Hand)":
+                enabled = GameManager.Instance != null && GameManager.Instance.CanUseOffHandSunderAttackOption(pc);
                 break;
             case "Feint":
                 enabled = hasStandardAction || canImprovedFeintMove;
@@ -1755,6 +1774,8 @@ public class CombatUI : MonoBehaviour
                 enabled &= pc.HasOffHandWeaponEquipped();
             else if (buttonName == "Sunder")
                 enabled &= pc.HasMeleeWeaponEquipped();
+            else if (buttonName == "Sunder (Off-Hand)")
+                enabled &= pc.HasOffHandWeaponEquipped();
             if (buttonName == "Bull Rush (Attack)" || buttonName == "Bull Rush (Charge)" || buttonName == "Trip")
                 enabled &= pc.HasMeleeWeaponEquipped();
         }
@@ -1841,6 +1862,32 @@ public class CombatUI : MonoBehaviour
                 else
                 {
                     label.text = "Disarm (Off-Hand) (No attacks)";
+                }
+                break;
+
+            case "Sunder":
+                if (pc != null && isEnabled && GameManager.Instance != null)
+                {
+                    int remaining = GameManager.Instance.GetRemainingMainHandSunderAttackActions(pc);
+                    int currentBab = GameManager.Instance.GetCurrentMainHandSunderAttackBonus(pc);
+                    label.text = $"Sunder (BAB {CharacterStats.FormatMod(currentBab)}, {remaining} left)";
+                }
+                else
+                {
+                    label.text = "Sunder (No main-hand attacks)";
+                }
+                break;
+
+            case "Sunder (Off-Hand)":
+                if (pc != null && isEnabled && GameManager.Instance != null)
+                {
+                    int remaining = GameManager.Instance.GetRemainingOffHandSunderAttackActions(pc);
+                    int currentBab = GameManager.Instance.GetCurrentOffHandSunderAttackBonus(pc);
+                    label.text = $"Sunder (Off-Hand) (BAB {CharacterStats.FormatMod(currentBab)}, {remaining} left)";
+                }
+                else
+                {
+                    label.text = "Sunder (Off-Hand) (No attacks)";
                 }
                 break;
 
@@ -2325,6 +2372,7 @@ public class CombatUI : MonoBehaviour
         CreateSpecialButton("Disarm (Off-Hand)", "Disarm (Off-Hand)");
         CreateSpecialButton("Grapple", "Grapple");
         CreateSpecialButton("Sunder", "Sunder");
+        CreateSpecialButton("Sunder (Off-Hand)", "Sunder (Off-Hand)");
         CreateSpecialButton("Bull Rush (Attack)", "Bull Rush (Attack)");
         CreateSpecialButton("Bull Rush (Charge)", "Bull Rush (Charge)");
         CreateSpecialButton("Overrun", "Overrun");
@@ -2351,6 +2399,7 @@ public class CombatUI : MonoBehaviour
                 case "Disarm (Off-Hand)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Disarm (Off-Hand)"); onSelect?.Invoke(SpecialAttackType.Disarm, true); }); break;
                 case "Grapple": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Grapple"); onSelect?.Invoke(SpecialAttackType.Grapple, false); }); break;
                 case "Sunder": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Sunder"); onSelect?.Invoke(SpecialAttackType.Sunder, false); }); break;
+                case "Sunder (Off-Hand)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Sunder (Off-Hand)"); onSelect?.Invoke(SpecialAttackType.Sunder, true); }); break;
                 case "Bull Rush (Attack)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Attack)"); onSelect?.Invoke(SpecialAttackType.BullRushAttack, false); }); break;
                 case "Bull Rush (Charge)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Charge)"); onSelect?.Invoke(SpecialAttackType.BullRushCharge, false); }); break;
                 case "Overrun": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Overrun"); onSelect?.Invoke(SpecialAttackType.Overrun, false); }); break;
@@ -4913,6 +4962,30 @@ public class CombatUI : MonoBehaviour
 
     public void ShowDisarmWeaponSelection(string targetName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
     {
+        ShowItemSelectionDialog(
+            panelName: "DisarmWeaponSelectionPanel",
+            title: "DISARM TARGET HELD ITEM",
+            bodyTextTemplate: "Choose which held item to disarm from {0}:",
+            targetName: targetName,
+            itemOptions: itemOptions,
+            onSelect: onSelect,
+            onCancel: onCancel);
+    }
+
+    public void ShowSunderItemSelection(string targetName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
+    {
+        ShowItemSelectionDialog(
+            panelName: "SunderItemSelectionPanel",
+            title: "SUNDER TARGET ITEM",
+            bodyTextTemplate: "Choose which equipped item to sunder on {0}:",
+            targetName: targetName,
+            itemOptions: itemOptions,
+            onSelect: onSelect,
+            onCancel: onCancel);
+    }
+
+    private void ShowItemSelectionDialog(string panelName, string title, string bodyTextTemplate, string targetName, List<string> itemOptions, System.Action<int> onSelect, System.Action onCancel)
+    {
         HideDisarmWeaponSelection();
 
         Canvas canvas = GetComponentInParent<Canvas>();
@@ -4926,7 +4999,7 @@ public class CombatUI : MonoBehaviour
         if (itemOptions == null)
             itemOptions = new List<string>();
 
-        _disarmWeaponSelectionPanel = new GameObject("DisarmWeaponSelectionPanel");
+        _disarmWeaponSelectionPanel = new GameObject(string.IsNullOrEmpty(panelName) ? "ItemSelectionPanel" : panelName);
         _disarmWeaponSelectionPanel.transform.SetParent(canvas.transform, false);
 
         RectTransform panelRT = _disarmWeaponSelectionPanel.AddComponent<RectTransform>();
@@ -4972,7 +5045,7 @@ public class CombatUI : MonoBehaviour
         titleText.fontStyle = FontStyle.Bold;
         titleText.color = new Color(0.92f, 0.88f, 1f);
         titleText.alignment = TextAnchor.MiddleCenter;
-        titleText.text = "DISARM TARGET HELD ITEM";
+        titleText.text = title;
 
         GameObject bodyObj = new GameObject("BodyText");
         bodyObj.transform.SetParent(dialog.transform, false);
@@ -4988,7 +5061,7 @@ public class CombatUI : MonoBehaviour
         bodyText.fontSize = 14;
         bodyText.alignment = TextAnchor.MiddleCenter;
         bodyText.color = new Color(0.9f, 0.95f, 1f);
-        bodyText.text = $"Choose which held item to disarm from {targetName}:";
+        bodyText.text = string.Format(bodyTextTemplate, targetName);
 
         float optionsTop = 0.7f;
         float optionsBottom = 0.2f;
@@ -5003,7 +5076,7 @@ public class CombatUI : MonoBehaviour
             float yMin = yMax - (step * 0.8f);
 
             Button optionBtn = CreateTouchPromptButton(dialog,
-                $"DisarmOption_{i}",
+                $"ItemOption_{i}",
                 itemOptions[i],
                 new Vector2(0.08f, yMin),
                 new Vector2(0.92f, yMax),

@@ -51,6 +51,41 @@ public struct DisarmableHeldItemOption
     }
 }
 
+public enum SunderTargetKind
+{
+    MainHand,
+    OffHand,
+    Shield,
+    Armor
+}
+
+public struct SunderableItemOption
+{
+    public EquipSlot Slot;
+    public ItemData Item;
+    public SunderTargetKind Kind;
+
+    public SunderableItemOption(EquipSlot slot, ItemData item, SunderTargetKind kind)
+    {
+        Slot = slot;
+        Item = item;
+        Kind = kind;
+    }
+
+    public string GetLabel()
+    {
+        string itemName = Item != null ? Item.Name : "Item";
+        switch (Kind)
+        {
+            case SunderTargetKind.MainHand: return $"Main Hand Weapon: {itemName}";
+            case SunderTargetKind.OffHand: return $"Off-Hand Item: {itemName}";
+            case SunderTargetKind.Shield: return $"Shield: {itemName}";
+            case SunderTargetKind.Armor: return $"Armor: {itemName}";
+            default: return itemName;
+        }
+    }
+}
+
 public class GrappleCheckResult
 {
     public int BaseRoll;
@@ -3862,6 +3897,33 @@ public class CharacterController : MonoBehaviour
         return options;
     }
 
+    public bool HasSunderableItemEquipped()
+    {
+        return GetSunderableItemOptions().Count > 0;
+    }
+
+    public List<SunderableItemOption> GetSunderableItemOptions()
+    {
+        var options = new List<SunderableItemOption>(4);
+        var inv = GetComponent<InventoryComponent>()?.CharacterInventory;
+        if (inv == null)
+            return options;
+
+        if (inv.RightHandSlot != null && inv.RightHandSlot.IsSunderable)
+            options.Add(new SunderableItemOption(EquipSlot.RightHand, inv.RightHandSlot, SunderTargetKind.MainHand));
+
+        if (inv.LeftHandSlot != null && inv.LeftHandSlot.IsSunderable)
+        {
+            SunderTargetKind kind = inv.LeftHandSlot.IsShield ? SunderTargetKind.Shield : SunderTargetKind.OffHand;
+            options.Add(new SunderableItemOption(EquipSlot.LeftHand, inv.LeftHandSlot, kind));
+        }
+
+        if (inv.ArmorRobeSlot != null && inv.ArmorRobeSlot.IsArmor)
+            options.Add(new SunderableItemOption(EquipSlot.ArmorRobe, inv.ArmorRobeSlot, SunderTargetKind.Armor));
+
+        return options;
+    }
+
     /// <summary>
     /// Returns equipped hand-slot light weapons (right hand first, then left hand).
     /// Used by grapple "Use Opponent's Weapon" availability and resolution.
@@ -5474,7 +5536,12 @@ public class CharacterController : MonoBehaviour
         ItemData disarmAttackerWeaponOverride = null,
         int? tripAttackBonusOverride = null,
         bool disarmUsedOffHand = false,
-        int disarmDualWieldPenaltyForLog = 0)
+        int disarmDualWieldPenaltyForLog = 0,
+        EquipSlot? sunderTargetSlot = null,
+        int? sunderAttackBonusOverride = null,
+        ItemData sunderAttackerWeaponOverride = null,
+        bool sunderUsedOffHand = false,
+        int sunderDualWieldPenaltyForLog = 0)
     {
         if (target == null || target.Stats == null)
         {
@@ -5491,7 +5558,7 @@ public class CharacterController : MonoBehaviour
             case SpecialAttackType.Trip: return ResolveTrip(target, tripAttackBonusOverride);
             case SpecialAttackType.Disarm: return ResolveDisarm(target, disarmTargetSlot, disarmAttackBonusOverride, disarmAttackerWeaponOverride, disarmUsedOffHand, disarmDualWieldPenaltyForLog);
             case SpecialAttackType.Grapple: return ResolveGrapple(target, grappleAttackBonusOverride);
-            case SpecialAttackType.Sunder: return ResolveSunder(target);
+            case SpecialAttackType.Sunder: return ResolveSunder(target, sunderTargetSlot, sunderAttackBonusOverride, sunderAttackerWeaponOverride, sunderUsedOffHand, sunderDualWieldPenaltyForLog);
             case SpecialAttackType.BullRushAttack:
                 return ResolveBullRush(target, bullRushAttackBonusOverride ?? (Stats != null ? Stats.BaseAttackBonus : 0), chargeBonus: 0);
             case SpecialAttackType.BullRushCharge:
@@ -5784,66 +5851,203 @@ public class CharacterController : MonoBehaviour
         };
     }
 
-    private SpecialAttackResult ResolveSunder(CharacterController target)
+    private SpecialAttackResult ResolveSunder(
+        CharacterController target,
+        EquipSlot? targetSlot,
+        int? iterativeAttackBonusOverride = null,
+        ItemData attackerWeaponOverride = null,
+        bool usedOffHand = false,
+        int attackerDualWieldPenaltyForLog = 0)
     {
-        ItemData targetWeapon = target.GetEquippedMainWeapon();
-        if (targetWeapon == null)
+        if (!TryGetSunderTargetItem(target, targetSlot, out ItemData targetItem, out EquipSlot resolvedTargetSlot, out SunderTargetKind targetKind))
         {
             return new SpecialAttackResult
             {
                 ManeuverName = "Sunder",
                 Success = false,
-                Log = $"{target.Stats.CharacterName} has no weapon to sunder."
+                Log = $"{target.Stats.CharacterName} has no sunderable weapon, shield, or armor equipped."
             };
         }
 
-        int atkRoll = Random.Range(1, 21);
-        int defRoll = Random.Range(1, 21);
-        int atkTotal = atkRoll + Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + GetDisarmHeldItemModifier(this) + (Stats.HasFeat("Improved Sunder") ? 4 : 0);
-        int defTotal = defRoll + target.Stats.BaseAttackBonus + target.Stats.STRMod + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + GetDisarmHeldItemModifier(target);
-
-        bool success = atkTotal >= defTotal;
-        int damage = 0;
-        if (success)
+        ItemData attackerWeapon = attackerWeaponOverride ?? GetEquippedMainWeapon();
+        if (attackerWeapon == null)
         {
-            int dmgRoll = 0;
-            for (int i = 0; i < Mathf.Max(1, Stats.BaseDamageCount); i++)
-                dmgRoll += Random.Range(1, Stats.BaseDamageDice + 1);
-            damage = dmgRoll + Mathf.Max(0, Stats.STRMod) + Stats.BonusDamage;
-
-            // Simplified object HP threshold for wielded weapons.
-            int breakThreshold = targetWeapon.IsTwoHanded ? 12 : 8;
-            if (damage >= breakThreshold)
+            return new SpecialAttackResult
             {
-                DestroyEquippedMainWeapon(target);
-                target.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
-                return new SpecialAttackResult
-                {
-                    ManeuverName = "Sunder",
-                    Success = true,
-                    CheckRoll = atkRoll,
-                    CheckTotal = atkTotal,
-                    OpposedRoll = defRoll,
-                    OpposedTotal = defTotal,
-                    DamageDealt = damage,
-                    Log = $"{Stats.CharacterName} sunders {target.Stats.CharacterName}'s {targetWeapon.Name}! ({atkTotal} vs {defTotal}, {damage} object dmg)"
-                };
-            }
+                ManeuverName = "Sunder",
+                Success = false,
+                Log = $"{Stats.CharacterName} cannot sunder without a weapon."
+            };
         }
+
+        targetItem.EnsureDurabilityInitialized();
+
+        int attackRoll = Random.Range(1, 21);
+        int defenseRoll = Random.Range(1, 21);
+        int attackBab = iterativeAttackBonusOverride ?? Stats.BaseAttackBonus;
+        int improvedSunderBonus = Stats.HasFeat("Improved Sunder") ? 4 : 0;
+        int handednessBonus = GetSunderHandednessModifier(attackerWeapon, targetItem);
+
+        int attackTotal = attackRoll
+            + attackBab
+            + Stats.STRMod
+            + Stats.SizeModifier
+            + Stats.ConditionAttackPenalty
+            + improvedSunderBonus
+            + handednessBonus;
+
+        int defenseTotal = defenseRoll
+            + target.Stats.BaseAttackBonus
+            + target.Stats.STRMod
+            + target.Stats.SizeModifier
+            + target.Stats.ConditionAttackPenalty;
+
+        var logLines = new List<string>();
+        string handLabel = usedOffHand ? "Off-Hand" : "Main Hand";
+        string targetLabel = GetSunderTargetDisplayLabel(targetKind, targetItem);
+
+        logLines.Add($"{Stats.CharacterName} attempts to sunder {target.Stats.CharacterName}'s {targetLabel} ({handLabel})");
+        logLines.Add(
+            $"Attacker check: d20 {attackRoll} + BAB {CharacterStats.FormatMod(attackBab)} + STR {CharacterStats.FormatMod(Stats.STRMod)} + size {CharacterStats.FormatMod(Stats.SizeModifier)}"
+            + (Stats.ConditionAttackPenalty != 0 ? $" + condition {CharacterStats.FormatMod(Stats.ConditionAttackPenalty)}" : string.Empty)
+            + (improvedSunderBonus != 0 ? $" + Improved Sunder {CharacterStats.FormatMod(improvedSunderBonus)}" : string.Empty)
+            + (handednessBonus != 0 ? $" + leverage {CharacterStats.FormatMod(handednessBonus)}" : string.Empty)
+            + (attackerDualWieldPenaltyForLog != 0 ? $" [includes dual-wield penalty {CharacterStats.FormatMod(attackerDualWieldPenaltyForLog)} in BAB]" : string.Empty)
+            + $" = {attackTotal}");
+        logLines.Add($"Defender check: d20 {defenseRoll} + BAB {CharacterStats.FormatMod(target.Stats.BaseAttackBonus)} + STR {CharacterStats.FormatMod(target.Stats.STRMod)} + size {CharacterStats.FormatMod(target.Stats.SizeModifier)}"
+            + (target.Stats.ConditionAttackPenalty != 0 ? $" + condition {CharacterStats.FormatMod(target.Stats.ConditionAttackPenalty)}" : string.Empty)
+            + $" = {defenseTotal}");
+
+        if (attackTotal < defenseTotal)
+        {
+            logLines.Add($"Result: FAILURE ({attackTotal} vs {defenseTotal}).");
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Sunder",
+                Success = false,
+                CheckRoll = attackRoll,
+                CheckTotal = attackTotal,
+                OpposedRoll = defenseRoll,
+                OpposedTotal = defenseTotal,
+                DamageDealt = 0,
+                Log = string.Join("\n", logLines)
+            };
+        }
+
+        int damageDiceSides = Mathf.Max(1, attackerWeapon.DamageDice > 0 ? attackerWeapon.DamageDice : Stats.BaseDamageDice);
+        int damageDiceCount = Mathf.Max(1, attackerWeapon.DamageCount > 0 ? attackerWeapon.DamageCount : Stats.BaseDamageCount);
+        int damageRoll = Stats.RollBaseDamage(damageDiceSides, damageDiceCount);
+        int damageAbility = Stats.GetWeaponDamageModifier(attackerWeapon, usedOffHand);
+        int damageBonus = attackerWeapon.BonusDamage;
+        int rawDamage = Mathf.Max(1, damageRoll + damageAbility + damageBonus);
+
+        targetItem.ApplySunderDamage(rawDamage, out int effectiveDamage, out int hpBefore, out int hpAfter);
+
+        logLines.Add($"Damage: {damageDiceCount}d{damageDiceSides} ({damageRoll}) + ability {CharacterStats.FormatMod(damageAbility)} + weapon {CharacterStats.FormatMod(damageBonus)} = {rawDamage}");
+        logLines.Add($"Object durability: hardness {targetItem.Hardness} reduces damage to {effectiveDamage}. HP {hpBefore} -> {hpAfter}/{targetItem.MaxHitPoints}");
+
+        if (targetItem.IsDestroyed)
+        {
+            DestroyEquippedItem(target, resolvedTargetSlot);
+            if (targetKind == SunderTargetKind.MainHand || targetKind == SunderTargetKind.OffHand || targetKind == SunderTargetKind.Shield)
+                target.ApplyCondition(CombatConditionType.Disarmed, 2, Stats.CharacterName);
+
+            logLines.Add($"💥 {target.Stats.CharacterName}'s {targetItem.Name} is destroyed!");
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Sunder",
+                Success = true,
+                CheckRoll = attackRoll,
+                CheckTotal = attackTotal,
+                OpposedRoll = defenseRoll,
+                OpposedTotal = defenseTotal,
+                DamageDealt = effectiveDamage,
+                Log = string.Join("\n", logLines)
+            };
+        }
+
+        if (targetItem.IsBroken)
+            logLines.Add($"⚠ {target.Stats.CharacterName}'s {targetItem.Name} is now BROKEN.");
+        else
+            logLines.Add($"Result: Hit item but it remains intact.");
 
         return new SpecialAttackResult
         {
             ManeuverName = "Sunder",
-            Success = false,
-            CheckRoll = atkRoll,
-            CheckTotal = atkTotal,
-            OpposedRoll = defRoll,
-            OpposedTotal = defTotal,
-            DamageDealt = damage,
-            Log = success
-                ? $"{Stats.CharacterName} hits {target.Stats.CharacterName}'s {targetWeapon.Name} but fails to break it ({damage} dmg)."
-                : $"{Stats.CharacterName} fails to sunder {target.Stats.CharacterName}'s weapon. ({atkTotal} vs {defTotal})"
+            Success = true,
+            CheckRoll = attackRoll,
+            CheckTotal = attackTotal,
+            OpposedRoll = defenseRoll,
+            OpposedTotal = defenseTotal,
+            DamageDealt = effectiveDamage,
+            Log = string.Join("\n", logLines)
         };
+    }
+
+    private static string GetSunderTargetDisplayLabel(SunderTargetKind kind, ItemData item)
+    {
+        string itemName = item != null ? item.Name : "item";
+        switch (kind)
+        {
+            case SunderTargetKind.MainHand: return $"main-hand weapon ({itemName})";
+            case SunderTargetKind.OffHand: return $"off-hand item ({itemName})";
+            case SunderTargetKind.Shield: return $"shield ({itemName})";
+            case SunderTargetKind.Armor: return $"armor ({itemName})";
+            default: return itemName;
+        }
+    }
+
+    private static int GetSunderHandednessModifier(ItemData attackerWeapon, ItemData targetItem)
+    {
+        if (attackerWeapon == null || targetItem == null)
+            return 0;
+
+        bool attackerTwoHanded = IsWeaponTwoHanded(attackerWeapon);
+        bool attackerLight = attackerWeapon.IsLightWeapon || attackerWeapon.WeaponSize == WeaponSizeCategory.Light;
+
+        bool targetTwoHanded = IsWeaponTwoHanded(targetItem);
+        bool targetOneHandedOrLight = targetItem.IsShield || !targetTwoHanded;
+
+        if (attackerTwoHanded && targetOneHandedOrLight)
+            return 4;
+
+        if (attackerLight && targetTwoHanded)
+            return -4;
+
+        return 0;
+    }
+
+    private static bool TryGetSunderTargetItem(CharacterController target, EquipSlot? preferredSlot, out ItemData item, out EquipSlot resolvedSlot, out SunderTargetKind kind)
+    {
+        item = null;
+        resolvedSlot = EquipSlot.None;
+        kind = SunderTargetKind.MainHand;
+
+        if (target == null)
+            return false;
+
+        List<SunderableItemOption> options = target.GetSunderableItemOptions();
+        if (options.Count == 0)
+            return false;
+
+        if (preferredSlot.HasValue)
+        {
+            for (int i = 0; i < options.Count; i++)
+            {
+                if (options[i].Slot == preferredSlot.Value)
+                {
+                    item = options[i].Item;
+                    resolvedSlot = options[i].Slot;
+                    kind = options[i].Kind;
+                    return item != null;
+                }
+            }
+        }
+
+        item = options[0].Item;
+        resolvedSlot = options[0].Slot;
+        kind = options[0].Kind;
+        return item != null;
     }
 
     public BullRushCheckResult RollBullRushAttackerCheck(int bab, int chargeBonus = 0, int? fixedRoll = null)
@@ -6456,6 +6660,31 @@ public class CharacterController : MonoBehaviour
     private static void DestroyEquippedHeldItem(CharacterController target, EquipSlot? handSlot)
     {
         RemoveEquippedHeldItem(target, handSlot);
+    }
+
+    private static void DestroyEquippedItem(CharacterController target, EquipSlot slot)
+    {
+        var invComp = target != null ? target.GetComponent<InventoryComponent>() : null;
+        if (invComp == null || invComp.CharacterInventory == null)
+            return;
+
+        var inv = invComp.CharacterInventory;
+
+        switch (slot)
+        {
+            case EquipSlot.RightHand:
+                inv.RightHandSlot = null;
+                break;
+            case EquipSlot.LeftHand:
+                inv.LeftHandSlot = null;
+                break;
+            case EquipSlot.Armor:
+            case EquipSlot.ArmorRobe:
+                inv.ArmorRobeSlot = null;
+                break;
+        }
+
+        inv.RecalculateStats();
     }
 
     private static ItemData RemoveEquippedHeldItem(CharacterController target, EquipSlot? handSlot)

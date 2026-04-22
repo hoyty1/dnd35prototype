@@ -1393,6 +1393,12 @@ public static class ItemDatabase
             ArmorCat = src.ArmorCat, MaxDexBonus = src.MaxDexBonus,
             ArmorCheckPenalty = src.ArmorCheckPenalty,
             ArcaneSpellFailure = src.ArcaneSpellFailure, WeightLbs = src.WeightLbs,
+            EnhancementBonus = src.EnhancementBonus,
+            Hardness = src.Hardness,
+            MaxHitPoints = src.MaxHitPoints,
+            CurrentHitPoints = src.CurrentHitPoints,
+            IsBroken = src.IsBroken,
+            IsDestroyed = src.IsDestroyed,
             // Other
             ConsumableEffect = src.ConsumableEffect,
             ConsumableSpellName = src.ConsumableSpellName,

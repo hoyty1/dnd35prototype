@@ -189,6 +189,9 @@ public class Inventory
 
     private void SetEquipSlot(EquipSlot slot, ItemData item)
     {
+        if (item != null)
+            item.EnsureDurabilityInitialized();
+
         switch (slot)
         {
             case EquipSlot.Head: HeadSlot = item; break;
