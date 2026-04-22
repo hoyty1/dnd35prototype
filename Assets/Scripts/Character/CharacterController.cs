@@ -850,6 +850,7 @@ public class CharacterController : MonoBehaviour
     private ConditionManager _conditionManager;
     private CharacterCombatStats _combatStats;
     private CharacterEquipment _equipment;
+    private CharacterInventory _inventory;
     private Coroutine _currentScaleAnimation;
     private Coroutine _grappleAlternateVisibilityCoroutine;
     private int _grappleDisplayPauseLocks;
@@ -910,6 +911,22 @@ public class CharacterController : MonoBehaviour
         return _equipment;
     }
 
+    private CharacterInventory EnsureInventory()
+    {
+        if (_inventory == null)
+        {
+            _inventory = GetComponent<CharacterInventory>();
+            if (_inventory == null)
+                _inventory = gameObject.AddComponent<CharacterInventory>();
+
+            _inventory.Initialize(this);
+        }
+
+        return _inventory;
+    }
+
+    public CharacterInventory Inventory => EnsureInventory();
+
     private void Awake()
     {
         _sr = GetComponent<SpriteRenderer>();
@@ -926,6 +943,7 @@ public class CharacterController : MonoBehaviour
 
         EnsureCombatStats();
         EnsureEquipment();
+        EnsureInventory();
     }
 
     private void OnDisable()
@@ -2139,6 +2157,43 @@ public class CharacterController : MonoBehaviour
     public (int mainPenalty, int offPenalty, bool lightOffHand) GetDualWieldPenalties()
     {
         return EnsureEquipment().GetDualWieldPenalties();
+    }
+
+    // ========== INVENTORY WRAPPERS ==========
+
+    public Inventory GetInventoryData()
+    {
+        return EnsureInventory().GetInventory();
+    }
+
+    public bool AddItem(ItemData item)
+    {
+        return EnsureInventory().AddItem(item);
+    }
+
+    public bool RemoveItem(ItemData item)
+    {
+        return EnsureInventory().RemoveItem(item);
+    }
+
+    public List<ItemData> GetAllInventoryItems()
+    {
+        return EnsureInventory().GetAllItems();
+    }
+
+    public int GetGeneralInventoryItemCount()
+    {
+        return EnsureInventory().GetGeneralInventoryItemCount();
+    }
+
+    public float GetTotalCarriedWeightLbs()
+    {
+        return EnsureInventory().GetTotalCarriedWeightLbs();
+    }
+
+    public int GetConsumableInventoryCount()
+    {
+        return EnsureInventory().GetConsumableCount();
     }
 
     public FullAttackResult DualWieldAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
@@ -6214,42 +6269,13 @@ public class CharacterController : MonoBehaviour
 
     private static ItemData GetEquippedHandsItem(CharacterController character)
     {
-        if (character == null)
-            return null;
-
-        InventoryComponent invComp = character.GetComponent<InventoryComponent>();
-        Inventory inv = invComp != null ? invComp.CharacterInventory : null;
-        return inv != null ? inv.HandsSlot : null;
+        return character != null ? character.EnsureInventory().GetEquippedHandsItem() : null;
     }
 
     private static bool TryEquipDisarmedItem(CharacterController receiver, ItemData disarmedItem, out EquipSlot equippedSlot)
     {
         equippedSlot = EquipSlot.None;
-        if (receiver == null || disarmedItem == null)
-            return false;
-
-        InventoryComponent invComp = receiver.GetComponent<InventoryComponent>();
-        Inventory inv = invComp != null ? invComp.CharacterInventory : null;
-        if (inv == null)
-            return false;
-
-        if (inv.RightHandSlot == null && disarmedItem.CanEquipIn(EquipSlot.RightHand))
-        {
-            inv.RightHandSlot = disarmedItem;
-            inv.RecalculateStats();
-            equippedSlot = EquipSlot.RightHand;
-            return true;
-        }
-
-        if (inv.LeftHandSlot == null && disarmedItem.CanEquipIn(EquipSlot.LeftHand))
-        {
-            inv.LeftHandSlot = disarmedItem;
-            inv.RecalculateStats();
-            equippedSlot = EquipSlot.LeftHand;
-            return true;
-        }
-
-        return false;
+        return receiver != null && receiver.EnsureInventory().TryEquipDisarmedItem(disarmedItem, out equippedSlot);
     }
 
     private static void DropItemToGround(CharacterController owner, ItemData item)
@@ -6371,20 +6397,16 @@ public class CharacterController : MonoBehaviour
 
     private static void DestroyEquippedItem(CharacterController target, EquipSlot slot)
     {
-        var invComp = target != null ? target.GetComponent<InventoryComponent>() : null;
-        if (invComp == null || invComp.CharacterInventory == null)
+        if (target == null)
             return;
 
-        var inv = invComp.CharacterInventory;
-        ItemData destroyedItem = inv.GetEquipped(slot);
-
+        bool removed = target.EnsureInventory().DestroyEquippedItem(slot, out ItemData destroyedItem);
         if (destroyedItem == null)
             return;
 
-        bool removed = inv.RemoveItem(destroyedItem);
         if (removed)
         {
-            string ownerName = target != null && target.Stats != null ? target.Stats.CharacterName : "Unknown";
+            string ownerName = target.Stats != null ? target.Stats.CharacterName : "Unknown";
             Debug.Log($"[Sunder] Destroyed item removed from inventory: {destroyedItem.Name} (owner: {ownerName})");
         }
         else
@@ -6395,39 +6417,7 @@ public class CharacterController : MonoBehaviour
 
     private static ItemData RemoveEquippedHeldItem(CharacterController target, EquipSlot? handSlot)
     {
-        var invComp = target != null ? target.GetComponent<InventoryComponent>() : null;
-        if (invComp == null || invComp.CharacterInventory == null)
-            return null;
-
-        var inv = invComp.CharacterInventory;
-        ItemData removedItem = null;
-
-        if (handSlot == EquipSlot.RightHand)
-        {
-            removedItem = inv.RightHandSlot;
-            inv.RightHandSlot = null;
-        }
-        else if (handSlot == EquipSlot.LeftHand)
-        {
-            removedItem = inv.LeftHandSlot;
-            inv.LeftHandSlot = null;
-        }
-        else
-        {
-            if (inv.RightHandSlot != null)
-            {
-                removedItem = inv.RightHandSlot;
-                inv.RightHandSlot = null;
-            }
-            else if (inv.LeftHandSlot != null)
-            {
-                removedItem = inv.LeftHandSlot;
-                inv.LeftHandSlot = null;
-            }
-        }
-
-        inv.RecalculateStats();
-        return removedItem;
+        return target != null ? target.EnsureInventory().RemoveEquippedHeldItem(handSlot) : null;
     }
 
     // ========== 5-FOOT STEP ==========
@@ -6515,8 +6505,7 @@ public class CharacterController : MonoBehaviour
         int bonusDamage = Stats.BonusDamage;
 
         // Check for equipped weapon (quarterstaff is a monk weapon)
-        var inv = GetComponent<InventoryComponent>();
-        ItemData equippedWeapon = inv != null ? inv.CharacterInventory.RightHandSlot : null;
+        ItemData equippedWeapon = EnsureInventory().GetRightHandEquippedWeapon();
         int critThreatMin = 20;
         int critMult = 2;
 
