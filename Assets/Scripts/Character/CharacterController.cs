@@ -13,7 +13,8 @@ public enum SpecialAttackType
     BullRushCharge,
     Overrun,
     Feint,
-    AidAnother
+    AidAnother,
+    TurnUndead
 }
 
 public enum GrappleActionType
@@ -5565,6 +5566,13 @@ public class CharacterController : MonoBehaviour
                 return ResolveBullRush(target, Stats != null ? Stats.BaseAttackBonus : 0, chargeBonus: bullRushChargeBonusOverride == 0 ? 2 : bullRushChargeBonusOverride);
             case SpecialAttackType.Overrun: return ResolveOverrun(target, defenderBlocks: true);
             case SpecialAttackType.Feint: return ResolveFeint(target);
+            case SpecialAttackType.TurnUndead:
+                return new SpecialAttackResult
+                {
+                    ManeuverName = "Turn Undead",
+                    Success = false,
+                    Log = "Turn Undead is resolved by GameManager and does not target a single creature."
+                };
             default:
                 return new SpecialAttackResult
                 {

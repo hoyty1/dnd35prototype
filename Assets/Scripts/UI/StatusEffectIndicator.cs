@@ -256,6 +256,8 @@ public class StatusEffectIndicator : MonoBehaviour
                 return new Color(0.38f, 0.72f, 0.95f, 0.88f);
             case CombatConditionType.Flanked:
                 return new Color(1f, 0.55f, 0.2f, 0.9f);
+            case CombatConditionType.Turned:
+                return new Color(1f, 0.95f, 0.66f, 0.92f);
             case CombatConditionType.Prone:
             case CombatConditionType.Grappled:
             case CombatConditionType.Pinned:

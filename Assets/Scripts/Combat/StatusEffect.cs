@@ -228,6 +228,21 @@ public static class ConditionRules
 
         Add(new ConditionDefinition
         {
+            Type = CombatConditionType.Turned,
+            DisplayName = "Turned",
+            ShortLabel = "TU",
+            Description = "Repelled by divine power. Must flee from the turner and cannot attack or cast spells.",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
             Type = CombatConditionType.Sickened,
             DisplayName = "Sickened",
             ShortLabel = "SI",
@@ -574,6 +589,7 @@ public enum CombatConditionType
     Shaken,
     Frightened,
     Panicked,
+    Turned,
     Sickened,
     Nauseated,
     Dazed,

@@ -135,6 +135,7 @@ public class ConditionManager : MonoBehaviour
             case CombatConditionType.Dying: return "#FF6666";
             case CombatConditionType.Stable: return "#FFB366";
             case CombatConditionType.Unconscious: return "#99AACC";
+            case CombatConditionType.Turned: return "#FFF2A8";
             default: return "#FFFF66";
         }
     }

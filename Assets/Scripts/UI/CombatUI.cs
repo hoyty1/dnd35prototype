@@ -793,6 +793,7 @@ public class CombatUI : MonoBehaviour
         bool fullAttackRelevant = hasIterativeAttacks || hasRapidShot;
         bool isProne = pc.HasCondition(CombatConditionType.Prone);
         bool isPinned = pc.HasCondition(CombatConditionType.Pinned);
+        bool isTurned = pc.HasCondition(CombatConditionType.Turned);
         bool canAttackWithWeapon = pc.CanAttackWithEquippedWeapon(out _);
         ItemData equippedWeapon = pc.GetEquippedMainWeapon();
         bool usingUnarmedStrike = equippedWeapon == null;
@@ -890,7 +891,7 @@ public class CombatUI : MonoBehaviour
 
         if (AttackButton != null)
         {
-            bool canSingleAttack = (hasStandardAttack || canContinueIterativeAttack) && canAttackWithWeapon && !isPinned;
+            bool canSingleAttack = (hasStandardAttack || canContinueIterativeAttack) && canAttackWithWeapon && !isPinned && !isTurned;
 
             AttackButton.gameObject.SetActive(isPinned || hasStandardAttack || canContinueIterativeAttack);
             AttackButton.interactable = canSingleAttack;
@@ -901,6 +902,10 @@ public class CombatUI : MonoBehaviour
                 if (isPinned)
                 {
                     atkLabel.text = "Attack (Pinned: grapple escape only)";
+                }
+                else if (isTurned)
+                {
+                    atkLabel.text = "Attack (Turned: must flee)";
                 }
                 else if (!canAttackWithWeapon)
                 {
@@ -934,7 +939,8 @@ public class CombatUI : MonoBehaviour
             bool canThrowAttack = showThrownButton
                 && gm != null
                 && gm.CanUseThrownAttackOption(pc)
-                && canAttackWithWeapon;
+                && canAttackWithWeapon
+                && !isTurned;
 
             AttackThrownButton.gameObject.SetActive(showThrownButton);
             AttackThrownButton.interactable = canThrowAttack;
@@ -942,7 +948,9 @@ public class CombatUI : MonoBehaviour
             Text thrownLabel = AttackThrownButton.GetComponentInChildren<Text>();
             if (thrownLabel != null)
             {
-                if (!canAttackWithWeapon)
+                if (isTurned)
+                    thrownLabel.text = "Attack (Thrown - Turned)";
+                else if (!canAttackWithWeapon)
                     thrownLabel.text = "Attack (Thrown - Reload first)";
                 else
                     thrownLabel.text = iterativeThrownFullRoundStage ? "Attack (Thrown - Full Round)" : "Attack (Thrown)";
@@ -961,7 +969,7 @@ public class CombatUI : MonoBehaviour
         if (AttackOffHandButton != null)
         {
             bool showOffHandButton = hasOffHandWeapon && !offHandUsed && offHandAvailableThisTurn;
-            bool canOffHandAttack = showOffHandButton && gm != null && gm.CanUseOffHandAttackOption(pc) && !isPinned;
+            bool canOffHandAttack = showOffHandButton && gm != null && gm.CanUseOffHandAttackOption(pc) && !isPinned && !isTurned;
 
             Debug.Log($"[UI] Off-hand available: {offHandAvailableThisTurn}");
             AttackOffHandButton.gameObject.SetActive(showOffHandButton);
@@ -973,6 +981,8 @@ public class CombatUI : MonoBehaviour
             {
                 if (isPinned)
                     offHandLabel.text = "Attack (Off-Hand - Pinned)";
+                else if (isTurned)
+                    offHandLabel.text = "Attack (Off-Hand - Turned)";
                 else if (offHandUsed)
                     offHandLabel.text = "Attack (Off-Hand - Used)";
                 else if (!canOffHandAttack)
@@ -987,7 +997,7 @@ public class CombatUI : MonoBehaviour
         if (AttackOffHandThrownButton != null)
         {
             bool showOffHandThrownButton = hasThrowableOffHandWeapon && !offHandUsed && offHandAvailableThisTurn;
-            bool canOffHandThrownAttack = showOffHandThrownButton && gm != null && gm.CanUseOffHandThrownAttackOption(pc) && !isPinned;
+            bool canOffHandThrownAttack = showOffHandThrownButton && gm != null && gm.CanUseOffHandThrownAttackOption(pc) && !isPinned && !isTurned;
 
             AttackOffHandThrownButton.gameObject.SetActive(showOffHandThrownButton);
             AttackOffHandThrownButton.interactable = canOffHandThrownAttack;
@@ -998,6 +1008,8 @@ public class CombatUI : MonoBehaviour
             {
                 if (isPinned)
                     offHandThrownLabel.text = "Attack (Off-Hand Thrown - Pinned)";
+                else if (isTurned)
+                    offHandThrownLabel.text = "Attack (Off-Hand Thrown - Turned)";
                 else if (offHandUsed)
                     offHandThrownLabel.text = "Attack (Off-Hand Thrown - Used)";
                 else if (!canOffHandThrownAttack)
@@ -1011,13 +1023,14 @@ public class CombatUI : MonoBehaviour
 
         if (AttackDefensivelyButton != null)
         {
-            bool canAttackDefensively = actions.HasStandardAction && canFightDefensively && canAttackWithWeapon && !isPinned;
+            bool canAttackDefensively = actions.HasStandardAction && canFightDefensively && canAttackWithWeapon && !isPinned && !isTurned;
             AttackDefensivelyButton.gameObject.SetActive(true);
             AttackDefensivelyButton.interactable = canAttackDefensively;
             Text atkDefLabel = AttackDefensivelyButton.GetComponentInChildren<Text>();
             if (atkDefLabel != null)
             {
                 if (isPinned) atkDefLabel.text = "Fighting Defensively (Pinned: no)";
+                else if (isTurned) atkDefLabel.text = "Fighting Defensively (Turned: no)";
                 else if (!canFightDefensively) atkDefLabel.text = "Fighting Defensively (Std) [BAB +1]";
                 else if (!actions.HasStandardAction) atkDefLabel.text = "Fighting Defensively (Std) [Used]";
                 else if (!canAttackWithWeapon) atkDefLabel.text = "Fighting Defensively (Std) [Reload first]";
@@ -1031,9 +1044,12 @@ public class CombatUI : MonoBehaviour
                 && pc.Stats != null
                 && pc.Stats.HasFeat("Improved Feint")
                 && (actions.HasMoveAction || actions.CanConvertStandardToMove);
-            bool canSpecialAttack = isPinned
-                ? actions.HasStandardAction
-                : (actions.HasStandardAction || canImprovedFeintMove || hasGrappleAttackAvailable || hasBullRushAttackAvailable || hasTripAttackAvailable || hasDisarmAttackAvailable);
+            bool hasTurnUndeadAvailable = gm != null && gm.CanUseTurnUndead(pc, out _);
+            bool canSpecialAttack = isTurned
+                ? hasTurnUndeadAvailable
+                : (isPinned
+                    ? actions.HasStandardAction
+                    : (actions.HasStandardAction || canImprovedFeintMove || hasGrappleAttackAvailable || hasBullRushAttackAvailable || hasTripAttackAvailable || hasDisarmAttackAvailable || hasTurnUndeadAvailable));
 
             SpecialAttackButton.gameObject.SetActive(true);
             SpecialAttackButton.interactable = canSpecialAttack;
@@ -1042,6 +1058,8 @@ public class CombatUI : MonoBehaviour
             {
                 if (isPinned)
                     spLabel.text = actions.HasStandardAction ? "Grapple Escape Actions (Standard)" : "Grapple Escape Actions (Used)";
+                else if (isTurned)
+                    spLabel.text = hasTurnUndeadAvailable ? "Special Attack (Turn Undead only)" : "Special Attack (Turned: no actions)";
                 else if (actions.HasStandardAction)
                     spLabel.text = canImprovedFeintMove ? "Special Attack (Std / Feint Move)" : "Special Attack (Standard)";
                 else if (hasGrappleAttackAvailable && gm != null)
@@ -1111,7 +1129,7 @@ public class CombatUI : MonoBehaviour
             bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
             bool blockedByProne = isProne;
             bool hasAnyChargeTarget = GameManager.Instance != null && GameManager.Instance.HasAnyValidChargeTarget(pc);
-            bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigued && !blockedByFiveFootStep && !blockedByProne && !isPinned && hasAnyChargeTarget;
+            bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigued && !blockedByFiveFootStep && !blockedByProne && !isPinned && !isTurned && hasAnyChargeTarget;
 
             ChargeButton.gameObject.SetActive(hasMeleeThreat || fatigued || blockedByFiveFootStep || blockedByProne);
             ChargeButton.interactable = canChargeTarget;
@@ -1119,6 +1137,7 @@ public class CombatUI : MonoBehaviour
             if (chargeLabel != null)
             {
                 if (isPinned) chargeLabel.text = "Charge (Pinned: no)";
+                else if (isTurned) chargeLabel.text = "Charge (Turned: no)";
                 else if (!hasMeleeThreat) chargeLabel.text = "Charge (Need melee)";
                 else if (fatigued) chargeLabel.text = "Charge (Fatigued)";
                 else if (blockedByProne) chargeLabel.text = "Charge (Prone)";
@@ -1143,7 +1162,7 @@ public class CombatUI : MonoBehaviour
 
         if (DualWieldButton != null)
         {
-            bool canDW = canDualWield && actions.HasFullRoundAction && !isPinned;
+            bool canDW = canDualWield && actions.HasFullRoundAction && !isPinned && !isTurned;
             bool canDualWieldAttack = true;
             bool offHandIsSpikedGauntlet = false;
             bool offHandIsShieldBash = false;
@@ -1164,6 +1183,7 @@ public class CombatUI : MonoBehaviour
             if (dwLabel != null)
             {
                 if (isPinned) dwLabel.text = "Dual Wield (Pinned: no)";
+                else if (isTurned) dwLabel.text = "Dual Wield (Turned: no)";
                 else if (!canDualWieldAttack) dwLabel.text = "Dual Wield (Reload first)";
                 else if (canDW && offHandIsSpikedGauntlet) dwLabel.text = "Dual Wield (Spiked Gauntlet Off-Hand)";
                 else if (canDW && offHandIsShieldBash) dwLabel.text = "Dual Wield (Shield Bash Off-Hand)";
@@ -1174,7 +1194,7 @@ public class CombatUI : MonoBehaviour
         if (FlurryOfBlowsButton != null)
         {
             bool isMonk = pc.Stats.IsMonk;
-            bool canFlurry = isMonk && actions.HasFullRoundAction && !isPinned;
+            bool canFlurry = isMonk && actions.HasFullRoundAction && !isPinned && !isTurned;
             FlurryOfBlowsButton.gameObject.SetActive(isMonk);
             FlurryOfBlowsButton.interactable = canFlurry;
             Text flurryLabel = FlurryOfBlowsButton.GetComponentInChildren<Text>();
@@ -1183,6 +1203,10 @@ public class CombatUI : MonoBehaviour
                 if (isPinned)
                 {
                     flurryLabel.text = "Flurry of Blows (Pinned: no)";
+                }
+                else if (isTurned)
+                {
+                    flurryLabel.text = "Flurry of Blows (Turned: no)";
                 }
                 else if (canFlurry)
                 {
@@ -1215,7 +1239,7 @@ public class CombatUI : MonoBehaviour
             bool isSpellcaster = pc.Stats.IsSpellcaster;
             var spellComp = pc.GetComponent<SpellcastingComponent>();
             bool hasCastableSpells = isSpellcaster && spellComp != null && spellComp.HasAnyCastablePreparedSpell();
-            bool canCast = actions.HasStandardAction && hasCastableSpells;
+            bool canCast = actions.HasStandardAction && hasCastableSpells && !isTurned;
 
             CastSpellButton.gameObject.SetActive(hasCastableSpells);
             CastSpellButton.interactable = canCast;
@@ -1224,7 +1248,7 @@ public class CombatUI : MonoBehaviour
             {
                 string baseLabel;
                 if (!canCast)
-                    baseLabel = "Cast Spell (N/A)";
+                    baseLabel = isTurned ? "Cast Spell (Turned: no)" : "Cast Spell (N/A)";
                 else if (isPinned)
                     baseLabel = "Cast Spell (Std, pinned: concentration/components apply)";
                 else if (isGrappling)
@@ -1666,6 +1690,7 @@ public class CombatUI : MonoBehaviour
         bool hasTripAttackAvailable = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseTripAttackOption(pc);
         bool hasDisarmAttackAvailable = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseDisarmAttackOption(pc);
         bool hasSunderAttackAvailable = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseSunderAttackOption(pc);
+        bool hasTurnUndeadAvailable = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseTurnUndead(pc, out _);
         bool canImprovedFeintMove = pc != null
             && pc.Stats != null
             && pc.Stats.HasFeat("Improved Feint")
@@ -1673,7 +1698,7 @@ public class CombatUI : MonoBehaviour
 
         GameManager gm = GameManager.Instance;
         string actorName = pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>";
-        Debug.Log($"[CombatUI][SpecialAttackMenu] SHOW actor={actorName} phase={(gm != null ? gm.CurrentPhase.ToString() : "<no-gm>")} subPhase={(gm != null ? gm.CurrentSubPhase.ToString() : "<no-gm>")} std={hasStandardAction} full={hasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} disarmAvailable={hasDisarmAttackAvailable} sunderAvailable={hasSunderAttackAvailable} improvedFeintMove={canImprovedFeintMove}");
+        Debug.Log($"[CombatUI][SpecialAttackMenu] SHOW actor={actorName} phase={(gm != null ? gm.CurrentPhase.ToString() : "<no-gm>")} subPhase={(gm != null ? gm.CurrentSubPhase.ToString() : "<no-gm>")} std={hasStandardAction} full={hasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} disarmAvailable={hasDisarmAttackAvailable} sunderAvailable={hasSunderAttackAvailable} turnUndeadAvailable={hasTurnUndeadAvailable} improvedFeintMove={canImprovedFeintMove}");
 
         _specialAttackPanel.SetActive(true);
 
@@ -1711,7 +1736,7 @@ public class CombatUI : MonoBehaviour
                 btn.gameObject.SetActive(true);
             }
 
-            bool enabled = IsSpecialAttackButtonEnabled(btn.name, pc, hasStandardAction, hasFullRoundAction, hasGrappleAttackAvailable, hasBullRushAttackAvailable, hasTripAttackAvailable, hasDisarmAttackAvailable, hasSunderAttackAvailable, canImprovedFeintMove);
+            bool enabled = IsSpecialAttackButtonEnabled(btn.name, pc, hasStandardAction, hasFullRoundAction, hasGrappleAttackAvailable, hasBullRushAttackAvailable, hasTripAttackAvailable, hasDisarmAttackAvailable, hasSunderAttackAvailable, hasTurnUndeadAvailable, canImprovedFeintMove);
             btn.interactable = enabled;
             UpdateSpecialAttackButtonLabel(btn, pc, enabled);
             Debug.Log($"[CombatUI][SpecialAttackMenu] button={btn.name} active={btn.gameObject.activeSelf} interactable={btn.interactable}");
@@ -1720,10 +1745,13 @@ public class CombatUI : MonoBehaviour
         WireSpecialAttackMenu(onSelect, onCancel);
     }
 
-    private bool IsSpecialAttackButtonEnabled(string buttonName, CharacterController pc, bool hasStandardAction, bool hasFullRoundAction, bool hasGrappleAttackAvailable, bool hasBullRushAttackAvailable, bool hasTripAttackAvailable, bool hasDisarmAttackAvailable, bool hasSunderAttackAvailable, bool canImprovedFeintMove)
+    private bool IsSpecialAttackButtonEnabled(string buttonName, CharacterController pc, bool hasStandardAction, bool hasFullRoundAction, bool hasGrappleAttackAvailable, bool hasBullRushAttackAvailable, bool hasTripAttackAvailable, bool hasDisarmAttackAvailable, bool hasSunderAttackAvailable, bool hasTurnUndeadAvailable, bool canImprovedFeintMove)
     {
         if (buttonName == "Cancel")
             return true;
+
+        if (pc != null && pc.HasCondition(CombatConditionType.Turned) && buttonName != "Turn Undead")
+            return false;
 
         bool enabled;
         switch (buttonName)
@@ -1754,6 +1782,9 @@ public class CombatUI : MonoBehaviour
                 break;
             case "Aid Another":
                 enabled = GameManager.Instance != null && GameManager.Instance.CanUseAidAnother(pc, out _);
+                break;
+            case "Turn Undead":
+                enabled = hasTurnUndeadAvailable;
                 break;
             case "Overrun":
                 enabled = GameManager.Instance != null && GameManager.Instance.CanUseOverrun(pc, out _);
@@ -1895,6 +1926,20 @@ public class CombatUI : MonoBehaviour
                 string aidReason = "Unavailable";
                 bool canAidAnother = pc != null && GameManager.Instance != null && GameManager.Instance.CanUseAidAnother(pc, out aidReason);
                 label.text = canAidAnother ? "Aid Another (Standard)" : $"Aid Another ({aidReason})";
+                break;
+
+            case "Turn Undead":
+                if (pc == null || pc.Stats == null || GameManager.Instance == null)
+                {
+                    label.text = "Turn Undead (Unavailable)";
+                    break;
+                }
+
+                int remainingTurns = GameManager.Instance.GetRemainingTurnUndeadAttempts(pc);
+                int maxTurns = pc.Stats.MaxTurnUndeadAttemptsPerDay;
+                label.text = isEnabled
+                    ? $"Turn Undead ({remainingTurns}/{maxTurns} left)"
+                    : $"Turn Undead ({remainingTurns}/{maxTurns})";
                 break;
 
             case "Overrun":
@@ -2378,6 +2423,7 @@ public class CombatUI : MonoBehaviour
         CreateSpecialButton("Overrun", "Overrun");
         CreateSpecialButton("Feint", "Feint");
         CreateSpecialButton("Aid Another", "Aid Another");
+        CreateSpecialButton("Turn Undead", "Turn Undead");
         CreateSpecialCancelButton();
 
         _specialAttackPanel.SetActive(false);
@@ -2405,6 +2451,7 @@ public class CombatUI : MonoBehaviour
                 case "Overrun": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Overrun"); onSelect?.Invoke(SpecialAttackType.Overrun, false); }); break;
                 case "Feint": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Feint"); onSelect?.Invoke(SpecialAttackType.Feint, false); }); break;
                 case "Aid Another": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Aid Another"); onSelect?.Invoke(SpecialAttackType.AidAnother, false); }); break;
+                case "Turn Undead": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Turn Undead"); onSelect?.Invoke(SpecialAttackType.TurnUndead, false); }); break;
                 case "Cancel":
                     btn.onClick.AddListener(() =>
                     {

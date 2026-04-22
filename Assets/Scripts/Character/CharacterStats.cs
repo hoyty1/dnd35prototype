@@ -222,6 +222,14 @@ public class CharacterStats
     /// <summary>Maximum rages per day. Level 1-3: 1/day.</summary>
     public int MaxRagesPerDay => IsBarbarian ? 1 : 0;
 
+    /// <summary>Turn Undead attempts consumed today.</summary>
+    public int TurnUndeadAttemptsUsedToday;
+
+    /// <summary>
+    /// D&D 3.5e Turn Undead attempts per day (Cleric baseline): 3 + CHA modifier (minimum 1).
+    /// </summary>
+    public int MaxTurnUndeadAttemptsPerDay => IsCleric ? Mathf.Max(1, 3 + CHAMod) : 0;
+
     /// <summary>Whether the barbarian is fatigued (after rage ends).</summary>
     public bool IsFatigued;
 

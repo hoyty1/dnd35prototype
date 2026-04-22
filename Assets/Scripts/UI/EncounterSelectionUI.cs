@@ -20,7 +20,7 @@ public class EncounterSelectionUI : MonoBehaviour
         if (_panel == null) return;
 
         _panel.SetActive(true);
-        _descriptionText.text = "Choose an encounter preset, or launch a dedicated mechanics test (Grapple / Feint).";
+        _descriptionText.text = "Choose an encounter preset, or launch a dedicated mechanics test (Grapple / Feint / Turn Undead).";
 
         if (_buttonContainer != null)
         {
@@ -43,12 +43,19 @@ public class EncounterSelectionUI : MonoBehaviour
                 onSelect?.Invoke("feint_sneak_test");
             });
 
+            // Dedicated quick launcher for Turn Undead mechanics validation.
+            CreateActionButton("✝️ Turn Undead Test", new Color(0.46f, 0.36f, 0.14f, 0.98f), () =>
+            {
+                Close();
+                onSelect?.Invoke("turn_undead_test");
+            });
+
             if (presets != null)
             {
                 foreach (var preset in presets)
                 {
                     // Avoid duplicate cards when test encounters are already exposed as quick-launch actions.
-                    if (preset != null && (preset.Id == "grapple_test" || preset.Id == "feint_sneak_test"))
+                    if (preset != null && (preset.Id == "grapple_test" || preset.Id == "feint_sneak_test" || preset.Id == "turn_undead_test"))
                         continue;
 
                     CreatePresetButton(preset, onSelect);
@@ -61,7 +68,7 @@ public class EncounterSelectionUI : MonoBehaviour
                 {
                     for (int i = 0; i < presets.Count; i++)
                     {
-                        if (presets[i] != null && presets[i].Id != "grapple_test" && presets[i].Id != "feint_sneak_test")
+                        if (presets[i] != null && presets[i].Id != "grapple_test" && presets[i].Id != "feint_sneak_test" && presets[i].Id != "turn_undead_test")
                         {
                             fallbackId = presets[i].Id;
                             break;

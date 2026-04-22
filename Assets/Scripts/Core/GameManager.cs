@@ -63,9 +63,11 @@ public class GameManager : MonoBehaviour
 
     private const string GrappleTestPresetId = "grapple_test";
     private const string FeintSneakTestPresetId = "feint_sneak_test";
+    private const string TurnUndeadTestPresetId = "turn_undead_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
     private bool _isFeintSneakTestEncounter;
+    private bool _isTurnUndeadTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
     // Game state
     public enum TurnPhase { PCTurn, NPCTurn, CombatOver }
@@ -1204,6 +1206,7 @@ public class GameManager : MonoBehaviour
         _activeEncounterEnemyIds.Clear();
         _isGrappleTestEncounter = string.Equals(presetId, GrappleTestPresetId, StringComparison.Ordinal);
         _isFeintSneakTestEncounter = string.Equals(presetId, FeintSneakTestPresetId, StringComparison.Ordinal);
+        _isTurnUndeadTestEncounter = string.Equals(presetId, TurnUndeadTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.EnemyIds != null && preset.EnemyIds.Count > 0)
         {
@@ -1222,6 +1225,8 @@ public class GameManager : MonoBehaviour
             ConfigureGrappleTestParty();
         else if (_isFeintSneakTestEncounter)
             ConfigureFeintSneakTestParty();
+        else if (_isTurnUndeadTestEncounter)
+            ConfigureTurnUndeadTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -1922,6 +1927,56 @@ public class GameManager : MonoBehaviour
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
         CombatUI?.ShowCombatLog("🗡️ Feint Test: Shadow (Rogue 6) starts adjacent to a goblin. Use Special Attack -> Feint, then attack for sneak damage.");
+    }
+
+    private void ConfigureTurnUndeadTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats clericStats = new CharacterStats(
+            name: "Brother Caldus",
+            level: 6,
+            characterClass: "Cleric",
+            str: 12, dex: 10, con: 14, wis: 16, intelligence: 10, cha: 16,
+            bab: 4,
+            armorBonus: 4,
+            shieldBonus: 2,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 1,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 42,
+            raceName: "Human"
+        );
+
+        clericStats.CharacterAlignment = Alignment.LawfulGood;
+
+        Vector2Int clericStart = new Vector2Int(9, 9);
+        Sprite clericAlive = IconLoader.GetToken("Cleric") ?? pcAliveFallback;
+        PC1.Init(clericStats, clericStart, clericAlive, pcDead);
+
+        InventoryComponent clericInventory = PC1.gameObject.GetComponent<InventoryComponent>();
+        if (clericInventory == null)
+            clericInventory = PC1.gameObject.AddComponent<InventoryComponent>();
+        clericInventory.Init(clericStats);
+
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        clericInventory.CharacterInventory.RecalculateStats();
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("✝️ Turn Undead Test: Brother Caldus (Cleric 6) faces undead. Use Special Attack -> Turn Undead.");
     }
 
     private void RestoreStandardPartyLayout()
@@ -5190,6 +5245,12 @@ public class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "attacks"))
             return;
 
+        if (IsActionBlockedByTurnedCondition(pc, "attacks"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
         if (!CanAttack(pc))
         {
             Debug.Log($"[Attack][Melee] Attack denied actor={pc.Stats.CharacterName} hasStandard={pc.Actions.HasStandardAction} inSequence={_isInAttackSequence}");
@@ -5242,6 +5303,12 @@ public class GameManager : MonoBehaviour
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "thrown attacks"))
             return;
+
+        if (IsActionBlockedByTurnedCondition(pc, "thrown attacks"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
         if (!CanThrowWeapon(pc))
         {
@@ -5494,6 +5561,12 @@ public class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "off-hand attacks"))
             return;
 
+        if (IsActionBlockedByTurnedCondition(pc, "off-hand attacks"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
         if (!CanUseOffHandAttackOption(pc))
         {
             Debug.Log($"[Attack][OffHand] Attack denied actor={pc.Stats.CharacterName} hasStandard={pc.Actions.HasStandardAction} hasMove={pc.Actions.HasMoveAction} inSequence={_isInAttackSequence} offHandUsed={_offHandAttackUsedThisTurn}");
@@ -5558,6 +5631,12 @@ public class GameManager : MonoBehaviour
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "off-hand thrown attacks"))
             return;
+
+        if (IsActionBlockedByTurnedCondition(pc, "off-hand thrown attacks"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
         if (!CanUseOffHandThrownAttackOption(pc))
         {
@@ -5761,6 +5840,9 @@ public class GameManager : MonoBehaviour
         if (actor == null)
             return false;
 
+        if (actor.HasCondition(CombatConditionType.Turned))
+            return false;
+
         if (_isInAttackSequence && _attackingCharacter == actor)
             return HasMoreAttacksAvailable();
 
@@ -5778,6 +5860,9 @@ public class GameManager : MonoBehaviour
     private bool CanThrowWeapon(CharacterController actor)
     {
         if (actor == null)
+            return false;
+
+        if (actor.HasCondition(CombatConditionType.Turned))
             return false;
 
         ItemData weapon = actor.GetEquippedWeapon();
@@ -5802,6 +5887,16 @@ public class GameManager : MonoBehaviour
             return false;
 
         return CanThrowWeapon(actor);
+    }
+
+    private bool IsActionBlockedByTurnedCondition(CharacterController actor, string attemptedAction)
+    {
+        if (actor == null || !actor.HasCondition(CombatConditionType.Turned))
+            return false;
+
+        string actionLabel = string.IsNullOrWhiteSpace(attemptedAction) ? "that action" : attemptedAction;
+        CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} is Turned and cannot perform {actionLabel}. They must flee from the source of divine turning.");
+        return true;
     }
 
     public bool HasThrowableMeleeWeaponEquipped(CharacterController actor)
@@ -6632,6 +6727,10 @@ public class GameManager : MonoBehaviour
         if (actor == null)
             return false;
 
+        bool hasTurnUndeadAvailable = CanUseTurnUndead(actor, out _);
+        if (actor.HasCondition(CombatConditionType.Turned))
+            return hasTurnUndeadAvailable;
+
         bool hasGrappleAttackAvailable = CanUseGrappleAttackOption(actor);
         bool hasBullRushAttackAvailable = CanUseBullRushAttackOption(actor);
         bool hasTripAttackAvailable = CanUseTripAttackOption(actor);
@@ -6644,7 +6743,225 @@ public class GameManager : MonoBehaviour
             || hasBullRushAttackAvailable
             || hasTripAttackAvailable
             || hasDisarmAttackAvailable
-            || hasSunderAttackAvailable;
+            || hasSunderAttackAvailable
+            || hasTurnUndeadAvailable;
+    }
+
+    public int GetRemainingTurnUndeadAttempts(CharacterController actor)
+    {
+        if (actor == null || actor.Stats == null)
+            return 0;
+
+        return Mathf.Max(0, actor.Stats.MaxTurnUndeadAttemptsPerDay - actor.Stats.TurnUndeadAttemptsUsedToday);
+    }
+
+    public bool CanUseTurnUndead(CharacterController actor, out string reason)
+    {
+        reason = "Unavailable";
+        if (actor == null || actor.Stats == null)
+        {
+            reason = "No active character";
+            return false;
+        }
+
+        if (!actor.Stats.IsCleric)
+        {
+            reason = "Cleric only";
+            return false;
+        }
+
+        if (actor.Actions == null || !actor.Actions.HasStandardAction)
+        {
+            reason = "Standard action used";
+            return false;
+        }
+
+        if (GetRemainingTurnUndeadAttempts(actor) <= 0)
+        {
+            reason = "No attempts left";
+            return false;
+        }
+
+        reason = "Ready";
+        return true;
+    }
+
+    private static bool IsUndeadCharacter(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return false;
+
+        if (string.Equals(character.Stats.CreatureType, "Undead", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (character.Stats.CreatureTags != null)
+        {
+            for (int i = 0; i < character.Stats.CreatureTags.Count; i++)
+            {
+                if (string.Equals(character.Stats.CreatureTags[i], "Undead", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private List<CharacterController> GetTurnableUndeadInRange(CharacterController turner, int maxRangeSquares = 12)
+    {
+        var result = new List<CharacterController>();
+        if (turner == null || turner.Stats == null)
+            return result;
+
+        foreach (CharacterController candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate == turner || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!IsEnemyTeam(turner, candidate) || !IsUndeadCharacter(candidate))
+                continue;
+
+            int distance = turner.GetMinimumDistanceToTarget(candidate, chebyshev: true);
+            if (distance <= maxRangeSquares)
+                result.Add(candidate);
+        }
+
+        result.Sort((a, b) =>
+        {
+            int distA = turner.GetMinimumDistanceToTarget(a, chebyshev: true);
+            int distB = turner.GetMinimumDistanceToTarget(b, chebyshev: true);
+            int byDist = distA.CompareTo(distB);
+            if (byDist != 0) return byDist;
+
+            int hdA = a != null && a.Stats != null ? a.Stats.Level : int.MaxValue;
+            int hdB = b != null && b.Stats != null ? b.Stats.Level : int.MaxValue;
+            int byHd = hdA.CompareTo(hdB);
+            if (byHd != 0) return byHd;
+
+            string nameA = a != null && a.Stats != null ? a.Stats.CharacterName : string.Empty;
+            string nameB = b != null && b.Stats != null ? b.Stats.CharacterName : string.Empty;
+            return string.Compare(nameA, nameB, StringComparison.Ordinal);
+        });
+
+        return result;
+    }
+
+    private static int ComputeTurnUndeadMaxHitDice(int turningCheckTotal, int clericLevel)
+    {
+        int level = Mathf.Max(1, clericLevel);
+
+        if (turningCheckTotal <= 0) return Mathf.Max(0, level - 4);
+        if (turningCheckTotal <= 3) return Mathf.Max(0, level - 3);
+        if (turningCheckTotal <= 6) return Mathf.Max(0, level - 2);
+        if (turningCheckTotal <= 9) return Mathf.Max(0, level - 1);
+        if (turningCheckTotal <= 12) return level;
+        if (turningCheckTotal <= 15) return level + 1;
+        if (turningCheckTotal <= 18) return level + 2;
+        if (turningCheckTotal <= 21) return level + 3;
+        return level + 4;
+    }
+
+    private void ExecuteTurnUndead(CharacterController cleric)
+    {
+        if (cleric == null || cleric.Stats == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!CanUseTurnUndead(cleric, out string reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Turn Undead: {reason}.");
+            ShowActionChoices();
+            return;
+        }
+
+        if (!cleric.CommitStandardAction())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {cleric.Stats.CharacterName} cannot use Turn Undead: standard action unavailable.");
+            ShowActionChoices();
+            return;
+        }
+
+        cleric.Stats.TurnUndeadAttemptsUsedToday++;
+        int attemptsRemaining = GetRemainingTurnUndeadAttempts(cleric);
+
+        int checkRoll = UnityEngine.Random.Range(1, 21);
+        int checkTotal = checkRoll + cleric.Stats.CHAMod;
+        int maxAffectedHd = ComputeTurnUndeadMaxHitDice(checkTotal, cleric.Stats.Level);
+
+        int turnDamageRoll = UnityEngine.Random.Range(1, 7) + UnityEngine.Random.Range(1, 7);
+        int turnPoolHd = Mathf.Max(0, turnDamageRoll + cleric.Stats.Level + cleric.Stats.CHAMod);
+
+        List<CharacterController> candidates = GetTurnableUndeadInRange(cleric, maxRangeSquares: 12);
+
+        int hdRemaining = turnPoolHd;
+        int turnedCount = 0;
+        int destroyedCount = 0;
+
+        CombatUI?.ShowCombatLog($"✝️ {cleric.Stats.CharacterName} invokes Turn Undead! (Attempt {cleric.Stats.TurnUndeadAttemptsUsedToday}/{cleric.Stats.MaxTurnUndeadAttemptsPerDay})");
+        CombatUI?.ShowCombatLog($"   Turning Check: d20 ({checkRoll}) + CHA {CharacterStats.FormatMod(cleric.Stats.CHAMod)} = {checkTotal} → affects undead up to {maxAffectedHd} HD");
+        CombatUI?.ShowCombatLog($"   Turning Damage: 2d6 ({turnDamageRoll}) + level {cleric.Stats.Level} + CHA {CharacterStats.FormatMod(cleric.Stats.CHAMod)} = {turnPoolHd} total HD");
+
+        if (candidates.Count == 0)
+        {
+            CombatUI?.ShowCombatLog("   No undead are within 60 ft to be affected.");
+            CombatUI?.ShowCombatLog($"   Remaining Turn Undead attempts today: {attemptsRemaining}");
+            UpdateAllStatsUI();
+            StartCoroutine(AfterAttackDelay(cleric, 0.8f));
+            return;
+        }
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            CharacterController undead = candidates[i];
+            if (undead == null || undead.Stats == null || undead.Stats.IsDead)
+                continue;
+
+            int undeadHd = Mathf.Max(1, undead.Stats.Level);
+            if (undeadHd > maxAffectedHd)
+            {
+                CombatUI?.ShowCombatLog($"   {undead.Stats.CharacterName} ({undeadHd} HD) is too powerful to be turned.");
+                continue;
+            }
+
+            if (hdRemaining < undeadHd)
+                break;
+
+            hdRemaining -= undeadHd;
+            bool destroyed = cleric.Stats.Level >= undeadHd * 2;
+
+            if (destroyed)
+            {
+                int lethalDamage = Mathf.Max(1, undead.Stats.CurrentHP + 10);
+                undead.Stats.TakeDamage(lethalDamage);
+                HandleSummonDeathCleanup(undead);
+                destroyedCount++;
+                CombatUI?.ShowCombatLog($"   💥 {undead.Stats.CharacterName} is destroyed by holy power! ({undeadHd} HD)");
+            }
+            else
+            {
+                undead.ApplyCondition(CombatConditionType.Turned, 10, cleric.Stats.CharacterName);
+                turnedCount++;
+                CombatUI?.ShowCombatLog($"   ↩ {undead.Stats.CharacterName} is turned for 10 rounds and flees! ({undeadHd} HD)");
+            }
+        }
+
+        if (turnedCount == 0 && destroyedCount == 0)
+            CombatUI?.ShowCombatLog("   The divine surge fails to overcome any undead this turn.");
+
+        CombatUI?.ShowCombatLog($"   Results: {destroyedCount} destroyed, {turnedCount} turned, {hdRemaining} HD turning power unspent.");
+        CombatUI?.ShowCombatLog($"   Remaining Turn Undead attempts today: {attemptsRemaining}");
+
+        UpdateAllStatsUI();
+
+        if (AreAllNPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
+            CombatUI?.SetActionButtonsVisible(false);
+            return;
+        }
+
+        StartCoroutine(AfterAttackDelay(cleric, 0.9f));
     }
 
     private bool TryConsumeFeintAction(CharacterController attacker, out string actionLabel)
@@ -6853,6 +7170,12 @@ public class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "overrun"))
             return;
 
+        if (IsActionBlockedByTurnedCondition(pc, "overrun"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
         OnSpecialAttackSelected(SpecialAttackType.Overrun, false);
     }
 
@@ -6860,6 +7183,13 @@ public class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         if (pc == null) { ShowActionChoices(); return; }
+
+        if (pc.HasCondition(CombatConditionType.Turned) && type != SpecialAttackType.TurnUndead)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} is Turned and cannot perform offensive special attacks.");
+            ShowActionChoices();
+            return;
+        }
 
         if (type == SpecialAttackType.AidAnother)
         {
@@ -6888,6 +7218,13 @@ public class GameManager : MonoBehaviour
             }
 
             StartOverrunDestinationSelection(pc);
+            return;
+        }
+
+        if (type == SpecialAttackType.TurnUndead)
+        {
+            CombatUI.HideSpecialAttackMenu();
+            ExecuteTurnUndead(pc);
             return;
         }
 
@@ -6989,6 +7326,12 @@ public class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "charging"))
             return;
 
+        if (IsActionBlockedByTurnedCondition(pc, "charge"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
         _pendingChargeBullRush = false;
         EnterChargeMode(pc);
     }
@@ -7000,6 +7343,12 @@ public class GameManager : MonoBehaviour
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "full attacks"))
             return;
+
+        if (IsActionBlockedByTurnedCondition(pc, "full attacks"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
         if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
@@ -7025,6 +7374,12 @@ public class GameManager : MonoBehaviour
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "fighting defensively"))
             return;
+
+        if (IsActionBlockedByTurnedCondition(pc, "fighting defensively"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
         if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
@@ -7060,6 +7415,12 @@ public class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "full attacks"))
             return;
 
+        if (IsActionBlockedByTurnedCondition(pc, "full attacks"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
         if (!pc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot full attack: {cannotAttackReason}");
@@ -7093,6 +7454,12 @@ public class GameManager : MonoBehaviour
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "dual-wield attacks"))
             return;
+
+        if (IsActionBlockedByTurnedCondition(pc, "dual-wield attacks"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
         if (pc.HasCondition(CombatConditionType.Grappled))
         {
@@ -7189,6 +7556,12 @@ public class GameManager : MonoBehaviour
         if (RedirectPinnedCharacterToGrappleMenu(pc, "flurry of blows"))
             return;
 
+        if (IsActionBlockedByTurnedCondition(pc, "flurry of blows"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
         EndAttackSequence();
         _pendingAttackMode = PendingAttackMode.FlurryOfBlows;
         CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
@@ -7232,6 +7605,11 @@ public class GameManager : MonoBehaviour
         CharacterController pc = ActivePC;
         if (pc == null || !pc.Stats.IsSpellcaster || !pc.Actions.HasStandardAction) return;
 
+        if (IsActionBlockedByTurnedCondition(pc, "spellcasting"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
         var spellComp = pc.GetComponent<SpellcastingComponent>();
         if (spellComp == null) return;
@@ -15822,6 +16200,12 @@ public class GameManager : MonoBehaviour
         CharacterController targetPC = GetClosestAlivePCTo(npc);
         if (targetPC == null) yield break;
 
+        if (npc.HasCondition(CombatConditionType.Turned) && IsUndeadCharacter(npc))
+        {
+            yield return StartCoroutine(AI_TurnedUndead(npc));
+            yield break;
+        }
+
         if (npc.IsGrappling())
         {
             yield return StartCoroutine(AI_GrappleRestrictedTurn(npc));
@@ -15849,6 +16233,56 @@ public class GameManager : MonoBehaviour
                 yield return StartCoroutine(AI_AggressiveMelee(npc, targetPC));
                 break;
         }
+    }
+
+    private IEnumerator AI_TurnedUndead(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null)
+            yield break;
+
+        CharacterController source = null;
+        List<StatusEffect> activeConditions = npc.GetActiveConditions();
+        for (int i = 0; i < activeConditions.Count; i++)
+        {
+            StatusEffect condition = activeConditions[i];
+            if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Turned)
+                continue;
+
+            if (string.IsNullOrWhiteSpace(condition.SourceName))
+                break;
+
+            foreach (CharacterController candidate in GetAllCharacters())
+            {
+                if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                    continue;
+
+                if (string.Equals(candidate.Stats.CharacterName, condition.SourceName, StringComparison.Ordinal))
+                {
+                    source = candidate;
+                    break;
+                }
+            }
+            break;
+        }
+
+        if (source == null)
+            source = GetClosestAliveEnemyTo(npc);
+
+        if (source != null && npc.Actions.HasMoveAction && !npc.Stats.MovementBlockedByCondition)
+        {
+            SquareCell retreatCell = FindBestMoveAwayFrom(npc, source.GridPosition);
+            if (retreatCell != null && retreatCell.Coords != npc.GridPosition)
+            {
+                yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, retreatCell.Coords, PlayerMoveSecondsPerStep));
+                npc.Actions.UseMoveAction();
+                CombatUI?.ShowCombatLog($"↩ {npc.Stats.CharacterName} flees from divine turning!");
+                yield return new WaitForSeconds(0.45f);
+                yield break;
+            }
+        }
+
+        CombatUI?.ShowCombatLog($"↩ {npc.Stats.CharacterName} is turned and cowers, unable to attack.");
+        yield return new WaitForSeconds(0.35f);
     }
 
     private IEnumerator AI_GrappleRestrictedTurn(CharacterController npc)
