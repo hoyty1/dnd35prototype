@@ -5853,7 +5853,7 @@ public class CharacterController : MonoBehaviour
         if (target.Stats != null && !string.IsNullOrEmpty(target.Stats.CreatureType))
             targetIsHumanoid = target.Stats.CreatureType.Trim().ToLowerInvariant().Contains("humanoid");
 
-        bool useBabWisDefense = !targetIsHumanoid || target.Stats.INT <= 2;
+        bool useBabWisDefense = !targetIsHumanoid;
         int opposedBonus = useBabWisDefense
             ? (target.Stats.BaseAttackBonus + target.Stats.WISMod)
             : target.Stats.GetSkillBonus("Sense Motive");
@@ -5863,7 +5863,7 @@ public class CharacterController : MonoBehaviour
         bool success = bluffTotal >= opposedTotal;
 
         string opposedLabel = useBabWisDefense
-            ? "BAB + WIS (non-humanoid or animal-level INT)"
+            ? "BAB + WIS (non-humanoid)"
             : "Sense Motive";
 
         if (success)
