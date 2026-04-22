@@ -100,22 +100,23 @@ public partial class GameManager : MonoBehaviour
     public TurnPhase CurrentPhase { get; private set; }
     public PlayerSubPhase CurrentSubPhase { get; private set; }
 
-    // ========== INITIATIVE SYSTEM ==========
-    /// <summary>Sorted initiative order for all combatants.</summary>
-    private List<InitiativeSystem.InitiativeEntry> _initiativeOrder = new List<InitiativeSystem.InitiativeEntry>();
-    /// <summary>Current index in initiative order (whose turn it is).</summary>
-    private int _currentInitiativeIndex;
+    // ========== INITIATIVE / TURN SERVICE ==========
+    [SerializeField] private TurnService _turnService;
 
-    /// <summary>The character currently taking their turn (PC or NPC).</summary>
-    private CharacterController _activeTurnCharacter;
+    /// <summary>Current combatant in initiative order (PC or NPC).</summary>
+    public CharacterController CurrentCharacter => _turnService != null ? _turnService.CurrentCharacter : null;
+
+    /// <summary>Current combat round number (starts at 1 once combat begins).</summary>
+    public int CurrentRound => _turnService != null ? _turnService.CurrentRound : 0;
 
     /// <summary>Returns the PC whose turn it currently is (null during NPC turns).</summary>
     public CharacterController ActivePC
     {
         get
         {
-            if (CurrentPhase == TurnPhase.PCTurn && _activeTurnCharacter != null && IsPC(_activeTurnCharacter))
-                return _activeTurnCharacter;
+            CharacterController current = CurrentCharacter;
+            if (CurrentPhase == TurnPhase.PCTurn && current != null && IsPC(current))
+                return current;
             return null;
         }
     }
@@ -248,9 +249,6 @@ public partial class GameManager : MonoBehaviour
     // ========== HOVER MARKER ==========
     private HoverMarker _hoverMarker;
     private Vector2Int _lastHoverMarkerCoord = new Vector2Int(-999, -999);
-
-    /// <summary>Current combat round number (starts at 1).</summary>
-    private int _currentRound = 0;
 
     // ========== SUMMONING STATE ==========
     private readonly HashSet<CharacterController> _summonedAllies = new HashSet<CharacterController>();
@@ -483,6 +481,11 @@ public partial class GameManager : MonoBehaviour
         }
         Instance = this;
 
+        _turnService ??= gameObject.GetComponent<TurnService>() ?? gameObject.AddComponent<TurnService>();
+        _turnService.OnTurnStarted += OnTurnStarted;
+        _turnService.OnNewRound += OnNewRound;
+        _turnService.OnCombatEnded += OnCombatEnded;
+
         turnUndeadSystem ??= gameObject.GetComponent<TurnUndeadSystem>() ?? gameObject.AddComponent<TurnUndeadSystem>();
         grappleSystem ??= gameObject.GetComponent<GrappleSystem>() ?? gameObject.AddComponent<GrappleSystem>();
         overrunSystem ??= gameObject.GetComponent<OverrunSystem>() ?? gameObject.AddComponent<OverrunSystem>();
@@ -498,6 +501,13 @@ public partial class GameManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (_turnService != null)
+        {
+            _turnService.OnTurnStarted -= OnTurnStarted;
+            _turnService.OnNewRound -= OnNewRound;
+            _turnService.OnCombatEnded -= OnCombatEnded;
+        }
+
         turnUndeadSystem?.Cleanup();
         grappleSystem?.Cleanup();
         overrunSystem?.Cleanup();
@@ -2182,71 +2192,60 @@ public partial class GameManager : MonoBehaviour
                 activeNPCs.Add(npc);
         }
 
-        _initiativeOrder = InitiativeSystem.RollInitiative(activePCs, activeNPCs);
-        _currentInitiativeIndex = 0;
+        _turnService?.StartCombat(activePCs, activeNPCs, IsPC);
 
-        // Log initiative order
-        string orderStr = InitiativeSystem.GetInitiativeOrderString(_initiativeOrder);
+        string orderStr = _turnService != null ? _turnService.GetInitiativeOrderString() : "No combatants";
         Debug.Log($"[Initiative] Combat begins! Initiative order:\n{orderStr}");
 
-        // Update initiative display in UI
         UpdateInitiativeUI();
-
-        // Start the first turn
-        AdvanceToNextTurn();
     }
 
     /// <summary>Update the initiative panel in the UI.</summary>
     private void UpdateInitiativeUI()
     {
-        if (CombatUI == null) return;
-        string display = InitiativeSystem.GetInitiativeDisplayString(_initiativeOrder, _currentInitiativeIndex);
+        if (CombatUI == null)
+            return;
+
+        string display = _turnService != null ? _turnService.GetInitiativeDisplayString() : string.Empty;
         CombatUI.UpdateInitiativeDisplay(display);
     }
 
-    /// <summary>
-    /// Advance to the next combatant in initiative order.
-    /// Skips dead characters. Wraps around to the beginning for a new round.
-    /// </summary>
-    private void AdvanceToNextTurn()
+    private void OnTurnStarted(CharacterController character)
     {
-        if (CurrentPhase == TurnPhase.CombatOver) return;
+        if (CurrentPhase == TurnPhase.CombatOver || character == null)
+            return;
 
-        // Find next alive character
-        int attempts = 0;
-        while (attempts < _initiativeOrder.Count)
-        {
-            if (_currentInitiativeIndex >= _initiativeOrder.Count)
-                _currentInitiativeIndex = 0; // New round
+        if (IsPC(character))
+            StartPCTurn(character);
+        else
+            StartCoroutine(SingleNPCTurnFromInitiative(character));
+    }
 
-            var entry = _initiativeOrder[_currentInitiativeIndex];
+    private void OnNewRound(int round)
+    {
+        Debug.Log($"[GameManager] ═══ ROUND {round} BEGINS ═══");
+        CombatUI.AddTurnSeparator(round);
+        ResetQuickenedSpellTrackingForAllCharacters();
+        ResetAttackDamageModesForAllCharacters();
 
-            if (entry.Character != null && !entry.Character.Stats.IsDead)
-            {
-                _activeTurnCharacter = entry.Character;
+        // Tick all spell effect durations at the start of each new round
+        TickAllSpellDurations();
 
-                if (entry.IsPC)
-                {
-                    StartPCTurn(entry.Character);
-                }
-                else
-                {
-                    StartCoroutine(SingleNPCTurnFromInitiative(entry.Character));
-                }
-                return;
-            }
+        // Tick summon durations (Summon Monster: 1 round/level)
+        TickSummonDurations();
 
-            // This character is dead, skip
-            _currentInitiativeIndex++;
-            attempts++;
-        }
+        // Keep Turn Undead tracker table aligned with condition expiration.
+        PruneTurnUndeadTrackers();
+        LogOngoingTurnUndeadStatusAtRoundStart();
+    }
 
-        // All characters are dead somehow
+    private void OnCombatEnded()
+    {
         CurrentPhase = TurnPhase.CombatOver;
         CombatUI.SetTurnIndicator("Combat has ended.");
         CombatUI.SetActionButtonsVisible(false);
+        UpdateInitiativeUI();
     }
-
 
     private void ProcessEndOfTurnHPState(CharacterController character)
     {
@@ -2268,14 +2267,15 @@ public partial class GameManager : MonoBehaviour
     /// <summary>Move to the next initiative slot and start that turn.</summary>
     private void NextInitiativeTurn()
     {
-        _activeTurnCharacter?.ProcessPinnedDurationAtTurnEnd();
-        ProcessEndOfTurnHPState(_activeTurnCharacter);
+        CharacterController endingCharacter = CurrentCharacter;
+        endingCharacter?.ProcessPinnedDurationAtTurnEnd();
+        ProcessEndOfTurnHPState(endingCharacter);
 
-        _currentInitiativeIndex++;
-        UpdateInitiativeUI();
         // Threat map may have changed (NPC moved, character died, etc.)
         InvalidatePreviewThreats();
-        AdvanceToNextTurn();
+
+        _turnService?.EndTurn();
+        UpdateInitiativeUI();
     }
 
     // ========== TURN MANAGEMENT WITH ACTION ECONOMY ==========
@@ -2288,27 +2288,6 @@ public partial class GameManager : MonoBehaviour
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
         CloseInventoryIfOpen();
-
-        // ===== NEW ROUND DETECTION =====
-        // A new round begins when PC1's turn starts (turn order: PC1 → PC2 → NPC → repeat)
-        if (pc == PC1)
-        {
-            _currentRound++;
-            Debug.Log($"[GameManager] ═══ ROUND {_currentRound} BEGINS ═══");
-            CombatUI.AddTurnSeparator(_currentRound);
-            ResetQuickenedSpellTrackingForAllCharacters();
-            ResetAttackDamageModesForAllCharacters();
-
-            // Tick all spell effect durations at the start of each new round
-            TickAllSpellDurations();
-
-            // Tick summon durations (Summon Monster: 1 round/level)
-            TickSummonDurations();
-
-            // Keep Turn Undead tracker table aligned with condition expiration.
-            PruneTurnUndeadTrackers();
-            LogOngoingTurnUndeadStatusAtRoundStart();
-        }
 
         // Tick Aid Another expiry counters before actions; this keeps bonuses available for one full beneficiary turn.
         ExpireAidBonusesAtTurnStart(pc);
@@ -2383,7 +2362,6 @@ public partial class GameManager : MonoBehaviour
         _loggedHeldChargeNoActionsReminder = false;
 
         CurrentPhase = TurnPhase.PCTurn;
-        _activeTurnCharacter = pc;
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
 
         int pcIdx = GetPCIndex(pc);
@@ -2400,10 +2378,10 @@ public partial class GameManager : MonoBehaviour
     public void StartPlayerTurn()
     {
         // Start combat from beginning if no initiative order
-        if (_initiativeOrder.Count == 0)
+        if (_turnService == null || !_turnService.HasInitiativeEntries())
             StartCombat();
         else
-            AdvanceToNextTurn();
+            _turnService.StartTurnAtCurrentIndex();
     }
 
     private void LogMenuFlow(string marker, CharacterController actor = null, string details = null)
@@ -2597,7 +2575,7 @@ public partial class GameManager : MonoBehaviour
 
     private bool IsCombatEncounterRunning()
     {
-        return _initiativeOrder != null && _initiativeOrder.Count > 0 && CurrentPhase != TurnPhase.CombatOver;
+        return _turnService != null && _turnService.HasInitiativeEntries() && CurrentPhase != TurnPhase.CombatOver;
     }
 
     /// <summary>
@@ -5799,7 +5777,18 @@ public partial class GameManager : MonoBehaviour
         EndAttackSequence();
         EndThrownAttackSequence();
         ResetOffHandTurnState();
-        EndActivePCTurn();
+        EndCurrentTurn();
+    }
+
+    public void EndCurrentTurn()
+    {
+        if (CurrentPhase == TurnPhase.CombatOver)
+            return;
+
+        if (IsPlayerTurn)
+            EndActivePCTurn();
+        else
+            NextInitiativeTurn();
     }
 
     public void OnPowerAttackSliderChanged(float value)
@@ -6314,54 +6303,11 @@ public partial class GameManager : MonoBehaviour
 
     private void InsertIntoInitiative(CharacterController combatant, CharacterController summoner)
     {
-        if (combatant == null || combatant.Stats == null) return;
+        if (combatant == null || combatant.Stats == null)
+            return;
 
         bool isPCTeam = IsPC(combatant);
-        var entry = new InitiativeSystem.InitiativeEntry(combatant, isPCTeam);
-
-        int insertIdx = -1;
-        if (summoner != null)
-        {
-            int summonerIdx = _initiativeOrder.FindIndex(e => e.Character == summoner);
-            if (summonerIdx >= 0)
-            {
-                entry.Roll = _initiativeOrder[summonerIdx].Roll;
-                entry.Modifier = _initiativeOrder[summonerIdx].Modifier;
-                entry.Total = _initiativeOrder[summonerIdx].Total;
-
-                insertIdx = summonerIdx + 1;
-                while (insertIdx < _initiativeOrder.Count)
-                {
-                    var e = _initiativeOrder[insertIdx];
-                    if (e.Total != entry.Total || e.Character == summoner)
-                        break;
-
-                    if (!IsSummonedCreature(e.Character))
-                        break;
-
-                    insertIdx++;
-                }
-            }
-        }
-
-        if (insertIdx < 0)
-        {
-            insertIdx = 0;
-            while (insertIdx < _initiativeOrder.Count)
-            {
-                var cur = _initiativeOrder[insertIdx];
-                if (entry.Total > cur.Total) break;
-                if (entry.Total == cur.Total && entry.Modifier > cur.Modifier) break;
-                insertIdx++;
-            }
-        }
-
-        _initiativeOrder.Insert(insertIdx, entry);
-
-        if (insertIdx <= _currentInitiativeIndex)
-            _currentInitiativeIndex++;
-
-        Debug.Log($"[Initiative] Added {combatant.Stats.CharacterName} to initiative at position {insertIdx + 1}: {entry.Total}");
+        _turnService?.AddToInitiative(combatant, isPCTeam, summoner);
         UpdateInitiativeUI();
     }
 
@@ -6465,18 +6411,7 @@ public partial class GameManager : MonoBehaviour
         _summonedAllies.Remove(cc);
         _summonedEnemies.Remove(cc);
 
-        int initIdx = _initiativeOrder.FindIndex(e => e.Character == cc);
-        if (initIdx >= 0)
-        {
-            _initiativeOrder.RemoveAt(initIdx);
-            if (initIdx < _currentInitiativeIndex)
-                _currentInitiativeIndex = Mathf.Max(0, _currentInitiativeIndex - 1);
-            else if (_currentInitiativeIndex >= _initiativeOrder.Count)
-                _currentInitiativeIndex = 0;
-        }
-
-        if (cc == _activeTurnCharacter)
-            _activeTurnCharacter = null;
+        _turnService?.RemoveFromInitiative(cc);
 
         string despawnMessage;
         if (reason == "duration expired")
@@ -8161,7 +8096,7 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private void TickAllSpellDurations()
     {
-        Debug.Log($"[SpellDuration] Ticking spell durations for round {_currentRound}...");
+        Debug.Log($"[SpellDuration] Ticking spell durations for round {CurrentRound}...");
 
         // Tick active, living PCs
         foreach (var pc in PCs)
@@ -11441,7 +11376,6 @@ public partial class GameManager : MonoBehaviour
     private IEnumerator SingleNPCTurnFromInitiative(CharacterController npc)
     {
         CurrentPhase = TurnPhase.NPCTurn;
-        _activeTurnCharacter = npc;
         CombatUI.SetActivePC(0); // No PC active
         CombatUI.SetActiveNPC(NPCs.IndexOf(npc)); // Highlight active NPC
         CombatUI.SetActionButtonsVisible(false);
