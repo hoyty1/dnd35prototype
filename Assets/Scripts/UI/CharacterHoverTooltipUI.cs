@@ -29,7 +29,7 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         if (Instance != null)
             return;
 
-        Canvas canvas = Object.FindObjectOfType<Canvas>();
+        Canvas canvas = UnityEngine.Object.FindObjectOfType<Canvas>();
         if (canvas == null)
         {
             GameObject canvasGO = new GameObject("CharacterTooltipCanvas");
