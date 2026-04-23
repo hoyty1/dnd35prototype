@@ -34,6 +34,7 @@ namespace Tests.AI
             TestAnimalProfileUsesNaturalTripFollowUpInsteadOfManeuver();
             TestEnemyDefinitionsAssignProfileArchetypes();
             TestWolfDefinitionMatchesBaselineStats();
+            TestTigerDefinitionUsesAnimalProfile();
             TestEvokerSchoolPriority();
             TestAbjurerPrefersSingleTarget();
             TestSpellcasterAOEAvoidsUnsafeFriendlyFire();
@@ -371,6 +372,25 @@ namespace Tests.AI
                 wolf == null
                     ? "(wolf definition missing)"
                     : $"(BAB={wolf.BAB}, HP={wolf.BaseHitDieHP}, Speed={wolf.BaseSpeed}, NA={wolf.NaturalArmorBonus}, AttackCount={wolfPrimaryAttack?.Count ?? 0}, TripBonus={wolf.TripAttackCheckBonus})");
+        }
+
+        private static void TestTigerDefinitionUsesAnimalProfile()
+        {
+            EnemyDatabase.Init();
+            EnemyDefinition tiger = EnemyDatabase.Get("tiger");
+
+            bool usesAnimalProfile = tiger != null
+                                     && tiger.AIProfileArchetype == EnemyAIProfileArchetype.Animal
+                                     && tiger.HasScent
+                                     && tiger.HasPounce
+                                     && tiger.HasImprovedGrab
+                                     && tiger.HasRake;
+
+            Assert(usesAnimalProfile,
+                "Tiger enemy definition uses Animal AI profile archetype",
+                tiger == null
+                    ? "(tiger definition missing)"
+                    : $"(archetype={tiger.AIProfileArchetype}, scent={tiger.HasScent}, pounce={tiger.HasPounce}, grab={tiger.HasImprovedGrab}, rake={tiger.HasRake})");
         }
 
         private static void TestEvokerSchoolPriority()
