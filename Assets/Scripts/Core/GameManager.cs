@@ -11938,19 +11938,86 @@ public partial class GameManager : MonoBehaviour
             yield break;
         }
 
-        npc.CommitStandardAction();
         RangeInfo npcRangeInfo = CalculateRangeInfo(npc, target);
 
         CharacterController flankPartner;
         bool isFlanking = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
         int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+        string partnerName = flankPartner != null && flankPartner.Stats != null
+            ? flankPartner.Stats.CharacterName
+            : null;
 
-        bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
+        bool canUseFullAttack = npc.Actions != null
+            && npc.Actions.HasFullRoundAction
+            && npc.IsTargetInCurrentWeaponRange(target);
+
+        if (canUseFullAttack)
+        {
+            if (!ResolveRangedAttackAoOForNPCAttackIfProvoked(npc, npcRangeInfo))
+            {
+                yield return new WaitForSeconds(0.8f);
+                yield break;
+            }
+
+            npc.Actions.UseFullRoundAction();
+
+            bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
+                npc,
+                npc.GetEquippedMainWeapon(),
+                npcRangeInfo,
+                treatAsThrownAttack: false);
+            ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeFearBreakAttack);
+
+            FullAttackResult fullResult = npc.FullAttack(target, isFlanking, flankBonus, partnerName, npcRangeInfo);
+            string flankPrefix = isFlanking
+                ? $"⚔ {npc.Stats.CharacterName} gains +2 flanking bonus{(string.IsNullOrEmpty(partnerName) ? "" : $" (with {partnerName})")}.\n"
+                : string.Empty;
+
+            _lastCombatLog = flankPrefix + fullResult.GetFullSummary();
+
+            Debug.Log($"[AI][Attack] {npc.Stats.CharacterName} performed full attack: attacks={fullResult.Attacks.Count}, hits={fullResult.HitCount}, totalDamage={fullResult.TotalDamageDealt}");
+
+            if (LogAttacksToConsole)
+                LogFullAttackToConsole(fullResult);
+
+            CombatUI.ShowCombatLog(_lastCombatLog);
+            UpdateAllStatsUI();
+
+            if (fullResult.TotalDamageDealt > 0)
+                CheckConcentrationOnDamage(target, fullResult.TotalDamageDealt);
+
+            if (fullResult.TargetKilled)
+            {
+                HandleSummonDeathCleanup(target);
+
+                if (AreAllPCsDead())
+                {
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+                    CombatUI.SetActionButtonsVisible(false);
+                    yield break;
+                }
+
+                CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
+            }
+
+            yield return new WaitForSeconds(1.0f);
+            yield break;
+        }
+
+        if (!npc.CommitStandardAction())
+        {
+            CombatUI.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no standard action available.");
+            yield return new WaitForSeconds(0.6f);
+            yield break;
+        }
+
+        bool singleAttackFearBreak = IsMeleeAttackForTurnUndeadFearBreak(
             npc,
             npc.GetEquippedMainWeapon(),
             npcRangeInfo,
             treatAsThrownAttack: false);
-        ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeFearBreakAttack);
+        ProcessTurnUndeadMeleeFearBreak(npc, target, singleAttackFearBreak);
 
         if (!ResolveRangedAttackAoOForNPCAttackIfProvoked(npc, npcRangeInfo))
         {
@@ -11958,14 +12025,10 @@ public partial class GameManager : MonoBehaviour
             yield break;
         }
 
-        CombatResult result = npc.Attack(target, isFlanking, flankBonus,
-            flankPartner != null ? flankPartner.Stats.CharacterName : null, npcRangeInfo);
+        CombatResult result = npc.Attack(target, isFlanking, flankBonus, partnerName, npcRangeInfo);
 
         TryResolveFreeTripOnHit(npc, target, result, npcRangeInfo);
 
-        string partnerName = flankPartner != null && flankPartner.Stats != null
-            ? flankPartner.Stats.CharacterName
-            : null;
         _lastCombatLog = BuildAttackLog(npc, isFlanking, partnerName, result);
 
         if (LogAttacksToConsole)
@@ -11988,10 +12051,8 @@ public partial class GameManager : MonoBehaviour
                 CombatUI.SetActionButtonsVisible(false);
                 yield break;
             }
-            else
-            {
-                CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
-            }
+
+            CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
         }
 
         yield return new WaitForSeconds(1.0f);
