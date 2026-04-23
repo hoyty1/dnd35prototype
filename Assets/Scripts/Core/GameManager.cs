@@ -166,6 +166,9 @@ public partial class GameManager : MonoBehaviour
     private bool _pendingDisarmUseOffHandSelection;
     private bool _pendingSunderUseOffHandSelection;
 
+    // Withdraw selection state.
+    private bool _isSelectingWithdraw;
+
     // Turn Undead targeted-confirmation state
 
     // Unified iterative attack flow state (melee + thrown share one sequence)
@@ -2566,6 +2569,7 @@ public partial class GameManager : MonoBehaviour
 
         _waitingForAoOConfirmation = false;
         _pendingAoOAction = null;
+        _isSelectingWithdraw = false;
         _isSelectingTurnUndead = false;
         _turnUndeadPendingInvoker = null;
         CloseTurnUndeadSelectionPanel(clearHighlights: true);
@@ -4004,10 +4008,57 @@ public partial class GameManager : MonoBehaviour
         else return;
 
         EndAttackSequence();
+        _isSelectingWithdraw = false;
         CurrentSubPhase = PlayerSubPhase.Moving;
         ShowMovementRange(pc);
         CombatUI.SetActionButtonsVisible(false);
         CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)");
+    }
+
+    private static int GetWithdrawMoveRangeSquares(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return 0;
+
+        return Mathf.Max(1, character.Stats.MoveRange * 2);
+    }
+
+    public string GetWithdrawDisabledReason(CharacterController character)
+    {
+        if (_combatFlowService != null)
+        {
+            if (_combatFlowService.CanPerformWithdraw(character, out string reason))
+                return string.Empty;
+
+            return reason;
+        }
+
+        return "Combat flow unavailable";
+    }
+
+    public void OnWithdrawButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null)
+            return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "withdrawing"))
+            return;
+
+        string reason = GetWithdrawDisabledReason(pc);
+        if (!string.IsNullOrEmpty(reason))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot withdraw: {reason}.");
+            return;
+        }
+
+        EndAttackSequence();
+        _isSelectingWithdraw = true;
+        CurrentSubPhase = PlayerSubPhase.Moving;
+        ShowMovementRange(pc, maxRangeOverride: GetWithdrawMoveRangeSquares(pc));
+        CombatUI.SetActionButtonsVisible(false);
+        CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Withdraw: select destination (double move, first square avoids AoO)");
+        CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} begins Withdraw (full-round, up to {GetWithdrawMoveRangeSquares(pc) * 5} ft). First square is protected from attacks of opportunity.");
     }
 
     public bool CanTakeFiveFootStep(CharacterController character)
@@ -8656,7 +8707,7 @@ public partial class GameManager : MonoBehaviour
         public List<bool> SlotUsedStates;
     }
 
-    private void ShowMovementRange(CharacterController pc)
+    private void ShowMovementRange(CharacterController pc, int maxRangeOverride = -1)
     {
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
@@ -8664,7 +8715,7 @@ public partial class GameManager : MonoBehaviour
         if (_movementService == null || pc == null)
             return;
 
-        List<SquareCell> moveCells = _movementService.CalculateMovementRange(pc);
+        List<SquareCell> moveCells = _movementService.CalculateMovementRange(pc, maxRangeOverride);
         for (int i = 0; i < moveCells.Count; i++)
         {
             SquareCell cell = moveCells[i];
@@ -8696,16 +8747,16 @@ public partial class GameManager : MonoBehaviour
     public int CalculateDistance(Vector2Int from, Vector2Int to, bool chebyshev = false) => _movementService != null ? _movementService.CalculateDistance(from, to, chebyshev) : (chebyshev ? SquareGridUtils.GetChebyshevDistance(from, to) : SquareGridUtils.GetDistance(from, to));
     public List<Vector2Int> GetSquaresInRange(Vector2Int origin, int range, bool includeOrigin = false) => _movementService != null ? _movementService.GetSquaresInRange(origin, range, includeOrigin) : new List<Vector2Int>();
     public int GetMovementCost(Vector2Int start, List<Vector2Int> path) => _movementService != null ? _movementService.GetMovementCost(start, path) : SquareGridUtils.CalculatePathCost(start, path ?? new List<Vector2Int>());
-    public AoOPathResult FindPath(CharacterController mover, Vector2Int destination, bool avoidThreats = true, int? maxRangeOverride = null, bool allowThroughAllies = true, bool allowThroughEnemies = false)
+    public AoOPathResult FindPath(CharacterController mover, Vector2Int destination, bool avoidThreats = true, int? maxRangeOverride = null, bool allowThroughAllies = true, bool allowThroughEnemies = false, bool suppressFirstSquareAoO = false)
         => _movementService != null
-            ? _movementService.FindPath(mover, destination, avoidThreats, maxRangeOverride, allowThroughAllies, allowThroughEnemies)
+            ? _movementService.FindPath(mover, destination, avoidThreats, maxRangeOverride, allowThroughAllies, allowThroughEnemies, suppressFirstSquareAoO)
             : new AoOPathResult();
-    public AoOPathResult FindPath(CharacterController mover, Vector2Int destination, HashSet<Vector2Int> threatenedSquares, int maxRangeOverride, bool allowThroughAllies = true, bool allowThroughEnemies = false)
+    public AoOPathResult FindPath(CharacterController mover, Vector2Int destination, HashSet<Vector2Int> threatenedSquares, int maxRangeOverride, bool allowThroughAllies = true, bool allowThroughEnemies = false, bool suppressFirstSquareAoO = false)
         => _movementService != null
-            ? _movementService.FindPath(mover, destination, threatenedSquares, maxRangeOverride, allowThroughAllies, allowThroughEnemies)
+            ? _movementService.FindPath(mover, destination, threatenedSquares, maxRangeOverride, allowThroughAllies, allowThroughEnemies, suppressFirstSquareAoO)
             : new AoOPathResult();
-    public List<AoOThreatInfo> CheckForAoO(CharacterController mover, List<Vector2Int> path)
-        => _movementService != null ? _movementService.CheckForAoO(mover, path) : new List<AoOThreatInfo>();
+    public List<AoOThreatInfo> CheckForAoO(CharacterController mover, List<Vector2Int> path, bool suppressFirstSquareAoO = false)
+        => _movementService != null ? _movementService.CheckForAoO(mover, path, suppressFirstSquareAoO) : new List<AoOThreatInfo>();
     public CombatResult TriggerAoO(CharacterController threatener, CharacterController target)
         => _movementService != null ? _movementService.TriggerAoO(threatener, target) : ThreatSystem.ExecuteAoO(threatener, target);
     public bool CanTake5FootStep(CharacterController character, Vector2Int destination)
@@ -8759,6 +8810,9 @@ public partial class GameManager : MonoBehaviour
 
     public IEnumerator MoveCharacterAlongComputedPathForAI(CharacterController mover, Vector2Int destination, float secondsPerStep)
         => MoveCharacterAlongComputedPath(mover, destination, secondsPerStep);
+
+    public IEnumerator ExecuteWithdrawMovementForAI(CharacterController mover, Vector2Int destination, float secondsPerStep)
+        => MoveCharacterAlongComputedPathWithdraw(mover, destination, secondsPerStep);
 
     public bool TryNPCSpecialAttackIfBeneficialForAI(CharacterController npc, CharacterController target)
         => TryNPCSpecialAttackIfBeneficial(npc, target);
@@ -8858,7 +8912,9 @@ public partial class GameManager : MonoBehaviour
                 else
                     CombatUI?.ShowCombatLog(wasGrappleMoveSelection
                         ? $"↩ {pc.Stats.CharacterName} chooses not to move after winning grapple control."
-                        : $"↩ {pc.Stats.CharacterName} cancels movement.");
+                        : (_isSelectingWithdraw
+                            ? $"↩ {pc.Stats.CharacterName} cancels Withdraw."
+                            : $"↩ {pc.Stats.CharacterName} cancels movement."));
             }
         }
 
@@ -8993,7 +9049,7 @@ public partial class GameManager : MonoBehaviour
         // Grapple move selection is capped at half speed; post-grapple free reposition is adjacent only.
         int previewMaxRange = _isGrappleMoveSelection
             ? Mathf.Max(1, _grappleMoveMaxRangeSquares)
-            : (_isFreeAdjacentGrappleMoveSelection ? 1 : pc.Stats.MoveRange);
+            : (_isFreeAdjacentGrappleMoveSelection ? 1 : (_isSelectingWithdraw ? GetWithdrawMoveRangeSquares(pc) : pc.Stats.MoveRange));
         var pathResult = Grid.FindPathAoOAware(
             pc.GridPosition,
             gridCoord,
@@ -9013,12 +9069,17 @@ public partial class GameManager : MonoBehaviour
             var segmentThreatened = new List<bool>();
             bool hasThreatData = threatenedSquares != null;
             Vector2Int prev = pc.GridPosition;
+            int segmentIndex = 0;
             foreach (var step in pathResult.Path)
             {
                 // A segment is "dangerous" if we're leaving a threatened square.
                 bool leaving = hasThreatData && threatenedSquares.Contains(prev);
+                if (_isSelectingWithdraw && segmentIndex == 0)
+                    leaving = false;
+
                 segmentThreatened.Add(leaving);
                 prev = step;
+                segmentIndex++;
             }
 
             _pathPreview.ShowPath(pc.GridPosition, pathResult.Path, segmentThreatened);
@@ -9802,8 +9863,17 @@ public partial class GameManager : MonoBehaviour
         if (!_highlightedCells.Contains(cell) || !Grid.CanPlaceCreature(cell.Coords, pc.GetVisualSquaresOccupied(), pc))
             return;
 
+        int movementRangeOverride = _isSelectingWithdraw ? GetWithdrawMoveRangeSquares(pc) : -1;
+        bool suppressFirstSquareAoO = _isSelectingWithdraw;
         var pathResult = _movementService != null
-            ? _movementService.FindPath(pc, cell.Coords, avoidThreats: true)
+            ? _movementService.FindPath(
+                pc,
+                cell.Coords,
+                avoidThreats: true,
+                maxRangeOverride: movementRangeOverride > 0 ? movementRangeOverride : (int?)null,
+                allowThroughAllies: true,
+                allowThroughEnemies: false,
+                suppressFirstSquareAoO: suppressFirstSquareAoO)
             : Grid.FindSafePath(pc.GridPosition, cell.Coords, pc, GetAllCharacters());
 
         if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
@@ -9814,7 +9884,7 @@ public partial class GameManager : MonoBehaviour
 
         if (!pathResult.ProvokesAoOs)
         {
-            StartCoroutine(ExecuteMovement(pc, new List<Vector2Int>(pathResult.Path)));
+            StartCoroutine(ExecuteMovement(pc, new List<Vector2Int>(pathResult.Path), isWithdraw: _isSelectingWithdraw));
             return;
         }
 
@@ -9837,23 +9907,25 @@ public partial class GameManager : MonoBehaviour
             ActionDescription = $"Move to ({cell.Coords.x},{cell.Coords.y})",
             Actor = pc,
             ThreateningEnemies = uniqueThreateners,
-            OnProceed = () => StartCoroutine(ResolveAoOsAndMove(pc, pathResult)),
+            OnProceed = () => StartCoroutine(ResolveAoOsAndMove(pc, pathResult, isWithdraw: _isSelectingWithdraw)),
             OnCancel = () =>
             {
                 CurrentSubPhase = PlayerSubPhase.Moving;
                 if (_isGrappleMoveSelection)
                     ShowGrappleMoveRange(pc);
                 else
-                    ShowMovementRange(pc);
+                    ShowMovementRange(pc, _isSelectingWithdraw ? GetWithdrawMoveRangeSquares(pc) : -1);
                 CombatUI.SetActionButtonsVisible(false);
                 CombatUI.SetTurnIndicator(_isGrappleMoveSelection
                     ? $"{pc.Stats.CharacterName} - Move while grappling: choose destination within half speed ({_grappleMoveMaxRangeSquares} sq)"
-                    : $"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)");
+                    : (_isSelectingWithdraw
+                        ? $"{pc.Stats.CharacterName} - Withdraw: select destination (double move, first square avoids AoO)"
+                        : $"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)"));
             }
         });
     }
 
-    private IEnumerator ResolveAoOsAndMove(CharacterController pc, AoOPathResult pathResult)
+    private IEnumerator ResolveAoOsAndMove(CharacterController pc, AoOPathResult pathResult, bool isWithdraw = false)
     {
         CurrentSubPhase = PlayerSubPhase.Animating;
 
@@ -9892,7 +9964,7 @@ public partial class GameManager : MonoBehaviour
                 ? pathResult.Path
                 : new List<Vector2Int>();
 
-            yield return StartCoroutine(ExecuteMovement(pc, path));
+            yield return StartCoroutine(ExecuteMovement(pc, path, isWithdraw));
         }
         else
         {
@@ -9913,7 +9985,7 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
-    private IEnumerator ExecuteMovement(CharacterController pc, List<Vector2Int> path)
+    private IEnumerator ExecuteMovement(CharacterController pc, List<Vector2Int> path, bool isWithdraw = false)
     {
         if (pc == null || path == null || path.Count == 0)
             yield break;
@@ -9924,13 +9996,43 @@ public partial class GameManager : MonoBehaviour
         if (_pathPreview != null) _pathPreview.HidePath();
         if (_hoverMarker != null) _hoverMarker.Hide();
 
-        if (pc.Actions.HasMoveAction)
+        bool consumedAction = false;
+        if (isWithdraw)
         {
-            pc.Actions.UseMoveAction();
+            if (pc.Actions.HasFullRoundAction)
+            {
+                pc.Actions.UseFullRoundAction();
+                consumedAction = true;
+            }
+            else
+            {
+                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot complete Withdraw without a full-round action.");
+                ShowActionChoices();
+                yield break;
+            }
+
+            pc.IsWithdrawing = true;
+            pc.WithdrawFirstStepProtected = true;
         }
-        else if (pc.Actions.CanConvertStandardToMove)
+        else
         {
-            pc.Actions.ConvertStandardToMove();
+            if (pc.Actions.HasMoveAction)
+            {
+                pc.Actions.UseMoveAction();
+                consumedAction = true;
+            }
+            else if (pc.Actions.CanConvertStandardToMove)
+            {
+                pc.Actions.ConvertStandardToMove();
+                consumedAction = true;
+            }
+        }
+
+        if (!consumedAction)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no action available for movement.");
+            ShowActionChoices();
+            yield break;
         }
 
         if (_movementService != null)
@@ -9941,10 +10043,86 @@ public partial class GameManager : MonoBehaviour
         PruneTurnUndeadTrackers();
         UpdateAllStatsUI();
 
+        if (isWithdraw)
+        {
+            pc.WithdrawFirstStepProtected = false;
+            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} completes Withdraw.");
+        }
+
         // Invalidate threat cache since positions changed
         InvalidatePreviewThreats();
 
         ShowActionChoices();
+    }
+
+    private IEnumerator MoveCharacterAlongComputedPathWithdraw(CharacterController mover, Vector2Int destination, float secondsPerStep)
+    {
+        if (mover == null || mover.Stats == null || Grid == null)
+            yield break;
+
+        if (!mover.Actions.HasFullRoundAction)
+            yield break;
+
+        if (destination == mover.GridPosition)
+            yield break;
+
+        int maxRange = GetWithdrawMoveRangeSquares(mover);
+        AoOPathResult pathResult = _movementService != null
+            ? _movementService.FindPath(
+                mover,
+                destination,
+                avoidThreats: false,
+                maxRangeOverride: maxRange,
+                allowThroughAllies: true,
+                allowThroughEnemies: false,
+                suppressFirstSquareAoO: true)
+            : Grid.FindPathAoOAware(mover.GridPosition, destination, null, maxRange, mover.GetVisualSquaresOccupied(), mover);
+
+        List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
+            ? pathResult.Path
+            : null;
+
+        if (path == null || path.Count == 0)
+            yield break;
+
+        mover.Actions.UseFullRoundAction();
+        mover.IsWithdrawing = true;
+        mover.WithdrawFirstStepProtected = true;
+
+        if (pathResult != null && pathResult.ProvokedAoOs != null)
+        {
+            foreach (var aooInfo in pathResult.ProvokedAoOs)
+            {
+                if (mover.Stats.IsDead)
+                    break;
+
+                CharacterController threatener = aooInfo != null ? aooInfo.Threatener : null;
+                if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead)
+                    continue;
+
+                CombatResult aooResult = _movementService != null
+                    ? _movementService.TriggerAoO(threatener, mover)
+                    : ThreatSystem.ExecuteAoO(threatener, mover);
+
+                if (aooResult != null)
+                    CombatUI?.ShowCombatLog($"⚔ AoO (Withdraw): {aooResult.GetDetailedSummary()}");
+
+                yield return new WaitForSeconds(0.35f);
+            }
+        }
+
+        if (!mover.Stats.IsDead)
+        {
+            if (_movementService != null)
+                yield return StartCoroutine(_movementService.ExecuteMovement(mover, path, secondsPerStep, markAsMoved: true));
+            else
+                yield return StartCoroutine(mover.MoveAlongPath(path, secondsPerStep, markAsMoved: true));
+
+            CheckTurnUndeadProximityBreakingForMover(mover);
+            PruneTurnUndeadTrackers();
+        }
+
+        mover.WithdrawFirstStepProtected = false;
     }
 
     private IEnumerator MoveCharacterAlongComputedPath(CharacterController mover, Vector2Int destination, float secondsPerStep)

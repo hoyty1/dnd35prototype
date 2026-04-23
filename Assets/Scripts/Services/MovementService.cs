@@ -166,7 +166,8 @@ public class MovementService : MonoBehaviour
         bool avoidThreats = true,
         int? maxRangeOverride = null,
         bool allowThroughAllies = true,
-        bool allowThroughEnemies = false)
+        bool allowThroughEnemies = false,
+        bool suppressFirstSquareAoO = false)
     {
         var result = new AoOPathResult();
 
@@ -191,7 +192,8 @@ public class MovementService : MonoBehaviour
             threatenedSquares: null,
             maxRangeOverride: maxRange,
             allowThroughAllies: allowThroughAllies,
-            allowThroughEnemies: allowThroughEnemies);
+            allowThroughEnemies: allowThroughEnemies,
+            suppressFirstSquareAoO: suppressFirstSquareAoO);
     }
 
     public AoOPathResult FindPath(
@@ -200,7 +202,8 @@ public class MovementService : MonoBehaviour
         HashSet<Vector2Int> threatenedSquares,
         int maxRangeOverride,
         bool allowThroughAllies = true,
-        bool allowThroughEnemies = false)
+        bool allowThroughEnemies = false,
+        bool suppressFirstSquareAoO = false)
     {
         var result = new AoOPathResult();
 
@@ -220,14 +223,14 @@ public class MovementService : MonoBehaviour
             allowThroughEnemies: allowThroughEnemies) ?? new AoOPathResult();
 
         if (result.Path != null && result.Path.Count > 0)
-            result.ProvokedAoOs = CheckForAoO(mover, result.Path);
+            result.ProvokedAoOs = CheckForAoO(mover, result.Path, suppressFirstSquareAoO);
 
         return result;
     }
 
     // ========== ATTACKS OF OPPORTUNITY ==========
 
-    public List<AoOThreatInfo> CheckForAoO(CharacterController mover, List<Vector2Int> path)
+    public List<AoOThreatInfo> CheckForAoO(CharacterController mover, List<Vector2Int> path, bool suppressFirstSquareAoO = false)
     {
         if (mover == null)
             return new List<AoOThreatInfo>();
@@ -236,7 +239,7 @@ public class MovementService : MonoBehaviour
             ? _allCharactersProvider.Invoke()
             : new List<CharacterController>();
 
-        return ThreatSystem.AnalyzePathForAoOs(mover, path, allCharacters);
+        return ThreatSystem.AnalyzePathForAoOs(mover, path, allCharacters, suppressFirstSquareAoO);
     }
 
     public CombatResult TriggerAoO(CharacterController threatener, CharacterController target)

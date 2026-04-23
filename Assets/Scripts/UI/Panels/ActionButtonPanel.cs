@@ -17,6 +17,7 @@ public class ActionButtonPanel : MonoBehaviour
 
     private GameObject ActionPanel => _combatUI != null ? _combatUI.ActionPanel : null;
     private Button MoveButton => _combatUI != null ? _combatUI.MoveButton : null;
+    private Button WithdrawButton => _combatUI != null ? _combatUI.WithdrawButton : null;
     private Button FiveFootStepButton => _combatUI != null ? _combatUI.FiveFootStepButton : null;
     private Button DropProneButton => _combatUI != null ? _combatUI.DropProneButton : null;
     private Button StandUpButton => _combatUI != null ? _combatUI.StandUpButton : null;
@@ -259,6 +260,11 @@ public class ActionButtonPanel : MonoBehaviour
         else if (context.Actions.CanConvertStandardToMove) moveLabel = "Move (Std→Move)";
 
         states.Set(MoveButton, new ActionButtonState(true, canMove, moveLabel));
+
+        string withdrawDisabledReason = context.Gm != null ? context.Gm.GetWithdrawDisabledReason(pc) : "Unavailable";
+        bool canWithdraw = string.IsNullOrEmpty(withdrawDisabledReason);
+        string withdrawLabel = canWithdraw ? "Withdraw (Full-Round, 2x move)" : $"Withdraw ({withdrawDisabledReason})";
+        states.Set(WithdrawButton, new ActionButtonState(true, canWithdraw, withdrawLabel));
 
         string fiveFootDisabledReason = context.Gm != null ? context.Gm.GetFiveFootStepDisabledReason(pc) : "Unavailable";
         bool canFiveFootStep = string.IsNullOrEmpty(fiveFootDisabledReason);
@@ -696,6 +702,7 @@ public class ActionButtonPanel : MonoBehaviour
     private void HideNonGrappleActionButtons()
     {
         if (MoveButton != null) MoveButton.gameObject.SetActive(false);
+        if (WithdrawButton != null) WithdrawButton.gameObject.SetActive(false);
         if (FiveFootStepButton != null) FiveFootStepButton.gameObject.SetActive(false);
         if (DropProneButton != null) DropProneButton.gameObject.SetActive(false);
         if (StandUpButton != null) StandUpButton.gameObject.SetActive(false);
@@ -725,6 +732,7 @@ public class ActionButtonPanel : MonoBehaviour
     public void HideAllActionButtons()
     {
         if (MoveButton != null) MoveButton.gameObject.SetActive(false);
+        if (WithdrawButton != null) WithdrawButton.gameObject.SetActive(false);
         if (FiveFootStepButton != null) FiveFootStepButton.gameObject.SetActive(false);
         if (DropProneButton != null) DropProneButton.gameObject.SetActive(false);
         if (StandUpButton != null) StandUpButton.gameObject.SetActive(false);

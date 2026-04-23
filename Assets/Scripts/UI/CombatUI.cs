@@ -90,6 +90,7 @@ public class CombatUI : MonoBehaviour
     [Header("Action Buttons - Action Economy")]
     public GameObject ActionPanel;
     public Button MoveButton;
+    public Button WithdrawButton;       // Withdraw (Full-Round Action, first square no AoO)
     public Button FiveFootStepButton;   // 5-foot step (Free Action, no AoO)
     public Button DropProneButton;      // Drop prone (Free Action)
     public Button StandUpButton;        // Stand up (Move Action, provokes AoO)

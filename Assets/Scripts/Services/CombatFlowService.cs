@@ -21,6 +21,55 @@ public class CombatFlowService : MonoBehaviour
         _gameManager = null;
     }
 
+    public bool CanPerformWithdraw(CharacterController actor, out string reason)
+    {
+        reason = string.Empty;
+
+        if (actor == null || actor.Stats == null)
+        {
+            reason = "No active character";
+            return false;
+        }
+
+        if (!actor.Actions.HasFullRoundAction)
+        {
+            reason = "Requires a full-round action";
+            return false;
+        }
+
+        if (actor.HasTakenFiveFootStep)
+        {
+            reason = "Cannot withdraw after a 5-foot step";
+            return false;
+        }
+
+        if (actor.HasCondition(CombatConditionType.Prone))
+        {
+            reason = "Stand up first";
+            return false;
+        }
+
+        if (actor.HasCondition(CombatConditionType.Pinned))
+        {
+            reason = "Pinned creatures cannot withdraw";
+            return false;
+        }
+
+        if (actor.IsGrappling())
+        {
+            reason = "Cannot withdraw while grappled";
+            return false;
+        }
+
+        if (actor.Stats.MovementBlockedByCondition)
+        {
+            reason = "Movement blocked by condition";
+            return false;
+        }
+
+        return true;
+    }
+
     // ===== Required extraction API (phase 2.1.6 contract) =====
     public CombatResult ExecuteAttack(CharacterController attacker, CharacterController target, int? attackBab = null, ItemData weaponOverride = null, RangeInfo rangeInfo = null, bool isOffHand = false)
     {

@@ -233,6 +233,8 @@ public class CharacterController : MonoBehaviour
     [HideInInspector] public bool HasMovedThisTurn;
     [HideInInspector] public bool HasTakenFiveFootStep;
     [HideInInspector] public bool HasAttackedThisTurn;
+    [HideInInspector] public bool IsWithdrawing;
+    [HideInInspector] public bool WithdrawFirstStepProtected;
 
     /// <summary>Action economy tracker for the current turn.</summary>
     public ActionEconomy Actions = new ActionEconomy();
@@ -5517,6 +5519,8 @@ public class CharacterController : MonoBehaviour
         HasMovedThisTurn = false;
         HasTakenFiveFootStep = false;
         HasAttackedThisTurn = false;
+        IsWithdrawing = false;
+        WithdrawFirstStepProtected = false;
         IsFightingDefensively = false; // lasts until start of this character's next turn
         Actions.Reset();
         Actions.SingleActionOnly = (_currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered);

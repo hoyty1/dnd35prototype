@@ -361,7 +361,7 @@ public static class ThreatSystem
     /// <param name="path">The movement path (list of squares, NOT including the starting square).</param>
     /// <param name="allCharacters">All characters in combat.</param>
     /// <returns>List of AoOs that would be provoked.</returns>
-    public static List<AoOThreatInfo> AnalyzePathForAoOs(CharacterController mover, List<Vector2Int> path, List<CharacterController> allCharacters)
+    public static List<AoOThreatInfo> AnalyzePathForAoOs(CharacterController mover, List<Vector2Int> path, List<CharacterController> allCharacters, bool suppressFirstSquareAoO = false)
     {
         var provokedAoOs = new List<AoOThreatInfo>();
         if (path == null || path.Count == 0) return provokedAoOs;
@@ -388,6 +388,12 @@ public static class ThreatSystem
         {
             Vector2Int currentBaseSquare = path[i];
             List<Vector2Int> previousOccupiedSquares = mover.GetOccupiedSquaresAt(previousBaseSquare);
+
+            if (suppressFirstSquareAoO && i == 0)
+            {
+                previousBaseSquare = currentBaseSquare;
+                continue;
+            }
 
             // Check each enemy: does leaving any previously occupied square provoke?
             foreach (var kvp in enemyThreats)

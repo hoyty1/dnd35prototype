@@ -742,6 +742,8 @@ public class SceneBootstrap : MonoBehaviour
         // Create action buttons inside the grid
         combatUI.MoveButton = CreateGridButton(btnGrid.transform, "MoveBtn",
             "Move", new Color(0.2f, 0.5f, 0.2f));
+        combatUI.WithdrawButton = CreateGridButton(btnGrid.transform, "WithdrawBtn",
+            "Withdraw", new Color(0.76f, 0.56f, 0.14f));
         combatUI.FiveFootStepButton = CreateGridButton(btnGrid.transform, "FiveFootStepBtn",
             "5-Foot Step", new Color(0.2f, 0.45f, 0.72f));
         combatUI.DropProneButton = CreateGridButton(btnGrid.transform, "DropProneBtn",
@@ -1039,6 +1041,8 @@ public class SceneBootstrap : MonoBehaviour
 
         if (ui.MoveButton != null)
             ui.MoveButton.onClick.AddListener(() => GameManager.Instance.OnMoveButtonPressed());
+        if (ui.WithdrawButton != null)
+            ui.WithdrawButton.onClick.AddListener(() => GameManager.Instance.OnWithdrawButtonPressed());
         if (ui.FiveFootStepButton != null)
             ui.FiveFootStepButton.onClick.AddListener(() => GameManager.Instance.OnFiveFootStepButtonPressed());
         if (ui.DropProneButton != null)

@@ -498,6 +498,20 @@ public class AIService : MonoBehaviour
 
         AIProfile profile = GetProfile(npc);
 
+        float hpPercent = npc.Stats.TotalMaxHP > 0 ? (float)npc.Stats.CurrentHP / npc.Stats.TotalMaxHP : 1f;
+        if (hpPercent < 0.30f && npc.Actions.HasFullRoundAction)
+        {
+            SquareCell withdrawCell = EvaluateWithdrawRetreatDestination(npc, target.GridPosition);
+            if (withdrawCell != null && withdrawCell.Coords != npc.GridPosition)
+            {
+                yield return _gameManager.StartCoroutine(
+                    _gameManager.ExecuteWithdrawMovementForAI(npc, withdrawCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} withdraws from {target.Stats.CharacterName}.");
+                yield return new WaitForSeconds(0.45f);
+                yield break;
+            }
+        }
+
         if (!npc.IsTargetInCurrentWeaponRange(target))
         {
             SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, profile);
@@ -809,6 +823,55 @@ public class AIService : MonoBehaviour
 
             if (pathResult.ProvokesAoOs)
                 score += avoidAoOs ? -1000f : -2f * pathResult.ProvokedAoOs.Count;
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestCell = cell;
+            }
+        }
+
+        return bestCell;
+    }
+
+    private SquareCell EvaluateWithdrawRetreatDestination(CharacterController mover, Vector2Int dangerSource)
+    {
+        if (mover == null || mover.Stats == null || _gameManager.Grid == null)
+            return null;
+
+        int withdrawRange = Mathf.Max(1, mover.Stats.MoveRange * 2);
+        List<SquareCell> moveCells = _gameManager.Grid.GetCellsInRange(mover.GridPosition, withdrawRange);
+
+        SquareCell bestCell = null;
+        float bestScore = float.NegativeInfinity;
+
+        for (int i = 0; i < moveCells.Count; i++)
+        {
+            SquareCell cell = moveCells[i];
+            if (cell == null)
+                continue;
+
+            if (!_gameManager.Grid.CanPlaceCreature(cell.Coords, mover.GetVisualSquaresOccupied(), mover))
+                continue;
+
+            AoOPathResult pathResult = _gameManager.FindPath(
+                mover,
+                cell.Coords,
+                avoidThreats: false,
+                maxRangeOverride: withdrawRange,
+                allowThroughAllies: true,
+                allowThroughEnemies: false,
+                suppressFirstSquareAoO: true);
+
+            if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
+                continue;
+
+            int distance = SquareGridUtils.GetDistance(cell.Coords, dangerSource);
+            int provokes = pathResult.ProvokedAoOs != null ? pathResult.ProvokedAoOs.Count : 0;
+
+            float score = distance * 3f;
+            score -= provokes * 4f;
+            score -= Mathf.Max(0, pathResult.Path.Count - withdrawRange) * 2f;
 
             if (score > bestScore)
             {
