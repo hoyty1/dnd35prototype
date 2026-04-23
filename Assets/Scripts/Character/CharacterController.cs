@@ -2190,14 +2190,14 @@ public class CharacterController : MonoBehaviour
                 startAttackIndex = 0;
 
             int naturalAttackGlobalIndex = 0;
-            int attacksExecuted = 0;
+            int naturalAttacksExecuted = 0;
             for (int naturalIndex = 0; naturalIndex < naturalAttacks.Count; naturalIndex++)
             {
                 NaturalAttackDefinition naturalAttack = naturalAttacks[naturalIndex];
                 int attackCount = Mathf.Max(1, naturalAttack.Count);
                 for (int repeat = 0; repeat < attackCount; repeat++)
                 {
-                    if (attacksExecuted >= maxAttacks)
+                    if (naturalAttacksExecuted >= maxAttacks)
                         break;
 
                     if (naturalAttackGlobalIndex++ < startAttackIndex)
@@ -2258,10 +2258,10 @@ public class CharacterController : MonoBehaviour
                     string naturalLabel = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural" : naturalAttack.Name;
                     string roleLabel = naturalAttack.IsPrimary ? "Primary" : "Secondary";
                     result.AttackLabels.Add($"{naturalLabel} {repeat + 1} ({roleLabel} {CharacterStats.FormatMod(baseBonus)})");
-                    attacksExecuted++;
+                    naturalAttacksExecuted++;
                 }
 
-                if (attacksExecuted >= maxAttacks || target.Stats.IsDead)
+                if (naturalAttacksExecuted >= maxAttacks || target.Stats.IsDead)
                     break;
             }
 
@@ -2578,9 +2578,9 @@ public class CharacterController : MonoBehaviour
                 critThreatMin,
                 critMult,
                 null,
-                useHalfStrength: false,
+                isOffHand: !rakeAttack.IsPrimary,
                 featDamageBonus: 0,
-                aidAnotherTargetAcBonus: 0,
+                situationalTargetAcBonus: 0,
                 dealNonlethalDamage: false,
                 damageModeAttackPenalty: 0,
                 damageModePenaltySource: string.Empty);
