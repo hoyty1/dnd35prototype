@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using UnityEngine;
@@ -242,12 +243,49 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         return sb.ToString();
     }
 
+    private static string FormatEquipmentNameForTooltip(string equipmentName)
+    {
+        if (string.IsNullOrWhiteSpace(equipmentName))
+            return equipmentName;
+
+        return FormatShieldNameForTooltip(equipmentName.Trim());
+    }
+
+    private static string FormatShieldNameForTooltip(string itemName)
+    {
+        if (string.IsNullOrWhiteSpace(itemName))
+            return itemName;
+
+        string trimmed = itemName.Trim();
+        string lower = trimmed.ToLowerInvariant();
+
+        // Convert database-style names like "Shield, Heavy Wooden" to natural form "Heavy Wooden Shield".
+        if (lower.StartsWith("shield,"))
+        {
+            string descriptor = trimmed.Substring("shield,".Length).Trim();
+            if (string.IsNullOrEmpty(descriptor))
+                return "Shield";
+
+            string titleDescriptor = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(descriptor.ToLowerInvariant());
+            return $"{titleDescriptor} Shield";
+        }
+
+        if (string.Equals(lower, "tower shield", StringComparison.Ordinal))
+            return "Tower Shield";
+
+        if (string.Equals(lower, "buckler", StringComparison.Ordinal))
+            return "Buckler";
+
+        return trimmed;
+    }
+
     private static List<string> GetWieldingTags(List<string> tags)
     {
         List<string> wielding = tags
             .Where(tag => tag.StartsWith("Wielding: "))
             .Select(tag => tag.Substring("Wielding: ".Length))
             .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(FormatEquipmentNameForTooltip)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -273,6 +311,7 @@ public class CharacterHoverTooltipUI : MonoBehaviour
             .Where(tag => tag.StartsWith("Armor: "))
             .Select(tag => tag.Substring("Armor: ".Length))
             .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(FormatEquipmentNameForTooltip)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToList();
