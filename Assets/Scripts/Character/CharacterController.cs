@@ -2559,12 +2559,17 @@ public class CharacterController : MonoBehaviour
             if (target.Stats.IsDead)
                 break;
 
-            int baseBonus = Stats.GetNaturalAttackBonus(rakeAttack);
+            // D&D 3.5e: rake attacks use PRIMARY attack bonuses (no -5 secondary penalty)
+            int baseBonus = Stats.BaseAttackBonus + Stats.STRMod + Stats.SizeModifier;
             int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + armorNonProfPenalty + conditionAttackPenalty;
             int hpBeforeAtk = target.Stats.CurrentHP;
 
             Stats.GetScaledNaturalAttackDamage(rakeAttack, out int damageCount, out int damageDice);
-            int naturalDamageBonus = Stats.GetNaturalAttackDamageBonus(rakeAttack);
+
+            // Rake damage still uses 0.5× STR by rule, so keep off-hand strength handling for damage resolution.
+            const bool useHalfStrengthForRakeDamage = true;
+            int baseStrengthFromDamageResolver = Mathf.FloorToInt(Stats.STRMod * 0.5f);
+            int naturalDamageBonus = Stats.GetNaturalAttackDamageBonus(rakeAttack) - baseStrengthFromDamageResolver;
 
             CombatResult atk = PerformSingleAttackWithCrit(
                 target,
@@ -2578,7 +2583,7 @@ public class CharacterController : MonoBehaviour
                 critThreatMin,
                 critMult,
                 null,
-                isOffHand: !rakeAttack.IsPrimary,
+                isOffHand: useHalfStrengthForRakeDamage,
                 featDamageBonus: 0,
                 situationalTargetAcBonus: 0,
                 dealNonlethalDamage: false,
