@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using DND35.AI;
 using DND35.AI.Profiles;
@@ -384,13 +385,14 @@ namespace Tests.AI
                                      && tiger.HasScent
                                      && tiger.HasPounce
                                      && tiger.HasImprovedGrab
-                                     && tiger.HasRake;
+                                     && tiger.HasRake
+                                     && string.Equals(tiger.ImprovedGrabTriggerAttackName, "Bite", StringComparison.OrdinalIgnoreCase);
 
             Assert(usesAnimalProfile,
                 "Tiger enemy definition uses Animal AI profile archetype",
                 tiger == null
                     ? "(tiger definition missing)"
-                    : $"(archetype={tiger.AIProfileArchetype}, scent={tiger.HasScent}, pounce={tiger.HasPounce}, grab={tiger.HasImprovedGrab}, rake={tiger.HasRake})");
+                    : $"(archetype={tiger.AIProfileArchetype}, scent={tiger.HasScent}, pounce={tiger.HasPounce}, grab={tiger.HasImprovedGrab}, trigger={tiger.ImprovedGrabTriggerAttackName}, rake={tiger.HasRake})");
         }
 
         private static void TestEvokerSchoolPriority()

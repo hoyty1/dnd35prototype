@@ -830,6 +830,12 @@ public class CharacterStats
     /// <summary>Monster special: successful natural-attack hit can start a grapple as a free action.</summary>
     public bool HasImprovedGrab;
 
+    /// <summary>
+    /// Optional attack-name filter for Improved Grab triggers (e.g., "Bite", "Claw").
+    /// If empty, Improved Grab defaults to claw-based triggers.
+    /// </summary>
+    public string ImprovedGrabTriggerAttackName;
+
     /// <summary>Monster special: can make a full natural attack sequence at the end of a charge.</summary>
     public bool HasPounce;
 

@@ -2212,6 +2212,7 @@ public partial class GameManager : MonoBehaviour
         stats.HasTripAttack = def.HasTripAttack;
         stats.TripAttackCheckBonus = def.TripAttackCheckBonus;
         stats.HasImprovedGrab = def.HasImprovedGrab;
+        stats.ImprovedGrabTriggerAttackName = def.ImprovedGrabTriggerAttackName;
         stats.HasPounce = def.HasPounce;
         stats.HasRake = def.HasRake;
         stats.HasScent = def.HasScent;

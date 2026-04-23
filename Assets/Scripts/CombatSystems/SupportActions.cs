@@ -1190,12 +1190,16 @@ public partial class GameManager
             : $"CHARGE: {target.Stats.CharacterName} | +2 attack, -2 AC until next turn. Click target/endpoint to confirm.");
     }
 
-    private static bool IsImprovedGrabTriggerAttack(CombatResult attack)
+    private static bool IsImprovedGrabTriggerAttack(CharacterController attacker, CombatResult attack)
     {
-        if (attack == null || string.IsNullOrWhiteSpace(attack.WeaponName))
+        if (attacker?.Stats == null || attack == null || string.IsNullOrWhiteSpace(attack.WeaponName))
             return false;
 
-        return attack.WeaponName.IndexOf("claw", StringComparison.OrdinalIgnoreCase) >= 0;
+        string triggerAttackName = attacker.Stats.ImprovedGrabTriggerAttackName;
+        if (string.IsNullOrWhiteSpace(triggerAttackName))
+            triggerAttackName = "claw";
+
+        return attack.WeaponName.IndexOf(triggerAttackName, StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private IEnumerator PromptImprovedGrabChoice(CharacterController attacker, CharacterController target, string attackName, Action<bool> onResolved)
@@ -1376,7 +1380,7 @@ public partial class GameManager
                         if (improvedGrabAttempted || improvedGrabSucceeded || target.Stats.IsDead)
                             continue;
 
-                        if (charger.Stats == null || !charger.Stats.HasImprovedGrab || !IsImprovedGrabTriggerAttack(attackResult) || !attackResult.Hit)
+                        if (charger.Stats == null || !charger.Stats.HasImprovedGrab || !IsImprovedGrabTriggerAttack(charger, attackResult) || !attackResult.Hit)
                             continue;
 
                         bool shouldAttemptGrab = true;
@@ -1427,7 +1431,7 @@ public partial class GameManager
                     if (result.Hit && result.TotalDamage > 0)
                         CheckConcentrationOnDamage(target, result.TotalDamage);
 
-                    if (charger.Stats != null && charger.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(result) && !target.Stats.IsDead)
+                    if (charger.Stats != null && charger.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(charger, result) && !target.Stats.IsDead)
                     {
                         bool shouldAttemptGrab = true;
                         if (charger.IsPlayerControlled)
@@ -1602,7 +1606,7 @@ public partial class GameManager
                     if (improvedGrabAttempted || improvedGrabSucceeded || target.Stats.IsDead)
                         continue;
 
-                    if (npc.Stats == null || !npc.Stats.HasImprovedGrab || !attackResult.Hit || !IsImprovedGrabTriggerAttack(attackResult))
+                    if (npc.Stats == null || !npc.Stats.HasImprovedGrab || !attackResult.Hit || !IsImprovedGrabTriggerAttack(npc, attackResult))
                         continue;
 
                     improvedGrabAttempted = true;
@@ -1640,7 +1644,7 @@ public partial class GameManager
                 if (result.Hit && result.TotalDamage > 0)
                     CheckConcentrationOnDamage(target, result.TotalDamage);
 
-                if (npc.Stats != null && npc.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(result) && !target.Stats.IsDead)
+                if (npc.Stats != null && npc.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(npc, result) && !target.Stats.IsDead)
                 {
                     SpecialAttackResult grabResult = npc.ResolveImprovedGrabFreeAttempt(target);
                     CombatUI?.ShowCombatLog($"🪢 Improved Grab: {grabResult.Log}");

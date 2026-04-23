@@ -539,6 +539,7 @@ public static class EnemyDatabase
             CreatureTags = new List<string> { "Animal" },
             HasScent = true,
             HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
             HasPounce = true,
             HasRake = true,
             RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = true },
@@ -661,6 +662,7 @@ public class EnemyDefinition
     public bool HasTripAttack;
     public int TripAttackCheckBonus;
     public bool HasImprovedGrab;
+    public string ImprovedGrabTriggerAttackName;
     public bool HasPounce;
     public bool HasRake;
     public bool HasScent;
