@@ -240,6 +240,10 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         if (statuses.Count > 0)
             sb.Append("\nStatus: ").Append(string.Join(", ", statuses));
 
+        string specialAbilities = character.Stats.GetSpecialAbilitiesSummary();
+        if (!string.IsNullOrEmpty(specialAbilities))
+            sb.Append("\nTraits: ").Append(specialAbilities);
+
         return sb.ToString();
     }
 

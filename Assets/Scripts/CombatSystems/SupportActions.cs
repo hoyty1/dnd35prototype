@@ -1190,6 +1190,68 @@ public partial class GameManager
             : $"CHARGE: {target.Stats.CharacterName} | +2 attack, -2 AC until next turn. Click target/endpoint to confirm.");
     }
 
+    private static bool IsImprovedGrabTriggerAttack(CombatResult attack)
+    {
+        if (attack == null || string.IsNullOrWhiteSpace(attack.WeaponName))
+            return false;
+
+        return attack.WeaponName.IndexOf("claw", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private IEnumerator PromptImprovedGrabChoice(CharacterController attacker, CharacterController target, string attackName, Action<bool> onResolved)
+    {
+        if (attacker == null || target == null || !attacker.IsPlayerControlled || CombatUI == null)
+        {
+            onResolved?.Invoke(true);
+            yield break;
+        }
+
+        bool resolved = false;
+        bool shouldGrab = false;
+        string attackLabel = string.IsNullOrWhiteSpace(attackName) ? "natural attack" : attackName;
+
+        CombatUI.ShowConfirmationDialog(
+            title: "Improved Grab",
+            message: $"{attacker.Stats.CharacterName} hit {target.Stats.CharacterName} with {attackLabel}. Start a grapple as a free action?",
+            confirmLabel: "Start Grapple",
+            cancelLabel: "Skip",
+            onConfirm: () =>
+            {
+                shouldGrab = true;
+                resolved = true;
+            },
+            onCancel: () =>
+            {
+                shouldGrab = false;
+                resolved = true;
+            });
+
+        while (!resolved)
+            yield return null;
+
+        onResolved?.Invoke(shouldGrab);
+    }
+
+    private void ResolveRakeAfterSuccessfulImprovedGrab(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null || attacker.Stats == null || !attacker.Stats.HasRake || target.Stats == null || target.Stats.IsDead)
+            return;
+
+        FullAttackResult rakeResult = attacker.PerformRakeAttacks(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+        if (rakeResult == null || rakeResult.Attacks == null || rakeResult.Attacks.Count == 0)
+            return;
+
+        CombatUI?.ShowCombatLog($"🩸 Rake follow-up: {attacker.Stats.CharacterName} tears at {target.Stats.CharacterName} while grappling!");
+        CombatUI?.ShowCombatLog(rakeResult.GetFullSummary());
+
+        for (int i = 0; i < rakeResult.Attacks.Count; i++)
+        {
+            CombatResult atk = rakeResult.Attacks[i];
+            if (atk != null && atk.Hit && atk.TotalDamage > 0)
+                CheckConcentrationOnDamage(target, atk.TotalDamage);
+        }
+    }
+
     private IEnumerator ExecuteCharge(CharacterController charger, CharacterController target)
     {
         if (!CanChargeTarget(charger, target, logFailures: true))
@@ -1257,27 +1319,120 @@ public partial class GameManager
         }
         else
         {
-            // Apply +2 charge attack bonus to this attack only.
-            charger.Stats.MoraleAttackBonus += 2;
-            CombatResult result;
-            try
-            {
-                ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
-                result = charger.Attack(target, false, 0, null, null);
-            }
-            finally
-            {
-                charger.Stats.MoraleAttackBonus -= 2;
-            }
+            bool usedPounce = charger.Stats != null
+                && charger.Stats.HasPounce
+                && charger.Stats.HasNaturalAttacks
+                && charger.GetEquippedMainWeapon() == null;
 
-            if (result != null)
+            if (usedPounce)
             {
-                RangeInfo chargeRangeInfo = CalculateRangeInfo(charger, target);
-                TryResolveFreeTripOnHit(charger, target, result, chargeRangeInfo);
+                CombatUI?.ShowCombatLog($"🐅 {charger.Stats.CharacterName} uses Pounce and unleashes a full natural attack at the end of the charge!");
 
-                CombatUI.ShowCombatLog($"⚡ Charge Attack (+2): {result.GetDetailedSummary()}");
-                if (result.Hit && result.TotalDamage > 0)
-                    CheckConcentrationOnDamage(target, result.TotalDamage);
+                charger.Stats.MoraleAttackBonus += 2;
+                FullAttackResult pounceResult;
+                try
+                {
+                    ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
+                    pounceResult = charger.FullAttack(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+                }
+                finally
+                {
+                    charger.Stats.MoraleAttackBonus -= 2;
+                }
+
+                bool improvedGrabAttempted = false;
+                bool improvedGrabSucceeded = false;
+
+                if (pounceResult != null)
+                {
+                    CombatUI?.ShowCombatLog($"⚡ Charge Pounce (+2): {pounceResult.GetFullSummary()}");
+
+                    for (int i = 0; i < pounceResult.Attacks.Count; i++)
+                    {
+                        CombatResult attackResult = pounceResult.Attacks[i];
+                        if (attackResult == null)
+                            continue;
+
+                        if (attackResult.Hit && attackResult.TotalDamage > 0)
+                            CheckConcentrationOnDamage(target, attackResult.TotalDamage);
+
+                        if (improvedGrabAttempted || improvedGrabSucceeded || target.Stats.IsDead)
+                            continue;
+
+                        if (charger.Stats == null || !charger.Stats.HasImprovedGrab || !IsImprovedGrabTriggerAttack(attackResult) || !attackResult.Hit)
+                            continue;
+
+                        bool shouldAttemptGrab = true;
+                        if (charger.IsPlayerControlled)
+                        {
+                            bool playerDecision = false;
+                            yield return StartCoroutine(PromptImprovedGrabChoice(charger, target, attackResult.WeaponName, decision => playerDecision = decision));
+                            shouldAttemptGrab = playerDecision;
+                        }
+
+                        improvedGrabAttempted = true;
+                        if (!shouldAttemptGrab)
+                        {
+                            CombatUI?.ShowCombatLog($"↷ {charger.Stats.CharacterName} declines to start a grapple.");
+                            continue;
+                        }
+
+                        SpecialAttackResult grabResult = charger.ResolveImprovedGrabFreeAttempt(target);
+                        CombatUI?.ShowCombatLog($"🪢 Improved Grab: {grabResult.Log}");
+                        improvedGrabSucceeded = grabResult.Success;
+
+                        if (grabResult.Success)
+                            ResolveRakeAfterSuccessfulImprovedGrab(charger, target);
+                    }
+                }
+            }
+            else
+            {
+                // Apply +2 charge attack bonus to this attack only.
+                charger.Stats.MoraleAttackBonus += 2;
+                CombatResult result;
+                try
+                {
+                    ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
+                    result = charger.Attack(target, false, 0, null, null);
+                }
+                finally
+                {
+                    charger.Stats.MoraleAttackBonus -= 2;
+                }
+
+                if (result != null)
+                {
+                    RangeInfo chargeRangeInfo = CalculateRangeInfo(charger, target);
+                    TryResolveFreeTripOnHit(charger, target, result, chargeRangeInfo);
+
+                    CombatUI.ShowCombatLog($"⚡ Charge Attack (+2): {result.GetDetailedSummary()}");
+                    if (result.Hit && result.TotalDamage > 0)
+                        CheckConcentrationOnDamage(target, result.TotalDamage);
+
+                    if (charger.Stats != null && charger.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(result) && !target.Stats.IsDead)
+                    {
+                        bool shouldAttemptGrab = true;
+                        if (charger.IsPlayerControlled)
+                        {
+                            bool playerDecision = false;
+                            yield return StartCoroutine(PromptImprovedGrabChoice(charger, target, result.WeaponName, decision => playerDecision = decision));
+                            shouldAttemptGrab = playerDecision;
+                        }
+
+                        if (shouldAttemptGrab)
+                        {
+                            SpecialAttackResult grabResult = charger.ResolveImprovedGrabFreeAttempt(target);
+                            CombatUI?.ShowCombatLog($"🪢 Improved Grab: {grabResult.Log}");
+                            if (grabResult.Success)
+                                ResolveRakeAfterSuccessfulImprovedGrab(charger, target);
+                        }
+                        else
+                        {
+                            CombatUI?.ShowCombatLog($"↷ {charger.Stats.CharacterName} declines to start a grapple.");
+                        }
+                    }
+                }
             }
         }
 
@@ -1370,28 +1525,92 @@ public partial class GameManager
         bool isFlankingCharge = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
         int flankingBonus = isFlankingCharge ? CombatUtils.FlankingAttackBonus : 0;
 
-        npc.Stats.MoraleAttackBonus += 2;
-        CombatResult result;
-        try
-        {
-            ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeAttack: true);
-            result = npc.Attack(target, isFlankingCharge, flankingBonus,
-                flankPartner != null ? flankPartner.Stats.CharacterName : null, null);
-        }
-        finally
-        {
-            npc.Stats.MoraleAttackBonus -= 2;
-        }
+        bool usedPounce = npc.Stats != null
+            && npc.Stats.HasPounce
+            && npc.Stats.HasNaturalAttacks
+            && npc.GetEquippedMainWeapon() == null;
 
-        if (result != null)
+        if (usedPounce)
         {
-            RangeInfo chargeRangeInfo = CalculateRangeInfo(npc, target);
-            TryResolveFreeTripOnHit(npc, target, result, chargeRangeInfo);
+            CombatUI?.ShowCombatLog($"🐅 {npc.Stats.CharacterName} uses Pounce!");
+            npc.Stats.MoraleAttackBonus += 2;
+            FullAttackResult pounceResult;
+            try
+            {
+                ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeAttack: true);
+                pounceResult = npc.FullAttack(target, isFlankingCharge, flankingBonus,
+                    flankPartner != null ? flankPartner.Stats.CharacterName : null, null);
+            }
+            finally
+            {
+                npc.Stats.MoraleAttackBonus -= 2;
+            }
 
-            string flankText = isFlankingCharge ? " + Flanking" : "";
-            CombatUI.ShowCombatLog($"☠ Charge Attack (+2{flankText}): {result.GetDetailedSummary()}");
-            if (result.Hit && result.TotalDamage > 0)
-                CheckConcentrationOnDamage(target, result.TotalDamage);
+            if (pounceResult != null)
+            {
+                string flankText = isFlankingCharge ? " + Flanking" : "";
+                CombatUI?.ShowCombatLog($"☠ Charge Pounce (+2{flankText}): {pounceResult.GetFullSummary()}");
+
+                bool improvedGrabAttempted = false;
+                bool improvedGrabSucceeded = false;
+                for (int i = 0; i < pounceResult.Attacks.Count; i++)
+                {
+                    CombatResult attackResult = pounceResult.Attacks[i];
+                    if (attackResult == null)
+                        continue;
+
+                    if (attackResult.Hit && attackResult.TotalDamage > 0)
+                        CheckConcentrationOnDamage(target, attackResult.TotalDamage);
+
+                    if (improvedGrabAttempted || improvedGrabSucceeded || target.Stats.IsDead)
+                        continue;
+
+                    if (npc.Stats == null || !npc.Stats.HasImprovedGrab || !attackResult.Hit || !IsImprovedGrabTriggerAttack(attackResult))
+                        continue;
+
+                    improvedGrabAttempted = true;
+                    SpecialAttackResult grabResult = npc.ResolveImprovedGrabFreeAttempt(target);
+                    CombatUI?.ShowCombatLog($"🪢 Improved Grab: {grabResult.Log}");
+                    improvedGrabSucceeded = grabResult.Success;
+
+                    if (grabResult.Success)
+                        ResolveRakeAfterSuccessfulImprovedGrab(npc, target);
+                }
+            }
+        }
+        else
+        {
+            npc.Stats.MoraleAttackBonus += 2;
+            CombatResult result;
+            try
+            {
+                ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeAttack: true);
+                result = npc.Attack(target, isFlankingCharge, flankingBonus,
+                    flankPartner != null ? flankPartner.Stats.CharacterName : null, null);
+            }
+            finally
+            {
+                npc.Stats.MoraleAttackBonus -= 2;
+            }
+
+            if (result != null)
+            {
+                RangeInfo chargeRangeInfo = CalculateRangeInfo(npc, target);
+                TryResolveFreeTripOnHit(npc, target, result, chargeRangeInfo);
+
+                string flankText = isFlankingCharge ? " + Flanking" : "";
+                CombatUI.ShowCombatLog($"☠ Charge Attack (+2{flankText}): {result.GetDetailedSummary()}");
+                if (result.Hit && result.TotalDamage > 0)
+                    CheckConcentrationOnDamage(target, result.TotalDamage);
+
+                if (npc.Stats != null && npc.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(result) && !target.Stats.IsDead)
+                {
+                    SpecialAttackResult grabResult = npc.ResolveImprovedGrabFreeAttempt(target);
+                    CombatUI?.ShowCombatLog($"🪢 Improved Grab: {grabResult.Log}");
+                    if (grabResult.Success)
+                        ResolveRakeAfterSuccessfulImprovedGrab(npc, target);
+                }
+            }
         }
 
         npc.ApplyCondition(CombatConditionType.ChargePenalty, 1, npc.Stats.CharacterName);

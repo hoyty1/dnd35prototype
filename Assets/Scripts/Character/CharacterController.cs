@@ -2525,6 +2525,85 @@ public class CharacterController : MonoBehaviour
         return EnsureInventory().GetConsumableCount();
     }
 
+    public FullAttackResult PerformRakeAttacks(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName)
+    {
+        var result = new FullAttackResult
+        {
+            Type = FullAttackResult.AttackType.FullAttack,
+            Attacker = this,
+            Defender = target,
+            DefenderHPBefore = target != null && target.Stats != null ? target.Stats.CurrentHP : 0
+        };
+
+        if (target == null || target.Stats == null || Stats == null || target.Stats.IsDead)
+        {
+            result.DefenderHPAfter = result.DefenderHPBefore;
+            return result;
+        }
+
+        NaturalAttackDefinition rakeAttack = Stats.GetRakeAttackDefinition();
+        if (rakeAttack == null)
+        {
+            result.DefenderHPAfter = target.Stats.CurrentHP;
+            return result;
+        }
+
+        int critThreatMin = 20;
+        int critMult = 2;
+        int attackCount = Mathf.Max(1, rakeAttack.Count);
+        int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
+        int conditionAttackPenalty = Stats.ConditionAttackPenalty;
+
+        for (int i = 0; i < attackCount; i++)
+        {
+            if (target.Stats.IsDead)
+                break;
+
+            int baseBonus = Stats.GetNaturalAttackBonus(rakeAttack);
+            int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + armorNonProfPenalty + conditionAttackPenalty;
+            int hpBeforeAtk = target.Stats.CurrentHP;
+
+            Stats.GetScaledNaturalAttackDamage(rakeAttack, out int damageCount, out int damageDice);
+            int naturalDamageBonus = Stats.GetNaturalAttackDamageBonus(rakeAttack);
+
+            CombatResult atk = PerformSingleAttackWithCrit(
+                target,
+                atkMod,
+                isFlanking,
+                flankingBonus,
+                flankingPartnerName,
+                damageDice,
+                damageCount,
+                naturalDamageBonus,
+                critThreatMin,
+                critMult,
+                null,
+                useHalfStrength: false,
+                featDamageBonus: 0,
+                aidAnotherTargetAcBonus: 0,
+                dealNonlethalDamage: false,
+                damageModeAttackPenalty: 0,
+                damageModePenaltySource: string.Empty);
+
+            atk.WeaponName = string.IsNullOrWhiteSpace(rakeAttack.Name) ? "Rake" : rakeAttack.Name;
+            atk.BreakdownBAB = baseBonus;
+            atk.BreakdownAbilityMod = Stats.STRMod;
+            atk.BreakdownAbilityName = "STR";
+            atk.WeaponNonProficiencyPenalty = 0;
+            atk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
+            atk.DefenderHPBefore = hpBeforeAtk;
+            atk.DefenderHPAfter = target.Stats.CurrentHP;
+            atk.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
+
+            result.Attacks.Add(atk);
+            result.AttackLabels.Add($"Rake {i + 1} ({CharacterStats.FormatMod(baseBonus)})");
+        }
+
+        result.DefenderHPAfter = target.Stats.CurrentHP;
+        result.TargetKilled = target.Stats.IsDead;
+        return result;
+    }
+
     public FullAttackResult DualWieldAttack(CharacterController target, bool isFlanking, int flankingBonus, string flankingPartnerName, RangeInfo rangeInfo = null)
     {
         var result = new FullAttackResult();
@@ -6000,6 +6079,88 @@ public class CharacterController : MonoBehaviour
             OpposedRoll = defenderCheck.BaseRoll,
             OpposedTotal = defenderCheck.Total,
             Log = successLog
+        };
+    }
+
+    public SpecialAttackResult ResolveImprovedGrabFreeAttempt(CharacterController target)
+    {
+        if (target == null || target.Stats == null || Stats == null)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Improved Grab",
+                Success = false,
+                Log = "No valid target for Improved Grab."
+            };
+        }
+
+        if (!Stats.HasImprovedGrab)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Improved Grab",
+                Success = false,
+                Log = $"{Stats.CharacterName} does not have Improved Grab."
+            };
+        }
+
+        if (TryGetGrappleState(out CharacterController currentOpponent, out _, out _, out _))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Improved Grab",
+                Success = false,
+                Log = $"{Stats.CharacterName} is already grappling {currentOpponent.Stats.CharacterName}."
+            };
+        }
+
+        if (target.TryGetGrappleState(out CharacterController targetOpponent, out _, out _, out _))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Improved Grab",
+                Success = false,
+                Log = $"{target.Stats.CharacterName} is already grappling {targetOpponent.Stats.CharacterName}."
+            };
+        }
+
+        GrappleCheckResult attackerCheck = RollGrappleCheck();
+        GrappleCheckResult defenderCheck = target.RollGrappleCheck();
+        bool success = attackerCheck.Total > defenderCheck.Total;
+
+        string grapplePositioningLog = string.Empty;
+        if (success)
+            grapplePositioningLog = EstablishGrappleWith(target);
+
+        string resultLine = BuildOpposedResultLine(Stats.CharacterName, attackerCheck.Total, target.Stats.CharacterName, defenderCheck.Total);
+        string outcomeLine = success
+            ? $"{Stats.CharacterName} seizes {target.Stats.CharacterName} with Improved Grab!"
+            : $"{Stats.CharacterName} fails to secure the grapple.";
+
+        if (success)
+            outcomeLine += " Both combatants gain the grappled condition.";
+
+        if (success && !string.IsNullOrEmpty(grapplePositioningLog))
+            outcomeLine += $" {grapplePositioningLog}";
+
+        string log = string.Join("\n\n", new[]
+        {
+            $"{Stats.CharacterName} attempts Improved Grab on {target.Stats.CharacterName} (free action).",
+            attackerCheck.GetBreakdown(),
+            defenderCheck.GetBreakdown(),
+            resultLine + "\n" + outcomeLine
+        });
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Improved Grab",
+            Success = success,
+            CheckRoll = attackerCheck.BaseRoll,
+            CheckTotal = attackerCheck.Total,
+            OpposedRoll = defenderCheck.BaseRoll,
+            OpposedTotal = defenderCheck.Total,
+            Log = log,
+            ProvokedAoO = false
         };
     }
 

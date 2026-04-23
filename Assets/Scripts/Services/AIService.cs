@@ -587,6 +587,7 @@ public class AIService : MonoBehaviour
                 continue;
 
             float score = profile.ScoreTarget(candidate, npc);
+            score += GetPerceptionTargetingAdjustment(npc, candidate);
             if (score > bestScore)
             {
                 bestScore = score;
@@ -614,6 +615,7 @@ public class AIService : MonoBehaviour
                 continue;
 
             float score = GetTargetPriority(npc, candidate);
+            score += GetPerceptionTargetingAdjustment(npc, candidate);
             if (score > bestScore)
             {
                 bestScore = score;
@@ -647,6 +649,7 @@ public class AIService : MonoBehaviour
             float distanceBonus = Mathf.Max(0f, maxRange - distance) * 2f;
             float woundedBonus = Mathf.Clamp01(1f - ((float)candidate.Stats.CurrentHP / Mathf.Max(1f, candidate.Stats.TotalMaxHP))) * 1.5f;
             float totalScore = armorScore + distanceBonus + woundedBonus;
+            totalScore += GetPerceptionTargetingAdjustment(npc, candidate);
 
             if (totalScore > bestScore)
             {
@@ -703,6 +706,27 @@ public class AIService : MonoBehaviour
         if (string.Equals(armorTag, "Heavy Armor", StringComparison.OrdinalIgnoreCase)) return 25f;
 
         return 10f;
+    }
+
+    private float GetPerceptionTargetingAdjustment(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || target == null || target.Stats == null)
+            return 0f;
+
+        if (!target.IsInvisibleCondition)
+            return 0f;
+
+        int distanceSquares = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+        bool hasScent = npc.Stats != null && npc.Stats.HasScent;
+
+        if (hasScent)
+        {
+            // Scent gives a strong close-range lock and partial tracking at longer range.
+            return distanceSquares <= 6 ? 4f : -6f;
+        }
+
+        // Without scent, invisible targets are much harder to prioritize reliably.
+        return -18f;
     }
 
     public float GetTargetPriority(CharacterController npc, CharacterController target)

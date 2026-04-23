@@ -845,6 +845,10 @@ public class CharacterSheetUI : MonoBehaviour
             }
         }
 
+        string specialAbilities = stats.GetSpecialAbilitiesSummary();
+        if (!string.IsNullOrEmpty(specialAbilities))
+            AddLine(content, $"  Special Abilities: {specialAbilities}", 10, new Color(0.72f, 0.9f, 0.75f), FontStyle.Normal, 13);
+
         AppendAidAnotherSection(content, selectedPC);
 
         // === Active Buffs ===

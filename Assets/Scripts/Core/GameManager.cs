@@ -2097,6 +2097,11 @@ public partial class GameManager : MonoBehaviour
         stats.NaturalArmorBonus = def.NaturalArmorBonus;
         stats.HasTripAttack = def.HasTripAttack;
         stats.TripAttackCheckBonus = def.TripAttackCheckBonus;
+        stats.HasImprovedGrab = def.HasImprovedGrab;
+        stats.HasPounce = def.HasPounce;
+        stats.HasRake = def.HasRake;
+        stats.HasScent = def.HasScent;
+        stats.SetRakeAttack(def.RakeAttack);
 
         // Ensure size-derived natural reach is respected for creatures larger than Medium.
         if (stats.AttackRange < stats.NaturalReachSquares)

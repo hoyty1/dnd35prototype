@@ -827,6 +827,21 @@ public class CharacterStats
     /// <summary>Creature-specific modifier applied to trip checks (e.g., wolves get +1).</summary>
     public int TripAttackCheckBonus;
 
+    /// <summary>Monster special: successful natural-attack hit can start a grapple as a free action.</summary>
+    public bool HasImprovedGrab;
+
+    /// <summary>Monster special: can make a full natural attack sequence at the end of a charge.</summary>
+    public bool HasPounce;
+
+    /// <summary>Monster special: extra hind-claw attacks against grappled prey.</summary>
+    public bool HasRake;
+
+    /// <summary>Monster special: grants heightened scent-based detection in AI logic.</summary>
+    public bool HasScent;
+
+    /// <summary>Optional natural attack profile used for rake attacks while grappling.</summary>
+    public NaturalAttackDefinition RakeAttack;
+
     /// <summary>
     /// Innate natural-weapon profiles used when no manufactured weapon is equipped
     /// (e.g., wolf bite, wight slam, claw).
@@ -1444,6 +1459,37 @@ public class CharacterStats
                 })
                 .ToList()
             : new List<NaturalAttackDefinition>();
+    }
+
+    public void SetRakeAttack(NaturalAttackDefinition attack)
+    {
+        if (attack == null)
+        {
+            RakeAttack = null;
+            return;
+        }
+
+        RakeAttack = attack.Clone();
+        RakeAttack.Count = Mathf.Max(1, RakeAttack.Count);
+    }
+
+    public NaturalAttackDefinition GetRakeAttackDefinition()
+    {
+        if (!HasRake || RakeAttack == null || !IsValidNaturalAttack(RakeAttack))
+            return null;
+
+        return RakeAttack;
+    }
+
+    public string GetSpecialAbilitiesSummary()
+    {
+        var traits = new List<string>();
+        if (HasImprovedGrab) traits.Add("Improved Grab");
+        if (HasPounce) traits.Add("Pounce");
+        if (HasRake) traits.Add("Rake");
+        if (HasScent) traits.Add("Scent");
+
+        return traits.Count > 0 ? string.Join(", ", traits) : string.Empty;
     }
 
     public string GetNaturalAttackSummary()

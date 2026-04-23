@@ -497,6 +497,7 @@ public static class EnemyDatabase
             BaseSpeed = 10,   // 50 ft
             BaseHitDieHP = 45,
             CreatureTags = new List<string> { "Animal" },
+            HasScent = true,
             HasTripAttack = true,
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
@@ -535,6 +536,11 @@ public static class EnemyDatabase
             BaseSpeed = 10,
             BaseHitDieHP = 45,
             CreatureTags = new List<string> { "Animal" },
+            HasScent = true,
+            HasImprovedGrab = true,
+            HasPounce = true,
+            HasRake = true,
+            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = EnemyAIBehavior.AggressiveMelee,
@@ -610,6 +616,7 @@ public static class EnemyDatabase
             BaseSpeed = 10,   // 50 ft
             BaseHitDieHP = 13,
             CreatureTags = new List<string> { "Animal" },
+            HasScent = true,
             HasTripAttack = true,
             TripAttackCheckBonus = 1,
             Feats = new List<string> { "Weapon Focus", "Track" },
@@ -652,6 +659,11 @@ public class EnemyDefinition
     public int NaturalArmorBonus;
     public bool HasTripAttack;
     public int TripAttackCheckBonus;
+    public bool HasImprovedGrab;
+    public bool HasPounce;
+    public bool HasRake;
+    public bool HasScent;
+    public NaturalAttackDefinition RakeAttack;
     public int STR, DEX, CON, WIS, INT, CHA;
     public int BAB;
     public int BaseSpeed;
