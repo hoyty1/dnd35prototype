@@ -1,4 +1,5 @@
 using UnityEngine;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
@@ -731,9 +732,24 @@ public class CharacterController : MonoBehaviour
         return true;
     }
 
+    private bool ShouldUseInnateNaturalAttackProfile(ItemData weapon)
+    {
+        if (weapon != null || Stats == null)
+            return false;
+
+        bool isAnimal = string.Equals(Stats.CreatureType, "Animal", StringComparison.OrdinalIgnoreCase);
+        bool hasInnateTripAttack = Stats.HasTripAttack;
+        bool hasNaturalDamageProfile = Stats.BaseDamageDice > 0 && Stats.BaseDamageCount > 0;
+
+        return hasNaturalDamageProfile && (isAnimal || hasInnateTripAttack);
+    }
+
     private AttackDamageMode GetDefaultAttackDamageModeForWeapon(ItemData weapon)
     {
         if (weapon != null)
+            return AttackDamageMode.Lethal;
+
+        if (ShouldUseInnateNaturalAttackProfile(weapon))
             return AttackDamageMode.Lethal;
 
         if (HasImprovedUnarmedStrikeForDamageMode() || HasGauntletEquipped())
@@ -755,7 +771,8 @@ public class CharacterController : MonoBehaviour
     private DamageModeAttackProfile ResolveDamageModeAttackProfile(ItemData weapon)
     {
         bool selectedNonlethal = ResolveSelectedAttackDamageMode(weapon) == AttackDamageMode.Nonlethal;
-        bool isUnarmedStrike = weapon == null;
+        bool isInnateNaturalAttack = ShouldUseInnateNaturalAttackProfile(weapon);
+        bool isUnarmedStrike = weapon == null && !isInnateNaturalAttack;
         bool weaponIsInherentlyNonlethal = weapon != null && weapon.DealsNonlethalDamage;
 
         var profile = new DamageModeAttackProfile
@@ -764,6 +781,9 @@ public class CharacterController : MonoBehaviour
             AttackPenalty = 0,
             PenaltySource = string.Empty
         };
+
+        if (isInnateNaturalAttack)
+            return profile;
 
         if (isUnarmedStrike)
         {
@@ -824,10 +844,19 @@ public class CharacterController : MonoBehaviour
     {
         if (weapon != null)
         {
-            damageDice = Stats.BaseDamageDice;
-            damageCount = Stats.BaseDamageCount;
-            bonusDamage = Stats.BonusDamage;
+            damageDice = Mathf.Max(1, weapon.DamageDice);
+            damageCount = Mathf.Max(1, weapon.DamageCount);
+            bonusDamage = weapon.BonusDamage;
             attackLabel = weapon.Name;
+            return;
+        }
+
+        if (ShouldUseInnateNaturalAttackProfile(weapon))
+        {
+            damageDice = Mathf.Max(1, Stats.BaseDamageDice);
+            damageCount = Mathf.Max(1, Stats.BaseDamageCount);
+            bonusDamage = Stats.BonusDamage;
+            attackLabel = Stats.HasTripAttack ? "Bite" : "Natural attack";
             return;
         }
 

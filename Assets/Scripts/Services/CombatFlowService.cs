@@ -300,6 +300,7 @@ public class CombatFlowService : MonoBehaviour
             _gameManager.Combat_GetCurrentAttackBAB(),
             attackWeapon);
 
+        _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
         _gameManager.Combat_ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
 
         int attackNumber = _gameManager.Combat_GetTotalAttacksUsed() + 1;
@@ -415,6 +416,7 @@ public class CombatFlowService : MonoBehaviour
         _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
 
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
+        _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
         _gameManager.Combat_ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
 
         string log = BuildAttackLog(attacker, isFlanking, partnerName, result);

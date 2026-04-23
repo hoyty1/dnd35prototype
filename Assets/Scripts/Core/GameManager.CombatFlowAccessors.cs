@@ -77,6 +77,9 @@ public partial class GameManager
     public void Combat_CheckConcentrationOnDamage(CharacterController target, int damage)
         => CheckConcentrationOnDamage(target, damage);
 
+    public void Combat_TryResolveFreeTripOnHit(CharacterController attacker, CharacterController target, CombatResult attackResult, RangeInfo attackRange)
+        => TryResolveFreeTripOnHit(attacker, target, attackResult, attackRange);
+
     public void Combat_HandleSummonDeathCleanup(CharacterController target)
         => HandleSummonDeathCleanup(target);
 
