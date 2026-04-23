@@ -117,6 +117,19 @@ namespace DND35.AI
             return 1f;
         }
 
+        /// <summary>
+        /// Profile-level hook for charge preference after baseline charge validity has passed.
+        /// Return true to take charge pressure, false to continue with normal attack/move flow.
+        /// </summary>
+        public virtual bool ShouldPreferCharge(CharacterController self, CharacterController target, int distanceSquares, bool preferAggression)
+        {
+            if (self == null || target == null)
+                return false;
+
+            // Default preserves existing behavior: if charging is legally available, profiles allow it.
+            return true;
+        }
+
         public virtual bool ShouldInitiateGrapple(CharacterController self, CharacterController target)
         {
             if (self == null || target == null || target.Stats == null)

@@ -1061,10 +1061,13 @@ public class AIService : MonoBehaviour
         int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
         bool canCharge = _gameManager.ShouldNPCUseChargeForAI(npc, target);
 
+        AIProfile profile = GetProfile(npc);
+        bool profilePrefersCharge = profile == null || profile.ShouldPreferCharge(npc, target, distance, preferAggression);
+
         if (!preferAggression && hpPercent < 0.30f && npc.Actions.HasMoveAction)
             return AIActionType.Retreat;
 
-        if (canCharge)
+        if (canCharge && profilePrefersCharge)
             return AIActionType.Charge;
 
         if (npc.IsTargetInCurrentWeaponRange(target))
