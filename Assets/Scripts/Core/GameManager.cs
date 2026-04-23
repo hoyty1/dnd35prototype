@@ -11666,6 +11666,48 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    private bool ResolveRangedAttackAoOForNPCAttackIfProvoked(CharacterController attacker, RangeInfo rangeInfo)
+    {
+        if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
+            return true;
+
+        bool isRangedOrThrownAttack = rangeInfo != null
+            ? !rangeInfo.IsMelee
+            : (attacker.IsEquippedWeaponRanged() || (attacker.GetEquippedMainWeapon()?.IsThrown ?? false));
+
+        if (!isRangedOrThrownAttack)
+            return true;
+
+        List<CharacterController> threateningEnemies = ThreatSystem.GetThreateningEnemies(
+            attacker.GridPosition,
+            attacker,
+            GetAllCharacters());
+
+        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+
+        if (threateningEnemies.Count == 0)
+            return true;
+
+        CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} makes a ranged attack while threatened and provokes {threateningEnemies.Count} attack(s) of opportunity.");
+
+        foreach (CharacterController enemy in threateningEnemies)
+        {
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, attacker);
+            if (aooResult == null)
+                continue;
+
+            CombatUI?.ShowCombatLog($"⚔ AoO vs ranged attack: {aooResult.GetDetailedSummary()}");
+
+            if (attacker.Stats.IsDead)
+            {
+                CombatUI?.ShowCombatLog($"<color=#FF6644>💀 {attacker.Stats.CharacterName} is slain before completing the ranged attack.</color>");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
     {
         if (!npc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
@@ -11696,6 +11738,12 @@ public partial class GameManager : MonoBehaviour
             npcRangeInfo,
             treatAsThrownAttack: false);
         ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeFearBreakAttack);
+
+        if (!ResolveRangedAttackAoOForNPCAttackIfProvoked(npc, npcRangeInfo))
+        {
+            yield return new WaitForSeconds(0.8f);
+            yield break;
+        }
 
         CombatResult result = npc.Attack(target, isFlanking, flankBonus,
             flankPartner != null ? flankPartner.Stats.CharacterName : null, npcRangeInfo);
