@@ -758,7 +758,7 @@ public class CharacterSheetUI : MonoBehaviour
         if (stats.MaxDexBonus >= 0 && effectiveDex > stats.MaxDexBonus)
             effectiveDex = stats.MaxDexBonus;
 
-        string acBreakdown = $"  10 + Armor {stats.ArmorBonus} + Shield {stats.ShieldBonus} + DEX {FormatMod(effectiveDex)}";
+        string acBreakdown = $"  10 + Armor {stats.ArmorBonus} + Shield {stats.ShieldBonus} + Natural {stats.NaturalArmorBonus} + DEX {FormatMod(effectiveDex)}";
         if (stats.SpellACBonus > 0) acBreakdown += $" + Spell {stats.SpellACBonus}";
         if (stats.DeflectionBonus > 0) acBreakdown += $" + Deflect {stats.DeflectionBonus}";
         if (stats.SizeModifier != 0) acBreakdown += $" + Size {FormatMod(stats.SizeModifier)}";

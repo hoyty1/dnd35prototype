@@ -356,7 +356,7 @@ namespace Tests.AI
                               && wolf.BaseHitDieHP == 13
                               && wolf.BaseSpeed == 10
                               && wolf.NaturalArmorBonus == 2
-                              && wolf.BonusDamage == 1
+                              && wolf.NaturalAttackBonusDamage == 1
                               && wolf.HasTripAttack
                               && wolf.TripAttackCheckBonus == 1;
 
@@ -364,7 +364,7 @@ namespace Tests.AI
                 "Wolf enemy definition uses Monster Manual baseline core stats",
                 wolf == null
                     ? "(wolf definition missing)"
-                    : $"(BAB={wolf.BAB}, HP={wolf.BaseHitDieHP}, Speed={wolf.BaseSpeed}, NA={wolf.NaturalArmorBonus}, DmgBonus={wolf.BonusDamage}, TripBonus={wolf.TripAttackCheckBonus})");
+                    : $"(BAB={wolf.BAB}, HP={wolf.BaseHitDieHP}, Speed={wolf.BaseSpeed}, NA={wolf.NaturalArmorBonus}, DmgBonus={wolf.NaturalAttackBonusDamage}, TripBonus={wolf.TripAttackCheckBonus})");
         }
 
         private static void TestEvokerSchoolPriority()

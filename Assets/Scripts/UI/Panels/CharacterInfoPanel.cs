@@ -188,7 +188,7 @@ public class CharacterInfoPanel : MonoBehaviour
             string dexLabel = (s.MaxDexBonus >= 0 && s.DEXMod > s.MaxDexBonus) ? "DEX*" : "DEX";
             string sizeDetail = FormatBonusDetail(s.SizeModifier, "Size");
             string defensiveDetail = ch.IsFightingDefensively ? " +2 Fighting Defensively" : "";
-            string acDetails = $"AC: {s.ArmorClass + (ch.IsFightingDefensively ? 2 : 0)} (10{FormatBonusDetail(effectiveDex, dexLabel)}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")}{sizeDetail}{defensiveDetail})";
+            string acDetails = $"AC: {s.ArmorClass + (ch.IsFightingDefensively ? 2 : 0)} (10{FormatBonusDetail(effectiveDex, dexLabel)}{FormatBonusDetail(s.ArmorBonus, "Armor")}{FormatBonusDetail(s.ShieldBonus, "Shield")}{FormatBonusDetail(s.NaturalArmorBonus, "Natural")}{sizeDetail}{defensiveDetail})";
             if (s.ArmorCheckPenalty > 0)
                 acDetails += $" ACP:-{s.ArmorCheckPenalty}";
             acText.text = acDetails;

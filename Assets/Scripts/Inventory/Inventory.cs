@@ -358,11 +358,24 @@ public class Inventory
             else
             {
                 OwnerStats.EquippedMainWeaponItem = null;
-                // Unarmed: 1d3, 20/×2, bludgeoning
-                OwnerStats.BaseDamageDice = 3;
-                OwnerStats.BaseDamageCount = 1;
-                OwnerStats.BonusDamage = 0;
-                OwnerStats.AttackRange = 1;
+
+                bool hasNaturalAttackProfile = OwnerStats.NaturalAttackDamageDice > 0 && OwnerStats.NaturalAttackDamageCount > 0;
+                if (hasNaturalAttackProfile)
+                {
+                    OwnerStats.BaseDamageDice = OwnerStats.NaturalAttackDamageDice;
+                    OwnerStats.BaseDamageCount = Mathf.Max(1, OwnerStats.NaturalAttackDamageCount);
+                    OwnerStats.BonusDamage = OwnerStats.NaturalAttackBonusDamage;
+                    OwnerStats.AttackRange = Mathf.Max(1, OwnerStats.NaturalAttackRange);
+                }
+                else
+                {
+                    // Unarmed: 1d3, 20/×2, bludgeoning
+                    OwnerStats.BaseDamageDice = 3;
+                    OwnerStats.BaseDamageCount = 1;
+                    OwnerStats.BonusDamage = 0;
+                    OwnerStats.AttackRange = 1;
+                }
+
                 OwnerStats.CritThreatMin = 20;
                 OwnerStats.CritMultiplier = 2;
             }

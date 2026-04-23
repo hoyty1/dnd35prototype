@@ -774,6 +774,15 @@ public class CharacterStats
     /// <summary>Creature-specific modifier applied to trip checks (e.g., wolves get +1).</summary>
     public int TripAttackCheckBonus;
 
+    /// <summary>
+    /// Innate natural-weapon profile used when no manufactured weapon is equipped
+    /// (e.g., wolf bite, wight slam). 0 dice means no innate natural attack.
+    /// </summary>
+    public int NaturalAttackDamageDice;
+    public int NaturalAttackDamageCount = 1;
+    public int NaturalAttackBonusDamage;
+    public int NaturalAttackRange = 1;
+
     /// <summary>Creature type tags for this character (e.g., "Goblinoid", "Orc"). Used for racial attack bonuses.</summary>
     public List<string> CreatureTags = new List<string>();
 
@@ -1240,6 +1249,13 @@ public class CharacterStats
         BaseDamageCount = damageCount;
         BonusDamage = bonusDamage;
         AttackRange = atkRange;
+
+        // Preserve a natural-attack fallback profile for monsters/summons that
+        // are intentionally weaponless.
+        NaturalAttackDamageDice = damageDice;
+        NaturalAttackDamageCount = Mathf.Max(1, damageCount);
+        NaturalAttackBonusDamage = bonusDamage;
+        NaturalAttackRange = Mathf.Max(1, atkRange);
 
         // Default crit stats (can be overridden by equipped weapons via Inventory.RecalculateStats)
         CritThreatMin = 20;   // Only natural 20 threatens by default

@@ -742,7 +742,7 @@ public class CharacterController : MonoBehaviour
 
         bool isAnimal = string.Equals(Stats.CreatureType, "Animal", StringComparison.OrdinalIgnoreCase);
         bool hasInnateTripAttack = Stats.HasTripAttack;
-        bool hasNaturalDamageProfile = Stats.BaseDamageDice > 0 && Stats.BaseDamageCount > 0;
+        bool hasNaturalDamageProfile = Stats.NaturalAttackDamageDice > 0 && Stats.NaturalAttackDamageCount > 0;
 
         return hasNaturalDamageProfile && (isAnimal || hasInnateTripAttack);
     }
@@ -856,9 +856,9 @@ public class CharacterController : MonoBehaviour
 
         if (ShouldUseInnateNaturalAttackProfile(weapon))
         {
-            damageDice = Mathf.Max(1, Stats.BaseDamageDice);
-            damageCount = Mathf.Max(1, Stats.BaseDamageCount);
-            bonusDamage = Stats.BonusDamage;
+            damageDice = Mathf.Max(1, Stats.NaturalAttackDamageDice);
+            damageCount = Mathf.Max(1, Stats.NaturalAttackDamageCount);
+            bonusDamage = Stats.NaturalAttackBonusDamage;
             attackLabel = Stats.HasTripAttack ? "Bite" : "Natural attack";
             return;
         }
@@ -3946,14 +3946,13 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// D&D 3.5 whip rule: standard whip cannot harm creatures with armor bonus +1 or natural armor +1.
-    /// In this prototype, ArmorBonus is used as the tracked armor/natural armor bucket.
     /// </summary>
     public bool IsTargetImmuneToWhipDamage(CharacterController target, ItemData weapon)
     {
         if (target == null || target.Stats == null || weapon == null) return false;
         if (!weapon.WhipLikeArmorRestriction) return false;
 
-        int armorLikeBonus = Mathf.Max(0, target.Stats.ArmorBonus);
+        int armorLikeBonus = Mathf.Max(0, target.Stats.ArmorBonus + target.Stats.NaturalArmorBonus);
         return armorLikeBonus >= 1;
     }
     /// <summary>
@@ -6719,10 +6718,11 @@ public class CharacterController : MonoBehaviour
         Debug.Log($"[Monk] {Stats.CharacterName}: Flurry of Blows! {flurryBonuses.Length} attacks at " +
                   $"{string.Join("/", System.Array.ConvertAll(flurryBonuses, b => CharacterStats.FormatMod(b)))}");
 
-        // Use monk unarmed damage (1d6 at level 3) or equipped monk weapon
-        int damageDice = Stats.MonkUnarmedDamageDie > 0 ? Stats.MonkUnarmedDamageDie : Stats.BaseDamageDice;
-        int damageCount = 1;
-        int bonusDamage = Stats.BonusDamage;
+        // Use monk/unarmed fallback profile unless a monk weapon is equipped.
+        var unarmedProfile = GetUnarmedDamage();
+        int damageDice = unarmedProfile.damageDice;
+        int damageCount = unarmedProfile.damageCount;
+        int bonusDamage = unarmedProfile.bonusDamage;
 
         // Check for equipped weapon (quarterstaff is a monk weapon)
         ItemData equippedWeapon = EnsureInventory().GetRightHandEquippedWeapon();

@@ -116,13 +116,7 @@ public static class EnemyDatabase
             SizeCategory = SizeCategory.Small,
             STR = 14, DEX = 15, CON = 13, WIS = 10, INT = 10, CHA = 8,
             BAB = 1,
-            ArmorBonus = 3,   // studded leather
-            ShieldBonus = 1,  // light wooden shield
-            DamageDice = 8,   // morningstar 1d8
-            DamageCount = 1,
-            BonusDamage = 0,
             BaseSpeed = 3,    // 15 ft (Small creature)
-            AttackRange = 1,
             BaseHitDieHP = 12,
             CreatureTags = new List<string> { "Goblinoid" },
             EquipmentIds = new List<EquipmentSlotPair>
@@ -161,13 +155,7 @@ public static class EnemyDatabase
             SizeCategory = SizeCategory.Small,
             STR = 11, DEX = 13, CON = 12, WIS = 9, INT = 10, CHA = 6,
             BAB = 0,
-            ArmorBonus = 2,   // leather armor
-            ShieldBonus = 1,  // small wooden shield equivalent
-            DamageDice = 6,   // morningstar 1d6 (small wielder)
-            DamageCount = 1,
-            BonusDamage = 0,
             BaseSpeed = 3,
-            AttackRange = 1,
             BaseHitDieHP = 6,
             CreatureTags = new List<string> { "Goblinoid" },
             EquipmentIds = new List<EquipmentSlotPair>
@@ -211,13 +199,7 @@ public static class EnemyDatabase
             // WIS 10, INT 6 (mindless but can aim), CHA 1 (undead husk)
             STR = 13, DEX = 15, CON = 10, WIS = 10, INT = 6, CHA = 1,
             BAB = 0,
-            ArmorBonus = 2,   // scraps of leather + natural armor
-            ShieldBonus = 0,  // no shield (needs both hands for bow)
-            DamageDice = 6,   // shortbow 1d6
-            DamageCount = 1,
-            BonusDamage = 0,
             BaseSpeed = 6,    // 30 ft (Medium undead)
-            AttackRange = 1,  // melee fallback; ranged handled by weapon
             BaseHitDieHP = 8, // 1 HD undead, fragile
             CreatureTags = new List<string> { "Undead" },
             EquipmentIds = new List<EquipmentSlotPair>
@@ -256,13 +238,11 @@ public static class EnemyDatabase
             NaturalArmorBonus = 4,
             STR = 12, DEX = 12, CON = 10, WIS = 13, INT = 11, CHA = 15,
             BAB = 3,
-            ArmorBonus = 0,
-            ShieldBonus = 0,
-            DamageDice = 4,   // slam 1d4
-            DamageCount = 1,
-            BonusDamage = 1,
+            NaturalAttackDamageDice = 4,
+            NaturalAttackDamageCount = 1,
+            NaturalAttackBonusDamage = 1,
+            NaturalAttackRange = 1,
             BaseSpeed = 6,
-            AttackRange = 1,
             BaseHitDieHP = 26,
             CreatureTags = new List<string> { "Undead" },
             EquipmentIds = new List<EquipmentSlotPair>(),
@@ -305,13 +285,7 @@ public static class EnemyDatabase
             // Orc: base STR 17 + racial = effective 17 (already includes orc bonus)
             STR = 17, DEX = 11, CON = 14, WIS = 8, INT = 8, CHA = 6,
             BAB = 2,
-            ArmorBonus = 3,   // hide armor
-            ShieldBonus = 0,  // two-handed weapon
-            DamageDice = 12,  // greataxe 1d12
-            DamageCount = 1,
-            BonusDamage = 0,
             BaseSpeed = 6,    // 30 ft base (orc speed), +10 ft barbarian fast movement
-            AttackRange = 1,
             BaseHitDieHP = 28, // 3d12 + CON, tough brute
             CreatureTags = new List<string> { "Orc" },
             Feats = new List<string> { "Power Attack", "Cleave" },
@@ -351,13 +325,7 @@ public static class EnemyDatabase
             SizeCategory = SizeCategory.Medium,
             STR = 16, DEX = 11, CON = 14, WIS = 10, INT = 8, CHA = 8,
             BAB = 2,
-            ArmorBonus = 2,
-            ShieldBonus = 0,
-            DamageDice = 4,   // dagger 1d4
-            DamageCount = 1,
-            BonusDamage = 0,
             BaseSpeed = 6,
-            AttackRange = 1,
             BaseHitDieHP = 20,
             CreatureTags = new List<string> { "Orc" },
             EquipmentIds = new List<EquipmentSlotPair>
@@ -401,13 +369,7 @@ public static class EnemyDatabase
             // Hobgoblin: DEX +2, CON +2 already factored in
             STR = 15, DEX = 14, CON = 14, WIS = 12, INT = 10, CHA = 10,
             BAB = 2,
-            ArmorBonus = 5,   // chainmail
-            ShieldBonus = 2,  // heavy steel shield
-            DamageDice = 8,   // longsword 1d8
-            DamageCount = 1,
-            BonusDamage = 0,
             BaseSpeed = 4,    // 20 ft (heavy armor reduces from 30 ft)
-            AttackRange = 1,
             BaseHitDieHP = 25, // 3d10 + CON, solid HP
             CreatureTags = new List<string> { "Goblinoid" },
             Feats = new List<string> { "Weapon Focus", "Combat Expertise" },
@@ -446,14 +408,8 @@ public static class EnemyDatabase
             IsTallCreature = true,
             STR = 21, DEX = 8, CON = 15, WIS = 10, INT = 6, CHA = 7,
             BAB = 3,
-            ArmorBonus = 2,   // hide scraps
             NaturalArmorBonus = 5,
-            ShieldBonus = 0,
-            DamageDice = 10,   // greatclub 1d10 in this prototype
-            DamageCount = 1,
-            BonusDamage = 0,
             BaseSpeed = 8,     // 40 ft
-            AttackRange = 2,
             BaseHitDieHP = 38,
             CreatureTags = new List<string> { "Giant" },
             EquipmentIds = new List<EquipmentSlotPair>
@@ -489,14 +445,12 @@ public static class EnemyDatabase
             IsTallCreature = false,
             STR = 25, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 10,
             BAB = 4,
-            ArmorBonus = 0,
             NaturalArmorBonus = 5,
-            ShieldBonus = 0,
-            DamageDice = 8,   // bite 1d8
-            DamageCount = 1,
-            BonusDamage = 0,
+            NaturalAttackDamageDice = 8,
+            NaturalAttackDamageCount = 1,
+            NaturalAttackBonusDamage = 0,
+            NaturalAttackRange = 1,  // long Large creature => 5-ft reach
             BaseSpeed = 10,   // 50 ft
-            AttackRange = 1,  // long Large creature => 5-ft reach
             BaseHitDieHP = 45,
             CreatureTags = new List<string> { "Animal" },
             HasTripAttack = true,
@@ -529,14 +483,12 @@ public static class EnemyDatabase
             IsTallCreature = false,
             STR = 13, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
             BAB = 1,
-            ArmorBonus = 0,
             NaturalArmorBonus = 2,
-            ShieldBonus = 0,
-            DamageDice = 6,   // bite 1d6
-            DamageCount = 1,
-            BonusDamage = 1,  // Str bonus to bite damage
+            NaturalAttackDamageDice = 6,
+            NaturalAttackDamageCount = 1,
+            NaturalAttackBonusDamage = 1,  // Str bonus to bite damage
+            NaturalAttackRange = 1,
             BaseSpeed = 10,   // 50 ft
-            AttackRange = 1,
             BaseHitDieHP = 13,
             CreatureTags = new List<string> { "Animal" },
             HasTripAttack = true,
@@ -582,12 +534,13 @@ public class EnemyDefinition
     public int TripAttackCheckBonus;
     public int STR, DEX, CON, WIS, INT, CHA;
     public int BAB;
-    public int ArmorBonus;
-    public int ShieldBonus;
-    public int DamageDice;
-    public int DamageCount;
-    public int BonusDamage;
     public int BaseSpeed;
+
+    // Optional natural attack profile used when no manufactured weapon is equipped
+    public int NaturalAttackDamageDice;
+    public int NaturalAttackDamageCount = 1;
+    public int NaturalAttackBonusDamage;
+    public int NaturalAttackRange = 1;
 
     // Built-in mitigation profile
     public int DamageReductionAmount;
@@ -595,7 +548,6 @@ public class EnemyDefinition
     public bool DamageReductionRangedOnly;
     public List<DamageResistanceEntry> DamageResistances = new List<DamageResistanceEntry>();
     public List<DamageType> DamageImmunities = new List<DamageType>();
-    public int AttackRange;
     public int BaseHitDieHP;
 
     // Tags and feats

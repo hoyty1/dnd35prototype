@@ -2058,13 +2058,13 @@ public partial class GameManager : MonoBehaviour
             str: def.STR, dex: def.DEX, con: def.CON,
             wis: def.WIS, intelligence: def.INT, cha: def.CHA,
             bab: computedBab,
-            armorBonus: def.ArmorBonus,
-            shieldBonus: def.ShieldBonus,
-            damageDice: def.DamageDice,
-            damageCount: def.DamageCount,
-            bonusDamage: def.BonusDamage,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: def.NaturalAttackDamageDice,
+            damageCount: Mathf.Max(1, def.NaturalAttackDamageCount),
+            bonusDamage: def.NaturalAttackBonusDamage,
             baseSpeed: def.BaseSpeed,
-            atkRange: def.AttackRange,
+            atkRange: Mathf.Max(1, def.NaturalAttackRange),
             baseHitDieHP: computedBaseHitDieHp
         );
 
