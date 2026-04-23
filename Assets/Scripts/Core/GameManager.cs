@@ -2141,10 +2141,38 @@ public partial class GameManager : MonoBehaviour
         if (def == null)
             return null;
 
-        if (string.Equals(def.CreatureType, "Animal", StringComparison.OrdinalIgnoreCase))
-            return ScriptableObject.CreateInstance<AnimalAIProfile>();
+        EnemyAIProfileArchetype archetype = def.AIProfileArchetype;
 
-        return null;
+        // Legacy fallback for old definitions that don't explicitly set an archetype.
+        if (archetype == EnemyAIProfileArchetype.None
+            && string.Equals(def.CreatureType, "Animal", StringComparison.OrdinalIgnoreCase))
+        {
+            archetype = EnemyAIProfileArchetype.Animal;
+        }
+
+        switch (archetype)
+        {
+            case EnemyAIProfileArchetype.Animal:
+                return ScriptableObject.CreateInstance<AnimalAIProfile>();
+            case EnemyAIProfileArchetype.Berserk:
+                return ScriptableObject.CreateInstance<BerserkAIProfile>();
+            case EnemyAIProfileArchetype.Grappler:
+                return ScriptableObject.CreateInstance<GrapplerAIProfile>();
+            case EnemyAIProfileArchetype.Ranged:
+                return ScriptableObject.CreateInstance<RangedAIProfile>();
+            case EnemyAIProfileArchetype.Healer:
+                return ScriptableObject.CreateInstance<HealerAIProfile>();
+            case EnemyAIProfileArchetype.Spellcaster:
+                return ScriptableObject.CreateInstance<SpellcasterAIProfile>();
+            case EnemyAIProfileArchetype.Evoker:
+                return ScriptableObject.CreateInstance<EvokerAIProfile>();
+            case EnemyAIProfileArchetype.Abjurer:
+                return ScriptableObject.CreateInstance<AbjurerAIProfile>();
+            case EnemyAIProfileArchetype.Necromancer:
+                return ScriptableObject.CreateInstance<NecromancerAIProfile>();
+            default:
+                return null;
+        }
     }
 
     /// <summary>Helper to update all stat UI panels using 4-PC multi-NPC system.</summary>

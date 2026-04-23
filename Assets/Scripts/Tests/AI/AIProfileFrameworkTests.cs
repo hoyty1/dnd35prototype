@@ -32,6 +32,7 @@ namespace Tests.AI
             TestProfileCanSelectValidTripAndDisarm();
             TestAnimalProfilePrefersNearestTarget();
             TestAnimalProfileUsesNaturalTripFollowUpInsteadOfManeuver();
+            TestEnemyDefinitionsAssignProfileArchetypes();
             TestWolfDefinitionMatchesBaselineStats();
             TestEvokerSchoolPriority();
             TestAbjurerPrefersSingleTarget();
@@ -317,6 +318,29 @@ namespace Tests.AI
                     target != null ? target.gameObject : null,
                     profile);
             }
+        }
+
+        private static void TestEnemyDefinitionsAssignProfileArchetypes()
+        {
+            EnemyDatabase.Init();
+
+            int total = 0;
+            List<string> missing = new List<string>();
+
+            foreach (EnemyDefinition def in EnemyDatabase.AllEnemies)
+            {
+                if (def == null)
+                    continue;
+
+                total++;
+                if (def.AIProfileArchetype == EnemyAIProfileArchetype.None)
+                    missing.Add(def.Id);
+            }
+
+            bool allAssigned = total > 0 && missing.Count == 0;
+            Assert(allAssigned,
+                "Enemy database assigns AI profile archetypes for all enemies",
+                $"(total={total}, missing={string.Join(",", missing)})");
         }
 
         private static void TestWolfDefinitionMatchesBaselineStats()

@@ -45,6 +45,13 @@ public static class EnemyDatabase
     /// <summary>Get all registered enemy definitions.</summary>
     public static IEnumerable<EnemyDefinition> AllEnemies => _enemies.Values;
 
+    /// <summary>Get the configured AI profile archetype for an enemy ID.</summary>
+    public static EnemyAIProfileArchetype GetAIProfileArchetype(string id)
+    {
+        EnemyDefinition def = Get(id);
+        return def != null ? def.AIProfileArchetype : EnemyAIProfileArchetype.None;
+    }
+
     /// <summary>
     /// Prebuilt encounter presets selectable before combat starts.
     /// </summary>
@@ -122,6 +129,7 @@ public static class EnemyDatabase
             },
             BackpackItemIds = new List<string> { "javelin" },
             AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.6f, 0.8f, 0.3f, 1f),  // greenish
             PanelColor = new Color(0.4f, 0.1f, 0.1f, 0.85f), // dark red
             NameColor = new Color(1f, 0.4f, 0.4f),
@@ -162,6 +170,7 @@ public static class EnemyDatabase
             },
             BackpackItemIds = new List<string>(),
             AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.58f, 0.8f, 0.3f, 1f),
             PanelColor = new Color(0.36f, 0.1f, 0.1f, 0.85f),
             NameColor = new Color(1f, 0.45f, 0.45f),
@@ -212,6 +221,7 @@ public static class EnemyDatabase
             DamageReductionBypass = DamageBypassTag.Bludgeoning,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
             AIBehavior = EnemyAIBehavior.RangedKiter,
+            AIProfileArchetype = EnemyAIProfileArchetype.Ranged,
             SpriteColor = new Color(0.85f, 0.85f, 0.75f, 1f),  // bone white
             PanelColor = new Color(0.2f, 0.2f, 0.3f, 0.85f),   // dark grey-blue
             NameColor = new Color(0.7f, 0.85f, 1f),             // pale blue
@@ -251,6 +261,7 @@ public static class EnemyDatabase
             DamageReductionBypass = DamageBypassTag.Silver,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
             AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Necromancer,
             SpriteColor = new Color(0.78f, 0.82f, 0.9f, 1f),
             PanelColor = new Color(0.19f, 0.18f, 0.3f, 0.85f),
             NameColor = new Color(0.72f, 0.9f, 1f),
@@ -297,6 +308,7 @@ public static class EnemyDatabase
             },
             BackpackItemIds = new List<string> { "javelin", "javelin" },
             AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.5f, 0.6f, 0.4f, 1f),     // olive-green skin
             PanelColor = new Color(0.35f, 0.15f, 0.05f, 0.85f), // dark brown
             NameColor = new Color(1f, 0.6f, 0.3f),              // orange
@@ -337,6 +349,7 @@ public static class EnemyDatabase
             },
             BackpackItemIds = new List<string> { "dagger" },
             AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Grappler,
             SpriteColor = new Color(0.55f, 0.68f, 0.45f, 1f),
             PanelColor = new Color(0.32f, 0.14f, 0.08f, 0.85f),
             NameColor = new Color(1f, 0.72f, 0.42f),
@@ -385,6 +398,7 @@ public static class EnemyDatabase
             },
             BackpackItemIds = new List<string> { "javelin", "javelin", "potion_healing" },
             AIBehavior = EnemyAIBehavior.DefensiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.8f, 0.5f, 0.3f, 1f),     // orange-brown
             PanelColor = new Color(0.15f, 0.15f, 0.3f, 0.85f),  // dark blue-grey
             NameColor = new Color(1f, 0.8f, 0.5f),              // golden
@@ -426,6 +440,7 @@ public static class EnemyDatabase
             },
             BackpackItemIds = new List<string> { "javelin", "javelin" },
             AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Grappler,
             SpriteColor = new Color(0.65f, 0.55f, 0.45f, 1f),
             PanelColor = new Color(0.25f, 0.12f, 0.08f, 0.85f),
             NameColor = new Color(1f, 0.78f, 0.52f),
@@ -464,6 +479,7 @@ public static class EnemyDatabase
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Animal,
             SpriteColor = new Color(0.62f, 0.62f, 0.62f, 1f),
             PanelColor = new Color(0.18f, 0.18f, 0.18f, 0.85f),
             NameColor = new Color(0.95f, 0.95f, 1f),
@@ -505,6 +521,7 @@ public static class EnemyDatabase
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Animal,
             SpriteColor = new Color(0.72f, 0.72f, 0.72f, 1f),
             PanelColor = new Color(0.2f, 0.2f, 0.2f, 0.85f),
             NameColor = new Color(0.9f, 0.9f, 0.95f),
@@ -562,6 +579,7 @@ public class EnemyDefinition
 
     // AI
     public EnemyAIBehavior AIBehavior = EnemyAIBehavior.AggressiveMelee;
+    public EnemyAIProfileArchetype AIProfileArchetype = EnemyAIProfileArchetype.None;
 
     // Visuals
     public Color SpriteColor = Color.white;
@@ -602,8 +620,25 @@ public class EquipmentSlotPair
 }
 
 /// <summary>
+/// Runtime AI profile archetypes used to instantiate specialized AIProfile objects.
+/// </summary>
+public enum EnemyAIProfileArchetype
+{
+    None,
+    Animal,
+    Berserk,
+    Grappler,
+    Ranged,
+    Healer,
+    Spellcaster,
+    Evoker,
+    Abjurer,
+    Necromancer
+}
+
+/// <summary>
 /// AI behavior archetypes that influence how an enemy acts during its turn.
-/// The GameManager NPC AI coroutine uses this to decide movement and attack patterns.
+/// The GameManager NPC AI coroutine uses this as fallback movement/attack behavior.
 /// </summary>
 public enum EnemyAIBehavior
 {

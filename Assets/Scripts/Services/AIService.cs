@@ -97,6 +97,10 @@ public class AIService : MonoBehaviour
                     {
                         yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
                     }
+                    else if (behavior == EnemyAIBehavior.DefensiveMelee)
+                    {
+                        yield return _gameManager.StartCoroutine(ExecuteDefensiveMeleeTurn(npc, targetPC));
+                    }
                     else
                     {
                         yield return _gameManager.StartCoroutine(ExecuteAggressiveMeleeTurn(npc, targetPC));
@@ -117,13 +121,17 @@ public class AIService : MonoBehaviour
                 yield break;
             }
 
-            if (profile.CombatStyle == CombatStyle.Ranged)
+            // Profile drives targeting/maneuvers, while EnemyAIBehavior still selects tactical shell.
+            if (behavior == EnemyAIBehavior.DefensiveMelee)
+            {
+                yield return _gameManager.StartCoroutine(ExecuteDefensiveMeleeTurn(npc, targetPC));
+            }
+            else if (behavior == EnemyAIBehavior.RangedKiter || profile.CombatStyle == CombatStyle.Ranged)
             {
                 yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
             }
             else
             {
-                // Melee and mixed currently share melee tactical shell; maneuvers/targeting are profile-driven.
                 yield return _gameManager.StartCoroutine(ExecuteAggressiveMeleeTurn(npc, targetPC));
             }
 
