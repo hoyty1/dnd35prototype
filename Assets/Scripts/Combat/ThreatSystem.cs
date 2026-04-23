@@ -182,6 +182,7 @@ public static class ThreatSystem
     public static List<CharacterController> GetThreateningEnemies(Vector2Int square, CharacterController mover, List<CharacterController> allCharacters)
     {
         var threateners = new List<CharacterController>();
+        var seenThreateners = new HashSet<CharacterController>();
 
         if (mover == null || mover.Stats == null)
         {
@@ -198,7 +199,7 @@ public static class ThreatSystem
             if (character.Stats == null || character.Stats.IsDead) continue;
             if (character.IsPlayerControlled == mover.IsPlayerControlled) continue;
 
-            if (GetThreatenedSquares(character).Contains(square))
+            if (GetThreatenedSquares(character).Contains(square) && seenThreateners.Add(character))
             {
                 threateners.Add(character);
             }
@@ -450,6 +451,23 @@ public static class ThreatSystem
     // AoO RESOLUTION
     // ========================================================================
 
+    private static ItemData ResolveBestAoOWeapon(CharacterController threatener)
+    {
+        if (threatener == null)
+            return null;
+
+        ItemData mainWeapon = threatener.GetEquippedMainWeapon();
+        if (mainWeapon != null && mainWeapon.WeaponCat == WeaponCategory.Melee)
+            return mainWeapon;
+
+        ItemData offHandWeapon = threatener.GetOffHandAttackWeapon();
+        if (offHandWeapon != null && offHandWeapon.WeaponCat == WeaponCategory.Melee)
+            return offHandWeapon;
+
+        // Null means unarmed/natural fallback in CharacterController.Attack.
+        return null;
+    }
+
     /// <summary>
     /// Execute an Attack of Opportunity. The threatener makes an immediate free melee attack.
     /// </summary>
@@ -467,8 +485,11 @@ public static class ThreatSystem
         Debug.Log($"[ThreatSystem] === ATTACK OF OPPORTUNITY ===");
         Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} makes AoO against {target.Stats.CharacterName}!");
 
-        // AoO is a single melee attack at full BAB (no flanking, no range)
-        CombatResult result = threatener.Attack(target, false, 0, null, null);
+        // AoO is a single melee attack at full BAB (no flanking, no range).
+        // Prefer an actually melee-capable equipped weapon so an off-hand melee weapon
+        // can still be used when the primary slot is currently ranged.
+        ItemData aooWeapon = ResolveBestAoOWeapon(threatener);
+        CombatResult result = threatener.Attack(target, false, 0, null, null, null, aooWeapon);
 
         // Mark this as an AoO in the result for logging
         result.IsAttackOfOpportunity = true;

@@ -440,19 +440,42 @@ public class CharacterEquipment : MonoBehaviour
 
     public bool HasMeleeWeaponEquipped()
     {
-        ItemData weapon = GetEquippedMainWeapon();
+        Inventory inv = GetInventory();
+        if (inv == null)
+            return true; // fall back to unarmed threat when inventory is unavailable
 
-        // Unarmed counts as melee — unarmed strikes threaten in D&D 3.5
-        // (characters always have at least an unarmed strike available)
-        if (weapon == null) return true;
+        bool hasAnyEquippedWeapon = false;
 
-        if (weapon.WeaponCat == WeaponCategory.Melee) return true;
+        ItemData rightHand = inv.RightHandSlot;
+        if (rightHand != null && rightHand.IsWeapon)
+        {
+            hasAnyEquippedWeapon = true;
+            if (rightHand.WeaponCat == WeaponCategory.Melee)
+                return true;
+        }
 
-        if (weapon.WeaponCat == WeaponCategory.Ranged) return false;
+        ItemData leftHand = inv.LeftHandSlot;
+        if (leftHand != null && leftHand.IsWeapon)
+        {
+            hasAnyEquippedWeapon = true;
+            if (leftHand.WeaponCat == WeaponCategory.Melee)
+                return true;
+        }
 
-        if (weapon.RangeIncrement > 0) return false;
+        ItemData hands = inv.HandsSlot;
+        if (hands != null && hands.IsWeapon)
+        {
+            hasAnyEquippedWeapon = true;
+            if (hands.WeaponCat == WeaponCategory.Melee)
+                return true;
+        }
 
-        return true;
+        // If no weapon is equipped at all, unarmed still counts as melee in this prototype.
+        if (!hasAnyEquippedWeapon)
+            return true;
+
+        // At least one weapon is equipped, but all equipped weapons are ranged-only.
+        return false;
     }
 
     // ========== SHIELD BASH AC SUPPRESSION ==========

@@ -254,18 +254,27 @@ public class CombatFlowService : MonoBehaviour
             attacker,
             _gameManager.Combat_GetAllCharacters());
 
-        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead);
 
         if (threateningEnemies.Count == 0)
             return true;
 
-        _gameManager.CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} makes a ranged attack while threatened and provokes {threateningEnemies.Count} attack(s) of opportunity.");
+        _gameManager.CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} makes a ranged attack while threatened and provokes up to {threateningEnemies.Count} attack(s) of opportunity.");
 
         foreach (CharacterController enemy in threateningEnemies)
         {
+            if (!ThreatSystem.CanMakeAoO(enemy))
+            {
+                Debug.Log($"[AOO-DEBUG] {enemy?.Stats?.CharacterName ?? "<unknown>"} cannot make AoO now (used {enemy?.Stats?.AttacksOfOpportunityUsed}/{enemy?.Stats?.MaxAttacksOfOpportunity}).");
+                continue;
+            }
+
             CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, attacker);
             if (aooResult == null)
+            {
+                Debug.Log($"[AOO-DEBUG] ExecuteAoO returned null for {enemy?.Stats?.CharacterName ?? "<unknown>"} vs {attacker.Stats.CharacterName}.");
                 continue;
+            }
 
             _gameManager.CombatUI?.ShowCombatLog($"⚔ AoO vs ranged attack: {aooResult.GetDetailedSummary()}");
         }

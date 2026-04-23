@@ -45,6 +45,7 @@ namespace Tests.AI
             TestHealerPrioritizesMostWoundedAlly();
             TestRangedRiskMultiplierDefaults();
             TestThreatSystemEstimatesRangedProvocationDamage();
+            TestThreatSystemCountsOffHandMeleeThreateners();
 
             Debug.Log($"====== AI PROFILE RESULTS: {_passed} passed, {_failed} failed ======");
         }
@@ -677,6 +678,44 @@ namespace Tests.AI
             {
                 TestHelpers.Cleanup(archer != null ? archer.gameObject : null,
                     fighter != null ? fighter.gameObject : null);
+            }
+        }
+
+        private static void TestThreatSystemCountsOffHandMeleeThreateners()
+        {
+            CharacterController archer = TestHelpers.CreateRogue("AI_Archer_OffhandThreat", level: 4);
+            CharacterController offHandThreatener = TestHelpers.CreateWarrior("Enemy_OffhandThreat", level: 4);
+            CharacterController adjacentThreatener = TestHelpers.CreateWarrior("Enemy_AdjacentThreat", level: 4);
+
+            try
+            {
+                archer.IsPlayerControlled = false;
+                offHandThreatener.IsPlayerControlled = true;
+                adjacentThreatener.IsPlayerControlled = true;
+
+                Inventory offHandInventory = offHandThreatener.GetComponent<InventoryComponent>().CharacterInventory;
+                offHandInventory.DirectEquip(ItemDatabase.CloneItem("shortbow"), EquipSlot.RightHand);
+                offHandInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.LeftHand);
+
+                TestHelpers.SetGridPosition(archer, 0, 0);
+                TestHelpers.SetGridPosition(offHandThreatener, 1, 0);
+                TestHelpers.SetGridPosition(adjacentThreatener, -1, 0);
+
+                List<CharacterController> all = new List<CharacterController> { archer, offHandThreatener, adjacentThreatener };
+                List<CharacterController> threats = ThreatSystem.GetThreateningEnemies(archer.GridPosition, archer, all);
+
+                bool includesOffHandThreatener = threats.Contains(offHandThreatener);
+                bool includesAdjacentThreatener = threats.Contains(adjacentThreatener);
+
+                Assert(includesOffHandThreatener && includesAdjacentThreatener && threats.Count == 2,
+                    "Threat system includes off-hand melee threatener when main hand is ranged",
+                    $"(threatCount={threats.Count}, includesOffHand={includesOffHandThreatener}, includesAdjacent={includesAdjacentThreatener})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(archer != null ? archer.gameObject : null,
+                    offHandThreatener != null ? offHandThreatener.gameObject : null,
+                    adjacentThreatener != null ? adjacentThreatener.gameObject : null);
             }
         }
     }
