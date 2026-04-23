@@ -257,6 +257,16 @@ public static class ConditionRules
 
         Add(new ConditionDefinition
         {
+            Type = CombatConditionType.Poisoned,
+            DisplayName = "Poisoned",
+            ShortLabel = "PO",
+            Description = "Afflicted by poison (effect varies by poison source).",
+            StackingRule = ConditionStackingRule.Refresh,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
             Type = CombatConditionType.Nauseated,
             DisplayName = "Nauseated",
             ShortLabel = "NA",
@@ -591,6 +601,7 @@ public enum CombatConditionType
     Panicked,
     Turned,
     Sickened,
+    Poisoned,
     Nauseated,
     Dazed,
     Stunned,
