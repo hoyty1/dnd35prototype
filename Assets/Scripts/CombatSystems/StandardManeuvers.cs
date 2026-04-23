@@ -445,16 +445,55 @@ public partial class GameManager
     }
 
     public bool CanUseGrappleAttackOption(CharacterController attacker)
-        => CanUseMainHandManeuverAttackOption(attacker, "Grapple");
+    {
+        if (attacker == null)
+            return false;
+
+        bool isAlreadyGrappling = attacker.IsGrappling();
+        if (!isAlreadyGrappling && !attacker.CanUseStandardGrapple())
+            return false;
+
+        return CanUseMainHandManeuverAttackOption(attacker, "Grapple");
+    }
 
     public int GetRemainingGrappleAttackActions(CharacterController attacker)
-        => GetRemainingMainHandManeuverAttackActions(attacker);
+    {
+        if (!CanUseGrappleAttackOption(attacker))
+            return 0;
+
+        return GetRemainingMainHandManeuverAttackActions(attacker);
+    }
 
     public int GetCurrentGrappleAttackBonus(CharacterController attacker)
-        => GetCurrentMainHandManeuverAttackBonusForUI(attacker);
+    {
+        if (!CanUseGrappleAttackOption(attacker))
+            return 0;
+
+        return GetCurrentMainHandManeuverAttackBonusForUI(attacker);
+    }
 
     private bool TryConsumeGrappleAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason)
-        => TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out attacksRemaining, out reason);
+    {
+        attackBonusUsed = 0;
+        attacksRemaining = 0;
+        reason = string.Empty;
+
+        if (attacker == null)
+        {
+            reason = "No attacker available.";
+            return false;
+        }
+
+        if (!attacker.CanUseStandardGrapple())
+        {
+            reason = attacker.Stats != null && attacker.Stats.HasImprovedGrab
+                ? "This creature has Improved Grab and can only start grapples through that ability after a qualifying hit"
+                : "Standard grapple is not available";
+            return false;
+        }
+
+        return TryConsumeMainHandManeuverAttackAction(attacker, "Grapple", out attackBonusUsed, out attacksRemaining, out reason);
+    }
 
     public bool CanUseBullRushAttackOption(CharacterController attacker)
         => CanUseMainHandManeuverAttackOption(attacker, "BullRushAttack");

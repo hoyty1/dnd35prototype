@@ -135,6 +135,9 @@ namespace DND35.AI
             if (self == null || target == null || target.Stats == null)
                 return false;
 
+            if (self.Stats != null && self.Stats.HasImprovedGrab)
+                return false;
+
             if (GrappleBehavior == GrappleBehavior.Avoid || GrappleBehavior == GrappleBehavior.EscapeOnly)
                 return false;
 

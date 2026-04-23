@@ -52,6 +52,8 @@ public static class GrappleDamageRulesTests
         TestIterativeGrappleAttackBonusesConsumeInOrder();
         TestOpposedEscapeCountsAsIterativeGrappleAttackAction();
         TestStandardOnlyAllowsSingleIterativeGrappleAttack();
+        TestImprovedGrabCreatureCannotUseStandardGrappleAction();
+        TestImprovedGrabCreatureCanStillUseIterativeGrappleActionsWhenAlreadyGrappling();
         TestIterativeBullRushAttackBonusesConsumeInOrder();
         TestIterativeDisarmAttackBonusesConsumeInOrder();
         TestStandardOnlyAllowsSingleIterativeDisarmAttack();
@@ -667,6 +669,45 @@ public static class GrappleDamageRulesTests
         Assert(!second && !string.IsNullOrEmpty(reason2), "Additional iterative grapple attacks are unavailable after standard-only use");
 
         Cleanup(attacker);
+    }
+
+    private static void TestImprovedGrabCreatureCannotUseStandardGrappleAction()
+    {
+        var attacker = CreateTestCharacter("ImprovedGrabNoStandardGrapple", "Fighter");
+        var defender = CreateWeakDefender("ImprovedGrabNoStandardGrappleTarget");
+
+        attacker.Stats.HasImprovedGrab = true;
+        attacker.StartNewTurn();
+
+        bool canUseStandardGrapple = attacker.CanUseStandardGrapple();
+        SpecialAttackResult result = attacker.ExecuteSpecialAttack(SpecialAttackType.Grapple, defender);
+
+        Assert(!canUseStandardGrapple, "Improved Grab creature is flagged as unable to use standard grapple action");
+        Assert(result != null && !result.Success, "Standard grapple attempt fails for Improved Grab creature");
+        Assert(result != null && result.Log.Contains("Improved Grab"), "Standard grapple failure log explains Improved Grab restriction");
+
+        Cleanup(attacker, defender);
+    }
+
+    private static void TestImprovedGrabCreatureCanStillUseIterativeGrappleActionsWhenAlreadyGrappling()
+    {
+        var attacker = CreateTestCharacter("ImprovedGrabIterativeGrapple", "Fighter");
+        var defender = CreateWeakDefender("ImprovedGrabIterativeGrappleTarget");
+
+        attacker.Stats.BaseAttackBonus = 11;
+        attacker.Stats.HasImprovedGrab = true;
+        attacker.StartNewTurn();
+
+        ForceGrappleState(attacker, defender);
+
+        bool consumed = attacker.TryConsumeIterativeGrappleAttackAction(out int babUsed, out int remaining, out string reason);
+
+        Assert(consumed, "Improved Grab creature can still consume iterative grapple attacks after grapple is established");
+        Assert(babUsed == 11, "First iterative grapple attack for Improved Grab creature uses top BAB");
+        Assert(remaining == 2, "Improved Grab creature retains full iterative grapple budget after first consume");
+        Assert(string.IsNullOrEmpty(reason), "No failure reason is returned when iterative grapple consume succeeds");
+
+        Cleanup(attacker, defender);
     }
 
     private static void TestIterativeBullRushAttackBonusesConsumeInOrder()

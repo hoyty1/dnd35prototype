@@ -140,6 +140,12 @@ namespace DND35.AI.Profiles
             if (self == null || target == null || target.Stats == null || target.Stats.IsDead)
                 return false;
 
+            if (self.Stats != null && self.Stats.HasImprovedGrab)
+            {
+                Debug.Log($"[AI][Animal] {self.Stats.CharacterName} has Improved Grab; skipping manual Grapple action (handled on qualifying hit).");
+                return false;
+            }
+
             AnimalSpecialty specialty = DetermineSpecialty(self);
             switch (specialty)
             {
@@ -147,10 +153,8 @@ namespace DND35.AI.Profiles
                     if (self.IsGrappling())
                         return false;
 
-                    // Grappler specialists may proactively attempt grapple if they have improved grab package.
-                    return self.Stats != null
-                        && self.Stats.HasImprovedGrab
-                        && !IsTargetGrappledByAttacker(target, self);
+                    // Grappler specialty uses attack pressure; grapples are initiated via Improved Grab trigger on hit.
+                    return false;
 
                 case AnimalSpecialty.Tripper:
                 case AnimalSpecialty.PackHunter:

@@ -11779,7 +11779,15 @@ public partial class GameManager : MonoBehaviour
         if (npc.IsGrappling()) return false;
         if (!npc.Actions.HasStandardAction) return false;
 
+        bool hasImprovedGrab = npc.Stats != null && npc.Stats.HasImprovedGrab;
         SpecialAttackType? choice = forcedChoice;
+
+        if (choice == SpecialAttackType.Grapple && hasImprovedGrab)
+        {
+            string npcName = npc.Stats != null ? npc.Stats.CharacterName : "<unknown>";
+            Debug.Log($"[AI][SpecialAttack] {npcName} has Improved Grab; refusing forced standard Grapple action.");
+            return false;
+        }
 
         if (!choice.HasValue)
         {
@@ -11789,7 +11797,7 @@ public partial class GameManager : MonoBehaviour
             if (choice == null && target.GetEquippedMainWeapon() != null && npc.Stats.STRMod >= 3)
                 choice = SpecialAttackType.Disarm;
 
-            if (choice == null && npc.Stats.STRMod >= 4)
+            if (choice == null && npc.Stats.STRMod >= 4 && !hasImprovedGrab)
                 choice = SpecialAttackType.Grapple;
         }
 

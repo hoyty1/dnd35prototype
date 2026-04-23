@@ -5976,6 +5976,24 @@ public class CharacterController : MonoBehaviour
         };
     }
 
+    /// <summary>
+    /// Checks whether this character can initiate a standard Grapple maneuver.
+    /// Creatures with Improved Grab must initiate grapples through that ability only.
+    /// </summary>
+    public bool CanUseStandardGrapple()
+    {
+        if (Stats == null)
+            return false;
+
+        if (Stats.HasImprovedGrab)
+        {
+            Debug.Log($"[Grapple] {Stats.CharacterName} has Improved Grab and cannot use standard Grapple action.");
+            return false;
+        }
+
+        return true;
+    }
+
     private SpecialAttackResult ResolveGrapple(CharacterController target, int? iterativeAttackBonusOverride = null)
     {
         if (target == null || target.Stats == null || Stats == null)
@@ -5985,6 +6003,18 @@ public class CharacterController : MonoBehaviour
                 ManeuverName = "Grapple",
                 Success = false,
                 Log = "No valid grapple target."
+            };
+        }
+
+        if (!CanUseStandardGrapple())
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Grapple",
+                Success = false,
+                Log = Stats.HasImprovedGrab
+                    ? $"{Stats.CharacterName} has Improved Grab and cannot initiate a standard grapple. Grapples must be triggered by Improved Grab after a qualifying hit."
+                    : $"{Stats.CharacterName} cannot initiate a standard grapple right now."
             };
         }
 
