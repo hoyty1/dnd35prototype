@@ -822,18 +822,37 @@ public class CharacterController : MonoBehaviour
 
     /// <summary>
     /// Resolve base unarmed strike damage for this character.
-    /// D&D 3.5 baseline is 1d3 (Medium) / 1d2 (Small); monks use their class progression die.
+    /// D&D 3.5 baseline is 1d3 at Medium and scales by size; monks use their class progression as Medium baseline.
     /// </summary>
     public (int damageCount, int damageDice, int bonusDamage) GetUnarmedDamage()
     {
-        int unarmedDie = 3;
-        if (Stats != null && Stats.CurrentSizeCategory == SizeCategory.Small)
-            unarmedDie = 2;
+        int mediumBaseCount = 1;
+        int mediumBaseDice = 3;
 
         if (Stats != null && Stats.MonkUnarmedDamageDie > 0)
-            unarmedDie = Stats.MonkUnarmedDamageDie;
+            mediumBaseDice = Stats.MonkUnarmedDamageDie;
 
-        return (1, unarmedDie, 0);
+        SizeCategory currentSize = Stats != null ? Stats.CurrentSizeCategory : SizeCategory.Medium;
+        if (!WeaponDamageScaler.TryScaleDamageDice(mediumBaseCount, mediumBaseDice, SizeCategory.Medium, currentSize, out int scaledCount, out int scaledDice))
+        {
+            scaledCount = mediumBaseCount;
+            scaledDice = mediumBaseDice;
+        }
+
+        return (scaledCount, scaledDice, 0);
+    }
+
+    private void GetScaledWeaponDamageDice(ItemData weapon, out int damageCount, out int damageDice)
+    {
+        if (weapon == null)
+        {
+            damageCount = 1;
+            damageDice = 3;
+            return;
+        }
+
+        SizeCategory currentSize = Stats != null ? Stats.CurrentSizeCategory : SizeCategory.Medium;
+        weapon.GetScaledDamageDice(currentSize, out damageCount, out damageDice);
     }
 
     /// <summary>
@@ -843,8 +862,7 @@ public class CharacterController : MonoBehaviour
     {
         if (weapon != null)
         {
-            damageDice = Mathf.Max(1, weapon.DamageDice);
-            damageCount = Mathf.Max(1, weapon.DamageCount);
+            GetScaledWeaponDamageDice(weapon, out damageCount, out damageDice);
             bonusDamage = weapon.BonusDamage;
             attackLabel = weapon.Name;
             return;
@@ -855,8 +873,7 @@ public class CharacterController : MonoBehaviour
             NaturalAttackDefinition naturalAttack = Stats.GetPrimaryNaturalAttack();
             if (naturalAttack != null)
             {
-                damageDice = Mathf.Max(1, naturalAttack.DamageDice);
-                damageCount = Mathf.Max(1, naturalAttack.DamageCount);
+                Stats.GetScaledNaturalAttackDamage(naturalAttack, out damageCount, out damageDice);
                 bonusDamage = Stats.GetNaturalAttackDamageBonus(naturalAttack) - Stats.STRMod;
                 attackLabel = string.IsNullOrWhiteSpace(naturalAttack.Name)
                     ? (Stats.HasTripAttack ? "Bite" : "Natural attack")
@@ -2203,8 +2220,10 @@ public class CharacterController : MonoBehaviour
                     int baseStrengthFromDamageResolver = useHalfStrength ? Mathf.FloorToInt(Stats.STRMod * 0.5f) : Stats.STRMod;
                     int naturalDamageBonus = Stats.GetNaturalAttackDamageBonus(naturalAttack) - baseStrengthFromDamageResolver;
 
+                    Stats.GetScaledNaturalAttackDamage(naturalAttack, out int naturalDamageCount, out int naturalDamageDice);
+
                     CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
-                        Mathf.Max(1, naturalAttack.DamageDice), Mathf.Max(1, naturalAttack.DamageCount), naturalDamageBonus,
+                        naturalDamageDice, naturalDamageCount, naturalDamageBonus,
                         critThreatMin, critMult,
                         equippedWeapon, useHalfStrength, totalFeatDmgBonus, aidAnotherTargetAcBonus,
                         damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
@@ -2231,7 +2250,7 @@ public class CharacterController : MonoBehaviour
                     atk.WeaponNonProficiencyPenalty = 0;
                     atk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
                     atk.WeaponName = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural attack" : naturalAttack.Name;
-                    atk.BaseDamageDiceStr = $"{Mathf.Max(1, naturalAttack.DamageCount)}d{Mathf.Max(1, naturalAttack.DamageDice)}";
+                    atk.BaseDamageDiceStr = $"{naturalDamageCount}d{naturalDamageDice}";
                     atk.DefenderHPBefore = hpBeforeAtk;
                     atk.DefenderHPAfter = target.Stats.CurrentHP;
 
@@ -2609,9 +2628,11 @@ public class CharacterController : MonoBehaviour
             int mainCritMult = mainWeapon.CritMultiplier > 0 ? mainWeapon.CritMultiplier : 2;
             int totalMainFeatDmg = powerAtkDmgBonus + pbsDmgBonus + mainWSBonus;
 
+            GetScaledWeaponDamageDice(mainWeapon, out int mainDamageCount, out int mainDamageDice);
+
             int hpBeforeMain = target.Stats.CurrentHP;
             CombatResult mainAtk = PerformSingleAttackWithCrit(target, mainAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-                mainWeapon.DamageDice, mainWeapon.DamageCount, mainWeapon.BonusDamage, mainCritMin, mainCritMult,
+                mainDamageDice, mainDamageCount, mainWeapon.BonusDamage, mainCritMin, mainCritMult,
                 mainWeapon, false, totalMainFeatDmg, mainAidAnotherTargetAcBonus,
                 mainDamageModeProfile.DealNonlethalDamage, mainDamageModeProfile.AttackPenalty, mainDamageModeProfile.PenaltySource);
 
@@ -2631,7 +2652,7 @@ public class CharacterController : MonoBehaviour
             mainAtk.PreciseShotNegated = preciseShotNegated;
             mainAtk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
             mainAtk.WeaponName = mainWeapon.Name;
-            mainAtk.BaseDamageDiceStr = $"{mainWeapon.DamageCount}d{mainWeapon.DamageDice}";
+            mainAtk.BaseDamageDiceStr = $"{mainDamageCount}d{mainDamageDice}";
             mainAtk.IsDualWieldAttack = true;
             mainAtk.IsOffHandAttack = false;
             mainAtk.BreakdownBAB = Stats.BaseAttackBonus;
@@ -2687,9 +2708,11 @@ public class CharacterController : MonoBehaviour
             int offCritMult = offWeapon.CritMultiplier > 0 ? offWeapon.CritMultiplier : 2;
             int totalOffFeatDmg = powerAtkDmgBonus + pbsDmgBonus + offWSBonus;
 
+            GetScaledWeaponDamageDice(offWeapon, out int offDamageCount, out int offDamageDice);
+
             int hpBeforeOff = target.Stats.CurrentHP;
             CombatResult offAtk = PerformSingleAttackWithCrit(target, offAtkMod, isFlanking, flankingBonus, flankingPartnerName,
-                offWeapon.DamageDice, offWeapon.DamageCount, offWeapon.BonusDamage, offCritMin, offCritMult,
+                offDamageDice, offDamageCount, offWeapon.BonusDamage, offCritMin, offCritMult,
                 offWeapon, true, totalOffFeatDmg, offAidAnotherTargetAcBonus,
                 offDamageModeProfile.DealNonlethalDamage, offDamageModeProfile.AttackPenalty, offDamageModeProfile.PenaltySource);
 
@@ -2709,7 +2732,7 @@ public class CharacterController : MonoBehaviour
             offAtk.PreciseShotNegated = preciseShotNegated;
             offAtk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
             offAtk.WeaponName = offWeapon.Name;
-            offAtk.BaseDamageDiceStr = $"{offWeapon.DamageCount}d{offWeapon.DamageDice}";
+            offAtk.BaseDamageDiceStr = $"{offDamageCount}d{offDamageDice}";
             offAtk.IsDualWieldAttack = true;
             offAtk.IsOffHandAttack = true;
             offAtk.BreakdownBAB = Stats.BaseAttackBonus;
@@ -3559,15 +3582,24 @@ public class CharacterController : MonoBehaviour
         if (!CanOccupyAtCurrentSize(GridPosition))
         {
             Stats.CurrentSizeCategory = oldSize;
+            RecalculateInventoryStatsAfterSizeChange();
             Debug.LogWarning($"[Size] {Stats.CharacterName}: size change blocked - insufficient room at ({GridPosition.x},{GridPosition.y}).");
             UpdateVisualSize(false);
             RefreshGridOccupancy();
             return false;
         }
 
+        RecalculateInventoryStatsAfterSizeChange();
         RefreshGridOccupancy();
         UpdateVisualSize();
         return true;
+    }
+
+    private void RecalculateInventoryStatsAfterSizeChange()
+    {
+        Inventory inventoryData = GetInventoryData();
+        if (inventoryData != null)
+            inventoryData.RecalculateStats();
     }
 
     /// <summary>
@@ -5207,8 +5239,9 @@ public class CharacterController : MonoBehaviour
                             + armorNonProfPenalty
                             + useOpponentWeaponAttackPenalty;
 
-            int damageDice = Mathf.Max(2, opponentWeapon.DamageDice);
-            int damageCount = Mathf.Max(1, opponentWeapon.DamageCount);
+            GetScaledWeaponDamageDice(opponentWeapon, out int scaledOpponentDamageCount, out int scaledOpponentDamageDice);
+            int damageDice = Mathf.Max(2, scaledOpponentDamageDice);
+            int damageCount = Mathf.Max(1, scaledOpponentDamageCount);
             int bonusDamage = opponentWeapon.BonusDamage;
             int critThreatMin = opponentWeapon.CritThreatMin > 0 ? opponentWeapon.CritThreatMin : 20;
             int critMultiplier = opponentWeapon.CritMultiplier > 0 ? opponentWeapon.CritMultiplier : 2;
@@ -5403,8 +5436,9 @@ public class CharacterController : MonoBehaviour
         }
         else
         {
-            damageDice = Mathf.Max(2, weapon.DamageDice);
-            damageCount = Mathf.Max(1, weapon.DamageCount);
+            GetScaledWeaponDamageDice(weapon, out int scaledWeaponDamageCount, out int scaledWeaponDamageDice);
+            damageDice = Mathf.Max(2, scaledWeaponDamageDice);
+            damageCount = Mathf.Max(1, scaledWeaponDamageCount);
             bonusDamage = weapon.BonusDamage;
             critThreatMin = weapon.CritThreatMin > 0 ? weapon.CritThreatMin : 20;
             critMultiplier = weapon.CritMultiplier > 0 ? weapon.CritMultiplier : 2;
@@ -6052,8 +6086,20 @@ public class CharacterController : MonoBehaviour
             };
         }
 
-        int damageDiceSides = Mathf.Max(1, attackerWeapon.DamageDice > 0 ? attackerWeapon.DamageDice : Stats.BaseDamageDice);
-        int damageDiceCount = Mathf.Max(1, attackerWeapon.DamageCount > 0 ? attackerWeapon.DamageCount : Stats.BaseDamageCount);
+        int damageDiceSides;
+        int damageDiceCount;
+        if (attackerWeapon != null)
+        {
+            GetScaledWeaponDamageDice(attackerWeapon, out damageDiceCount, out damageDiceSides);
+            damageDiceSides = Mathf.Max(1, damageDiceSides);
+            damageDiceCount = Mathf.Max(1, damageDiceCount);
+        }
+        else
+        {
+            damageDiceSides = Mathf.Max(1, Stats.BaseDamageDice);
+            damageDiceCount = Mathf.Max(1, Stats.BaseDamageCount);
+        }
+
         int damageRoll = Stats.RollBaseDamage(damageDiceSides, damageDiceCount);
         int damageAbility = Stats.GetWeaponDamageModifier(attackerWeapon, usedOffHand);
         int damageBonus = attackerWeapon.BonusDamage;
@@ -6824,8 +6870,7 @@ public class CharacterController : MonoBehaviour
         if (equippedWeapon != null)
         {
             // Use weapon stats if equipped
-            damageDice = equippedWeapon.DamageDice;
-            damageCount = equippedWeapon.DamageCount;
+            GetScaledWeaponDamageDice(equippedWeapon, out damageCount, out damageDice);
             bonusDamage = equippedWeapon.BonusDamage;
             critThreatMin = equippedWeapon.CritThreatMin;
             critMult = equippedWeapon.CritMultiplier;
@@ -6833,7 +6878,7 @@ public class CharacterController : MonoBehaviour
         }
         else
         {
-            Debug.Log($"[Monk] Using unarmed strike: 1d{damageDice}");
+            Debug.Log($"[Monk] Using unarmed strike: {damageCount}d{damageDice}");
         }
 
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);

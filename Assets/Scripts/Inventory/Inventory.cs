@@ -362,8 +362,9 @@ public class Inventory
                 NaturalAttackDefinition primaryNaturalAttack = OwnerStats.GetPrimaryNaturalAttack();
                 if (primaryNaturalAttack != null)
                 {
-                    OwnerStats.BaseDamageDice = Mathf.Max(1, primaryNaturalAttack.DamageDice);
-                    OwnerStats.BaseDamageCount = Mathf.Max(1, primaryNaturalAttack.DamageCount);
+                    OwnerStats.GetScaledNaturalAttackDamage(primaryNaturalAttack, out int naturalDamageCount, out int naturalDamageDice);
+                    OwnerStats.BaseDamageDice = naturalDamageDice;
+                    OwnerStats.BaseDamageCount = naturalDamageCount;
                     OwnerStats.BonusDamage = OwnerStats.GetNaturalAttackDamageBonus(primaryNaturalAttack) - OwnerStats.STRMod;
                     OwnerStats.AttackRange = Mathf.Max(1, primaryNaturalAttack.Range);
                 }
@@ -391,8 +392,9 @@ public class Inventory
     /// <summary>Apply weapon stats from an ItemData to OwnerStats.</summary>
     private void ApplyWeaponStats(ItemData weapon)
     {
-        OwnerStats.BaseDamageDice = weapon.DamageDice;
-        OwnerStats.BaseDamageCount = weapon.DamageCount;
+        weapon.GetScaledDamageDice(OwnerStats.CurrentSizeCategory, out int scaledDamageCount, out int scaledDamageDice);
+        OwnerStats.BaseDamageDice = scaledDamageDice;
+        OwnerStats.BaseDamageCount = scaledDamageCount;
         OwnerStats.BonusDamage = weapon.BonusDamage;
 
         if (weapon.WeaponCat == WeaponCategory.Melee)

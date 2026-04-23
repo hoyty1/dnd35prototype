@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -191,5 +192,122 @@ public static class SizeCategoryExtensions
 
         decreased = size - 1;
         return true;
+    }
+}
+
+/// <summary>
+/// D&D 3.5e weapon/natural attack damage scaling by size category
+/// (DMG tables for changing weapon damage by size).
+/// </summary>
+public static class WeaponDamageScaler
+{
+    private static readonly Dictionary<string, string[]> MediumReferenceProgressions = new Dictionary<string, string[]>
+    {
+        // Keys are the damage expression at Medium size.
+        { "1",   new[] { "1",   "1",   "1",   "1",   "1",   "1d2", "1d3", "1d4", "1d6" } },
+        { "1d2", new[] { "1",   "1",   "1",   "1d2", "1d3", "1d4", "1d6", "1d8", "2d6" } },
+        { "1d3", new[] { "1",   "1d2", "1d2", "1d3", "1d4", "1d6", "1d8", "2d6", "3d6" } },
+        { "1d4", new[] { "1",   "1d2", "1d3", "1d4", "1d6", "1d8", "2d6", "3d6", "4d6" } },
+        { "1d6", new[] { "1d2", "1d3", "1d4", "1d6", "1d8", "2d6", "3d6", "4d6", "6d6" } },
+        { "1d8", new[] { "1d3", "1d4", "1d6", "1d8", "2d6", "3d6", "4d6", "6d6", "8d6" } },
+        { "1d10",new[] { "1d4", "1d6", "1d8", "1d10","2d8", "3d8", "4d8", "6d8", "8d8" } },
+        { "1d12",new[] { "1d6", "1d8", "1d10","1d12","3d6", "4d6", "6d6", "8d6", "12d6" } },
+        { "2d4", new[] { "1d3", "1d4", "1d6", "1d8", "2d4", "2d6", "3d6", "4d6", "6d6" } },
+        { "2d6", new[] { "1d4", "1d6", "1d8", "1d10","2d6", "3d6", "4d6", "6d6", "8d6" } },
+        { "2d8", new[] { "1d6", "1d8", "1d10","2d6", "2d8", "3d8", "4d8", "6d8", "8d8" } },
+    };
+
+    public static bool TryScaleDamageDice(int baseCount, int baseDice, SizeCategory fromSize, SizeCategory toSize, out int scaledCount, out int scaledDice)
+    {
+        scaledCount = Mathf.Max(1, baseCount);
+        scaledDice = Mathf.Max(1, baseDice);
+
+        if (fromSize == toSize)
+            return true;
+
+        if (!TryResolveProgression(baseCount, baseDice, fromSize, out string[] progression))
+            return false;
+
+        return TryParseDamageExpression(progression[(int)toSize], out scaledCount, out scaledDice);
+    }
+
+    public static string ScaleDamageExpression(string baseExpression, SizeCategory fromSize, SizeCategory toSize)
+    {
+        if (!TryParseDamageExpression(baseExpression, out int count, out int dice))
+            return baseExpression;
+
+        if (!TryScaleDamageDice(count, dice, fromSize, toSize, out int scaledCount, out int scaledDice))
+            return baseExpression;
+
+        return ToExpression(scaledCount, scaledDice);
+    }
+
+    private static bool TryResolveProgression(int damageCount, int damageDice, SizeCategory fromSize, out string[] progression)
+    {
+        progression = null;
+        string expression = ToExpression(damageCount, damageDice);
+
+        // Fast path when source expression is already the Medium baseline key.
+        if (fromSize == SizeCategory.Medium && MediumReferenceProgressions.TryGetValue(expression, out progression))
+            return true;
+
+        string[] candidate = null;
+        foreach (KeyValuePair<string, string[]> kvp in MediumReferenceProgressions)
+        {
+            string atSourceSize = kvp.Value[(int)fromSize];
+            if (!TryParseDamageExpression(atSourceSize, out int candidateCount, out int candidateDice))
+                continue;
+
+            if (candidateCount != damageCount || candidateDice != damageDice)
+                continue;
+
+            // Prefer exact medium-key match when ambiguous.
+            if (kvp.Key == expression)
+            {
+                progression = kvp.Value;
+                return true;
+            }
+
+            if (candidate == null)
+                candidate = kvp.Value;
+        }
+
+        progression = candidate;
+        return progression != null;
+    }
+
+    private static bool TryParseDamageExpression(string expression, out int count, out int dice)
+    {
+        count = 1;
+        dice = 1;
+
+        if (string.IsNullOrWhiteSpace(expression))
+            return false;
+
+        string normalized = expression.Trim().ToLowerInvariant();
+        if (normalized == "1")
+        {
+            count = 1;
+            dice = 1;
+            return true;
+        }
+
+        string[] parts = normalized.Split('d');
+        if (parts.Length != 2)
+            return false;
+
+        if (!int.TryParse(parts[0], out count) || !int.TryParse(parts[1], out dice))
+            return false;
+
+        count = Mathf.Max(1, count);
+        dice = Mathf.Max(1, dice);
+        return true;
+    }
+
+    public static string ToExpression(int damageCount, int damageDice)
+    {
+        int clampedCount = Mathf.Max(1, damageCount);
+        int clampedDice = Mathf.Max(1, damageDice);
+        return clampedCount == 1 && clampedDice == 1 ? "1" : $"{clampedCount}d{clampedDice}";
     }
 }

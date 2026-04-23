@@ -1396,7 +1396,7 @@ public static class ItemDatabase
             Proficiency = src.Proficiency, WeaponCat = src.WeaponCat,
             WeaponSize = src.WeaponSize,
             DamageDice = src.DamageDice, DamageCount = src.DamageCount,
-            BonusDamage = src.BonusDamage, AttackRange = src.AttackRange,
+            BonusDamage = src.BonusDamage, DesignedForSize = src.DesignedForSize, AttackRange = src.AttackRange,
             IsLightWeapon = src.IsLightWeapon, IsTwoHanded = src.IsTwoHanded,
             HasReach = src.HasReach, ReachSquares = src.ReachSquares,
             CanAttackAdjacent = src.CanAttackAdjacent, IsReachWeapon = src.IsReachWeapon,

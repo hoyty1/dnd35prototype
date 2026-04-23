@@ -141,6 +141,7 @@ public class ItemData
     public int DamageDice;      // Sides on damage die (e.g., 8 for d8)
     public int DamageCount;     // Number of damage dice (usually 1)
     public int BonusDamage;     // Flat bonus damage
+    public SizeCategory DesignedForSize = SizeCategory.Medium; // Creature size this weapon profile is built for
     public int AttackRange;     // Legacy max range field: melee in squares, ranged in feet. Use ReachSquares for melee semantics.
     public bool IsLightWeapon;  // Light weapon (dagger, short sword) - reduces TWF penalties
     public bool IsTwoHanded;    // Two-handed weapon - can't be dual-wielded, 1.5x STR to damage
@@ -418,6 +419,22 @@ public class ItemData
             return true;
 
         return false;
+    }
+
+    /// <summary>
+    /// Returns this weapon's damage dice scaled from its designed size to a target wielder size.
+    /// Falls back to the item's base dice if no progression entry exists.
+    /// </summary>
+    public void GetScaledDamageDice(SizeCategory wielderSize, out int damageCount, out int damageDice)
+    {
+        int baseCount = Mathf.Max(1, DamageCount);
+        int baseDice = Mathf.Max(1, DamageDice);
+
+        if (!WeaponDamageScaler.TryScaleDamageDice(baseCount, baseDice, DesignedForSize, wielderSize, out damageCount, out damageDice))
+        {
+            damageCount = baseCount;
+            damageDice = baseDice;
+        }
     }
 
     /// <summary>Get parsed canonical damage types for this weapon.</summary>

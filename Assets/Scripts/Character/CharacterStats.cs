@@ -1410,6 +1410,18 @@ public class CharacterStats
         return attack.GetDamageBonus(STRMod);
     }
 
+    public void GetScaledNaturalAttackDamage(NaturalAttackDefinition attack, out int damageCount, out int damageDice)
+    {
+        int baseCount = attack != null ? Mathf.Max(1, attack.DamageCount) : 1;
+        int baseDice = attack != null ? Mathf.Max(1, attack.DamageDice) : 1;
+
+        if (!WeaponDamageScaler.TryScaleDamageDice(baseCount, baseDice, BaseSizeCategory, CurrentSizeCategory, out damageCount, out damageDice))
+        {
+            damageCount = baseCount;
+            damageDice = baseDice;
+        }
+    }
+
     public int GetTotalNaturalAttackCount()
     {
         int total = 0;
@@ -1449,8 +1461,9 @@ public class CharacterStats
             string displayName = count > 1 ? $"{count} {attackName}s" : attackName;
             int attackBonus = GetNaturalAttackBonus(attack);
             int damageBonus = GetNaturalAttackDamageBonus(attack);
+            GetScaledNaturalAttackDamage(attack, out int scaledDamageCount, out int scaledDamageDice);
             string damageBonusPart = damageBonus != 0 ? FormatMod(damageBonus) : string.Empty;
-            entries.Add($"{displayName} {FormatMod(attackBonus)} ({attack.DamageCount}d{attack.DamageDice}{damageBonusPart})");
+            entries.Add($"{displayName} {FormatMod(attackBonus)} ({scaledDamageCount}d{scaledDamageDice}{damageBonusPart})");
         }
 
         return string.Join(", ", entries);
