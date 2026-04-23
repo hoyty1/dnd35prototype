@@ -374,6 +374,53 @@ public class CombatFlowService : MonoBehaviour
         return result;
     }
 
+    private static bool ShouldUseNaturalAttackStep(CharacterController attacker, ItemData attackWeapon)
+    {
+        return attacker != null
+            && attackWeapon == null
+            && attacker.Stats != null
+            && attacker.Stats.HasNaturalAttacks;
+    }
+
+    private static bool TryGetNaturalAttackAtSequenceIndex(CharacterController attacker, int attackIndex, out NaturalAttackDefinition attack)
+    {
+        attack = null;
+        if (attacker == null || attacker.Stats == null || attackIndex < 0)
+            return false;
+
+        List<NaturalAttackDefinition> naturalAttacks = attacker.Stats.GetValidNaturalAttacks();
+        int currentIndex = 0;
+        for (int naturalIndex = 0; naturalIndex < naturalAttacks.Count; naturalIndex++)
+        {
+            NaturalAttackDefinition naturalAttack = naturalAttacks[naturalIndex];
+            int count = Mathf.Max(1, naturalAttack.Count);
+            for (int i = 0; i < count; i++)
+            {
+                if (currentIndex == attackIndex)
+                {
+                    attack = naturalAttack;
+                    return true;
+                }
+
+                currentIndex++;
+            }
+        }
+
+        return false;
+    }
+
+    private static int GetSequenceAttackBaseBonus(CharacterController attacker, GameManager.AttackType attackType, int attackIndex)
+    {
+        if (attackType == GameManager.AttackType.Melee
+            && ShouldUseNaturalAttackStep(attacker, attacker != null ? attacker.GetEquippedMainWeapon() : null)
+            && TryGetNaturalAttackAtSequenceIndex(attacker, attackIndex, out NaturalAttackDefinition naturalAttack))
+        {
+            return attacker.Stats.GetNaturalAttackBonus(naturalAttack);
+        }
+
+        return attacker != null ? attacker.GetIterativeAttackBAB(attackIndex) : 0;
+    }
+
     public void PerformIterativeSequenceAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
@@ -405,26 +452,63 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
-        CombatResult result = attacker.Attack(
-            target,
-            isFlanking,
-            flankBonus,
-            partnerName,
-            rangeInfo,
-            _gameManager.Combat_GetCurrentAttackBAB(),
-            attackWeapon);
+        bool useNaturalFullAttackStep = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee
+            && ShouldUseNaturalAttackStep(attacker, attackWeapon);
 
-        _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
-        _gameManager.Combat_ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
-
+        CombatResult result;
+        string attackModeLog;
         int attackNumber = _gameManager.Combat_GetTotalAttacksUsed() + 1;
-        string modeLabel = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown ? "Thrown" : "Melee";
-        string dwPenaltyInfo = _gameManager.Combat_IsDualWielding()
-            && (_gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee || _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown)
-                ? $", dual-wield penalty {CharacterStats.FormatMod(_gameManager.Combat_GetMainHandPenalty())}"
-                : string.Empty;
 
-        _gameManager.CombatUI?.ShowCombatLog($"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} ({modeLabel}) at BAB {CharacterStats.FormatMod(_gameManager.Combat_GetCurrentAttackBAB())}{dwPenaltyInfo}");
+        if (useNaturalFullAttackStep)
+        {
+            int naturalAttackIndex = _gameManager.Combat_GetTotalAttacksUsed();
+            FullAttackResult naturalStep = attacker.FullAttack(
+                target,
+                isFlanking,
+                flankBonus,
+                partnerName,
+                rangeInfo,
+                startAttackIndex: naturalAttackIndex,
+                maxAttacks: 1);
+
+            if (naturalStep == null || naturalStep.Attacks == null || naturalStep.Attacks.Count == 0)
+            {
+                Debug.LogWarning($"[Attack][Sequence] Natural attack step produced no attacks for {attacker.Stats.CharacterName} at index {naturalAttackIndex}; ending sequence.");
+                _gameManager.Combat_EndAttackSequence();
+                _gameManager.Combat_ShowActionChoices();
+                return;
+            }
+
+            result = naturalStep.Attacks[0];
+            string naturalLabel = (naturalStep.AttackLabels != null && naturalStep.AttackLabels.Count > 0)
+                ? naturalStep.AttackLabels[0]
+                : "Natural attack";
+            attackModeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} (Melee) {naturalLabel}";
+        }
+        else
+        {
+            result = attacker.Attack(
+                target,
+                isFlanking,
+                flankBonus,
+                partnerName,
+                rangeInfo,
+                _gameManager.Combat_GetCurrentAttackBAB(),
+                attackWeapon);
+
+            _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
+            _gameManager.Combat_ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
+
+            string modeLabel = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown ? "Thrown" : "Melee";
+            string dwPenaltyInfo = _gameManager.Combat_IsDualWielding()
+                && (_gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee || _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown)
+                    ? $", dual-wield penalty {CharacterStats.FormatMod(_gameManager.Combat_GetMainHandPenalty())}"
+                    : string.Empty;
+
+            attackModeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} ({modeLabel}) at BAB {CharacterStats.FormatMod(_gameManager.Combat_GetCurrentAttackBAB())}{dwPenaltyInfo}";
+        }
+
+        _gameManager.CombatUI?.ShowCombatLog(attackModeLog);
 
         string attackLog = BuildAttackLog(attacker, isFlanking, partnerName, result);
         _gameManager.Combat_SetLastCombatLog(attackLog);
@@ -478,7 +562,8 @@ public class CombatFlowService : MonoBehaviour
 
         if (_gameManager.Combat_HasMoreAttacksAvailable())
         {
-            int nextBaseBab = attacker.GetIterativeAttackBAB(_gameManager.Combat_GetTotalAttacksUsed());
+            int nextAttackIndex = _gameManager.Combat_GetTotalAttacksUsed();
+            int nextBaseBab = GetSequenceAttackBaseBonus(attacker, _gameManager.Combat_GetCurrentAttackType(), nextAttackIndex);
             int nextBab = nextBaseBab;
             if (_gameManager.Combat_IsDualWielding()
                 && (_gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee || _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown))

@@ -5542,6 +5542,53 @@ public partial class GameManager : MonoBehaviour
         return AttackType.Melee;
     }
 
+    private static bool UsesInnateNaturalAttackSequence(CharacterController attacker, AttackType attackType, ItemData equippedWeapon)
+    {
+        return attacker != null
+            && attackType == AttackType.Melee
+            && equippedWeapon == null
+            && attacker.Stats != null
+            && attacker.Stats.HasNaturalAttacks;
+    }
+
+    private static bool TryGetNaturalAttackAtSequenceIndex(CharacterController attacker, int attackIndex, out NaturalAttackDefinition attack)
+    {
+        attack = null;
+        if (attacker == null || attacker.Stats == null || attackIndex < 0)
+            return false;
+
+        List<NaturalAttackDefinition> naturalAttacks = attacker.Stats.GetValidNaturalAttacks();
+        int currentIndex = 0;
+        for (int naturalIndex = 0; naturalIndex < naturalAttacks.Count; naturalIndex++)
+        {
+            NaturalAttackDefinition naturalAttack = naturalAttacks[naturalIndex];
+            int count = Mathf.Max(1, naturalAttack.Count);
+            for (int i = 0; i < count; i++)
+            {
+                if (currentIndex == attackIndex)
+                {
+                    attack = naturalAttack;
+                    return true;
+                }
+
+                currentIndex++;
+            }
+        }
+
+        return false;
+    }
+
+    private int GetAttackSequenceBaseAttackBonus(CharacterController attacker, AttackType attackType, int attackIndex)
+    {
+        if (UsesInnateNaturalAttackSequence(attacker, attackType, attacker != null ? attacker.GetEquippedMainWeapon() : null)
+            && TryGetNaturalAttackAtSequenceIndex(attacker, attackIndex, out NaturalAttackDefinition naturalAttack))
+        {
+            return attacker.Stats.GetNaturalAttackBonus(naturalAttack);
+        }
+
+        return attacker != null ? attacker.GetIterativeAttackBAB(attackIndex) : 0;
+    }
+
     private void StartAttackSequence(CharacterController attacker)
     {
         StartAttackSequence(attacker, GetDefaultAttackType(attacker));
@@ -5555,7 +5602,10 @@ public partial class GameManager : MonoBehaviour
         _attackingCharacter = attacker;
         _equippedWeapon = attacker.GetEquippedMainWeapon();
 
-        _totalAttackBudget = Mathf.Max(1, attacker.GetIterativeAttackCount());
+        bool usingInnateNaturalAttacks = UsesInnateNaturalAttackSequence(attacker, attackType, _equippedWeapon);
+        _totalAttackBudget = usingInnateNaturalAttacks
+            ? Mathf.Max(1, attacker.Stats.GetTotalNaturalAttackCount())
+            : Mathf.Max(1, attacker.GetIterativeAttackCount());
         _totalAttacksUsed = 0;
         _attackSequenceConsumesFullRound = false;
         _isInAttackSequence = true;
@@ -5654,7 +5704,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         int attackNumber = _totalAttacksUsed + 1;
-        int baseBab = attacker.GetIterativeAttackBAB(_totalAttacksUsed);
+        int baseBab = GetAttackSequenceBaseAttackBonus(attacker, attackType, _totalAttacksUsed);
         int attackBab = baseBab;
 
         // Apply dual-wield penalty to main-hand iterative attacks.

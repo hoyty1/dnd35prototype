@@ -380,19 +380,43 @@ namespace Tests.AI
             EnemyDatabase.Init();
             EnemyDefinition tiger = EnemyDatabase.Get("tiger");
 
+            NaturalAttackDefinition tigerClaw = tiger != null && tiger.NaturalAttacks != null
+                ? tiger.NaturalAttacks.Find(a => a != null && string.Equals(a.Name, "Claw", StringComparison.OrdinalIgnoreCase))
+                : null;
+            NaturalAttackDefinition tigerBite = tiger != null && tiger.NaturalAttacks != null
+                ? tiger.NaturalAttacks.Find(a => a != null && string.Equals(a.Name, "Bite", StringComparison.OrdinalIgnoreCase))
+                : null;
+            int tigerNaturalAttackCount = 0;
+            if (tiger != null && tiger.NaturalAttacks != null)
+            {
+                for (int i = 0; i < tiger.NaturalAttacks.Count; i++)
+                {
+                    NaturalAttackDefinition attack = tiger.NaturalAttacks[i];
+                    if (attack != null && attack.DamageDice > 0 && attack.DamageCount > 0)
+                        tigerNaturalAttackCount += Mathf.Max(1, attack.Count);
+                }
+            }
+
             bool usesAnimalProfile = tiger != null
                                      && tiger.AIProfileArchetype == EnemyAIProfileArchetype.Animal
                                      && tiger.HasScent
                                      && tiger.HasPounce
                                      && tiger.HasImprovedGrab
                                      && tiger.HasRake
-                                     && string.Equals(tiger.ImprovedGrabTriggerAttackName, "Bite", StringComparison.OrdinalIgnoreCase);
+                                     && string.Equals(tiger.ImprovedGrabTriggerAttackName, "Bite", StringComparison.OrdinalIgnoreCase)
+                                     && tigerNaturalAttackCount == 3
+                                     && tigerClaw != null
+                                     && tigerClaw.IsPrimary
+                                     && tigerClaw.Count == 2
+                                     && tigerBite != null
+                                     && !tigerBite.IsPrimary
+                                     && tigerBite.Count == 1;
 
             Assert(usesAnimalProfile,
                 "Tiger enemy definition uses Animal AI profile archetype",
                 tiger == null
                     ? "(tiger definition missing)"
-                    : $"(archetype={tiger.AIProfileArchetype}, scent={tiger.HasScent}, pounce={tiger.HasPounce}, grab={tiger.HasImprovedGrab}, trigger={tiger.ImprovedGrabTriggerAttackName}, rake={tiger.HasRake})");
+                    : $"(archetype={tiger.AIProfileArchetype}, scent={tiger.HasScent}, pounce={tiger.HasPounce}, grab={tiger.HasImprovedGrab}, trigger={tiger.ImprovedGrabTriggerAttackName}, rake={tiger.HasRake}, naturalAttackCount={tigerNaturalAttackCount}, clawCount={tigerClaw?.Count ?? 0}, biteCount={tigerBite?.Count ?? 0})");
         }
 
         private static void TestEvokerSchoolPriority()
