@@ -523,6 +523,11 @@ public class CharacterStats
     /// <summary>Rage Will save bonus (+2 while raging).</summary>
     public int RageWillBonus => IsRaging ? 2 : 0;
 
+    private int GetEffectiveProgressionLevel()
+    {
+        return Mathf.Max(1, HitDice > 0 ? HitDice : Level);
+    }
+
     // ========== CLASS-BASED SAVE BONUSES (D&D 3.5) ==========
 
     /// <summary>
@@ -535,6 +540,9 @@ public class CharacterStats
     {
         get
         {
+            if (UseCreatureTypeProgression)
+                return ProgressionCalculator.CalculateSave(CreatureFortitudeProgression, GetEffectiveProgressionLevel());
+
             ClassRegistry.Init();
             ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
             bool goodFort = classDef != null && classDef.GoodFortitude;
@@ -550,6 +558,9 @@ public class CharacterStats
     {
         get
         {
+            if (UseCreatureTypeProgression)
+                return ProgressionCalculator.CalculateSave(CreatureReflexProgression, GetEffectiveProgressionLevel());
+
             ClassRegistry.Init();
             ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
             bool goodRef = classDef != null && classDef.GoodReflex;
@@ -565,6 +576,9 @@ public class CharacterStats
     {
         get
         {
+            if (UseCreatureTypeProgression)
+                return ProgressionCalculator.CalculateSave(CreatureWillProgression, GetEffectiveProgressionLevel());
+
             ClassRegistry.Init();
             ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
             bool goodWill = classDef != null && classDef.GoodWill;
@@ -736,6 +750,20 @@ public class CharacterStats
 
     /// <summary>Broad creature type used by some spells (e.g., Humanoid-only effects).</summary>
     public string CreatureType = "Humanoid";
+
+    /// <summary>Monster HD used for creature-type progression math. Defaults to character level.</summary>
+    public int HitDice;
+
+    /// <summary>
+    /// When true, this character's BAB and base saves use creature-type progression rules
+    /// instead of class progression (used by NPC monsters).
+    /// </summary>
+    public bool UseCreatureTypeProgression;
+
+    public BABProgression CreatureBABProgression = BABProgression.Medium;
+    public SaveProgression CreatureFortitudeProgression = SaveProgression.Poor;
+    public SaveProgression CreatureReflexProgression = SaveProgression.Poor;
+    public SaveProgression CreatureWillProgression = SaveProgression.Poor;
 
     /// <summary>Innate natural armor bonus separate from worn armor.</summary>
     public int NaturalArmorBonus;
@@ -1159,6 +1187,7 @@ public class CharacterStats
     {
         CharacterName = name;
         Level = level;
+        HitDice = Mathf.Max(1, level);
         CharacterClass = characterClass;
 
         // Explicit defaults before race/template overrides.

@@ -109,9 +109,13 @@ public static class EnemyDatabase
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            HitDice = 2,
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
             SizeCategory = SizeCategory.Small,
             STR = 14, DEX = 15, CON = 13, WIS = 10, INT = 10, CHA = 8,
-            BAB = 2,
+            BAB = 1,
             ArmorBonus = 3,   // studded leather
             ShieldBonus = 1,  // light wooden shield
             DamageDice = 8,   // morningstar 1d8
@@ -150,9 +154,13 @@ public static class EnemyDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            HitDice = 1,
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
             SizeCategory = SizeCategory.Small,
             STR = 11, DEX = 13, CON = 12, WIS = 9, INT = 10, CHA = 6,
-            BAB = 1,
+            BAB = 0,
             ArmorBonus = 2,   // leather armor
             ShieldBonus = 1,  // small wooden shield equivalent
             DamageDice = 6,   // morningstar 1d6 (small wielder)
@@ -196,12 +204,13 @@ public static class EnemyDatabase
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Undead",
+            HitDice = 1,
             SizeCategory = SizeCategory.Medium,
             NaturalArmorBonus = 2,
             // Skeleton: STR 13 (was a human), DEX 15 (undead agility), CON 10 (undead placeholder)
             // WIS 10, INT 6 (mindless but can aim), CHA 1 (undead husk)
             STR = 13, DEX = 15, CON = 10, WIS = 10, INT = 6, CHA = 1,
-            BAB = 1,
+            BAB = 0,
             ArmorBonus = 2,   // scraps of leather + natural armor
             ShieldBonus = 0,  // no shield (needs both hands for bow)
             DamageDice = 6,   // shortbow 1d6
@@ -242,10 +251,11 @@ public static class EnemyDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Undead",
+            HitDice = 4,
             SizeCategory = SizeCategory.Medium,
             NaturalArmorBonus = 4,
             STR = 12, DEX = 12, CON = 10, WIS = 13, INT = 11, CHA = 15,
-            BAB = 2,
+            BAB = 3,
             ArmorBonus = 0,
             ShieldBonus = 0,
             DamageDice = 4,   // slam 1d4
@@ -287,10 +297,14 @@ public static class EnemyDatabase
             Level = 3,
             CharacterClass = "Barbarian",
             CreatureType = "Humanoid",
+            HitDice = 3,
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
             SizeCategory = SizeCategory.Medium,
             // Orc: base STR 17 + racial = effective 17 (already includes orc bonus)
             STR = 17, DEX = 11, CON = 14, WIS = 8, INT = 8, CHA = 6,
-            BAB = 3,
+            BAB = 2,
             ArmorBonus = 3,   // hide armor
             ShieldBonus = 0,  // two-handed weapon
             DamageDice = 12,  // greataxe 1d12
@@ -330,9 +344,13 @@ public static class EnemyDatabase
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Humanoid",
+            HitDice = 3,
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
             SizeCategory = SizeCategory.Medium,
             STR = 16, DEX = 11, CON = 14, WIS = 10, INT = 8, CHA = 8,
-            BAB = 3,
+            BAB = 2,
             ArmorBonus = 2,
             ShieldBonus = 0,
             DamageDice = 4,   // dagger 1d4
@@ -375,10 +393,14 @@ public static class EnemyDatabase
             Level = 3,
             CharacterClass = "Fighter",
             CreatureType = "Humanoid",
+            HitDice = 3,
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
             SizeCategory = SizeCategory.Medium,
             // Hobgoblin: DEX +2, CON +2 already factored in
             STR = 15, DEX = 14, CON = 14, WIS = 12, INT = 10, CHA = 10,
-            BAB = 3,
+            BAB = 2,
             ArmorBonus = 5,   // chainmail
             ShieldBonus = 2,  // heavy steel shield
             DamageDice = 8,   // longsword 1d8
@@ -419,10 +441,11 @@ public static class EnemyDatabase
             Level = 4,
             CharacterClass = "Warrior",
             CreatureType = "Giant",
+            HitDice = 4,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = true,
             STR = 21, DEX = 8, CON = 15, WIS = 10, INT = 6, CHA = 7,
-            BAB = 4,
+            BAB = 3,
             ArmorBonus = 2,   // hide scraps
             NaturalArmorBonus = 5,
             ShieldBonus = 0,
@@ -461,6 +484,7 @@ public static class EnemyDatabase
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            HitDice = 6,
             SizeCategory = SizeCategory.Large,
             IsTallCreature = false,
             STR = 25, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 10,
@@ -500,6 +524,7 @@ public static class EnemyDatabase
             Level = 2,          // 2 HD animal
             CharacterClass = "Warrior",
             CreatureType = "Animal",
+            HitDice = 2,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
             STR = 13, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
@@ -545,6 +570,11 @@ public class EnemyDefinition
     public int Level;
     public string CharacterClass;
     public string CreatureType = "Humanoid";
+    public int HitDice = 1;
+    public BABProgression? BABOverride;
+    public SaveProgression? FortitudeSaveOverride;
+    public SaveProgression? ReflexSaveOverride;
+    public SaveProgression? WillSaveOverride;
     public SizeCategory SizeCategory = SizeCategory.Medium;
     public bool IsTallCreature = true;
     public int NaturalArmorBonus;

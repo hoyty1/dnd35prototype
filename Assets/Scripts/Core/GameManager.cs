@@ -2038,13 +2038,26 @@ public partial class GameManager : MonoBehaviour
     private void InitializeNPCFromDefinition(CharacterController npc, EnemyDefinition def,
         Vector2Int pos, Sprite alive, Sprite dead)
     {
+        int hitDice = Mathf.Max(1, def.HitDice > 0 ? def.HitDice : def.Level);
+        CreatureTypeProgression creatureProgression = CreatureTypeProgressionDatabase.GetFromString(def.CreatureType);
+
+        BABProgression babProgression = def.BABOverride ?? creatureProgression.BAB;
+        SaveProgression fortitudeProgression = def.FortitudeSaveOverride ?? creatureProgression.Fortitude;
+        SaveProgression reflexProgression = def.ReflexSaveOverride ?? creatureProgression.Reflex;
+        SaveProgression willProgression = def.WillSaveOverride ?? creatureProgression.Will;
+
+        int computedBab = ProgressionCalculator.CalculateBAB(babProgression, hitDice);
+        int computedBaseHitDieHp = def.BaseHitDieHP > 0
+            ? def.BaseHitDieHP
+            : ProgressionCalculator.CalculateAverageHpFromHitDice(creatureProgression.HitDie, hitDice);
+
         CharacterStats stats = new CharacterStats(
             name: def.Name,
             level: def.Level,
             characterClass: def.CharacterClass,
             str: def.STR, dex: def.DEX, con: def.CON,
             wis: def.WIS, intelligence: def.INT, cha: def.CHA,
-            bab: def.BAB,
+            bab: computedBab,
             armorBonus: def.ArmorBonus,
             shieldBonus: def.ShieldBonus,
             damageDice: def.DamageDice,
@@ -2052,8 +2065,15 @@ public partial class GameManager : MonoBehaviour
             bonusDamage: def.BonusDamage,
             baseSpeed: def.BaseSpeed,
             atkRange: def.AttackRange,
-            baseHitDieHP: def.BaseHitDieHP
+            baseHitDieHP: computedBaseHitDieHp
         );
+
+        stats.HitDice = hitDice;
+        stats.UseCreatureTypeProgression = true;
+        stats.CreatureBABProgression = babProgression;
+        stats.CreatureFortitudeProgression = fortitudeProgression;
+        stats.CreatureReflexProgression = reflexProgression;
+        stats.CreatureWillProgression = willProgression;
 
         foreach (string tag in def.CreatureTags)
             stats.CreatureTags.Add(tag);
@@ -2136,7 +2156,9 @@ public partial class GameManager : MonoBehaviour
         npc.aiProfile = BuildRuntimeAIProfile(def);
 
         Debug.Log($"[GameManager] {def.Name}: HP {stats.MaxHP} AC {stats.ArmorClass} " +
-                  $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq");
+                  $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq " +
+                  $"Type={stats.CreatureType} HD={stats.HitDice} BABProg={stats.CreatureBABProgression} " +
+                  $"Saves(F/R/W)={stats.ClassFortSave}/{stats.ClassRefSave}/{stats.ClassWillSave}");
     }
 
     private DND35.AI.AIProfile BuildRuntimeAIProfile(EnemyDefinition def)
