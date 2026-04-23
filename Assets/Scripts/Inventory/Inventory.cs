@@ -364,7 +364,7 @@ public class Inventory
                 {
                     OwnerStats.BaseDamageDice = Mathf.Max(1, primaryNaturalAttack.DamageDice);
                     OwnerStats.BaseDamageCount = Mathf.Max(1, primaryNaturalAttack.DamageCount);
-                    OwnerStats.BonusDamage = primaryNaturalAttack.BonusDamage;
+                    OwnerStats.BonusDamage = OwnerStats.GetNaturalAttackDamageBonus(primaryNaturalAttack) - OwnerStats.STRMod;
                     OwnerStats.AttackRange = Mathf.Max(1, primaryNaturalAttack.Range);
                 }
                 else

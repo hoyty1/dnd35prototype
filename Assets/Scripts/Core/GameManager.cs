@@ -2047,6 +2047,7 @@ public partial class GameManager : MonoBehaviour
         SaveProgression willProgression = def.WillSaveOverride ?? creatureProgression.Will;
 
         int computedBab = ProgressionCalculator.CalculateBAB(babProgression, hitDice);
+        int resolvedBab = def.BaseAttackBonusOverride ?? computedBab;
         int computedBaseHitDieHp = def.BaseHitDieHP > 0
             ? def.BaseHitDieHP
             : ProgressionCalculator.CalculateAverageHpFromHitDice(creatureProgression.HitDie, hitDice);
@@ -2057,7 +2058,7 @@ public partial class GameManager : MonoBehaviour
             characterClass: def.CharacterClass,
             str: def.STR, dex: def.DEX, con: def.CON,
             wis: def.WIS, intelligence: def.INT, cha: def.CHA,
-            bab: computedBab,
+            bab: resolvedBab,
             armorBonus: 0,
             shieldBonus: 0,
             damageDice: 0,
@@ -2073,6 +2074,7 @@ public partial class GameManager : MonoBehaviour
         stats.HitDice = hitDice;
         stats.UseCreatureTypeProgression = true;
         stats.CreatureBABProgression = babProgression;
+        stats.BaseAttackBonusOverride = def.BaseAttackBonusOverride;
         stats.CreatureFortitudeProgression = fortitudeProgression;
         stats.CreatureReflexProgression = reflexProgression;
         stats.CreatureWillProgression = willProgression;

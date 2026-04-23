@@ -22,12 +22,15 @@ public static class EnemyDatabase
         RegisterGoblinWarchief();
         RegisterGoblinFeintDrill();
         RegisterSkeletonArcher();
+        RegisterSkeletonWarrior();
         RegisterWightDreadwalker();
         RegisterOrcBerserker();
         RegisterOrcGrappleDrill();
         RegisterHobgoblinSergeant();
         RegisterOgreBrute();
         RegisterDireWolf();
+        RegisterTiger();
+        RegisterBrownBear();
         RegisterWolfPackHunter();
 
         Debug.Log($"[EnemyDatabase] Initialized with {_enemies.Count} enemy types.");
@@ -221,6 +224,47 @@ public static class EnemyDatabase
     }
 
     /// <summary>
+    /// Skeleton Warrior (CR 2-ish) — armored undead melee template used to validate
+    /// explicit BAB overrides.
+    /// </summary>
+    private static void RegisterSkeletonWarrior()
+    {
+        Register(new EnemyDefinition
+        {
+            Id = "skeleton_warrior",
+            Name = "Skeleton Warrior",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            NaturalArmorBonus = 2,
+            BaseAttackBonusOverride = 4,
+            STR = 15, DEX = 13, CON = 10, WIS = 10, INT = 0, CHA = 1,
+            BAB = 4,
+            BaseSpeed = 6,
+            BaseHitDieHP = 24,
+            CreatureTags = new List<string> { "Undead" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("banded_mail", EquipSlot.Armor),
+                new EquipmentSlotPair("longsword", EquipSlot.RightHand),
+                new EquipmentSlotPair("shield_heavy_steel", EquipSlot.LeftHand)
+            },
+            BackpackItemIds = new List<string>(),
+            DamageReductionAmount = 5,
+            DamageReductionBypass = DamageBypassTag.Bludgeoning,
+            DamageImmunities = new List<DamageType> { DamageType.Cold },
+            AIBehavior = EnemyAIBehavior.DefensiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Berserk,
+            SpriteColor = new Color(0.82f, 0.82f, 0.74f, 1f),
+            PanelColor = new Color(0.22f, 0.22f, 0.28f, 0.85f),
+            NameColor = new Color(0.75f, 0.85f, 1f),
+            Description = "An armored skeletal champion animated with unnatural precision. Uses a manually overridden BAB profile for encounter tuning."
+        });
+    }
+
+    /// <summary>
     /// Wight Dreadwalker (CR 3-ish) — stronger undead used to validate
     /// Turn Undead's "turned and fleeing" outcome when not outright destroyed.
     /// </summary>
@@ -240,7 +284,7 @@ public static class EnemyDatabase
             BAB = 3,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Slam", DamageDice = 4, DamageCount = 1, BonusDamage = 1, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamage = 0, Range = 1, IsPrimary = true }
             },
             BaseSpeed = 6,
             BaseHitDieHP = 26,
@@ -445,10 +489,10 @@ public static class EnemyDatabase
             IsTallCreature = false,
             STR = 25, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 10,
             BAB = 4,
-            NaturalArmorBonus = 5,
+            NaturalArmorBonus = 3,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, BonusDamage = 0, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamage = 0, Range = 1, IsPrimary = true }
             }, // long Large creature => 5-ft reach
             BaseSpeed = 10,   // 50 ft
             BaseHitDieHP = 45,
@@ -462,6 +506,81 @@ public static class EnemyDatabase
             PanelColor = new Color(0.18f, 0.18f, 0.18f, 0.85f),
             NameColor = new Color(0.95f, 0.95f, 1f),
             Description = "A massive wolf with crushing jaws and pack-hunting instincts. It can drag prey down with vicious trip attacks."
+        });
+    }
+
+    /// <summary>
+    /// Tiger (CR 4) — 2 primary claws and a secondary bite.
+    /// </summary>
+    private static void RegisterTiger()
+    {
+        Register(new EnemyDefinition
+        {
+            Id = "tiger",
+            Name = "Tiger",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 6,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 23, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 6,
+            BAB = 4,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamage = 0, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamage = 0, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 10,
+            BaseHitDieHP = 45,
+            CreatureTags = new List<string> { "Animal" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.88f, 0.66f, 0.32f, 1f),
+            PanelColor = new Color(0.35f, 0.2f, 0.08f, 0.85f),
+            NameColor = new Color(1f, 0.82f, 0.5f),
+            Description = "A massive striped predator with raking claws and a crushing bite. Uses proper primary/secondary natural attack sequencing."
+        });
+    }
+
+    /// <summary>
+    /// Brown Bear (CR 4) — 2 primary claws and a secondary bite.
+    /// </summary>
+    private static void RegisterBrownBear()
+    {
+        Register(new EnemyDefinition
+        {
+            Id = "brown_bear",
+            Name = "Brown Bear",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 6,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 27, DEX = 13, CON = 19, WIS = 12, INT = 2, CHA = 6,
+            BAB = 4,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamage = 0, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamage = 0, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 57,
+            CreatureTags = new List<string> { "Animal" },
+            HasTripAttack = false,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = EnemyAIBehavior.AggressiveMelee,
+            AIProfileArchetype = EnemyAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.5f, 0.38f, 0.28f, 1f),
+            PanelColor = new Color(0.25f, 0.17f, 0.12f, 0.85f),
+            NameColor = new Color(0.95f, 0.8f, 0.62f),
+            Description = "A towering bear that mauls prey with two claws before following up with a secondary bite."
         });
     }
 
@@ -486,7 +605,7 @@ public static class EnemyDatabase
             NaturalArmorBonus = 2,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, BonusDamage = 1, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamage = 0, Range = 1, IsPrimary = true }
             },  // Str bonus to bite damage
             BaseSpeed = 10,   // 50 ft
             BaseHitDieHP = 13,
@@ -524,6 +643,7 @@ public class EnemyDefinition
     public string CreatureType = "Humanoid";
     public int HitDice = 1;
     public BABProgression? BABOverride;
+    public int? BaseAttackBonusOverride;
     public SaveProgression? FortitudeSaveOverride;
     public SaveProgression? ReflexSaveOverride;
     public SaveProgression? WillSaveOverride;

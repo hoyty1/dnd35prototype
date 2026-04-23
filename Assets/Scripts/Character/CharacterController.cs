@@ -740,11 +740,7 @@ public class CharacterController : MonoBehaviour
         if (weapon != null || Stats == null)
             return false;
 
-        bool isAnimal = string.Equals(Stats.CreatureType, "Animal", StringComparison.OrdinalIgnoreCase);
-        bool hasInnateTripAttack = Stats.HasTripAttack;
-        bool hasNaturalDamageProfile = Stats.HasNaturalAttacks;
-
-        return hasNaturalDamageProfile && (isAnimal || hasInnateTripAttack);
+        return Stats.HasNaturalAttacks;
     }
 
     private AttackDamageMode GetDefaultAttackDamageModeForWeapon(ItemData weapon)
@@ -861,7 +857,7 @@ public class CharacterController : MonoBehaviour
             {
                 damageDice = Mathf.Max(1, naturalAttack.DamageDice);
                 damageCount = Mathf.Max(1, naturalAttack.DamageCount);
-                bonusDamage = naturalAttack.BonusDamage;
+                bonusDamage = Stats.GetNaturalAttackDamageBonus(naturalAttack) - Stats.STRMod;
                 attackLabel = string.IsNullOrWhiteSpace(naturalAttack.Name)
                     ? (Stats.HasTripAttack ? "Bite" : "Natural attack")
                     : naturalAttack.Name;
@@ -2032,10 +2028,13 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public int GetPlannedFullAttackCount(RangeInfo rangeInfo = null)
     {
+        ItemData equippedWeapon = GetEquippedMainWeapon();
+        if (ShouldUseInnateNaturalAttackProfile(equippedWeapon))
+            return Mathf.Max(0, Stats.GetTotalNaturalAttackCount());
+
         int[] attackBonuses = Stats.GetIterativeAttackBonuses();
         int count = attackBonuses != null ? attackBonuses.Length : 0;
 
-        ItemData equippedWeapon = GetEquippedMainWeapon();
         bool useThrownRange = equippedWeapon != null
             && equippedWeapon.IsThrown
             && equippedWeapon.RangeIncrement > 0
@@ -2165,6 +2164,93 @@ public class CharacterController : MonoBehaviour
         int totalFeatDmgBonus = powerAtkDmgBonus + pbsDmgBonus + weaponSpecBonus;
         DamageModeAttackProfile damageModeProfile = ResolveDamageModeAttackProfile(equippedWeapon);
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
+
+        bool useNaturalAttackSequence = isMelee && ShouldUseInnateNaturalAttackProfile(equippedWeapon);
+        if (useNaturalAttackSequence)
+        {
+            List<NaturalAttackDefinition> naturalAttacks = Stats.GetValidNaturalAttacks();
+            if (startAttackIndex < 0)
+                startAttackIndex = 0;
+
+            int naturalAttackGlobalIndex = 0;
+            int attacksExecuted = 0;
+            for (int naturalIndex = 0; naturalIndex < naturalAttacks.Count; naturalIndex++)
+            {
+                NaturalAttackDefinition naturalAttack = naturalAttacks[naturalIndex];
+                int attackCount = Mathf.Max(1, naturalAttack.Count);
+                for (int repeat = 0; repeat < attackCount; repeat++)
+                {
+                    if (attacksExecuted >= maxAttacks)
+                        break;
+
+                    if (naturalAttackGlobalIndex++ < startAttackIndex)
+                        continue;
+
+                    if (target.Stats.IsDead)
+                        break;
+
+                    int baseBonus = Stats.GetNaturalAttackBonus(naturalAttack);
+                    int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
+                    int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
+                    int atkMod = baseBonus + (isFlanking ? flankingBonus : 0) + racialAtkBonus
+                                 + powerAtkPenalty + weaponFocusBonus + combatExpertisePenalty
+                                 + proneAttackPenalty + fightingDefensivelyPenalty
+                                 + shootingIntoMeleePenalty + armorNonProfPenalty + conditionAttackPenalty
+                                 + aidAnotherAttackBonus + damageModeProfile.AttackPenalty;
+
+                    int hpBeforeAtk = target.Stats.CurrentHP;
+                    bool useHalfStrength = !naturalAttack.IsPrimary;
+                    int baseStrengthFromDamageResolver = useHalfStrength ? Mathf.FloorToInt(Stats.STRMod * 0.5f) : Stats.STRMod;
+                    int naturalDamageBonus = Stats.GetNaturalAttackDamageBonus(naturalAttack) - baseStrengthFromDamageResolver;
+
+                    CombatResult atk = PerformSingleAttackWithCrit(target, atkMod, isFlanking, flankingBonus, flankingPartnerName,
+                        Mathf.Max(1, naturalAttack.DamageDice), Mathf.Max(1, naturalAttack.DamageCount), naturalDamageBonus,
+                        critThreatMin, critMult,
+                        equippedWeapon, useHalfStrength, totalFeatDmgBonus, aidAnotherTargetAcBonus,
+                        damageModeProfile.DealNonlethalDamage, damageModeProfile.AttackPenalty, damageModeProfile.PenaltySource);
+
+                    atk.RacialAttackBonus = racialAtkBonus;
+                    atk.SizeAttackBonus = Stats.SizeModifier;
+                    atk.PowerAttackValue = (powerAtkPenalty != 0) ? PowerAttackValue : 0;
+                    atk.PowerAttackDamageBonus = powerAtkDmgBonus;
+                    atk.RapidShotActive = false;
+                    atk.PointBlankShotActive = false;
+                    atk.FeatDamageBonus = totalFeatDmgBonus;
+                    atk.WeaponFocusBonus = weaponFocusBonus;
+                    atk.WeaponSpecBonus = weaponSpecBonus;
+                    atk.CombatExpertisePenalty = combatExpertisePenalty;
+                    atk.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
+                    atk.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
+                    atk.PreciseShotNegated = preciseShotNegated;
+                    atk.AidAnotherAttackBonus = aidAnotherAttackBonus;
+                    atk.AidAnotherTargetAcBonus = aidAnotherTargetAcBonus;
+                    atk.FightingDefensivelyACBonus = target != null && target.IsFightingDefensively ? 2 : 0;
+                    atk.BreakdownBAB = baseBonus;
+                    atk.BreakdownAbilityMod = Stats.STRMod;
+                    atk.BreakdownAbilityName = naturalAttack.IsPrimary ? "STR" : "STR (Secondary)";
+                    atk.WeaponNonProficiencyPenalty = 0;
+                    atk.ArmorNonProficiencyPenalty = armorNonProfPenalty;
+                    atk.WeaponName = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural attack" : naturalAttack.Name;
+                    atk.BaseDamageDiceStr = $"{Mathf.Max(1, naturalAttack.DamageCount)}d{Mathf.Max(1, naturalAttack.DamageDice)}";
+                    atk.DefenderHPBefore = hpBeforeAtk;
+                    atk.DefenderHPAfter = target.Stats.CurrentHP;
+
+                    result.Attacks.Add(atk);
+                    string naturalLabel = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural" : naturalAttack.Name;
+                    string roleLabel = naturalAttack.IsPrimary ? "Primary" : "Secondary";
+                    result.AttackLabels.Add($"{naturalLabel} {repeat + 1} ({roleLabel} {CharacterStats.FormatMod(baseBonus)})");
+                    attacksExecuted++;
+                }
+
+                if (attacksExecuted >= maxAttacks || target.Stats.IsDead)
+                    break;
+            }
+
+            result.DefenderHPAfter = target.Stats.CurrentHP;
+            result.TargetKilled = target.Stats.IsDead;
+            HasAttackedThisTurn = result.Attacks.Count > 0;
+            return result;
+        }
 
         // === Debug Logging ===
         Debug.Log($"[FullAttack] {Stats.CharacterName}: FullAttack() called");

@@ -28,6 +28,7 @@ public class NaturalAttackDefinition
     public string Name = "Natural attack";
     public int DamageDice;
     public int DamageCount = 1;
+    public int Count = 1;
     public int BonusDamage;
     public int Range = 1;
     public bool IsPrimary = true;
@@ -39,6 +40,7 @@ public class NaturalAttackDefinition
             Name = Name,
             DamageDice = DamageDice,
             DamageCount = Mathf.Max(1, DamageCount),
+            Count = Mathf.Max(1, Count),
             BonusDamage = BonusDamage,
             Range = Mathf.Max(1, Range),
             IsPrimary = IsPrimary
@@ -832,7 +834,24 @@ public class CharacterStats
     // ========== EQUIPMENT / BONUSES ==========
     public int ArmorBonus;      // From worn armor (e.g., chain shirt = +4)
     public int ShieldBonus;     // From shield
-    public int BaseAttackBonus; // BAB from class/level (fighter gets level, rogue gets 3/4)
+    [SerializeField] private int _baseAttackBonus; // BAB from class/level (fighter gets level, rogue gets 3/4)
+    public int? BaseAttackBonusOverride;
+
+    public int BaseAttackBonus
+    {
+        get
+        {
+            if (BaseAttackBonusOverride.HasValue)
+                return BaseAttackBonusOverride.Value;
+
+            if (UseCreatureTypeProgression)
+                return ProgressionCalculator.CalculateBAB(CreatureBABProgression, GetEffectiveProgressionLevel());
+
+            return _baseAttackBonus;
+        }
+        set => _baseAttackBonus = value;
+    }
+
     public int BaseDamageDice;  // Number of sides on weapon damage die (e.g., 8 for longsword d8)
     public int BaseDamageCount; // Number of damage dice (usually 1)
     public int BonusDamage;     // Extra flat damage (magic weapon, etc.)
@@ -1299,37 +1318,117 @@ public class CharacterStats
         InitFeats();
     }
 
-    public bool HasNaturalAttacks => NaturalAttacks != null && NaturalAttacks.Any(a => a != null && a.DamageDice > 0 && a.DamageCount > 0);
+    private bool IsValidNaturalAttack(NaturalAttackDefinition attack)
+    {
+        return attack != null && attack.DamageDice > 0 && attack.DamageCount > 0;
+    }
+
+    public bool HasNaturalAttacks => NaturalAttacks != null && NaturalAttacks.Any(IsValidNaturalAttack);
+
+    public List<NaturalAttackDefinition> GetValidNaturalAttacks()
+    {
+        if (NaturalAttacks == null || NaturalAttacks.Count == 0)
+            return new List<NaturalAttackDefinition>();
+
+        return NaturalAttacks.Where(IsValidNaturalAttack).ToList();
+    }
 
     public NaturalAttackDefinition GetPrimaryNaturalAttack()
     {
-        if (NaturalAttacks == null || NaturalAttacks.Count == 0)
+        List<NaturalAttackDefinition> validAttacks = GetValidNaturalAttacks();
+        if (validAttacks.Count == 0)
             return null;
 
-        for (int i = 0; i < NaturalAttacks.Count; i++)
+        for (int i = 0; i < validAttacks.Count; i++)
         {
-            NaturalAttackDefinition attack = NaturalAttacks[i];
-            if (attack != null && attack.IsPrimary && attack.DamageDice > 0 && attack.DamageCount > 0)
+            NaturalAttackDefinition attack = validAttacks[i];
+            if (attack.IsPrimary)
                 return attack;
         }
 
-        for (int i = 0; i < NaturalAttacks.Count; i++)
+        return validAttacks[0];
+    }
+
+    public int GetNaturalAttackBonus(NaturalAttackDefinition attack)
+    {
+        if (!IsValidNaturalAttack(attack))
+            return BaseAttackBonus + STRMod + SizeModifier;
+
+        int bonus = BaseAttackBonus;
+        if (!attack.IsPrimary)
+            bonus -= 5;
+
+        bonus += STRMod + SizeModifier;
+        return bonus;
+    }
+
+    public int GetNaturalAttackDamageBonus(NaturalAttackDefinition attack)
+    {
+        if (!IsValidNaturalAttack(attack))
+            return 0;
+
+        int validAttackCount = GetTotalNaturalAttackCount();
+        int strengthBonus;
+        if (!attack.IsPrimary)
         {
-            NaturalAttackDefinition attack = NaturalAttacks[i];
-            if (attack != null && attack.DamageDice > 0 && attack.DamageCount > 0)
-                return attack;
+            strengthBonus = Mathf.FloorToInt(STRMod * 0.5f);
+        }
+        else if (validAttackCount == 1)
+        {
+            strengthBonus = Mathf.FloorToInt(STRMod * 1.5f);
+        }
+        else
+        {
+            strengthBonus = STRMod;
         }
 
-        return null;
+        return strengthBonus;
+    }
+
+    public int GetTotalNaturalAttackCount()
+    {
+        int total = 0;
+        List<NaturalAttackDefinition> validAttacks = GetValidNaturalAttacks();
+        for (int i = 0; i < validAttacks.Count; i++)
+            total += Mathf.Max(1, validAttacks[i].Count);
+
+        return total;
     }
 
     public void SetNaturalAttacks(IEnumerable<NaturalAttackDefinition> attacks)
     {
         NaturalAttacks = attacks != null
-            ? attacks.Where(a => a != null && a.DamageDice > 0 && a.DamageCount > 0)
-                .Select(a => a.Clone())
+            ? attacks.Where(IsValidNaturalAttack)
+                .Select(a =>
+                {
+                    NaturalAttackDefinition clone = a.Clone();
+                    clone.Count = Mathf.Max(1, clone.Count);
+                    return clone;
+                })
                 .ToList()
             : new List<NaturalAttackDefinition>();
+    }
+
+    public string GetNaturalAttackSummary()
+    {
+        List<NaturalAttackDefinition> validAttacks = GetValidNaturalAttacks();
+        if (validAttacks.Count == 0)
+            return string.Empty;
+
+        var entries = new List<string>();
+        for (int i = 0; i < validAttacks.Count; i++)
+        {
+            NaturalAttackDefinition attack = validAttacks[i];
+            int count = Mathf.Max(1, attack.Count);
+            string attackName = string.IsNullOrWhiteSpace(attack.Name) ? "Natural attack" : attack.Name;
+            string displayName = count > 1 ? $"{count} {attackName}s" : attackName;
+            int attackBonus = GetNaturalAttackBonus(attack);
+            int damageBonus = GetNaturalAttackDamageBonus(attack);
+            string damageBonusPart = damageBonus != 0 ? FormatMod(damageBonus) : string.Empty;
+            entries.Add($"{displayName} {FormatMod(attackBonus)} ({attack.DamageCount}d{attack.DamageDice}{damageBonusPart})");
+        }
+
+        return string.Join(", ", entries);
     }
 
     // ========== COMBAT METHODS ==========

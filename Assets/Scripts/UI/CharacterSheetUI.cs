@@ -827,9 +827,14 @@ public class CharacterSheetUI : MonoBehaviour
             if (primaryNaturalAttack != null)
             {
                 string naturalName = string.IsNullOrWhiteSpace(primaryNaturalAttack.Name) ? "Natural attack" : primaryNaturalAttack.Name;
-                string naturalBonusStr = primaryNaturalAttack.BonusDamage != 0 ? FormatMod(primaryNaturalAttack.BonusDamage) : "";
+                int naturalDamageBonus = stats.GetNaturalAttackDamageBonus(primaryNaturalAttack);
+                string naturalBonusStr = naturalDamageBonus != 0 ? FormatMod(naturalDamageBonus) : "";
                 AddLine(content, $"  Attack Source: {naturalName}", 11, LightText, FontStyle.Normal, 14);
                 AddLine(content, $"  Damage: {primaryNaturalAttack.DamageCount}d{primaryNaturalAttack.DamageDice}{naturalBonusStr}", 11, LightText, FontStyle.Normal, 14);
+
+                string naturalSummary = stats.GetNaturalAttackSummary();
+                if (!string.IsNullOrEmpty(naturalSummary))
+                    AddLine(content, $"  Natural Full Attack: {naturalSummary}", 10, DimText, FontStyle.Normal, 13);
             }
             else
             {
