@@ -212,6 +212,80 @@ public static class ThreatSystem
         return threateners;
     }
 
+    /// <summary>
+    /// Estimate expected incoming damage if attacker performs a ranged attack while threatened.
+    /// This is intended for AI risk assessment and does not guarantee exact combat outcome.
+    /// </summary>
+    public static float CalculateExpectedAoODamageForRangedAttack(CharacterController attacker, List<CharacterController> threateningEnemies = null)
+    {
+        if (attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
+            return 0f;
+
+        if (threateningEnemies == null)
+        {
+            GameManager gm = GameManager.Instance;
+            List<CharacterController> allCharacters = gm != null ? gm.GetAllCharactersForAI() : null;
+            threateningEnemies = GetThreateningEnemies(attacker.GridPosition, attacker, allCharacters);
+        }
+
+        if (threateningEnemies == null || threateningEnemies.Count == 0)
+            return 0f;
+
+        float totalExpectedDamage = 0f;
+
+        for (int i = 0; i < threateningEnemies.Count; i++)
+        {
+            CharacterController enemy = threateningEnemies[i];
+            if (enemy == null || enemy.Stats == null)
+                continue;
+
+            if (!CanMakeAoO(enemy))
+                continue;
+
+            totalExpectedDamage += EstimateExpectedAoODamage(enemy, attacker);
+        }
+
+        return totalExpectedDamage;
+    }
+
+    private static float EstimateExpectedAoODamage(CharacterController threatener, CharacterController target)
+    {
+        if (threatener == null || threatener.Stats == null || target == null || target.Stats == null)
+            return 0f;
+
+        int meleeAttackBonus = threatener.Stats.GetMeleeAttackBonus();
+        int targetArmorClass = target.Stats.GetArmorClass();
+
+        // d20 chance approximation. Clamp to preserve natural 1/20-style floor/ceiling behavior.
+        float hitChance = Mathf.Clamp((21f + meleeAttackBonus - targetArmorClass) / 20f, 0.05f, 0.95f);
+        float averageDamage = EstimateAverageMeleeDamage(threatener);
+
+        return hitChance * averageDamage;
+    }
+
+    private static float EstimateAverageMeleeDamage(CharacterController attacker)
+    {
+        if (attacker == null || attacker.Stats == null)
+            return 0f;
+
+        ItemData weapon = attacker.GetEquippedMainWeapon();
+        if (weapon != null && weapon.IsWeapon)
+        {
+            float diceAverage = weapon.DamageCount > 0 && weapon.DamageDice > 0
+                ? weapon.DamageCount * (weapon.DamageDice + 1) * 0.5f
+                : 2.5f;
+
+            float damageBonus = weapon.BonusDamage;
+            if (weapon.WeaponCat == WeaponCategory.Melee || weapon.IsThrown)
+                damageBonus += attacker.Stats.STRMod;
+
+            return Mathf.Max(1f, diceAverage + damageBonus);
+        }
+
+        // Basic fallback for natural/unarmed AoOs.
+        return Mathf.Max(1f, 2f + attacker.Stats.STRMod);
+    }
+
     // ========================================================================
     // AoO USAGE TRACKING
     // ========================================================================

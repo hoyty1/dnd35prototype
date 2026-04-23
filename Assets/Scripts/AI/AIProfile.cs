@@ -108,6 +108,15 @@ namespace DND35.AI
             return GrappleBehavior == GrappleBehavior.Avoid || GrappleBehavior == GrappleBehavior.EscapeOnly;
         }
 
+        /// <summary>
+        /// Multiplier for how much AoO risk this profile tolerates before preferring safer ranged tactics.
+        /// Lower values = more conservative behavior.
+        /// </summary>
+        public virtual float GetRangedAoORiskToleranceMultiplier()
+        {
+            return 1f;
+        }
+
         public virtual bool ShouldInitiateGrapple(CharacterController self, CharacterController target)
         {
             if (self == null || target == null || target.Stats == null)

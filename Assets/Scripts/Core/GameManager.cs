@@ -8796,6 +8796,29 @@ public partial class GameManager : MonoBehaviour
     public float GetPlayerMoveSecondsPerStepForAI()
         => PlayerMoveSecondsPerStep;
 
+    public bool CanTakeFiveFootStepForAI(CharacterController npc)
+        => CanTakeFiveFootStep(npc);
+
+    public bool CanTakeFiveFootStepToForAI(CharacterController npc, Vector2Int destination)
+    {
+        if (npc == null || _movementService == null)
+            return false;
+
+        return _movementService.CanTake5FootStep(npc, destination);
+    }
+
+    public bool TryTakeFiveFootStepForAI(CharacterController npc, Vector2Int destination)
+    {
+        if (npc == null || Grid == null)
+            return false;
+
+        SquareCell destinationCell = Grid.GetCell(destination);
+        if (destinationCell == null)
+            return false;
+
+        return ExecuteFiveFootStep(npc, destinationCell, returnToActionChoices: false);
+    }
+
     private void CancelMovementSelection()
     {
         CharacterController pc = ActivePC;

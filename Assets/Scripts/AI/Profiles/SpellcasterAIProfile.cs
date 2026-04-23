@@ -239,5 +239,11 @@ namespace DND35.AI.Profiles
 
             return score;
         }
+
+        public override float GetRangedAoORiskToleranceMultiplier()
+        {
+            // Spellcasters are generally more conservative about provoking while threatened.
+            return 0.75f;
+        }
     }
 }

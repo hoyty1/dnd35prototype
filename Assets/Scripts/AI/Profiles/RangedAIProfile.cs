@@ -55,5 +55,10 @@ namespace DND35.AI.Profiles
             TagPriorities.Add(new TagPriority("Wielding: Unarmed", 3f));
             TagPriorities.Add(new TagPriority("Armor: Heavy Armor", 6f, true));
         }
+
+        public override float GetRangedAoORiskToleranceMultiplier()
+        {
+            return 1f;
+        }
     }
 }

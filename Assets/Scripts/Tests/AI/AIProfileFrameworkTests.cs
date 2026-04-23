@@ -43,6 +43,8 @@ namespace Tests.AI
             TestHealerChoosesMeleeWithHighACAndMeleeAB();
             TestHealerChoosesRangedWithLowAC();
             TestHealerPrioritizesMostWoundedAlly();
+            TestRangedRiskMultiplierDefaults();
+            TestThreatSystemEstimatesRangedProvocationDamage();
 
             Debug.Log($"====== AI PROFILE RESULTS: {_passed} passed, {_failed} failed ======");
         }
@@ -624,6 +626,57 @@ namespace Tests.AI
                     allyB != null ? allyB.gameObject : null,
                     allyC != null ? allyC.gameObject : null,
                     profile);
+            }
+        }
+
+        private static void TestRangedRiskMultiplierDefaults()
+        {
+            RangedAIProfile rangedProfile = ScriptableObject.CreateInstance<RangedAIProfile>();
+            SpellcasterAIProfile spellcasterProfile = ScriptableObject.CreateInstance<SpellcasterAIProfile>();
+
+            try
+            {
+                float ranged = rangedProfile.GetRangedAoORiskToleranceMultiplier();
+                float caster = spellcasterProfile.GetRangedAoORiskToleranceMultiplier();
+
+                Assert(caster < ranged,
+                    "Spellcaster profile is more conservative than ranged profile for AoO risk",
+                    $"(ranged={ranged:F2}, caster={caster:F2})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(rangedProfile, spellcasterProfile);
+            }
+        }
+
+        private static void TestThreatSystemEstimatesRangedProvocationDamage()
+        {
+            CharacterController archer = TestHelpers.CreateRogue("AI_Archer", level: 4);
+            CharacterController fighter = TestHelpers.CreateWarrior("Enemy_Fighter", level: 4);
+
+            try
+            {
+                archer.IsPlayerControlled = false;
+                fighter.IsPlayerControlled = true;
+
+                TestHelpers.SetGridPosition(archer, 0, 0);
+                TestHelpers.SetGridPosition(fighter, 1, 0);
+
+                fighter.Stats.MaxAttacksOfOpportunity = 1;
+                fighter.Stats.AttacksOfOpportunityUsed = 0;
+
+                List<CharacterController> all = new List<CharacterController> { archer, fighter };
+                List<CharacterController> threats = ThreatSystem.GetThreateningEnemies(archer.GridPosition, archer, all);
+                float expectedDamage = ThreatSystem.CalculateExpectedAoODamageForRangedAttack(archer, threats);
+
+                Assert(expectedDamage > 0f,
+                    "Threat system estimates positive expected AoO damage for threatened ranged attacker",
+                    $"(expectedDamage={expectedDamage:F2}, threats={threats.Count})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(archer != null ? archer.gameObject : null,
+                    fighter != null ? fighter.gameObject : null);
             }
         }
     }

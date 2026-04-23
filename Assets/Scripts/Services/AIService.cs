@@ -261,13 +261,45 @@ public class AIService : MonoBehaviour
     private IEnumerator ExecuteRangedKiterTurn(CharacterController npc)
     {
         AIProfile profile = GetProfile(npc);
+        List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
 
-        CharacterController closestPC = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
+        CharacterController closestPC = SelectBestTarget(npc, allCombatants);
         if (closestPC == null)
             yield break;
 
+        bool avoidAoORisk = npc.IsEquippedWeaponRanged();
+        bool riskIsTooHigh = false;
+        bool tookTacticalStep = false;
+
+        if (avoidAoORisk)
+        {
+            RangedAoORiskAssessment riskAssessment = AssessRangedAoORisk(npc, closestPC, profile, allCombatants);
+            riskIsTooHigh = riskAssessment.IsThreatened && riskAssessment.ExpectedDamage > riskAssessment.RiskTolerance;
+
+            if (riskAssessment.IsThreatened)
+            {
+                if (riskIsTooHigh && TryTakeTacticalFiveFootStep(npc, closestPC, profile, allCombatants, out Vector2Int stepDestination))
+                {
+                    tookTacticalStep = true;
+                    riskIsTooHigh = false;
+                    _gameManager.CombatUI?.ShowCombatLog(
+                        $"{npc.Stats.CharacterName} takes a tactical 5-foot step to avoid incoming attacks before firing.");
+                    Debug.Log($"[AI][RangedAoO] {npc.Stats.CharacterName} 5-foot steps to {stepDestination} (expected={riskAssessment.ExpectedDamage:F1}, tolerance={riskAssessment.RiskTolerance:F1})");
+                    yield return new WaitForSeconds(0.35f);
+                }
+                else
+                {
+                    string riskLabel = riskIsTooHigh ? "high" : "acceptable";
+                    Debug.Log($"[AI][RangedAoO] {npc.Stats.CharacterName} threat risk is {riskLabel} (expected={riskAssessment.ExpectedDamage:F1}, tolerance={riskAssessment.RiskTolerance:F1}, threats={riskAssessment.ThreatCount})");
+                }
+            }
+        }
+
         int distToClosestPC = SquareGridUtils.GetDistance(npc.GridPosition, closestPC.GridPosition);
-        if (distToClosestPC <= 2)
+        bool shouldRetreatForDistance = distToClosestPC <= 2 && npc.Actions.HasMoveAction && !tookTacticalStep;
+        bool shouldRetreatForRisk = avoidAoORisk && riskIsTooHigh && npc.Actions.HasMoveAction && !tookTacticalStep;
+
+        if (shouldRetreatForDistance || shouldRetreatForRisk)
         {
             SquareCell retreatCell = EvaluateMovementOptions(npc, closestPC.GridPosition, retreat: true, profile: profile);
             if (retreatCell != null)
@@ -275,7 +307,12 @@ public class AIService : MonoBehaviour
                 yield return _gameManager.StartCoroutine(
                     _gameManager.MoveCharacterAlongComputedPathForAI(npc, retreatCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
                 npc.Actions.UseMoveAction();
-                _gameManager.CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} retreats to maintain distance!");
+
+                if (shouldRetreatForRisk)
+                    _gameManager.CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} repositions to avoid provoking attacks of opportunity.");
+                else
+                    _gameManager.CombatUI.ShowCombatLog($"{npc.Stats.CharacterName} retreats to maintain distance!");
+
                 yield return new WaitForSeconds(0.5f);
             }
         }
@@ -311,6 +348,137 @@ public class AIService : MonoBehaviour
         {
             yield return new WaitForSeconds(0.3f);
         }
+    }
+
+    private struct RangedAoORiskAssessment
+    {
+        public bool IsThreatened;
+        public int ThreatCount;
+        public float ExpectedDamage;
+        public float RiskTolerance;
+    }
+
+    private RangedAoORiskAssessment AssessRangedAoORisk(
+        CharacterController npc,
+        CharacterController target,
+        AIProfile profile,
+        List<CharacterController> allCombatants)
+    {
+        var assessment = new RangedAoORiskAssessment();
+        if (npc == null || npc.Stats == null)
+            return assessment;
+
+        List<CharacterController> threateningEnemies = ThreatSystem.GetThreateningEnemies(npc.GridPosition, npc, allCombatants);
+        threateningEnemies.RemoveAll(enemy => !ThreatSystem.CanMakeAoO(enemy));
+
+        assessment.ThreatCount = threateningEnemies.Count;
+        assessment.IsThreatened = assessment.ThreatCount > 0;
+
+        if (!assessment.IsThreatened)
+            return assessment;
+
+        assessment.ExpectedDamage = ThreatSystem.CalculateExpectedAoODamageForRangedAttack(npc, threateningEnemies);
+        assessment.RiskTolerance = CalculateRangedRiskTolerance(npc, target, profile);
+        return assessment;
+    }
+
+    private float CalculateRangedRiskTolerance(CharacterController npc, CharacterController target, AIProfile profile)
+    {
+        if (npc == null || npc.Stats == null)
+            return 0f;
+
+        float maxHP = Mathf.Max(1f, npc.Stats.TotalMaxHP);
+        float hpPercent = Mathf.Clamp01((float)npc.Stats.CurrentHP / maxHP);
+
+        float tolerancePercent;
+        if (hpPercent > 0.75f)
+            tolerancePercent = 0.25f;
+        else if (hpPercent > 0.5f)
+            tolerancePercent = 0.10f;
+        else
+            tolerancePercent = 0.05f;
+
+        if (profile != null)
+            tolerancePercent *= Mathf.Clamp(profile.GetRangedAoORiskToleranceMultiplier(), 0.25f, 2f);
+
+        // Accept slightly higher risk for kill opportunities/high-value enemy casters.
+        if (target != null && target.Stats != null)
+        {
+            bool targetNearDefeat = target.Stats.TotalMaxHP > 0
+                && ((float)target.Stats.CurrentHP / target.Stats.TotalMaxHP) <= 0.25f;
+            bool highValueTarget = target.Stats.IsWizard || target.Stats.IsCleric;
+
+            if (targetNearDefeat || highValueTarget)
+                tolerancePercent += 0.05f;
+        }
+
+        return maxHP * Mathf.Clamp(tolerancePercent, 0.02f, 0.35f);
+    }
+
+    private bool TryTakeTacticalFiveFootStep(
+        CharacterController npc,
+        CharacterController target,
+        AIProfile profile,
+        List<CharacterController> allCombatants,
+        out Vector2Int destination)
+    {
+        destination = npc != null ? npc.GridPosition : Vector2Int.zero;
+
+        if (npc == null || target == null || _gameManager == null || _gameManager.Grid == null)
+            return false;
+
+        if (!_gameManager.CanTakeFiveFootStepForAI(npc))
+            return false;
+
+        int preferredRange = profile != null && profile.Movement != null
+            ? Mathf.Max(1, profile.Movement.PreferredRangeSquares)
+            : 4;
+        int maxRange = GetMaximumAttackRangeInSquares(npc);
+
+        Vector2Int bestCell = npc.GridPosition;
+        float bestScore = float.NegativeInfinity;
+        bool found = false;
+
+        Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(npc.GridPosition);
+        for (int i = 0; i < neighbors.Length; i++)
+        {
+            Vector2Int candidate = neighbors[i];
+            if (!_gameManager.CanTakeFiveFootStepToForAI(npc, candidate))
+                continue;
+
+            int distToTarget = SquareGridUtils.GetDistance(candidate, target.GridPosition);
+            if (distToTarget > maxRange)
+                continue;
+
+            List<CharacterController> threatsAfterStep = ThreatSystem.GetThreateningEnemies(candidate, npc, allCombatants);
+            threatsAfterStep.RemoveAll(enemy => !ThreatSystem.CanMakeAoO(enemy));
+
+            float expectedAfterStep = ThreatSystem.CalculateExpectedAoODamageForRangedAttack(npc, threatsAfterStep);
+            float rangeScore = -Mathf.Abs(distToTarget - preferredRange);
+            float threatScore = -expectedAfterStep * 3f;
+            float totalScore = threatScore + rangeScore;
+
+            if (threatsAfterStep.Count == 0)
+                totalScore += 6f;
+
+            if (totalScore > bestScore)
+            {
+                bestScore = totalScore;
+                bestCell = candidate;
+                found = true;
+            }
+        }
+
+        if (!found)
+            return false;
+
+        if (_gameManager.TryTakeFiveFootStepForAI(npc, bestCell))
+        {
+            destination = bestCell;
+            return true;
+        }
+
+        return false;
     }
 
     private IEnumerator ExecuteDefensiveMeleeTurn(CharacterController npc, CharacterController preferredTarget)
