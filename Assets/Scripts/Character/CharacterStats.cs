@@ -22,6 +22,17 @@ public enum EncumbranceLevel
     Overloaded
 }
 
+/// <summary>
+/// Source of damage bonus for natural attacks.
+/// </summary>
+public enum DamageBonusSource
+{
+    None,
+    Strength,
+    StrengthHalf,
+    StrengthOneAndHalf
+}
+
 [System.Serializable]
 public class NaturalAttackDefinition
 {
@@ -29,9 +40,25 @@ public class NaturalAttackDefinition
     public int DamageDice;
     public int DamageCount = 1;
     public int Count = 1;
-    public int BonusDamage;
+    public DamageBonusSource BonusDamageSource = DamageBonusSource.Strength;
     public int Range = 1;
     public bool IsPrimary = true;
+
+    public int GetDamageBonus(int strengthModifier)
+    {
+        switch (BonusDamageSource)
+        {
+            case DamageBonusSource.Strength:
+                return strengthModifier;
+            case DamageBonusSource.StrengthHalf:
+                return Mathf.FloorToInt(strengthModifier * 0.5f);
+            case DamageBonusSource.StrengthOneAndHalf:
+                return Mathf.FloorToInt(strengthModifier * 1.5f);
+            case DamageBonusSource.None:
+            default:
+                return 0;
+        }
+    }
 
     public NaturalAttackDefinition Clone()
     {
@@ -41,7 +68,7 @@ public class NaturalAttackDefinition
             DamageDice = DamageDice,
             DamageCount = Mathf.Max(1, DamageCount),
             Count = Mathf.Max(1, Count),
-            BonusDamage = BonusDamage,
+            BonusDamageSource = BonusDamageSource,
             Range = Mathf.Max(1, Range),
             IsPrimary = IsPrimary
         };
@@ -1362,27 +1389,25 @@ public class CharacterStats
         return bonus;
     }
 
+    public DamageBonusSource GetDefaultNaturalAttackDamageSource(NaturalAttackDefinition attack)
+    {
+        if (!IsValidNaturalAttack(attack))
+            return DamageBonusSource.None;
+
+        if (!attack.IsPrimary)
+            return DamageBonusSource.StrengthHalf;
+
+        return GetTotalNaturalAttackCount() == 1
+            ? DamageBonusSource.StrengthOneAndHalf
+            : DamageBonusSource.Strength;
+    }
+
     public int GetNaturalAttackDamageBonus(NaturalAttackDefinition attack)
     {
         if (!IsValidNaturalAttack(attack))
             return 0;
 
-        int validAttackCount = GetTotalNaturalAttackCount();
-        int strengthBonus;
-        if (!attack.IsPrimary)
-        {
-            strengthBonus = Mathf.FloorToInt(STRMod * 0.5f);
-        }
-        else if (validAttackCount == 1)
-        {
-            strengthBonus = Mathf.FloorToInt(STRMod * 1.5f);
-        }
-        else
-        {
-            strengthBonus = STRMod;
-        }
-
-        return strengthBonus;
+        return attack.GetDamageBonus(STRMod);
     }
 
     public int GetTotalNaturalAttackCount()

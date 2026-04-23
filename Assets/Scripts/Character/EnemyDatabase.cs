@@ -284,7 +284,7 @@ public static class EnemyDatabase
             BAB = 3,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Slam", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamage = 0, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
             },
             BaseSpeed = 6,
             BaseHitDieHP = 26,
@@ -492,7 +492,7 @@ public static class EnemyDatabase
             NaturalArmorBonus = 3,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamage = 0, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
             }, // long Large creature => 5-ft reach
             BaseSpeed = 10,   // 50 ft
             BaseHitDieHP = 45,
@@ -529,8 +529,8 @@ public static class EnemyDatabase
             NaturalArmorBonus = 3,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Claw", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamage = 0, Range = 1, IsPrimary = true },
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamage = 0, Range = 1, IsPrimary = false }
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
             },
             BaseSpeed = 10,
             BaseHitDieHP = 45,
@@ -566,8 +566,8 @@ public static class EnemyDatabase
             NaturalArmorBonus = 3,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Claw", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamage = 0, Range = 1, IsPrimary = true },
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamage = 0, Range = 1, IsPrimary = false }
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
             },
             BaseSpeed = 8,
             BaseHitDieHP = 57,
@@ -605,7 +605,7 @@ public static class EnemyDatabase
             NaturalArmorBonus = 2,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamage = 0, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
             },  // Str bonus to bite damage
             BaseSpeed = 10,   // 50 ft
             BaseHitDieHP = 13,
