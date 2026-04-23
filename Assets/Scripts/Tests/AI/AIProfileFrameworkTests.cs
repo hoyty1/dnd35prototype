@@ -351,12 +351,17 @@ namespace Tests.AI
             EnemyDatabase.Init();
             EnemyDefinition wolf = EnemyDatabase.Get("wolf_pack_hunter");
 
+            NaturalAttackDefinition wolfPrimaryAttack = wolf != null && wolf.NaturalAttacks != null && wolf.NaturalAttacks.Count > 0
+                ? wolf.NaturalAttacks[0]
+                : null;
+
             bool statsMatch = wolf != null
                               && wolf.BAB == 1
                               && wolf.BaseHitDieHP == 13
                               && wolf.BaseSpeed == 10
                               && wolf.NaturalArmorBonus == 2
-                              && wolf.NaturalAttackBonusDamage == 1
+                              && wolfPrimaryAttack != null
+                              && wolfPrimaryAttack.BonusDamage == 1
                               && wolf.HasTripAttack
                               && wolf.TripAttackCheckBonus == 1;
 
@@ -364,7 +369,7 @@ namespace Tests.AI
                 "Wolf enemy definition uses Monster Manual baseline core stats",
                 wolf == null
                     ? "(wolf definition missing)"
-                    : $"(BAB={wolf.BAB}, HP={wolf.BaseHitDieHP}, Speed={wolf.BaseSpeed}, NA={wolf.NaturalArmorBonus}, DmgBonus={wolf.NaturalAttackBonusDamage}, TripBonus={wolf.TripAttackCheckBonus})");
+                    : $"(BAB={wolf.BAB}, HP={wolf.BaseHitDieHP}, Speed={wolf.BaseSpeed}, NA={wolf.NaturalArmorBonus}, DmgBonus={wolfPrimaryAttack?.BonusDamage ?? 0}, TripBonus={wolf.TripAttackCheckBonus})");
         }
 
         private static void TestEvokerSchoolPriority()

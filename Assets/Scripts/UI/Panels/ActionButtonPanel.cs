@@ -185,8 +185,12 @@ public class ActionButtonPanel : MonoBehaviour
         context.IsTurned = pc.HasCondition(CombatConditionType.Turned);
         context.CanAttackWithWeapon = pc.CanAttackWithEquippedWeapon(out _);
         context.EquippedWeapon = pc.GetEquippedMainWeapon();
-        context.UsingUnarmedStrike = context.EquippedWeapon == null;
-        context.AttackSourceLabel = context.UsingUnarmedStrike ? "Unarmed strike" : context.EquippedWeapon.Name;
+        NaturalAttackDefinition primaryNaturalAttack = pc.Stats != null ? pc.Stats.GetPrimaryNaturalAttack() : null;
+        bool usingNaturalAttack = context.EquippedWeapon == null && primaryNaturalAttack != null;
+        context.UsingUnarmedStrike = context.EquippedWeapon == null && !usingNaturalAttack;
+        context.AttackSourceLabel = context.EquippedWeapon != null
+            ? context.EquippedWeapon.Name
+            : (usingNaturalAttack ? (string.IsNullOrWhiteSpace(primaryNaturalAttack.Name) ? "Natural attack" : primaryNaturalAttack.Name) : "Unarmed strike");
 
         context.IterativeWeaponSequenceActive = context.Gm != null && context.Gm.IsIterativeAttackSequenceActiveFor(pc);
         context.IterativeWeaponFullRoundStage = context.Gm != null && context.Gm.IsIterativeAttackInFullRoundStage(pc);

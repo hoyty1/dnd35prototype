@@ -23,6 +23,30 @@ public enum EncumbranceLevel
 }
 
 [System.Serializable]
+public class NaturalAttackDefinition
+{
+    public string Name = "Natural attack";
+    public int DamageDice;
+    public int DamageCount = 1;
+    public int BonusDamage;
+    public int Range = 1;
+    public bool IsPrimary = true;
+
+    public NaturalAttackDefinition Clone()
+    {
+        return new NaturalAttackDefinition
+        {
+            Name = Name,
+            DamageDice = DamageDice,
+            DamageCount = Mathf.Max(1, DamageCount),
+            BonusDamage = BonusDamage,
+            Range = Mathf.Max(1, Range),
+            IsPrimary = IsPrimary
+        };
+    }
+}
+
+[System.Serializable]
 public class CharacterStats
 {
     // ========== IDENTITY ==========
@@ -775,13 +799,10 @@ public class CharacterStats
     public int TripAttackCheckBonus;
 
     /// <summary>
-    /// Innate natural-weapon profile used when no manufactured weapon is equipped
-    /// (e.g., wolf bite, wight slam). 0 dice means no innate natural attack.
+    /// Innate natural-weapon profiles used when no manufactured weapon is equipped
+    /// (e.g., wolf bite, wight slam, claw).
     /// </summary>
-    public int NaturalAttackDamageDice;
-    public int NaturalAttackDamageCount = 1;
-    public int NaturalAttackBonusDamage;
-    public int NaturalAttackRange = 1;
+    public List<NaturalAttackDefinition> NaturalAttacks = new List<NaturalAttackDefinition>();
 
     /// <summary>Creature type tags for this character (e.g., "Goblinoid", "Orc"). Used for racial attack bonuses.</summary>
     public List<string> CreatureTags = new List<string>();
@@ -1250,13 +1271,6 @@ public class CharacterStats
         BonusDamage = bonusDamage;
         AttackRange = atkRange;
 
-        // Preserve a natural-attack fallback profile for monsters/summons that
-        // are intentionally weaponless.
-        NaturalAttackDamageDice = damageDice;
-        NaturalAttackDamageCount = Mathf.Max(1, damageCount);
-        NaturalAttackBonusDamage = bonusDamage;
-        NaturalAttackRange = Mathf.Max(1, atkRange);
-
         // Default crit stats (can be overridden by equipped weapons via Inventory.RecalculateStats)
         CritThreatMin = 20;   // Only natural 20 threatens by default
         CritMultiplier = 2;   // ×2 by default
@@ -1283,6 +1297,39 @@ public class CharacterStats
 
         // Auto-grant feats based on class
         InitFeats();
+    }
+
+    public bool HasNaturalAttacks => NaturalAttacks != null && NaturalAttacks.Any(a => a != null && a.DamageDice > 0 && a.DamageCount > 0);
+
+    public NaturalAttackDefinition GetPrimaryNaturalAttack()
+    {
+        if (NaturalAttacks == null || NaturalAttacks.Count == 0)
+            return null;
+
+        for (int i = 0; i < NaturalAttacks.Count; i++)
+        {
+            NaturalAttackDefinition attack = NaturalAttacks[i];
+            if (attack != null && attack.IsPrimary && attack.DamageDice > 0 && attack.DamageCount > 0)
+                return attack;
+        }
+
+        for (int i = 0; i < NaturalAttacks.Count; i++)
+        {
+            NaturalAttackDefinition attack = NaturalAttacks[i];
+            if (attack != null && attack.DamageDice > 0 && attack.DamageCount > 0)
+                return attack;
+        }
+
+        return null;
+    }
+
+    public void SetNaturalAttacks(IEnumerable<NaturalAttackDefinition> attacks)
+    {
+        NaturalAttacks = attacks != null
+            ? attacks.Where(a => a != null && a.DamageDice > 0 && a.DamageCount > 0)
+                .Select(a => a.Clone())
+                .ToList()
+            : new List<NaturalAttackDefinition>();
     }
 
     // ========== COMBAT METHODS ==========

@@ -823,10 +823,21 @@ public class CharacterSheetUI : MonoBehaviour
         }
         else
         {
-            var unarmed = selectedPC != null ? selectedPC.GetUnarmedDamage() : (1, 3, 0);
-            string unarmedBonusStr = unarmed.Item3 != 0 ? FormatMod(unarmed.Item3) : "";
-            AddLine(content, "  Attack Source: Unarmed strike", 11, LightText, FontStyle.Normal, 14);
-            AddLine(content, $"  Damage: {unarmed.Item1}d{unarmed.Item2}{unarmedBonusStr}", 11, LightText, FontStyle.Normal, 14);
+            NaturalAttackDefinition primaryNaturalAttack = stats.GetPrimaryNaturalAttack();
+            if (primaryNaturalAttack != null)
+            {
+                string naturalName = string.IsNullOrWhiteSpace(primaryNaturalAttack.Name) ? "Natural attack" : primaryNaturalAttack.Name;
+                string naturalBonusStr = primaryNaturalAttack.BonusDamage != 0 ? FormatMod(primaryNaturalAttack.BonusDamage) : "";
+                AddLine(content, $"  Attack Source: {naturalName}", 11, LightText, FontStyle.Normal, 14);
+                AddLine(content, $"  Damage: {primaryNaturalAttack.DamageCount}d{primaryNaturalAttack.DamageDice}{naturalBonusStr}", 11, LightText, FontStyle.Normal, 14);
+            }
+            else
+            {
+                var unarmed = selectedPC != null ? selectedPC.GetUnarmedDamage() : (1, 3, 0);
+                string unarmedBonusStr = unarmed.Item3 != 0 ? FormatMod(unarmed.Item3) : "";
+                AddLine(content, "  Attack Source: Unarmed strike", 11, LightText, FontStyle.Normal, 14);
+                AddLine(content, $"  Damage: {unarmed.Item1}d{unarmed.Item2}{unarmedBonusStr}", 11, LightText, FontStyle.Normal, 14);
+            }
         }
 
         AppendAidAnotherSection(content, selectedPC);

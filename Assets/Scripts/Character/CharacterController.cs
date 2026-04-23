@@ -742,7 +742,7 @@ public class CharacterController : MonoBehaviour
 
         bool isAnimal = string.Equals(Stats.CreatureType, "Animal", StringComparison.OrdinalIgnoreCase);
         bool hasInnateTripAttack = Stats.HasTripAttack;
-        bool hasNaturalDamageProfile = Stats.NaturalAttackDamageDice > 0 && Stats.NaturalAttackDamageCount > 0;
+        bool hasNaturalDamageProfile = Stats.HasNaturalAttacks;
 
         return hasNaturalDamageProfile && (isAnimal || hasInnateTripAttack);
     }
@@ -856,11 +856,17 @@ public class CharacterController : MonoBehaviour
 
         if (ShouldUseInnateNaturalAttackProfile(weapon))
         {
-            damageDice = Mathf.Max(1, Stats.NaturalAttackDamageDice);
-            damageCount = Mathf.Max(1, Stats.NaturalAttackDamageCount);
-            bonusDamage = Stats.NaturalAttackBonusDamage;
-            attackLabel = Stats.HasTripAttack ? "Bite" : "Natural attack";
-            return;
+            NaturalAttackDefinition naturalAttack = Stats.GetPrimaryNaturalAttack();
+            if (naturalAttack != null)
+            {
+                damageDice = Mathf.Max(1, naturalAttack.DamageDice);
+                damageCount = Mathf.Max(1, naturalAttack.DamageCount);
+                bonusDamage = naturalAttack.BonusDamage;
+                attackLabel = string.IsNullOrWhiteSpace(naturalAttack.Name)
+                    ? (Stats.HasTripAttack ? "Bite" : "Natural attack")
+                    : naturalAttack.Name;
+                return;
+            }
         }
 
         var unarmed = GetUnarmedDamage();

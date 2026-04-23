@@ -2060,13 +2060,15 @@ public partial class GameManager : MonoBehaviour
             bab: computedBab,
             armorBonus: 0,
             shieldBonus: 0,
-            damageDice: def.NaturalAttackDamageDice,
-            damageCount: Mathf.Max(1, def.NaturalAttackDamageCount),
-            bonusDamage: def.NaturalAttackBonusDamage,
+            damageDice: 0,
+            damageCount: 1,
+            bonusDamage: 0,
             baseSpeed: def.BaseSpeed,
-            atkRange: Mathf.Max(1, def.NaturalAttackRange),
+            atkRange: 1,
             baseHitDieHP: computedBaseHitDieHp
         );
+
+        stats.SetNaturalAttacks(def.NaturalAttacks);
 
         stats.HitDice = hitDice;
         stats.UseCreatureTypeProgression = true;

@@ -238,10 +238,10 @@ public static class EnemyDatabase
             NaturalArmorBonus = 4,
             STR = 12, DEX = 12, CON = 10, WIS = 13, INT = 11, CHA = 15,
             BAB = 3,
-            NaturalAttackDamageDice = 4,
-            NaturalAttackDamageCount = 1,
-            NaturalAttackBonusDamage = 1,
-            NaturalAttackRange = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 4, DamageCount = 1, BonusDamage = 1, Range = 1, IsPrimary = true }
+            },
             BaseSpeed = 6,
             BaseHitDieHP = 26,
             CreatureTags = new List<string> { "Undead" },
@@ -446,10 +446,10 @@ public static class EnemyDatabase
             STR = 25, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 10,
             BAB = 4,
             NaturalArmorBonus = 5,
-            NaturalAttackDamageDice = 8,
-            NaturalAttackDamageCount = 1,
-            NaturalAttackBonusDamage = 0,
-            NaturalAttackRange = 1,  // long Large creature => 5-ft reach
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, BonusDamage = 0, Range = 1, IsPrimary = true }
+            }, // long Large creature => 5-ft reach
             BaseSpeed = 10,   // 50 ft
             BaseHitDieHP = 45,
             CreatureTags = new List<string> { "Animal" },
@@ -484,10 +484,10 @@ public static class EnemyDatabase
             STR = 13, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
             BAB = 1,
             NaturalArmorBonus = 2,
-            NaturalAttackDamageDice = 6,
-            NaturalAttackDamageCount = 1,
-            NaturalAttackBonusDamage = 1,  // Str bonus to bite damage
-            NaturalAttackRange = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, BonusDamage = 1, Range = 1, IsPrimary = true }
+            },  // Str bonus to bite damage
             BaseSpeed = 10,   // 50 ft
             BaseHitDieHP = 13,
             CreatureTags = new List<string> { "Animal" },
@@ -536,11 +536,8 @@ public class EnemyDefinition
     public int BAB;
     public int BaseSpeed;
 
-    // Optional natural attack profile used when no manufactured weapon is equipped
-    public int NaturalAttackDamageDice;
-    public int NaturalAttackDamageCount = 1;
-    public int NaturalAttackBonusDamage;
-    public int NaturalAttackRange = 1;
+    // Optional natural attacks used when no manufactured weapon is equipped
+    public List<NaturalAttackDefinition> NaturalAttacks = new List<NaturalAttackDefinition>();
 
     // Built-in mitigation profile
     public int DamageReductionAmount;

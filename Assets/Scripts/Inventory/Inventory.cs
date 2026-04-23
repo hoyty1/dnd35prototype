@@ -359,13 +359,13 @@ public class Inventory
             {
                 OwnerStats.EquippedMainWeaponItem = null;
 
-                bool hasNaturalAttackProfile = OwnerStats.NaturalAttackDamageDice > 0 && OwnerStats.NaturalAttackDamageCount > 0;
-                if (hasNaturalAttackProfile)
+                NaturalAttackDefinition primaryNaturalAttack = OwnerStats.GetPrimaryNaturalAttack();
+                if (primaryNaturalAttack != null)
                 {
-                    OwnerStats.BaseDamageDice = OwnerStats.NaturalAttackDamageDice;
-                    OwnerStats.BaseDamageCount = Mathf.Max(1, OwnerStats.NaturalAttackDamageCount);
-                    OwnerStats.BonusDamage = OwnerStats.NaturalAttackBonusDamage;
-                    OwnerStats.AttackRange = Mathf.Max(1, OwnerStats.NaturalAttackRange);
+                    OwnerStats.BaseDamageDice = Mathf.Max(1, primaryNaturalAttack.DamageDice);
+                    OwnerStats.BaseDamageCount = Mathf.Max(1, primaryNaturalAttack.DamageCount);
+                    OwnerStats.BonusDamage = primaryNaturalAttack.BonusDamage;
+                    OwnerStats.AttackRange = Mathf.Max(1, primaryNaturalAttack.Range);
                 }
                 else
                 {
