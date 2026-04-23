@@ -5509,14 +5509,27 @@ public class CharacterController : MonoBehaviour
         int critThreatMin;
         int critMultiplier;
 
+        string grappleAttackLabel = string.Empty;
+
         if (isUnarmed)
         {
-            var unarmed = GetUnarmedDamage();
-            damageDice = Mathf.Max(2, unarmed.damageDice);
-            damageCount = Mathf.Max(1, unarmed.damageCount);
-            bonusDamage = Stats.STRMod + unarmed.bonusDamage;
-            critThreatMin = 20;
-            critMultiplier = 2;
+            if (ShouldUseInnateNaturalAttackProfile(null))
+            {
+                ResolveBaseAttackDamageProfile(null, out damageDice, out damageCount, out bonusDamage, out grappleAttackLabel);
+                damageDice = Mathf.Max(2, damageDice);
+                damageCount = Mathf.Max(1, damageCount);
+                critThreatMin = 20;
+                critMultiplier = 2;
+            }
+            else
+            {
+                var unarmed = GetUnarmedDamage();
+                damageDice = Mathf.Max(2, unarmed.damageDice);
+                damageCount = Mathf.Max(1, unarmed.damageCount);
+                bonusDamage = Stats.STRMod + unarmed.bonusDamage;
+                critThreatMin = 20;
+                critMultiplier = 2;
+            }
         }
         else
         {
@@ -5557,7 +5570,9 @@ public class CharacterController : MonoBehaviour
         attackResult.DefenderHPBefore = hpBefore;
         attackResult.DefenderHPAfter = opponent.Stats.CurrentHP;
 
-        string weaponLabel = isUnarmed ? "unarmed strike" : weapon.Name;
+        string weaponLabel = isUnarmed
+            ? (string.IsNullOrWhiteSpace(grappleAttackLabel) ? "unarmed strike" : grappleAttackLabel)
+            : weapon.Name;
         string damageTypeLabel = damageMode.DealNonlethalDamage ? "nonlethal" : "lethal";
 
         var logLines = new List<string>

@@ -135,6 +135,53 @@ namespace DND35.AI.Profiles
             }
         }
 
+        /// <summary>
+        /// Animals only attempt to escape a grapple when critically wounded.
+        /// Otherwise they should keep mauling their prey.
+        /// </summary>
+        public override bool ShouldEscapeGrapple(CharacterController self)
+        {
+            return ShouldAttemptEmergencyGrappleEscape(self);
+        }
+
+        /// <summary>
+        /// Predatory animals in a grapple prioritize lethal natural attacks.
+        /// </summary>
+        public bool ShouldPrioritizeLethalNaturalGrappleAttacks(CharacterController self)
+        {
+            if (self == null || self.Stats == null)
+                return false;
+
+            AnimalSpecialty specialty = DetermineSpecialty(self);
+            if (specialty != AnimalSpecialty.Grappler)
+                return false;
+
+            if (!self.IsGrappling())
+                return false;
+
+            return !ShouldAttemptEmergencyGrappleEscape(self);
+        }
+
+        /// <summary>
+        /// Escape only when survival is threatened.
+        /// </summary>
+        public bool ShouldAttemptEmergencyGrappleEscape(CharacterController self)
+        {
+            if (self == null || self.Stats == null)
+                return false;
+
+            int maxHp = Mathf.Max(1, self.Stats.TotalMaxHP);
+            float hpPercent = (float)self.Stats.CurrentHP / maxHp;
+            bool shouldEscape = hpPercent < 0.25f;
+
+            if (shouldEscape)
+            {
+                Debug.Log($"[AI][Animal] {self.Stats.CharacterName} is critically wounded ({self.Stats.CurrentHP}/{maxHp}, {hpPercent:P0}) and will try to escape grapple.");
+            }
+
+            return shouldEscape;
+        }
+
         public override bool ShouldInitiateGrapple(CharacterController self, CharacterController target)
         {
             if (self == null || target == null || target.Stats == null || target.Stats.IsDead)

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using DND35.AI.Profiles;
 
 public class GrappleSystem : BaseCombatManeuver
 {
@@ -1676,7 +1677,10 @@ public partial class GameManager
 
             if (!usedEscapePrompt)
             {
-                result = npc.ResolveGrappleAction(chosenAction.Value, null, null, iterativeAttackBonusOverride);
+                AttackDamageMode? grappleDamageModeOverride = ShouldForceLethalGrappleDamageForNPC(npc, chosenAction.Value)
+                    ? AttackDamageMode.Lethal
+                    : null;
+                result = npc.ResolveGrappleAction(chosenAction.Value, grappleDamageModeOverride, null, iterativeAttackBonusOverride);
             }
             else
             {
@@ -1736,6 +1740,9 @@ public partial class GameManager
         if (legalActions.Count == 0)
             return null;
 
+        if (TryChoosePredatoryAnimalGrappleAction(npc, legalActions, actorPinned, opponentPinned, out GrappleActionType animalAction))
+            return animalAction;
+
         if (actorPinned)
         {
             if (legalActions.Contains(GrappleActionType.BreakPin))
@@ -1788,6 +1795,105 @@ public partial class GameManager
         }
 
         return legalActions[UnityEngine.Random.Range(0, legalActions.Count)];
+    }
+
+    private static bool IsPredatoryAnimalGrapplerProfile(CharacterController npc, out AnimalAIProfile animalProfile)
+    {
+        animalProfile = npc != null ? npc.aiProfile as AnimalAIProfile : null;
+        return animalProfile != null && animalProfile.ShouldPrioritizeLethalNaturalGrappleAttacks(npc);
+    }
+
+    private bool ShouldForceLethalGrappleDamageForNPC(CharacterController npc, GrappleActionType actionType)
+    {
+        if (actionType != GrappleActionType.DamageOpponent)
+            return false;
+
+        return IsPredatoryAnimalGrapplerProfile(npc, out _);
+    }
+
+    private bool TryChoosePredatoryAnimalGrappleAction(
+        CharacterController npc,
+        List<GrappleActionType> legalActions,
+        bool actorPinned,
+        bool opponentPinned,
+        out GrappleActionType chosenAction)
+    {
+        chosenAction = default;
+
+        if (npc == null || npc.Stats == null)
+            return false;
+
+        if (!(npc.aiProfile is AnimalAIProfile animalProfile))
+            return false;
+
+        if (animalProfile.ShouldAttemptEmergencyGrappleEscape(npc))
+        {
+            if (legalActions.Contains(GrappleActionType.BreakPin))
+            {
+                chosenAction = GrappleActionType.BreakPin;
+                return true;
+            }
+
+            if (legalActions.Contains(GrappleActionType.OpposedGrappleEscape))
+            {
+                chosenAction = GrappleActionType.OpposedGrappleEscape;
+                return true;
+            }
+
+            if (legalActions.Contains(GrappleActionType.EscapeArtist))
+            {
+                chosenAction = GrappleActionType.EscapeArtist;
+                return true;
+            }
+
+            return false;
+        }
+
+        if (!animalProfile.ShouldPrioritizeLethalNaturalGrappleAttacks(npc))
+            return false;
+
+        if (actorPinned)
+        {
+            if (legalActions.Contains(GrappleActionType.BreakPin))
+            {
+                chosenAction = GrappleActionType.BreakPin;
+                return true;
+            }
+
+            if (legalActions.Contains(GrappleActionType.OpposedGrappleEscape))
+            {
+                chosenAction = GrappleActionType.OpposedGrappleEscape;
+                return true;
+            }
+
+            if (legalActions.Contains(GrappleActionType.EscapeArtist))
+            {
+                chosenAction = GrappleActionType.EscapeArtist;
+                return true;
+            }
+
+            return false;
+        }
+
+        if (npc.IsPinningOpponent() && legalActions.Contains(GrappleActionType.ReleasePinnedOpponent))
+        {
+            chosenAction = GrappleActionType.ReleasePinnedOpponent;
+            return true;
+        }
+
+        if (!opponentPinned && legalActions.Contains(GrappleActionType.AttackUnarmed))
+        {
+            chosenAction = GrappleActionType.AttackUnarmed;
+            return true;
+        }
+
+        if (legalActions.Contains(GrappleActionType.DamageOpponent))
+        {
+            chosenAction = GrappleActionType.DamageOpponent;
+            return true;
+        }
+
+        return false;
     }
 
     private List<GrappleActionType> BuildNPCLegalGrappleActions(CharacterController npc, CharacterController opponent, bool actorPinned, bool opponentPinned)
