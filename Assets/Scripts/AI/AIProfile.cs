@@ -121,6 +121,84 @@ namespace DND35.AI
             return self.Stats != null && self.Stats.STRMod >= target.Stats.STRMod;
         }
 
+        /// <summary>
+        /// Validates whether trip is meaningful against the current target.
+        /// </summary>
+        protected virtual bool IsValidTripTarget(CharacterController target)
+        {
+            if (target == null)
+            {
+                Debug.LogWarning("[AI Validation] Trip target is null.");
+                return false;
+            }
+
+            if (target.HasCondition(CombatConditionType.Prone))
+            {
+                Debug.Log($"[AI Validation] Cannot trip {target.Stats?.CharacterName ?? "Unknown"} - target is already prone.");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Validates whether target currently has a disarmable held item.
+        /// </summary>
+        protected virtual bool IsValidDisarmTarget(CharacterController target)
+        {
+            if (target == null)
+            {
+                Debug.LogWarning("[AI Validation] Disarm target is null.");
+                return false;
+            }
+
+            bool hasDisarmable = target.HasDisarmableWeaponEquipped();
+            if (!hasDisarmable)
+            {
+                Debug.Log($"[AI Validation] Cannot disarm {target.Stats?.CharacterName ?? "Unknown"} - no disarmable held weapon.");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Validates whether target currently has a sunderable item equipped.
+        /// </summary>
+        protected virtual bool IsValidSunderTarget(CharacterController target)
+        {
+            if (target == null)
+            {
+                Debug.LogWarning("[AI Validation] Sunder target is null.");
+                return false;
+            }
+
+            bool hasSunderable = target.HasSunderableItemEquipped();
+            if (!hasSunderable)
+            {
+                Debug.Log($"[AI Validation] Cannot sunder {target.Stats?.CharacterName ?? "Unknown"} - no sunderable equipment.");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Placeholder for future bull rush restrictions (size/path rules).
+        /// </summary>
+        protected virtual bool IsValidBullRushTarget(CharacterController target, CharacterController self)
+        {
+            return target != null && self != null;
+        }
+
+        /// <summary>
+        /// Placeholder for future overrun restrictions (size/path rules).
+        /// </summary>
+        protected virtual bool IsValidOverrunTarget(CharacterController target, CharacterController self)
+        {
+            return target != null && self != null;
+        }
+
         public virtual SpecialAttackType? GetPreferredManeuver(CharacterController self, CharacterController target)
         {
             if (self == null || target == null)
@@ -131,11 +209,20 @@ namespace DND35.AI
 
             if (Maneuvers != null)
             {
-                if (Maneuvers.AttemptTrip && !target.HasCondition(CombatConditionType.Prone) && self.HasMeleeWeaponEquipped())
+                if (Maneuvers.AttemptTrip && self.HasMeleeWeaponEquipped() && IsValidTripTarget(target))
                     return SpecialAttackType.Trip;
 
-                if (Maneuvers.AttemptDisarm && target.GetEquippedMainWeapon() != null)
+                if (Maneuvers.AttemptDisarm && IsValidDisarmTarget(target))
                     return SpecialAttackType.Disarm;
+
+                if (Maneuvers.AttemptSunder && IsValidSunderTarget(target))
+                    return SpecialAttackType.Sunder;
+
+                if (Maneuvers.AttemptBullRush && IsValidBullRushTarget(target, self))
+                    return SpecialAttackType.BullRushAttack;
+
+                if (Maneuvers.AttemptOverrun && IsValidOverrunTarget(target, self))
+                    return SpecialAttackType.Overrun;
             }
 
             if (ShouldInitiateGrapple(self, target))

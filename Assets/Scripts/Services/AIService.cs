@@ -646,10 +646,13 @@ public class AIService : MonoBehaviour
                     return !target.HasCondition(CombatConditionType.Prone) && npc.HasMeleeWeaponEquipped();
 
                 if (preferred.Value == SpecialAttackType.Disarm)
-                    return target.GetEquippedMainWeapon() != null;
+                    return target.HasDisarmableWeaponEquipped();
 
                 if (preferred.Value == SpecialAttackType.Grapple)
                     return profile.ShouldInitiateGrapple(npc, target);
+
+                if (preferred.Value == SpecialAttackType.Sunder)
+                    return target.HasSunderableItemEquipped();
 
                 return true;
             }

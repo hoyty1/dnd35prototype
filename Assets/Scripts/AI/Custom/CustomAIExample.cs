@@ -37,8 +37,13 @@ namespace DND35.AI.Custom
         {
             if (self != null && target != null && self.Stats != null)
             {
-                if (!target.HasCondition(CombatConditionType.Prone) && self.Stats.STRMod >= 3)
+                // Example: high-STR bruiser prefers trip when target validation passes.
+                if (self.Stats.STRMod >= 3 && IsValidTripTarget(target))
                     return SpecialAttackType.Trip;
+
+                // Example: use disarm when opponent has a valid held weapon.
+                if (self.Stats.DEXMod >= 2 && IsValidDisarmTarget(target))
+                    return SpecialAttackType.Disarm;
             }
 
             return base.GetPreferredManeuver(self, target);

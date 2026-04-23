@@ -33,3 +33,22 @@ Assign `CharacterController.aiProfile` on any NPC. During NPC turns, `AIService`
 - `Armor: Unarmored`
 - `Wielding: Unarmed`
 - `HP State: Staggered`
+
+
+## Maneuver Target Validation
+`AIProfile` now validates maneuver targets before choosing special attacks.
+
+### Built-in checks
+- **Trip**: skipped if target is already `Prone`.
+- **Disarm**: skipped if target has no disarmable held weapon.
+- **Sunder**: skipped if target has no sunderable equipped item.
+
+### Extensible hooks
+Override these in custom profiles for extra rules:
+- `IsValidTripTarget(target)`
+- `IsValidDisarmTarget(target)`
+- `IsValidSunderTarget(target)`
+- `IsValidBullRushTarget(target, self)`
+- `IsValidOverrunTarget(target, self)`
+
+Example usage is included in `Custom/CustomAIExample.cs`.
