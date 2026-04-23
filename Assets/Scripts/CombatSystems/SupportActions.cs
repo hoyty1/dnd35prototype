@@ -1241,7 +1241,7 @@ public partial class GameManager
         if (rakeResult == null || rakeResult.Attacks == null || rakeResult.Attacks.Count == 0)
             return;
 
-        CombatUI?.ShowCombatLog($"🩸 Rake follow-up: {attacker.Stats.CharacterName} tears at {target.Stats.CharacterName} while grappling!");
+        CombatUI?.ShowCombatLog($"🩸 {attacker.Stats.CharacterName} rakes grappled opponent {target.Stats.CharacterName}!");
         CombatUI?.ShowCombatLog(rakeResult.GetFullSummary());
 
         for (int i = 0; i < rakeResult.Attacks.Count; i++)
@@ -1330,10 +1330,14 @@ public partial class GameManager
 
                 charger.Stats.MoraleAttackBonus += 2;
                 FullAttackResult pounceResult;
+                FullAttackResult pounceRakeResult = null;
                 try
                 {
                     ProcessTurnUndeadMeleeFearBreak(charger, target, isMeleeAttack: true);
                     pounceResult = charger.FullAttack(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+
+                    if (charger.Stats.HasRake && target.Stats != null && !target.Stats.IsDead)
+                        pounceRakeResult = charger.PerformRakeAttacks(target, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
                 }
                 finally
                 {
@@ -1346,6 +1350,19 @@ public partial class GameManager
                 if (pounceResult != null)
                 {
                     CombatUI?.ShowCombatLog($"⚡ Charge Pounce (+2): {pounceResult.GetFullSummary()}");
+
+                    if (pounceRakeResult != null && pounceRakeResult.Attacks != null && pounceRakeResult.Attacks.Count > 0)
+                    {
+                        CombatUI?.ShowCombatLog($"🦶 {charger.Stats.CharacterName} pounces and rakes with hind claws!");
+                        CombatUI?.ShowCombatLog($"🩸 Pounce Rake: {pounceRakeResult.GetFullSummary()}");
+
+                        for (int i = 0; i < pounceRakeResult.Attacks.Count; i++)
+                        {
+                            CombatResult rakeAttack = pounceRakeResult.Attacks[i];
+                            if (rakeAttack != null && rakeAttack.Hit && rakeAttack.TotalDamage > 0)
+                                CheckConcentrationOnDamage(target, rakeAttack.TotalDamage);
+                        }
+                    }
 
                     for (int i = 0; i < pounceResult.Attacks.Count; i++)
                     {
@@ -1535,11 +1552,18 @@ public partial class GameManager
             CombatUI?.ShowCombatLog($"🐅 {npc.Stats.CharacterName} uses Pounce!");
             npc.Stats.MoraleAttackBonus += 2;
             FullAttackResult pounceResult;
+            FullAttackResult pounceRakeResult = null;
             try
             {
                 ProcessTurnUndeadMeleeFearBreak(npc, target, isMeleeAttack: true);
                 pounceResult = npc.FullAttack(target, isFlankingCharge, flankingBonus,
                     flankPartner != null ? flankPartner.Stats.CharacterName : null, null);
+
+                if (npc.Stats.HasRake && target.Stats != null && !target.Stats.IsDead)
+                {
+                    pounceRakeResult = npc.PerformRakeAttacks(target, isFlankingCharge, flankingBonus,
+                        flankPartner != null ? flankPartner.Stats.CharacterName : null);
+                }
             }
             finally
             {
@@ -1550,6 +1574,19 @@ public partial class GameManager
             {
                 string flankText = isFlankingCharge ? " + Flanking" : "";
                 CombatUI?.ShowCombatLog($"☠ Charge Pounce (+2{flankText}): {pounceResult.GetFullSummary()}");
+
+                if (pounceRakeResult != null && pounceRakeResult.Attacks != null && pounceRakeResult.Attacks.Count > 0)
+                {
+                    CombatUI?.ShowCombatLog($"🦶 {npc.Stats.CharacterName} pounces and rakes with hind claws!");
+                    CombatUI?.ShowCombatLog($"🩸 Pounce Rake: {pounceRakeResult.GetFullSummary()}");
+
+                    for (int i = 0; i < pounceRakeResult.Attacks.Count; i++)
+                    {
+                        CombatResult rakeAttack = pounceRakeResult.Attacks[i];
+                        if (rakeAttack != null && rakeAttack.Hit && rakeAttack.TotalDamage > 0)
+                            CheckConcentrationOnDamage(target, rakeAttack.TotalDamage);
+                    }
+                }
 
                 bool improvedGrabAttempted = false;
                 bool improvedGrabSucceeded = false;
