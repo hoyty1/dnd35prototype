@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using DND35.AI;
 using DND35.AI.Profiles;
 using Tests.Utilities;
@@ -29,6 +30,9 @@ namespace Tests.AI
             TestProfileSkipsDisarmAgainstUnarmedTarget();
             TestProfileSkipsSunderWhenNoEquipment();
             TestProfileCanSelectValidTripAndDisarm();
+            TestEvokerSchoolPriority();
+            TestAbjurerPrefersSingleTarget();
+            TestSpellcasterAOEAvoidsUnsafeFriendlyFire();
 
             Debug.Log($"====== AI PROFILE RESULTS: {_passed} passed, {_failed} failed ======");
         }
@@ -251,6 +255,107 @@ namespace Tests.AI
                     tripTarget != null ? tripTarget.gameObject : null,
                     disarmTarget != null ? disarmTarget.gameObject : null,
                     profile);
+            }
+        }
+
+        private static void TestEvokerSchoolPriority()
+        {
+            EvokerAIProfile profile = ScriptableObject.CreateInstance<EvokerAIProfile>();
+            try
+            {
+                float evocation = profile.GetSchoolPriority(SpellSchool.Evocation);
+                float abjuration = profile.GetSchoolPriority(SpellSchool.Abjuration);
+                Assert(evocation > abjuration,
+                    "Evoker profile prioritizes Evocation school",
+                    $"(evocation={evocation:F1}, abjuration={abjuration:F1})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(profile);
+            }
+        }
+
+        private static void TestAbjurerPrefersSingleTarget()
+        {
+            AbjurerAIProfile profile = ScriptableObject.CreateInstance<AbjurerAIProfile>();
+            try
+            {
+                Assert(profile.AOECasting.PreferSingleTarget,
+                    "Abjurer profile prefers single-target casting");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(profile);
+            }
+        }
+
+        private static void TestSpellcasterAOEAvoidsUnsafeFriendlyFire()
+        {
+            SpellcasterAIProfile profile = ScriptableObject.CreateInstance<SpellcasterAIProfile>();
+            var gridGo = new GameObject("Grid_Test");
+            var gmGo = new GameObject("GM_Test");
+            SquareGrid grid = gridGo.AddComponent<SquareGrid>();
+            GameManager gm = gmGo.AddComponent<GameManager>();
+
+            CharacterController caster = null;
+            CharacterController enemy = null;
+            CharacterController ally1 = null;
+            CharacterController ally2 = null;
+
+            try
+            {
+                gm.Grid = grid;
+                grid.GenerateGrid();
+
+                profile.AOECasting.AvoidHittingAllies = true;
+                profile.AOECasting.MaxAcceptableAllyCasualties = 0f;
+                profile.AOECasting.AcceptableAllyDamagePercent = 0.05f;
+
+                caster = TestHelpers.CreateCharacter("Caster", "Wizard", level: 5, intelligence: 18, bab: 2, gridPosition: new Vector2Int(0, 0));
+                enemy = TestHelpers.CreateWarrior("Enemy", level: 5);
+                ally1 = TestHelpers.CreateWarrior("Ally1", level: 5);
+                ally2 = TestHelpers.CreateWarrior("Ally2", level: 5);
+
+                caster.IsPlayerControlled = true;
+                ally1.IsPlayerControlled = true;
+                ally2.IsPlayerControlled = true;
+                enemy.IsPlayerControlled = false;
+
+                TestHelpers.SetGridPosition(enemy, 2, 2);
+                TestHelpers.SetGridPosition(ally1, 2, 2);
+                TestHelpers.SetGridPosition(ally2, 2, 3);
+
+                var all = new List<CharacterController> { caster, enemy, ally1, ally2 };
+
+                SpellData fireballLike = new SpellData
+                {
+                    Name = "Test Fireball",
+                    School = "Evocation",
+                    TargetType = SpellTargetType.Area,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 2,
+                    AreaRadius = 2,
+                    DamageCount = 6,
+                    DamageDice = 6,
+                    BonusDamage = 0,
+                    DamageType = "fire",
+                    EffectType = SpellEffectType.Damage
+                };
+
+                SpellAOEEvaluation eval = profile.EvaluateAOECast(fireballLike, caster, enemy, all, gm);
+                Assert(!eval.IsSafe,
+                    "Spellcaster AOE evaluation blocks unsafe ally damage",
+                    $"(alliesHit={eval.AlliesHit}, casualties={eval.EffectiveAllyCasualties:F1})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(caster != null ? caster.gameObject : null,
+                    enemy != null ? enemy.gameObject : null,
+                    ally1 != null ? ally1.gameObject : null,
+                    ally2 != null ? ally2.gameObject : null,
+                    profile,
+                    gmGo,
+                    gridGo);
             }
         }
     }

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using DND35.AI;
+using DND35.AI.Profiles;
 using UnityEngine;
 
 /// <summary>
@@ -699,8 +700,15 @@ public class AIService : MonoBehaviour
         if (castable == null || castable.Count == 0)
             return null;
 
+        AIProfile profile = GetProfile(caster);
+        SpellcasterAIProfile spellcasterProfile = profile as SpellcasterAIProfile;
+
         SpellData best = null;
-        int bestScore = int.MinValue;
+        float bestScore = float.NegativeInfinity;
+
+        List<CharacterController> allCombatants = _gameManager != null
+            ? _gameManager.GetAllCharactersForAI()
+            : new List<CharacterController>();
 
         for (int i = 0; i < castable.Count; i++)
         {
@@ -708,15 +716,24 @@ public class AIService : MonoBehaviour
             if (spell == null)
                 continue;
 
-            int score = 0;
-            if (spell.EffectType == SpellEffectType.Healing)
-                score += caster.Stats.CurrentHP <= Mathf.CeilToInt(caster.Stats.TotalMaxHP * 0.4f) ? 10 : 2;
-            if (spell.EffectType == SpellEffectType.Buff)
-                score += 4;
-            if (spell.EffectType == SpellEffectType.Damage || spell.EffectType == SpellEffectType.Debuff)
-                score += 6;
-            if (target != null && target.Stats != null && target.Stats.CurrentHP <= Mathf.CeilToInt(target.Stats.TotalMaxHP * 0.35f))
-                score += 2;
+            float score;
+
+            if (spellcasterProfile != null)
+            {
+                score = spellcasterProfile.ScoreSpell(spell, caster, target, allCombatants, _gameManager);
+            }
+            else
+            {
+                score = 0f;
+                if (spell.EffectType == SpellEffectType.Healing)
+                    score += caster.Stats.CurrentHP <= Mathf.CeilToInt(caster.Stats.TotalMaxHP * 0.4f) ? 10f : 2f;
+                if (spell.EffectType == SpellEffectType.Buff)
+                    score += 4f;
+                if (spell.EffectType == SpellEffectType.Damage || spell.EffectType == SpellEffectType.Debuff)
+                    score += 6f;
+                if (target != null && target.Stats != null && target.Stats.CurrentHP <= Mathf.CeilToInt(target.Stats.TotalMaxHP * 0.35f))
+                    score += 2f;
+            }
 
             if (score > bestScore)
             {
