@@ -11404,7 +11404,10 @@ public partial class GameManager : MonoBehaviour
         if (!attacker.Stats.HasTripAttack)
             return;
 
-        if (attackRange == null || !attackRange.IsMelee)
+        bool isMeleeHit = attackRange != null
+            ? attackRange.IsMelee
+            : !attackResult.IsRangedAttack;
+        if (!isMeleeHit)
             return;
 
         if (!attackResult.Hit || target.Stats.IsDead || target.HasCondition(CombatConditionType.Prone))

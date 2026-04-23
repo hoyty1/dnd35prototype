@@ -393,6 +393,18 @@ public static class ThreatSystem
         // Mark this as an AoO in the result for logging
         result.IsAttackOfOpportunity = true;
 
+        // Innate trip follow-up (e.g., wolf bite) is a free action and should not consume AoO economy.
+        if (result.Hit
+            && threatener.Stats != null
+            && threatener.Stats.HasTripAttack
+            && target.Stats != null
+            && !target.Stats.IsDead
+            && !target.HasCondition(CombatConditionType.Prone))
+        {
+            SpecialAttackResult tripResult = threatener.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
+            Debug.Log($"[ThreatSystem] Free trip follow-up from AoO by {threatener.Stats.CharacterName}: Success={tripResult.Success} | {tripResult.Log}");
+        }
+
         // Log the result
         if (result.Hit)
         {

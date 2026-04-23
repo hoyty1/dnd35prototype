@@ -1272,6 +1272,9 @@ public partial class GameManager
 
             if (result != null)
             {
+                RangeInfo chargeRangeInfo = CalculateRangeInfo(charger, target);
+                TryResolveFreeTripOnHit(charger, target, result, chargeRangeInfo);
+
                 CombatUI.ShowCombatLog($"⚡ Charge Attack (+2): {result.GetDetailedSummary()}");
                 if (result.Hit && result.TotalDamage > 0)
                     CheckConcentrationOnDamage(target, result.TotalDamage);
@@ -1382,6 +1385,9 @@ public partial class GameManager
 
         if (result != null)
         {
+            RangeInfo chargeRangeInfo = CalculateRangeInfo(npc, target);
+            TryResolveFreeTripOnHit(npc, target, result, chargeRangeInfo);
+
             string flankText = isFlankingCharge ? " + Flanking" : "";
             CombatUI.ShowCombatLog($"☠ Charge Attack (+2{flankText}): {result.GetDetailedSummary()}");
             if (result.Hit && result.TotalDamage > 0)
