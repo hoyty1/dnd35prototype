@@ -268,12 +268,12 @@ public class CombatFlowService : MonoBehaviour
                 continue;
 
             _gameManager.CombatUI?.ShowCombatLog($"⚔ AoO vs ranged attack: {aooResult.GetDetailedSummary()}");
+        }
 
-            if (attacker.Stats.IsDead)
-            {
-                _gameManager.CombatUI?.ShowCombatLog($"<color=#FF6644>💀 {attacker.Stats.CharacterName} is slain before completing the ranged attack.</color>");
-                return false;
-            }
+        if (attacker.Stats.IsDead)
+        {
+            _gameManager.CombatUI?.ShowCombatLog($"<color=#FF6644>💀 {attacker.Stats.CharacterName} is slain before completing the ranged attack.</color>");
+            return false;
         }
 
         return true;
