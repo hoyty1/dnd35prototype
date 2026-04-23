@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using DND35.AI;
 
 public enum SpecialAttackType
 {
@@ -216,6 +217,10 @@ public class CharacterController : MonoBehaviour
 {
     [Header("Character Setup")]
     public bool IsPlayerControlled;
+
+    [Header("AI Configuration")]
+    [Tooltip("Optional AI profile used by AIService for NPC decision making")]
+    public AIProfile aiProfile;
 
     [Header("Sprites")]
     public Sprite AliveSprite;

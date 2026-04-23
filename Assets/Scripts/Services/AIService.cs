@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using DND35.AI;
 using UnityEngine;
 
 /// <summary>
@@ -74,6 +75,22 @@ public class AIService : MonoBehaviour
         if (isSummon)
         {
             yield return _gameManager.StartCoroutine(_gameManager.ExecuteSummonedCreatureTurnForAI(npc));
+            yield break;
+        }
+
+        AIProfile profile = GetProfile(npc);
+        if (profile != null)
+        {
+            if (profile.CombatStyle == CombatStyle.Ranged)
+            {
+                yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
+            }
+            else
+            {
+                // Melee and mixed currently share melee tactical shell; maneuvers/targeting are profile-driven.
+                yield return _gameManager.StartCoroutine(ExecuteAggressiveMeleeTurn(npc, targetPC));
+            }
+
             yield break;
         }
 
@@ -164,9 +181,11 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        AIProfile profile = GetProfile(npc);
+
         if (!npc.IsTargetInCurrentWeaponRange(target))
         {
-            SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target);
+            SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, profile);
             if (bestCell != null)
             {
                 yield return _gameManager.StartCoroutine(
@@ -183,7 +202,8 @@ public class AIService : MonoBehaviour
 
         if (npc.IsTargetInCurrentWeaponRange(target) && !target.Stats.IsDead)
         {
-            if (!ShouldUseManeuver(npc, target) || !_gameManager.TryNPCSpecialAttackIfBeneficialForAI(npc, target))
+            bool usedSpecial = ShouldUseManeuver(npc, target) && TryExecutePreferredManeuver(npc, target, profile);
+            if (!usedSpecial)
                 yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, target));
             else
                 yield return new WaitForSeconds(0.8f);
@@ -196,6 +216,8 @@ public class AIService : MonoBehaviour
 
     private IEnumerator ExecuteRangedKiterTurn(CharacterController npc)
     {
+        AIProfile profile = GetProfile(npc);
+
         CharacterController closestPC = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
         if (closestPC == null)
             yield break;
@@ -203,7 +225,7 @@ public class AIService : MonoBehaviour
         int distToClosestPC = SquareGridUtils.GetDistance(npc.GridPosition, closestPC.GridPosition);
         if (distToClosestPC <= 2)
         {
-            SquareCell retreatCell = EvaluateMovementOptions(npc, closestPC.GridPosition, retreat: true);
+            SquareCell retreatCell = EvaluateMovementOptions(npc, closestPC.GridPosition, retreat: true, profile: profile);
             if (retreatCell != null)
             {
                 yield return _gameManager.StartCoroutine(
@@ -223,14 +245,15 @@ public class AIService : MonoBehaviour
 
         if (distToRangedTarget <= maxRange && !rangedTarget.Stats.IsDead)
         {
-            if (!ShouldUseManeuver(npc, rangedTarget) || !_gameManager.TryNPCSpecialAttackIfBeneficialForAI(npc, rangedTarget))
+            bool usedSpecial = ShouldUseManeuver(npc, rangedTarget) && TryExecutePreferredManeuver(npc, rangedTarget, profile);
+            if (!usedSpecial)
                 yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, rangedTarget));
             else
                 yield return new WaitForSeconds(0.8f);
         }
         else if (distToRangedTarget > maxRange && npc.Actions.HasMoveAction)
         {
-            SquareCell approachCell = EvaluateMovementOptions(npc, rangedTarget.GridPosition, retreat: false);
+            SquareCell approachCell = EvaluateMovementOptions(npc, rangedTarget.GridPosition, retreat: false, profile: profile);
             if (approachCell != null)
             {
                 yield return _gameManager.StartCoroutine(
@@ -261,9 +284,11 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        AIProfile profile = GetProfile(npc);
+
         if (!npc.IsTargetInCurrentWeaponRange(target))
         {
-            SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target);
+            SquareCell bestCell = EvaluateMovementOptions(npc, target.GridPosition, retreat: false, target, profile);
             if (bestCell != null)
             {
                 yield return _gameManager.StartCoroutine(
@@ -280,7 +305,8 @@ public class AIService : MonoBehaviour
 
         if (npc.IsTargetInCurrentWeaponRange(target) && !target.Stats.IsDead)
         {
-            if (!ShouldUseManeuver(npc, target) || !_gameManager.TryNPCSpecialAttackIfBeneficialForAI(npc, target))
+            bool usedSpecial = ShouldUseManeuver(npc, target) && TryExecutePreferredManeuver(npc, target, profile);
+            if (!usedSpecial)
                 yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, target));
             else
                 yield return new WaitForSeconds(0.8f);
@@ -293,10 +319,23 @@ public class AIService : MonoBehaviour
 
     private const string ArmorPriorityBehaviorTag = "Uses Armor-Based Targeting";
 
+    private static AIProfile GetProfile(CharacterController npc)
+    {
+        return npc != null ? npc.aiProfile : null;
+    }
+
     public CharacterController SelectBestTarget(CharacterController npc, List<CharacterController> allCombatants)
     {
         if (npc == null || allCombatants == null)
             return null;
+
+        AIProfile profile = GetProfile(npc);
+        if (profile != null)
+        {
+            CharacterController profiled = SelectBestTargetFromProfile(npc, allCombatants, profile);
+            if (profiled != null)
+                return profiled;
+        }
 
         if (UsesArmorPriorityTargeting(npc))
         {
@@ -306,6 +345,33 @@ public class AIService : MonoBehaviour
         }
 
         return SelectBestTargetDefault(npc, allCombatants);
+    }
+
+    private CharacterController SelectBestTargetFromProfile(CharacterController npc, List<CharacterController> allCombatants, AIProfile profile)
+    {
+        CharacterController best = null;
+        float bestScore = float.NegativeInfinity;
+
+        for (int i = 0; i < allCombatants.Count; i++)
+        {
+            CharacterController candidate = allCombatants[i];
+            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+                continue;
+
+            float score = profile.ScoreTarget(candidate, npc);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+
+        if (best != null)
+            Debug.Log($"[AI][Profile:{profile.ProfileName}] {npc.Stats.CharacterName} targets {best.Stats.CharacterName} score={bestScore:F1}");
+
+        return best;
     }
 
     private CharacterController SelectBestTargetDefault(CharacterController npc, List<CharacterController> allCombatants)
@@ -462,19 +528,26 @@ public class AIService : MonoBehaviour
         return score;
     }
 
-    public SquareCell EvaluateMovementOptions(CharacterController mover, Vector2Int targetPos, bool retreat, CharacterController targetCharacter = null)
+    public SquareCell EvaluateMovementOptions(CharacterController mover, Vector2Int targetPos, bool retreat, CharacterController targetCharacter = null, AIProfile profile = null)
     {
         if (mover == null || mover.Stats == null || _gameManager.Grid == null)
             return null;
 
+        if (profile == null)
+            profile = GetProfile(mover);
+
         List<SquareCell> moveCells = _gameManager.Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);
-        SquareCell bestCell = null;
-
-        int bestDistanceMetric = retreat ? int.MinValue : int.MaxValue;
-        bool bestCanThreaten = false;
-        bool bestWouldFlank = false;
-
         List<CharacterController> allCombatants = targetCharacter != null ? _gameManager.GetAllCharactersForAI() : null;
+
+        SquareCell bestCell = null;
+        float bestScore = float.NegativeInfinity;
+
+        int preferredRange = profile != null && profile.Movement != null
+            ? Mathf.Max(0, profile.Movement.PreferredRangeSquares)
+            : 1;
+
+        bool avoidAoOs = profile != null && profile.Movement != null && profile.Movement.AvoidAoOs;
+        bool seekFlanking = profile == null || profile.Movement == null || profile.Movement.SeekFlanking;
 
         for (int i = 0; i < moveCells.Count; i++)
         {
@@ -485,17 +558,11 @@ public class AIService : MonoBehaviour
             if (!_gameManager.Grid.CanPlaceCreature(cell.Coords, mover.GetVisualSquaresOccupied(), mover))
                 continue;
 
-            int dist = SquareGridUtils.GetDistance(cell.Coords, targetPos);
-            if (retreat)
-            {
-                if (dist > bestDistanceMetric)
-                {
-                    bestDistanceMetric = dist;
-                    bestCell = cell;
-                }
+            AoOPathResult pathResult = _gameManager.FindPath(mover, cell.Coords, avoidThreats: false, maxRangeOverride: mover.Stats.MoveRange);
+            if (pathResult == null || pathResult.Path == null)
                 continue;
-            }
 
+            int dist = SquareGridUtils.GetDistance(cell.Coords, targetPos);
             bool canThreatenFromCell = false;
             bool wouldFlankFromCell = false;
             if (targetCharacter != null)
@@ -513,20 +580,28 @@ public class AIService : MonoBehaviour
                 }
             }
 
-            bool better = false;
-            if (wouldFlankFromCell != bestWouldFlank)
-                better = wouldFlankFromCell;
-            else if (canThreatenFromCell != bestCanThreaten)
-                better = canThreatenFromCell;
-            else if (dist < bestDistanceMetric)
-                better = true;
-
-            if (better)
+            float score;
+            if (retreat)
             {
-                bestDistanceMetric = dist;
+                score = dist * 2f;
+            }
+            else
+            {
+                int distanceToPreferred = Mathf.Abs(dist - preferredRange);
+                score = -distanceToPreferred * 2f;
+                if (canThreatenFromCell)
+                    score += 2f;
+                if (seekFlanking && wouldFlankFromCell)
+                    score += 3f;
+            }
+
+            if (pathResult.ProvokesAoOs)
+                score += avoidAoOs ? -1000f : -2f * pathResult.ProvokedAoOs.Count;
+
+            if (score > bestScore)
+            {
+                bestScore = score;
                 bestCell = cell;
-                bestCanThreaten = canThreatenFromCell;
-                bestWouldFlank = wouldFlankFromCell;
             }
         }
 
@@ -561,12 +636,51 @@ public class AIService : MonoBehaviour
         if (!npc.Actions.HasStandardAction)
             return false;
 
+        AIProfile profile = GetProfile(npc);
+        if (profile != null)
+        {
+            SpecialAttackType? preferred = profile.GetPreferredManeuver(npc, target);
+            if (preferred.HasValue)
+            {
+                if (preferred.Value == SpecialAttackType.Trip)
+                    return !target.HasCondition(CombatConditionType.Prone) && npc.HasMeleeWeaponEquipped();
+
+                if (preferred.Value == SpecialAttackType.Disarm)
+                    return target.GetEquippedMainWeapon() != null;
+
+                if (preferred.Value == SpecialAttackType.Grapple)
+                    return profile.ShouldInitiateGrapple(npc, target);
+
+                return true;
+            }
+
+            // Profile present but no preferred maneuver => obey profile and skip legacy fallback.
+            return false;
+        }
+
         if (target.GetEquippedMainWeapon() != null && npc.Stats.STRMod >= 3)
             return true; // disarm preference
         if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped())
             return true; // trip preference
 
         return npc.Stats.STRMod >= 4;
+    }
+
+    private bool TryExecutePreferredManeuver(CharacterController npc, CharacterController target, AIProfile profile)
+    {
+        if (npc == null || target == null)
+            return false;
+
+        if (profile != null)
+        {
+            SpecialAttackType? preferred = profile.GetPreferredManeuver(npc, target);
+            if (preferred.HasValue)
+                return _gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, preferred.Value);
+
+            return false;
+        }
+
+        return _gameManager.TryNPCSpecialAttackIfBeneficialForAI(npc, target);
     }
 
     public SpellData SelectSpell(CharacterController caster, CharacterController target)

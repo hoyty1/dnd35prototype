@@ -8720,6 +8720,9 @@ public partial class GameManager : MonoBehaviour
     public bool TryNPCSpecialAttackIfBeneficialForAI(CharacterController npc, CharacterController target)
         => TryNPCSpecialAttackIfBeneficial(npc, target);
 
+    public bool TryNPCSpecialAttackByTypeForAI(CharacterController npc, CharacterController target, SpecialAttackType attackType)
+        => TryNPCSpecialAttackIfBeneficial(npc, target, attackType);
+
     public IEnumerator NPCPerformAttackForAI(CharacterController npc, CharacterController target)
         => NPCPerformAttack(npc, target);
 
@@ -11352,20 +11355,28 @@ public partial class GameManager : MonoBehaviour
 
     private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target)
     {
+        return TryNPCSpecialAttackIfBeneficial(npc, target, null);
+    }
+
+    private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target, SpecialAttackType? forcedChoice)
+    {
         if (npc == null || target == null) return false;
         if (npc.IsGrappling()) return false;
         if (!npc.Actions.HasStandardAction) return false;
 
-        SpecialAttackType? choice = null;
+        SpecialAttackType? choice = forcedChoice;
 
-        if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped())
-            choice = SpecialAttackType.Trip;
+        if (!choice.HasValue)
+        {
+            if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped())
+                choice = SpecialAttackType.Trip;
 
-        if (choice == null && target.GetEquippedMainWeapon() != null && npc.Stats.STRMod >= 3)
-            choice = SpecialAttackType.Disarm;
+            if (choice == null && target.GetEquippedMainWeapon() != null && npc.Stats.STRMod >= 3)
+                choice = SpecialAttackType.Disarm;
 
-        if (choice == null && npc.Stats.STRMod >= 4)
-            choice = SpecialAttackType.Grapple;
+            if (choice == null && npc.Stats.STRMod >= 4)
+                choice = SpecialAttackType.Grapple;
+        }
 
         if (choice == null) return false;
 
