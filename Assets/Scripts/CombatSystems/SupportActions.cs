@@ -1273,6 +1273,13 @@ public partial class GameManager
             yield break;
         }
 
+        if (charger.Actions == null || !charger.Actions.UseFullRoundAction())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {charger.Stats.CharacterName} cannot charge: no full-round action remaining.");
+            ShowActionChoices();
+            yield break;
+        }
+
         CombatUI?.ShowCombatLog(_pendingChargeBullRush
             ? $"🏇 {charger.Stats.CharacterName} charges and attempts a bull rush on {target.Stats.CharacterName}!"
             : $"🏇 {charger.Stats.CharacterName} charges {target.Stats.CharacterName}!");
@@ -1403,7 +1410,16 @@ public partial class GameManager
                         improvedGrabSucceeded = grabResult.Success;
 
                         if (grabResult.Success)
-                            ResolveRakeAfterSuccessfulImprovedGrab(charger, target);
+                        {
+                            if (usedPounce)
+                            {
+                                CombatUI?.ShowCombatLog($"⏹ {charger.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn.");
+                            }
+                            else
+                            {
+                                ResolveRakeAfterSuccessfulImprovedGrab(charger, target);
+                            }
+                        }
                     }
                 }
             }
@@ -1461,8 +1477,6 @@ public partial class GameManager
         charger.ApplyCondition(CombatConditionType.ChargePenalty, 1, charger.Stats.CharacterName);
         CombatUI.ShowCombatLog($"🛡 {charger.Stats.CharacterName} is charging: -2 AC until next turn.");
 
-        charger.Actions.UseFullRoundAction();
-
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
         _chargeTarget = null;
@@ -1514,6 +1528,12 @@ public partial class GameManager
         List<Vector2Int> path = GetChargePath(npc, target);
         if (path == null || path.Count == 0)
             yield break;
+
+        if (npc.Actions == null || !npc.Actions.UseFullRoundAction())
+        {
+            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} cannot charge: no full-round action remaining.");
+            yield break;
+        }
 
         CombatUI.ShowCombatLog($"🏇 {npc.Stats.CharacterName} charges {target.Stats.CharacterName}!");
 
@@ -1615,7 +1635,16 @@ public partial class GameManager
                     improvedGrabSucceeded = grabResult.Success;
 
                     if (grabResult.Success)
-                        ResolveRakeAfterSuccessfulImprovedGrab(npc, target);
+                    {
+                        if (usedPounce)
+                        {
+                            CombatUI?.ShowCombatLog($"⏹ {npc.Stats.CharacterName} established the grapple, but pounce already consumed the full-round action. Grapple attacks begin next turn.");
+                        }
+                        else
+                        {
+                            ResolveRakeAfterSuccessfulImprovedGrab(npc, target);
+                        }
+                    }
                 }
             }
         }
@@ -1655,7 +1684,6 @@ public partial class GameManager
         }
 
         npc.ApplyCondition(CombatConditionType.ChargePenalty, 1, npc.Stats.CharacterName);
-        npc.Actions.UseFullRoundAction();
         UpdateAllStatsUI();
 
         yield return new WaitForSeconds(0.8f);
