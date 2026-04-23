@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using DND35.AI;
+using Random = UnityEngine.Random;  // Resolve ambiguity with System.Random
 
 public enum SpecialAttackType
 {
