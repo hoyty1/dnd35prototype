@@ -56,3 +56,30 @@ Override these in custom profiles for extra rules:
 - `IsValidOverrunTarget(target, self)`
 
 Example usage is included in `Custom/CustomAIExample.cs`.
+
+
+## Healer Profile
+- **Specialty**: Support spellcasting and party sustain.
+- **Priority order**:
+  1. `CriticalHealing` (ally below critical threshold)
+  2. `Healing` (ally below healing threshold)
+  3. `Buffing` (all allies healthy)
+  4. `OffensiveSpell` (damage/debuff support)
+  5. `PhysicalAttack` (last resort)
+
+### Adaptive melee vs ranged (physical fallback)
+Healer physical mode is chosen dynamically from stats:
+- compares **Armor Class** against `MinimumMeleeArmorClass`
+- compares **melee attack bonus** vs **ranged attack bonus**
+- can force ranged when AC is low (`ForceRangedIfLowAC`)
+
+### Default thresholds
+- `HealingThreshold`: **70% HP**
+- `CriticalHealingThreshold`: **25% HP**
+- `HealthyThreshold`: **75% HP**
+- `MinimumMeleeArmorClass`: **16**
+- `AttackBonusPreference`: **+2**
+
+### Tuning examples
+- **Dedicated healer**: raise `HealingThreshold` and `CriticalHealingThreshold`, keep `ForceRangedIfLowAC = true`
+- **War cleric**: lower `HealingThreshold`, lower `MinimumMeleeArmorClass`, smaller `AttackBonusPreference`

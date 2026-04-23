@@ -82,6 +82,41 @@ public class AIService : MonoBehaviour
         AIProfile profile = GetProfile(npc);
         if (profile != null)
         {
+            if (profile is HealerAIProfile healerProfile)
+            {
+                List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
+                bool hasCastableSpells = HasCastablePreparedSpells(npc);
+                HealerActionType actionType = healerProfile.DetermineActionPriority(npc, allCombatants, hasCastableSpells);
+
+                Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} action priority: {actionType}");
+
+                if (actionType == HealerActionType.PhysicalAttack)
+                {
+                    CombatStyle physicalStyle = healerProfile.DetermineCombatMode(npc);
+                    if (physicalStyle == CombatStyle.Ranged)
+                    {
+                        yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
+                    }
+                    else
+                    {
+                        yield return _gameManager.StartCoroutine(ExecuteAggressiveMeleeTurn(npc, targetPC));
+                    }
+
+                    yield break;
+                }
+
+                if (actionType == HealerActionType.CriticalHealing || actionType == HealerActionType.Healing)
+                {
+                    CharacterController healTarget = healerProfile.GetPriorityHealTarget(npc, allCombatants);
+                    if (healTarget != null && healTarget.Stats != null)
+                        Debug.Log($"[AI][Healer] {npc.Stats.CharacterName} would prioritize healing {healTarget.Stats.CharacterName}.");
+                }
+
+                // Spell execution remains handled by existing combat flow; keep support casters in ranged shell for now.
+                yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
+                yield break;
+            }
+
             if (profile.CombatStyle == CombatStyle.Ranged)
             {
                 yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
@@ -685,6 +720,15 @@ public class AIService : MonoBehaviour
         }
 
         return _gameManager.TryNPCSpecialAttackIfBeneficialForAI(npc, target);
+    }
+
+    private static bool HasCastablePreparedSpells(CharacterController caster)
+    {
+        if (caster == null)
+            return false;
+
+        SpellcastingComponent spellcasting = caster.GetComponent<SpellcastingComponent>();
+        return spellcasting != null && spellcasting.CanCastSpells && spellcasting.HasAnyCastablePreparedSpell();
     }
 
     public SpellData SelectSpell(CharacterController caster, CharacterController target)

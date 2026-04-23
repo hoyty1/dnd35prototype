@@ -33,6 +33,12 @@ namespace Tests.AI
             TestEvokerSchoolPriority();
             TestAbjurerPrefersSingleTarget();
             TestSpellcasterAOEAvoidsUnsafeFriendlyFire();
+            TestHealerPrioritizesHealing();
+            TestHealerUsesBuffingWhenAlliesHealthy();
+            TestHealerChoosesCriticalHealing();
+            TestHealerChoosesMeleeWithHighACAndMeleeAB();
+            TestHealerChoosesRangedWithLowAC();
+            TestHealerPrioritizesMostWoundedAlly();
 
             Debug.Log($"====== AI PROFILE RESULTS: {_passed} passed, {_failed} failed ======");
         }
@@ -356,6 +362,168 @@ namespace Tests.AI
                     profile,
                     gmGo,
                     gridGo);
+            }
+        }
+
+        private static void TestHealerPrioritizesHealing()
+        {
+            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            CharacterController healer = TestHelpers.CreateCleric("Healer_Cleric", level: 5);
+            CharacterController woundedAlly = TestHelpers.CreateWarrior("Ally_Wounded", level: 5);
+
+            try
+            {
+                healer.IsPlayerControlled = true;
+                woundedAlly.IsPlayerControlled = true;
+                woundedAlly.Stats.CurrentHP = Mathf.CeilToInt(woundedAlly.Stats.TotalMaxHP * 0.30f);
+
+                var all = new List<CharacterController> { healer, woundedAlly };
+                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true);
+
+                Assert(action == HealerActionType.Healing,
+                    "Healer prioritizes healing for wounded ally",
+                    $"(action={action})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(healer != null ? healer.gameObject : null,
+                    woundedAlly != null ? woundedAlly.gameObject : null,
+                    profile);
+            }
+        }
+
+        private static void TestHealerUsesBuffingWhenAlliesHealthy()
+        {
+            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            CharacterController healer = TestHelpers.CreateCleric("Healer_Buffer", level: 5);
+            CharacterController healthyAlly = TestHelpers.CreateWarrior("Ally_Healthy", level: 5);
+
+            try
+            {
+                healer.IsPlayerControlled = true;
+                healthyAlly.IsPlayerControlled = true;
+
+                var all = new List<CharacterController> { healer, healthyAlly };
+                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true);
+
+                Assert(action == HealerActionType.Buffing,
+                    "Healer chooses buffing when party is healthy",
+                    $"(action={action})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(healer != null ? healer.gameObject : null,
+                    healthyAlly != null ? healthyAlly.gameObject : null,
+                    profile);
+            }
+        }
+
+        private static void TestHealerChoosesCriticalHealing()
+        {
+            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            CharacterController healer = TestHelpers.CreateCleric("Healer_Critical", level: 5);
+            CharacterController criticalAlly = TestHelpers.CreateWarrior("Ally_Critical", level: 5);
+
+            try
+            {
+                healer.IsPlayerControlled = true;
+                criticalAlly.IsPlayerControlled = true;
+                criticalAlly.Stats.CurrentHP = Mathf.CeilToInt(criticalAlly.Stats.TotalMaxHP * 0.15f);
+
+                var all = new List<CharacterController> { healer, criticalAlly };
+                HealerActionType action = profile.DetermineActionPriority(healer, all, hasCastableSpells: true);
+
+                Assert(action == HealerActionType.CriticalHealing,
+                    "Healer chooses critical healing for emergency HP",
+                    $"(action={action})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(healer != null ? healer.gameObject : null,
+                    criticalAlly != null ? criticalAlly.gameObject : null,
+                    profile);
+            }
+        }
+
+        private static void TestHealerChoosesMeleeWithHighACAndMeleeAB()
+        {
+            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            CharacterController healer = TestHelpers.CreateCleric("Healer_MeleeMode", level: 6);
+
+            try
+            {
+                healer.Stats.DEX = 12;
+                healer.Stats.STR = 18;
+                healer.Stats.ArmorBonus = 8;
+                healer.Stats.ShieldBonus = 2;
+
+                CombatStyle mode = profile.DetermineCombatMode(healer);
+                Assert(mode == CombatStyle.Melee,
+                    "Healer chooses melee with high AC and stronger melee bonus",
+                    $"(mode={mode}, AC={healer.Stats.GetArmorClass()}, melee={healer.Stats.GetMeleeAttackBonus()}, ranged={healer.Stats.GetRangedAttackBonus()})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(healer != null ? healer.gameObject : null, profile);
+            }
+        }
+
+        private static void TestHealerChoosesRangedWithLowAC()
+        {
+            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            CharacterController healer = TestHelpers.CreateCleric("Healer_RangedMode", level: 6);
+
+            try
+            {
+                healer.Stats.STR = 18;
+                healer.Stats.DEX = 12;
+                healer.Stats.ArmorBonus = 1;
+                healer.Stats.ShieldBonus = 0;
+
+                CombatStyle mode = profile.DetermineCombatMode(healer);
+                Assert(mode == CombatStyle.Ranged,
+                    "Healer chooses ranged when AC is low",
+                    $"(mode={mode}, AC={healer.Stats.GetArmorClass()})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(healer != null ? healer.gameObject : null, profile);
+            }
+        }
+
+        private static void TestHealerPrioritizesMostWoundedAlly()
+        {
+            HealerAIProfile profile = ScriptableObject.CreateInstance<HealerAIProfile>();
+            CharacterController healer = TestHelpers.CreateCleric("Healer_Targeting", level: 5);
+            CharacterController allyA = TestHelpers.CreateWarrior("Ally_A", level: 5);
+            CharacterController allyB = TestHelpers.CreateWarrior("Ally_B", level: 5);
+            CharacterController allyC = TestHelpers.CreateWarrior("Ally_C", level: 5);
+
+            try
+            {
+                healer.IsPlayerControlled = true;
+                allyA.IsPlayerControlled = true;
+                allyB.IsPlayerControlled = true;
+                allyC.IsPlayerControlled = true;
+
+                allyA.Stats.CurrentHP = Mathf.CeilToInt(allyA.Stats.TotalMaxHP * 0.62f);
+                allyB.Stats.CurrentHP = Mathf.CeilToInt(allyB.Stats.TotalMaxHP * 0.20f);
+                allyC.Stats.CurrentHP = Mathf.CeilToInt(allyC.Stats.TotalMaxHP * 0.68f);
+
+                var all = new List<CharacterController> { healer, allyA, allyB, allyC };
+                CharacterController target = profile.GetPriorityHealTarget(healer, all);
+
+                Assert(target == allyB,
+                    "Healer prioritizes most wounded ally",
+                    $"(selected={target?.Stats?.CharacterName ?? "null"})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(healer != null ? healer.gameObject : null,
+                    allyA != null ? allyA.gameObject : null,
+                    allyB != null ? allyB.gameObject : null,
+                    allyC != null ? allyC.gameObject : null,
+                    profile);
             }
         }
     }

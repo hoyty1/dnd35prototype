@@ -1061,6 +1061,30 @@ public class CharacterStats
     /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier + morale bonus + condition penalties.</summary>
     public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier + MoraleAttackBonus + ConditionAttackPenalty;
 
+    /// <summary>
+    /// Convenience wrapper for AC comparisons used by AI profiles.
+    /// </summary>
+    public int GetArmorClass()
+    {
+        return ArmorClass;
+    }
+
+    /// <summary>
+    /// Estimated melee attack bonus for AI mode decisions.
+    /// </summary>
+    public int GetMeleeAttackBonus()
+    {
+        return BaseAttackBonus + STRMod + SizeModifier + MoraleAttackBonus + ConditionAttackPenalty;
+    }
+
+    /// <summary>
+    /// Estimated ranged attack bonus for AI mode decisions.
+    /// </summary>
+    public int GetRangedAttackBonus()
+    {
+        return BaseAttackBonus + DEXMod + SizeModifier + MoraleAttackBonus + ConditionAttackPenalty;
+    }
+
     /// <summary>Movement speed in squares per turn after class bonuses, encumbrance, conditions, and 5-ft rounding.</summary>
     public int MoveRange
     {
