@@ -195,6 +195,53 @@ public class CombatFlowService : MonoBehaviour
         return flankLogPrefix + damageModePrefix + result.GetDetailedSummary();
     }
 
+    private bool ResolveRangedAttackAoOIfProvoked(CharacterController attacker)
+    {
+        if (_gameManager == null || attacker == null || attacker.Stats == null || attacker.Stats.IsDead)
+            return true;
+
+        List<CharacterController> threateningEnemies = ThreatSystem.GetThreateningEnemies(
+            attacker.GridPosition,
+            attacker,
+            _gameManager.Combat_GetAllCharacters());
+
+        threateningEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+
+        if (threateningEnemies.Count == 0)
+            return true;
+
+        _gameManager.CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} makes a ranged attack while threatened and provokes {threateningEnemies.Count} attack(s) of opportunity.");
+
+        foreach (CharacterController enemy in threateningEnemies)
+        {
+            CombatResult aooResult = ThreatSystem.ExecuteAoO(enemy, attacker);
+            if (aooResult == null)
+                continue;
+
+            _gameManager.CombatUI?.ShowCombatLog($"⚔ AoO vs ranged attack: {aooResult.GetDetailedSummary()}");
+
+            if (attacker.Stats.IsDead)
+            {
+                _gameManager.CombatUI?.ShowCombatLog($"<color=#FF6644>💀 {attacker.Stats.CharacterName} is slain before completing the ranged attack.</color>");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool IsRangedOrThrownAttack(RangeInfo rangeInfo)
+    {
+        if (rangeInfo != null)
+            return !rangeInfo.IsMelee;
+
+        if (_gameManager == null)
+            return false;
+
+        GameManager.AttackType currentType = _gameManager.Combat_GetCurrentAttackType();
+        return currentType == GameManager.AttackType.Ranged || currentType == GameManager.AttackType.Thrown;
+    }
+
     public CombatResult ExecuteOffHandAttack(CharacterController attacker, CharacterController target, int attackBab, ItemData offHandWeapon, bool useThrownRange)
     {
         if (_gameManager == null || attacker == null || target == null || offHandWeapon == null)
@@ -234,6 +281,9 @@ public class CombatFlowService : MonoBehaviour
             treatAsThrownAttack: useThrownRange);
 
         _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreak);
+
+        if (IsRangedOrThrownAttack(rangeInfo) && !ResolveRangedAttackAoOIfProvoked(attacker))
+            return null;
 
         CombatResult result = attacker.Attack(
             target,
@@ -290,6 +340,12 @@ public class CombatFlowService : MonoBehaviour
             treatAsThrownAttack: _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown);
 
         _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
+
+        if (IsRangedOrThrownAttack(rangeInfo) && !ResolveRangedAttackAoOIfProvoked(attacker))
+        {
+            _gameManager.Combat_EndAttackSequence();
+            return;
+        }
 
         CombatResult result = attacker.Attack(
             target,
@@ -414,6 +470,9 @@ public class CombatFlowService : MonoBehaviour
             treatAsThrownAttack: _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown);
 
         _gameManager.Combat_ProcessTurnUndeadMeleeFearBreak(attacker, target, isMeleeFearBreakAttack);
+
+        if (IsRangedOrThrownAttack(rangeInfo) && !ResolveRangedAttackAoOIfProvoked(attacker))
+            return;
 
         CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
         _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
