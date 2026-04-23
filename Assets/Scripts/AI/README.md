@@ -29,8 +29,39 @@ See `Custom/CustomAIExample.cs` for a template.
 ## Assigning Profiles
 Assign `CharacterController.aiProfile` on any NPC. During NPC turns, `AIService` reads this profile and adjusts:
 - target scoring
-- movement (including AoO avoidance preference)
+- movement scoring preferences (preferred range, AoO-avoidance weight, flanking bias)
 - maneuver selection hints (trip/disarm/grapple)
+
+## Dual-Layer Runtime AI (Important)
+This project currently uses **both** systems together at runtime:
+
+1. **`EnemyAIProfileArchetype` / `AIProfile`** (decision brain)
+   - Built in `GameManager.BuildRuntimeAIProfile(def)` and assigned to `npc.aiProfile`.
+   - Drives target scoring, maneuver preference, grapple intent, and spell scoring.
+
+2. **`EnemyAIBehavior`** (tactical shell)
+   - Stored per NPC in `GameManager._npcAIBehaviors`.
+   - Passed into `AIService.ExecuteNPCTurn(npc, behavior)`.
+   - Selects which top-level tactical coroutine runs (`AggressiveMelee`, `DefensiveMelee`, `RangedKiter`).
+
+In `AIService`, the intent is explicit: profile drives detailed decisions, while `EnemyAIBehavior` still selects the tactical shell.
+
+### Practical interpretation
+- **AIProfileArchetype** answers: *"Who should I target, which maneuver/spell should I prefer, and why?"*
+- **AIBehavior** answers: *"Should this turn execute aggressive melee, defensive melee, or ranged-kiting movement/attack flow?"*
+
+### Is `AIBehavior` redundant?
+Not at runtime today.
+- If a profile exists, behavior is still used to choose the shell (except some profile-driven ranged cases).
+- If a profile is missing, behavior is the direct fallback switch.
+
+### What if you remove `AIBehavior = ...` from one enemy entry?
+For entries like wolf that omit the assignment, `EnemyDefinition.AIBehavior` defaults to `AggressiveMelee`, so behavior is effectively unchanged **today**.
+
+However, removing the field assignment broadly would:
+- collapse many enemies to default aggressive behavior,
+- lose per-enemy tactical shell selection (defensive/ranged),
+- reduce combat variety and could regress intended encounter behavior.
 
 ## Tag Priority Examples
 - `Race: Elf`
