@@ -5488,6 +5488,9 @@ public class CharacterController : MonoBehaviour
         }
 
         bool isUnarmed = weapon == null;
+        if (isUnarmed && ShouldUseInnateNaturalAttackProfile(null))
+            return ResolveNaturalAttackRoutineWhileGrappling(opponent, maneuverName);
+
         DamageModeAttackProfile damageMode = ResolveDamageModeAttackProfile(weapon);
 
         int weaponNonProfPenalty = isUnarmed ? 0 : Stats.GetWeaponNonProficiencyPenalty(weapon);
@@ -5601,6 +5604,103 @@ public class CharacterController : MonoBehaviour
             Log = string.Join("\n", logLines)
         };
     }
+
+    /// <summary>
+    /// Grapple natural attack routine for creatures with innate natural attacks.
+    /// D&D 3.5e: Use full natural attack routine while grappling, plus rake when available.
+    /// Tiger example: 2 claws + bite + 2 rakes.
+    /// </summary>
+    private SpecialAttackResult ResolveNaturalAttackRoutineWhileGrappling(CharacterController opponent, string maneuverName)
+    {
+        if (opponent == null || opponent.Stats == null || Stats == null)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = maneuverName,
+                Success = false,
+                Log = "No valid grapple opponent."
+            };
+        }
+
+        int targetHpBefore = opponent.Stats.CurrentHP;
+        FullAttackResult naturalRoutine = FullAttack(
+            opponent,
+            isFlanking: false,
+            flankingBonus: 0,
+            flankingPartnerName: null,
+            rangeInfo: null,
+            startAttackIndex: 0,
+            maxAttacks: int.MaxValue);
+
+        int naturalAttackCount = naturalRoutine != null && naturalRoutine.Attacks != null ? naturalRoutine.Attacks.Count : 0;
+        int naturalHitCount = 0;
+        int naturalDamage = 0;
+
+        if (naturalRoutine != null && naturalRoutine.Attacks != null)
+        {
+            for (int i = 0; i < naturalRoutine.Attacks.Count; i++)
+            {
+                CombatResult attack = naturalRoutine.Attacks[i];
+                if (attack != null && attack.Hit)
+                {
+                    naturalHitCount++;
+                    naturalDamage += attack.FinalDamageDealt;
+                }
+            }
+        }
+
+        int rakeAttackCount = 0;
+        int rakeHitCount = 0;
+        int rakeDamage = 0;
+        bool rakeExecuted = false;
+
+        if (Stats.HasRake
+            && TryGetGrappleState(out CharacterController grappledOpponent, out _, out _, out _)
+            && grappledOpponent == opponent
+            && !opponent.Stats.IsDead)
+        {
+            FullAttackResult rakeRoutine = PerformRakeAttacks(opponent, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+            if (rakeRoutine != null && rakeRoutine.Attacks != null && rakeRoutine.Attacks.Count > 0)
+            {
+                rakeExecuted = true;
+                rakeAttackCount = rakeRoutine.Attacks.Count;
+                for (int i = 0; i < rakeRoutine.Attacks.Count; i++)
+                {
+                    CombatResult attack = rakeRoutine.Attacks[i];
+                    if (attack != null && attack.Hit)
+                    {
+                        rakeHitCount++;
+                        rakeDamage += attack.FinalDamageDealt;
+                    }
+                }
+            }
+        }
+
+        int totalAttackCount = naturalAttackCount + rakeAttackCount;
+        int totalHitCount = naturalHitCount + rakeHitCount;
+        int totalDamage = naturalDamage + rakeDamage;
+
+        var logLines = new List<string>
+        {
+            $"{Stats.CharacterName} mauls {opponent.Stats.CharacterName} while grappling.",
+            $"Natural attacks: {naturalAttackCount} (full routine while grappling).",
+            rakeExecuted
+                ? $"Rake attacks: {rakeAttackCount} (grapple bonus attacks)."
+                : "Rake attacks: 0.",
+            $"Total attacks: {totalAttackCount} | Hits: {totalHitCount} | Damage: {totalDamage}",
+            $"Target HP: {targetHpBefore} -> {opponent.Stats.CurrentHP}"
+        };
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = maneuverName,
+            Success = totalHitCount > 0,
+            DamageDealt = totalDamage,
+            TargetKilled = opponent.Stats.IsDead,
+            Log = string.Join("\n", logLines)
+        };
+    }
+
     private SpecialAttackResult ResolveDisarmSmallObjectStub(CharacterController opponent, bool isPinned)
     {
         if (opponent == null || opponent.Stats == null)

@@ -1883,6 +1883,23 @@ public partial class GameManager
 
         if (!opponentPinned && legalActions.Contains(GrappleActionType.AttackUnarmed))
         {
+            int naturalAttackCount = 0;
+            List<NaturalAttackDefinition> naturalAttacks = npc.Stats.GetValidNaturalAttacks();
+            if (naturalAttacks != null)
+            {
+                for (int i = 0; i < naturalAttacks.Count; i++)
+                    naturalAttackCount += Mathf.Max(1, naturalAttacks[i].Count);
+            }
+
+            int rakeAttackCount = 0;
+            if (npc.Stats.HasRake)
+            {
+                NaturalAttackDefinition rakeAttack = npc.Stats.GetRakeAttackDefinition();
+                rakeAttackCount = Mathf.Max(1, rakeAttack != null ? rakeAttack.Count : 2);
+            }
+
+            Debug.Log($"[AI][Grapple] {npc.Stats.CharacterName} chooses full natural grapple routine: natural={naturalAttackCount}, rake={rakeAttackCount}, total={naturalAttackCount + rakeAttackCount}.");
+
             chosenAction = GrappleActionType.AttackUnarmed;
             return true;
         }
