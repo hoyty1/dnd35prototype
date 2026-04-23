@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using DND35.AI.Profiles;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -2068,6 +2069,7 @@ public partial class GameManager : MonoBehaviour
         stats.IsTallCreature = def.IsTallCreature;
         stats.NaturalArmorBonus = def.NaturalArmorBonus;
         stats.HasTripAttack = def.HasTripAttack;
+        stats.TripAttackCheckBonus = def.TripAttackCheckBonus;
 
         // Ensure size-derived natural reach is respected for creatures larger than Medium.
         if (stats.AttackRange < stats.NaturalReachSquares)
@@ -2128,8 +2130,21 @@ public partial class GameManager : MonoBehaviour
             concMgr = npc.gameObject.AddComponent<ConcentrationManager>();
         concMgr.Init(stats, npc);
 
+        npc.aiProfile = BuildRuntimeAIProfile(def);
+
         Debug.Log($"[GameManager] {def.Name}: HP {stats.MaxHP} AC {stats.ArmorClass} " +
                   $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq");
+    }
+
+    private DND35.AI.AIProfile BuildRuntimeAIProfile(EnemyDefinition def)
+    {
+        if (def == null)
+            return null;
+
+        if (string.Equals(def.CreatureType, "Animal", StringComparison.OrdinalIgnoreCase))
+            return ScriptableObject.CreateInstance<AnimalAIProfile>();
+
+        return null;
     }
 
     /// <summary>Helper to update all stat UI panels using 4-PC multi-NPC system.</summary>
@@ -11353,6 +11368,29 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    private void TryResolveFreeTripOnHit(CharacterController attacker, CharacterController target, CombatResult attackResult, RangeInfo attackRange)
+    {
+        if (attacker == null || target == null || attacker.Stats == null || target.Stats == null || attackResult == null)
+            return;
+
+        if (!attacker.Stats.HasTripAttack)
+            return;
+
+        if (attackRange == null || !attackRange.IsMelee)
+            return;
+
+        if (!attackResult.Hit || target.Stats.IsDead || target.HasCondition(CombatConditionType.Prone))
+            return;
+
+        SpecialAttackResult tripResult = attacker.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
+        string tripContext = tripResult.Success
+            ? "free trip follow-up"
+            : "free trip attempt failed";
+
+        CombatUI?.ShowCombatLog($"☠ {attacker.Stats.CharacterName} follows up with Trip ({tripContext}): {tripResult.Log}");
+        Debug.Log($"[NPC Trip Follow-up] {attacker.Stats.CharacterName} triggered free trip after hit. Success={tripResult.Success}");
+    }
+
     private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target)
     {
         return TryNPCSpecialAttackIfBeneficial(npc, target, null);
@@ -11429,6 +11467,8 @@ public partial class GameManager : MonoBehaviour
 
         CombatResult result = npc.Attack(target, isFlanking, flankBonus,
             flankPartner != null ? flankPartner.Stats.CharacterName : null, npcRangeInfo);
+
+        TryResolveFreeTripOnHit(npc, target, result, npcRangeInfo);
 
         string partnerName = flankPartner != null && flankPartner.Stats != null
             ? flankPartner.Stats.CharacterName

@@ -472,39 +472,43 @@ public static class EnemyDatabase
     }
 
     /// <summary>
-    /// Wolf Pack Hunter (CR 1) — Fast quadruped striker with trip tendency.
+    /// Wolf (CR 1) — D&D 3.5e Monster Manual baseline wolf.
+    /// Uses bite attacks and free trip attempts on hit.
     /// </summary>
     private static void RegisterWolfPackHunter()
     {
         Register(new EnemyDefinition
         {
             Id = "wolf_pack_hunter",
-            Name = "Wolf Pack Hunter",
-            Level = 2,
+            Name = "Wolf",
+            Level = 2,          // 2 HD animal
             CharacterClass = "Warrior",
             CreatureType = "Animal",
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = false,
             STR = 13, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
-            BAB = 2,
+            BAB = 1,
             ArmorBonus = 0,
             NaturalArmorBonus = 2,
             ShieldBonus = 0,
             DamageDice = 6,   // bite 1d6
             DamageCount = 1,
-            BonusDamage = 0,
+            BonusDamage = 1,  // Str bonus to bite damage
             BaseSpeed = 10,   // 50 ft
             AttackRange = 1,
-            BaseHitDieHP = 18,
+            BaseHitDieHP = 13,
             CreatureTags = new List<string> { "Animal" },
             HasTripAttack = true,
+            TripAttackCheckBonus = 1,
+            Feats = new List<string> { "Weapon Focus", "Track" },
+            WeaponFocusChoice = "Bite",
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = EnemyAIBehavior.AggressiveMelee,
             SpriteColor = new Color(0.72f, 0.72f, 0.72f, 1f),
             PanelColor = new Color(0.2f, 0.2f, 0.2f, 0.85f),
             NameColor = new Color(0.9f, 0.9f, 0.95f),
-            Description = "A lean predator that circles for openings and drags enemies to the ground with vicious bites."
+            Description = "A swift pack hunter from the Monster Manual baseline. It bites to pull enemies prone with free trip attempts."
         });
     }
 }
@@ -528,6 +532,7 @@ public class EnemyDefinition
     public bool IsTallCreature = true;
     public int NaturalArmorBonus;
     public bool HasTripAttack;
+    public int TripAttackCheckBonus;
     public int STR, DEX, CON, WIS, INT, CHA;
     public int BAB;
     public int ArmorBonus;

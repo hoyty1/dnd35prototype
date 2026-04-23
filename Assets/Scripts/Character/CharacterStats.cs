@@ -743,6 +743,9 @@ public class CharacterStats
     /// <summary>Whether this creature has a built-in trip-capable natural attack profile.</summary>
     public bool HasTripAttack;
 
+    /// <summary>Creature-specific modifier applied to trip checks (e.g., wolves get +1).</summary>
+    public int TripAttackCheckBonus;
+
     /// <summary>Creature type tags for this character (e.g., "Goblinoid", "Orc"). Used for racial attack bonuses.</summary>
     public List<string> CreatureTags = new List<string>();
 

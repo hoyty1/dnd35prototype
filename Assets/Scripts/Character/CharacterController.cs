@@ -5573,7 +5573,7 @@ public class CharacterController : MonoBehaviour
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
         int attackBonus = attackBonusOverride ?? Stats.BaseAttackBonus;
-        int atkTotal = atkRoll + attackBonus + Stats.STRMod + Stats.SizeModifier + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Trip") ? 4 : 0);
+        int atkTotal = atkRoll + attackBonus + Stats.STRMod + Stats.SizeModifier + Stats.TripAttackCheckBonus + Stats.ConditionAttackPenalty + (Stats.HasFeat("Improved Trip") ? 4 : 0);
         int defAbility = Mathf.Max(target.Stats.STRMod, target.Stats.DEXMod);
         int defTotal = defRoll + target.Stats.BaseAttackBonus + defAbility + target.Stats.SizeModifier + target.Stats.ConditionAttackPenalty + (target.Stats.HasFeat("Improved Trip") ? 4 : 0);
 

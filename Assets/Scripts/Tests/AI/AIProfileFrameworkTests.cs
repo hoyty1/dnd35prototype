@@ -30,6 +30,9 @@ namespace Tests.AI
             TestProfileSkipsDisarmAgainstUnarmedTarget();
             TestProfileSkipsSunderWhenNoEquipment();
             TestProfileCanSelectValidTripAndDisarm();
+            TestAnimalProfilePrefersNearestTarget();
+            TestAnimalProfileUsesNaturalTripFollowUpInsteadOfManeuver();
+            TestWolfDefinitionMatchesBaselineStats();
             TestEvokerSchoolPriority();
             TestAbjurerPrefersSingleTarget();
             TestSpellcasterAOEAvoidsUnsafeFriendlyFire();
@@ -262,6 +265,79 @@ namespace Tests.AI
                     disarmTarget != null ? disarmTarget.gameObject : null,
                     profile);
             }
+        }
+
+        private static void TestAnimalProfilePrefersNearestTarget()
+        {
+            CharacterController wolf = TestHelpers.CreateWarrior("AI_Wolf", level: 2);
+            CharacterController nearTarget = TestHelpers.CreateWarrior("Near_Target", level: 3);
+            CharacterController farTarget = TestHelpers.CreateWarrior("Far_Target", level: 3);
+            AnimalAIProfile profile = ScriptableObject.CreateInstance<AnimalAIProfile>();
+
+            try
+            {
+                TestHelpers.SetGridPosition(wolf, 0, 0);
+                TestHelpers.SetGridPosition(nearTarget, 1, 0);
+                TestHelpers.SetGridPosition(farTarget, 6, 0);
+
+                float nearScore = profile.ScoreTarget(nearTarget, wolf);
+                float farScore = profile.ScoreTarget(farTarget, wolf);
+
+                Assert(nearScore > farScore,
+                    "Animal profile prefers nearest target",
+                    $"(near={nearScore:F2}, far={farScore:F2})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(wolf != null ? wolf.gameObject : null,
+                    nearTarget != null ? nearTarget.gameObject : null,
+                    farTarget != null ? farTarget.gameObject : null,
+                    profile);
+            }
+        }
+
+        private static void TestAnimalProfileUsesNaturalTripFollowUpInsteadOfManeuver()
+        {
+            CharacterController wolf = TestHelpers.CreateWarrior("AI_Wolf_Trip", level: 2);
+            CharacterController target = TestHelpers.CreateWarrior("Trip_Target", level: 3);
+            AnimalAIProfile profile = ScriptableObject.CreateInstance<AnimalAIProfile>();
+
+            try
+            {
+                wolf.Stats.HasTripAttack = true;
+                SpecialAttackType? preferred = profile.GetPreferredManeuver(wolf, target);
+
+                Assert(!preferred.HasValue,
+                    "Animal profile defers innate trip creatures to normal attacks",
+                    $"(preferred={preferred?.ToString() ?? "none"})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(wolf != null ? wolf.gameObject : null,
+                    target != null ? target.gameObject : null,
+                    profile);
+            }
+        }
+
+        private static void TestWolfDefinitionMatchesBaselineStats()
+        {
+            EnemyDatabase.Init();
+            EnemyDefinition wolf = EnemyDatabase.Get("wolf_pack_hunter");
+
+            bool statsMatch = wolf != null
+                              && wolf.BAB == 1
+                              && wolf.BaseHitDieHP == 13
+                              && wolf.BaseSpeed == 10
+                              && wolf.NaturalArmorBonus == 2
+                              && wolf.BonusDamage == 1
+                              && wolf.HasTripAttack
+                              && wolf.TripAttackCheckBonus == 1;
+
+            Assert(statsMatch,
+                "Wolf enemy definition uses Monster Manual baseline core stats",
+                wolf == null
+                    ? "(wolf definition missing)"
+                    : $"(BAB={wolf.BAB}, HP={wolf.BaseHitDieHP}, Speed={wolf.BaseSpeed}, NA={wolf.NaturalArmorBonus}, DmgBonus={wolf.BonusDamage}, TripBonus={wolf.TripAttackCheckBonus})");
         }
 
         private static void TestEvokerSchoolPriority()

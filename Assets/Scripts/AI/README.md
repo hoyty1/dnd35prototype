@@ -11,6 +11,7 @@ This folder contains a data-driven AI profile system for NPC behavior.
 - **Berserk**: melee aggression, willing to eat AoOs, prioritizes wounded targets.
 - **Ranged**: keep distance, avoid AoOs, prioritize unarmored/light targets.
 - **Grappler**: initiate/maintain grapples, control-focused maneuvering.
+- **Animal**: pack-hunter melee profile (nearest-target pressure, AoO-aware pathing, flanking opportunity bias).
 - **Spellcaster (base)**: school-priority spell scoring + ally-aware AoE safety evaluation.
 - **Evoker**: aggressive AoE damage (Evocation-first).
 - **Abjurer**: defensive, single-target-leaning caster with strict friendly-fire limits.
