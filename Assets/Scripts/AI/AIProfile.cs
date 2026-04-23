@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace DND35.AI
 {
@@ -41,9 +44,11 @@ namespace DND35.AI
         [Header("Maneuvers")]
         public ManeuverPreferences Maneuvers = new ManeuverPreferences();
 
+#if UNITY_EDITOR
         [Header("Custom")]
         [Tooltip("Optional metadata reference for custom extension script.")]
         public MonoScript CustomAIScript;
+#endif
 
         public virtual float ScoreTarget(CharacterController target, CharacterController self)
         {
