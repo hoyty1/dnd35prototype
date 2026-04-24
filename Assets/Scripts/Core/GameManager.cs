@@ -11438,6 +11438,8 @@ public partial class GameManager : MonoBehaviour
             if (attack.Hit && attack.TotalDamage > 0)
                 CheckConcentrationOnDamage(currentTarget, attack.TotalDamage);
 
+            TryResolveFreeTripFromAttackResults(attacker, currentTarget, stepResult.Attacks, rangeInfo);
+
             if (attack.TargetKilled)
             {
                 HandleSummonDeathCleanup(currentTarget);
@@ -11917,6 +11919,21 @@ public partial class GameManager : MonoBehaviour
         Debug.Log($"[NPC Trip Follow-up] {attacker.Stats.CharacterName} triggered free trip after hit. Success={tripResult.Success}");
     }
 
+    private void TryResolveFreeTripFromAttackResults(CharacterController attacker, CharacterController target, List<CombatResult> attacks, RangeInfo attackRange)
+    {
+        if (attacker == null || target == null || attacks == null || attacks.Count == 0)
+            return;
+
+        for (int i = 0; i < attacks.Count; i++)
+        {
+            CombatResult attackResult = attacks[i];
+            TryResolveFreeTripOnHit(attacker, target, attackResult, attackRange);
+
+            if (target.Stats == null || target.Stats.IsDead || target.HasCondition(CombatConditionType.Prone))
+                break;
+        }
+    }
+
     private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target)
     {
         return TryNPCSpecialAttackIfBeneficial(npc, target, null);
@@ -12188,6 +12205,7 @@ public partial class GameManager : MonoBehaviour
             if (attack.Hit && attack.TotalDamage > 0)
                 CheckConcentrationOnDamage(currentTarget, attack.TotalDamage);
 
+            TryResolveFreeTripFromAttackResults(npc, currentTarget, stepResult.Attacks, rangeInfo);
             TryResolveImprovedGrabFromAttackResults(npc, currentTarget, stepResult.Attacks);
 
             if (currentTarget.Stats.IsDead)
@@ -12462,6 +12480,7 @@ public partial class GameManager : MonoBehaviour
             if (fullResult.TotalDamageDealt > 0)
                 CheckConcentrationOnDamage(target, fullResult.TotalDamageDealt);
 
+            TryResolveFreeTripFromAttackResults(npc, target, fullResult.Attacks, npcRangeInfo);
             TryResolveImprovedGrabFromAttackResults(npc, target, fullResult.Attacks);
 
             if (fullResult.TargetKilled)

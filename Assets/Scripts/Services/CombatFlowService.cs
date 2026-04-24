@@ -480,6 +480,8 @@ public class CombatFlowService : MonoBehaviour
             }
 
             result = naturalStep.Attacks[0];
+            _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
+
             string naturalLabel = (naturalStep.AttackLabels != null && naturalStep.AttackLabels.Count > 0)
                 ? naturalStep.AttackLabels[0]
                 : "Natural attack";
@@ -683,6 +685,16 @@ public class CombatFlowService : MonoBehaviour
 
         if (result.TotalDamageDealt > 0)
             _gameManager.Combat_CheckConcentrationOnDamage(target, result.TotalDamageDealt);
+
+        if (result.Attacks != null)
+        {
+            for (int i = 0; i < result.Attacks.Count; i++)
+            {
+                _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result.Attacks[i], rangeInfo);
+                if (target == null || target.Stats == null || target.Stats.IsDead || target.HasCondition(CombatConditionType.Prone))
+                    break;
+            }
+        }
 
         if (result.TargetKilled)
         {
