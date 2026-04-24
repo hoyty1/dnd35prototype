@@ -4655,52 +4655,56 @@ public partial class GameManager : MonoBehaviour
             ? _movementService.CheckForAoO(pc, crawlPath)
             : ThreatSystem.AnalyzePathForAoOs(pc, crawlPath, GetAllCharacters());
 
+        Vector2Int oldPos = pc.GridPosition;
+        ConsumeMoveAction(pc);
+
+        if (_movementService != null)
+            yield return StartCoroutine(_movementService.ExecuteMovement(pc, crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true));
+        else
+            yield return StartCoroutine(pc.MoveAlongPath(crawlPath, PlayerMoveSecondsPerStep, markAsMoved: true));
+
+        bool interruptedByIncapacitation = false;
         if (provokedAoOs.Count > 0)
         {
             CombatUI?.ShowCombatLog("Crawling provokes attacks of opportunity!");
             foreach (var aooInfo in provokedAoOs)
             {
-                if (pc.Stats.IsDead) break;
-
-                CharacterController threatener = aooInfo.Threatener;
-                if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead) continue;
+                CharacterController threatener = aooInfo != null ? aooInfo.Threatener : null;
+                if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead)
+                    continue;
 
                 CombatResult aooResult = _movementService != null
                     ? _movementService.TriggerAoO(threatener, pc)
                     : ThreatSystem.ExecuteAoO(threatener, pc);
-                if (aooResult != null)
+                if (aooResult == null)
+                    continue;
+
+                CombatUI?.ShowCombatLog($"⚔ AoO (crawling): {aooResult.GetDetailedSummary()}");
+                UpdateAllStatsUI();
+
+                if (aooResult.Hit && aooResult.TotalDamage > 0)
+                    CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
+
+                if (pc.IsUnconscious || pc.Stats.IsDead)
                 {
-                    CombatUI?.ShowCombatLog($"⚔ AoO (crawling): {aooResult.GetDetailedSummary()}");
-                    UpdateAllStatsUI();
-
-                    if (aooResult.Hit && aooResult.TotalDamage > 0)
-                        CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
-
-                    yield return new WaitForSeconds(0.8f);
+                    interruptedByIncapacitation = true;
+                    break;
                 }
+
+                yield return new WaitForSeconds(0.8f);
             }
         }
-
-        if (pc.Stats.IsDead)
-        {
-            CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} was slain while crawling!");
-            UpdateAllStatsUI();
-            EndActivePCTurn();
-            yield break;
-        }
-
-        Vector2Int oldPos = pc.GridPosition;
-        ConsumeMoveAction(pc);
-
-        List<Vector2Int> crawlMovePath = new List<Vector2Int> { destination.Coords };
-        if (_movementService != null)
-            yield return StartCoroutine(_movementService.ExecuteMovement(pc, crawlMovePath, PlayerMoveSecondsPerStep, markAsMoved: true));
-        else
-            yield return StartCoroutine(pc.MoveAlongPath(crawlMovePath, PlayerMoveSecondsPerStep, markAsMoved: true));
 
         RefreshFlankedConditions();
         UpdateAllStatsUI();
         InvalidatePreviewThreats();
+
+        if (interruptedByIncapacitation)
+        {
+            CombatUI?.ShowCombatLog($"⛔ {pc.Stats.CharacterName}'s crawl is interrupted by incapacitation.");
+            EndActivePCTurn();
+            yield break;
+        }
 
         CombatUI?.ShowCombatLog($"{pc.Stats.CharacterName} crawls ({oldPos.x},{oldPos.y} → {destination.Coords.x},{destination.Coords.y}).");
 
@@ -10123,67 +10127,25 @@ public partial class GameManager : MonoBehaviour
 
     private IEnumerator ResolveAoOsAndMove(CharacterController pc, AoOPathResult pathResult, bool isWithdraw = false)
     {
+        if (pc == null || pc.Stats == null)
+            yield break;
+
         CurrentSubPhase = PlayerSubPhase.Animating;
 
-        foreach (var aooInfo in pathResult.ProvokedAoOs)
-        {
-            if (pc.Stats.IsDead) break;
+        List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
+            ? pathResult.Path
+            : new List<Vector2Int>();
 
-            var threatener = aooInfo.Threatener;
-            if (threatener.Stats.IsDead) continue;
+        List<AoOThreatInfo> provokedAoOs = (pathResult != null && pathResult.ProvokedAoOs != null)
+            ? pathResult.ProvokedAoOs
+            : null;
 
-            CombatResult aooResult = _movementService != null
-                ? _movementService.TriggerAoO(threatener, pc)
-                : ThreatSystem.ExecuteAoO(threatener, pc);
-            if (aooResult != null)
-            {
-                string aooLog = $"⚔ AoO: {aooResult.GetDetailedSummary()}";
-                CombatUI.ShowCombatLog(aooLog);
-                UpdateAllStatsUI();
-
-                if (LogAttacksToConsole)
-                    Debug.Log("[Combat] " + aooLog);
-
-                // Check concentration for AoO damage
-                if (aooResult.Hit && aooResult.TotalDamage > 0)
-                {
-                    CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
-                }
-
-                yield return new WaitForSeconds(1.0f);
-            }
-        }
-
-        if (!pc.Stats.IsDead)
-        {
-            List<Vector2Int> path = (pathResult != null && pathResult.Path != null && pathResult.Path.Count > 0)
-                ? pathResult.Path
-                : new List<Vector2Int>();
-
-            yield return StartCoroutine(ExecuteMovement(pc, path, isWithdraw));
-        }
-        else
-        {
-            Debug.Log($"[GameManager] {pc.Stats.CharacterName} was slain by AoO during movement!");
-            CombatUI.ShowCombatLog($"{pc.Stats.CharacterName} was slain during movement!");
-            UpdateAllStatsUI();
-
-            if (AreAllPCsDead())
-            {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
-                CombatUI.SetActionButtonsVisible(false);
-                yield break;
-            }
-
-            yield return new WaitForSeconds(1.0f);
-            EndActivePCTurn();
-        }
+        yield return StartCoroutine(ExecuteMovement(pc, path, isWithdraw, provokedAoOs));
     }
 
-    private IEnumerator ExecuteMovement(CharacterController pc, List<Vector2Int> path, bool isWithdraw = false)
+    private IEnumerator ExecuteMovement(CharacterController pc, List<Vector2Int> path, bool isWithdraw = false, List<AoOThreatInfo> provokedAoOs = null)
     {
-        if (pc == null || path == null || path.Count == 0)
+        if (pc == null || pc.Stats == null || path == null || path.Count == 0)
             yield break;
 
         CurrentSubPhase = PlayerSubPhase.Animating;
@@ -10231,10 +10193,62 @@ public partial class GameManager : MonoBehaviour
             yield break;
         }
 
-        if (_movementService != null)
-            yield return StartCoroutine(_movementService.ExecuteMovement(pc, path, PlayerMoveSecondsPerStep, markAsMoved: true));
-        else
-            yield return StartCoroutine(pc.MoveAlongPath(path, PlayerMoveSecondsPerStep, markAsMoved: true));
+        bool interruptedByIncapacitation = false;
+        for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
+        {
+            Vector2Int step = path[pathIndex];
+            var stepPath = new List<Vector2Int> { step };
+
+            if (_movementService != null)
+                yield return StartCoroutine(_movementService.ExecuteMovement(pc, stepPath, PlayerMoveSecondsPerStep, markAsMoved: false));
+            else
+                yield return StartCoroutine(pc.MoveAlongPath(stepPath, PlayerMoveSecondsPerStep, markAsMoved: false));
+
+            if (provokedAoOs == null || provokedAoOs.Count == 0)
+                continue;
+
+            for (int aooIndex = 0; aooIndex < provokedAoOs.Count; aooIndex++)
+            {
+                AoOThreatInfo aooInfo = provokedAoOs[aooIndex];
+                if (aooInfo == null || aooInfo.PathIndex != pathIndex)
+                    continue;
+
+                CharacterController threatener = aooInfo.Threatener;
+                if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead)
+                    continue;
+
+                CombatResult aooResult = _movementService != null
+                    ? _movementService.TriggerAoO(threatener, pc)
+                    : ThreatSystem.ExecuteAoO(threatener, pc);
+                if (aooResult == null)
+                    continue;
+
+                string aooLog = $"⚔ AoO: {aooResult.GetDetailedSummary()}";
+                CombatUI?.ShowCombatLog(aooLog);
+                UpdateAllStatsUI();
+
+                if (LogAttacksToConsole)
+                    Debug.Log("[Combat] " + aooLog);
+
+                if (aooResult.Hit && aooResult.TotalDamage > 0)
+                    CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
+
+                if (pc.IsUnconscious || pc.Stats.IsDead)
+                {
+                    interruptedByIncapacitation = true;
+                    break;
+                }
+
+                yield return new WaitForSeconds(1.0f);
+            }
+
+            if (interruptedByIncapacitation)
+                break;
+        }
+
+        if (path.Count > 0)
+            pc.HasMovedThisTurn = true;
+
         CheckTurnUndeadProximityBreakingForMover(pc);
         PruneTurnUndeadTrackers();
         UpdateAllStatsUI();
@@ -10242,11 +10256,27 @@ public partial class GameManager : MonoBehaviour
         if (isWithdraw)
         {
             pc.WithdrawFirstStepProtected = false;
-            CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} completes Withdraw.");
+            if (!interruptedByIncapacitation)
+                CombatUI?.ShowCombatLog($"↩ {pc.Stats.CharacterName} completes Withdraw.");
         }
 
-        // Invalidate threat cache since positions changed
         InvalidatePreviewThreats();
+
+        if (interruptedByIncapacitation)
+        {
+            CombatUI?.ShowCombatLog($"⛔ {pc.Stats.CharacterName}'s movement stops immediately due to incapacitation.");
+
+            if (AreAllPCsDead())
+            {
+                CurrentPhase = TurnPhase.CombatOver;
+                CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+                CombatUI.SetActionButtonsVisible(false);
+                yield break;
+            }
+
+            EndActivePCTurn();
+            yield break;
+        }
 
         ShowActionChoices();
     }

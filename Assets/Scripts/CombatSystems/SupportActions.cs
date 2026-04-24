@@ -1286,36 +1286,67 @@ public partial class GameManager
             ? $"🏇 {charger.Stats.CharacterName} charges and attempts a bull rush on {target.Stats.CharacterName}!"
             : $"🏇 {charger.Stats.CharacterName} charges {target.Stats.CharacterName}!");
 
-        // Resolve provoked AoOs during charge movement.
+        // Resolve AoOs at each path step so movement can stop immediately on incapacitation.
         var provokedAoOs = CheckForAoO(charger, path);
-        foreach (var aooInfo in provokedAoOs)
+        bool interruptedByIncapacitation = false;
+        for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
         {
-            if (charger.Stats.IsDead) break;
-            if (aooInfo == null || aooInfo.Threatener == null || aooInfo.Threatener.Stats.IsDead) continue;
+            var stepPath = new List<Vector2Int> { path[pathIndex] };
+            if (_movementService != null)
+                yield return StartCoroutine(_movementService.ExecuteMovement(charger, stepPath, PlayerMoveSecondsPerStep, markAsMoved: false));
+            else
+                yield return StartCoroutine(charger.MoveAlongPath(stepPath, PlayerMoveSecondsPerStep, markAsMoved: false));
 
-            CombatResult aooResult = TriggerAoO(aooInfo.Threatener, charger);
-            if (aooResult == null) continue;
+            for (int i = 0; i < provokedAoOs.Count; i++)
+            {
+                AoOThreatInfo aooInfo = provokedAoOs[i];
+                if (aooInfo == null || aooInfo.PathIndex != pathIndex)
+                    continue;
 
-            CombatUI.ShowCombatLog($"⚔ AoO during charge: {aooResult.GetDetailedSummary()}");
-            UpdateAllStatsUI();
+                CharacterController threatener = aooInfo.Threatener;
+                if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead)
+                    continue;
 
-            if (aooResult.Hit && aooResult.TotalDamage > 0)
-                CheckConcentrationOnDamage(charger, aooResult.TotalDamage);
+                CombatResult aooResult = TriggerAoO(threatener, charger);
+                if (aooResult == null)
+                    continue;
 
-            yield return new WaitForSeconds(0.8f);
+                CombatUI.ShowCombatLog($"⚔ AoO during charge: {aooResult.GetDetailedSummary()}");
+                UpdateAllStatsUI();
+
+                if (aooResult.Hit && aooResult.TotalDamage > 0)
+                    CheckConcentrationOnDamage(charger, aooResult.TotalDamage);
+
+                if (charger.IsUnconscious || charger.Stats.IsDead)
+                {
+                    interruptedByIncapacitation = true;
+                    break;
+                }
+
+                yield return new WaitForSeconds(0.8f);
+            }
+
+            if (interruptedByIncapacitation)
+                break;
         }
 
-        if (charger.Stats.IsDead)
-        {
-            CombatUI?.ShowCombatLog($"{charger.Stats.CharacterName} falls before completing the charge.");
-            UpdateAllStatsUI();
-            if (IsPlayerTurn) EndActivePCTurn();
-            yield break;
-        }
+        if (path.Count > 0)
+            charger.HasMovedThisTurn = true;
 
-        yield return StartCoroutine(charger.MoveAlongPath(path, PlayerMoveSecondsPerStep, markAsMoved: true));
         CheckTurnUndeadProximityBreakingForMover(charger);
         PruneTurnUndeadTrackers();
+
+        if (interruptedByIncapacitation)
+        {
+            CombatUI?.ShowCombatLog($"⛔ {charger.Stats.CharacterName}'s charge is interrupted by incapacitation.");
+            UpdateAllStatsUI();
+            _chargeTarget = null;
+            _pendingChargePath.Clear();
+            _pendingChargeBullRush = false;
+            if (IsPlayerTurn)
+                EndActivePCTurn();
+            yield break;
+        }
 
         InvalidatePreviewThreats();
 
@@ -1542,29 +1573,60 @@ public partial class GameManager
         CombatUI.ShowCombatLog($"🏇 {npc.Stats.CharacterName} charges {target.Stats.CharacterName}!");
 
         var provokedAoOs = CheckForAoO(npc, path);
-        foreach (var aooInfo in provokedAoOs)
+        bool interruptedByIncapacitation = false;
+        for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
         {
-            if (npc.Stats.IsDead) break;
-            if (aooInfo == null || aooInfo.Threatener == null || aooInfo.Threatener.Stats.IsDead) continue;
+            var stepPath = new List<Vector2Int> { path[pathIndex] };
+            if (_movementService != null)
+                yield return StartCoroutine(_movementService.ExecuteMovement(npc, stepPath, NpcChargeMoveSecondsPerStep, markAsMoved: false));
+            else
+                yield return StartCoroutine(npc.MoveAlongPath(stepPath, NpcChargeMoveSecondsPerStep, markAsMoved: false));
 
-            CombatResult aooResult = TriggerAoO(aooInfo.Threatener, npc);
-            if (aooResult == null) continue;
+            for (int i = 0; i < provokedAoOs.Count; i++)
+            {
+                AoOThreatInfo aooInfo = provokedAoOs[i];
+                if (aooInfo == null || aooInfo.PathIndex != pathIndex)
+                    continue;
 
-            CombatUI.ShowCombatLog($"⚔ AoO vs {npc.Stats.CharacterName}: {aooResult.GetDetailedSummary()}");
-            UpdateAllStatsUI();
+                CharacterController threatener = aooInfo.Threatener;
+                if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead)
+                    continue;
 
-            if (aooResult.Hit && aooResult.TotalDamage > 0)
-                CheckConcentrationOnDamage(npc, aooResult.TotalDamage);
+                CombatResult aooResult = TriggerAoO(threatener, npc);
+                if (aooResult == null)
+                    continue;
 
-            yield return new WaitForSeconds(0.5f);
+                CombatUI.ShowCombatLog($"⚔ AoO vs {npc.Stats.CharacterName}: {aooResult.GetDetailedSummary()}");
+                UpdateAllStatsUI();
+
+                if (aooResult.Hit && aooResult.TotalDamage > 0)
+                    CheckConcentrationOnDamage(npc, aooResult.TotalDamage);
+
+                if (npc.IsUnconscious || npc.Stats.IsDead)
+                {
+                    interruptedByIncapacitation = true;
+                    break;
+                }
+
+                yield return new WaitForSeconds(0.5f);
+            }
+
+            if (interruptedByIncapacitation)
+                break;
         }
 
-        if (npc.Stats.IsDead)
-            yield break;
+        if (path.Count > 0)
+            npc.HasMovedThisTurn = true;
 
-        yield return StartCoroutine(npc.MoveAlongPath(path, NpcChargeMoveSecondsPerStep, markAsMoved: true));
         CheckTurnUndeadProximityBreakingForMover(npc);
         PruneTurnUndeadTrackers();
+
+        if (interruptedByIncapacitation)
+        {
+            CombatUI?.ShowCombatLog($"⛔ {npc.Stats.CharacterName}'s charge is interrupted by incapacitation.");
+            UpdateAllStatsUI();
+            yield break;
+        }
 
         CharacterController flankPartner;
         bool isFlankingCharge = CombatUtils.IsAttackerFlanking(npc, target, GetAllCharacters(), out flankPartner);
