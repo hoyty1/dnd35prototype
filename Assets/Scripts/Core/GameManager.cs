@@ -11995,7 +11995,7 @@ public partial class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    CharacterController steppedTarget;
+                    CharacterController steppedTarget = null;
                     bool stepped = profile != null
                         && profile.ShouldTakeFiveFootStepToContinueFullAttack(npc)
                         && TryTakeFiveFootStepForAdaptiveFullAttack(npc, profile, out steppedTarget);
