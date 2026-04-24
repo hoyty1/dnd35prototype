@@ -579,6 +579,7 @@ public static class AoESystem
         SquareGrid grid)
     {
         var targets = new List<CharacterController>();
+        var seenTargets = new HashSet<CharacterController>();
 
         foreach (Vector2Int pos in cellPositions)
         {
@@ -587,35 +588,36 @@ public static class AoESystem
                 continue;
 
             CharacterController occupant = cell.Occupant;
+            bool includeTarget = false;
 
             switch (filter)
             {
                 case AoETargetFilter.All:
                     // All creatures in the area (can include caster)
-                    targets.Add(occupant);
+                    includeTarget = true;
                     break;
 
                 case AoETargetFilter.AlliesOnly:
                     // Only allies (same faction as caster)
-                    if (casterIsPC && (allPCs.Contains(occupant)))
-                        targets.Add(occupant);
-                    else if (!casterIsPC && allNPCs.Contains(occupant))
-                        targets.Add(occupant);
+                    includeTarget = (casterIsPC && allPCs.Contains(occupant))
+                        || (!casterIsPC && allNPCs.Contains(occupant));
                     break;
 
                 case AoETargetFilter.EnemiesOnly:
                     // Only enemies (opposite faction from caster)
-                    if (casterIsPC && allNPCs.Contains(occupant))
-                        targets.Add(occupant);
-                    else if (!casterIsPC && allPCs.Contains(occupant))
-                        targets.Add(occupant);
+                    includeTarget = (casterIsPC && allNPCs.Contains(occupant))
+                        || (!casterIsPC && allPCs.Contains(occupant));
                     break;
 
                 case AoETargetFilter.Self:
-                    if (occupant == caster)
-                        targets.Add(occupant);
+                    includeTarget = occupant == caster;
                     break;
             }
+
+            // Large/Huge creatures can occupy multiple cells in the AoE.
+            // They should only be affected once per spell cast.
+            if (includeTarget && seenTargets.Add(occupant))
+                targets.Add(occupant);
         }
 
         return targets;
