@@ -30,6 +30,7 @@ public static class NPCDatabase
         RegisterOgreBrute();
         RegisterDireWolf();
         RegisterTiger();
+        RegisterDireTigerCompanion();
         RegisterBrownBear();
         RegisterWolfPackHunter();
 
@@ -71,6 +72,7 @@ public static class NPCDatabase
             }),
             new EncounterPreset("armor_targeting_test", "🏹 Armor Priority Targeting Test", "Wizard (unarmored), rogue (light), fighter (heavy) vs 2 skeleton archers that prioritize weakest armor in range.", new List<string> { "skeleton_archer", "skeleton_archer" }),
             new EncounterPreset("tiger_hunt_test", "🐅 Tiger Hunt Test", "Three-PC behavior test for tiger pounce, improved grab, rake, scent vs invisible target, and low-HP withdraw AI.", new List<string> { "tiger" }),
+            new EncounterPreset("ogre_battle_test", "🧙 Ogre Battle", "Player-controlled wizard and dire tiger ally versus two ogre brutes.", new List<string> { "dire_tiger_companion", "ogre_brute", "ogre_brute" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
@@ -551,6 +553,52 @@ public static class NPCDatabase
             PanelColor = new Color(0.35f, 0.2f, 0.08f, 0.85f),
             NameColor = new Color(1f, 0.82f, 0.5f),
             Description = "A massive striped predator with raking claws and a crushing bite. Uses proper primary/secondary natural attack sequencing."
+        });
+    }
+
+    /// <summary>
+    /// Dire Tiger companion used by ally-control test scenarios.
+    /// Mirrors tiger stats but spawns on the player team and is directly controllable.
+    /// </summary>
+    private static void RegisterDireTigerCompanion()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "dire_tiger_companion",
+            Name = "Dire Tiger",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 6,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 23, DEX = 15, CON = 17, WIS = 12, INT = 2, CHA = 6,
+            BAB = 4,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 10,
+            BaseHitDieHP = 45,
+            CreatureTags = new List<string> { "Animal" },
+            HasScent = true,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            HasPounce = true,
+            HasRake = true,
+            RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = true },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            IsAlly = true,
+            IsControllable = true,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.9f, 0.72f, 0.38f, 1f),
+            PanelColor = new Color(0.2f, 0.3f, 0.14f, 0.85f),
+            NameColor = new Color(0.86f, 1f, 0.78f),
+            Description = "A dominated dire tiger companion fighting for the player. It keeps tiger pounce/grab/rake behavior while accepting direct player commands."
         });
     }
 

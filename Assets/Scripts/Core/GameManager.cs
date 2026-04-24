@@ -74,12 +74,14 @@ public partial class GameManager : MonoBehaviour
     private const string TurnUndeadTestPresetId = "turn_undead_test";
     private const string ArmorTargetingTestPresetId = "armor_targeting_test";
     private const string TigerHuntTestPresetId = "tiger_hunt_test";
+    private const string OgreBattleTestPresetId = "ogre_battle_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
     private bool _isFeintSneakTestEncounter;
     private bool _isTurnUndeadTestEncounter;
     private bool _isArmorTargetingTestEncounter;
     private bool _isTigerHuntTestEncounter;
+    private bool _isOgreBattleTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
 
     // Game state
@@ -762,6 +764,7 @@ public partial class GameManager : MonoBehaviour
         _isTurnUndeadTestEncounter = string.Equals(presetId, TurnUndeadTestPresetId, StringComparison.Ordinal);
         _isArmorTargetingTestEncounter = string.Equals(presetId, ArmorTargetingTestPresetId, StringComparison.Ordinal);
         _isTigerHuntTestEncounter = string.Equals(presetId, TigerHuntTestPresetId, StringComparison.Ordinal);
+        _isOgreBattleTestEncounter = string.Equals(presetId, OgreBattleTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.NPCIds != null && preset.NPCIds.Count > 0)
         {
@@ -786,6 +789,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureArmorTargetingTestParty();
         else if (_isTigerHuntTestEncounter)
             ConfigureTigerHuntTestParty();
+        else if (_isOgreBattleTestEncounter)
+            ConfigureOgreBattleTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -1719,6 +1724,50 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   Optional: focus fire tiger below 30% HP to verify animal withdraw/flee behavior.");
     }
 
+    private void ConfigureOgreBattleTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats wizardStats = new CharacterStats(
+            name: "Aria",
+            level: 6,
+            characterClass: "Wizard",
+            str: 8, dex: 14, con: 12, wis: 13, intelligence: 18, cha: 10,
+            bab: 3,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 30,
+            raceName: "Human"
+        );
+
+        wizardStats.CharacterAlignment = Alignment.NeutralGood;
+
+        PC1.Init(wizardStats, new Vector2Int(6, 10), IconLoader.GetToken("Wizard") ?? pcAliveFallback, pcDead);
+
+        InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        wizardInventory.Init(wizardStats);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.RecalculateStats();
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("🧙 Ogre Battle: Aria (Wizard 6) fights alongside a controllable dire tiger against two ogres.");
+        CombatUI?.ShowCombatLog("   Validate: multi-character player turns, ally tiger control, and berserk ogre pressure.");
+    }
+
     private void RestoreStandardPartyLayout()
     {
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2033,6 +2082,12 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(14, 10),
     };
 
+    private static readonly Vector2Int[] OgreBattleTestSpawnPositions = {
+        new Vector2Int(8, 10),  // Player ally dire tiger
+        new Vector2Int(14, 8),  // Ogre #1
+        new Vector2Int(14, 12), // Ogre #2
+    };
+
     private void SetupEnemyEncounter(List<string> enemyIds)
     {
         NPCDatabase.Init();
@@ -2092,6 +2147,11 @@ public partial class GameManager : MonoBehaviour
             {
                 // Place tiger with enough lane length to charge wounded prey and trigger pounce behavior.
                 pos = TigerHuntTestSpawnPositions[i];
+            }
+            else if (_isOgreBattleTestEncounter && i < OgreBattleTestSpawnPositions.Length)
+            {
+                // Spawn controllable dire tiger near the wizard with both ogres advancing from the far side.
+                pos = OgreBattleTestSpawnPositions[i];
             }
             else
             {
