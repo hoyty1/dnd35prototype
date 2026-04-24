@@ -11932,7 +11932,7 @@ public partial class GameManager : MonoBehaviour
         for (int i = 0; i < attacks.Count; i++)
         {
             CombatResult attackResult = attacks[i];
-            if (!IsImprovedGrabTriggerAttack(attacker, attackResult))
+            if (attackResult == null || !attackResult.Hit || !IsImprovedGrabTriggerAttack(attacker, attackResult))
                 continue;
 
             SpecialAttackResult grabResult = attacker.ResolveImprovedGrabFreeAttempt(target);
