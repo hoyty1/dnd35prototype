@@ -528,7 +528,7 @@ public class CombatFlowService : MonoBehaviour
         if (result.TargetKilled)
         {
             _gameManager.Combat_HandleSummonDeathCleanup(target);
-            if (!target.IsPlayerControlled)
+            if (target.Team == CharacterTeam.Enemy)
             {
                 _gameManager.Combat_UpdateAllStatsUI();
                 if (_gameManager.Combat_AreAllNPCsDead())
@@ -639,7 +639,7 @@ public class CombatFlowService : MonoBehaviour
         if (result.TargetKilled)
         {
             _gameManager.Combat_HandleSummonDeathCleanup(target);
-            if (!target.IsPlayerControlled)
+            if (target.Team == CharacterTeam.Enemy)
             {
                 _gameManager.Combat_UpdateAllStatsUI();
                 if (_gameManager.Combat_AreAllNPCsDead())
@@ -699,7 +699,7 @@ public class CombatFlowService : MonoBehaviour
         if (result.TargetKilled)
         {
             _gameManager.Combat_HandleSummonDeathCleanup(target);
-            if (!target.IsPlayerControlled)
+            if (target.Team == CharacterTeam.Enemy)
             {
                 _gameManager.Combat_UpdateAllStatsUI();
                 if (_gameManager.Combat_AreAllNPCsDead())
@@ -747,7 +747,7 @@ public class CombatFlowService : MonoBehaviour
         if (result.TargetKilled)
         {
             _gameManager.Combat_HandleSummonDeathCleanup(target);
-            if (!target.IsPlayerControlled)
+            if (target.Team == CharacterTeam.Enemy)
             {
                 _gameManager.Combat_UpdateAllStatsUI();
                 if (_gameManager.Combat_AreAllNPCsDead())
@@ -795,7 +795,7 @@ public class CombatFlowService : MonoBehaviour
         if (result.TargetKilled)
         {
             _gameManager.Combat_HandleSummonDeathCleanup(target);
-            if (!target.IsPlayerControlled)
+            if (target.Team == CharacterTeam.Enemy)
             {
                 _gameManager.Combat_UpdateAllStatsUI();
                 if (_gameManager.Combat_AreAllNPCsDead())
