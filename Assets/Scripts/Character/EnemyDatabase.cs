@@ -749,7 +749,8 @@ public enum EnemyAIProfileArchetype
     Spellcaster,
     Evoker,
     Abjurer,
-    Necromancer
+    Necromancer,
+    UndeadMindless
 }
 
 /// <summary>

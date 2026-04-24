@@ -162,6 +162,23 @@ namespace DND35.AI
             return false;
         }
 
+        /// <summary>
+        /// When true, this profile is willing to ignore attacks of opportunity while moving.
+        /// </summary>
+        public virtual bool ShouldIgnoreAoO(CharacterController self)
+        {
+            return false;
+        }
+
+        /// <summary>
+        /// Optional per-profile weapon fallback hook used at attack time.
+        /// Return true if this profile changed weapon state this turn.
+        /// </summary>
+        public virtual bool TryEnsureWeaponFallback(CharacterController self)
+        {
+            return false;
+        }
+
         public virtual bool ShouldInitiateGrapple(CharacterController self, CharacterController target)
         {
             if (self == null || target == null || target.Stats == null)

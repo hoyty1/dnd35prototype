@@ -812,7 +812,10 @@ public class AIService : MonoBehaviour
             ? Mathf.Max(0, profile.Movement.PreferredRangeSquares)
             : 1;
 
-        bool avoidAoOs = profile != null && profile.Movement != null && profile.Movement.AvoidAoOs;
+        bool avoidAoOs = profile != null
+            && profile.Movement != null
+            && profile.Movement.AvoidAoOs
+            && !profile.ShouldIgnoreAoO(mover);
         bool seekFlanking = profile == null || profile.Movement == null || profile.Movement.SeekFlanking;
 
         for (int i = 0; i < moveCells.Count; i++)

@@ -2320,6 +2320,8 @@ public partial class GameManager : MonoBehaviour
                 return ScriptableObject.CreateInstance<AbjurerAIProfile>();
             case EnemyAIProfileArchetype.Necromancer:
                 return ScriptableObject.CreateInstance<NecromancerAIProfile>();
+            case EnemyAIProfileArchetype.UndeadMindless:
+                return ScriptableObject.CreateInstance<UndeadMindlessAIProfile>();
             default:
                 return null;
         }
@@ -12375,6 +12377,9 @@ public partial class GameManager : MonoBehaviour
 
     private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
     {
+        if (npc != null && npc.aiProfile != null)
+            npc.aiProfile.TryEnsureWeaponFallback(npc);
+
         if (!npc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
         {
             if (ExecuteReload(npc, out string reloadLog))
