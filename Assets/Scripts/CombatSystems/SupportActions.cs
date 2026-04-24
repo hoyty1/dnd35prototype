@@ -1273,12 +1273,14 @@ public partial class GameManager
             yield break;
         }
 
-        if (charger.Actions == null || !charger.Actions.UseFullRoundAction())
+        if (charger.Actions == null || !charger.Actions.HasFullRoundAction)
         {
             CombatUI?.ShowCombatLog($"⚠ {charger.Stats.CharacterName} cannot charge: no full-round action remaining.");
             ShowActionChoices();
             yield break;
         }
+
+        charger.Actions.UseFullRoundAction();
 
         CombatUI?.ShowCombatLog(_pendingChargeBullRush
             ? $"🏇 {charger.Stats.CharacterName} charges and attempts a bull rush on {target.Stats.CharacterName}!"
@@ -1529,11 +1531,13 @@ public partial class GameManager
         if (path == null || path.Count == 0)
             yield break;
 
-        if (npc.Actions == null || !npc.Actions.UseFullRoundAction())
+        if (npc.Actions == null || !npc.Actions.HasFullRoundAction)
         {
             CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} cannot charge: no full-round action remaining.");
             yield break;
         }
+
+        npc.Actions.UseFullRoundAction();
 
         CombatUI.ShowCombatLog($"🏇 {npc.Stats.CharacterName} charges {target.Stats.CharacterName}!");
 
