@@ -151,6 +151,8 @@ public partial class GameManager : MonoBehaviour
     private SpellData _pendingSpell; // Spell selected for casting
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
     private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
+    private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
+    private string _pendingNaturalAttackLabel; // Display label for selected natural-weapon single attack
 
     // Mid-sequence full-attack retargeting state (ranged + melee)
     private bool _isAwaitingRangedRetargetSelection;
@@ -2811,6 +2813,7 @@ public partial class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
         _currentAttackType = GetDefaultAttackType(pc);
         _skipNextSingleAttackStandardActionCommit = false;
+        ClearPendingNaturalAttackSelection();
         EndGrappleContextMenuDisplayLock();
         CombatUI.HideSummonContextMenu();
 
@@ -4993,6 +4996,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
 
@@ -5006,6 +5010,79 @@ public partial class GameManager : MonoBehaviour
             Debug.Log("[Attack][Sequence] Continuing sequence with melee");
             ContinueAttackSequence(pc, AttackType.Melee);
         }
+    }
+
+    private void SetPendingNaturalAttackSelection(int naturalAttackSequenceIndex, string naturalAttackLabel)
+    {
+        _pendingNaturalAttackSequenceIndex = Mathf.Max(0, naturalAttackSequenceIndex);
+        _pendingNaturalAttackLabel = naturalAttackLabel;
+    }
+
+    private void ClearPendingNaturalAttackSelection()
+    {
+        _pendingNaturalAttackSequenceIndex = -1;
+        _pendingNaturalAttackLabel = null;
+    }
+
+    private bool HasPendingNaturalAttackSelection()
+    {
+        return _pendingNaturalAttackSequenceIndex >= 0;
+    }
+
+    public void OnNaturalAttackButtonPressed(int naturalAttackSequenceIndex, string naturalAttackLabel)
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null)
+            return;
+
+        if (RedirectPinnedCharacterToGrappleMenu(pc, "attacks"))
+            return;
+
+        if (IsActionBlockedByTurnedCondition(pc, "attacks"))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        if (!CanAttack(pc))
+        {
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        if (pc.Stats == null || !pc.Stats.HasNaturalAttacks || pc.GetEquippedMainWeapon() != null)
+        {
+            string pcName = pc.Stats != null ? pc.Stats.CharacterName : "Character";
+            CombatUI?.ShowCombatLog($"⚠ {pcName} cannot use a natural-weapon attack option right now.");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        List<NaturalAttackDefinition> naturalAttacks = pc.Stats.GetValidNaturalAttacks();
+        int totalNaturalAttackCount = 0;
+        for (int i = 0; i < naturalAttacks.Count; i++)
+            totalNaturalAttackCount += Mathf.Max(1, naturalAttacks[i].Count);
+
+        if (totalNaturalAttackCount <= 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no valid natural attacks configured.");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
+
+        int clampedSequenceIndex = Mathf.Clamp(naturalAttackSequenceIndex, 0, totalNaturalAttackCount - 1);
+        string resolvedLabel = string.IsNullOrWhiteSpace(naturalAttackLabel) ? "Natural attack" : naturalAttackLabel;
+
+        _pendingDefensiveAttackSelection = false;
+        pc.SetFightingDefensively(false);
+        EndAttackSequence();
+        SetPendingNaturalAttackSelection(clampedSequenceIndex, resolvedLabel);
+
+        _pendingAttackMode = PendingAttackMode.Single;
+        _currentAttackType = AttackType.Melee;
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+        ShowAttackTargets(pc);
+        CombatUI?.SetTurnIndicator($"ATTACK ({resolvedLabel}): Click an enemy to attack!");
     }
 
     public void OnThrownAttackButtonPressed()
@@ -5045,6 +5122,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
 
@@ -5231,6 +5309,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
 
@@ -5302,6 +5381,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
 
@@ -6098,6 +6178,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
         EndAttackSequence();
@@ -6135,6 +6216,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = true;
         pc.SetFightingDefensively(true);
         EndAttackSequence();
@@ -6175,6 +6257,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        ClearPendingNaturalAttackSelection();
         _pendingDefensiveAttackSelection = true;
         pc.SetFightingDefensively(true);
         EndAttackSequence();
@@ -8059,6 +8142,7 @@ public partial class GameManager : MonoBehaviour
         _pendingDefensiveAttackSelection = false;
         _pendingAttackMode = PendingAttackMode.Single;
         _skipNextSingleAttackStandardActionCommit = false;
+        ClearPendingNaturalAttackSelection();
         _isSelectingOffHandTarget = false;
         _isSelectingOffHandThrownTarget = false;
         _currentOffHandBAB = 0;

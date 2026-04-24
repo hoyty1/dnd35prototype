@@ -796,8 +796,9 @@ public class SceneBootstrap : MonoBehaviour
             "Overrun", new Color(0.58f, 0.34f, 0.2f));
         combatUI.ChargeButton = CreateGridButton(btnGrid.transform, "ChargeBtn",
             "Charge", new Color(0.78f, 0.45f, 0.15f));
-        // Full Attack and Dual Wield entry points are intentionally omitted from
-        // the main actions window while multi-attack flow is being reworked.
+        combatUI.FullAttackButton = CreateGridButton(btnGrid.transform, "FullAttackBtn",
+            "Full Attack", new Color(0.64f, 0.24f, 0.24f));
+        // Dual Wield entry point remains intentionally omitted from the main actions window.
         combatUI.FlurryOfBlowsButton = CreateGridButton(btnGrid.transform, "FlurryBtn",
             "Flurry of Blows", new Color(0.2f, 0.5f, 0.5f));
         combatUI.RageButton = CreateGridButton(btnGrid.transform, "RageBtn",
@@ -1116,7 +1117,12 @@ public class SceneBootstrap : MonoBehaviour
         }
         if (ui.ChargeButton != null)
             ui.ChargeButton.onClick.AddListener(() => GameManager.Instance.OnChargeButtonPressed());
-        // Full Attack and Dual Wield actions are intentionally not wired from the main action window.
+        if (ui.FullAttackButton != null)
+        {
+            ui.FullAttackButton.onClick.RemoveAllListeners();
+            ui.FullAttackButton.onClick.AddListener(() => GameManager.Instance.OnFullAttackButtonPressed());
+        }
+        // Dual Wield action remains intentionally hidden from the main action window.
         if (ui.FlurryOfBlowsButton != null)
             ui.FlurryOfBlowsButton.onClick.AddListener(() => GameManager.Instance.OnFlurryOfBlowsButtonPressed());
         if (ui.RageButton != null)

@@ -105,6 +105,9 @@ public class ActionButtonPanel : MonoBehaviour
         public ItemData EquippedWeapon;
         public bool UsingUnarmedStrike;
         public string AttackSourceLabel;
+        public bool UsingInnateNaturalAttacks;
+        public List<NaturalAttackButtonOption> NaturalAttackOptions;
+        public bool HasMultipleNaturalAttackTypes;
         public bool IterativeWeaponSequenceActive;
         public bool IterativeWeaponFullRoundStage;
         public bool HasGrappleState;
@@ -137,6 +140,13 @@ public class ActionButtonPanel : MonoBehaviour
         public string GrappleOpponentName;
     }
 
+    private sealed class NaturalAttackButtonOption
+    {
+        public int SequenceIndex;
+        public string AttackName;
+        public bool IsPrimary;
+    }
+
     public void UpdateActionButtons(CharacterController pc)
     {
         if (_combatUI == null)
@@ -149,6 +159,8 @@ public class ActionButtonPanel : MonoBehaviour
         }
 
         ActionButtonContext context = BuildActionButtonContext(pc);
+        ConfigureAttackButtonListeners(context);
+
         ActionButtonStates states = ComputeActionButtonStates(pc, context);
         ApplyButtonStates(states);
 
@@ -188,6 +200,9 @@ public class ActionButtonPanel : MonoBehaviour
         context.EquippedWeapon = pc.GetEquippedMainWeapon();
         NaturalAttackDefinition primaryNaturalAttack = pc.Stats != null ? pc.Stats.GetPrimaryNaturalAttack() : null;
         bool usingNaturalAttack = context.EquippedWeapon == null && primaryNaturalAttack != null;
+        context.UsingInnateNaturalAttacks = usingNaturalAttack;
+        context.NaturalAttackOptions = BuildNaturalAttackButtonOptions(pc);
+        context.HasMultipleNaturalAttackTypes = context.NaturalAttackOptions.Count > 1;
         context.UsingUnarmedStrike = context.EquippedWeapon == null && !usingNaturalAttack;
         context.AttackSourceLabel = context.EquippedWeapon != null
             ? context.EquippedWeapon.Name
@@ -233,6 +248,93 @@ public class ActionButtonPanel : MonoBehaviour
             : "Opponent";
 
         return context;
+    }
+
+    private List<NaturalAttackButtonOption> BuildNaturalAttackButtonOptions(CharacterController pc)
+    {
+        var options = new List<NaturalAttackButtonOption>();
+        if (pc == null || pc.Stats == null)
+            return options;
+
+        List<NaturalAttackDefinition> validAttacks = pc.Stats.GetValidNaturalAttacks();
+        if (validAttacks.Count == 0)
+            return options;
+
+        var seenNames = new HashSet<string>();
+        int sequenceIndex = 0;
+        for (int i = 0; i < validAttacks.Count; i++)
+        {
+            NaturalAttackDefinition attack = validAttacks[i];
+            int count = Mathf.Max(1, attack.Count);
+            string attackName = string.IsNullOrWhiteSpace(attack.Name) ? "Natural attack" : attack.Name.Trim();
+            string normalizedName = attackName.ToLowerInvariant();
+
+            if (!seenNames.Contains(normalizedName))
+            {
+                options.Add(new NaturalAttackButtonOption
+                {
+                    SequenceIndex = sequenceIndex,
+                    AttackName = attackName,
+                    IsPrimary = attack.IsPrimary
+                });
+                seenNames.Add(normalizedName);
+            }
+
+            sequenceIndex += count;
+        }
+
+        return options;
+    }
+
+    private static string BuildNaturalAttackButtonLabel(NaturalAttackButtonOption option)
+    {
+        if (option == null)
+            return "Attack: Natural attack";
+
+        string role = option.IsPrimary ? "Primary" : "Secondary";
+        return $"Attack: {option.AttackName} ({role})";
+    }
+
+    private void ConfigureAttackButtonListeners(ActionButtonContext context)
+    {
+        if (AttackButton == null || context == null)
+            return;
+
+        GameManager gm = context.Gm;
+        if (gm == null)
+            return;
+
+        if (context.UsingInnateNaturalAttacks && context.NaturalAttackOptions != null && context.NaturalAttackOptions.Count > 0)
+        {
+            NaturalAttackButtonOption primaryOption = context.NaturalAttackOptions[0];
+            AttackButton.onClick.RemoveAllListeners();
+            AttackButton.onClick.AddListener(() => gm.OnNaturalAttackButtonPressed(primaryOption.SequenceIndex, primaryOption.AttackName));
+
+            if (AttackThrownButton != null)
+            {
+                AttackThrownButton.onClick.RemoveAllListeners();
+                if (context.NaturalAttackOptions.Count > 1)
+                {
+                    NaturalAttackButtonOption secondaryOption = context.NaturalAttackOptions[1];
+                    AttackThrownButton.onClick.AddListener(() => gm.OnNaturalAttackButtonPressed(secondaryOption.SequenceIndex, secondaryOption.AttackName));
+                }
+                else
+                {
+                    AttackThrownButton.onClick.AddListener(() => gm.OnThrownAttackButtonPressed());
+                }
+            }
+
+            return;
+        }
+
+        AttackButton.onClick.RemoveAllListeners();
+        AttackButton.onClick.AddListener(() => gm.OnAttackButtonPressed());
+
+        if (AttackThrownButton != null)
+        {
+            AttackThrownButton.onClick.RemoveAllListeners();
+            AttackThrownButton.onClick.AddListener(() => gm.OnThrownAttackButtonPressed());
+        }
     }
 
     private ActionButtonStates ComputeActionButtonStates(CharacterController pc, ActionButtonContext context)
@@ -307,6 +409,8 @@ public class ActionButtonPanel : MonoBehaviour
             attackLabel = "Attack (Pinned: grapple escape only)";
         else if (context.IsTurned)
             attackLabel = "Attack (Turned: must flee)";
+        else if (context.UsingInnateNaturalAttacks && context.NaturalAttackOptions != null && context.NaturalAttackOptions.Count > 0)
+            attackLabel = BuildNaturalAttackButtonLabel(context.NaturalAttackOptions[0]);
         else if (!context.CanAttackWithWeapon)
             attackLabel = "Attack (Reload first)";
         else if (context.CanStartMainAfterOffHand)
@@ -320,11 +424,26 @@ public class ActionButtonPanel : MonoBehaviour
 
         states.Set(AttackButton, new ActionButtonState(showAttackButton, canSingleAttack, attackLabel));
 
-        bool showThrownButton = context.HasThrowableMeleeWeapon && (context.HasStandardAttack || context.IterativeThrownSequenceActive) && !context.IsPinned;
-        bool canThrowAttack = showThrownButton && context.Gm != null && context.Gm.CanUseThrownAttackOption(pc) && context.CanAttackWithWeapon && !context.IsTurned;
-        string thrownLabel = context.IsTurned
-            ? "Attack (Thrown - Turned)"
-            : (!context.CanAttackWithWeapon ? "Attack (Thrown - Reload first)" : (context.IterativeThrownFullRoundStage ? "Attack (Thrown - Full Round)" : "Attack (Thrown)"));
+        bool showingSecondaryNaturalAttack = context.UsingInnateNaturalAttacks
+            && context.NaturalAttackOptions != null
+            && context.NaturalAttackOptions.Count > 1;
+
+        bool showThrownButton = showingSecondaryNaturalAttack
+            ? (context.HasStandardAttack || context.CanContinueIterativeAttack) && !context.IsPinned
+            : context.HasThrowableMeleeWeapon && (context.HasStandardAttack || context.IterativeThrownSequenceActive) && !context.IsPinned;
+
+        bool canThrowAttack = showingSecondaryNaturalAttack
+            ? canSingleAttack
+            : showThrownButton && context.Gm != null && context.Gm.CanUseThrownAttackOption(pc) && context.CanAttackWithWeapon && !context.IsTurned;
+
+        string thrownLabel;
+        if (context.IsTurned)
+            thrownLabel = showingSecondaryNaturalAttack ? "Attack (Turned: must flee)" : "Attack (Thrown - Turned)";
+        else if (context.UsingInnateNaturalAttacks && context.NaturalAttackOptions != null && context.NaturalAttackOptions.Count > 1)
+            thrownLabel = BuildNaturalAttackButtonLabel(context.NaturalAttackOptions[1]);
+        else
+            thrownLabel = !context.CanAttackWithWeapon ? "Attack (Thrown - Reload first)" : (context.IterativeThrownFullRoundStage ? "Attack (Thrown - Full Round)" : "Attack (Thrown)");
+
         states.Set(AttackThrownButton, new ActionButtonState(showThrownButton, canThrowAttack, thrownLabel));
     }
 
@@ -400,8 +519,26 @@ public class ActionButtonPanel : MonoBehaviour
         // Dual Wield entry point is intentionally removed from the main Actions window.
         states.Set(DualWieldButton, new ActionButtonState(false, false));
 
-        // Full Attack entry points are intentionally removed from the main Actions window.
-        states.Set(FullAttackButton, new ActionButtonState(false, false));
+        bool showNaturalFullAttack = context.UsingInnateNaturalAttacks && context.HasMultipleNaturalAttackTypes;
+        bool canNaturalFullAttack = showNaturalFullAttack
+            && context.Actions.HasFullRoundAction
+            && !context.IsPinned
+            && !context.IsTurned
+            && context.CanAttackWithWeapon;
+
+        string fullAttackLabel;
+        if (!showNaturalFullAttack)
+            fullAttackLabel = "Full Attack";
+        else if (context.IsPinned)
+            fullAttackLabel = "Full Attack (Pinned: grapple escape only)";
+        else if (context.IsTurned)
+            fullAttackLabel = "Full Attack (Turned: must flee)";
+        else if (!context.Actions.HasFullRoundAction)
+            fullAttackLabel = "Full Attack (Used)";
+        else
+            fullAttackLabel = "Full Attack (All Natural Weapons)";
+
+        states.Set(FullAttackButton, new ActionButtonState(showNaturalFullAttack, canNaturalFullAttack, fullAttackLabel));
         states.Set(FullAttackDefensivelyButton, new ActionButtonState(false, false));
     }
 

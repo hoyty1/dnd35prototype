@@ -619,9 +619,57 @@ public class CombatFlowService : MonoBehaviour
         if (IsRangedOrThrownAttack(rangeInfo) && !ResolveRangedAttackAoOIfProvoked(attacker))
             return;
 
-        CombatResult result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
+        CombatResult result;
+        string naturalAttackModeLog = null;
+
+        bool useSelectedNaturalAttack = _gameManager.Combat_HasPendingNaturalAttackSelection()
+            && _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee
+            && attackWeapon == null
+            && attacker.Stats != null
+            && attacker.Stats.HasNaturalAttacks;
+
+        if (useSelectedNaturalAttack)
+        {
+            int naturalAttackIndex = Mathf.Max(0, _gameManager.Combat_GetPendingNaturalAttackSequenceIndex());
+            FullAttackResult naturalStep = attacker.FullAttack(
+                target,
+                isFlanking,
+                flankBonus,
+                partnerName,
+                rangeInfo,
+                startAttackIndex: naturalAttackIndex,
+                maxAttacks: 1);
+
+            if (naturalStep != null && naturalStep.Attacks != null && naturalStep.Attacks.Count > 0)
+            {
+                result = naturalStep.Attacks[0];
+                string naturalLabel = _gameManager.Combat_GetPendingNaturalAttackLabel();
+                if (string.IsNullOrWhiteSpace(naturalLabel))
+                {
+                    naturalLabel = naturalStep.AttackLabels != null && naturalStep.AttackLabels.Count > 0
+                        ? naturalStep.AttackLabels[0]
+                        : "Natural attack";
+                }
+
+                naturalAttackModeLog = $"↻ Natural Attack ({naturalLabel})";
+            }
+            else
+            {
+                result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
+            }
+
+            _gameManager.Combat_ClearPendingNaturalAttackSelection();
+        }
+        else
+        {
+            result = attacker.Attack(target, isFlanking, flankBonus, partnerName, rangeInfo, null, attackWeapon);
+        }
+
         _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
         _gameManager.Combat_ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
+
+        if (!string.IsNullOrEmpty(naturalAttackModeLog))
+            _gameManager.CombatUI?.ShowCombatLog(naturalAttackModeLog);
 
         string log = BuildAttackLog(attacker, isFlanking, partnerName, result);
         _gameManager.Combat_SetLastCombatLog(log);

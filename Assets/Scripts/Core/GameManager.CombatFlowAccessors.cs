@@ -41,6 +41,11 @@ public partial class GameManager
         return value;
     }
 
+    public bool Combat_HasPendingNaturalAttackSelection() => HasPendingNaturalAttackSelection();
+    public int Combat_GetPendingNaturalAttackSequenceIndex() => _pendingNaturalAttackSequenceIndex;
+    public string Combat_GetPendingNaturalAttackLabel() => _pendingNaturalAttackLabel;
+    public void Combat_ClearPendingNaturalAttackSelection() => ClearPendingNaturalAttackSelection();
+
     public void Combat_ClearPendingDefensiveAttackSelectionFlag()
     {
         _pendingDefensiveAttackSelection = false;
