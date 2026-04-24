@@ -37,16 +37,16 @@ Assign `CharacterController.aiProfile` on any NPC. During NPC turns, `AIService`
 ## Dual-Layer Runtime AI (Important)
 This project currently uses **both** systems together at runtime:
 
-1. **`EnemyAIProfileArchetype` / `AIProfile`** (decision brain)
+1. **`NPCAIProfileArchetype` / `AIProfile`** (decision brain)
    - Built in `GameManager.BuildRuntimeAIProfile(def)` and assigned to `npc.aiProfile`.
    - Drives target scoring, maneuver preference, grapple intent, and spell scoring.
 
-2. **`EnemyAIBehavior`** (tactical shell)
+2. **`NPCAIBehavior`** (tactical shell)
    - Stored per NPC in `GameManager._npcAIBehaviors`.
    - Passed into `AIService.ExecuteNPCTurn(npc, behavior)`.
    - Selects which top-level tactical coroutine runs (`AggressiveMelee`, `DefensiveMelee`, `RangedKiter`).
 
-In `AIService`, the intent is explicit: profile drives detailed decisions, while `EnemyAIBehavior` still selects the tactical shell.
+In `AIService`, the intent is explicit: profile drives detailed decisions, while `NPCAIBehavior` still selects the tactical shell.
 
 ### Practical interpretation
 - **AIProfileArchetype** answers: *"Who should I target, which maneuver/spell should I prefer, and why?"*
@@ -58,7 +58,7 @@ Not at runtime today.
 - If a profile is missing, behavior is the direct fallback switch.
 
 ### What if you remove `AIBehavior = ...` from one enemy entry?
-For entries like wolf that omit the assignment, `EnemyDefinition.AIBehavior` defaults to `AggressiveMelee`, so behavior is effectively unchanged **today**.
+For entries like wolf that omit the assignment, `NPCDefinition.AIBehavior` defaults to `AggressiveMelee`, so behavior is effectively unchanged **today**.
 
 However, removing the field assignment broadly would:
 - collapse many enemies to default aggressive behavior,

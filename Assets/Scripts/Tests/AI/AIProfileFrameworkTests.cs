@@ -36,8 +36,8 @@ namespace Tests.AI
             TestAnimalProfileEnablesAdaptiveFullAttackRetargeting();
             TestDefaultProfileLeavesAdaptiveFullAttackRetargetingDisabled();
             TestProfileCoupDeGraceDefaults();
-            TestEnemyDefinitionCoupDeGraceOverrideFieldDefaultsToNull();
-            TestEnemyDefinitionsAssignProfileArchetypes();
+            TestNPCDefinitionCoupDeGraceOverrideFieldDefaultsToNull();
+            TestNPCDefinitionsAssignProfileArchetypes();
             TestWolfDefinitionMatchesBaselineStats();
             TestTigerDefinitionUsesAnimalProfile();
             TestScenarioEnemyProfileAssignments();
@@ -397,11 +397,11 @@ namespace Tests.AI
             }
         }
 
-        private static void TestEnemyDefinitionCoupDeGraceOverrideFieldDefaultsToNull()
+        private static void TestNPCDefinitionCoupDeGraceOverrideFieldDefaultsToNull()
         {
-            EnemyDatabase.Init();
-            EnemyDefinition wolf = EnemyDatabase.Get("wolf_pack_hunter");
-            EnemyDefinition tiger = EnemyDatabase.Get("tiger");
+            NPCDatabase.Init();
+            NPCDefinition wolf = NPCDatabase.Get("wolf_pack_hunter");
+            NPCDefinition tiger = NPCDatabase.Get("tiger");
 
             bool defaultsToNull = wolf != null
                                   && tiger != null
@@ -415,20 +415,20 @@ namespace Tests.AI
                     : $"(wolfOverride={(wolf.UseCoupDeGrace.HasValue ? wolf.UseCoupDeGrace.Value.ToString() : "null")}, tigerOverride={(tiger.UseCoupDeGrace.HasValue ? tiger.UseCoupDeGrace.Value.ToString() : "null")})");
         }
 
-        private static void TestEnemyDefinitionsAssignProfileArchetypes()
+        private static void TestNPCDefinitionsAssignProfileArchetypes()
         {
-            EnemyDatabase.Init();
+            NPCDatabase.Init();
 
             int total = 0;
             List<string> missing = new List<string>();
 
-            foreach (EnemyDefinition def in EnemyDatabase.AllEnemies)
+            foreach (NPCDefinition def in NPCDatabase.AllNPCs)
             {
                 if (def == null)
                     continue;
 
                 total++;
-                if (def.AIProfileArchetype == EnemyAIProfileArchetype.None)
+                if (def.AIProfileArchetype == NPCAIProfileArchetype.None)
                     missing.Add(def.Id);
             }
 
@@ -440,8 +440,8 @@ namespace Tests.AI
 
         private static void TestWolfDefinitionMatchesBaselineStats()
         {
-            EnemyDatabase.Init();
-            EnemyDefinition wolf = EnemyDatabase.Get("wolf_pack_hunter");
+            NPCDatabase.Init();
+            NPCDefinition wolf = NPCDatabase.Get("wolf_pack_hunter");
 
             NaturalAttackDefinition wolfPrimaryAttack = wolf != null && wolf.NaturalAttacks != null && wolf.NaturalAttacks.Count > 0
                 ? wolf.NaturalAttacks[0]
@@ -467,8 +467,8 @@ namespace Tests.AI
 
         private static void TestTigerDefinitionUsesAnimalProfile()
         {
-            EnemyDatabase.Init();
-            EnemyDefinition tiger = EnemyDatabase.Get("tiger");
+            NPCDatabase.Init();
+            NPCDefinition tiger = NPCDatabase.Get("tiger");
 
             NaturalAttackDefinition tigerClaw = tiger != null && tiger.NaturalAttacks != null
                 ? tiger.NaturalAttacks.Find(a => a != null && string.Equals(a.Name, "Claw", StringComparison.OrdinalIgnoreCase))
@@ -488,7 +488,7 @@ namespace Tests.AI
             }
 
             bool usesAnimalProfile = tiger != null
-                                     && tiger.AIProfileArchetype == EnemyAIProfileArchetype.Animal
+                                     && tiger.AIProfileArchetype == NPCAIProfileArchetype.Animal
                                      && tiger.HasScent
                                      && tiger.HasPounce
                                      && tiger.HasImprovedGrab
@@ -511,29 +511,29 @@ namespace Tests.AI
 
         private static void TestScenarioEnemyProfileAssignments()
         {
-            EnemyDatabase.Init();
+            NPCDatabase.Init();
 
-            var expected = new Dictionary<string, EnemyAIProfileArchetype>
+            var expected = new Dictionary<string, NPCAIProfileArchetype>
             {
-                { "goblin_warchief", EnemyAIProfileArchetype.Humanoid },
-                { "goblin_feint_drill", EnemyAIProfileArchetype.Humanoid },
-                { "skeleton_archer", EnemyAIProfileArchetype.UndeadMindless },
-                { "skeleton_warrior", EnemyAIProfileArchetype.UndeadMindless },
-                { "wight_dreadwalker", EnemyAIProfileArchetype.Humanoid },
-                { "orc_berserker", EnemyAIProfileArchetype.Berserk },
-                { "orc_grapple_drill", EnemyAIProfileArchetype.Grappler },
-                { "hobgoblin_sergeant", EnemyAIProfileArchetype.Humanoid },
-                { "ogre_brute", EnemyAIProfileArchetype.Berserk },
-                { "dire_wolf", EnemyAIProfileArchetype.Animal },
-                { "tiger", EnemyAIProfileArchetype.Animal },
-                { "brown_bear", EnemyAIProfileArchetype.Animal },
-                { "wolf_pack_hunter", EnemyAIProfileArchetype.Animal },
+                { "goblin_warchief", NPCAIProfileArchetype.Humanoid },
+                { "goblin_feint_drill", NPCAIProfileArchetype.Humanoid },
+                { "skeleton_archer", NPCAIProfileArchetype.UndeadMindless },
+                { "skeleton_warrior", NPCAIProfileArchetype.UndeadMindless },
+                { "wight_dreadwalker", NPCAIProfileArchetype.Humanoid },
+                { "orc_berserker", NPCAIProfileArchetype.Berserk },
+                { "orc_grapple_drill", NPCAIProfileArchetype.Grappler },
+                { "hobgoblin_sergeant", NPCAIProfileArchetype.Humanoid },
+                { "ogre_brute", NPCAIProfileArchetype.Berserk },
+                { "dire_wolf", NPCAIProfileArchetype.Animal },
+                { "tiger", NPCAIProfileArchetype.Animal },
+                { "brown_bear", NPCAIProfileArchetype.Animal },
+                { "wolf_pack_hunter", NPCAIProfileArchetype.Animal },
             };
 
             List<string> mismatches = new List<string>();
             foreach (var pair in expected)
             {
-                EnemyDefinition def = EnemyDatabase.Get(pair.Key);
+                NPCDefinition def = NPCDatabase.Get(pair.Key);
                 if (def == null)
                 {
                     mismatches.Add($"{pair.Key}=missing");

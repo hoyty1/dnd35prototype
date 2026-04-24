@@ -40,7 +40,7 @@ public partial class GameManager : MonoBehaviour
     public List<CharacterController> NPCs = new List<CharacterController>();
 
     /// <summary>AI behavior assigned to each NPC (indexed same as NPCs list).</summary>
-    private List<EnemyAIBehavior> _npcAIBehaviors = new List<EnemyAIBehavior>();
+    private List<NPCAIBehavior> _npcAIBehaviors = new List<NPCAIBehavior>();
 
     // Legacy alias
     public CharacterController PC { get => PC1; set => PC1 = value; }
@@ -723,7 +723,7 @@ public partial class GameManager : MonoBehaviour
 
     private void PromptEncounterSelection()
     {
-        EnemyDatabase.Init();
+        NPCDatabase.Init();
 
         if (EncounterSelectionUI == null)
             EncounterSelectionUI = FindObjectOfType<EncounterSelectionUI>();
@@ -731,7 +731,7 @@ public partial class GameManager : MonoBehaviour
             EncounterSelectionUI = gameObject.AddComponent<EncounterSelectionUI>();
 
         WaitingForEncounterSelection = true;
-        var presets = EnemyDatabase.ListEncounterPresets();
+        var presets = NPCDatabase.ListEncounterPresets();
 
         // Show all available encounters so the player can scroll and select any scenario.
         EncounterSelectionUI.Open(presets,
@@ -753,7 +753,7 @@ public partial class GameManager : MonoBehaviour
 
     private void ApplyEncounterPreset(string presetId)
     {
-        EncounterPreset preset = EnemyDatabase.GetEncounterPreset(presetId);
+        EncounterPreset preset = NPCDatabase.GetEncounterPreset(presetId);
         _activeEncounterEnemyIds.Clear();
         _isGrappleTestEncounter = string.Equals(presetId, GrappleTestPresetId, StringComparison.Ordinal);
         _isFeintSneakTestEncounter = string.Equals(presetId, FeintSneakTestPresetId, StringComparison.Ordinal);
@@ -761,9 +761,9 @@ public partial class GameManager : MonoBehaviour
         _isArmorTargetingTestEncounter = string.Equals(presetId, ArmorTargetingTestPresetId, StringComparison.Ordinal);
         _isTigerHuntTestEncounter = string.Equals(presetId, TigerHuntTestPresetId, StringComparison.Ordinal);
 
-        if (preset != null && preset.EnemyIds != null && preset.EnemyIds.Count > 0)
+        if (preset != null && preset.NPCIds != null && preset.NPCIds.Count > 0)
         {
-            _activeEncounterEnemyIds.AddRange(preset.EnemyIds);
+            _activeEncounterEnemyIds.AddRange(preset.NPCIds);
             CombatUI?.ShowCombatLog($"🧭 Encounter selected: {preset.DisplayName}");
         }
         else
@@ -1944,7 +1944,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         // ==========================================
-        // NPCs: Multiple enemies from EnemyDatabase
+        // NPCs: Multiple enemies from NPCDatabase
         // ==========================================
         // Enemy encounter setup is deferred until the player selects a preset.
 
@@ -2033,7 +2033,7 @@ public partial class GameManager : MonoBehaviour
 
     private void SetupEnemyEncounter(List<string> enemyIds)
     {
-        EnemyDatabase.Init();
+        NPCDatabase.Init();
         ItemDatabase.Init();
 
         _npcAIBehaviors.Clear();
@@ -2058,7 +2058,7 @@ public partial class GameManager : MonoBehaviour
             }
 
             string enemyId = enemyIds[i];
-            EnemyDefinition def = EnemyDatabase.Get(enemyId);
+            NPCDefinition def = NPCDatabase.Get(enemyId);
             if (def == null)
             {
                 Debug.LogError($"[GameManager] Unknown enemy ID: {enemyId}");
@@ -2150,7 +2150,7 @@ public partial class GameManager : MonoBehaviour
             CombatUI.NPCNameText.transform.parent.gameObject.SetActive(false);
     }
 
-    private void InitializeNPCFromDefinition(CharacterController npc, EnemyDefinition def,
+    private void InitializeNPCFromDefinition(CharacterController npc, NPCDefinition def,
         Vector2Int pos, Sprite alive, Sprite dead)
     {
         int hitDice = Mathf.Max(1, def.HitDice > 0 ? def.HitDice : def.Level);
@@ -2287,43 +2287,43 @@ public partial class GameManager : MonoBehaviour
                   $"Saves(F/R/W)={stats.ClassFortSave}/{stats.ClassRefSave}/{stats.ClassWillSave}");
     }
 
-    private DND35.AI.AIProfile BuildRuntimeAIProfile(EnemyDefinition def)
+    private DND35.AI.AIProfile BuildRuntimeAIProfile(NPCDefinition def)
     {
         if (def == null)
             return null;
 
-        EnemyAIProfileArchetype archetype = def.AIProfileArchetype;
+        NPCAIProfileArchetype archetype = def.AIProfileArchetype;
 
         // Legacy fallback for old definitions that don't explicitly set an archetype.
-        if (archetype == EnemyAIProfileArchetype.None
+        if (archetype == NPCAIProfileArchetype.None
             && string.Equals(def.CreatureType, "Animal", StringComparison.OrdinalIgnoreCase))
         {
-            archetype = EnemyAIProfileArchetype.Animal;
+            archetype = NPCAIProfileArchetype.Animal;
         }
 
         switch (archetype)
         {
-            case EnemyAIProfileArchetype.Animal:
+            case NPCAIProfileArchetype.Animal:
                 return ScriptableObject.CreateInstance<AnimalAIProfile>();
-            case EnemyAIProfileArchetype.Humanoid:
+            case NPCAIProfileArchetype.Humanoid:
                 return ScriptableObject.CreateInstance<HumanoidAIProfile>();
-            case EnemyAIProfileArchetype.Berserk:
+            case NPCAIProfileArchetype.Berserk:
                 return ScriptableObject.CreateInstance<BerserkAIProfile>();
-            case EnemyAIProfileArchetype.Grappler:
+            case NPCAIProfileArchetype.Grappler:
                 return ScriptableObject.CreateInstance<GrapplerAIProfile>();
-            case EnemyAIProfileArchetype.Ranged:
+            case NPCAIProfileArchetype.Ranged:
                 return ScriptableObject.CreateInstance<RangedAIProfile>();
-            case EnemyAIProfileArchetype.Healer:
+            case NPCAIProfileArchetype.Healer:
                 return ScriptableObject.CreateInstance<HealerAIProfile>();
-            case EnemyAIProfileArchetype.Spellcaster:
+            case NPCAIProfileArchetype.Spellcaster:
                 return ScriptableObject.CreateInstance<SpellcasterAIProfile>();
-            case EnemyAIProfileArchetype.Evoker:
+            case NPCAIProfileArchetype.Evoker:
                 return ScriptableObject.CreateInstance<EvokerAIProfile>();
-            case EnemyAIProfileArchetype.Abjurer:
+            case NPCAIProfileArchetype.Abjurer:
                 return ScriptableObject.CreateInstance<AbjurerAIProfile>();
-            case EnemyAIProfileArchetype.Necromancer:
+            case NPCAIProfileArchetype.Necromancer:
                 return ScriptableObject.CreateInstance<NecromancerAIProfile>();
-            case EnemyAIProfileArchetype.UndeadMindless:
+            case NPCAIProfileArchetype.UndeadMindless:
                 return ScriptableObject.CreateInstance<UndeadMindlessAIProfile>();
             default:
                 return null;
@@ -6718,7 +6718,7 @@ public partial class GameManager : MonoBehaviour
         concMgr.Init(stats, summon);
 
         NPCs.Add(summon);
-        _npcAIBehaviors.Add(EnemyAIBehavior.AggressiveMelee);
+        _npcAIBehaviors.Add(NPCAIBehavior.AggressiveMelee);
 
         if (summon.IsPlayerControlled)
             _summonedAllies.Add(summon);
@@ -8990,12 +8990,12 @@ public partial class GameManager : MonoBehaviour
         => _conditionService != null ? _conditionService.GetActiveConditions(target) : new List<ConditionService.ActiveCondition>();
 
     // Public delegation helpers for AIService.
-    public EnemyAIBehavior GetNPCBehaviorForAI(CharacterController npc)
+    public NPCAIBehavior GetNPCBehaviorForAI(CharacterController npc)
     {
         int npcIdx = NPCs.IndexOf(npc);
         return (npcIdx >= 0 && npcIdx < _npcAIBehaviors.Count)
             ? _npcAIBehaviors[npcIdx]
-            : EnemyAIBehavior.AggressiveMelee;
+            : NPCAIBehavior.AggressiveMelee;
     }
 
     public void BeginNPCTurnForAI(CharacterController npc)
@@ -11691,7 +11691,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         // Determine AI behavior for this NPC
-        EnemyAIBehavior behavior = GetNPCBehaviorForAI(npc);
+        NPCAIBehavior behavior = GetNPCBehaviorForAI(npc);
         if (_aiService != null)
             yield return StartCoroutine(_aiService.ExecuteNPCTurn(npc, behavior));
 

@@ -2,22 +2,22 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Data-driven enemy type definitions for the D&D 3.5 hex RPG prototype.
-/// Each EnemyDefinition describes a complete enemy template including stats,
+/// Data-driven NPC type definitions for the D&D 3.5 hex RPG prototype.
+/// Each NPCDefinition describes a complete NPC template including stats,
 /// equipment, creature tags, AI behavior preference, and visual appearance.
 /// 
 /// Enemy types are balanced for encounters against level 3 PCs.
 /// </summary>
-public static class EnemyDatabase
+public static class NPCDatabase
 {
-    private static Dictionary<string, EnemyDefinition> _enemies = new Dictionary<string, EnemyDefinition>();
+    private static Dictionary<string, NPCDefinition> _npcs = new Dictionary<string, NPCDefinition>();
     private static bool _initialized = false;
 
     public static void Init()
     {
         if (_initialized) return;
         _initialized = true;
-        _enemies.Clear();
+        _npcs.Clear();
 
         RegisterGoblinWarchief();
         RegisterGoblinFeintDrill();
@@ -33,26 +33,26 @@ public static class EnemyDatabase
         RegisterBrownBear();
         RegisterWolfPackHunter();
 
-        Debug.Log($"[EnemyDatabase] Initialized with {_enemies.Count} enemy types.");
+        Debug.Log($"[NPCDatabase] Initialized with {_npcs.Count} NPC types.");
     }
 
-    /// <summary>Retrieve an enemy definition by ID.</summary>
-    public static EnemyDefinition Get(string id)
+    /// <summary>Retrieve an NPC definition by ID.</summary>
+    public static NPCDefinition Get(string id)
     {
         Init();
-        if (_enemies.TryGetValue(id, out var def)) return def;
-        Debug.LogWarning($"[EnemyDatabase] Unknown enemy ID: '{id}'");
+        if (_npcs.TryGetValue(id, out var def)) return def;
+        Debug.LogWarning($"[NPCDatabase] Unknown NPC ID: '{id}'");
         return null;
     }
 
-    /// <summary>Get all registered enemy definitions.</summary>
-    public static IEnumerable<EnemyDefinition> AllEnemies => _enemies.Values;
+    /// <summary>Get all registered NPC definitions.</summary>
+    public static IEnumerable<NPCDefinition> AllNPCs => _npcs.Values;
 
-    /// <summary>Get the configured AI profile archetype for an enemy ID.</summary>
-    public static EnemyAIProfileArchetype GetAIProfileArchetype(string id)
+    /// <summary>Get the configured AI profile archetype for an NPC ID.</summary>
+    public static NPCAIProfileArchetype GetAIProfileArchetype(string id)
     {
-        EnemyDefinition def = Get(id);
-        return def != null ? def.AIProfileArchetype : EnemyAIProfileArchetype.None;
+        NPCDefinition def = Get(id);
+        return def != null ? def.AIProfileArchetype : NPCAIProfileArchetype.None;
     }
 
     /// <summary>
@@ -89,13 +89,13 @@ public static class EnemyDatabase
         return all.Count > 0 ? all[0] : null;
     }
 
-    private static void Register(EnemyDefinition def)
+    private static void Register(NPCDefinition def)
     {
-        _enemies[def.Id] = def;
+        _npcs[def.Id] = def;
     }
 
     // ================================================================
-    //  ENEMY TYPE DEFINITIONS
+    //  NPC TYPE DEFINITIONS
     // ================================================================
 
     /// <summary>
@@ -106,7 +106,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterGoblinWarchief()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "goblin_warchief",
             Name = "Goblin Warchief",
@@ -130,8 +130,8 @@ public static class EnemyDatabase
                 new EquipmentSlotPair("shield_light_wooden", EquipSlot.LeftHand)
             },
             BackpackItemIds = new List<string> { "javelin" },
-            AIBehavior = EnemyAIBehavior.AggressiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.Humanoid,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.6f, 0.8f, 0.3f, 1f),  // greenish
             PanelColor = new Color(0.4f, 0.1f, 0.1f, 0.85f), // dark red
             NameColor = new Color(1f, 0.4f, 0.4f),
@@ -145,7 +145,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterGoblinFeintDrill()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "goblin_feint_drill",
             Name = "Goblin Warrior",
@@ -169,8 +169,8 @@ public static class EnemyDatabase
                 new EquipmentSlotPair("shield_light_wooden", EquipSlot.LeftHand)
             },
             BackpackItemIds = new List<string>(),
-            AIBehavior = EnemyAIBehavior.AggressiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.Humanoid,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.58f, 0.8f, 0.3f, 1f),
             PanelColor = new Color(0.36f, 0.1f, 0.1f, 0.85f),
             NameColor = new Color(1f, 0.45f, 0.45f),
@@ -189,7 +189,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterSkeletonArcher()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "skeleton_archer",
             Name = "Skeleton Archer",
@@ -215,8 +215,8 @@ public static class EnemyDatabase
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Bludgeoning,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
-            AIBehavior = EnemyAIBehavior.RangedKiter,
-            AIProfileArchetype = EnemyAIProfileArchetype.UndeadMindless,
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
             SpriteColor = new Color(0.85f, 0.85f, 0.75f, 1f),  // bone white
             PanelColor = new Color(0.2f, 0.2f, 0.3f, 0.85f),   // dark grey-blue
             NameColor = new Color(0.7f, 0.85f, 1f),             // pale blue
@@ -230,7 +230,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterSkeletonWarrior()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "skeleton_warrior",
             Name = "Skeleton Warrior",
@@ -256,8 +256,8 @@ public static class EnemyDatabase
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Bludgeoning,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
-            AIBehavior = EnemyAIBehavior.DefensiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.UndeadMindless,
+            AIBehavior = NPCAIBehavior.DefensiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
             SpriteColor = new Color(0.82f, 0.82f, 0.74f, 1f),
             PanelColor = new Color(0.22f, 0.22f, 0.28f, 0.85f),
             NameColor = new Color(0.75f, 0.85f, 1f),
@@ -271,7 +271,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterWightDreadwalker()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "wight_dreadwalker",
             Name = "Wight Dreadwalker",
@@ -295,8 +295,8 @@ public static class EnemyDatabase
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Silver,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
-            AIBehavior = EnemyAIBehavior.AggressiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.Humanoid,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.78f, 0.82f, 0.9f, 1f),
             PanelColor = new Color(0.19f, 0.18f, 0.3f, 0.85f),
             NameColor = new Color(0.72f, 0.9f, 1f),
@@ -315,7 +315,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterOrcBerserker()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "orc_berserker",
             Name = "Orc Berserker",
@@ -340,8 +340,8 @@ public static class EnemyDatabase
                 new EquipmentSlotPair("greataxe", EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string> { "javelin", "javelin" },
-            AIBehavior = EnemyAIBehavior.AggressiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.Berserk,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.5f, 0.6f, 0.4f, 1f),     // olive-green skin
             PanelColor = new Color(0.35f, 0.15f, 0.05f, 0.85f), // dark brown
             NameColor = new Color(1f, 0.6f, 0.3f),              // orange
@@ -356,7 +356,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterOrcGrappleDrill()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "orc_grapple_drill",
             Name = "Orc Grapple Drill",
@@ -379,8 +379,8 @@ public static class EnemyDatabase
                 new EquipmentSlotPair("dagger", EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string> { "dagger" },
-            AIBehavior = EnemyAIBehavior.AggressiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.Grappler,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
             SpriteColor = new Color(0.55f, 0.68f, 0.45f, 1f),
             PanelColor = new Color(0.32f, 0.14f, 0.08f, 0.85f),
             NameColor = new Color(1f, 0.72f, 0.42f),
@@ -399,7 +399,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterHobgoblinSergeant()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "hobgoblin_sergeant",
             Name = "Hobgoblin Sergeant",
@@ -426,8 +426,8 @@ public static class EnemyDatabase
                 new EquipmentSlotPair("shield_heavy_steel", EquipSlot.LeftHand)
             },
             BackpackItemIds = new List<string> { "javelin", "javelin", "potion_healing" },
-            AIBehavior = EnemyAIBehavior.DefensiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.Humanoid,
+            AIBehavior = NPCAIBehavior.DefensiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.8f, 0.5f, 0.3f, 1f),     // orange-brown
             PanelColor = new Color(0.15f, 0.15f, 0.3f, 0.85f),  // dark blue-grey
             NameColor = new Color(1f, 0.8f, 0.5f),              // golden
@@ -441,7 +441,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterOgreBrute()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "ogre_brute",
             Name = "Ogre Brute",
@@ -463,8 +463,8 @@ public static class EnemyDatabase
                 new EquipmentSlotPair("hide_armor", EquipSlot.Armor)
             },
             BackpackItemIds = new List<string> { "javelin", "javelin" },
-            AIBehavior = EnemyAIBehavior.AggressiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.Berserk,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.65f, 0.55f, 0.45f, 1f),
             PanelColor = new Color(0.25f, 0.12f, 0.08f, 0.85f),
             NameColor = new Color(1f, 0.78f, 0.52f),
@@ -478,7 +478,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterDireWolf()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "dire_wolf",
             Name = "Dire Wolf",
@@ -502,8 +502,8 @@ public static class EnemyDatabase
             HasTripAttack = true,
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
-            AIBehavior = EnemyAIBehavior.AggressiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.Animal,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.62f, 0.62f, 0.62f, 1f),
             PanelColor = new Color(0.18f, 0.18f, 0.18f, 0.85f),
             NameColor = new Color(0.95f, 0.95f, 1f),
@@ -516,7 +516,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterTiger()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "tiger",
             Name = "Tiger",
@@ -545,8 +545,8 @@ public static class EnemyDatabase
             RakeAttack = new NaturalAttackDefinition { Name = "Rake", DamageDice = 8, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = true },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
-            AIBehavior = EnemyAIBehavior.AggressiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.Animal,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.88f, 0.66f, 0.32f, 1f),
             PanelColor = new Color(0.35f, 0.2f, 0.08f, 0.85f),
             NameColor = new Color(1f, 0.82f, 0.5f),
@@ -559,7 +559,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterBrownBear()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "brown_bear",
             Name = "Brown Bear",
@@ -583,8 +583,8 @@ public static class EnemyDatabase
             HasTripAttack = false,
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
-            AIBehavior = EnemyAIBehavior.AggressiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.Animal,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.5f, 0.38f, 0.28f, 1f),
             PanelColor = new Color(0.25f, 0.17f, 0.12f, 0.85f),
             NameColor = new Color(0.95f, 0.8f, 0.62f),
@@ -598,7 +598,7 @@ public static class EnemyDatabase
     /// </summary>
     private static void RegisterWolfPackHunter()
     {
-        Register(new EnemyDefinition
+        Register(new NPCDefinition
         {
             Id = "wolf_pack_hunter",
             Name = "Wolf",
@@ -625,8 +625,8 @@ public static class EnemyDatabase
             WeaponFocusChoice = "Bite",
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
-            AIBehavior = EnemyAIBehavior.AggressiveMelee,
-            AIProfileArchetype = EnemyAIProfileArchetype.Animal,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
             SpriteColor = new Color(0.72f, 0.72f, 0.72f, 1f),
             PanelColor = new Color(0.2f, 0.2f, 0.2f, 0.85f),
             NameColor = new Color(0.9f, 0.9f, 0.95f),
@@ -636,11 +636,11 @@ public static class EnemyDatabase
 }
 
 /// <summary>
-/// Complete definition of an enemy type — everything needed to instantiate
+/// Complete definition of an NPC type — everything needed to instantiate
 /// a fully configured CharacterStats, equip items, and choose AI behavior.
 /// </summary>
 [System.Serializable]
-public class EnemyDefinition
+public class NPCDefinition
 {
     public string Id;
     public string Name;
@@ -692,9 +692,9 @@ public class EnemyDefinition
     public List<string> BackpackItemIds = new List<string>();
 
     // AI
-    public EnemyAIBehavior AIBehavior = EnemyAIBehavior.AggressiveMelee;
-    public EnemyAIProfileArchetype AIProfileArchetype = EnemyAIProfileArchetype.None;
-    // null = use AI profile default, true/false = force this individual enemy behavior.
+    public NPCAIBehavior AIBehavior = NPCAIBehavior.AggressiveMelee;
+    public NPCAIProfileArchetype AIProfileArchetype = NPCAIProfileArchetype.None;
+    // null = use AI profile default, true/false = force this individual NPC behavior.
     public bool? UseCoupDeGrace;
 
     // Visuals
@@ -709,14 +709,14 @@ public class EncounterPreset
     public string Id;
     public string DisplayName;
     public string Description;
-    public List<string> EnemyIds = new List<string>();
+    public List<string> NPCIds = new List<string>();
 
-    public EncounterPreset(string id, string displayName, string description, List<string> enemyIds)
+    public EncounterPreset(string id, string displayName, string description, List<string> npcIds)
     {
         Id = id;
         DisplayName = displayName;
         Description = description;
-        EnemyIds = enemyIds ?? new List<string>();
+        NPCIds = npcIds ?? new List<string>();
     }
 }
 /// <summary>
@@ -738,7 +738,7 @@ public class EquipmentSlotPair
 /// <summary>
 /// Runtime AI profile archetypes used to instantiate specialized AIProfile objects.
 /// </summary>
-public enum EnemyAIProfileArchetype
+public enum NPCAIProfileArchetype
 {
     None,
     Animal,
@@ -755,10 +755,10 @@ public enum EnemyAIProfileArchetype
 }
 
 /// <summary>
-/// AI behavior archetypes that influence how an enemy acts during its turn.
+/// AI behavior archetypes that influence how an NPC acts during its turn.
 /// The GameManager NPC AI coroutine uses this as fallback movement/attack behavior.
 /// </summary>
-public enum EnemyAIBehavior
+public enum NPCAIBehavior
 {
     /// <summary>Move directly toward closest PC and attack in melee.</summary>
     AggressiveMelee,

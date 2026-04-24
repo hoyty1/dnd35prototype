@@ -42,7 +42,7 @@ public class AIService : MonoBehaviour
         _gameManager = null;
     }
 
-    public IEnumerator ExecuteNPCTurn(CharacterController npc, EnemyAIBehavior behavior)
+    public IEnumerator ExecuteNPCTurn(CharacterController npc, NPCAIBehavior behavior)
     {
         if (_gameManager == null || npc == null || npc.Stats == null)
             yield break;
@@ -97,7 +97,7 @@ public class AIService : MonoBehaviour
                     {
                         yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
                     }
-                    else if (behavior == EnemyAIBehavior.DefensiveMelee)
+                    else if (behavior == NPCAIBehavior.DefensiveMelee)
                     {
                         yield return _gameManager.StartCoroutine(ExecuteDefensiveMeleeTurn(npc, targetPC));
                     }
@@ -121,12 +121,12 @@ public class AIService : MonoBehaviour
                 yield break;
             }
 
-            // Profile drives targeting/maneuvers, while EnemyAIBehavior still selects tactical shell.
-            if (behavior == EnemyAIBehavior.DefensiveMelee)
+            // Profile drives targeting/maneuvers, while NPCAIBehavior still selects tactical shell.
+            if (behavior == NPCAIBehavior.DefensiveMelee)
             {
                 yield return _gameManager.StartCoroutine(ExecuteDefensiveMeleeTurn(npc, targetPC));
             }
-            else if (behavior == EnemyAIBehavior.RangedKiter || profile.CombatStyle == CombatStyle.Ranged)
+            else if (behavior == NPCAIBehavior.RangedKiter || profile.CombatStyle == CombatStyle.Ranged)
             {
                 yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
             }
@@ -140,13 +140,13 @@ public class AIService : MonoBehaviour
 
         switch (behavior)
         {
-            case EnemyAIBehavior.AggressiveMelee:
+            case NPCAIBehavior.AggressiveMelee:
                 yield return _gameManager.StartCoroutine(ExecuteAggressiveMeleeTurn(npc, targetPC));
                 break;
-            case EnemyAIBehavior.RangedKiter:
+            case NPCAIBehavior.RangedKiter:
                 yield return _gameManager.StartCoroutine(ExecuteRangedKiterTurn(npc));
                 break;
-            case EnemyAIBehavior.DefensiveMelee:
+            case NPCAIBehavior.DefensiveMelee:
                 yield return _gameManager.StartCoroutine(ExecuteDefensiveMeleeTurn(npc, targetPC));
                 break;
             default:
