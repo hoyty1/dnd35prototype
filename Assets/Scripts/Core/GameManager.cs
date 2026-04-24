@@ -2171,6 +2171,8 @@ public partial class GameManager : MonoBehaviour
             InitializeNPCFromDefinition(npc, def, pos, npcAlive, npcDead);
             _npcAIBehaviors.Add(def.AIBehavior);
 
+            ApplyScenarioSpawnOverrides(enemyId, npc, i);
+
             if (_isArmorTargetingTestEncounter && string.Equals(enemyId, "skeleton_archer", StringComparison.Ordinal))
             {
                 npc.aiProfile = ScriptableObject.CreateInstance<RangedAIProfile>();
@@ -2210,6 +2212,24 @@ public partial class GameManager : MonoBehaviour
         // Hide legacy single-NPC panel since we're using multi-panels
         if (CombatUI.NPCNameText != null)
             CombatUI.NPCNameText.transform.parent.gameObject.SetActive(false);
+    }
+
+    private void ApplyScenarioSpawnOverrides(string enemyId, CharacterController npc, int spawnIndex)
+    {
+        if (npc == null)
+            return;
+
+        if (_isOgreBattleTestEncounter
+            && spawnIndex == 0
+            && string.Equals(enemyId, "dire_tiger", StringComparison.Ordinal))
+        {
+            // IMPORTANT: Keep NPCDatabase definitions scenario-agnostic.
+            // Ogre Battle needs an allied/controllable tiger, so we override allegiance/control at spawn time
+            // instead of baking scenario flags (IsAlly/IsControllable) into the shared NPC record.
+            npc.ConfigureTeamControl(CharacterTeam.Player, controllable: true);
+            npc.Tags.AddTag("ScenarioOverride:OgreBattleAlly");
+            Debug.Log("[OgreBattleTest] Applied spawn-time override for dire_tiger: Team=Player, IsControllable=true.");
+        }
     }
 
     private void InitializeNPCFromDefinition(CharacterController npc, NPCDefinition def,
