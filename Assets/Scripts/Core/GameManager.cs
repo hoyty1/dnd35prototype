@@ -2111,8 +2111,9 @@ public partial class GameManager : MonoBehaviour
 
             if (_isArmorTargetingTestEncounter && string.Equals(enemyId, "skeleton_archer", StringComparison.Ordinal))
             {
+                npc.aiProfile = ScriptableObject.CreateInstance<RangedAIProfile>();
                 npc.Tags.AddTag("Uses Armor-Based Targeting");
-                Debug.Log($"[ArmorTargetingTest] Enabled armor-priority AI for {npc.Stats.CharacterName}");
+                Debug.Log($"[ArmorTargetingTest] Overriding {npc.Stats.CharacterName} to Ranged profile for armor-priority targeting validation.");
             }
 
             // Only apply color tint if using the generic fallback sprite
@@ -2304,6 +2305,8 @@ public partial class GameManager : MonoBehaviour
         {
             case EnemyAIProfileArchetype.Animal:
                 return ScriptableObject.CreateInstance<AnimalAIProfile>();
+            case EnemyAIProfileArchetype.Humanoid:
+                return ScriptableObject.CreateInstance<HumanoidAIProfile>();
             case EnemyAIProfileArchetype.Berserk:
                 return ScriptableObject.CreateInstance<BerserkAIProfile>();
             case EnemyAIProfileArchetype.Grappler:

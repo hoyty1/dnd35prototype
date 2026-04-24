@@ -40,6 +40,7 @@ namespace Tests.AI
             TestEnemyDefinitionsAssignProfileArchetypes();
             TestWolfDefinitionMatchesBaselineStats();
             TestTigerDefinitionUsesAnimalProfile();
+            TestScenarioEnemyProfileAssignments();
             TestEvokerSchoolPriority();
             TestAbjurerPrefersSingleTarget();
             TestSpellcasterAOEAvoidsUnsafeFriendlyFire();
@@ -506,6 +507,46 @@ namespace Tests.AI
                 tiger == null
                     ? "(tiger definition missing)"
                     : $"(archetype={tiger.AIProfileArchetype}, scent={tiger.HasScent}, pounce={tiger.HasPounce}, grab={tiger.HasImprovedGrab}, trigger={tiger.ImprovedGrabTriggerAttackName}, rake={tiger.HasRake}, naturalAttackCount={tigerNaturalAttackCount}, clawCount={tigerClaw?.Count ?? 0}, biteCount={tigerBite?.Count ?? 0})");
+        }
+
+        private static void TestScenarioEnemyProfileAssignments()
+        {
+            EnemyDatabase.Init();
+
+            var expected = new Dictionary<string, EnemyAIProfileArchetype>
+            {
+                { "goblin_warchief", EnemyAIProfileArchetype.Humanoid },
+                { "goblin_feint_drill", EnemyAIProfileArchetype.Humanoid },
+                { "skeleton_archer", EnemyAIProfileArchetype.UndeadMindless },
+                { "skeleton_warrior", EnemyAIProfileArchetype.UndeadMindless },
+                { "wight_dreadwalker", EnemyAIProfileArchetype.Humanoid },
+                { "orc_berserker", EnemyAIProfileArchetype.Berserk },
+                { "orc_grapple_drill", EnemyAIProfileArchetype.Grappler },
+                { "hobgoblin_sergeant", EnemyAIProfileArchetype.Humanoid },
+                { "ogre_brute", EnemyAIProfileArchetype.Berserk },
+                { "dire_wolf", EnemyAIProfileArchetype.Animal },
+                { "tiger", EnemyAIProfileArchetype.Animal },
+                { "brown_bear", EnemyAIProfileArchetype.Animal },
+                { "wolf_pack_hunter", EnemyAIProfileArchetype.Animal },
+            };
+
+            List<string> mismatches = new List<string>();
+            foreach (var pair in expected)
+            {
+                EnemyDefinition def = EnemyDatabase.Get(pair.Key);
+                if (def == null)
+                {
+                    mismatches.Add($"{pair.Key}=missing");
+                    continue;
+                }
+
+                if (def.AIProfileArchetype != pair.Value)
+                    mismatches.Add($"{pair.Key}={def.AIProfileArchetype} (expected {pair.Value})");
+            }
+
+            Assert(mismatches.Count == 0,
+                "Scenario enemy definitions use expected AI profile archetypes",
+                mismatches.Count > 0 ? $"(mismatches: {string.Join(", ", mismatches)})" : string.Empty);
         }
 
         private static void TestEvokerSchoolPriority()
