@@ -946,7 +946,13 @@ public class AIService : MonoBehaviour
 
     public bool ShouldUseManeuver(CharacterController npc, CharacterController target)
     {
-        if (npc == null || target == null || npc.IsGrappling())
+        if (npc == null || target == null)
+            return false;
+
+        if (_gameManager != null && _gameManager.CanUseCoupDeGraceAttackOption(npc))
+            return true;
+
+        if (npc.IsGrappling())
             return false;
         if (!npc.Actions.HasStandardAction)
             return false;
@@ -988,6 +994,9 @@ public class AIService : MonoBehaviour
     {
         if (npc == null || target == null)
             return false;
+
+        if (_gameManager != null && _gameManager.CanUseCoupDeGraceAttackOption(npc))
+            return _gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.CoupDeGrace);
 
         if (profile != null)
         {

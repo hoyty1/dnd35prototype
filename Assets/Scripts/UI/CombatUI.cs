@@ -842,6 +842,9 @@ public class CombatUI : MonoBehaviour
             case "Feint":
                 enabled = hasStandardAction || canImprovedFeintMove;
                 break;
+            case "Coup de Grace":
+                enabled = GameManager.Instance != null && GameManager.Instance.CanUseCoupDeGraceAttackOption(pc);
+                break;
             case "Aid Another":
                 enabled = GameManager.Instance != null && GameManager.Instance.CanUseAidAnother(pc, out _);
                 break;
@@ -982,6 +985,21 @@ public class CombatUI : MonoBehaviour
                 else
                 {
                     label.text = "Sunder (Off-Hand) (No attacks)";
+                }
+                break;
+
+            case "Coup de Grace":
+                if (pc != null && GameManager.Instance != null)
+                {
+                    int helplessCount = GameManager.Instance.GetAdjacentHelplessEnemiesForCoupDeGrace(pc).Count;
+                    bool canUseCdg = GameManager.Instance.CanUseCoupDeGraceAttackOption(pc);
+                    label.text = canUseCdg
+                        ? $"Coup de Grace ({helplessCount} target{(helplessCount == 1 ? string.Empty : "s")})"
+                        : "Coup de Grace (Needs full-round + helpless adjacent target)";
+                }
+                else
+                {
+                    label.text = "Coup de Grace";
                 }
                 break;
 
@@ -1460,6 +1478,7 @@ public class CombatUI : MonoBehaviour
         CreateSpecialButton("Bull Rush (Charge)", "Bull Rush (Charge)");
         CreateSpecialButton("Overrun", "Overrun");
         CreateSpecialButton("Feint", "Feint");
+        CreateSpecialButton("Coup de Grace", "Coup de Grace");
         CreateSpecialButton("Aid Another", "Aid Another");
         CreateSpecialCancelButton();
 
@@ -1487,6 +1506,7 @@ public class CombatUI : MonoBehaviour
                 case "Bull Rush (Charge)": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Bull Rush (Charge)"); onSelect?.Invoke(SpecialAttackType.BullRushCharge, false); }); break;
                 case "Overrun": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Overrun"); onSelect?.Invoke(SpecialAttackType.Overrun, false); }); break;
                 case "Feint": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Feint"); onSelect?.Invoke(SpecialAttackType.Feint, false); }); break;
+                case "Coup de Grace": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Coup de Grace"); onSelect?.Invoke(SpecialAttackType.CoupDeGrace, false); }); break;
                 case "Aid Another": btn.onClick.AddListener(() => { Debug.Log("[CombatUI][SpecialAttackMenu] CLICK Aid Another"); onSelect?.Invoke(SpecialAttackType.AidAnother, false); }); break;
                 case "Cancel":
                     btn.onClick.AddListener(() =>

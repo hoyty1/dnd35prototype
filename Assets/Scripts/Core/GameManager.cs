@@ -5802,6 +5802,7 @@ public partial class GameManager : MonoBehaviour
         bool hasTripAttackAvailable = CanUseTripAttackOption(actor);
         bool hasDisarmAttackAvailable = CanUseDisarmAttackOption(actor);
         bool hasSunderAttackAvailable = CanUseSunderAttackOption(actor);
+        bool hasCoupDeGraceAvailable = CanUseCoupDeGraceAttackOption(actor);
         return actor.Actions.HasStandardAction
             || actor.Actions.HasFullRoundAction
             || CanUseImprovedFeintAsMove(actor)
@@ -5809,7 +5810,8 @@ public partial class GameManager : MonoBehaviour
             || hasBullRushAttackAvailable
             || hasTripAttackAvailable
             || hasDisarmAttackAvailable
-            || hasSunderAttackAvailable;
+            || hasSunderAttackAvailable
+            || hasCoupDeGraceAvailable;
     }
 
 
@@ -5818,7 +5820,7 @@ public partial class GameManager : MonoBehaviour
     {
         CharacterController pc = ActivePC;
         bool canOpen = pc != null && CanOpenSpecialAttackMenu(pc);
-        Debug.Log($"[GameManager][SpecialAttack] ButtonPressed actor={(pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>")} canOpen={canOpen} phase={CurrentPhase} subPhase={CurrentSubPhase} std={(pc != null ? pc.Actions.HasStandardAction : false)} full={(pc != null ? pc.Actions.HasFullRoundAction : false)} grappleAvailable={(pc != null ? CanUseGrappleAttackOption(pc) : false)} bullRushAvailable={(pc != null ? CanUseBullRushAttackOption(pc) : false)} tripAvailable={(pc != null ? CanUseTripAttackOption(pc) : false)} disarmAvailable={(pc != null ? CanUseDisarmAttackOption(pc) : false)} sunderAvailable={(pc != null ? CanUseSunderAttackOption(pc) : false)}");
+        Debug.Log($"[GameManager][SpecialAttack] ButtonPressed actor={(pc != null && pc.Stats != null ? pc.Stats.CharacterName : "<null>")} canOpen={canOpen} phase={CurrentPhase} subPhase={CurrentSubPhase} std={(pc != null ? pc.Actions.HasStandardAction : false)} full={(pc != null ? pc.Actions.HasFullRoundAction : false)} grappleAvailable={(pc != null ? CanUseGrappleAttackOption(pc) : false)} bullRushAvailable={(pc != null ? CanUseBullRushAttackOption(pc) : false)} tripAvailable={(pc != null ? CanUseTripAttackOption(pc) : false)} disarmAvailable={(pc != null ? CanUseDisarmAttackOption(pc) : false)} sunderAvailable={(pc != null ? CanUseSunderAttackOption(pc) : false)} coupDeGraceAvailable={(pc != null ? CanUseCoupDeGraceAttackOption(pc) : false)}");
         if (!canOpen) return;
 
         if (RedirectPinnedCharacterToGrappleMenu(pc, "special attacks"))
@@ -5887,6 +5889,7 @@ public partial class GameManager : MonoBehaviour
         bool hasMainHandSunderAttackAvailable = CanUseMainHandSunderAttackOption(pc);
         bool hasOffHandSunderAttackAvailable = CanUseOffHandSunderAttackOption(pc);
         bool hasSunderAttackAvailable = useOffHandDisarm ? hasOffHandSunderAttackAvailable : hasMainHandSunderAttackAvailable;
+        bool hasCoupDeGraceAttackAvailable = CanUseCoupDeGraceAttackOption(pc);
 
         if (type == SpecialAttackType.Disarm && !useOffHandDisarm && !_dualWieldingChoiceMade && NeedsDualWieldingPrompt(pc))
         {
@@ -5916,11 +5919,13 @@ public partial class GameManager : MonoBehaviour
                             ? hasDisarmAttackAvailable
                             : (type == SpecialAttackType.Sunder
                                 ? hasSunderAttackAvailable
-                                : (type == SpecialAttackType.BullRushCharge
-                                    ? pc.Actions.HasFullRoundAction
-                                    : pc.Actions.HasStandardAction))))));
+                                : (type == SpecialAttackType.CoupDeGrace
+                                    ? hasCoupDeGraceAttackAvailable
+                                    : (type == SpecialAttackType.BullRushCharge
+                                        ? pc.Actions.HasFullRoundAction
+                                        : pc.Actions.HasStandardAction)))))));
 
-        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} mainDisarmAvailable={hasMainHandDisarmAttackAvailable} offHandDisarmAvailable={hasOffHandDisarmAttackAvailable} mainSunderAvailable={hasMainHandSunderAttackAvailable} offHandSunderAvailable={hasOffHandSunderAttackAvailable} requestedOffHand={useOffHandDisarm}");
+        Debug.Log($"[GameManager][SpecialAttack] Selected type={type} actor={pc.Stats.CharacterName} allowed={hasAction} phase={CurrentPhase} subPhase={CurrentSubPhase} std={pc.Actions.HasStandardAction} full={pc.Actions.HasFullRoundAction} grappleAvailable={hasGrappleAttackAvailable} bullRushAvailable={hasBullRushAttackAvailable} tripAvailable={hasTripAttackAvailable} mainDisarmAvailable={hasMainHandDisarmAttackAvailable} offHandDisarmAvailable={hasOffHandDisarmAttackAvailable} mainSunderAvailable={hasMainHandSunderAttackAvailable} offHandSunderAvailable={hasOffHandSunderAttackAvailable} coupDeGraceAvailable={hasCoupDeGraceAttackAvailable} requestedOffHand={useOffHandDisarm}");
 
         if (!hasAction)
         {
@@ -5936,9 +5941,11 @@ public partial class GameManager : MonoBehaviour
                                 ? (useOffHandDisarm ? "Need an available off-hand disarm attack" : "Need at least one remaining main-hand disarm attack")
                                 : (type == SpecialAttackType.Sunder
                                     ? (useOffHandDisarm ? "Need an available off-hand sunder attack" : "Need at least one remaining main-hand sunder attack")
-                                    : (type == SpecialAttackType.BullRushCharge
-                                        ? "Need a full-round action and valid charge movement"
-                                        : "Need a standard action"))))));
+                                    : (type == SpecialAttackType.CoupDeGrace
+                                        ? "Need a full-round action, an adjacent helpless enemy, and a melee attack option"
+                                        : (type == SpecialAttackType.BullRushCharge
+                                            ? "Need a full-round action and valid charge movement"
+                                            : "Need a standard action")))))));
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot use {type}: {reason}.");
             ShowActionChoices();
             return;
@@ -10676,7 +10683,7 @@ public partial class GameManager : MonoBehaviour
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        int maxRange = (type == SpecialAttackType.Feint)
+        int maxRange = (type == SpecialAttackType.Feint || type == SpecialAttackType.CoupDeGrace)
             ? 1
             : attacker.GetMeleeMaxAttackDistance();
         if (maxRange < 1) maxRange = 1;
@@ -10691,7 +10698,7 @@ public partial class GameManager : MonoBehaviour
             if (!IsEnemyTeam(attacker, c.Occupant)) continue;
 
             int distance = attacker.GetMinimumDistanceToTarget(c.Occupant, chebyshev: true);
-            bool inRange = (type == SpecialAttackType.Feint)
+            bool inRange = (type == SpecialAttackType.Feint || type == SpecialAttackType.CoupDeGrace)
                 ? distance == 1
                 : attacker.CanMeleeAttackDistance(distance);
 
@@ -10724,6 +10731,15 @@ public partial class GameManager : MonoBehaviour
                 continue;
             }
 
+            if (type == SpecialAttackType.CoupDeGrace)
+            {
+                bool helplessTarget = c.Occupant.IsHelplessForCoupDeGrace() && !c.Occupant.IsImmuneToCriticalHits();
+                c.SetHighlight(helplessTarget ? HighlightType.Attack : HighlightType.AttackDeadZone);
+                _highlightedCells.Add(c);
+                hasTarget = true;
+                continue;
+            }
+
             c.SetHighlight(HighlightType.Attack);
             _highlightedCells.Add(c);
             hasTarget = true;
@@ -10737,6 +10753,8 @@ public partial class GameManager : MonoBehaviour
                 CombatUI.SetTurnIndicator("SPECIAL: Disarm - red targets are valid, gray targets have no disarmable weapon (Right-click/Esc to cancel)");
             else if (type == SpecialAttackType.Sunder)
                 CombatUI.SetTurnIndicator("SPECIAL: Sunder - red targets are valid, gray targets have no sunderable item (Right-click/Esc to cancel)");
+            else if (type == SpecialAttackType.CoupDeGrace)
+                CombatUI.SetTurnIndicator("SPECIAL: Coup de Grace - red targets are helpless and vulnerable to critical hits (Right-click/Esc to cancel)");
             else
                 CombatUI.SetTurnIndicator($"SPECIAL: {type} - select target (Right-click/Esc to cancel)");
         }
@@ -10792,7 +10810,8 @@ public partial class GameManager : MonoBehaviour
             || type == SpecialAttackType.Sunder
             || type == SpecialAttackType.BullRushAttack
             || type == SpecialAttackType.BullRushCharge
-            || type == SpecialAttackType.Overrun;
+            || type == SpecialAttackType.Overrun
+            || type == SpecialAttackType.CoupDeGrace;
         ProcessTurnUndeadMeleeFearBreak(attacker, target, specialAttackCountsAsMeleeFearBreak);
 
         string actionLabel = "standard action";
@@ -10818,6 +10837,32 @@ public partial class GameManager : MonoBehaviour
                 ShowActionChoices();
                 return;
             }
+        }
+        else if (type == SpecialAttackType.CoupDeGrace)
+        {
+            if (!target.IsHelplessForCoupDeGrace())
+            {
+                CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} is not helpless; Coup de Grace cannot be performed.");
+                ShowActionChoices();
+                return;
+            }
+
+            if (target.IsImmuneToCriticalHits())
+            {
+                CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} is immune to critical hits and cannot be coup de graced.");
+                ShowActionChoices();
+                return;
+            }
+
+            if (!attacker.Actions.HasFullRoundAction)
+            {
+                CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot perform Coup de Grace: full-round action already spent.");
+                ShowActionChoices();
+                return;
+            }
+
+            attacker.Actions.UseFullRoundAction();
+            actionLabel = "full-round action";
         }
         else if (type == SpecialAttackType.Disarm)
         {
@@ -10962,27 +11007,46 @@ public partial class GameManager : MonoBehaviour
             actionLabel = "standard action";
         }
 
-        bool maneuverProvokesAoO = type == SpecialAttackType.Grapple || type == SpecialAttackType.Sunder;
+        bool maneuverProvokesAoO = type == SpecialAttackType.Grapple || type == SpecialAttackType.Sunder || type == SpecialAttackType.CoupDeGrace;
         if (maneuverProvokesAoO)
         {
             bool attackerIgnoresAoO = false;
-            string maneuverLabel = type == SpecialAttackType.Grapple ? "Grapple" : "Sunder";
+            string maneuverLabel = type == SpecialAttackType.Grapple
+                ? "Grapple"
+                : (type == SpecialAttackType.Sunder ? "Sunder" : "Coup de Grace");
 
             if (type == SpecialAttackType.Grapple)
                 attackerIgnoresAoO = attacker.Stats != null && attacker.Stats.HasFeat("Improved Grapple");
             else if (type == SpecialAttackType.Sunder)
                 attackerIgnoresAoO = attacker.Stats != null && attacker.Stats.HasFeat("Improved Sunder");
 
-            bool targetCanAoO = target != null && !target.Stats.IsDead && ThreatSystem.CanMakeAoO(target);
-            if (!attackerIgnoresAoO && targetCanAoO)
+            if (!attackerIgnoresAoO)
             {
-                CombatResult maneuverAoO = ThreatSystem.ExecuteAoO(target, attacker);
-                if (maneuverAoO != null)
+                var provokingEnemies = new List<CharacterController>();
+
+                if (type == SpecialAttackType.Grapple || type == SpecialAttackType.Sunder)
                 {
+                    if (target != null && target.Stats != null && !target.Stats.IsDead)
+                        provokingEnemies.Add(target);
+                }
+                else
+                {
+                    provokingEnemies = ThreatSystem.GetThreateningEnemies(attacker.GridPosition, attacker, GetAllCharacters());
+                }
+
+                provokingEnemies.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
+
+                for (int i = 0; i < provokingEnemies.Count; i++)
+                {
+                    CharacterController enemy = provokingEnemies[i];
+                    CombatResult maneuverAoO = ThreatSystem.ExecuteAoO(enemy, attacker);
+                    if (maneuverAoO == null)
+                        continue;
+
                     CombatUI.ShowCombatLog($"⚔ {maneuverLabel} initiation AoO: {maneuverAoO.GetDetailedSummary()}");
                     UpdateAllStatsUI();
 
-                    if (maneuverAoO.Hit)
+                    if (type != SpecialAttackType.CoupDeGrace && maneuverAoO.Hit)
                     {
                         CombatUI.ShowCombatLog($"{maneuverLabel} attempt disrupted by attack of opportunity");
                         Grid.ClearAllHighlights();
@@ -10996,21 +11060,21 @@ public partial class GameManager : MonoBehaviour
                         StartCoroutine(AfterAttackDelay(attacker, 0.8f));
                         return;
                     }
-                }
 
-                if (attacker.Stats.IsDead)
-                {
-                    CombatUI.ShowCombatLog($"💀 {attacker.Stats.CharacterName} is dropped while attempting to start {maneuverLabel.ToLowerInvariant()}.");
-                    Grid.ClearAllHighlights();
-                    _highlightedCells.Clear();
-                    _isSelectingSpecialAttack = false;
-                    if (type == SpecialAttackType.Sunder)
+                    if (attacker.Stats.IsDead || attacker.IsUnconscious)
                     {
-                        _pendingSunderUseOffHandSelection = false;
-                        ClearSunderSequenceState();
+                        CombatUI.ShowCombatLog($"💀 {attacker.Stats.CharacterName} is incapacitated while attempting to start {maneuverLabel.ToLowerInvariant()}.");
+                        Grid.ClearAllHighlights();
+                        _highlightedCells.Clear();
+                        _isSelectingSpecialAttack = false;
+                        if (type == SpecialAttackType.Sunder)
+                        {
+                            _pendingSunderUseOffHandSelection = false;
+                            ClearSunderSequenceState();
+                        }
+                        StartCoroutine(AfterAttackDelay(attacker, 0.8f));
+                        return;
                     }
-                    StartCoroutine(AfterAttackDelay(attacker, 0.8f));
-                    return;
                 }
             }
         }
@@ -11494,14 +11558,15 @@ public partial class GameManager : MonoBehaviour
         bool hasRemainingBullRushAttempts = CanUseBullRushAttackOption(character);
         bool hasRemainingTripAttempts = CanUseTripAttackOption(character);
         bool hasRemainingDisarmAttempts = CanUseDisarmAttackOption(character);
+        bool hasRemainingCoupDeGraceAttempt = CanUseCoupDeGraceAttackOption(character);
 
         bool hasIterativeWeaponAttackSequence = _isInAttackSequence && _attackingCharacter == character;
 
-        if (hasRemainingGrappleAttempts || hasRemainingBullRushAttempts || hasRemainingTripAttempts || hasRemainingDisarmAttempts || hasIterativeWeaponAttackSequence)
+        if (hasRemainingGrappleAttempts || hasRemainingBullRushAttempts || hasRemainingTripAttempts || hasRemainingDisarmAttempts || hasRemainingCoupDeGraceAttempt || hasIterativeWeaponAttackSequence)
         {
             Debug.Log(
                 $"[TurnFlow] ShouldAutoEndTurn=false for {character.Stats.CharacterName}: " +
-                $"iterativeRemaining(g={hasRemainingGrappleAttempts}, br={hasRemainingBullRushAttempts}, trip={hasRemainingTripAttempts}, d={hasRemainingDisarmAttempts}, atk={hasIterativeWeaponAttackSequence})");
+                $"iterativeRemaining(g={hasRemainingGrappleAttempts}, br={hasRemainingBullRushAttempts}, trip={hasRemainingTripAttempts}, d={hasRemainingDisarmAttempts}, cdg={hasRemainingCoupDeGraceAttempt}, atk={hasIterativeWeaponAttackSequence})");
             return false;
         }
 
@@ -11856,11 +11921,19 @@ public partial class GameManager : MonoBehaviour
 
     private bool TryNPCSpecialAttackIfBeneficial(CharacterController npc, CharacterController target, SpecialAttackType? forcedChoice)
     {
-        if (npc == null || target == null) return false;
-        if (npc.IsGrappling()) return false;
-        if (!npc.Actions.HasStandardAction) return false;
+        if (npc == null || target == null)
+            return false;
 
         bool hasImprovedGrab = npc.Stats != null && npc.Stats.HasImprovedGrab;
+        var coupTargets = GetAdjacentHelplessEnemiesForCoupDeGrace(npc);
+        bool hasCoupOption = coupTargets.Count > 0 && npc.Actions != null && npc.Actions.HasFullRoundAction;
+
+        if (npc.IsGrappling() && (!forcedChoice.HasValue || forcedChoice.Value != SpecialAttackType.CoupDeGrace))
+            return false;
+
+        if (!npc.Actions.HasStandardAction && !hasCoupOption)
+            return false;
+
         SpecialAttackType? choice = forcedChoice;
 
         if (choice == SpecialAttackType.Grapple && hasImprovedGrab)
@@ -11872,7 +11945,9 @@ public partial class GameManager : MonoBehaviour
 
         if (!choice.HasValue)
         {
-            if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped())
+            if (hasCoupOption)
+                choice = SpecialAttackType.CoupDeGrace;
+            else if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped())
                 choice = SpecialAttackType.Trip;
 
             if (choice == null && target.GetEquippedMainWeapon() != null && npc.Stats.STRMod >= 3)
@@ -11882,7 +11957,19 @@ public partial class GameManager : MonoBehaviour
                 choice = SpecialAttackType.Grapple;
         }
 
-        if (choice == null) return false;
+        if (choice == null)
+            return false;
+
+        if (choice.Value == SpecialAttackType.CoupDeGrace)
+        {
+            if (!hasCoupOption)
+                return false;
+
+            CharacterController coupTarget = (target != null && coupTargets.Contains(target))
+                ? target
+                : coupTargets[0];
+            target = coupTarget;
+        }
 
         var result = npc.ExecuteSpecialAttack(choice.Value, target);
         CombatUI.ShowCombatLog($"☠ {npc.Stats.CharacterName} uses SPECIAL [{choice.Value}]! {result.Log}");
@@ -11895,7 +11982,11 @@ public partial class GameManager : MonoBehaviour
                 TryPushTargetAway(npc, target, 1, allowAttackerFollow: true);
         }
 
-        npc.CommitStandardAction();
+        if (choice.Value == SpecialAttackType.CoupDeGrace)
+            npc.Actions.UseFullRoundAction();
+        else
+            npc.CommitStandardAction();
+
         UpdateAllStatsUI();
         return true;
     }

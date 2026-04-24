@@ -17,6 +17,7 @@ public enum SpecialAttackType
     Overrun,
     Feint,
     AidAnother,
+    CoupDeGrace,
     TurnUndead
 }
 
@@ -3193,6 +3194,32 @@ public class CharacterController : MonoBehaviour
             || creatureType == "ooze";
     }
 
+    public bool IsHelplessForCoupDeGrace()
+    {
+        if (Stats == null || Stats.IsDead)
+            return false;
+
+        return IsUnconscious
+            || HasCondition(CombatConditionType.Helpless)
+            || HasCondition(CombatConditionType.Paralyzed)
+            || HasCondition(CombatConditionType.Unconscious);
+    }
+
+    public bool IsImmuneToCriticalHits()
+    {
+        if (Stats == null)
+            return false;
+
+        string creatureType = string.IsNullOrEmpty(Stats.CreatureType)
+            ? string.Empty
+            : Stats.CreatureType.Trim().ToLowerInvariant();
+
+        // D&D 3.5 baseline critical-hit immunity used in this prototype.
+        return creatureType == "undead"
+            || creatureType == "construct"
+            || creatureType == "ooze";
+    }
+
     private bool IsTargetDeniedDexForSneakAttack(CharacterController target, bool isMeleeAttack, bool feintWindowConsumed, out string reason)
     {
         reason = string.Empty;
@@ -5995,6 +6022,7 @@ public class CharacterController : MonoBehaviour
                 return ResolveBullRush(target, Stats != null ? Stats.BaseAttackBonus : 0, chargeBonus: bullRushChargeBonusOverride == 0 ? 2 : bullRushChargeBonusOverride);
             case SpecialAttackType.Overrun: return ResolveOverrun(target, defenderBlocks: true);
             case SpecialAttackType.Feint: return ResolveFeint(target);
+            case SpecialAttackType.CoupDeGrace: return ResolveCoupDeGrace(target);
             case SpecialAttackType.TurnUndead:
                 return new SpecialAttackResult
                 {
@@ -6794,6 +6822,145 @@ public class CharacterController : MonoBehaviour
             Log = success
                 ? $"{Stats.CharacterName} feints {target.Stats.CharacterName}! Bluff ({bluffRoll}+{bluffBonus}={bluffTotal}) vs {opposedLabel} ({opposedRoll}+{opposedBonus}={opposedTotal}). Next melee attack by {Stats.CharacterName} before end of their next turn denies DEX-to-AC (unless target is already flat-footed)."
                 : $"{Stats.CharacterName}'s feint fails: Bluff ({bluffRoll}+{bluffBonus}={bluffTotal}) vs {target.Stats.CharacterName}'s {opposedLabel} ({opposedRoll}+{opposedBonus}={opposedTotal})."
+        };
+    }
+
+    private SpecialAttackResult ResolveCoupDeGrace(CharacterController target)
+    {
+        if (target == null || target.Stats == null)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Coup de Grace",
+                Success = false,
+                Log = "Coup de Grace failed: invalid target."
+            };
+        }
+
+        int distance = GetMinimumDistanceToTarget(target, chebyshev: true);
+        if (distance != 1)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Coup de Grace",
+                Success = false,
+                Log = $"Coup de Grace failed: {target.Stats.CharacterName} is not adjacent."
+            };
+        }
+
+        if (!target.IsHelplessForCoupDeGrace())
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Coup de Grace",
+                Success = false,
+                Log = $"Coup de Grace failed: {target.Stats.CharacterName} is not helpless."
+            };
+        }
+
+        if (target.IsImmuneToCriticalHits())
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Coup de Grace",
+                Success = false,
+                Log = $"Coup de Grace failed: {target.Stats.CharacterName} is immune to critical hits ({target.Stats.CreatureType})."
+            };
+        }
+
+        ItemData weapon = GetEquippedMainWeapon();
+        ResolveBaseAttackDamageProfile(weapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
+
+        int damageModifier = Stats.GetWeaponDamageModifier(weapon, isOffHand: false);
+        int baseDamageRoll = Stats.RollBaseDamage(damageDice, damageCount);
+        int baseDamage = Mathf.Max(1, baseDamageRoll + damageModifier + bonusDamage);
+
+        int sneakDamage = 0;
+        bool sneakApplied = false;
+        if (Stats.IsRogue)
+        {
+            sneakDamage = CombatUtils.RollSneakAttackDamage(Stats.Level);
+            sneakApplied = sneakDamage > 0;
+        }
+
+        int preCritDamage = baseDamage + sneakDamage;
+        int critMultiplier = weapon != null && weapon.CritMultiplier > 0
+            ? weapon.CritMultiplier
+            : (Stats.CritMultiplier > 0 ? Stats.CritMultiplier : 2);
+        int rawCriticalDamage = Mathf.Max(1, preCritDamage * critMultiplier);
+
+        var damageTypes = weapon != null
+            ? weapon.GetDamageTypes()
+            : new HashSet<DamageType> { DamageType.Bludgeoning };
+
+        DamageBypassTag attackTags = weapon != null ? weapon.GetBypassTags() : DamageBypassTag.Bludgeoning;
+
+        var packet = new DamagePacket
+        {
+            RawDamage = rawCriticalDamage,
+            Types = damageTypes,
+            AttackTags = attackTags,
+            IsRanged = false,
+            IsNonlethal = false,
+            Source = AttackSource.Weapon,
+            SourceName = weapon != null ? weapon.Name : "unarmed strike"
+        };
+
+        int hpBefore = target.Stats.CurrentHP;
+        DamageResolutionResult mitigation = target.Stats.ApplyIncomingDamage(rawCriticalDamage, packet);
+        int finalDamage = mitigation.FinalDamage;
+        int hpAfterDamage = target.Stats.CurrentHP;
+
+        int fortRoll = 0;
+        int fortTotal = 0;
+        int saveDC = 10 + Mathf.Max(0, finalDamage);
+        bool fortSucceeded = false;
+        bool diedFromDamage = hpAfterDamage <= -10;
+
+        if (!diedFromDamage)
+        {
+            fortRoll = Random.Range(1, 21);
+            fortTotal = fortRoll + target.Stats.FortitudeSave;
+            fortSucceeded = fortTotal >= saveDC;
+
+            if (!fortSucceeded)
+            {
+                target.Stats.CurrentHP = -10;
+                target.SyncHPStateFromCurrentHP(emitLog: false);
+            }
+        }
+
+        bool targetKilled = target.Stats.IsDead;
+        if (targetKilled)
+            target.OnDeath();
+
+        string mitigationSummary = mitigation.GetMitigationSummary();
+        string sneakSegment = sneakApplied
+            ? $" + Sneak {sneakDamage}"
+            : string.Empty;
+        string damageSource = weapon != null ? weapon.Name : attackLabel;
+
+        string saveLine = diedFromDamage
+            ? $"{target.Stats.CharacterName} is slain by damage before the Fortitude save can matter."
+            : $"Fortitude save: d20({fortRoll}) + {target.Stats.FortitudeSave} = {fortTotal} vs DC {saveDC} {(fortSucceeded ? "SUCCESS" : "FAILURE")}.";
+
+        string deathLine = diedFromDamage
+            ? $"{target.Stats.CharacterName} is dead."
+            : (!fortSucceeded
+                ? $"{target.Stats.CharacterName} dies from the failed save."
+                : (targetKilled ? $"{target.Stats.CharacterName} is dead." : $"{target.Stats.CharacterName} survives."));
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = "Coup de Grace",
+            Success = true,
+            DamageDealt = finalDamage,
+            TargetKilled = targetKilled,
+            Log = $"{Stats.CharacterName} performs Coup de Grace on helpless {target.Stats.CharacterName} with {damageSource}: "
+                + $"({damageCount}d{damageDice}={baseDamageRoll} + mod {CharacterStats.FormatMod(damageModifier + bonusDamage)}{sneakSegment}) ×{critMultiplier} = {rawCriticalDamage}; "
+                + $"mitigated to {finalDamage} ({hpBefore} → {target.Stats.CurrentHP}). "
+                + (string.IsNullOrEmpty(mitigationSummary) ? string.Empty : mitigationSummary + " ")
+                + saveLine + " " + deathLine
         };
     }
 

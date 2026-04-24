@@ -116,6 +116,7 @@ public class ActionButtonPanel : MonoBehaviour
         public bool HasBullRushAttackAvailable;
         public bool HasTripAttackAvailable;
         public bool HasDisarmAttackAvailable;
+        public bool HasCoupDeGraceAttackAvailable;
         public bool HasThrowableMeleeWeapon;
         public bool IterativeThrownSequenceActive;
         public bool IterativeThrownFullRoundStage;
@@ -205,6 +206,7 @@ public class ActionButtonPanel : MonoBehaviour
         context.HasBullRushAttackAvailable = context.Gm != null && context.Gm.CanUseBullRushAttackOption(pc);
         context.HasTripAttackAvailable = context.Gm != null && context.Gm.CanUseTripAttackOption(pc);
         context.HasDisarmAttackAvailable = context.Gm != null && context.Gm.CanUseDisarmAttackOption(pc);
+        context.HasCoupDeGraceAttackAvailable = context.Gm != null && context.Gm.CanUseCoupDeGraceAttackOption(pc);
 
         context.HasThrowableMeleeWeapon = context.Gm != null && context.Gm.HasThrowableMeleeWeaponEquipped(pc);
         context.IterativeThrownSequenceActive = context.Gm != null && context.Gm.IsIterativeThrownAttackSequenceActiveFor(pc);
@@ -413,7 +415,7 @@ public class ActionButtonPanel : MonoBehaviour
         bool canSpecialAttack = !context.IsTurned
             && (context.IsPinned
                 ? context.Actions.HasStandardAction
-                : (context.Actions.HasStandardAction || canImprovedFeintMove || context.HasGrappleAttackAvailable || context.HasBullRushAttackAvailable || context.HasTripAttackAvailable || context.HasDisarmAttackAvailable));
+                : (context.Actions.HasStandardAction || context.Actions.HasFullRoundAction || canImprovedFeintMove || context.HasGrappleAttackAvailable || context.HasBullRushAttackAvailable || context.HasTripAttackAvailable || context.HasDisarmAttackAvailable || context.HasCoupDeGraceAttackAvailable));
 
         string specialAttackLabel;
         if (context.IsPinned)
@@ -430,6 +432,8 @@ public class ActionButtonPanel : MonoBehaviour
             specialAttackLabel = $"Special Attack (Trip BAB {CharacterStats.FormatMod(context.Gm.GetCurrentTripAttackBonus(pc))}, {context.Gm.GetRemainingTripAttackActions(pc)} left)";
         else if (context.HasDisarmAttackAvailable && context.Gm != null)
             specialAttackLabel = $"Special Attack (Disarm BAB {CharacterStats.FormatMod(context.Gm.GetCurrentDisarmAttackBonus(pc))}, {context.Gm.GetRemainingDisarmAttackActions(pc)} left)";
+        else if (context.HasCoupDeGraceAttackAvailable)
+            specialAttackLabel = "Special Attack (Coup de Grace ready)";
         else if (canImprovedFeintMove)
             specialAttackLabel = "Special Attack (Feint Move)";
         else
@@ -454,7 +458,7 @@ public class ActionButtonPanel : MonoBehaviour
         states.Set(TurnUndeadButton, new ActionButtonState(canEverUseTurnUndead, canUseTurnUndead, turnUndeadLabel));
 
         bool standaloneDisarmWasVisible = _combatUI.HideStandaloneDisarmButtonsInMainActionsForActionPanel();
-        Debug.Log($"[CombatUI][Actions] actor={pc.Stats.CharacterName} specialAttackVisible=true specialAttackInteractable={canSpecialAttack} grappleAvailable={context.HasGrappleAttackAvailable} bullRushAvailable={context.HasBullRushAttackAvailable} tripAvailable={context.HasTripAttackAvailable} disarmViaSpecialAvailable={context.HasDisarmAttackAvailable} standaloneDisarmSuppressed={standaloneDisarmWasVisible}");
+        Debug.Log($"[CombatUI][Actions] actor={pc.Stats.CharacterName} specialAttackVisible=true specialAttackInteractable={canSpecialAttack} grappleAvailable={context.HasGrappleAttackAvailable} bullRushAvailable={context.HasBullRushAttackAvailable} tripAvailable={context.HasTripAttackAvailable} disarmViaSpecialAvailable={context.HasDisarmAttackAvailable} coupDeGraceAvailable={context.HasCoupDeGraceAttackAvailable} standaloneDisarmSuppressed={standaloneDisarmWasVisible}");
 
         bool canUseLegacyGrappleButton = context.IsGrappling && context.Actions.HasStandardAction;
         states.Set(GrappleActionsButton, new ActionButtonState(context.IsGrappling, canUseLegacyGrappleButton, canUseLegacyGrappleButton ? "Grapple Actions" : "Grapple Actions (Used)"));

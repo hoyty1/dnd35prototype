@@ -520,6 +520,58 @@ public partial class GameManager
     private bool TryConsumeTripAttackAction(CharacterController attacker, out int attackBonusUsed, out int attacksRemaining, out string reason)
         => TryConsumeMainHandManeuverAttackAction(attacker, "Trip", out attackBonusUsed, out attacksRemaining, out reason);
 
+    public List<CharacterController> GetAdjacentHelplessEnemiesForCoupDeGrace(CharacterController attacker)
+    {
+        var adjacentHelpless = new List<CharacterController>();
+        if (attacker == null || attacker.Stats == null)
+            return adjacentHelpless;
+
+        List<CharacterController> all = GetAllCharacters();
+        for (int i = 0; i < all.Count; i++)
+        {
+            CharacterController candidate = all[i];
+            if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+
+            if (!IsEnemyTeam(attacker, candidate))
+                continue;
+
+            int distance = attacker.GetMinimumDistanceToTarget(candidate, chebyshev: true);
+            if (distance != 1)
+                continue;
+
+            if (!candidate.IsHelplessForCoupDeGrace())
+                continue;
+
+            adjacentHelpless.Add(candidate);
+        }
+
+        return adjacentHelpless;
+    }
+
+    public bool CanUseCoupDeGraceAttackOption(CharacterController attacker)
+    {
+        if (attacker == null || attacker.Actions == null || attacker.Stats == null)
+            return false;
+
+        if (!attacker.Actions.HasFullRoundAction)
+            return false;
+
+        if (attacker.HasCondition(CombatConditionType.Turned)
+            || attacker.HasCondition(CombatConditionType.Prone)
+            || attacker.HasCondition(CombatConditionType.Pinned)
+            || attacker.HasCondition(CombatConditionType.Grappled))
+            return false;
+
+        if (!attacker.CanAttackWithEquippedWeapon(out _))
+            return false;
+
+        if (attacker.IsEquippedWeaponRanged())
+            return false;
+
+        return GetAdjacentHelplessEnemiesForCoupDeGrace(attacker).Count > 0;
+    }
+
     private bool TryConsumeDisarmAttackAction(CharacterController attacker, bool useOffHand, out int attackBonusUsed, out int attacksRemaining, out string reason, out bool usedOffHand, out ItemData disarmWeapon)
     {
         attackBonusUsed = 0;
