@@ -4651,6 +4651,19 @@ public class CharacterController : MonoBehaviour
         return $"Result: {opponentName} wins ({opponentTotal} vs {actorTotal})";
     }
 
+    private static string BuildD20Formula(string label, int dieRoll, int modifier, int total)
+    {
+        string mod = modifier >= 0 ? $"+{modifier}" : modifier.ToString();
+        return $"{label}: 1d20{mod} = {dieRoll}{mod} = {total}";
+    }
+
+    private static string BuildDamageFormula(string label, string dice, int diceRoll, int staticModifier, int rawDamage, int finalDamage)
+    {
+        string staticPart = staticModifier >= 0 ? $"+{staticModifier}" : staticModifier.ToString();
+        string finalClause = rawDamage != finalDamage ? $" => {finalDamage} final" : string.Empty;
+        return $"{label}: {dice}{staticPart} = {diceRoll}{staticPart} = {rawDamage} raw{finalClause}";
+    }
+
     private bool TryResolveOpposedGrappleCheck(CharacterController opponent, out int myRoll, out int myTotal, out int oppRoll, out int oppTotal, int myCheckModifier = 0, int? myBaseAttackBonusOverride = null)
     {
         myRoll = 0;
@@ -4725,6 +4738,20 @@ public class CharacterController : MonoBehaviour
                     }
                 }
 
+                string outcome = success
+                    ? (escapedPinOnly
+                        ? $"{Stats.CharacterName} slips out of the pin by {opponent.Stats.CharacterName}. The grapple continues."
+                        : $"{Stats.CharacterName} slips free of {opponent.Stats.CharacterName}'s hold!")
+                    : $"{Stats.CharacterName} fails to slip free.";
+
+                string log = string.Join("\n\n", new[]
+                {
+                    $"{Stats.CharacterName} attempts Escape Artist against {opponent.Stats.CharacterName}",
+                    BuildD20Formula($"{Stats.CharacterName} Escape Artist", roll, bonus, total),
+                    $"Escape DC: 20 + {opponent.Stats.CharacterName} grapple mod ({opponent.GetGrappleModifier()}) = {dc}",
+                    $"Result: {(success ? "SUCCESS" : "FAILURE")} ({total} vs DC {dc})\n{outcome}"
+                });
+
                 return new SpecialAttackResult
                 {
                     ManeuverName = "Grapple Escape (Escape Artist)",
@@ -4732,11 +4759,7 @@ public class CharacterController : MonoBehaviour
                     CheckRoll = roll,
                     CheckTotal = total,
                     OpposedTotal = dc,
-                    Log = success
-                        ? (escapedPinOnly
-                            ? $"{Stats.CharacterName} slips out of the pin by {opponent.Stats.CharacterName}! Escape Artist ({total}) vs DC {dc}. The grapple continues."
-                            : $"{Stats.CharacterName} slips free of {opponent.Stats.CharacterName}'s hold! Escape Artist ({total}) vs DC {dc}.")
-                        : $"{Stats.CharacterName} fails to slip free. Escape Artist ({total}) vs DC {dc}."
+                    Log = log
                 };
             }
             case GrappleActionType.OpposedGrappleEscape:
@@ -5077,12 +5100,13 @@ public class CharacterController : MonoBehaviour
                 int highestOpposedTotal = int.MinValue;
                 int highestOpposedRoll = 0;
 
+                int myFormulaModifier = myBaseModifier + pinnedMoveBonus;
                 var opposedCheckLogLines = new List<string>
                 {
                     pinnedMoveBonus > 0
                         ? $"{Stats.CharacterName} gains +4 on grapple check for moving a pinned opponent in a 1v1 grapple."
                         : string.Empty,
-                    $"{Stats.CharacterName} grapple check: d20 ({myRoll}) + grapple mod ({myBaseModifier:+#;-#;0}){(pinnedMoveBonus != 0 ? $" + pinned bonus ({pinnedMoveBonus:+#;-#;0})" : string.Empty)} = {myTotal}."
+                    BuildD20Formula($"{Stats.CharacterName} grapple check", myRoll, myFormulaModifier, myTotal)
                 };
 
                 for (int i = 0; i < grappleOpponents.Count; i++)
@@ -5103,8 +5127,8 @@ public class CharacterController : MonoBehaviour
                         highestOpposedRoll = oppRoll;
                     }
 
-                    opposedCheckLogLines.Add(
-                        $"vs {currentOpponent.Stats.CharacterName}: d20 ({oppRoll}) + grapple mod ({oppMod:+#;-#;0}) = {oppTotal} → {(beatThisOpponent ? "beaten" : "not beaten")}");
+                    opposedCheckLogLines.Add(BuildD20Formula($"vs {currentOpponent.Stats.CharacterName}", oppRoll, oppMod, oppTotal)
+                        + $" → {(beatThisOpponent ? "beaten" : "not beaten")}");
                 }
 
                 if (highestOpposedTotal == int.MinValue)
@@ -5303,7 +5327,9 @@ public class CharacterController : MonoBehaviour
         {
             $"{Stats.CharacterName} attempts to use opponent's {opponentWeapon.Name}.",
             string.IsNullOrEmpty(selectionNote) ? string.Empty : selectionNote,
-            $"Grapple check: d20 ({myRoll}) + BAB/STR/size ({myModifier:+#;-#;0}) = {myTotal} vs d20 ({oppRoll}) + BAB/STR/size ({oppModifier:+#;-#;0}) = {oppTotal}."
+            BuildD20Formula($"{Stats.CharacterName} grapple check", myRoll, myModifier, myTotal),
+            BuildD20Formula($"{opponent.Stats.CharacterName} grapple check", oppRoll, oppModifier, oppTotal),
+            BuildOpposedResultLine(Stats.CharacterName, myTotal, opponent.Stats.CharacterName, oppTotal)
         };
 
         int finalDamageDealt = 0;
@@ -5362,13 +5388,28 @@ public class CharacterController : MonoBehaviour
             finalDamageDealt = attackResult.FinalDamageDealt;
             targetKilled = opponent.Stats.IsDead;
 
+            int attackDamageRaw = attackResult.RawTotalDamage > 0 ? attackResult.RawTotalDamage : (attackResult.Damage + attackResult.SneakAttackDamage);
+            int attackDamageStaticModifier = attackResult.Damage - attackResult.BaseDamageRoll;
+
             logLines.Add($"{Stats.CharacterName} uses {opponent.Stats.CharacterName}'s {opponentWeapon.Name} against them ({selectedHandSlot}).");
             logLines.Add("-4 penalty for using opponent's weapon.");
-            logLines.Add($"Attack roll: d20 ({attackResult.DieRoll}) + modifiers ({attackMod:+#;-#;0}) = {attackResult.TotalRoll} vs AC {attackResult.TargetAC} => {(attackResult.Hit ? "HIT" : "MISS")}.");
+            logLines.Add(BuildD20Formula("Attack roll", attackResult.DieRoll, attackMod, attackResult.TotalRoll)
+                + $" vs AC {attackResult.TargetAC} => {(attackResult.Hit ? "HIT" : "MISS")}");
             if (attackResult.Hit)
-                logLines.Add($"Damage: {finalDamageDealt} (target HP {attackResult.DefenderHPBefore} -> {attackResult.DefenderHPAfter}).");
+            {
+                logLines.Add(BuildDamageFormula(
+                    "Damage roll",
+                    string.IsNullOrEmpty(attackResult.BaseDamageDiceStr) ? $"{damageCount}d{damageDice}" : attackResult.BaseDamageDiceStr,
+                    attackResult.BaseDamageRoll,
+                    attackDamageStaticModifier,
+                    attackDamageRaw,
+                    finalDamageDealt));
+                logLines.Add($"Target HP: {attackResult.DefenderHPBefore} -> {attackResult.DefenderHPAfter}");
+            }
             else
-                logLines.Add("Damage: 0 (attack missed).");
+            {
+                logLines.Add("Damage roll: not rolled (attack missed).");
+            }
         }
         else
         {
@@ -5577,17 +5618,29 @@ public class CharacterController : MonoBehaviour
             ? (string.IsNullOrWhiteSpace(grappleAttackLabel) ? "unarmed strike" : grappleAttackLabel)
             : weapon.Name;
         string damageTypeLabel = damageMode.DealNonlethalDamage ? "nonlethal" : "lethal";
+        int grappleAttackRawDamage = attackResult.RawTotalDamage > 0 ? attackResult.RawTotalDamage : (attackResult.Damage + attackResult.SneakAttackDamage);
+        int grappleAttackStaticModifier = attackResult.Damage - attackResult.BaseDamageRoll;
 
         var logLines = new List<string>
         {
             $"{Stats.CharacterName} attacks {opponent.Stats.CharacterName} with {weaponLabel} while grappling.",
-            $"Attack roll: d20 ({attackResult.DieRoll}) + modifiers ({attackMod:+#;-#;0}) vs AC {attackResult.TargetAC} => {(attackResult.Hit ? "HIT" : "MISS")}",
+            BuildD20Formula("Attack roll", attackResult.DieRoll, attackMod, attackResult.TotalRoll)
+                + $" vs AC {attackResult.TargetAC} => {(attackResult.Hit ? "HIT" : "MISS")}",
             "Includes -4 grapple attack penalty.",
             damageMode.AttackPenalty != 0
                 ? $"Damage-mode penalty applied: {damageMode.AttackPenalty:+#;-#;0} ({damageMode.PenaltySource})."
                 : string.Empty,
             attackResult.Hit
-                ? $"Damage dealt: {attackResult.FinalDamageDealt} {damageTypeLabel} (target HP {attackResult.DefenderHPBefore} -> {attackResult.DefenderHPAfter})."
+                ? BuildDamageFormula(
+                    $"Damage roll ({damageTypeLabel})",
+                    string.IsNullOrEmpty(attackResult.BaseDamageDiceStr) ? $"{damageCount}d{damageDice}" : attackResult.BaseDamageDiceStr,
+                    attackResult.BaseDamageRoll,
+                    grappleAttackStaticModifier,
+                    grappleAttackRawDamage,
+                    attackResult.FinalDamageDealt)
+                : "Damage roll: not rolled (attack missed).",
+            attackResult.Hit
+                ? $"Target HP: {attackResult.DefenderHPBefore} -> {attackResult.DefenderHPAfter}."
                 : "Damage dealt: 0 (attack missed)."
         };
         logLines.RemoveAll(string.IsNullOrEmpty);
@@ -5653,13 +5706,14 @@ public class CharacterController : MonoBehaviour
         int rakeHitCount = 0;
         int rakeDamage = 0;
         bool rakeExecuted = false;
+        FullAttackResult rakeRoutine = null;
 
         if (Stats.HasRake
             && TryGetGrappleState(out CharacterController grappledOpponent, out _, out _, out _)
             && grappledOpponent == opponent
             && !opponent.Stats.IsDead)
         {
-            FullAttackResult rakeRoutine = PerformRakeAttacks(opponent, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
+            rakeRoutine = PerformRakeAttacks(opponent, isFlanking: false, flankingBonus: 0, flankingPartnerName: null);
             if (rakeRoutine != null && rakeRoutine.Attacks != null && rakeRoutine.Attacks.Count > 0)
             {
                 rakeExecuted = true;
@@ -5690,6 +5744,38 @@ public class CharacterController : MonoBehaviour
             $"Total attacks: {totalAttackCount} | Hits: {totalHitCount} | Damage: {totalDamage}",
             $"Target HP: {targetHpBefore} -> {opponent.Stats.CurrentHP}"
         };
+
+        if (naturalRoutine != null && naturalRoutine.Attacks != null && naturalRoutine.Attacks.Count > 0)
+        {
+            logLines.Add("── Natural attack roll breakdowns ──");
+            for (int i = 0; i < naturalRoutine.Attacks.Count; i++)
+            {
+                CombatResult attack = naturalRoutine.Attacks[i];
+                if (attack == null)
+                    continue;
+
+                string label = (naturalRoutine.AttackLabels != null && i < naturalRoutine.AttackLabels.Count)
+                    ? naturalRoutine.AttackLabels[i]
+                    : $"Natural Attack {i + 1}";
+                logLines.Add(attack.GetAttackBreakdown(label));
+            }
+        }
+
+        if (rakeRoutine != null && rakeRoutine.Attacks != null && rakeRoutine.Attacks.Count > 0)
+        {
+            logLines.Add("── Rake attack roll breakdowns ──");
+            for (int i = 0; i < rakeRoutine.Attacks.Count; i++)
+            {
+                CombatResult attack = rakeRoutine.Attacks[i];
+                if (attack == null)
+                    continue;
+
+                string label = (rakeRoutine.AttackLabels != null && i < rakeRoutine.AttackLabels.Count)
+                    ? rakeRoutine.AttackLabels[i]
+                    : $"Rake {i + 1}";
+                logLines.Add(attack.GetAttackBreakdown(label));
+            }
+        }
 
         return new SpecialAttackResult
         {
