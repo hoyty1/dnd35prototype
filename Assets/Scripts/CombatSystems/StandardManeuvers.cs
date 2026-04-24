@@ -484,7 +484,8 @@ public partial class GameManager
             return false;
         }
 
-        if (!attacker.CanUseStandardGrapple())
+        bool isAlreadyGrappling = attacker.IsGrappling();
+        if (!isAlreadyGrappling && !attacker.CanUseStandardGrapple())
         {
             reason = attacker.Stats != null && attacker.Stats.HasImprovedGrab
                 ? "This creature has Improved Grab and can only start grapples through that ability after a qualifying hit"
