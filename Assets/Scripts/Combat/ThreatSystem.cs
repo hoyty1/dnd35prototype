@@ -164,7 +164,7 @@ public static class ThreatSystem
         {
             if (character == null || character == mover) continue;
             if (character.Stats == null || character.Stats.IsDead) continue;
-            if (character.IsPlayerControlled == mover.IsPlayerControlled) continue; // Same team
+            if (character.Team == mover.Team) continue; // Same team
 
             if (GetThreatenedSquares(character).Contains(square))
                 return true;
@@ -197,7 +197,7 @@ public static class ThreatSystem
         {
             if (character == null || character == mover) continue;
             if (character.Stats == null || character.Stats.IsDead) continue;
-            if (character.IsPlayerControlled == mover.IsPlayerControlled) continue;
+            if (character.Team == mover.Team) continue;
 
             if (GetThreatenedSquares(character).Contains(square) && seenThreateners.Add(character))
             {
@@ -376,7 +376,7 @@ public static class ThreatSystem
         {
             if (character == mover) continue;
             if (character.Stats.IsDead) continue;
-            if (character.IsPlayerControlled == mover.IsPlayerControlled) continue;
+            if (character.Team == mover.Team) continue;
 
             enemyThreats[character] = GetThreatenedSquares(character);
             enemyAoOUsedThisMovement[character] = 0;

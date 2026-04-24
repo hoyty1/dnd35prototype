@@ -350,7 +350,7 @@ public static class SpellCaster
             if (threatener == null || threatener == caster) continue;
             if (threatener.Stats == null || threatener.Stats.IsDead) continue;
 
-            if (threatener.IsPlayerControlled == caster.IsPlayerControlled)
+            if (threatener.Team == caster.Team)
             {
                 engagedWithCasterAlly = true;
                 break;

@@ -414,7 +414,7 @@ public class SquareGrid : MonoBehaviour
                     return false;
 
                 // During traversal, ally/enemy pass-through is controlled by the caller.
-                bool isAllyOccupant = mover != null && occupant.IsPlayerControlled == mover.IsPlayerControlled;
+                bool isAllyOccupant = mover != null && occupant.Team == mover.Team;
                 if (isAllyOccupant)
                 {
                     if (!allowThroughAllies)
@@ -463,7 +463,7 @@ public class SquareGrid : MonoBehaviour
         {
             if (character == mover) continue;
             if (character.Stats.IsDead) continue;
-            if (character.IsPlayerControlled == mover.IsPlayerControlled) continue;
+            if (character.Team == mover.Team) continue;
 
             var threats = ThreatSystem.GetThreatenedSquares(character);
             allThreatened.UnionWith(threats);

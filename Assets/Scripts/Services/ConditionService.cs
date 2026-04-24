@@ -278,7 +278,7 @@ public class ConditionService : MonoBehaviour
                     continue;
                 if (enemy.Stats.IsDead)
                     continue;
-                if (enemy.IsPlayerControlled == character.IsPlayerControlled)
+                if (enemy.Team == character.Team)
                     continue;
 
                 if (CombatUtils.IsAttackerFlanking(enemy, character, allCharacters, out CharacterController _))

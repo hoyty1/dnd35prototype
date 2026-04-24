@@ -104,14 +104,14 @@ public class SceneBootstrap : MonoBehaviour
             GameObject pcGO = new GameObject(pcNames[i]);
             pcGO.AddComponent<SpriteRenderer>();
             pcs[i] = pcGO.AddComponent<CharacterController>();
-            pcs[i].IsPlayerControlled = true;
+            pcs[i].ConfigureTeamControl(CharacterTeam.Player, controllable: true);
         }
 
         // Legacy NPC (first enemy)
         GameObject npcGO = new GameObject("NPC_Enemy_0");
         npcGO.AddComponent<SpriteRenderer>();
         CharacterController npc = npcGO.AddComponent<CharacterController>();
-        npc.IsPlayerControlled = false;
+        npc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
 
         var npcList = new List<CharacterController>();
         npcList.Add(npc);
@@ -122,7 +122,7 @@ public class SceneBootstrap : MonoBehaviour
             GameObject go = new GameObject($"NPC_Enemy_{i}");
             go.AddComponent<SpriteRenderer>();
             CharacterController cc = go.AddComponent<CharacterController>();
-            cc.IsPlayerControlled = false;
+            cc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
             npcList.Add(cc);
         }
 

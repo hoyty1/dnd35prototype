@@ -40,7 +40,8 @@ public static class CombatUtils
     public static bool AreAllies(CharacterController attacker, CharacterController ally)
     {
         if (attacker == null || ally == null) return false;
-        return attacker.IsPlayerControlled == ally.IsPlayerControlled;
+        if (attacker.Team == CharacterTeam.Neutral || ally.Team == CharacterTeam.Neutral) return false;
+        return attacker.Team == ally.Team;
     }
 
     /// <summary>

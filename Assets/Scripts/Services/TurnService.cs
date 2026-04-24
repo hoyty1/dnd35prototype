@@ -105,7 +105,7 @@ public class TurnService : MonoBehaviour
         for (int i = 0; i < _initiativeOrder.Count; i++)
         {
             InitiativeEntry e = _initiativeOrder[i];
-            string tag = e.IsPC ? "PC" : "NPC";
+            string tag = GetInitiativeRoleLabel(e.Character);
             Debug.Log($"[TurnService][Initiative] #{i + 1}: [{tag}] {e}");
         }
         Debug.Log("[TurnService][Initiative] =============================");
@@ -282,7 +282,7 @@ public class TurnService : MonoBehaviour
         {
             InitiativeEntry e = _initiativeOrder[i];
             string name = e.Character != null && e.Character.Stats != null ? e.Character.Stats.CharacterName : "<null>";
-            string tag = e.IsPC ? "⚔" : "💀";
+            string tag = GetInitiativeIcon(e.Character);
             parts.Add($"{tag}{name}({e.Total})");
         }
 
@@ -301,14 +301,56 @@ public class TurnService : MonoBehaviour
             if (e.Character == null || e.Character.Stats == null || e.Character.Stats.IsDead)
                 continue;
 
-            string name = e.Character.Stats.CharacterName;
+            string name = $"{GetInitiativeIcon(e.Character)}{e.Character.Stats.CharacterName}";
             if (i == _currentInitiativeIndex)
                 parts.Add($"<color=#FFDD44><b>▶{name}</b></color>");
             else
-                parts.Add(e.IsPC ? $"<color=#66FF66>{name}</color>" : $"<color=#FF6666>{name}</color>");
+                parts.Add($"<color={GetInitiativeColorHex(e.Character)}>{name}</color>");
         }
 
         return "Init: " + string.Join(" → ", parts);
+    }
+
+    private static string GetInitiativeRoleLabel(CharacterController character)
+    {
+        if (character == null)
+            return "Unknown";
+
+        if (character.Team == CharacterTeam.Player)
+            return character.IsControllable ? "Player-Controlled Ally" : "AI Ally";
+
+        if (character.Team == CharacterTeam.Enemy)
+            return character.IsControllable ? "Player-Controlled Enemy" : "Enemy AI";
+
+        return character.IsControllable ? "Player-Controlled Neutral" : "Neutral";
+    }
+
+    private static string GetInitiativeIcon(CharacterController character)
+    {
+        if (character == null)
+            return "•";
+
+        if (character.Team == CharacterTeam.Player)
+            return character.IsControllable ? "🟦" : "🟩";
+
+        if (character.Team == CharacterTeam.Enemy)
+            return character.IsControllable ? "🟧" : "🟥";
+
+        return "⬜";
+    }
+
+    private static string GetInitiativeColorHex(CharacterController character)
+    {
+        if (character == null)
+            return "#CCCCCC";
+
+        if (character.Team == CharacterTeam.Player)
+            return character.IsControllable ? "#66B3FF" : "#77EE99";
+
+        if (character.Team == CharacterTeam.Enemy)
+            return character.IsControllable ? "#FFB366" : "#FF6666";
+
+        return "#CCCCCC";
     }
 
     private static bool IsEligibleCombatant(CharacterController combatant)

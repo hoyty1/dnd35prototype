@@ -622,29 +622,31 @@ public partial class GameManager : MonoBehaviour
     private bool IsPC(CharacterController c)
     {
         if (c == null) return false;
-        // Summons are always autonomous NPC turns (even if allied to the party).
-        return PCs.Contains(c);
+        return c.IsControllable;
     }
 
     private bool IsEnemyTeam(CharacterController source, CharacterController target)
     {
         if (source == null || target == null) return false;
-        return source.IsPlayerControlled != target.IsPlayerControlled;
+
+        return (source.Team == CharacterTeam.Player && target.Team == CharacterTeam.Enemy)
+            || (source.Team == CharacterTeam.Enemy && target.Team == CharacterTeam.Player);
     }
 
     private bool IsAllyTeam(CharacterController source, CharacterController target)
     {
         if (source == null || target == null) return false;
-        return source.IsPlayerControlled == target.IsPlayerControlled;
+        if (source.Team == CharacterTeam.Neutral || target.Team == CharacterTeam.Neutral) return false;
+        return source.Team == target.Team;
     }
 
-    private List<CharacterController> GetTeamMembers(bool isPlayerControlled)
+    private List<CharacterController> GetTeamMembers(CharacterTeam teamFilter)
     {
         var team = new List<CharacterController>();
         foreach (var c in GetAllCharacters())
         {
             if (c == null || c.Stats == null || c.Stats.IsDead) continue;
-            if (c.IsPlayerControlled == isPlayerControlled)
+            if (c.Team == teamFilter)
                 team.Add(c);
         }
 
@@ -1215,7 +1217,7 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         // Only allow player-owned summon commands during player turns.
-        if (!summon.IsPlayerControlled)
+        if (summon.Team != CharacterTeam.Player)
             return false;
 
         ActiveSummonInstance active = GetActiveSummon(summon);
@@ -2244,6 +2246,9 @@ public partial class GameManager : MonoBehaviour
 
         npc.Init(stats, pos, alive, dead);
 
+        CharacterTeam npcTeam = def.IsAlly ? CharacterTeam.Player : CharacterTeam.Enemy;
+        npc.ConfigureTeamControl(npcTeam, def.IsControllable);
+
         InventoryComponent inv = npc.gameObject.GetComponent<InventoryComponent>();
         if (inv == null) inv = npc.gameObject.AddComponent<InventoryComponent>();
         inv.Init(stats);
@@ -2375,7 +2380,7 @@ public partial class GameManager : MonoBehaviour
         foreach (var npc in NPCs)
         {
             if (!IsActiveCombatant(npc)) continue;
-            if (npc.IsPlayerControlled) continue; // allied summons should not block victory
+            if (npc.Team != CharacterTeam.Enemy) continue; // allied/neutral units should not block victory
             if (!npc.Stats.IsDead) return false;
         }
         return true;
@@ -2401,7 +2406,7 @@ public partial class GameManager : MonoBehaviour
         foreach (var npc in NPCs)
         {
             if (!IsActiveCombatant(npc)) continue;
-            if (npc.IsPlayerControlled) continue;
+            if (npc.Team != CharacterTeam.Enemy) continue;
             if (!npc.Stats.IsDead) count++;
         }
         return count;
@@ -2413,7 +2418,7 @@ public partial class GameManager : MonoBehaviour
         foreach (var npc in NPCs)
         {
             if (!IsActiveCombatant(npc) || npc.Stats.IsDead) continue;
-            if (npc.IsPlayerControlled) continue;
+            if (npc.Team != CharacterTeam.Enemy) continue;
             return npc;
         }
         return null;
@@ -2647,8 +2652,18 @@ public partial class GameManager : MonoBehaviour
         CurrentSubPhase = PlayerSubPhase.ChoosingAction;
 
         int pcIdx = GetPCIndex(pc);
-        CombatUI.SetActivePC(pcIdx);
-        CombatUI.SetActiveNPC(-1); // Clear NPC highlights when PC is active
+        if (pcIdx > 0)
+        {
+            CombatUI.SetActivePC(pcIdx);
+            CombatUI.SetActiveNPC(-1); // Clear NPC highlights when a core party member is active
+        }
+        else
+        {
+            // Player-controlled non-party combatants (hirelings, dominated foes, etc.)
+            // still use player input but are represented in NPC panels.
+            CombatUI.SetActivePC(0);
+            CombatUI.SetActiveNPC(NPCs.IndexOf(pc));
+        }
 
         // Update initiative UI to highlight current character
         UpdateInitiativeUI();
@@ -6444,7 +6459,7 @@ public partial class GameManager : MonoBehaviour
 
     public void RequestDismissSummon(CharacterController summon)
     {
-        if (!IsPlayerTurn || summon == null || !summon.IsPlayerControlled)
+        if (!IsPlayerTurn || summon == null || summon.Team != CharacterTeam.Player)
             return;
 
         var active = GetActiveSummon(summon);
@@ -6664,7 +6679,8 @@ public partial class GameManager : MonoBehaviour
         GameObject summonGO = new GameObject($"Summon_{template.TemplateId}_{UnityEngine.Random.Range(1000, 9999)}");
         summonGO.AddComponent<SpriteRenderer>();
         CharacterController summon = summonGO.AddComponent<CharacterController>();
-        summon.IsPlayerControlled = caster.IsPlayerControlled;
+        CharacterTeam summonTeam = caster != null ? caster.Team : CharacterTeam.Enemy;
+        summon.ConfigureTeamControl(summonTeam, controllable: false);
 
         CharacterStats stats = new CharacterStats(
             name: template.DisplayName,
@@ -6720,7 +6736,7 @@ public partial class GameManager : MonoBehaviour
         NPCs.Add(summon);
         _npcAIBehaviors.Add(NPCAIBehavior.AggressiveMelee);
 
-        if (summon.IsPlayerControlled)
+        if (summon.Team == CharacterTeam.Player)
             _summonedAllies.Add(summon);
         else
             _summonedEnemies.Add(summon);
@@ -6889,7 +6905,7 @@ public partial class GameManager : MonoBehaviour
                 RemainingRounds = durationRounds,
                 TotalDurationRounds = durationRounds,
                 SourceSpellId = _pendingSpell.SpellId,
-                IsAlliedToPCs = summonCC.IsPlayerControlled,
+                IsAlliedToPCs = summonCC.Team == CharacterTeam.Player,
                 SmiteUsed = false,
                 CurrentCommand = SummonCommand.AttackNearest()
             };
@@ -7595,9 +7611,10 @@ public partial class GameManager : MonoBehaviour
             }
 
             // Get all valid targets
-            bool casterIsPC = caster.IsPlayerControlled;
-            List<CharacterController> allyTeam = GetTeamMembers(caster.IsPlayerControlled);
-            List<CharacterController> enemyTeam = GetTeamMembers(!caster.IsPlayerControlled);
+            bool casterIsPC = caster.Team == CharacterTeam.Player;
+            CharacterTeam enemyTeamType = caster.Team == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+            List<CharacterController> allyTeam = GetTeamMembers(caster.Team);
+            List<CharacterController> enemyTeam = GetTeamMembers(enemyTeamType);
             List<CharacterController> targets = AoESystem.GetTargetsInArea(
                 aoeCells, caster, allyTeam, enemyTeam,
                 spell.AoEFilter, casterIsPC, Grid);
@@ -7877,9 +7894,10 @@ public partial class GameManager : MonoBehaviour
         }
 
         // Get all valid targets in the AoE
-        bool casterIsPC = caster.IsPlayerControlled;
-        List<CharacterController> allyTeam = GetTeamMembers(caster.IsPlayerControlled);
-        List<CharacterController> enemyTeam = GetTeamMembers(!caster.IsPlayerControlled);
+        bool casterIsPC = caster.Team == CharacterTeam.Player;
+        CharacterTeam enemyTeamType = caster.Team == CharacterTeam.Player ? CharacterTeam.Enemy : CharacterTeam.Player;
+        List<CharacterController> allyTeam = GetTeamMembers(caster.Team);
+        List<CharacterController> enemyTeam = GetTeamMembers(enemyTeamType);
         List<CharacterController> targets = AoESystem.GetTargetsInArea(
             aoeCells, caster, allyTeam, enemyTeam,
             _pendingSpell.AoEFilter, casterIsPC, Grid);
@@ -9175,7 +9193,7 @@ public partial class GameManager : MonoBehaviour
         {
             if (character == pc) continue;
             if (character.Stats.IsDead) continue;
-            if (character.IsPlayerControlled == pc.IsPlayerControlled) continue;
+            if (character.Team == pc.Team) continue;
 
             var threats = ThreatSystem.GetThreatenedSquares(character);
             _previewThreatenedSquares.UnionWith(threats);
@@ -10600,7 +10618,7 @@ public partial class GameManager : MonoBehaviour
         {
             HandleSummonDeathCleanup(target);
 
-            if (!target.IsPlayerControlled)
+            if (target.Team == CharacterTeam.Enemy)
             {
                 UpdateAllStatsUI();
                 if (AreAllNPCsDead())
@@ -11209,7 +11227,7 @@ public partial class GameManager : MonoBehaviour
 
         UpdateAllStatsUI();
 
-        if (target != null && target.Stats != null && target.Stats.IsDead && !target.IsPlayerControlled && AreAllNPCsDead())
+        if (target != null && target.Stats != null && target.Stats.IsDead && target.Team == CharacterTeam.Enemy && AreAllNPCsDead())
         {
             CurrentPhase = TurnPhase.CombatOver;
             CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
@@ -11447,7 +11465,7 @@ public partial class GameManager : MonoBehaviour
             {
                 HandleSummonDeathCleanup(currentTarget);
 
-                if (!currentTarget.IsPlayerControlled && AreAllNPCsDead())
+                if (currentTarget.Team == CharacterTeam.Enemy && AreAllNPCsDead())
                 {
                     CurrentPhase = TurnPhase.CombatOver;
                     CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
@@ -11552,11 +11570,11 @@ public partial class GameManager : MonoBehaviour
         if (character == null)
             return true;
 
-        if (character.IsPlayerControlled)
+        if (character.IsControllable)
         {
             bool offHandAvailable = CanUseOffHandAttackOption(character);
             bool offHandThrownAvailable = CanUseOffHandThrownAttackOption(character);
-            Debug.Log($"[TurnFlow] ShouldAutoEndTurn=false for player {character.Stats.CharacterName}. " +
+            Debug.Log($"[TurnFlow] ShouldAutoEndTurn=false for controllable unit {character.Stats.CharacterName}. " +
                       $"Manual End Turn required. offHandAvailable={offHandAvailable} offHandThrownAvailable={offHandThrownAvailable} " +
                       $"offHandGate={_offHandAttackAvailableThisTurn} offHandUsed={_offHandAttackUsedThisTurn} attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}");
             return false;

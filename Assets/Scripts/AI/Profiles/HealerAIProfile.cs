@@ -227,7 +227,7 @@ namespace DND35.AI.Profiles
             if (healer == null || candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 return false;
 
-            return candidate.IsPlayerControlled == healer.IsPlayerControlled;
+            return candidate.Team == healer.Team;
         }
     }
 

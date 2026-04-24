@@ -691,6 +691,10 @@ public class NPCDefinition
     public List<EquipmentSlotPair> EquipmentIds = new List<EquipmentSlotPair>();
     public List<string> BackpackItemIds = new List<string>();
 
+    // Team/control flags
+    public bool IsAlly = false;
+    public bool IsControllable = false;
+
     // AI
     public NPCAIBehavior AIBehavior = NPCAIBehavior.AggressiveMelee;
     public NPCAIProfileArchetype AIProfileArchetype = NPCAIProfileArchetype.None;

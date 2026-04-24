@@ -964,7 +964,7 @@ public partial class GameManager
                 return;
             }
 
-            if (attacker.IsPlayerControlled && CombatUI != null)
+            if (attacker.IsControllable && CombatUI != null)
             {
                 CombatUI.ShowBullRushFollowChoice(attacker, target, pushResolution.ActualSquares, shouldFollow =>
                 {
@@ -989,7 +989,7 @@ public partial class GameManager
         {
             CombatUI?.ShowCombatLog($"Can push 0 to {maxExtraSquares} extra squares (base 1 + extra)");
 
-            if (attacker.IsPlayerControlled && CombatUI != null)
+            if (attacker.IsControllable && CombatUI != null)
             {
                 Debug.Log($"[GameManager][BullRushExtraPush] Showing player choice UI. attacker={attacker.Stats.CharacterName}, target={target.Stats.CharacterName}, maxExtraSquares={maxExtraSquares}, actionPanelExists={CombatUI.ActionPanel != null}, actionPanelActiveSelf={(CombatUI.ActionPanel != null && CombatUI.ActionPanel.activeSelf)}, actionPanelActiveInHierarchy={(CombatUI.ActionPanel != null && CombatUI.ActionPanel.activeInHierarchy)}, frame={Time.frameCount}");
 

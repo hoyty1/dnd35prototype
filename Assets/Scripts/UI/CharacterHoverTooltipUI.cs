@@ -210,6 +210,10 @@ public class CharacterHoverTooltipUI : MonoBehaviour
             : character.name;
         sb.Append(displayName);
 
+        string teamLabel = character.Team.ToString();
+        string controlLabel = character.IsControllable ? "Player" : "AI";
+        sb.Append("\nTeam: ").Append(teamLabel).Append(" • Control: ").Append(controlLabel);
+
         string race = ExtractTagValue(character, "Race: ");
         if (!string.IsNullOrWhiteSpace(race) && race != "Unknown")
             sb.Append("\nRace: ").Append(race);

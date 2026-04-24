@@ -389,7 +389,7 @@ public partial class GameManager
             return;
         }
 
-        if (!enemy.IsPlayerControlled)
+        if (!enemy.IsControllable)
         {
             onResolved?.Invoke(true);
             return;
@@ -726,7 +726,7 @@ public partial class GameManager
 
     private bool ShouldShowOverrunResponsePrompt(CharacterController target)
     {
-        bool shouldPrompt = target != null && target.IsPlayerControlled;
+        bool shouldPrompt = target != null && target.IsControllable;
         Debug.Log($"[Overrun] Target response mode: {(shouldPrompt ? "PlayerPrompt" : "NPC-AutoBlock")}");
         return shouldPrompt;
     }
@@ -832,7 +832,7 @@ public partial class GameManager
 
         UpdateAllStatsUI();
 
-        if (target.Stats.IsDead && !target.IsPlayerControlled && AreAllNPCsDead())
+        if (target.Stats.IsDead && target.Team == CharacterTeam.Enemy && AreAllNPCsDead())
         {
             CurrentPhase = TurnPhase.CombatOver;
             CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
@@ -844,7 +844,7 @@ public partial class GameManager
             && !result.AttackerActionConsumed
             && CurrentPhase == TurnPhase.PCTurn
             && ActivePC == attacker
-            && attacker.IsPlayerControlled
+            && attacker.IsControllable
             && attacker.Actions.HasMoveAction)
         {
             int remainingMovement = Mathf.Max(0, attacker.Stats.MoveRange - movementSpentByOverrun);

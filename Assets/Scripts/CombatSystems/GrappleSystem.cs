@@ -391,7 +391,7 @@ public partial class GameManager
             return false;
         }
 
-        bool actorCanSelectNow = actor.IsPlayerControlled
+        bool actorCanSelectNow = actor.IsControllable
             && CurrentPhase == TurnPhase.PCTurn
             && ActivePC == actor;
 
@@ -1417,7 +1417,7 @@ public partial class GameManager
         if (opponent == null || opponent.Stats == null || opponent.Stats.IsDead)
             return false;
 
-        if (!opponent.IsPlayerControlled)
+        if (!opponent.IsControllable)
             return false;
 
         grappler = opponent;

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -211,6 +212,13 @@ public class BullRushCheckResult
     }
 }
 
+public enum CharacterTeam
+{
+    Player,
+    Enemy,
+    Neutral
+}
+
 /// <summary>
 /// Controls a character on the square grid (both PC and NPC).
 /// Supports D&D 3.5 action economy, full attacks, dual wielding, and critical hits.
@@ -219,7 +227,80 @@ public class BullRushCheckResult
 public class CharacterController : MonoBehaviour
 {
     [Header("Character Setup")]
-    public bool IsPlayerControlled;
+    [FormerlySerializedAs("IsPlayerControlled")]
+    [SerializeField] private bool _isPlayerControlled;
+    [SerializeField] private CharacterTeam _team = CharacterTeam.Enemy;
+    [SerializeField] private bool _isControllable;
+    [SerializeField] private bool _controllableExplicitlySet;
+
+    /// <summary>
+    /// Team-side compatibility flag used throughout legacy combat checks.
+    /// True => Player team, False => Enemy/neutral team.
+    /// </summary>
+    public bool IsPlayerControlled
+    {
+        get => _isPlayerControlled;
+        set
+        {
+            _isPlayerControlled = value;
+            _team = value ? CharacterTeam.Player : CharacterTeam.Enemy;
+
+            // Backward compatibility: if explicit controllability was never configured,
+            // preserve historical behavior where player-side actors were directly controlled.
+            if (!_controllableExplicitlySet)
+                _isControllable = value;
+        }
+    }
+
+    /// <summary>Current combat team for ally/enemy evaluation.</summary>
+    public CharacterTeam Team => _team;
+
+    /// <summary>True when this character receives player input instead of AI automation.</summary>
+    public bool IsControllable
+    {
+        get => _isControllable;
+        set
+        {
+            _isControllable = value;
+            _controllableExplicitlySet = true;
+        }
+    }
+
+    /// <summary>Convenience flag for AI execution checks.</summary>
+    public bool UsesAI => !IsControllable;
+
+    public void SetTeam(CharacterTeam team)
+    {
+        _team = team;
+        _isPlayerControlled = team == CharacterTeam.Player;
+
+        if (!_controllableExplicitlySet)
+            _isControllable = _isPlayerControlled;
+    }
+
+    private void NormalizeTeamControlState()
+    {
+        if (_team == CharacterTeam.Player)
+            _isPlayerControlled = true;
+        else if (_isPlayerControlled)
+            _team = CharacterTeam.Player;
+
+        if (!_controllableExplicitlySet)
+            _isControllable = _isPlayerControlled;
+    }
+
+    public void SetControllable(bool controllable)
+    {
+        IsControllable = controllable;
+    }
+
+    public void ConfigureTeamControl(CharacterTeam team, bool controllable)
+    {
+        _team = team;
+        _isPlayerControlled = team == CharacterTeam.Player;
+        _isControllable = controllable;
+        _controllableExplicitlySet = true;
+    }
 
     [Header("AI Configuration")]
     [Tooltip("Optional AI profile used by AIService for NPC decision making")]
@@ -1033,6 +1114,8 @@ public class CharacterController : MonoBehaviour
 
     private void Awake()
     {
+        NormalizeTeamControlState();
+
         _sr = GetComponent<SpriteRenderer>();
         if (_sr == null)
             _sr = gameObject.AddComponent<SpriteRenderer>();
@@ -1069,6 +1152,11 @@ public class CharacterController : MonoBehaviour
     public void RefreshAllTags()
     {
         EnsureStatusTagManager().RefreshAllTags();
+    }
+
+    private void OnValidate()
+    {
+        NormalizeTeamControlState();
     }
 
     public string GetArmorTag()
@@ -2920,7 +3008,7 @@ public class CharacterController : MonoBehaviour
             if (threatener == null || threatener == attacker) continue;
             if (threatener.Stats == null || threatener.Stats.IsDead) continue;
 
-            if (threatener.IsPlayerControlled == attacker.IsPlayerControlled)
+            if (threatener.Team == attacker.Team)
                 return true;
         }
 

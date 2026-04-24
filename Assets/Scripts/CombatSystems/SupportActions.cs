@@ -1204,7 +1204,7 @@ public partial class GameManager
 
     private IEnumerator PromptImprovedGrabChoice(CharacterController attacker, CharacterController target, string attackName, Action<bool> onResolved)
     {
-        if (attacker == null || target == null || !attacker.IsPlayerControlled || CombatUI == null)
+        if (attacker == null || target == null || !attacker.IsControllable || CombatUI == null)
         {
             onResolved?.Invoke(true);
             yield break;
@@ -1424,7 +1424,7 @@ public partial class GameManager
                             continue;
 
                         bool shouldAttemptGrab = true;
-                        if (charger.IsPlayerControlled)
+                        if (charger.IsControllable)
                         {
                             bool playerDecision = false;
                             yield return StartCoroutine(PromptImprovedGrabChoice(charger, target, attackResult.WeaponName, decision => playerDecision = decision));
@@ -1483,7 +1483,7 @@ public partial class GameManager
                     if (charger.Stats != null && charger.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(charger, result) && !target.Stats.IsDead)
                     {
                         bool shouldAttemptGrab = true;
-                        if (charger.IsPlayerControlled)
+                        if (charger.IsControllable)
                         {
                             bool playerDecision = false;
                             yield return StartCoroutine(PromptImprovedGrabChoice(charger, target, result.WeaponName, decision => playerDecision = decision));
@@ -1518,7 +1518,7 @@ public partial class GameManager
 
         UpdateAllStatsUI();
 
-        if (target.Stats.IsDead && !target.IsPlayerControlled && AreAllNPCsDead())
+        if (target.Stats.IsDead && target.Team == CharacterTeam.Enemy && AreAllNPCsDead())
         {
             CurrentPhase = TurnPhase.CombatOver;
             CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");

@@ -37,6 +37,7 @@ namespace Tests.AI
             TestDefaultProfileLeavesAdaptiveFullAttackRetargetingDisabled();
             TestProfileCoupDeGraceDefaults();
             TestNPCDefinitionCoupDeGraceOverrideFieldDefaultsToNull();
+            TestNPCDefinitionTeamControlFlagsDefaultToEnemyAI();
             TestNPCDefinitionsAssignProfileArchetypes();
             TestWolfDefinitionMatchesBaselineStats();
             TestTigerDefinitionUsesAnimalProfile();
@@ -413,6 +414,24 @@ namespace Tests.AI
                 wolf == null || tiger == null
                     ? "(enemy definition missing)"
                     : $"(wolfOverride={(wolf.UseCoupDeGrace.HasValue ? wolf.UseCoupDeGrace.Value.ToString() : "null")}, tigerOverride={(tiger.UseCoupDeGrace.HasValue ? tiger.UseCoupDeGrace.Value.ToString() : "null")})");
+        }
+
+        private static void TestNPCDefinitionTeamControlFlagsDefaultToEnemyAI()
+        {
+            NPCDatabase.Init();
+            NPCDefinition wolf = NPCDatabase.Get("wolf_pack_hunter");
+            NPCDefinition goblin = NPCDatabase.Get("goblin_warchief");
+
+            bool defaultsAreEnemyAI = wolf != null
+                                     && goblin != null
+                                     && !wolf.IsAlly && !wolf.IsControllable
+                                     && !goblin.IsAlly && !goblin.IsControllable;
+
+            Assert(defaultsAreEnemyAI,
+                "NPC definitions default to enemy AI team/control flags",
+                wolf == null || goblin == null
+                    ? "(npc definition missing)"
+                    : $"(wolf ally={wolf.IsAlly}, ctrl={wolf.IsControllable}; goblin ally={goblin.IsAlly}, ctrl={goblin.IsControllable})");
         }
 
         private static void TestNPCDefinitionsAssignProfileArchetypes()
