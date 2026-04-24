@@ -33,6 +33,8 @@ namespace Tests.AI
             TestProfileCanSelectValidTripAndDisarm();
             TestAnimalProfilePrefersNearestTarget();
             TestAnimalProfileUsesNaturalTripFollowUpInsteadOfManeuver();
+            TestAnimalProfileEnablesAdaptiveFullAttackRetargeting();
+            TestDefaultProfileLeavesAdaptiveFullAttackRetargetingDisabled();
             TestEnemyDefinitionsAssignProfileArchetypes();
             TestWolfDefinitionMatchesBaselineStats();
             TestTigerDefinitionUsesAnimalProfile();
@@ -322,6 +324,48 @@ namespace Tests.AI
                 TestHelpers.Cleanup(wolf != null ? wolf.gameObject : null,
                     target != null ? target.gameObject : null,
                     profile);
+            }
+        }
+
+        private static void TestAnimalProfileEnablesAdaptiveFullAttackRetargeting()
+        {
+            CharacterController tiger = TestHelpers.CreateWarrior("AI_Tiger_Profile", level: 8);
+            AnimalAIProfile profile = ScriptableObject.CreateInstance<AnimalAIProfile>();
+
+            try
+            {
+                bool ignoreUnconscious = profile.ShouldIgnoreUnconsciousTargets(tiger);
+                bool switchMidAttack = profile.ShouldSwitchTargetsMidFullAttack(tiger);
+                bool allowStepRetarget = profile.ShouldTakeFiveFootStepToContinueFullAttack(tiger);
+
+                Assert(ignoreUnconscious && switchMidAttack && allowStepRetarget,
+                    "Animal profile enables adaptive full-attack retargeting behavior",
+                    $"(ignoreUnconscious={ignoreUnconscious}, switchMidAttack={switchMidAttack}, allowStepRetarget={allowStepRetarget})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(tiger != null ? tiger.gameObject : null, profile);
+            }
+        }
+
+        private static void TestDefaultProfileLeavesAdaptiveFullAttackRetargetingDisabled()
+        {
+            CharacterController attacker = TestHelpers.CreateWarrior("AI_Default_Profile", level: 5);
+            AIProfile profile = ScriptableObject.CreateInstance<AIProfile>();
+
+            try
+            {
+                bool ignoreUnconscious = profile.ShouldIgnoreUnconsciousTargets(attacker);
+                bool switchMidAttack = profile.ShouldSwitchTargetsMidFullAttack(attacker);
+                bool allowStepRetarget = profile.ShouldTakeFiveFootStepToContinueFullAttack(attacker);
+
+                Assert(!ignoreUnconscious && !switchMidAttack && !allowStepRetarget,
+                    "Base profile keeps adaptive full-attack retargeting disabled by default",
+                    $"(ignoreUnconscious={ignoreUnconscious}, switchMidAttack={switchMidAttack}, allowStepRetarget={allowStepRetarget})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(attacker != null ? attacker.gameObject : null, profile);
             }
         }
 

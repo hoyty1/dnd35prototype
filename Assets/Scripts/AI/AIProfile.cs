@@ -130,6 +130,30 @@ namespace DND35.AI
             return true;
         }
 
+        /// <summary>
+        /// When true, profile target selection should ignore unconscious targets as long as at least one conscious enemy is available.
+        /// </summary>
+        public virtual bool ShouldIgnoreUnconsciousTargets(CharacterController self)
+        {
+            return false;
+        }
+
+        /// <summary>
+        /// When true, this profile can swap targets mid full-attack sequence if the current target drops unconscious/dead.
+        /// </summary>
+        public virtual bool ShouldSwitchTargetsMidFullAttack(CharacterController self)
+        {
+            return false;
+        }
+
+        /// <summary>
+        /// When true, this profile is allowed to spend an available 5-foot step to continue a full attack on a new target.
+        /// </summary>
+        public virtual bool ShouldTakeFiveFootStepToContinueFullAttack(CharacterController self)
+        {
+            return false;
+        }
+
         public virtual bool ShouldInitiateGrapple(CharacterController self, CharacterController target)
         {
             if (self == null || target == null || target.Stats == null)

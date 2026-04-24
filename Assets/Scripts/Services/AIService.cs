@@ -578,12 +578,28 @@ public class AIService : MonoBehaviour
         CharacterController best = null;
         float bestScore = float.NegativeInfinity;
 
+        var enemyCandidates = new List<CharacterController>();
+        bool hasConsciousEnemy = false;
+
         for (int i = 0; i < allCombatants.Count; i++)
         {
             CharacterController candidate = allCombatants[i];
             if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
                 continue;
             if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+                continue;
+
+            enemyCandidates.Add(candidate);
+            if (!candidate.IsUnconscious)
+                hasConsciousEnemy = true;
+        }
+
+        bool ignoreUnconscious = profile.ShouldIgnoreUnconsciousTargets(npc) && hasConsciousEnemy;
+
+        for (int i = 0; i < enemyCandidates.Count; i++)
+        {
+            CharacterController candidate = enemyCandidates[i];
+            if (ignoreUnconscious && candidate.IsUnconscious)
                 continue;
 
             float score = profile.ScoreTarget(candidate, npc);

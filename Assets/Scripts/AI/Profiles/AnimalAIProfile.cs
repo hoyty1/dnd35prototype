@@ -135,6 +135,21 @@ namespace DND35.AI.Profiles
             }
         }
 
+        public override bool ShouldIgnoreUnconsciousTargets(CharacterController self)
+        {
+            return true;
+        }
+
+        public override bool ShouldSwitchTargetsMidFullAttack(CharacterController self)
+        {
+            return true;
+        }
+
+        public override bool ShouldTakeFiveFootStepToContinueFullAttack(CharacterController self)
+        {
+            return true;
+        }
+
         /// <summary>
         /// Animals only attempt to escape a grapple when critically wounded.
         /// Otherwise they should keep mauling their prey.

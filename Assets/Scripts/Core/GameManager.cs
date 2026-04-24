@@ -11943,6 +11943,309 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
+    private FullAttackResult PerformNPCFullAttackWithAdaptiveRetargeting(
+        CharacterController npc,
+        CharacterController initialTarget,
+        DND35.AI.AIProfile profile)
+    {
+        var aggregate = new FullAttackResult
+        {
+            Type = FullAttackResult.AttackType.FullAttack,
+            Attacker = npc,
+            Defender = initialTarget,
+            DefenderHPBefore = initialTarget != null && initialTarget.Stats != null ? initialTarget.Stats.CurrentHP : 0
+        };
+
+        if (npc == null || npc.Stats == null || initialTarget == null || initialTarget.Stats == null)
+            return aggregate;
+
+        RangeInfo initialRangeInfo = CalculateRangeInfo(npc, initialTarget);
+        int plannedAttackCount = npc.GetPlannedFullAttackCount(initialRangeInfo);
+        if (plannedAttackCount <= 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no available full-attack steps.");
+            aggregate.DefenderHPAfter = initialTarget.Stats.CurrentHP;
+            aggregate.TargetKilled = initialTarget.Stats.IsDead;
+            return aggregate;
+        }
+
+        CharacterController currentTarget = initialTarget;
+        int attacksMade = 0;
+        int targetSwitchCount = 0;
+
+        for (int attackIndex = 0; attackIndex < plannedAttackCount; attackIndex++)
+        {
+            if (npc == null || npc.Stats == null || npc.Stats.IsDead || CurrentPhase == TurnPhase.CombatOver)
+                break;
+
+            bool needsNewTarget = currentTarget == null
+                || currentTarget.Stats == null
+                || currentTarget.Stats.IsDead
+                || (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && currentTarget.IsUnconscious)
+                || !IsTargetInCurrentWeaponRange(npc, currentTarget);
+
+            if (needsNewTarget)
+            {
+                CharacterController inReachTarget = SelectBestAdaptiveFullAttackTarget(npc, profile, requireInRange: true);
+                if (inReachTarget != null)
+                {
+                    currentTarget = inReachTarget;
+                    targetSwitchCount++;
+                    CombatUI?.ShowCombatLog($"🎯 {npc.Stats.CharacterName} shifts focus to {currentTarget.Stats.CharacterName}.");
+                }
+                else
+                {
+                    CharacterController steppedTarget;
+                    bool stepped = profile != null
+                        && profile.ShouldTakeFiveFootStepToContinueFullAttack(npc)
+                        && TryTakeFiveFootStepForAdaptiveFullAttack(npc, profile, out steppedTarget);
+
+                    if (stepped)
+                    {
+                        currentTarget = steppedTarget;
+                        targetSwitchCount++;
+                        CombatUI?.ShowCombatLog($"🎯 {npc.Stats.CharacterName} re-engages {currentTarget.Stats.CharacterName} after a 5-foot step.");
+                    }
+                    else
+                    {
+                        int remainingAttacks = plannedAttackCount - attackIndex;
+                        CombatUI?.ShowCombatLog($"↩ {npc.Stats.CharacterName} has no valid active targets for {remainingAttacks} remaining attack(s).");
+                        break;
+                    }
+                }
+            }
+
+            if (currentTarget == null || currentTarget.Stats == null)
+                break;
+
+            CharacterController flankPartner;
+            bool isFlanking = CombatUtils.IsAttackerFlanking(npc, currentTarget, GetAllCharacters(), out flankPartner);
+            int flankBonus = isFlanking ? CombatUtils.FlankingAttackBonus : 0;
+            string partnerName = flankPartner != null && flankPartner.Stats != null
+                ? flankPartner.Stats.CharacterName
+                : null;
+
+            RangeInfo rangeInfo = CalculateRangeInfo(npc, currentTarget);
+            bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
+                npc,
+                npc.GetEquippedMainWeapon(),
+                rangeInfo,
+                treatAsThrownAttack: false);
+            ProcessTurnUndeadMeleeFearBreak(npc, currentTarget, isMeleeFearBreakAttack);
+
+            FullAttackResult stepResult = npc.FullAttack(
+                currentTarget,
+                isFlanking,
+                flankBonus,
+                partnerName,
+                rangeInfo,
+                startAttackIndex: attackIndex,
+                maxAttacks: 1);
+
+            if (stepResult == null || stepResult.Attacks == null || stepResult.Attacks.Count == 0)
+                break;
+
+            CombatResult attack = stepResult.Attacks[0];
+            string label = (stepResult.AttackLabels != null && stepResult.AttackLabels.Count > 0)
+                ? stepResult.AttackLabels[0]
+                : $"Attack {attackIndex + 1}";
+
+            aggregate.Attacks.Add(attack);
+            aggregate.AttackLabels.Add(label);
+            attacksMade++;
+
+            CombatUI?.ShowCombatLog(attack.GetAttackBreakdown(label));
+
+            if (attack.Hit && attack.TotalDamage > 0)
+                CheckConcentrationOnDamage(currentTarget, attack.TotalDamage);
+
+            TryResolveImprovedGrabFromAttackResults(npc, currentTarget, stepResult.Attacks);
+
+            if (currentTarget.Stats.IsDead)
+            {
+                HandleSummonDeathCleanup(currentTarget);
+
+                if (AreAllPCsDead())
+                {
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI.SetTurnIndicator("DEFEAT! All heroes have fallen!");
+                    CombatUI.SetActionButtonsVisible(false);
+                    break;
+                }
+
+                int attacksRemainingAfterKill = plannedAttackCount - (attackIndex + 1);
+                if (attacksRemainingAfterKill > 0)
+                    CombatUI?.ShowCombatLog($"💀 {currentTarget.Stats.CharacterName} is defeated! {attacksRemainingAfterKill} attack(s) remaining.");
+
+                currentTarget = null;
+                continue;
+            }
+
+            if (profile != null && profile.ShouldIgnoreUnconsciousTargets(npc) && currentTarget.IsUnconscious)
+            {
+                int attacksRemainingAfterDrop = plannedAttackCount - (attackIndex + 1);
+                if (attacksRemainingAfterDrop > 0)
+                    CombatUI?.ShowCombatLog($"💤 {currentTarget.Stats.CharacterName} drops unconscious! {npc.Stats.CharacterName} looks for another active target.");
+
+                currentTarget = null;
+            }
+        }
+
+        aggregate.DefenderHPAfter = aggregate.Defender != null && aggregate.Defender.Stats != null
+            ? aggregate.Defender.Stats.CurrentHP
+            : aggregate.DefenderHPBefore;
+        aggregate.TargetKilled = aggregate.Defender != null && aggregate.Defender.Stats != null && aggregate.Defender.Stats.IsDead;
+
+        _lastCombatLog = $"✅ {npc.Stats.CharacterName} completes adaptive full attack ({attacksMade}/{plannedAttackCount} attacks, {aggregate.TotalDamageDealt} total damage, {targetSwitchCount} target switch(es)).";
+        CombatUI?.ShowCombatLog(_lastCombatLog);
+
+        return aggregate;
+    }
+
+    private CharacterController SelectBestAdaptiveFullAttackTarget(
+        CharacterController attacker,
+        DND35.AI.AIProfile profile,
+        bool requireInRange)
+    {
+        if (attacker == null || attacker.Stats == null)
+            return null;
+
+        var enemies = new List<CharacterController>();
+        bool hasConsciousEnemy = false;
+
+        foreach (CharacterController candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+
+            if (!IsEnemyTeam(attacker, candidate))
+                continue;
+
+            enemies.Add(candidate);
+            if (!candidate.IsUnconscious)
+                hasConsciousEnemy = true;
+        }
+
+        bool ignoreUnconscious = profile != null
+            && profile.ShouldIgnoreUnconsciousTargets(attacker)
+            && hasConsciousEnemy;
+
+        var candidates = new List<CharacterController>();
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            CharacterController candidate = enemies[i];
+            if (ignoreUnconscious && candidate.IsUnconscious)
+                continue;
+
+            if (requireInRange && !IsTargetInCurrentWeaponRange(attacker, candidate))
+                continue;
+
+            candidates.Add(candidate);
+        }
+
+        if (candidates.Count == 0)
+            return null;
+
+        if (_aiService != null)
+        {
+            CharacterController profiled = _aiService.SelectBestTarget(attacker, candidates);
+            if (profiled != null)
+                return profiled;
+        }
+
+        CharacterController best = null;
+        float bestScore = float.NegativeInfinity;
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            CharacterController candidate = candidates[i];
+            float score = profile != null ? profile.ScoreTarget(candidate, attacker) : 0f;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    private bool TryTakeFiveFootStepForAdaptiveFullAttack(
+        CharacterController attacker,
+        DND35.AI.AIProfile profile,
+        out CharacterController nextTarget)
+    {
+        nextTarget = null;
+
+        if (attacker == null || !CanTakeFiveFootStep(attacker) || _movementService == null)
+            return false;
+
+        var enemies = new List<CharacterController>();
+        bool hasConsciousEnemy = false;
+
+        foreach (CharacterController candidate in GetAllCharacters())
+        {
+            if (candidate == null || candidate == attacker || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+
+            if (!IsEnemyTeam(attacker, candidate))
+                continue;
+
+            enemies.Add(candidate);
+            if (!candidate.IsUnconscious)
+                hasConsciousEnemy = true;
+        }
+
+        bool ignoreUnconscious = profile != null
+            && profile.ShouldIgnoreUnconsciousTargets(attacker)
+            && hasConsciousEnemy;
+
+        Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(attacker.GridPosition);
+        Vector2Int bestStep = attacker.GridPosition;
+        CharacterController bestTarget = null;
+        float bestScore = float.NegativeInfinity;
+
+        for (int i = 0; i < neighbors.Length; i++)
+        {
+            Vector2Int stepCell = neighbors[i];
+            if (!_movementService.CanTake5FootStep(attacker, stepCell))
+                continue;
+
+            for (int t = 0; t < enemies.Count; t++)
+            {
+                CharacterController candidate = enemies[t];
+                if (ignoreUnconscious && candidate.IsUnconscious)
+                    continue;
+
+                int distance = SquareGridUtils.GetDistance(stepCell, candidate.GridPosition);
+                if (!attacker.CanMeleeAttackDistance(distance, attacker.GetEquippedMainWeapon()))
+                    continue;
+
+                float score = profile != null ? profile.ScoreTarget(candidate, attacker) : 0f;
+                score -= distance * 0.25f;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestStep = stepCell;
+                    bestTarget = candidate;
+                }
+            }
+        }
+
+        if (bestTarget == null)
+            return false;
+
+        SquareCell destination = Grid != null ? Grid.GetCell(bestStep) : null;
+        if (destination == null)
+            return false;
+
+        if (!ExecuteFiveFootStep(attacker, destination, returnToActionChoices: false))
+            return false;
+
+        nextTarget = bestTarget;
+        return true;
+    }
+
     private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
     {
         if (!npc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
@@ -11982,6 +12285,25 @@ public partial class GameManager : MonoBehaviour
             }
 
             npc.Actions.UseFullRoundAction();
+
+            DND35.AI.AIProfile activeProfile = npc.aiProfile;
+            bool canSwitchMidAttack = activeProfile != null
+                && activeProfile.ShouldSwitchTargetsMidFullAttack(npc)
+                && !IsAttackModeRanged(npc);
+
+            if (canSwitchMidAttack)
+            {
+                FullAttackResult switchedResult = PerformNPCFullAttackWithAdaptiveRetargeting(npc, target, activeProfile);
+
+                Debug.Log($"[AI][Attack] {npc.Stats.CharacterName} performed adaptive full attack: attacks={switchedResult.Attacks.Count}, hits={switchedResult.HitCount}, totalDamage={switchedResult.TotalDamageDealt}");
+
+                if (LogAttacksToConsole)
+                    LogFullAttackToConsole(switchedResult);
+
+                UpdateAllStatsUI();
+                yield return new WaitForSeconds(1.0f);
+                yield break;
+            }
 
             bool isMeleeFearBreakAttack = IsMeleeAttackForTurnUndeadFearBreak(
                 npc,
