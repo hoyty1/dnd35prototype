@@ -12252,6 +12252,57 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    private bool CanAttemptImprovedGrabFromAttack(CharacterController attacker, CharacterController target, CombatResult attackResult)
+    {
+        if (attacker?.Stats == null || target?.Stats == null || attackResult == null)
+            return false;
+
+        if (!attacker.Stats.HasImprovedGrab || target.Stats.IsDead || !attackResult.Hit)
+            return false;
+
+        return IsImprovedGrabTriggerAttack(attacker, attackResult);
+    }
+
+    private IEnumerator ResolveImprovedGrabWithPromptCoroutine(CharacterController attacker, CharacterController target, CombatResult attackResult, Action onResolved)
+    {
+        bool shouldAttemptGrab = true;
+        if (attacker != null && attacker.IsControllable)
+        {
+            bool playerDecision = false;
+            yield return StartCoroutine(PromptImprovedGrabChoice(attacker, target, attackResult != null ? attackResult.WeaponName : null, decision => playerDecision = decision));
+            shouldAttemptGrab = playerDecision;
+        }
+
+        if (!shouldAttemptGrab)
+        {
+            CombatUI?.ShowCombatLog($"↷ {attacker?.Stats?.CharacterName ?? "Attacker"} declines to start a grapple.");
+            onResolved?.Invoke();
+            yield break;
+        }
+
+        SpecialAttackResult grabResult = attacker.ResolveImprovedGrabFreeAttempt(target);
+        string attackName = !string.IsNullOrWhiteSpace(attackResult?.WeaponName) ? attackResult.WeaponName : "trigger attack";
+        CombatUI?.ShowCombatLog($"🪢 Improved Grab ({attackName} hit): {grabResult.Log}");
+        onResolved?.Invoke();
+    }
+
+    private bool TryResolveImprovedGrabAfterSingleAttack(CharacterController attacker, CharacterController target, CombatResult attackResult, Action onResolved)
+    {
+        if (!CanAttemptImprovedGrabFromAttack(attacker, target, attackResult))
+            return false;
+
+        if (attacker != null && attacker.IsControllable)
+        {
+            StartCoroutine(ResolveImprovedGrabWithPromptCoroutine(attacker, target, attackResult, onResolved));
+            return true;
+        }
+
+        SpecialAttackResult grabResult = attacker.ResolveImprovedGrabFreeAttempt(target);
+        string attackName = !string.IsNullOrWhiteSpace(attackResult?.WeaponName) ? attackResult.WeaponName : "trigger attack";
+        CombatUI?.ShowCombatLog($"🪢 Improved Grab ({attackName} hit): {grabResult.Log}");
+        return false;
+    }
+
     private void TryResolveImprovedGrabFromAttackResults(CharacterController attacker, CharacterController target, List<CombatResult> attacks)
     {
         if (attacker?.Stats == null || target?.Stats == null || attacks == null || attacks.Count == 0)
@@ -12263,7 +12314,7 @@ public partial class GameManager : MonoBehaviour
         for (int i = 0; i < attacks.Count; i++)
         {
             CombatResult attackResult = attacks[i];
-            if (attackResult == null || !attackResult.Hit || !IsImprovedGrabTriggerAttack(attacker, attackResult))
+            if (!CanAttemptImprovedGrabFromAttack(attacker, target, attackResult))
                 continue;
 
             SpecialAttackResult grabResult = attacker.ResolveImprovedGrabFreeAttempt(target);

@@ -702,6 +702,19 @@ public class CombatFlowService : MonoBehaviour
             }
         }
 
+        // Single-attack natural weapon actions should always return to main action choices
+        // (move + 5-foot-step may remain available). Clear any stale attack-sequence state.
+        _gameManager.Combat_EndAttackSequence();
+
+        bool waitingOnImprovedGrabPrompt = _gameManager.Combat_TryResolveImprovedGrabAfterSingleAttack(
+            attacker,
+            target,
+            result,
+            onResolved: () => _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f));
+
+        if (waitingOnImprovedGrabPrompt)
+            return;
+
         _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f);
     }
 

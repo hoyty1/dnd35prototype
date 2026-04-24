@@ -85,6 +85,9 @@ public partial class GameManager
     public void Combat_TryResolveFreeTripOnHit(CharacterController attacker, CharacterController target, CombatResult attackResult, RangeInfo attackRange)
         => TryResolveFreeTripOnHit(attacker, target, attackResult, attackRange);
 
+    public bool Combat_TryResolveImprovedGrabAfterSingleAttack(CharacterController attacker, CharacterController target, CombatResult attackResult, System.Action onResolved)
+        => TryResolveImprovedGrabAfterSingleAttack(attacker, target, attackResult, onResolved);
+
     public void Combat_HandleSummonDeathCleanup(CharacterController target)
         => HandleSummonDeathCleanup(target);
 
