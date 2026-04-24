@@ -11921,6 +11921,28 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    private void TryResolveImprovedGrabFromAttackResults(CharacterController attacker, CharacterController target, List<CombatResult> attacks)
+    {
+        if (attacker?.Stats == null || target?.Stats == null || attacks == null || attacks.Count == 0)
+            return;
+
+        if (!attacker.Stats.HasImprovedGrab || target.Stats.IsDead)
+            return;
+
+        for (int i = 0; i < attacks.Count; i++)
+        {
+            CombatResult attackResult = attacks[i];
+            if (!IsImprovedGrabTriggerAttack(attacker, attackResult))
+                continue;
+
+            SpecialAttackResult grabResult = attacker.ResolveImprovedGrabFreeAttempt(target);
+            CombatUI?.ShowCombatLog($"🪢 Improved Grab ({attackResult.WeaponName} hit): {grabResult.Log}");
+
+            if (grabResult.Success || target.Stats.IsDead)
+                break;
+        }
+    }
+
     private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
     {
         if (!npc.CanAttackWithEquippedWeapon(out string cannotAttackReason))
@@ -11986,6 +12008,8 @@ public partial class GameManager : MonoBehaviour
             if (fullResult.TotalDamageDealt > 0)
                 CheckConcentrationOnDamage(target, fullResult.TotalDamageDealt);
 
+            TryResolveImprovedGrabFromAttackResults(npc, target, fullResult.Attacks);
+
             if (fullResult.TargetKilled)
             {
                 HandleSummonDeathCleanup(target);
@@ -12039,6 +12063,8 @@ public partial class GameManager : MonoBehaviour
 
         if (result.Hit && result.TotalDamage > 0)
             CheckConcentrationOnDamage(target, result.TotalDamage);
+
+        TryResolveImprovedGrabFromAttackResults(npc, target, new List<CombatResult> { result });
 
         if (result.TargetKilled)
         {
