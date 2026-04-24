@@ -150,6 +150,12 @@ namespace DND35.AI.Profiles
             return true;
         }
 
+        public override bool ShouldUseCoupDeGrace(CharacterController self)
+        {
+            // Predators finish helpless prey.
+            return true;
+        }
+
         /// <summary>
         /// Animals only attempt to escape a grapple when critically wounded.
         /// Otherwise they should keep mauling their prey.

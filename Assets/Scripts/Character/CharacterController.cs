@@ -225,6 +225,8 @@ public class CharacterController : MonoBehaviour
     [Tooltip("Optional AI profile used by AIService for NPC decision making")]
     public AIProfile aiProfile;
 
+    [HideInInspector] public bool? EnemyUseCoupDeGraceOverride;
+
     [Header("Sprites")]
     public Sprite AliveSprite;
     public Sprite DeadSprite;

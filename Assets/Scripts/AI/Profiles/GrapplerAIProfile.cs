@@ -42,6 +42,12 @@ namespace DND35.AI.Profiles
             EnsureDefaultTags();
         }
 
+        public override bool ShouldUseCoupDeGrace(CharacterController self)
+        {
+            // Grapplers focus on control, not execution.
+            return false;
+        }
+
         private void EnsureDefaultTags()
         {
             if (TagPriorities == null)

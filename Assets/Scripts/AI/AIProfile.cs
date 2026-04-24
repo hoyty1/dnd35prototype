@@ -154,6 +154,14 @@ namespace DND35.AI
             return false;
         }
 
+        /// <summary>
+        /// When true, this profile will execute adjacent helpless targets with Coup de Grace when legal.
+        /// </summary>
+        public virtual bool ShouldUseCoupDeGrace(CharacterController self)
+        {
+            return false;
+        }
+
         public virtual bool ShouldInitiateGrapple(CharacterController self, CharacterController target)
         {
             if (self == null || target == null || target.Stats == null)

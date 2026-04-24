@@ -2278,6 +2278,7 @@ public partial class GameManager : MonoBehaviour
         concMgr.Init(stats, npc);
 
         npc.aiProfile = BuildRuntimeAIProfile(def);
+        npc.EnemyUseCoupDeGraceOverride = def.UseCoupDeGrace;
 
         Debug.Log($"[GameManager] {def.Name}: HP {stats.MaxHP} AC {stats.ArmorClass} " +
                   $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq " +
@@ -11926,7 +11927,12 @@ public partial class GameManager : MonoBehaviour
 
         bool hasImprovedGrab = npc.Stats != null && npc.Stats.HasImprovedGrab;
         var coupTargets = GetAdjacentHelplessEnemiesForCoupDeGrace(npc);
-        bool hasCoupOption = coupTargets.Count > 0 && npc.Actions != null && npc.Actions.HasFullRoundAction;
+        bool profileAllowsCoupDeGrace = npc.EnemyUseCoupDeGraceOverride
+            ?? (npc.aiProfile != null && npc.aiProfile.ShouldUseCoupDeGrace(npc));
+        bool hasCoupOption = profileAllowsCoupDeGrace
+            && coupTargets.Count > 0
+            && npc.Actions != null
+            && npc.Actions.HasFullRoundAction;
 
         if (npc.IsGrappling() && (!forcedChoice.HasValue || forcedChoice.Value != SpecialAttackType.CoupDeGrace))
             return false;

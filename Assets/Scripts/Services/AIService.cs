@@ -949,15 +949,19 @@ public class AIService : MonoBehaviour
         if (npc == null || target == null)
             return false;
 
-        if (_gameManager != null && _gameManager.CanUseCoupDeGraceAttackOption(npc))
+        AIProfile profile = GetProfile(npc);
+        if (_gameManager != null
+            && _gameManager.CanUseCoupDeGraceAttackOption(npc)
+            && ShouldNPCUseCoupDeGrace(npc, profile))
+        {
             return true;
+        }
 
         if (npc.IsGrappling())
             return false;
         if (!npc.Actions.HasStandardAction)
             return false;
 
-        AIProfile profile = GetProfile(npc);
         if (profile != null)
         {
             SpecialAttackType? preferred = profile.GetPreferredManeuver(npc, target);
@@ -995,8 +999,12 @@ public class AIService : MonoBehaviour
         if (npc == null || target == null)
             return false;
 
-        if (_gameManager != null && _gameManager.CanUseCoupDeGraceAttackOption(npc))
+        if (_gameManager != null
+            && _gameManager.CanUseCoupDeGraceAttackOption(npc)
+            && ShouldNPCUseCoupDeGrace(npc, profile))
+        {
             return _gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, SpecialAttackType.CoupDeGrace);
+        }
 
         if (profile != null)
         {
@@ -1008,6 +1016,18 @@ public class AIService : MonoBehaviour
         }
 
         return _gameManager.TryNPCSpecialAttackIfBeneficialForAI(npc, target);
+    }
+
+    private static bool ShouldNPCUseCoupDeGrace(CharacterController npc, AIProfile profile)
+    {
+        if (npc == null)
+            return false;
+
+        if (npc.EnemyUseCoupDeGraceOverride.HasValue)
+            return npc.EnemyUseCoupDeGraceOverride.Value;
+
+        AIProfile resolvedProfile = profile ?? GetProfile(npc);
+        return resolvedProfile != null && resolvedProfile.ShouldUseCoupDeGrace(npc);
     }
 
     private static bool HasCastablePreparedSpells(CharacterController caster)

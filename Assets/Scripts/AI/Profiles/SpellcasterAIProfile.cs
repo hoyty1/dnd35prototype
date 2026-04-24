@@ -240,6 +240,12 @@ namespace DND35.AI.Profiles
             return score;
         }
 
+        public override bool ShouldUseCoupDeGrace(CharacterController self)
+        {
+            // Spellcasters typically prefer casting/control over spending a full-round execution action.
+            return false;
+        }
+
         public override float GetRangedAoORiskToleranceMultiplier()
         {
             // Spellcasters are generally more conservative about provoking while threatened.

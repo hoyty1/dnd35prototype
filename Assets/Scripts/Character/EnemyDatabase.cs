@@ -694,6 +694,8 @@ public class EnemyDefinition
     // AI
     public EnemyAIBehavior AIBehavior = EnemyAIBehavior.AggressiveMelee;
     public EnemyAIProfileArchetype AIProfileArchetype = EnemyAIProfileArchetype.None;
+    // null = use AI profile default, true/false = force this individual enemy behavior.
+    public bool? UseCoupDeGrace;
 
     // Visuals
     public Color SpriteColor = Color.white;

@@ -35,6 +35,8 @@ namespace Tests.AI
             TestAnimalProfileUsesNaturalTripFollowUpInsteadOfManeuver();
             TestAnimalProfileEnablesAdaptiveFullAttackRetargeting();
             TestDefaultProfileLeavesAdaptiveFullAttackRetargetingDisabled();
+            TestProfileCoupDeGraceDefaults();
+            TestEnemyDefinitionCoupDeGraceOverrideFieldDefaultsToNull();
             TestEnemyDefinitionsAssignProfileArchetypes();
             TestWolfDefinitionMatchesBaselineStats();
             TestTigerDefinitionUsesAnimalProfile();
@@ -367,6 +369,49 @@ namespace Tests.AI
             {
                 TestHelpers.Cleanup(attacker != null ? attacker.gameObject : null, profile);
             }
+        }
+
+        private static void TestProfileCoupDeGraceDefaults()
+        {
+            CharacterController attacker = TestHelpers.CreateWarrior("AI_Coup_Defaults", level: 5);
+            AnimalAIProfile animalProfile = ScriptableObject.CreateInstance<AnimalAIProfile>();
+            BerserkAIProfile berserkProfile = ScriptableObject.CreateInstance<BerserkAIProfile>();
+            SpellcasterAIProfile spellcasterProfile = ScriptableObject.CreateInstance<SpellcasterAIProfile>();
+            AIProfile baseProfile = ScriptableObject.CreateInstance<AIProfile>();
+
+            try
+            {
+                bool animalUsesCoup = animalProfile.ShouldUseCoupDeGrace(attacker);
+                bool berserkUsesCoup = berserkProfile.ShouldUseCoupDeGrace(attacker);
+                bool spellcasterUsesCoup = spellcasterProfile.ShouldUseCoupDeGrace(attacker);
+                bool baseUsesCoup = baseProfile.ShouldUseCoupDeGrace(attacker);
+
+                Assert(animalUsesCoup && berserkUsesCoup && !spellcasterUsesCoup && !baseUsesCoup,
+                    "AI profile coup de grace defaults match archetype intent",
+                    $"(animal={animalUsesCoup}, berserk={berserkUsesCoup}, spellcaster={spellcasterUsesCoup}, base={baseUsesCoup})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(attacker != null ? attacker.gameObject : null, animalProfile, berserkProfile, spellcasterProfile, baseProfile);
+            }
+        }
+
+        private static void TestEnemyDefinitionCoupDeGraceOverrideFieldDefaultsToNull()
+        {
+            EnemyDatabase.Init();
+            EnemyDefinition wolf = EnemyDatabase.Get("wolf_pack_hunter");
+            EnemyDefinition tiger = EnemyDatabase.Get("tiger");
+
+            bool defaultsToNull = wolf != null
+                                  && tiger != null
+                                  && !wolf.UseCoupDeGrace.HasValue
+                                  && !tiger.UseCoupDeGrace.HasValue;
+
+            Assert(defaultsToNull,
+                "Enemy definitions default coup de grace override to null (profile-driven)",
+                wolf == null || tiger == null
+                    ? "(enemy definition missing)"
+                    : $"(wolfOverride={(wolf.UseCoupDeGrace.HasValue ? wolf.UseCoupDeGrace.Value.ToString() : "null")}, tigerOverride={(tiger.UseCoupDeGrace.HasValue ? tiger.UseCoupDeGrace.Value.ToString() : "null")})");
         }
 
         private static void TestEnemyDefinitionsAssignProfileArchetypes()

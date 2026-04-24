@@ -42,6 +42,12 @@ namespace DND35.AI.Profiles
             EnsureDefaultTags();
         }
 
+        public override bool ShouldUseCoupDeGrace(CharacterController self)
+        {
+            // Berserkers are bloodthirsty and will finish helpless foes.
+            return true;
+        }
+
         private void EnsureDefaultTags()
         {
             if (TagPriorities == null)
