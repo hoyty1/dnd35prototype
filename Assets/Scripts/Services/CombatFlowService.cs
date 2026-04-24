@@ -583,11 +583,51 @@ public class CombatFlowService : MonoBehaviour
         _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f);
     }
 
+    private static void PreserveSingleNaturalAttackActionEconomy(
+        CharacterController attacker,
+        bool moveActionWasAvailableBeforeAttack,
+        bool moveActionUsedBeforeAttack,
+        bool fullRoundActionUsedBeforeAttack,
+        bool standardConvertedToMoveBeforeAttack)
+    {
+        if (attacker == null || attacker.Actions == null)
+            return;
+
+        // Guardrail: selecting a single natural-weapon attack (e.g., Bite) should consume only
+        // a standard action. If any internal path accidentally toggles full-round/move state,
+        // restore the pre-attack movement economy for this turn.
+        if (!fullRoundActionUsedBeforeAttack && attacker.Actions.FullRoundActionUsed)
+        {
+            Debug.LogWarning($"[Attack][NaturalSingle] Restoring action economy for {attacker.Stats?.CharacterName}: clearing unintended FullRoundActionUsed flag.");
+            attacker.Actions.FullRoundActionUsed = false;
+        }
+
+        if (!attacker.Actions.SingleActionOnly
+            && moveActionWasAvailableBeforeAttack
+            && !moveActionUsedBeforeAttack
+            && attacker.Actions.MoveActionUsed)
+        {
+            Debug.LogWarning($"[Attack][NaturalSingle] Restoring move action for {attacker.Stats?.CharacterName} after single natural attack.");
+            attacker.Actions.MoveActionUsed = false;
+        }
+
+        if (!standardConvertedToMoveBeforeAttack && attacker.Actions.StandardConvertedToMove)
+        {
+            Debug.LogWarning($"[Attack][NaturalSingle] Clearing unintended StandardConvertedToMove flag for {attacker.Stats?.CharacterName}.");
+            attacker.Actions.StandardConvertedToMove = false;
+        }
+    }
+
     public void PerformSingleAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
         if (_gameManager == null || attacker == null || target == null)
             return;
+
+        bool moveActionWasAvailableBeforeAttack = attacker.Actions != null && attacker.Actions.HasMoveAction;
+        bool moveActionUsedBeforeAttack = attacker.Actions != null && attacker.Actions.MoveActionUsed;
+        bool fullRoundActionUsedBeforeAttack = attacker.Actions != null && attacker.Actions.FullRoundActionUsed;
+        bool standardConvertedToMoveBeforeAttack = attacker.Actions != null && attacker.Actions.StandardConvertedToMove;
 
         bool skipStandardCommit = _gameManager.Combat_ConsumeSkipNextSingleAttackStandardActionCommitFlag();
         if (!skipStandardCommit)
@@ -700,6 +740,16 @@ public class CombatFlowService : MonoBehaviour
 
                 _gameManager.CombatUI?.ShowCombatLog(log + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
             }
+        }
+
+        if (useSelectedNaturalAttack)
+        {
+            PreserveSingleNaturalAttackActionEconomy(
+                attacker,
+                moveActionWasAvailableBeforeAttack,
+                moveActionUsedBeforeAttack,
+                fullRoundActionUsedBeforeAttack,
+                standardConvertedToMoveBeforeAttack);
         }
 
         // Single-attack natural weapon actions should always return to main action choices
