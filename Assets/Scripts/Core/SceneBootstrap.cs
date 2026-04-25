@@ -766,6 +766,8 @@ public class SceneBootstrap : MonoBehaviour
             "Special Attack", new Color(0.55f, 0.35f, 0.15f));
         combatUI.TurnUndeadButton = CreateGridButton(btnGrid.transform, "TurnUndeadBtn",
             "Turn Undead", new Color(0.72f, 0.68f, 0.2f));
+        combatUI.SmiteButton = CreateGridButton(btnGrid.transform, "SmiteBtn",
+            "Smite", new Color(0.8f, 0.42f, 0.14f));
         combatUI.GrappleActionsButton = CreateGridButton(btnGrid.transform, "GrappleActionsBtn",
             "Grapple Actions (Legacy)", new Color(0.45f, 0.24f, 0.6f));
         combatUI.GrappleDamageButton = CreateGridButton(btnGrid.transform, "GrappleDamageBtn",
@@ -1078,6 +1080,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.SpecialAttackButton.onClick.AddListener(() => GameManager.Instance.OnSpecialAttackButtonPressed());
         if (ui.TurnUndeadButton != null)
             ui.TurnUndeadButton.onClick.AddListener(() => GameManager.Instance.OnTurnUndeadButtonPressed());
+        if (ui.SmiteButton != null)
+            ui.SmiteButton.onClick.AddListener(() => GameManager.Instance.OnSmiteButtonPressed());
         if (ui.GrappleActionsButton != null)
         {
             ui.GrappleActionsButton.onClick.RemoveAllListeners();

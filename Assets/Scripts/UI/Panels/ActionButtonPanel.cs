@@ -29,6 +29,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button FullAttackButton => _combatUI != null ? _combatUI.FullAttackButton : null;
     private Button SpecialAttackButton => _combatUI != null ? _combatUI.SpecialAttackButton : null;
     private Button TurnUndeadButton => _combatUI != null ? _combatUI.TurnUndeadButton : null;
+    private Button SmiteButton => _combatUI != null ? _combatUI.SmiteButton : null;
     private Button GrappleActionsButton => _combatUI != null ? _combatUI.GrappleActionsButton : null;
     private Button GrappleDamageButton => _combatUI != null ? _combatUI.GrappleDamageButton : null;
     private Button GrappleLightWeaponAttackButton => _combatUI != null ? _combatUI.GrappleLightWeaponAttackButton : null;
@@ -613,6 +614,15 @@ public class ActionButtonPanel : MonoBehaviour
 
         states.Set(TurnUndeadButton, new ActionButtonState(canEverUseTurnUndead, canUseTurnUndead, turnUndeadLabel));
 
+        string smiteReason = string.Empty;
+        bool canUseSmite = context.Gm != null && context.Gm.CanUseTemplateSmite(pc, out smiteReason);
+        bool hasTemplateSmite = pc != null && pc.Stats != null && (pc.Stats.HasTemplateSmiteEvil || pc.Stats.HasTemplateSmiteGood);
+        string smiteAxis = pc != null && pc.Stats != null && pc.Stats.HasTemplateSmiteGood ? "Good" : "Evil";
+        string smiteLabel = !hasTemplateSmite
+            ? "Smite (N/A)"
+            : (canUseSmite ? $"Smite {smiteAxis} (Standard, 1/day)" : $"Smite {smiteAxis} ({smiteReason})");
+        states.Set(SmiteButton, new ActionButtonState(hasTemplateSmite, canUseSmite, smiteLabel));
+
         bool standaloneDisarmWasVisible = _combatUI.HideStandaloneDisarmButtonsInMainActionsForActionPanel();
         Debug.Log($"[CombatUI][Actions] actor={pc.Stats.CharacterName} specialAttackVisible=true specialAttackInteractable={canSpecialAttack} grappleAvailable={context.HasGrappleAttackAvailable} bullRushAvailable={context.HasBullRushAttackAvailable} tripAvailable={context.HasTripAttackAvailable} disarmViaSpecialAvailable={context.HasDisarmAttackAvailable} coupDeGraceAvailable={context.HasCoupDeGraceAttackAvailable} standaloneDisarmSuppressed={standaloneDisarmWasVisible}");
 
@@ -877,6 +887,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (AttackOffHandThrownButton != null) AttackOffHandThrownButton.gameObject.SetActive(false);
         if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
         if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
+        if (SmiteButton != null) SmiteButton.gameObject.SetActive(false);
         if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);
         if (AidAnotherButton != null) AidAnotherButton.gameObject.SetActive(false);
         if (OverrunButton != null) OverrunButton.gameObject.SetActive(false);
@@ -908,6 +919,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (FullAttackButton != null) FullAttackButton.gameObject.SetActive(false);
         if (SpecialAttackButton != null) SpecialAttackButton.gameObject.SetActive(false);
         if (TurnUndeadButton != null) TurnUndeadButton.gameObject.SetActive(false);
+        if (SmiteButton != null) SmiteButton.gameObject.SetActive(false);
         if (GrappleActionsButton != null) GrappleActionsButton.gameObject.SetActive(false);
         if (GrappleDamageButton != null) GrappleDamageButton.gameObject.SetActive(false);
         if (GrappleLightWeaponAttackButton != null) GrappleLightWeaponAttackButton.gameObject.SetActive(false);

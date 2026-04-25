@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -728,12 +729,25 @@ public class NPCDefinition
     public bool DamageReductionRangedOnly;
     public List<DamageResistanceEntry> DamageResistances = new List<DamageResistanceEntry>();
     public List<DamageType> DamageImmunities = new List<DamageType>();
+    public int SpellResistance;
     public int BaseHitDieHP;
+
+    // Template-afforded actions
+    public bool GainsSmiteEvil;
+    public bool GainsSmiteGood;
 
     // Tags and feats
     public List<string> CreatureTags = new List<string>();
     public List<string> Feats = new List<string>();
     public string WeaponFocusChoice;
+
+    // Optional descriptive traits surfaced in tooltips/UI (e.g., "Darkvision 60 ft", "Smite Evil 1/day").
+    public List<string> SpecialAbilities = new List<string>();
+
+    // Runtime template flags and descriptors.
+    public bool IsCelestial;
+    public bool IsFiendish;
+    public List<string> AppliedTemplateIds = new List<string>();
 
     // Equipment
     public List<EquipmentSlotPair> EquipmentIds = new List<EquipmentSlotPair>();
@@ -753,6 +767,91 @@ public class NPCDefinition
     public Color SpriteColor = Color.white;
     public Color PanelColor = new Color(0.4f, 0.1f, 0.1f, 0.85f);
     public Color NameColor = new Color(1f, 0.4f, 0.4f);
+
+    /// <summary>
+    /// Deep-clone this definition so spawn-time template mutation never edits the shared database entry.
+    /// </summary>
+    public NPCDefinition Clone()
+    {
+        NPCDefinition clone = (NPCDefinition)MemberwiseClone();
+
+        clone.NaturalAttacks = new List<NaturalAttackDefinition>();
+        if (NaturalAttacks != null)
+        {
+            for (int i = 0; i < NaturalAttacks.Count; i++)
+            {
+                NaturalAttackDefinition attack = NaturalAttacks[i];
+                if (attack == null) continue;
+                clone.NaturalAttacks.Add(new NaturalAttackDefinition
+                {
+                    Name = attack.Name,
+                    DamageDice = attack.DamageDice,
+                    DamageCount = attack.DamageCount,
+                    Count = attack.Count,
+                    BonusDamageSource = attack.BonusDamageSource,
+                    Range = attack.Range,
+                    IsPrimary = attack.IsPrimary
+                });
+            }
+        }
+
+        clone.RakeAttack = RakeAttack == null
+            ? null
+            : new NaturalAttackDefinition
+            {
+                Name = RakeAttack.Name,
+                DamageDice = RakeAttack.DamageDice,
+                DamageCount = RakeAttack.DamageCount,
+                Count = RakeAttack.Count,
+                BonusDamageSource = RakeAttack.BonusDamageSource,
+                Range = RakeAttack.Range,
+                IsPrimary = RakeAttack.IsPrimary
+            };
+
+        clone.DamageResistances = new List<DamageResistanceEntry>();
+        if (DamageResistances != null)
+        {
+            for (int i = 0; i < DamageResistances.Count; i++)
+            {
+                DamageResistanceEntry entry = DamageResistances[i];
+                if (entry == null) continue;
+                clone.DamageResistances.Add(new DamageResistanceEntry { Type = entry.Type, Amount = entry.Amount });
+            }
+        }
+
+        clone.DamageImmunities = DamageImmunities != null
+            ? new List<DamageType>(DamageImmunities)
+            : new List<DamageType>();
+        clone.CreatureTags = CreatureTags != null
+            ? new List<string>(CreatureTags)
+            : new List<string>();
+        clone.Feats = Feats != null
+            ? new List<string>(Feats)
+            : new List<string>();
+        clone.SpecialAbilities = SpecialAbilities != null
+            ? new List<string>(SpecialAbilities)
+            : new List<string>();
+        clone.AppliedTemplateIds = AppliedTemplateIds != null
+            ? new List<string>(AppliedTemplateIds)
+            : new List<string>();
+
+        clone.EquipmentIds = new List<EquipmentSlotPair>();
+        if (EquipmentIds != null)
+        {
+            for (int i = 0; i < EquipmentIds.Count; i++)
+            {
+                EquipmentSlotPair eq = EquipmentIds[i];
+                if (eq == null) continue;
+                clone.EquipmentIds.Add(new EquipmentSlotPair(eq.ItemId, eq.Slot));
+            }
+        }
+
+        clone.BackpackItemIds = BackpackItemIds != null
+            ? new List<string>(BackpackItemIds)
+            : new List<string>();
+
+        return clone;
+    }
 }
 
 [System.Serializable]

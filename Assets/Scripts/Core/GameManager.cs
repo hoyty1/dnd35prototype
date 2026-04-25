@@ -138,7 +138,7 @@ public partial class GameManager : MonoBehaviour
     public bool IsPlayerTurn => ActivePC != null;
 
     // Current attack mode being selected for
-    public enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell }
+    public enum PendingAttackMode { Single, FullAttack, DualWield, FlurryOfBlows, CastSpell, TemplateSmite }
 
     public enum AttackType
     {
@@ -2209,7 +2209,8 @@ public partial class GameManager : MonoBehaviour
             }
 
             string enemyId = enemyIds[i];
-            NPCDefinition def = NPCDatabase.Get(enemyId);
+            NPCDefinition sourceDef = NPCDatabase.Get(enemyId);
+            NPCDefinition def = CreatureTemplateRegistry.ApplyTemplatesClone(sourceDef);
             if (def == null)
             {
                 Debug.LogError($"[GameManager] Unknown enemy ID: {enemyId}");
@@ -2302,7 +2303,10 @@ public partial class GameManager : MonoBehaviour
                 if (panelUI.NameText != null) panelUI.NameText.color = def.NameColor;
             }
 
-            Debug.Log($"[GameManager] Spawned NPC {i}: {def.Name} (Lv {def.Level} {def.CharacterClass}) at ({pos.x},{pos.y}) — AI: {def.AIBehavior}");
+            string templateLog = (def.AppliedTemplateIds != null && def.AppliedTemplateIds.Count > 0)
+                ? $" | Templates: {string.Join(",", def.AppliedTemplateIds)}"
+                : string.Empty;
+            Debug.Log($"[GameManager] Spawned NPC {i}: {def.Name} (Lv {def.Level} {def.CharacterClass}) at ({pos.x},{pos.y}) — AI: {def.AIBehavior}{templateLog}");
         }
 
         // Legacy NPC field points to first active enemy
@@ -2429,6 +2433,19 @@ public partial class GameManager : MonoBehaviour
         {
             foreach (var imm in def.DamageImmunities)
                 stats.AddDamageImmunity(imm);
+        }
+
+        stats.SpellResistance = Mathf.Max(0, def.SpellResistance);
+        stats.IsCelestialTemplate = def.IsCelestial;
+        stats.IsFiendishTemplate = def.IsFiendish;
+        stats.HasTemplateSmiteEvil = def.GainsSmiteEvil;
+        stats.HasTemplateSmiteGood = def.GainsSmiteGood;
+        stats.TemplateSmiteUsed = false;
+
+        if (def.SpecialAbilities != null)
+        {
+            for (int i = 0; i < def.SpecialAbilities.Count; i++)
+                stats.AddSpecialAbility(def.SpecialAbilities[i]);
         }
 
         npc.Init(stats, pos, alive, dead);
@@ -7193,6 +7210,18 @@ public partial class GameManager : MonoBehaviour
         else
             stats.CharacterAlignment = Alignment.TrueNeutral;
 
+        stats.IsCelestialTemplate = template.IsCelestial;
+        stats.IsFiendishTemplate = template.IsFiendish;
+        stats.HasTemplateSmiteEvil = template.IsCelestial;
+        stats.HasTemplateSmiteGood = template.IsFiendish;
+        stats.TemplateSmiteUsed = false;
+
+        if (template.SpecialTraits != null)
+        {
+            for (int i = 0; i < template.SpecialTraits.Count; i++)
+                stats.AddSpecialAbility(template.SpecialTraits[i]);
+        }
+
         Sprite alive = IconLoader.GetToken(template.TokenType);
         if (alive == null)
             alive = LoadSprite("Sprites/npc_enemy_alive");
@@ -10130,6 +10159,7 @@ public partial class GameManager : MonoBehaviour
                 case PendingAttackMode.DualWield: modeStr = "DUAL WIELD"; break;
                 case PendingAttackMode.FlurryOfBlows: modeStr = "FLURRY OF BLOWS"; break;
                 case PendingAttackMode.CastSpell: modeStr = "CAST SPELL"; break;
+                case PendingAttackMode.TemplateSmite: modeStr = "SMITE"; break;
             }
 
             if (_pendingAttackMode == PendingAttackMode.Single && _currentAttackType == AttackType.Thrown)
@@ -10978,6 +11008,18 @@ public partial class GameManager : MonoBehaviour
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
             ShowActionChoices();
+            return;
+        }
+
+        if (_pendingAttackMode == PendingAttackMode.TemplateSmite)
+        {
+            if (!cell.IsOccupied || cell.Occupant == null || cell.Occupant == pc || cell.Occupant.Stats == null || cell.Occupant.Stats.IsDead || !_highlightedCells.Contains(cell))
+            {
+                CombatUI?.ShowCombatLog("Select a highlighted valid smite target.");
+                return;
+            }
+
+            ExecuteTemplateSmiteAttack(pc, cell.Occupant);
             return;
         }
 
@@ -12366,13 +12408,13 @@ public partial class GameManager : MonoBehaviour
     {
         if (summon == null || target == null || summonData == null || summonData.Template == null)
             return false;
-        if (summonData.SmiteUsed)
+        if (summonData.SmiteUsed || (summon.Stats != null && summon.Stats.TemplateSmiteUsed))
             return false;
         if (!summon.Actions.HasStandardAction)
             return false;
 
-        bool smiteEvil = summonData.Template.IsCelestial && AlignmentHelper.IsEvil(target.Stats.CharacterAlignment);
-        bool smiteGood = summonData.Template.IsFiendish && AlignmentHelper.IsGood(target.Stats.CharacterAlignment);
+        bool smiteEvil = summon.Stats.HasTemplateSmiteEvil && AlignmentHelper.IsEvil(target.Stats.CharacterAlignment);
+        bool smiteGood = summon.Stats.HasTemplateSmiteGood && AlignmentHelper.IsGood(target.Stats.CharacterAlignment);
         if (!smiteEvil && !smiteGood)
             return false;
 
@@ -12398,6 +12440,7 @@ public partial class GameManager : MonoBehaviour
 
         summon.CommitStandardAction();
         summonData.SmiteUsed = true;
+        summon.Stats.TemplateSmiteUsed = true;
 
         string targetAxis = smiteEvil ? "Evil" : "Good";
         CombatUI.ShowCombatLog($"<color=#FFD280>✦ {GetSummonDisplayName(summon)} uses Smite {targetAxis}! {result.GetDetailedSummary()}</color>");

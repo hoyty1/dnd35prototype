@@ -102,6 +102,7 @@ public class CombatUI : MonoBehaviour
     public Button FullAttackButton;     // Full Attack (Full-Round Action)
     public Button SpecialAttackButton;  // Combat maneuvers (Standard Action)
     public Button TurnUndeadButton;     // Turn Undead (Standard Action, Cleric/Paladin only)
+    public Button SmiteButton;          // Template Smite (Standard Action, 1/day)
     public Button GrappleActionsButton; // Legacy grapple menu button (deprecated)
     public Button GrappleDamageButton;          // Grapple: deal damage (Standard Action)
     public Button GrappleLightWeaponAttackButton; // Grapple: attack with main-hand light weapon (Standard Action)

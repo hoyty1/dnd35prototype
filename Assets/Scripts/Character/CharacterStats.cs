@@ -867,6 +867,20 @@ public class CharacterStats
 
     /// <summary>Typed immunities (e.g., Immune Cold).</summary>
     public List<DamageType> DamageImmunities = new List<DamageType>();
+
+    /// <summary>Spell Resistance (SR), if any. 0 means no SR.</summary>
+    public int SpellResistance;
+
+    // Template-derived metadata/actions (Celestial/Fiendish, etc.)
+    public bool IsCelestialTemplate;
+    public bool IsFiendishTemplate;
+    public bool HasTemplateSmiteEvil;
+    public bool HasTemplateSmiteGood;
+    public bool TemplateSmiteUsed;
+
+    /// <summary>Creature trait strings shown in sheet/tooltip UI (e.g., "Darkvision 60 ft", "Smite Evil 1/day").</summary>
+    public List<string> SpecialAbilities = new List<string>();
+
     // ========== BASE ABILITY SCORES (before racial modifiers) ==========
     /// <summary>Base ability scores BEFORE racial modifiers are applied.</summary>
     public int BaseSTR, BaseDEX, BaseCON, BaseWIS, BaseINT, BaseCHA;
@@ -1487,6 +1501,23 @@ public class CharacterStats
         return RakeAttack;
     }
 
+    public void AddSpecialAbility(string trait)
+    {
+        if (string.IsNullOrWhiteSpace(trait))
+            return;
+
+        if (SpecialAbilities == null)
+            SpecialAbilities = new List<string>();
+
+        for (int i = 0; i < SpecialAbilities.Count; i++)
+        {
+            if (string.Equals(SpecialAbilities[i], trait, System.StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+
+        SpecialAbilities.Add(trait);
+    }
+
     public string GetSpecialAbilitiesSummary()
     {
         var traits = new List<string>();
@@ -1494,6 +1525,41 @@ public class CharacterStats
         if (HasPounce) traits.Add("Pounce");
         if (HasRake) traits.Add("Rake");
         if (HasScent) traits.Add("Scent");
+
+        if (HasTemplateSmiteEvil)
+            traits.Add(TemplateSmiteUsed ? "Smite Evil (used)" : "Smite Evil 1/day");
+        if (HasTemplateSmiteGood)
+            traits.Add(TemplateSmiteUsed ? "Smite Good (used)" : "Smite Good 1/day");
+
+        if (SpellResistance > 0)
+            traits.Add($"SR {SpellResistance}");
+
+        string mitigationSummary = GetMitigationSummaryString();
+        if (!string.IsNullOrWhiteSpace(mitigationSummary))
+            traits.Add(mitigationSummary);
+
+        if (SpecialAbilities != null)
+        {
+            for (int i = 0; i < SpecialAbilities.Count; i++)
+            {
+                string trait = SpecialAbilities[i];
+                if (string.IsNullOrWhiteSpace(trait))
+                    continue;
+
+                bool duplicate = false;
+                for (int t = 0; t < traits.Count; t++)
+                {
+                    if (string.Equals(traits[t], trait, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        duplicate = true;
+                        break;
+                    }
+                }
+
+                if (!duplicate)
+                    traits.Add(trait);
+            }
+        }
 
         return traits.Count > 0 ? string.Join(", ", traits) : string.Empty;
     }
@@ -1965,6 +2031,9 @@ public class CharacterStats
             for (int i = 0; i < DamageImmunities.Count; i++)
                 parts.Add($"Immune {DamageTextUtils.GetDamageTypeDisplay(DamageImmunities[i])}");
         }
+
+        if (SpellResistance > 0)
+            parts.Add($"SR {SpellResistance}");
 
         return string.Join(", ", parts);
     }
