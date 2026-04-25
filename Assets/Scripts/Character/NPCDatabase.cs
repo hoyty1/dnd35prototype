@@ -33,7 +33,9 @@ public static class NPCDatabase
         RegisterTiger();
         RegisterDireTiger();
         RegisterBrownBear();
+        RegisterDireBear();
         RegisterWolfPackHunter();
+        RegisterZombieShambler();
 
         Debug.Log($"[NPCDatabase] Initialized with {_npcs.Count} NPC types.");
     }
@@ -75,6 +77,7 @@ public static class NPCDatabase
             new EncounterPreset("tiger_hunt_test", "🐅 Tiger Hunt Test", "Three-PC behavior test for tiger pounce, improved grab, rake, scent vs invisible target, and low-HP withdraw AI.", new List<string> { "tiger" }),
             new EncounterPreset("ogre_battle_test", "🧙 Ogre Battle", "Player-controlled wizard and dire tiger ally versus two ogre brutes.", new List<string> { "dire_tiger", "ogre_brute", "ogre_brute" }),
             new EncounterPreset("shield_bash_test", "🛡️ Shield Bash Test", "Compare shield bash AC behavior: Shielder keeps shield AC with Improved Shield Bash while Basher loses shield AC until next turn.", new List<string> { "orc_berserker", "orc_berserker" }),
+            new EncounterPreset("celestial_template_test", "✨ Celestial Template Test", "Good cleric with celestial wolf + celestial dire bear allies against evil undead. Templates are applied at spawn time.", new List<string> { "wolf_pack_hunter", "dire_bear", "skeleton_warrior", "skeleton_archer", "zombie_shambler" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
@@ -305,6 +308,43 @@ public static class NPCDatabase
             PanelColor = new Color(0.19f, 0.18f, 0.3f, 0.85f),
             NameColor = new Color(0.72f, 0.9f, 1f),
             Description = "A malevolent wight animated by hunger and shadow. Tough enough to be turned but not instantly destroyed in cleric test encounters."
+        });
+    }
+
+    /// <summary>
+    /// Zombie Shambler (CR 1) — basic undead melee body used in template tests.
+    /// </summary>
+    private static void RegisterZombieShambler()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "zombie_shambler",
+            Name = "Zombie",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Undead",
+            HitDice = 2,
+            SizeCategory = SizeCategory.Medium,
+            NaturalArmorBonus = 3,
+            STR = 17, DEX = 6, CON = 10, WIS = 10, INT = 0, CHA = 1,
+            BAB = 1,
+            BaseSpeed = 4,
+            BaseHitDieHP = 22,
+            CreatureTags = new List<string> { "Undead" },
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            DamageReductionAmount = 5,
+            DamageReductionBypass = DamageBypassTag.Slashing,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
+            SpriteColor = new Color(0.62f, 0.75f, 0.62f, 1f),
+            PanelColor = new Color(0.17f, 0.28f, 0.17f, 0.85f),
+            NameColor = new Color(0.72f, 0.9f, 0.72f),
+            Description = "A shambling corpse that batters enemies with heavy slams. Slow, resilient, and mindless."
         });
     }
 
@@ -638,6 +678,46 @@ public static class NPCDatabase
             PanelColor = new Color(0.25f, 0.17f, 0.12f, 0.85f),
             NameColor = new Color(0.95f, 0.8f, 0.62f),
             Description = "A towering bear that mauls prey with two claws before following up with a secondary bite."
+        });
+    }
+
+    /// <summary>
+    /// Dire Bear (CR 7) — high-HD bear used for template scaling tests.
+    /// </summary>
+    private static void RegisterDireBear()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "dire_bear",
+            Name = "Dire Bear",
+            Level = 12,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 12,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 31, DEX = 13, CON = 19, WIS = 12, INT = 2, CHA = 10,
+            BAB = 9,
+            NaturalArmorBonus = 7,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 8, DamageCount = 2, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 114,
+            CreatureTags = new List<string> { "Animal" },
+            HasScent = true,
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Claw",
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.44f, 0.3f, 0.22f, 1f),
+            PanelColor = new Color(0.2f, 0.14f, 0.1f, 0.85f),
+            NameColor = new Color(0.95f, 0.82f, 0.7f),
+            Description = "A hulking dire bear that tears foes apart with heavy claws before biting. Used as a high-HD celestial template benchmark."
         });
     }
 

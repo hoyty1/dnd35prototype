@@ -76,6 +76,7 @@ public partial class GameManager : MonoBehaviour
     private const string TigerHuntTestPresetId = "tiger_hunt_test";
     private const string OgreBattleTestPresetId = "ogre_battle_test";
     private const string ShieldBashTestPresetId = "shield_bash_test";
+    private const string CelestialTemplateTestPresetId = "celestial_template_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
     private bool _isFeintSneakTestEncounter;
@@ -84,6 +85,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isTigerHuntTestEncounter;
     private bool _isOgreBattleTestEncounter;
     private bool _isShieldBashTestEncounter;
+    private bool _isCelestialTemplateTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
 
     // Game state
@@ -774,6 +776,7 @@ public partial class GameManager : MonoBehaviour
         _isTigerHuntTestEncounter = string.Equals(presetId, TigerHuntTestPresetId, StringComparison.Ordinal);
         _isOgreBattleTestEncounter = string.Equals(presetId, OgreBattleTestPresetId, StringComparison.Ordinal);
         _isShieldBashTestEncounter = string.Equals(presetId, ShieldBashTestPresetId, StringComparison.Ordinal);
+        _isCelestialTemplateTestEncounter = string.Equals(presetId, CelestialTemplateTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.NPCIds != null && preset.NPCIds.Count > 0)
         {
@@ -802,6 +805,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureOgreBattleTestParty();
         else if (_isShieldBashTestEncounter)
             ConfigureShieldBashTestParty();
+        else if (_isCelestialTemplateTestEncounter)
+            ConfigureCelestialTemplateTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -1857,6 +1862,55 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   After shield bash: Shielder keeps AC 18; Basher drops to AC 16 until next turn.");
     }
 
+    private void ConfigureCelestialTemplateTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats clericStats = new CharacterStats(
+            name: "Lysara",
+            level: 5,
+            characterClass: "Cleric",
+            str: 12, dex: 10, con: 14, wis: 18, intelligence: 10, cha: 14,
+            bab: 3,
+            armorBonus: 4,
+            shieldBonus: 2,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 1,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 36,
+            raceName: "Human"
+        );
+
+        clericStats.CharacterAlignment = Alignment.LawfulGood;
+
+        Vector2Int clericStart = new Vector2Int(3, 7);
+        Sprite clericAlive = IconLoader.GetToken("Cleric") ?? pcAliveFallback;
+        PC1.Init(clericStats, clericStart, clericAlive, pcDead);
+
+        InventoryComponent clericInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        clericInventory.Init(clericStats);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        clericInventory.CharacterInventory.RecalculateStats();
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("✨ Celestial Template Test: Lysara (Cleric 5) commands celestial wolf + celestial dire bear allies.");
+        CombatUI?.ShowCombatLog("   Verify: templates are applied at spawn time (Magical Beast type, resistances, DR/SR scaling, Smite Evil). ");
+        CombatUI?.ShowCombatLog("   Opposing undead should remain evil-aligned to validate celestial smite targeting.");
+    }
+
     private void RestoreStandardPartyLayout()
     {
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2131,6 +2185,40 @@ public partial class GameManager : MonoBehaviour
 
     // ========== ENEMY ENCOUNTER SETUP ==========
 
+    private NPCDefinition BuildEncounterDefinitionForSpawn(string enemyId, NPCDefinition sourceDef, int spawnIndex)
+    {
+        if (sourceDef == null)
+            return null;
+
+        // Apply scenario-local template directives at spawn-time to avoid creating dedicated
+        // celestial NPC records (wolf/dire bear stay generic base entries in NPCDatabase).
+        NPCDefinition scenarioDef = sourceDef;
+        if (_isCelestialTemplateTestEncounter
+            && (spawnIndex == 0 || spawnIndex == 1)
+            && (string.Equals(enemyId, "wolf_pack_hunter", StringComparison.Ordinal)
+                || string.Equals(enemyId, "dire_bear", StringComparison.Ordinal)))
+        {
+            scenarioDef = sourceDef.Clone();
+            if (scenarioDef.AppliedTemplateIds == null)
+                scenarioDef.AppliedTemplateIds = new List<string>();
+
+            bool alreadyTagged = false;
+            for (int i = 0; i < scenarioDef.AppliedTemplateIds.Count; i++)
+            {
+                if (string.Equals(scenarioDef.AppliedTemplateIds[i], "celestial", StringComparison.OrdinalIgnoreCase))
+                {
+                    alreadyTagged = true;
+                    break;
+                }
+            }
+
+            if (!alreadyTagged)
+                scenarioDef.AppliedTemplateIds.Add("celestial");
+        }
+
+        return CreatureTemplateRegistry.ApplyTemplatesClone(scenarioDef);
+    }
+
     private static readonly Vector2Int[] EncounterSpawnPositions = {
         new Vector2Int(16, 6),
         new Vector2Int(14, 10),
@@ -2182,6 +2270,14 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(11, 9),  // Orc adjacent to Basher
     };
 
+    private static readonly Vector2Int[] CelestialTemplateTestSpawnPositions = {
+        new Vector2Int(2, 7),   // Celestial wolf ally
+        new Vector2Int(4, 7),   // Celestial dire bear ally
+        new Vector2Int(10, 7),  // Skeleton warrior
+        new Vector2Int(11, 6),  // Skeleton archer
+        new Vector2Int(11, 8),  // Zombie
+    };
+
     private void SetupEnemyEncounter(List<string> enemyIds)
     {
         NPCDatabase.Init();
@@ -2210,7 +2306,7 @@ public partial class GameManager : MonoBehaviour
 
             string enemyId = enemyIds[i];
             NPCDefinition sourceDef = NPCDatabase.Get(enemyId);
-            NPCDefinition def = CreatureTemplateRegistry.ApplyTemplatesClone(sourceDef);
+            NPCDefinition def = BuildEncounterDefinitionForSpawn(enemyId, sourceDef, i);
             if (def == null)
             {
                 Debug.LogError($"[GameManager] Unknown enemy ID: {enemyId}");
@@ -2252,6 +2348,11 @@ public partial class GameManager : MonoBehaviour
             {
                 // Keep one melee enemy adjacent to each test fighter so shield-bash AC differences are obvious.
                 pos = ShieldBashTestSpawnPositions[i];
+            }
+            else if (_isCelestialTemplateTestEncounter && i < CelestialTemplateTestSpawnPositions.Length)
+            {
+                // Keep celestial allies close to the cleric and undead on the opposite side.
+                pos = CelestialTemplateTestSpawnPositions[i];
             }
             else
             {
@@ -2340,6 +2441,24 @@ public partial class GameManager : MonoBehaviour
             npc.ConfigureTeamControl(CharacterTeam.Player, controllable: true);
             npc.Tags.AddTag("ScenarioOverride:OgreBattleAlly");
             Debug.Log("[OgreBattleTest] Applied spawn-time override for dire_tiger: Team=Player, IsControllable=true.");
+        }
+
+        if (_isCelestialTemplateTestEncounter)
+        {
+            if (spawnIndex == 0 || spawnIndex == 1)
+            {
+                npc.ConfigureTeamControl(CharacterTeam.Player, controllable: true);
+                npc.Stats.CharacterAlignment = Alignment.NeutralGood;
+                npc.Tags.AddTag("ScenarioOverride:CelestialTemplateAlly");
+                Debug.Log($"[CelestialTemplateTest] Ally override applied to {enemyId}: Team=Player, IsControllable=true, Alignment=NeutralGood.");
+            }
+            else
+            {
+                npc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
+                npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
+                npc.Tags.AddTag("ScenarioOverride:CelestialTemplateUndeadEnemy");
+                Debug.Log($"[CelestialTemplateTest] Enemy override applied to {enemyId}: Team=Enemy, Alignment=NeutralEvil.");
+            }
         }
     }
 
