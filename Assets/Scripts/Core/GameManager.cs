@@ -3217,7 +3217,41 @@ public partial class GameManager : MonoBehaviour
 
     private bool ShouldSkipTurnDueToHPState(CharacterController character)
     {
-        return character == null || character.Stats == null || !character.CanTakeTurnActions();
+        if (character == null || character.Stats == null)
+            return true;
+
+        if (!character.CanTakeTurnActions())
+            return true;
+
+        return !character.CanTakeActions();
+    }
+
+    private string GetUnableToActReason(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return "cannot act";
+
+        if (!character.CanTakeTurnActions())
+        {
+            if (character.CurrentHPState == HPState.Dead)
+                return "is dead";
+
+            return "is unconscious";
+        }
+
+        if (character.HasCondition(CombatConditionType.Dazed))
+            return "is dazed";
+
+        if (character.HasCondition(CombatConditionType.Stunned))
+            return "is stunned";
+
+        if (character.HasCondition(CombatConditionType.Turned))
+            return "is turned";
+
+        if (character.HasCondition(CombatConditionType.Pinned))
+            return "is pinned";
+
+        return "cannot act";
     }
     /// <summary>Move to the next initiative slot and start that turn.</summary>
     private void NextInitiativeTurn()
@@ -3254,9 +3288,7 @@ public partial class GameManager : MonoBehaviour
         {
             if (pc != null && pc.Stats != null)
             {
-                string reason = pc.CurrentHPState == HPState.Dead
-                    ? "is dead"
-                    : "is unconscious";
+                string reason = GetUnableToActReason(pc);
                 CombatUI?.ShowCombatLog($"⏭ {pc.Stats.CharacterName} {reason} and cannot act this turn.");
             }
 
@@ -8036,6 +8068,40 @@ public partial class GameManager : MonoBehaviour
         return string.Equals(target.Stats.CreatureType, "Humanoid", StringComparison.OrdinalIgnoreCase);
     }
 
+    private int GetTargetHitDice(CharacterController target)
+    {
+        if (target?.Stats == null) return 0;
+        return Mathf.Max(1, target.Stats.HitDice > 0 ? target.Stats.HitDice : target.Stats.Level);
+    }
+
+    private bool IsImmuneToMindAffecting(CharacterController target)
+    {
+        if (target?.Stats == null) return false;
+
+        string creatureType = string.IsNullOrWhiteSpace(target.Stats.CreatureType)
+            ? string.Empty
+            : target.Stats.CreatureType.Trim().ToLowerInvariant();
+
+        if (creatureType == "undead" || creatureType == "construct" || creatureType == "ooze" || creatureType == "plant" || creatureType == "vermin")
+            return true;
+
+        if (target.Stats.SpecialAbilities != null)
+        {
+            for (int i = 0; i < target.Stats.SpecialAbilities.Count; i++)
+            {
+                string trait = target.Stats.SpecialAbilities[i];
+                if (string.IsNullOrWhiteSpace(trait))
+                    continue;
+
+                string normalized = trait.ToLowerInvariant();
+                if (normalized.Contains("mind-affect") || normalized.Contains("mind affecting") || normalized.Contains("mindless"))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
     private bool IsValidTargetForSpell(CharacterController caster, CharacterController target, SpellData spell)
     {
         if (caster == null || target == null || spell == null || target.Stats == null || target.Stats.IsDead)
@@ -8046,6 +8112,16 @@ public partial class GameManager : MonoBehaviour
         {
             // Person transmutations can target any humanoid creature (ally or enemy).
             return IsHumanoid(target);
+        }
+
+        if (spell.SpellId == "daze")
+        {
+            // D&D 3.5e Daze: one humanoid creature of 4 HD or less.
+            if (!IsEnemyTeam(caster, target)) return false;
+            if (!IsHumanoid(target)) return false;
+            if (GetTargetHitDice(target) > 4) return false;
+            if (IsImmuneToMindAffecting(target)) return false;
+            return true;
         }
 
         switch (spell.TargetType)
@@ -8490,7 +8566,19 @@ public partial class GameManager : MonoBehaviour
             // Apply tracked buff/debuff effects based on spell type
             bool appliesTrackedEffect = _pendingSpell.EffectType == SpellEffectType.Buff ||
                                         _pendingSpell.EffectType == SpellEffectType.Debuff;
-            if (result.Success && appliesTrackedEffect)
+
+            bool effectNegatedBySave = _pendingSpell.EffectType == SpellEffectType.Debuff && result.RequiredSave && result.SaveSucceeded;
+            if (effectNegatedBySave)
+            {
+                CombatUI?.ShowCombatLog($"🛡 {target.Stats.CharacterName} resists {_pendingSpell.Name} with a successful {result.SaveType} save.");
+            }
+
+            if (result.MindAffectingImmunityBlocked)
+            {
+                CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is immune to mind-affecting effects. {_pendingSpell.Name} has no effect.");
+            }
+
+            if (result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -9362,6 +9450,16 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private ActiveSpellEffect ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
     {
+        if (spell != null && spell.SpellId == "daze")
+        {
+            int dazeRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 1);
+            string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
+            target.ApplyCondition(CombatConditionType.Dazed, dazeRounds, sourceName);
+            CombatUI?.ShowCombatLog($"<color=#FFCC66>💫 {target.Stats.CharacterName} is dazed for {dazeRounds} round(s)!</color>");
+            Debug.Log($"[GameManager] Daze applied to {target.Stats.CharacterName} for {dazeRounds} round(s)");
+            return null;
+        }
+
         // Use StatusEffectManager for tracked buff application
         var statusMgr = target.GetComponent<StatusEffectManager>();
         if (statusMgr != null)
@@ -12735,7 +12833,7 @@ public partial class GameManager : MonoBehaviour
             CombatUI.SetActiveNPC(-1); // Clear NPC highlight
             if (npc != null && npc.Stats != null)
             {
-                string reason = npc.CurrentHPState == HPState.Dead ? "is dead" : "is unconscious";
+                string reason = GetUnableToActReason(npc);
                 CombatUI?.ShowCombatLog($"⏭ {npc.Stats.CharacterName} {reason} and cannot act this turn.");
             }
             NextInitiativeTurn();

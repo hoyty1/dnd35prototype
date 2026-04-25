@@ -102,6 +102,8 @@ public class SpellData
     public string SavingThrowType;      // "Reflex", "Will", "Fortitude"
     public int SaveDC;                  // 0 = computed (10 + spell level + casting mod)
     public bool SaveHalves;             // True if save halves damage (e.g., Acid Splash)
+    public bool SpellResistanceApplies; // True if target SR can negate the spell on a caster-level check
+    public bool IsMindAffecting;        // True for [Mind-Affecting] spells/effects
 
     // ========== BUFF/DEBUFF ==========
     public int BuffACBonus;             // AC bonus (Mage Armor = +4)

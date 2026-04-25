@@ -135,6 +135,30 @@ public static class SpellCaster
             result.AttackHit = true;
         }
 
+        // ========== MIND-AFFECTING IMMUNITY ==========
+        if (result.AttackHit && spell.IsMindAffecting && IsImmuneToMindAffecting(targetStats))
+        {
+            result.MindAffectingImmunityBlocked = true;
+            result.Success = false;
+            return result;
+        }
+
+        // ========== SPELL RESISTANCE ==========
+        if (result.AttackHit && spell.SpellResistanceApplies && targetStats != null && targetStats.SpellResistance > 0)
+        {
+            result.SpellResistanceChecked = true;
+            result.SpellResistanceValue = targetStats.SpellResistance;
+            result.SpellResistanceRoll = Random.Range(1, 21);
+            result.SpellResistanceTotal = result.SpellResistanceRoll + GetCasterLevelForSpellResistanceCheck(casterStats);
+            result.SpellResistancePassed = result.SpellResistanceTotal >= result.SpellResistanceValue;
+
+            if (!result.SpellResistancePassed)
+            {
+                result.Success = false;
+                return result;
+            }
+        }
+
         // ========== SAVING THROW ==========
         if (spell.AllowsSavingThrow && result.AttackHit)
         {
@@ -154,7 +178,7 @@ public static class SpellCaster
             else
             {
                 int saveRoll = Random.Range(1, 21);
-                int saveMod = GetSaveModifier(targetStats, spell.SavingThrowType);
+                int saveMod = GetSaveModifier(targetStats, spell);
                 result.SaveRoll = saveRoll;
                 result.SaveMod = saveMod;
                 result.SaveTotal = saveRoll + saveMod;
@@ -296,11 +320,15 @@ public static class SpellCaster
         // ========== BUFF / DEBUFF ==========
         if (spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Debuff)
         {
-            result.BuffApplied = true;
+            bool debuffNegatedBySave = spell.EffectType == SpellEffectType.Debuff && result.RequiredSave && result.SaveSucceeded;
+            result.BuffApplied = !debuffNegatedBySave;
+
             if (spell.SpellId == "mage_armor")
                 result.BuffDescription = $"+{spell.BuffACBonus} armor AC bonus (Mage Armor)";
             else if (spell.EffectType == SpellEffectType.Debuff)
-                result.BuffDescription = $"Debuff: {spell.Description}";
+                result.BuffDescription = debuffNegatedBySave
+                    ? $"Debuff negated by save: {spell.Description}"
+                    : $"Debuff: {spell.Description}";
             else
                 result.BuffDescription = spell.Description;
         }
@@ -435,17 +463,79 @@ public static class SpellCaster
         }
     }
 
-    /// <summary>
-    /// Get the appropriate saving throw modifier for a character.
-    /// </summary>
-    private static int GetSaveModifier(CharacterStats stats, string saveType)
+    private static int GetCasterLevelForSpellResistanceCheck(CharacterStats casterStats)
     {
-        switch (saveType)
+        if (casterStats == null)
+            return 0;
+
+        int casterLevel = casterStats.GetCasterLevel();
+        if (casterLevel > 0)
+            return casterLevel;
+
+        return Mathf.Max(1, casterStats.Level);
+    }
+
+    private static bool IsImmuneToMindAffecting(CharacterStats targetStats)
+    {
+        if (targetStats == null)
+            return false;
+
+        string creatureType = string.IsNullOrWhiteSpace(targetStats.CreatureType)
+            ? string.Empty
+            : targetStats.CreatureType.Trim().ToLowerInvariant();
+
+        if (creatureType == "undead" || creatureType == "construct" || creatureType == "ooze" || creatureType == "plant" || creatureType == "vermin")
+            return true;
+
+        if (targetStats.SpecialAbilities != null)
         {
-            case "Reflex": return stats.ReflexSave;
-            case "Will": return stats.WillSave;
-            case "Fortitude": return stats.FortitudeSave;
-            default: return 0;
+            for (int i = 0; i < targetStats.SpecialAbilities.Count; i++)
+            {
+                string trait = targetStats.SpecialAbilities[i];
+                if (string.IsNullOrWhiteSpace(trait))
+                    continue;
+
+                string normalized = trait.ToLowerInvariant();
+                if (normalized.Contains("mind-affect") || normalized.Contains("mind affecting") || normalized.Contains("mindless"))
+                    return true;
+            }
         }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Get the appropriate saving throw modifier for a character,
+    /// including conditional bonuses such as Still Mind (+2 vs enchantment effects).
+    /// </summary>
+    private static int GetSaveModifier(CharacterStats stats, SpellData spell)
+    {
+        if (stats == null || spell == null)
+            return 0;
+
+        int baseSave;
+        switch (spell.SavingThrowType)
+        {
+            case "Reflex":
+                baseSave = stats.ReflexSave;
+                break;
+            case "Will":
+                baseSave = stats.WillSave;
+                break;
+            case "Fortitude":
+                baseSave = stats.FortitudeSave;
+                break;
+            default:
+                baseSave = 0;
+                break;
+        }
+
+        bool isEnchantment = !string.IsNullOrWhiteSpace(spell.School)
+            && spell.School.Trim().Equals("Enchantment", System.StringComparison.OrdinalIgnoreCase);
+
+        if (spell.SavingThrowType == "Will" && isEnchantment && stats.StillMindBonus > 0)
+            baseSave += stats.StillMindBonus;
+
+        return baseSave;
     }
 }

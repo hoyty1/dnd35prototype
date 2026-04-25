@@ -37,6 +37,14 @@ public class SpellResult
     public int SaveTotal;               // d20 + save modifier
     public bool SaveSucceeded;
 
+    // ========== SPELL RESISTANCE / IMMUNITY ==========
+    public bool SpellResistanceChecked;
+    public int SpellResistanceValue;
+    public int SpellResistanceRoll;
+    public int SpellResistanceTotal;
+    public bool SpellResistancePassed = true;
+    public bool MindAffectingImmunityBlocked;
+
     // ========== DAMAGE ==========
     public int DamageDealt;             // Final damage applied after save and mitigation
     public int DamageRolled;            // Raw damage before save reduction
@@ -102,6 +110,28 @@ public class SpellResult
             sb.AppendLine($"  Target: {TargetName}");
 
         sb.AppendLine();
+
+        // ========== MIND-AFFECTING IMMUNITY ==========
+        if (MindAffectingImmunityBlocked)
+        {
+            sb.AppendLine("  Mind-affecting immunity: target is immune — spell has no effect.");
+            sb.Append($"═══════════════════════════════════");
+            return sb.ToString();
+        }
+
+        // ========== SPELL RESISTANCE ==========
+        if (SpellResistanceChecked)
+        {
+            string srResult = SpellResistancePassed ? "PASSED" : "BLOCKED";
+            sb.AppendLine($"  Spell Resistance: d20 {SpellResistanceRoll} + CL = {SpellResistanceTotal} vs SR {SpellResistanceValue} — {srResult}");
+            sb.AppendLine();
+
+            if (!SpellResistancePassed)
+            {
+                sb.Append($"═══════════════════════════════════");
+                return sb.ToString();
+            }
+        }
 
         // ========== ATTACK ROLL (if required) ==========
         if (RequiredAttackRoll)

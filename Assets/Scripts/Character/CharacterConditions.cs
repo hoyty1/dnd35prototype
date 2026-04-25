@@ -117,6 +117,7 @@ public class CharacterConditions : MonoBehaviour
     public bool IsStunned => HasCondition(CombatConditionType.Stunned);
     public bool IsInvisible => HasCondition(CombatConditionType.Invisible);
     public bool IsTurned => HasCondition(CombatConditionType.Turned);
+    public bool IsDazed => HasCondition(CombatConditionType.Dazed);
     public bool IsFeinted => HasCondition(CombatConditionType.Feinted);
     public bool IsFlatFooted => HasCondition(CombatConditionType.FlatFooted);
 
@@ -159,7 +160,7 @@ public class CharacterConditions : MonoBehaviour
 
     public bool CanTakeActions()
     {
-        if (IsStunned || IsTurned || IsPinned)
+        if (IsStunned || IsTurned || IsPinned || IsDazed)
             return false;
 
         return true;
@@ -167,7 +168,7 @@ public class CharacterConditions : MonoBehaviour
 
     public bool CanMove()
     {
-        if (IsGrappled || IsPinned || IsStunned)
+        if (IsGrappled || IsPinned || IsStunned || IsDazed)
             return false;
 
         return true;
@@ -175,7 +176,7 @@ public class CharacterConditions : MonoBehaviour
 
     public bool CanAttack()
     {
-        if (IsStunned || IsTurned)
+        if (IsStunned || IsTurned || IsDazed)
             return false;
 
         return true;
@@ -190,6 +191,7 @@ public class CharacterConditions : MonoBehaviour
         if (IsPinned) summary += "[Pinned] ";
         if (IsPinning) summary += "[Pinning] ";
         if (IsStunned) summary += "[Stunned] ";
+        if (IsDazed) summary += "[Dazed] ";
         if (IsInvisible) summary += "[Invisible] ";
         if (IsTurned) summary += "[Turned] ";
         if (IsFeinted) summary += "[Feinted] ";
