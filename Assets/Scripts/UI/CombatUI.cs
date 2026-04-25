@@ -2199,9 +2199,11 @@ public class CombatUI : MonoBehaviour
         }
 
         // Build label
-        string rangeStr = spell.RangeSquares == 0 ? "Touch" :
-                          spell.RangeSquares < 0 ? "Self" :
-                          $"{spell.RangeSquares} sq";
+        int casterLevel = (spellComp != null && spellComp.Stats != null) ? spellComp.Stats.Level : 0;
+        int effectiveRangeSquares = spell.GetRangeSquaresForCasterLevel(casterLevel);
+        string rangeStr = effectiveRangeSquares == 0 ? "Touch" :
+                          effectiveRangeSquares < 0 ? "Self" :
+                          $"{effectiveRangeSquares} sq";
         string effectStr = "";
         if (spell.EffectType == SpellEffectType.Damage)
             effectStr = $" | {spell.DamageCount}d{spell.DamageDice}{(spell.BonusDamage > 0 ? $"+{spell.BonusDamage}" : "")} {spell.DamageType}";
@@ -2314,9 +2316,11 @@ public class CombatUI : MonoBehaviour
             default: btnColor = new Color(0.3f, 0.3f, 0.4f, 1f); break;
         }
 
-        string rangeStr = spell.RangeSquares == 0 ? "Touch" :
-                          spell.RangeSquares < 0 ? "Self" :
-                          $"{spell.RangeSquares} sq";
+        int casterLevel = (spellComp != null && spellComp.Stats != null) ? spellComp.Stats.Level : 0;
+        int effectiveRangeSquares = spell.GetRangeSquaresForCasterLevel(casterLevel);
+        string rangeStr = effectiveRangeSquares == 0 ? "Touch" :
+                          effectiveRangeSquares < 0 ? "Self" :
+                          $"{effectiveRangeSquares} sq";
         string effectStr = "";
         if (spell.EffectType == SpellEffectType.Damage)
             effectStr = $" | {spell.DamageCount}d{spell.DamageDice}{(spell.BonusDamage > 0 ? $"+{spell.BonusDamage}" : "")} {spell.DamageType}";

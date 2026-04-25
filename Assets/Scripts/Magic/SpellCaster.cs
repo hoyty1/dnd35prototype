@@ -232,9 +232,10 @@ public static class SpellCaster
             if (result.DamageDealt > 0)
                 result.DamageDealt = Mathf.Max(1, result.DamageDealt);
 
+            int effectiveRangeSquares = spell.GetRangeSquaresForCasterLevel(casterStats != null ? casterStats.Level : 0);
             bool isRangedSpellDamage = result.RequiredAttackRoll
                 ? result.IsRangedTouch
-                : (spell.RangeSquares > 1 || spell.TargetType == SpellTargetType.Area);
+                : (effectiveRangeSquares > 1 || spell.TargetType == SpellTargetType.Area);
 
             var packet = new DamagePacket
             {
@@ -383,7 +384,9 @@ public static class SpellCaster
         if (metamagic.Has(MetamagicFeatId.EnlargeSpell) && spell.RangeSquares > 0)
         {
             spell.RangeSquares *= 2;
-            Debug.Log($"[Metamagic] Enlarge Spell: range doubled to {spell.RangeSquares} squares");
+            if (spell.RangeIncreaseSquares > 0)
+                spell.RangeIncreaseSquares *= 2;
+            Debug.Log($"[Metamagic] Enlarge Spell: range doubled to {spell.RangeSquares} squares (scaling +{spell.RangeIncreaseSquares}/{spell.RangeIncreasePerLevels} lv)");
         }
 
         // Extend Spell: double duration

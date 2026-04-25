@@ -704,8 +704,11 @@ public class SpellSelectionUI : MonoBehaviour
         string levelStr = spell.SpellLevel == 0 ? "Cantrip" : $"Level {spell.SpellLevel}";
         string rangeStr = spell.RangeSquares < 0 ? "Self" :
                           spell.RangeSquares == 0 ? "Touch" :
-                          spell.RangeSquares == 1 ? "Touch (1 sq)" :
-                          $"{spell.RangeSquares} sq ({spell.RangeSquares * 5} ft)";
+                          (spell.RangeIncreasePerLevels > 0 && spell.RangeIncreaseSquares > 0)
+                              ? $"{spell.RangeSquares} + {spell.RangeIncreaseSquares}/{spell.RangeIncreasePerLevels} lv sq"
+                              : spell.RangeSquares == 1
+                                  ? "Touch (1 sq)"
+                                  : $"{spell.RangeSquares} sq ({spell.RangeSquares * 5} ft)";
 
         detail += $"<color=#FFDD44><b>{spell.Name}</b></color>\n";
         detail += $"<color=#AABBFF>{levelStr} | {spell.School}</color>\n\n";

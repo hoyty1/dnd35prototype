@@ -20,8 +20,26 @@ public class SpellData
 
     // ========== TARGETING ==========
     public SpellTargetType TargetType;  // SingleEnemy, SingleAlly, Self, Area
-    public int RangeSquares;            // Range in squares (0 = touch, -1 = self)
+    public int RangeSquares;            // Base range in squares (0 = touch, -1 = self)
+    public int RangeIncreasePerLevels;  // Optional scaling: +RangeIncreaseSquares per N caster levels (round down)
+    public int RangeIncreaseSquares;    // Optional scaling amount in squares
     public int AreaRadius;              // For area spells, radius in squares (0 = single target)
+
+    /// <summary>
+    /// Returns effective range in squares for a given caster level.
+    /// Scaling uses integer division (round down), e.g. 5 + floor(level/2).
+    /// </summary>
+    public int GetRangeSquaresForCasterLevel(int casterLevel)
+    {
+        // Preserve sentinel values and touch behavior.
+        if (RangeSquares <= 0) return RangeSquares;
+
+        if (RangeIncreasePerLevels <= 0 || RangeIncreaseSquares <= 0 || casterLevel <= 0)
+            return RangeSquares;
+
+        int increments = casterLevel / RangeIncreasePerLevels;
+        return RangeSquares + (increments * RangeIncreaseSquares);
+    }
 
 
     // ========== TOUCH ATTACK METADATA ==========
@@ -182,7 +200,23 @@ public class SpellData
     public string GetShortDescription()
     {
         string levelStr = SpellLevel == 0 ? "Cantrip" : $"Level {SpellLevel}";
-        string rangeStr = RangeSquares < 0 ? "Self" : RangeSquares == 0 ? "Touch" : $"{RangeSquares} sq ({RangeSquares * 5} ft)";
+        string rangeStr;
+        if (RangeSquares < 0)
+        {
+            rangeStr = "Self";
+        }
+        else if (RangeSquares == 0)
+        {
+            rangeStr = "Touch";
+        }
+        else if (RangeIncreasePerLevels > 0 && RangeIncreaseSquares > 0)
+        {
+            rangeStr = $"{RangeSquares} sq + {RangeIncreaseSquares} sq/{RangeIncreasePerLevels} lv";
+        }
+        else
+        {
+            rangeStr = $"{RangeSquares} sq ({RangeSquares * 5} ft)";
+        }
 
         string effectStr = "";
         if (EffectType == SpellEffectType.Damage)

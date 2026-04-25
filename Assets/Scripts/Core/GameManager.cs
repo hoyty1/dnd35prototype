@@ -7499,7 +7499,8 @@ public partial class GameManager : MonoBehaviour
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        int range = spell.RangeSquares > 0 ? spell.RangeSquares : 1;
+        int range = spell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 0);
+        if (range <= 0) range = 1;
         List<SquareCell> cells = Grid.GetCellsInRange(caster.GridPosition, range);
 
         foreach (var cell in cells)
@@ -8084,8 +8085,8 @@ public partial class GameManager : MonoBehaviour
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        int range = spell.RangeSquares;
-        if (range <= 0) range = 1; // Touch spells = adjacent (1 square)
+        int range = spell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 0);
+        if (range <= 0) range = 1; // Touch/self spells = adjacent (1 square for targeting)
 
 
         List<SquareCell> allCells = Grid.GetCellsInRange(caster.GridPosition, range);
@@ -8132,7 +8133,7 @@ public partial class GameManager : MonoBehaviour
 
         if (hasTarget)
         {
-            string rangeStr = spell.RangeSquares <= 0 ? "Touch" : $"{spell.RangeSquares} sq ({spell.RangeSquares * 5} ft)";
+            string rangeStr = spell.RangeSquares <= 0 ? "Touch" : $"{range} sq ({range * 5} ft)";
             string targetMsg;
             if (_pendingSpellFromHeldCharge)
             {
@@ -8669,7 +8670,9 @@ public partial class GameManager : MonoBehaviour
         // For burst spells with range > 0, show the valid placement range
         if (spell.AoEShapeType == AoEShape.Burst)
         {
-            int range = spell.AoERangeSquares > 0 ? spell.AoERangeSquares : spell.RangeSquares;
+            int range = spell.AoERangeSquares > 0
+                ? spell.AoERangeSquares
+                : spell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 0);
             if (range <= 0) range = 1;
 
             List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, range);
@@ -8764,7 +8767,9 @@ public partial class GameManager : MonoBehaviour
 
                 ClearAoEPreviewHighlights();
 
-                int range = _pendingSpell.AoERangeSquares > 0 ? _pendingSpell.AoERangeSquares : _pendingSpell.RangeSquares;
+                int range = _pendingSpell.AoERangeSquares > 0
+                    ? _pendingSpell.AoERangeSquares
+                    : _pendingSpell.GetRangeSquaresForCasterLevel(pc?.Stats?.Level ?? 0);
                 if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, range))
                     return;
                 aoeCells = AoESystem.GetBurstCells(gridPos, _pendingSpell.AoESizeSquares, Grid);
@@ -8845,7 +8850,9 @@ public partial class GameManager : MonoBehaviour
             // Restore to range highlight if within burst placement range, otherwise clear
             if (_pendingSpell != null && _pendingSpell.AoEShapeType == AoEShape.Burst)
             {
-                int range = _pendingSpell.AoERangeSquares > 0 ? _pendingSpell.AoERangeSquares : _pendingSpell.RangeSquares;
+                int range = _pendingSpell.AoERangeSquares > 0
+                    ? _pendingSpell.AoERangeSquares
+                    : _pendingSpell.GetRangeSquaresForCasterLevel(pc?.Stats?.Level ?? 0);
                 int dist = SquareGridUtils.GetDistance(casterPos, cellPos);
                 if (dist <= range)
                     cell.SetHighlight(HighlightType.SpellRange);
@@ -8874,7 +8881,9 @@ public partial class GameManager : MonoBehaviour
         // Validate range for burst spells
         if (_pendingSpell.AoEShapeType == AoEShape.Burst)
         {
-            int range = _pendingSpell.AoERangeSquares > 0 ? _pendingSpell.AoERangeSquares : _pendingSpell.RangeSquares;
+            int range = _pendingSpell.AoERangeSquares > 0
+                ? _pendingSpell.AoERangeSquares
+                : _pendingSpell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 0);
             if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, range))
             {
                 Debug.Log($"[AoE] Target position ({targetPos.x},{targetPos.y}) is out of range for burst");
