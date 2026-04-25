@@ -35,6 +35,7 @@ public static class NPCDatabase
         RegisterBrownBear();
         RegisterDireBear();
         RegisterWolfPackHunter();
+        RegisterSummonMonsterBaseCreatures();
         RegisterFiendishWolf();
         RegisterFiendishDireBear();
         RegisterHumanPaladin();
@@ -83,6 +84,7 @@ public static class NPCDatabase
             new EncounterPreset("shield_bash_test", "🛡️ Shield Bash Test", "Compare shield bash AC behavior: Shielder keeps shield AC with Improved Shield Bash while Basher loses shield AC until next turn.", new List<string> { "orc_berserker", "orc_berserker" }),
             new EncounterPreset("celestial_template_test", "✨ Celestial Template Test", "Good cleric with celestial wolf + celestial dire bear allies against evil undead. Templates are applied at spawn time.", new List<string> { "wolf_pack_hunter", "dire_bear", "skeleton_warrior", "skeleton_archer", "zombie_shambler" }),
             new EncounterPreset("fiendish_template_test", "🔥 Fiendish Template Test", "Evil necromancer with fiendish wolf + fiendish dire bear allies against good paladin and cleric. Templates are applied at spawn time.", new List<string> { "fiendish_wolf", "fiendish_dire_bear", "human_paladin", "human_cleric" }),
+            new EncounterPreset("summon_monster_test", "🌀 Summon Monster Test", "Single cleric summoner with prepped Summon Monster I/II versus a mixed enemy line for summon placement + command validation.", new List<string> { "orc_berserker", "skeleton_archer", "goblin_warchief" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
@@ -765,6 +767,489 @@ public static class NPCDatabase
             PanelColor = new Color(0.2f, 0.2f, 0.2f, 0.85f),
             NameColor = new Color(0.9f, 0.9f, 0.95f),
             Description = "A swift pack hunter from the Monster Manual baseline. It bites to pull enemies prone with free trip attempts."
+        });
+    }
+
+    private static void RegisterSummonMonsterBaseCreatures()
+    {
+        RegisterSummonDog();
+        RegisterSummonDireRat();
+        RegisterSummonEagle();
+        RegisterSummonOctopus();
+        RegisterSummonSmallViper();
+        RegisterSummonDireBat();
+        RegisterSummonSmallAirElemental();
+        RegisterSummonSmallFireElemental();
+        RegisterSummonCrocodile();
+        RegisterSummonBlackBear();
+        RegisterSummonApe();
+        RegisterSummonDireBadger();
+        RegisterSummonLargeShark();
+        RegisterSummonConstrictorSnake();
+    }
+
+    private static void RegisterSummonDog()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_dog",
+            Name = "Dog",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 13, DEX = 17, CON = 15, WIS = 12, INT = 2, CHA = 6,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 8,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasScent = true,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.83f, 0.73f, 0.58f, 1f),
+            PanelColor = new Color(0.22f, 0.16f, 0.12f, 0.85f),
+            NameColor = new Color(0.98f, 0.9f, 0.8f),
+            Description = "Summon Monster baseline dog used for celestial variants and low-level summon validation."
+        });
+    }
+
+    private static void RegisterSummonDireRat()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_dire_rat",
+            Name = "Dire Rat",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 10, DEX = 17, CON = 12, WIS = 12, INT = 1, CHA = 4,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 6,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.55f, 0.55f, 0.55f, 1f),
+            PanelColor = new Color(0.18f, 0.18f, 0.18f, 0.85f),
+            NameColor = new Color(0.86f, 0.86f, 0.9f),
+            Description = "Summon Monster baseline dire rat."
+        });
+    }
+
+    private static void RegisterSummonEagle()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_eagle",
+            Name = "Eagle",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 10, DEX = 15, CON = 12, WIS = 14, INT = 2, CHA = 7,
+            NaturalArmorBonus = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Talons", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Beak", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 10,
+            BaseHitDieHP = 7,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasScent = true,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.78f, 0.73f, 0.64f, 1f),
+            PanelColor = new Color(0.2f, 0.17f, 0.1f, 0.85f),
+            NameColor = new Color(0.97f, 0.91f, 0.77f),
+            Description = "Summon Monster baseline eagle used for celestial eagle variants."
+        });
+    }
+
+    private static void RegisterSummonOctopus()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_octopus",
+            Name = "Octopus",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 2,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 12, DEX = 15, CON = 11, WIS = 12, INT = 2, CHA = 3,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Tentacles", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 5,
+            BaseHitDieHP = 11,
+            CreatureTags = new List<string> { "Animal", "Aquatic", "SummonBase" },
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Tentacles",
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.62f, 0.48f, 0.68f, 1f),
+            PanelColor = new Color(0.18f, 0.13f, 0.23f, 0.85f),
+            NameColor = new Color(0.88f, 0.8f, 0.95f),
+            Description = "Summon Monster baseline octopus with improved-grab style control attack."
+        });
+    }
+
+    private static void RegisterSummonSmallViper()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_small_viper",
+            Name = "Small Viper",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 6, DEX = 17, CON = 11, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 6,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasScent = true,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.45f, 0.72f, 0.34f, 1f),
+            PanelColor = new Color(0.15f, 0.23f, 0.12f, 0.85f),
+            NameColor = new Color(0.84f, 0.94f, 0.8f),
+            Description = "Summon Monster baseline Small Viper."
+        });
+    }
+
+    private static void RegisterSummonDireBat()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_dire_bat",
+            Name = "Dire Bat",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 17, DEX = 13, CON = 17, WIS = 14, INT = 2, CHA = 6,
+            NaturalArmorBonus = 4,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 10,
+            BaseHitDieHP = 30,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasScent = true,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.4f, 0.32f, 0.38f, 1f),
+            PanelColor = new Color(0.15f, 0.1f, 0.16f, 0.85f),
+            NameColor = new Color(0.85f, 0.79f, 0.9f),
+            Description = "Summon Monster baseline dire bat used for fiendish dire bat variants."
+        });
+    }
+
+    private static void RegisterSummonSmallAirElemental()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_small_air_elemental",
+            Name = "Small Air Elemental",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Elemental",
+            HitDice = 2,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 10, DEX = 17, CON = 12, WIS = 11, INT = 4, CHA = 11,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 10,
+            BaseHitDieHP = 14,
+            CreatureTags = new List<string> { "Elemental", "Air", "SummonBase" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.68f, 0.86f, 1f, 1f),
+            PanelColor = new Color(0.14f, 0.19f, 0.26f, 0.85f),
+            NameColor = new Color(0.85f, 0.95f, 1f),
+            Description = "Summon Monster baseline Small Air Elemental."
+        });
+    }
+
+    private static void RegisterSummonSmallFireElemental()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_small_fire_elemental",
+            Name = "Small Fire Elemental",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Elemental",
+            HitDice = 2,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 12, DEX = 17, CON = 12, WIS = 11, INT = 4, CHA = 11,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Slam", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 10,
+            BaseHitDieHP = 15,
+            CreatureTags = new List<string> { "Elemental", "Fire", "SummonBase" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(1f, 0.55f, 0.22f, 1f),
+            PanelColor = new Color(0.28f, 0.1f, 0.08f, 0.85f),
+            NameColor = new Color(1f, 0.86f, 0.72f),
+            Description = "Summon Monster baseline Small Fire Elemental."
+        });
+    }
+
+    private static void RegisterSummonCrocodile()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_crocodile",
+            Name = "Crocodile",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 19, DEX = 12, CON = 17, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 5,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 24,
+            CreatureTags = new List<string> { "Animal", "Aquatic", "SummonBase" },
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.42f, 0.56f, 0.34f, 1f),
+            PanelColor = new Color(0.12f, 0.2f, 0.1f, 0.85f),
+            NameColor = new Color(0.84f, 0.93f, 0.78f),
+            Description = "Summon Monster baseline crocodile with bite-into-grapple threat."
+        });
+    }
+
+    private static void RegisterSummonBlackBear()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_black_bear",
+            Name = "Black Bear",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 19, DEX = 13, CON = 15, WIS = 12, INT = 2, CHA = 6,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 24,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasScent = true,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.28f, 0.2f, 0.13f, 1f),
+            PanelColor = new Color(0.14f, 0.09f, 0.06f, 0.85f),
+            NameColor = new Color(0.9f, 0.78f, 0.62f),
+            Description = "Summon Monster baseline black bear."
+        });
+    }
+
+    private static void RegisterSummonApe()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_ape",
+            Name = "Ape",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 21, DEX = 15, CON = 14, WIS = 12, INT = 2, CHA = 7,
+            NaturalArmorBonus = 4,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 6, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 30,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.45f, 0.32f, 0.25f, 1f),
+            PanelColor = new Color(0.18f, 0.12f, 0.09f, 0.85f),
+            NameColor = new Color(0.95f, 0.84f, 0.75f),
+            Description = "Summon Monster baseline ape with heavy claw volume."
+        });
+    }
+
+    private static void RegisterSummonDireBadger()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_dire_badger",
+            Name = "Dire Badger",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 14, DEX = 17, CON = 15, WIS = 12, INT = 2, CHA = 10,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 22,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasScent = true,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.5f, 0.45f, 0.43f, 1f),
+            PanelColor = new Color(0.2f, 0.17f, 0.16f, 0.85f),
+            NameColor = new Color(0.93f, 0.9f, 0.9f),
+            Description = "Summon Monster baseline dire badger."
+        });
+    }
+
+    private static void RegisterSummonLargeShark()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_large_shark",
+            Name = "Large Shark",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 17, DEX = 15, CON = 13, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 4,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 26,
+            CreatureTags = new List<string> { "Animal", "Aquatic", "SummonBase" },
+            HasScent = true,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.62f, 0.7f, 0.78f, 1f),
+            PanelColor = new Color(0.14f, 0.18f, 0.22f, 0.85f),
+            NameColor = new Color(0.88f, 0.94f, 0.99f),
+            Description = "Summon Monster baseline large shark."
+        });
+    }
+
+    private static void RegisterSummonConstrictorSnake()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "summon_constrictor_snake",
+            Name = "Constrictor Snake",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 17, DEX = 17, CON = 13, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 25,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.56f, 0.64f, 0.28f, 1f),
+            PanelColor = new Color(0.2f, 0.23f, 0.1f, 0.85f),
+            NameColor = new Color(0.9f, 0.95f, 0.74f),
+            Description = "Summon Monster baseline constrictor snake."
         });
     }
 

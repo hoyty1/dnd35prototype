@@ -78,6 +78,7 @@ public partial class GameManager : MonoBehaviour
     private const string ShieldBashTestPresetId = "shield_bash_test";
     private const string CelestialTemplateTestPresetId = "celestial_template_test";
     private const string FiendishTemplateTestPresetId = "fiendish_template_test";
+    private const string SummonMonsterTestPresetId = "summon_monster_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
     private bool _isFeintSneakTestEncounter;
@@ -88,6 +89,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isShieldBashTestEncounter;
     private bool _isCelestialTemplateTestEncounter;
     private bool _isFiendishTemplateTestEncounter;
+    private bool _isSummonMonsterTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
 
     // Game state
@@ -157,6 +159,7 @@ public partial class GameManager : MonoBehaviour
     private SpellData _pendingSpell; // Spell selected for casting
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
     private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
+    private SummonMonsterOption _pendingSummonSelection; // Selected summon option waiting for placement
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
     private string _pendingNaturalAttackLabel; // Display label for selected natural-weapon single attack
 
@@ -289,7 +292,6 @@ public partial class GameManager : MonoBehaviour
     {
         public CharacterController Controller;
         public CharacterController Caster;
-        public SummonTemplate Template;
         public int RemainingRounds;
         public int TotalDurationRounds;
         public string SourceSpellId;
@@ -298,204 +300,6 @@ public partial class GameManager : MonoBehaviour
         public SummonCommand CurrentCommand;
     }
 
-
-    private class SummonTemplate
-    {
-        public string TemplateId;
-        public string DisplayName;
-        public string CharacterClass;
-        public string TokenType;
-        public Color TintColor;
-        public int Level;
-        public int STR, DEX, CON, WIS, INT, CHA;
-        public int BAB;
-        public int ArmorBonus;
-        public int ShieldBonus;
-        public int DamageDice;
-        public int DamageCount;
-        public int BonusDamage;
-        public int BaseSpeed;
-        public int AttackRange;
-        public global::SizeCategory SizeCategory;
-        public int BaseHitDieHP;
-        public string CreatureTypeLine;
-        public string AttackLabel;
-        public bool IsCelestial;
-        public bool IsFiendish;
-        public bool HasTrip;
-        public bool HasDisease;
-        public bool HasMultiAttack;
-        public List<string> SpecialTraits = new List<string>();
-        public List<string> CreatureTags = new List<string>();
-    }
-
-    private static readonly Dictionary<string, List<SummonTemplate>> SummonMonsterOptions = new Dictionary<string, List<SummonTemplate>>
-    {
-        {
-            "summon_monster_1", new List<SummonTemplate>
-            {
-                new SummonTemplate
-                {
-                    TemplateId = "sm1_celestial_dog",
-                    DisplayName = "Celestial Dog",
-                    CharacterClass = "Warrior",
-                    TokenType = "wolf",
-                    TintColor = new Color(0.95f, 0.95f, 0.8f, 1f),
-                    CreatureTypeLine = "Small Magical Beast (Good)",
-                    AttackLabel = "Bite",
-                    IsCelestial = true,
-                    HasTrip = false,
-                    Level = 1,
-                    STR = 13, DEX = 14, CON = 13, WIS = 12, INT = 2, CHA = 6,
-                    BAB = 1,
-                    ArmorBonus = 1,
-                    ShieldBonus = 0,
-                    DamageDice = 6,
-                    DamageCount = 1,
-                    BonusDamage = 1,
-                    BaseSpeed = 8,
-                    AttackRange = 1,
-                    SizeCategory = global::SizeCategory.Small,
-                    BaseHitDieHP = 8,
-                    SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (acid, cold, electricity)", "Scent", "Smite Evil 1/day" },
-                    CreatureTags = new List<string> { "Animal", "Summoned", "Good" }
-                },
-                new SummonTemplate
-                {
-                    TemplateId = "sm1_fiendish_wolf",
-                    DisplayName = "Fiendish Wolf",
-                    CharacterClass = "Warrior",
-                    TokenType = "wolf",
-                    TintColor = new Color(0.6f, 0.2f, 0.2f, 1f),
-                    CreatureTypeLine = "Medium Magical Beast (Evil)",
-                    AttackLabel = "Bite",
-                    IsFiendish = true,
-                    HasTrip = true,
-                    Level = 1,
-                    STR = 13, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
-                    BAB = 1,
-                    ArmorBonus = 2,
-                    ShieldBonus = 0,
-                    DamageDice = 6,
-                    DamageCount = 1,
-                    BonusDamage = 2,
-                    BaseSpeed = 8,
-                    AttackRange = 1,
-                    SizeCategory = global::SizeCategory.Medium,
-                    BaseHitDieHP = 10,
-                    SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (cold, fire)", "Trip", "Smite Good 1/day" },
-                    CreatureTags = new List<string> { "Animal", "Summoned", "Evil" }
-                },
-                new SummonTemplate
-                {
-                    TemplateId = "sm1_small_air_elemental",
-                    DisplayName = "Small Air Elemental",
-                    CharacterClass = "Warrior",
-                    TokenType = "wizard",
-                    TintColor = new Color(0.65f, 0.85f, 1f, 1f),
-                    CreatureTypeLine = "Small Elemental (Air)",
-                    AttackLabel = "Slam",
-                    HasTrip = false,
-                    Level = 1,
-                    STR = 10, DEX = 17, CON = 12, WIS = 11, INT = 4, CHA = 11,
-                    BAB = 1,
-                    ArmorBonus = 2,
-                    ShieldBonus = 0,
-                    DamageDice = 6,
-                    DamageCount = 1,
-                    BonusDamage = 1,
-                    BaseSpeed = 10,
-                    AttackRange = 1,
-                    SizeCategory = global::SizeCategory.Small,
-                    BaseHitDieHP = 8,
-                    SpecialTraits = new List<string> { "Darkvision 60 ft", "Elemental traits", "Whirlwind (prototype)" },
-                    CreatureTags = new List<string> { "Elemental", "Summoned" }
-                }
-            }
-        },
-        {
-            "summon_monster_2", new List<SummonTemplate>
-            {
-                new SummonTemplate
-                {
-                    TemplateId = "sm2_celestial_wolf",
-                    DisplayName = "Celestial Wolf",
-                    CharacterClass = "Warrior",
-                    TokenType = "wolf",
-                    TintColor = new Color(0.92f, 0.92f, 0.75f, 1f),
-                    CreatureTypeLine = "Medium Magical Beast (Good)",
-                    AttackLabel = "Bite",
-                    IsCelestial = true,
-                    HasTrip = true,
-                    Level = 2,
-                    STR = 15, DEX = 15, CON = 15, WIS = 12, INT = 2, CHA = 6,
-                    BAB = 2,
-                    ArmorBonus = 3,
-                    ShieldBonus = 0,
-                    DamageDice = 8,
-                    DamageCount = 1,
-                    BonusDamage = 2,
-                    BaseSpeed = 8,
-                    AttackRange = 1,
-                    SizeCategory = global::SizeCategory.Medium,
-                    BaseHitDieHP = 14,
-                    SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (acid, cold, electricity)", "Trip", "Smite Evil 1/day" },
-                    CreatureTags = new List<string> { "Animal", "Summoned", "Good" }
-                },
-                new SummonTemplate
-                {
-                    TemplateId = "sm2_fiendish_boar",
-                    DisplayName = "Fiendish Boar",
-                    CharacterClass = "Warrior",
-                    TokenType = "orc",
-                    TintColor = new Color(0.45f, 0.25f, 0.2f, 1f),
-                    CreatureTypeLine = "Medium Magical Beast (Evil)",
-                    AttackLabel = "Gore",
-                    IsFiendish = true,
-                    HasTrip = false,
-                    Level = 2,
-                    STR = 17, DEX = 10, CON = 17, WIS = 13, INT = 2, CHA = 4,
-                    BAB = 2,
-                    ArmorBonus = 4,
-                    ShieldBonus = 0,
-                    DamageDice = 8,
-                    DamageCount = 1,
-                    BonusDamage = 3,
-                    BaseSpeed = 8,
-                    AttackRange = 1,
-                    SizeCategory = global::SizeCategory.Medium,
-                    BaseHitDieHP = 16,
-                    SpecialTraits = new List<string> { "DR 5/magic", "Resist 5 (cold, fire)", "Ferocity", "Smite Good 1/day" },
-                    CreatureTags = new List<string> { "Animal", "Summoned", "Evil" }
-                },
-                new SummonTemplate
-                {
-                    TemplateId = "sm2_small_fire_elemental",
-                    DisplayName = "Small Fire Elemental",
-                    CharacterClass = "Warrior",
-                    TokenType = "wizard",
-                    TintColor = new Color(1f, 0.55f, 0.25f, 1f),
-                    CreatureTypeLine = "Small Elemental (Fire)",
-                    AttackLabel = "Slam",
-                    HasTrip = false,
-                    Level = 2,
-                    STR = 12, DEX = 17, CON = 12, WIS = 11, INT = 4, CHA = 11,
-                    BAB = 2,
-                    ArmorBonus = 3,
-                    ShieldBonus = 0,
-                    DamageDice = 8,
-                    DamageCount = 1,
-                    BonusDamage = 1,
-                    BaseSpeed = 10,
-                    AttackRange = 1,
-                    SizeCategory = global::SizeCategory.Small,
-                    BaseHitDieHP = 12,
-                    SpecialTraits = new List<string> { "Darkvision 60 ft", "Elemental traits", "Fire aura (prototype)" },
-                    CreatureTags = new List<string> { "Elemental", "Summoned", "Fire" }
-                }
-            }
-        }
-    };
     /// <summary>
     /// Tracks whether we've already logged the "no actions but holding charge" reminder this turn.
     /// Prevents duplicate log spam while still informing the player.
@@ -780,6 +584,7 @@ public partial class GameManager : MonoBehaviour
         _isShieldBashTestEncounter = string.Equals(presetId, ShieldBashTestPresetId, StringComparison.Ordinal);
         _isCelestialTemplateTestEncounter = string.Equals(presetId, CelestialTemplateTestPresetId, StringComparison.Ordinal);
         _isFiendishTemplateTestEncounter = string.Equals(presetId, FiendishTemplateTestPresetId, StringComparison.Ordinal);
+        _isSummonMonsterTestEncounter = string.Equals(presetId, SummonMonsterTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.NPCIds != null && preset.NPCIds.Count > 0)
         {
@@ -812,6 +617,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureCelestialTemplateTestParty();
         else if (_isFiendishTemplateTestEncounter)
             ConfigureFiendishTemplateTestParty();
+        else if (_isSummonMonsterTestEncounter)
+            ConfigureSummonMonsterTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -1964,6 +1771,119 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   Targets are good-aligned human paladin + cleric to validate Smite Good selection and damage bonuses.");
     }
 
+    private void ConfigureSummonMonsterTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+        SpellDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats summonerStats = new CharacterStats(
+            name: "Ilyra",
+            level: 6,
+            characterClass: "Cleric",
+            str: 10, dex: 12, con: 14, wis: 18, intelligence: 10, cha: 14,
+            bab: 4,
+            armorBonus: 4,
+            shieldBonus: 2,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 40,
+            raceName: "Human"
+        );
+
+        summonerStats.CharacterAlignment = Alignment.NeutralGood;
+
+        Vector2Int summonerStart = new Vector2Int(4, 9);
+        Sprite summonerAlive = IconLoader.GetToken("Cleric") ?? pcAliveFallback;
+        PC1.Init(summonerStats, summonerStart, summonerAlive, pcDead);
+
+        InventoryComponent inventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        inventory.Init(summonerStats);
+        inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
+        inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        inventory.CharacterInventory.RecalculateStats();
+
+        SpellcastingComponent spellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
+        spellComp.KnownSpells.Clear();
+        spellComp.SelectedSpellIds = new List<string> { "detect_magic", "guidance", "light", "resistance" };
+        spellComp.PreparedSpellSlotIds = null;
+        spellComp.Init(summonerStats);
+        PrepareSummonMonsterTestSpellSlots(spellComp);
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("🌀 Summon Monster Test: Ilyra (Cleric 6) has Summon Monster I/II prepared in multiple slots.");
+        CombatUI?.ShowCombatLog("   Flow validation: choose creature first, then pick a legal placement tile.");
+        CombatUI?.ShowCombatLog("   Alignment validation: good cleric should see celestial-only cleric options where applicable.");
+    }
+
+    private void PrepareSummonMonsterTestSpellSlots(SpellcastingComponent spellComp)
+    {
+        if (spellComp == null || spellComp.SpellSlots == null || spellComp.SpellSlots.Count == 0)
+            return;
+
+        SpellData summonOne = SpellDatabase.GetSpell("summon_monster_1_clr");
+        SpellData summonTwo = SpellDatabase.GetSpell("summon_monster_2_clr");
+        SpellData bless = SpellDatabase.GetSpell("bless");
+        SpellData shieldOfFaith = SpellDatabase.GetSpell("shield_of_faith");
+        SpellData holdPerson = SpellDatabase.GetSpell("hold_person");
+        SpellData cureModerate = SpellDatabase.GetSpell("cure_moderate_wounds");
+
+        int levelOneSummonCount = 0;
+        int levelTwoSummonCount = 0;
+
+        for (int i = 0; i < spellComp.SpellSlots.Count; i++)
+        {
+            SpellSlot slot = spellComp.SpellSlots[i];
+            if (slot == null)
+                continue;
+
+            SpellData toPrepare = null;
+
+            if (slot.Level == 1)
+            {
+                if (summonOne != null && levelOneSummonCount < 2)
+                {
+                    toPrepare = summonOne;
+                    levelOneSummonCount++;
+                }
+                else
+                {
+                    toPrepare = bless ?? shieldOfFaith;
+                }
+            }
+            else if (slot.Level == 2)
+            {
+                if (summonTwo != null && levelTwoSummonCount < 2)
+                {
+                    toPrepare = summonTwo;
+                    levelTwoSummonCount++;
+                }
+                else
+                {
+                    toPrepare = holdPerson ?? cureModerate;
+                }
+            }
+
+            if (toPrepare != null)
+                spellComp.PrepareSpellInSlot(i, toPrepare);
+        }
+
+        spellComp.SyncPreparedSpellsFromSlots();
+        Debug.Log($"[SummonTest] Prepared summon loadout for {spellComp.Stats?.CharacterName}: {spellComp.GetSlotDetails()}");
+    }
+
     private void RestoreStandardPartyLayout()
     {
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2338,6 +2258,12 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(11, 7),  // Human cleric (good)
     };
 
+    private static readonly Vector2Int[] SummonMonsterTestSpawnPositions = {
+        new Vector2Int(13, 7),
+        new Vector2Int(15, 9),
+        new Vector2Int(13, 12),
+    };
+
     private void SetupEnemyEncounter(List<string> enemyIds)
     {
         NPCDatabase.Init();
@@ -2418,6 +2344,11 @@ public partial class GameManager : MonoBehaviour
             {
                 // Keep fiendish allies near the necromancer with good enemies opposite for Smite Good demonstrations.
                 pos = FiendishTemplateTestSpawnPositions[i];
+            }
+            else if (_isSummonMonsterTestEncounter && i < SummonMonsterTestSpawnPositions.Length)
+            {
+                // Keep targets spread so summon placement and command behavior can be observed.
+                pos = SummonMonsterTestSpawnPositions[i];
             }
             else
             {
@@ -7049,6 +6980,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSpell = spell;
         _pendingMetamagic = metamagic;
         _pendingSpellFromHeldCharge = false;
+        _pendingSummonSelection = null;
 
         // Casting another spell while holding a touch charge ends the held charge.
         var spellComp = pc.GetComponent<SpellcastingComponent>();
@@ -7087,25 +7019,18 @@ public partial class GameManager : MonoBehaviour
 
     private bool IsSummonMonsterSpell(SpellData spell)
     {
-        if (spell == null || string.IsNullOrEmpty(spell.SpellId)) return false;
-        string normalized = NormalizeSummonSpellId(spell.SpellId);
-        return normalized == "summon_monster_1" || normalized == "summon_monster_2";
+        if (spell == null || string.IsNullOrWhiteSpace(spell.SpellId))
+            return false;
+
+        return SummonMonsterLists.GetSummonMonsterSpellLevel(spell.SpellId) > 0;
     }
 
-    private string NormalizeSummonSpellId(string spellId)
+    private List<SummonMonsterOption> GetSummonOptionsForSpell(SpellData spell, CharacterController caster)
     {
-        if (string.IsNullOrEmpty(spellId)) return "";
-        if (spellId == "summon_monster_1" || spellId == "summon_monster_1_clr") return "summon_monster_1";
-        if (spellId == "summon_monster_2" || spellId == "summon_monster_2_clr") return "summon_monster_2";
-        return spellId;
-    }
+        if (spell == null || caster == null || caster.Stats == null)
+            return new List<SummonMonsterOption>();
 
-    private List<SummonTemplate> GetSummonOptionsForSpell(SpellData spell)
-    {
-        if (spell == null) return null;
-        string normalized = NormalizeSummonSpellId(spell.SpellId);
-        if (SummonMonsterOptions.TryGetValue(normalized, out var options)) return options;
-        return null;
+        return SummonMonsterLists.GetFilteredOptions(spell.SpellId, caster.Stats);
     }
 
     public bool TryGetSummonCommand(CharacterController character, out SummonCommand command)
@@ -7201,13 +7126,65 @@ public partial class GameManager : MonoBehaviour
             onCancel: null);
     }
 
+    private void ShowSummonCreatureSelectionMenu(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || spell == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        var options = GetSummonOptionsForSpell(spell, caster);
+        if (options == null || options.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"No valid summon options for {spell.Name} ({caster.Stats.CharacterAlignment}).");
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            _pendingSummonSelection = null;
+            ShowActionChoices();
+            return;
+        }
+
+        CombatUI?.ShowSummonCreatureSelection(
+            spell.Name,
+            options.ConvertAll(o => o.BuildUiLabel()),
+            onSelect: idx =>
+            {
+                if (idx < 0 || idx >= options.Count)
+                {
+                    ShowActionChoices();
+                    return;
+                }
+
+                _pendingSummonSelection = options[idx];
+                _pendingAttackMode = PendingAttackMode.CastSpell;
+                CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+                ShowSummonPlacementTargets(caster, spell);
+            },
+            onCancel: () =>
+            {
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingSummonSelection = null;
+                ShowActionChoices();
+            });
+    }
+
     private void ShowSummonPlacementTargets(CharacterController caster, SpellData spell)
     {
+        if (caster == null || spell == null || _pendingSummonSelection == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
         CombatUI.SetActionButtonsVisible(false);
 
-        int range = spell != null && spell.RangeSquares > 0 ? spell.RangeSquares : 1;
+        int range = spell.RangeSquares > 0 ? spell.RangeSquares : 1;
         List<SquareCell> cells = Grid.GetCellsInRange(caster.GridPosition, range);
 
         foreach (var cell in cells)
@@ -7226,8 +7203,7 @@ public partial class GameManager : MonoBehaviour
 
         HighlightCharacterFootprint(caster, HighlightType.Selected);
 
-        CombatUI.SetTurnIndicator($"✦ {_pendingSpell.Name}: Click an empty tile to place summon | Range: {range * 5} ft | Right-click to cancel");
-
+        CombatUI.SetTurnIndicator($"✦ {spell.Name}: Place {_pendingSummonSelection.BuildUiLabel()} | Range: {range * 5} ft | Right-click to cancel");
     }
 
     private bool TryConsumePendingSpellCast(CharacterController caster)
@@ -7390,81 +7366,77 @@ public partial class GameManager : MonoBehaviour
         UpdateInitiativeUI();
     }
 
-    private CharacterController SpawnSummonedCreature(CharacterController caster, Vector2Int cell, SummonTemplate template)
+    private CharacterController SpawnSummonedCreature(CharacterController caster, Vector2Int cell, SummonMonsterOption option)
     {
-        if (caster == null || template == null) return null;
+        if (caster == null || option == null)
+            return null;
 
-        GameObject summonGO = new GameObject($"Summon_{template.TemplateId}_{UnityEngine.Random.Range(1000, 9999)}");
-        summonGO.AddComponent<SpriteRenderer>();
-        CharacterController summon = summonGO.AddComponent<CharacterController>();
-        CharacterTeam summonTeam = caster != null ? caster.Team : CharacterTeam.Enemy;
-        summon.ConfigureTeamControl(summonTeam, controllable: false);
-
-        CharacterStats stats = new CharacterStats(
-            name: template.DisplayName,
-            level: template.Level,
-            characterClass: template.CharacterClass,
-            str: template.STR, dex: template.DEX, con: template.CON,
-            wis: template.WIS, intelligence: template.INT, cha: template.CHA,
-            bab: template.BAB,
-            armorBonus: template.ArmorBonus,
-            shieldBonus: template.ShieldBonus,
-            damageDice: template.DamageDice,
-            damageCount: template.DamageCount,
-            bonusDamage: template.BonusDamage,
-            baseSpeed: template.BaseSpeed,
-            atkRange: template.AttackRange,
-            baseHitDieHP: template.BaseHitDieHP
-        );
-
-        foreach (string tag in template.CreatureTags)
+        NPCDefinition baseDef = NPCDatabase.Get(option.NpcDefinitionId);
+        if (baseDef == null)
         {
-            if (!stats.CreatureTags.Contains(tag))
-                stats.CreatureTags.Add(tag);
+            Debug.LogError($"[Summon] Missing NPC definition '{option.NpcDefinitionId}' for summon option '{option.DisplayName}'.");
+            return null;
         }
 
-        if (template.IsCelestial)
-            stats.CharacterAlignment = Alignment.NeutralGood;
-        else if (template.IsFiendish)
-            stats.CharacterAlignment = Alignment.NeutralEvil;
+        NPCDefinition summonDef = baseDef.Clone();
+        summonDef.Id = $"summon_runtime_{option.NpcDefinitionId}";
+        summonDef.Name = option.BuildUiLabel();
+
+        if (summonDef.AppliedTemplateIds == null)
+            summonDef.AppliedTemplateIds = new List<string>();
         else
-            stats.CharacterAlignment = Alignment.TrueNeutral;
+            summonDef.AppliedTemplateIds.Clear();
 
-        stats.IsCelestialTemplate = template.IsCelestial;
-        stats.IsFiendishTemplate = template.IsFiendish;
-        stats.HasTemplateSmiteEvil = template.IsCelestial;
-        stats.HasTemplateSmiteGood = template.IsFiendish;
-        stats.TemplateSmiteUsed = false;
-
-        if (template.SpecialTraits != null)
+        if (!string.IsNullOrWhiteSpace(option.TemplateId))
         {
-            for (int i = 0; i < template.SpecialTraits.Count; i++)
-                stats.AddSpecialAbility(template.SpecialTraits[i]);
+            summonDef.AppliedTemplateIds.Add(option.TemplateId);
         }
 
-        Sprite alive = IconLoader.GetToken(template.TokenType);
+        bool isCelestial = string.Equals(option.TemplateId, "celestial", StringComparison.OrdinalIgnoreCase);
+        bool isFiendish = string.Equals(option.TemplateId, "fiendish", StringComparison.OrdinalIgnoreCase);
+        summonDef.GainsSmiteEvil = isCelestial;
+        summonDef.GainsSmiteGood = isFiendish;
+
+        if (summonDef.CreatureTags == null)
+            summonDef.CreatureTags = new List<string>();
+
+        if (!summonDef.CreatureTags.Contains("Summoned"))
+            summonDef.CreatureTags.Add("Summoned");
+
+        if (isCelestial && !summonDef.CreatureTags.Contains("Good"))
+            summonDef.CreatureTags.Add("Good");
+        if (isFiendish && !summonDef.CreatureTags.Contains("Evil"))
+            summonDef.CreatureTags.Add("Evil");
+
+        GameObject summonGO = new GameObject($"Summon_{option.NpcDefinitionId}_{UnityEngine.Random.Range(1000, 9999)}");
+        if (summonGO.GetComponent<SpriteRenderer>() == null)
+            summonGO.AddComponent<SpriteRenderer>();
+
+        CharacterController summon = summonGO.AddComponent<CharacterController>();
+
+        string iconKey = IconLoader.DetermineMonsterType(summonDef.Name);
+        Sprite alive = !string.IsNullOrEmpty(iconKey) ? IconLoader.GetToken(iconKey) : null;
         if (alive == null)
             alive = LoadSprite("Sprites/npc_enemy_alive");
         Sprite dead = LoadSprite("Sprites/npc_enemy_dead");
 
-        summon.Init(stats, cell, alive, dead);
+        InitializeNPCFromDefinition(summon, summonDef, cell, alive, dead);
 
-        var sr = summon.GetComponent<SpriteRenderer>();
-        if (sr != null && alive == null)
-            sr.color = template.TintColor;
+        bool alliedToPlayer = caster.Team == CharacterTeam.Player;
+        summon.ConfigureTeamControl(alliedToPlayer ? CharacterTeam.Player : CharacterTeam.Enemy, controllable: alliedToPlayer);
 
-        var inv = summon.gameObject.AddComponent<InventoryComponent>();
-        inv.Init(stats);
-        inv.CharacterInventory.RecalculateStats();
-
-        var statusMgr = summon.gameObject.AddComponent<StatusEffectManager>();
-        statusMgr.Init(stats);
-
-        var concMgr = summon.gameObject.AddComponent<ConcentrationManager>();
-        concMgr.Init(stats, summon);
+        if (summon.Stats != null)
+        {
+            if (isCelestial)
+                summon.Stats.CharacterAlignment = Alignment.NeutralGood;
+            else if (isFiendish)
+                summon.Stats.CharacterAlignment = Alignment.NeutralEvil;
+            else
+                summon.Stats.CharacterAlignment = Alignment.TrueNeutral;
+        }
 
         NPCs.Add(summon);
-        _npcAIBehaviors.Add(NPCAIBehavior.AggressiveMelee);
+        _npcAIBehaviors.Add(summonDef.AIBehavior);
 
         if (summon.Team == CharacterTeam.Player)
             _summonedAllies.Add(summon);
@@ -7474,7 +7446,7 @@ public partial class GameManager : MonoBehaviour
         var summonVisual = summon.gameObject.GetComponent<SummonedCreatureVisual>();
         if (summonVisual == null)
             summonVisual = summon.gameObject.AddComponent<SummonedCreatureVisual>();
-        summonVisual.Init(summon, template.IsCelestial, template.IsFiendish);
+        summonVisual.Init(summon, isCelestial, isFiendish);
 
         return summon;
     }
@@ -7573,15 +7545,23 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
-    private void PerformSummonMonsterCast(CharacterController caster, SquareCell targetCell, SummonTemplate template)
+    private void PerformSummonMonsterCast(CharacterController caster, SquareCell targetCell, SummonMonsterOption option)
     {
-        if (caster == null || targetCell == null || template == null || _pendingSpell == null)
+        if (caster == null || targetCell == null || option == null || _pendingSpell == null)
         {
             ShowActionChoices();
             return;
         }
 
-        int summonSizeSquares = template.SizeCategory.GetSpaceWidthSquares();
+        NPCDefinition baseDef = NPCDatabase.Get(option.NpcDefinitionId);
+        if (baseDef == null)
+        {
+            CombatUI?.ShowCombatLog($"Cannot summon {option.DisplayName}: missing creature definition.");
+            ShowActionChoices();
+            return;
+        }
+
+        int summonSizeSquares = baseDef.SizeCategory.GetSpaceWidthSquares();
         if (!Grid.CanPlaceCreature(targetCell.Coords, summonSizeSquares))
         {
             CombatUI.ShowCombatLog("Cannot summon there: not enough open space for that creature size.");
@@ -7590,7 +7570,6 @@ public partial class GameManager : MonoBehaviour
         }
 
         CurrentSubPhase = PlayerSubPhase.Animating;
-
         CaptureSpellcastResourceSnapshot(caster);
 
         if (!TryConsumePendingSpellCast(caster))
@@ -7617,7 +7596,7 @@ public partial class GameManager : MonoBehaviour
 
             ClearSpellcastResourceSnapshot();
 
-            CharacterController summonCC = SpawnSummonedCreature(caster, targetCell.Coords, template);
+            CharacterController summonCC = SpawnSummonedCreature(caster, targetCell.Coords, option);
             if (summonCC == null)
             {
                 ShowActionChoices();
@@ -7631,7 +7610,6 @@ public partial class GameManager : MonoBehaviour
             {
                 Controller = summonCC,
                 Caster = caster,
-                Template = template,
                 RemainingRounds = durationRounds,
                 TotalDurationRounds = durationRounds,
                 SourceSpellId = _pendingSpell.SpellId,
@@ -7645,11 +7623,12 @@ public partial class GameManager : MonoBehaviour
             if (visual != null)
                 visual.SetDuration(durationRounds, durationRounds);
 
-            CombatUI.ShowCombatLog($"<color=#66E8FF>✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name} and summons {template.DisplayName} for {durationRounds} rounds!</color>");
+            CombatUI.ShowCombatLog($"<color=#66E8FF>✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name} and summons {option.BuildUiLabel()} for {durationRounds} rounds!</color>");
 
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
+            _pendingSummonSelection = null;
 
             Grid.ClearAllHighlights();
             UpdateAllStatsUI();
@@ -7681,12 +7660,10 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        // Summon Monster spells: select an empty destination tile in range.
+        // Summon Monster spells: choose creature first, then select destination tile.
         if (IsSummonMonsterSpell(_pendingSpell))
         {
-            _pendingAttackMode = PendingAttackMode.CastSpell;
-            CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
-            ShowSummonPlacementTargets(caster, _pendingSpell);
+            ShowSummonCreatureSelectionMenu(caster, _pendingSpell);
             return;
         }
 
@@ -8674,6 +8651,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSpell = null;
         _pendingSpellFromHeldCharge = false;
         _pendingMetamagic = null;
+        _pendingSummonSelection = null;
         _pendingAttackMode = PendingAttackMode.Single;
 
         Grid.ClearAllHighlights();
@@ -11144,9 +11122,15 @@ public partial class GameManager : MonoBehaviour
         // ===== SPELL CASTING MODE =====
         if (_pendingAttackMode == PendingAttackMode.CastSpell && _pendingSpell != null)
         {
-            // Summon Monster spells: pick an empty highlighted destination, then choose creature.
+            // Summon Monster spells: creature was selected first, now place it on an empty highlighted tile.
             if (IsSummonMonsterSpell(_pendingSpell))
             {
+                if (_pendingSummonSelection == null)
+                {
+                    ShowSummonCreatureSelectionMenu(pc, _pendingSpell);
+                    return;
+                }
+
                 if (!_highlightedCells.Contains(cell))
                 {
                     CombatUI.ShowCombatLog("Choose a highlighted empty tile in range for the summon.");
@@ -11159,36 +11143,7 @@ public partial class GameManager : MonoBehaviour
                     return;
                 }
 
-                List<SummonTemplate> options = GetSummonOptionsForSpell(_pendingSpell);
-                if (options == null || options.Count == 0)
-                {
-                    CombatUI.ShowCombatLog($"No summon options configured for {_pendingSpell.Name}.");
-                    _pendingSpell = null;
-                    _pendingMetamagic = null;
-                    _pendingSpellFromHeldCharge = false;
-                    ShowActionChoices();
-                    return;
-                }
-
-                var selectedCell = cell;
-                CombatUI.ShowSummonCreatureSelection(_pendingSpell.Name,
-                    options.ConvertAll(o => o.DisplayName),
-                    onSelect: (idx) =>
-                    {
-                        if (idx < 0 || idx >= options.Count)
-                        {
-                            ShowActionChoices();
-                            return;
-                        }
-                        PerformSummonMonsterCast(pc, selectedCell, options[idx]);
-                    },
-                    onCancel: () =>
-                    {
-                        _pendingSpell = null;
-                        _pendingMetamagic = null;
-                        _pendingSpellFromHeldCharge = false;
-                        ShowActionChoices();
-                    });
+                PerformSummonMonsterCast(pc, cell, _pendingSummonSelection);
                 return;
             }
 
@@ -12531,7 +12486,7 @@ public partial class GameManager : MonoBehaviour
         if (!summon.IsTargetInCurrentWeaponRange(target) || target.Stats.IsDead)
             yield break;
 
-        if (data.Template != null && data.Template.HasTrip && !target.Stats.IsProne && summon.Actions.HasStandardAction)
+        if (summon.Stats != null && summon.Stats.HasTripAttack && !target.Stats.IsProne && summon.Actions.HasStandardAction)
         {
             var trip = summon.ExecuteSpecialAttack(SpecialAttackType.Trip, target);
             CombatUI.ShowCombatLog($"<color=#66E8FF>✦ {GetSummonDisplayName(summon)} attempts Trip: {trip.Log}</color>");
@@ -12626,7 +12581,7 @@ public partial class GameManager : MonoBehaviour
 
     private bool TryExecuteSummonSmiteAttack(CharacterController summon, CharacterController target, ActiveSummonInstance summonData)
     {
-        if (summon == null || target == null || summonData == null || summonData.Template == null)
+        if (summon == null || target == null || summonData == null)
             return false;
         if (summonData.SmiteUsed || (summon.Stats != null && summon.Stats.TemplateSmiteUsed))
             return false;
