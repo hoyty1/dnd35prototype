@@ -111,7 +111,7 @@ public partial class GameManager
         if (!validAlignment)
             return false;
 
-        return attacker.IsTargetInCurrentWeaponRange(target, useThrownRange: false);
+        return attacker.IsTargetInCurrentWeaponRange(target);
     }
 
     private string GetTemplateSmiteAxisLabel(CharacterController attacker)
