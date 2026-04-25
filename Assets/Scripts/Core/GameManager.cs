@@ -6145,7 +6145,13 @@ public partial class GameManager : MonoBehaviour
         _isInAttackSequence = false;
         _attackingCharacter = null;
         _equippedWeapon = null;
-        _attackSequenceConsumesFullRound = false;
+
+        // Keep progressive full-attack commitment across single-attack UI refreshes.
+        // This must persist after the second committed attack so remaining natural attacks
+        // can still be selected even though no move action remains.
+        if (_weaponAttacksCommittedThisTurn <= 0)
+            _attackSequenceConsumesFullRound = false;
+
         _currentAttackBAB = 0;
 
         // Keep per-turn off-hand usage flag, but clear transient targeting state.

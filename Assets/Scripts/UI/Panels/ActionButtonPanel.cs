@@ -261,6 +261,11 @@ public class ActionButtonPanel : MonoBehaviour
             return options;
 
         GameManager gm = GameManager.Instance;
+        bool shouldGroupByAttackTypeAtTurnStart = gm != null && gm.Combat_GetWeaponAttacksCommittedThisTurn() <= 0;
+        HashSet<string> seenAttackTypes = shouldGroupByAttackTypeAtTurnStart
+            ? new HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+            : null;
+
         int sequenceIndex = 0;
         for (int i = 0; i < validAttacks.Count; i++)
         {
@@ -275,8 +280,12 @@ public class ActionButtonPanel : MonoBehaviour
                 if (isUsed)
                     continue;
 
-                // Keep one option per remaining sequence entry so multi-count natural attacks
-                // (e.g., 2 Claws) expose all remaining attacks in the current turn.
+                if (shouldGroupByAttackTypeAtTurnStart)
+                {
+                    if (seenAttackTypes == null || !seenAttackTypes.Add(attackName))
+                        continue;
+                }
+
                 options.Add(new NaturalAttackButtonOption
                 {
                     SequenceIndex = currentSequenceIndex,
