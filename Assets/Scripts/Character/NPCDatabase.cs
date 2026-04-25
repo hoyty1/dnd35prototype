@@ -927,9 +927,7 @@ public class NPCDefinition
     // Optional descriptive traits surfaced in tooltips/UI (e.g., "Darkvision 60 ft", "Smite Evil 1/day").
     public List<string> SpecialAbilities = new List<string>();
 
-    // Runtime template flags and descriptors.
-    public bool IsCelestial;
-    public bool IsFiendish;
+    // Runtime template descriptors.
     public List<string> AppliedTemplateIds = new List<string>();
 
     // Equipment

@@ -2638,8 +2638,26 @@ public partial class GameManager : MonoBehaviour
         }
 
         stats.SpellResistance = Mathf.Max(0, def.SpellResistance);
-        stats.IsCelestialTemplate = def.IsCelestial;
-        stats.IsFiendishTemplate = def.IsFiendish;
+
+        bool hasCelestialTemplate = false;
+        bool hasFiendishTemplate = false;
+        if (def.AppliedTemplateIds != null)
+        {
+            for (int i = 0; i < def.AppliedTemplateIds.Count; i++)
+            {
+                string templateId = def.AppliedTemplateIds[i];
+                if (string.IsNullOrWhiteSpace(templateId))
+                    continue;
+
+                if (string.Equals(templateId, "celestial", StringComparison.OrdinalIgnoreCase))
+                    hasCelestialTemplate = true;
+                else if (string.Equals(templateId, "fiendish", StringComparison.OrdinalIgnoreCase))
+                    hasFiendishTemplate = true;
+            }
+        }
+
+        stats.IsCelestialTemplate = hasCelestialTemplate;
+        stats.IsFiendishTemplate = hasFiendishTemplate;
         stats.HasTemplateSmiteEvil = def.GainsSmiteEvil;
         stats.HasTemplateSmiteGood = def.GainsSmiteGood;
         stats.TemplateSmiteUsed = false;

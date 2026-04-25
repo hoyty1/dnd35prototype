@@ -39,19 +39,7 @@ public static class CreatureTemplateRegistry
             }
         }
 
-        if (definition.IsCelestial)
-            TryAddTemplate(resolved, "celestial");
-
-        if (definition.IsFiendish)
-            TryAddTemplate(resolved, "fiendish");
-
         return resolved;
-    }
-
-    private static void TryAddTemplate(List<ICreatureTemplate> resolved, string templateId)
-    {
-        if (_templates.TryGetValue(templateId, out ICreatureTemplate template) && !resolved.Contains(template))
-            resolved.Add(template);
     }
 
     public static NPCDefinition ApplyTemplatesClone(NPCDefinition source)
@@ -137,8 +125,6 @@ public abstract class OutsiderTemplateBase : ICreatureTemplate
             AddOrRaiseResistance(definition, DamageType.Electricity, resistanceValue);
             definition.GainsSmiteEvil = true;
             definition.GainsSmiteGood = false;
-            definition.IsCelestial = true;
-            definition.IsFiendish = false;
         }
         else
         {
@@ -146,8 +132,6 @@ public abstract class OutsiderTemplateBase : ICreatureTemplate
             AddOrRaiseResistance(definition, DamageType.Fire, resistanceValue);
             definition.GainsSmiteGood = true;
             definition.GainsSmiteEvil = false;
-            definition.IsFiendish = true;
-            definition.IsCelestial = false;
         }
     }
 
