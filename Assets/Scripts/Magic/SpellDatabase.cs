@@ -114,22 +114,48 @@ public static partial class SpellDatabase
         Debug.LogWarning($"[SpellDatabase] Spell not found by name: {spellName}");
         return null;
     }
+    private static bool SpellMatchesClass(SpellData spell, string className)
+    {
+        if (spell == null || spell.ClassList == null || string.IsNullOrWhiteSpace(className))
+            return false;
+
+        for (int i = 0; i < spell.ClassList.Length; i++)
+        {
+            string cls = spell.ClassList[i];
+            if (string.Equals(cls, className, System.StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
     /// <summary>Get all spells available to a specific class.</summary>
     public static List<SpellData> GetSpellsForClass(string className)
     {
         Init();
+
         var result = new List<SpellData>();
         foreach (var spell in _spells.Values)
         {
-            foreach (string cls in spell.ClassList)
-            {
-                if (cls == className)
-                {
-                    result.Add(spell);
-                    break;
-                }
-            }
+            if (SpellMatchesClass(spell, className))
+                result.Add(spell);
         }
+
+        result.Sort((a, b) =>
+        {
+            int levelCmp = a.SpellLevel.CompareTo(b.SpellLevel);
+            if (levelCmp != 0) return levelCmp;
+            return string.Compare(a.Name, b.Name, System.StringComparison.OrdinalIgnoreCase);
+        });
+
+        return result;
+    }
+
+    /// <summary>Get all non-placeholder spells available to a specific class.</summary>
+    public static List<SpellData> GetImplementedSpellsForClass(string className)
+    {
+        var result = GetSpellsForClass(className);
+        result.RemoveAll(spell => spell == null || spell.IsPlaceholder);
         return result;
     }
 
@@ -140,16 +166,22 @@ public static partial class SpellDatabase
         var result = new List<SpellData>();
         foreach (var spell in _spells.Values)
         {
-            if (spell.SpellLevel != spellLevel) continue;
-            foreach (string cls in spell.ClassList)
-            {
-                if (cls == className)
-                {
-                    result.Add(spell);
-                    break;
-                }
-            }
+            if (spell.SpellLevel != spellLevel)
+                continue;
+
+            if (SpellMatchesClass(spell, className))
+                result.Add(spell);
         }
+
+        result.Sort((a, b) => string.Compare(a.Name, b.Name, System.StringComparison.OrdinalIgnoreCase));
+        return result;
+    }
+
+    /// <summary>Get all non-placeholder spells of a specific level for a class.</summary>
+    public static List<SpellData> GetImplementedSpellsForClassAtLevel(string className, int spellLevel)
+    {
+        var result = GetSpellsForClassAtLevel(className, spellLevel);
+        result.RemoveAll(spell => spell == null || spell.IsPlaceholder);
         return result;
     }
 

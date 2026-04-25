@@ -79,6 +79,8 @@ public partial class GameManager : MonoBehaviour
     private const string CelestialTemplateTestPresetId = "celestial_template_test";
     private const string FiendishTemplateTestPresetId = "fiendish_template_test";
     private const string SummonMonsterTestPresetId = "summon_monster_test";
+    private const string WizardSpellTestPresetId = "wizard_spell_test";
+    private const string ClericSpellTestPresetId = "cleric_spell_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
     private bool _isFeintSneakTestEncounter;
@@ -90,6 +92,8 @@ public partial class GameManager : MonoBehaviour
     private bool _isCelestialTemplateTestEncounter;
     private bool _isFiendishTemplateTestEncounter;
     private bool _isSummonMonsterTestEncounter;
+    private bool _isWizardSpellTestEncounter;
+    private bool _isClericSpellTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
 
     // Game state
@@ -585,6 +589,8 @@ public partial class GameManager : MonoBehaviour
         _isCelestialTemplateTestEncounter = string.Equals(presetId, CelestialTemplateTestPresetId, StringComparison.Ordinal);
         _isFiendishTemplateTestEncounter = string.Equals(presetId, FiendishTemplateTestPresetId, StringComparison.Ordinal);
         _isSummonMonsterTestEncounter = string.Equals(presetId, SummonMonsterTestPresetId, StringComparison.Ordinal);
+        _isWizardSpellTestEncounter = string.Equals(presetId, WizardSpellTestPresetId, StringComparison.Ordinal);
+        _isClericSpellTestEncounter = string.Equals(presetId, ClericSpellTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.NPCIds != null && preset.NPCIds.Count > 0)
         {
@@ -619,6 +625,10 @@ public partial class GameManager : MonoBehaviour
             ConfigureFiendishTemplateTestParty();
         else if (_isSummonMonsterTestEncounter)
             ConfigureSummonMonsterTestParty();
+        else if (_isWizardSpellTestEncounter)
+            ConfigureWizardSpellTestParty();
+        else if (_isClericSpellTestEncounter)
+            ConfigureClericSpellTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -1939,6 +1949,219 @@ public partial class GameManager : MonoBehaviour
         Debug.Log($"[SummonTest] Prepared summon loadout for {spellComp.Stats?.CharacterName}: {spellComp.GetSlotDetails()}");
     }
 
+    private void ConfigureWizardSpellTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+        SpellDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats wizardStats = new CharacterStats(
+            name: "Archmage Theron",
+            level: 20,
+            characterClass: "Wizard",
+            str: 8, dex: 16, con: 14, wis: 12, intelligence: 24, cha: 10,
+            bab: 10,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 110,
+            raceName: "Human"
+        );
+        wizardStats.CharacterAlignment = Alignment.TrueNeutral;
+
+        Vector2Int wizardStart = new Vector2Int(3, 9);
+        Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
+
+        InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        wizardInventory.Init(wizardStats);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.RecalculateStats();
+
+        SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
+        wizardSpellComp.KnownSpells.Clear();
+        wizardSpellComp.SelectedSpellIds = null;
+        wizardSpellComp.PreparedSpellSlotIds = null;
+        wizardSpellComp.Init(wizardStats);
+        AutoPopulateAndPrepareAllImplementedClassSpells(wizardSpellComp, "Wizard");
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("📘 Wizard Spell Test: Archmage Theron auto-prepared all implemented wizard spells.");
+        CombatUI?.ShowCombatLog("   Target Dummy has AC 1, HP 50, and severe save penalties for deterministic spell validation.");
+    }
+
+    private void ConfigureClericSpellTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+        SpellDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats clericStats = new CharacterStats(
+            name: "High Priestess Ilyra",
+            level: 20,
+            characterClass: "Cleric",
+            str: 14, dex: 12, con: 16, wis: 24, intelligence: 12, cha: 16,
+            bab: 15,
+            armorBonus: 4,
+            shieldBonus: 2,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 150,
+            raceName: "Human"
+        );
+        clericStats.CharacterAlignment = Alignment.NeutralGood;
+
+        Vector2Int clericStart = new Vector2Int(3, 9);
+        Sprite clericAlive = IconLoader.GetToken("Cleric") ?? pcAliveFallback;
+        PC1.Init(clericStats, clericStart, clericAlive, pcDead);
+
+        InventoryComponent clericInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        clericInventory.Init(clericStats);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        clericInventory.CharacterInventory.RecalculateStats();
+
+        SpellcastingComponent clericSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
+        clericSpellComp.KnownSpells.Clear();
+        clericSpellComp.SelectedSpellIds = null;
+        clericSpellComp.PreparedSpellSlotIds = null;
+        clericSpellComp.Init(clericStats);
+        AutoPopulateAndPrepareAllImplementedClassSpells(clericSpellComp, "Cleric");
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("📖 Cleric Spell Test: High Priestess Ilyra auto-prepared all implemented cleric spells.");
+        CombatUI?.ShowCombatLog("   Target Dummy has AC 1, HP 50, and severe save penalties for deterministic spell validation.");
+    }
+
+    private void AutoPopulateAndPrepareAllImplementedClassSpells(SpellcastingComponent spellComp, string className)
+    {
+        if (spellComp == null || spellComp.Stats == null)
+            return;
+
+        List<SpellData> implementedSpells = SpellDatabase.GetImplementedSpellsForClass(className);
+        if (implementedSpells == null || implementedSpells.Count == 0)
+            implementedSpells = SpellDatabase.GetSpellsForClass(className);
+
+        spellComp.KnownSpells.Clear();
+        if (implementedSpells != null)
+            spellComp.KnownSpells.AddRange(implementedSpells);
+
+        for (int i = 0; i < spellComp.SpellSlots.Count; i++)
+        {
+            SpellSlot existingSlot = spellComp.SpellSlots[i];
+            if (existingSlot != null)
+                existingSlot.Clear();
+        }
+
+        int maxSpellLevel = 0;
+        for (int i = 0; i < spellComp.KnownSpells.Count; i++)
+        {
+            SpellData spell = spellComp.KnownSpells[i];
+            if (spell != null && spell.SpellLevel > maxSpellLevel)
+                maxSpellLevel = spell.SpellLevel;
+        }
+
+        EnsureSpellSlotArrayCapacity(spellComp, maxSpellLevel + 1);
+
+        for (int level = 0; level <= maxSpellLevel; level++)
+        {
+            List<SpellData> spellsAtLevel = new List<SpellData>();
+            for (int i = 0; i < spellComp.KnownSpells.Count; i++)
+            {
+                SpellData spell = spellComp.KnownSpells[i];
+                if (spell != null && spell.SpellLevel == level)
+                    spellsAtLevel.Add(spell);
+            }
+
+            int existingSlotCount = 0;
+            for (int i = 0; i < spellComp.SpellSlots.Count; i++)
+            {
+                SpellSlot slot = spellComp.SpellSlots[i];
+                if (slot != null && slot.Level == level)
+                    existingSlotCount++;
+            }
+
+            int requiredSlots = Mathf.Max(existingSlotCount, spellsAtLevel.Count);
+            while (existingSlotCount < requiredSlots)
+            {
+                spellComp.SpellSlots.Add(new SpellSlot(level));
+                existingSlotCount++;
+            }
+
+            spellComp.SlotsMax[level] = requiredSlots;
+            spellComp.SlotsRemaining[level] = requiredSlots;
+
+            if (spellsAtLevel.Count == 0)
+                continue;
+
+            int cursor = 0;
+            for (int slotIndex = 0; slotIndex < spellComp.SpellSlots.Count; slotIndex++)
+            {
+                SpellSlot slot = spellComp.SpellSlots[slotIndex];
+                if (slot == null || slot.Level != level)
+                    continue;
+
+                SpellData toPrepare = spellsAtLevel[cursor % spellsAtLevel.Count];
+                spellComp.PrepareSpellInSlot(slotIndex, toPrepare);
+                cursor++;
+            }
+        }
+
+        spellComp.SyncPreparedSpellsFromSlots();
+        Debug.Log($"[SpellTest] Auto-populated {spellComp.KnownSpells.Count} implemented {className} spells for {spellComp.Stats.CharacterName}. Slots: {spellComp.GetSlotSummary()}");
+    }
+
+    private static void EnsureSpellSlotArrayCapacity(SpellcastingComponent spellComp, int requiredLength)
+    {
+        int targetLength = Mathf.Max(1, requiredLength);
+
+        if (spellComp.SlotsMax == null || spellComp.SlotsMax.Length < targetLength)
+        {
+            int[] resizedMax = new int[targetLength];
+            if (spellComp.SlotsMax != null)
+            {
+                for (int i = 0; i < spellComp.SlotsMax.Length; i++)
+                    resizedMax[i] = spellComp.SlotsMax[i];
+            }
+            spellComp.SlotsMax = resizedMax;
+        }
+
+        if (spellComp.SlotsRemaining == null || spellComp.SlotsRemaining.Length < targetLength)
+        {
+            int[] resizedRemaining = new int[targetLength];
+            if (spellComp.SlotsRemaining != null)
+            {
+                for (int i = 0; i < spellComp.SlotsRemaining.Length; i++)
+                    resizedRemaining[i] = spellComp.SlotsRemaining[i];
+            }
+            spellComp.SlotsRemaining = resizedRemaining;
+        }
+    }
+
     private void RestoreStandardPartyLayout()
     {
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2319,6 +2542,14 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(13, 12),
     };
 
+    private static readonly Vector2Int[] WizardSpellTestSpawnPositions = {
+        new Vector2Int(12, 9),
+    };
+
+    private static readonly Vector2Int[] ClericSpellTestSpawnPositions = {
+        new Vector2Int(12, 9),
+    };
+
     private void SetupEnemyEncounter(List<string> enemyIds)
     {
         NPCDatabase.Init();
@@ -2405,6 +2636,16 @@ public partial class GameManager : MonoBehaviour
                 // Keep targets spread so summon placement and command behavior can be observed.
                 pos = SummonMonsterTestSpawnPositions[i];
             }
+            else if (_isWizardSpellTestEncounter && i < WizardSpellTestSpawnPositions.Length)
+            {
+                // Keep the dummy in a clean line with the wizard for single-target + AoE validation.
+                pos = WizardSpellTestSpawnPositions[i];
+            }
+            else if (_isClericSpellTestEncounter && i < ClericSpellTestSpawnPositions.Length)
+            {
+                // Mirror wizard test spacing so cleric spell coverage can be compared directly.
+                pos = ClericSpellTestSpawnPositions[i];
+            }
             else
             {
                 pos = (i < EncounterSpawnPositions.Length)
@@ -2421,6 +2662,14 @@ public partial class GameManager : MonoBehaviour
                 npcAlive = npcAliveFallback;
 
             InitializeNPCFromDefinition(npc, def, pos, npcAlive, npcDead);
+
+            if (npc.Stats != null && string.Equals(enemyId, "target_dummy", StringComparison.Ordinal))
+            {
+                // Force extremely low saves for deterministic save-or-suck / save-for-half spell validation.
+                npc.Stats.MoraleSaveBonus = -10;
+                Debug.Log($"[SpellTest] Applied target dummy save penalty: F={npc.Stats.FortitudeSave}, R={npc.Stats.ReflexSave}, W={npc.Stats.WillSave}");
+            }
+
             _npcAIBehaviors.Add(def.AIBehavior);
 
             ApplyScenarioSpawnOverrides(enemyId, npc, i);
@@ -2882,12 +3131,23 @@ public partial class GameManager : MonoBehaviour
                 activeNPCs.Add(npc);
         }
 
-        _turnService?.StartCombat(activePCs, activeNPCs, IsPC);
+        List<CharacterController> forcedFirst = GetForcedFirstInitiativeActors();
+        _turnService?.StartCombat(activePCs, activeNPCs, IsPC, forcedFirst);
 
         string orderStr = _turnService != null ? _turnService.GetInitiativeOrderString() : "No combatants";
         Debug.Log($"[Initiative] Combat begins! Initiative order:\n{orderStr}");
 
         UpdateInitiativeUI();
+    }
+
+    private List<CharacterController> GetForcedFirstInitiativeActors()
+    {
+        if ((_isWizardSpellTestEncounter || _isClericSpellTestEncounter) && IsActiveCombatant(PC1) && PC1 != null)
+        {
+            return new List<CharacterController> { PC1 };
+        }
+
+        return null;
     }
 
     /// <summary>Update the initiative panel in the UI.</summary>

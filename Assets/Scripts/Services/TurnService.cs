@@ -52,7 +52,11 @@ public class TurnService : MonoBehaviour
     public event Action<int> OnNewRound;
     public event Action OnCombatEnded;
 
-    public void StartCombat(List<CharacterController> pcs, List<CharacterController> npcs, Func<CharacterController, bool> isPCPredicate)
+    public void StartCombat(
+        List<CharacterController> pcs,
+        List<CharacterController> npcs,
+        Func<CharacterController, bool> isPCPredicate,
+        IReadOnlyList<CharacterController> forcedFirstCharacters = null)
     {
         _initiativeOrder.Clear();
         _currentInitiativeIndex = 0;
@@ -91,6 +95,7 @@ public class TurnService : MonoBehaviour
         }
 
         SortInitiativeOrder();
+        ApplyForcedFirstOrdering(forcedFirstCharacters);
 
         if (_initiativeOrder.Count == 0)
         {
@@ -125,6 +130,46 @@ public class TurnService : MonoBehaviour
 
             return UnityEngine.Random.Range(0, 2) == 0 ? -1 : 1;
         });
+    }
+
+    private void ApplyForcedFirstOrdering(IReadOnlyList<CharacterController> forcedFirstCharacters)
+    {
+        if (forcedFirstCharacters == null || forcedFirstCharacters.Count == 0 || _initiativeOrder.Count == 0)
+            return;
+
+        List<InitiativeEntry> forcedEntries = new List<InitiativeEntry>();
+
+        for (int i = 0; i < forcedFirstCharacters.Count; i++)
+        {
+            CharacterController forcedCharacter = forcedFirstCharacters[i];
+            if (!IsEligibleCombatant(forcedCharacter))
+                continue;
+
+            int index = _initiativeOrder.FindIndex(e => e.Character == forcedCharacter);
+            if (index < 0)
+                continue;
+
+            InitiativeEntry entry = _initiativeOrder[index];
+            _initiativeOrder.RemoveAt(index);
+            forcedEntries.Add(entry);
+        }
+
+        if (forcedEntries.Count == 0)
+            return;
+
+        _initiativeOrder.InsertRange(0, forcedEntries);
+        _currentInitiativeIndex = 0;
+
+        List<string> forcedNames = new List<string>();
+        for (int i = 0; i < forcedEntries.Count; i++)
+        {
+            string name = forcedEntries[i].Character != null && forcedEntries[i].Character.Stats != null
+                ? forcedEntries[i].Character.Stats.CharacterName
+                : "<null>";
+            forcedNames.Add(name);
+        }
+
+        Debug.Log($"[TurnService][Initiative] Forced first order applied: {string.Join(", ", forcedNames)}");
     }
 
     public void StartTurnAtCurrentIndex()

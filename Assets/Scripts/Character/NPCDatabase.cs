@@ -41,6 +41,7 @@ public static class NPCDatabase
         RegisterHumanPaladin();
         RegisterHumanCleric();
         RegisterZombieShambler();
+        RegisterTargetDummy();
 
         Debug.Log($"[NPCDatabase] Initialized with {_npcs.Count} NPC types.");
     }
@@ -85,6 +86,8 @@ public static class NPCDatabase
             new EncounterPreset("celestial_template_test", "✨ Celestial Template Test", "Good cleric with celestial wolf + celestial dire bear allies against evil undead. Templates are applied at spawn time.", new List<string> { "wolf_pack_hunter", "dire_bear", "skeleton_warrior", "skeleton_archer", "zombie_shambler" }),
             new EncounterPreset("fiendish_template_test", "🔥 Fiendish Template Test", "Evil necromancer with fiendish wolf + fiendish dire bear allies against good paladin and cleric. Templates are applied at spawn time.", new List<string> { "fiendish_wolf", "fiendish_dire_bear", "human_paladin", "human_cleric" }),
             new EncounterPreset("summon_monster_test", "🌀 Summon Monster Test", "Cleric + wizard summon drill with Summon Monster I/II prepared on both casters for selection UI, placement, and command validation.", new List<string> { "orc_berserker", "skeleton_archer", "goblin_warchief" }),
+            new EncounterPreset("wizard_spell_test", "📘 Wizard Spell Test", "Single wizard scenario with every implemented wizard spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
+            new EncounterPreset("cleric_spell_test", "📖 Cleric Spell Test", "Single cleric scenario with every implemented cleric spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
@@ -1386,6 +1389,42 @@ public static class NPCDatabase
             PanelColor = new Color(0.22f, 0.24f, 0.34f, 0.85f),
             NameColor = new Color(0.93f, 0.96f, 1f),
             Description = "A devoted battle-priest used as a good-aligned divine caster target for fiendish smite testing."
+        });
+    }
+
+    private static void RegisterTargetDummy()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "target_dummy",
+            Name = "Arcane Target Dummy",
+            Level = 1,
+            CharacterClass = "Commoner",
+            CreatureType = "Humanoid",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Medium,
+            STR = 1,
+            DEX = 1,
+            CON = 1,
+            WIS = 1,
+            INT = 1,
+            CHA = 1,
+            BAB = 0,
+            BaseSpeed = 6,
+            NaturalArmorBonus = -4,
+            FortitudeSaveOverride = SaveProgression.Poor,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
+            BaseHitDieHP = 50,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "Training" },
+            AIBehavior = NPCAIBehavior.DefensiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.62f, 0.58f, 0.46f, 1f),
+            PanelColor = new Color(0.28f, 0.24f, 0.18f, 0.85f),
+            NameColor = new Color(1f, 0.92f, 0.78f),
+            Description = "Training target with very low defenses for deterministic spell-hit validation."
         });
     }
 }
