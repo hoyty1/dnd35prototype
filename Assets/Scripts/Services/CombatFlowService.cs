@@ -545,22 +545,7 @@ public class CombatFlowService : MonoBehaviour
         }
 
         _gameManager.Combat_SetTotalAttacksUsed(_gameManager.Combat_GetTotalAttacksUsed() + 1);
-
-        if (_gameManager.Combat_GetTotalAttacksUsed() == 1
-            && !_gameManager.Combat_GetAttackSequenceConsumesFullRound()
-            && _gameManager.Combat_GetTotalAttackBudget() > 1)
-        {
-            if (attacker.Actions != null && attacker.Actions.HasMoveAction)
-            {
-                attacker.Actions.UseMoveAction();
-                _gameManager.Combat_SetAttackSequenceConsumesFullRound(true);
-            }
-            else
-            {
-                _gameManager.Combat_SetTotalAttackBudget(_gameManager.Combat_GetTotalAttacksUsed());
-                Debug.LogWarning("[Attack][Sequence] Could not consume move action for full-round conversion; trimming attack budget.");
-            }
-        }
+        _gameManager.Combat_RegisterWeaponAttackCommitted(attacker);
 
         if (_gameManager.Combat_HasMoreAttacksAvailable())
         {
@@ -628,9 +613,20 @@ public class CombatFlowService : MonoBehaviour
         bool moveActionUsedBeforeAttack = attacker.Actions != null && attacker.Actions.MoveActionUsed;
         bool fullRoundActionUsedBeforeAttack = attacker.Actions != null && attacker.Actions.FullRoundActionUsed;
         bool standardConvertedToMoveBeforeAttack = attacker.Actions != null && attacker.Actions.StandardConvertedToMove;
+        bool wasFirstWeaponAttackBeforeThis = _gameManager.Combat_GetWeaponAttacksCommittedThisTurn() <= 0;
 
         bool skipStandardCommit = _gameManager.Combat_ConsumeSkipNextSingleAttackStandardActionCommitFlag();
-        if (!skipStandardCommit)
+        bool isAdditionalProgressiveAttack = _gameManager.Combat_GetWeaponAttacksCommittedThisTurn() >= 1;
+
+        if (isAdditionalProgressiveAttack)
+        {
+            if (!_gameManager.Combat_TryEnterProgressiveFullAttackStage(attacker, "a follow-up attack"))
+            {
+                _gameManager.Combat_ShowActionChoices();
+                return;
+            }
+        }
+        else if (!skipStandardCommit)
         {
             if (!attacker.CommitStandardAction())
             {
@@ -661,6 +657,7 @@ public class CombatFlowService : MonoBehaviour
 
         CombatResult result;
         string naturalAttackModeLog = null;
+        int selectedNaturalAttackIndex = -1;
 
         bool useSelectedNaturalAttack = _gameManager.Combat_HasPendingNaturalAttackSelection()
             && _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee
@@ -671,6 +668,7 @@ public class CombatFlowService : MonoBehaviour
         if (useSelectedNaturalAttack)
         {
             int naturalAttackIndex = Mathf.Max(0, _gameManager.Combat_GetPendingNaturalAttackSequenceIndex());
+            selectedNaturalAttackIndex = naturalAttackIndex;
             FullAttackResult naturalStep = attacker.FullAttack(
                 target,
                 isFlanking,
@@ -707,6 +705,10 @@ public class CombatFlowService : MonoBehaviour
 
         _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
         _gameManager.Combat_ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
+        _gameManager.Combat_RegisterWeaponAttackCommitted(attacker);
+
+        if (useSelectedNaturalAttack)
+            _gameManager.Combat_MarkNaturalAttackSequenceIndexUsed(selectedNaturalAttackIndex);
 
         if (!string.IsNullOrEmpty(naturalAttackModeLog))
             _gameManager.CombatUI?.ShowCombatLog(naturalAttackModeLog);
@@ -742,7 +744,7 @@ public class CombatFlowService : MonoBehaviour
             }
         }
 
-        if (useSelectedNaturalAttack)
+        if (useSelectedNaturalAttack && wasFirstWeaponAttackBeforeThis)
         {
             PreserveSingleNaturalAttackActionEconomy(
                 attacker,

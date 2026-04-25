@@ -204,6 +204,10 @@ public partial class GameManager : MonoBehaviour
 
     private bool _skipNextSingleAttackStandardActionCommit;
 
+    // Progressive house-rule attack tracking.
+    private int _weaponAttacksCommittedThisTurn;
+    private readonly HashSet<int> _usedNaturalAttackSequenceIndices = new HashSet<int>();
+
     // Iterative disarm flow state
     private bool _isDisarmSequenceActive;
     private CharacterController _disarmInitiator;
@@ -2697,6 +2701,8 @@ public partial class GameManager : MonoBehaviour
         _pendingAttackType = AttackType.Melee;
         _pendingDisarmUseOffHandSelection = false;
         _pendingSunderUseOffHandSelection = false;
+        _weaponAttacksCommittedThisTurn = 0;
+        _usedNaturalAttackSequenceIndices.Clear();
 
         Debug.Log($"[Turn][OffHand] Flags reset for {pc.Stats.CharacterName}: available={_offHandAttackAvailableThisTurn}, used={_offHandAttackUsedThisTurn}");
         Debug.Log($"[Turn][DualWield] Turn start reset: choiceMade={_dualWieldingChoiceMade}, isDualWielding={_isDualWielding}, mainPenalty={_mainHandPenalty}, offPenalty={_offHandPenalty}");
@@ -5044,12 +5050,6 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        if (!CanAttack(pc))
-        {
-            CombatUI?.UpdateActionButtons(pc);
-            return;
-        }
-
         if (pc.Stats == null || !pc.Stats.HasNaturalAttacks || pc.GetEquippedMainWeapon() != null)
         {
             string pcName = pc.Stats != null ? pc.Stats.CharacterName : "Character";
@@ -5058,25 +5058,45 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        List<NaturalAttackDefinition> naturalAttacks = pc.Stats.GetValidNaturalAttacks();
-        int totalNaturalAttackCount = 0;
-        for (int i = 0; i < naturalAttacks.Count; i++)
-            totalNaturalAttackCount += Mathf.Max(1, naturalAttacks[i].Count);
-
-        if (totalNaturalAttackCount <= 0)
+        if (_weaponAttacksCommittedThisTurn <= 0)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no valid natural attacks configured.");
+            if (pc.Actions == null || !pc.Actions.HasStandardAction)
+            {
+                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no standard action available for a natural attack.");
+                CombatUI?.UpdateActionButtons(pc);
+                return;
+            }
+        }
+        else if (!_attackSequenceConsumesFullRound)
+        {
+            if (pc.Actions == null || !pc.Actions.HasMoveAction)
+            {
+                CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot continue natural attacks after moving.");
+                CombatUI?.UpdateActionButtons(pc);
+                return;
+            }
+        }
+
+        if (!HasRemainingNaturalAttacks(pc))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no natural attacks remaining this turn.");
             CombatUI?.UpdateActionButtons(pc);
             return;
         }
 
-        int clampedSequenceIndex = Mathf.Clamp(naturalAttackSequenceIndex, 0, totalNaturalAttackCount - 1);
         string resolvedLabel = string.IsNullOrWhiteSpace(naturalAttackLabel) ? "Natural attack" : naturalAttackLabel;
+        int resolvedSequenceIndex = ResolveNextAvailableNaturalAttackSequenceIndex(pc, naturalAttackSequenceIndex, resolvedLabel);
+        if (resolvedSequenceIndex < 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no {resolvedLabel} attack remaining this turn.");
+            CombatUI?.UpdateActionButtons(pc);
+            return;
+        }
 
         _pendingDefensiveAttackSelection = false;
         pc.SetFightingDefensively(false);
         EndAttackSequence();
-        SetPendingNaturalAttackSelection(clampedSequenceIndex, resolvedLabel);
+        SetPendingNaturalAttackSelection(resolvedSequenceIndex, resolvedLabel);
 
         _pendingAttackMode = PendingAttackMode.Single;
         _currentAttackType = AttackType.Melee;
@@ -5524,10 +5544,16 @@ public partial class GameManager : MonoBehaviour
 
     public bool IsIterativeAttackSequenceActiveFor(CharacterController actor)
     {
-        return actor != null
-            && _isInAttackSequence
-            && _attackingCharacter == actor
-            && HasMoreAttacksAvailable();
+        if (actor == null
+            || !_isInAttackSequence
+            || _attackingCharacter != actor
+            || !HasMoreAttacksAvailable())
+            return false;
+
+        if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound)
+            return actor.Actions != null && actor.Actions.HasMoveAction;
+
+        return true;
     }
 
     public bool IsIterativeAttackInFullRoundStage(CharacterController actor)
@@ -5557,6 +5583,111 @@ public partial class GameManager : MonoBehaviour
         return IsIterativeThrownAttackSequenceActiveFor(actor) && _attackSequenceConsumesFullRound;
     }
 
+    private bool TryEnterProgressiveFullAttackStage(CharacterController attacker, string attemptedActionLabel)
+    {
+        if (attacker == null || attacker.Actions == null)
+            return false;
+
+        // First committed weapon attack only spends Standard action.
+        if (_weaponAttacksCommittedThisTurn <= 0)
+            return true;
+
+        // Already in full-attack stage this turn.
+        if (_attackSequenceConsumesFullRound)
+            return true;
+
+        if (!attacker.Actions.HasMoveAction)
+        {
+            string actionLabel = string.IsNullOrWhiteSpace(attemptedActionLabel) ? "another attack" : attemptedActionLabel;
+            CombatUI?.ShowCombatLog($"⚠ {attacker.Stats.CharacterName} cannot continue attacking: {actionLabel} would require consuming the remaining move action.");
+            return false;
+        }
+
+        attacker.Actions.UseMoveAction();
+        _attackSequenceConsumesFullRound = true;
+        CombatUI?.ShowCombatLog($"↻ {attacker.Stats.CharacterName} commits to a full attack and spends their move action.");
+        return true;
+    }
+
+    private void RegisterWeaponAttackCommitted(CharacterController attacker)
+    {
+        if (attacker == null)
+            return;
+
+        _weaponAttacksCommittedThisTurn = Mathf.Max(0, _weaponAttacksCommittedThisTurn) + 1;
+
+        if (_weaponAttacksCommittedThisTurn >= 2)
+            _attackSequenceConsumesFullRound = true;
+    }
+
+    private int GetTotalNaturalAttackCount(CharacterController attacker)
+    {
+        if (attacker == null || attacker.Stats == null)
+            return 0;
+
+        List<NaturalAttackDefinition> naturalAttacks = attacker.Stats.GetValidNaturalAttacks();
+        int total = 0;
+        for (int i = 0; i < naturalAttacks.Count; i++)
+            total += Mathf.Max(1, naturalAttacks[i].Count);
+
+        return total;
+    }
+
+    private bool HasRemainingNaturalAttacks(CharacterController attacker)
+    {
+        int totalNaturalAttacks = GetTotalNaturalAttackCount(attacker);
+        return totalNaturalAttacks > 0 && _usedNaturalAttackSequenceIndices.Count < totalNaturalAttacks;
+    }
+
+    private static bool AreSameNaturalAttackName(string a, string b)
+    {
+        string lhs = string.IsNullOrWhiteSpace(a) ? string.Empty : a.Trim();
+        string rhs = string.IsNullOrWhiteSpace(b) ? string.Empty : b.Trim();
+        return string.Equals(lhs, rhs, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private int ResolveNextAvailableNaturalAttackSequenceIndex(CharacterController attacker, int preferredSequenceIndex, string preferredLabel)
+    {
+        if (attacker == null || attacker.Stats == null)
+            return -1;
+
+        List<NaturalAttackDefinition> naturalAttacks = attacker.Stats.GetValidNaturalAttacks();
+        if (naturalAttacks.Count <= 0)
+            return -1;
+
+        int globalIndex = 0;
+        int firstUnused = -1;
+        int preferredByLabel = -1;
+
+        for (int i = 0; i < naturalAttacks.Count; i++)
+        {
+            NaturalAttackDefinition natural = naturalAttacks[i];
+            int count = Mathf.Max(1, natural.Count);
+            string naturalName = string.IsNullOrWhiteSpace(natural.Name) ? "Natural attack" : natural.Name;
+
+            for (int repeat = 0; repeat < count; repeat++)
+            {
+                int index = globalIndex++;
+                if (_usedNaturalAttackSequenceIndices.Contains(index))
+                    continue;
+
+                if (firstUnused < 0)
+                    firstUnused = index;
+
+                if (preferredByLabel < 0 && AreSameNaturalAttackName(naturalName, preferredLabel))
+                    preferredByLabel = index;
+
+                if (index == preferredSequenceIndex)
+                    return index;
+            }
+        }
+
+        if (preferredByLabel >= 0)
+            return preferredByLabel;
+
+        return firstUnused;
+    }
+
     private bool CanAttack(CharacterController actor)
     {
         if (actor == null)
@@ -5566,7 +5697,15 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         if (_isInAttackSequence && _attackingCharacter == actor)
-            return HasMoreAttacksAvailable();
+        {
+            if (!HasMoreAttacksAvailable())
+                return false;
+
+            if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound)
+                return actor.Actions != null && actor.Actions.HasMoveAction;
+
+            return true;
+        }
 
         if (actor.Actions == null)
             return false;
@@ -5577,6 +5716,11 @@ public partial class GameManager : MonoBehaviour
             return true;
 
         return actor.Actions.HasStandardAction;
+    }
+
+    public bool CanUsePrimaryAttackOption(CharacterController actor)
+    {
+        return CanAttack(actor);
     }
 
     private bool CanThrowWeapon(CharacterController actor)
@@ -5592,7 +5736,15 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         if (_isInAttackSequence)
-            return _attackingCharacter == actor && HasMoreAttacksAvailable();
+        {
+            if (_attackingCharacter != actor || !HasMoreAttacksAvailable())
+                return false;
+
+            if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound)
+                return actor.Actions != null && actor.Actions.HasMoveAction;
+
+            return true;
+        }
 
         if (actor.Actions == null)
             return false;
@@ -5624,6 +5776,31 @@ public partial class GameManager : MonoBehaviour
     public bool HasThrowableMeleeWeaponEquipped(CharacterController actor)
     {
         return actor != null && actor.HasThrowableWeaponEquipped();
+    }
+
+    public bool IsNaturalAttackSequenceIndexUsed(CharacterController actor, int sequenceIndex)
+    {
+        return actor != null
+            && actor == ActivePC
+            && sequenceIndex >= 0
+            && _usedNaturalAttackSequenceIndices.Contains(sequenceIndex);
+    }
+
+    public bool CanUseNaturalAttackOption(CharacterController actor)
+    {
+        if (actor == null || actor != ActivePC || actor.Stats == null || !actor.Stats.HasNaturalAttacks || actor.GetEquippedMainWeapon() != null)
+            return false;
+
+        if (!HasRemainingNaturalAttacks(actor))
+            return false;
+
+        if (_weaponAttacksCommittedThisTurn <= 0)
+            return actor.Actions != null && actor.Actions.HasStandardAction;
+
+        if (_attackSequenceConsumesFullRound)
+            return true;
+
+        return actor.Actions != null && actor.Actions.HasMoveAction;
     }
 
     private bool IsOffHandAttackAvailable()
@@ -5677,15 +5854,37 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        if (_isInAttackSequence && _attackingCharacter != actor)
+        if (_isInAttackSequence)
         {
-            Debug.Log($"[OffHand][CanUse] Denied: attack sequence belongs to {( _attackingCharacter != null && _attackingCharacter.Stats != null ? _attackingCharacter.Stats.CharacterName : "<none>")}, not {actor.Stats?.CharacterName ?? "<null>"}.");
-            return false;
+            if (_attackingCharacter != actor)
+            {
+                Debug.Log($"[OffHand][CanUse] Denied: attack sequence belongs to {( _attackingCharacter != null && _attackingCharacter.Stats != null ? _attackingCharacter.Stats.CharacterName : "<none>")}, not {actor.Stats?.CharacterName ?? "<null>"}.");
+                return false;
+            }
+
+            if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound && !actor.Actions.HasMoveAction)
+            {
+                Debug.Log($"[OffHand][CanUse] Denied: second attack would require move action but {actor.Stats?.CharacterName ?? "<null>"} has no move action.");
+                return false;
+            }
+
+            Debug.Log($"[OffHand][CanUse] Allowed in active sequence for {actor.Stats?.CharacterName ?? "<null>"}.");
+            return true;
         }
 
-        // Dedicated flag controls availability. Action-economy checks are intentionally excluded.
-        Debug.Log($"[OffHand][CanUse] Allowed for {actor.Stats?.CharacterName ?? "<null>"}. hasStandard={actor.Actions.HasStandardAction}, hasMove={actor.Actions.HasMoveAction}, inSequence={_isInAttackSequence}");
-        return true;
+        if (_weaponAttacksCommittedThisTurn <= 0)
+        {
+            bool canUseStandard = actor.Actions.HasStandardAction;
+            Debug.Log($"[OffHand][CanUse] Outside sequence, first attack requires standard. allowed={canUseStandard}");
+            return canUseStandard;
+        }
+
+        if (_attackSequenceConsumesFullRound)
+            return true;
+
+        bool canUseMoveForSecondAttack = actor.Actions.HasMoveAction;
+        Debug.Log($"[OffHand][CanUse] Outside sequence, additional attack requires move. allowed={canUseMoveForSecondAttack}");
+        return canUseMoveForSecondAttack;
     }
 
     public bool CanUseOffHandThrownAttackOption(CharacterController actor)
@@ -5851,6 +6050,16 @@ public partial class GameManager : MonoBehaviour
         Debug.Log($"[Attack][Sequence] {attacker.Stats.CharacterName} continuing attack sequence");
         Debug.Log($"[Attack][Sequence] Attack type: {attackType}");
 
+        if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound)
+        {
+            if (!TryEnterProgressiveFullAttackStage(attacker, "a second attack"))
+            {
+                EndAttackSequence();
+                ShowActionChoices();
+                return;
+            }
+        }
+
         PerformAttackByType(attacker, attackType);
     }
 
@@ -5967,6 +6176,8 @@ public partial class GameManager : MonoBehaviour
         _pendingAttackType = AttackType.Melee;
         _pendingDisarmUseOffHandSelection = false;
         _pendingSunderUseOffHandSelection = false;
+        _weaponAttacksCommittedThisTurn = 0;
+        _usedNaturalAttackSequenceIndices.Clear();
     }
 
 
@@ -10740,11 +10951,20 @@ public partial class GameManager : MonoBehaviour
 
         Debug.Log($"[OffHand] HandleOffHandTargetClick attacker={attacker.Stats.CharacterName} target={target.Stats.CharacterName} mode={(useThrownRange ? "Thrown" : "Melee")} weapon={offHandWeapon.Name} BAB={_currentOffHandBAB}");
 
-        if (!_isInAttackSequence)
+        if (_weaponAttacksCommittedThisTurn >= 1 && !_attackSequenceConsumesFullRound)
         {
-            // Off-hand attacks are controlled by the dedicated off-hand availability gate.
-            // Do not hard-block confirmation if no standard action remains after a completed
-            // main-hand full-attack sequence.
+            if (!TryEnterProgressiveFullAttackStage(attacker, useThrownRange ? "an off-hand thrown attack" : "an off-hand attack"))
+            {
+                _isSelectingOffHandTarget = false;
+                _isSelectingOffHandThrownTarget = false;
+                _currentOffHandBAB = 0;
+                _currentOffHandWeapon = null;
+                ShowActionChoices();
+                return;
+            }
+        }
+        else if (!_isInAttackSequence)
+        {
             bool shouldConsumeStandardAction = attacker.Actions.HasStandardAction && !attacker.Actions.FullRoundActionUsed;
             if (shouldConsumeStandardAction)
             {
@@ -10774,6 +10994,9 @@ public partial class GameManager : MonoBehaviour
         Debug.Log("[OffHand] Calling ExecuteOffHandAttack...");
         CombatResult result = ExecuteOffHandAttack(attacker, target, _currentOffHandBAB, offHandWeapon, useThrownRange);
         Debug.Log("[OffHand] ExecuteOffHandAttack returned.");
+
+        if (result != null)
+            RegisterWeaponAttackCommitted(attacker);
 
         if (result != null && result.Hit && result.TotalDamage > 0)
             CheckConcentrationOnDamage(target, result.TotalDamage);

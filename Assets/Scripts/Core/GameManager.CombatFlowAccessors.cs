@@ -45,6 +45,16 @@ public partial class GameManager
     public int Combat_GetPendingNaturalAttackSequenceIndex() => _pendingNaturalAttackSequenceIndex;
     public string Combat_GetPendingNaturalAttackLabel() => _pendingNaturalAttackLabel;
     public void Combat_ClearPendingNaturalAttackSelection() => ClearPendingNaturalAttackSelection();
+    public int Combat_GetWeaponAttacksCommittedThisTurn() => _weaponAttacksCommittedThisTurn;
+    public bool Combat_TryEnterProgressiveFullAttackStage(CharacterController attacker, string attemptedActionLabel)
+        => TryEnterProgressiveFullAttackStage(attacker, attemptedActionLabel);
+    public void Combat_RegisterWeaponAttackCommitted(CharacterController attacker)
+        => RegisterWeaponAttackCommitted(attacker);
+    public void Combat_MarkNaturalAttackSequenceIndexUsed(int sequenceIndex)
+    {
+        if (sequenceIndex >= 0)
+            _usedNaturalAttackSequenceIndices.Add(sequenceIndex);
+    }
 
     public void Combat_ClearPendingDefensiveAttackSelectionFlag()
     {

@@ -260,6 +260,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (validAttacks.Count == 0)
             return options;
 
+        GameManager gm = GameManager.Instance;
         var seenNames = new HashSet<string>();
         int sequenceIndex = 0;
         for (int i = 0; i < validAttacks.Count; i++)
@@ -269,18 +270,24 @@ public class ActionButtonPanel : MonoBehaviour
             string attackName = string.IsNullOrWhiteSpace(attack.Name) ? "Natural attack" : attack.Name.Trim();
             string normalizedName = attackName.ToLowerInvariant();
 
-            if (!seenNames.Contains(normalizedName))
+            for (int repeat = 0; repeat < count; repeat++)
             {
+                int currentSequenceIndex = sequenceIndex++;
+                bool isUsed = gm != null && gm.IsNaturalAttackSequenceIndexUsed(pc, currentSequenceIndex);
+                if (isUsed)
+                    continue;
+
+                if (seenNames.Contains(normalizedName))
+                    continue;
+
                 options.Add(new NaturalAttackButtonOption
                 {
-                    SequenceIndex = sequenceIndex,
+                    SequenceIndex = currentSequenceIndex,
                     AttackName = attackName,
                     IsPrimary = attack.IsPrimary
                 });
                 seenNames.Add(normalizedName);
             }
-
-            sequenceIndex += count;
         }
 
         return options;
@@ -401,8 +408,15 @@ public class ActionButtonPanel : MonoBehaviour
 
     private void ComputePrimaryAttackStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
     {
-        bool canSingleAttack = (context.HasStandardAttack || context.CanContinueIterativeAttack) && context.CanAttackWithWeapon && !context.IsPinned && !context.IsTurned;
-        bool showAttackButton = context.IsPinned || context.HasStandardAttack || context.CanContinueIterativeAttack;
+        bool usingNaturalOptions = context.UsingInnateNaturalAttacks && context.NaturalAttackOptions != null && context.NaturalAttackOptions.Count > 0;
+
+        bool canSingleAttack = usingNaturalOptions
+            ? (context.Gm != null && context.Gm.CanUseNaturalAttackOption(pc) && !context.IsPinned && !context.IsTurned)
+            : ((context.Gm != null && context.Gm.CanUsePrimaryAttackOption(pc)) && context.CanAttackWithWeapon && !context.IsPinned && !context.IsTurned);
+
+        bool showAttackButton = usingNaturalOptions
+            ? (context.IsPinned || context.NaturalAttackOptions.Count > 0)
+            : (context.IsPinned || context.HasStandardAttack || context.CanContinueIterativeAttack);
 
         string attackLabel;
         if (context.IsPinned)
@@ -429,11 +443,11 @@ public class ActionButtonPanel : MonoBehaviour
             && context.NaturalAttackOptions.Count > 1;
 
         bool showThrownButton = showingSecondaryNaturalAttack
-            ? (context.HasStandardAttack || context.CanContinueIterativeAttack) && !context.IsPinned
+            ? (context.NaturalAttackOptions.Count > 1 && !context.IsPinned)
             : context.HasThrowableMeleeWeapon && (context.HasStandardAttack || context.IterativeThrownSequenceActive) && !context.IsPinned;
 
         bool canThrowAttack = showingSecondaryNaturalAttack
-            ? canSingleAttack
+            ? (context.Gm != null && context.Gm.CanUseNaturalAttackOption(pc) && !context.IsTurned)
             : showThrownButton && context.Gm != null && context.Gm.CanUseThrownAttackOption(pc) && context.CanAttackWithWeapon && !context.IsTurned;
 
         string thrownLabel;

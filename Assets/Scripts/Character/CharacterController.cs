@@ -323,6 +323,12 @@ public class CharacterController : MonoBehaviour
     /// <summary>Action economy tracker for the current turn.</summary>
     public ActionEconomy Actions = new ActionEconomy();
 
+    /// <summary>
+    /// Progressive attack pool used by the house-rule iterative attack flow.
+    /// The pool is rebuilt at turn start and consumed as attack actions are committed.
+    /// </summary>
+    public AttackPool ProgressiveAttackPool { get; } = new AttackPool();
+
     // ========== FEAT PROPERTIES ==========
 
     /// <summary>
@@ -6051,6 +6057,7 @@ public class CharacterController : MonoBehaviour
         IsFightingDefensively = false; // lasts until start of this character's next turn
         Actions.Reset();
         Actions.SingleActionOnly = (_currentHPState == HPState.Disabled || _currentHPState == HPState.Staggered);
+        ProgressiveAttackPool.Clear();
         _grappleAttackBonusesThisTurn.Clear();
         _grappleAttacksUsedThisTurn = 0;
         _grappleAttackBudgetThisTurn = 0;
