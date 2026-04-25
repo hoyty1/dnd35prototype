@@ -187,8 +187,9 @@ public partial class GameManager
             return;
         }
 
-        int attackBonus = Mathf.Max(1, attacker.Stats.CHAMod + 2);
-        int damageBonus = Mathf.Max(1, attacker.Stats.Level + 2);
+        int attackBonus = attacker.Stats.CHAMod;
+        int hitDice = Mathf.Max(1, attacker.Stats.HitDice > 0 ? attacker.Stats.HitDice : attacker.Stats.Level);
+        int damageBonus = hitDice;
 
         attacker.Stats.MoraleAttackBonus += attackBonus;
         attacker.Stats.MoraleDamageBonus += damageBonus;

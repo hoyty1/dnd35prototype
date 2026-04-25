@@ -115,20 +115,28 @@ public abstract class OutsiderTemplateBase : ICreatureTemplate
 
     private void ApplyMitigation(NPCDefinition definition, int hd)
     {
-        // D&D-inspired baseline for celestial/fiendish creatures in this prototype.
-        if (hd >= 5)
+        int resistanceValue = hd >= 8 ? 10 : 5;
+
+        if (hd >= 4)
         {
-            definition.DamageReductionAmount = Mathf.Max(definition.DamageReductionAmount, 5);
+            int drAmount = hd >= 12 ? 10 : 5;
+            definition.DamageReductionAmount = Mathf.Max(definition.DamageReductionAmount, drAmount);
             definition.DamageReductionBypass |= DamageBypassTag.Magic;
         }
 
-        int resistanceValue = hd >= 11 ? 10 : 5;
+        if (hd >= 8)
+        {
+            int sr = hd + (hd >= 12 ? 10 : 5);
+            definition.SpellResistance = Mathf.Max(definition.SpellResistance, sr);
+        }
+
         if (IsGoodTemplate)
         {
             AddOrRaiseResistance(definition, DamageType.Acid, resistanceValue);
             AddOrRaiseResistance(definition, DamageType.Cold, resistanceValue);
             AddOrRaiseResistance(definition, DamageType.Electricity, resistanceValue);
             definition.GainsSmiteEvil = true;
+            definition.GainsSmiteGood = false;
             definition.IsCelestial = true;
             definition.IsFiendish = false;
         }
@@ -137,11 +145,10 @@ public abstract class OutsiderTemplateBase : ICreatureTemplate
             AddOrRaiseResistance(definition, DamageType.Cold, resistanceValue);
             AddOrRaiseResistance(definition, DamageType.Fire, resistanceValue);
             definition.GainsSmiteGood = true;
+            definition.GainsSmiteEvil = false;
             definition.IsFiendish = true;
             definition.IsCelestial = false;
         }
-
-        definition.SpellResistance = Mathf.Max(definition.SpellResistance, hd + 5);
     }
 
     private void ApplyTemplateTags(NPCDefinition definition)
@@ -170,7 +177,7 @@ public abstract class OutsiderTemplateBase : ICreatureTemplate
 
     private static string BuildResistanceSummary(NPCDefinition definition, DamageType[] types, int hd)
     {
-        int amount = hd >= 11 ? 10 : 5;
+        int amount = hd >= 8 ? 10 : 5;
         string joined = string.Join(", ", Array.ConvertAll(types, DamageTextUtils.GetDamageTypeDisplay));
         return $"Resist {amount} ({joined})";
     }

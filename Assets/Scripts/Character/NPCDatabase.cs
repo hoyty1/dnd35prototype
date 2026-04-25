@@ -35,6 +35,10 @@ public static class NPCDatabase
         RegisterBrownBear();
         RegisterDireBear();
         RegisterWolfPackHunter();
+        RegisterFiendishWolf();
+        RegisterFiendishDireBear();
+        RegisterHumanPaladin();
+        RegisterHumanCleric();
         RegisterZombieShambler();
 
         Debug.Log($"[NPCDatabase] Initialized with {_npcs.Count} NPC types.");
@@ -78,6 +82,7 @@ public static class NPCDatabase
             new EncounterPreset("ogre_battle_test", "🧙 Ogre Battle", "Player-controlled wizard and dire tiger ally versus two ogre brutes.", new List<string> { "dire_tiger", "ogre_brute", "ogre_brute" }),
             new EncounterPreset("shield_bash_test", "🛡️ Shield Bash Test", "Compare shield bash AC behavior: Shielder keeps shield AC with Improved Shield Bash while Basher loses shield AC until next turn.", new List<string> { "orc_berserker", "orc_berserker" }),
             new EncounterPreset("celestial_template_test", "✨ Celestial Template Test", "Good cleric with celestial wolf + celestial dire bear allies against evil undead. Templates are applied at spawn time.", new List<string> { "wolf_pack_hunter", "dire_bear", "skeleton_warrior", "skeleton_archer", "zombie_shambler" }),
+            new EncounterPreset("fiendish_template_test", "🔥 Fiendish Template Test", "Evil necromancer with fiendish wolf + fiendish dire bear allies against good paladin and cleric. Templates are applied at spawn time.", new List<string> { "fiendish_wolf", "fiendish_dire_bear", "human_paladin", "human_cleric" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
@@ -760,6 +765,104 @@ public static class NPCDatabase
             PanelColor = new Color(0.2f, 0.2f, 0.2f, 0.85f),
             NameColor = new Color(0.9f, 0.9f, 0.95f),
             Description = "A swift pack hunter from the Monster Manual baseline. It bites to pull enemies prone with free trip attempts."
+        });
+    }
+
+    private static void RegisterFiendishWolf()
+    {
+        NPCDefinition baseWolf = Get("wolf_pack_hunter");
+        if (baseWolf == null)
+            return;
+
+        NPCDefinition fiendishWolf = baseWolf.Clone();
+        fiendishWolf.Id = "fiendish_wolf";
+        fiendishWolf.Name = "Fiendish Wolf";
+        fiendishWolf.AppliedTemplateIds = new List<string> { "fiendish" };
+        fiendishWolf.Description = "A lower-planar wolf infused with fiendish power. Benchmark for 1-3 HD fiendish template scaling.";
+        fiendishWolf.SpriteColor = new Color(0.62f, 0.22f, 0.24f, 1f);
+        fiendishWolf.PanelColor = new Color(0.24f, 0.08f, 0.1f, 0.9f);
+        fiendishWolf.NameColor = new Color(0.98f, 0.74f, 0.74f);
+        Register(fiendishWolf);
+    }
+
+    private static void RegisterFiendishDireBear()
+    {
+        NPCDefinition baseBear = Get("dire_bear");
+        if (baseBear == null)
+            return;
+
+        NPCDefinition fiendishBear = baseBear.Clone();
+        fiendishBear.Id = "fiendish_dire_bear";
+        fiendishBear.Name = "Fiendish Dire Bear";
+        fiendishBear.AppliedTemplateIds = new List<string> { "fiendish" };
+        fiendishBear.Description = "A towering dire bear warped by infernal essence. Benchmark for 12+ HD fiendish template scaling.";
+        fiendishBear.SpriteColor = new Color(0.55f, 0.2f, 0.16f, 1f);
+        fiendishBear.PanelColor = new Color(0.21f, 0.07f, 0.05f, 0.9f);
+        fiendishBear.NameColor = new Color(1f, 0.76f, 0.7f);
+        Register(fiendishBear);
+    }
+
+    private static void RegisterHumanPaladin()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "human_paladin",
+            Name = "Human Paladin",
+            Level = 5,
+            CharacterClass = "Paladin",
+            CreatureType = "Humanoid",
+            HitDice = 5,
+            SizeCategory = SizeCategory.Medium,
+            STR = 16, DEX = 10, CON = 14, WIS = 12, INT = 10, CHA = 14,
+            BAB = 5,
+            BaseSpeed = 6,
+            BaseHitDieHP = 42,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("longsword", EquipSlot.RightHand),
+                new EquipmentSlotPair("shield_heavy_steel", EquipSlot.LeftHand),
+                new EquipmentSlotPair("chainmail", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "Human", "Good" },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.84f, 0.88f, 0.98f, 1f),
+            PanelColor = new Color(0.2f, 0.2f, 0.35f, 0.85f),
+            NameColor = new Color(0.95f, 0.95f, 1f),
+            Description = "A righteous knight in chainmail who serves as a good-aligned smite target for fiendish template verification."
+        });
+    }
+
+    private static void RegisterHumanCleric()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "human_cleric",
+            Name = "Human Cleric",
+            Level = 5,
+            CharacterClass = "Cleric",
+            CreatureType = "Humanoid",
+            HitDice = 5,
+            SizeCategory = SizeCategory.Medium,
+            STR = 12, DEX = 10, CON = 14, WIS = 17, INT = 10, CHA = 12,
+            BAB = 3,
+            BaseSpeed = 6,
+            BaseHitDieHP = 36,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("mace_heavy", EquipSlot.RightHand),
+                new EquipmentSlotPair("shield_heavy_steel", EquipSlot.LeftHand),
+                new EquipmentSlotPair("chainmail", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "Human", "Good" },
+            AIBehavior = NPCAIBehavior.DefensiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.82f, 0.86f, 0.95f, 1f),
+            PanelColor = new Color(0.22f, 0.24f, 0.34f, 0.85f),
+            NameColor = new Color(0.93f, 0.96f, 1f),
+            Description = "A devoted battle-priest used as a good-aligned divine caster target for fiendish smite testing."
         });
     }
 }

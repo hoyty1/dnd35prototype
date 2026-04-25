@@ -77,6 +77,7 @@ public partial class GameManager : MonoBehaviour
     private const string OgreBattleTestPresetId = "ogre_battle_test";
     private const string ShieldBashTestPresetId = "shield_bash_test";
     private const string CelestialTemplateTestPresetId = "celestial_template_test";
+    private const string FiendishTemplateTestPresetId = "fiendish_template_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
     private bool _isFeintSneakTestEncounter;
@@ -86,6 +87,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isOgreBattleTestEncounter;
     private bool _isShieldBashTestEncounter;
     private bool _isCelestialTemplateTestEncounter;
+    private bool _isFiendishTemplateTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
 
     // Game state
@@ -777,6 +779,7 @@ public partial class GameManager : MonoBehaviour
         _isOgreBattleTestEncounter = string.Equals(presetId, OgreBattleTestPresetId, StringComparison.Ordinal);
         _isShieldBashTestEncounter = string.Equals(presetId, ShieldBashTestPresetId, StringComparison.Ordinal);
         _isCelestialTemplateTestEncounter = string.Equals(presetId, CelestialTemplateTestPresetId, StringComparison.Ordinal);
+        _isFiendishTemplateTestEncounter = string.Equals(presetId, FiendishTemplateTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.NPCIds != null && preset.NPCIds.Count > 0)
         {
@@ -807,6 +810,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureShieldBashTestParty();
         else if (_isCelestialTemplateTestEncounter)
             ConfigureCelestialTemplateTestParty();
+        else if (_isFiendishTemplateTestEncounter)
+            ConfigureFiendishTemplateTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -1911,6 +1916,54 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   Opposing undead should remain evil-aligned to validate celestial smite targeting.");
     }
 
+    private void ConfigureFiendishTemplateTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats necromancerStats = new CharacterStats(
+            name: "Malakai",
+            level: 5,
+            characterClass: "Wizard",
+            str: 8, dex: 14, con: 12, wis: 12, intelligence: 18, cha: 14,
+            bab: 2,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 28,
+            raceName: "Human"
+        );
+
+        necromancerStats.CharacterAlignment = Alignment.NeutralEvil;
+        necromancerStats.AddSpecialAbility("Necromancy Focus");
+
+        Vector2Int necromancerStart = new Vector2Int(3, 7);
+        Sprite necromancerAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        PC1.Init(necromancerStats, necromancerStart, necromancerAlive, pcDead);
+
+        InventoryComponent necromancerInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        necromancerInventory.Init(necromancerStats);
+        necromancerInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        necromancerInventory.CharacterInventory.RecalculateStats();
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("🔥 Fiendish Template Test: Malakai (NE Wizard 5) commands fiendish wolf + fiendish dire bear allies.");
+        CombatUI?.ShowCombatLog("   Verify Fiendish scaling: darkvision, Resist Cold/Fire, Smite Good, DR 10/magic at 12 HD, and SR 22 on the dire bear.");
+        CombatUI?.ShowCombatLog("   Targets are good-aligned human paladin + cleric to validate Smite Good selection and damage bonuses.");
+    }
+
     private void RestoreStandardPartyLayout()
     {
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2278,6 +2331,13 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(11, 8),  // Zombie
     };
 
+    private static readonly Vector2Int[] FiendishTemplateTestSpawnPositions = {
+        new Vector2Int(2, 7),   // Fiendish wolf ally
+        new Vector2Int(4, 7),   // Fiendish dire bear ally
+        new Vector2Int(10, 7),  // Human paladin (good)
+        new Vector2Int(11, 7),  // Human cleric (good)
+    };
+
     private void SetupEnemyEncounter(List<string> enemyIds)
     {
         NPCDatabase.Init();
@@ -2353,6 +2413,11 @@ public partial class GameManager : MonoBehaviour
             {
                 // Keep celestial allies close to the cleric and undead on the opposite side.
                 pos = CelestialTemplateTestSpawnPositions[i];
+            }
+            else if (_isFiendishTemplateTestEncounter && i < FiendishTemplateTestSpawnPositions.Length)
+            {
+                // Keep fiendish allies near the necromancer with good enemies opposite for Smite Good demonstrations.
+                pos = FiendishTemplateTestSpawnPositions[i];
             }
             else
             {
@@ -2458,6 +2523,24 @@ public partial class GameManager : MonoBehaviour
                 npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
                 npc.Tags.AddTag("ScenarioOverride:CelestialTemplateUndeadEnemy");
                 Debug.Log($"[CelestialTemplateTest] Enemy override applied to {enemyId}: Team=Enemy, Alignment=NeutralEvil.");
+            }
+        }
+
+        if (_isFiendishTemplateTestEncounter)
+        {
+            if (spawnIndex == 0 || spawnIndex == 1)
+            {
+                npc.ConfigureTeamControl(CharacterTeam.Player, controllable: true);
+                npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
+                npc.Tags.AddTag("ScenarioOverride:FiendishTemplateAlly");
+                Debug.Log($"[FiendishTemplateTest] Ally override applied to {enemyId}: Team=Player, IsControllable=true, Alignment=NeutralEvil.");
+            }
+            else
+            {
+                npc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
+                npc.Stats.CharacterAlignment = spawnIndex == 2 ? Alignment.LawfulGood : Alignment.NeutralGood;
+                npc.Tags.AddTag("ScenarioOverride:FiendishTemplateGoodEnemy");
+                Debug.Log($"[FiendishTemplateTest] Enemy override applied to {enemyId}: Team=Enemy, Alignment={npc.Stats.CharacterAlignment}.");
             }
         }
     }
