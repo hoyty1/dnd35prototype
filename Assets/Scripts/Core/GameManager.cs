@@ -2279,6 +2279,14 @@ public partial class GameManager : MonoBehaviour
                 Debug.Log($"[ArmorTargetingTest] Overriding {npc.Stats.CharacterName} to Ranged profile for armor-priority targeting validation.");
             }
 
+            if (_isShieldBashTestEncounter)
+            {
+                // Keep shield bash validation deterministic: basic melee pressure only, no trip/disarm/grapple maneuver selection.
+                npc.aiProfile = ScriptableObject.CreateInstance<UndeadMindlessAIProfile>();
+                npc.Tags.AddTag("ShieldBashTestSimpleMeleeAI");
+                Debug.Log($"[ShieldBashTest] Overriding {npc.Stats.CharacterName} to simple melee-only AI profile.");
+            }
+
             // Only apply color tint if using the generic fallback sprite
             SpriteRenderer sr = npc.GetComponent<SpriteRenderer>();
             if (sr != null && npcAlive == npcAliveFallback) sr.color = def.SpriteColor;
