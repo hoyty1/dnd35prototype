@@ -28,6 +28,8 @@ public static class ImprovedShieldBashTests
 
         TestShieldBashWithoutFeatLosesShieldAcUntilNextTurn();
         TestShieldBashWithFeatKeepsShieldAc();
+        TestOffHandShieldBashSingleAttackWithoutFeatLosesShieldAc();
+        TestOffHandShieldBashSingleAttackWithFeatKeepsShieldAc();
 
         Debug.Log($"====== Improved Shield Bash Results: {_passed} passed, {_failed} failed ======");
     }
@@ -173,6 +175,92 @@ public static class ImprovedShieldBashTests
 
             Assert(!attacker.HasCondition(CombatConditionType.LostShieldAC),
                 "With feat: Lost Shield AC condition is not applied");
+        }
+        finally
+        {
+            Cleanup(attacker, target);
+        }
+    }
+
+    private static void TestOffHandShieldBashSingleAttackWithoutFeatLosesShieldAc()
+    {
+        CharacterController attacker = null;
+        CharacterController target = null;
+
+        try
+        {
+            attacker = CreateShieldBashFighter("SingleOffHand_NoFeat", hasImprovedShieldBash: false);
+            target = CreateDurableTarget("SingleOffHandTarget_NoFeat");
+
+            var inventory = attacker.GetComponent<InventoryComponent>()?.CharacterInventory;
+            ItemData offHandShield = inventory?.LeftHandSlot;
+
+            Assert(offHandShield != null && offHandShield.IsShield,
+                "Single off-hand without feat: off-hand shield is equipped");
+
+            CombatResult result = attacker.Attack(
+                target,
+                isFlanking: false,
+                flankingBonus: 0,
+                flankingPartnerName: null,
+                rangeInfo: null,
+                baseAttackBonusOverride: null,
+                attackWeaponOverride: offHandShield,
+                additionalAttackModifier: 0,
+                isOffHandAttack: true);
+
+            Assert(result != null,
+                "Single off-hand without feat: shield bash attack resolves");
+
+            Assert(attacker.Stats.ShieldBonus == 0,
+                "Single off-hand without feat: shield bonus suppressed to 0",
+                $"expected 0, got {attacker.Stats.ShieldBonus}");
+
+            Assert(attacker.HasCondition(CombatConditionType.LostShieldAC),
+                "Single off-hand without feat: Lost Shield AC condition applied");
+        }
+        finally
+        {
+            Cleanup(attacker, target);
+        }
+    }
+
+    private static void TestOffHandShieldBashSingleAttackWithFeatKeepsShieldAc()
+    {
+        CharacterController attacker = null;
+        CharacterController target = null;
+
+        try
+        {
+            attacker = CreateShieldBashFighter("SingleOffHand_WithFeat", hasImprovedShieldBash: true);
+            target = CreateDurableTarget("SingleOffHandTarget_WithFeat");
+
+            var inventory = attacker.GetComponent<InventoryComponent>()?.CharacterInventory;
+            ItemData offHandShield = inventory?.LeftHandSlot;
+
+            Assert(offHandShield != null && offHandShield.IsShield,
+                "Single off-hand with feat: off-hand shield is equipped");
+
+            CombatResult result = attacker.Attack(
+                target,
+                isFlanking: false,
+                flankingBonus: 0,
+                flankingPartnerName: null,
+                rangeInfo: null,
+                baseAttackBonusOverride: null,
+                attackWeaponOverride: offHandShield,
+                additionalAttackModifier: 0,
+                isOffHandAttack: true);
+
+            Assert(result != null,
+                "Single off-hand with feat: shield bash attack resolves");
+
+            Assert(attacker.Stats.ShieldBonus == 2,
+                "Single off-hand with feat: shield bonus remains +2",
+                $"expected 2, got {attacker.Stats.ShieldBonus}");
+
+            Assert(!attacker.HasCondition(CombatConditionType.LostShieldAC),
+                "Single off-hand with feat: Lost Shield AC condition not applied");
         }
         finally
         {

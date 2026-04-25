@@ -2125,6 +2125,11 @@ public class CharacterController : MonoBehaviour
         result.DefenderHPBefore = hpBefore;
         result.DefenderHPAfter = target.Stats.CurrentHP;
 
+        // Off-hand shield bash in single-attack/off-hand flow must suppress shield AC
+        // when Improved Shield Bash is not present.
+        if (isOffHandAttack && IsShieldBashWeapon(equippedWeapon))
+            SuppressShieldBonusForShieldBash(equippedWeapon);
+
         if (equippedWeapon != null && equippedWeapon.RequiresReload)
         {
             string reloadStateMessage = OnWeaponFired(equippedWeapon);
