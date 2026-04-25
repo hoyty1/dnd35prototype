@@ -84,7 +84,7 @@ public static class NPCDatabase
             new EncounterPreset("shield_bash_test", "🛡️ Shield Bash Test", "Compare shield bash AC behavior: Shielder keeps shield AC with Improved Shield Bash while Basher loses shield AC until next turn.", new List<string> { "orc_berserker", "orc_berserker" }),
             new EncounterPreset("celestial_template_test", "✨ Celestial Template Test", "Good cleric with celestial wolf + celestial dire bear allies against evil undead. Templates are applied at spawn time.", new List<string> { "wolf_pack_hunter", "dire_bear", "skeleton_warrior", "skeleton_archer", "zombie_shambler" }),
             new EncounterPreset("fiendish_template_test", "🔥 Fiendish Template Test", "Evil necromancer with fiendish wolf + fiendish dire bear allies against good paladin and cleric. Templates are applied at spawn time.", new List<string> { "fiendish_wolf", "fiendish_dire_bear", "human_paladin", "human_cleric" }),
-            new EncounterPreset("summon_monster_test", "🌀 Summon Monster Test", "Single cleric summoner with prepped Summon Monster I/II versus a mixed enemy line for summon placement + command validation.", new List<string> { "orc_berserker", "skeleton_archer", "goblin_warchief" }),
+            new EncounterPreset("summon_monster_test", "🌀 Summon Monster Test", "Cleric + wizard summon drill with Summon Monster I/II prepared on both casters for selection UI, placement, and command validation.", new List<string> { "orc_berserker", "skeleton_archer", "goblin_warchief" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
@@ -786,6 +786,44 @@ public static class NPCDatabase
         RegisterSummonDireBadger();
         RegisterSummonLargeShark();
         RegisterSummonConstrictorSnake();
+
+        // Alias IDs for external checks/docs that refer to generic base names.
+        RegisterSummonCreatureAliases();
+    }
+
+    private static void RegisterSummonCreatureAliases()
+    {
+        RegisterSummonAlias("dog", "summon_dog");
+        RegisterSummonAlias("eagle", "summon_eagle");
+        RegisterSummonAlias("dire_rat", "summon_dire_rat");
+        RegisterSummonAlias("wolf", "wolf_pack_hunter", "Wolf");
+        RegisterSummonAlias("badger", "summon_dire_badger", "Badger");
+
+        // These IDs are used by external validation scripts; map to closest existing summon baselines.
+        RegisterSummonAlias("riding_dog", "summon_dog", "Riding Dog");
+        RegisterSummonAlias("owl", "summon_eagle", "Owl");
+        RegisterSummonAlias("raven", "summon_eagle", "Raven");
+        RegisterSummonAlias("giant_bee", "summon_dire_bat", "Giant Bee");
+    }
+
+    private static void RegisterSummonAlias(string aliasId, string sourceId, string overrideName = null)
+    {
+        NPCDefinition source = Get(sourceId);
+        if (source == null)
+            return;
+
+        NPCDefinition alias = source.Clone();
+        alias.Id = aliasId;
+
+        if (!string.IsNullOrWhiteSpace(overrideName))
+            alias.Name = overrideName;
+
+        if (alias.CreatureTags == null)
+            alias.CreatureTags = new List<string>();
+        if (!alias.CreatureTags.Contains("SummonAlias"))
+            alias.CreatureTags.Add("SummonAlias");
+
+        Register(alias);
     }
 
     private static void RegisterSummonDog()

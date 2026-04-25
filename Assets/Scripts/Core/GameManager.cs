@@ -1781,12 +1781,12 @@ public partial class GameManager : MonoBehaviour
         Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
         Sprite pcDead = LoadSprite("Sprites/pc_dead");
 
-        CharacterStats summonerStats = new CharacterStats(
+        CharacterStats clericStats = new CharacterStats(
             name: "Ilyra",
-            level: 6,
+            level: 5,
             characterClass: "Cleric",
             str: 10, dex: 12, con: 14, wis: 18, intelligence: 10, cha: 14,
-            bab: 4,
+            bab: 3,
             armorBonus: 4,
             shieldBonus: 2,
             damageDice: 8,
@@ -1794,51 +1794,106 @@ public partial class GameManager : MonoBehaviour
             bonusDamage: 0,
             baseSpeed: 6,
             atkRange: 1,
-            baseHitDieHP: 40,
+            baseHitDieHP: 34,
             raceName: "Human"
         );
+        clericStats.CharacterAlignment = Alignment.NeutralGood;
 
-        summonerStats.CharacterAlignment = Alignment.NeutralGood;
+        CharacterStats wizardStats = new CharacterStats(
+            name: "Theron",
+            level: 5,
+            characterClass: "Wizard",
+            str: 8, dex: 14, con: 12, wis: 12, intelligence: 18, cha: 10,
+            bab: 2,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 24,
+            raceName: "Human"
+        );
+        wizardStats.CharacterAlignment = Alignment.TrueNeutral;
 
-        Vector2Int summonerStart = new Vector2Int(4, 9);
-        Sprite summonerAlive = IconLoader.GetToken("Cleric") ?? pcAliveFallback;
-        PC1.Init(summonerStats, summonerStart, summonerAlive, pcDead);
+        Vector2Int clericStart = new Vector2Int(4, 9);
+        Vector2Int wizardStart = new Vector2Int(3, 10);
 
-        InventoryComponent inventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
-        inventory.Init(summonerStats);
-        inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
-        inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
-        inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
-        inventory.CharacterInventory.RecalculateStats();
+        Sprite clericAlive = IconLoader.GetToken("Cleric") ?? pcAliveFallback;
+        Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
 
-        SpellcastingComponent spellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
-        spellComp.KnownSpells.Clear();
-        spellComp.SelectedSpellIds = new List<string> { "detect_magic", "guidance", "light", "resistance" };
-        spellComp.PreparedSpellSlotIds = null;
-        spellComp.Init(summonerStats);
-        PrepareSummonMonsterTestSpellSlots(spellComp);
+        PC1.Init(clericStats, clericStart, clericAlive, pcDead);
+        PC2.Init(wizardStats, wizardStart, wizardAlive, pcDead);
+
+        InventoryComponent clericInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        clericInventory.Init(clericStats);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        clericInventory.CharacterInventory.RecalculateStats();
+
+        InventoryComponent wizardInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
+        wizardInventory.Init(wizardStats);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.RecalculateStats();
+
+        SpellcastingComponent clericSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
+        clericSpellComp.KnownSpells.Clear();
+        clericSpellComp.SelectedSpellIds = new List<string> { "detect_magic", "guidance", "light", "resistance" };
+        clericSpellComp.PreparedSpellSlotIds = null;
+        clericSpellComp.Init(clericStats);
+        PrepareSummonMonsterTestSpellSlots(
+            clericSpellComp,
+            summonOneSpellId: "summon_monster_1_clr",
+            summonTwoSpellId: "summon_monster_2_clr",
+            levelOneFallbackAId: "bless",
+            levelOneFallbackBId: "shield_of_faith",
+            levelTwoFallbackAId: "hold_person",
+            levelTwoFallbackBId: "cure_moderate_wounds");
+
+        SpellcastingComponent wizardSpellComp = PC2.gameObject.GetComponent<SpellcastingComponent>() ?? PC2.gameObject.AddComponent<SpellcastingComponent>();
+        wizardSpellComp.KnownSpells.Clear();
+        wizardSpellComp.SelectedSpellIds = new List<string> { "detect_magic", "ray_of_frost", "acid_splash", "read_magic" };
+        wizardSpellComp.PreparedSpellSlotIds = null;
+        wizardSpellComp.Init(wizardStats);
+        PrepareSummonMonsterTestSpellSlots(
+            wizardSpellComp,
+            summonOneSpellId: "summon_monster_1",
+            summonTwoSpellId: "summon_monster_2",
+            levelOneFallbackAId: "magic_missile",
+            levelOneFallbackBId: "mage_armor",
+            levelTwoFallbackAId: "mirror_image",
+            levelTwoFallbackBId: "invisibility");
 
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
-        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC2, true, CombatUI != null ? CombatUI.PC2Panel : null);
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🌀 Summon Monster Test: Ilyra (Cleric 6) has Summon Monster I/II prepared in multiple slots.");
+        CombatUI?.ShowCombatLog("🌀 Summon Monster Test: Ilyra (Cleric 5) and Theron (Wizard 5) both have Summon Monster I/II prepared.");
         CombatUI?.ShowCombatLog("   Flow validation: choose creature first, then pick a legal placement tile.");
-        CombatUI?.ShowCombatLog("   Alignment validation: good cleric should see celestial-only cleric options where applicable.");
+        CombatUI?.ShowCombatLog("   Alignment validation: cleric sees celestial/fiendish cleric-locked options based on alignment; wizard sees class-agnostic options.");
     }
 
-    private void PrepareSummonMonsterTestSpellSlots(SpellcastingComponent spellComp)
+    private void PrepareSummonMonsterTestSpellSlots(
+        SpellcastingComponent spellComp,
+        string summonOneSpellId,
+        string summonTwoSpellId,
+        string levelOneFallbackAId,
+        string levelOneFallbackBId,
+        string levelTwoFallbackAId,
+        string levelTwoFallbackBId)
     {
         if (spellComp == null || spellComp.SpellSlots == null || spellComp.SpellSlots.Count == 0)
             return;
 
-        SpellData summonOne = SpellDatabase.GetSpell("summon_monster_1_clr");
-        SpellData summonTwo = SpellDatabase.GetSpell("summon_monster_2_clr");
-        SpellData bless = SpellDatabase.GetSpell("bless");
-        SpellData shieldOfFaith = SpellDatabase.GetSpell("shield_of_faith");
-        SpellData holdPerson = SpellDatabase.GetSpell("hold_person");
-        SpellData cureModerate = SpellDatabase.GetSpell("cure_moderate_wounds");
+        SpellData summonOne = SpellDatabase.GetSpell(summonOneSpellId);
+        SpellData summonTwo = SpellDatabase.GetSpell(summonTwoSpellId);
+        SpellData levelOneFallbackA = SpellDatabase.GetSpell(levelOneFallbackAId);
+        SpellData levelOneFallbackB = SpellDatabase.GetSpell(levelOneFallbackBId);
+        SpellData levelTwoFallbackA = SpellDatabase.GetSpell(levelTwoFallbackAId);
+        SpellData levelTwoFallbackB = SpellDatabase.GetSpell(levelTwoFallbackBId);
 
         int levelOneSummonCount = 0;
         int levelTwoSummonCount = 0;
@@ -1860,7 +1915,7 @@ public partial class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    toPrepare = bless ?? shieldOfFaith;
+                    toPrepare = levelOneFallbackA ?? levelOneFallbackB;
                 }
             }
             else if (slot.Level == 2)
@@ -1872,7 +1927,7 @@ public partial class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    toPrepare = holdPerson ?? cureModerate;
+                    toPrepare = levelTwoFallbackA ?? levelTwoFallbackB;
                 }
             }
 
@@ -7379,8 +7434,6 @@ public partial class GameManager : MonoBehaviour
         }
 
         NPCDefinition summonDef = baseDef.Clone();
-        summonDef.Id = $"summon_runtime_{option.NpcDefinitionId}";
-        summonDef.Name = option.BuildUiLabel();
 
         if (summonDef.AppliedTemplateIds == null)
             summonDef.AppliedTemplateIds = new List<string>();
@@ -7388,14 +7441,15 @@ public partial class GameManager : MonoBehaviour
             summonDef.AppliedTemplateIds.Clear();
 
         if (!string.IsNullOrWhiteSpace(option.TemplateId))
-        {
             summonDef.AppliedTemplateIds.Add(option.TemplateId);
-        }
+
+        // Apply template mutations (DR/resistances/special abilities/etc.) through the centralized registry.
+        summonDef = CreatureTemplateRegistry.ApplyTemplatesClone(summonDef) ?? summonDef;
+        summonDef.Id = $"summon_runtime_{option.NpcDefinitionId}";
+        summonDef.Name = option.BuildUiLabel();
 
         bool isCelestial = string.Equals(option.TemplateId, "celestial", StringComparison.OrdinalIgnoreCase);
         bool isFiendish = string.Equals(option.TemplateId, "fiendish", StringComparison.OrdinalIgnoreCase);
-        summonDef.GainsSmiteEvil = isCelestial;
-        summonDef.GainsSmiteGood = isFiendish;
 
         if (summonDef.CreatureTags == null)
             summonDef.CreatureTags = new List<string>();
