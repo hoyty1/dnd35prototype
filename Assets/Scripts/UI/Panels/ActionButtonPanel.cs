@@ -261,14 +261,12 @@ public class ActionButtonPanel : MonoBehaviour
             return options;
 
         GameManager gm = GameManager.Instance;
-        var seenNames = new HashSet<string>();
         int sequenceIndex = 0;
         for (int i = 0; i < validAttacks.Count; i++)
         {
             NaturalAttackDefinition attack = validAttacks[i];
             int count = Mathf.Max(1, attack.Count);
             string attackName = string.IsNullOrWhiteSpace(attack.Name) ? "Natural attack" : attack.Name.Trim();
-            string normalizedName = attackName.ToLowerInvariant();
 
             for (int repeat = 0; repeat < count; repeat++)
             {
@@ -277,16 +275,14 @@ public class ActionButtonPanel : MonoBehaviour
                 if (isUsed)
                     continue;
 
-                if (seenNames.Contains(normalizedName))
-                    continue;
-
+                // Keep one option per remaining sequence entry so multi-count natural attacks
+                // (e.g., 2 Claws) expose all remaining attacks in the current turn.
                 options.Add(new NaturalAttackButtonOption
                 {
                     SequenceIndex = currentSequenceIndex,
                     AttackName = attackName,
                     IsPrimary = attack.IsPrimary
                 });
-                seenNames.Add(normalizedName);
             }
         }
 
