@@ -517,6 +517,17 @@ public static class ConditionRules
             MovementMultiplier = 1f
         });
 
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.LostShieldAC,
+            DisplayName = "Lost Shield AC",
+            ShortLabel = "LS",
+            Description = "Shield bash used without Improved Shield Bash; shield bonus to AC is lost until your next turn.",
+            StackingRule = ConditionStackingRule.Refresh,
+            ArmorClassModifier = 0,
+            MovementMultiplier = 1f
+        });
+
         // Compatibility alias (normalized to Prone)
         map[CombatConditionType.KnockedDown] = map[CombatConditionType.Prone].CloneFor(CombatConditionType.KnockedDown);
 
@@ -623,6 +634,7 @@ public enum CombatConditionType
     Feinted,
     ChargePenalty,
     Flanked,
+    LostShieldAC,
 
     // Normalized alias
     KnockedDown

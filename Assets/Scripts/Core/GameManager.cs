@@ -75,6 +75,7 @@ public partial class GameManager : MonoBehaviour
     private const string ArmorTargetingTestPresetId = "armor_targeting_test";
     private const string TigerHuntTestPresetId = "tiger_hunt_test";
     private const string OgreBattleTestPresetId = "ogre_battle_test";
+    private const string ShieldBashTestPresetId = "shield_bash_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
     private bool _isFeintSneakTestEncounter;
@@ -82,6 +83,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isArmorTargetingTestEncounter;
     private bool _isTigerHuntTestEncounter;
     private bool _isOgreBattleTestEncounter;
+    private bool _isShieldBashTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
 
     // Game state
@@ -771,6 +773,7 @@ public partial class GameManager : MonoBehaviour
         _isArmorTargetingTestEncounter = string.Equals(presetId, ArmorTargetingTestPresetId, StringComparison.Ordinal);
         _isTigerHuntTestEncounter = string.Equals(presetId, TigerHuntTestPresetId, StringComparison.Ordinal);
         _isOgreBattleTestEncounter = string.Equals(presetId, OgreBattleTestPresetId, StringComparison.Ordinal);
+        _isShieldBashTestEncounter = string.Equals(presetId, ShieldBashTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.NPCIds != null && preset.NPCIds.Count > 0)
         {
@@ -797,6 +800,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureTigerHuntTestParty();
         else if (_isOgreBattleTestEncounter)
             ConfigureOgreBattleTestParty();
+        else if (_isShieldBashTestEncounter)
+            ConfigureShieldBashTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -1774,6 +1779,84 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   Validate: multi-character player turns, ally tiger control, and berserk ogre pressure.");
     }
 
+    private void ConfigureShieldBashTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats shielderStats = new CharacterStats(
+            name: "Shielder",
+            level: 5,
+            characterClass: "Fighter",
+            str: 16, dex: 14, con: 14, wis: 10, intelligence: 10, cha: 10,
+            bab: 5,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 3,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 44,
+            raceName: "Human"
+        );
+
+        shielderStats.InitFeats();
+        shielderStats.AddFeats(new List<string> { "Improved Shield Bash" });
+
+        CharacterStats basherStats = new CharacterStats(
+            name: "Basher",
+            level: 5,
+            characterClass: "Fighter",
+            str: 16, dex: 14, con: 14, wis: 10, intelligence: 10, cha: 10,
+            bab: 5,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 3,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 44,
+            raceName: "Human"
+        );
+
+        basherStats.InitFeats();
+
+        Vector2Int shielderStart = new Vector2Int(6, 9);
+        Vector2Int basherStart = new Vector2Int(12, 9);
+
+        PC1.Init(shielderStats, shielderStart, IconLoader.GetToken("Fighter") ?? pcAliveFallback, pcDead);
+        PC2.Init(basherStats, basherStart, IconLoader.GetToken("Fighter") ?? pcAliveFallback, pcDead);
+
+        InventoryComponent shielderInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        shielderInventory.Init(shielderStats);
+        shielderInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
+        shielderInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        shielderInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
+        shielderInventory.CharacterInventory.RecalculateStats();
+
+        InventoryComponent basherInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
+        basherInventory.Init(basherStats);
+        basherInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
+        basherInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        basherInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
+        basherInventory.CharacterInventory.RecalculateStats();
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, true, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("🛡️ Shield Bash Test: Shielder (Improved Shield Bash) vs Basher (no feat).");
+        CombatUI?.ShowCombatLog("   Both use longsword + heavy shield + chain shirt. Expected base AC: 18 each.");
+        CombatUI?.ShowCombatLog("   After shield bash: Shielder keeps AC 18; Basher drops to AC 16 until next turn.");
+    }
+
     private void RestoreStandardPartyLayout()
     {
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2094,6 +2177,11 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(14, 12), // Ogre #2
     };
 
+    private static readonly Vector2Int[] ShieldBashTestSpawnPositions = {
+        new Vector2Int(7, 9),   // Orc adjacent to Shielder
+        new Vector2Int(11, 9),  // Orc adjacent to Basher
+    };
+
     private void SetupEnemyEncounter(List<string> enemyIds)
     {
         NPCDatabase.Init();
@@ -2158,6 +2246,11 @@ public partial class GameManager : MonoBehaviour
             {
                 // Spawn controllable dire tiger near the wizard with both ogres advancing from the far side.
                 pos = OgreBattleTestSpawnPositions[i];
+            }
+            else if (_isShieldBashTestEncounter && i < ShieldBashTestSpawnPositions.Length)
+            {
+                // Keep one melee enemy adjacent to each test fighter so shield-bash AC differences are obvious.
+                pos = ShieldBashTestSpawnPositions[i];
             }
             else
             {
