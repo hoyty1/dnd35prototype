@@ -1918,43 +1918,16 @@ public partial class GameManager : MonoBehaviour
             raceName: "Human"
         );
 
-        CharacterStats fighterStats = new CharacterStats(
-            name: "Aldric",
-            level: 5,
-            characterClass: "Fighter",
-            str: 18, dex: 12, con: 16, wis: 10, intelligence: 10, cha: 10,
-            bab: 5,
-            armorBonus: 6,
-            shieldBonus: 2,
-            damageDice: 8,
-            damageCount: 1,
-            bonusDamage: 4,
-            baseSpeed: 4,
-            atkRange: 1,
-            baseHitDieHP: 52,
-            raceName: "Human"
-        );
-
         Vector2Int wizardStart = new Vector2Int(3, 9);
-        Vector2Int fighterStart = new Vector2Int(4, 10);
 
         Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
-        Sprite fighterAlive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
 
         PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
-        PC2.Init(fighterStats, fighterStart, fighterAlive, pcDead);
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
         wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
-
-        InventoryComponent fighterInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
-        fighterInventory.Init(fighterStats);
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
-        fighterInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
         wizardSpellComp.KnownSpells.Clear();
@@ -1971,14 +1944,20 @@ public partial class GameManager : MonoBehaviour
         };
         wizardSpellComp.Init(wizardStats);
 
+        StatusEffectManager wizardStatusMgr = PC1.gameObject.GetComponent<StatusEffectManager>() ?? PC1.gameObject.AddComponent<StatusEffectManager>();
+        wizardStatusMgr.Init(wizardStats);
+
+        ConcentrationManager wizardConcentrationMgr = PC1.gameObject.GetComponent<ConcentrationManager>() ?? PC1.gameObject.AddComponent<ConcentrationManager>();
+        wizardConcentrationMgr.Init(wizardStats, PC1);
+
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
-        SetPCActiveState(PC2, true, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
         CombatUI?.ShowCombatLog("🧪 NPC Magic Missile Test: Theron (Wizard 5) has Shield prepared for direct counter-testing.");
         CombatUI?.ShowCombatLog("   Cast Shield on Theron, then end turn to verify Arcane Missile Adept cannot damage him with Magic Missile.");
-        CombatUI?.ShowCombatLog("   Aldric is provided as an alternate target so AI target-selection can skip Shield-protected allies.");
+        CombatUI?.ShowCombatLog("   Scenario is now focused to two combatants only: player wizard vs enemy Arcane Missile Adept.");
     }
 
     private void PrepareSummonMonsterTestSpellSlots(
@@ -9657,6 +9636,10 @@ public partial class GameManager : MonoBehaviour
         var statusMgr = target.GetComponent<StatusEffectManager>();
         if (statusMgr != null)
         {
+            // Defensive rebind: some encounter presets reinitialize CharacterStats objects on existing
+            // character GameObjects, so the manager must always point at the current stats instance.
+            statusMgr.Init(target.Stats);
+
             int casterLevel = caster.Stats != null ? caster.Stats.Level : 1;
             var effect = statusMgr.AddEffect(spell, caster.Stats.CharacterName, casterLevel);
 
