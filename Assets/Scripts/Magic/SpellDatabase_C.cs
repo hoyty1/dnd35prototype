@@ -100,6 +100,7 @@ public static partial class SpellDatabase
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeSquares = 5,
                     EffectType = SpellEffectType.Debuff,
+                    IsMindAffecting = true,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
                     BuffDurationRounds = -1,
