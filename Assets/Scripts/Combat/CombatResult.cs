@@ -90,6 +90,11 @@ public class CombatResult
     public int FeintDexDeniedToAc;
     public string FeintWindowNote = "";
 
+    public int ProtectionDeflectionBonusToAc;
+    public string ProtectionSourceName = "";
+    public bool ProtectionSummonedBarrierBlocked;
+    public string ProtectionBarrierNote = "";
+
     public int BreakdownBAB;
     public int BreakdownAbilityMod;
     public string BreakdownAbilityName;
@@ -189,6 +194,13 @@ public class CombatResult
             sb.AppendLine($"  Feint: defender loses +{FeintDexDeniedToAc} DEX bonus to AC");
         else if (!string.IsNullOrEmpty(FeintWindowNote))
             sb.AppendLine($"  Feint: {FeintWindowNote}");
+        if (ProtectionDeflectionBonusToAc > 0)
+        {
+            string sourceName = string.IsNullOrEmpty(ProtectionSourceName) ? "Protection from Alignment" : ProtectionSourceName;
+            sb.AppendLine($"  {sourceName}: +{ProtectionDeflectionBonusToAc} deflection AC vs this attacker");
+        }
+        if (ProtectionSummonedBarrierBlocked && !string.IsNullOrEmpty(ProtectionBarrierNote))
+            sb.AppendLine($"  Barrier: {ProtectionBarrierNote}");
 
         sb.AppendLine();
         sb.AppendLine("  Attack Roll:");
@@ -294,6 +306,13 @@ public class CombatResult
             sb.AppendLine($"      Defender grappled: -{GrappleDexDeniedToAc} DEX to AC vs this attacker");
         else if (!string.IsNullOrEmpty(GrappleDexRuleNote))
             sb.AppendLine($"      {GrappleDexRuleNote}");
+        if (ProtectionDeflectionBonusToAc > 0)
+        {
+            string sourceName = string.IsNullOrEmpty(ProtectionSourceName) ? "Protection from Alignment" : ProtectionSourceName;
+            sb.AppendLine($"      {sourceName}: +{ProtectionDeflectionBonusToAc} deflection AC");
+        }
+        if (ProtectionSummonedBarrierBlocked && !string.IsNullOrEmpty(ProtectionBarrierNote))
+            sb.AppendLine($"      Barrier: {ProtectionBarrierNote}");
 
         if (BreakdownBAB != 0) sb.AppendLine($"      {FormatModLine(BreakdownBAB, "BAB")}");
         if (BreakdownAbilityMod != 0) sb.AppendLine($"      {FormatModLine(BreakdownAbilityMod, string.IsNullOrEmpty(BreakdownAbilityName) ? "STR" : BreakdownAbilityName)}");

@@ -69,80 +69,90 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "domain_protection_from_chaos",
+                    SpellId = "protection_from_chaos",
                     Name = "Protection from Chaos",
-                    Description = "+2 deflection AC and +2 resistance on saves against chaotic creatures.",
+                    Description = "Wards against chaotic creatures: +2 deflection AC and +2 resistance on saves vs chaotic creatures; blocks mental control and bodily contact by summoned chaotic creatures.",
                     SpellLevel = 1,
                     School = "Abjuration",
-                    ClassList = new string[] { "Cleric" },
-                    TargetType = SpellTargetType.SingleAlly,
-                    RangeCategory = SpellRangeCategory.Touch,
-                    EffectType = SpellEffectType.Buff,
-                    BuffACBonus = 2,
-                    BuffDurationRounds = 30, // 1 min/level
-                    BuffType = "protection_alignment",
-                    ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Alignment protection not fully implemented]"
-                });
-
-        Register(new SpellData
-                {
-                    SpellId = "protection_from_evil",
-                    Name = "Protection from Evil",
-                    Description = "+2 deflection bonus to AC and +2 resistance bonus on saves vs evil creatures. 1 min/level. PHB p.266",
-                    SpellLevel = 1, School = "Abjuration",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Cleric", "Paladin", "Sorcerer", "Wizard" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDeflectionBonus = 2,
                     BuffSaveBonus = 2,
-                    BuffDurationRounds = 30,
                     BuffType = "protection",
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 10,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
 
         Register(new SpellData
                 {
-                    SpellId = "domain_protection_from_good",
-                    Name = "Protection from Good",
-                    Description = "+2 deflection AC and +2 resistance on saves against good creatures.",
+                    SpellId = "protection_from_evil",
+                    Name = "Protection from Evil",
+                    Description = "Wards against evil creatures: +2 deflection AC and +2 resistance on saves vs evil creatures; blocks mental control and bodily contact by summoned evil creatures. PHB p.266",
                     SpellLevel = 1,
                     School = "Abjuration",
-                    ClassList = new string[] { "Cleric" },
+                    ClassList = new[] { "Cleric", "Paladin", "Sorcerer", "Wizard" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
-                    BuffACBonus = 2,
-                    BuffDurationRounds = 30,
-                    BuffType = "protection_alignment",
+                    BuffDeflectionBonus = 2,
+                    BuffSaveBonus = 2,
+                    BuffType = "protection",
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 10,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Alignment protection not fully implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
                 {
-                    SpellId = "domain_protection_from_law",
-                    Name = "Protection from Law",
-                    Description = "+2 deflection AC and +2 resistance on saves against lawful creatures.",
+                    SpellId = "protection_from_good",
+                    Name = "Protection from Good",
+                    Description = "Wards against good creatures: +2 deflection AC and +2 resistance on saves vs good creatures; blocks mental control and bodily contact by summoned good creatures.",
                     SpellLevel = 1,
                     School = "Abjuration",
-                    ClassList = new string[] { "Cleric" },
+                    ClassList = new[] { "Cleric", "Sorcerer", "Wizard" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
-                    BuffACBonus = 2,
-                    BuffDurationRounds = 30,
-                    BuffType = "protection_alignment",
+                    BuffDeflectionBonus = 2,
+                    BuffSaveBonus = 2,
+                    BuffType = "protection",
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 10,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Alignment protection not fully implemented]"
+                    ProvokesAoO = true
+                });
+
+        Register(new SpellData
+                {
+                    SpellId = "protection_from_law",
+                    Name = "Protection from Law",
+                    Description = "Wards against lawful creatures: +2 deflection AC and +2 resistance on saves vs lawful creatures; blocks mental control and bodily contact by summoned lawful creatures.",
+                    SpellLevel = 1,
+                    School = "Abjuration",
+                    ClassList = new[] { "Cleric", "Sorcerer", "Wizard" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Buff,
+                    BuffDeflectionBonus = 2,
+                    BuffSaveBonus = 2,
+                    BuffType = "protection",
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 10,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
@@ -180,8 +190,12 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Fire interaction not implemented]"
                 });
 
-        // Aliases
-        RegisterClassSpellAlias("protection_from_evil_clr", "protection_from_evil", "Cleric", 1);
+        // Backward-compat aliases for older domain IDs.
+        RegisterAlias("domain_protection_from_chaos", "protection_from_chaos");
+        RegisterAlias("domain_protection_from_good", "protection_from_good");
+        RegisterAlias("domain_protection_from_law", "protection_from_law");
 
+        // Legacy alias retained for existing prepared spell references.
+        RegisterClassSpellAlias("protection_from_evil_clr", "protection_from_evil", "Cleric", 1);
     }
 }

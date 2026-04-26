@@ -56,6 +56,14 @@ public class ActiveSpellEffect
     public int AppliedDamageReductionAmount;
     public DamageBypassTag AppliedDamageReductionBypass = DamageBypassTag.None;
     public bool AppliedDamageReductionRangedOnly;
+
+    // Protection from alignment conditional metadata (not applied as unconditional stat modifiers).
+    public AlignmentProtectionType ProtectionAgainstAlignment = AlignmentProtectionType.None;
+    public int ProtectionDeflectionBonus;
+    public int ProtectionResistanceBonus;
+    public bool ProtectionBlocksMentalControl;
+    public bool ProtectionBlocksSummonedContact;
+
     /// <summary>LEGACY: The bonus type string for backward compatibility.</summary>
     public string BonusTypeLegacy;
 
@@ -210,6 +218,20 @@ public class ActiveSpellEffect
         if (AppliedDamageReductionAmount > 0)
             mods += $" DR:{AppliedDamageReductionAmount}/{DamageTextUtils.FormatBypassTags(AppliedDamageReductionBypass)}";
 
+        if (ProtectionAgainstAlignment != AlignmentProtectionType.None)
+        {
+            string align = AlignmentProtectionRules.GetDisplayName(ProtectionAgainstAlignment);
+            mods += $" Protect:{align}";
+            if (ProtectionDeflectionBonus > 0)
+                mods += $" ACvs{align}:{ProtectionDeflectionBonus:+#;-#}";
+            if (ProtectionResistanceBonus > 0)
+                mods += $" SavesVs{align}:{ProtectionResistanceBonus:+#;-#}";
+            if (ProtectionBlocksMentalControl)
+                mods += " MindShield";
+            if (ProtectionBlocksSummonedContact)
+                mods += " SummonBarrier";
+        }
+
         string typeStr = BonusTypeEnum != BonusType.Untyped ? $" ({BonusTypeHelper.GetDisplayName(BonusTypeEnum)})" : "";
         return $"{spellName}{typeStr} [{GetDurationDisplayString()}] from {CasterName}{mods}";
     }
@@ -237,4 +259,140 @@ public enum DurationType
 
     /// <summary>Effect lasts while the caster maintains concentration.</summary>
     Concentration
+}
+
+public enum AlignmentProtectionType
+{
+    None = 0,
+    Evil,
+    Good,
+    Law,
+    Chaos
+}
+
+public struct AlignmentProtectionBenefits
+{
+    public bool HasMatch;
+    public int DeflectionAcBonus;
+    public int ResistanceSaveBonus;
+    public bool BlocksMentalControl;
+    public bool BlocksSummonedContact;
+    public string SourceSpellName;
+}
+
+public static class AlignmentProtectionRules
+{
+    public static bool TryGetProtectionTypeForSpell(string spellId, out AlignmentProtectionType type)
+    {
+        type = AlignmentProtectionType.None;
+        if (string.IsNullOrWhiteSpace(spellId))
+            return false;
+
+        switch (spellId)
+        {
+            case "protection_from_evil":
+                type = AlignmentProtectionType.Evil;
+                return true;
+            case "protection_from_good":
+                type = AlignmentProtectionType.Good;
+                return true;
+            case "protection_from_law":
+                type = AlignmentProtectionType.Law;
+                return true;
+            case "protection_from_chaos":
+                type = AlignmentProtectionType.Chaos;
+                return true;
+            // Backward compatibility aliases.
+            case "domain_protection_from_good":
+                type = AlignmentProtectionType.Good;
+                return true;
+            case "domain_protection_from_law":
+                type = AlignmentProtectionType.Law;
+                return true;
+            case "domain_protection_from_chaos":
+                type = AlignmentProtectionType.Chaos;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public static bool Matches(AlignmentProtectionType type, Alignment alignment)
+    {
+        if (type == AlignmentProtectionType.None)
+            return false;
+
+        switch (type)
+        {
+            case AlignmentProtectionType.Evil:
+                return AlignmentHelper.IsEvil(alignment);
+            case AlignmentProtectionType.Good:
+                return AlignmentHelper.IsGood(alignment);
+            case AlignmentProtectionType.Law:
+                return AlignmentHelper.IsLawful(alignment);
+            case AlignmentProtectionType.Chaos:
+                return AlignmentHelper.IsChaotic(alignment);
+            default:
+                return false;
+        }
+    }
+
+    public static string GetDisplayName(AlignmentProtectionType type)
+    {
+        switch (type)
+        {
+            case AlignmentProtectionType.Evil: return "Evil";
+            case AlignmentProtectionType.Good: return "Good";
+            case AlignmentProtectionType.Law: return "Law";
+            case AlignmentProtectionType.Chaos: return "Chaos";
+            default: return "None";
+        }
+    }
+
+    public static AlignmentProtectionBenefits GetBenefitsAgainst(CharacterController protectedTarget, Alignment sourceAlignment)
+    {
+        var benefits = new AlignmentProtectionBenefits();
+        if (protectedTarget == null)
+            return benefits;
+
+        StatusEffectManager statusMgr = protectedTarget.GetComponent<StatusEffectManager>();
+        if (statusMgr == null || statusMgr.ActiveEffects == null || statusMgr.ActiveEffects.Count == 0)
+            return benefits;
+
+        for (int i = 0; i < statusMgr.ActiveEffects.Count; i++)
+        {
+            ActiveSpellEffect effect = statusMgr.ActiveEffects[i];
+            if (effect == null)
+                continue;
+
+            AlignmentProtectionType against = effect.ProtectionAgainstAlignment;
+            if (against == AlignmentProtectionType.None && effect.Spell != null)
+                TryGetProtectionTypeForSpell(effect.Spell.SpellId, out against);
+
+            if (!Matches(against, sourceAlignment))
+                continue;
+
+            int deflection = effect.ProtectionDeflectionBonus;
+            if (deflection <= 0 && effect.Spell != null)
+                deflection = Mathf.Max(effect.Spell.BuffDeflectionBonus, effect.Spell.BuffACBonus);
+
+            int resistance = effect.ProtectionResistanceBonus;
+            if (resistance <= 0 && effect.Spell != null)
+                resistance = effect.Spell.BuffSaveBonus;
+
+            benefits.HasMatch = true;
+            benefits.DeflectionAcBonus = Mathf.Max(benefits.DeflectionAcBonus, Mathf.Max(0, deflection));
+            benefits.ResistanceSaveBonus = Mathf.Max(benefits.ResistanceSaveBonus, Mathf.Max(0, resistance));
+            // Protection from alignment always grants these two ward effects.
+            bool blocksMental = true;
+            bool blocksSummoned = true;
+            benefits.BlocksMentalControl = benefits.BlocksMentalControl || blocksMental;
+            benefits.BlocksSummonedContact = benefits.BlocksSummonedContact || blocksSummoned;
+
+            if (string.IsNullOrEmpty(benefits.SourceSpellName) && effect.Spell != null)
+                benefits.SourceSpellName = effect.Spell.Name;
+        }
+
+        return benefits;
+    }
 }

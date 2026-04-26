@@ -3402,6 +3402,32 @@ public class CharacterController : MonoBehaviour
         bool isRangedAttack = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
         int targetAC = GetSituationalTargetArmorClass(target, this, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
 
+        AlignmentProtectionBenefits protection = AlignmentProtectionRules.GetBenefitsAgainst(
+            target,
+            Stats != null ? Stats.CharacterAlignment : Alignment.None);
+
+        if (protection.DeflectionAcBonus > 0)
+        {
+            targetAC += protection.DeflectionAcBonus;
+            result.ProtectionDeflectionBonusToAc = protection.DeflectionAcBonus;
+            result.ProtectionSourceName = protection.SourceSpellName;
+        }
+
+        bool attackerIsSummoned = GameManager.Instance != null && GameManager.Instance.IsSummonedCreature(this);
+        bool isMeleeContactAttack = !isRangedAttack;
+        if (isMeleeContactAttack && attackerIsSummoned && protection.HasMatch && protection.BlocksSummonedContact)
+        {
+            result.TargetAC = targetAC;
+            result.Hit = false;
+            result.DieRoll = 1;
+            result.TotalRoll = 1;
+            result.DefenderHPBefore = target != null && target.Stats != null ? target.Stats.CurrentHP : 0;
+            result.DefenderHPAfter = result.DefenderHPBefore;
+            result.ProtectionSummonedBarrierBlocked = true;
+            result.ProtectionBarrierNote = "Protection from alignment barrier blocks bodily contact from summoned creatures.";
+            return result;
+        }
+
         int grappleDexDenied = GetGrappleDexDeniedAgainstAttacker(target, this, out string grappleDexNote);
         int pinnedDexDenied = GetPinnedDexDeniedAgainstAttacker(target, this, out string pinnedDexNote);
         int totalDexDenied = Mathf.Max(grappleDexDenied, pinnedDexDenied);

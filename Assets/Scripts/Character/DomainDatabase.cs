@@ -27,7 +27,7 @@ public static class DomainDatabase
 
         Register(new DomainData("Law",
             "Cast law spells at +1 caster level.",
-            new Dictionary<int, string> { { 1, "domain_protection_from_chaos" }, { 2, "calm_emotions" } }));
+            new Dictionary<int, string> { { 1, "protection_from_chaos" }, { 2, "calm_emotions" } }));
 
         Register(new DomainData("War",
             "Free Martial Weapon Proficiency and Weapon Focus with deity's favored weapon.",
@@ -59,11 +59,11 @@ public static class DomainDatabase
 
         Register(new DomainData("Evil",
             "Cast evil spells at +1 caster level.",
-            new Dictionary<int, string> { { 1, "domain_protection_from_good" }, { 2, "domain_desecrate" } }));
+            new Dictionary<int, string> { { 1, "protection_from_good" }, { 2, "domain_desecrate" } }));
 
         Register(new DomainData("Chaos",
             "Cast chaos spells at +1 caster level.",
-            new Dictionary<int, string> { { 1, "domain_protection_from_law" }, { 2, "shatter" } }));
+            new Dictionary<int, string> { { 1, "protection_from_law" }, { 2, "shatter" } }));
 
         Register(new DomainData("Destruction",
             "You gain the smite power. Once per day, make a single melee attack with +4 on attack rolls and bonus damage equal to your cleric level.",

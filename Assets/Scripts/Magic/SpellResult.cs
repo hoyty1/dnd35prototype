@@ -44,6 +44,11 @@ public class SpellResult
     public int SpellResistanceTotal;
     public bool SpellResistancePassed = true;
     public bool MindAffectingImmunityBlocked;
+    public bool MindAffectingBlockedByProtection;
+    public bool SummonedContactBlockedByProtection;
+    public int ProtectionAcBonus;
+    public int ProtectionSaveBonus;
+    public string ProtectionSourceName;
     public string NoEffectReason;
 
     // ========== DAMAGE ==========
@@ -124,6 +129,10 @@ public class SpellResult
         if (!string.IsNullOrWhiteSpace(NoEffectReason))
         {
             sb.AppendLine($"  {NoEffectReason}");
+            if (MindAffectingBlockedByProtection)
+                sb.AppendLine("  Protection from alignment: mental control is blocked.");
+            if (SummonedContactBlockedByProtection)
+                sb.AppendLine("  Protection from alignment barrier: summoned creature cannot make bodily contact.");
             sb.Append($"═══════════════════════════════════");
             return sb.ToString();
         }
@@ -158,6 +167,11 @@ public class SpellResult
                 sb.AppendLine("    + 0 (Precise Shot negates shooting into melee penalty)");
             if (TargetFightingDefensivelyACBonus > 0)
                 sb.AppendLine($"    Defender stance: +{TargetFightingDefensivelyACBonus} Touch AC (Fighting Defensively)");
+            if (ProtectionAcBonus > 0)
+            {
+                string source = string.IsNullOrEmpty(ProtectionSourceName) ? "Protection from Alignment" : ProtectionSourceName;
+                sb.AppendLine($"    Defender ward: +{ProtectionAcBonus} Touch AC ({source})");
+            }
             string hitMiss = AttackHit ? "HIT!" : "MISS!";
             string natNote = AttackRoll == 20 ? " (NATURAL 20!)" : AttackRoll == 1 ? " (NATURAL 1!)" : "";
             sb.AppendLine($"    = {AttackTotal} vs Touch AC {TouchAC} - {hitMiss}{natNote}");
@@ -171,6 +185,11 @@ public class SpellResult
             sb.AppendLine($"    Roll: d20 = {SaveRoll}");
             if (SaveMod != 0)
                 sb.AppendLine($"    {FormatModLine(SaveMod, SaveType)}");
+            if (ProtectionSaveBonus > 0)
+            {
+                string source = string.IsNullOrEmpty(ProtectionSourceName) ? "Protection from Alignment" : ProtectionSourceName;
+                sb.AppendLine($"    + {ProtectionSaveBonus} ({source} ward)");
+            }
             string saveResult = SaveSucceeded ? "RESISTED!" : "FAILED!";
             sb.AppendLine($"    = {SaveTotal} vs DC {SaveDC} - {saveResult}");
             sb.AppendLine();

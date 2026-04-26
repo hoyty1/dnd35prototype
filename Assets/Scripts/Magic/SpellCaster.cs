@@ -60,6 +60,11 @@ public static class SpellCaster
         bool isMaximized = metamagic != null && metamagic.Has(MetamagicFeatId.MaximizeSpell);
         bool isHeightened = metamagic != null && metamagic.Has(MetamagicFeatId.HeightenSpell);
 
+        Alignment sourceAlignment = casterStats != null ? casterStats.CharacterAlignment : Alignment.None;
+        AlignmentProtectionBenefits protection = AlignmentProtectionRules.GetBenefitsAgainst(targetController, sourceAlignment);
+        if (!string.IsNullOrEmpty(protection.SourceSpellName))
+            result.ProtectionSourceName = protection.SourceSpellName;
+
         // ========== DETERMINE EFFECTIVE SPELL LEVEL (for save DC with Heighten) ==========
         int effectiveSpellLevel = spell.SpellLevel;
         if (isHeightened && metamagic.HeightenToLevel > spell.SpellLevel)
@@ -71,6 +76,21 @@ public static class SpellCaster
         // AoE spells do not use touch attack rolls.
         bool isAoESpell = spell.TargetType == SpellTargetType.Area;
         bool usesTouchAttack = spell.IsMeleeTouchSpell() || spell.IsRangedTouchSpell();
+
+        bool casterIsSummoned = casterController != null
+            && GameManager.Instance != null
+            && GameManager.Instance.IsSummonedCreature(casterController);
+
+        if (usesTouchAttack && spell.IsMeleeTouchSpell() && casterIsSummoned && protection.HasMatch && protection.BlocksSummonedContact)
+        {
+            result.AttackHit = false;
+            result.Success = false;
+            result.TargetHPBefore = targetStats != null ? targetStats.CurrentHP : 0;
+            result.TargetHPAfter = result.TargetHPBefore;
+            result.SummonedContactBlockedByProtection = true;
+            result.NoEffectReason = "Protection from alignment barrier blocks bodily contact by this summoned creature.";
+            return result;
+        }
 
         if (usesTouchAttack && forceFriendlyTouchNoRoll)
         {
@@ -99,6 +119,12 @@ public static class SpellCaster
 
             int touchAC = SpellcastingComponent.GetTouchAC(targetStats)
                 + ((targetController != null && targetController.IsFightingDefensively) ? 2 : 0);
+
+            if (protection.DeflectionAcBonus > 0)
+            {
+                touchAC += protection.DeflectionAcBonus;
+                result.ProtectionAcBonus = protection.DeflectionAcBonus;
+            }
 
             int roll = Random.Range(1, 21);
             int total = roll + atkBonus + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
@@ -133,6 +159,17 @@ public static class SpellCaster
         else
         {
             result.AttackHit = true;
+        }
+
+        // ========== PROTECTION FROM ALIGNMENT: MENTAL CONTROL BLOCK ==========
+        if (result.AttackHit && spell.IsMindAffecting && protection.HasMatch && protection.BlocksMentalControl)
+        {
+            result.MindAffectingBlockedByProtection = true;
+            result.Success = false;
+            result.TargetHPBefore = targetStats != null ? targetStats.CurrentHP : 0;
+            result.TargetHPAfter = result.TargetHPBefore;
+            result.NoEffectReason = "Protection from alignment blocks mental control from this source.";
+            return result;
         }
 
         // ========== MIND-AFFECTING IMMUNITY ==========
@@ -199,9 +236,10 @@ public static class SpellCaster
             else
             {
                 int saveRoll = Random.Range(1, 21);
-                int saveMod = GetSaveModifier(targetStats, spell);
+                int saveMod = GetSaveModifier(targetStats, spell, protection, out int protectionSaveBonus);
                 result.SaveRoll = saveRoll;
                 result.SaveMod = saveMod;
+                result.ProtectionSaveBonus = protectionSaveBonus;
                 result.SaveTotal = saveRoll + saveMod;
                 result.SaveSucceeded = result.SaveTotal >= result.SaveDC;
             }
@@ -578,8 +616,14 @@ public static class SpellCaster
     /// Get the appropriate saving throw modifier for a character,
     /// including conditional bonuses such as Still Mind (+2 vs enchantment effects).
     /// </summary>
-    private static int GetSaveModifier(CharacterStats stats, SpellData spell)
+    private static int GetSaveModifier(
+        CharacterStats stats,
+        SpellData spell,
+        AlignmentProtectionBenefits protection,
+        out int protectionSaveBonus)
     {
+        protectionSaveBonus = 0;
+
         if (stats == null || spell == null)
             return 0;
 
@@ -605,6 +649,12 @@ public static class SpellCaster
 
         if (spell.SavingThrowType == "Will" && isEnchantment && stats.StillMindBonus > 0)
             baseSave += stats.StillMindBonus;
+
+        if (protection.HasMatch && protection.ResistanceSaveBonus > 0)
+        {
+            protectionSaveBonus = protection.ResistanceSaveBonus;
+            baseSave += protectionSaveBonus;
+        }
 
         return baseSave;
     }

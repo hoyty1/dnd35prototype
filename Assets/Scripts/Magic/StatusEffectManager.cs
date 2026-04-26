@@ -141,6 +141,20 @@ public class StatusEffectManager : MonoBehaviour
         effect.AppliedDamageReductionBypass = spell.BuffDamageReductionBypass;
         effect.AppliedDamageReductionRangedOnly = spell.BuffDamageReductionRangedOnly;
 
+        // Protection from alignment grants conditional AC/save bonuses and ward effects.
+        // It should NOT apply unconditional Deflection/Save bonuses directly to stats.
+        if (AlignmentProtectionRules.TryGetProtectionTypeForSpell(spell.SpellId, out AlignmentProtectionType protectionType))
+        {
+            effect.ProtectionAgainstAlignment = protectionType;
+            effect.ProtectionDeflectionBonus = Mathf.Max(0, spell.BuffDeflectionBonus > 0 ? spell.BuffDeflectionBonus : spell.BuffACBonus);
+            effect.ProtectionResistanceBonus = Mathf.Max(0, spell.BuffSaveBonus);
+            effect.ProtectionBlocksMentalControl = true;
+            effect.ProtectionBlocksSummonedContact = true;
+
+            effect.AppliedDeflectionBonus = 0;
+            effect.AppliedSaveBonus = 0;
+        }
+
         // Apply stat modifications
         ApplyStatModifications(effect);
         effect.IsApplied = true;
