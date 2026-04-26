@@ -24,52 +24,117 @@ public static class SpellRanges
 
     public const int UNLIMITED_RANGE_SQUARES = 9999;
 
+    public static bool TryGetStandardRangeProfile(
+        SpellRangeCategory range,
+        out int baseSquares,
+        out int increasePerLevels,
+        out int increaseSquares)
+    {
+        switch (range)
+        {
+            case SpellRangeCategory.Personal:
+                baseSquares = -1;
+                increasePerLevels = 0;
+                increaseSquares = 0;
+                return true;
+
+            case SpellRangeCategory.Touch:
+                baseSquares = 1;
+                increasePerLevels = 0;
+                increaseSquares = 0;
+                return true;
+
+            case SpellRangeCategory.Close:
+                baseSquares = 5;
+                increasePerLevels = 2;
+                increaseSquares = 1;
+                return true;
+
+            case SpellRangeCategory.Medium:
+                baseSquares = 20;
+                increasePerLevels = 1;
+                increaseSquares = 2;
+                return true;
+
+            case SpellRangeCategory.Long:
+                baseSquares = 80;
+                increasePerLevels = 1;
+                increaseSquares = 8;
+                return true;
+
+            case SpellRangeCategory.Unlimited:
+                baseSquares = UNLIMITED_RANGE_SQUARES;
+                increasePerLevels = 0;
+                increaseSquares = 0;
+                return true;
+
+            case SpellRangeCategory.Custom:
+            default:
+                baseSquares = 0;
+                increasePerLevels = 0;
+                increaseSquares = 0;
+                return false;
+        }
+    }
+
+    public static bool TryDetectCategory(
+        int baseSquares,
+        int increasePerLevels,
+        int increaseSquares,
+        out SpellRangeCategory category)
+    {
+        if (baseSquares == -1 && increasePerLevels <= 0 && increaseSquares <= 0)
+        {
+            category = SpellRangeCategory.Personal;
+            return true;
+        }
+
+        if (baseSquares == 1 && increasePerLevels <= 0 && increaseSquares <= 0)
+        {
+            category = SpellRangeCategory.Touch;
+            return true;
+        }
+
+        if (baseSquares == 5 && increasePerLevels == 2 && increaseSquares == 1)
+        {
+            category = SpellRangeCategory.Close;
+            return true;
+        }
+
+        if (baseSquares == 20 && increasePerLevels == 1 && increaseSquares == 2)
+        {
+            category = SpellRangeCategory.Medium;
+            return true;
+        }
+
+        if (baseSquares == 80 && increasePerLevels == 1 && increaseSquares == 8)
+        {
+            category = SpellRangeCategory.Long;
+            return true;
+        }
+
+        if (baseSquares == UNLIMITED_RANGE_SQUARES && increasePerLevels <= 0 && increaseSquares <= 0)
+        {
+            category = SpellRangeCategory.Unlimited;
+            return true;
+        }
+
+        category = SpellRangeCategory.Custom;
+        return false;
+    }
+
     public static void Configure(SpellData spell, SpellRangeCategory range)
     {
         if (spell == null) return;
 
-        switch (range)
+        if (!TryGetStandardRangeProfile(range, out int baseSquares, out int increasePerLevels, out int increaseSquares))
         {
-            case SpellRangeCategory.Personal:
-                spell.RangeSquares = -1;
-                spell.RangeIncreasePerLevels = 0;
-                spell.RangeIncreaseSquares = 0;
-                break;
-
-            case SpellRangeCategory.Touch:
-                spell.RangeSquares = 1;
-                spell.RangeIncreasePerLevels = 0;
-                spell.RangeIncreaseSquares = 0;
-                break;
-
-            case SpellRangeCategory.Close:
-                spell.RangeSquares = 5;
-                spell.RangeIncreasePerLevels = 2;
-                spell.RangeIncreaseSquares = 1;
-                break;
-
-            case SpellRangeCategory.Medium:
-                spell.RangeSquares = 20;
-                spell.RangeIncreasePerLevels = 1;
-                spell.RangeIncreaseSquares = 2;
-                break;
-
-            case SpellRangeCategory.Long:
-                spell.RangeSquares = 80;
-                spell.RangeIncreasePerLevels = 1;
-                spell.RangeIncreaseSquares = 8;
-                break;
-
-            case SpellRangeCategory.Unlimited:
-                spell.RangeSquares = UNLIMITED_RANGE_SQUARES;
-                spell.RangeIncreasePerLevels = 0;
-                spell.RangeIncreaseSquares = 0;
-                break;
-
-            case SpellRangeCategory.Custom:
-            default:
-                break;
+            return;
         }
+
+        spell.RangeSquares = baseSquares;
+        spell.RangeIncreasePerLevels = increasePerLevels;
+        spell.RangeIncreaseSquares = increaseSquares;
     }
 
     public static string GetFormulaDescription(SpellRangeCategory range)

@@ -20,6 +20,26 @@ public class SpellData
 
     // ========== TARGETING ==========
     public SpellTargetType TargetType;  // SingleEnemy, SingleAlly, Self, Area
+
+    /// <summary>
+    /// Primary spell range definition. Use standard D&D 3.5e categories where possible.
+    /// If set to a non-custom category, legacy range fields are auto-synchronized.
+    /// </summary>
+    private SpellRangeCategory _rangeCategory = SpellRangeCategory.Custom;
+    public SpellRangeCategory RangeCategory
+    {
+        get => _rangeCategory;
+        set
+        {
+            _rangeCategory = value;
+            if (_rangeCategory != SpellRangeCategory.Custom)
+            {
+                SpellRanges.Configure(this, _rangeCategory);
+            }
+        }
+    }
+
+    // Legacy/manual range fields retained for backward compatibility and custom formulas.
     public int RangeSquares;            // Base range in squares (-1 = self, 1 = touch)
     public int RangeIncreasePerLevels;  // Optional scaling: +RangeIncreaseSquares per N caster levels (round down)
     public int RangeIncreaseSquares;    // Optional scaling amount in squares
@@ -30,7 +50,7 @@ public class SpellData
     /// </summary>
     public void SetRange(SpellRangeCategory range)
     {
-        SpellRanges.Configure(this, range);
+        RangeCategory = range;
     }
 
     public void SetRangeClose() => SetRange(SpellRangeCategory.Close);
@@ -43,9 +63,49 @@ public class SpellData
     /// </summary>
     public static SpellData CreateWithRange(SpellRangeCategory range)
     {
-        var spell = new SpellData();
-        spell.SetRange(range);
-        return spell;
+        return new SpellData { RangeCategory = range };
+    }
+
+    /// <summary>
+    /// Returns the effective range category (explicit category if set; otherwise auto-detected from legacy values).
+    /// </summary>
+    public SpellRangeCategory GetEffectiveRangeCategory()
+    {
+        if (RangeCategory != SpellRangeCategory.Custom)
+            return RangeCategory;
+
+        return SpellRanges.TryDetectCategory(RangeSquares, RangeIncreasePerLevels, RangeIncreaseSquares, out var detected)
+            ? detected
+            : SpellRangeCategory.Custom;
+    }
+
+    private void GetEffectiveRangeProfile(out int baseSquares, out int increasePerLevels, out int increaseSquares)
+    {
+        var category = GetEffectiveRangeCategory();
+        if (SpellRanges.TryGetStandardRangeProfile(category, out baseSquares, out increasePerLevels, out increaseSquares))
+            return;
+
+        baseSquares = RangeSquares;
+        increasePerLevels = RangeIncreasePerLevels;
+        increaseSquares = RangeIncreaseSquares;
+    }
+
+    private int GetEffectiveBaseRangeSquares()
+    {
+        GetEffectiveRangeProfile(out int baseSquares, out _, out _);
+        return baseSquares;
+    }
+
+    private int GetEffectiveRangeIncreasePerLevels()
+    {
+        GetEffectiveRangeProfile(out _, out int increasePerLevels, out _);
+        return increasePerLevels;
+    }
+
+    private int GetEffectiveRangeIncreaseSquares()
+    {
+        GetEffectiveRangeProfile(out _, out _, out int increaseSquares);
+        return increaseSquares;
     }
 
     /// <summary>
@@ -54,14 +114,19 @@ public class SpellData
     /// </summary>
     public int GetRangeSquaresForCasterLevel(int casterLevel)
     {
+        int baseRange = GetEffectiveBaseRangeSquares();
+
         // Preserve sentinel values and touch/self behavior.
-        if (RangeSquares <= 0) return RangeSquares;
+        if (baseRange <= 0) return baseRange;
 
-        if (RangeIncreasePerLevels <= 0 || RangeIncreaseSquares <= 0 || casterLevel <= 0)
-            return RangeSquares;
+        int increasePerLevels = GetEffectiveRangeIncreasePerLevels();
+        int increaseSquares = GetEffectiveRangeIncreaseSquares();
 
-        int increments = casterLevel / RangeIncreasePerLevels;
-        return RangeSquares + (increments * RangeIncreaseSquares);
+        if (increasePerLevels <= 0 || increaseSquares <= 0 || casterLevel <= 0)
+            return baseRange;
+
+        int increments = casterLevel / increasePerLevels;
+        return baseRange + (increments * increaseSquares);
     }
 
 
@@ -80,7 +145,7 @@ public class SpellData
     public bool IsTouchSpell()
     {
         if (IsTouch || IsMeleeTouch || IsRangedTouch) return true;
-        return TargetType == SpellTargetType.Touch || RangeSquares == 1;
+        return TargetType == SpellTargetType.Touch || GetEffectiveBaseRangeSquares() == 1;
     }
 
     /// <summary>
@@ -91,7 +156,7 @@ public class SpellData
     {
         if (IsMeleeTouch) return true;
         if (IsRangedTouch) return false;
-        return IsTouchSpell() && RangeSquares <= 1;
+        return IsTouchSpell() && GetEffectiveBaseRangeSquares() <= 1;
     }
 
     /// <summary>
@@ -102,7 +167,7 @@ public class SpellData
     {
         if (IsRangedTouch) return true;
         if (IsMeleeTouch) return false;
-        return IsTouchSpell() && RangeSquares > 1;
+        return IsTouchSpell() && GetEffectiveBaseRangeSquares() > 1;
     }
     // ========== AREA OF EFFECT ==========
     /// <summary>Shape of the AoE (None = single target, Burst = radius, Cone = emanation from caster).</summary>
@@ -225,22 +290,32 @@ public class SpellData
     public string GetShortDescription()
     {
         string levelStr = SpellLevel == 0 ? "Cantrip" : $"Level {SpellLevel}";
+
+        int baseRangeSquares = GetEffectiveBaseRangeSquares();
+        int rangeIncreasePerLevels = GetEffectiveRangeIncreasePerLevels();
+        int rangeIncreaseSquares = GetEffectiveRangeIncreaseSquares();
+        SpellRangeCategory effectiveRangeCategory = GetEffectiveRangeCategory();
+
         string rangeStr;
-        if (RangeSquares < 0)
+        if (effectiveRangeCategory == SpellRangeCategory.Unlimited)
+        {
+            rangeStr = "Unlimited";
+        }
+        else if (baseRangeSquares < 0)
         {
             rangeStr = "Self";
         }
-        else if (RangeSquares == 0)
+        else if (effectiveRangeCategory == SpellRangeCategory.Touch || baseRangeSquares == 0)
         {
             rangeStr = "Touch";
         }
-        else if (RangeIncreasePerLevels > 0 && RangeIncreaseSquares > 0)
+        else if (rangeIncreasePerLevels > 0 && rangeIncreaseSquares > 0)
         {
-            rangeStr = $"{RangeSquares} sq + {RangeIncreaseSquares} sq/{RangeIncreasePerLevels} lv";
+            rangeStr = $"{baseRangeSquares} sq + {rangeIncreaseSquares} sq/{rangeIncreasePerLevels} lv";
         }
         else
         {
-            rangeStr = $"{RangeSquares} sq ({RangeSquares * 5} ft)";
+            rangeStr = $"{baseRangeSquares} sq ({baseRangeSquares * 5} ft)";
         }
 
         string effectStr = "";
