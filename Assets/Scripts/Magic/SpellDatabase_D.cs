@@ -58,6 +58,7 @@ public static partial class SpellDatabase
                     SavingThrowType = "Will",
                     SpellResistanceApplies = true,
                     IsMindAffecting = true,
+                    BlockedByProtectionFromAlignment = false,
                     BuffDurationRounds = 1,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true

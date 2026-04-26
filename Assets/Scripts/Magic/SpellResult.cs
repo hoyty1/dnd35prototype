@@ -181,17 +181,27 @@ public class SpellResult
         // ========== SAVING THROW ==========
         if (RequiredSave && AttackHit)
         {
-            sb.AppendLine($"  {SaveType} save (DC {SaveDC}):");
-            sb.AppendLine($"    Roll: d20 = {SaveRoll}");
-            if (SaveMod != 0)
-                sb.AppendLine($"    {FormatModLine(SaveMod, SaveType)}");
+            int baseSaveMod = SaveMod - ProtectionSaveBonus;
+            sb.AppendLine($"  {SaveType} Save:");
+            sb.AppendLine($"    Base: {CharacterStats.FormatMod(baseSaveMod)}");
+
             if (ProtectionSaveBonus > 0)
             {
                 string source = string.IsNullOrEmpty(ProtectionSourceName) ? "Protection from Alignment" : ProtectionSourceName;
-                sb.AppendLine($"    + {ProtectionSaveBonus} ({source} ward)");
+                sb.AppendLine($"    {FormatModLine(ProtectionSaveBonus, $"{source} (vs aligned source)")}");
             }
-            string saveResult = SaveSucceeded ? "RESISTED!" : "FAILED!";
-            sb.AppendLine($"    = {SaveTotal} vs DC {SaveDC} - {saveResult}");
+            else if (!string.IsNullOrWhiteSpace(ProtectionSourceName))
+            {
+                sb.AppendLine("    (No protection bonus - caster not aligned against the ward)");
+            }
+
+            sb.AppendLine($"    Total: {CharacterStats.FormatMod(SaveMod)}");
+            string saveResult = SaveSucceeded ? "SUCCESS" : "FAIL";
+            sb.AppendLine($"    Roll: {SaveRoll} + {SaveMod} = {SaveTotal} vs DC {SaveDC}: {saveResult}");
+
+            if (ProtectionSaveBonus > 0)
+                sb.AppendLine("    COMPARISON: A non-opposed caster using the same spell would not grant this +2 save bonus.");
+
             sb.AppendLine();
         }
 

@@ -198,6 +198,7 @@ public class CombatResult
         {
             string sourceName = string.IsNullOrEmpty(ProtectionSourceName) ? "Protection from Alignment" : ProtectionSourceName;
             sb.AppendLine($"  {sourceName}: +{ProtectionDeflectionBonusToAc} deflection AC vs this attacker");
+            sb.AppendLine("  COMPARISON: A non-opposed attacker making the same roll would target the defender's normal AC.");
         }
         if (ProtectionSummonedBarrierBlocked && !string.IsNullOrEmpty(ProtectionBarrierNote))
             sb.AppendLine($"  Barrier: {ProtectionBarrierNote}");

@@ -2041,8 +2041,15 @@ public partial class GameManager : MonoBehaviour
         SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
-        CombatUI?.ShowCombatLog("🧪 Protection from Evil Test: Warded Theron (Wizard 10) vs Vhalzor + summoned fiendish wolf + goblin ravager.");
-        CombatUI?.ShowCombatLog("   Validate that Charm Person is blocked as mental control, summoned wolf contact is blocked, and evil attackers face +2 AC/+2 save bonuses.");
+        CombatUI?.ShowCombatLog("🧪 Protection from Evil Test: Warded Theron (Wizard 10) vs evil + non-evil controls.");
+        CombatUI?.ShowCombatLog("This scenario tests SIX mechanics:");
+        CombatUI?.ShowCombatLog("  1. Mental Control Immunity (Charm Person blocked)");
+        CombatUI?.ShowCombatLog("  2. Summoned Barrier (Fiendish Wolf can't touch)");
+        CombatUI?.ShowCombatLog("  3. AC Bonus vs Evil (+2 vs Evil Goblin)");
+        CombatUI?.ShowCombatLog("  4. NO AC Bonus vs Non-Evil (normal AC vs Neutral Bandit)");
+        CombatUI?.ShowCombatLog("  5. Save Bonus vs Evil (+2 vs Evil Acolyte's Daze)");
+        CombatUI?.ShowCombatLog("  6. NO Save Bonus vs Non-Evil (normal save vs Neutral Mage's Daze)");
+        CombatUI?.ShowCombatLog("");
     }
 
     private void ConfigureDisruptUndeadTestParty()
@@ -2770,6 +2777,9 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(12, 9),  // Evil enchanter with line of sight to protected wizard.
         new Vector2Int(10, 9),  // Fiendish wolf starts close enough to test summoned contact barrier.
         new Vector2Int(12, 11), // Evil goblin melee pressure from a flank lane.
+        new Vector2Int(8, 5),   // Neutral bandit control (no AC bonus expected).
+        new Vector2Int(13, 7),  // Neutral mage control (no save bonus expected).
+        new Vector2Int(13, 3),  // Evil acolyte control (+2 save bonus expected).
     };
 
     private static readonly Vector2Int[] WizardSpellTestSpawnPositions = {
@@ -2946,6 +2956,30 @@ public partial class GameManager : MonoBehaviour
             Debug.Log($"[GameManager] Spawned NPC {i}: {def.Name} (Lv {def.Level} {def.CharacterClass}) at ({pos.x},{pos.y}) — AI: {def.AIBehavior}{templateLog}");
         }
 
+        if (_isProtectionFromEvilTestEncounter)
+        {
+            CombatUI?.ShowCombatLog("╔═══════════════════════════════════════════════════════╗");
+            CombatUI?.ShowCombatLog("║   CONTROL TESTS (Non-Evil + Evil Save Comparison)    ║");
+            CombatUI?.ShowCombatLog("╚═══════════════════════════════════════════════════════╝");
+            CombatUI?.ShowCombatLog("");
+            CombatUI?.ShowCombatLog("✓ Neutral Bandit (TRUE NEUTRAL): NO AC bonus from ward expected.");
+            CombatUI?.ShowCombatLog("✓ Neutral Mage (TRUE NEUTRAL): Daze allows normal save (no +2 bonus).");
+            CombatUI?.ShowCombatLog("✓ Evil Acolyte (NEUTRAL EVIL): Daze allows save with +2 protection bonus.");
+            CombatUI?.ShowCombatLog("");
+            CombatUI?.ShowCombatLog("AC BONUS TEST:");
+            CombatUI?.ShowCombatLog("  Evil Goblin      → Player AC includes +2 deflection");
+            CombatUI?.ShowCombatLog("  Neutral Bandit   → Player AC has no protection deflection bonus");
+            CombatUI?.ShowCombatLog("");
+            CombatUI?.ShowCombatLog("SAVE BONUS TEST:");
+            CombatUI?.ShowCombatLog("  Evil Acolyte Daze   → Will save gains +2 resistance bonus");
+            CombatUI?.ShowCombatLog("  Neutral Mage Daze   → Will save remains base value (no +2)");
+            CombatUI?.ShowCombatLog("");
+            CombatUI?.ShowCombatLog("MENTAL CONTROL TEST:");
+            CombatUI?.ShowCombatLog("  Evil Enchanter Charm Person → BLOCKED completely by protection");
+            CombatUI?.ShowCombatLog("  Daze (both evil/neutral casters) → NOT blocked, only save mechanics apply");
+            CombatUI?.ShowCombatLog("");
+        }
+
         // Legacy NPC field points to first active enemy
         NPC = null;
         for (int i = 0; i < NPCs.Count; i++)
@@ -3063,10 +3097,33 @@ public partial class GameManager : MonoBehaviour
                 RegisterScenarioSummonedCreature(npc, summonCaster, durationRounds: 50, sourceSpellId: "scenario_setup_protection_from_evil_test");
                 Debug.Log("[ProtectionFromEvilTest] Fiendish wolf registered as summoned creature for barrier validation.");
             }
-            else
+            else if (string.Equals(enemyId, "evil_goblin_test", StringComparison.Ordinal))
             {
                 npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
                 npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilMeleeEnemy");
+            }
+            else if (string.Equals(enemyId, "neutral_bandit_test", StringComparison.Ordinal))
+            {
+                npc.Stats.CharacterAlignment = Alignment.TrueNeutral;
+                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilNeutralMeleeControl");
+                Debug.Log("[ProtectionFromEvilTest] Neutral bandit control applied: no deflection bonus should trigger.");
+            }
+            else if (string.Equals(enemyId, "neutral_mage_test", StringComparison.Ordinal))
+            {
+                npc.Stats.CharacterAlignment = Alignment.TrueNeutral;
+                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilNeutralCasterControl");
+                Debug.Log("[ProtectionFromEvilTest] Neutral mage control applied: Daze should not grant +2 protection save bonus.");
+            }
+            else if (string.Equals(enemyId, "evil_acolyte_test", StringComparison.Ordinal))
+            {
+                npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
+                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilEvilCasterControl");
+                Debug.Log("[ProtectionFromEvilTest] Evil acolyte control applied: Daze should grant +2 protection save bonus.");
+            }
+            else
+            {
+                npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
+                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilFallbackEnemy");
             }
         }
     }

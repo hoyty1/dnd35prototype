@@ -43,6 +43,7 @@ public static class NPCDatabase
         RegisterArcaneMissileAdept();
         RegisterProtectionFromEvilTestCasters();
         RegisterProtectionFromEvilTestMelee();
+        RegisterProtectionFromEvilTestControls();
         RegisterZombieShambler();
         RegisterTargetDummy();
 
@@ -90,7 +91,7 @@ public static class NPCDatabase
             new EncounterPreset("fiendish_template_test", "🔥 Fiendish Template Test", "Evil necromancer with fiendish wolf + fiendish dire bear allies against good paladin and cleric. Templates are applied at spawn time.", new List<string> { "fiendish_wolf", "fiendish_dire_bear", "human_paladin", "human_cleric" }),
             new EncounterPreset("summon_monster_test", "🌀 Summon Monster Test", "Cleric + wizard summon drill with Summon Monster I/II prepared on both casters for selection UI, placement, and command validation.", new List<string> { "orc_berserker", "skeleton_archer", "goblin_warchief" }),
             new EncounterPreset("npc_magic_missile_test", "🧪 NPC Magic Missile Test", "Enemy evoker only casts Magic Missile; Shield should block damage during resolution (not targeting).", new List<string> { "arcane_missile_adept" }),
-            new EncounterPreset("protection_from_evil_test", "🛡️ Protection from Evil Test", "Single protected wizard versus evil charm caster, fiendish summoned wolf, and evil melee grunt to validate mental-control block, summoned contact barrier, and +2 AC/save bonuses.", new List<string> { "evil_enchanter_test", "fiendish_wolf", "evil_goblin_test" }),
+            new EncounterPreset("protection_from_evil_test", "🛡️ Protection from Evil Test", "Single protected wizard versus evil and non-evil threats to validate mental-control block, summoned contact barrier, +2 AC/save bonuses vs Evil, and no bonus vs non-Evil controls.", new List<string> { "evil_enchanter_test", "fiendish_wolf", "evil_goblin_test", "neutral_bandit_test", "neutral_mage_test", "evil_acolyte_test" }),
             new EncounterPreset("disrupt_undead_test", "☀️ Disrupt Undead Test", "Wizard cantrip drill versus mixed targets: skeletons + zombie + one living orc to confirm undead-only damage.", new List<string> { "skeleton_warrior", "skeleton_warrior", "zombie_shambler", "orc_berserker" }),
             new EncounterPreset("wizard_spell_test", "📘 Wizard Spell Test", "Single wizard scenario with every implemented wizard spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("cleric_spell_test", "📖 Cleric Spell Test", "Single cleric scenario with every implemented cleric spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
@@ -1509,6 +1510,107 @@ public static class NPCDatabase
             PanelColor = new Color(0.18f, 0.28f, 0.16f, 0.88f),
             NameColor = new Color(0.9f, 1f, 0.9f),
             Description = "Melee evil humanoid used to verify Protection from Evil's +2 deflection AC against standard weapon attacks."
+        });
+    }
+
+    private static void RegisterProtectionFromEvilTestControls()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "neutral_bandit_test",
+            Name = "Neutral Bandit",
+            Level = 3,
+            CharacterClass = "Rogue",
+            CreatureType = "Humanoid",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            STR = 12,
+            DEX = 16,
+            CON = 12,
+            WIS = 11,
+            INT = 10,
+            CHA = 10,
+            BAB = 2,
+            BaseSpeed = 6,
+            BaseHitDieHP = 18,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("short_sword", EquipSlot.RightHand),
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "Human", "ProtectionFromEvilTest", "ControlTest" },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.76f, 0.74f, 0.62f, 1f),
+            PanelColor = new Color(0.2f, 0.2f, 0.2f, 0.88f),
+            NameColor = new Color(0.96f, 0.94f, 0.84f),
+            Description = "Neutral melee control for Protection from Evil AC validation (should NOT trigger +2 deflection bonus)."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "neutral_mage_test",
+            Name = "Neutral Mage",
+            Level = 3,
+            CharacterClass = "Wizard",
+            CreatureType = "Humanoid",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            STR = 10,
+            DEX = 13,
+            CON = 12,
+            WIS = 14,
+            INT = 16,
+            CHA = 10,
+            BAB = 1,
+            BaseSpeed = 6,
+            BaseHitDieHP = 15,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            KnownSpellIds = new List<string> { "daze" },
+            PreparedSpellSlotIds = new List<string> { "daze", "daze", "daze", "daze" },
+            CreatureTags = new List<string> { "Humanoid", "Arcane", "ProtectionFromEvilTest", "ControlTest" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            SpriteColor = new Color(0.62f, 0.72f, 0.92f, 1f),
+            PanelColor = new Color(0.14f, 0.18f, 0.34f, 0.88f),
+            NameColor = new Color(0.88f, 0.94f, 1f),
+            Description = "Neutral caster control for Protection from Evil save validation (Daze should NOT gain +2 save bonus)."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "evil_acolyte_test",
+            Name = "Evil Acolyte",
+            Level = 3,
+            CharacterClass = "Cleric",
+            CreatureType = "Humanoid",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            STR = 10,
+            DEX = 11,
+            CON = 12,
+            WIS = 16,
+            INT = 12,
+            CHA = 13,
+            BAB = 2,
+            BaseSpeed = 6,
+            BaseHitDieHP = 20,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("chain_shirt", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            KnownSpellIds = new List<string> { "daze" },
+            PreparedSpellSlotIds = new List<string> { "daze", "daze", "daze", "daze" },
+            CreatureTags = new List<string> { "Humanoid", "Divine", "Evil", "ProtectionFromEvilTest", "ControlTest" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            SpriteColor = new Color(0.86f, 0.52f, 0.52f, 1f),
+            PanelColor = new Color(0.34f, 0.14f, 0.14f, 0.88f),
+            NameColor = new Color(1f, 0.9f, 0.9f),
+            Description = "Evil caster control for Protection from Evil save validation (Daze should gain +2 resistance bonus)."
         });
     }
 

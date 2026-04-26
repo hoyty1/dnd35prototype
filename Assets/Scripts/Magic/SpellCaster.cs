@@ -62,6 +62,7 @@ public static class SpellCaster
 
         Alignment sourceAlignment = casterStats != null ? casterStats.CharacterAlignment : Alignment.None;
         AlignmentProtectionBenefits protection = AlignmentProtectionRules.GetBenefitsAgainst(targetController, sourceAlignment);
+        result.ProtectionSourceName = GetActiveAlignmentProtectionSourceName(targetController);
         if (!string.IsNullOrEmpty(protection.SourceSpellName))
             result.ProtectionSourceName = protection.SourceSpellName;
 
@@ -569,6 +570,37 @@ public static class SpellCaster
             spell.HasSomaticComponent = false;
             Debug.Log("[Metamagic] Still Spell: somatic component removed");
         }
+    }
+
+    private static string GetActiveAlignmentProtectionSourceName(CharacterController targetController)
+    {
+        if (targetController == null)
+            return string.Empty;
+
+        StatusEffectManager statusMgr = targetController.GetComponent<StatusEffectManager>();
+        if (statusMgr == null || statusMgr.ActiveEffects == null)
+            return string.Empty;
+
+        for (int i = 0; i < statusMgr.ActiveEffects.Count; i++)
+        {
+            ActiveSpellEffect effect = statusMgr.ActiveEffects[i];
+            if (effect == null)
+                continue;
+
+            AlignmentProtectionType protectionType = effect.ProtectionAgainstAlignment;
+            if (protectionType == AlignmentProtectionType.None && effect.Spell != null)
+                AlignmentProtectionRules.TryGetProtectionTypeForSpell(effect.Spell.SpellId, out protectionType);
+
+            if (protectionType == AlignmentProtectionType.None)
+                continue;
+
+            if (effect.Spell != null && !string.IsNullOrWhiteSpace(effect.Spell.Name))
+                return effect.Spell.Name;
+
+            return "Protection from Alignment";
+        }
+
+        return string.Empty;
     }
 
     private static int GetCasterLevelForSpellResistanceCheck(CharacterStats casterStats)
