@@ -98,7 +98,10 @@ public static partial class SpellDatabase
                     SpellLevel = 1, School = "Enchantment",
                     ClassList = new[] { "Wizard" },
                     TargetType = SpellTargetType.SingleEnemy,
-                    RangeSquares = 5,
+                    // D&D 3.5e: Close range (25 ft + 5 ft / 2 levels).
+                    // Keeping this as a fixed 25 ft caused long-range test casters (like Vhalzor, CL10)
+                    // to never attempt Charm Person in the Protection from Evil benchmark encounter.
+                    RangeCategory = SpellRangeCategory.Close,
                     EffectType = SpellEffectType.Debuff,
                     IsMindAffecting = true,
                     BlockedByProtectionFromAlignment = true,
