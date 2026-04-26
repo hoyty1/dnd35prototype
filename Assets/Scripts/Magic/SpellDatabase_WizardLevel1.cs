@@ -11,7 +11,7 @@ public static partial class SpellDatabase
     {
         // --- FUNCTIONAL: Damage Spells ---
 
-        Register(new SpellData
+        Register(SpellData.CreateWithRange(SpellRangeCategory.Medium)
         {
             SpellId = "magic_missile",
             Name = "Magic Missile",
@@ -19,7 +19,6 @@ public static partial class SpellDatabase
             SpellLevel = 1, School = "Evocation",
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
-            RangeSquares = 22, // Medium range
             EffectType = SpellEffectType.Damage,
             DamageDice = 4, DamageCount = 1, BonusDamage = 1,
             DamageType = "force",

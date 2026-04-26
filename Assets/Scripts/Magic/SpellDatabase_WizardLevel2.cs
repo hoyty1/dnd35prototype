@@ -11,7 +11,7 @@ public static partial class SpellDatabase
     {
         // --- FUNCTIONAL: Damage Spells ---
 
-        Register(new SpellData
+        Register(SpellData.CreateWithRange(SpellRangeCategory.Close)
         {
             SpellId = "scorching_ray",
             Name = "Scorching Ray",
@@ -19,7 +19,6 @@ public static partial class SpellDatabase
             SpellLevel = 2, School = "Evocation",
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
-            RangeSquares = 5,
             IsTouch = true,
             IsRangedTouch = true,
             EffectType = SpellEffectType.Damage,
@@ -29,7 +28,7 @@ public static partial class SpellDatabase
             ProvokesAoO = true
         });
 
-        Register(new SpellData
+        Register(SpellData.CreateWithRange(SpellRangeCategory.Long)
         {
             SpellId = "acid_arrow",
             Name = "Acid Arrow",
@@ -37,7 +36,6 @@ public static partial class SpellDatabase
             SpellLevel = 2, School = "Conjuration",
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
-            RangeSquares = 8, // Long range
             IsTouch = true,
             IsRangedTouch = true,
             EffectType = SpellEffectType.Damage,

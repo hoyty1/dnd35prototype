@@ -20,10 +20,33 @@ public class SpellData
 
     // ========== TARGETING ==========
     public SpellTargetType TargetType;  // SingleEnemy, SingleAlly, Self, Area
-    public int RangeSquares;            // Base range in squares (0 = touch, -1 = self)
+    public int RangeSquares;            // Base range in squares (-1 = self, 1 = touch)
     public int RangeIncreasePerLevels;  // Optional scaling: +RangeIncreaseSquares per N caster levels (round down)
     public int RangeIncreaseSquares;    // Optional scaling amount in squares
     public int AreaRadius;              // For area spells, radius in squares (0 = single target)
+
+    /// <summary>
+    /// Configure this spell with one of the standard D&D 3.5e range categories.
+    /// </summary>
+    public void SetRange(SpellRangeCategory range)
+    {
+        SpellRanges.Configure(this, range);
+    }
+
+    public void SetRangeClose() => SetRange(SpellRangeCategory.Close);
+    public void SetRangeMedium() => SetRange(SpellRangeCategory.Medium);
+    public void SetRangeLong() => SetRange(SpellRangeCategory.Long);
+
+    /// <summary>
+    /// Convenience factory for creating a SpellData instance preconfigured
+    /// with a standard range category.
+    /// </summary>
+    public static SpellData CreateWithRange(SpellRangeCategory range)
+    {
+        var spell = new SpellData();
+        spell.SetRange(range);
+        return spell;
+    }
 
     /// <summary>
     /// Returns effective range in squares for a given caster level.
@@ -31,7 +54,7 @@ public class SpellData
     /// </summary>
     public int GetRangeSquaresForCasterLevel(int casterLevel)
     {
-        // Preserve sentinel values and touch behavior.
+        // Preserve sentinel values and touch/self behavior.
         if (RangeSquares <= 0) return RangeSquares;
 
         if (RangeIncreasePerLevels <= 0 || RangeIncreaseSquares <= 0 || casterLevel <= 0)
