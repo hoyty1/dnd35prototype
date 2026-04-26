@@ -143,6 +143,16 @@ public static class SpellCaster
             return result;
         }
 
+        // ========== SPELL-SPECIFIC TARGET RESTRICTIONS ==========
+        if (result.AttackHit && IsDisruptUndeadSpell(spell) && !IsUndeadTarget(targetStats))
+        {
+            result.Success = false;
+            result.NoEffectReason = "Disrupt Undead has no effect on living creatures.";
+            result.TargetHPBefore = targetStats.CurrentHP;
+            result.TargetHPAfter = targetStats.CurrentHP;
+            return result;
+        }
+
         // ========== SPELL RESISTANCE ==========
         if (result.AttackHit && spell.SpellResistanceApplies && targetStats != null && targetStats.SpellResistance > 0)
         {
@@ -350,6 +360,19 @@ public static class SpellCaster
     private static bool IsMagicMissileSpell(SpellData spell)
     {
         return spell != null && spell.SpellId == "magic_missile";
+    }
+
+    private static bool IsDisruptUndeadSpell(SpellData spell)
+    {
+        return spell != null && spell.SpellId == "disrupt_undead";
+    }
+
+    private static bool IsUndeadTarget(CharacterStats targetStats)
+    {
+        if (targetStats == null || string.IsNullOrWhiteSpace(targetStats.CreatureType))
+            return false;
+
+        return string.Equals(targetStats.CreatureType.Trim(), "undead", System.StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool HasActiveShieldSpell(CharacterController targetController)

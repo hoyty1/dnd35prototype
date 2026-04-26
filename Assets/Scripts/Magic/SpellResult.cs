@@ -44,6 +44,7 @@ public class SpellResult
     public int SpellResistanceTotal;
     public bool SpellResistancePassed = true;
     public bool MindAffectingImmunityBlocked;
+    public string NoEffectReason;
 
     // ========== DAMAGE ==========
     public int DamageDealt;             // Final damage applied after save and mitigation
@@ -116,6 +117,13 @@ public class SpellResult
         if (MindAffectingImmunityBlocked)
         {
             sb.AppendLine("  Mind-affecting immunity: target is immune — spell has no effect.");
+            sb.Append($"═══════════════════════════════════");
+            return sb.ToString();
+        }
+
+        if (!string.IsNullOrWhiteSpace(NoEffectReason))
+        {
+            sb.AppendLine($"  {NoEffectReason}");
             sb.Append($"═══════════════════════════════════");
             return sb.ToString();
         }

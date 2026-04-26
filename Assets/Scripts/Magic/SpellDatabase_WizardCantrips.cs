@@ -52,7 +52,7 @@ public static partial class SpellDatabase
         {
             SpellId = "disrupt_undead",
             Name = "Disrupt Undead",
-            Description = "Deals 1d6 positive energy damage to one undead creature. Ranged touch attack.",
+            Description = "You fire a ray of positive energy at one undead creature. Make a ranged touch attack; on a hit it deals 1d6 positive damage. This spell has no effect on living creatures.",
             SpellLevel = 0, School = "Necromancy",
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
@@ -62,6 +62,7 @@ public static partial class SpellDatabase
             EffectType = SpellEffectType.Damage,
             DamageDice = 6, DamageCount = 1,
             DamageType = "positive",
+            SpellResistanceApplies = true,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });

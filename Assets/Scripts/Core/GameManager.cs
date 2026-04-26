@@ -80,6 +80,7 @@ public partial class GameManager : MonoBehaviour
     private const string FiendishTemplateTestPresetId = "fiendish_template_test";
     private const string SummonMonsterTestPresetId = "summon_monster_test";
     private const string NPCMagicMissileTestPresetId = "npc_magic_missile_test";
+    private const string DisruptUndeadTestPresetId = "disrupt_undead_test";
     private const string WizardSpellTestPresetId = "wizard_spell_test";
     private const string ClericSpellTestPresetId = "cleric_spell_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
@@ -94,6 +95,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isFiendishTemplateTestEncounter;
     private bool _isSummonMonsterTestEncounter;
     private bool _isNpcMagicMissileTestEncounter;
+    private bool _isDisruptUndeadTestEncounter;
     private bool _isWizardSpellTestEncounter;
     private bool _isClericSpellTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
@@ -592,6 +594,7 @@ public partial class GameManager : MonoBehaviour
         _isFiendishTemplateTestEncounter = string.Equals(presetId, FiendishTemplateTestPresetId, StringComparison.Ordinal);
         _isSummonMonsterTestEncounter = string.Equals(presetId, SummonMonsterTestPresetId, StringComparison.Ordinal);
         _isNpcMagicMissileTestEncounter = string.Equals(presetId, NPCMagicMissileTestPresetId, StringComparison.Ordinal);
+        _isDisruptUndeadTestEncounter = string.Equals(presetId, DisruptUndeadTestPresetId, StringComparison.Ordinal);
         _isWizardSpellTestEncounter = string.Equals(presetId, WizardSpellTestPresetId, StringComparison.Ordinal);
         _isClericSpellTestEncounter = string.Equals(presetId, ClericSpellTestPresetId, StringComparison.Ordinal);
 
@@ -630,6 +633,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureSummonMonsterTestParty();
         else if (_isNpcMagicMissileTestEncounter)
             ConfigureNpcMagicMissileTestParty();
+        else if (_isDisruptUndeadTestEncounter)
+            ConfigureDisruptUndeadTestParty();
         else if (_isWizardSpellTestEncounter)
             ConfigureWizardSpellTestParty();
         else if (_isClericSpellTestEncounter)
@@ -1958,6 +1963,70 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("🧪 NPC Magic Missile Test: Theron (Wizard 5) has Shield prepared for direct counter-testing.");
         CombatUI?.ShowCombatLog("   Cast Shield on Theron, then end turn to verify Arcane Missile Adept cannot damage him with Magic Missile.");
         CombatUI?.ShowCombatLog("   Scenario is now focused to two combatants only: player wizard vs enemy Arcane Missile Adept.");
+    }
+
+    private void ConfigureDisruptUndeadTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+        SpellDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats wizardStats = new CharacterStats(
+            name: "Necromancer Theron",
+            level: 3,
+            characterClass: "Wizard",
+            str: 8, dex: 14, con: 12, wis: 12, intelligence: 16, cha: 10,
+            bab: 1,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 18,
+            raceName: "Human"
+        );
+
+        Vector2Int wizardStart = new Vector2Int(3, 9);
+        Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
+
+        InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        wizardInventory.Init(wizardStats);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.RecalculateStats();
+
+        SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
+        wizardSpellComp.KnownSpells.Clear();
+        wizardSpellComp.SelectedSpellIds = new List<string>
+        {
+            "detect_magic_wiz", "ray_of_frost", "acid_splash", "disrupt_undead", "read_magic"
+        };
+        wizardSpellComp.PreparedSpellSlotIds = new List<string>
+        {
+            "disrupt_undead", "disrupt_undead", "disrupt_undead", "disrupt_undead", "disrupt_undead"
+        };
+        wizardSpellComp.Init(wizardStats);
+
+        StatusEffectManager wizardStatusMgr = PC1.gameObject.GetComponent<StatusEffectManager>() ?? PC1.gameObject.AddComponent<StatusEffectManager>();
+        wizardStatusMgr.Init(wizardStats);
+
+        ConcentrationManager wizardConcentrationMgr = PC1.gameObject.GetComponent<ConcentrationManager>() ?? PC1.gameObject.AddComponent<ConcentrationManager>();
+        wizardConcentrationMgr.Init(wizardStats, PC1);
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("☀️ Disrupt Undead Test: Necromancer Theron (Wizard 3) prepared 5× Disrupt Undead.");
+        CombatUI?.ShowCombatLog("   Procedure: use ranged touch attacks vs skeletons/zombie and verify 1d6 positive damage.");
+        CombatUI?.ShowCombatLog("   Validation: cast at the living orc as a control target — Disrupt Undead should report no effect.");
     }
 
     private void PrepareSummonMonsterTestSpellSlots(
