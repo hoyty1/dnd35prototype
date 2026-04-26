@@ -1,7 +1,7 @@
 // ============================================================================
 // SpellDatabase.cs — Core infrastructure for the spell database
 // Contains: Init(), GetSpell(), GetAllSpells(), Count, Register() helper
-// Registration methods are in separate partial class files by spell level.
+// Registration methods are in separate partial class files by starting letter.
 // ============================================================================
 using System;
 using System.Collections.Generic;
@@ -20,13 +20,8 @@ using UnityEngine;
 /// Functional: ~60-70% (combat-relevant spells)
 /// Placeholder: ~30-40% (summoning, illusions, complex utility)
 ///
-/// This is a partial class — registration methods are split across:
-///   SpellDatabase_WizardCantrips.cs
-///   SpellDatabase_WizardLevel1.cs
-///   SpellDatabase_WizardLevel2.cs
-///   SpellDatabase_ClericCantrips.cs
-///   SpellDatabase_ClericLevel1.cs
-///   SpellDatabase_ClericLevel2.cs
+/// This is a partial class — registration methods are split across alphabetical files:
+///   SpellDatabase_A.cs ... SpellDatabase_Z.cs (as needed)
 /// </summary>
 public static partial class SpellDatabase
 {
@@ -41,40 +36,32 @@ public static partial class SpellDatabase
         _spells = new Dictionary<string, SpellData>();
         _spellAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        // ================================================================
-        //  WIZARD CANTRIPS (Level 0)  — PHB p.192-196
-        // ================================================================
-        RegisterWizardCantrips();
 
         // ================================================================
-        //  WIZARD 1ST LEVEL SPELLS  — PHB p.196-230 (approx)
+        //  SPELL REGISTRATION (ALPHABETICAL FILES)
         // ================================================================
-        RegisterWizard1stLevel();
-
-        // ================================================================
-        //  WIZARD 2ND LEVEL SPELLS  — PHB p.230-260 (approx)
-        // ================================================================
-        RegisterWizard2ndLevel();
-
-        // ================================================================
-        //  CLERIC CANTRIPS (Level 0 Orisons)  — PHB p.183-184
-        // ================================================================
-        RegisterClericCantrips();
-
-        // ================================================================
-        //  CLERIC 1ST LEVEL SPELLS  — PHB p.184-210 (approx)
-        // ================================================================
-        RegisterCleric1stLevel();
-
-        // ================================================================
-        //  CLERIC 2ND LEVEL SPELLS  — PHB p.210-230 (approx)
-        // ================================================================
-        RegisterCleric2ndLevel();
-
-        // ================================================================
-        //  DOMAIN-SPECIFIC SPELLS  — spells that only appear on domain lists
-        // ================================================================
-        RegisterDomainSpells();
+        RegisterSpellsA();
+        RegisterSpellsB();
+        RegisterSpellsC();
+        RegisterSpellsD();
+        RegisterSpellsE();
+        RegisterSpellsF();
+        RegisterSpellsG();
+        RegisterSpellsH();
+        RegisterSpellsI();
+        RegisterSpellsK();
+        RegisterSpellsL();
+        RegisterSpellsM();
+        RegisterSpellsN();
+        RegisterSpellsO();
+        RegisterSpellsP();
+        RegisterSpellsR();
+        RegisterSpellsS();
+        RegisterSpellsT();
+        RegisterSpellsU();
+        RegisterSpellsV();
+        RegisterSpellsW();
+        RegisterSpellsZ();
 
         AnnotateDomainAvailabilityFromDomainDatabase();
 
