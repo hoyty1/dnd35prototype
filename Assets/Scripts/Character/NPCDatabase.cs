@@ -41,6 +41,8 @@ public static class NPCDatabase
         RegisterHumanPaladin();
         RegisterHumanCleric();
         RegisterArcaneMissileAdept();
+        RegisterProtectionFromEvilTestCasters();
+        RegisterProtectionFromEvilTestMelee();
         RegisterZombieShambler();
         RegisterTargetDummy();
 
@@ -88,6 +90,7 @@ public static class NPCDatabase
             new EncounterPreset("fiendish_template_test", "🔥 Fiendish Template Test", "Evil necromancer with fiendish wolf + fiendish dire bear allies against good paladin and cleric. Templates are applied at spawn time.", new List<string> { "fiendish_wolf", "fiendish_dire_bear", "human_paladin", "human_cleric" }),
             new EncounterPreset("summon_monster_test", "🌀 Summon Monster Test", "Cleric + wizard summon drill with Summon Monster I/II prepared on both casters for selection UI, placement, and command validation.", new List<string> { "orc_berserker", "skeleton_archer", "goblin_warchief" }),
             new EncounterPreset("npc_magic_missile_test", "🧪 NPC Magic Missile Test", "Enemy evoker only casts Magic Missile; Shield should block damage during resolution (not targeting).", new List<string> { "arcane_missile_adept" }),
+            new EncounterPreset("protection_from_evil_test", "🛡️ Protection from Evil Test", "Single protected wizard versus evil charm caster, fiendish summoned wolf, and evil melee grunt to validate mental-control block, summoned contact barrier, and +2 AC/save bonuses.", new List<string> { "evil_enchanter_test", "fiendish_wolf", "evil_goblin_test" }),
             new EncounterPreset("disrupt_undead_test", "☀️ Disrupt Undead Test", "Wizard cantrip drill versus mixed targets: skeletons + zombie + one living orc to confirm undead-only damage.", new List<string> { "skeleton_warrior", "skeleton_warrior", "zombie_shambler", "orc_berserker" }),
             new EncounterPreset("wizard_spell_test", "📘 Wizard Spell Test", "Single wizard scenario with every implemented wizard spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("cleric_spell_test", "📖 Cleric Spell Test", "Single cleric scenario with every implemented cleric spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
@@ -1429,6 +1432,83 @@ public static class NPCDatabase
             PanelColor = new Color(0.16f, 0.14f, 0.32f, 0.85f),
             NameColor = new Color(0.9f, 0.9f, 1f),
             Description = "Enemy wizard test NPC configured to only cast Magic Missile; Shield mitigation happens during resolution."
+        });
+    }
+
+    private static void RegisterProtectionFromEvilTestCasters()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "evil_enchanter_test",
+            Name = "Vhalzor the Corrupter",
+            Level = 10,
+            CharacterClass = "Wizard",
+            CreatureType = "Humanoid",
+            HitDice = 10,
+            SizeCategory = SizeCategory.Medium,
+            STR = 8,
+            DEX = 14,
+            CON = 12,
+            WIS = 12,
+            INT = 30,
+            CHA = 16,
+            BAB = 5,
+            BaseSpeed = 6,
+            BaseHitDieHP = 58,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
+            },
+            BackpackItemIds = new List<string>(),
+            KnownSpellIds = new List<string> { "charm_person" },
+            PreparedSpellSlotIds = new List<string>
+            {
+                "charm_person", "charm_person", "charm_person", "charm_person", "charm_person", "charm_person"
+            },
+            CreatureTags = new List<string> { "Humanoid", "Arcane", "Evil", "ProtectionFromEvilTest" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            SpriteColor = new Color(0.74f, 0.42f, 0.78f, 1f),
+            PanelColor = new Color(0.22f, 0.1f, 0.26f, 0.88f),
+            NameColor = new Color(0.96f, 0.82f, 1f),
+            Description = "Dedicated Protection from Evil benchmark caster: repeatedly casts Charm Person with extremely high save DC pressure."
+        });
+    }
+
+    private static void RegisterProtectionFromEvilTestMelee()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "evil_goblin_test",
+            Name = "Goblin Ravager",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = true,
+            STR = 14,
+            DEX = 14,
+            CON = 12,
+            WIS = 8,
+            INT = 8,
+            CHA = 8,
+            BAB = 4,
+            BaseSpeed = 6,
+            BaseHitDieHP = 32,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("morningstar", EquipSlot.RightHand),
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "Goblin", "Evil", "ProtectionFromEvilTest" },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Berserk,
+            SpriteColor = new Color(0.52f, 0.76f, 0.52f, 1f),
+            PanelColor = new Color(0.18f, 0.28f, 0.16f, 0.88f),
+            NameColor = new Color(0.9f, 1f, 0.9f),
+            Description = "Melee evil humanoid used to verify Protection from Evil's +2 deflection AC against standard weapon attacks."
         });
     }
 

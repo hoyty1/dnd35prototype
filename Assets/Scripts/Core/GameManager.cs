@@ -80,6 +80,7 @@ public partial class GameManager : MonoBehaviour
     private const string FiendishTemplateTestPresetId = "fiendish_template_test";
     private const string SummonMonsterTestPresetId = "summon_monster_test";
     private const string NPCMagicMissileTestPresetId = "npc_magic_missile_test";
+    private const string ProtectionFromEvilTestPresetId = "protection_from_evil_test";
     private const string DisruptUndeadTestPresetId = "disrupt_undead_test";
     private const string WizardSpellTestPresetId = "wizard_spell_test";
     private const string ClericSpellTestPresetId = "cleric_spell_test";
@@ -95,6 +96,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isFiendishTemplateTestEncounter;
     private bool _isSummonMonsterTestEncounter;
     private bool _isNpcMagicMissileTestEncounter;
+    private bool _isProtectionFromEvilTestEncounter;
     private bool _isDisruptUndeadTestEncounter;
     private bool _isWizardSpellTestEncounter;
     private bool _isClericSpellTestEncounter;
@@ -594,6 +596,7 @@ public partial class GameManager : MonoBehaviour
         _isFiendishTemplateTestEncounter = string.Equals(presetId, FiendishTemplateTestPresetId, StringComparison.Ordinal);
         _isSummonMonsterTestEncounter = string.Equals(presetId, SummonMonsterTestPresetId, StringComparison.Ordinal);
         _isNpcMagicMissileTestEncounter = string.Equals(presetId, NPCMagicMissileTestPresetId, StringComparison.Ordinal);
+        _isProtectionFromEvilTestEncounter = string.Equals(presetId, ProtectionFromEvilTestPresetId, StringComparison.Ordinal);
         _isDisruptUndeadTestEncounter = string.Equals(presetId, DisruptUndeadTestPresetId, StringComparison.Ordinal);
         _isWizardSpellTestEncounter = string.Equals(presetId, WizardSpellTestPresetId, StringComparison.Ordinal);
         _isClericSpellTestEncounter = string.Equals(presetId, ClericSpellTestPresetId, StringComparison.Ordinal);
@@ -633,6 +636,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureSummonMonsterTestParty();
         else if (_isNpcMagicMissileTestEncounter)
             ConfigureNpcMagicMissileTestParty();
+        else if (_isProtectionFromEvilTestEncounter)
+            ConfigureProtectionFromEvilTestParty();
         else if (_isDisruptUndeadTestEncounter)
             ConfigureDisruptUndeadTestParty();
         else if (_isWizardSpellTestEncounter)
@@ -1965,6 +1970,81 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   Scenario is now focused to two combatants only: player wizard vs enemy Arcane Missile Adept.");
     }
 
+    private void ConfigureProtectionFromEvilTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+        SpellDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats wizardStats = new CharacterStats(
+            name: "Warded Theron",
+            level: 10,
+            characterClass: "Wizard",
+            str: 8, dex: 14, con: 14, wis: 14, intelligence: 20, cha: 10,
+            bab: 5,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 58,
+            raceName: "Human"
+        );
+        wizardStats.CharacterAlignment = Alignment.TrueNeutral;
+
+        Vector2Int wizardStart = new Vector2Int(3, 9);
+        Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
+
+        InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        wizardInventory.Init(wizardStats);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.RecalculateStats();
+
+        SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
+        wizardSpellComp.KnownSpells.Clear();
+        wizardSpellComp.SelectedSpellIds = new List<string>
+        {
+            "detect_magic_wiz", "read_magic", "protection_from_evil", "shield", "magic_missile"
+        };
+        wizardSpellComp.PreparedSpellSlotIds = new List<string>
+        {
+            "protection_from_evil", "protection_from_evil", "shield", "magic_missile", "magic_missile"
+        };
+        wizardSpellComp.Init(wizardStats);
+
+        StatusEffectManager wizardStatusMgr = PC1.gameObject.GetComponent<StatusEffectManager>() ?? PC1.gameObject.AddComponent<StatusEffectManager>();
+        wizardStatusMgr.Init(wizardStats);
+
+        SpellData protectionFromEvil = SpellDatabase.GetSpell("protection_from_evil");
+        if (protectionFromEvil != null)
+        {
+            wizardStatusMgr.AddEffect(protectionFromEvil, "Scenario Setup", casterLevel: wizardStats.Level);
+            CombatUI?.ShowCombatLog("🛡️ Warded Theron starts with Protection from Evil active.");
+        }
+        else
+        {
+            Debug.LogError("[ProtectionFromEvilTest] Missing spell definition: protection_from_evil");
+        }
+
+        ConcentrationManager wizardConcentrationMgr = PC1.gameObject.GetComponent<ConcentrationManager>() ?? PC1.gameObject.AddComponent<ConcentrationManager>();
+        wizardConcentrationMgr.Init(wizardStats, PC1);
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("🧪 Protection from Evil Test: Warded Theron (Wizard 10) vs Vhalzor + summoned fiendish wolf + goblin ravager.");
+        CombatUI?.ShowCombatLog("   Validate that Charm Person is blocked as mental control, summoned wolf contact is blocked, and evil attackers face +2 AC/+2 save bonuses.");
+    }
+
     private void ConfigureDisruptUndeadTestParty()
     {
         RaceDatabase.Init();
@@ -2686,6 +2766,12 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(13, 12),
     };
 
+    private static readonly Vector2Int[] ProtectionFromEvilTestSpawnPositions = {
+        new Vector2Int(12, 9),  // Evil enchanter with line of sight to protected wizard.
+        new Vector2Int(10, 9),  // Fiendish wolf starts close enough to test summoned contact barrier.
+        new Vector2Int(12, 11), // Evil goblin melee pressure from a flank lane.
+    };
+
     private static readonly Vector2Int[] WizardSpellTestSpawnPositions = {
         new Vector2Int(12, 9),
     };
@@ -2779,6 +2865,11 @@ public partial class GameManager : MonoBehaviour
             {
                 // Keep targets spread so summon placement and command behavior can be observed.
                 pos = SummonMonsterTestSpawnPositions[i];
+            }
+            else if (_isProtectionFromEvilTestEncounter && i < ProtectionFromEvilTestSpawnPositions.Length)
+            {
+                // Place enemies so all three protection clauses are exercised quickly (charm spell, summoned contact, regular melee).
+                pos = ProtectionFromEvilTestSpawnPositions[i];
             }
             else if (_isWizardSpellTestEncounter && i < WizardSpellTestSpawnPositions.Length)
             {
@@ -2945,6 +3036,37 @@ public partial class GameManager : MonoBehaviour
                 npc.Stats.CharacterAlignment = spawnIndex == 2 ? Alignment.LawfulGood : Alignment.NeutralGood;
                 npc.Tags.AddTag("ScenarioOverride:FiendishTemplateGoodEnemy");
                 Debug.Log($"[FiendishTemplateTest] Enemy override applied to {enemyId}: Team=Enemy, Alignment={npc.Stats.CharacterAlignment}.");
+            }
+        }
+
+        if (_isProtectionFromEvilTestEncounter)
+        {
+            npc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
+
+            if (string.Equals(enemyId, "evil_enchanter_test", StringComparison.Ordinal))
+            {
+                npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
+                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilEnchanter");
+                Debug.Log("[ProtectionFromEvilTest] Enchanter override applied: Team=Enemy, Alignment=NeutralEvil, Charm Person loadout active.");
+            }
+            else if (string.Equals(enemyId, "fiendish_wolf", StringComparison.Ordinal))
+            {
+                npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
+                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilSummonedFiend");
+
+                CharacterController summonCaster = null;
+                if (NPCs != null && NPCs.Count > 0)
+                    summonCaster = NPCs[0];
+                if (summonCaster == null)
+                    summonCaster = npc;
+
+                RegisterScenarioSummonedCreature(npc, summonCaster, durationRounds: 50, sourceSpellId: "scenario_setup_protection_from_evil_test");
+                Debug.Log("[ProtectionFromEvilTest] Fiendish wolf registered as summoned creature for barrier validation.");
+            }
+            else
+            {
+                npc.Stats.CharacterAlignment = Alignment.NeutralEvil;
+                npc.Tags.AddTag("ScenarioOverride:ProtectionFromEvilMeleeEnemy");
             }
         }
     }
@@ -7606,6 +7728,38 @@ public partial class GameManager : MonoBehaviour
                 return summon;
         }
         return null;
+    }
+
+    private void RegisterScenarioSummonedCreature(CharacterController summon, CharacterController caster, int durationRounds, string sourceSpellId)
+    {
+        if (summon == null)
+            return;
+
+        ActiveSummonInstance existing = GetActiveSummon(summon);
+        if (existing != null)
+            _activeSummons.Remove(existing);
+
+        CharacterController resolvedCaster = caster ?? summon;
+        int clampedDuration = Mathf.Max(1, durationRounds);
+
+        var scenarioSummon = new ActiveSummonInstance
+        {
+            Controller = summon,
+            Caster = resolvedCaster,
+            RemainingRounds = clampedDuration,
+            TotalDurationRounds = clampedDuration,
+            SourceSpellId = string.IsNullOrWhiteSpace(sourceSpellId) ? "scenario_setup" : sourceSpellId,
+            IsAlliedToPCs = summon.Team == CharacterTeam.Player,
+            SmiteUsed = false,
+            CurrentCommand = SummonCommand.AttackNearest()
+        };
+
+        _activeSummons.Add(scenarioSummon);
+
+        if (summon.Team == CharacterTeam.Player)
+            _summonedAllies.Add(summon);
+        else
+            _summonedEnemies.Add(summon);
     }
 
     public bool IsSummonedCreature(CharacterController character)
