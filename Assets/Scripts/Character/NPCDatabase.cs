@@ -1419,12 +1419,12 @@ public static class NPCDatabase
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "Training" },
-            AIBehavior = NPCAIBehavior.DefensiveMelee,
-            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
             SpriteColor = new Color(0.62f, 0.58f, 0.46f, 1f),
             PanelColor = new Color(0.28f, 0.24f, 0.18f, 0.85f),
             NameColor = new Color(1f, 0.92f, 0.78f),
-            Description = "Training target with very low defenses for deterministic spell-hit validation."
+            Description = "Training target with very low defenses that only performs basic melee attacks."
         });
     }
 }

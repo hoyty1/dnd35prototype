@@ -7259,7 +7259,8 @@ public partial class GameManager : MonoBehaviour
         else
         {
             string reason = pc.Stats.IsRaging ? "already raging" :
-                           pc.Stats.IsFatigued ? "fatigued" : "no rages left today";
+                           (pc.Stats.IsExhaustedState ? "exhausted" :
+                               (pc.Stats.IsFatiguedState ? "fatigued" : "no rages left today"));
             CombatUI.ShowCombatLog($"{pc.Stats.CharacterName} cannot rage: {reason}");
             Debug.Log($"[GameManager] {pc.Stats.CharacterName} failed to activate Rage: {reason}");
         }

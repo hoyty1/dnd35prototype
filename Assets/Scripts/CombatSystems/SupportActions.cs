@@ -931,9 +931,13 @@ public partial class GameManager
             return false;
         }
 
-        if (charger.Stats.IsFatigued)
+        if (charger.Stats.IsFatiguedOrExhausted)
         {
-            if (logFailures) CombatUI?.ShowCombatLog("⚠ Fatigued creatures cannot charge.");
+            if (logFailures)
+            {
+                string fatigueState = charger.Stats.IsExhaustedState ? "Exhausted" : "Fatigued";
+                CombatUI?.ShowCombatLog($"⚠ {fatigueState} creatures cannot charge.");
+            }
             return false;
         }
 

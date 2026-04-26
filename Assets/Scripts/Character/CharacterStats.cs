@@ -333,6 +333,24 @@ public class CharacterStats
     public bool HasChargePenalty => HasNormalizedCondition(CombatConditionType.ChargePenalty);
     public bool IsFlanked => HasNormalizedCondition(CombatConditionType.Flanked);
 
+    public bool HasFatiguedCondition => HasNormalizedCondition(CombatConditionType.Fatigued);
+    public bool HasExhaustedCondition => HasNormalizedCondition(CombatConditionType.Exhausted);
+
+    /// <summary>
+    /// Legacy fatigue bool from barbarian rage plus the generalized condition system.
+    /// Exhausted supersedes fatigued for penalties.
+    /// </summary>
+    public bool IsFatiguedState => IsFatigued || HasFatiguedCondition;
+    public bool IsExhaustedState => HasExhaustedCondition;
+    public bool IsFatiguedOrExhausted => IsFatiguedState || IsExhaustedState;
+
+    public bool CannotRunOrCharge => IsFatiguedOrExhausted;
+    public bool CanRun => !CannotRunOrCharge;
+    public bool CanCharge => !CannotRunOrCharge;
+
+    public int StrengthConditionPenalty => IsExhaustedState ? 6 : (IsFatiguedState ? 2 : 0);
+    public int DexterityConditionPenalty => IsExhaustedState ? 6 : (IsFatiguedState ? 2 : 0);
+
     /// <summary>Aggregate attack modifier from active conditions.</summary>
     public int ConditionAttackPenalty => SumConditionValue(d => d.AttackModifier);
 
@@ -402,10 +420,10 @@ public class CharacterStats
     /// </summary>
     public bool ActivateRage()
     {
-        if (!IsBarbarian || IsRaging || IsFatigued || RagesUsedToday >= MaxRagesPerDay)
+        if (!IsBarbarian || IsRaging || IsFatiguedOrExhausted || RagesUsedToday >= MaxRagesPerDay)
         {
             Debug.Log($"[Barbarian] {CharacterName}: Cannot rage - " +
-                      $"IsBarbarian={IsBarbarian}, IsRaging={IsRaging}, IsFatigued={IsFatigued}, " +
+                      $"IsBarbarian={IsBarbarian}, IsRaging={IsRaging}, IsFatiguedOrExhausted={IsFatiguedOrExhausted}, " +
                       $"RagesUsed={RagesUsedToday}/{MaxRagesPerDay}");
             return false;
         }
@@ -432,8 +450,8 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// End Barbarian Rage. Remove bonuses, apply fatigue.
-    /// Fatigue: -2 STR, -2 DEX, can't charge or run.
+    /// End Barbarian Rage. Remove rage bonuses and apply fatigued state.
+    /// Fatigue penalties are applied dynamically via condition-aware ability modifiers.
     /// </summary>
     public void DeactivateRage()
     {
@@ -451,10 +469,8 @@ public class CharacterStats
         if (CurrentHP > MaxHP) CurrentHP = MaxHP;
         if (CurrentHP < -10) CurrentHP = -10;
 
-        // Apply fatigue: -2 STR, -2 DEX
+        // Apply fatigue state (penalties handled by StrengthConditionPenalty / DexterityConditionPenalty).
         IsFatigued = true;
-        STR -= 2;
-        DEX -= 2;
 
         Debug.Log($"[Barbarian] {CharacterName}: Rage ended! Now FATIGUED. " +
                   $"STR {STR}, DEX {DEX}, CON {CON}, HP {CurrentHP}/{MaxHP}");
@@ -469,6 +485,31 @@ public class CharacterStats
     public void ApplyCondition(CombatConditionType type, int rounds, string sourceName)
     {
         CombatConditionType normalized = ConditionRules.Normalize(type);
+
+        // D&D 3.5: if something would make a fatigued creature fatigued again, it becomes exhausted.
+        if (normalized == CombatConditionType.Fatigued)
+        {
+            if (IsExhaustedState)
+            {
+                // Already exhausted; no escalation beyond exhausted.
+                return;
+            }
+
+            if (IsFatiguedState)
+            {
+                normalized = CombatConditionType.Exhausted;
+                IsFatigued = false;
+                RemoveCondition(CombatConditionType.Fatigued);
+            }
+        }
+
+        // Exhausted supersedes fatigued.
+        if (normalized == CombatConditionType.Exhausted)
+        {
+            IsFatigued = false;
+            RemoveCondition(CombatConditionType.Fatigued);
+        }
+
         ConditionDefinition def = ConditionRules.GetDefinition(normalized);
 
         if (def.StackingRule == ConditionStackingRule.StackBySource)
@@ -568,6 +609,30 @@ public class CharacterStats
         {
             Debug.Log($"[Barbarian] {CharacterName}: Rage expired!");
             DeactivateRage();
+        }
+    }
+
+    /// <summary>
+    /// Apply out-of-combat complete rest to fatigue/exhaustion states.
+    /// D&D 3.5:
+    /// - 1 hour rest: exhausted becomes fatigued.
+    /// - 8 hours complete rest: fatigued ends.
+    /// </summary>
+    public void ApplyCompleteRest(int hours)
+    {
+        if (hours <= 0)
+            return;
+
+        if (IsExhaustedState && hours >= 1)
+        {
+            RemoveCondition(CombatConditionType.Exhausted);
+            ApplyCondition(CombatConditionType.Fatigued, -1, "Rest");
+        }
+
+        if (hours >= 8)
+        {
+            IsFatigued = false;
+            RemoveCondition(CombatConditionType.Fatigued);
         }
     }
 
@@ -1083,8 +1148,11 @@ public class CharacterStats
         }
     }
 
-    public int STRMod => GetModifier(STR);
-    public int DEXMod => GetModifier(DEX);
+    public int EffectiveStrengthScore => Mathf.Max(1, STR - StrengthConditionPenalty);
+    public int EffectiveDexterityScore => Mathf.Max(1, DEX - DexterityConditionPenalty);
+
+    public int STRMod => GetModifier(EffectiveStrengthScore);
+    public int DEXMod => GetModifier(EffectiveDexterityScore);
     public int CONMod => GetModifier(CON);
     public int WISMod => GetModifier(WIS);
     public int INTMod => GetModifier(INT);

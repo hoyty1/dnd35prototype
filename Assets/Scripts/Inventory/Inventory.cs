@@ -304,7 +304,7 @@ public class Inventory
 
             // --- Encumbrance from total carried weight ---
             float totalWeight = GetTotalCarriedWeightLbs();
-            float maxCarry = CharacterStats.GetHeavyLoadForStrength(OwnerStats.STR);
+            float maxCarry = CharacterStats.GetHeavyLoadForStrength(OwnerStats.EffectiveStrengthScore);
             EncumbranceLevel encumbrance = CharacterStats.GetEncumbranceLevel(totalWeight, maxCarry);
             int encDexCap = CharacterStats.GetEncumbranceDexCap(encumbrance);
             int encAcp = CharacterStats.GetEncumbranceCheckPenalty(encumbrance);

@@ -515,23 +515,24 @@ public class ActionButtonPanel : MonoBehaviour
 
         bool hasFullRound = context.Actions.HasFullRoundAction;
         bool hasMeleeThreat = pc.HasMeleeWeaponEquipped();
-        bool fatigued = pc.Stats != null && pc.Stats.IsFatigued;
+        bool fatigueRestricted = pc.Stats != null && pc.Stats.IsFatiguedOrExhausted;
+        bool isExhausted = pc.Stats != null && pc.Stats.IsExhaustedState;
         bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
         bool blockedByProne = context.IsProne;
         bool hasAnyChargeTarget = context.Gm != null && context.Gm.HasAnyValidChargeTarget(pc);
-        bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigued && !blockedByFiveFootStep && !blockedByProne && !context.IsPinned && !context.IsTurned && hasAnyChargeTarget;
+        bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigueRestricted && !blockedByFiveFootStep && !blockedByProne && !context.IsPinned && !context.IsTurned && hasAnyChargeTarget;
 
         string chargeLabel;
         if (context.IsPinned) chargeLabel = "Charge (Pinned: no)";
         else if (context.IsTurned) chargeLabel = "Charge (Turned: no)";
         else if (!hasMeleeThreat) chargeLabel = "Charge (Need melee)";
-        else if (fatigued) chargeLabel = "Charge (Fatigued)";
+        else if (fatigueRestricted) chargeLabel = isExhausted ? "Charge (Exhausted)" : "Charge (Fatigued)";
         else if (blockedByProne) chargeLabel = "Charge (Prone)";
         else if (blockedByFiveFootStep) chargeLabel = "Charge (After 5-ft step: no)";
         else if (!hasFullRound) chargeLabel = "Charge (Used)";
         else if (!hasAnyChargeTarget) chargeLabel = "Charge (No valid target)";
         else chargeLabel = "Charge (Full-Round)";
-        states.Set(ChargeButton, new ActionButtonState(hasMeleeThreat || fatigued || blockedByFiveFootStep || blockedByProne, canChargeTarget, chargeLabel));
+        states.Set(ChargeButton, new ActionButtonState(hasMeleeThreat || fatigueRestricted || blockedByFiveFootStep || blockedByProne, canChargeTarget, chargeLabel));
     }
 
     private void ComputeDualWieldAndFullAttackStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
@@ -653,10 +654,11 @@ public class ActionButtonPanel : MonoBehaviour
         states.Set(FlurryOfBlowsButton, new ActionButtonState(isMonk, canFlurry, flurryLabel));
 
         bool isBarbarian = pc.Stats.IsBarbarian;
-        bool canRage = isBarbarian && !pc.Stats.IsRaging && !pc.Stats.IsFatigued && pc.Stats.RagesUsedToday < pc.Stats.MaxRagesPerDay;
+        bool canRage = isBarbarian && !pc.Stats.IsRaging && !pc.Stats.IsFatiguedOrExhausted && pc.Stats.RagesUsedToday < pc.Stats.MaxRagesPerDay;
         string rageLabel;
         if (pc.Stats.IsRaging) rageLabel = $"RAGING ({pc.Stats.RageRoundsRemaining} rds)";
-        else if (pc.Stats.IsFatigued) rageLabel = "Rage (Fatigued)";
+        else if (pc.Stats.IsExhaustedState) rageLabel = "Rage (Exhausted)";
+        else if (pc.Stats.IsFatiguedState) rageLabel = "Rage (Fatigued)";
         else if (canRage) rageLabel = $"Rage ({pc.Stats.MaxRagesPerDay - pc.Stats.RagesUsedToday}/day)";
         else rageLabel = "Rage (Used)";
         states.Set(RageButton, new ActionButtonState(isBarbarian, canRage, rageLabel));
@@ -866,10 +868,12 @@ public class ActionButtonPanel : MonoBehaviour
             return;
 
         bool isBarbarian = pc.Stats.IsBarbarian;
-        RageStatusText.gameObject.SetActive(isBarbarian && (pc.Stats.IsRaging || pc.Stats.IsFatigued));
+        RageStatusText.gameObject.SetActive(isBarbarian && (pc.Stats.IsRaging || pc.Stats.IsFatiguedOrExhausted));
         if (pc.Stats.IsRaging)
             RageStatusText.text = $"⚡ RAGING! {pc.Stats.RageRoundsRemaining} rounds left | -2 AC | +4 STR/CON | +2 Will";
-        else if (pc.Stats.IsFatigued)
+        else if (pc.Stats.IsExhaustedState)
+            RageStatusText.text = "🥵 EXHAUSTED: -6 STR, -6 DEX, half speed";
+        else if (pc.Stats.IsFatiguedState)
             RageStatusText.text = "😫 FATIGUED: -2 STR, -2 DEX";
     }
 

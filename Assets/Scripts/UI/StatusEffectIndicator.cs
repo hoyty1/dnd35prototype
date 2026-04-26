@@ -98,11 +98,15 @@ public class StatusEffectIndicator : MonoBehaviour
             }
         }
 
-        if (_character.Stats.IsFatigued)
+        bool hasFatigueCondition = _character.Stats.HasFatiguedCondition;
+        bool hasExhaustedCondition = _character.Stats.HasExhaustedCondition;
+
+        // Legacy barbarian fatigue state may exist without an explicit combat condition.
+        if (_character.Stats.IsFatigued && !hasFatigueCondition && !hasExhaustedCondition)
         {
             list.Add(new IconData
             {
-                Key = "Fatigued",
+                Key = "FatiguedLegacy",
                 ShortLabel = "FT",
                 Tooltip = "Fatigued\n-2 STR, -2 DEX\nCannot charge or run",
                 Color = new Color(0.92f, 0.45f, 0.45f, 0.9f),

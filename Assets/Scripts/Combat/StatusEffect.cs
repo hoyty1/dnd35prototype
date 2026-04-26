@@ -160,7 +160,7 @@ public static class ConditionRules
             Type = CombatConditionType.Fatigued,
             DisplayName = "Fatigued",
             ShortLabel = "FT",
-            Description = "Cannot charge/run; STR/DEX penalties handled in class systems.",
+            Description = "-2 STR and DEX. Cannot run or charge.",
             StackingRule = ConditionStackingRule.Refresh,
             MovementMultiplier = 1f,
             IsFearCondition = false
@@ -171,11 +171,10 @@ public static class ConditionRules
             Type = CombatConditionType.Exhausted,
             DisplayName = "Exhausted",
             ShortLabel = "EX",
-            Description = "Severe fatigue; half speed and action limitations (stubbed).",
+            Description = "-6 STR and DEX. Move at half speed. Cannot run or charge.",
             StackingRule = ConditionStackingRule.Refresh,
             MovementMultiplier = 0.5f,
-            AttackModifier = -3,
-            ArmorClassModifier = -3
+            IsFearCondition = false
         });
 
         Add(new ConditionDefinition
