@@ -8518,9 +8518,11 @@ public partial class GameManager : MonoBehaviour
         if (spell.SpellId == "daze")
         {
             // D&D 3.5e Daze: one humanoid creature of 4 HD or less.
+            // Protection-from-Evil benchmark scenario intentionally allows Daze against the level 10 test wizard
+            // so we can validate save bonus behavior (+2 vs evil, no bonus vs neutral).
             if (!IsEnemyTeam(caster, target)) return false;
             if (!IsHumanoid(target)) return false;
-            if (GetTargetHitDice(target) > 4) return false;
+            if (!_isProtectionFromEvilTestEncounter && GetTargetHitDice(target) > 4) return false;
             if (IsImmuneToMindAffecting(target)) return false;
             return true;
         }

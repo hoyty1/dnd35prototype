@@ -6242,8 +6242,38 @@ public class CharacterController : MonoBehaviour
         }
     }
 
+    private bool IsBlockedBySummonedContactBarrier(CharacterController target, out AlignmentProtectionBenefits protection)
+    {
+        protection = default(AlignmentProtectionBenefits);
+
+        if (target == null || target.Stats == null || Stats == null)
+            return false;
+
+        if (GameManager.Instance == null || !GameManager.Instance.IsSummonedCreature(this))
+            return false;
+
+        protection = AlignmentProtectionRules.GetBenefitsAgainst(target, Stats.CharacterAlignment);
+        return protection.HasMatch && protection.BlocksSummonedContact;
+    }
+
+    private SpecialAttackResult BuildSummonedContactBarrierResult(CharacterController target, string maneuverName)
+    {
+        string attackerName = Stats != null ? Stats.CharacterName : name;
+        string defenderName = target != null && target.Stats != null ? target.Stats.CharacterName : "target";
+
+        return new SpecialAttackResult
+        {
+            ManeuverName = maneuverName,
+            Success = false,
+            Log = $"Protection barrier prevents {attackerName} from making bodily contact with {defenderName}. {maneuverName} automatically fails!"
+        };
+    }
+
     private SpecialAttackResult ResolveTrip(CharacterController target, int? attackBonusOverride = null)
     {
+        if (IsBlockedBySummonedContactBarrier(target, out _))
+            return BuildSummonedContactBarrierResult(target, "Trip");
+
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
         int attackBonus = attackBonusOverride ?? Stats.BaseAttackBonus;
@@ -6271,6 +6301,9 @@ public class CharacterController : MonoBehaviour
 
     private SpecialAttackResult ResolveDisarm(CharacterController target, EquipSlot? preferredTargetSlot, int? iterativeAttackBonusOverride = null, ItemData attackerWeaponOverride = null, bool usedOffHand = false, int attackerDualWieldPenaltyForLog = 0)
     {
+        if (IsBlockedBySummonedContactBarrier(target, out _))
+            return BuildSummonedContactBarrierResult(target, "Disarm");
+
         if (!TryGetDisarmTargetHeldItem(target, preferredTargetSlot, out ItemData targetHeldItem, out EquipSlot targetHeldItemSlot))
         {
             return new SpecialAttackResult
@@ -6437,6 +6470,9 @@ public class CharacterController : MonoBehaviour
             };
         }
 
+        if (IsBlockedBySummonedContactBarrier(target, out _))
+            return BuildSummonedContactBarrierResult(target, "Grapple");
+
         if (!CanUseStandardGrapple())
         {
             return new SpecialAttackResult
@@ -6560,6 +6596,9 @@ public class CharacterController : MonoBehaviour
             };
         }
 
+        if (IsBlockedBySummonedContactBarrier(target, out _))
+            return BuildSummonedContactBarrierResult(target, "Improved Grab");
+
         if (!Stats.HasImprovedGrab)
         {
             return new SpecialAttackResult
@@ -6638,6 +6677,9 @@ public class CharacterController : MonoBehaviour
         bool usedOffHand = false,
         int attackerDualWieldPenaltyForLog = 0)
     {
+        if (IsBlockedBySummonedContactBarrier(target, out _))
+            return BuildSummonedContactBarrierResult(target, "Sunder");
+
         if (!TryGetSunderTargetItem(target, targetSlot, out ItemData targetItem, out EquipSlot resolvedTargetSlot, out SunderTargetKind targetKind))
         {
             return new SpecialAttackResult
@@ -6897,6 +6939,9 @@ public class CharacterController : MonoBehaviour
 
     private SpecialAttackResult ResolveBullRush(CharacterController target, int attackBab, int chargeBonus)
     {
+        if (IsBlockedBySummonedContactBarrier(target, out _))
+            return BuildSummonedContactBarrierResult(target, "Bull Rush");
+
         BullRushCheckResult attackerCheck = RollBullRushAttackerCheck(attackBab, chargeBonus);
         BullRushCheckResult defenderCheck = target.RollBullRushDefenderCheck();
         bool success = attackerCheck.Total > defenderCheck.Total;
@@ -6954,6 +6999,9 @@ public class CharacterController : MonoBehaviour
                 Log = $"{target.Stats.CharacterName} avoids {Stats.CharacterName}'s overrun attempt and yields space."
             };
         }
+
+        if (IsBlockedBySummonedContactBarrier(target, out _))
+            return BuildSummonedContactBarrierResult(target, "Overrun");
 
         int atkRoll = Random.Range(1, 21);
         int defRoll = Random.Range(1, 21);
@@ -7038,6 +7086,9 @@ public class CharacterController : MonoBehaviour
                 Log = "Coup de Grace failed: invalid target."
             };
         }
+
+        if (IsBlockedBySummonedContactBarrier(target, out _))
+            return BuildSummonedContactBarrierResult(target, "Coup de Grace");
 
         int distance = GetMinimumDistanceToTarget(target, chebyshev: true);
         if (distance != 1)

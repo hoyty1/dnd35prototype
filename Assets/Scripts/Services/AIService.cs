@@ -267,6 +267,12 @@ public class AIService : MonoBehaviour
         if (closestPC == null)
             yield break;
 
+        if (TryExecuteSpellcastAction(npc, closestPC))
+        {
+            yield return new WaitForSeconds(0.8f);
+            yield break;
+        }
+
         bool avoidAoORisk = npc.IsEquippedWeaponRanged();
         bool riskIsTooHigh = false;
         bool tookTacticalStep = false;
@@ -328,6 +334,10 @@ public class AIService : MonoBehaviour
         }
 
         int maxRange = GetMaximumAttackRangeInSquares(npc);
+        int preferredSpellRange = GetBestAvailableSpellRangeInSquares(npc, rangedTarget);
+        if (preferredSpellRange > maxRange)
+            maxRange = preferredSpellRange;
+
         int distToRangedTarget = SquareGridUtils.GetDistance(npc.GridPosition, rangedTarget.GridPosition);
 
         if (distToRangedTarget <= maxRange && !rangedTarget.Stats.IsDead)
@@ -1048,25 +1058,59 @@ public class AIService : MonoBehaviour
         return spellcasting != null && spellcasting.CanCastSpells && spellcasting.HasAnyCastablePreparedSpell();
     }
 
+    private int GetBestAvailableSpellRangeInSquares(CharacterController caster, CharacterController target)
+    {
+        if (caster == null || caster.Stats == null)
+            return 0;
+
+        SpellData bestSpell = SelectSpell(caster, target);
+        if (bestSpell == null)
+            return 0;
+
+        int rangeSquares = bestSpell.GetRangeSquaresForCasterLevel(caster.Stats.GetCasterLevel());
+        return Mathf.Max(1, rangeSquares);
+    }
+
     private bool TryExecuteSpellcastAction(CharacterController caster, CharacterController fallbackTarget)
     {
         if (_gameManager == null || caster == null || caster.Stats == null)
             return false;
 
-        if (!caster.Actions.HasStandardAction || !caster.Stats.IsSpellcaster)
+        if (!caster.Actions.HasStandardAction)
             return false;
+
+        if (!caster.Stats.IsSpellcaster)
+            return false;
+
+        SpellcastingComponent spellcasting = caster.GetComponent<SpellcastingComponent>();
+        List<SpellData> castableSpells = spellcasting != null ? spellcasting.GetCastablePreparedSpells() : null;
+        int castableCount = castableSpells != null ? castableSpells.Count : 0;
 
         SpellData spell = SelectSpell(caster, fallbackTarget);
         if (spell == null)
+        {
+            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} has no castable spell choice. castablePrepared={castableCount}");
             return false;
+        }
 
         CharacterController spellTarget = SelectBestSpellTarget(caster, spell, fallbackTarget);
         if (spellTarget == null)
+        {
+            int rangeSquares = Mathf.Max(1, spell.GetRangeSquaresForCasterLevel(caster.Stats.GetCasterLevel()));
+            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} selected {spell.Name} but found no valid targets in range ({rangeSquares} squares).");
             return false;
+        }
+
+        int targetDistance = SquareGridUtils.GetDistance(caster.GridPosition, spellTarget.GridPosition);
+        int spellRange = Mathf.Max(1, spell.GetRangeSquaresForCasterLevel(caster.Stats.GetCasterLevel()));
+        Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} evaluating {spell.Name}: target={spellTarget.Stats.CharacterName}, distance={targetDistance}, range={spellRange}, castablePrepared={castableCount}");
 
         bool casted = _gameManager.TryNPCPerformSpellCastForAI(caster, spellTarget, spell);
         if (!casted)
+        {
+            Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} failed to cast {spell.Name} on {spellTarget.Stats.CharacterName}. (Likely invalid target constraints, LOS, or range race)");
             return false;
+        }
 
         Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} casts {spell.Name} on {spellTarget.Stats.CharacterName}");
         return true;
