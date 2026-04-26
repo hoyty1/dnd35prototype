@@ -2930,6 +2930,26 @@ public partial class GameManager : MonoBehaviour
 
         inv.CharacterInventory.RecalculateStats();
 
+        bool shouldInitSpellcasting = stats.IsSpellcaster
+            && ((def.KnownSpellIds != null && def.KnownSpellIds.Count > 0)
+                || (def.PreparedSpellSlotIds != null && def.PreparedSpellSlotIds.Count > 0));
+
+        if (shouldInitSpellcasting)
+        {
+            SpellcastingComponent spellComp = npc.gameObject.GetComponent<SpellcastingComponent>()
+                ?? npc.gameObject.AddComponent<SpellcastingComponent>();
+            spellComp.KnownSpells.Clear();
+            spellComp.SelectedSpellIds = def.KnownSpellIds != null && def.KnownSpellIds.Count > 0
+                ? new List<string>(def.KnownSpellIds)
+                : null;
+            spellComp.PreparedSpellSlotIds = def.PreparedSpellSlotIds != null && def.PreparedSpellSlotIds.Count > 0
+                ? new List<string>(def.PreparedSpellSlotIds)
+                : null;
+            spellComp.Init(stats);
+
+            Debug.Log($"[GameManager] Initialized NPC spellcasting for {def.Name}: {spellComp.GetSlotSummary()}");
+        }
+
         // Initialize StatusEffectManager for NPC duration tracking
         var statusMgr = npc.gameObject.GetComponent<StatusEffectManager>();
         if (statusMgr == null)
@@ -8152,6 +8172,40 @@ public partial class GameManager : MonoBehaviour
 
         return false;
     }
+
+    private bool HasActiveShieldSpell(CharacterController target)
+    {
+        if (target == null)
+            return false;
+
+        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        if (statusMgr != null)
+        {
+            foreach (ActiveSpellEffect effect in statusMgr.ActiveEffects)
+            {
+                if (effect?.Spell == null)
+                    continue;
+
+                if (string.Equals(effect.Spell.SpellId, "shield", StringComparison.OrdinalIgnoreCase)
+                    && effect.RemainingRounds > 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        SpellcastingComponent spellComp = target.GetComponent<SpellcastingComponent>();
+        if (spellComp != null
+            && spellComp.ActiveBuffs != null
+            && spellComp.ActiveBuffs.TryGetValue("shield", out int rounds)
+            && rounds > 0)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Highlight valid targets for a spell based on its range and target type.
     /// Shows the full spell range area (purple) with valid targets highlighted (magenta).
@@ -10227,6 +10281,12 @@ public partial class GameManager : MonoBehaviour
 
     public IEnumerator NPCPerformAttackForAI(CharacterController npc, CharacterController target)
         => NPCPerformAttack(npc, target);
+
+    public bool TryNPCPerformSpellCastForAI(CharacterController npc, CharacterController target, SpellData spell)
+        => TryNPCPerformSpellCast(npc, target, spell);
+
+    public bool HasActiveShieldSpellForAI(CharacterController target)
+        => HasActiveShieldSpell(target);
 
     public List<CharacterController> GetAllCharactersForAI()
         => GetAllCharacters();
@@ -13639,6 +13699,84 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         nextTarget = bestTarget;
+        return true;
+    }
+
+    private bool TryNPCPerformSpellCast(CharacterController npc, CharacterController target, SpellData spell)
+    {
+        if (npc == null || target == null || spell == null || npc.Stats == null || target.Stats == null)
+            return false;
+
+        if (!npc.Actions.HasStandardAction)
+            return false;
+
+        if (target.Stats.IsDead)
+            return false;
+
+        SpellcastingComponent spellComp = npc.GetComponent<SpellcastingComponent>();
+        if (spellComp == null || !spellComp.CanCastSpells)
+            return false;
+
+        if (!spellComp.CanCast(spell))
+            return false;
+
+        if (!IsValidTargetForSpell(npc, target, spell))
+            return false;
+
+        int rangeSquares = spell.GetRangeSquaresForCasterLevel(npc.Stats.GetCasterLevel());
+        if (rangeSquares <= 0)
+            rangeSquares = 1;
+
+        int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+        if (distance > rangeSquares)
+            return false;
+
+        if (spell.TargetType == SpellTargetType.Area)
+            return false;
+
+        if (!npc.CommitStandardAction())
+            return false;
+
+        bool consumed = spellComp.CastSpellFromSlot(spell);
+        if (!consumed)
+            return false;
+
+        if (TryRollArcaneSpellFailure(npc, spell, false, out int asfRoll, out int asfChance))
+        {
+            LogArcaneSpellFailure(npc, spell, asfRoll, asfChance);
+            UpdateAllStatsUI();
+            return true;
+        }
+
+        bool skipFriendlyTouchAttackRoll = spell.IsMeleeTouchSpell() && IsFriendlyTarget(npc, target);
+        bool forceTargetToFailSave = ShouldForceTargetToAcceptSave(npc, target, spell);
+        SpellResult result = SpellCaster.Cast(spell, npc.Stats, target.Stats, null, skipFriendlyTouchAttackRoll, forceTargetToFailSave, npc, target);
+
+        bool appliesTrackedEffect = spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Debuff;
+        bool effectNegatedBySave = spell.EffectType == SpellEffectType.Debuff && result.RequiredSave && result.SaveSucceeded;
+
+        if (effectNegatedBySave)
+            CombatUI?.ShowCombatLog($"🛡 {target.Stats.CharacterName} resists {spell.Name} with a successful {result.SaveType} save.");
+
+        if (result.MindAffectingImmunityBlocked)
+            CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is immune to mind-affecting effects. {spell.Name} has no effect.");
+
+        if (result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            ApplySpellBuff(npc, target, spell, spellComp);
+
+        if (result.DamageDealt > 0)
+            CheckConcentrationOnDamage(target, result.DamageDealt);
+
+        _lastCombatLog = result.GetFormattedLog();
+        CombatUI?.ShowCombatLog(_lastCombatLog);
+
+        if (result.TargetKilled)
+        {
+            target.OnDeath();
+            HandleSummonDeathCleanup(target);
+        }
+
+        UpdateAllStatsUI();
         return true;
     }
 
