@@ -3485,6 +3485,8 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     public void StartCombat()
     {
+        ClearAllActiveGreaseEffects();
+
         var activePCs = new List<CharacterController>();
         foreach (var pc in PCs)
         {
@@ -3553,6 +3555,9 @@ public partial class GameManager : MonoBehaviour
         // Tick summon durations (Summon Monster: 1 round/level)
         TickSummonDurations();
 
+        // Tick persistent Grease zones/objects.
+        TickActiveGreaseEffects();
+
         // Keep Turn Undead tracker table aligned with condition expiration.
         PruneTurnUndeadTrackers();
         LogOngoingTurnUndeadStatusAtRoundStart();
@@ -3561,6 +3566,7 @@ public partial class GameManager : MonoBehaviour
     private void OnCombatEnded()
     {
         CurrentPhase = TurnPhase.CombatOver;
+        ClearAllActiveGreaseEffects();
         _conditionService?.CleanupOnCombatEnd(GetAllCharacters());
         CombatUI.SetTurnIndicator("Combat has ended.");
         CombatUI.SetActionButtonsVisible(false);
@@ -4876,6 +4882,12 @@ public partial class GameManager : MonoBehaviour
         if (inv.EmptySlots <= 0)
         {
             feedback = $"{actor.Stats.CharacterName}'s inventory is full.";
+            return false;
+        }
+
+        if (!TryResolveGreasedItemPickup(actor, item, out string greasePickupFailure))
+        {
+            feedback = greasePickupFailure;
             return false;
         }
 
@@ -7714,6 +7726,9 @@ public partial class GameManager : MonoBehaviour
             Debug.Log($"[GameManager] Metamagic applied: {metamagic.GetSummary(spell.SpellLevel)}");
         }
 
+        if (TryShowGreaseCastModePrompt(pc))
+            return;
+
         if (ShouldShowTouchSpellPrompt(_pendingSpell))
         {
             CombatUI?.ShowTouchSpellPrompt(
@@ -7725,6 +7740,7 @@ public partial class GameManager : MonoBehaviour
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
+                    ResetPendingGreaseCastMode();
                     ShowActionChoices();
                 });
             return;
@@ -8398,6 +8414,12 @@ public partial class GameManager : MonoBehaviour
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
             ShowActionChoices();
+            return;
+        }
+
+        if (IsPendingGreaseAreaCast())
+        {
+            EnterGreaseAreaTargetingMode(caster, _pendingSpell);
             return;
         }
 
@@ -9098,6 +9120,7 @@ public partial class GameManager : MonoBehaviour
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
+                    ResetPendingGreaseCastMode();
                     return;
                 }
                 else if (AreAllPCsDead())
@@ -9108,6 +9131,7 @@ public partial class GameManager : MonoBehaviour
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
+                    ResetPendingGreaseCastMode();
                     return;
                 }
             }
@@ -9115,6 +9139,7 @@ public partial class GameManager : MonoBehaviour
             _pendingSpell = null;
             _pendingSpellFromHeldCharge = false;
             _pendingMetamagic = null;
+            ResetPendingGreaseCastMode();
 
             // After standard action, check for remaining actions
             StartCoroutine(AfterAttackDelay(caster, 1.5f));
@@ -9261,6 +9286,9 @@ public partial class GameManager : MonoBehaviour
         Vector2 worldPoint = GetMouseWorldPosition();
         if (worldPoint == Vector2.zero && _mainCam == null) return;
 
+        if (TryUpdateGreaseAreaPreview(pc, worldPoint))
+            return;
+
         HashSet<Vector2Int> aoeCells = null;
 
         // ===== LINE SPELLS: Mouse-direction targeting =====
@@ -9401,6 +9429,9 @@ public partial class GameManager : MonoBehaviour
     {
         if (_pendingSpell == null || !_isAoETargeting) return;
 
+        if (TryHandleGreaseAreaTargetClick(caster, clickedCell))
+            return;
+
         Vector2Int targetPos = clickedCell.Coords;
 
         // Validate range for burst spells
@@ -9483,6 +9514,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSpell = null;
         _pendingMetamagic = null;
         _pendingSpellFromHeldCharge = false;
+        ResetPendingGreaseCastMode();
 
         Grid.ClearAllHighlights();
         ShowActionChoices();
@@ -9500,6 +9532,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSpellFromHeldCharge = false;
         _pendingMetamagic = null;
         _pendingSummonSelection = null;
+        ResetPendingGreaseCastMode();
         _pendingAttackMode = PendingAttackMode.Single;
 
         Grid.ClearAllHighlights();
@@ -10351,6 +10384,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSpell = null;
         _pendingMetamagic = null;
         _pendingSpellFromHeldCharge = false;
+        ResetPendingGreaseCastMode();
 
         Grid.ClearAllHighlights();
         UpdateAllStatsUI();
@@ -10366,6 +10400,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSpell = null;
         _pendingMetamagic = null;
         _pendingSpellFromHeldCharge = false;
+        ResetPendingGreaseCastMode();
 
         Grid.ClearAllHighlights();
         UpdateAllStatsUI();
@@ -11846,9 +11881,21 @@ public partial class GameManager : MonoBehaviour
         }
 
         bool interruptedByIncapacitation = false;
+        bool interruptedByGreaseSlip = false;
+        int movementBudgetSquares = isWithdraw ? GetWithdrawMoveRangeSquares(pc) : Mathf.Max(1, pc.Stats.MoveRange);
+        int movementCostConsumed = 0;
+        Vector2Int previousCell = pc.GridPosition;
+
         for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
         {
             Vector2Int step = path[pathIndex];
+            int stepCost = 1 + GetGreaseAreaExtraMovementCost(pc, step);
+            if (movementCostConsumed + stepCost > movementBudgetSquares)
+            {
+                CombatUI?.ShowCombatLog($"🛢 {pc.Stats.CharacterName} cannot move farther this action (grease slows movement).");
+                break;
+            }
+
             var stepPath = new List<Vector2Int> { step };
 
             if (_movementService != null)
@@ -11856,49 +11903,59 @@ public partial class GameManager : MonoBehaviour
             else
                 yield return StartCoroutine(pc.MoveAlongPath(stepPath, PlayerMoveSecondsPerStep, markAsMoved: false));
 
-            if (provokedAoOs == null || provokedAoOs.Count == 0)
-                continue;
+            movementCostConsumed += stepCost;
 
-            for (int aooIndex = 0; aooIndex < provokedAoOs.Count; aooIndex++)
+            if (provokedAoOs != null && provokedAoOs.Count > 0)
             {
-                AoOThreatInfo aooInfo = provokedAoOs[aooIndex];
-                if (aooInfo == null || aooInfo.PathIndex != pathIndex)
-                    continue;
-
-                CharacterController threatener = aooInfo.Threatener;
-                if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead)
-                    continue;
-
-                CombatResult aooResult = _movementService != null
-                    ? _movementService.TriggerAoO(threatener, pc)
-                    : ThreatSystem.ExecuteAoO(threatener, pc);
-                if (aooResult == null)
-                    continue;
-
-                string aooLog = $"⚔ AoO: {aooResult.GetDetailedSummary()}";
-                CombatUI?.ShowCombatLog(aooLog);
-                UpdateAllStatsUI();
-
-                if (LogAttacksToConsole)
-                    Debug.Log("[Combat] " + aooLog);
-
-                if (aooResult.Hit && aooResult.TotalDamage > 0)
-                    CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
-
-                if (pc.IsUnconscious || pc.Stats.IsDead)
+                for (int aooIndex = 0; aooIndex < provokedAoOs.Count; aooIndex++)
                 {
-                    interruptedByIncapacitation = true;
-                    break;
+                    AoOThreatInfo aooInfo = provokedAoOs[aooIndex];
+                    if (aooInfo == null || aooInfo.PathIndex != pathIndex)
+                        continue;
+
+                    CharacterController threatener = aooInfo.Threatener;
+                    if (threatener == null || threatener.Stats == null || threatener.Stats.IsDead)
+                        continue;
+
+                    CombatResult aooResult = _movementService != null
+                        ? _movementService.TriggerAoO(threatener, pc)
+                        : ThreatSystem.ExecuteAoO(threatener, pc);
+                    if (aooResult == null)
+                        continue;
+
+                    string aooLog = $"⚔ AoO: {aooResult.GetDetailedSummary()}";
+                    CombatUI?.ShowCombatLog(aooLog);
+                    UpdateAllStatsUI();
+
+                    if (LogAttacksToConsole)
+                        Debug.Log("[Combat] " + aooLog);
+
+                    if (aooResult.Hit && aooResult.TotalDamage > 0)
+                        CheckConcentrationOnDamage(pc, aooResult.TotalDamage);
+
+                    if (pc.IsUnconscious || pc.Stats.IsDead)
+                    {
+                        interruptedByIncapacitation = true;
+                        break;
+                    }
+
+                    yield return new WaitForSeconds(1.0f);
                 }
 
-                yield return new WaitForSeconds(1.0f);
+                if (interruptedByIncapacitation)
+                    break;
             }
 
-            if (interruptedByIncapacitation)
+            if (!HandleGreaseStepAfterMovement(pc, previousCell, step))
+            {
+                interruptedByGreaseSlip = true;
                 break;
+            }
+
+            previousCell = step;
         }
 
-        if (path.Count > 0)
+        if (movementCostConsumed > 0)
             pc.HasMovedThisTurn = true;
 
         CheckTurnUndeadProximityBreakingForMover(pc);
@@ -11929,6 +11986,9 @@ public partial class GameManager : MonoBehaviour
             EndActivePCTurn();
             yield break;
         }
+
+        if (interruptedByGreaseSlip)
+            CombatUI?.ShowCombatLog($"🛢 {pc.Stats.CharacterName}'s movement ends after slipping in grease.");
 
         ShowActionChoices();
     }
@@ -12078,6 +12138,7 @@ public partial class GameManager : MonoBehaviour
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
+                ResetPendingGreaseCastMode();
                 ShowActionChoices();
                 return;
             }
@@ -12085,6 +12146,12 @@ public partial class GameManager : MonoBehaviour
             // Valid target click
             if (cell.IsOccupied && !cell.Occupant.Stats.IsDead)
             {
+                if (IsPendingGreaseObjectCast())
+                {
+                    PerformGreaseObjectCast(pc, cell.Occupant);
+                    return;
+                }
+
                 PerformSpellCast(pc, cell.Occupant);
                 return;
             }
@@ -12093,6 +12160,7 @@ public partial class GameManager : MonoBehaviour
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
+            ResetPendingGreaseCastMode();
             ShowActionChoices();
             return;
         }

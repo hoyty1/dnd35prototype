@@ -110,16 +110,14 @@ public static partial class SpellDatabase
                 {
                     SpellId = "grease",
                     Name = "Grease",
-                    Description = "Covers ground in grease, creatures must save or fall. Reflex save. 1 round/level. PHB p.237",
+                    Description = "Object or 10-ft-square area becomes slippery. Reflex save to avoid falling when first affected. Balance checks while traversing. Duration 1 round/level. PHB p.237",
                     SpellLevel = 1, School = "Conjuration",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.SingleEnemy, // Simplified
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
+                    TargetType = SpellTargetType.SingleEnemy, // Runtime prompt supports object mode (single target) or area mode
                     RangeCategory = SpellRangeCategory.Close,
-                    AreaRadius = 2,
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Reflex",
-                    BuffDurationRounds = 3,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
