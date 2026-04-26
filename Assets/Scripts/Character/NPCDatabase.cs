@@ -87,7 +87,7 @@ public static class NPCDatabase
             new EncounterPreset("celestial_template_test", "✨ Celestial Template Test", "Good cleric with celestial wolf + celestial dire bear allies against evil undead. Templates are applied at spawn time.", new List<string> { "wolf_pack_hunter", "dire_bear", "skeleton_warrior", "skeleton_archer", "zombie_shambler" }),
             new EncounterPreset("fiendish_template_test", "🔥 Fiendish Template Test", "Evil necromancer with fiendish wolf + fiendish dire bear allies against good paladin and cleric. Templates are applied at spawn time.", new List<string> { "fiendish_wolf", "fiendish_dire_bear", "human_paladin", "human_cleric" }),
             new EncounterPreset("summon_monster_test", "🌀 Summon Monster Test", "Cleric + wizard summon drill with Summon Monster I/II prepared on both casters for selection UI, placement, and command validation.", new List<string> { "orc_berserker", "skeleton_archer", "goblin_warchief" }),
-            new EncounterPreset("npc_magic_missile_test", "🧪 NPC Magic Missile Test", "Enemy evoker only casts Magic Missile and should skip targets protected by Shield.", new List<string> { "arcane_missile_adept" }),
+            new EncounterPreset("npc_magic_missile_test", "🧪 NPC Magic Missile Test", "Enemy evoker only casts Magic Missile; Shield should block damage during resolution (not targeting).", new List<string> { "arcane_missile_adept" }),
             new EncounterPreset("wizard_spell_test", "📘 Wizard Spell Test", "Single wizard scenario with every implemented wizard spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("cleric_spell_test", "📖 Cleric Spell Test", "Single cleric scenario with every implemented cleric spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
@@ -1427,7 +1427,7 @@ public static class NPCDatabase
             SpriteColor = new Color(0.62f, 0.66f, 0.92f, 1f),
             PanelColor = new Color(0.16f, 0.14f, 0.32f, 0.85f),
             NameColor = new Color(0.9f, 0.9f, 1f),
-            Description = "Enemy wizard test NPC configured to only cast Magic Missile and avoid Shielded targets."
+            Description = "Enemy wizard test NPC configured to only cast Magic Missile; Shield mitigation happens during resolution."
         });
     }
 

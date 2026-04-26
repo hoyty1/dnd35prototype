@@ -1085,8 +1085,6 @@ public class AIService : MonoBehaviour
         if (rangeSquares <= 0)
             rangeSquares = 1;
 
-        bool skipShieldedTargets = string.Equals(spell.SpellId, "magic_missile", StringComparison.OrdinalIgnoreCase);
-
         CharacterController bestTarget = null;
         float bestScore = float.NegativeInfinity;
 
@@ -1101,9 +1099,6 @@ public class AIService : MonoBehaviour
 
             int distance = SquareGridUtils.GetDistance(caster.GridPosition, candidate.GridPosition);
             if (distance > rangeSquares)
-                continue;
-
-            if (skipShieldedTargets && _gameManager.HasActiveShieldSpellForAI(candidate))
                 continue;
 
             float score = GetTargetPriority(caster, candidate);
