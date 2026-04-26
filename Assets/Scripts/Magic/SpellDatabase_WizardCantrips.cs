@@ -72,24 +72,6 @@ public static partial class SpellDatabase
             ProvokesAoO = true
         });
 
-        Register(new SpellData
-        {
-            SpellId = "electric_jolt",
-            Name = "Electric Jolt",
-            Description = "Deals 1d3 electricity damage. Ranged touch attack. (Spell Compendium)",
-            SpellLevel = 0, School = "Evocation",
-            ClassList = new[] { "Wizard" },
-            TargetType = SpellTargetType.SingleEnemy,
-            RangeSquares = 5,
-            IsTouch = true,
-            IsRangedTouch = true,
-            EffectType = SpellEffectType.Damage,
-            DamageDice = 3, DamageCount = 1,
-            DamageType = "electricity",
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true
-        });
-
         // --- PLACEHOLDER: Utility Cantrips ---
 
         Register(new SpellData
