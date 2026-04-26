@@ -3,7 +3,9 @@
 // Contains: Init(), GetSpell(), GetAllSpells(), Count, Register() helper
 // Registration methods are in separate partial class files by spell level.
 // ============================================================================
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 /// <summary>
@@ -29,6 +31,7 @@ using UnityEngine;
 public static partial class SpellDatabase
 {
     private static Dictionary<string, SpellData> _spells;
+    private static Dictionary<string, string> _spellAliases;
     private static bool _initialized;
 
     public static void Init()
@@ -36,6 +39,7 @@ public static partial class SpellDatabase
         if (_initialized) return;
         _initialized = true;
         _spells = new Dictionary<string, SpellData>();
+        _spellAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // ================================================================
         //  WIZARD CANTRIPS (Level 0)  — PHB p.192-196
@@ -72,6 +76,8 @@ public static partial class SpellDatabase
         // ================================================================
         RegisterDomainSpells();
 
+        AnnotateDomainAvailabilityFromDomainDatabase();
+
         int total = _spells.Count;
         int functional = 0;
         int placeholder = 0;
@@ -85,15 +91,76 @@ public static partial class SpellDatabase
 
     private static void Register(SpellData spell)
     {
+        if (spell == null || string.IsNullOrWhiteSpace(spell.SpellId))
+        {
+            Debug.LogWarning("[SpellDatabase] Attempted to register a null/invalid spell.");
+            return;
+        }
+
+        spell.EnsureAvailabilityFromLegacyClassList();
         _spells[spell.SpellId] = spell;
+    }
+
+    private static void RegisterAlias(string aliasSpellId, string canonicalSpellId)
+    {
+        if (string.IsNullOrWhiteSpace(aliasSpellId) || string.IsNullOrWhiteSpace(canonicalSpellId))
+            return;
+
+        if (string.Equals(aliasSpellId, canonicalSpellId, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _spellAliases[aliasSpellId] = canonicalSpellId;
+    }
+
+    private static void RegisterClassSpellAlias(string aliasSpellId, string canonicalSpellId, string className, int spellLevel, string domain = null)
+    {
+        RegisterAlias(aliasSpellId, canonicalSpellId);
+
+        if (_spells.TryGetValue(canonicalSpellId, out SpellData canonicalSpell))
+        {
+            canonicalSpell.AddAvailability(className, spellLevel, domain);
+        }
+        else
+        {
+            Debug.LogWarning($"[SpellDatabase] Could not register alias '{aliasSpellId}' -> '{canonicalSpellId}' because canonical spell is missing.");
+        }
+    }
+
+    private static void AnnotateDomainAvailabilityFromDomainDatabase()
+    {
+        DomainDatabase.Init();
+        List<DomainData> domains = DomainDatabase.GetAllDomains();
+        foreach (DomainData domain in domains)
+        {
+            if (domain?.DomainSpells == null)
+                continue;
+
+            foreach (KeyValuePair<int, string> entry in domain.DomainSpells)
+            {
+                SpellData spell = GetSpell(entry.Value);
+                if (spell == null)
+                    continue;
+
+                spell.AddAvailability("Cleric", entry.Key, domain.Name);
+            }
+        }
     }
 
     /// <summary>Get a spell by ID. Returns null if not found.</summary>
     public static SpellData GetSpell(string spellId)
     {
         Init();
+
+        if (string.IsNullOrWhiteSpace(spellId))
+            return null;
+
         if (_spells.TryGetValue(spellId, out SpellData spell))
             return spell;
+
+        if (_spellAliases.TryGetValue(spellId, out string canonicalId) &&
+            _spells.TryGetValue(canonicalId, out spell))
+            return spell;
+
         Debug.LogWarning($"[SpellDatabase] Spell not found: {spellId}");
         return null;
     }
@@ -116,13 +183,24 @@ public static partial class SpellDatabase
     }
     private static bool SpellMatchesClass(SpellData spell, string className)
     {
-        if (spell == null || spell.ClassList == null || string.IsNullOrWhiteSpace(className))
+        if (spell == null || string.IsNullOrWhiteSpace(className))
+            return false;
+
+        if (spell.AvailableFor != null && spell.AvailableFor.Count > 0)
+        {
+            return spell.AvailableFor.Any(a =>
+                a != null &&
+                a.MatchesClass(className) &&
+                string.IsNullOrWhiteSpace(a.Domain));
+        }
+
+        if (spell.ClassList == null)
             return false;
 
         for (int i = 0; i < spell.ClassList.Length; i++)
         {
             string cls = spell.ClassList[i];
-            if (string.Equals(cls, className, System.StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(cls, className, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
 
@@ -143,9 +221,11 @@ public static partial class SpellDatabase
 
         result.Sort((a, b) =>
         {
-            int levelCmp = a.SpellLevel.CompareTo(b.SpellLevel);
+            int aLevel = a.GetSpellLevelFor(className);
+            int bLevel = b.GetSpellLevelFor(className);
+            int levelCmp = aLevel.CompareTo(bLevel);
             if (levelCmp != 0) return levelCmp;
-            return string.Compare(a.Name, b.Name, System.StringComparison.OrdinalIgnoreCase);
+            return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
         });
 
         return result;
@@ -166,10 +246,7 @@ public static partial class SpellDatabase
         var result = new List<SpellData>();
         foreach (var spell in _spells.Values)
         {
-            if (spell.SpellLevel != spellLevel)
-                continue;
-
-            if (SpellMatchesClass(spell, className))
+            if (spell != null && spell.IsAvailableFor(className, spellLevel))
                 result.Add(spell);
         }
 

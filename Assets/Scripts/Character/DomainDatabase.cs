@@ -16,10 +16,10 @@ public static class DomainDatabase
         _initialized = true;
 
         // Core domains from PHB
-        // Note: domain spells use existing spell IDs where available (_clr suffix for cleric versions)
+        // Note: domain spells reference canonical spell IDs when available.
         Register(new DomainData("Good",
             "Cast good spells at +1 caster level.",
-            new Dictionary<int, string> { { 1, "protection_from_evil_clr" }, { 2, "aid" } }));
+            new Dictionary<int, string> { { 1, "protection_from_evil" }, { 2, "aid" } }));
 
         Register(new DomainData("Healing",
             "Cast healing spells at +1 caster level.",
@@ -31,7 +31,7 @@ public static class DomainDatabase
 
         Register(new DomainData("War",
             "Free Martial Weapon Proficiency and Weapon Focus with deity's favored weapon.",
-            new Dictionary<int, string> { { 1, "magic_weapon_clr" }, { 2, "spiritual_weapon" } }));
+            new Dictionary<int, string> { { 1, "magic_weapon" }, { 2, "spiritual_weapon" } }));
 
         Register(new DomainData("Magic",
             "Use scrolls, staves, and wands as a wizard of one level higher.",
@@ -47,7 +47,7 @@ public static class DomainDatabase
 
         Register(new DomainData("Strength",
             "You can perform a feat of strength as a supernatural ability. You gain an enhancement bonus to Strength equal to your cleric level for 1 round, 1/day.",
-            new Dictionary<int, string> { { 1, "enlarge_person" }, { 2, "bulls_strength_clr" } }));
+            new Dictionary<int, string> { { 1, "enlarge_person" }, { 2, "bulls_strength" } }));
 
         Register(new DomainData("Trickery",
             "Add Bluff, Disguise, and Hide to your list of class skills.",
@@ -55,7 +55,7 @@ public static class DomainDatabase
 
         Register(new DomainData("Death",
             "You may use a death touch once per day. Roll 1d6 per cleric level; if the total equals or exceeds the target's current hit points, it dies.",
-            new Dictionary<int, string> { { 1, "cause_fear_clr" }, { 2, "death_knell" } }));
+            new Dictionary<int, string> { { 1, "cause_fear" }, { 2, "death_knell" } }));
 
         Register(new DomainData("Evil",
             "Cast evil spells at +1 caster level.",
@@ -71,7 +71,7 @@ public static class DomainDatabase
 
         Register(new DomainData("Sun",
             "Once per day, you can perform a greater turning against undead. The undead so turned are destroyed.",
-            new Dictionary<int, string> { { 1, "endure_elements_clr" }, { 2, "domain_heat_metal" } }));
+            new Dictionary<int, string> { { 1, "endure_elements" }, { 2, "domain_heat_metal" } }));
 
         Register(new DomainData("Luck",
             "You gain the power of good fortune: reroll one roll per day before the DM declares success or failure. You must take the reroll result.",
@@ -79,7 +79,7 @@ public static class DomainDatabase
 
         Register(new DomainData("Air",
             "Turn or destroy earth creatures as a good cleric turns undead. Rebuke, command, or bolster air creatures as an evil cleric rebukes undead.",
-            new Dictionary<int, string> { { 1, "obscuring_mist_clr" }, { 2, "domain_wind_wall" } }));
+            new Dictionary<int, string> { { 1, "obscuring_mist" }, { 2, "domain_wind_wall" } }));
 
         Register(new DomainData("Animal",
             "You can use speak with animals once per day as a spell-like ability. Knowledge (nature) is a class skill.",
@@ -99,7 +99,7 @@ public static class DomainDatabase
 
         Register(new DomainData("Water",
             "Turn or destroy fire creatures as a good cleric turns undead. Rebuke, command, or bolster water creatures as an evil cleric rebukes undead.",
-            new Dictionary<int, string> { { 1, "obscuring_mist_clr" }, { 2, "fog_cloud" } }));
+            new Dictionary<int, string> { { 1, "obscuring_mist" }, { 2, "fog_cloud" } }));
 
         Register(new DomainData("Travel",
             "For a total time per day of 1 round per cleric level, you can act normally regardless of magical effects that impede movement. Survival is a class skill.",
