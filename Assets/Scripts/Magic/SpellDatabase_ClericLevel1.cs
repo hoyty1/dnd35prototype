@@ -128,60 +128,14 @@ public static partial class SpellDatabase
             ProvokesAoO = true
         });
 
-        Register(new SpellData
-        {
-            SpellId = "protection_from_evil_clr",
-            Name = "Protection from Evil",
-            Description = "+2 deflection bonus to AC and +2 resistance bonus on saves vs evil. 1 min/level. PHB p.266",
-            SpellLevel = 1, School = "Abjuration",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.SingleAlly,
-            RangeCategory = SpellRangeCategory.Touch,
-            EffectType = SpellEffectType.Buff,
-            BuffDeflectionBonus = 2,
-            BuffSaveBonus = 2,
-            BuffDurationRounds = 30,
-            BuffType = "protection",
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true
-        });
+        // Shared with wizard list: protection_from_evil
+        RegisterClassSpellAlias("protection_from_evil_clr", "protection_from_evil", "Cleric", 1);
 
-        Register(new SpellData
-        {
-            SpellId = "magic_weapon_clr",
-            Name = "Magic Weapon",
-            Description = "Weapon gains +1 enhancement bonus on attack and damage. 1 min/level. PHB p.251",
-            SpellLevel = 1, School = "Transmutation",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.SingleAlly,
-            RangeCategory = SpellRangeCategory.Touch,
-            EffectType = SpellEffectType.Buff,
-            BuffAttackBonus = 1,
-            BuffDamageBonus = 1,
-            BuffDurationRounds = 30,
-            BuffType = "enhancement",
-            BuffBonusType = BonusType.Enhancement,
-            BonusTypeExplicitlySet = true,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true
-        });
+        // Shared with wizard list: magic_weapon
+        RegisterClassSpellAlias("magic_weapon_clr", "magic_weapon", "Cleric", 1);
 
-        Register(new SpellData
-        {
-            SpellId = "endure_elements_clr",
-            Name = "Endure Elements",
-            Description = "Exist comfortably in hot or cold environments. Duration 24 hours. PHB p.226",
-            SpellLevel = 1, School = "Abjuration",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.SingleAlly,
-            RangeCategory = SpellRangeCategory.Touch,
-            EffectType = SpellEffectType.Buff,
-            BuffDurationRounds = -1,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Environmental protection not implemented]"
-        });
+        // Shared with wizard list: endure_elements
+        RegisterClassSpellAlias("endure_elements_clr", "endure_elements", "Cleric", 1);
 
         // --- FUNCTIONAL: Debuff Spells ---
 
@@ -241,22 +195,8 @@ public static partial class SpellDatabase
             ProvokesAoO = true
         });
 
-        Register(new SpellData
-        {
-            SpellId = "cause_fear_clr",
-            Name = "Cause Fear",
-            Description = "One creature of 5 HD or less flees for 1d4 rounds. Will save: shaken 1 round. PHB p.208",
-            SpellLevel = 1, School = "Necromancy",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.SingleEnemy,
-            RangeCategory = SpellRangeCategory.Close,
-            EffectType = SpellEffectType.Debuff,
-            AllowsSavingThrow = true,
-            SavingThrowType = "Will",
-            BuffDurationRounds = 3,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true
-        });
+        // Shared with wizard list: cause_fear
+        RegisterClassSpellAlias("cause_fear_clr", "cause_fear", "Cleric", 1);
 
         Register(new SpellData
         {
@@ -335,22 +275,8 @@ public static partial class SpellDatabase
             PlaceholderReason = "[PLACEHOLDER - Attack prevention not fully implemented]"
         });
 
-        Register(new SpellData
-        {
-            SpellId = "comprehend_languages_clr",
-            Name = "Comprehend Languages",
-            Description = "Understand all spoken and written languages. Duration 10 min/level. PHB p.212",
-            SpellLevel = 1, School = "Divination",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.Self,
-            RangeCategory = SpellRangeCategory.Personal,
-            EffectType = SpellEffectType.Buff,
-            BuffDurationRounds = -1,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Language mechanics not implemented]"
-        });
+        // Shared with wizard list: comprehend_languages
+        RegisterClassSpellAlias("comprehend_languages_clr", "comprehend_languages", "Cleric", 1);
 
         Register(new SpellData
         {
@@ -386,24 +312,8 @@ public static partial class SpellDatabase
             PlaceholderReason = "[PLACEHOLDER - Undead perception not implemented]"
         });
 
-        Register(new SpellData
-        {
-            SpellId = "obscuring_mist_clr",
-            Name = "Obscuring Mist",
-            Description = "Fog provides concealment (20% miss chance). 20-ft radius. 1 min/level. PHB p.258",
-            SpellLevel = 1, School = "Conjuration",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.Self,
-            RangeSquares = 4,
-            AreaRadius = 4,
-            EffectType = SpellEffectType.Buff,
-            BuffDurationRounds = 30,
-            BuffType = "concealment",
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Concealment/fog not implemented]"
-        });
+        // Shared with wizard list: obscuring_mist
+        RegisterClassSpellAlias("obscuring_mist_clr", "obscuring_mist", "Cleric", 1);
 
         Register(new SpellData
         {
@@ -422,22 +332,8 @@ public static partial class SpellDatabase
             PlaceholderReason = "[PLACEHOLDER - HP reveal not implemented]"
         });
 
-        Register(new SpellData
-        {
-            SpellId = "summon_monster_1_clr",
-            Name = "Summon Monster I",
-            Description = "Calls a creature to fight for you. Duration 1 round/level. PHB p.285",
-            SpellLevel = 1, School = "Conjuration",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.Self,
-            RangeSquares = 5,
-            EffectType = SpellEffectType.Buff,
-            BuffDurationRounds = 3,
-            ActionType = SpellActionType.FullRound,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Summoning not implemented]"
-        });
+        // Shared with wizard list: summon_monster_1
+        RegisterClassSpellAlias("summon_monster_1_clr", "summon_monster_1", "Cleric", 1);
     }
 
     // ====================================================================

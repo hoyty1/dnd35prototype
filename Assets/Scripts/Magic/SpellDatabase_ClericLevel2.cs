@@ -152,85 +152,17 @@ public static partial class SpellDatabase
             ProvokesAoO = true
         });
 
-        Register(new SpellData
-        {
-            SpellId = "bulls_strength_clr",
-            Name = "Bull's Strength",
-            Description = "Subject gains +4 enhancement bonus to STR for 1 min/level. PHB p.207",
-            SpellLevel = 2, School = "Transmutation",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.SingleAlly,
-            RangeCategory = SpellRangeCategory.Touch,
-            EffectType = SpellEffectType.Buff,
-            BuffStatName = "STR",
-            BuffStatBonus = 4,
-            BuffDurationRounds = 30,
-            BuffType = "enhancement",
-            BuffBonusType = BonusType.Enhancement,
-            BonusTypeExplicitlySet = true,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true
-        });
+        // Shared with wizard list: bulls_strength
+        RegisterClassSpellAlias("bulls_strength_clr", "bulls_strength", "Cleric", 2);
 
-        Register(new SpellData
-        {
-            SpellId = "bears_endurance_clr",
-            Name = "Bear's Endurance",
-            Description = "Subject gains +4 enhancement bonus to CON for 1 min/level. PHB p.203",
-            SpellLevel = 2, School = "Transmutation",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.SingleAlly,
-            RangeCategory = SpellRangeCategory.Touch,
-            EffectType = SpellEffectType.Buff,
-            BuffStatName = "CON",
-            BuffStatBonus = 4,
-            BuffDurationRounds = 30,
-            BuffType = "enhancement",
-            BuffBonusType = BonusType.Enhancement,
-            BonusTypeExplicitlySet = true,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true
-        });
+        // Shared with wizard list: bears_endurance
+        RegisterClassSpellAlias("bears_endurance_clr", "bears_endurance", "Cleric", 2);
 
-        Register(new SpellData
-        {
-            SpellId = "owls_wisdom_clr",
-            Name = "Owl's Wisdom",
-            Description = "Subject gains +4 enhancement bonus to WIS for 1 min/level. PHB p.259",
-            SpellLevel = 2, School = "Transmutation",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.SingleAlly,
-            RangeCategory = SpellRangeCategory.Touch,
-            EffectType = SpellEffectType.Buff,
-            BuffStatName = "WIS",
-            BuffStatBonus = 4,
-            BuffDurationRounds = 30,
-            BuffType = "enhancement",
-            BuffBonusType = BonusType.Enhancement,
-            BonusTypeExplicitlySet = true,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true
-        });
+        // Shared with wizard list: owls_wisdom
+        RegisterClassSpellAlias("owls_wisdom_clr", "owls_wisdom", "Cleric", 2);
 
-        Register(new SpellData
-        {
-            SpellId = "eagles_splendor_clr",
-            Name = "Eagle's Splendor",
-            Description = "Subject gains +4 enhancement bonus to CHA for 1 min/level. PHB p.225",
-            SpellLevel = 2, School = "Transmutation",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.SingleAlly,
-            RangeCategory = SpellRangeCategory.Touch,
-            EffectType = SpellEffectType.Buff,
-            BuffStatName = "CHA",
-            BuffStatBonus = 4,
-            BuffDurationRounds = 30,
-            BuffType = "enhancement",
-            BuffBonusType = BonusType.Enhancement,
-            BonusTypeExplicitlySet = true,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true
-        });
+        // Shared with wizard list: eagles_splendor
+        RegisterClassSpellAlias("eagles_splendor_clr", "eagles_splendor", "Cleric", 2);
 
         Register(new SpellData
         {
@@ -250,23 +182,8 @@ public static partial class SpellDatabase
             ProvokesAoO = true
         });
 
-        Register(new SpellData
-        {
-            SpellId = "resist_energy_clr",
-            Name = "Resist Energy",
-            Description = "Grants resistance 10 to specified energy type. 10 min/level. PHB p.272",
-            SpellLevel = 2, School = "Abjuration",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.SingleAlly,
-            RangeCategory = SpellRangeCategory.Touch,
-            EffectType = SpellEffectType.Buff,
-            BuffDurationRounds = -1,
-            BuffType = "energy_resistance",
-            BuffDamageResistanceAmount = 10,
-            BuffDamageResistanceType = DamageType.Fire, // TODO: replace with player-selected energy type
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true
-        });
+        // Shared with wizard list: resist_energy
+        RegisterClassSpellAlias("resist_energy_clr", "resist_energy", "Cleric", 2);
 
         // --- FUNCTIONAL: Debuff Spells ---
 
@@ -395,22 +312,8 @@ public static partial class SpellDatabase
             PlaceholderReason = "[PLACEHOLDER - Status effect removal not implemented]"
         });
 
-        Register(new SpellData
-        {
-            SpellId = "summon_monster_2_clr",
-            Name = "Summon Monster II",
-            Description = "Calls creature to fight for you. Duration 1 round/level. PHB p.286",
-            SpellLevel = 2, School = "Conjuration",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.Self,
-            RangeSquares = 5,
-            EffectType = SpellEffectType.Buff,
-            BuffDurationRounds = 3,
-            ActionType = SpellActionType.FullRound,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Summoning not implemented]"
-        });
+        // Shared with wizard list: summon_monster_2
+        RegisterClassSpellAlias("summon_monster_2_clr", "summon_monster_2", "Cleric", 2);
 
         Register(new SpellData
         {

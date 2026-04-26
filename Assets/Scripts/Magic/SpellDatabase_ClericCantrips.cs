@@ -84,90 +84,20 @@ public static partial class SpellDatabase
             ProvokesAoO = true
         });
 
-        Register(new SpellData
-        {
-            SpellId = "resistance_clr",
-            Name = "Resistance",
-            Description = "Subject gains +1 on saving throws for 1 minute.",
-            SpellLevel = 0, School = "Abjuration",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.SingleAlly,
-            RangeCategory = SpellRangeCategory.Touch,
-            EffectType = SpellEffectType.Buff,
-            BuffSaveBonus = 1,
-            BuffDurationRounds = 10,
-            BuffType = "resistance",
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true
-        });
+        // Shared with wizard list: resistance_wiz
+        RegisterClassSpellAlias("resistance_clr", "resistance_wiz", "Cleric", 0);
 
-        Register(new SpellData
-        {
-            SpellId = "detect_magic_clr",
-            Name = "Detect Magic",
-            Description = "Detects spells and magic items within 60 ft cone. Concentration, up to 1 min/level.",
-            SpellLevel = 0, School = "Divination",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.Self,
-            RangeCategory = SpellRangeCategory.Personal,
-            EffectType = SpellEffectType.Buff,
-            DurationType = DurationType.Concentration,
-            DurationValue = 1,
-            DurationScalesWithLevel = true,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Detection mechanics not implemented]"
-        });
+        // Shared with wizard list: detect_magic_wiz
+        RegisterClassSpellAlias("detect_magic_clr", "detect_magic_wiz", "Cleric", 0);
 
-        Register(new SpellData
-        {
-            SpellId = "detect_poison_clr",
-            Name = "Detect Poison",
-            Description = "Detects poison in one creature or small object.",
-            SpellLevel = 0, School = "Divination",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.Self,
-            RangeSquares = 5,
-            EffectType = SpellEffectType.Buff,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Poison detection not implemented]"
-        });
+        // Shared with wizard list: detect_poison_wiz
+        RegisterClassSpellAlias("detect_poison_clr", "detect_poison_wiz", "Cleric", 0);
 
-        Register(new SpellData
-        {
-            SpellId = "light_clr",
-            Name = "Light",
-            Description = "Object shines like a torch for 10 min/level.",
-            SpellLevel = 0, School = "Evocation",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.Self,
-            RangeCategory = SpellRangeCategory.Touch,
-            EffectType = SpellEffectType.Buff,
-            BuffDurationRounds = -1,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Light/illumination not implemented]"
-        });
+        // Shared with wizard list: light
+        RegisterClassSpellAlias("light_clr", "light", "Cleric", 0);
 
-        Register(new SpellData
-        {
-            SpellId = "mending_clr",
-            Name = "Mending",
-            Description = "Makes minor repairs on an object.",
-            SpellLevel = 0, School = "Transmutation",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.Self,
-            RangeSquares = 2,
-            EffectType = SpellEffectType.Buff,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Object repair not implemented]"
-        });
+        // Shared with wizard list: mending
+        RegisterClassSpellAlias("mending_clr", "mending", "Cleric", 0);
 
         Register(new SpellData
         {
@@ -201,22 +131,8 @@ public static partial class SpellDatabase
             PlaceholderReason = "[PLACEHOLDER - Water creation not implemented]"
         });
 
-        Register(new SpellData
-        {
-            SpellId = "read_magic_clr",
-            Name = "Read Magic",
-            Description = "Read scrolls and spellbooks. Duration 10 min/level.",
-            SpellLevel = 0, School = "Divination",
-            ClassList = new[] { "Cleric" },
-            TargetType = SpellTargetType.Self,
-            RangeCategory = SpellRangeCategory.Personal,
-            EffectType = SpellEffectType.Buff,
-            BuffDurationRounds = -1,
-            ActionType = SpellActionType.Standard,
-            ProvokesAoO = true,
-            IsPlaceholder = true,
-            PlaceholderReason = "[PLACEHOLDER - Scroll reading not implemented]"
-        });
+        // Shared with wizard list: read_magic
+        RegisterClassSpellAlias("read_magic_clr", "read_magic", "Cleric", 0);
     }
 
     // ====================================================================

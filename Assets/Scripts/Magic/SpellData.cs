@@ -1,10 +1,41 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
+
+[Serializable]
+public class SpellAvailability
+{
+    public string ClassName;
+    public int Level;
+    public string Domain;
+
+    public SpellAvailability(string className, int level, string domain = null)
+    {
+        ClassName = className;
+        Level = level;
+        Domain = domain;
+    }
+
+    public bool MatchesClass(string className)
+    {
+        return !string.IsNullOrWhiteSpace(className) &&
+               string.Equals(ClassName, className, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public bool MatchesDomain(string domain)
+    {
+        return !string.IsNullOrWhiteSpace(domain) &&
+               !string.IsNullOrWhiteSpace(Domain) &&
+               string.Equals(Domain, domain, StringComparison.OrdinalIgnoreCase);
+    }
+}
 
 /// <summary>
 /// Defines a spell's properties according to D&D 3.5e rules.
 /// Analogous to ItemData for weapons/armor.
 /// </summary>
-[System.Serializable]
+[Serializable]
 public class SpellData
 {
     // ========== IDENTITY ==========
@@ -15,8 +46,102 @@ public class SpellData
     public string School;           // Evocation, Conjuration, Necromancy, Abjuration, etc.
 
     // ========== CLASSES ==========
-    /// <summary>Which classes can cast this spell ("Wizard", "Cleric", or both).</summary>
+    /// <summary>Legacy class list field (kept for backward compatibility with existing spell declarations).</summary>
     public string[] ClassList;
+
+    /// <summary>
+    /// Availability metadata for class/domain spell list membership.
+    /// A spell may have multiple entries (e.g., Cleric 1 + Healing domain 1).
+    /// </summary>
+    public List<SpellAvailability> AvailableFor = new List<SpellAvailability>();
+
+    public void AddAvailability(string className, int level, string domain = null)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return;
+
+        bool exists = AvailableFor.Any(a =>
+            a != null &&
+            a.MatchesClass(className) &&
+            a.Level == level &&
+            (string.IsNullOrWhiteSpace(domain)
+                ? string.IsNullOrWhiteSpace(a.Domain)
+                : a.MatchesDomain(domain)));
+
+        if (!exists)
+            AvailableFor.Add(new SpellAvailability(className, level, domain));
+    }
+
+    public void EnsureAvailabilityFromLegacyClassList()
+    {
+        if (ClassList == null || ClassList.Length == 0)
+            return;
+
+        for (int i = 0; i < ClassList.Length; i++)
+        {
+            AddAvailability(ClassList[i], SpellLevel);
+        }
+    }
+
+    public bool IsAvailableFor(string className, int spellLevel)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return false;
+
+        if (AvailableFor != null && AvailableFor.Count > 0)
+        {
+            return AvailableFor.Any(a =>
+                a != null &&
+                a.MatchesClass(className) &&
+                string.IsNullOrWhiteSpace(a.Domain) &&
+                a.Level == spellLevel);
+        }
+
+        return SpellLevel == spellLevel &&
+               ClassList != null &&
+               ClassList.Any(cls => string.Equals(cls, className, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public bool IsAvailableForDomain(string domainName)
+    {
+        if (string.IsNullOrWhiteSpace(domainName) || AvailableFor == null)
+            return false;
+
+        return AvailableFor.Any(a => a != null && a.MatchesDomain(domainName));
+    }
+
+    public int GetSpellLevelFor(string className, string domain = null)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return -1;
+
+        if (AvailableFor != null && AvailableFor.Count > 0)
+        {
+            SpellAvailability availability;
+            if (string.IsNullOrWhiteSpace(domain))
+            {
+                availability = AvailableFor
+                    .Where(a => a != null && a.MatchesClass(className) && string.IsNullOrWhiteSpace(a.Domain))
+                    .OrderBy(a => a.Level)
+                    .FirstOrDefault();
+            }
+            else
+            {
+                availability = AvailableFor
+                    .Where(a => a != null && a.MatchesClass(className) && a.MatchesDomain(domain))
+                    .OrderBy(a => a.Level)
+                    .FirstOrDefault();
+            }
+
+            if (availability != null)
+                return availability.Level;
+        }
+
+        if (ClassList != null && ClassList.Any(cls => string.Equals(cls, className, StringComparison.OrdinalIgnoreCase)))
+            return SpellLevel;
+
+        return -1;
+    }
 
     // ========== TARGETING ==========
     public SpellTargetType TargetType;  // SingleEnemy, SingleAlly, Self, Area
@@ -283,7 +408,14 @@ public class SpellData
     /// <summary>Clone this spell data for independent modification.</summary>
     public SpellData Clone()
     {
-        return (SpellData)this.MemberwiseClone();
+        SpellData clone = (SpellData)this.MemberwiseClone();
+        clone.AvailableFor = AvailableFor != null
+            ? AvailableFor
+                .Where(a => a != null)
+                .Select(a => new SpellAvailability(a.ClassName, a.Level, a.Domain))
+                .ToList()
+            : new List<SpellAvailability>();
+        return clone;
     }
 
     /// <summary>Get a formatted description for the spell list UI.</summary>
