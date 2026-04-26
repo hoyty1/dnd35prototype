@@ -154,7 +154,7 @@ public partial class GameManager
 
             _highlightedCells.Add(cell);
             bool isAlly = IsAllyTeam(caster, cell.Occupant);
-            cell.SetHighlight(isAlly ? HighlightType.Ally : HighlightType.AttackRange);
+            cell.SetHighlight(isAlly ? HighlightType.AoEAlly : HighlightType.AttackRange);
         }
 
         HighlightCharacterFootprint(caster, HighlightType.Selected);
