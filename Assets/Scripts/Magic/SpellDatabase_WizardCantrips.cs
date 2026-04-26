@@ -332,9 +332,9 @@ public static partial class SpellDatabase
         {
             SpellId = "touch_of_fatigue",
             Name = "Touch of Fatigue",
-            Description = "Touch attack fatigues target (–2 STR and DEX, can't run or charge). Fort save negates.",
+            Description = "Necromancy cantrip. Melee touch attack; target becomes fatigued for 1 round/level. Fortitude negates. A fatigued target becomes exhausted; exhausted targets are unaffected. SR applies.",
             SpellLevel = 0, School = "Necromancy",
-            ClassList = new[] { "Wizard" },
+            ClassList = new[] { "Wizard", "Sorcerer" },
             TargetType = SpellTargetType.SingleEnemy,
             RangeCategory = SpellRangeCategory.Touch,
             IsTouch = true,
@@ -342,8 +342,11 @@ public static partial class SpellDatabase
             EffectType = SpellEffectType.Debuff,
             AllowsSavingThrow = true,
             SavingThrowType = "Fortitude",
-            BuffStatBonus = -2, // -2 to STR and DEX
-            BuffDurationRounds = 10, // 1 round/level at CL3 = 3, simplified to 10
+            SpellResistanceApplies = true,
+            DurationType = DurationType.Rounds,
+            DurationValue = 1,
+            DurationScalesWithLevel = true,
+            BuffDurationRounds = 1,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });

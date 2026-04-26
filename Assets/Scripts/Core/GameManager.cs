@@ -9471,6 +9471,39 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
+        if (spell != null && spell.SpellId == "touch_of_fatigue")
+        {
+            string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
+            int casterLevel = caster != null && caster.Stats != null
+                ? Mathf.Max(1, caster.Stats.GetCasterLevel())
+                : 1;
+
+            bool wasExhausted = target.HasCondition(CombatConditionType.Exhausted);
+            if (wasExhausted)
+            {
+                CombatUI?.ShowCombatLog($"<color=#FFCC66>💤 {target.Stats.CharacterName} is already exhausted. Touch of Fatigue has no effect.</color>");
+                Debug.Log($"[GameManager] Touch of Fatigue had no effect on {target.Stats.CharacterName} (already exhausted)");
+                return null;
+            }
+
+            bool wasFatigued = target.HasCondition(CombatConditionType.Fatigued);
+            target.ApplyCondition(CombatConditionType.Fatigued, casterLevel, sourceName);
+
+            bool isNowExhausted = target.HasCondition(CombatConditionType.Exhausted);
+            if (wasFatigued && isNowExhausted)
+            {
+                CombatUI?.ShowCombatLog($"<color=#FF9966>🥵 {target.Stats.CharacterName} becomes exhausted for {casterLevel} round(s)!</color>");
+                Debug.Log($"[GameManager] Touch of Fatigue escalated {target.Stats.CharacterName} to Exhausted for {casterLevel} rounds");
+            }
+            else
+            {
+                CombatUI?.ShowCombatLog($"<color=#FFCC66>😫 {target.Stats.CharacterName} is fatigued for {casterLevel} round(s)!</color>");
+                Debug.Log($"[GameManager] Touch of Fatigue applied Fatigued to {target.Stats.CharacterName} for {casterLevel} rounds");
+            }
+
+            return null;
+        }
+
         // Use StatusEffectManager for tracked buff application
         var statusMgr = target.GetComponent<StatusEffectManager>();
         if (statusMgr != null)
