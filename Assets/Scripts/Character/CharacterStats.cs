@@ -1620,7 +1620,7 @@ public class CharacterStats
     /// </summary>
     public (bool hit, int roll, int total) RollToHit(int targetAC)
     {
-        int roll = Random.Range(1, 21); // 1-20
+        int roll = UnityEngine.Random.Range(1, 21); // 1-20
         int total = roll + AttackBonus;
 
         // Natural 20 always hits, natural 1 always misses
@@ -1637,7 +1637,7 @@ public class CharacterStats
     /// </summary>
     public (bool hit, int roll, int total) RollToHitWithFlanking(int targetAC, int flankingBonus)
     {
-        int roll = Random.Range(1, 21);
+        int roll = UnityEngine.Random.Range(1, 21);
         int total = roll + AttackBonus + flankingBonus;
 
         bool hit;
@@ -1655,7 +1655,7 @@ public class CharacterStats
     /// <param name="targetAC">Target's Armor Class</param>
     public (bool hit, int roll, int total) RollToHitWithMod(int totalAttackMod, int targetAC)
     {
-        int roll = Random.Range(1, 21);
+        int roll = UnityEngine.Random.Range(1, 21);
         int total = roll + totalAttackMod;
 
         bool hit;
@@ -1675,7 +1675,7 @@ public class CharacterStats
         int total = 0;
         for (int i = 0; i < BaseDamageCount; i++)
         {
-            total += Random.Range(1, BaseDamageDice + 1);
+            total += UnityEngine.Random.Range(1, BaseDamageDice + 1);
         }
         total += STRMod + BonusDamage + MoraleDamageBonus;
         return Mathf.Max(1, total); // Minimum 1 damage on a hit
@@ -1694,7 +1694,7 @@ public class CharacterStats
         int total = 0;
         for (int i = 0; i < damageCount; i++)
         {
-            total += Random.Range(1, damageDice + 1);
+            total += UnityEngine.Random.Range(1, damageDice + 1);
         }
         int strBonus = Mathf.FloorToInt(STRMod * strMultiplier);
         total += strBonus + bonusDamage;
@@ -1725,7 +1725,7 @@ public class CharacterStats
     /// <returns>(confirmed, naturalRoll, total) - confirmed is true if the crit is confirmed</returns>
     public (bool confirmed, int roll, int total) RollCritConfirmation(int totalAttackMod, int targetAC)
     {
-        int roll = Random.Range(1, 21);
+        int roll = UnityEngine.Random.Range(1, 21);
         int total = roll + totalAttackMod;
 
         // Natural 20 on confirmation always confirms; natural 1 always fails confirmation
@@ -1755,7 +1755,7 @@ public class CharacterStats
         int totalDice = damageCount * mult;
         for (int i = 0; i < totalDice; i++)
         {
-            diceTotal += Random.Range(1, damageDice + 1);
+            diceTotal += UnityEngine.Random.Range(1, damageDice + 1);
         }
         // Add static bonuses once (NOT multiplied per D&D 3.5)
         int strBonus = Mathf.FloorToInt(STRMod * strMultiplier);
@@ -2716,7 +2716,7 @@ public class CharacterStats
             return -1;
         }
 
-        int d20 = Random.Range(1, 21);
+        int d20 = UnityEngine.Random.Range(1, 21);
         int totalBonus = skill.GetTotalBonus(abilityMod);
         int featBonus = GetFeatSkillBonus(skillName);
         int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
@@ -2832,7 +2832,7 @@ public class CharacterStats
         int total = 0;
         for (int i = 0; i < damageCount; i++)
         {
-            total += Random.Range(1, damageDice + 1);
+            total += UnityEngine.Random.Range(1, damageDice + 1);
         }
         return total;
     }
@@ -2845,7 +2845,7 @@ public class CharacterStats
         int total = 0;
         for (int i = 0; i < damageCount; i++)
         {
-            total += Random.Range(1, damageDice + 1);
+            total += UnityEngine.Random.Range(1, damageDice + 1);
         }
         total += damageModifier + bonusDamage;
         return Mathf.Max(1, total);
@@ -2862,7 +2862,7 @@ public class CharacterStats
         int totalDice = damageCount * mult;
         for (int i = 0; i < totalDice; i++)
         {
-            diceTotal += Random.Range(1, damageDice + 1);
+            diceTotal += UnityEngine.Random.Range(1, damageDice + 1);
         }
         int total = diceTotal + damageModifier + bonusDamage;
         return Mathf.Max(1, total);
