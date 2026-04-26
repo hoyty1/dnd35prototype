@@ -93,8 +93,8 @@ public enum DamageModifierType
 {
     None,               // No ability modifier to damage (bows, crossbows, slings)
     Strength,           // Add full STR modifier (one-handed melee, thrown weapons)
-    StrengthOneAndHalf, // Add 1.5× STR modifier, rounded down (two-handed melee)
-    StrengthHalf,       // Add 0.5× STR modifier, rounded down (off-hand; handled separately)
+    StrengthOneAndHalf, // Add 1.5× STR bonus, rounded down; STR penalties are not multiplied (two-handed melee)
+    StrengthHalf,       // Add 0.5× STR bonus, rounded down; STR penalties are not multiplied (off-hand; handled separately)
     Composite           // Add STR up to composite rating (composite bows)
 }
 

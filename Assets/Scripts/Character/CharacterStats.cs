@@ -1696,7 +1696,7 @@ public class CharacterStats
         {
             total += UnityEngine.Random.Range(1, damageDice + 1);
         }
-        int strBonus = Mathf.FloorToInt(STRMod * strMultiplier);
+        int strBonus = ApplyStrengthDamageMultiplier(STRMod, strMultiplier);
         total += strBonus + bonusDamage;
         return Mathf.Max(1, total);
     }
@@ -1758,7 +1758,7 @@ public class CharacterStats
             diceTotal += UnityEngine.Random.Range(1, damageDice + 1);
         }
         // Add static bonuses once (NOT multiplied per D&D 3.5)
-        int strBonus = Mathf.FloorToInt(STRMod * strMultiplier);
+        int strBonus = ApplyStrengthDamageMultiplier(STRMod, strMultiplier);
         int total = diceTotal + strBonus + bonusDamage;
         return Mathf.Max(1, total);
     }
@@ -2751,17 +2751,31 @@ public class CharacterStats
     // ========== DAMAGE MODIFIER HELPERS (D&D 3.5) ==========
 
     /// <summary>
+    /// Apply a Strength damage multiplier according to D&D 3.5 rules.
+    /// Bonuses are multiplied and rounded down; penalties are never multiplied.
+    /// </summary>
+    private static int ApplyStrengthDamageMultiplier(int strengthMod, float multiplier)
+    {
+        if (strengthMod <= 0)
+        {
+            return strengthMod;
+        }
+
+        return Mathf.FloorToInt(strengthMod * multiplier);
+    }
+
+    /// <summary>
     /// Calculate the STR-based damage bonus for a weapon based on its DamageModifierType.
     /// Returns the integer bonus to add to damage (can be negative for low STR).
     /// </summary>
     /// <param name="weapon">The weapon being used (null = unarmed, uses full STR)</param>
-    /// <param name="isOffHand">True if this is an off-hand attack (overrides to 0.5× STR)</param>
+    /// <param name="isOffHand">True if this is an off-hand attack (overrides to 0.5× STR bonus)</param>
     public int GetWeaponDamageModifier(ItemData weapon, bool isOffHand = false)
     {
         if (isOffHand)
         {
-            // Off-hand always uses 0.5× STR, regardless of weapon type
-            return Mathf.FloorToInt(STRMod * 0.5f);
+            // Off-hand: 0.5× STR bonus, but STR penalties are applied at full value.
+            return ApplyStrengthDamageMultiplier(STRMod, 0.5f);
         }
 
         if (weapon == null)
@@ -2779,10 +2793,10 @@ public class CharacterStats
                 return STRMod;
 
             case DamageModifierType.StrengthOneAndHalf:
-                return Mathf.FloorToInt(STRMod * 1.5f);
+                return ApplyStrengthDamageMultiplier(STRMod, 1.5f);
 
             case DamageModifierType.StrengthHalf:
-                return Mathf.FloorToInt(STRMod * 0.5f);
+                return ApplyStrengthDamageMultiplier(STRMod, 0.5f);
 
             case DamageModifierType.Composite:
                 // Add STR up to the composite rating (minimum 0 — negative STR still applies fully)

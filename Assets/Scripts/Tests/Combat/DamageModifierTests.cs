@@ -29,7 +29,9 @@ public static class DamageModifierTests
         TestCompositeLongbow2LowStr();
         TestJavelinThrownStr();
         TestOffHandHalfStr();
+        TestOffHandNegativeStrNotMultiplied();
         TestQuarterstaffTwoHanded();
+        TestTwoHandedNegativeStrNotMultiplied();
         TestUnarmedStrike();
         TestSlingNoStr();
         TestCrossbowNoStr();
@@ -139,6 +141,15 @@ public static class DamageModifierTests
         Assert(mod == 0, "Off-hand dagger 0.5× STR +1 = +0 (rounded down)", $"got {mod}");
     }
 
+    static void TestOffHandNegativeStrNotMultiplied()
+    {
+        // D&D 3.5: off-hand multiplies STR bonuses only; penalties apply in full.
+        var stats = MakeChar(6); // -2 STR mod
+        var weapon = ItemDatabase.Get("dagger");
+        int mod = stats.GetWeaponDamageModifier(weapon, isOffHand: true);
+        Assert(mod == -2, "Off-hand dagger with STR -2 keeps full penalty (not halved)", $"got {mod}");
+    }
+
     static void TestQuarterstaffTwoHanded()
     {
         // Quarterstaff is two-handed: 1.5× STR
@@ -148,6 +159,15 @@ public static class DamageModifierTests
         Assert(mod == 4, "Quarterstaff 1.5x STR (STR 16, +3 mod, 1.5x = +4)", $"got {mod}");
         Assert(weapon.IsTwoHanded, "Quarterstaff is two-handed");
         Assert(weapon.DmgModType == DamageModifierType.StrengthOneAndHalf, "Quarterstaff DmgModType is StrengthOneAndHalf");
+    }
+
+    static void TestTwoHandedNegativeStrNotMultiplied()
+    {
+        // D&D 3.5: two-handed multiplies STR bonuses only; penalties apply in full.
+        var stats = MakeChar(8); // -1 STR mod
+        var weapon = ItemDatabase.Get("greatsword");
+        int mod = stats.GetWeaponDamageModifier(weapon);
+        Assert(mod == -1, "Greatsword with STR -1 keeps full penalty (not 1.5x)", $"got {mod}");
     }
 
     static void TestUnarmedStrike()
