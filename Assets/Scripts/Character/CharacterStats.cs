@@ -1,4 +1,5 @@
 using UnityEngine;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -2664,8 +2665,22 @@ public class CharacterStats
         return true;
     }
 
+    private static bool IsDazzledSightBasedSkill(string skillName)
+    {
+        return string.Equals(skillName, "Spot", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(skillName, "Search", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public int GetConditionSkillModifier(string skillName)
+    {
+        if (!IsDazzledSightBasedSkill(skillName))
+            return 0;
+
+        return HasNormalizedCondition(CombatConditionType.Dazzled) ? -1 : 0;
+    }
+
     /// <summary>
-    /// Get the total bonus for a skill (ranks + ability mod + feat bonuses).
+    /// Get the total bonus for a skill (ranks + ability mod + feat bonuses + condition modifiers).
     /// Returns 0 if skill not found.
     /// </summary>
     public int GetSkillBonus(string skillName)
@@ -2675,7 +2690,8 @@ public class CharacterStats
         int baseBonus = skill.GetTotalBonus(GetAbilityModForSkill(skill));
         int featBonus = GetFeatSkillBonus(skillName);
         int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
-        return baseBonus + featBonus + acpPenalty;
+        int conditionModifier = GetConditionSkillModifier(skillName);
+        return baseBonus + featBonus + acpPenalty + conditionModifier;
     }
 
     /// <summary>
@@ -2704,11 +2720,13 @@ public class CharacterStats
         int totalBonus = skill.GetTotalBonus(abilityMod);
         int featBonus = GetFeatSkillBonus(skillName);
         int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
-        int total = d20 + totalBonus + featBonus + acpPenalty;
+        int conditionModifier = GetConditionSkillModifier(skillName);
+        int total = d20 + totalBonus + featBonus + acpPenalty + conditionModifier;
 
         string featStr = featBonus > 0 ? $" + {featBonus}(feat)" : "";
         string acpStr = acpPenalty < 0 ? $" {acpPenalty}(ACP)" : "";
-        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr} = {total}");
+        string conditionStr = conditionModifier != 0 ? $" {conditionModifier}(condition)" : "";
+        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr}{conditionStr} = {total}");
 
         return total;
     }

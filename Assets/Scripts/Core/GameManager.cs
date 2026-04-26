@@ -9460,6 +9460,16 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
+        if (spell != null && spell.SpellId == "flare")
+        {
+            int dazzledRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 10);
+            string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
+            target.ApplyCondition(CombatConditionType.Dazzled, dazzledRounds, sourceName);
+            CombatUI?.ShowCombatLog($"<color=#FFCC66>✨ {target.Stats.CharacterName} is dazzled (-1 attack, Spot, and Search) for {dazzledRounds} round(s)!</color>");
+            Debug.Log($"[GameManager] Flare applied Dazzled to {target.Stats.CharacterName} for {dazzledRounds} round(s)");
+            return null;
+        }
+
         // Use StatusEffectManager for tracked buff application
         var statusMgr = target.GetComponent<StatusEffectManager>();
         if (statusMgr != null)

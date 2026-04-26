@@ -118,6 +118,7 @@ public class CharacterConditions : MonoBehaviour
     public bool IsInvisible => HasCondition(CombatConditionType.Invisible);
     public bool IsTurned => HasCondition(CombatConditionType.Turned);
     public bool IsDazed => HasCondition(CombatConditionType.Dazed);
+    public bool IsDazzled => HasCondition(CombatConditionType.Dazzled);
     public bool IsFeinted => HasCondition(CombatConditionType.Feinted);
     public bool IsFlatFooted => HasCondition(CombatConditionType.FlatFooted);
 
@@ -154,6 +155,9 @@ public class CharacterConditions : MonoBehaviour
 
         if (IsInvisible)
             modifier += 2;
+
+        if (IsDazzled)
+            modifier -= 1;
 
         return modifier;
     }
@@ -192,6 +196,7 @@ public class CharacterConditions : MonoBehaviour
         if (IsPinning) summary += "[Pinning] ";
         if (IsStunned) summary += "[Stunned] ";
         if (IsDazed) summary += "[Dazed] ";
+        if (IsDazzled) summary += "[Dazzled] ";
         if (IsInvisible) summary += "[Invisible] ";
         if (IsTurned) summary += "[Turned] ";
         if (IsFeinted) summary += "[Feinted] ";

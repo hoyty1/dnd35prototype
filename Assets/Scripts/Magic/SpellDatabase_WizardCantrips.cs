@@ -158,7 +158,7 @@ public static partial class SpellDatabase
         {
             SpellId = "flare",
             Name = "Flare",
-            Description = "Dazzles one creature (–1 on attack rolls). Fortitude save negates.",
+            Description = "Dazzles one creature for 1 minute (–1 on attack rolls and sight-based Search/Spot checks). Fortitude negates.",
             SpellLevel = 0, School = "Evocation",
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
@@ -166,8 +166,7 @@ public static partial class SpellDatabase
             EffectType = SpellEffectType.Debuff,
             AllowsSavingThrow = true,
             SavingThrowType = "Fortitude",
-            BuffDurationRounds = -1, // Until end of encounter
-            BuffAttackBonus = -1, // -1 to attack rolls (dazzled)
+            BuffDurationRounds = 10,
             ActionType = SpellActionType.Standard,
             ProvokesAoO = true
         });
