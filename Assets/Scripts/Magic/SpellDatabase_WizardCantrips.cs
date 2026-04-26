@@ -29,7 +29,7 @@ public static partial class SpellDatabase
             ProvokesAoO = true
         });
 
-        Register(SpellData.CreateWithRange(SpellRangeCategory.Close)
+        Register(new SpellData
         {
             SpellId = "acid_splash",
             Name = "Acid Splash",
@@ -37,6 +37,10 @@ public static partial class SpellDatabase
             SpellLevel = 0, School = "Conjuration",
             ClassList = new[] { "Wizard" },
             TargetType = SpellTargetType.SingleEnemy,
+            // Close range (25 ft + 5 ft/2 levels)
+            RangeSquares = 5,
+            RangeIncreasePerLevels = 2,
+            RangeIncreaseSquares = 1,
             IsTouch = true,
             IsRangedTouch = true,
             EffectType = SpellEffectType.Damage,
@@ -325,7 +329,7 @@ public static partial class SpellDatabase
             ProvokesAoO = true
         });
 
-        Register(SpellData.CreateWithRange(SpellRangeCategory.Close)
+        Register(new SpellData
         {
             SpellId = "daze",
             Name = "Daze",
@@ -333,6 +337,10 @@ public static partial class SpellDatabase
             SpellLevel = 0, School = "Enchantment",
             ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
             TargetType = SpellTargetType.SingleEnemy,
+            // Close range (25 ft + 5 ft/2 levels)
+            RangeSquares = 5,
+            RangeIncreasePerLevels = 2,
+            RangeIncreaseSquares = 1,
             EffectType = SpellEffectType.Debuff,
             AllowsSavingThrow = true,
             SavingThrowType = "Will",
