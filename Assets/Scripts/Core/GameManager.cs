@@ -2025,6 +2025,7 @@ public partial class GameManager : MonoBehaviour
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
         CombatUI?.ShowCombatLog("☀️ Disrupt Undead Test: Necromancer Theron (Wizard 3) prepared 5× Disrupt Undead.");
+        CombatUI?.ShowCombatLog("   Test Mode - Easy to Hit is active for all enemies (very low AC / Touch AC).");
         CombatUI?.ShowCombatLog("   Procedure: use ranged touch attacks vs skeletons/zombie and verify 1d6 positive damage.");
         CombatUI?.ShowCombatLog("   Validation: cast at the living orc as a control target — Disrupt Undead should report no effect.");
     }
@@ -2816,6 +2817,7 @@ public partial class GameManager : MonoBehaviour
             _npcAIBehaviors.Add(def.AIBehavior);
 
             ApplyScenarioSpawnOverrides(enemyId, npc, i);
+            ApplyDisruptUndeadTestEasyHitOverrides(enemyId, npc);
 
             if (_isArmorTargetingTestEncounter && string.Equals(enemyId, "skeleton_archer", StringComparison.Ordinal))
             {
@@ -2867,6 +2869,30 @@ public partial class GameManager : MonoBehaviour
         // Hide legacy single-NPC panel since we're using multi-panels
         if (CombatUI.NPCNameText != null)
             CombatUI.NPCNameText.transform.parent.gameObject.SetActive(false);
+    }
+
+    private void ApplyDisruptUndeadTestEasyHitOverrides(string enemyId, CharacterController npc)
+    {
+        if (!_isDisruptUndeadTestEncounter || npc == null || npc.Stats == null)
+            return;
+
+        CharacterStats stats = npc.Stats;
+
+        // Test-only override: lower all defenses so Disrupt Undead ranged touch attacks land consistently.
+        stats.BaseDEX = 1;
+        stats.DEX = 1;
+        stats.ArmorBonus = 0;
+        stats.ShieldBonus = 0;
+        stats.SpellACBonus = 0;
+        stats.DeflectionBonus = 0;
+        stats.NaturalArmorBonus = 1;
+
+        int loweredAC = stats.ArmorClass;
+        int loweredTouchAC = SpellcastingComponent.GetTouchAC(stats);
+
+        string enemyLabel = string.IsNullOrEmpty(stats.CharacterName) ? enemyId : stats.CharacterName;
+        CombatUI?.ShowCombatLog($"🧪 Test Mode - Easy to Hit: {enemyLabel} defenses lowered (AC {loweredAC}, Touch AC {loweredTouchAC}).");
+        Debug.Log($"[DisruptUndeadTest] Easy-hit override applied to {enemyLabel}: AC={loweredAC}, TouchAC={loweredTouchAC}");
     }
 
     private void ApplyScenarioSpawnOverrides(string enemyId, CharacterController npc, int spawnIndex)
