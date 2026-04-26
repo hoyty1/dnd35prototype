@@ -8,7 +8,8 @@ public partial class GameManager
     {
         None,
         Area,
-        Object
+        Object,
+        Armor
     }
 
     private sealed class ActiveGreaseArea
@@ -17,6 +18,7 @@ public partial class GameManager
         public int RemainingRounds;
         public int SaveDC;
         public string CasterName;
+        public GameObject VisualIndicator;
     }
 
     private sealed class ActiveGreasedObject
@@ -46,6 +48,11 @@ public partial class GameManager
         return IsGreaseSpell(_pendingSpell) && _pendingGreaseCastMode == GreaseCastMode.Object;
     }
 
+    private bool IsPendingGreaseArmorCast()
+    {
+        return IsGreaseSpell(_pendingSpell) && _pendingGreaseCastMode == GreaseCastMode.Armor;
+    }
+
     private void ResetPendingGreaseCastMode()
     {
         _pendingGreaseCastMode = GreaseCastMode.None;
@@ -59,7 +66,8 @@ public partial class GameManager
         var options = new List<string>
         {
             "Grease Area (10-ft square)",
-            "Grease Held Object"
+            "Grease Held Object",
+            "Grease Worn Armor"
         };
 
         CombatUI.ShowPickUpItemSelection(
@@ -67,7 +75,13 @@ public partial class GameManager
             itemOptions: options,
             onSelect: selectedIndex =>
             {
-                _pendingGreaseCastMode = selectedIndex == 0 ? GreaseCastMode.Area : GreaseCastMode.Object;
+                if (selectedIndex == 0)
+                    _pendingGreaseCastMode = GreaseCastMode.Area;
+                else if (selectedIndex == 1)
+                    _pendingGreaseCastMode = GreaseCastMode.Object;
+                else
+                    _pendingGreaseCastMode = GreaseCastMode.Armor;
+
                 BeginPendingSpellTargeting(caster);
             },
             onCancel: () =>
@@ -79,7 +93,7 @@ public partial class GameManager
                 ShowActionChoices();
             },
             titleOverride: "Grease: Choose Target Mode",
-            bodyOverride: "Select whether you want to grease a 10-ft square area or a held object.",
+            bodyOverride: "Select whether you want to grease an area, held object, or worn armor.",
             optionButtonColorOverride: new Color(0.46f, 0.36f, 0.12f, 0.95f));
 
         return true;
@@ -112,6 +126,39 @@ public partial class GameManager
 
         HighlightCharacterFootprint(caster, HighlightType.Selected);
         CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim 10-ft square | Range: {range * 5} ft | Move mouse to preview, click to cast | Right-click to cancel");
+    }
+
+    private void EnterGreaseArmorTargetingMode(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || spell == null || Grid == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        _pendingAttackMode = PendingAttackMode.CastSpell;
+        CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        int range = spell.GetRangeSquaresForCasterLevel(caster?.Stats?.GetCasterLevel() ?? 0);
+        if (range <= 0) range = 1;
+
+        List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, range);
+        for (int i = 0; i < rangeCells.Count; i++)
+        {
+            SquareCell cell = rangeCells[i];
+            if (cell == null || !cell.IsOccupied || cell.Occupant == null || cell.Occupant.Stats == null || cell.Occupant.Stats.IsDead)
+                continue;
+
+            _highlightedCells.Add(cell);
+            bool isAlly = IsAllyTeam(caster, cell.Occupant);
+            cell.SetHighlight(isAlly ? HighlightType.Ally : HighlightType.AttackRange);
+        }
+
+        HighlightCharacterFootprint(caster, HighlightType.Selected);
+        CombatUI?.SetTurnIndicator($"✦ {spell.Name}: Select a creature's worn armor | Range: {range * 5} ft");
     }
 
     private bool TryUpdateGreaseAreaPreview(CharacterController caster, Vector2 worldPoint)
@@ -353,6 +400,7 @@ public partial class GameManager
             CasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown"
         };
 
+        area.VisualIndicator = CreateGreaseAreaVisual(area.Cells);
         _activeGreaseAreas.Add(area);
 
         if (_movementService != null)
@@ -360,6 +408,69 @@ public partial class GameManager
             foreach (Vector2Int cell in area.Cells)
                 _movementService.SetDifficultTerrain(cell, true);
         }
+    }
+
+    private GameObject CreateGreaseAreaVisual(HashSet<Vector2Int> cells)
+    {
+        if (cells == null || cells.Count == 0)
+            return null;
+
+        int minX = int.MaxValue;
+        int minY = int.MaxValue;
+        int maxX = int.MinValue;
+        int maxY = int.MinValue;
+
+        foreach (Vector2Int cell in cells)
+        {
+            if (cell.x < minX) minX = cell.x;
+            if (cell.y < minY) minY = cell.y;
+            if (cell.x > maxX) maxX = cell.x;
+            if (cell.y > maxY) maxY = cell.y;
+        }
+
+        int widthCells = Mathf.Max(1, maxX - minX + 1);
+        int heightCells = Mathf.Max(1, maxY - minY + 1);
+
+        Vector3 visualCenter = new Vector3(
+            (minX + maxX) * 0.5f,
+            (minY + maxY) * 0.5f,
+            -0.02f);
+
+        GameObject visualRoot = new GameObject($"GreaseArea_{minX}_{minY}");
+        visualRoot.transform.position = visualCenter;
+
+        GameObject quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        quad.name = "GreaseAreaVisual";
+        quad.transform.SetParent(visualRoot.transform, false);
+        quad.transform.localPosition = Vector3.zero;
+        quad.transform.localScale = new Vector3(widthCells * SquareGridUtils.CellSize, heightCells * SquareGridUtils.CellSize, 1f);
+
+        Collider col = quad.GetComponent<Collider>();
+        if (col != null)
+            Destroy(col);
+
+        MeshRenderer renderer = quad.GetComponent<MeshRenderer>();
+        if (renderer != null)
+        {
+            Shader shader = Shader.Find("Unlit/Color");
+            if (shader == null)
+                shader = Shader.Find("Sprites/Default");
+
+            Material greaseMat = shader != null ? new Material(shader) : new Material(Shader.Find("Standard"));
+            greaseMat.color = new Color(0.2f, 0.75f, 0.28f, 0.35f);
+            renderer.material = greaseMat;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            renderer.sortingOrder = 2;
+        }
+
+        return visualRoot;
+    }
+
+    private static void DestroyGreaseAreaVisual(GameObject visualIndicator)
+    {
+        if (visualIndicator != null)
+            Destroy(visualIndicator);
     }
 
     private void PerformGreaseObjectCast(CharacterController caster, CharacterController target)
@@ -400,6 +511,110 @@ public partial class GameManager
             ClearSpellcastResourceSnapshot();
 
             _lastCombatLog = ResolveGreaseObjectCast(caster, target);
+            CombatUI?.ShowCombatLog(_lastCombatLog);
+
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            ResetPendingGreaseCastMode();
+
+            Grid.ClearAllHighlights();
+            UpdateAllStatsUI();
+            StartCoroutine(AfterAttackDelay(caster, 1.5f));
+        });
+    }
+
+    private void PerformGreaseArmorCast(CharacterController caster, CharacterController target)
+    {
+        if (caster == null || target == null || target.Stats == null || _pendingSpell == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CaptureSpellcastResourceSnapshot(caster);
+
+        if (!TryConsumePendingSpellCast(caster))
+        {
+            ClearSpellcastResourceSnapshot();
+            ShowActionChoices();
+            return;
+        }
+
+        HandleConcentrationOnCasting(caster, _pendingSpell);
+
+        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
+        {
+            if (!canProceed)
+            {
+                if (_spellcastProvocationCancelled)
+                {
+                    HandleSpellcastCancelledFromAoOPrompt(caster);
+                    return;
+                }
+
+                ClearSpellcastResourceSnapshot();
+                HandleInterruptedSpellCast(caster, 1.0f);
+                return;
+            }
+
+            ClearSpellcastResourceSnapshot();
+
+            int durationRounds = GetGreaseDurationRounds(caster);
+            StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+            if (statusMgr == null)
+                statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
+            statusMgr.Init(target.Stats);
+
+            for (int i = statusMgr.ActiveEffects.Count - 1; i >= 0; i--)
+            {
+                ActiveSpellEffect existing = statusMgr.ActiveEffects[i];
+                if (existing == null)
+                    continue;
+
+                bool isGreaseArmor = (existing.Spell != null && existing.Spell.SpellId == "grease_armor")
+                    || existing.GreasedArmorGrappleResistBonus != 0
+                    || existing.GreasedArmorGrappleEscapeBonus != 0
+                    || existing.GreasedArmorBreakPinBonus != 0
+                    || existing.GreasedArmorResistPinBonus != 0;
+
+                if (isGreaseArmor)
+                    statusMgr.RemoveEffect(existing);
+            }
+
+            var effectSpell = new SpellData
+            {
+                SpellId = "grease_armor",
+                Name = "Grease (Armor)",
+                BuffType = "circumstance"
+            };
+
+            var greasedArmorEffect = new ActiveSpellEffect
+            {
+                Spell = effectSpell,
+                CasterName = caster.Stats.CharacterName,
+                CasterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel()),
+                AffectedCharacterName = target.Stats.CharacterName,
+                DurationType = DurationType.Rounds,
+                RemainingRounds = durationRounds,
+                BonusTypeLegacy = "Circumstance",
+                BonusTypeEnum = BonusType.Circumstance,
+                IsApplied = true,
+                GreasedArmorGrappleResistBonus = 10,
+                GreasedArmorGrappleEscapeBonus = 10,
+                GreasedArmorBreakPinBonus = 10,
+                GreasedArmorResistPinBonus = 10
+            };
+            statusMgr.ActiveEffects.Add(greasedArmorEffect);
+
+            var log = new StringBuilder();
+            log.AppendLine("═══════════════════════════════");
+            log.AppendLine($"✨ {caster.Stats.CharacterName} casts Grease on {target.Stats.CharacterName}'s armor!");
+            log.AppendLine($"Duration: {durationRounds} rounds | Save: none (worn armor)");
+            log.AppendLine($"{target.Stats.CharacterName} gains +10 circumstance bonus to resist/escape grapple and pin checks.");
+            log.Append("═══════════════════════════════");
+            _lastCombatLog = log.ToString();
             CombatUI?.ShowCombatLog(_lastCombatLog);
 
             _pendingSpell = null;
@@ -474,17 +689,16 @@ public partial class GameManager
 
     private void ClearAllActiveGreaseEffects()
     {
-        if (_movementService != null)
+        for (int i = 0; i < _activeGreaseAreas.Count; i++)
         {
-            for (int i = 0; i < _activeGreaseAreas.Count; i++)
+            ActiveGreaseArea area = _activeGreaseAreas[i];
+            if (area?.Cells != null && _movementService != null)
             {
-                ActiveGreaseArea area = _activeGreaseAreas[i];
-                if (area?.Cells == null)
-                    continue;
-
                 foreach (Vector2Int cell in area.Cells)
                     _movementService.SetDifficultTerrain(cell, false);
             }
+
+            DestroyGreaseAreaVisual(area?.VisualIndicator);
         }
 
         _activeGreaseAreas.Clear();
@@ -535,6 +749,7 @@ public partial class GameManager
             ActiveGreaseArea ex = expired[i];
             _activeGreaseAreas.Remove(ex);
             UnregisterGreaseAreaTerrain(ex);
+            DestroyGreaseAreaVisual(ex?.VisualIndicator);
             CombatUI?.ShowCombatLog("🛢 Grease effect dissipates.");
         }
     }

@@ -78,7 +78,7 @@ public static class NPCDatabase
         return new List<EncounterPreset>
         {
             new EncounterPreset("grapple_test", "🧪 Grapple Test Encounter", "Fighter vs orc in adjacent squares for dedicated grappling checks.", new List<string> { "orc_grapple_drill" }),
-            new EncounterPreset("grease_test", "🧪 Grease Mechanics Test", "Wizard + greased-armor fighter versus clustered low-Reflex grapplers for area/object Grease and grapple-defense validation.", new List<string> { "grease_test_grappler1", "grease_test_grappler2", "grease_test_grappler3", "grease_test_grappler4" }),
+            new EncounterPreset("grease_test", "🧪 Grease Mechanics Test", "Wizard + fighter versus clustered low-Reflex grapplers for Grease area/object/armor mode and grapple-defense validation.", new List<string> { "grease_test_grappler1", "grease_test_grappler2", "grease_test_grappler3", "grease_test_grappler4" }),
             new EncounterPreset("feint_sneak_test", "🗡️ Feint & Sneak Attack Test", "Level 6 rogue vs one goblin tuned for Bluff feints and sneak attack validation.", new List<string> { "goblin_feint_drill" }),
             new EncounterPreset("turn_undead_test", "✝️ Turn Undead Test", "Expanded cleric stress test with 12 skeletons and 3 wights to force HD-pool target selection.", new List<string> {
                 "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer",
@@ -482,6 +482,7 @@ public static class NPCDatabase
             },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            AITargetPriority = "Slippery Sam",
             SpriteColor = new Color(0.64f, 0.54f, 0.42f, 1f),
             PanelColor = new Color(0.35f, 0.14f, 0.08f, 0.85f),
             NameColor = new Color(1f, 0.72f, 0.44f),
@@ -511,6 +512,7 @@ public static class NPCDatabase
             },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            AITargetPriority = "Slippery Sam",
             SpriteColor = new Color(0.60f, 0.5f, 0.38f, 1f),
             PanelColor = new Color(0.33f, 0.13f, 0.08f, 0.85f),
             NameColor = new Color(0.98f, 0.68f, 0.42f),
@@ -540,6 +542,7 @@ public static class NPCDatabase
             },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            AITargetPriority = "Slippery Sam",
             SpriteColor = new Color(0.62f, 0.52f, 0.4f, 1f),
             PanelColor = new Color(0.34f, 0.13f, 0.08f, 0.85f),
             NameColor = new Color(0.99f, 0.7f, 0.43f),
@@ -569,6 +572,7 @@ public static class NPCDatabase
             },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            AITargetPriority = "Slippery Sam",
             SpriteColor = new Color(0.58f, 0.48f, 0.37f, 1f),
             PanelColor = new Color(0.31f, 0.12f, 0.07f, 0.85f),
             NameColor = new Color(0.96f, 0.66f, 0.41f),
@@ -1856,6 +1860,8 @@ public class NPCDefinition
     // AI
     public NPCAIBehavior AIBehavior = NPCAIBehavior.AggressiveMelee;
     public NPCAIProfileArchetype AIProfileArchetype = NPCAIProfileArchetype.None;
+    /// <summary>Optional explicit enemy character name this NPC should prioritize.</summary>
+    public string AITargetPriority;
     // null = use AI profile default, true/false = force this individual NPC behavior.
     public bool? UseCoupDeGrace;
 

@@ -1299,24 +1299,6 @@ public partial class GameManager : MonoBehaviour
         StatusEffectManager fighterStatusMgr = PC2.gameObject.GetComponent<StatusEffectManager>() ?? PC2.gameObject.AddComponent<StatusEffectManager>();
         fighterStatusMgr.Init(fighterStats);
 
-        ActiveSpellEffect greasedArmorEffect = new ActiveSpellEffect
-        {
-            CasterName = "Scenario Setup",
-            CasterLevel = fighterStats.Level,
-            AffectedCharacterName = fighterStats.CharacterName,
-            DurationType = DurationType.Permanent,
-            RemainingRounds = -1,
-            BonusTypeLegacy = "Untyped",
-            BonusTypeEnum = BonusType.Untyped,
-            IsApplied = true,
-            GreasedArmorGrappleResistBonus = 10,
-            GreasedArmorGrappleEscapeBonus = 10,
-            GreasedArmorBreakPinBonus = 10,
-            GreasedArmorResistPinBonus = 10
-        };
-        fighterStatusMgr.ActiveEffects.Add(greasedArmorEffect);
-        Debug.Log("[GreaseTest] Applied permanent Greased Armor test effect to Slippery Sam (+10 resist grapple/escape/break pin/resist pin).");
-
         ConcentrationManager wizardConcentrationMgr = PC1.gameObject.GetComponent<ConcentrationManager>() ?? PC1.gameObject.AddComponent<ConcentrationManager>();
         wizardConcentrationMgr.Init(wizardStats, PC1);
 
@@ -1328,10 +1310,20 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("╔═══════════════════════════════════════════════════════╗");
         CombatUI?.ShowCombatLog("║          🧪 GREASE MECHANICS TEST SCENARIO           ║");
         CombatUI?.ShowCombatLog("╚═══════════════════════════════════════════════════════╝");
-        CombatUI?.ShowCombatLog("This scenario tests area grease, object grease, and greased armor grapple defense.");
+        CombatUI?.ShowCombatLog("This scenario tests all three Grease modes and grapple defense timing.");
         CombatUI?.ShowCombatLog("  • Greasy Greg (Wizard 5): Grease prepared x4 (DC 15). ");
-        CombatUI?.ShowCombatLog("  • Slippery Sam (Fighter 5): Greased armor grants +10 grapple resist/escape/pin checks.");
+        CombatUI?.ShowCombatLog("  • Slippery Sam (Fighter 5): NO pre-applied grease; must be buffed by spell.");
         CombatUI?.ShowCombatLog("  • Enemies: 4 low-Reflex grapplers clustered for 10-ft area testing.");
+        CombatUI?.ShowCombatLog("");
+        CombatUI?.ShowCombatLog("WIZARD ACTIONS:");
+        CombatUI?.ShowCombatLog("  1. Cast Grease (Armor) on Slippery Sam (+10 grapple defense, 5 rounds).");
+        CombatUI?.ShowCombatLog("  2. Cast Grease (Area) on enemy cluster to force Reflex saves/prone.");
+        CombatUI?.ShowCombatLog("  3. Cast Grease (Object) on enemy weapon to force drops.");
+        CombatUI?.ShowCombatLog("FIGHTER ACTIONS:");
+        CombatUI?.ShowCombatLog("  1. Wait for Grease (Armor), then absorb enemy grapple attempts.");
+        CombatUI?.ShowCombatLog("  2. If grappled, test escape checks with the +10 circumstance bonus.");
+        CombatUI?.ShowCombatLog("ENEMY BEHAVIOR:");
+        CombatUI?.ShowCombatLog("  • All grapplers prioritize Slippery Sam first.");
 
         Debug.Log($"[GreaseTest] Party ready. Wizard at {wizardStart}, Fighter at {fighterStart}. Grease prepared: 4.");
     }
@@ -3092,6 +3084,8 @@ public partial class GameManager : MonoBehaviour
                 ? $" | Templates: {string.Join(",", def.AppliedTemplateIds)}"
                 : string.Empty;
             Debug.Log($"[GameManager] Spawned NPC {i}: {def.Name} (Lv {def.Level} {def.CharacterClass}) at ({pos.x},{pos.y}) — AI: {def.AIBehavior}{templateLog}");
+            if (!string.IsNullOrWhiteSpace(def.AITargetPriority))
+                CombatUI?.ShowCombatLog($"  {npc.Stats.CharacterName} priority target: {def.AITargetPriority}");
 
             if (_isGreaseTestEncounter && npc.Stats != null)
             {
@@ -3116,9 +3110,9 @@ public partial class GameManager : MonoBehaviour
 
         if (_isGreaseTestEncounter)
         {
-            CombatUI?.ShowCombatLog("🧪 Grease scenario loaded: enemies are clustered in a 2x2 square (12,5) to (13,6). ");
-            CombatUI?.ShowCombatLog("   Use Grease (Area) to test prone + Balance checks, then Grease (Object) to force weapon drops.");
-            CombatUI?.ShowCombatLog("   Slippery Sam has Greased Armor: +10 grapple resist/escape/break-pin bonuses.");
+            CombatUI?.ShowCombatLog("🧪 Grease scenario loaded: enemies are clustered in a 2x2 square (12,5) to (13,6).");
+            CombatUI?.ShowCombatLog("   Use Grease (Armor) on Slippery Sam first, then validate Area and Object modes.");
+            CombatUI?.ShowCombatLog("   Enemies are scripted to prioritize Slippery Sam for grapple pressure.");
         }
 
         if (_isProtectionFromEvilTestEncounter)
@@ -3477,6 +3471,7 @@ public partial class GameManager : MonoBehaviour
 
         npc.aiProfile = BuildRuntimeAIProfile(def);
         npc.EnemyUseCoupDeGraceOverride = def.UseCoupDeGrace;
+        npc.PriorityTargetName = string.IsNullOrWhiteSpace(def.AITargetPriority) ? null : def.AITargetPriority;
 
         Debug.Log($"[GameManager] {def.Name}: HP {stats.MaxHP} AC {stats.ArmorClass} " +
                   $"Atk {CharacterStats.FormatMod(stats.AttackBonus)} Speed {stats.MoveRange}sq " +
@@ -8588,6 +8583,12 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        if (IsPendingGreaseArmorCast())
+        {
+            EnterGreaseArmorTargetingMode(caster, _pendingSpell);
+            return;
+        }
+
         // ===== AoE SPELLS: Enter AoE targeting mode =====
         if (_pendingSpell.AoEShapeType != AoEShape.None)
         {
@@ -12314,6 +12315,12 @@ public partial class GameManager : MonoBehaviour
                 if (IsPendingGreaseObjectCast())
                 {
                     PerformGreaseObjectCast(pc, cell.Occupant);
+                    return;
+                }
+
+                if (IsPendingGreaseArmorCast())
+                {
+                    PerformGreaseArmorCast(pc, cell.Occupant);
                     return;
                 }
 

@@ -571,6 +571,23 @@ public class AIService : MonoBehaviour
         if (npc == null || allCombatants == null)
             return null;
 
+        if (!string.IsNullOrWhiteSpace(npc.PriorityTargetName))
+        {
+            for (int i = 0; i < allCombatants.Count; i++)
+            {
+                CharacterController candidate = allCombatants[i];
+                if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                    continue;
+                if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+                    continue;
+                if (candidate.Stats.CharacterName != npc.PriorityTargetName)
+                    continue;
+
+                Debug.Log($"[AI][PriorityTarget] {npc.Stats.CharacterName} prioritizes {candidate.Stats.CharacterName}");
+                return candidate;
+            }
+        }
+
         AIProfile profile = GetProfile(npc);
         if (profile != null)
         {

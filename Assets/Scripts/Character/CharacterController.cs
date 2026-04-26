@@ -308,6 +308,11 @@ public class CharacterController : MonoBehaviour
 
     [HideInInspector] public bool? EnemyUseCoupDeGraceOverride;
 
+    /// <summary>
+    /// Optional explicit enemy name this NPC should prioritize when selecting targets.
+    /// </summary>
+    public string PriorityTargetName { get; set; }
+
     [Header("Sprites")]
     public Sprite AliveSprite;
     public Sprite DeadSprite;
