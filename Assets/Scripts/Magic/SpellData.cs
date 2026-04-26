@@ -316,7 +316,28 @@ public class SpellData
     public int SaveDC;                  // 0 = computed (10 + spell level + casting mod)
     public bool SaveHalves;             // True if save halves damage (e.g., Acid Splash)
     public bool SpellResistanceApplies; // True if target SR can negate the spell on a caster-level check
-    public bool IsMindAffecting;        // True for [Mind-Affecting] spells/effects
+
+    /// <summary>
+    /// True for [Mind-Affecting] spells/effects.
+    /// Use this for broad mind-affecting mechanics (for example: undead/construct immunity).
+    /// </summary>
+    public bool IsMindAffecting;
+
+    /// <summary>
+    /// Is this spell blocked by Protection from [Alignment] spells?
+    /// This is a subset of mind-affecting spells - specifically those that
+    /// involve mental control/compulsion that Protection spells ward against.
+    ///
+    /// Per D&D 3.5e: Protection from Alignment blocks mental control, which includes
+    /// charm, compulsion, and domination effects, but not all mind-affecting spells.
+    ///
+    /// Examples:
+    ///   YES (Blocked): Charm Person, Command, Dominate Person, Suggestion
+    ///   NO (Not Blocked): Fear effects, morale bonuses, some compulsions
+    ///
+    /// This flag should be curated per spell based on D&D 3.5e rules and playtesting.
+    /// </summary>
+    public bool BlockedByProtectionFromAlignment;
 
     // ========== BUFF/DEBUFF ==========
     public int BuffACBonus;             // AC bonus (Mage Armor = +4)

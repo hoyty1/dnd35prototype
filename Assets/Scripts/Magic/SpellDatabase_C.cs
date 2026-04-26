@@ -101,6 +101,7 @@ public static partial class SpellDatabase
                     RangeSquares = 5,
                     EffectType = SpellEffectType.Debuff,
                     IsMindAffecting = true,
+                    BlockedByProtectionFromAlignment = true,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
                     BuffDurationRounds = -1,

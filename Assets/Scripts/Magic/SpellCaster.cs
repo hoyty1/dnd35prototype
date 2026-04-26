@@ -162,7 +162,7 @@ public static class SpellCaster
         }
 
         // ========== PROTECTION FROM ALIGNMENT: MENTAL CONTROL BLOCK ==========
-        if (result.AttackHit && spell.IsMindAffecting && protection.HasMatch && protection.BlocksMentalControl)
+        if (result.AttackHit && IsBlockedByProtectionFromAlignment(targetController, casterController, spell))
         {
             result.MindAffectingBlockedByProtection = true;
             result.Success = false;
@@ -581,6 +581,26 @@ public static class SpellCaster
             return casterLevel;
 
         return Mathf.Max(1, casterStats.Level);
+    }
+
+    /// <summary>
+    /// Check if target is immune to this spell due to Protection from [Alignment].
+    /// This uses SpellData.BlockedByProtectionFromAlignment instead of the broader
+    /// SpellData.IsMindAffecting flag so only curated mental-control spells are blocked.
+    /// </summary>
+    private static bool IsBlockedByProtectionFromAlignment(
+        CharacterController target,
+        CharacterController caster,
+        SpellData spell)
+    {
+        if (spell == null || !spell.BlockedByProtectionFromAlignment)
+            return false;
+
+        if (target == null || caster == null || caster.Stats == null)
+            return false;
+
+        AlignmentProtectionBenefits protection = AlignmentProtectionRules.GetBenefitsAgainst(target, caster.Stats.CharacterAlignment);
+        return protection.HasMatch && protection.BlocksMentalControl;
     }
 
     private static bool IsImmuneToMindAffecting(CharacterStats targetStats)
