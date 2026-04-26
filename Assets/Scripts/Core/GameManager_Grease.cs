@@ -299,6 +299,8 @@ public partial class GameManager
             log.AppendLine("═══════════════════════════════════");
             log.AppendLine($"✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name}! (10-ft square)");
             log.AppendLine($"  Duration: {durationRounds} rounds | Reflex DC: {saveDC}");
+            if (_isGreaseTestEncounter)
+                log.AppendLine("  [TEST] Verifying low-Reflex grappler saves and prone results for clustered targets.");
 
             var seenTargets = new HashSet<CharacterController>();
             for (int i = 0; i < targets.Count; i++)
@@ -586,6 +588,8 @@ public partial class GameManager
         sb.AppendLine("═══════════════════════════════");
         sb.AppendLine($"✨ {caster.Stats.CharacterName} casts Grease on {target.Stats.CharacterName}'s {targetItem.Name}!");
         sb.AppendLine($"Reflex save: d20({roll}) + {target.Stats.ReflexSave} = {total} vs DC {saveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}");
+        if (_isGreaseTestEncounter)
+            sb.AppendLine("[TEST] Greased-object validation: failed save should force immediate weapon drop.");
 
         if (!saveSucceeded)
         {

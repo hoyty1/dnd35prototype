@@ -4769,7 +4769,57 @@ public class CharacterController : MonoBehaviour
         return EnsureCombatStats().GetGrappleSizeModifier();
     }
 
-    private GrappleCheckResult RollGrappleCheck(int? baseAttackBonusOverride = null, int additionalModifier = 0, string additionalModifierLabel = null)
+    private enum GrappleCheckContext
+    {
+        Standard,
+        ResistGrapple,
+        EscapeGrapple,
+        BreakPin,
+        ResistPin
+    }
+
+    private int GetGreasedArmorGrappleBonus(GrappleCheckContext context)
+    {
+        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
+        if (statusEffectManager == null || statusEffectManager.ActiveEffects == null || statusEffectManager.ActiveEffects.Count == 0)
+            return 0;
+
+        int bestBonus = 0;
+        for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
+        {
+            ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
+            if (effect == null)
+                continue;
+
+            int candidate = 0;
+            switch (context)
+            {
+                case GrappleCheckContext.ResistGrapple:
+                    candidate = effect.GreasedArmorGrappleResistBonus;
+                    break;
+                case GrappleCheckContext.EscapeGrapple:
+                    candidate = effect.GreasedArmorGrappleEscapeBonus;
+                    break;
+                case GrappleCheckContext.BreakPin:
+                    candidate = effect.GreasedArmorBreakPinBonus;
+                    break;
+                case GrappleCheckContext.ResistPin:
+                    candidate = effect.GreasedArmorResistPinBonus;
+                    break;
+            }
+
+            if (candidate > bestBonus)
+                bestBonus = candidate;
+        }
+
+        return bestBonus;
+    }
+
+    private GrappleCheckResult RollGrappleCheck(
+        int? baseAttackBonusOverride = null,
+        int additionalModifier = 0,
+        string additionalModifierLabel = null,
+        GrappleCheckContext context = GrappleCheckContext.Standard)
     {
         var result = new GrappleCheckResult
         {
@@ -4787,6 +4837,30 @@ public class CharacterController : MonoBehaviour
 
             if (Stats.HasFeat("Improved Grapple"))
                 result.AddMiscModifier(4, "Improved Grapple feat");
+        }
+
+        int greasedArmorBonus = GetGreasedArmorGrappleBonus(context);
+        if (greasedArmorBonus > 0)
+        {
+            string label = "Greased armor";
+            switch (context)
+            {
+                case GrappleCheckContext.ResistGrapple:
+                    label = "Greased armor (resist grapple)";
+                    break;
+                case GrappleCheckContext.EscapeGrapple:
+                    label = "Greased armor (escape grapple)";
+                    break;
+                case GrappleCheckContext.BreakPin:
+                    label = "Greased armor (break pin)";
+                    break;
+                case GrappleCheckContext.ResistPin:
+                    label = "Greased armor (resist pin)";
+                    break;
+            }
+
+            result.AddMiscModifier(greasedArmorBonus, label);
+            Debug.Log($"[GrappleSystem][GreasedArmor] {result.CharacterName} gains {greasedArmorBonus:+#;-#;0} on grapple check ({context}).");
         }
 
         if (additionalModifier != 0)
@@ -5002,8 +5076,8 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride);
-                GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
+                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride, context: GrappleCheckContext.EscapeGrapple);
+                GrappleCheckResult oppCheck = opponent.RollGrappleCheck(context: GrappleCheckContext.ResistGrapple);
 
                 bool success = myCheck.Total > oppCheck.Total;
                 bool escapedPinOnly = false;
@@ -5208,7 +5282,7 @@ public class CharacterController : MonoBehaviour
                 }
 
                 GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride);
-                GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
+                GrappleCheckResult oppCheck = opponent.RollGrappleCheck(context: GrappleCheckContext.ResistPin);
 
                 bool success = myCheck.Total > oppCheck.Total;
                 if (success && TryGetGrappleLink(this, out GrappleLink link))
@@ -5262,7 +5336,7 @@ public class CharacterController : MonoBehaviour
                     };
                 }
 
-                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride);
+                GrappleCheckResult myCheck = RollGrappleCheck(iterativeAttackBonusOverride, context: GrappleCheckContext.BreakPin);
                 GrappleCheckResult oppCheck = opponent.RollGrappleCheck();
 
                 bool success = myCheck.Total > oppCheck.Total;
@@ -6545,7 +6619,7 @@ public class CharacterController : MonoBehaviour
         }
 
         GrappleCheckResult attackerCheck = RollGrappleCheck(attackBab);
-        GrappleCheckResult defenderCheck = target.RollGrappleCheck();
+        GrappleCheckResult defenderCheck = target.RollGrappleCheck(context: GrappleCheckContext.ResistGrapple);
 
         bool success = attackerCheck.Total > defenderCheck.Total;
         string grapplePositioningLog = string.Empty;
@@ -6630,7 +6704,7 @@ public class CharacterController : MonoBehaviour
         }
 
         GrappleCheckResult attackerCheck = RollGrappleCheck();
-        GrappleCheckResult defenderCheck = target.RollGrappleCheck();
+        GrappleCheckResult defenderCheck = target.RollGrappleCheck(context: GrappleCheckContext.ResistGrapple);
         bool success = attackerCheck.Total > defenderCheck.Total;
 
         string grapplePositioningLog = string.Empty;

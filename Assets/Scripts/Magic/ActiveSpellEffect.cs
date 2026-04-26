@@ -64,6 +64,12 @@ public class ActiveSpellEffect
     public bool ProtectionBlocksMentalControl;
     public bool ProtectionBlocksSummonedContact;
 
+    // Scenario/test hook: persistent grease-on-armor grapple modifiers.
+    public int GreasedArmorGrappleResistBonus;
+    public int GreasedArmorGrappleEscapeBonus;
+    public int GreasedArmorBreakPinBonus;
+    public int GreasedArmorResistPinBonus;
+
     /// <summary>LEGACY: The bonus type string for backward compatibility.</summary>
     public string BonusTypeLegacy;
 
@@ -231,6 +237,15 @@ public class ActiveSpellEffect
             if (ProtectionBlocksSummonedContact)
                 mods += " SummonBarrier";
         }
+
+        if (GreasedArmorGrappleResistBonus != 0)
+            mods += $" GrappleResist:{GreasedArmorGrappleResistBonus:+#;-#}";
+        if (GreasedArmorGrappleEscapeBonus != 0)
+            mods += $" GrappleEscape:{GreasedArmorGrappleEscapeBonus:+#;-#}";
+        if (GreasedArmorBreakPinBonus != 0)
+            mods += $" BreakPin:{GreasedArmorBreakPinBonus:+#;-#}";
+        if (GreasedArmorResistPinBonus != 0)
+            mods += $" ResistPin:{GreasedArmorResistPinBonus:+#;-#}";
 
         string typeStr = BonusTypeEnum != BonusType.Untyped ? $" ({BonusTypeHelper.GetDisplayName(BonusTypeEnum)})" : "";
         return $"{spellName}{typeStr} [{GetDurationDisplayString()}] from {CasterName}{mods}";

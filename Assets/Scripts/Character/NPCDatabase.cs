@@ -27,6 +27,7 @@ public static class NPCDatabase
         RegisterWightDreadwalker();
         RegisterOrcBerserker();
         RegisterOrcGrappleDrill();
+        RegisterGreaseTestGrapplers();
         RegisterHobgoblinSergeant();
         RegisterOgreBrute();
         RegisterDireWolf();
@@ -77,6 +78,7 @@ public static class NPCDatabase
         return new List<EncounterPreset>
         {
             new EncounterPreset("grapple_test", "🧪 Grapple Test Encounter", "Fighter vs orc in adjacent squares for dedicated grappling checks.", new List<string> { "orc_grapple_drill" }),
+            new EncounterPreset("grease_test", "🧪 Grease Mechanics Test", "Wizard + greased-armor fighter versus clustered low-Reflex grapplers for area/object Grease and grapple-defense validation.", new List<string> { "grease_test_grappler1", "grease_test_grappler2", "grease_test_grappler3", "grease_test_grappler4" }),
             new EncounterPreset("feint_sneak_test", "🗡️ Feint & Sneak Attack Test", "Level 6 rogue vs one goblin tuned for Bluff feints and sneak attack validation.", new List<string> { "goblin_feint_drill" }),
             new EncounterPreset("turn_undead_test", "✝️ Turn Undead Test", "Expanded cleric stress test with 12 skeletons and 3 wights to force HD-pool target selection.", new List<string> {
                 "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer", "skeleton_archer",
@@ -446,6 +448,131 @@ public static class NPCDatabase
             PanelColor = new Color(0.32f, 0.14f, 0.08f, 0.85f),
             NameColor = new Color(1f, 0.72f, 0.42f),
             Description = "An orc sparring target tuned for grappling tests. Carries a dagger to validate weapon-in-grapple interactions."
+        });
+    }
+
+
+    /// <summary>
+    /// Dedicated grapple-heavy enemies for grease scenario validation.
+    /// All are configured with weak Reflex progression so Grease saves are easy to observe.
+    /// </summary>
+    private static void RegisterGreaseTestGrapplers()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "grease_test_grappler1",
+            Name = "Brutus the Grappler",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            HitDice = 3,
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
+            SizeCategory = SizeCategory.Medium,
+            STR = 16, DEX = 8, CON = 14, WIS = 10, INT = 8, CHA = 8,
+            BAB = 2,
+            BaseSpeed = 6,
+            BaseHitDieHP = 28,
+            Feats = new List<string> { "Improved Grapple" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("studded_leather", EquipSlot.Armor),
+                new EquipmentSlotPair("morningstar", EquipSlot.RightHand)
+            },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            SpriteColor = new Color(0.64f, 0.54f, 0.42f, 1f),
+            PanelColor = new Color(0.35f, 0.14f, 0.08f, 0.85f),
+            NameColor = new Color(1f, 0.72f, 0.44f),
+            Description = "Brutish grappler with very low Reflex save for Grease area/object save validation."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "grease_test_grappler2",
+            Name = "Thug Crusher",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            HitDice = 2,
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
+            SizeCategory = SizeCategory.Medium,
+            STR = 15, DEX = 9, CON = 13, WIS = 10, INT = 8, CHA = 8,
+            BAB = 1,
+            BaseSpeed = 6,
+            BaseHitDieHP = 18,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
+                new EquipmentSlotPair("club", EquipSlot.RightHand)
+            },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            SpriteColor = new Color(0.60f, 0.5f, 0.38f, 1f),
+            PanelColor = new Color(0.33f, 0.13f, 0.08f, 0.85f),
+            NameColor = new Color(0.98f, 0.68f, 0.42f),
+            Description = "Low-Reflex thug wielding a club to repeatedly pressure grapple defenses."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "grease_test_grappler3",
+            Name = "Brawler Grog",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            HitDice = 2,
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
+            SizeCategory = SizeCategory.Medium,
+            STR = 14, DEX = 10, CON = 12, WIS = 10, INT = 8, CHA = 8,
+            BAB = 1,
+            BaseSpeed = 6,
+            BaseHitDieHP = 16,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
+                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
+            },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            SpriteColor = new Color(0.62f, 0.52f, 0.4f, 1f),
+            PanelColor = new Color(0.34f, 0.13f, 0.08f, 0.85f),
+            NameColor = new Color(0.99f, 0.7f, 0.43f),
+            Description = "Quarterstaff brawler with baseline Reflex save for additional Grease save sampling."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "grease_test_grappler4",
+            Name = "Weak Grappler",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            HitDice = 1,
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
+            SizeCategory = SizeCategory.Medium,
+            STR = 13, DEX = 8, CON = 12, WIS = 10, INT = 8, CHA = 8,
+            BAB = 1,
+            BaseSpeed = 6,
+            BaseHitDieHP = 12,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
+                new EquipmentSlotPair("dagger", EquipSlot.RightHand)
+            },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Grappler,
+            SpriteColor = new Color(0.58f, 0.48f, 0.37f, 1f),
+            PanelColor = new Color(0.31f, 0.12f, 0.07f, 0.85f),
+            NameColor = new Color(0.96f, 0.66f, 0.41f),
+            Description = "Fragile backup grappler used to verify repeated Grease + grapple defense interactions."
         });
     }
 

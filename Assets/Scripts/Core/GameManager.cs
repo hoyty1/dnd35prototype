@@ -70,6 +70,7 @@ public partial class GameManager : MonoBehaviour
     public bool WaitingForEncounterSelection { get; private set; }
 
     private const string GrappleTestPresetId = "grapple_test";
+    private const string GreaseTestPresetId = "grease_test";
     private const string FeintSneakTestPresetId = "feint_sneak_test";
     private const string TurnUndeadTestPresetId = "turn_undead_test";
     private const string ArmorTargetingTestPresetId = "armor_targeting_test";
@@ -86,6 +87,7 @@ public partial class GameManager : MonoBehaviour
     private const string ClericSpellTestPresetId = "cleric_spell_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
+    private bool _isGreaseTestEncounter;
     private bool _isFeintSneakTestEncounter;
     private bool _isTurnUndeadTestEncounter;
     private bool _isArmorTargetingTestEncounter;
@@ -586,6 +588,7 @@ public partial class GameManager : MonoBehaviour
         EncounterPreset preset = NPCDatabase.GetEncounterPreset(presetId);
         _activeEncounterEnemyIds.Clear();
         _isGrappleTestEncounter = string.Equals(presetId, GrappleTestPresetId, StringComparison.Ordinal);
+        _isGreaseTestEncounter = string.Equals(presetId, GreaseTestPresetId, StringComparison.Ordinal);
         _isFeintSneakTestEncounter = string.Equals(presetId, FeintSneakTestPresetId, StringComparison.Ordinal);
         _isTurnUndeadTestEncounter = string.Equals(presetId, TurnUndeadTestPresetId, StringComparison.Ordinal);
         _isArmorTargetingTestEncounter = string.Equals(presetId, ArmorTargetingTestPresetId, StringComparison.Ordinal);
@@ -616,6 +619,8 @@ public partial class GameManager : MonoBehaviour
 
         if (_isGrappleTestEncounter)
             ConfigureGrappleTestParty();
+        else if (_isGreaseTestEncounter)
+            ConfigureGreaseTestParty();
         else if (_isFeintSneakTestEncounter)
             ConfigureFeintSneakTestParty();
         else if (_isTurnUndeadTestEncounter)
@@ -1208,6 +1213,127 @@ public partial class GameManager : MonoBehaviour
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
         CombatUI?.ShowCombatLog("🧪 Grapple Test: Fighter and target start adjacent. Use Special Attack -> Grapple.");
+    }
+
+    private void ConfigureGreaseTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+        SpellDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats wizardStats = new CharacterStats(
+            name: "Greasy Greg",
+            level: 5,
+            characterClass: "Wizard",
+            str: 10, dex: 14, con: 12, wis: 13, intelligence: 18, cha: 10,
+            bab: 2,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 22,
+            raceName: "Human"
+        );
+        wizardStats.CharacterAlignment = Alignment.TrueNeutral;
+
+        CharacterStats fighterStats = new CharacterStats(
+            name: "Slippery Sam",
+            level: 5,
+            characterClass: "Fighter",
+            str: 18, dex: 14, con: 14, wis: 12, intelligence: 10, cha: 10,
+            bab: 5,
+            armorBonus: 4,
+            shieldBonus: 0,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 47,
+            raceName: "Human"
+        );
+        fighterStats.CharacterAlignment = Alignment.LawfulNeutral;
+
+        Vector2Int wizardStart = new Vector2Int(5, 5);
+        Vector2Int fighterStart = new Vector2Int(7, 5);
+
+        Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        Sprite fighterAlive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+
+        PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
+        PC2.Init(fighterStats, fighterStart, fighterAlive, pcDead);
+
+        InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        wizardInventory.Init(wizardStats);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.RecalculateStats();
+
+        InventoryComponent fighterInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
+        fighterInventory.Init(fighterStats);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        fighterInventory.CharacterInventory.RecalculateStats();
+
+        SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
+        wizardSpellComp.KnownSpells.Clear();
+        wizardSpellComp.SelectedSpellIds = new List<string>
+        {
+            "detect_magic_wiz", "read_magic", "grease", "mage_armor"
+        };
+        wizardSpellComp.PreparedSpellSlotIds = new List<string>
+        {
+            "grease", "grease", "grease", "grease"
+        };
+        wizardSpellComp.Init(wizardStats);
+
+        StatusEffectManager wizardStatusMgr = PC1.gameObject.GetComponent<StatusEffectManager>() ?? PC1.gameObject.AddComponent<StatusEffectManager>();
+        wizardStatusMgr.Init(wizardStats);
+
+        StatusEffectManager fighterStatusMgr = PC2.gameObject.GetComponent<StatusEffectManager>() ?? PC2.gameObject.AddComponent<StatusEffectManager>();
+        fighterStatusMgr.Init(fighterStats);
+
+        ActiveSpellEffect greasedArmorEffect = new ActiveSpellEffect
+        {
+            CasterName = "Scenario Setup",
+            CasterLevel = fighterStats.Level,
+            AffectedCharacterName = fighterStats.CharacterName,
+            DurationType = DurationType.Permanent,
+            RemainingRounds = -1,
+            BonusTypeLegacy = "Untyped",
+            BonusTypeEnum = BonusType.Untyped,
+            IsApplied = true,
+            GreasedArmorGrappleResistBonus = 10,
+            GreasedArmorGrappleEscapeBonus = 10,
+            GreasedArmorBreakPinBonus = 10,
+            GreasedArmorResistPinBonus = 10
+        };
+        fighterStatusMgr.ActiveEffects.Add(greasedArmorEffect);
+        Debug.Log("[GreaseTest] Applied permanent Greased Armor test effect to Slippery Sam (+10 resist grapple/escape/break pin/resist pin).");
+
+        ConcentrationManager wizardConcentrationMgr = PC1.gameObject.GetComponent<ConcentrationManager>() ?? PC1.gameObject.AddComponent<ConcentrationManager>();
+        wizardConcentrationMgr.Init(wizardStats, PC1);
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, true, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("╔═══════════════════════════════════════════════════════╗");
+        CombatUI?.ShowCombatLog("║          🧪 GREASE MECHANICS TEST SCENARIO           ║");
+        CombatUI?.ShowCombatLog("╚═══════════════════════════════════════════════════════╝");
+        CombatUI?.ShowCombatLog("This scenario tests area grease, object grease, and greased armor grapple defense.");
+        CombatUI?.ShowCombatLog("  • Greasy Greg (Wizard 5): Grease prepared x4 (DC 15). ");
+        CombatUI?.ShowCombatLog("  • Slippery Sam (Fighter 5): Greased armor grants +10 grapple resist/escape/pin checks.");
+        CombatUI?.ShowCombatLog("  • Enemies: 4 low-Reflex grapplers clustered for 10-ft area testing.");
+
+        Debug.Log($"[GreaseTest] Party ready. Wizard at {wizardStart}, Fighter at {fighterStart}. Grease prepared: 4.");
     }
 
     private void ConfigureFeintSneakTestParty()
@@ -2709,6 +2835,13 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(13, 12),
     };
 
+    private static readonly Vector2Int[] GreaseTestSpawnPositions = {
+        new Vector2Int(12, 5),
+        new Vector2Int(13, 6),
+        new Vector2Int(12, 6),
+        new Vector2Int(13, 5),
+    };
+
     private static readonly Vector2Int[] TurnUndeadTestSpawnPositions = {
         // Front line (6 skeletons) - ~15 ft from cleric start (9,9)
         new Vector2Int(12, 6),
@@ -2836,6 +2969,11 @@ public partial class GameManager : MonoBehaviour
                 // Spawn adjacent in dedicated mechanics test encounters.
                 pos = PC1.GridPosition + Vector2Int.right;
             }
+            else if (_isGreaseTestEncounter && i < GreaseTestSpawnPositions.Length)
+            {
+                // Cluster all enemies into a tight 2x2 for 10-ft grease area and repeated grapple attempts.
+                pos = GreaseTestSpawnPositions[i];
+            }
             else if (_isTurnUndeadTestEncounter && i < TurnUndeadTestSpawnPositions.Length)
             {
                 // Explicit 15-undead test formation (front skeletons, mid wights, back skeletons).
@@ -2954,6 +3092,33 @@ public partial class GameManager : MonoBehaviour
                 ? $" | Templates: {string.Join(",", def.AppliedTemplateIds)}"
                 : string.Empty;
             Debug.Log($"[GameManager] Spawned NPC {i}: {def.Name} (Lv {def.Level} {def.CharacterClass}) at ({pos.x},{pos.y}) — AI: {def.AIBehavior}{templateLog}");
+
+            if (_isGreaseTestEncounter && npc.Stats != null)
+            {
+                int grappleMod = npc.GetGrappleModifier();
+                string weaponLabel = "unarmed";
+                if (def.EquipmentIds != null)
+                {
+                    for (int eqIndex = 0; eqIndex < def.EquipmentIds.Count; eqIndex++)
+                    {
+                        EquipmentSlotPair eq = def.EquipmentIds[eqIndex];
+                        if (eq != null && eq.Slot == EquipSlot.RightHand && !string.IsNullOrWhiteSpace(eq.ItemId))
+                        {
+                            weaponLabel = eq.ItemId;
+                            break;
+                        }
+                    }
+                }
+
+                CombatUI?.ShowCombatLog($"✓ {npc.Stats.CharacterName}: Grapple {CharacterStats.FormatMod(grappleMod)}, Reflex {CharacterStats.FormatMod(npc.Stats.ReflexSave)}, Weapon {weaponLabel}");
+            }
+        }
+
+        if (_isGreaseTestEncounter)
+        {
+            CombatUI?.ShowCombatLog("🧪 Grease scenario loaded: enemies are clustered in a 2x2 square (12,5) to (13,6). ");
+            CombatUI?.ShowCombatLog("   Use Grease (Area) to test prone + Balance checks, then Grease (Object) to force weapon drops.");
+            CombatUI?.ShowCombatLog("   Slippery Sam has Greased Armor: +10 grapple resist/escape/break-pin bonuses.");
         }
 
         if (_isProtectionFromEvilTestEncounter)
