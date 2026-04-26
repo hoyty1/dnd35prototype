@@ -2048,6 +2048,7 @@ public class CharacterController : MonoBehaviour
 
         int weaponNonProfPenalty = Stats.GetWeaponNonProficiencyPenalty(equippedWeapon);
         int armorNonProfPenalty = Stats.GetArmorNonProficiencyAttackPenalty();
+        int moraleAttackBonus = Stats.MoraleAttackBonus;
         int conditionAttackPenalty = Stats.ConditionAttackPenalty;
         int aidAnotherAttackBonus = ConsumeAidAnotherAttackBonus(target);
         int aidAnotherTargetAcBonus = ConsumeAidAnotherAcBonus(target);
@@ -2059,7 +2060,7 @@ public class CharacterController : MonoBehaviour
                           + (isFlanking ? flankingBonus : 0) + racialAtkBonus + rangePenalty
                           + powerAtkPenalty + pbsAtkBonus + weaponFocusBonus + combatExpertisePenalty
                           + proneAttackPenalty + fightingDefensivelyPenalty + shootingIntoMeleePenalty
-                          + weaponNonProfPenalty + armorNonProfPenalty + conditionAttackPenalty
+                          + weaponNonProfPenalty + armorNonProfPenalty + moraleAttackBonus + conditionAttackPenalty
                           + aidAnotherAttackBonus + damageModeProfile.AttackPenalty + additionalAttackModifier;
 
         int critThreatMin = Stats.CritThreatMin > 0 ? Stats.CritThreatMin : 20;
@@ -4803,7 +4804,13 @@ public class CharacterController : MonoBehaviour
 
         int remainingMoraleAttackBonus = Stats.MoraleAttackBonus - spellAttackBonusTotal;
         if (remainingMoraleAttackBonus != 0)
-            result.AddAttackBuffDebuffModifier("Other morale effects", remainingMoraleAttackBonus);
+        {
+            string moraleLabel = "Other morale effects";
+            if (spellAttackBonusTotal == 0 && remainingMoraleAttackBonus == 2)
+                moraleLabel = "Charge";
+
+            result.AddAttackBuffDebuffModifier(moraleLabel, remainingMoraleAttackBonus);
+        }
 
         int conditionAttackBonusTotal = 0;
         if (Stats.ActiveConditions != null)
