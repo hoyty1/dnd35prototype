@@ -3438,6 +3438,7 @@ public class CharacterController : MonoBehaviour
         result.IsRangedAttack = isRangedAttack;
         result.NaturalTwenty = (roll == 20);
         result.NaturalOne = (roll == 1);
+        AttachAttackBuffDebuffBreakdown(result);
 
         // Step 2: Check for critical threat (only if the attack hit)
         bool isThreat = false;
@@ -4766,6 +4767,72 @@ public class CharacterController : MonoBehaviour
 
         result.Total = result.BaseRoll + result.BaseAttackBonus + result.StrengthModifier + result.SizeModifier + result.MiscModifier;
         return result;
+    }
+
+    private void AttachAttackBuffDebuffBreakdown(CombatResult result)
+    {
+        if (result == null || Stats == null)
+            return;
+
+        if (result.AttackBuffDebuffModifiers == null)
+            result.AttackBuffDebuffModifiers = new List<AttackModifierBreakdownEntry>();
+        else
+            result.AttackBuffDebuffModifiers.Clear();
+
+        int spellAttackBonusTotal = 0;
+        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
+        if (statusEffectManager != null && statusEffectManager.ActiveEffects != null)
+        {
+            for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
+            {
+                ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
+                if (effect == null)
+                    continue;
+
+                int attackBonus = effect.AppliedAttackBonus;
+                if (attackBonus == 0)
+                    continue;
+
+                string spellLabel = effect.Spell != null && !string.IsNullOrWhiteSpace(effect.Spell.Name)
+                    ? effect.Spell.Name
+                    : "Spell effect";
+                result.AddAttackBuffDebuffModifier(spellLabel, attackBonus);
+                spellAttackBonusTotal += attackBonus;
+            }
+        }
+
+        int remainingMoraleAttackBonus = Stats.MoraleAttackBonus - spellAttackBonusTotal;
+        if (remainingMoraleAttackBonus != 0)
+            result.AddAttackBuffDebuffModifier("Other morale effects", remainingMoraleAttackBonus);
+
+        int conditionAttackBonusTotal = 0;
+        if (Stats.ActiveConditions != null)
+        {
+            for (int i = 0; i < Stats.ActiveConditions.Count; i++)
+            {
+                StatusEffect activeCondition = Stats.ActiveConditions[i];
+                ConditionDefinition conditionDefinition = ConditionRules.GetDefinition(activeCondition.Type);
+                int attackModifier = conditionDefinition.AttackModifier;
+                if (attackModifier == 0)
+                    continue;
+
+                string conditionLabel = !string.IsNullOrWhiteSpace(conditionDefinition.DisplayName)
+                    ? conditionDefinition.DisplayName
+                    : activeCondition.Type.ToString();
+                if (!string.IsNullOrWhiteSpace(activeCondition.SourceName)
+                    && !string.Equals(activeCondition.SourceName, conditionLabel, StringComparison.OrdinalIgnoreCase))
+                {
+                    conditionLabel = $"{conditionLabel} ({activeCondition.SourceName})";
+                }
+
+                result.AddAttackBuffDebuffModifier(conditionLabel, attackModifier);
+                conditionAttackBonusTotal += attackModifier;
+            }
+        }
+
+        int remainingConditionAttackBonus = Stats.ConditionAttackPenalty - conditionAttackBonusTotal;
+        if (remainingConditionAttackBonus != 0)
+            result.AddAttackBuffDebuffModifier("Other condition modifiers", remainingConditionAttackBonus);
     }
 
     private static string BuildOpposedResultLine(string actorName, int actorTotal, string opponentName, int opponentTotal)

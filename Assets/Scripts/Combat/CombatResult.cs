@@ -2,6 +2,21 @@ using System.Collections.Generic;
 using System.Text;
 
 /// <summary>
+/// Individual attack-roll modifier entry used for detailed combat log breakdowns.
+/// </summary>
+public struct AttackModifierBreakdownEntry
+{
+    public string Label;
+    public int Value;
+
+    public AttackModifierBreakdownEntry(string label, int value)
+    {
+        Label = label;
+        Value = value;
+    }
+}
+
+/// <summary>
 /// Holds the result of a single attack action using D&D 3.5 mechanics.
 /// </summary>
 public class CombatResult
@@ -83,6 +98,7 @@ public class CombatResult
     public bool IsOffHandAttack;
     public int WeaponNonProficiencyPenalty;
     public int ArmorNonProficiencyPenalty;
+    public List<AttackModifierBreakdownEntry> AttackBuffDebuffModifiers = new List<AttackModifierBreakdownEntry>();
 
     public int BaseDamageRoll;
     public string BaseDamageDiceStr;
@@ -104,6 +120,14 @@ public class CombatResult
         : Damage + SneakAttackDamage;
 
     public string GetSummary() => GetDetailedSummary();
+
+    public void AddAttackBuffDebuffModifier(string label, int value)
+    {
+        if (string.IsNullOrWhiteSpace(label) || value == 0)
+            return;
+
+        AttackBuffDebuffModifiers.Add(new AttackModifierBreakdownEntry(label.Trim(), value));
+    }
 
     public string GetDetailedSummary()
     {
@@ -198,6 +222,16 @@ public class CombatResult
         if (ArmorNonProficiencyPenalty != 0)
             sb.AppendLine($"    {FormatModLine(ArmorNonProficiencyPenalty, "armor/shield non-proficiency")}");
 
+        if (AttackBuffDebuffModifiers != null && AttackBuffDebuffModifiers.Count > 0)
+        {
+            sb.AppendLine("    Buffs/Debuffs:");
+            for (int i = 0; i < AttackBuffDebuffModifiers.Count; i++)
+            {
+                AttackModifierBreakdownEntry entry = AttackBuffDebuffModifiers[i];
+                sb.AppendLine($"      {FormatModLine(entry.Value, entry.Label)}");
+            }
+        }
+
         string critNote = NaturalTwenty ? " (NATURAL 20!)" : NaturalOne ? " (NATURAL 1!)" : "";
         sb.AppendLine($"    = {TotalRoll} vs AC {TargetAC} - {(Hit ? "HIT!" : "MISS!")}{critNote}");
 
@@ -287,6 +321,16 @@ public class CombatResult
             sb.AppendLine($"      {FormatModLine(WeaponNonProficiencyPenalty, "weapon non-proficiency")}");
         if (ArmorNonProficiencyPenalty != 0)
             sb.AppendLine($"      {FormatModLine(ArmorNonProficiencyPenalty, "armor/shield non-proficiency")}");
+
+        if (AttackBuffDebuffModifiers != null && AttackBuffDebuffModifiers.Count > 0)
+        {
+            sb.AppendLine("      Buffs/Debuffs:");
+            for (int i = 0; i < AttackBuffDebuffModifiers.Count; i++)
+            {
+                AttackModifierBreakdownEntry entry = AttackBuffDebuffModifiers[i];
+                sb.AppendLine($"        {FormatModLine(entry.Value, entry.Label)}");
+            }
+        }
 
         string critNote = NaturalTwenty ? " (NATURAL 20!)" : NaturalOne ? " (NATURAL 1!)" : "";
         sb.AppendLine($"      = {TotalRoll} vs AC {TargetAC} - {(Hit ? "HIT!" : "MISS!")}{critNote}");
