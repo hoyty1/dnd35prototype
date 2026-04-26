@@ -1506,8 +1506,8 @@ public partial class GameManager
             }
         }
 
-        // Apply AC penalty until next turn.
-        charger.ApplyCondition(CombatConditionType.ChargePenalty, 1, charger.Stats.CharacterName);
+        // D&D 3.5e: charge AC penalty lasts until the start of this charger's next turn.
+        ApplyChargePenaltyUntilStartOfNextTurn(charger);
         CombatUI.ShowCombatLog($"🛡 {charger.Stats.CharacterName} is charging: -2 AC until next turn.");
 
         Grid.ClearAllHighlights();
@@ -1527,6 +1527,28 @@ public partial class GameManager
         }
 
         StartCoroutine(AfterAttackDelay(charger, 1.0f));
+    }
+
+    private void ApplyChargePenaltyUntilStartOfNextTurn(CharacterController actor)
+    {
+        if (actor == null || actor.Stats == null)
+            return;
+
+        if (_conditionService != null)
+        {
+            // Use turn-boundary expiration instead of round ticking so this penalty
+            // lasts until THIS character's next turn start (PHB 3.5e charge timing).
+            ApplyCondition(
+                actor,
+                CombatConditionType.ChargePenalty,
+                rounds: -1,
+                source: actor,
+                expiresAtStartOfTurn: true);
+            return;
+        }
+
+        // Fallback path when ConditionService is unavailable.
+        actor.ApplyCondition(CombatConditionType.ChargePenalty, 1, actor.Stats.CharacterName);
     }
 
     private void CancelChargeTargeting()
@@ -1749,7 +1771,7 @@ public partial class GameManager
             }
         }
 
-        npc.ApplyCondition(CombatConditionType.ChargePenalty, 1, npc.Stats.CharacterName);
+        ApplyChargePenaltyUntilStartOfNextTurn(npc);
         UpdateAllStatsUI();
 
         yield return new WaitForSeconds(0.8f);
