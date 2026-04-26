@@ -159,6 +159,17 @@ public static class SpellCaster
             }
         }
 
+        // ========== SHIELD VS MAGIC MISSILE ==========
+        if (result.AttackHit && IsMagicMissileSpell(spell) && HasActiveShieldSpell(targetController))
+        {
+            result.MagicMissileBlockedByShield = true;
+            result.DamageRolled = 0;
+            result.DamageDealt = 0;
+            result.TargetHPBefore = targetStats.CurrentHP;
+            result.TargetHPAfter = targetStats.CurrentHP;
+            return result;
+        }
+
         // ========== SAVING THROW ==========
         if (spell.AllowsSavingThrow && result.AttackHit)
         {
@@ -334,6 +345,42 @@ public static class SpellCaster
         }
 
         return result;
+    }
+
+    private static bool IsMagicMissileSpell(SpellData spell)
+    {
+        return spell != null && spell.SpellId == "magic_missile";
+    }
+
+    private static bool HasActiveShieldSpell(CharacterController targetController)
+    {
+        if (targetController == null)
+            return false;
+
+        StatusEffectManager statusMgr = targetController.GetComponent<StatusEffectManager>();
+        if (statusMgr != null && statusMgr.ActiveEffects != null)
+        {
+            for (int i = 0; i < statusMgr.ActiveEffects.Count; i++)
+            {
+                ActiveSpellEffect effect = statusMgr.ActiveEffects[i];
+                if (effect?.Spell == null)
+                    continue;
+
+                if (effect.Spell.SpellId == "shield" && effect.RemainingRounds > 0)
+                    return true;
+            }
+        }
+
+        SpellcastingComponent spellComp = targetController.GetComponent<SpellcastingComponent>();
+        if (spellComp != null
+            && spellComp.ActiveBuffs != null
+            && spellComp.ActiveBuffs.TryGetValue("shield", out int rounds)
+            && rounds > 0)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static List<CharacterController> GetAllCombatCharactersSnapshot()

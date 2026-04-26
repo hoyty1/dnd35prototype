@@ -40,6 +40,7 @@ public static class NPCDatabase
         RegisterFiendishDireBear();
         RegisterHumanPaladin();
         RegisterHumanCleric();
+        RegisterArcaneMissileAdept();
         RegisterZombieShambler();
         RegisterTargetDummy();
 
@@ -86,6 +87,7 @@ public static class NPCDatabase
             new EncounterPreset("celestial_template_test", "✨ Celestial Template Test", "Good cleric with celestial wolf + celestial dire bear allies against evil undead. Templates are applied at spawn time.", new List<string> { "wolf_pack_hunter", "dire_bear", "skeleton_warrior", "skeleton_archer", "zombie_shambler" }),
             new EncounterPreset("fiendish_template_test", "🔥 Fiendish Template Test", "Evil necromancer with fiendish wolf + fiendish dire bear allies against good paladin and cleric. Templates are applied at spawn time.", new List<string> { "fiendish_wolf", "fiendish_dire_bear", "human_paladin", "human_cleric" }),
             new EncounterPreset("summon_monster_test", "🌀 Summon Monster Test", "Cleric + wizard summon drill with Summon Monster I/II prepared on both casters for selection UI, placement, and command validation.", new List<string> { "orc_berserker", "skeleton_archer", "goblin_warchief" }),
+            new EncounterPreset("npc_magic_missile_test", "🧪 NPC Magic Missile Test", "Enemy evoker only casts Magic Missile and should skip targets protected by Shield.", new List<string> { "arcane_missile_adept", "orc_berserker" }),
             new EncounterPreset("wizard_spell_test", "📘 Wizard Spell Test", "Single wizard scenario with every implemented wizard spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("cleric_spell_test", "📖 Cleric Spell Test", "Single cleric scenario with every implemented cleric spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
@@ -1392,6 +1394,43 @@ public static class NPCDatabase
         });
     }
 
+    private static void RegisterArcaneMissileAdept()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "arcane_missile_adept",
+            Name = "Arcane Missile Adept",
+            Level = 5,
+            CharacterClass = "Wizard",
+            CreatureType = "Humanoid",
+            HitDice = 5,
+            SizeCategory = SizeCategory.Medium,
+            STR = 8,
+            DEX = 14,
+            CON = 12,
+            WIS = 10,
+            INT = 18,
+            CHA = 10,
+            BAB = 2,
+            BaseSpeed = 6,
+            BaseHitDieHP = 30,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
+            },
+            BackpackItemIds = new List<string>(),
+            KnownSpellIds = new List<string> { "magic_missile" },
+            PreparedSpellSlotIds = new List<string> { "magic_missile", "magic_missile", "magic_missile", "magic_missile", "magic_missile", "magic_missile", "magic_missile" },
+            CreatureTags = new List<string> { "Humanoid", "Arcane", "AI:MagicMissileOnly" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Evoker,
+            SpriteColor = new Color(0.62f, 0.66f, 0.92f, 1f),
+            PanelColor = new Color(0.16f, 0.14f, 0.32f, 0.85f),
+            NameColor = new Color(0.9f, 0.9f, 1f),
+            Description = "Enemy wizard test NPC configured to only cast Magic Missile and avoid Shielded targets."
+        });
+    }
+
     private static void RegisterTargetDummy()
     {
         Register(new NPCDefinition
@@ -1486,6 +1525,10 @@ public class NPCDefinition
     public List<string> Feats = new List<string>();
     public string WeaponFocusChoice;
 
+    // Optional spellcasting loadout for NPC AI casters.
+    public List<string> KnownSpellIds = new List<string>();
+    public List<string> PreparedSpellSlotIds = new List<string>();
+
     // Optional descriptive traits surfaced in tooltips/UI (e.g., "Darkvision 60 ft", "Smite Evil 1/day").
     public List<string> SpecialAbilities = new List<string>();
 
@@ -1570,6 +1613,12 @@ public class NPCDefinition
             : new List<string>();
         clone.Feats = Feats != null
             ? new List<string>(Feats)
+            : new List<string>();
+        clone.KnownSpellIds = KnownSpellIds != null
+            ? new List<string>(KnownSpellIds)
+            : new List<string>();
+        clone.PreparedSpellSlotIds = PreparedSpellSlotIds != null
+            ? new List<string>(PreparedSpellSlotIds)
             : new List<string>();
         clone.SpecialAbilities = SpecialAbilities != null
             ? new List<string>(SpecialAbilities)

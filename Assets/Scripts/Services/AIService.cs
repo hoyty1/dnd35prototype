@@ -321,6 +321,12 @@ public class AIService : MonoBehaviour
         if (rangedTarget == null)
             yield break;
 
+        if (TryExecuteSpellcastAction(npc, rangedTarget))
+        {
+            yield return new WaitForSeconds(0.8f);
+            yield break;
+        }
+
         int maxRange = GetMaximumAttackRangeInSquares(npc);
         int distToRangedTarget = SquareGridUtils.GetDistance(npc.GridPosition, rangedTarget.GridPosition);
 
@@ -1042,6 +1048,100 @@ public class AIService : MonoBehaviour
         return spellcasting != null && spellcasting.CanCastSpells && spellcasting.HasAnyCastablePreparedSpell();
     }
 
+    private bool TryExecuteSpellcastAction(CharacterController caster, CharacterController fallbackTarget)
+    {
+        if (_gameManager == null || caster == null || caster.Stats == null)
+            return false;
+
+        if (!caster.Actions.HasStandardAction || !caster.Stats.IsSpellcaster)
+            return false;
+
+        SpellData spell = SelectSpell(caster, fallbackTarget);
+        if (spell == null)
+            return false;
+
+        CharacterController spellTarget = SelectBestSpellTarget(caster, spell, fallbackTarget);
+        if (spellTarget == null)
+            return false;
+
+        bool casted = _gameManager.TryNPCPerformSpellCastForAI(caster, spellTarget, spell);
+        if (!casted)
+            return false;
+
+        Debug.Log($"[AI][Spell] {caster.Stats.CharacterName} casts {spell.Name} on {spellTarget.Stats.CharacterName}");
+        return true;
+    }
+
+    private CharacterController SelectBestSpellTarget(CharacterController caster, SpellData spell, CharacterController fallbackTarget)
+    {
+        if (_gameManager == null || caster == null || spell == null)
+            return fallbackTarget;
+
+        List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
+        if (allCombatants == null || allCombatants.Count == 0)
+            return fallbackTarget;
+
+        int rangeSquares = spell.GetRangeSquaresForCasterLevel(caster.Stats != null ? caster.Stats.GetCasterLevel() : 1);
+        if (rangeSquares <= 0)
+            rangeSquares = 1;
+
+        bool skipShieldedTargets = string.Equals(spell.SpellId, "magic_missile", StringComparison.OrdinalIgnoreCase);
+
+        CharacterController bestTarget = null;
+        float bestScore = float.NegativeInfinity;
+
+        for (int i = 0; i < allCombatants.Count; i++)
+        {
+            CharacterController candidate = allCombatants[i];
+            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+
+            if (!_gameManager.IsEnemyTeamForAI(caster, candidate))
+                continue;
+
+            int distance = SquareGridUtils.GetDistance(caster.GridPosition, candidate.GridPosition);
+            if (distance > rangeSquares)
+                continue;
+
+            if (skipShieldedTargets && _gameManager.HasActiveShieldSpellForAI(candidate))
+                continue;
+
+            float score = GetTargetPriority(caster, candidate);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestTarget = candidate;
+            }
+        }
+
+        return bestTarget;
+    }
+
+    private static bool HasCreatureTag(CharacterController character, string tag)
+    {
+        if (character?.Stats?.CreatureTags == null || string.IsNullOrWhiteSpace(tag))
+            return false;
+
+        for (int i = 0; i < character.Stats.CreatureTags.Count; i++)
+        {
+            if (string.Equals(character.Stats.CreatureTags[i], tag, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsMagicMissileOnlyCaster(CharacterController caster)
+    {
+        if (caster == null)
+            return false;
+
+        if (caster.Tags != null && caster.Tags.HasTag("AI:MagicMissileOnly"))
+            return true;
+
+        return HasCreatureTag(caster, "AI:MagicMissileOnly");
+    }
+
     public SpellData SelectSpell(CharacterController caster, CharacterController target)
     {
         if (caster == null || caster.Stats == null)
@@ -1054,6 +1154,18 @@ public class AIService : MonoBehaviour
         List<SpellData> castable = spellcasting.GetCastablePreparedSpells();
         if (castable == null || castable.Count == 0)
             return null;
+
+        if (IsMagicMissileOnlyCaster(caster))
+        {
+            for (int i = 0; i < castable.Count; i++)
+            {
+                SpellData spell = castable[i];
+                if (spell != null && string.Equals(spell.SpellId, "magic_missile", StringComparison.OrdinalIgnoreCase))
+                    return spell;
+            }
+
+            return null;
+        }
 
         AIProfile profile = GetProfile(caster);
         SpellcasterAIProfile spellcasterProfile = profile as SpellcasterAIProfile;

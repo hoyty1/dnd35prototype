@@ -66,6 +66,7 @@ public class SpellResult
     // ========== MAGIC MISSILE (special) ==========
     public int MissileCount;
     public int[] MissileDamages;        // Damage per missile
+    public bool MagicMissileBlockedByShield;
 
     // ========== METAMAGIC ==========
     public MetamagicData Metamagic;       // Applied metamagic (null if none)
@@ -165,6 +166,14 @@ public class SpellResult
             string saveResult = SaveSucceeded ? "RESISTED!" : "FAILED!";
             sb.AppendLine($"    = {SaveTotal} vs DC {SaveDC} - {saveResult}");
             sb.AppendLine();
+        }
+
+        if (MagicMissileBlockedByShield)
+        {
+            sb.AppendLine("  Shield negates Magic Missile: all missiles are blocked.");
+            sb.AppendLine($"  {TargetName}: {TargetHPBefore} → {TargetHPAfter} HP");
+            sb.Append($"═══════════════════════════════════");
+            return sb.ToString();
         }
 
         // ========== DAMAGE ==========

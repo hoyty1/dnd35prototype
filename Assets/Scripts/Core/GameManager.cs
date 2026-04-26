@@ -79,6 +79,7 @@ public partial class GameManager : MonoBehaviour
     private const string CelestialTemplateTestPresetId = "celestial_template_test";
     private const string FiendishTemplateTestPresetId = "fiendish_template_test";
     private const string SummonMonsterTestPresetId = "summon_monster_test";
+    private const string NPCMagicMissileTestPresetId = "npc_magic_missile_test";
     private const string WizardSpellTestPresetId = "wizard_spell_test";
     private const string ClericSpellTestPresetId = "cleric_spell_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
@@ -92,6 +93,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isCelestialTemplateTestEncounter;
     private bool _isFiendishTemplateTestEncounter;
     private bool _isSummonMonsterTestEncounter;
+    private bool _isNpcMagicMissileTestEncounter;
     private bool _isWizardSpellTestEncounter;
     private bool _isClericSpellTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
@@ -589,6 +591,7 @@ public partial class GameManager : MonoBehaviour
         _isCelestialTemplateTestEncounter = string.Equals(presetId, CelestialTemplateTestPresetId, StringComparison.Ordinal);
         _isFiendishTemplateTestEncounter = string.Equals(presetId, FiendishTemplateTestPresetId, StringComparison.Ordinal);
         _isSummonMonsterTestEncounter = string.Equals(presetId, SummonMonsterTestPresetId, StringComparison.Ordinal);
+        _isNpcMagicMissileTestEncounter = string.Equals(presetId, NPCMagicMissileTestPresetId, StringComparison.Ordinal);
         _isWizardSpellTestEncounter = string.Equals(presetId, WizardSpellTestPresetId, StringComparison.Ordinal);
         _isClericSpellTestEncounter = string.Equals(presetId, ClericSpellTestPresetId, StringComparison.Ordinal);
 
@@ -625,6 +628,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureFiendishTemplateTestParty();
         else if (_isSummonMonsterTestEncounter)
             ConfigureSummonMonsterTestParty();
+        else if (_isNpcMagicMissileTestEncounter)
+            ConfigureNpcMagicMissileTestParty();
         else if (_isWizardSpellTestEncounter)
             ConfigureWizardSpellTestParty();
         else if (_isClericSpellTestEncounter)
@@ -1886,6 +1891,96 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   Alignment validation: cleric sees celestial/fiendish cleric-locked options based on alignment; wizard sees class-agnostic options.");
     }
 
+    private void ConfigureNpcMagicMissileTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+        SpellDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats wizardStats = new CharacterStats(
+            name: "Theron",
+            level: 5,
+            characterClass: "Wizard",
+            str: 8, dex: 14, con: 12, wis: 12, intelligence: 18, cha: 10,
+            bab: 2,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 24,
+            raceName: "Human"
+        );
+
+        CharacterStats fighterStats = new CharacterStats(
+            name: "Aldric",
+            level: 5,
+            characterClass: "Fighter",
+            str: 18, dex: 12, con: 16, wis: 10, intelligence: 10, cha: 10,
+            bab: 5,
+            armorBonus: 6,
+            shieldBonus: 2,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 4,
+            baseSpeed: 4,
+            atkRange: 1,
+            baseHitDieHP: 52,
+            raceName: "Human"
+        );
+
+        Vector2Int wizardStart = new Vector2Int(3, 9);
+        Vector2Int fighterStart = new Vector2Int(4, 10);
+
+        Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        Sprite fighterAlive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+
+        PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
+        PC2.Init(fighterStats, fighterStart, fighterAlive, pcDead);
+
+        InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        wizardInventory.Init(wizardStats);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.RecalculateStats();
+
+        InventoryComponent fighterInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
+        fighterInventory.Init(fighterStats);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        fighterInventory.CharacterInventory.RecalculateStats();
+
+        SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
+        wizardSpellComp.KnownSpells.Clear();
+        wizardSpellComp.SelectedSpellIds = new List<string>
+        {
+            "detect_magic_wiz", "ray_of_frost", "acid_splash", "read_magic",
+            "shield", "magic_missile", "mage_armor", "mirror_image"
+        };
+        wizardSpellComp.PreparedSpellSlotIds = new List<string>
+        {
+            "detect_magic_wiz", "ray_of_frost", "acid_splash", "read_magic",
+            "shield", "magic_missile", "mage_armor",
+            "mirror_image", "invisibility"
+        };
+        wizardSpellComp.Init(wizardStats);
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, true, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("🧪 NPC Magic Missile Test: Theron (Wizard 5) has Shield prepared for direct counter-testing.");
+        CombatUI?.ShowCombatLog("   Cast Shield on Theron, then end turn to verify Arcane Missile Adept cannot damage him with Magic Missile.");
+        CombatUI?.ShowCombatLog("   Aldric is provided as an alternate target so AI target-selection can skip Shield-protected allies.");
+    }
+
     private void PrepareSummonMonsterTestSpellSlots(
         SpellcastingComponent spellComp,
         string summonOneSpellId,
@@ -2929,6 +3024,26 @@ public partial class GameManager : MonoBehaviour
         }
 
         inv.CharacterInventory.RecalculateStats();
+
+        bool shouldInitSpellcasting = stats.IsSpellcaster
+            && ((def.KnownSpellIds != null && def.KnownSpellIds.Count > 0)
+                || (def.PreparedSpellSlotIds != null && def.PreparedSpellSlotIds.Count > 0));
+
+        if (shouldInitSpellcasting)
+        {
+            SpellcastingComponent spellComp = npc.gameObject.GetComponent<SpellcastingComponent>()
+                ?? npc.gameObject.AddComponent<SpellcastingComponent>();
+            spellComp.KnownSpells.Clear();
+            spellComp.SelectedSpellIds = def.KnownSpellIds != null && def.KnownSpellIds.Count > 0
+                ? new List<string>(def.KnownSpellIds)
+                : null;
+            spellComp.PreparedSpellSlotIds = def.PreparedSpellSlotIds != null && def.PreparedSpellSlotIds.Count > 0
+                ? new List<string>(def.PreparedSpellSlotIds)
+                : null;
+            spellComp.Init(stats);
+
+            Debug.Log($"[GameManager] Initialized NPC spellcasting for {def.Name}: {spellComp.GetSlotSummary()}");
+        }
 
         // Initialize StatusEffectManager for NPC duration tracking
         var statusMgr = npc.gameObject.GetComponent<StatusEffectManager>();
@@ -8152,6 +8267,40 @@ public partial class GameManager : MonoBehaviour
 
         return false;
     }
+
+    private bool HasActiveShieldSpell(CharacterController target)
+    {
+        if (target == null)
+            return false;
+
+        StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+        if (statusMgr != null)
+        {
+            foreach (ActiveSpellEffect effect in statusMgr.ActiveEffects)
+            {
+                if (effect?.Spell == null)
+                    continue;
+
+                if (string.Equals(effect.Spell.SpellId, "shield", StringComparison.OrdinalIgnoreCase)
+                    && effect.RemainingRounds > 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        SpellcastingComponent spellComp = target.GetComponent<SpellcastingComponent>();
+        if (spellComp != null
+            && spellComp.ActiveBuffs != null
+            && spellComp.ActiveBuffs.TryGetValue("shield", out int rounds)
+            && rounds > 0)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Highlight valid targets for a spell based on its range and target type.
     /// Shows the full spell range area (purple) with valid targets highlighted (magenta).
@@ -10227,6 +10376,12 @@ public partial class GameManager : MonoBehaviour
 
     public IEnumerator NPCPerformAttackForAI(CharacterController npc, CharacterController target)
         => NPCPerformAttack(npc, target);
+
+    public bool TryNPCPerformSpellCastForAI(CharacterController npc, CharacterController target, SpellData spell)
+        => TryNPCPerformSpellCast(npc, target, spell);
+
+    public bool HasActiveShieldSpellForAI(CharacterController target)
+        => HasActiveShieldSpell(target);
 
     public List<CharacterController> GetAllCharactersForAI()
         => GetAllCharacters();
@@ -13639,6 +13794,84 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         nextTarget = bestTarget;
+        return true;
+    }
+
+    private bool TryNPCPerformSpellCast(CharacterController npc, CharacterController target, SpellData spell)
+    {
+        if (npc == null || target == null || spell == null || npc.Stats == null || target.Stats == null)
+            return false;
+
+        if (!npc.Actions.HasStandardAction)
+            return false;
+
+        if (target.Stats.IsDead)
+            return false;
+
+        SpellcastingComponent spellComp = npc.GetComponent<SpellcastingComponent>();
+        if (spellComp == null || !spellComp.CanCastSpells)
+            return false;
+
+        if (!spellComp.CanCast(spell))
+            return false;
+
+        if (!IsValidTargetForSpell(npc, target, spell))
+            return false;
+
+        int rangeSquares = spell.GetRangeSquaresForCasterLevel(npc.Stats.GetCasterLevel());
+        if (rangeSquares <= 0)
+            rangeSquares = 1;
+
+        int distance = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+        if (distance > rangeSquares)
+            return false;
+
+        if (spell.TargetType == SpellTargetType.Area)
+            return false;
+
+        if (!npc.CommitStandardAction())
+            return false;
+
+        bool consumed = spellComp.CastSpellFromSlot(spell);
+        if (!consumed)
+            return false;
+
+        if (TryRollArcaneSpellFailure(npc, spell, false, out int asfRoll, out int asfChance))
+        {
+            LogArcaneSpellFailure(npc, spell, asfRoll, asfChance);
+            UpdateAllStatsUI();
+            return true;
+        }
+
+        bool skipFriendlyTouchAttackRoll = spell.IsMeleeTouchSpell() && IsFriendlyTarget(npc, target);
+        bool forceTargetToFailSave = ShouldForceTargetToAcceptSave(npc, target, spell);
+        SpellResult result = SpellCaster.Cast(spell, npc.Stats, target.Stats, null, skipFriendlyTouchAttackRoll, forceTargetToFailSave, npc, target);
+
+        bool appliesTrackedEffect = spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Debuff;
+        bool effectNegatedBySave = spell.EffectType == SpellEffectType.Debuff && result.RequiredSave && result.SaveSucceeded;
+
+        if (effectNegatedBySave)
+            CombatUI?.ShowCombatLog($"🛡 {target.Stats.CharacterName} resists {spell.Name} with a successful {result.SaveType} save.");
+
+        if (result.MindAffectingImmunityBlocked)
+            CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is immune to mind-affecting effects. {spell.Name} has no effect.");
+
+        if (result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            ApplySpellBuff(npc, target, spell, spellComp);
+
+        if (result.DamageDealt > 0)
+            CheckConcentrationOnDamage(target, result.DamageDealt);
+
+        _lastCombatLog = result.GetFormattedLog();
+        CombatUI?.ShowCombatLog(_lastCombatLog);
+
+        if (result.TargetKilled)
+        {
+            target.OnDeath();
+            HandleSummonDeathCleanup(target);
+        }
+
+        UpdateAllStatsUI();
         return true;
     }
 
