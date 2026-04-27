@@ -52,6 +52,30 @@ public abstract class PersistentAreaEffect : MonoBehaviour
     public int CasterLevel { get; set; }
 
     // ═══════════════════════════════════════════════════
+    // WIND DISPERSION
+    // ═══════════════════════════════════════════════════
+
+    /// <summary>
+    /// Whether this persistent effect can be dispersed by wind.
+    /// </summary>
+    public bool DispersibleByWind { get; set; } = false;
+
+    /// <summary>
+    /// Minimum wind strength required to disperse this effect.
+    /// </summary>
+    public WindStrength RequiredWindStrength { get; set; } = WindStrength.Strong;
+
+    /// <summary>
+    /// Rounds remaining until the effect is fully dispersed by wind.
+    /// </summary>
+    public int WindDispersionCounter { get; set; } = 0;
+
+    /// <summary>
+    /// Whether the effect is currently being dispersed by wind.
+    /// </summary>
+    public bool IsBeingDispersedByWind { get; set; } = false;
+
+    // ═══════════════════════════════════════════════════
     // AREA SHAPE AND SIZE
     // ═══════════════════════════════════════════════════
 
@@ -110,6 +134,7 @@ public abstract class PersistentAreaEffect : MonoBehaviour
     public GameObject VisualIndicator { get; protected set; }
 
     protected GameManager gameManager;
+    private bool hasExpired;
 
     protected virtual void Awake()
     {
@@ -468,6 +493,20 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         }
 
         RoundsRemaining--;
+
+        if (IsBeingDispersedByWind && DispersibleByWind)
+        {
+            WindDispersionCounter--;
+            if (WindDispersionCounter <= 0)
+            {
+                LogEffect("Has been dispersed by wind.");
+                ExpireEffect();
+                return;
+            }
+
+            LogEffect($"Dispersing in wind: {WindDispersionCounter} round(s) remaining.");
+        }
+
         if (RoundsRemaining <= 0)
             ExpireEffect();
     }
@@ -518,8 +557,13 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         }
     }
 
-    protected virtual void ExpireEffect()
+    public virtual void ExpireEffect()
     {
+        if (hasExpired)
+            return;
+
+        hasExpired = true;
+
         OnAreaExpires();
 
         foreach (CharacterController character in CharactersInArea)
@@ -529,6 +573,10 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         }
 
         CharactersInArea.Clear();
+
+        if (AreaEffectManager.HasInstance)
+            AreaEffectManager.Instance.UnregisterAreaEffect(this);
+
         LogEffect("Expires.");
         Destroy(gameObject);
     }
@@ -539,6 +587,14 @@ public abstract class PersistentAreaEffect : MonoBehaviour
             gameManager.CombatUI.ShowCombatLog($"<color=#66E0FF>[{EffectName}]</color> {message}");
         else
             Debug.Log($"[{EffectName}] {message}");
+    }
+
+    /// <summary>
+    /// Public logger helper used by external systems (e.g., wind manager).
+    /// </summary>
+    public void LogWindDispersion(string message)
+    {
+        LogEffect(message);
     }
 }
 

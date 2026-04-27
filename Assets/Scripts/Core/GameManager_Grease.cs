@@ -628,6 +628,8 @@ public partial class GameManager
 
     private void TickActiveGreaseEffects()
     {
+        // Wind can disperse persistent fog effects before area effects tick.
+        WindEffectManager.Instance.OnRoundStart();
         AreaEffectManager.Instance.OnCombatRoundStart();
 
         if (_activeGreasedObjects.Count > 0)
@@ -637,6 +639,7 @@ public partial class GameManager
     private void ClearAllActiveGreaseEffects()
     {
         AreaEffectManager.Instance.ClearAllEffects();
+        WindEffectManager.Instance.ClearAllWindEffects();
         _activeGreasedObjects.Clear();
     }
 

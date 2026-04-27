@@ -17,10 +17,34 @@ public partial class GameManager
 
         bool isObscuringMist = spell.SpellId == "obscuring_mist";
         bool isFogCloud = spell.SpellId == "fog_cloud";
-        if (!isObscuringMist && !isFogCloud)
+        bool isGustOfWind = spell.SpellId == "gust_of_wind";
+        if (!isObscuringMist && !isFogCloud && !isGustOfWind)
             return false;
 
         int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+
+        if (isGustOfWind)
+        {
+            int gustSaveDC = GetSpellSaveDC(caster, spell);
+            var gustEffect = new GustOfWindEffect();
+            gustEffect.Initialize(caster, spell, aoeCells, targets, gustSaveDC, casterLevel);
+            string gustResult = gustEffect.ResolveEffect();
+
+            var gustLog = new StringBuilder();
+            gustLog.AppendLine("═══════════════════════════════════");
+            gustLog.AppendLine($"✨ {caster.Stats.CharacterName} casts Gust of Wind!");
+            gustLog.AppendLine($"  Area: 60-ft line ({aoeCells.Count} squares)");
+            gustLog.AppendLine($"  Wind Strength: {WindStrength.Severe}");
+            gustLog.AppendLine($"  Save DC: Fortitude {gustSaveDC}");
+            if (!string.IsNullOrWhiteSpace(gustResult))
+                gustLog.Append(gustResult);
+            else
+                gustLog.AppendLine("  No creatures are caught in the gust.");
+            gustLog.Append("═══════════════════════════════════");
+            log = gustLog.ToString();
+            return true;
+        }
+
         int durationRounds = ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel);
         if (durationRounds <= 0)
             durationRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 10);

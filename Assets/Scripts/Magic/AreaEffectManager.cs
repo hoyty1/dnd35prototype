@@ -86,6 +86,15 @@ public class AreaEffectManager : MonoBehaviour
         return result;
     }
 
+    /// <summary>
+    /// Returns a snapshot of all currently active persistent area effects.
+    /// </summary>
+    public List<PersistentAreaEffect> GetAllAreaEffects()
+    {
+        activeEffects.RemoveAll(e => e == null);
+        return new List<PersistentAreaEffect>(activeEffects);
+    }
+
     public void ClearAllEffects()
     {
         var copy = new List<PersistentAreaEffect>(activeEffects);

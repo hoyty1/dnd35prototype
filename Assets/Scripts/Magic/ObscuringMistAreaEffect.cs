@@ -18,6 +18,9 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
         VisualColor = new Color(0.82f, 0.82f, 0.82f, 0.50f);
         VisualHeight = 1.8f;
         ShowVisual = true;
+
+        DispersibleByWind = true;
+        RequiredWindStrength = WindStrength.Moderate;
     }
 
     protected override void OnAreaCreated()

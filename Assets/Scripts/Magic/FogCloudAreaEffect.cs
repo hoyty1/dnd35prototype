@@ -18,6 +18,9 @@ public class FogCloudAreaEffect : PersistentAreaEffect
         VisualColor = new Color(0.66f, 0.66f, 0.66f, 0.58f);
         VisualHeight = 2.0f;
         ShowVisual = true;
+
+        DispersibleByWind = true;
+        RequiredWindStrength = WindStrength.Moderate;
     }
 
     protected override void OnAreaCreated()
