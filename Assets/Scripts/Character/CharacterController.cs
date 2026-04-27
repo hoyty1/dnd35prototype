@@ -3472,7 +3472,7 @@ public class CharacterController : MonoBehaviour
         result.NaturalOne = (roll == 1);
         AttachAttackBuffDebuffBreakdown(result);
 
-        // Step 2: Check for critical threat (only if the attack hit)
+        // Step 2: Concealment miss chance check (rolled after a successful attack roll)
         bool isThreat = false;
         bool critConfirmed = false;
         int confirmRoll = 0;
@@ -3480,6 +3480,26 @@ public class CharacterController : MonoBehaviour
 
         if (hit)
         {
+            int missChance = target.GetMissChance(isRangedAttack);
+            if (missChance > 0)
+            {
+                int concealmentRoll = Random.Range(1, 101);
+                result.ConcealmentMissChance = missChance;
+                result.ConcealmentRoll = concealmentRoll;
+                result.ConcealmentDescription = target.GetConcealmentDescription(isRangedAttack);
+
+                if (concealmentRoll <= missChance)
+                {
+                    result.Hit = false;
+                    result.MissedDueToConcealment = true;
+                    result.Damage = 0;
+                    result.BaseDamageRoll = 0;
+                    result.RawTotalDamage = 0;
+                    result.FinalDamageDealt = 0;
+                    return result;
+                }
+            }
+
             bool whipArmorBlocked = IsTargetImmuneToWhipDamage(target, weapon);
             if (whipArmorBlocked)
             {
@@ -3538,6 +3558,13 @@ public class CharacterController : MonoBehaviour
             int rawSneakDamage = 0;
             bool deniedDexForSneak = IsTargetDeniedDexForSneakAttack(target, !isRangedAttack, feintWindowConsumed, out string dexDeniedReason);
             bool sneakAttackEligible = Stats.IsRogue && (isFlanking || deniedDexForSneak);
+
+            if (sneakAttackEligible && target.HasConcealment(isRangedAttack))
+            {
+                result.SneakAttackTriggerReason = "target has concealment";
+                Debug.Log($"[Sneak Attack] {Stats.CharacterName} cannot sneak attack {target.Stats.CharacterName}: target has concealment.");
+                sneakAttackEligible = false;
+            }
 
             if (sneakAttackEligible)
             {
@@ -4818,6 +4845,112 @@ public class CharacterController : MonoBehaviour
         }
 
         return bestBonus;
+    }
+
+    /// <summary>
+    /// Returns the highest concealment miss chance currently protecting this character.
+    /// D&D 3.5e concealment miss chances do not stack; use the highest applicable source.
+    /// </summary>
+    public int GetMissChance(bool incomingIsRangedAttack = false)
+    {
+        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
+        if (statusEffectManager == null || statusEffectManager.ActiveEffects == null || statusEffectManager.ActiveEffects.Count == 0)
+            return 0;
+
+        int bestMissChance = 0;
+        for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
+        {
+            ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
+            if (effect == null || effect.MissChance <= 0)
+                continue;
+
+            if (effect.MissChanceAgainstRangedOnly && !incomingIsRangedAttack)
+                continue;
+
+            if (effect.MissChanceAgainstMeleeOnly && incomingIsRangedAttack)
+                continue;
+
+            int normalized = Mathf.Clamp(effect.MissChance, 0, 100);
+            if (normalized > bestMissChance)
+                bestMissChance = normalized;
+        }
+
+        return bestMissChance;
+    }
+
+    /// <summary>
+    /// True when this character currently has total concealment against the incoming attack type.
+    /// </summary>
+    public bool HasTotalConcealment(bool incomingIsRangedAttack = false)
+    {
+        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
+        if (statusEffectManager == null || statusEffectManager.ActiveEffects == null || statusEffectManager.ActiveEffects.Count == 0)
+            return false;
+
+        for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
+        {
+            ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
+            if (effect == null || !effect.IsTotalConcealment || effect.MissChance <= 0)
+                continue;
+
+            if (effect.MissChanceAgainstRangedOnly && !incomingIsRangedAttack)
+                continue;
+
+            if (effect.MissChanceAgainstMeleeOnly && incomingIsRangedAttack)
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool HasConcealment(bool incomingIsRangedAttack = false)
+    {
+        return GetMissChance(incomingIsRangedAttack) > 0;
+    }
+
+    /// <summary>
+    /// Human-readable concealment summary for combat log output.
+    /// </summary>
+    public string GetConcealmentDescription(bool incomingIsRangedAttack = false)
+    {
+        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
+        if (statusEffectManager == null || statusEffectManager.ActiveEffects == null || statusEffectManager.ActiveEffects.Count == 0)
+            return "No concealment";
+
+        int missChance = GetMissChance(incomingIsRangedAttack);
+        if (missChance <= 0)
+            return "No concealment";
+
+        ActiveSpellEffect sourceEffect = null;
+        for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
+        {
+            ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
+            if (effect == null || effect.MissChance <= 0)
+                continue;
+
+            if (effect.MissChanceAgainstRangedOnly && !incomingIsRangedAttack)
+                continue;
+
+            if (effect.MissChanceAgainstMeleeOnly && incomingIsRangedAttack)
+                continue;
+
+            if (Mathf.Clamp(effect.MissChance, 0, 100) == missChance)
+            {
+                sourceEffect = effect;
+                break;
+            }
+        }
+
+        string sourceName = sourceEffect != null && !string.IsNullOrWhiteSpace(sourceEffect.ConcealmentSource)
+            ? sourceEffect.ConcealmentSource
+            : "Unknown source";
+
+        bool isTotal = sourceEffect != null ? sourceEffect.IsTotalConcealment : missChance >= 50;
+        return isTotal
+            ? $"Total concealment ({missChance}% miss chance) from {sourceName}"
+            : $"Concealment ({missChance}% miss chance) from {sourceName}";
     }
 
     private GrappleCheckResult RollGrappleCheck(

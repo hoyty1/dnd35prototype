@@ -1,0 +1,115 @@
+using UnityEngine;
+
+/// <summary>
+/// Obscuring Mist (PHB 3.5e): creatures inside gain concealment (20% miss chance).
+/// </summary>
+public class ObscuringMistAreaEffect : PersistentAreaEffect
+{
+    private const string ConcealmentSpellId = "obscuring_mist_concealment";
+
+    protected override void Awake()
+    {
+        base.Awake();
+
+        EffectName = "Obscuring Mist";
+        SpellId = "obscuring_mist";
+        Shape = AreaShape.Circle;
+        Radius = 4f; // 20-ft radius
+        VisualColor = new Color(0.82f, 0.82f, 0.82f, 0.50f);
+        VisualHeight = 1.8f;
+        ShowVisual = true;
+    }
+
+    protected override void OnAreaCreated()
+    {
+        LogEffect("Mist billows across a 20-ft radius spread.");
+        LogEffect("Creatures in the mist gain concealment (20% miss chance).");
+    }
+
+    protected override void OnCreatureEntersArea(CharacterController character, bool isInitial)
+    {
+        if (character == null || character.Stats == null || character.Stats.IsDead)
+            return;
+
+        string timing = isInitial ? "is within" : "enters";
+        LogEffect($"{character.Stats.CharacterName} {timing} the obscuring mist.");
+        ApplyConcealment(character);
+    }
+
+    protected override void OnCreatureInAreaAtRoundStart(CharacterController character)
+    {
+        if (character == null || character.Stats == null || character.Stats.IsDead)
+            return;
+
+        ApplyConcealment(character);
+    }
+
+    protected override void OnCreatureExitsArea(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return;
+
+        RemoveConcealment(character);
+        LogEffect($"{character.Stats.CharacterName} leaves the obscuring mist and loses concealment from it.");
+    }
+
+    protected override void OnAreaExpires()
+    {
+        LogEffect("Obscuring Mist dissipates.");
+    }
+
+    private void ApplyConcealment(CharacterController character)
+    {
+        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        if (statusMgr == null)
+            statusMgr = character.gameObject.AddComponent<StatusEffectManager>();
+
+        statusMgr.Init(character.Stats);
+
+        for (int i = 0; i < statusMgr.ActiveEffects.Count; i++)
+        {
+            ActiveSpellEffect existing = statusMgr.ActiveEffects[i];
+            if (existing != null && existing.Spell != null && existing.Spell.SpellId == ConcealmentSpellId)
+            {
+                existing.RemainingRounds = 1;
+                existing.MissChance = 20;
+                existing.IsTotalConcealment = false;
+                existing.ConcealmentSource = "Obscuring Mist";
+                return;
+            }
+        }
+
+        var effect = new ActiveSpellEffect
+        {
+            Spell = new SpellData { SpellId = ConcealmentSpellId, Name = "Obscuring Mist" },
+            CasterName = Caster != null && Caster.Stats != null ? Caster.Stats.CharacterName : "Unknown",
+            CasterLevel = Mathf.Max(1, CasterLevel),
+            RemainingRounds = 1,
+            DurationType = DurationType.Rounds,
+            AffectedCharacterName = character.Stats.CharacterName,
+            BonusTypeLegacy = "Concealment",
+            BonusTypeEnum = BonusType.Concealment,
+            IsApplied = true,
+            MissChance = 20,
+            IsTotalConcealment = false,
+            ConcealmentSource = "Obscuring Mist"
+        };
+
+        statusMgr.ActiveEffects.Add(effect);
+        LogEffect($"{character.Stats.CharacterName} gains concealment (20% miss chance).");
+    }
+
+    private void RemoveConcealment(CharacterController character)
+    {
+        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        if (statusMgr == null || statusMgr.ActiveEffects == null || statusMgr.ActiveEffects.Count == 0)
+            return;
+
+        for (int i = statusMgr.ActiveEffects.Count - 1; i >= 0; i--)
+        {
+            ActiveSpellEffect effect = statusMgr.ActiveEffects[i];
+            if (effect != null && effect.Spell != null && effect.Spell.SpellId == ConcealmentSpellId)
+                statusMgr.RemoveEffect(effect);
+        }
+    }
+}

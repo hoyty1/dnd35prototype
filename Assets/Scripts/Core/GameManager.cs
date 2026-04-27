@@ -9948,6 +9948,31 @@ public partial class GameManager : MonoBehaviour
 
             ClearSpellcastResourceSnapshot();
 
+            if (TryHandleConcealmentAreaSpellCast(caster, _pendingSpell, aoeCells, targets, out string concealmentAreaLog))
+            {
+                _lastCombatLog = concealmentAreaLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
             // Build the combat log header
             var logBuilder = new System.Text.StringBuilder();
             string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :

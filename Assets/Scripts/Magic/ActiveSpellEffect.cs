@@ -70,6 +70,14 @@ public class ActiveSpellEffect
     public int GreasedArmorBreakPinBonus;
     public int GreasedArmorResistPinBonus;
 
+    // Concealment / miss chance metadata (D&D 3.5e PHB p.152-153)
+    // 20 = concealment, 50 = total concealment.
+    public int MissChance;
+    public bool IsTotalConcealment;
+    public string ConcealmentSource;
+    public bool MissChanceAgainstRangedOnly;
+    public bool MissChanceAgainstMeleeOnly;
+
     /// <summary>LEGACY: The bonus type string for backward compatibility.</summary>
     public string BonusTypeLegacy;
 
@@ -246,6 +254,17 @@ public class ActiveSpellEffect
             mods += $" BreakPin:{GreasedArmorBreakPinBonus:+#;-#}";
         if (GreasedArmorResistPinBonus != 0)
             mods += $" ResistPin:{GreasedArmorResistPinBonus:+#;-#}";
+
+        if (MissChance > 0)
+        {
+            string concealmentKind = IsTotalConcealment ? "Total Concealment" : "Concealment";
+            string source = string.IsNullOrWhiteSpace(ConcealmentSource) ? "Unknown" : ConcealmentSource;
+            mods += $" {concealmentKind}:{MissChance}%({source})";
+            if (MissChanceAgainstRangedOnly)
+                mods += " [ranged-only]";
+            else if (MissChanceAgainstMeleeOnly)
+                mods += " [melee-only]";
+        }
 
         string typeStr = BonusTypeEnum != BonusType.Untyped ? $" ({BonusTypeHelper.GetDisplayName(BonusTypeEnum)})" : "";
         return $"{spellName}{typeStr} [{GetDurationDisplayString()}] from {CasterName}{mods}";

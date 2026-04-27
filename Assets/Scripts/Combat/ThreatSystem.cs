@@ -476,6 +476,15 @@ public static class ThreatSystem
     /// <returns>The CombatResult of the AoO, or null if the AoO couldn't be made.</returns>
     public static CombatResult ExecuteAoO(CharacterController threatener, CharacterController target)
     {
+        if (threatener == null || target == null || threatener.Stats == null || target.Stats == null)
+            return null;
+
+        if (target.HasTotalConcealment(incomingIsRangedAttack: false))
+        {
+            Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} cannot make AoO against {target.Stats.CharacterName}: target has total concealment.");
+            return null;
+        }
+
         if (!UseAoO(threatener))
         {
             Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} has no remaining AoOs this round!");

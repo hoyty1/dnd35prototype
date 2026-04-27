@@ -30,19 +30,25 @@ public static partial class SpellDatabase
                 {
                     SpellId = "obscuring_mist",
                     Name = "Obscuring Mist",
-                    Description = "Fog surrounds you, granting concealment (20% miss chance). 20-ft radius. 1 min/level. PHB p.258",
+                    Description = "Mist spreads in a 20-ft radius and grants concealment (20% miss chance) to creatures inside. Duration 1 min/level. PHB p.258",
                     SpellLevel = 1, School = "Conjuration",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.Self,
+                    ClassList = new[] { "Wizard", "Sorcerer", "Druid", "Cleric" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Close,
                     RangeSquares = 4,
                     AreaRadius = 4,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,
+                    AoERangeSquares = 4,
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Buff,
-                    BuffDurationRounds = 30,
+                    BuffDurationRounds = 10,
                     BuffType = "concealment",
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Concealment/fog not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData

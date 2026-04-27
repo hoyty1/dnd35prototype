@@ -166,18 +166,25 @@ public static partial class SpellDatabase
                 {
                     SpellId = "fog_cloud",
                     Name = "Fog Cloud",
-                    Description = "Fog obscures vision, 20-ft radius. Duration 10 min/level. PHB p.232",
+                    Description = "Fog obscures vision in a 20-ft radius spread. Creatures within gain concealment (20% miss chance). Duration 10 min/level. PHB p.232",
                     SpellLevel = 2, School = "Conjuration",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.Self,
+                    ClassList = new[] { "Wizard", "Sorcerer", "Druid", "Cleric" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
                     RangeSquares = 22,
                     AreaRadius = 4,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,
+                    AoERangeSquares = 22,
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Buff,
-                    BuffDurationRounds = -1,
+                    BuffDurationRounds = 100,
+                    BuffType = "concealment",
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Fog/concealment area not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData

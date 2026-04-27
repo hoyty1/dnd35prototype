@@ -95,6 +95,11 @@ public class CombatResult
     public bool ProtectionSummonedBarrierBlocked;
     public string ProtectionBarrierNote = "";
 
+    public int ConcealmentMissChance;
+    public int ConcealmentRoll;
+    public bool MissedDueToConcealment;
+    public string ConcealmentDescription = "";
+
     public int BreakdownBAB;
     public int BreakdownAbilityMod;
     public string BreakdownAbilityName;
@@ -248,6 +253,14 @@ public class CombatResult
         string critNote = NaturalTwenty ? " (NATURAL 20!)" : NaturalOne ? " (NATURAL 1!)" : "";
         sb.AppendLine($"    = {TotalRoll} vs AC {TargetAC} - {(Hit ? "HIT!" : "MISS!")}{critNote}");
 
+        if (MissedDueToConcealment)
+        {
+            string concealDesc = string.IsNullOrWhiteSpace(ConcealmentDescription)
+                ? "Concealment"
+                : ConcealmentDescription;
+            sb.AppendLine($"  Miss Chance: d100 = {ConcealmentRoll} vs {ConcealmentMissChance}% → MISS ({concealDesc})");
+        }
+
         if (IsCritThreat)
         {
             string threatRange = CritThreatMin < 20 ? $"{CritThreatMin}-20" : "20";
@@ -354,6 +367,12 @@ public class CombatResult
 
         string critNote = NaturalTwenty ? " (NATURAL 20!)" : NaturalOne ? " (NATURAL 1!)" : "";
         sb.AppendLine($"      = {TotalRoll} vs AC {TargetAC} - {(Hit ? "HIT!" : "MISS!")}{critNote}");
+
+        if (MissedDueToConcealment)
+        {
+            string concealDesc = string.IsNullOrWhiteSpace(ConcealmentDescription) ? "Concealment" : ConcealmentDescription;
+            sb.AppendLine($"      Miss Chance: d100 = {ConcealmentRoll} vs {ConcealmentMissChance}% → MISS ({concealDesc})");
+        }
 
         if (Hit)
         {

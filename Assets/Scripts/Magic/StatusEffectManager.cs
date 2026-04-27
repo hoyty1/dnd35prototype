@@ -155,6 +155,34 @@ public class StatusEffectManager : MonoBehaviour
             effect.AppliedSaveBonus = 0;
         }
 
+        // Concealment / miss chance metadata (non-stacking; highest applies at attack time).
+        // Keep spell-specific handling explicit to avoid accidental false positives from BuffType aliases.
+        if (spell.SpellId == "blur" || spell.SpellId == "obscuring_mist" || spell.SpellId == "fog_cloud")
+        {
+            effect.MissChance = 20;
+            effect.IsTotalConcealment = false;
+            effect.ConcealmentSource = spell.Name;
+        }
+        else if (spell.SpellId == "displacement")
+        {
+            effect.MissChance = 50;
+            effect.IsTotalConcealment = true;
+            effect.ConcealmentSource = spell.Name;
+        }
+        else if (spell.SpellId == "invisibility")
+        {
+            effect.MissChance = 50;
+            effect.IsTotalConcealment = true;
+            effect.ConcealmentSource = spell.Name;
+        }
+        else if (spell.SpellId == "entropic_shield")
+        {
+            effect.MissChance = 20;
+            effect.IsTotalConcealment = false;
+            effect.ConcealmentSource = spell.Name;
+            effect.MissChanceAgainstRangedOnly = true;
+        }
+
         // Apply stat modifications
         ApplyStatModifications(effect);
         effect.IsApplied = true;
