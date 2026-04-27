@@ -64,6 +64,10 @@ public class SquareCell : MonoBehaviour
     private SpriteRenderer _sr;
     private Color _defaultColor;
 
+    // Optional color overlay used by persistent area effects (mist/fog/etc.).
+    private SpriteRenderer _customHighlightOverlay;
+    private static Sprite _customHighlightSprite;
+
     // Small token rendered on top of a cell whenever it has one or more ground items.
     private SpriteRenderer _groundItemTokenRenderer;
     private static Sprite _groundItemTokenSprite;
@@ -164,6 +168,28 @@ public class SquareCell : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Apply a custom semi-transparent overlay color without changing base grid highlight logic.
+    /// </summary>
+    public void SetHighlight(Color color)
+    {
+        EnsureCustomHighlightOverlay();
+        if (_customHighlightOverlay == null)
+            return;
+
+        _customHighlightOverlay.color = color;
+        _customHighlightOverlay.enabled = true;
+    }
+
+    /// <summary>
+    /// Clear custom overlay highlight used by persistent area effects.
+    /// </summary>
+    public void ClearHighlight()
+    {
+        if (_customHighlightOverlay != null)
+            _customHighlightOverlay.enabled = false;
+    }
+
     public void AddGroundItem(ItemData item)
     {
         if (item == null)
@@ -183,6 +209,48 @@ public class SquareCell : MonoBehaviour
             RefreshGroundItemTokenVisual();
 
         return removed;
+    }
+
+    private void EnsureCustomHighlightOverlay()
+    {
+        if (_customHighlightOverlay != null)
+            return;
+
+        if (_sr == null)
+            _sr = GetComponent<SpriteRenderer>();
+
+        if (_sr == null)
+            return;
+
+        GameObject overlayGO = new GameObject("CustomHighlightOverlay");
+        overlayGO.transform.SetParent(transform, false);
+        overlayGO.transform.localPosition = new Vector3(0f, 0f, -0.005f);
+        overlayGO.transform.localScale = Vector3.one;
+
+        _customHighlightOverlay = overlayGO.AddComponent<SpriteRenderer>();
+        _customHighlightOverlay.sprite = _sr.sprite != null ? _sr.sprite : GetOrCreateCustomHighlightSprite();
+        _customHighlightOverlay.sortingLayerID = _sr.sortingLayerID;
+        _customHighlightOverlay.sortingOrder = _sr.sortingOrder + 1;
+        _customHighlightOverlay.enabled = false;
+    }
+
+    private static Sprite GetOrCreateCustomHighlightSprite()
+    {
+        if (_customHighlightSprite != null)
+            return _customHighlightSprite;
+
+        Texture2D texture = new Texture2D(1, 1, TextureFormat.RGBA32, false)
+        {
+            filterMode = FilterMode.Point,
+            wrapMode = TextureWrapMode.Clamp
+        };
+
+        texture.SetPixel(0, 0, Color.white);
+        texture.Apply();
+
+        _customHighlightSprite = Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
+        _customHighlightSprite.name = "CellCustomHighlightSprite";
+        return _customHighlightSprite;
     }
 
     private void EnsureGroundItemTokenVisual()

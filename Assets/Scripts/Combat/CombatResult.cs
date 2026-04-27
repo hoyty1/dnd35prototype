@@ -253,12 +253,13 @@ public class CombatResult
         string critNote = NaturalTwenty ? " (NATURAL 20!)" : NaturalOne ? " (NATURAL 1!)" : "";
         sb.AppendLine($"    = {TotalRoll} vs AC {TargetAC} - {(Hit ? "HIT!" : "MISS!")}{critNote}");
 
-        if (MissedDueToConcealment)
+        if (ConcealmentMissChance > 0)
         {
             string concealDesc = string.IsNullOrWhiteSpace(ConcealmentDescription)
                 ? "Concealment"
                 : ConcealmentDescription;
-            sb.AppendLine($"  Miss Chance: d100 = {ConcealmentRoll} vs {ConcealmentMissChance}% → MISS ({concealDesc})");
+            string concealmentOutcome = MissedDueToConcealment ? "MISS" : "PASS";
+            sb.AppendLine($"  Concealment Check: d100 = {ConcealmentRoll} vs {ConcealmentMissChance}% → {concealmentOutcome} ({concealDesc})");
         }
 
         if (IsCritThreat)
@@ -368,10 +369,11 @@ public class CombatResult
         string critNote = NaturalTwenty ? " (NATURAL 20!)" : NaturalOne ? " (NATURAL 1!)" : "";
         sb.AppendLine($"      = {TotalRoll} vs AC {TargetAC} - {(Hit ? "HIT!" : "MISS!")}{critNote}");
 
-        if (MissedDueToConcealment)
+        if (ConcealmentMissChance > 0)
         {
             string concealDesc = string.IsNullOrWhiteSpace(ConcealmentDescription) ? "Concealment" : ConcealmentDescription;
-            sb.AppendLine($"      Miss Chance: d100 = {ConcealmentRoll} vs {ConcealmentMissChance}% → MISS ({concealDesc})");
+            string concealmentOutcome = MissedDueToConcealment ? "MISS" : "PASS";
+            sb.AppendLine($"      Concealment Check: d100 = {ConcealmentRoll} vs {ConcealmentMissChance}% → {concealmentOutcome} ({concealDesc})");
         }
 
         if (Hit)

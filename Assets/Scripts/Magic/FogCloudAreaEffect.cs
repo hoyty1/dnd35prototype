@@ -1,11 +1,16 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
 /// Fog Cloud (PHB 3.5e): creatures inside gain concealment (20% miss chance).
+/// Visual uses shaded grid squares instead of opaque 3D volume.
 /// </summary>
 public class FogCloudAreaEffect : PersistentAreaEffect
 {
     private const string ConcealmentSpellId = "fog_cloud_concealment";
+
+    private readonly List<SquareCell> _highlightedCells = new List<SquareCell>();
+    private static readonly Color FogColor = new Color(0.60f, 0.60f, 0.60f, 0.40f);
 
     protected override void Awake()
     {
@@ -15,9 +20,9 @@ public class FogCloudAreaEffect : PersistentAreaEffect
         SpellId = "fog_cloud";
         Shape = AreaShape.Circle;
         Radius = 4f; // 20-ft radius
-        VisualColor = new Color(0.66f, 0.66f, 0.66f, 0.58f);
-        VisualHeight = 2.0f;
-        ShowVisual = true;
+
+        // Replace opaque area mesh with per-cell shading.
+        ShowVisual = false;
 
         DispersibleByWind = true;
         RequiredWindStrength = WindStrength.Moderate;
@@ -27,6 +32,7 @@ public class FogCloudAreaEffect : PersistentAreaEffect
     {
         LogEffect("A dense fog forms in a 20-ft radius spread.");
         LogEffect("Creatures in the fog gain concealment (20% miss chance).");
+        ApplyGridHighlight();
     }
 
     protected override void OnCreatureEntersArea(CharacterController character, bool isInitial)
@@ -58,7 +64,20 @@ public class FogCloudAreaEffect : PersistentAreaEffect
 
     protected override void OnAreaExpires()
     {
+        foreach (CharacterController character in CharactersInArea)
+        {
+            if (character != null)
+                RemoveConcealment(character);
+        }
+
+        RemoveGridHighlight();
         LogEffect("Fog Cloud dissipates.");
+    }
+
+    protected override void OnDestroy()
+    {
+        RemoveGridHighlight();
+        base.OnDestroy();
     }
 
     private void ApplyConcealment(CharacterController character)
@@ -114,5 +133,36 @@ public class FogCloudAreaEffect : PersistentAreaEffect
             if (effect != null && effect.Spell != null && effect.Spell.SpellId == ConcealmentSpellId)
                 statusMgr.RemoveEffect(effect);
         }
+    }
+
+    private void ApplyGridHighlight()
+    {
+        if (gameManager == null || gameManager.Grid == null)
+        {
+            Debug.LogWarning("[FogCloudAreaEffect] Grid not found - cannot apply fog highlight.");
+            return;
+        }
+
+        foreach (Vector2Int cellCoord in AffectedCells)
+        {
+            SquareCell cell = gameManager.Grid.GetCell(cellCoord);
+            if (cell == null)
+                continue;
+
+            cell.SetHighlight(FogColor);
+            _highlightedCells.Add(cell);
+        }
+    }
+
+    private void RemoveGridHighlight()
+    {
+        for (int i = 0; i < _highlightedCells.Count; i++)
+        {
+            SquareCell cell = _highlightedCells[i];
+            if (cell != null)
+                cell.ClearHighlight();
+        }
+
+        _highlightedCells.Clear();
     }
 }

@@ -1,11 +1,16 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
 /// Obscuring Mist (PHB 3.5e): creatures inside gain concealment (20% miss chance).
+/// Visual uses shaded grid squares instead of opaque 3D volume.
 /// </summary>
 public class ObscuringMistAreaEffect : PersistentAreaEffect
 {
     private const string ConcealmentSpellId = "obscuring_mist_concealment";
+
+    private readonly List<SquareCell> _highlightedCells = new List<SquareCell>();
+    private static readonly Color MistColor = new Color(0.70f, 0.70f, 0.70f, 0.30f);
 
     protected override void Awake()
     {
@@ -15,9 +20,9 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
         SpellId = "obscuring_mist";
         Shape = AreaShape.Circle;
         Radius = 4f; // 20-ft radius
-        VisualColor = new Color(0.82f, 0.82f, 0.82f, 0.50f);
-        VisualHeight = 1.8f;
-        ShowVisual = true;
+
+        // Replace opaque area mesh with per-cell shading.
+        ShowVisual = false;
 
         DispersibleByWind = true;
         RequiredWindStrength = WindStrength.Moderate;
@@ -27,6 +32,7 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
     {
         LogEffect("Mist billows across a 20-ft radius spread.");
         LogEffect("Creatures in the mist gain concealment (20% miss chance).");
+        ApplyGridHighlight();
     }
 
     protected override void OnCreatureEntersArea(CharacterController character, bool isInitial)
@@ -58,7 +64,20 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
 
     protected override void OnAreaExpires()
     {
+        foreach (CharacterController character in CharactersInArea)
+        {
+            if (character != null)
+                RemoveConcealment(character);
+        }
+
+        RemoveGridHighlight();
         LogEffect("Obscuring Mist dissipates.");
+    }
+
+    protected override void OnDestroy()
+    {
+        RemoveGridHighlight();
+        base.OnDestroy();
     }
 
     private void ApplyConcealment(CharacterController character)
@@ -114,5 +133,36 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
             if (effect != null && effect.Spell != null && effect.Spell.SpellId == ConcealmentSpellId)
                 statusMgr.RemoveEffect(effect);
         }
+    }
+
+    private void ApplyGridHighlight()
+    {
+        if (gameManager == null || gameManager.Grid == null)
+        {
+            Debug.LogWarning("[ObscuringMistAreaEffect] Grid not found - cannot apply mist highlight.");
+            return;
+        }
+
+        foreach (Vector2Int cellCoord in AffectedCells)
+        {
+            SquareCell cell = gameManager.Grid.GetCell(cellCoord);
+            if (cell == null)
+                continue;
+
+            cell.SetHighlight(MistColor);
+            _highlightedCells.Add(cell);
+        }
+    }
+
+    private void RemoveGridHighlight()
+    {
+        for (int i = 0; i < _highlightedCells.Count; i++)
+        {
+            SquareCell cell = _highlightedCells[i];
+            if (cell != null)
+                cell.ClearHighlight();
+        }
+
+        _highlightedCells.Clear();
     }
 }
