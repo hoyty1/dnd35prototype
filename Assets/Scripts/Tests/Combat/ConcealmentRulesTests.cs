@@ -190,8 +190,8 @@ public static class ConcealmentRulesTests
             threatener = CreateController(BuildStats("Threatener", "Fighter", 5, Alignment.TrueNeutral, 18, 12, 14, 10, 10, 10, 5));
             target = CreateController(BuildStats("ConcealedTarget", "Rogue", 5, Alignment.TrueNeutral, 12, 16, 12, 10, 10, 10, 3));
 
-            threatener.Team = CharacterTeam.Player;
-            target.Team = CharacterTeam.Enemy;
+            threatener.SetTeam(CharacterTeam.Player);
+            target.SetTeam(CharacterTeam.Enemy);
 
             StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
             var invisEffect = new ActiveSpellEffect
