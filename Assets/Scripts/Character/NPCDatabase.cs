@@ -95,7 +95,7 @@ public static class NPCDatabase
             new EncounterPreset("summon_monster_test", "🌀 Summon Monster Test", "Cleric + wizard summon drill with Summon Monster I/II prepared on both casters for selection UI, placement, and command validation.", new List<string> { "orc_berserker", "skeleton_archer", "goblin_warchief" }),
             new EncounterPreset("npc_magic_missile_test", "🧪 NPC Magic Missile Test", "Enemy evoker only casts Magic Missile; Shield should block damage during resolution (not targeting).", new List<string> { "arcane_missile_adept" }),
             new EncounterPreset("protection_from_evil_test", "🛡️ Protection from Evil Test", "Single protected wizard versus evil and non-evil threats to validate mental-control block, summoned contact barrier, +2 AC/save bonuses vs Evil, and no bonus vs non-Evil controls.", new List<string> { "evil_enchanter_test", "fiendish_wolf", "evil_goblin_test", "neutral_bandit_test", "neutral_mage_test", "evil_acolyte_test" }),
-            new EncounterPreset("wind_dispersion_test", "🌬️ Wind Dispersion Test", "Mist-focused wizard versus druid with Gust of Wind to validate fog concealment and wind dispersion interactions.", new List<string> { "wind_druid" }),
+            new EncounterPreset("wind_dispersion_test", "🌬️ Gust of Wind & Obscuring Mist", "Comprehensive wind mechanics test: concealment in mist, instant dispersion by Gust of Wind, and size-based effects (Small knockback, Medium prone, Large checked).", new List<string> { "test_halfling_gust", "test_fighter_gust", "test_barbarian_gust", "test_ogre_gust", "test_archer_gust" }),
             new EncounterPreset("disrupt_undead_test", "☀️ Disrupt Undead Test", "Wizard cantrip drill versus mixed targets: skeletons + zombie + one living orc to confirm undead-only damage.", new List<string> { "skeleton_warrior", "skeleton_warrior", "zombie_shambler", "orc_berserker" }),
             new EncounterPreset("wizard_spell_test", "📘 Wizard Spell Test", "Single wizard scenario with every implemented wizard spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("cleric_spell_test", "📖 Cleric Spell Test", "Single cleric scenario with every implemented cleric spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
@@ -1751,71 +1751,238 @@ public static class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "mist_wizard",
-            Name = "Mistweaver Adept",
-            Level = 7,
-            CharacterClass = "Wizard",
-            CreatureType = "Humanoid",
-            HitDice = 7,
-            SizeCategory = SizeCategory.Medium,
-            STR = 8,
-            DEX = 14,
-            CON = 12,
-            WIS = 12,
-            INT = 20,
-            CHA = 10,
-            BAB = 3,
-            BaseSpeed = 6,
-            BaseHitDieHP = 36,
-            EquipmentIds = new List<EquipmentSlotPair>
-            {
-                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
-            },
-            BackpackItemIds = new List<string>(),
-            KnownSpellIds = new List<string> { "obscuring_mist", "fog_cloud" },
-            PreparedSpellSlotIds = new List<string> { "obscuring_mist", "obscuring_mist", "fog_cloud", "fog_cloud" },
-            CreatureTags = new List<string> { "Humanoid", "Arcane", "WindDispersionTest" },
-            AIBehavior = NPCAIBehavior.RangedKiter,
-            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
-            SpriteColor = new Color(0.76f, 0.80f, 0.92f, 1f),
-            PanelColor = new Color(0.18f, 0.20f, 0.30f, 0.88f),
-            NameColor = new Color(0.92f, 0.94f, 1f),
-            Description = "Mist-focused wizard used to validate concealment zones and wind dispersion behavior."
-        });
-
-        Register(new NPCDefinition
-        {
-            Id = "wind_druid",
-            Name = "Stormbound Druid",
-            Level = 7,
+            Id = "gust_druid",
+            Name = "Zephyr Windcaller",
+            Level = 5,
             CharacterClass = "Druid",
             CreatureType = "Humanoid",
-            HitDice = 7,
+            HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             STR = 10,
             DEX = 12,
             CON = 14,
-            WIS = 20,
-            INT = 12,
-            CHA = 10,
-            BAB = 5,
+            WIS = 16,
+            INT = 10,
+            CHA = 12,
+            BAB = 3,
             BaseSpeed = 6,
-            BaseHitDieHP = 44,
+            BaseHitDieHP = 35,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("spear", EquipSlot.RightHand),
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand),
+                new EquipmentSlotPair("hide_armor", EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
-            KnownSpellIds = new List<string> { "gust_of_wind" },
-            PreparedSpellSlotIds = new List<string> { "gust_of_wind", "gust_of_wind", "gust_of_wind", "gust_of_wind" },
+            KnownSpellIds = new List<string> { "obscuring_mist", "gust_of_wind" },
+            PreparedSpellSlotIds = new List<string> { "obscuring_mist", "obscuring_mist", "obscuring_mist", "gust_of_wind", "gust_of_wind" },
             CreatureTags = new List<string> { "Humanoid", "Divine", "WindDispersionTest" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
             SpriteColor = new Color(0.58f, 0.84f, 0.72f, 1f),
             PanelColor = new Color(0.14f, 0.28f, 0.22f, 0.88f),
             NameColor = new Color(0.86f, 1f, 0.92f),
-            Description = "Druid configured to repeatedly cast Gust of Wind for fog-dispersion validation."
+            Description = "Primary player druid for Gust of Wind / Obscuring Mist test coverage."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "mist_wizard",
+            Name = "Misty Veilweaver",
+            Level = 5,
+            CharacterClass = "Wizard",
+            CreatureType = "Humanoid",
+            HitDice = 5,
+            SizeCategory = SizeCategory.Medium,
+            STR = 8,
+            DEX = 14,
+            CON = 12,
+            WIS = 12,
+            INT = 18,
+            CHA = 10,
+            BAB = 2,
+            BaseSpeed = 6,
+            BaseHitDieHP = 20,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
+            },
+            BackpackItemIds = new List<string>(),
+            KnownSpellIds = new List<string> { "obscuring_mist", "gust_of_wind", "magic_missile" },
+            PreparedSpellSlotIds = new List<string> { "obscuring_mist", "magic_missile", "gust_of_wind" },
+            CreatureTags = new List<string> { "Humanoid", "Arcane", "WindDispersionTest" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Evoker,
+            SpriteColor = new Color(0.76f, 0.80f, 0.92f, 1f),
+            PanelColor = new Color(0.18f, 0.20f, 0.30f, 0.88f),
+            NameColor = new Color(0.92f, 0.94f, 1f),
+            Description = "Support wizard for concealment + wind-dispersion verification and force spell control."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "test_halfling_gust",
+            Name = "Finn Lightfoot",
+            Level = 3,
+            CharacterClass = "Rogue",
+            CreatureType = "Humanoid",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Small,
+            STR = 8,
+            DEX = 18,
+            CON = 12,
+            WIS = 10,
+            INT = 12,
+            CHA = 14,
+            BAB = 2,
+            BaseSpeed = 4,
+            BaseHitDieHP = 18,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("short_sword", EquipSlot.RightHand),
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "SmallTarget" },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.92f, 0.84f, 0.55f, 1f),
+            PanelColor = new Color(0.24f, 0.20f, 0.10f, 0.88f),
+            NameColor = new Color(1f, 0.96f, 0.8f),
+            Description = "Small target used to validate failed-save prone + knockback from Gust of Wind."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "test_fighter_gust",
+            Name = "Roland Ironheart",
+            Level = 4,
+            CharacterClass = "Fighter",
+            CreatureType = "Humanoid",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            STR = 16,
+            DEX = 14,
+            CON = 16,
+            WIS = 10,
+            INT = 10,
+            CHA = 10,
+            BAB = 4,
+            BaseSpeed = 4,
+            BaseHitDieHP = 38,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("longsword", EquipSlot.RightHand),
+                new EquipmentSlotPair("shield_heavy_wooden", EquipSlot.LeftHand),
+                new EquipmentSlotPair("chainmail", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "MediumTarget" },
+            AIBehavior = NPCAIBehavior.DefensiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.76f, 0.78f, 0.82f, 1f),
+            PanelColor = new Color(0.20f, 0.22f, 0.28f, 0.88f),
+            NameColor = new Color(0.94f, 0.96f, 1f),
+            Description = "Medium target used to validate prone-only Gust of Wind effect on failed Fortitude save."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "test_barbarian_gust",
+            Name = "Throk the Mighty",
+            Level = 4,
+            CharacterClass = "Barbarian",
+            CreatureType = "Humanoid",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            STR = 18,
+            DEX = 12,
+            CON = 18,
+            WIS = 10,
+            INT = 8,
+            CHA = 8,
+            BAB = 4,
+            BaseSpeed = 8,
+            BaseHitDieHP = 48,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("greataxe", EquipSlot.RightHand),
+                new EquipmentSlotPair("hide_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "MediumTarget", "HighFortitude" },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Berserk,
+            SpriteColor = new Color(0.78f, 0.52f, 0.42f, 1f),
+            PanelColor = new Color(0.30f, 0.14f, 0.10f, 0.88f),
+            NameColor = new Color(1f, 0.88f, 0.82f),
+            Description = "High-Fortitude medium target used to demonstrate successful save resistance."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "test_ogre_gust",
+            Name = "Gruumsh Bonecrusher",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Giant",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = true,
+            STR = 21,
+            DEX = 8,
+            CON = 15,
+            WIS = 10,
+            INT = 6,
+            CHA = 7,
+            BAB = 3,
+            BaseSpeed = 8,
+            BaseHitDieHP = 29,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("greatclub", EquipSlot.RightHand)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Giant", "WindDispersionTest", "LargeTarget" },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Berserk,
+            SpriteColor = new Color(0.65f, 0.55f, 0.45f, 1f),
+            PanelColor = new Color(0.25f, 0.12f, 0.08f, 0.88f),
+            NameColor = new Color(1f, 0.85f, 0.65f),
+            Description = "Large target used to validate checked (cannot advance) Gust of Wind result on failed save."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "test_archer_gust",
+            Name = "Elara Keeneye",
+            Level = 3,
+            CharacterClass = "Ranger",
+            CreatureType = "Humanoid",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            STR = 12,
+            DEX = 16,
+            CON = 12,
+            WIS = 14,
+            INT = 10,
+            CHA = 10,
+            BAB = 3,
+            BaseSpeed = 6,
+            BaseHitDieHP = 24,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("longbow", EquipSlot.RightHand),
+                new EquipmentSlotPair("longsword", EquipSlot.LeftHand),
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "ArcherControl" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.70f, 0.86f, 0.70f, 1f),
+            PanelColor = new Color(0.15f, 0.24f, 0.15f, 0.88f),
+            NameColor = new Color(0.88f, 1f, 0.88f),
+            Description = "Ranged control target positioned off the wind line to validate concealment attacks."
         });
     }
 
