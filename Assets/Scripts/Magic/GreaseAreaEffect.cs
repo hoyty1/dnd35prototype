@@ -14,7 +14,8 @@ public class GreaseAreaEffect : PersistentAreaEffect
         EffectName = "Grease";
         SpellId = "grease";
         Shape = AreaShape.Square;
-        AreaSize = 2; // 10-ft square on 5-ft grid
+        SizeX = 2; // 10-ft square on 5-ft grid
+        SizeY = 2;
         VisualColor = new Color(0.2f, 0.75f, 0.28f, 0.35f);
         VisualHeight = 0.02f;
         ShowVisual = true;

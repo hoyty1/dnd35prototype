@@ -12,8 +12,12 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
 
         EffectName = "Wall of Fire";
         SpellId = "wall_of_fire";
-        Shape = AreaShape.Line;
-        AreaSize = 4; // 20-ft line example
+
+        Shape = AreaShape.Rectangle;
+        SizeX = 4; // 20 ft long
+        SizeY = 1; // 5 ft wide
+        DirectionAngle = 0f; // Horizontal by default
+
         VisualColor = new Color(1f, 0.35f, 0.05f, 0.55f);
         VisualHeight = 0.03f;
         ShowVisual = true;
