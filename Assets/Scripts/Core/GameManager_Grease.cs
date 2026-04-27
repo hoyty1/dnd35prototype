@@ -12,15 +12,6 @@ public partial class GameManager
         Armor
     }
 
-    private sealed class ActiveGreaseArea
-    {
-        public HashSet<Vector2Int> Cells;
-        public int RemainingRounds;
-        public int SaveDC;
-        public string CasterName;
-        public GameObject VisualIndicator;
-    }
-
     private sealed class ActiveGreasedObject
     {
         public ItemData Item;
@@ -30,7 +21,6 @@ public partial class GameManager
     }
 
     private GreaseCastMode _pendingGreaseCastMode;
-    private readonly List<ActiveGreaseArea> _activeGreaseAreas = new List<ActiveGreaseArea>();
     private readonly List<ActiveGreasedObject> _activeGreasedObjects = new List<ActiveGreasedObject>();
 
     private static bool IsGreaseSpell(SpellData spell)
@@ -349,26 +339,23 @@ public partial class GameManager
             if (_isGreaseTestEncounter)
                 log.AppendLine("  [TEST] Verifying low-Reflex grappler saves and prone results for clustered targets.");
 
-            var seenTargets = new HashSet<CharacterController>();
-            for (int i = 0; i < targets.Count; i++)
+            if (targets != null && targets.Count > 0)
             {
-                CharacterController target = targets[i];
-                if (target == null || target.Stats == null || target.Stats.IsDead || !seenTargets.Add(target))
-                    continue;
-
-                int roll = UnityEngine.Random.Range(1, 21);
-                int total = roll + target.Stats.ReflexSave;
-                bool saveSucceeded = total >= saveDC;
-
-                log.AppendLine($"  {target.Stats.CharacterName}: Reflex d20({roll}) + {target.Stats.ReflexSave} = {total} vs DC {saveDC} {(saveSucceeded ? "SUCCESS" : "FAIL")}");
-                if (!saveSucceeded)
+                var seenTargets = new HashSet<CharacterController>();
+                int uniqueTargets = 0;
+                for (int i = 0; i < targets.Count; i++)
                 {
-                    target.ApplyCondition(CombatConditionType.Prone, -1, _pendingSpell.Name);
-                    log.AppendLine($"    💥 {target.Stats.CharacterName} falls prone!");
+                    CharacterController target = targets[i];
+                    if (target == null || target.Stats == null || target.Stats.IsDead || !seenTargets.Add(target))
+                        continue;
+
+                    uniqueTargets++;
                 }
+
+                log.AppendLine($"  Creatures currently in area: {uniqueTargets}");
             }
 
-            RegisterActiveGreaseArea(caster, greaseCells, durationRounds, saveDC);
+            CreateGreaseArea(GetGreaseCenterWorldPosition(greaseCells), durationRounds, saveDC, caster);
 
             log.AppendLine("  Ground is now greased (difficult movement, Balance DC 10 to stay upright).");
             log.Append("═══════════════════════════════════");
@@ -387,33 +374,10 @@ public partial class GameManager
         });
     }
 
-    private void RegisterActiveGreaseArea(CharacterController caster, HashSet<Vector2Int> cells, int durationRounds, int saveDC)
+    private Vector3 GetGreaseCenterWorldPosition(HashSet<Vector2Int> cells)
     {
         if (cells == null || cells.Count == 0)
-            return;
-
-        var area = new ActiveGreaseArea
-        {
-            Cells = new HashSet<Vector2Int>(cells),
-            RemainingRounds = Mathf.Max(1, durationRounds),
-            SaveDC = saveDC,
-            CasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown"
-        };
-
-        area.VisualIndicator = CreateGreaseAreaVisual(area.Cells);
-        _activeGreaseAreas.Add(area);
-
-        if (_movementService != null)
-        {
-            foreach (Vector2Int cell in area.Cells)
-                _movementService.SetDifficultTerrain(cell, true);
-        }
-    }
-
-    private GameObject CreateGreaseAreaVisual(HashSet<Vector2Int> cells)
-    {
-        if (cells == null || cells.Count == 0)
-            return null;
+            return Vector3.zero;
 
         int minX = int.MaxValue;
         int minY = int.MaxValue;
@@ -428,49 +392,35 @@ public partial class GameManager
             if (cell.y > maxY) maxY = cell.y;
         }
 
-        int widthCells = Mathf.Max(1, maxX - minX + 1);
-        int heightCells = Mathf.Max(1, maxY - minY + 1);
-
-        Vector3 visualCenter = new Vector3(
-            (minX + maxX) * 0.5f,
-            (minY + maxY) * 0.5f,
-            -0.02f);
-
-        GameObject visualRoot = new GameObject($"GreaseArea_{minX}_{minY}");
-        visualRoot.transform.position = visualCenter;
-
-        GameObject quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        quad.name = "GreaseAreaVisual";
-        quad.transform.SetParent(visualRoot.transform, false);
-        quad.transform.localPosition = Vector3.zero;
-        quad.transform.localScale = new Vector3(widthCells * SquareGridUtils.CellSize, heightCells * SquareGridUtils.CellSize, 1f);
-
-        Collider col = quad.GetComponent<Collider>();
-        if (col != null)
-            Destroy(col);
-
-        MeshRenderer renderer = quad.GetComponent<MeshRenderer>();
-        if (renderer != null)
-        {
-            Shader shader = Shader.Find("Unlit/Color");
-            if (shader == null)
-                shader = Shader.Find("Sprites/Default");
-
-            Material greaseMat = shader != null ? new Material(shader) : new Material(Shader.Find("Standard"));
-            greaseMat.color = new Color(0.2f, 0.75f, 0.28f, 0.35f);
-            renderer.material = greaseMat;
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
-            renderer.sortingOrder = 2;
-        }
-
-        return visualRoot;
+        return new Vector3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, 0f);
     }
 
-    private static void DestroyGreaseAreaVisual(GameObject visualIndicator)
+    /// <summary>
+    /// Creates a grease area through the reusable persistent area-effect system.
+    /// </summary>
+    public void CreateGreaseArea(Vector3 centerPosition, int duration, int saveDC, CharacterController caster)
     {
-        if (visualIndicator != null)
-            Destroy(visualIndicator);
+        GameObject greaseObj = new GameObject("Grease_Area");
+        greaseObj.transform.position = centerPosition;
+
+        GreaseAreaEffect grease = greaseObj.AddComponent<GreaseAreaEffect>();
+        grease.CenterPosition = centerPosition;
+        grease.RoundsRemaining = Mathf.Max(1, duration);
+        grease.SaveDC = saveDC;
+        grease.Caster = caster;
+        grease.CasterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+    }
+
+    /// <summary>
+    /// Shared hook for area effects that need to mark difficult terrain on the movement grid.
+    /// </summary>
+    public void SetAreaDifficultTerrain(IEnumerable<Vector2Int> cells, bool isDifficult)
+    {
+        if (_movementService == null || cells == null)
+            return;
+
+        foreach (Vector2Int cell in cells)
+            _movementService.SetDifficultTerrain(cell, isDifficult);
     }
 
     private void PerformGreaseObjectCast(CharacterController caster, CharacterController target)
@@ -630,13 +580,11 @@ public partial class GameManager
 
     private bool IsCellInActiveGreaseArea(Vector2Int pos)
     {
-        for (int i = 0; i < _activeGreaseAreas.Count; i++)
+        List<GreaseAreaEffect> greaseEffects = AreaEffectManager.Instance.GetEffectsOfType<GreaseAreaEffect>();
+        for (int i = 0; i < greaseEffects.Count; i++)
         {
-            ActiveGreaseArea area = _activeGreaseAreas[i];
-            if (area == null || area.RemainingRounds <= 0 || area.Cells == null)
-                continue;
-
-            if (area.Cells.Contains(pos))
+            GreaseAreaEffect effect = greaseEffects[i];
+            if (effect != null && effect.IsCellInArea(pos))
                 return true;
         }
 
@@ -680,8 +628,7 @@ public partial class GameManager
 
     private void TickActiveGreaseEffects()
     {
-        if (_activeGreaseAreas.Count > 0)
-            TickGreaseAreasAtRoundStart();
+        AreaEffectManager.Instance.OnCombatRoundStart();
 
         if (_activeGreasedObjects.Count > 0)
             TickGreasedObjectsAtRoundStart();
@@ -689,95 +636,8 @@ public partial class GameManager
 
     private void ClearAllActiveGreaseEffects()
     {
-        for (int i = 0; i < _activeGreaseAreas.Count; i++)
-        {
-            ActiveGreaseArea area = _activeGreaseAreas[i];
-            if (area?.Cells != null && _movementService != null)
-            {
-                foreach (Vector2Int cell in area.Cells)
-                    _movementService.SetDifficultTerrain(cell, false);
-            }
-
-            DestroyGreaseAreaVisual(area?.VisualIndicator);
-        }
-
-        _activeGreaseAreas.Clear();
+        AreaEffectManager.Instance.ClearAllEffects();
         _activeGreasedObjects.Clear();
-    }
-
-    private void TickGreaseAreasAtRoundStart()
-    {
-        var expired = new List<ActiveGreaseArea>();
-
-        for (int i = 0; i < _activeGreaseAreas.Count; i++)
-        {
-            ActiveGreaseArea area = _activeGreaseAreas[i];
-            if (area == null)
-            {
-                expired.Add(area);
-                continue;
-            }
-
-            var checkedCharacters = new HashSet<CharacterController>();
-            foreach (Vector2Int cellPos in area.Cells)
-            {
-                SquareCell cell = Grid != null ? Grid.GetCell(cellPos) : null;
-                if (cell == null || !cell.IsOccupied || cell.Occupant == null || cell.Occupant.Stats == null || cell.Occupant.Stats.IsDead)
-                    continue;
-
-                CharacterController occupant = cell.Occupant;
-                if (!checkedCharacters.Add(occupant))
-                    continue;
-
-                int balanceTotal = occupant.Stats.RollSkillCheck("Balance");
-                bool success = balanceTotal >= 10;
-                CombatUI?.ShowCombatLog($"🛢 Grease (round start): {occupant.Stats.CharacterName} Balance {balanceTotal} vs DC 10 {(success ? "SUCCESS" : "FAIL")}." );
-                if (!success)
-                {
-                    occupant.ApplyCondition(CombatConditionType.Prone, -1, "Grease");
-                    CombatUI?.ShowCombatLog($"💥 {occupant.Stats.CharacterName} loses footing in grease and falls prone!");
-                }
-            }
-
-            area.RemainingRounds--;
-            if (area.RemainingRounds <= 0)
-                expired.Add(area);
-        }
-
-        for (int i = 0; i < expired.Count; i++)
-        {
-            ActiveGreaseArea ex = expired[i];
-            _activeGreaseAreas.Remove(ex);
-            UnregisterGreaseAreaTerrain(ex);
-            DestroyGreaseAreaVisual(ex?.VisualIndicator);
-            CombatUI?.ShowCombatLog("🛢 Grease effect dissipates.");
-        }
-    }
-
-    private void UnregisterGreaseAreaTerrain(ActiveGreaseArea expiredArea)
-    {
-        if (_movementService == null || expiredArea == null || expiredArea.Cells == null)
-            return;
-
-        foreach (Vector2Int cell in expiredArea.Cells)
-        {
-            bool stillCovered = false;
-            for (int i = 0; i < _activeGreaseAreas.Count; i++)
-            {
-                ActiveGreaseArea remaining = _activeGreaseAreas[i];
-                if (remaining == null || remaining.RemainingRounds <= 0 || remaining.Cells == null)
-                    continue;
-
-                if (remaining.Cells.Contains(cell))
-                {
-                    stillCovered = true;
-                    break;
-                }
-            }
-
-            if (!stillCovered)
-                _movementService.SetDifficultTerrain(cell, false);
-        }
     }
 
     private string ResolveGreaseObjectCast(CharacterController caster, CharacterController target)
