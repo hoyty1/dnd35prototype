@@ -1941,6 +1941,25 @@ public class CharacterController : MonoBehaviour
         int additionalAttackModifier = 0,
         bool isOffHandAttack = false)
     {
+        if (target == null || target.Stats == null || target.Stats.IsDead)
+        {
+            Debug.LogWarning($"[Combat] {Stats?.CharacterName ?? name} attempted to attack an invalid target.");
+            return new CombatResult
+            {
+                Attacker = this,
+                Defender = target,
+                WeaponName = (attackWeaponOverride ?? GetEquippedMainWeapon()) != null
+                    ? (attackWeaponOverride ?? GetEquippedMainWeapon()).Name
+                    : "Unarmed strike",
+                Hit = false,
+                DieRoll = 1,
+                TotalRoll = 1,
+                TargetAC = 0,
+                DefenderHPBefore = 0,
+                DefenderHPAfter = 0
+            };
+        }
+
         // Calculate racial attack bonus against target
         int racialAtkBonus = Stats.GetRacialAttackBonus(target.Stats);
         int rangePenalty = (rangeInfo != null && !rangeInfo.IsMelee && rangeInfo.IsInRange) ? rangeInfo.Penalty : 0;
@@ -2200,6 +2219,16 @@ public class CharacterController : MonoBehaviour
         result.Type = FullAttackResult.AttackType.FullAttack;
         result.Attacker = this;
         result.Defender = target;
+
+        if (target == null || target.Stats == null || target.Stats.IsDead)
+        {
+            Debug.LogWarning($"[FullAttack] {Stats?.CharacterName ?? name} attempted a full attack on an invalid target.");
+            result.DefenderHPBefore = 0;
+            result.DefenderHPAfter = 0;
+            result.TargetKilled = false;
+            return result;
+        }
+
         result.DefenderHPBefore = target.Stats.CurrentHP;
 
         int[] attackBonuses = Stats.GetIterativeAttackBonuses();

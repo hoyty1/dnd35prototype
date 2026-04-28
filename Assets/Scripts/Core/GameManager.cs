@@ -14795,7 +14795,16 @@ public partial class GameManager : MonoBehaviour
 
     private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
     {
-        if (npc != null && npc.aiProfile != null)
+        if (npc == null || npc.Stats == null)
+            yield break;
+
+        if (target == null || target.Stats == null || target.Stats.IsDead)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {npc.Stats.CharacterName} has no valid target and stops attacking.");
+            yield break;
+        }
+
+        if (npc.aiProfile != null)
             npc.aiProfile.TryEnsureWeaponFallback(npc);
 
         if (!npc.CanAttackWithEquippedWeapon(out string cannotAttackReason))

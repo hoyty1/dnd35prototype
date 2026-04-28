@@ -59,7 +59,18 @@ public class AIService : MonoBehaviour
 
         CharacterController targetPC = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
         if (targetPC == null)
-            yield break;
+        {
+            yield return _gameManager.StartCoroutine(ExecuteSearchTurnWhenNoTargets(npc));
+            targetPC = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
+            if (targetPC == null)
+            {
+                string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
+                _gameManager.CombatUI?.ShowCombatLog($"{npcName} cannot find a target and keeps searching the battlefield.");
+                yield break;
+            }
+
+            _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} spots {targetPC.Stats.CharacterName} after searching.");
+        }
 
         if (npc.HasCondition(CombatConditionType.Turned) && _gameManager.IsUndeadCharacterForAI(npc))
         {
@@ -153,6 +164,124 @@ public class AIService : MonoBehaviour
                 yield return _gameManager.StartCoroutine(ExecuteAggressiveMeleeTurn(npc, targetPC));
                 break;
         }
+    }
+
+    private IEnumerator ExecuteSearchTurnWhenNoTargets(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null || npc.Actions == null)
+            yield break;
+
+        string npcName = npc.Stats.CharacterName;
+        _gameManager.CombatUI?.ShowCombatLog($"{npcName} has no valid targets and starts searching.");
+
+        if (!npc.Actions.HasMoveAction || npc.Stats.MovementBlockedByCondition)
+        {
+            _gameManager.CombatUI?.ShowCombatLog($"{npcName} cannot move to search this turn.");
+            yield break;
+        }
+
+        Vector2Int searchDestination;
+        if (!TryFindSearchDestination(npc, out searchDestination) || searchDestination == npc.GridPosition)
+        {
+            _gameManager.CombatUI?.ShowCombatLog($"{npcName} scans the area but finds no better position.");
+            yield break;
+        }
+
+        Debug.Log($"[AI][Search] {npcName} moving from {npc.GridPosition} to {searchDestination}");
+
+        yield return _gameManager.StartCoroutine(
+            _gameManager.MoveCharacterAlongComputedPathForAI(npc, searchDestination, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+
+        if (npc.Actions.HasMoveAction)
+            npc.Actions.UseMoveAction();
+
+        _gameManager.CombatUI?.ShowCombatLog($"{npcName} moves to search for enemies.");
+        yield return new WaitForSeconds(0.35f);
+    }
+
+    private bool TryFindSearchDestination(CharacterController npc, out Vector2Int destination)
+    {
+        destination = npc != null ? npc.GridPosition : Vector2Int.zero;
+
+        if (npc == null || npc.Stats == null || _gameManager == null || _gameManager.Grid == null)
+            return false;
+
+        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
+        AIProfile profile = GetProfile(npc);
+        List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
+
+        SquareCell bestTrackedCell = null;
+        int bestTrackedDistance = int.MaxValue;
+
+        if (tracker != null && allCombatants != null)
+        {
+            for (int i = 0; i < allCombatants.Count; i++)
+            {
+                CharacterController candidate = allCombatants[i];
+                if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                    continue;
+                if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+                    continue;
+                if (!tracker.HasLastKnownPosition(candidate))
+                    continue;
+
+                Vector2Int? knownPosition = tracker.GetLastKnownPosition(candidate);
+                if (!knownPosition.HasValue)
+                    continue;
+
+                SquareCell candidateCell = EvaluateMovementOptions(npc, knownPosition.Value, retreat: false, candidate, profile);
+                if (candidateCell == null || candidateCell.Coords == npc.GridPosition)
+                    continue;
+
+                int distToKnown = SquareGridUtils.GetDistance(candidateCell.Coords, knownPosition.Value);
+                if (distToKnown < bestTrackedDistance)
+                {
+                    bestTrackedDistance = distToKnown;
+                    bestTrackedCell = candidateCell;
+                }
+            }
+        }
+
+        if (bestTrackedCell != null)
+        {
+            destination = bestTrackedCell.Coords;
+            return true;
+        }
+
+        Vector2Int mapCenter = new Vector2Int(_gameManager.Grid.Width / 2, _gameManager.Grid.Height / 2);
+        List<SquareCell> moveCells = _gameManager.Grid.GetCellsInRange(npc.GridPosition, npc.Stats.MoveRange);
+
+        SquareCell bestExplorationCell = null;
+        float bestScore = float.NegativeInfinity;
+
+        for (int i = 0; i < moveCells.Count; i++)
+        {
+            SquareCell cell = moveCells[i];
+            if (cell == null || cell.Coords == npc.GridPosition)
+                continue;
+
+            if (!_gameManager.Grid.CanPlaceCreature(cell.Coords, npc.GetVisualSquaresOccupied(), npc))
+                continue;
+
+            AoOPathResult pathResult = _gameManager.FindPath(npc, cell.Coords, avoidThreats: false, maxRangeOverride: npc.Stats.MoveRange);
+            if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
+                continue;
+
+            int distToCenter = SquareGridUtils.GetDistance(cell.Coords, mapCenter);
+            float score = -distToCenter + UnityEngine.Random.Range(0f, 4f);
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestExplorationCell = cell;
+            }
+        }
+
+        if (bestExplorationCell == null)
+            return false;
+
+        destination = bestExplorationCell.Coords;
+        return true;
     }
 
     private IEnumerator ExecuteTurnedUndeadTurn(CharacterController npc)
