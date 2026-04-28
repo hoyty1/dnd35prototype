@@ -1927,10 +1927,37 @@ public class CharacterController : MonoBehaviour
         CombatConditionType conditionType = effect.ToConditionType();
         if (conditionType != CombatConditionType.None)
         {
-            ApplyCondition(conditionType, rounds, sourceName);
+            GameManager gm = GameManager.Instance;
+            if (gm != null)
+            {
+                gm.ApplyCondition(
+                    this,
+                    conditionType,
+                    rounds,
+                    source: null,
+                    data: null,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Poison");
 
-            if (conditionType == CombatConditionType.Paralyzed || conditionType == CombatConditionType.Unconscious)
-                ApplyCondition(CombatConditionType.Helpless, rounds, sourceName);
+                if (conditionType == CombatConditionType.Paralyzed || conditionType == CombatConditionType.Unconscious)
+                {
+                    gm.ApplyCondition(
+                        this,
+                        CombatConditionType.Helpless,
+                        rounds,
+                        source: null,
+                        data: null,
+                        sourceNameOverride: sourceName,
+                        sourceCategory: "Poison");
+                }
+            }
+            else
+            {
+                ApplyCondition(conditionType, rounds, sourceName);
+
+                if (conditionType == CombatConditionType.Paralyzed || conditionType == CombatConditionType.Unconscious)
+                    ApplyCondition(CombatConditionType.Helpless, rounds, sourceName);
+            }
 
             string durationLabel = rounds < 0 ? "permanent" : $"{rounds} rounds";
             LogAbilityScoreMessage($"⚠ {Stats.CharacterName} is {ConditionRules.GetDefinition(conditionType).DisplayName.ToLowerInvariant()} from {sourceName} ({durationLabel}).");
@@ -2069,6 +2096,16 @@ public class CharacterController : MonoBehaviour
     public bool CanAttack()
     {
         return EnsureConditions().CanAttack();
+    }
+
+    public bool CanCastSpells()
+    {
+        return EnsureConditions().CanCastSpells();
+    }
+
+    public bool IsHelplessLikeConditionState()
+    {
+        return EnsureConditions().IsHelplessLike();
     }
 
     public string GetConditionSummary()
@@ -3775,10 +3812,7 @@ public class CharacterController : MonoBehaviour
         if (Stats == null || Stats.IsDead)
             return false;
 
-        return IsUnconscious
-            || HasCondition(CombatConditionType.Helpless)
-            || HasCondition(CombatConditionType.Paralyzed)
-            || HasCondition(CombatConditionType.Unconscious);
+        return IsUnconscious || IsHelplessLikeConditionState();
     }
 
     public bool IsImmuneToCriticalHits()
@@ -4250,6 +4284,12 @@ public class CharacterController : MonoBehaviour
     public bool CanAttackWithWeapon(ItemData weapon, out string reason)
     {
         reason = string.Empty;
+
+        if (!CanAttack())
+        {
+            reason = "Current condition prevents attacking.";
+            return false;
+        }
 
         if (HasCondition(CombatConditionType.Pinned))
         {

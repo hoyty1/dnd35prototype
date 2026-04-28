@@ -69,6 +69,7 @@ public class ConditionManager : MonoBehaviour
             return;
         }
 
+        existing.SourceName = sourceName;
         RefreshDuration(existing, rounds);
     }
 

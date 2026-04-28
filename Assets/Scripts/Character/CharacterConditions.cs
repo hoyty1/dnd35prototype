@@ -164,44 +164,87 @@ public class CharacterConditions : MonoBehaviour
 
     public bool CanTakeActions()
     {
-        if (IsStunned || IsTurned || IsPinned || IsDazed)
-            return false;
+        List<StatusEffect> active = GetActiveConditions();
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionDefinition def = ConditionRules.GetDefinition(active[i].Type);
+            if (def.PreventsStandardActions && def.PreventsFullRoundActions)
+                return false;
+        }
 
         return true;
     }
 
     public bool CanMove()
     {
-        if (IsGrappled || IsPinned || IsStunned || IsDazed)
+        if (_character != null && _character.Stats != null && _character.Stats.MovementBlockedByCondition)
             return false;
+
+        List<StatusEffect> active = GetActiveConditions();
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionDefinition def = ConditionRules.GetDefinition(active[i].Type);
+            if (def.PreventsMovement || def.MovementMultiplier <= 0f)
+                return false;
+        }
 
         return true;
     }
 
     public bool CanAttack()
     {
-        if (IsStunned || IsTurned || IsDazed)
-            return false;
+        List<StatusEffect> active = GetActiveConditions();
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionDefinition def = ConditionRules.GetDefinition(active[i].Type);
+            if (def.PreventsStandardActions || def.PreventsFullRoundActions)
+                return false;
+        }
 
         return true;
     }
 
+    public bool CanCastSpells()
+    {
+        List<StatusEffect> active = GetActiveConditions();
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionDefinition def = ConditionRules.GetDefinition(active[i].Type);
+            if (def.PreventsSpellcasting || def.PreventsStandardActions)
+                return false;
+        }
+
+        return true;
+    }
+
+    public bool IsHelplessLike()
+    {
+        List<StatusEffect> active = GetActiveConditions();
+        for (int i = 0; i < active.Count; i++)
+        {
+            if (ConditionRules.IsHelplessLike(active[i].Type))
+                return true;
+        }
+
+        return false;
+    }
+
     public string GetConditionSummary()
     {
-        string summary = string.Empty;
+        List<StatusEffect> active = GetActiveConditions();
+        if (active.Count == 0)
+            return string.Empty;
 
-        if (IsProne) summary += "[Prone] ";
-        if (IsGrappled) summary += "[Grappled] ";
-        if (IsPinned) summary += "[Pinned] ";
-        if (IsPinning) summary += "[Pinning] ";
-        if (IsStunned) summary += "[Stunned] ";
-        if (IsDazed) summary += "[Dazed] ";
-        if (IsDazzled) summary += "[Dazzled] ";
-        if (IsInvisible) summary += "[Invisible] ";
-        if (IsTurned) summary += "[Turned] ";
-        if (IsFeinted) summary += "[Feinted] ";
-        if (IsFlatFooted) summary += "[Flat-Footed] ";
+        List<string> labels = new List<string>(active.Count + 1);
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionDefinition def = ConditionRules.GetDefinition(active[i].Type);
+            labels.Add($"[{def.DisplayName}]");
+        }
 
-        return summary.TrimEnd();
+        if (IsPinning)
+            labels.Add("[Pinning]");
+
+        return string.Join(" ", labels);
     }
 }

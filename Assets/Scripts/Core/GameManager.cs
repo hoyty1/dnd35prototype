@@ -4187,17 +4187,13 @@ public partial class GameManager : MonoBehaviour
             return "is unconscious";
         }
 
-        if (character.HasCondition(CombatConditionType.Dazed))
-            return "is dazed";
-
-        if (character.HasCondition(CombatConditionType.Stunned))
-            return "is stunned";
-
-        if (character.HasCondition(CombatConditionType.Turned))
-            return "is turned";
-
-        if (character.HasCondition(CombatConditionType.Pinned))
-            return "is pinned";
+        List<StatusEffect> active = character.GetActiveConditions();
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionDefinition def = ConditionRules.GetDefinition(active[i].Type);
+            if (def.PreventsStandardActions && def.PreventsFullRoundActions)
+                return $"is {def.DisplayName.ToLowerInvariant()}";
+        }
 
         return "cannot act";
     }
@@ -7269,7 +7265,7 @@ public partial class GameManager : MonoBehaviour
         if (actor == null)
             return false;
 
-        if (actor.HasCondition(CombatConditionType.Turned))
+        if (!actor.CanAttack())
             return false;
 
         if (_isInAttackSequence && _attackingCharacter == actor)
@@ -7304,7 +7300,7 @@ public partial class GameManager : MonoBehaviour
         if (actor == null)
             return false;
 
-        if (actor.HasCondition(CombatConditionType.Turned))
+        if (!actor.CanAttack())
             return false;
 
         ItemData weapon = actor.GetEquippedWeapon();
@@ -10551,6 +10547,43 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
+        if (spell != null && spell.SpellId == "hold_person")
+        {
+            int holdRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 1);
+            string sourceName = spell.Name;
+
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Paralyzed,
+                    holdRounds,
+                    source: caster,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Helpless,
+                    holdRounds,
+                    source: caster,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+            }
+            else
+            {
+                string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
+                target.ApplyCondition(CombatConditionType.Paralyzed, holdRounds, fallbackSource);
+                target.ApplyCondition(CombatConditionType.Helpless, holdRounds, fallbackSource);
+            }
+
+            CombatUI?.ShowCombatLog($"<color=#FF9966>⛓ {target.Stats.CharacterName} is paralyzed by Hold Person for {holdRounds} round(s)!</color>");
+            Debug.Log($"[GameManager] Hold Person applied Paralyzed to {target.Stats.CharacterName} for {holdRounds} rounds");
+            return null;
+        }
+
         if (spell != null && spell.SpellId == "touch_of_fatigue")
         {
             string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
@@ -11281,8 +11314,18 @@ public partial class GameManager : MonoBehaviour
         => _movementService != null && _movementService.CanTake5FootStep(character, destination);
 
     // Public delegation helpers for condition-aware systems.
-    public void ApplyCondition(CharacterController target, CombatConditionType type, int rounds, CharacterController source = null, object data = null, bool expiresAtEndOfTurn = false, bool expiresAtStartOfTurn = false)
-        => _conditionService?.ApplyCondition(target, type, rounds, source, data, expiresAtEndOfTurn, expiresAtStartOfTurn);
+    public void ApplyCondition(
+        CharacterController target,
+        CombatConditionType type,
+        int rounds,
+        CharacterController source = null,
+        object data = null,
+        bool expiresAtEndOfTurn = false,
+        bool expiresAtStartOfTurn = false,
+        string sourceNameOverride = null,
+        string sourceCategory = "Unknown",
+        string sourceId = null)
+        => _conditionService?.ApplyCondition(target, type, rounds, source, data, expiresAtEndOfTurn, expiresAtStartOfTurn, sourceNameOverride, sourceCategory, sourceId);
     public bool RemoveCondition(CharacterController target, CombatConditionType type)
         => _conditionService != null && _conditionService.RemoveCondition(target, type);
     public int RemoveAllConditions(CharacterController target)

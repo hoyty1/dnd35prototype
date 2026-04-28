@@ -23,9 +23,23 @@ public class ConditionService : MonoBehaviour
         public CombatConditionType Type;
         public int RemainingRounds;
         public CharacterController Source;
+        public string SourceName;
+        public string SourceCategory;
+        public string SourceId;
         public object Data;
         public bool ExpiresAtEndOfTurn;
         public bool ExpiresAtStartOfTurn;
+    }
+
+    [Serializable]
+    public class ConditionEscapeCheckData
+    {
+        public string SaveType;
+        public int SaveDC;
+        public string SourceName;
+        public string SourceSpellId;
+        public bool CheckAtTurnStart = true;
+        public bool RemoveHelplessOnSuccess = true;
     }
 
     private readonly Dictionary<CharacterController, List<ActiveCondition>> _activeConditionsByCharacter =
@@ -76,16 +90,15 @@ public class ConditionService : MonoBehaviour
         object data = null,
         bool expiresAtEndOfTurn = false,
         bool expiresAtStartOfTurn = false,
-        string sourceNameOverride = null)
+        string sourceNameOverride = null,
+        string sourceCategory = "Unknown",
+        string sourceId = null)
     {
         if (!IsValidCharacter(target))
             return;
 
-        string sourceName = !string.IsNullOrWhiteSpace(sourceNameOverride)
-            ? sourceNameOverride
-            : (source != null && source.Stats != null
-                ? source.Stats.CharacterName
-                : (target.Stats != null ? target.Stats.CharacterName : "Unknown"));
+        string sourceName = ResolveSourceName(target, source, sourceNameOverride);
+        string normalizedSourceCategory = string.IsNullOrWhiteSpace(sourceCategory) ? "Unknown" : sourceCategory;
 
         target.ApplyConditionDirect(type, rounds, sourceName);
         SyncCharacter(target);
@@ -95,6 +108,9 @@ public class ConditionService : MonoBehaviour
             return;
 
         tracked.Source = source;
+        tracked.SourceName = sourceName;
+        tracked.SourceCategory = normalizedSourceCategory;
+        tracked.SourceId = sourceId;
         tracked.Data = data;
         tracked.ExpiresAtEndOfTurn = expiresAtEndOfTurn;
         tracked.ExpiresAtStartOfTurn = expiresAtStartOfTurn;
@@ -164,6 +180,7 @@ public class ConditionService : MonoBehaviour
 
         SyncCharacter(actor);
         ExpireTurnBoundaryConditions(actor, expireAtStart: true);
+        ResolveTurnStartEscapeChecks(actor);
     }
 
     public void OnTurnEnd(CharacterController actor)
@@ -366,6 +383,71 @@ public class ConditionService : MonoBehaviour
         }
     }
 
+    private void ResolveTurnStartEscapeChecks(CharacterController actor)
+    {
+        if (!_activeConditionsByCharacter.TryGetValue(actor, out List<ActiveCondition> conditions) || conditions == null || conditions.Count == 0)
+            return;
+
+        for (int i = 0; i < conditions.Count; i++)
+        {
+            ActiveCondition condition = conditions[i];
+            if (condition == null || condition.Data is not ConditionEscapeCheckData escapeData)
+                continue;
+
+            if (!escapeData.CheckAtTurnStart)
+                continue;
+
+            int roll = UnityEngine.Random.Range(1, 21);
+            int saveMod = GetSaveModifierForType(actor.Stats, escapeData.SaveType);
+            int total = roll + saveMod;
+            bool success = total >= escapeData.SaveDC;
+
+            Debug.Log($"[ConditionService] {actor.Stats.CharacterName} {escapeData.SaveType} save to end {condition.Type}: d20({roll}) + {saveMod} = {total} vs DC {escapeData.SaveDC} => {(success ? "SUCCESS" : "FAIL")}");
+
+            if (!success)
+                continue;
+
+            if (RemoveCondition(actor, condition.Type))
+                OnConditionExpired?.Invoke(actor, condition);
+
+            if (escapeData.RemoveHelplessOnSuccess && condition.Type == CombatConditionType.Paralyzed)
+                RemoveCondition(actor, CombatConditionType.Helpless);
+
+            break;
+        }
+    }
+
+    private static int GetSaveModifierForType(CharacterStats stats, string saveType)
+    {
+        if (stats == null)
+            return 0;
+
+        switch (saveType)
+        {
+            case "Fortitude":
+                return stats.FortitudeSave;
+            case "Reflex":
+                return stats.ReflexSave;
+            case "Will":
+            default:
+                return stats.WillSave;
+        }
+    }
+
+    private static string ResolveSourceName(CharacterController target, CharacterController source, string sourceNameOverride)
+    {
+        if (!string.IsNullOrWhiteSpace(sourceNameOverride))
+            return sourceNameOverride;
+
+        if (source != null && source.Stats != null && !string.IsNullOrWhiteSpace(source.Stats.CharacterName))
+            return source.Stats.CharacterName;
+
+        if (target != null && target.Stats != null && !string.IsNullOrWhiteSpace(target.Stats.CharacterName))
+            return target.Stats.CharacterName;
+
+        return "Unknown";
+    }
+
     private ActiveCondition FindActiveCondition(CharacterController target, CombatConditionType type)
     {
         if (!_activeConditionsByCharacter.TryGetValue(target, out List<ActiveCondition> activeList) || activeList == null)
@@ -417,8 +499,14 @@ public class ConditionService : MonoBehaviour
                 activeCondition.Data = previous.Data;
                 activeCondition.ExpiresAtEndOfTurn = previous.ExpiresAtEndOfTurn;
                 activeCondition.ExpiresAtStartOfTurn = previous.ExpiresAtStartOfTurn;
+                activeCondition.SourceCategory = previous.SourceCategory;
+                activeCondition.SourceId = previous.SourceId;
+
                 if (activeCondition.Source == null)
                     activeCondition.Source = previous.Source;
+
+                if (string.IsNullOrWhiteSpace(activeCondition.SourceName))
+                    activeCondition.SourceName = previous.SourceName;
             }
 
             mapped.Add(activeCondition);
@@ -458,6 +546,9 @@ public class ConditionService : MonoBehaviour
             Type = effect != null ? ConditionRules.Normalize(effect.Type) : CombatConditionType.None,
             RemainingRounds = effect != null ? effect.RemainingRounds : 0,
             Source = source,
+            SourceName = effect != null ? effect.SourceName : null,
+            SourceCategory = "Unknown",
+            SourceId = null,
             Data = null,
             ExpiresAtEndOfTurn = false,
             ExpiresAtStartOfTurn = false

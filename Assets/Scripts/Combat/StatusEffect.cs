@@ -15,12 +15,7 @@ public enum ConditionStackingRule
 }
 
 /// <summary>
-/// D&D 3.5 style condition definition metadata.
-///
-/// IMPORTANT:
-/// - We implement direct numeric effects that are already wired in combat math.
-/// - Rule-heavy behavior (e.g., total action denial, precise movement limits, spellcasting limits)
-///   is exposed via flags and hook stubs in ConditionManager for incremental rollout.
+/// D&D 3.5 condition metadata used by combat/stat/action systems.
 /// </summary>
 public sealed class ConditionDefinition
 {
@@ -30,27 +25,32 @@ public sealed class ConditionDefinition
     public string Description;
     public ConditionStackingRule StackingRule;
 
-    // Numeric modifiers (applied generically in CharacterStats where appropriate)
+    // Core combat modifiers.
     public int AttackModifier;
     public int ArmorClassModifier;
     public int FortitudeModifier;
     public int ReflexModifier;
     public int WillModifier;
     public int InitiativeModifier;
+    public int SkillCheckModifier;
+    public int AbilityCheckModifier;
 
-    // Movement model (generic).
+    // Movement model.
     public bool PreventsMovement;
     public float MovementMultiplier;
 
-    // Combat capability flags.
+    // Capability flags.
     public bool PreventsAoO;
     public bool PreventsThreatening;
-
-    // Rule stub flags for higher-level behavior (action UI / spellcasting / AI).
     public bool PreventsStandardActions;
     public bool PreventsFullRoundActions;
     public bool PreventsSpellcasting;
+
+    // Tactical/special-state markers.
     public bool IsFearCondition;
+    public bool DeniesDexToAc;
+    public bool GrantsCombatAdvantage;
+    public bool CoupDeGraceVulnerable;
 
     public ConditionDefinition CloneFor(CombatConditionType type)
     {
@@ -67,6 +67,8 @@ public sealed class ConditionDefinition
             ReflexModifier = ReflexModifier,
             WillModifier = WillModifier,
             InitiativeModifier = InitiativeModifier,
+            SkillCheckModifier = SkillCheckModifier,
+            AbilityCheckModifier = AbilityCheckModifier,
             PreventsMovement = PreventsMovement,
             MovementMultiplier = MovementMultiplier,
             PreventsAoO = PreventsAoO,
@@ -74,7 +76,10 @@ public sealed class ConditionDefinition
             PreventsStandardActions = PreventsStandardActions,
             PreventsFullRoundActions = PreventsFullRoundActions,
             PreventsSpellcasting = PreventsSpellcasting,
-            IsFearCondition = IsFearCondition
+            IsFearCondition = IsFearCondition,
+            DeniesDexToAc = DeniesDexToAc,
+            GrantsCombatAdvantage = GrantsCombatAdvantage,
+            CoupDeGraceVulnerable = CoupDeGraceVulnerable
         };
     }
 }
@@ -90,32 +95,105 @@ public static class ConditionRules
     {
         var map = new Dictionary<CombatConditionType, ConditionDefinition>();
 
-        void Add(ConditionDefinition def)
-        {
-            map[def.Type] = def;
-        }
+        void Add(ConditionDefinition def) => map[def.Type] = def;
 
-        // Core baseline condition used for unknown/custom values.
         Add(new ConditionDefinition
         {
             Type = CombatConditionType.None,
             DisplayName = "None",
             ShortLabel = "--",
-            Description = "No condition",
+            Description = "No condition.",
             StackingRule = ConditionStackingRule.Refresh,
             MovementMultiplier = 1f
         });
 
-        // ===== PHB-style conditions (direct numeric effects + rule stubs) =====
         Add(new ConditionDefinition
         {
             Type = CombatConditionType.Blinded,
             DisplayName = "Blinded",
             ShortLabel = "BL",
-            Description = "Cannot see. Severe combat penalties.",
+            Description = "Cannot see. -2 AC, -2 attack, loses DEX to AC, moves carefully.",
             StackingRule = ConditionStackingRule.Refresh,
             AttackModifier = -2,
             ArmorClassModifier = -2,
+            SkillCheckModifier = -4,
+            DeniesDexToAc = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.BlownAway,
+            DisplayName = "Blown Away",
+            ShortLabel = "BA",
+            Description = "Overpowered by severe wind; knocked down and unable to act normally.",
+            StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -4,
+            ArmorClassModifier = -4,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Checked,
+            DisplayName = "Checked",
+            ShortLabel = "CK",
+            Description = "Severe wind checks movement and ranged attacks.",
+            StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -2,
+            MovementMultiplier = 0.5f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Confused,
+            DisplayName = "Confused",
+            ShortLabel = "CF",
+            Description = "Acts unpredictably. Tactical behavior is AI-controlled.",
+            StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -2,
+            SkillCheckModifier = -2,
+            PreventsAoO = true,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Cowering,
+            DisplayName = "Cowering",
+            ShortLabel = "CW",
+            Description = "Frozen in fear. Takes no actions and suffers AC penalty.",
+            StackingRule = ConditionStackingRule.Refresh,
+            ArmorClassModifier = -2,
+            DeniesDexToAc = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            IsFearCondition = true,
+            MovementMultiplier = 0f,
+            PreventsMovement = true,
+            GrantsCombatAdvantage = true
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Dazed,
+            DisplayName = "Dazed",
+            ShortLabel = "DA",
+            Description = "Can take no actions.",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
             PreventsAoO = true,
             PreventsThreatening = true,
             MovementMultiplier = 1f
@@ -129,7 +207,25 @@ public static class ConditionRules
             Description = "-1 attack and sight-based checks.",
             StackingRule = ConditionStackingRule.Refresh,
             AttackModifier = -1,
+            SkillCheckModifier = -1,
             MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Dead,
+            DisplayName = "Dead",
+            ShortLabel = "DE",
+            Description = "Dead creature; cannot act.",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f,
+            CoupDeGraceVulnerable = false
         });
 
         Add(new ConditionDefinition
@@ -137,225 +233,11 @@ public static class ConditionRules
             Type = CombatConditionType.Deafened,
             DisplayName = "Deafened",
             ShortLabel = "DF",
-            Description = "Cannot hear; initiative and perception penalties (stubbed).",
+            Description = "Cannot hear. -4 initiative and some perception penalties.",
             StackingRule = ConditionStackingRule.Refresh,
             InitiativeModifier = -4,
+            SkillCheckModifier = -2,
             MovementMultiplier = 1f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Entangled,
-            DisplayName = "Entangled",
-            ShortLabel = "EN",
-            Description = "-2 attack, -4 DEX-like effects, half movement.",
-            StackingRule = ConditionStackingRule.Refresh,
-            AttackModifier = -2,
-            ArmorClassModifier = -2,
-            MovementMultiplier = 0.5f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Fatigued,
-            DisplayName = "Fatigued",
-            ShortLabel = "FT",
-            Description = "-2 STR and DEX. Cannot run or charge.",
-            StackingRule = ConditionStackingRule.Refresh,
-            MovementMultiplier = 1f,
-            IsFearCondition = false
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Exhausted,
-            DisplayName = "Exhausted",
-            ShortLabel = "EX",
-            Description = "-6 STR and DEX. Move at half speed. Cannot run or charge.",
-            StackingRule = ConditionStackingRule.Refresh,
-            MovementMultiplier = 0.5f,
-            IsFearCondition = false
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Shaken,
-            DisplayName = "Shaken",
-            ShortLabel = "SH",
-            Description = "-2 attack, saves, checks.",
-            StackingRule = ConditionStackingRule.Refresh,
-            AttackModifier = -2,
-            FortitudeModifier = -2,
-            ReflexModifier = -2,
-            WillModifier = -2,
-            IsFearCondition = true,
-            MovementMultiplier = 1f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Frightened,
-            DisplayName = "Frightened",
-            ShortLabel = "FR",
-            Description = "Fear escalation from Shaken; includes movement behavior stub.",
-            StackingRule = ConditionStackingRule.Refresh,
-            AttackModifier = -2,
-            FortitudeModifier = -2,
-            ReflexModifier = -2,
-            WillModifier = -2,
-            IsFearCondition = true,
-            MovementMultiplier = 1f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Panicked,
-            DisplayName = "Panicked",
-            ShortLabel = "PN",
-            Description = "Severe fear; cannot perform meaningful actions (stubbed).",
-            StackingRule = ConditionStackingRule.Refresh,
-            AttackModifier = -2,
-            FortitudeModifier = -2,
-            ReflexModifier = -2,
-            WillModifier = -2,
-            IsFearCondition = true,
-            PreventsStandardActions = true,
-            PreventsFullRoundActions = true,
-            PreventsSpellcasting = true,
-            MovementMultiplier = 1f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Turned,
-            DisplayName = "Turned",
-            ShortLabel = "TU",
-            Description = "Repelled by divine power. Must flee from the turner and cannot attack or cast spells.",
-            StackingRule = ConditionStackingRule.Refresh,
-            PreventsStandardActions = true,
-            PreventsFullRoundActions = true,
-            PreventsSpellcasting = true,
-            PreventsAoO = true,
-            PreventsThreatening = true,
-            MovementMultiplier = 1f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Sickened,
-            DisplayName = "Sickened",
-            ShortLabel = "SI",
-            Description = "-2 attack, weapon damage, saves, checks.",
-            StackingRule = ConditionStackingRule.Refresh,
-            AttackModifier = -2,
-            FortitudeModifier = -2,
-            ReflexModifier = -2,
-            WillModifier = -2,
-            MovementMultiplier = 1f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Poisoned,
-            DisplayName = "Poisoned",
-            ShortLabel = "PO",
-            Description = "Afflicted by poison (effect varies by poison source).",
-            StackingRule = ConditionStackingRule.Refresh,
-            MovementMultiplier = 1f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Nauseated,
-            DisplayName = "Nauseated",
-            ShortLabel = "NA",
-            Description = "Cannot attack/cast/concentrate (stubbed).",
-            StackingRule = ConditionStackingRule.Refresh,
-            AttackModifier = -10,
-            PreventsStandardActions = true,
-            PreventsFullRoundActions = true,
-            PreventsSpellcasting = true,
-            MovementMultiplier = 1f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Dazed,
-            DisplayName = "Dazed",
-            ShortLabel = "DA",
-            Description = "Can take no actions (stubbed action lock).",
-            StackingRule = ConditionStackingRule.Refresh,
-            PreventsStandardActions = true,
-            PreventsFullRoundActions = true,
-            PreventsSpellcasting = true,
-            PreventsAoO = true,
-            PreventsThreatening = true,
-            MovementMultiplier = 1f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Stunned,
-            DisplayName = "Stunned",
-            ShortLabel = "ST",
-            Description = "Drops held items, cannot act, -2 AC.",
-            StackingRule = ConditionStackingRule.Refresh,
-            ArmorClassModifier = -2,
-            PreventsStandardActions = true,
-            PreventsFullRoundActions = true,
-            PreventsSpellcasting = true,
-            PreventsAoO = true,
-            PreventsThreatening = true,
-            MovementMultiplier = 1f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Paralyzed,
-            DisplayName = "Paralyzed",
-            ShortLabel = "PA",
-            Description = "Immobile and helpless (stubbed).",
-            StackingRule = ConditionStackingRule.Refresh,
-            PreventsMovement = true,
-            PreventsStandardActions = true,
-            PreventsFullRoundActions = true,
-            PreventsSpellcasting = true,
-            PreventsAoO = true,
-            PreventsThreatening = true,
-            MovementMultiplier = 0f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Helpless,
-            DisplayName = "Helpless",
-            ShortLabel = "HP",
-            Description = "Completely at opponent's mercy (stubbed coup-de-grace handling).",
-            StackingRule = ConditionStackingRule.Refresh,
-            ArmorClassModifier = -4,
-            PreventsMovement = true,
-            PreventsStandardActions = true,
-            PreventsFullRoundActions = true,
-            PreventsSpellcasting = true,
-            PreventsAoO = true,
-            PreventsThreatening = true,
-            MovementMultiplier = 0f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Unconscious,
-            DisplayName = "Unconscious",
-            ShortLabel = "UC",
-            Description = "Unconscious and helpless. Cannot act or threaten.",
-            StackingRule = ConditionStackingRule.Refresh,
-            PreventsMovement = true,
-            PreventsStandardActions = true,
-            PreventsFullRoundActions = true,
-            PreventsSpellcasting = true,
-            PreventsAoO = true,
-            PreventsThreatening = true,
-            MovementMultiplier = 0f
         });
 
         Add(new ConditionDefinition
@@ -363,17 +245,7 @@ public static class ConditionRules
             Type = CombatConditionType.Disabled,
             DisplayName = "Disabled",
             ShortLabel = "DB",
-            Description = "At 0 HP: can take only one move or one standard action.",
-            StackingRule = ConditionStackingRule.Refresh,
-            MovementMultiplier = 1f
-        });
-
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Staggered,
-            DisplayName = "Staggered",
-            ShortLabel = "SG",
-            Description = "Nonlethal damage equals current HP: can take one move or one standard action each turn.",
+            Description = "At 0 HP: one move or one standard action each turn.",
             StackingRule = ConditionStackingRule.Refresh,
             MovementMultiplier = 1f
         });
@@ -383,7 +255,7 @@ public static class ConditionRules
             Type = CombatConditionType.Dying,
             DisplayName = "Dying",
             ShortLabel = "DY",
-            Description = "At -1 to -9 HP, unconscious and losing 1 HP each turn.",
+            Description = "At negative HP and losing life; unconscious/helpless.",
             StackingRule = ConditionStackingRule.Refresh,
             PreventsMovement = true,
             PreventsStandardActions = true,
@@ -391,71 +263,80 @@ public static class ConditionRules
             PreventsSpellcasting = true,
             PreventsAoO = true,
             PreventsThreatening = true,
-            MovementMultiplier = 0f
+            MovementMultiplier = 0f,
+            GrantsCombatAdvantage = true,
+            CoupDeGraceVulnerable = true
         });
 
         Add(new ConditionDefinition
         {
-            Type = CombatConditionType.Stable,
-            DisplayName = "Stable",
-            ShortLabel = "STB",
-            Description = "At negative HP, unconscious but no longer losing HP.",
-            StackingRule = ConditionStackingRule.Refresh,
-            PreventsMovement = true,
-            PreventsStandardActions = true,
-            PreventsFullRoundActions = true,
-            PreventsSpellcasting = true,
-            PreventsAoO = true,
-            PreventsThreatening = true,
-            MovementMultiplier = 0f
-        });
-        Add(new ConditionDefinition
-        {
-            Type = CombatConditionType.Prone,
-            DisplayName = "Prone",
-            ShortLabel = "PR",
-            Description = "Melee/ranged situational modifiers handled by attack resolution.",
-            StackingRule = ConditionStackingRule.Refresh,
+            Type = CombatConditionType.EnergyDrained,
+            DisplayName = "Energy Drained",
+            ShortLabel = "ED",
+            Description = "Negative levels weaken all checks and combat output.",
+            StackingRule = ConditionStackingRule.StackBySource,
+            AttackModifier = -1,
+            FortitudeModifier = -1,
+            ReflexModifier = -1,
+            WillModifier = -1,
+            SkillCheckModifier = -1,
+            AbilityCheckModifier = -1,
             MovementMultiplier = 1f
         });
 
         Add(new ConditionDefinition
         {
-            Type = CombatConditionType.Grappled,
-            DisplayName = "Grappled",
-            ShortLabel = "GR",
-            Description = "-4 attack, no attacks of opportunity, no threatened squares; normal movement actions are restricted, but grapple move uses half speed on success.",
+            Type = CombatConditionType.Entangled,
+            DisplayName = "Entangled",
+            ShortLabel = "EN",
+            Description = "-2 attack, -2 AC, half movement.",
             StackingRule = ConditionStackingRule.Refresh,
-            AttackModifier = -4,
-            PreventsAoO = true,
-            PreventsThreatening = true,
-            MovementMultiplier = 1f
+            AttackModifier = -2,
+            ArmorClassModifier = -2,
+            MovementMultiplier = 0.5f
         });
 
         Add(new ConditionDefinition
         {
-            Type = CombatConditionType.Pinned,
-            DisplayName = "Pinned",
-            ShortLabel = "PD",
-            Description = "Held immobile in a grapple (not helpless). Loses DEX to AC, takes -4 AC vs attackers other than the grappler, and can only attempt to escape.",
+            Type = CombatConditionType.Exhausted,
+            DisplayName = "Exhausted",
+            ShortLabel = "EX",
+            Description = "-6 STR/DEX equivalent penalties, half speed.",
             StackingRule = ConditionStackingRule.Refresh,
-            AttackModifier = -4,
-            PreventsMovement = true,
+            AttackModifier = -3,
+            ArmorClassModifier = -3,
+            SkillCheckModifier = -3,
+            AbilityCheckModifier = -3,
+            MovementMultiplier = 0.5f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Fascinated,
+            DisplayName = "Fascinated",
+            ShortLabel = "FA",
+            Description = "Pays attention to source and cannot take other actions.",
+            StackingRule = ConditionStackingRule.Refresh,
             PreventsStandardActions = true,
             PreventsFullRoundActions = true,
             PreventsSpellcasting = true,
             PreventsAoO = true,
             PreventsThreatening = true,
-            MovementMultiplier = 0f
+            MovementMultiplier = 0f,
+            PreventsMovement = true
         });
 
         Add(new ConditionDefinition
         {
-            Type = CombatConditionType.Invisible,
-            DisplayName = "Invisible",
-            ShortLabel = "IV",
-            Description = "Visibility benefits are mostly situational (stubbed for engine-wide handling).",
+            Type = CombatConditionType.Fatigued,
+            DisplayName = "Fatigued",
+            ShortLabel = "FT",
+            Description = "-2 STR/DEX equivalent penalties; cannot run or charge.",
             StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -1,
+            ArmorClassModifier = -1,
+            SkillCheckModifier = -1,
+            AbilityCheckModifier = -1,
             MovementMultiplier = 1f
         });
 
@@ -464,20 +345,320 @@ public static class ConditionRules
             Type = CombatConditionType.FlatFooted,
             DisplayName = "Flat-Footed",
             ShortLabel = "FF",
-            Description = "Cannot use DEX to AC (stubbed via AC adjustment approximation).",
+            Description = "Denied DEX to AC and cannot make AoOs.",
             StackingRule = ConditionStackingRule.Refresh,
             ArmorClassModifier = -2,
+            DeniesDexToAc = true,
             PreventsAoO = true,
+            MovementMultiplier = 1f,
+            GrantsCombatAdvantage = true
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Frightened,
+            DisplayName = "Frightened",
+            ShortLabel = "FR",
+            Description = "-2 attacks/saves/checks; generally flees from source.",
+            StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -2,
+            FortitudeModifier = -2,
+            ReflexModifier = -2,
+            WillModifier = -2,
+            SkillCheckModifier = -2,
+            IsFearCondition = true,
             MovementMultiplier = 1f
         });
 
-        // ===== Prototype-specific existing tactical states =====
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Grappled,
+            DisplayName = "Grappled",
+            ShortLabel = "GR",
+            Description = "-4 attack, no AoOs, no threatened squares, restricted actions.",
+            StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -4,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            SkillCheckModifier = -2,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Helpless,
+            DisplayName = "Helpless",
+            ShortLabel = "HP",
+            Description = "Cannot defend, move, or act; vulnerable to coup de grace.",
+            StackingRule = ConditionStackingRule.Refresh,
+            ArmorClassModifier = -4,
+            DeniesDexToAc = true,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f,
+            GrantsCombatAdvantage = true,
+            CoupDeGraceVulnerable = true
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Incorporeal,
+            DisplayName = "Incorporeal",
+            ShortLabel = "IC",
+            Description = "No physical body; special interaction with mundane attacks.",
+            StackingRule = ConditionStackingRule.Refresh,
+            ArmorClassModifier = 2,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Invisible,
+            DisplayName = "Invisible",
+            ShortLabel = "IV",
+            Description = "Visibility-based combat advantages and concealment.",
+            StackingRule = ConditionStackingRule.Refresh,
+            ArmorClassModifier = 2,
+            MovementMultiplier = 1f,
+            GrantsCombatAdvantage = true
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Nauseated,
+            DisplayName = "Nauseated",
+            ShortLabel = "NA",
+            Description = "Only a single move action allowed; no attacks or spellcasting.",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Panicked,
+            DisplayName = "Panicked",
+            ShortLabel = "PN",
+            Description = "Severe fear, drops items and flees; cannot attack or cast.",
+            StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -2,
+            FortitudeModifier = -2,
+            ReflexModifier = -2,
+            WillModifier = -2,
+            SkillCheckModifier = -2,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            IsFearCondition = true,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Paralyzed,
+            DisplayName = "Paralyzed",
+            ShortLabel = "PA",
+            Description = "Frozen and helpless; cannot move or act.",
+            StackingRule = ConditionStackingRule.Refresh,
+            DeniesDexToAc = true,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f,
+            GrantsCombatAdvantage = true,
+            CoupDeGraceVulnerable = true
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Petrified,
+            DisplayName = "Petrified",
+            ShortLabel = "PT",
+            Description = "Turned to stone; inert and helpless.",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f,
+            GrantsCombatAdvantage = true,
+            CoupDeGraceVulnerable = true
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Pinned,
+            DisplayName = "Pinned",
+            ShortLabel = "PD",
+            Description = "Immobilized in grapple; can usually only attempt escape.",
+            StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -4,
+            ArmorClassModifier = -4,
+            DeniesDexToAc = true,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f,
+            GrantsCombatAdvantage = true
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Prone,
+            DisplayName = "Prone",
+            ShortLabel = "PR",
+            Description = "Grounded; melee/ranged modifiers handled in attack resolution.",
+            StackingRule = ConditionStackingRule.Refresh,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Shaken,
+            DisplayName = "Shaken",
+            ShortLabel = "SH",
+            Description = "-2 attack, saves, and checks.",
+            StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -2,
+            FortitudeModifier = -2,
+            ReflexModifier = -2,
+            WillModifier = -2,
+            SkillCheckModifier = -2,
+            IsFearCondition = true,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Sickened,
+            DisplayName = "Sickened",
+            ShortLabel = "SI",
+            Description = "-2 attack, saves, checks, and damage-equivalent pressure.",
+            StackingRule = ConditionStackingRule.Refresh,
+            AttackModifier = -2,
+            FortitudeModifier = -2,
+            ReflexModifier = -2,
+            WillModifier = -2,
+            SkillCheckModifier = -2,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Stable,
+            DisplayName = "Stable",
+            ShortLabel = "STB",
+            Description = "At negative HP but no longer losing HP; unconscious.",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f,
+            GrantsCombatAdvantage = true,
+            CoupDeGraceVulnerable = true
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Staggered,
+            DisplayName = "Staggered",
+            ShortLabel = "SG",
+            Description = "Only one move action or one standard action each turn.",
+            StackingRule = ConditionStackingRule.Refresh,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Stunned,
+            DisplayName = "Stunned",
+            ShortLabel = "ST",
+            Description = "Drops held items, loses DEX to AC, cannot act.",
+            StackingRule = ConditionStackingRule.Refresh,
+            ArmorClassModifier = -2,
+            DeniesDexToAc = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 1f,
+            GrantsCombatAdvantage = true
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Turned,
+            DisplayName = "Turned",
+            ShortLabel = "TU",
+            Description = "Repelled by divine power; must flee and cannot take offensive actions.",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            IsFearCondition = true,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Unconscious,
+            DisplayName = "Unconscious",
+            ShortLabel = "UC",
+            Description = "Unaware and helpless.",
+            StackingRule = ConditionStackingRule.Refresh,
+            DeniesDexToAc = true,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f,
+            GrantsCombatAdvantage = true,
+            CoupDeGraceVulnerable = true
+        });
+
+        // Existing project-specific states retained.
+        Add(new ConditionDefinition
+        {
+            Type = CombatConditionType.Poisoned,
+            DisplayName = "Poisoned",
+            ShortLabel = "PO",
+            Description = "Afflicted by poison; exact penalties depend on poison source.",
+            StackingRule = ConditionStackingRule.StackBySource,
+            MovementMultiplier = 1f
+        });
+
         Add(new ConditionDefinition
         {
             Type = CombatConditionType.Disarmed,
             DisplayName = "Disarmed",
             ShortLabel = "DS",
-            Description = "Weapon unavailable; attack penalty approximated.",
+            Description = "Primary weapon lost.",
             StackingRule = ConditionStackingRule.Refresh,
             AttackModifier = -4,
             MovementMultiplier = 1f
@@ -488,10 +669,11 @@ public static class ConditionRules
             Type = CombatConditionType.Feinted,
             DisplayName = "Feinted",
             ShortLabel = "FE",
-            Description = "Legacy marker for feint state (no direct AC modifier; handled by feint attack logic).",
+            Description = "Temporary DEX-denial marker from feint action.",
             StackingRule = ConditionStackingRule.Refresh,
-            ArmorClassModifier = 0,
-            MovementMultiplier = 1f
+            MovementMultiplier = 1f,
+            DeniesDexToAc = true,
+            GrantsCombatAdvantage = true
         });
 
         Add(new ConditionDefinition
@@ -499,7 +681,7 @@ public static class ConditionRules
             Type = CombatConditionType.ChargePenalty,
             DisplayName = "Charge Penalty",
             ShortLabel = "CH",
-            Description = "-2 AC until start of next turn.",
+            Description = "-2 AC until next turn start.",
             StackingRule = ConditionStackingRule.Refresh,
             ArmorClassModifier = -2,
             MovementMultiplier = 1f
@@ -510,10 +692,11 @@ public static class ConditionRules
             Type = CombatConditionType.Flanked,
             DisplayName = "Flanked",
             ShortLabel = "FL",
-            Description = "Tactical state; enemies gain flanking bonuses.",
+            Description = "Enemies gain flanking bonuses.",
             StackingRule = ConditionStackingRule.Refresh,
             ArmorClassModifier = -2,
-            MovementMultiplier = 1f
+            MovementMultiplier = 1f,
+            GrantsCombatAdvantage = true
         });
 
         Add(new ConditionDefinition
@@ -521,14 +704,14 @@ public static class ConditionRules
             Type = CombatConditionType.LostShieldAC,
             DisplayName = "Lost Shield AC",
             ShortLabel = "LS",
-            Description = "Shield bash used without Improved Shield Bash; shield bonus to AC is lost until your next turn.",
+            Description = "Shield bonus temporarily lost after shield bash.",
             StackingRule = ConditionStackingRule.Refresh,
-            ArmorClassModifier = 0,
             MovementMultiplier = 1f
         });
 
-        // Compatibility alias (normalized to Prone)
+        // Compatibility aliases.
         map[CombatConditionType.KnockedDown] = map[CombatConditionType.Prone].CloneFor(CombatConditionType.KnockedDown);
+        map[CombatConditionType.Grappling] = map[CombatConditionType.Grappled].CloneFor(CombatConditionType.Grappling);
 
         return map;
     }
@@ -539,6 +722,8 @@ public static class ConditionRules
         {
             case CombatConditionType.KnockedDown:
                 return CombatConditionType.Prone;
+            case CombatConditionType.Grappling:
+                return CombatConditionType.Grappled;
             default:
                 return type;
         }
@@ -547,15 +732,21 @@ public static class ConditionRules
     public static ConditionDefinition GetDefinition(CombatConditionType type)
     {
         type = Normalize(type);
-        if (Definitions.TryGetValue(type, out var definition))
+        if (Definitions.TryGetValue(type, out ConditionDefinition definition))
             return definition;
 
         return Definitions[CombatConditionType.None];
     }
+
+    public static bool IsHelplessLike(CombatConditionType type)
+    {
+        ConditionDefinition def = GetDefinition(type);
+        return def.CoupDeGraceVulnerable || Normalize(type) == CombatConditionType.Helpless;
+    }
 }
 
 /// <summary>
-/// Core non-spell combat condition effect entry.
+/// Core condition effect entry.
 /// </summary>
 [Serializable]
 public class StatusEffect
@@ -593,50 +784,6 @@ public class StatusEffect
         var def = ConditionRules.GetDefinition(Type);
         return $"{def.DisplayName}({GetDurationLabel()})";
     }
-}
-
-public enum CombatConditionType
-{
-    None = 0,
-
-    // PHB-style conditions
-    Blinded,
-    Dazzled,
-    Deafened,
-    Entangled,
-    Fatigued,
-    Exhausted,
-    Shaken,
-    Frightened,
-    Panicked,
-    Turned,
-    Sickened,
-    Poisoned,
-    Nauseated,
-    Dazed,
-    Stunned,
-    Paralyzed,
-    Helpless,
-    Unconscious,
-    Disabled,
-    Staggered,
-    Dying,
-    Stable,
-    Prone,
-    Grappled,
-    Pinned,
-    Invisible,
-    FlatFooted,
-
-    // Prototype tactical / legacy conditions
-    Disarmed,
-    Feinted,
-    ChargePenalty,
-    Flanked,
-    LostShieldAC,
-
-    // Normalized alias
-    KnockedDown
 }
 
 /// <summary>

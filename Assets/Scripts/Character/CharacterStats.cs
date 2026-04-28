@@ -534,6 +534,8 @@ public class CharacterStats
             return;
         }
 
+        // Refresh semantics: latest applier becomes the active source label.
+        existing.SourceName = sourceName;
         RefreshConditionDuration(existing, rounds);
     }
 
@@ -2784,18 +2786,30 @@ public class CharacterStats
         return true;
     }
 
-    private static bool IsDazzledSightBasedSkill(string skillName)
-    {
-        return string.Equals(skillName, "Spot", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(skillName, "Search", StringComparison.OrdinalIgnoreCase);
-    }
-
     public int GetConditionSkillModifier(string skillName)
     {
-        if (!IsDazzledSightBasedSkill(skillName))
-            return 0;
+        int total = 0;
 
-        return HasNormalizedCondition(CombatConditionType.Dazzled) ? -1 : 0;
+        for (int i = 0; i < ActiveConditions.Count; i++)
+        {
+            StatusEffect active = ActiveConditions[i];
+            if (active == null)
+                continue;
+
+            ConditionDefinition def = ConditionRules.GetDefinition(active.Type);
+            total += def.SkillCheckModifier;
+
+            // Dazzled explicitly applies only to sight-based checks by SRD text.
+            if (ConditionRules.Normalize(active.Type) == CombatConditionType.Dazzled)
+            {
+                bool sightBased = string.Equals(skillName, "Spot", System.StringComparison.OrdinalIgnoreCase)
+                                  || string.Equals(skillName, "Search", System.StringComparison.OrdinalIgnoreCase);
+                if (!sightBased)
+                    total -= def.SkillCheckModifier;
+            }
+        }
+
+        return total;
     }
 
     /// <summary>

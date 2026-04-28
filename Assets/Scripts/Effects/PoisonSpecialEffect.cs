@@ -73,7 +73,7 @@ public class PoisonSpecialEffect
             case PoisonEffectType.Nausea:
                 return CombatConditionType.Nauseated;
             case PoisonEffectType.Confusion:
-                return CombatConditionType.Dazed;
+                return CombatConditionType.Confused;
             case PoisonEffectType.Blindness:
                 return CombatConditionType.Blinded;
             case PoisonEffectType.Deafness:
@@ -81,7 +81,7 @@ public class PoisonSpecialEffect
             case PoisonEffectType.Exhaustion:
                 return CombatConditionType.Exhausted;
             case PoisonEffectType.Petrification:
-                return CombatConditionType.Helpless;
+                return CombatConditionType.Petrified;
             default:
                 return CombatConditionType.None;
         }
