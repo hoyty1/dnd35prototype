@@ -37,6 +37,12 @@ public static class NPCDatabase
         RegisterDireBear();
         RegisterWolfPackHunter();
         RegisterSummonMonsterBaseCreatures();
+
+        // Monster Manual creature coverage (these intentionally override summon alias IDs such as dog/owl/raven).
+        RegisterMonsterManualAnimals();
+        RegisterMonsterManualVermin();
+        RegisterMonsterManualVipers();
+
         RegisterFiendishWolf();
         RegisterFiendishDireBear();
         RegisterHumanPaladin();
@@ -102,6 +108,7 @@ public static class NPCDatabase
             new EncounterPreset("true_strike_test", "🎯 True Strike Test", "Focused True Strike validation (next attack +20 insight, concealment bypass, expiration timing) using the wizard spell test setup.", new List<string> { "target_dummy" }),
             new EncounterPreset("wizard_spell_test", "📘 Wizard Spell Test", "Single wizard scenario with every implemented wizard spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("cleric_spell_test", "📖 Cleric Spell Test", "Single cleric scenario with every implemented cleric spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
+            new EncounterPreset("creature_showcase", "🕷️ Creature Showcase - Animals & Vermin", "Showcase encounter covering newly implemented Monster Manual animals, vermin, and viper variants.", new List<string> { "dog", "owl", "badger", "monkey", "dire_rat", "raven", "hawk", "giant_fire_beetle", "monstrous_centipede_medium", "monstrous_scorpion_medium", "monstrous_spider_medium", "viper_medium" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
             new EncounterPreset("undead_ambush", "Undead Ambush", "Ranged pressure from skeletons with melee support.", new List<string> { "skeleton_archer", "skeleton_archer", "orc_berserker" }),
             new EncounterPreset("wolf_pack", "Wolf Pack", "Fast-moving animals that try to surround and trip.", new List<string> { "dire_wolf", "wolf_pack_hunter", "wolf_pack_hunter" }),
@@ -1434,6 +1441,644 @@ public static class NPCDatabase
             PanelColor = new Color(0.2f, 0.23f, 0.1f, 0.85f),
             NameColor = new Color(0.9f, 0.95f, 0.74f),
             Description = "Summon Monster baseline constrictor snake."
+        });
+    }
+
+    private static void RegisterMonsterManualAnimals()
+    {
+        RegisterDog();
+        RegisterOwl();
+        RegisterBadger();
+        RegisterMonkey();
+        RegisterDireRat();
+        RegisterRaven();
+        RegisterHawk();
+    }
+
+    private static void RegisterMonsterManualVermin()
+    {
+        RegisterGiantFireBeetle();
+        RegisterMonstrousCentipedes();
+        RegisterMonstrousScorpions();
+        RegisterMonstrousSpiders();
+    }
+
+    private static void RegisterMonsterManualVipers()
+    {
+        RegisterViperTiny();
+        RegisterViperSmall();
+        RegisterViperMedium();
+        RegisterViperLarge();
+        RegisterViperHuge();
+    }
+
+    private static void RegisterDog()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "dog",
+            Name = "Dog",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 13, DEX = 17, CON = 15, WIS = 12, INT = 2, CHA = 6,
+            NaturalArmorBonus = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 6,
+            CreatureTags = new List<string> { "Animal", "MM35" },
+            Feats = new List<string> { "Alertness", "Track" },
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Scent", "Skills: Jump +8, Listen +5, Spot +5, Survival +1" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.84f, 0.72f, 0.56f, 1f),
+            PanelColor = new Color(0.22f, 0.15f, 0.1f, 0.85f),
+            NameColor = new Color(0.98f, 0.9f, 0.8f),
+            Description = "Monster Manual dog. Fast Small animal with scent and tracking-focused skill spread."
+        });
+    }
+
+    private static void RegisterOwl()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "owl",
+            Name = "Owl",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Tiny,
+            IsTallCreature = false,
+            STR = 4, DEX = 17, CON = 10, WIS = 14, INT = 2, CHA = 4,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Talons", DamageDice = 2, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 2,
+            BaseHitDieHP = 2,
+            CreatureTags = new List<string> { "Animal", "MM35", "Fly" },
+            Feats = new List<string> { "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Low-light vision", "Fly 40 ft (average)", "Skills: Listen +14, Move Silently +17, Spot +6" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.76f, 0.7f, 0.6f, 1f),
+            PanelColor = new Color(0.2f, 0.16f, 0.12f, 0.85f),
+            NameColor = new Color(0.94f, 0.9f, 0.84f),
+            Description = "Monster Manual owl. Tiny aerial hunter with keen senses and low-light vision."
+        });
+    }
+
+    private static void RegisterBadger()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "badger",
+            Name = "Badger",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 8, DEX = 17, CON = 15, WIS = 12, INT = 2, CHA = 6,
+            NaturalArmorBonus = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 2, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 6,
+            CreatureTags = new List<string> { "Animal", "MM35", "Burrow" },
+            Feats = new List<string> { "Weapon Finesse", "Track" },
+            SpecialAbilities = new List<string> { "Rage (as barbarian)", "Burrow 10 ft", "Skills: Escape Artist +7, Listen +3, Spot +3" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.62f, 0.55f, 0.52f, 1f),
+            PanelColor = new Color(0.22f, 0.19f, 0.18f, 0.85f),
+            NameColor = new Color(0.93f, 0.9f, 0.9f),
+            Description = "Monster Manual badger. Tunnel-capable skirmisher with claw/claw/bite routine and rage trait."
+        });
+    }
+
+    private static void RegisterMonkey()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "monkey",
+            Name = "Monkey",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Tiny,
+            IsTallCreature = false,
+            STR = 3, DEX = 15, CON = 10, WIS = 12, INT = 2, CHA = 5,
+            NaturalArmorBonus = 0,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 4,
+            CreatureTags = new List<string> { "Animal", "MM35", "Climb" },
+            Feats = new List<string> { "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Climb 30 ft", "Skills: Balance +10, Climb +10, Hide +10, Listen +3, Spot +3" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.72f, 0.62f, 0.48f, 1f),
+            PanelColor = new Color(0.22f, 0.16f, 0.1f, 0.85f),
+            NameColor = new Color(0.95f, 0.88f, 0.76f),
+            Description = "Monster Manual monkey. Tiny climber with agile bite and strong movement utility."
+        });
+    }
+
+    private static void RegisterDireRat()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "dire_rat",
+            Name = "Dire Rat",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 10, DEX = 17, CON = 12, WIS = 12, INT = 1, CHA = 4,
+            NaturalArmorBonus = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 5,
+            CreatureTags = new List<string> { "Animal", "MM35" },
+            Feats = new List<string> { "Alertness", "Weapon Finesse" },
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Disease (Filth Fever)", "Scent", "Climb 20 ft", "Skills: Climb +11, Hide +8, Listen +4, Move Silently +4, Spot +4, Swim +11" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.55f, 0.55f, 0.57f, 1f),
+            PanelColor = new Color(0.18f, 0.18f, 0.2f, 0.85f),
+            NameColor = new Color(0.88f, 0.88f, 0.92f),
+            Description = "Monster Manual dire rat. Fast Small disease carrier with scent and exceptional climb/swim mobility."
+        });
+    }
+
+    private static void RegisterRaven()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "raven",
+            Name = "Raven",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Tiny,
+            IsTallCreature = false,
+            STR = 1, DEX = 15, CON = 10, WIS = 14, INT = 2, CHA = 6,
+            NaturalArmorBonus = 0,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claws", DamageDice = 2, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 2,
+            BaseHitDieHP = 2,
+            CreatureTags = new List<string> { "Animal", "MM35", "Fly" },
+            Feats = new List<string> { "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Fly 40 ft (average)", "Skills: Listen +3, Spot +5" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.24f, 0.24f, 0.28f, 1f),
+            PanelColor = new Color(0.1f, 0.1f, 0.14f, 0.85f),
+            NameColor = new Color(0.84f, 0.84f, 0.9f),
+            Description = "Monster Manual raven. Tiny aerial scavenger with agile claws and perceptive vision."
+        });
+    }
+
+    private static void RegisterHawk()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "hawk",
+            Name = "Hawk",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Tiny,
+            IsTallCreature = false,
+            STR = 4, DEX = 17, CON = 10, WIS = 14, INT = 2, CHA = 6,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Talons", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 2,
+            BaseHitDieHP = 4,
+            CreatureTags = new List<string> { "Animal", "MM35", "Fly" },
+            Feats = new List<string> { "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Fly 60 ft (average)", "Skills: Listen +2, Spot +14" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.62f, 0.52f, 0.38f, 1f),
+            PanelColor = new Color(0.2f, 0.14f, 0.1f, 0.85f),
+            NameColor = new Color(0.95f, 0.86f, 0.72f),
+            Description = "Monster Manual hawk. Tiny raptor with high-accuracy talons and exceptional spotting capability."
+        });
+    }
+
+    private static void RegisterGiantFireBeetle()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "giant_fire_beetle",
+            Name = "Giant Fire Beetle",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Vermin",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 10, DEX = 11, CON = 11, WIS = 10, INT = 1, CHA = 7,
+            NaturalArmorBonus = 5,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 2, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 4,
+            CreatureTags = new List<string> { "Vermin", "MM35" },
+            SpecialAbilities = new List<string> { "Light Glands (10-ft radius red glow)", "Darkvision 60 ft", "Vermin traits", "Mindless" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.75f, 0.38f, 0.2f, 1f),
+            PanelColor = new Color(0.25f, 0.1f, 0.08f, 0.85f),
+            NameColor = new Color(1f, 0.78f, 0.64f),
+            Description = "Monster Manual giant fire beetle. Small vermin with hard shell, strong bite, and bioluminescent glands."
+        });
+    }
+
+    private static void RegisterMonstrousCentipedes()
+    {
+        RegisterMonstrousCentipedeVariant("monstrous_centipede_tiny", "Monstrous Centipede (Tiny)", 1, SizeCategory.Tiny, 1, 15, 10, 3, 1, 20, 1, 3, 10, "1 Dex", "1 Dex");
+        RegisterMonstrousCentipedeVariant("monstrous_centipede_small", "Monstrous Centipede (Small)", 1, SizeCategory.Small, 2, 15, 10, 5, 1, 30, 1, 4, 10, "1d2 Dex", "1d2 Dex");
+        RegisterMonstrousCentipedeVariant("monstrous_centipede_medium", "Monstrous Centipede (Medium)", 1, SizeCategory.Medium, 4, 15, 10, 9, 2, 40, 1, 6, 10, "1d3 Dex", "1d3 Dex");
+        RegisterMonstrousCentipedeVariant("monstrous_centipede_large", "Monstrous Centipede (Large)", 3, SizeCategory.Large, 13, 15, 10, 13, 3, 40, 1, 8, 11, "1d4 Dex", "1d4 Dex");
+        RegisterMonstrousCentipedeVariant("monstrous_centipede_huge", "Monstrous Centipede (Huge)", 6, SizeCategory.Huge, 33, 15, 12, 17, 6, 40, 2, 6, 14, "1d6 Dex", "1d6 Dex");
+        RegisterMonstrousCentipedeVariant("monstrous_centipede_gargantuan", "Monstrous Centipede (Gargantuan)", 12, SizeCategory.Gargantuan, 66, 15, 12, 23, 10, 40, 2, 8, 17, "1d8 Dex", "1d8 Dex");
+        RegisterMonstrousCentipedeVariant("monstrous_centipede_colossal", "Monstrous Centipede (Colossal)", 24, SizeCategory.Colossal, 132, 13, 12, 27, 16, 40, 4, 6, 23, "2d6 Dex", "2d6 Dex");
+    }
+
+    private static void RegisterMonstrousCentipedeVariant(string id, string name, int hitDice, SizeCategory size, int hp, int dex, int con, int str, int naturalArmor, int speed, int damageCount, int damageDice, int poisonDc, string poisonInitial, string poisonSecondary)
+    {
+        Register(new NPCDefinition
+        {
+            Id = id,
+            Name = name,
+            Level = Mathf.Max(1, hitDice),
+            CharacterClass = "Warrior",
+            CreatureType = "Vermin",
+            HitDice = Mathf.Max(1, hitDice),
+            SizeCategory = size,
+            IsTallCreature = false,
+            STR = str, DEX = dex, CON = con, WIS = 10, INT = 1, CHA = 2,
+            NaturalArmorBonus = naturalArmor,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = damageDice, DamageCount = damageCount, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = speed / 5,
+            BaseHitDieHP = hp,
+            CreatureTags = new List<string> { "Vermin", "MM35" },
+            Feats = new List<string> { "Weapon Finesse" },
+            SpecialAbilities = new List<string>
+            {
+                $"Poison (Fort DC {poisonDc}; initial {poisonInitial}; secondary {poisonSecondary})",
+                "Climb speed equals land speed",
+                "Darkvision 60 ft",
+                "Vermin traits",
+                "Mindless"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.68f, 0.2f, 0.16f, 1f),
+            PanelColor = new Color(0.22f, 0.08f, 0.07f, 0.85f),
+            NameColor = new Color(0.96f, 0.78f, 0.74f),
+            Description = $"Monster Manual {name.ToLowerInvariant()}. Poisonous vermin striker with climb mobility and vermin immunities."
+        });
+    }
+
+    private static void RegisterMonstrousScorpions()
+    {
+        RegisterMonstrousScorpionVariant("monstrous_scorpion_tiny", "Monstrous Scorpion (Tiny)", 1, SizeCategory.Tiny, 4, 10, 14, 3, 2, 20, 1, 2, 1, 2, 12, "1 Con", "1 Con");
+        RegisterMonstrousScorpionVariant("monstrous_scorpion_small", "Monstrous Scorpion (Small)", 1, SizeCategory.Small, 6, 10, 14, 9, 3, 30, 1, 3, 1, 3, 12, "1d2 Con", "1d2 Con");
+        RegisterMonstrousScorpionVariant("monstrous_scorpion_medium", "Monstrous Scorpion (Medium)", 2, SizeCategory.Medium, 13, 10, 14, 13, 4, 40, 1, 4, 1, 4, 13, "1d3 Con", "1d3 Con");
+        RegisterMonstrousScorpionVariant("monstrous_scorpion_large", "Monstrous Scorpion (Large)", 5, SizeCategory.Large, 32, 10, 14, 19, 7, 50, 1, 6, 1, 6, 14, "1d4 Con", "1d4 Con");
+        RegisterMonstrousScorpionVariant("monstrous_scorpion_huge", "Monstrous Scorpion (Huge)", 10, SizeCategory.Huge, 75, 10, 16, 23, 12, 50, 2, 4, 1, 8, 18, "1d6 Con", "1d6 Con");
+        RegisterMonstrousScorpionVariant("monstrous_scorpion_gargantuan", "Monstrous Scorpion (Gargantuan)", 20, SizeCategory.Gargantuan, 150, 10, 16, 31, 18, 50, 2, 6, 2, 6, 23, "1d8 Con", "1d8 Con");
+        RegisterMonstrousScorpionVariant("monstrous_scorpion_colossal", "Monstrous Scorpion (Colossal)", 40, SizeCategory.Colossal, 300, 8, 16, 35, 25, 50, 2, 8, 2, 8, 33, "1d10 Con", "1d10 Con");
+    }
+
+    private static void RegisterMonstrousScorpionVariant(string id, string name, int hitDice, SizeCategory size, int hp, int dex, int con, int str, int naturalArmor, int speed, int stingDamageCount, int stingDamageDice, int clawDamageCount, int clawDamageDice, int poisonDc, string poisonInitial, string poisonSecondary)
+    {
+        Register(new NPCDefinition
+        {
+            Id = id,
+            Name = name,
+            Level = Mathf.Max(1, hitDice),
+            CharacterClass = "Warrior",
+            CreatureType = "Vermin",
+            HitDice = Mathf.Max(1, hitDice),
+            SizeCategory = size,
+            IsTallCreature = false,
+            STR = str, DEX = dex, CON = con, WIS = 10, INT = 1, CHA = 2,
+            NaturalArmorBonus = naturalArmor,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = clawDamageDice, DamageCount = clawDamageCount, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Sting", DamageDice = stingDamageDice, DamageCount = stingDamageCount, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = speed / 5,
+            BaseHitDieHP = hp,
+            CreatureTags = new List<string> { "Vermin", "MM35" },
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Claw",
+            SpecialAbilities = new List<string>
+            {
+                $"Poison (Fort DC {poisonDc}; initial {poisonInitial}; secondary {poisonSecondary})",
+                "Constrict",
+                "Improved Grab (claw)",
+                "Darkvision 60 ft",
+                "Tremorsense 60 ft",
+                "Vermin traits",
+                "Mindless"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.58f, 0.34f, 0.22f, 1f),
+            PanelColor = new Color(0.2f, 0.12f, 0.08f, 0.85f),
+            NameColor = new Color(0.94f, 0.82f, 0.72f),
+            Description = $"Monster Manual {name.ToLowerInvariant()}. Armored vermin with pincer grab into venomous sting pressure."
+        });
+    }
+
+    private static void RegisterMonstrousSpiders()
+    {
+        RegisterMonstrousSpiderVariant("monstrous_spider_tiny", "Monstrous Spider (Tiny)", 1, SizeCategory.Tiny, 2, 17, 10, 3, 0, 20, 1, 3, 10, "1d2 Str", "1d2 Str", 10);
+        RegisterMonstrousSpiderVariant("monstrous_spider_small", "Monstrous Spider (Small)", 1, SizeCategory.Small, 4, 17, 10, 7, 0, 30, 1, 4, 10, "1d3 Str", "1d3 Str", 10);
+        RegisterMonstrousSpiderVariant("monstrous_spider_medium", "Monstrous Spider (Medium)", 2, SizeCategory.Medium, 11, 17, 12, 11, 1, 30, 1, 6, 12, "1d4 Str", "1d4 Str", 12);
+        RegisterMonstrousSpiderVariant("monstrous_spider_large", "Monstrous Spider (Large)", 4, SizeCategory.Large, 22, 17, 12, 15, 2, 30, 1, 8, 13, "1d6 Str", "1d6 Str", 13);
+        RegisterMonstrousSpiderVariant("monstrous_spider_huge", "Monstrous Spider (Huge)", 8, SizeCategory.Huge, 52, 17, 14, 19, 5, 30, 2, 6, 16, "1d8 Str", "1d8 Str", 16);
+        RegisterMonstrousSpiderVariant("monstrous_spider_gargantuan", "Monstrous Spider (Gargantuan)", 16, SizeCategory.Gargantuan, 104, 17, 14, 25, 10, 30, 2, 8, 20, "2d6 Str", "2d6 Str", 20);
+        RegisterMonstrousSpiderVariant("monstrous_spider_colossal", "Monstrous Spider (Colossal)", 32, SizeCategory.Colossal, 208, 15, 14, 31, 18, 30, 4, 6, 28, "2d8 Str", "2d8 Str", 28);
+    }
+
+    private static void RegisterMonstrousSpiderVariant(string id, string name, int hitDice, SizeCategory size, int hp, int dex, int con, int str, int naturalArmor, int speed, int damageCount, int damageDice, int poisonDc, string poisonInitial, string poisonSecondary, int webDc)
+    {
+        Register(new NPCDefinition
+        {
+            Id = id,
+            Name = name,
+            Level = Mathf.Max(1, hitDice),
+            CharacterClass = "Warrior",
+            CreatureType = "Vermin",
+            HitDice = Mathf.Max(1, hitDice),
+            SizeCategory = size,
+            IsTallCreature = false,
+            STR = str, DEX = dex, CON = con, WIS = 10, INT = 1, CHA = 2,
+            NaturalArmorBonus = naturalArmor,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = damageDice, DamageCount = damageCount, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = speed / 5,
+            BaseHitDieHP = hp,
+            CreatureTags = new List<string> { "Vermin", "MM35" },
+            SpecialAbilities = new List<string>
+            {
+                $"Poison (Fort DC {poisonDc}; initial {poisonInitial}; secondary {poisonSecondary})",
+                $"Web (Escape Artist/Strength DC {webDc})",
+                "Tremorsense 60 ft",
+                "Darkvision 60 ft",
+                "Vermin traits",
+                "Mindless"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.22f, 0.22f, 0.22f, 1f),
+            PanelColor = new Color(0.1f, 0.1f, 0.1f, 0.85f),
+            NameColor = new Color(0.86f, 0.86f, 0.9f),
+            Description = $"Monster Manual {name.ToLowerInvariant()}. Web-spinning ambush vermin with toxic bite and tremorsense."
+        });
+    }
+
+    private static void RegisterViperTiny()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "viper_tiny",
+            Name = "Viper (Tiny)",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Tiny,
+            IsTallCreature = false,
+            STR = 4, DEX = 17, CON = 11, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 2, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.None, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 3,
+            BaseHitDieHP = 1,
+            CreatureTags = new List<string> { "Animal", "MM35", "Snake" },
+            Feats = new List<string> { "Improved Initiative", "Weapon Finesse" },
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Poison (Fort DC 10; initial 1d6 Con; secondary 1d6 Con)", "Climb 15 ft", "Swim 15 ft", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.42f, 0.72f, 0.34f, 1f),
+            PanelColor = new Color(0.14f, 0.24f, 0.11f, 0.85f),
+            NameColor = new Color(0.84f, 0.94f, 0.8f),
+            Description = "Monster Manual tiny viper. Venomous familiar-scale snake with scent and mixed movement modes."
+        });
+    }
+
+    private static void RegisterViperSmall()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "viper_small",
+            Name = "Viper (Small)",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 6, DEX = 17, CON = 11, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 2, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 4,
+            BaseHitDieHP = 4,
+            CreatureTags = new List<string> { "Animal", "MM35", "Snake" },
+            Feats = new List<string> { "Improved Initiative", "Weapon Finesse" },
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Poison (Fort DC 10; initial 1d6 Con; secondary 1d6 Con)", "Climb 20 ft", "Swim 20 ft", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.38f, 0.68f, 0.3f, 1f),
+            PanelColor = new Color(0.12f, 0.21f, 0.1f, 0.85f),
+            NameColor = new Color(0.82f, 0.92f, 0.78f),
+            Description = "Monster Manual small viper. Agile poisonous snake with scent and climbing/swimming mobility."
+        });
+    }
+
+    private static void RegisterViperMedium()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "viper_medium",
+            Name = "Viper (Medium)",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 2,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 8, DEX = 17, CON = 11, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 4,
+            BaseHitDieHP = 9,
+            CreatureTags = new List<string> { "Animal", "MM35", "Snake" },
+            Feats = new List<string> { "Weapon Finesse" },
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Poison (Fort DC 11; initial 1d6 Con; secondary 1d6 Con)", "Climb 20 ft", "Swim 20 ft", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.36f, 0.64f, 0.27f, 1f),
+            PanelColor = new Color(0.11f, 0.19f, 0.09f, 0.85f),
+            NameColor = new Color(0.8f, 0.9f, 0.76f),
+            Description = "Monster Manual medium viper. Core serpent baseline for poison-focused animal encounters."
+        });
+    }
+
+    private static void RegisterViperLarge()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "viper_large",
+            Name = "Viper (Large)",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 10, DEX = 17, CON = 11, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 4,
+            BaseHitDieHP = 13,
+            CreatureTags = new List<string> { "Animal", "MM35", "Snake" },
+            Feats = new List<string> { "Improved Initiative", "Weapon Finesse" },
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Poison (Fort DC 11; initial 1d6 Con; secondary 1d6 Con)", "Climb 20 ft", "Swim 20 ft", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.34f, 0.6f, 0.25f, 1f),
+            PanelColor = new Color(0.1f, 0.18f, 0.08f, 0.85f),
+            NameColor = new Color(0.78f, 0.88f, 0.72f),
+            Description = "Monster Manual large viper. Broad-bodied venomous snake suited for mid-tier wilderness fights."
+        });
+    }
+
+    private static void RegisterViperHuge()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "viper_huge",
+            Name = "Viper (Huge)",
+            Level = 6,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 6,
+            SizeCategory = SizeCategory.Huge,
+            IsTallCreature = false,
+            STR = 16, DEX = 15, CON = 13, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 5,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 4,
+            BaseHitDieHP = 33,
+            CreatureTags = new List<string> { "Animal", "MM35", "Snake" },
+            Feats = new List<string> { "Improved Initiative", "Run", "Weapon Focus" },
+            WeaponFocusChoice = "Bite",
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Poison (Fort DC 14; initial 1d6 Con; secondary 1d6 Con)", "Climb 20 ft", "Swim 20 ft", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.3f, 0.54f, 0.22f, 1f),
+            PanelColor = new Color(0.09f, 0.16f, 0.07f, 0.85f),
+            NameColor = new Color(0.76f, 0.86f, 0.7f),
+            Description = "Monster Manual huge viper. High-HD giant serpent with potent Constitution poison and long reach."
         });
     }
 
