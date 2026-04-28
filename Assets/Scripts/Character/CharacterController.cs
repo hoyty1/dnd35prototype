@@ -1997,47 +1997,9 @@ public class CharacterController : MonoBehaviour
                         && rangeInfo != null && !rangeInfo.IsMelee;
         bool isMelee = !isRanged;
 
-        // Visibility tracking for total concealment interactions.
-        UpdateLastKnownPosition(target, incomingIsRangedAttack: isRanged);
-
-        if (target.HasTotalConcealment(this, incomingIsRangedAttack: isRanged))
-        {
-            LastKnownPositionTracker tracker = GetComponent<LastKnownPositionTracker>();
-            Vector2Int? trackerLastKnown = tracker != null ? tracker.GetLastKnownPosition(target) : null;
-            Vector2Int? fallbackLastKnown = GetLastKnownPosition(target);
-            Vector2Int? resolvedLastKnown = trackerLastKnown ?? fallbackLastKnown;
-
-            if (resolvedLastKnown.HasValue && target.GridPosition != resolvedLastKnown.Value)
-            {
-                string attackerName = Stats != null ? Stats.CharacterName : name;
-                string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
-                string lastKnownText = $"({resolvedLastKnown.Value.x}, {resolvedLastKnown.Value.y})";
-                string currentText = $"({target.GridPosition.x}, {target.GridPosition.y})";
-
-                Debug.Log($"[Concealment] {attackerName} attacks {targetName}'s last known position.");
-                Debug.Log($"[Concealment]   Last known: {lastKnownText}");
-                Debug.Log($"[Concealment]   Current: {currentText}");
-                Debug.Log("[Concealment]   Target has MOVED - automatic miss (empty square).");
-
-                return new CombatResult
-                {
-                    Attacker = this,
-                    Defender = target,
-                    WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed strike",
-                    Hit = false,
-                    DieRoll = 1,
-                    TotalRoll = 1,
-                    TargetAC = target.Stats.ArmorClass,
-                    MissedDueToConcealment = true,
-                    ConcealmentMissChance = 100,
-                    ConcealmentRoll = 100,
-                    ConcealmentDescription = $"Last known position miss: last seen at {lastKnownText}, current position {currentText}, target moved",
-                    DefenderHPBefore = target.Stats.CurrentHP,
-                    DefenderHPAfter = target.Stats.CurrentHP,
-                    IsRangedAttack = isRanged
-                };
-            }
-        }
+        // Last-known-position empty-square checks are resolved in PerformSingleAttackWithCrit()
+        // so all attack entry points (single, full-attack, flurry, grapple strike, etc.) follow
+        // the same rules and never roll against an empty square.
 
         // === FEAT: Power Attack (melee only) ===
         int powerAtkPenalty = 0;
@@ -3410,6 +3372,70 @@ public class CharacterController : MonoBehaviour
 
     // ========== INTERNAL: Single attack with critical hit support ==========
 
+    private bool TryResolveLastKnownPositionAutoMiss(CharacterController target, bool isRangedAttack, ItemData weapon, out CombatResult autoMiss)
+    {
+        autoMiss = null;
+
+        if (target == null || target.Stats == null || target.Stats.IsDead)
+            return false;
+
+        // Maintain attacker-side memory whenever the target is currently visible.
+        UpdateLastKnownPosition(target, incomingIsRangedAttack: isRangedAttack);
+
+        if (!target.HasTotalConcealment(this, incomingIsRangedAttack: isRangedAttack))
+            return false;
+
+        LastKnownPositionTracker tracker = GetComponent<LastKnownPositionTracker>();
+        if (tracker != null && tracker.IsPinpointedThisRound(target))
+            return false;
+
+        Vector2Int? trackerLastKnown = tracker != null ? tracker.GetLastKnownPosition(target) : null;
+        Vector2Int? fallbackLastKnown = GetLastKnownPosition(target);
+        Vector2Int? resolvedLastKnown = trackerLastKnown ?? fallbackLastKnown;
+
+        if (!resolvedLastKnown.HasValue || target.GridPosition == resolvedLastKnown.Value)
+            return false;
+
+        string attackerName = Stats != null ? Stats.CharacterName : name;
+        string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+        string lastKnownText = $"({resolvedLastKnown.Value.x}, {resolvedLastKnown.Value.y})";
+        string currentText = $"({target.GridPosition.x}, {target.GridPosition.y})";
+
+        Debug.Log($"[Concealment] {attackerName} attacks {targetName}'s last known position.");
+        Debug.Log($"[Concealment]   Last known: {lastKnownText}");
+        Debug.Log($"[Concealment]   Current: {currentText}");
+        Debug.Log("[Concealment]   ATTACKING EMPTY SQUARE - automatic miss (no attack roll).");
+
+        GameManager gm = GameManager.Instance;
+        if (gm != null && gm.CombatUI != null)
+        {
+            gm.CombatUI.ShowCombatLog($"{attackerName} attacks {targetName}'s last known position.");
+            gm.CombatUI.ShowCombatLog($"  Last known: {lastKnownText}");
+            gm.CombatUI.ShowCombatLog($"  Current: {currentText}");
+            gm.CombatUI.ShowCombatLog("  ATTACKING EMPTY SQUARE: automatic miss (no attack roll)");
+        }
+
+        autoMiss = new CombatResult
+        {
+            Attacker = this,
+            Defender = target,
+            WeaponName = weapon != null ? weapon.Name : "Unarmed strike",
+            Hit = false,
+            DieRoll = 0,
+            TotalRoll = 0,
+            TargetAC = 0,
+            MissedDueToConcealment = true,
+            ConcealmentMissChance = 100,
+            ConcealmentRoll = 100,
+            ConcealmentDescription = $"Last known position miss: last seen at {lastKnownText}, current position {currentText}, target moved",
+            DefenderHPBefore = target.Stats.CurrentHP,
+            DefenderHPAfter = target.Stats.CurrentHP,
+            IsRangedAttack = isRangedAttack
+        };
+
+        return true;
+    }
+
     /// <summary>
     /// Perform a single attack with full D&D 3.5 critical hit mechanics.
     /// Uses the weapon's DamageModifierType to determine STR bonus to damage.
@@ -3452,6 +3478,10 @@ public class CharacterController : MonoBehaviour
         result.DamageModifierDesc = damageModDesc;
 
         bool isRangedAttack = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
+
+        if (TryResolveLastKnownPositionAutoMiss(target, isRangedAttack, weapon, out CombatResult emptySquareMiss))
+            return emptySquareMiss;
+
         int targetAC = GetSituationalTargetArmorClass(target, this, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
 
         AlignmentProtectionBenefits protection = AlignmentProtectionRules.GetBenefitsAgainst(
