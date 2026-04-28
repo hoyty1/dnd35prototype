@@ -14898,7 +14898,7 @@ public partial class GameManager : MonoBehaviour
                 CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
             }
 
-            if (FullAttackHadLastKnownPositionMiss(fullResult))
+            if (FullAttackHadLastKnownPositionMiss(fullResult) && HandleConsecutiveLastKnownAutoMiss(npc, target))
                 yield return StartCoroutine(TryImmediateSearchAfterLastKnownMiss(npc, target));
 
             yield return new WaitForSeconds(1.0f);
@@ -14957,10 +14957,33 @@ public partial class GameManager : MonoBehaviour
             CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
         }
 
-        if (IsLastKnownPositionAutoMiss(result))
+        if (IsLastKnownPositionAutoMiss(result) && HandleConsecutiveLastKnownAutoMiss(npc, target))
             yield return StartCoroutine(TryImmediateSearchAfterLastKnownMiss(npc, target));
 
         yield return new WaitForSeconds(1.0f);
+    }
+
+    private bool HandleConsecutiveLastKnownAutoMiss(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || target == null)
+            return false;
+
+        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
+        if (tracker == null)
+            return true;
+
+        int missCount = tracker.RegisterLastKnownAutoMiss(target);
+        if (!tracker.ShouldForgetTargetAfterAutoMisses(target))
+            return true;
+
+        tracker.ForgetTarget(target);
+
+        string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
+        string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+        CombatUI?.ShowCombatLog($"{npcName} loses track of {targetName} after {missCount} failed attacks on the last known square and stops blind-firing.");
+        Debug.Log($"[AI][Concealment] {npcName} forgetting stale last-known position for {targetName} after {missCount} consecutive auto-misses.");
+
+        return false;
     }
 
     private static bool IsLastKnownPositionAutoMiss(CombatResult result)

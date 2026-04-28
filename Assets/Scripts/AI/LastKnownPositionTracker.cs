@@ -10,8 +10,11 @@ using UnityEngine;
 /// </summary>
 public class LastKnownPositionTracker : MonoBehaviour
 {
+    private const int MaxConsecutiveLastKnownAutoMisses = 3;
+
     private readonly Dictionary<CharacterController, Vector2Int> _lastKnownGridPositions = new Dictionary<CharacterController, Vector2Int>();
     private readonly HashSet<CharacterController> _pinpointedThisRound = new HashSet<CharacterController>();
+    private readonly Dictionary<CharacterController, int> _consecutiveLastKnownAutoMisses = new Dictionary<CharacterController, int>();
 
     private CharacterController _owner;
 
@@ -26,6 +29,7 @@ public class LastKnownPositionTracker : MonoBehaviour
             return;
 
         _lastKnownGridPositions[character] = character.GridPosition;
+        _consecutiveLastKnownAutoMisses[character] = 0;
     }
 
     public void UpdateVisibleCharacters(List<CharacterController> visibleCharacters)
@@ -70,6 +74,42 @@ public class LastKnownPositionTracker : MonoBehaviour
     public bool IsPinpointedThisRound(CharacterController character)
     {
         return character != null && _pinpointedThisRound.Contains(character);
+    }
+
+    public int RegisterLastKnownAutoMiss(CharacterController character)
+    {
+        if (character == null)
+            return 0;
+
+        int current = 0;
+        _consecutiveLastKnownAutoMisses.TryGetValue(character, out current);
+        current++;
+        _consecutiveLastKnownAutoMisses[character] = current;
+
+        return current;
+    }
+
+    public int GetConsecutiveLastKnownAutoMisses(CharacterController character)
+    {
+        if (character == null)
+            return 0;
+
+        return _consecutiveLastKnownAutoMisses.TryGetValue(character, out int misses) ? misses : 0;
+    }
+
+    public bool ShouldForgetTargetAfterAutoMisses(CharacterController character)
+    {
+        return GetConsecutiveLastKnownAutoMisses(character) >= MaxConsecutiveLastKnownAutoMisses;
+    }
+
+    public void ForgetTarget(CharacterController character)
+    {
+        if (character == null)
+            return;
+
+        _lastKnownGridPositions.Remove(character);
+        _pinpointedThisRound.Remove(character);
+        _consecutiveLastKnownAutoMisses.Remove(character);
     }
 
     public void ClearRoundPinpointData()
@@ -155,6 +195,7 @@ public class LastKnownPositionTracker : MonoBehaviour
             {
                 CharacterController target = validConcealedTargets[i];
                 _pinpointedThisRound.Add(target);
+                _consecutiveLastKnownAutoMisses[target] = 0;
             }
 
             if (gameManager != null && gameManager.CombatUI != null)
@@ -202,6 +243,7 @@ public class LastKnownPositionTracker : MonoBehaviour
     {
         _lastKnownGridPositions.Clear();
         _pinpointedThisRound.Clear();
+        _consecutiveLastKnownAutoMisses.Clear();
     }
 
     private int GetListenBonus()
