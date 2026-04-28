@@ -52,6 +52,8 @@ namespace Tests.AI
             TestHealerChoosesRangedWithLowAC();
             TestHealerPrioritizesMostWoundedAlly();
             TestRangedRiskMultiplierDefaults();
+            TestConcealmentTargetingAdjustmentUsesPriorityTiers();
+            TestConcealmentTargetingAdjustmentSupportsProfileMultiplier();
             TestThreatSystemEstimatesRangedProvocationDamage();
             TestThreatSystemCountsOffHandMeleeThreateners();
 
@@ -849,6 +851,31 @@ namespace Tests.AI
             {
                 TestHelpers.Cleanup(rangedProfile, spellcasterProfile);
             }
+        }
+
+        private static void TestConcealmentTargetingAdjustmentUsesPriorityTiers()
+        {
+            float visible = AIService.GetConcealmentTargetingAdjustment(0, canSeeTarget: true, hasLastKnownPosition: true);
+            float partial = AIService.GetConcealmentTargetingAdjustment(20, canSeeTarget: true, hasLastKnownPosition: true);
+            float totalVisible = AIService.GetConcealmentTargetingAdjustment(50, canSeeTarget: true, hasLastKnownPosition: true);
+            float unknown = AIService.GetConcealmentTargetingAdjustment(50, canSeeTarget: false, hasLastKnownPosition: false);
+
+            bool ordered = visible > partial && partial > totalVisible && totalVisible > unknown;
+            Assert(ordered,
+                "Concealment targeting adjustment follows visible > partial > total > unknown order",
+                $"(visible={visible:F1}, partial={partial:F1}, totalVisible={totalVisible:F1}, unknown={unknown:F1})");
+        }
+
+        private static void TestConcealmentTargetingAdjustmentSupportsProfileMultiplier()
+        {
+            float baseline = AIService.GetConcealmentTargetingAdjustment(50, canSeeTarget: false, hasLastKnownPosition: true, penaltyMultiplier: 1f);
+            float reduced = AIService.GetConcealmentTargetingAdjustment(50, canSeeTarget: false, hasLastKnownPosition: true, penaltyMultiplier: 0.5f);
+            float disabled = AIService.GetConcealmentTargetingAdjustment(50, canSeeTarget: false, hasLastKnownPosition: true, penaltyMultiplier: 0f);
+
+            bool scalingWorks = Mathf.Abs(reduced) < Mathf.Abs(baseline) && Mathf.Approximately(disabled, 0f);
+            Assert(scalingWorks,
+                "Concealment targeting multiplier scales penalties and supports disabling",
+                $"(baseline={baseline:F1}, reduced={reduced:F1}, disabled={disabled:F1})");
         }
 
         private static void TestThreatSystemEstimatesRangedProvocationDamage()

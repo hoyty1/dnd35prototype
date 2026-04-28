@@ -35,6 +35,17 @@ namespace DND35.AI
         public bool PrioritizeIsolated;
         public bool SwitchTargetsOften;
 
+        /// <summary>
+        /// When true, target selection strongly prefers enemies with lower concealment miss chance.
+        /// </summary>
+        public virtual bool PrioritizeVisibleTargets => true;
+
+        /// <summary>
+        /// Multiplier applied to concealment visibility bonuses/penalties during target selection.
+        /// 0 disables concealment weighting, 1 uses default weighting, values >1 increase weighting.
+        /// </summary>
+        public virtual float ConcealmentPenaltyMultiplier => 1f;
+
         [Header("Movement")]
         public MovementPreferences Movement = new MovementPreferences();
 

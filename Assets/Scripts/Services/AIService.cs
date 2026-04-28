@@ -679,7 +679,7 @@ public class AIService : MonoBehaviour
                 continue;
 
             float score = profile.ScoreTarget(candidate, npc);
-            score += GetPerceptionTargetingAdjustment(npc, candidate);
+            score += GetPerceptionTargetingAdjustment(npc, candidate, profile);
             if (score > bestScore)
             {
                 bestScore = score;
@@ -688,7 +688,12 @@ public class AIService : MonoBehaviour
         }
 
         if (best != null)
-            Debug.Log($"[AI][Profile:{profile.ProfileName}] {npc.Stats.CharacterName} targets {best.Stats.CharacterName} score={bestScore:F1}");
+        {
+            bool incomingIsRanged = npc.IsEquippedWeaponRanged();
+            int missChance = best.GetMissChance(npc, incomingIsRanged);
+            bool canSee = npc.CanSee(best, incomingIsRanged);
+            Debug.Log($"[AI][Profile:{profile.ProfileName}] {npc.Stats.CharacterName} targets {best.Stats.CharacterName} score={bestScore:F1} concealment={missChance}% ({GetConcealmentPriorityLabel(missChance, canSee)})");
+        }
 
         return best;
     }
@@ -713,6 +718,14 @@ public class AIService : MonoBehaviour
                 bestScore = score;
                 best = candidate;
             }
+        }
+
+        if (best != null)
+        {
+            bool incomingIsRanged = npc.IsEquippedWeaponRanged();
+            int missChance = best.GetMissChance(npc, incomingIsRanged);
+            bool canSee = npc.CanSee(best, incomingIsRanged);
+            Debug.Log($"[AI][Default] {npc.Stats.CharacterName} targets {best.Stats.CharacterName} score={bestScore:F1} concealment={missChance}% ({GetConcealmentPriorityLabel(missChance, canSee)})");
         }
 
         return best;
@@ -800,7 +813,7 @@ public class AIService : MonoBehaviour
         return 10f;
     }
 
-    private float GetPerceptionTargetingAdjustment(CharacterController npc, CharacterController target)
+    private float GetPerceptionTargetingAdjustment(CharacterController npc, CharacterController target, AIProfile profile = null)
     {
         if (npc == null || target == null || target.Stats == null)
             return 0f;
@@ -827,14 +840,62 @@ public class AIService : MonoBehaviour
         bool incomingIsRanged = npc.IsEquippedWeaponRanged();
         npc.UpdateLastKnownPosition(target, incomingIsRanged);
 
-        if (!npc.CanSee(target, incomingIsRanged))
+        int missChance = target.GetMissChance(npc, incomingIsRanged);
+        bool canSeeTarget = npc.CanSee(target, incomingIsRanged);
+        bool hasLastKnownPosition = npc.GetLastKnownPosition(target).HasValue;
+
+        if (!canSeeTarget)
         {
+            // Keep baseline visibility awareness so non-concealment blind spots still receive a penalty.
             adjustment += -12f;
-            if (npc.GetLastKnownPosition(target).HasValue)
+            if (hasLastKnownPosition)
                 adjustment += 4f;
         }
 
+        if (profile == null || profile.PrioritizeVisibleTargets)
+        {
+            float concealmentMultiplier = profile != null ? Mathf.Max(0f, profile.ConcealmentPenaltyMultiplier) : 1f;
+            adjustment += GetConcealmentTargetingAdjustment(missChance, canSeeTarget, hasLastKnownPosition, concealmentMultiplier);
+        }
+
         return adjustment;
+    }
+
+    internal static float GetConcealmentTargetingAdjustment(int missChance, bool canSeeTarget, bool hasLastKnownPosition, float penaltyMultiplier = 1f)
+    {
+        float multiplier = Mathf.Max(0f, penaltyMultiplier);
+        if (multiplier <= 0f)
+            return 0f;
+
+        int normalizedMissChance = Mathf.Clamp(missChance, 0, 100);
+
+        if (normalizedMissChance <= 0)
+            return 50f * multiplier; // Highest priority: clean line of attack.
+
+        if (normalizedMissChance < 50)
+            return -30f * multiplier; // Medium priority: partial concealment.
+
+        float totalConcealmentPenalty = -80f * multiplier; // Low priority by default.
+        if (!canSeeTarget)
+            totalConcealmentPenalty -= 40f * multiplier; // Lowest priority when target cannot be seen.
+
+        if (hasLastKnownPosition)
+            totalConcealmentPenalty += 20f * multiplier; // Slight recovery when a trackable position exists.
+
+        return totalConcealmentPenalty;
+    }
+
+    private static string GetConcealmentPriorityLabel(int missChance, bool canSeeTarget)
+    {
+        int normalizedMissChance = Mathf.Clamp(missChance, 0, 100);
+        if (normalizedMissChance <= 0)
+            return "visible";
+        if (normalizedMissChance < 50)
+            return "partially concealed";
+        if (canSeeTarget)
+            return "totally concealed";
+
+        return "unknown position";
     }
 
     public float GetTargetPriority(CharacterController npc, CharacterController target)
