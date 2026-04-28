@@ -383,6 +383,10 @@ public class CharacterController : MonoBehaviour
     // Used only for visual/status indication on the defender token.
     private readonly HashSet<CharacterController> _incomingFeintSources = new HashSet<CharacterController>();
 
+    // Tracks each enemy's last known grid square when this character had line of sight.
+    // Used for total-concealment targeting behavior.
+    private readonly Dictionary<CharacterController, Vector2Int> _lastKnownTargetPositions = new Dictionary<CharacterController, Vector2Int>();
+
     // Iterative grapple attack tracking (D&D 3.5):
     // Some grapple actions can be used multiple times as attacks during a full attack sequence.
     private readonly List<int> _grappleAttackBonusesThisTurn = new List<int>();
@@ -1992,6 +1996,36 @@ public class CharacterController : MonoBehaviour
                         && (equippedWeapon.WeaponCat == WeaponCategory.Ranged || useThrownRange)
                         && rangeInfo != null && !rangeInfo.IsMelee;
         bool isMelee = !isRanged;
+
+        // Visibility tracking for total concealment interactions.
+        UpdateLastKnownPosition(target, incomingIsRangedAttack: isRanged);
+
+        if (target.HasTotalConcealment(this, incomingIsRangedAttack: isRanged))
+        {
+            Vector2Int? lastKnown = GetLastKnownPosition(target);
+            if (lastKnown.HasValue && target.GridPosition != lastKnown.Value)
+            {
+                Debug.Log($"[Concealment] {Stats.CharacterName} attacks last-known square {lastKnown.Value} but {target.Stats.CharacterName} moved to {target.GridPosition}: automatic miss.");
+                return new CombatResult
+                {
+                    Attacker = this,
+                    Defender = target,
+                    WeaponName = equippedWeapon != null ? equippedWeapon.Name : "Unarmed strike",
+                    Hit = false,
+                    DieRoll = 1,
+                    TotalRoll = 1,
+                    TargetAC = target.Stats.ArmorClass,
+                    MissedDueToConcealment = true,
+                    ConcealmentMissChance = 100,
+                    ConcealmentRoll = 100,
+                    ConcealmentDescription = "Total concealment: target moved from last known position",
+                    DefenderHPBefore = target.Stats.CurrentHP,
+                    DefenderHPAfter = target.Stats.CurrentHP,
+                    IsRangedAttack = isRanged
+                };
+            }
+        }
+
         // === FEAT: Power Attack (melee only) ===
         int powerAtkPenalty = 0;
         int powerAtkDmgBonus = 0;
@@ -3480,13 +3514,13 @@ public class CharacterController : MonoBehaviour
 
         if (hit)
         {
-            int missChance = target.GetMissChance(isRangedAttack);
+            int missChance = target.GetMissChance(this, isRangedAttack);
             if (missChance > 0)
             {
                 int concealmentRoll = Random.Range(1, 101);
                 result.ConcealmentMissChance = missChance;
                 result.ConcealmentRoll = concealmentRoll;
-                result.ConcealmentDescription = target.GetConcealmentDescription(isRangedAttack);
+                result.ConcealmentDescription = target.GetConcealmentDescription(this, isRangedAttack);
 
                 if (concealmentRoll <= missChance)
                 {
@@ -4848,10 +4882,36 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// Evaluate concealment miss chance for this target against a specific attacker.
+    /// Handles dynamic effects (e.g., Obscuring Mist distance bands).
+    /// </summary>
+    private int EvaluateEffectMissChanceAgainstAttacker(ActiveSpellEffect effect, CharacterController attacker, bool incomingIsRangedAttack)
+    {
+        if (effect == null)
+            return 0;
+
+        if (effect.MissChanceAgainstRangedOnly && !incomingIsRangedAttack)
+            return 0;
+
+        if (effect.MissChanceAgainstMeleeOnly && incomingIsRangedAttack)
+            return 0;
+
+        if (effect.SourceAreaEffect is ObscuringMistAreaEffect mist && attacker != null)
+            return Mathf.Clamp(mist.GetConcealmentMissChance(attacker, this), 0, 100);
+
+        return Mathf.Clamp(effect.MissChance, 0, 100);
+    }
+
+    /// <summary>
     /// Returns the highest concealment miss chance currently protecting this character.
     /// D&D 3.5e concealment miss chances do not stack; use the highest applicable source.
     /// </summary>
     public int GetMissChance(bool incomingIsRangedAttack = false)
+    {
+        return GetMissChance(null, incomingIsRangedAttack);
+    }
+
+    public int GetMissChance(CharacterController attacker, bool incomingIsRangedAttack = false)
     {
         StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
         if (statusEffectManager == null || statusEffectManager.ActiveEffects == null || statusEffectManager.ActiveEffects.Count == 0)
@@ -4864,13 +4924,7 @@ public class CharacterController : MonoBehaviour
             if (effect == null || effect.MissChance <= 0)
                 continue;
 
-            if (effect.MissChanceAgainstRangedOnly && !incomingIsRangedAttack)
-                continue;
-
-            if (effect.MissChanceAgainstMeleeOnly && incomingIsRangedAttack)
-                continue;
-
-            int normalized = Mathf.Clamp(effect.MissChance, 0, 100);
+            int normalized = EvaluateEffectMissChanceAgainstAttacker(effect, attacker, incomingIsRangedAttack);
             if (normalized > bestMissChance)
                 bestMissChance = normalized;
         }
@@ -4883,31 +4937,61 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public bool HasTotalConcealment(bool incomingIsRangedAttack = false)
     {
-        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
-        if (statusEffectManager == null || statusEffectManager.ActiveEffects == null || statusEffectManager.ActiveEffects.Count == 0)
-            return false;
+        return HasTotalConcealment(null, incomingIsRangedAttack);
+    }
 
-        for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
-        {
-            ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
-            if (effect == null || !effect.IsTotalConcealment || effect.MissChance <= 0)
-                continue;
-
-            if (effect.MissChanceAgainstRangedOnly && !incomingIsRangedAttack)
-                continue;
-
-            if (effect.MissChanceAgainstMeleeOnly && incomingIsRangedAttack)
-                continue;
-
-            return true;
-        }
-
-        return false;
+    public bool HasTotalConcealment(CharacterController attacker, bool incomingIsRangedAttack = false)
+    {
+        return GetMissChance(attacker, incomingIsRangedAttack) >= 50;
     }
 
     public bool HasConcealment(bool incomingIsRangedAttack = false)
     {
-        return GetMissChance(incomingIsRangedAttack) > 0;
+        return HasConcealment(null, incomingIsRangedAttack);
+    }
+
+    public bool HasConcealment(CharacterController attacker, bool incomingIsRangedAttack = false)
+    {
+        return GetMissChance(attacker, incomingIsRangedAttack) > 0;
+    }
+
+    public bool CanSee(CharacterController target, bool incomingIsRangedAttack = false)
+    {
+        if (target == null || target.Stats == null || target.Stats.IsDead)
+            return false;
+
+        if (!target.HasTotalConcealment(this, incomingIsRangedAttack))
+            return true;
+
+        return false;
+    }
+
+    public void UpdateLastKnownPosition(CharacterController target, bool incomingIsRangedAttack = false)
+    {
+        if (target == null || target.Stats == null || target.Stats.IsDead)
+            return;
+
+        if (CanSee(target, incomingIsRangedAttack))
+            _lastKnownTargetPositions[target] = target.GridPosition;
+    }
+
+    public Vector2Int? GetLastKnownPosition(CharacterController target)
+    {
+        if (target == null)
+            return null;
+
+        if (_lastKnownTargetPositions.TryGetValue(target, out Vector2Int pos))
+            return pos;
+
+        return null;
+    }
+
+    public void ClearLastKnownPosition(CharacterController target)
+    {
+        if (target == null)
+            return;
+
+        _lastKnownTargetPositions.Remove(target);
     }
 
     /// <summary>
@@ -4915,11 +4999,16 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public string GetConcealmentDescription(bool incomingIsRangedAttack = false)
     {
+        return GetConcealmentDescription(null, incomingIsRangedAttack);
+    }
+
+    public string GetConcealmentDescription(CharacterController attacker, bool incomingIsRangedAttack = false)
+    {
         StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
         if (statusEffectManager == null || statusEffectManager.ActiveEffects == null || statusEffectManager.ActiveEffects.Count == 0)
             return "No concealment";
 
-        int missChance = GetMissChance(incomingIsRangedAttack);
+        int missChance = GetMissChance(attacker, incomingIsRangedAttack);
         if (missChance <= 0)
             return "No concealment";
 
@@ -4930,13 +5019,8 @@ public class CharacterController : MonoBehaviour
             if (effect == null || effect.MissChance <= 0)
                 continue;
 
-            if (effect.MissChanceAgainstRangedOnly && !incomingIsRangedAttack)
-                continue;
-
-            if (effect.MissChanceAgainstMeleeOnly && incomingIsRangedAttack)
-                continue;
-
-            if (Mathf.Clamp(effect.MissChance, 0, 100) == missChance)
+            int normalized = EvaluateEffectMissChanceAgainstAttacker(effect, attacker, incomingIsRangedAttack);
+            if (normalized == missChance)
             {
                 sourceEffect = effect;
                 break;
@@ -4947,7 +5031,17 @@ public class CharacterController : MonoBehaviour
             ? sourceEffect.ConcealmentSource
             : "Unknown source";
 
-        bool isTotal = sourceEffect != null ? sourceEffect.IsTotalConcealment : missChance >= 50;
+        if (sourceEffect != null && sourceEffect.SourceAreaEffect is ObscuringMistAreaEffect && attacker != null)
+        {
+            int distance = attacker.GetMinimumDistanceToTarget(this, chebyshev: true);
+            string distanceLabel = distance <= 1 ? "within 5 ft" : "beyond 5 ft";
+            bool dynamicTotal = missChance >= 50;
+            return dynamicTotal
+                ? $"Total concealment ({missChance}% miss chance) from {sourceName} ({distanceLabel})"
+                : $"Concealment ({missChance}% miss chance) from {sourceName} ({distanceLabel})";
+        }
+
+        bool isTotal = sourceEffect != null ? (sourceEffect.IsTotalConcealment || missChance >= 50) : missChance >= 50;
         return isTotal
             ? $"Total concealment ({missChance}% miss chance) from {sourceName}"
             : $"Concealment ({missChance}% miss chance) from {sourceName}";

@@ -37,7 +37,7 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
     protected override void OnAreaCreated()
     {
         LogEffect("Mist billows across a 20-ft radius spread.");
-        LogEffect("Creatures in the mist gain concealment (20% miss chance).");
+        LogEffect("Within the mist: adjacent attackers suffer 20% miss chance; attackers farther than 5 ft suffer 50% (total concealment).");
         ApplyGridHighlight();
     }
 
@@ -120,6 +120,7 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
                 existing.MissChance = 20;
                 existing.IsTotalConcealment = false;
                 existing.ConcealmentSource = "Obscuring Mist";
+                existing.SourceAreaEffect = this;
                 return;
             }
         }
@@ -137,11 +138,29 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
             IsApplied = true,
             MissChance = 20,
             IsTotalConcealment = false,
-            ConcealmentSource = "Obscuring Mist"
+            ConcealmentSource = "Obscuring Mist",
+            SourceAreaEffect = this
         };
 
         statusMgr.ActiveEffects.Add(effect);
-        LogEffect($"{character.Stats.CharacterName} gains concealment (20% miss chance).");
+        LogEffect($"{character.Stats.CharacterName} is shrouded by mist (20% at 5 ft, 50% beyond 5 ft).");
+    }
+
+    public int GetConcealmentMissChance(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null)
+            return 0;
+
+        if (!IsCharacterInArea(attacker) || !IsCharacterInArea(target))
+            return 0;
+
+        int distanceSquares = attacker.GetMinimumDistanceToTarget(target, chebyshev: true);
+        return distanceSquares <= 1 ? 20 : 50;
+    }
+
+    public bool GrantsTotalConcealmentAgainst(CharacterController attacker, CharacterController target)
+    {
+        return GetConcealmentMissChance(attacker, target) >= 50;
     }
 
     private void RemoveConcealment(CharacterController character)

@@ -78,6 +78,12 @@ public class ActiveSpellEffect
     public bool MissChanceAgainstRangedOnly;
     public bool MissChanceAgainstMeleeOnly;
 
+    /// <summary>
+    /// Optional runtime reference to the persistent area effect source (used for dynamic concealment rules).
+    /// Not serialized.
+    /// </summary>
+    [System.NonSerialized] public PersistentAreaEffect SourceAreaEffect;
+
     /// <summary>LEGACY: The bonus type string for backward compatibility.</summary>
     public string BonusTypeLegacy;
 

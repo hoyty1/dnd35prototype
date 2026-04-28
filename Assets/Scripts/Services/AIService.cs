@@ -267,6 +267,49 @@ public class AIService : MonoBehaviour
         if (closestPC == null)
             yield break;
 
+        bool preferRangedVisibility = npc.IsEquippedWeaponRanged();
+        npc.UpdateLastKnownPosition(closestPC, incomingIsRangedAttack: preferRangedVisibility);
+
+        if (!npc.CanSee(closestPC, incomingIsRangedAttack: preferRangedVisibility))
+        {
+            Vector2Int? lastKnown = npc.GetLastKnownPosition(closestPC);
+            if (lastKnown.HasValue)
+            {
+                _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} cannot see {closestPC.Stats.CharacterName} clearly and fires at the last known position.");
+                yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, closestPC));
+                yield return new WaitForSeconds(0.45f);
+
+                if (npc.Actions.HasMoveAction)
+                {
+                    SquareCell searchCell = EvaluateMovementOptions(npc, lastKnown.Value, retreat: false, closestPC, profile);
+                    if (searchCell != null && searchCell.Coords != npc.GridPosition)
+                    {
+                        yield return _gameManager.StartCoroutine(
+                            _gameManager.MoveCharacterAlongComputedPathForAI(npc, searchCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                        npc.Actions.UseMoveAction();
+                        _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} searches through the mist for {closestPC.Stats.CharacterName}.");
+                        yield return new WaitForSeconds(0.4f);
+                    }
+                }
+                yield break;
+            }
+
+            if (npc.Actions.HasMoveAction)
+            {
+                SquareCell blindSearchCell = EvaluateMovementOptions(npc, closestPC.GridPosition, retreat: false, closestPC, profile);
+                if (blindSearchCell != null && blindSearchCell.Coords != npc.GridPosition)
+                {
+                    yield return _gameManager.StartCoroutine(
+                        _gameManager.MoveCharacterAlongComputedPathForAI(npc, blindSearchCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+                    npc.Actions.UseMoveAction();
+                    _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} advances, trying to reacquire line of sight through concealment.");
+                    yield return new WaitForSeconds(0.4f);
+                }
+            }
+
+            yield break;
+        }
+
         if (TryExecuteSpellcastAction(npc, closestPC))
         {
             yield return new WaitForSeconds(0.8f);
@@ -762,20 +805,36 @@ public class AIService : MonoBehaviour
         if (npc == null || target == null || target.Stats == null)
             return 0f;
 
-        if (!target.IsInvisibleCondition)
-            return 0f;
+        float adjustment = 0f;
 
-        int distanceSquares = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
-        bool hasScent = npc.Stats != null && npc.Stats.HasScent;
-
-        if (hasScent)
+        if (target.IsInvisibleCondition)
         {
-            // Scent gives a strong close-range lock and partial tracking at longer range.
-            return distanceSquares <= 6 ? 4f : -6f;
+            int distanceSquares = SquareGridUtils.GetDistance(npc.GridPosition, target.GridPosition);
+            bool hasScent = npc.Stats != null && npc.Stats.HasScent;
+
+            if (hasScent)
+            {
+                // Scent gives a strong close-range lock and partial tracking at longer range.
+                adjustment += distanceSquares <= 6 ? 4f : -6f;
+            }
+            else
+            {
+                // Without scent, invisible targets are much harder to prioritize reliably.
+                adjustment += -18f;
+            }
         }
 
-        // Without scent, invisible targets are much harder to prioritize reliably.
-        return -18f;
+        bool incomingIsRanged = npc.IsEquippedWeaponRanged();
+        npc.UpdateLastKnownPosition(target, incomingIsRanged);
+
+        if (!npc.CanSee(target, incomingIsRanged))
+        {
+            adjustment += -12f;
+            if (npc.GetLastKnownPosition(target).HasValue)
+                adjustment += 4f;
+        }
+
+        return adjustment;
     }
 
     public float GetTargetPriority(CharacterController npc, CharacterController target)

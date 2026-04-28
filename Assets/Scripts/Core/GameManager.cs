@@ -2285,8 +2285,8 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("╚══════════════════════════════════════════════════════╝");
         CombatUI?.ShowCombatLog("Party: Zephyr Windcaller (Wizard 5) + Misty Veilweaver (Wizard 5)");
         CombatUI?.ShowCombatLog("Enemy line: Small + Medium + Medium (high Fort) + Large + off-line Archer");
-        CombatUI?.ShowCombatLog("Phase 1: Cast Obscuring Mist and verify 20% miss chance on attacks.");
-        CombatUI?.ShowCombatLog("Phase 2: Move units through/around mist and confirm concealment updates correctly.");
+        CombatUI?.ShowCombatLog("Phase 1: Cast Obscuring Mist and verify 20% miss chance for adjacent attackers.");
+        CombatUI?.ShowCombatLog("Phase 2: Separate attacker/target by >5 ft inside mist and verify 50% total concealment.");
         CombatUI?.ShowCombatLog("Phase 3: Recast mist in a second lane and verify persistent area indicators remain visible.");
     }
 

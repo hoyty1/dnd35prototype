@@ -479,7 +479,7 @@ public static class ThreatSystem
         if (threatener == null || target == null || threatener.Stats == null || target.Stats == null)
             return null;
 
-        if (target.HasTotalConcealment(incomingIsRangedAttack: false))
+        if (target.HasTotalConcealment(threatener, incomingIsRangedAttack: false))
         {
             Debug.Log($"[ThreatSystem] {threatener.Stats.CharacterName} cannot make AoO against {target.Stats.CharacterName}: target has total concealment.");
             return null;
