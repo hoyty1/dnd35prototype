@@ -591,6 +591,22 @@ public partial class GameManager
         return false;
     }
 
+    private int GetHighestGreaseSaveDCAtCell(Vector2Int pos)
+    {
+        int highestDC = 10;
+        List<GreaseAreaEffect> greaseEffects = AreaEffectManager.Instance.GetEffectsOfType<GreaseAreaEffect>();
+        for (int i = 0; i < greaseEffects.Count; i++)
+        {
+            GreaseAreaEffect effect = greaseEffects[i];
+            if (effect == null || !effect.IsCellInArea(pos))
+                continue;
+
+            highestDC = Mathf.Max(highestDC, effect.SaveDC);
+        }
+
+        return highestDC;
+    }
+
     private int GetGreaseAreaExtraMovementCost(CharacterController mover, Vector2Int destination)
     {
         if (mover == null || mover.Stats == null || mover.Stats.IsDead)
@@ -611,14 +627,25 @@ public partial class GameManager
 
         if (!wasInGrease)
         {
-            int balanceTotal = mover.Stats.RollSkillCheck("Balance");
-            bool success = balanceTotal >= 10;
-            CombatUI?.ShowCombatLog($"🛢 Grease check ({mover.Stats.CharacterName}): Balance {balanceTotal} vs DC 10 {(success ? "SUCCESS" : "FAIL")}.");
+            // If an area hook has already applied prone on entry, stop movement immediately.
+            if (mover.HasCondition(CombatConditionType.Prone))
+            {
+                CombatUI?.ShowCombatLog($"💥 {mover.Stats.CharacterName} enters grease, falls prone, and stops moving.");
+                return false;
+            }
+
+            int saveDC = GetHighestGreaseSaveDCAtCell(currentCell);
+            int roll = UnityEngine.Random.Range(1, 21);
+            int reflex = mover.Stats.ReflexSave;
+            int total = roll + reflex;
+            bool success = total >= saveDC;
+
+            CombatUI?.ShowCombatLog($"🛢 Grease check ({mover.Stats.CharacterName}): Reflex d20({roll}) + {reflex} = {total} vs DC {saveDC} {(success ? "SUCCESS" : "FAIL")}.");
 
             if (!success)
             {
                 mover.ApplyCondition(CombatConditionType.Prone, -1, "Grease");
-                CombatUI?.ShowCombatLog($"💥 {mover.Stats.CharacterName} slips in grease and falls prone!");
+                CombatUI?.ShowCombatLog($"💥 {mover.Stats.CharacterName} slips in grease, falls prone, and movement ends immediately.");
                 return false;
             }
         }
