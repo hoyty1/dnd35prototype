@@ -1495,7 +1495,7 @@ public static class NPCDatabase
             CreatureTags = new List<string> { "Animal", "MM35" },
             Feats = new List<string> { "Alertness", "Track" },
             HasScent = true,
-            SpecialAbilities = new List<string> { "Scent", "Skills: Jump +8, Listen +5, Spot +5, Survival +1" },
+            SpecialAbilities = new List<string> { "Low-light vision", "Scent", "Skills: Jump +7, Listen +5, Spot +5, Survival +1" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
@@ -1523,10 +1523,10 @@ public static class NPCDatabase
             NaturalArmorBonus = 2,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Talons", DamageDice = 2, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Talons", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
             },
             BaseSpeed = 2,
-            BaseHitDieHP = 2,
+            BaseHitDieHP = 4,
             CreatureTags = new List<string> { "Animal", "MM35", "Fly" },
             Feats = new List<string> { "Weapon Finesse" },
             SpecialAbilities = new List<string> { "Low-light vision", "Fly 40 ft (average)", "Skills: Listen +14, Move Silently +17, Spot +6" },
@@ -1563,8 +1563,9 @@ public static class NPCDatabase
             BaseSpeed = 6,
             BaseHitDieHP = 6,
             CreatureTags = new List<string> { "Animal", "MM35", "Burrow" },
-            Feats = new List<string> { "Weapon Finesse", "Track" },
-            SpecialAbilities = new List<string> { "Rage (as barbarian)", "Burrow 10 ft", "Skills: Escape Artist +7, Listen +3, Spot +3" },
+            Feats = new List<string> { "Agile", "Weapon Finesse", "Track" },
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Low-light vision", "Scent", "Rage (as barbarian)", "Burrow 10 ft", "Skills: Balance +5, Escape Artist +9, Listen +3, Spot +3" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
@@ -1592,13 +1593,13 @@ public static class NPCDatabase
             NaturalArmorBonus = 0,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
             },
             BaseSpeed = 6,
             BaseHitDieHP = 4,
             CreatureTags = new List<string> { "Animal", "MM35", "Climb" },
-            Feats = new List<string> { "Weapon Finesse" },
-            SpecialAbilities = new List<string> { "Climb 30 ft", "Skills: Balance +10, Climb +10, Hide +10, Listen +3, Spot +3" },
+            Feats = new List<string> { "Agile", "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Low-light vision", "Climb 30 ft", "Skills: Balance +12, Climb +10, Escape Artist +4, Hide +10, Listen +3, Spot +3" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
@@ -1633,7 +1634,7 @@ public static class NPCDatabase
             CreatureTags = new List<string> { "Animal", "MM35" },
             Feats = new List<string> { "Alertness", "Weapon Finesse" },
             HasScent = true,
-            SpecialAbilities = new List<string> { "Disease (Filth Fever)", "Scent", "Climb 20 ft", "Skills: Climb +11, Hide +8, Listen +4, Move Silently +4, Spot +4, Swim +11" },
+            SpecialAbilities = new List<string> { "Low-light vision", "Disease (Filth Fever)", "Scent", "Climb 20 ft", "Skills: Climb +11, Hide +8, Listen +4, Move Silently +4, Spot +4, Swim +11" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
@@ -1661,13 +1662,13 @@ public static class NPCDatabase
             NaturalArmorBonus = 0,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Claws", DamageDice = 2, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Claws", DamageDice = 2, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
             },
             BaseSpeed = 2,
-            BaseHitDieHP = 2,
+            BaseHitDieHP = 1,
             CreatureTags = new List<string> { "Animal", "MM35", "Fly" },
             Feats = new List<string> { "Weapon Finesse" },
-            SpecialAbilities = new List<string> { "Fly 40 ft (average)", "Skills: Listen +3, Spot +5" },
+            SpecialAbilities = new List<string> { "Low-light vision", "Fly 40 ft (average)", "Skills: Listen +3, Spot +5" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
@@ -1695,13 +1696,13 @@ public static class NPCDatabase
             NaturalArmorBonus = 2,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Talons", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+                new NaturalAttackDefinition { Name = "Talons", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
             },
             BaseSpeed = 2,
             BaseHitDieHP = 4,
             CreatureTags = new List<string> { "Animal", "MM35", "Fly" },
-            Feats = new List<string> { "Weapon Finesse" },
-            SpecialAbilities = new List<string> { "Fly 60 ft (average)", "Skills: Listen +2, Spot +14" },
+            Feats = new List<string> { "Alertness", "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Low-light vision", "Fly 60 ft (average)", "Skills: Listen +4, Spot +16" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
