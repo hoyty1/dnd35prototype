@@ -3828,6 +3828,14 @@ public class CharacterController : MonoBehaviour
     }
 
     /// <summary>
+    /// Check if the equipped primary weapon is ranged.
+    /// </summary>
+    public bool HasRangedWeaponEquipped()
+    {
+        return EnsureEquipment().IsEquippedWeaponRanged();
+    }
+
+    /// <summary>
     /// Check if the character has a melee weapon equipped (or is unarmed, which counts as melee).
     /// D&D 3.5 Rule: Only characters with melee weapons (including natural/unarmed) threaten squares.
     /// Ranged-only characters do NOT threaten any squares and cannot make Attacks of Opportunity.
@@ -3835,6 +3843,55 @@ public class CharacterController : MonoBehaviour
     public bool HasMeleeWeaponEquipped()
     {
         return EnsureEquipment().HasMeleeWeaponEquipped();
+    }
+
+    /// <summary>
+    /// Returns true when this character is currently in a ranged-only combat loadout.
+    /// </summary>
+    public bool IsRangedOnlyCombatLoadout()
+    {
+        return HasRangedWeaponEquipped() && !HasMeleeWeaponEquipped();
+    }
+
+    /// <summary>
+    /// Get a compact label for currently usable weapon mode.
+    /// </summary>
+    public string GetPrimaryWeaponType()
+    {
+        if (IsRangedOnlyCombatLoadout())
+            return "Ranged";
+        if (HasMeleeWeaponEquipped())
+            return "Melee";
+        return "Unarmed";
+    }
+
+    /// <summary>
+    /// True when this actor can attempt melee-only special maneuvers.
+    /// </summary>
+    public bool CanPerformSpecialMeleeAttacks()
+    {
+        return !IsRangedOnlyCombatLoadout();
+    }
+
+    /// <summary>
+    /// Validate whether current loadout can perform the requested special attack type.
+    /// </summary>
+    public bool CanPerformSpecialAttack(SpecialAttackType attackType)
+    {
+        switch (attackType)
+        {
+            case SpecialAttackType.Trip:
+            case SpecialAttackType.Disarm:
+            case SpecialAttackType.Grapple:
+            case SpecialAttackType.Sunder:
+            case SpecialAttackType.BullRushAttack:
+            case SpecialAttackType.BullRushCharge:
+            case SpecialAttackType.Overrun:
+            case SpecialAttackType.CoupDeGrace:
+                return CanPerformSpecialMeleeAttacks();
+            default:
+                return true;
+        }
     }
 
     /// <summary>
@@ -6515,6 +6572,20 @@ public class CharacterController : MonoBehaviour
                 ManeuverName = type.ToString(),
                 Success = false,
                 Log = $"{Stats.CharacterName} cannot perform {type}: no valid target."
+            };
+        }
+
+        if (!CanPerformSpecialAttack(type))
+        {
+            string attackerName = Stats != null ? Stats.CharacterName : name;
+            string maneuverName = type.ToString();
+            string weaponType = GetPrimaryWeaponType();
+            Debug.LogWarning($"[SpecialAttack][Validation] {attackerName} blocked from using {maneuverName} while weapon mode is {weaponType}.");
+            return new SpecialAttackResult
+            {
+                ManeuverName = maneuverName,
+                Success = false,
+                Log = $"{attackerName} cannot perform {maneuverName} while wielding a ranged-only loadout."
             };
         }
 

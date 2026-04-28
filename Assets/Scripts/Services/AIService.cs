@@ -1123,6 +1123,12 @@ public class AIService : MonoBehaviour
             SpecialAttackType? preferred = profile.GetPreferredManeuver(npc, target);
             if (preferred.HasValue)
             {
+                if (!npc.CanPerformSpecialAttack(preferred.Value))
+                {
+                    Debug.Log($"[AI][Maneuver] {npc.Stats.CharacterName} skips {preferred.Value} due to ranged-only loadout ({npc.GetPrimaryWeaponType()}).");
+                    return false;
+                }
+
                 if (preferred.Value == SpecialAttackType.Trip)
                     return !target.HasCondition(CombatConditionType.Prone) && npc.HasMeleeWeaponEquipped();
 
@@ -1142,12 +1148,17 @@ public class AIService : MonoBehaviour
             return false;
         }
 
-        if (target.GetEquippedMainWeapon() != null && npc.Stats.STRMod >= 3)
+        if (target.GetEquippedMainWeapon() != null
+            && npc.Stats.STRMod >= 3
+            && npc.CanPerformSpecialAttack(SpecialAttackType.Disarm))
             return true; // disarm preference
-        if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped())
+        if (!target.Stats.IsProne
+            && npc.HasMeleeWeaponEquipped()
+            && npc.CanPerformSpecialAttack(SpecialAttackType.Trip))
             return true; // trip preference
 
-        return npc.Stats.STRMod >= 4;
+        return npc.Stats.STRMod >= 4
+            && npc.CanPerformSpecialAttack(SpecialAttackType.Grapple);
     }
 
     private bool TryExecutePreferredManeuver(CharacterController npc, CharacterController target, AIProfile profile)
@@ -1166,7 +1177,15 @@ public class AIService : MonoBehaviour
         {
             SpecialAttackType? preferred = profile.GetPreferredManeuver(npc, target);
             if (preferred.HasValue)
+            {
+                if (!npc.CanPerformSpecialAttack(preferred.Value))
+                {
+                    Debug.Log($"[AI][Maneuver] {npc.Stats.CharacterName} blocked from executing {preferred.Value} due to ranged-only loadout ({npc.GetPrimaryWeaponType()}).");
+                    return false;
+                }
+
                 return _gameManager.TryNPCSpecialAttackByTypeForAI(npc, target, preferred.Value);
+            }
 
             return false;
         }

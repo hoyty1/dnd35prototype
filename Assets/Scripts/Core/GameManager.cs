@@ -14003,6 +14003,13 @@ public partial class GameManager : MonoBehaviour
 
         SpecialAttackType? choice = forcedChoice;
 
+        if (choice.HasValue && !npc.CanPerformSpecialAttack(choice.Value))
+        {
+            string npcName = npc.Stats != null ? npc.Stats.CharacterName : "<unknown>";
+            Debug.Log($"[AI][SpecialAttack] {npcName} cannot perform forced {choice.Value} while in {npc.GetPrimaryWeaponType()} mode.");
+            return false;
+        }
+
         if (choice == SpecialAttackType.Grapple && hasImprovedGrab)
         {
             string npcName = npc.Stats != null ? npc.Stats.CharacterName : "<unknown>";
@@ -14014,13 +14021,21 @@ public partial class GameManager : MonoBehaviour
         {
             if (hasCoupOption)
                 choice = SpecialAttackType.CoupDeGrace;
-            else if (!target.Stats.IsProne && npc.HasMeleeWeaponEquipped())
+            else if (!target.Stats.IsProne
+                && npc.HasMeleeWeaponEquipped()
+                && npc.CanPerformSpecialAttack(SpecialAttackType.Trip))
                 choice = SpecialAttackType.Trip;
 
-            if (choice == null && target.GetEquippedMainWeapon() != null && npc.Stats.STRMod >= 3)
+            if (choice == null
+                && target.GetEquippedMainWeapon() != null
+                && npc.Stats.STRMod >= 3
+                && npc.CanPerformSpecialAttack(SpecialAttackType.Disarm))
                 choice = SpecialAttackType.Disarm;
 
-            if (choice == null && npc.Stats.STRMod >= 4 && !hasImprovedGrab)
+            if (choice == null
+                && npc.Stats.STRMod >= 4
+                && !hasImprovedGrab
+                && npc.CanPerformSpecialAttack(SpecialAttackType.Grapple))
                 choice = SpecialAttackType.Grapple;
         }
 
