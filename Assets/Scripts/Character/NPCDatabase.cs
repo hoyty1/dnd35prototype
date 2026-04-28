@@ -46,6 +46,7 @@ public static class NPCDatabase
         RegisterProtectionFromEvilTestMelee();
         RegisterProtectionFromEvilTestControls();
         RegisterWindDispersionTestCasters();
+        RegisterObscuringMistRangedOnlyTestNPCs();
         RegisterZombieShambler();
         RegisterTargetDummy();
 
@@ -96,6 +97,7 @@ public static class NPCDatabase
             new EncounterPreset("npc_magic_missile_test", "🧪 NPC Magic Missile Test", "Enemy evoker only casts Magic Missile; Shield should block damage during resolution (not targeting).", new List<string> { "arcane_missile_adept" }),
             new EncounterPreset("protection_from_evil_test", "🛡️ Protection from Evil Test", "Single protected wizard versus evil and non-evil threats to validate mental-control block, summoned contact barrier, +2 AC/save bonuses vs Evil, and no bonus vs non-Evil controls.", new List<string> { "evil_enchanter_test", "fiendish_wolf", "evil_goblin_test", "neutral_bandit_test", "neutral_mage_test", "evil_acolyte_test" }),
             new EncounterPreset("wind_dispersion_test", "🌫️ Obscuring Mist Test", "Focused concealment test for Obscuring Mist (20% at 5 ft, 50% beyond 5 ft) with mixed target sizes and ranged pressure.", new List<string> { "test_halfling_gust", "test_fighter_gust", "test_barbarian_gust", "test_ogre_gust", "test_archer_gust" }),
+            new EncounterPreset("obscuring_mist_ranged_only", "🏹 Obscuring Mist - Ranged Combat Only", "Dedicated ranged concealment scenario: six ranged attackers with mixed weapon types surround a party in Obscuring Mist to validate total concealment targeting, last-known-position behavior, and visible-target prioritization.", new List<string> { "ranged_test_archer_north", "ranged_test_archer_ne", "ranged_test_archer_east", "ranged_test_archer_se", "ranged_test_archer_south", "ranged_test_archer_west" }),
             new EncounterPreset("disrupt_undead_test", "☀️ Disrupt Undead Test", "Wizard cantrip drill versus mixed targets: skeletons + zombie + one living orc to confirm undead-only damage.", new List<string> { "skeleton_warrior", "skeleton_warrior", "zombie_shambler", "orc_berserker" }),
             new EncounterPreset("wizard_spell_test", "📘 Wizard Spell Test", "Single wizard scenario with every implemented wizard spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("cleric_spell_test", "📖 Cleric Spell Test", "Single cleric scenario with every implemented cleric spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
@@ -1982,6 +1984,207 @@ public static class NPCDatabase
             PanelColor = new Color(0.15f, 0.24f, 0.15f, 0.88f),
             NameColor = new Color(0.88f, 1f, 0.88f),
             Description = "Ranged control target positioned off the wind line to validate concealment attacks."
+        });
+    }
+
+    private static void RegisterObscuringMistRangedOnlyTestNPCs()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "ranged_test_archer_north",
+            Name = "Aelindra Swiftarrow",
+            Level = 4,
+            CharacterClass = "Ranger",
+            CreatureType = "Humanoid",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            STR = 12,
+            DEX = 18,
+            CON = 12,
+            WIS = 14,
+            INT = 10,
+            CHA = 10,
+            BAB = 4,
+            BaseSpeed = 6,
+            BaseHitDieHP = 28,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("longbow", EquipSlot.RightHand),
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "North" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.74f, 0.92f, 0.74f, 1f),
+            PanelColor = new Color(0.15f, 0.23f, 0.14f, 0.88f),
+            NameColor = new Color(0.93f, 1f, 0.92f),
+            Description = "Elven longbow specialist positioned north of the mist for ranged-only concealment tests."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "ranged_test_archer_ne",
+            Name = "Marcus Longshot",
+            Level = 4,
+            CharacterClass = "Ranger",
+            CreatureType = "Humanoid",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            STR = 14,
+            DEX = 16,
+            CON = 14,
+            WIS = 14,
+            INT = 10,
+            CHA = 10,
+            BAB = 4,
+            BaseSpeed = 6,
+            BaseHitDieHP = 32,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("longbow", EquipSlot.RightHand),
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "Northeast" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.80f, 0.86f, 0.72f, 1f),
+            PanelColor = new Color(0.20f, 0.24f, 0.14f, 0.88f),
+            NameColor = new Color(0.98f, 0.96f, 0.84f),
+            Description = "Human ranger on the northeast lane for diagonal concealment targeting checks."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "ranged_test_archer_east",
+            Name = "Garrick Strongbow",
+            Level = 4,
+            CharacterClass = "Fighter",
+            CreatureType = "Humanoid",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            STR = 16,
+            DEX = 16,
+            CON = 14,
+            WIS = 10,
+            INT = 10,
+            CHA = 10,
+            BAB = 4,
+            BaseSpeed = 6,
+            BaseHitDieHP = 34,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("composite_longbow", EquipSlot.RightHand),
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "East" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.84f, 0.76f, 0.66f, 1f),
+            PanelColor = new Color(0.24f, 0.18f, 0.12f, 0.88f),
+            NameColor = new Color(1f, 0.92f, 0.84f),
+            Description = "Fighter archer using a composite longbow to validate Strength-to-damage ranged output."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "ranged_test_archer_se",
+            Name = "Pip Quickfingers",
+            Level = 4,
+            CharacterClass = "Rogue",
+            CreatureType = "Humanoid",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Small,
+            STR = 10,
+            DEX = 18,
+            CON = 12,
+            WIS = 12,
+            INT = 12,
+            CHA = 10,
+            BAB = 3,
+            BaseSpeed = 4,
+            BaseHitDieHP = 22,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("shortbow", EquipSlot.RightHand),
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "Southeast", "SmallTarget" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.95f, 0.84f, 0.56f, 1f),
+            PanelColor = new Color(0.28f, 0.22f, 0.10f, 0.88f),
+            NameColor = new Color(1f, 0.97f, 0.86f),
+            Description = "Halfling shortbow shooter for small-size ranged accuracy and concealment behavior checks."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "ranged_test_archer_south",
+            Name = "Borlin Ironbolt",
+            Level = 4,
+            CharacterClass = "Fighter",
+            CreatureType = "Humanoid",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Medium,
+            STR = 14,
+            DEX = 14,
+            CON = 16,
+            WIS = 10,
+            INT = 10,
+            CHA = 8,
+            BAB = 4,
+            BaseSpeed = 4,
+            BaseHitDieHP = 38,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("crossbow_heavy", EquipSlot.RightHand),
+                new EquipmentSlotPair("chainmail", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "South", "Crossbow" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.76f, 0.78f, 0.84f, 1f),
+            PanelColor = new Color(0.18f, 0.20f, 0.26f, 0.88f),
+            NameColor = new Color(0.94f, 0.96f, 1f),
+            Description = "Dwarven heavy crossbowman testing slower, high-impact ranged attacks into total concealment."
+        });
+
+        Register(new NPCDefinition
+        {
+            Id = "ranged_test_archer_west",
+            Name = "Kira Windrunner",
+            Level = 3,
+            CharacterClass = "Ranger",
+            CreatureType = "Humanoid",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            STR = 10,
+            DEX = 16,
+            CON = 12,
+            WIS = 14,
+            INT = 10,
+            CHA = 12,
+            BAB = 3,
+            BaseSpeed = 6,
+            BaseHitDieHP = 24,
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair("shortbow", EquipSlot.RightHand),
+                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+            },
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "West", "Scout" },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.70f, 0.90f, 0.86f, 1f),
+            PanelColor = new Color(0.12f, 0.24f, 0.22f, 0.88f),
+            NameColor = new Color(0.88f, 1f, 0.98f),
+            Description = "Mobile western scout with shortbow used to validate ranged-only reposition/search behavior."
         });
     }
 

@@ -83,6 +83,7 @@ public partial class GameManager : MonoBehaviour
     private const string NPCMagicMissileTestPresetId = "npc_magic_missile_test";
     private const string ProtectionFromEvilTestPresetId = "protection_from_evil_test";
     private const string WindDispersionTestPresetId = "wind_dispersion_test";
+    private const string ObscuringMistRangedOnlyTestPresetId = "obscuring_mist_ranged_only";
     private const string DisruptUndeadTestPresetId = "disrupt_undead_test";
     private const string WizardSpellTestPresetId = "wizard_spell_test";
     private const string ClericSpellTestPresetId = "cleric_spell_test";
@@ -101,6 +102,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isNpcMagicMissileTestEncounter;
     private bool _isProtectionFromEvilTestEncounter;
     private bool _isWindDispersionTestEncounter;
+    private bool _isObscuringMistRangedOnlyTestEncounter;
     private bool _isDisruptUndeadTestEncounter;
     private bool _isWizardSpellTestEncounter;
     private bool _isClericSpellTestEncounter;
@@ -603,6 +605,7 @@ public partial class GameManager : MonoBehaviour
         _isNpcMagicMissileTestEncounter = string.Equals(presetId, NPCMagicMissileTestPresetId, StringComparison.Ordinal);
         _isProtectionFromEvilTestEncounter = string.Equals(presetId, ProtectionFromEvilTestPresetId, StringComparison.Ordinal);
         _isWindDispersionTestEncounter = string.Equals(presetId, WindDispersionTestPresetId, StringComparison.Ordinal);
+        _isObscuringMistRangedOnlyTestEncounter = string.Equals(presetId, ObscuringMistRangedOnlyTestPresetId, StringComparison.Ordinal);
         _isDisruptUndeadTestEncounter = string.Equals(presetId, DisruptUndeadTestPresetId, StringComparison.Ordinal);
         _isWizardSpellTestEncounter = string.Equals(presetId, WizardSpellTestPresetId, StringComparison.Ordinal);
         _isClericSpellTestEncounter = string.Equals(presetId, ClericSpellTestPresetId, StringComparison.Ordinal);
@@ -648,6 +651,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureProtectionFromEvilTestParty();
         else if (_isWindDispersionTestEncounter)
             ConfigureWindDispersionTestParty();
+        else if (_isObscuringMistRangedOnlyTestEncounter)
+            ConfigureObscuringMistRangedOnlyTestParty();
         else if (_isDisruptUndeadTestEncounter)
             ConfigureDisruptUndeadTestParty();
         else if (_isWizardSpellTestEncounter)
@@ -2290,6 +2295,161 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("Phase 3: Recast mist in a second lane and verify persistent area indicators remain visible.");
     }
 
+    private void ConfigureObscuringMistRangedOnlyTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+        SpellDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats fighter1Stats = new CharacterStats(
+            name: "Thoran Ironshield",
+            level: 4,
+            characterClass: "Fighter",
+            str: 18, dex: 12, con: 18, wis: 10, intelligence: 10, cha: 8,
+            bab: 4,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 4,
+            atkRange: 1,
+            baseHitDieHP: 38,
+            raceName: "Dwarf"
+        );
+
+        Vector2Int fighter1Start = new Vector2Int(7, 8);
+        Sprite fighter1Alive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+        PC1.Init(fighter1Stats, fighter1Start, fighter1Alive, pcDead);
+
+        InventoryComponent fighter1Inventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        fighter1Inventory.Init(fighter1Stats);
+        fighter1Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("warhammer"), EquipSlot.RightHand);
+        fighter1Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
+        fighter1Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        fighter1Inventory.CharacterInventory.RecalculateStats();
+
+        CharacterStats fighter2Stats = new CharacterStats(
+            name: "Valdor the Brave",
+            level: 4,
+            characterClass: "Fighter",
+            str: 16, dex: 14, con: 16, wis: 10, intelligence: 10, cha: 12,
+            bab: 4,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 4,
+            atkRange: 1,
+            baseHitDieHP: 36,
+            raceName: "Human"
+        );
+
+        Vector2Int fighter2Start = new Vector2Int(9, 8);
+        Sprite fighter2Alive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+        PC2.Init(fighter2Stats, fighter2Start, fighter2Alive, pcDead);
+
+        InventoryComponent fighter2Inventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
+        fighter2Inventory.Init(fighter2Stats);
+        fighter2Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
+        fighter2Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
+        fighter2Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        fighter2Inventory.CharacterInventory.RecalculateStats();
+
+        CharacterStats wizardStats = new CharacterStats(
+            name: "Mira Veilbinder",
+            level: 4,
+            characterClass: "Wizard",
+            str: 10, dex: 14, con: 14, wis: 12, intelligence: 17, cha: 10,
+            bab: 2,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 24,
+            raceName: "Human"
+        );
+
+        Vector2Int wizardStart = new Vector2Int(8, 7);
+        Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        PC3.Init(wizardStats, wizardStart, wizardAlive, pcDead);
+
+        InventoryComponent wizardInventory = PC3.gameObject.GetComponent<InventoryComponent>() ?? PC3.gameObject.AddComponent<InventoryComponent>();
+        wizardInventory.Init(wizardStats);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.RecalculateStats();
+
+        SpellcastingComponent wizardSpellComp = PC3.gameObject.GetComponent<SpellcastingComponent>() ?? PC3.gameObject.AddComponent<SpellcastingComponent>();
+        wizardSpellComp.KnownSpells.Clear();
+        wizardSpellComp.SelectedSpellIds = new List<string>
+        {
+            "obscuring_mist", "magic_missile", "shield"
+        };
+        wizardSpellComp.PreparedSpellSlotIds = new List<string>
+        {
+            "obscuring_mist", "obscuring_mist", "magic_missile", "shield"
+        };
+        wizardSpellComp.Init(wizardStats);
+
+        StatusEffectManager wizardStatusMgr = PC3.gameObject.GetComponent<StatusEffectManager>() ?? PC3.gameObject.AddComponent<StatusEffectManager>();
+        wizardStatusMgr.Init(wizardStats);
+
+        ConcentrationManager wizardConcentrationMgr = PC3.gameObject.GetComponent<ConcentrationManager>() ?? PC3.gameObject.AddComponent<ConcentrationManager>();
+        wizardConcentrationMgr.Init(wizardStats, PC3);
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, true, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, true, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("╔═══════════════════════════════════════════════════════════════╗");
+        CombatUI?.ShowCombatLog("║       OBSCURING MIST - RANGED COMBAT ONLY TEST               ║");
+        CombatUI?.ShowCombatLog("╚═══════════════════════════════════════════════════════════════╝");
+        CombatUI?.ShowCombatLog("");
+        CombatUI?.ShowCombatLog("PARTY (center lane - intended to fight inside mist):");
+        CombatUI?.ShowCombatLog("  • Thoran Ironshield (Fighter 4)");
+        CombatUI?.ShowCombatLog("  • Valdor the Brave (Fighter 4)");
+        CombatUI?.ShowCombatLog("  • Mira Veilbinder (Wizard 4, casts Obscuring Mist)");
+        CombatUI?.ShowCombatLog("");
+        CombatUI?.ShowCombatLog("RANGED ENEMIES (6-direction surround):");
+        CombatUI?.ShowCombatLog("  NORTH:     Aelindra Swiftarrow (Longbow)");
+        CombatUI?.ShowCombatLog("  NORTHEAST: Marcus Longshot (Longbow)");
+        CombatUI?.ShowCombatLog("  EAST:      Garrick Strongbow (Composite Longbow)");
+        CombatUI?.ShowCombatLog("  SOUTHEAST: Pip Quickfingers (Shortbow)");
+        CombatUI?.ShowCombatLog("  SOUTH:     Borlin Ironbolt (Heavy Crossbow)");
+        CombatUI?.ShowCombatLog("  WEST:      Kira Windrunner (Shortbow)");
+        CombatUI?.ShowCombatLog("");
+        CombatUI?.ShowCombatLog("BATTLEFIELD LAYOUT:");
+        CombatUI?.ShowCombatLog("═══════════════════════════════════════════════════════════════");
+        CombatUI?.ShowCombatLog("                    Aelindra (Longbow)");
+        CombatUI?.ShowCombatLog("                             N");
+        CombatUI?.ShowCombatLog("               Marcus      |      Pip");
+        CombatUI?.ShowCombatLog("                  NE       |       SE");
+        CombatUI?.ShowCombatLog("                            ");
+        CombatUI?.ShowCombatLog("     Kira (W)  ←      [ PARTY IN MIST ]      →  Garrick (E)");
+        CombatUI?.ShowCombatLog("                            ");
+        CombatUI?.ShowCombatLog("                             S");
+        CombatUI?.ShowCombatLog("                   Borlin (Crossbow)");
+        CombatUI?.ShowCombatLog("═══════════════════════════════════════════════════════════════");
+        CombatUI?.ShowCombatLog("");
+        CombatUI?.ShowCombatLog("HOW TO TEST:");
+        CombatUI?.ShowCombatLog("  1) Cast Obscuring Mist with Mira on party center.");
+        CombatUI?.ShowCombatLog("  2) Verify ranged attacks against misted targets resolve with concealment checks.");
+        CombatUI?.ShowCombatLog("  3) Move targets inside mist to validate last-known-position attacks and misses.");
+        CombatUI?.ShowCombatLog("  4) Move one target outside mist; verify archers prioritize visible target.");
+        CombatUI?.ShowCombatLog("  5) Confirm AI remains ranged-focused (no melee maneuvers/disarm/trip/grapple attempts).");
+        CombatUI?.ShowCombatLog("  6) Compare longbow/shortbow/composite/heavy-crossbow behavior and damage output.");
+        CombatUI?.ShowCombatLog("");
+    }
+
     private void ConfigureDisruptUndeadTestParty()
     {
         RaceDatabase.Init();
@@ -3035,6 +3195,15 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(12, 11), // Archer off line for concealment-only interaction
     };
 
+    private static readonly Vector2Int[] ObscuringMistRangedOnlySpawnPositions = {
+        new Vector2Int(8, 14),  // North longbow
+        new Vector2Int(13, 12), // Northeast longbow
+        new Vector2Int(15, 8),  // East composite longbow
+        new Vector2Int(12, 4),  // Southeast shortbow
+        new Vector2Int(8, 2),   // South heavy crossbow
+        new Vector2Int(2, 8),   // West shortbow
+    };
+
     private static readonly Vector2Int[] WizardSpellTestSpawnPositions = {
         new Vector2Int(12, 9),
     };
@@ -3143,6 +3312,11 @@ public partial class GameManager : MonoBehaviour
             {
                 // Build a straight wind lane + one off-axis archer to validate line-of-effect and concealment interactions.
                 pos = WindDispersionTestSpawnPositions[i];
+            }
+            else if (_isObscuringMistRangedOnlyTestEncounter && i < ObscuringMistRangedOnlySpawnPositions.Length)
+            {
+                // Place six ranged attackers around the central mist zone to test concealed-target ranged AI behavior.
+                pos = ObscuringMistRangedOnlySpawnPositions[i];
             }
             else if (_isWizardSpellTestEncounter && i < WizardSpellTestSpawnPositions.Length)
             {
