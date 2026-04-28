@@ -6,6 +6,9 @@ using UnityEngine;
 /// </summary>
 public class WallOfFireAreaEffect : PersistentAreaEffect
 {
+    protected override Color GridHighlightColor => AreaEffectColors.WallOfFire;
+    protected override bool UseGridHighlighting => true;
+
     protected override void Awake()
     {
         base.Awake();
@@ -18,9 +21,7 @@ public class WallOfFireAreaEffect : PersistentAreaEffect
         SizeY = 1; // 5 ft wide
         DirectionAngle = 0f; // Horizontal by default
 
-        VisualColor = new Color(1f, 0.35f, 0.05f, 0.55f);
-        VisualHeight = 0.03f;
-        ShowVisual = true;
+        ShowVisual = false;
     }
 
     protected override void OnCreatureEntersArea(CharacterController character, bool isInitial)

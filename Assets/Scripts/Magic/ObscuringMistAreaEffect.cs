@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -9,14 +8,8 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
 {
     private const string ConcealmentSpellId = "obscuring_mist_concealment";
 
-    private readonly List<SquareCell> _highlightedCells = new List<SquareCell>();
-
-    // Mist color: pale blue-white with medium opacity for better battlefield contrast.
-    // RGB(0.85, 0.95, 1.00) keeps the effect thematic (natural mist tone).
-    // Alpha 0.50 is intentionally more visible than the old 0.30 gray tint.
-    private static readonly Color MistColor = new Color(0.85f, 0.95f, 1.00f, 0.50f);
-
-    private bool _gridHighlightApplied;
+    protected override Color GridHighlightColor => AreaEffectColors.ObscuringMist;
+    protected override bool UseGridHighlighting => true;
 
     protected override void Awake()
     {
@@ -38,7 +31,6 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
     {
         LogEffect("Mist billows across a 20-ft radius spread.");
         LogEffect("Within the mist: adjacent attackers suffer 20% miss chance; attackers farther than 5 ft suffer 50% (total concealment).");
-        ApplyGridHighlight();
     }
 
     private void Update()
@@ -47,14 +39,14 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
         UpdateCharacterTracking();
 
         // Defensive re-apply in case grid initializes slightly after the area object.
-        if (!_gridHighlightApplied)
+        if (!IsGridHighlightApplied)
             ApplyGridHighlight();
     }
 
     public override void OnRoundStart()
     {
         base.OnRoundStart();
-        if (!_gridHighlightApplied)
+        if (!IsGridHighlightApplied)
             ApplyGridHighlight();
     }
 
@@ -95,12 +87,6 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
 
         RemoveGridHighlight();
         LogEffect("Obscuring Mist dissipates.");
-    }
-
-    protected override void OnDestroy()
-    {
-        RemoveGridHighlight();
-        base.OnDestroy();
     }
 
     private void ApplyConcealment(CharacterController character)
@@ -192,39 +178,4 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
         }
     }
 
-    private void ApplyGridHighlight()
-    {
-        if (gameManager == null || gameManager.Grid == null)
-        {
-            _gridHighlightApplied = false;
-            Debug.LogWarning("[ObscuringMistAreaEffect] Grid not found - cannot apply mist highlight.");
-            return;
-        }
-
-        _highlightedCells.Clear();
-        foreach (Vector2Int cellCoord in AffectedCells)
-        {
-            SquareCell cell = gameManager.Grid.GetCell(cellCoord);
-            if (cell == null)
-                continue;
-
-            cell.SetHighlight(MistColor);
-            _highlightedCells.Add(cell);
-        }
-
-        _gridHighlightApplied = _highlightedCells.Count > 0;
-    }
-
-    private void RemoveGridHighlight()
-    {
-        for (int i = 0; i < _highlightedCells.Count; i++)
-        {
-            SquareCell cell = _highlightedCells[i];
-            if (cell != null)
-                cell.ClearHighlight();
-        }
-
-        _highlightedCells.Clear();
-        _gridHighlightApplied = false;
-    }
 }

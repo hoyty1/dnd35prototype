@@ -7,6 +7,9 @@ public class GreaseAreaEffect : PersistentAreaEffect
 {
     private const int BalanceDC = 10;
 
+    protected override Color GridHighlightColor => AreaEffectColors.Grease;
+    protected override bool UseGridHighlighting => true;
+
     protected override void Awake()
     {
         base.Awake();
@@ -16,9 +19,7 @@ public class GreaseAreaEffect : PersistentAreaEffect
         Shape = AreaShape.Square;
         SizeX = 2; // 10-ft square on 5-ft grid
         SizeY = 2;
-        VisualColor = new Color(0.2f, 0.75f, 0.28f, 0.35f);
-        VisualHeight = 0.02f;
-        ShowVisual = true;
+        ShowVisual = false;
     }
 
     protected override void OnAreaCreated()

@@ -129,12 +129,30 @@ public abstract class PersistentAreaEffect : MonoBehaviour
     public float VisualHeight { get; protected set; } = 0.02f;
     public bool ShowVisual { get; protected set; } = true;
 
+    /// <summary>
+    /// Color to apply to grid cells when grid highlighting is enabled.
+    /// Override in derived area-effect classes for spell-specific visual identity.
+    /// </summary>
+    protected virtual Color GridHighlightColor => new Color(0.5f, 0.5f, 0.5f, 0.30f);
+
+    /// <summary>
+    /// Enables transparent per-cell highlight overlays instead of mesh visuals.
+    /// </summary>
+    protected virtual bool UseGridHighlighting => false;
+
+    /// <summary>
+    /// True once at least one grid cell has an active highlight.
+    /// </summary>
+    protected bool IsGridHighlightApplied => gridHighlightApplied;
+
     public HashSet<Vector2Int> AffectedCells { get; protected set; }
     public HashSet<CharacterController> CharactersInArea { get; protected set; }
     public GameObject VisualIndicator { get; protected set; }
 
     protected GameManager gameManager;
     private bool hasExpired;
+    private readonly List<SquareCell> highlightedCells = new List<SquareCell>();
+    private bool gridHighlightApplied;
 
     protected virtual void Awake()
     {
@@ -152,10 +170,14 @@ public abstract class PersistentAreaEffect : MonoBehaviour
 
         CalculateAffectedCells();
 
-        if (ShowVisual)
+        if (ShowVisual && !UseGridHighlighting)
             CreateVisualIndicator();
 
         OnAreaCreated();
+
+        if (UseGridHighlighting)
+            ApplyGridHighlight();
+
         ApplyInitialEffect();
 
         AreaEffectManager.Instance.RegisterAreaEffect(this);
@@ -193,6 +215,8 @@ public abstract class PersistentAreaEffect : MonoBehaviour
 
     protected virtual void OnDestroy()
     {
+        RemoveGridHighlight();
+
         if (AreaEffectManager.HasInstance)
             AreaEffectManager.Instance.UnregisterAreaEffect(this);
 
@@ -386,6 +410,59 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         return AffectedCells.Contains(character.GridPosition);
     }
 
+    /// <summary>
+    /// Apply transparent color highlight to all currently affected grid cells.
+    /// </summary>
+    protected void ApplyGridHighlight()
+    {
+        if (!UseGridHighlighting)
+            return;
+
+        if (gameManager == null)
+            gameManager = GameManager.Instance != null ? GameManager.Instance : FindObjectOfType<GameManager>();
+
+        if (gameManager == null || gameManager.Grid == null)
+        {
+            gridHighlightApplied = false;
+            Debug.LogWarning($"[{GetType().Name}] Grid not found - cannot apply highlight for {EffectName}.");
+            return;
+        }
+
+        RemoveGridHighlight();
+
+        Color colorToApply = GridHighlightColor;
+        foreach (Vector2Int cellCoord in AffectedCells)
+        {
+            SquareCell cell = gameManager.Grid.GetCell(cellCoord);
+            if (cell == null)
+                continue;
+
+            cell.SetHighlight(colorToApply);
+            highlightedCells.Add(cell);
+        }
+
+        gridHighlightApplied = highlightedCells.Count > 0;
+    }
+
+    /// <summary>
+    /// Remove highlight from all cells currently tracked by this area effect.
+    /// </summary>
+    protected void RemoveGridHighlight()
+    {
+        if (!UseGridHighlighting)
+            return;
+
+        for (int i = 0; i < highlightedCells.Count; i++)
+        {
+            SquareCell cell = highlightedCells[i];
+            if (cell != null)
+                cell.ClearHighlight();
+        }
+
+        highlightedCells.Clear();
+        gridHighlightApplied = false;
+    }
+
     protected virtual void CreateVisualIndicator()
     {
         if (VisualIndicator != null)
@@ -484,6 +561,9 @@ public abstract class PersistentAreaEffect : MonoBehaviour
 
     public virtual void OnRoundStart()
     {
+        if (UseGridHighlighting && !gridHighlightApplied)
+            ApplyGridHighlight();
+
         UpdateCharacterTracking();
 
         foreach (CharacterController character in CharactersInArea)
@@ -573,6 +653,8 @@ public abstract class PersistentAreaEffect : MonoBehaviour
         }
 
         CharactersInArea.Clear();
+
+        RemoveGridHighlight();
 
         if (AreaEffectManager.HasInstance)
             AreaEffectManager.Instance.UnregisterAreaEffect(this);
