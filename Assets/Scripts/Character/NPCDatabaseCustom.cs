@@ -792,6 +792,9 @@ public static partial class NPCDatabase
         RegisterSummonEagle();
         RegisterSummonOctopus();
         RegisterSummonSmallViper();
+        RegisterSummonMonstrousCentipedeMedium();
+        RegisterSummonMonstrousScorpionSmall();
+        RegisterSummonMonstrousSpiderSmall();
         RegisterSummonDireBat();
         RegisterSummonSmallAirElemental();
         RegisterSummonSmallFireElemental();
@@ -936,6 +939,103 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.15f, 0.23f, 0.12f, 0.85f),
             NameColor = new Color(0.84f, 0.94f, 0.8f),
             Description = "Summon Monster baseline Small Viper."
+        });
+    }
+
+    private static void RegisterSummonMonstrousCentipedeMedium()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "monstrous_centipede_medium",
+            Name = "Monstrous Centipede (Medium)",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Vermin",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 9, DEX = 15, CON = 10, WIS = 10, INT = 1, CHA = 2,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 7,
+            CreatureTags = new List<string> { "Vermin", "SummonBase" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.56f, 0.44f, 0.3f, 1f),
+            PanelColor = new Color(0.18f, 0.12f, 0.07f, 0.85f),
+            NameColor = new Color(0.92f, 0.82f, 0.71f),
+            Description = "Summon Monster baseline Monstrous Centipede (Medium)."
+        });
+    }
+
+    private static void RegisterSummonMonstrousScorpionSmall()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "monstrous_scorpion_small",
+            Name = "Monstrous Scorpion (Small)",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Vermin",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 8, DEX = 13, CON = 10, WIS = 10, INT = 1, CHA = 2,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 3, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Sting", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 7,
+            CreatureTags = new List<string> { "Vermin", "SummonBase" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.51f, 0.4f, 0.29f, 1f),
+            PanelColor = new Color(0.17f, 0.11f, 0.07f, 0.85f),
+            NameColor = new Color(0.9f, 0.8f, 0.67f),
+            Description = "Summon Monster baseline Monstrous Scorpion (Small)."
+        });
+    }
+
+    private static void RegisterSummonMonstrousSpiderSmall()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "monstrous_spider_small",
+            Name = "Monstrous Spider (Small)",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Vermin",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 9, DEX = 15, CON = 10, WIS = 10, INT = 1, CHA = 2,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 7,
+            CreatureTags = new List<string> { "Vermin", "SummonBase" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.3f, 0.3f, 0.3f, 1f),
+            PanelColor = new Color(0.13f, 0.13f, 0.13f, 0.85f),
+            NameColor = new Color(0.82f, 0.82f, 0.82f),
+            Description = "Summon Monster baseline Monstrous Spider (Small)."
         });
     }
 
