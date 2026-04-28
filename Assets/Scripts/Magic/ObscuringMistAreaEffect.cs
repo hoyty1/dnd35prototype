@@ -137,7 +137,9 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
         if (attacker == null || target == null)
             return 0;
 
-        if (!IsCharacterInArea(attacker) || !IsCharacterInArea(target))
+        // Concealment is granted by the target being inside the mist.
+        // The attacker can be inside or outside; distance to the target determines partial vs total concealment.
+        if (!IsCharacterInArea(target))
             return 0;
 
         int distanceSquares = attacker.GetMinimumDistanceToTarget(target, chebyshev: true);

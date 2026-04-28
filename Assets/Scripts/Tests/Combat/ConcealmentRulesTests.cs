@@ -26,6 +26,7 @@ public static class ConcealmentRulesTests
         TestFogSpellsAreImplementedAsAoEConcealment();
         TestAttackMissesWhenDefenderHasGuaranteedConcealment();
         TestTotalConcealmentPreventsAttackOfOpportunity();
+        TestObscuringMistAppliesConcealmentToTargetsInsideWhenAttackerOutside();
 
         Debug.Log($"====== Concealment Rules Results: {_passed} passed, {_failed} failed ======");
     }
@@ -225,6 +226,48 @@ public static class ConcealmentRulesTests
         {
             DestroyController(threatener);
             DestroyController(target);
+        }
+    }
+
+    private static void TestObscuringMistAppliesConcealmentToTargetsInsideWhenAttackerOutside()
+    {
+        CharacterController attacker = null;
+        CharacterController target = null;
+        ObscuringMistAreaEffect mist = null;
+
+        try
+        {
+            attacker = CreateController(BuildStats("OutsideArcher", "Fighter", 6, Alignment.TrueNeutral, 14, 16, 12, 10, 10, 10, 6));
+            target = CreateController(BuildStats("InsideTarget", "Wizard", 6, Alignment.TrueNeutral, 10, 12, 10, 10, 16, 10, 3));
+
+            attacker.GridPosition = new Vector2Int(0, 0);
+            target.GridPosition = new Vector2Int(3, 0);
+
+            GameObject mistObject = new GameObject("ConcealmentTest_ObscuringMist");
+            mist = mistObject.AddComponent<ObscuringMistAreaEffect>();
+
+            // Simulate only the target being inside the mist area.
+            mist.AffectedCells.Add(target.GridPosition);
+
+            int farMissChance = mist.GetConcealmentMissChance(attacker, target);
+            Assert(farMissChance == 50,
+                "Obscuring Mist grants total concealment to target inside mist when attacker is outside beyond 5 ft",
+                $"missChance={farMissChance}");
+
+            // Move attacker adjacent to the target while still outside the mist area.
+            attacker.GridPosition = new Vector2Int(2, 0);
+            int nearMissChance = mist.GetConcealmentMissChance(attacker, target);
+            Assert(nearMissChance == 20,
+                "Obscuring Mist grants 20% concealment to target inside mist when attacker is outside within 5 ft",
+                $"missChance={nearMissChance}");
+        }
+        finally
+        {
+            DestroyController(attacker);
+            DestroyController(target);
+
+            if (mist != null)
+                Object.DestroyImmediate(mist.gameObject);
         }
     }
 }
