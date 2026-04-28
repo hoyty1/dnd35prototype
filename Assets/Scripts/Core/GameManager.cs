@@ -11170,8 +11170,48 @@ public partial class GameManager : MonoBehaviour
 
         _conditionService?.OnTurnStart(npc);
         npc.StartNewTurn();
+        ProcessNPCRoundStartPerception(npc);
         PruneTurnUndeadTrackers();
         CheckTurnUndeadProximityBreakingForMover(npc);
+    }
+
+    private void ProcessNPCRoundStartPerception(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null || npc.Stats.IsDead)
+            return;
+
+        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
+        if (tracker == null)
+            tracker = npc.gameObject.AddComponent<LastKnownPositionTracker>();
+
+        var visibleEnemies = new List<CharacterController>();
+        var concealedTrackedEnemies = new List<CharacterController>();
+
+        List<CharacterController> allCharacters = GetAllCharacters();
+        bool incomingIsRangedAttack = npc.IsEquippedWeaponRanged();
+
+        for (int i = 0; i < allCharacters.Count; i++)
+        {
+            CharacterController enemy = allCharacters[i];
+            if (enemy == null || enemy == npc || enemy.Stats == null || enemy.Stats.IsDead)
+                continue;
+            if (!IsEnemyTeam(npc, enemy))
+                continue;
+
+            if (npc.CanSee(enemy, incomingIsRangedAttack))
+                visibleEnemies.Add(enemy);
+            else if (tracker.HasLastKnownPosition(enemy))
+                concealedTrackedEnemies.Add(enemy);
+        }
+
+        tracker.UpdateVisibleCharacters(visibleEnemies);
+
+        if (concealedTrackedEnemies.Count > 0)
+        {
+            string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
+            CombatUI?.ShowCombatLog($"{npcName} attempts to locate concealed targets:");
+            tracker.AttemptListenChecks(concealedTrackedEnemies, this);
+        }
     }
 
     public IEnumerator ExecuteGrappleRestrictedTurnForAI(CharacterController npc)
@@ -14858,6 +14898,9 @@ public partial class GameManager : MonoBehaviour
                 CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
             }
 
+            if (FullAttackHadLastKnownPositionMiss(fullResult))
+                yield return StartCoroutine(TryImmediateSearchAfterLastKnownMiss(npc, target));
+
             yield return new WaitForSeconds(1.0f);
             yield break;
         }
@@ -14914,7 +14957,80 @@ public partial class GameManager : MonoBehaviour
             CombatUI.ShowCombatLog(_lastCombatLog + $"\n{target.Stats.CharacterName} has fallen, but the fight continues!");
         }
 
+        if (IsLastKnownPositionAutoMiss(result))
+            yield return StartCoroutine(TryImmediateSearchAfterLastKnownMiss(npc, target));
+
         yield return new WaitForSeconds(1.0f);
+    }
+
+    private static bool IsLastKnownPositionAutoMiss(CombatResult result)
+    {
+        if (result == null)
+            return false;
+
+        if (!result.MissedDueToConcealment || result.ConcealmentMissChance < 100)
+            return false;
+
+        string description = result.ConcealmentDescription ?? string.Empty;
+        return description.IndexOf("last known", StringComparison.OrdinalIgnoreCase) >= 0
+            || description.IndexOf("target moved", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool FullAttackHadLastKnownPositionMiss(FullAttackResult fullResult)
+    {
+        if (fullResult == null || fullResult.Attacks == null || fullResult.Attacks.Count == 0)
+            return false;
+
+        for (int i = 0; i < fullResult.Attacks.Count; i++)
+        {
+            if (IsLastKnownPositionAutoMiss(fullResult.Attacks[i]))
+                return true;
+        }
+
+        return false;
+    }
+
+    private IEnumerator TryImmediateSearchAfterLastKnownMiss(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || target == null || npc.Actions == null)
+            yield break;
+
+        if (!npc.Actions.HasMoveAction)
+            yield break;
+
+        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
+        Vector2Int destinationHint = target.GridPosition;
+        if (tracker != null)
+        {
+            Vector2Int? known = tracker.GetLastKnownPosition(target);
+            if (known.HasValue)
+                destinationHint = known.Value;
+        }
+
+        DND35.AI.AIProfile profile = npc.aiProfile;
+        SquareCell searchCell = _aiService != null
+            ? _aiService.EvaluateMovementOptions(npc, destinationHint, retreat: false, target, profile)
+            : null;
+
+        if (searchCell == null || searchCell.Coords == npc.GridPosition)
+            yield break;
+
+        string npcName = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
+        string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+
+        CombatUI?.ShowCombatLog($"{npcName} rushes to search after missing {targetName}'s last known position.");
+
+        yield return StartCoroutine(MoveCharacterAlongComputedPath(npc, searchCell.Coords, PlayerMoveSecondsPerStep));
+
+        if (npc.Actions.HasMoveAction)
+            npc.Actions.UseMoveAction();
+
+        bool canSeeAfterMove = npc.CanSee(target, npc.IsEquippedWeaponRanged());
+        CombatUI?.ShowCombatLog(canSeeAfterMove
+            ? $"{npcName} reacquires visual contact on {targetName}."
+            : $"{npcName} continues searching for {targetName} in concealment.");
+
+        yield return new WaitForSeconds(0.35f);
     }
 
     // ========== DETAILED CONSOLE LOGGING ==========

@@ -268,29 +268,30 @@ public class AIService : MonoBehaviour
             yield break;
 
         bool preferRangedVisibility = npc.IsEquippedWeaponRanged();
-        npc.UpdateLastKnownPosition(closestPC, incomingIsRangedAttack: preferRangedVisibility);
+        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
+        if (tracker == null)
+            tracker = npc.gameObject.AddComponent<LastKnownPositionTracker>();
+
+        if (npc.CanSee(closestPC, incomingIsRangedAttack: preferRangedVisibility))
+        {
+            tracker.UpdateLastKnownPosition(closestPC);
+        }
 
         if (!npc.CanSee(closestPC, incomingIsRangedAttack: preferRangedVisibility))
         {
-            Vector2Int? lastKnown = npc.GetLastKnownPosition(closestPC);
-            if (lastKnown.HasValue)
-            {
+            var concealedSingleTarget = new List<CharacterController> { closestPC };
+            tracker.AttemptListenChecks(concealedSingleTarget, _gameManager);
+
+            Vector2Int? lastKnown = tracker.GetLastKnownPosition(closestPC);
+            if (tracker.IsPinpointedThisRound(closestPC))
+                _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} pinpoints {closestPC.Stats.CharacterName} by sound and attacks their current position.");
+            else if (lastKnown.HasValue)
                 _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} cannot see {closestPC.Stats.CharacterName} clearly and fires at the last known position.");
+
+            if (tracker.IsPinpointedThisRound(closestPC) || lastKnown.HasValue)
+            {
                 yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, closestPC));
                 yield return new WaitForSeconds(0.45f);
-
-                if (npc.Actions.HasMoveAction)
-                {
-                    SquareCell searchCell = EvaluateMovementOptions(npc, lastKnown.Value, retreat: false, closestPC, profile);
-                    if (searchCell != null && searchCell.Coords != npc.GridPosition)
-                    {
-                        yield return _gameManager.StartCoroutine(
-                            _gameManager.MoveCharacterAlongComputedPathForAI(npc, searchCell.Coords, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
-                        npc.Actions.UseMoveAction();
-                        _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} searches through the mist for {closestPC.Stats.CharacterName}.");
-                        yield return new WaitForSeconds(0.4f);
-                    }
-                }
                 yield break;
             }
 
@@ -614,14 +615,72 @@ public class AIService : MonoBehaviour
         if (npc == null || allCombatants == null)
             return null;
 
+        LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
+        if (tracker == null)
+            tracker = npc.gameObject.AddComponent<LastKnownPositionTracker>();
+
+        var visibleTargets = new List<CharacterController>();
+        var concealedTrackedTargets = new List<CharacterController>();
+
+        for (int i = 0; i < allCombatants.Count; i++)
+        {
+            CharacterController candidate = allCombatants[i];
+            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+            if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
+                continue;
+
+            if (CanSeeTarget(npc, candidate))
+            {
+                visibleTargets.Add(candidate);
+                tracker.UpdateLastKnownPosition(candidate);
+            }
+            else if (tracker.HasLastKnownPosition(candidate))
+            {
+                concealedTrackedTargets.Add(candidate);
+            }
+        }
+
+        // D&D 3.5e priority: visible enemies first, concealed enemies second (only if tracked).
+        CharacterController visibleTarget = SelectBestTargetFromCandidates(npc, visibleTargets);
+        if (visibleTarget != null)
+            return visibleTarget;
+
+        if (concealedTrackedTargets.Count > 0)
+        {
+            tracker.AttemptListenChecks(concealedTrackedTargets, _gameManager);
+
+            var pinpointedTargets = new List<CharacterController>();
+            for (int i = 0; i < concealedTrackedTargets.Count; i++)
+            {
+                CharacterController candidate = concealedTrackedTargets[i];
+                if (tracker.IsPinpointedThisRound(candidate))
+                    pinpointedTargets.Add(candidate);
+            }
+
+            CharacterController pinpointedTarget = SelectBestTargetFromCandidates(npc, pinpointedTargets);
+            if (pinpointedTarget != null)
+                return pinpointedTarget;
+
+            CharacterController trackedTarget = SelectBestTargetFromCandidates(npc, concealedTrackedTargets);
+            if (trackedTarget != null)
+                return trackedTarget;
+        }
+
+        return null;
+    }
+
+    private CharacterController SelectBestTargetFromCandidates(CharacterController npc, List<CharacterController> candidateTargets)
+    {
+        if (npc == null || candidateTargets == null || candidateTargets.Count == 0)
+            return null;
+
         if (!string.IsNullOrWhiteSpace(npc.PriorityTargetName))
         {
-            for (int i = 0; i < allCombatants.Count; i++)
+            for (int i = 0; i < candidateTargets.Count; i++)
             {
-                CharacterController candidate = allCombatants[i];
+                CharacterController candidate = candidateTargets[i];
                 if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
-                    continue;
-                if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
                     continue;
                 if (candidate.Stats.CharacterName != npc.PriorityTargetName)
                     continue;
@@ -634,19 +693,28 @@ public class AIService : MonoBehaviour
         AIProfile profile = GetProfile(npc);
         if (profile != null)
         {
-            CharacterController profiled = SelectBestTargetFromProfile(npc, allCombatants, profile);
+            CharacterController profiled = SelectBestTargetFromProfile(npc, candidateTargets, profile);
             if (profiled != null)
                 return profiled;
         }
 
         if (UsesArmorPriorityTargeting(npc))
         {
-            CharacterController prioritized = SelectBestArmorPriorityTarget(npc, allCombatants);
+            CharacterController prioritized = SelectBestArmorPriorityTarget(npc, candidateTargets);
             if (prioritized != null)
                 return prioritized;
         }
 
-        return SelectBestTargetDefault(npc, allCombatants);
+        return SelectBestTargetDefault(npc, candidateTargets);
+    }
+
+    private bool CanSeeTarget(CharacterController npc, CharacterController target)
+    {
+        if (npc == null || target == null || target.Stats == null || target.Stats.IsDead)
+            return false;
+
+        bool incomingIsRangedAttack = npc.IsEquippedWeaponRanged();
+        return npc.CanSee(target, incomingIsRangedAttack);
     }
 
     private CharacterController SelectBestTargetFromProfile(CharacterController npc, List<CharacterController> allCombatants, AIProfile profile)

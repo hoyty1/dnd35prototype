@@ -2002,10 +2002,23 @@ public class CharacterController : MonoBehaviour
 
         if (target.HasTotalConcealment(this, incomingIsRangedAttack: isRanged))
         {
-            Vector2Int? lastKnown = GetLastKnownPosition(target);
-            if (lastKnown.HasValue && target.GridPosition != lastKnown.Value)
+            LastKnownPositionTracker tracker = GetComponent<LastKnownPositionTracker>();
+            Vector2Int? trackerLastKnown = tracker != null ? tracker.GetLastKnownPosition(target) : null;
+            Vector2Int? fallbackLastKnown = GetLastKnownPosition(target);
+            Vector2Int? resolvedLastKnown = trackerLastKnown ?? fallbackLastKnown;
+
+            if (resolvedLastKnown.HasValue && target.GridPosition != resolvedLastKnown.Value)
             {
-                Debug.Log($"[Concealment] {Stats.CharacterName} attacks last-known square {lastKnown.Value} but {target.Stats.CharacterName} moved to {target.GridPosition}: automatic miss.");
+                string attackerName = Stats != null ? Stats.CharacterName : name;
+                string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+                string lastKnownText = $"({resolvedLastKnown.Value.x}, {resolvedLastKnown.Value.y})";
+                string currentText = $"({target.GridPosition.x}, {target.GridPosition.y})";
+
+                Debug.Log($"[Concealment] {attackerName} attacks {targetName}'s last known position.");
+                Debug.Log($"[Concealment]   Last known: {lastKnownText}");
+                Debug.Log($"[Concealment]   Current: {currentText}");
+                Debug.Log("[Concealment]   Target has MOVED - automatic miss (empty square).");
+
                 return new CombatResult
                 {
                     Attacker = this,
@@ -2018,7 +2031,7 @@ public class CharacterController : MonoBehaviour
                     MissedDueToConcealment = true,
                     ConcealmentMissChance = 100,
                     ConcealmentRoll = 100,
-                    ConcealmentDescription = "Total concealment: target moved from last known position",
+                    ConcealmentDescription = $"Last known position miss: last seen at {lastKnownText}, current position {currentText}, target moved",
                     DefenderHPBefore = target.Stats.CurrentHP,
                     DefenderHPAfter = target.Stats.CurrentHP,
                     IsRangedAttack = isRanged
