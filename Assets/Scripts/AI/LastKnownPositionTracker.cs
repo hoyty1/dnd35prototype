@@ -77,6 +77,10 @@ public class LastKnownPositionTracker : MonoBehaviour
         _pinpointedThisRound.Clear();
     }
 
+    /// <summary>
+    /// Attempt ONE Listen check per round to pinpoint concealed characters.
+    /// D&D 3.5e: this is a single perception check for the round, not one roll per target.
+    /// </summary>
     public void AttemptListenChecks(List<CharacterController> concealedTargets, GameManager gameManager)
     {
         _pinpointedThisRound.Clear();
@@ -84,46 +88,114 @@ public class LastKnownPositionTracker : MonoBehaviour
         if (_owner == null || concealedTargets == null || concealedTargets.Count == 0)
             return;
 
+        // Build a valid concealed target list first (alive, has stats, currently not visible).
+        List<CharacterController> validConcealedTargets = new List<CharacterController>();
+        bool incomingIsRangedAttack = _owner.IsEquippedWeaponRanged();
+
         for (int i = 0; i < concealedTargets.Count; i++)
         {
             CharacterController target = concealedTargets[i];
             if (target == null || target.Stats == null || target.Stats.IsDead)
                 continue;
 
-            bool incomingIsRangedAttack = _owner.IsEquippedWeaponRanged();
             if (_owner.CanSee(target, incomingIsRangedAttack))
                 continue;
 
-            int listenDC = 20;
-            int listenBonus = GetListenBonus();
-            int d20Roll = Random.Range(1, 21);
-            int listenTotal = d20Roll + listenBonus;
-            bool success = listenTotal >= listenDC;
+            validConcealedTargets.Add(target);
+        }
 
-            string ownerName = _owner.Stats != null ? _owner.Stats.CharacterName : _owner.name;
-            string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+        if (validConcealedTargets.Count == 0)
+            return;
+
+        // ═══════════════════════════════════════════════════════════════
+        // D&D 3.5E LISTEN CHECK RULES:
+        // - Listen is resolved as a single check for the situation/round.
+        // - You do not roll separately per concealed creature.
+        // - DC 20 is used here to pinpoint concealed creature locations.
+        // - Success pinpoints all concealed targets in this set.
+        // - Failure pinpoints none of them.
+        // ═══════════════════════════════════════════════════════════════
+        int listenDC = 20;
+        int listenBonus = GetListenBonus();
+        int d20Roll = Random.Range(1, 21);
+        int listenTotal = d20Roll + listenBonus;
+        bool success = listenTotal >= listenDC;
+
+        string ownerName = _owner.Stats != null ? _owner.Stats.CharacterName : _owner.name;
+
+        if (gameManager != null && gameManager.CombatUI != null)
+        {
+            gameManager.CombatUI.ShowCombatLog(string.Empty);
+            gameManager.CombatUI.ShowCombatLog($"{ownerName} makes Listen check to pinpoint concealed enemies");
+
+            if (validConcealedTargets.Count == 1)
+            {
+                CharacterController onlyTarget = validConcealedTargets[0];
+                string onlyTargetName = onlyTarget.Stats != null ? onlyTarget.Stats.CharacterName : onlyTarget.name;
+                gameManager.CombatUI.ShowCombatLog($"  Concealed target: {onlyTargetName}");
+            }
+            else
+            {
+                List<string> targetNames = new List<string>(validConcealedTargets.Count);
+                for (int i = 0; i < validConcealedTargets.Count; i++)
+                {
+                    CharacterController target = validConcealedTargets[i];
+                    targetNames.Add(target.Stats != null ? target.Stats.CharacterName : target.name);
+                }
+
+                gameManager.CombatUI.ShowCombatLog($"  Concealed targets: {string.Join(", ", targetNames)}");
+            }
+
+            gameManager.CombatUI.ShowCombatLog($"  Listen: d20({d20Roll}) + {listenBonus} = {listenTotal} vs DC {listenDC}");
+        }
+
+        if (success)
+        {
+            for (int i = 0; i < validConcealedTargets.Count; i++)
+            {
+                CharacterController target = validConcealedTargets[i];
+                _pinpointedThisRound.Add(target);
+            }
 
             if (gameManager != null && gameManager.CombatUI != null)
             {
-                gameManager.CombatUI.ShowCombatLog($"{ownerName} makes Listen check to locate {targetName}");
-                gameManager.CombatUI.ShowCombatLog($"  Listen: d20({d20Roll}) + {listenBonus} = {listenTotal} vs DC {listenDC}");
-            }
-
-            if (success)
-            {
-                _pinpointedThisRound.Add(target);
-                if (gameManager != null && gameManager.CombatUI != null)
+                gameManager.CombatUI.ShowCombatLog("  ✓ SUCCESS - All targets pinpointed!");
+                for (int i = 0; i < validConcealedTargets.Count; i++)
                 {
-                    gameManager.CombatUI.ShowCombatLog($"  ✓ SUCCESS - {targetName} pinpointed!");
-                    gameManager.CombatUI.ShowCombatLog("  Can attack current position (still 50% concealment)");
+                    CharacterController target = validConcealedTargets[i];
+                    string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+                    gameManager.CombatUI.ShowCombatLog($"    • {targetName} location pinpointed");
                 }
-            }
-            else if (gameManager != null && gameManager.CombatUI != null)
-            {
-                gameManager.CombatUI.ShowCombatLog($"  ✗ FAILURE - Cannot locate {targetName}");
-                gameManager.CombatUI.ShowCombatLog("  Must attack last known position");
+
+                gameManager.CombatUI.ShowCombatLog("  Can attack current positions (still 50% concealment)");
             }
         }
+        else if (gameManager != null && gameManager.CombatUI != null)
+        {
+            gameManager.CombatUI.ShowCombatLog("  ✗ FAILURE - Cannot locate any targets");
+            gameManager.CombatUI.ShowCombatLog("  Must attack last known positions");
+        }
+
+        if (gameManager != null && gameManager.CombatUI != null)
+            gameManager.CombatUI.ShowCombatLog(string.Empty);
+
+        // Example combat logs:
+        // BEFORE (incorrect - multiple checks):
+        //   Marcus makes Listen check to locate Thoran
+        //   Marcus makes Listen check to locate Valdor
+        //   Marcus makes Listen check to locate Lyra
+        //
+        // AFTER (correct - one check):
+        //   Marcus makes Listen check to pinpoint concealed enemies
+        //     Concealed targets: Thoran, Valdor, Lyra
+        //     Listen: d20(12) + 3 = 15 vs DC 20
+        //     ✗ FAILURE - Cannot locate any targets
+        //
+        // AFTER (correct success):
+        //   Pip makes Listen check to pinpoint concealed enemies
+        //     Concealed targets: Thoran, Valdor, Lyra
+        //     Listen: d20(18) + 4 = 22 vs DC 20
+        //     ✓ SUCCESS - All targets pinpointed!
     }
 
     public void ClearAllPositions()
