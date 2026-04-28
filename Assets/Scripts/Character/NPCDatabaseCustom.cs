@@ -789,8 +789,6 @@ public static partial class NPCDatabase
 
     private static void RegisterSummonMonsterBaseCreatures()
     {
-        RegisterSummonDog();
-        RegisterSummonDireRat();
         RegisterSummonEagle();
         RegisterSummonOctopus();
         RegisterSummonSmallViper();
@@ -804,23 +802,20 @@ public static partial class NPCDatabase
         RegisterSummonLargeShark();
         RegisterSummonConstrictorSnake();
 
-        // Alias IDs for external checks/docs that refer to generic base names.
+        // Keep compatibility aliases for commonly referenced summon list names.
         RegisterSummonCreatureAliases();
     }
 
     private static void RegisterSummonCreatureAliases()
     {
-        RegisterSummonAlias("dog", "summon_dog");
-        RegisterSummonAlias("eagle", "summon_eagle");
-        RegisterSummonAlias("dire_rat", "summon_dire_rat");
         RegisterSummonAlias("wolf", "wolf_pack_hunter", "Wolf");
-        RegisterSummonAlias("badger", "summon_dire_badger", "Badger");
+        RegisterSummonAlias("badger", "dire_badger", "Badger");
 
         // These IDs are used by external validation scripts; map to closest existing summon baselines.
-        RegisterSummonAlias("riding_dog", "summon_dog", "Riding Dog");
-        RegisterSummonAlias("owl", "summon_eagle", "Owl");
-        RegisterSummonAlias("raven", "summon_eagle", "Raven");
-        RegisterSummonAlias("giant_bee", "summon_dire_bat", "Giant Bee");
+        RegisterSummonAlias("riding_dog", "dog", "Riding Dog");
+        RegisterSummonAlias("owl", "eagle", "Owl");
+        RegisterSummonAlias("raven", "eagle", "Raven");
+        RegisterSummonAlias("giant_bee", "dire_bat", "Giant Bee");
     }
 
     private static void RegisterSummonAlias(string aliasId, string sourceId, string overrideName = null)
@@ -843,76 +838,11 @@ public static partial class NPCDatabase
         Register(alias);
     }
 
-    private static void RegisterSummonDog()
-    {
-        Register(new NPCDefinition
-        {
-            Id = "summon_dog",
-            Name = "Dog",
-            Level = 1,
-            CharacterClass = "Warrior",
-            CreatureType = "Animal",
-            HitDice = 1,
-            SizeCategory = SizeCategory.Small,
-            IsTallCreature = false,
-            STR = 13, DEX = 17, CON = 15, WIS = 12, INT = 2, CHA = 6,
-            NaturalArmorBonus = 2,
-            NaturalAttacks = new List<NaturalAttackDefinition>
-            {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
-            },
-            BaseSpeed = 8,
-            BaseHitDieHP = 8,
-            CreatureTags = new List<string> { "Animal", "SummonBase" },
-            HasScent = true,
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
-            AIProfileArchetype = NPCAIProfileArchetype.Animal,
-            SpriteColor = new Color(0.83f, 0.73f, 0.58f, 1f),
-            PanelColor = new Color(0.22f, 0.16f, 0.12f, 0.85f),
-            NameColor = new Color(0.98f, 0.9f, 0.8f),
-            Description = "Summon Monster baseline dog used for celestial variants and low-level summon validation."
-        });
-    }
-
-    private static void RegisterSummonDireRat()
-    {
-        Register(new NPCDefinition
-        {
-            Id = "summon_dire_rat",
-            Name = "Dire Rat",
-            Level = 1,
-            CharacterClass = "Warrior",
-            CreatureType = "Animal",
-            HitDice = 1,
-            SizeCategory = SizeCategory.Small,
-            IsTallCreature = false,
-            STR = 10, DEX = 17, CON = 12, WIS = 12, INT = 1, CHA = 4,
-            NaturalArmorBonus = 2,
-            NaturalAttacks = new List<NaturalAttackDefinition>
-            {
-                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
-            },
-            BaseSpeed = 8,
-            BaseHitDieHP = 6,
-            CreatureTags = new List<string> { "Animal", "SummonBase" },
-            EquipmentIds = new List<EquipmentSlotPair>(),
-            BackpackItemIds = new List<string>(),
-            AIBehavior = NPCAIBehavior.AggressiveMelee,
-            AIProfileArchetype = NPCAIProfileArchetype.Animal,
-            SpriteColor = new Color(0.55f, 0.55f, 0.55f, 1f),
-            PanelColor = new Color(0.18f, 0.18f, 0.18f, 0.85f),
-            NameColor = new Color(0.86f, 0.86f, 0.9f),
-            Description = "Summon Monster baseline dire rat."
-        });
-    }
-
     private static void RegisterSummonEagle()
     {
         Register(new NPCDefinition
         {
-            Id = "summon_eagle",
+            Id = "eagle",
             Name = "Eagle",
             Level = 1,
             CharacterClass = "Warrior",
@@ -946,7 +876,7 @@ public static partial class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "summon_octopus",
+            Id = "octopus",
             Name = "Octopus",
             Level = 2,
             CharacterClass = "Warrior",
@@ -980,7 +910,7 @@ public static partial class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "summon_small_viper",
+            Id = "small_viper",
             Name = "Small Viper",
             Level = 1,
             CharacterClass = "Warrior",
@@ -1013,7 +943,7 @@ public static partial class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "summon_dire_bat",
+            Id = "dire_bat",
             Name = "Dire Bat",
             Level = 4,
             CharacterClass = "Warrior",
@@ -1046,7 +976,7 @@ public static partial class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "summon_small_air_elemental",
+            Id = "small_air_elemental",
             Name = "Small Air Elemental",
             Level = 2,
             CharacterClass = "Warrior",
@@ -1078,7 +1008,7 @@ public static partial class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "summon_small_fire_elemental",
+            Id = "small_fire_elemental",
             Name = "Small Fire Elemental",
             Level = 2,
             CharacterClass = "Warrior",
@@ -1110,7 +1040,7 @@ public static partial class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "summon_crocodile",
+            Id = "crocodile",
             Name = "Crocodile",
             Level = 3,
             CharacterClass = "Warrior",
@@ -1144,7 +1074,7 @@ public static partial class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "summon_black_bear",
+            Id = "black_bear",
             Name = "Black Bear",
             Level = 3,
             CharacterClass = "Warrior",
@@ -1178,7 +1108,7 @@ public static partial class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "summon_ape",
+            Id = "ape",
             Name = "Ape",
             Level = 4,
             CharacterClass = "Warrior",
@@ -1211,7 +1141,7 @@ public static partial class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "summon_dire_badger",
+            Id = "dire_badger",
             Name = "Dire Badger",
             Level = 3,
             CharacterClass = "Warrior",
@@ -1245,7 +1175,7 @@ public static partial class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "summon_large_shark",
+            Id = "large_shark",
             Name = "Large Shark",
             Level = 4,
             CharacterClass = "Warrior",
@@ -1278,7 +1208,7 @@ public static partial class NPCDatabase
     {
         Register(new NPCDefinition
         {
-            Id = "summon_constrictor_snake",
+            Id = "constrictor_snake",
             Name = "Constrictor Snake",
             Level = 4,
             CharacterClass = "Warrior",

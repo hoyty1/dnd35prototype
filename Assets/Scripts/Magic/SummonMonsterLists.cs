@@ -67,34 +67,34 @@ public static class SummonMonsterLists
             {
                 1, new List<SummonMonsterOption>
                 {
-                    new SummonMonsterOption { DisplayName = "Dog", NpcDefinitionId = "summon_dog", TemplateId = "celestial", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Good },
-                    new SummonMonsterOption { DisplayName = "Wolf", NpcDefinitionId = "wolf_pack_hunter", TemplateId = "fiendish", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Evil },
-                    new SummonMonsterOption { DisplayName = "Dire Rat", NpcDefinitionId = "summon_dire_rat" },
-                    new SummonMonsterOption { DisplayName = "Eagle", NpcDefinitionId = "summon_eagle" },
-                    new SummonMonsterOption { DisplayName = "Octopus", NpcDefinitionId = "summon_octopus" },
-                    new SummonMonsterOption { DisplayName = "Small Viper", NpcDefinitionId = "summon_small_viper" }
+                    new SummonMonsterOption { DisplayName = "Dog", NpcDefinitionId = "dog", TemplateId = "celestial", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Good },
+                    new SummonMonsterOption { DisplayName = "Wolf", NpcDefinitionId = "wolf", TemplateId = "fiendish", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Evil },
+                    new SummonMonsterOption { DisplayName = "Dire Rat", NpcDefinitionId = "dire_rat" },
+                    new SummonMonsterOption { DisplayName = "Eagle", NpcDefinitionId = "eagle" },
+                    new SummonMonsterOption { DisplayName = "Octopus", NpcDefinitionId = "octopus" },
+                    new SummonMonsterOption { DisplayName = "Small Viper", NpcDefinitionId = "small_viper" }
                 }
             },
             {
                 2, new List<SummonMonsterOption>
                 {
-                    new SummonMonsterOption { DisplayName = "Eagle", NpcDefinitionId = "summon_eagle", TemplateId = "celestial", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Good },
-                    new SummonMonsterOption { DisplayName = "Dire Bat", NpcDefinitionId = "summon_dire_bat", TemplateId = "fiendish", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Evil },
-                    new SummonMonsterOption { DisplayName = "Small Air Elemental", NpcDefinitionId = "summon_small_air_elemental" },
-                    new SummonMonsterOption { DisplayName = "Small Fire Elemental", NpcDefinitionId = "summon_small_fire_elemental" },
-                    new SummonMonsterOption { DisplayName = "Wolf", NpcDefinitionId = "wolf_pack_hunter" },
-                    new SummonMonsterOption { DisplayName = "Crocodile", NpcDefinitionId = "summon_crocodile" }
+                    new SummonMonsterOption { DisplayName = "Eagle", NpcDefinitionId = "eagle", TemplateId = "celestial", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Good },
+                    new SummonMonsterOption { DisplayName = "Dire Bat", NpcDefinitionId = "dire_bat", TemplateId = "fiendish", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Evil },
+                    new SummonMonsterOption { DisplayName = "Small Air Elemental", NpcDefinitionId = "small_air_elemental" },
+                    new SummonMonsterOption { DisplayName = "Small Fire Elemental", NpcDefinitionId = "small_fire_elemental" },
+                    new SummonMonsterOption { DisplayName = "Wolf", NpcDefinitionId = "wolf" },
+                    new SummonMonsterOption { DisplayName = "Crocodile", NpcDefinitionId = "crocodile" }
                 }
             },
             {
                 3, new List<SummonMonsterOption>
                 {
-                    new SummonMonsterOption { DisplayName = "Black Bear", NpcDefinitionId = "summon_black_bear", TemplateId = "celestial", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Good },
+                    new SummonMonsterOption { DisplayName = "Black Bear", NpcDefinitionId = "black_bear", TemplateId = "celestial", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Good },
                     new SummonMonsterOption { DisplayName = "Dire Wolf", NpcDefinitionId = "dire_wolf", TemplateId = "fiendish", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Evil },
-                    new SummonMonsterOption { DisplayName = "Ape", NpcDefinitionId = "summon_ape" },
-                    new SummonMonsterOption { DisplayName = "Dire Badger", NpcDefinitionId = "summon_dire_badger" },
-                    new SummonMonsterOption { DisplayName = "Large Shark", NpcDefinitionId = "summon_large_shark" },
-                    new SummonMonsterOption { DisplayName = "Constrictor Snake", NpcDefinitionId = "summon_constrictor_snake" }
+                    new SummonMonsterOption { DisplayName = "Ape", NpcDefinitionId = "ape" },
+                    new SummonMonsterOption { DisplayName = "Dire Badger", NpcDefinitionId = "dire_badger" },
+                    new SummonMonsterOption { DisplayName = "Large Shark", NpcDefinitionId = "large_shark" },
+                    new SummonMonsterOption { DisplayName = "Constrictor Snake", NpcDefinitionId = "constrictor_snake" }
                 }
             }
         };
