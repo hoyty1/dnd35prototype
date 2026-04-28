@@ -642,6 +642,8 @@ public class AIService : MonoBehaviour
         }
 
         // D&D 3.5e priority: visible enemies first, concealed enemies second (only if tracked).
+        // Note: forgotten targets are not permanently excluded. If they are visible now,
+        // they are added to visibleTargets and immediately tracked again above.
         CharacterController visibleTarget = SelectBestTargetFromCandidates(npc, visibleTargets);
         if (visibleTarget != null)
             return visibleTarget;

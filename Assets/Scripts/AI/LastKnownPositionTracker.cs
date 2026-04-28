@@ -102,11 +102,19 @@ public class LastKnownPositionTracker : MonoBehaviour
         return GetConsecutiveLastKnownAutoMisses(character) >= MaxConsecutiveLastKnownAutoMisses;
     }
 
+    /// <summary>
+    /// Forget a target's stale concealment tracking state.
+    ///
+    /// IMPORTANT: This is not a blacklist.
+    /// If the target becomes visible again, UpdateLastKnownPosition() will
+    /// re-add them immediately and reset their consecutive auto-miss counter.
+    /// </summary>
     public void ForgetTarget(CharacterController character)
     {
         if (character == null)
             return;
 
+        // Remove stale tracking data only.
         _lastKnownGridPositions.Remove(character);
         _pinpointedThisRound.Remove(character);
         _consecutiveLastKnownAutoMisses.Remove(character);
