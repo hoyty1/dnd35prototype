@@ -10,7 +10,12 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
     private const string ConcealmentSpellId = "obscuring_mist_concealment";
 
     private readonly List<SquareCell> _highlightedCells = new List<SquareCell>();
-    private static readonly Color MistColor = new Color(0.70f, 0.70f, 0.70f, 0.30f);
+
+    // Mist color: pale blue-white with medium opacity for better battlefield contrast.
+    // RGB(0.85, 0.95, 1.00) keeps the effect thematic (natural mist tone).
+    // Alpha 0.50 is intentionally more visible than the old 0.30 gray tint.
+    private static readonly Color MistColor = new Color(0.85f, 0.95f, 1.00f, 0.50f);
+
     private bool _gridHighlightApplied;
 
     protected override void Awake()

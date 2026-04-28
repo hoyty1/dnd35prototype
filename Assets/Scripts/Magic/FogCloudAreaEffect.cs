@@ -10,7 +10,12 @@ public class FogCloudAreaEffect : PersistentAreaEffect
     private const string ConcealmentSpellId = "fog_cloud_concealment";
 
     private readonly List<SquareCell> _highlightedCells = new List<SquareCell>();
-    private static readonly Color FogColor = new Color(0.60f, 0.60f, 0.60f, 0.40f);
+
+    // Fog color: steel blue-gray, darker and denser than Obscuring Mist.
+    // RGB(0.65, 0.75, 0.90) preserves a fog-like look while improving visibility.
+    // Alpha 0.55 keeps this marker distinct and easier to read on gray battle maps.
+    private static readonly Color FogColor = new Color(0.65f, 0.75f, 0.90f, 0.55f);
+
     private bool _gridHighlightApplied;
 
     protected override void Awake()
