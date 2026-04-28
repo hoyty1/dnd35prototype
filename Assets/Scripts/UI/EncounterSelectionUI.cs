@@ -452,8 +452,8 @@ public class EncounterSelectionUI : MonoBehaviour
         cardImage.color = CardColor;
 
         LayoutElement le = card.GetComponent<LayoutElement>();
-        le.preferredHeight = 80f;
-        le.minHeight = 80f;
+        le.preferredHeight = 104f;
+        le.minHeight = 104f;
 
         Outline outline = card.GetComponent<Outline>();
         outline.effectColor = new Color(0.95f, 0.87f, 0.45f, 0.95f);
@@ -479,39 +479,60 @@ public class EncounterSelectionUI : MonoBehaviour
             RefreshSelectionVisuals();
         });
 
+        GameObject contentRoot = new GameObject("CardContent", typeof(RectTransform), typeof(VerticalLayoutGroup));
+        contentRoot.transform.SetParent(card.transform, false);
+        RectTransform contentRect = contentRoot.GetComponent<RectTransform>();
+        contentRect.anchorMin = Vector2.zero;
+        contentRect.anchorMax = Vector2.one;
+        contentRect.offsetMin = new Vector2(12f, 8f);
+        contentRect.offsetMax = new Vector2(-12f, -8f);
+
+        VerticalLayoutGroup contentLayout = contentRoot.GetComponent<VerticalLayoutGroup>();
+        contentLayout.spacing = 6f;
+        contentLayout.padding = new RectOffset(0, 0, 0, 0);
+        contentLayout.childAlignment = TextAnchor.UpperLeft;
+        contentLayout.childControlWidth = true;
+        contentLayout.childControlHeight = true;
+        contentLayout.childForceExpandWidth = true;
+        contentLayout.childForceExpandHeight = false;
+
         CreateText(
-            card.transform,
+            contentRoot.transform,
             preset.DisplayName,
-            19,
+            17,
             FontStyle.Bold,
             Color.white,
             new Vector2(0f, 0.5f),
-            new Vector2(1f, 1f),
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero,
-            TextAnchor.MiddleLeft,
-            out Text titleText
-        );
-        titleText.rectTransform.offsetMin = new Vector2(12f, -36f);
-        titleText.rectTransform.offsetMax = new Vector2(-12f, -8f);
-
-        CreateText(
-            card.transform,
-            preset.Description,
-            14,
-            FontStyle.Normal,
-            new Color(0.85f, 0.88f, 0.94f, 1f),
-            new Vector2(0f, 0f),
             new Vector2(1f, 0.5f),
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
+            new Vector2(0f, 30f),
+            TextAnchor.MiddleLeft,
+            out Text titleText
+        );
+        LayoutElement titleLayout = titleText.gameObject.AddComponent<LayoutElement>();
+        titleLayout.preferredHeight = 30f;
+        titleLayout.minHeight = 30f;
+        titleText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        titleText.verticalOverflow = VerticalWrapMode.Truncate;
+
+        CreateText(
+            contentRoot.transform,
+            preset.Description,
+            13,
+            FontStyle.Normal,
+            new Color(0.85f, 0.88f, 0.94f, 1f),
+            new Vector2(0f, 0.5f),
+            new Vector2(1f, 0.5f),
+            new Vector2(0.5f, 0.5f),
             Vector2.zero,
+            new Vector2(0f, 52f),
             TextAnchor.UpperLeft,
             out Text descText
         );
-        descText.rectTransform.offsetMin = new Vector2(12f, 8f);
-        descText.rectTransform.offsetMax = new Vector2(-12f, 18f);
+        LayoutElement descLayout = descText.gameObject.AddComponent<LayoutElement>();
+        descLayout.preferredHeight = 52f;
+        descLayout.minHeight = 52f;
         descText.horizontalOverflow = HorizontalWrapMode.Wrap;
         descText.verticalOverflow = VerticalWrapMode.Truncate;
 
