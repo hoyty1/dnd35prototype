@@ -55,14 +55,13 @@ public static partial class SpellDatabase
                 {
                     SpellId = "true_strike",
                     Name = "True Strike",
-                    Description = "+20 insight bonus on your next single attack roll. PHB p.296",
+                    Description = "You gain +20 insight on your next single attack roll before end of your next turn, and that attack ignores concealment miss chance. PHB p.296",
                     SpellLevel = 1, School = "Divination",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
-                    BuffAttackBonus = 20,
-                    BuffDurationRounds = 1, // Until next attack or end of next round
+                    // Runtime behavior is implemented via TrueStrikeEffect (consumed on next attack).
                     BuffType = "insight",
                     BuffBonusType = BonusType.Insight,
                     BonusTypeExplicitlySet = true,

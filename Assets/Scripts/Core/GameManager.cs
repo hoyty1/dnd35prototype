@@ -85,6 +85,7 @@ public partial class GameManager : MonoBehaviour
     private const string WindDispersionTestPresetId = "wind_dispersion_test";
     private const string ObscuringMistRangedOnlyTestPresetId = "obscuring_mist_ranged_only";
     private const string DisruptUndeadTestPresetId = "disrupt_undead_test";
+    private const string TrueStrikeTestPresetId = "true_strike_test";
     private const string WizardSpellTestPresetId = "wizard_spell_test";
     private const string ClericSpellTestPresetId = "cleric_spell_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
@@ -104,6 +105,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isWindDispersionTestEncounter;
     private bool _isObscuringMistRangedOnlyTestEncounter;
     private bool _isDisruptUndeadTestEncounter;
+    private bool _isTrueStrikeTestEncounter;
     private bool _isWizardSpellTestEncounter;
     private bool _isClericSpellTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
@@ -607,6 +609,7 @@ public partial class GameManager : MonoBehaviour
         _isWindDispersionTestEncounter = string.Equals(presetId, WindDispersionTestPresetId, StringComparison.Ordinal);
         _isObscuringMistRangedOnlyTestEncounter = string.Equals(presetId, ObscuringMistRangedOnlyTestPresetId, StringComparison.Ordinal);
         _isDisruptUndeadTestEncounter = string.Equals(presetId, DisruptUndeadTestPresetId, StringComparison.Ordinal);
+        _isTrueStrikeTestEncounter = string.Equals(presetId, TrueStrikeTestPresetId, StringComparison.Ordinal);
         _isWizardSpellTestEncounter = string.Equals(presetId, WizardSpellTestPresetId, StringComparison.Ordinal);
         _isClericSpellTestEncounter = string.Equals(presetId, ClericSpellTestPresetId, StringComparison.Ordinal);
 
@@ -655,6 +658,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureObscuringMistRangedOnlyTestParty();
         else if (_isDisruptUndeadTestEncounter)
             ConfigureDisruptUndeadTestParty();
+        else if (_isTrueStrikeTestEncounter)
+            ConfigureTrueStrikeTestParty();
         else if (_isWizardSpellTestEncounter)
             ConfigureWizardSpellTestParty();
         else if (_isClericSpellTestEncounter)
@@ -2631,6 +2636,13 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   Target Dummy has AC 1, HP 50, and severe save penalties for deterministic spell validation.");
     }
 
+    private void ConfigureTrueStrikeTestParty()
+    {
+        ConfigureWizardSpellTestParty();
+        CombatUI?.ShowCombatLog("🎯 True Strike Test: Cast True Strike, then make one attack to verify +20 insight, concealment bypass, and one-use consumption.");
+        CombatUI?.ShowCombatLog("   If you end your next turn without attacking, True Strike should expire automatically.");
+    }
+
     private void ConfigureClericSpellTestParty()
     {
         RaceDatabase.Init();
@@ -4098,6 +4110,12 @@ public partial class GameManager : MonoBehaviour
     private void NextInitiativeTurn()
     {
         CharacterController endingCharacter = CurrentCharacter;
+
+        // Spell-specific end-of-turn expiration (D&D 3.5e timing):
+        // True Strike lasts until end of caster's next turn if unused.
+        var trueStrike = endingCharacter != null ? endingCharacter.GetComponent<TrueStrikeEffect>() : null;
+        trueStrike?.CheckExpirationAtTurnEnd(endingCharacter, CurrentRound);
+
         endingCharacter?.ProcessPinnedDurationAtTurnEnd();
         _conditionService?.OnTurnEnd(endingCharacter);
         ProcessEndOfTurnHPState(endingCharacter);
@@ -10468,6 +10486,33 @@ public partial class GameManager : MonoBehaviour
                 Debug.Log($"[GameManager] Touch of Fatigue applied Fatigued to {target.Stats.CharacterName} for {casterLevel} rounds");
             }
 
+            return null;
+        }
+
+        if (spell != null && spell.SpellId == "true_strike")
+        {
+            CharacterController recipient = caster;
+            if (recipient == null)
+                return null;
+
+            if (target != null && target != caster)
+            {
+                CombatUI?.ShowCombatLog($"<color=#FFAA66>⚠ True Strike is personal and can only target the caster.</color>");
+                Debug.Log("[GameManager] True Strike attempted on non-caster target; ignoring target and applying to caster only.");
+            }
+
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            recipientStatusMgr?.RemoveEffectsBySpellId("true_strike");
+
+            TrueStrikeEffect existing = recipient.GetComponent<TrueStrikeEffect>();
+            if (existing != null)
+                Destroy(existing);
+
+            TrueStrikeEffect effect = recipient.gameObject.AddComponent<TrueStrikeEffect>();
+            effect.Initialize(recipient, this, CurrentRound);
+
+            string casterName = recipient.Stats != null ? recipient.Stats.CharacterName : "Unknown";
+            CombatUI?.ShowCombatLog($"<color=#88CCFF>✨ {casterName} casts True Strike (+20 insight on next attack, ignores concealment).</color>");
             return null;
         }
 

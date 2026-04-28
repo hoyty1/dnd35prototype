@@ -3508,6 +3508,12 @@ public class CharacterController : MonoBehaviour
 
         bool isRangedAttack = weapon != null && (weapon.WeaponCat == WeaponCategory.Ranged || weapon.RangeIncrement > 0);
 
+        TrueStrikeEffect trueStrike = GetComponent<TrueStrikeEffect>();
+        bool trueStrikeActive = trueStrike != null && trueStrike.IsActive();
+        bool ignoreConcealmentForThisAttack = trueStrikeActive;
+        int trueStrikeBonus = trueStrikeActive ? trueStrike.GetAttackBonus() : 0;
+        int totalAtkModWithTrueStrike = totalAtkMod + trueStrikeBonus;
+
         if (TryResolveLastKnownPositionAutoMiss(target, isRangedAttack, weapon, out CombatResult emptySquareMiss))
             return emptySquareMiss;
 
@@ -3568,7 +3574,7 @@ public class CharacterController : MonoBehaviour
         }
 
         // Step 1: Roll to hit
-        var (hit, roll, total) = Stats.RollToHitWithMod(totalAtkMod, targetAC);
+        var (hit, roll, total) = Stats.RollToHitWithMod(totalAtkModWithTrueStrike, targetAC);
         result.DieRoll = roll;
         result.TotalRoll = total;
         result.TargetAC = targetAC;
@@ -3577,6 +3583,13 @@ public class CharacterController : MonoBehaviour
         result.NaturalTwenty = (roll == 20);
         result.NaturalOne = (roll == 1);
         AttachAttackBuffDebuffBreakdown(result);
+
+        if (trueStrikeActive && trueStrikeBonus != 0)
+            result.AddAttackBuffDebuffModifier("True Strike (insight)", trueStrikeBonus);
+
+        // D&D 3.5e True Strike is consumed on the next attack roll (hit or miss).
+        if (trueStrikeActive)
+            trueStrike.ConsumeOnAttackRoll();
 
         // Step 2: Concealment miss chance check (rolled after a successful attack roll)
         bool isThreat = false;
@@ -3589,20 +3602,30 @@ public class CharacterController : MonoBehaviour
             int missChance = target.GetMissChance(this, isRangedAttack);
             if (missChance > 0)
             {
-                int concealmentRoll = Random.Range(1, 101);
                 result.ConcealmentMissChance = missChance;
-                result.ConcealmentRoll = concealmentRoll;
                 result.ConcealmentDescription = target.GetConcealmentDescription(this, isRangedAttack);
 
-                if (concealmentRoll <= missChance)
+                if (ignoreConcealmentForThisAttack)
                 {
-                    result.Hit = false;
-                    result.MissedDueToConcealment = true;
-                    result.Damage = 0;
-                    result.BaseDamageRoll = 0;
-                    result.RawTotalDamage = 0;
-                    result.FinalDamageDealt = 0;
-                    return result;
+                    // True Strike negates miss chance from concealment for this attack.
+                    result.ConcealmentRoll = 100;
+                    result.ConcealmentDescription = $"{result.ConcealmentDescription} (ignored by True Strike)";
+                }
+                else
+                {
+                    int concealmentRoll = Random.Range(1, 101);
+                    result.ConcealmentRoll = concealmentRoll;
+
+                    if (concealmentRoll <= missChance)
+                    {
+                        result.Hit = false;
+                        result.MissedDueToConcealment = true;
+                        result.Damage = 0;
+                        result.BaseDamageRoll = 0;
+                        result.RawTotalDamage = 0;
+                        result.FinalDamageDealt = 0;
+                        return result;
+                    }
                 }
             }
 
@@ -3627,7 +3650,7 @@ public class CharacterController : MonoBehaviour
             if (isThreat)
             {
                 // Roll confirmation with the same attack modifier
-                var (confirmed, confRoll, confTotal) = Stats.RollCritConfirmation(totalAtkMod, targetAC);
+                var (confirmed, confRoll, confTotal) = Stats.RollCritConfirmation(totalAtkModWithTrueStrike, targetAC);
                 critConfirmed = confirmed;
                 confirmRoll = confRoll;
                 confirmTotal = confTotal;
