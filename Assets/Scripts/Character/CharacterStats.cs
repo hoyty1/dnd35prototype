@@ -309,6 +309,32 @@ public class CharacterStats
     /// <summary>Active combat conditions tracked on this character.</summary>
     public List<StatusEffect> ActiveConditions = new List<StatusEffect>();
 
+    private int _cachedNegativeLevelCount;
+
+    public int NegativeLevelCount => CountConditionStacks(CombatConditionType.EnergyDrained);
+    public int NegativeLevelHpPenalty => Mathf.Max(0, NegativeLevelCount) * 5;
+    public int EffectiveCharacterLevel => Mathf.Max(1, Level - NegativeLevelCount);
+
+    private int CountConditionStacks(CombatConditionType type)
+    {
+        if (ActiveConditions == null || ActiveConditions.Count == 0)
+            return 0;
+
+        CombatConditionType normalized = ConditionRules.Normalize(type);
+        int count = 0;
+        for (int i = 0; i < ActiveConditions.Count; i++)
+        {
+            StatusEffect active = ActiveConditions[i];
+            if (active == null)
+                continue;
+
+            if (ConditionRules.Normalize(active.Type) == normalized)
+                count++;
+        }
+
+        return count;
+    }
+
     private bool HasNormalizedCondition(CombatConditionType type)
     {
         CombatConditionType normalized = ConditionRules.Normalize(type);
@@ -533,15 +559,23 @@ public class CharacterStats
 
         if (def.StackingRule == ConditionStackingRule.StackBySource)
         {
-            var existingBySource = ActiveConditions.FirstOrDefault(c =>
-                ConditionRules.Normalize(c.Type) == normalized && c.SourceName == sourceName);
-
-            if (existingBySource == null)
+            if (normalized == CombatConditionType.EnergyDrained)
+            {
                 ActiveConditions.Add(new StatusEffect(normalized, sourceName, rounds));
+            }
             else
-                RefreshConditionDuration(existingBySource, rounds);
+            {
+                var existingBySource = ActiveConditions.FirstOrDefault(c =>
+                    ConditionRules.Normalize(c.Type) == normalized && c.SourceName == sourceName);
+
+                if (existingBySource == null)
+                    ActiveConditions.Add(new StatusEffect(normalized, sourceName, rounds));
+                else
+                    RefreshConditionDuration(existingBySource, rounds);
+            }
 
             EnsureLinkedParalyzedHelpless(normalized, rounds, sourceName);
+            RefreshNegativeLevelState();
             return;
         }
 
@@ -556,6 +590,7 @@ public class CharacterStats
         }
 
         EnsureLinkedParalyzedHelpless(normalized, rounds, sourceName);
+        RefreshNegativeLevelState();
     }
 
     private void EnsureLinkedParalyzedHelpless(CombatConditionType normalized, int rounds, string sourceName)
@@ -596,6 +631,7 @@ public class CharacterStats
         if (normalized == CombatConditionType.Paralyzed)
             RemoveLinkedHelplessIfNoOtherDriver(removed != null ? removed.SourceName : null);
 
+        RefreshNegativeLevelState();
         return true;
     }
 
@@ -619,7 +655,37 @@ public class CharacterStats
                 RemoveLinkedHelplessIfNoOtherDriver(cond != null ? cond.SourceName : null);
         }
 
+        RefreshNegativeLevelState();
         return expired;
+    }
+
+    public void RefreshNegativeLevelState()
+    {
+        int currentNegativeLevels = NegativeLevelCount;
+        int delta = currentNegativeLevels - _cachedNegativeLevelCount;
+
+        if (delta > 0)
+            CurrentHP = Mathf.Max(-10, CurrentHP - (delta * 5));
+
+        _cachedNegativeLevelCount = currentNegativeLevels;
+
+        if (CurrentHP > TotalMaxHP)
+            CurrentHP = TotalMaxHP;
+
+        EnforceNegativeLevelDeathThreshold();
+    }
+
+    public bool EnforceNegativeLevelDeathThreshold()
+    {
+        int hitDiceForDeath = Mathf.Max(1, HitDice > 0 ? HitDice : Level);
+        if (NegativeLevelCount < hitDiceForDeath)
+            return false;
+
+        if (CurrentHP <= -10)
+            return true;
+
+        CurrentHP = -10;
+        return true;
     }
 
     private void RemoveLinkedHelplessIfNoOtherDriver(string paralyzedSourceName)
@@ -845,7 +911,7 @@ public class CharacterStats
     /// </summary>
     public int GetCasterLevel()
     {
-        return IsSpellcaster ? Mathf.Max(1, Level) : 0;
+        return IsSpellcaster ? Mathf.Max(1, EffectiveCharacterLevel) : 0;
     }
 
     /// <summary>
@@ -953,8 +1019,8 @@ public class CharacterStats
     /// <summary>HP bonus from feats (Toughness).</summary>
     public int FeatHPBonus => FeatManager.GetTotalHPBonus(this);
 
-    /// <summary>Total Max HP including feat bonuses and spell bonuses.</summary>
-    public int TotalMaxHP => MaxHP + FeatHPBonus + BonusMaxHP;
+    /// <summary>Total Max HP including feat bonuses, spell bonuses, and negative level reduction.</summary>
+    public int TotalMaxHP => Mathf.Max(1, MaxHP + FeatHPBonus + BonusMaxHP - NegativeLevelHpPenalty);
 
     /// <summary>AC bonus from Dodge feat.</summary>
     public int FeatACBonus => FeatManager.GetACBonus(this);
@@ -2066,6 +2132,26 @@ public class CharacterStats
         result.DamageReductionApplied = drApplied;
         result.FinalDamage = Mathf.Max(0, result.DamageAfterResistance - drApplied);
 
+        int hardness = 0;
+        for (int i = 0; i < ActiveConditions.Count; i++)
+        {
+            StatusEffect active = ActiveConditions[i];
+            if (active == null)
+                continue;
+
+            ConditionDefinition def = ConditionRules.GetDefinition(active.Type);
+            if (def.Hardness > hardness)
+                hardness = def.Hardness;
+        }
+
+        if (hardness > 0 && result.FinalDamage > 0)
+        {
+            int hardnessBlocked = Mathf.Min(result.FinalDamage, hardness);
+            result.FinalDamage = Mathf.Max(0, result.FinalDamage - hardnessBlocked);
+            result.DamageReductionApplied += hardnessBlocked;
+            result.Notes.Add($"Hardness {hardness} blocked {hardnessBlocked}");
+        }
+
         if (packet.IsNonlethal)
         {
             ApplyNonlethalDamage(result.FinalDamage);
@@ -2121,6 +2207,12 @@ public class CharacterStats
     /// </summary>
     public int HealDamage(int amount, out int nonlethalHealed)
     {
+        if (HasNormalizedCondition(CombatConditionType.Petrified))
+        {
+            nonlethalHealed = 0;
+            return 0;
+        }
+
         int remaining = Mathf.Max(0, amount);
         if (remaining <= 0)
         {
@@ -2928,6 +3020,13 @@ public class CharacterStats
 
         Skill skill = Skills[skillName];
         int abilityMod = GetAbilityModForSkill(skill);
+
+        if (HasNormalizedCondition(CombatConditionType.Deafened)
+            && string.Equals(skillName, "Listen", System.StringComparison.OrdinalIgnoreCase))
+        {
+            Debug.Log($"[Skills] {CharacterName} automatically fails Listen while deafened.");
+            return -1;
+        }
 
         if (skill.TrainedOnly && skill.Ranks == 0)
         {

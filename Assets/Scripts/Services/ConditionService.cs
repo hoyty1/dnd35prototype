@@ -181,6 +181,10 @@ public class ConditionService : MonoBehaviour
         SyncCharacter(actor);
         ExpireTurnBoundaryConditions(actor, expireAtStart: true);
         ResolveTurnStartEscapeChecks(actor);
+
+        actor.Stats?.RefreshNegativeLevelState();
+        SpellcastingComponent spellComp = actor.GetComponent<SpellcastingComponent>();
+        spellComp?.ApplyNegativeLevelSlotLoss();
     }
 
     public void OnTurnEnd(CharacterController actor)

@@ -176,6 +176,8 @@ public class SpellcastingComponent : MonoBehaviour
             SyncPreparedSpellsFromSlots();
         }
 
+        ApplyNegativeLevelSlotLoss();
+
         Debug.Log($"[Spellcasting] {stats.CharacterName} ({stats.CharacterClass}): " +
                   $"{KnownSpells.Count} known, {PreparedSpells.Count} prepared, slots: {GetSlotSummary()}");
 
@@ -538,12 +540,13 @@ public class SpellcastingComponent : MonoBehaviour
         if (spell.SpellLevel == 0)
         {
             bool isPrepared = SpellSlots.Any(s => s.PreparedSpell != null &&
-                                                   s.PreparedSpell.SpellId == spell.SpellId);
+                                                   s.PreparedSpell.SpellId == spell.SpellId &&
+                                                   !s.DisabledByNegativeLevel);
             return isPrepared ? 999 : 0; // 999 = unlimited
         }
 
         return SpellSlots.Count(s => s.PreparedSpell != null &&
-                                     s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed);
+                                     s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed && !s.DisabledByNegativeLevel);
     }
 
     /// <summary>
@@ -571,8 +574,8 @@ public class SpellcastingComponent : MonoBehaviour
         {
             if (slot.Level != level || !slot.HasSpell) continue;
 
-            // Cantrips are always available if prepared (unlimited use)
-            bool isAvailable = (level == 0) ? true : slot.CanCast;
+            // Cantrips are available if prepared and not disabled by negative levels.
+            bool isAvailable = (level == 0) ? !slot.DisabledByNegativeLevel : slot.CanCast;
 
             if (isAvailable && !seen.Contains(slot.PreparedSpell.SpellId))
             {
@@ -605,7 +608,8 @@ public class SpellcastingComponent : MonoBehaviour
         {
             bool isPrepared = SpellSlots.Any(s =>
                 s.PreparedSpell != null &&
-                s.PreparedSpell.SpellId == spell.SpellId);
+                s.PreparedSpell.SpellId == spell.SpellId &&
+                !s.DisabledByNegativeLevel);
 
             if (!isPrepared)
             {
@@ -661,7 +665,7 @@ public class SpellcastingComponent : MonoBehaviour
         // For cantrips: always available if there are any cantrip slots (cantrips are unlimited)
         if (spellLevel == 0)
         {
-            return SpellSlots.Any(s => s.Level == 0 && s.HasSpell);
+            return SpellSlots.Any(s => s.Level == 0 && s.HasSpell && !s.DisabledByNegativeLevel);
         }
 
         // For level 1+: need at least one unused slot at this level
@@ -795,7 +799,7 @@ public class SpellcastingComponent : MonoBehaviour
         // For cantrips: always available if prepared (unlimited)
         if (spell.SpellLevel == 0)
         {
-            return SpellSlots.Any(s => s.Level == 0 && s.HasSpell && s.PreparedSpell.SpellId == spell.SpellId);
+            return SpellSlots.Any(s => s.Level == 0 && s.HasSpell && s.PreparedSpell.SpellId == spell.SpellId && !s.DisabledByNegativeLevel);
         }
 
         // For level 1+: need at least one unused slot with this specific spell
@@ -857,7 +861,7 @@ public class SpellcastingComponent : MonoBehaviour
             if (level == 0)
             {
                 // Cantrips are unlimited — count all prepared (not empty) slots as available
-                SlotsRemaining[level] = SpellSlots.Count(s => s.Level == 0 && s.HasSpell);
+                SlotsRemaining[level] = SpellSlots.Count(s => s.Level == 0 && s.HasSpell && !s.DisabledByNegativeLevel);
             }
             else
             {
@@ -882,8 +886,8 @@ public class SpellcastingComponent : MonoBehaviour
         {
             if (!slot.HasSpell) continue;
 
-            // Cantrips are always available (unlimited), other spells need unused slot
-            bool isAvailable = (slot.Level == 0) ? true : !slot.IsUsed;
+            // Cantrips are always available if not disabled by negative levels.
+            bool isAvailable = (slot.Level == 0) ? !slot.DisabledByNegativeLevel : slot.CanCast;
 
             if (isAvailable && !seen.Contains(slot.PreparedSpell.SpellId))
             {
@@ -891,6 +895,36 @@ public class SpellcastingComponent : MonoBehaviour
                 PreparedSpells.Add(slot.PreparedSpell);
             }
         }
+    }
+
+    public void ApplyNegativeLevelSlotLoss()
+    {
+        if (SpellSlots == null || SpellSlots.Count == 0)
+            return;
+
+        int toDisable = Stats != null ? Mathf.Max(0, Stats.NegativeLevelCount) : 0;
+
+        for (int i = 0; i < SpellSlots.Count; i++)
+            SpellSlots[i].DisabledByNegativeLevel = false;
+
+        if (toDisable > 0)
+        {
+            // Lose highest-level slots first (D&D 3.5e negative levels).
+            for (int level = 9; level >= 0 && toDisable > 0; level--)
+            {
+                for (int i = 0; i < SpellSlots.Count && toDisable > 0; i++)
+                {
+                    SpellSlot slot = SpellSlots[i];
+                    if (slot == null || slot.Level != level || slot.DisabledByNegativeLevel)
+                        continue;
+
+                    slot.DisabledByNegativeLevel = true;
+                    toDisable--;
+                }
+            }
+        }
+
+        SyncPreparedSpellsFromSlots();
     }
 
     /// <summary>
@@ -1003,8 +1037,8 @@ public class SpellcastingComponent : MonoBehaviour
             {
                 if (!slot.HasSpell) continue;
 
-                // Cantrips always available if prepared, others need unused slot
-                bool available = (slot.Level == 0) ? true : slot.CanCast;
+                // Cantrips available if prepared and not disabled by negative levels.
+                bool available = (slot.Level == 0) ? !slot.DisabledByNegativeLevel : slot.CanCast;
 
                 if (available && !seen.Contains(slot.PreparedSpell.SpellId))
                 {
@@ -1032,7 +1066,7 @@ public class SpellcastingComponent : MonoBehaviour
         if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
             // Any cantrip prepared OR any level 1+ slot with spell and not used
-            return SpellSlots.Any(s => s.HasSpell && (s.Level == 0 || s.CanCast));
+            return SpellSlots.Any(s => s.HasSpell && ((s.Level == 0 && !s.DisabledByNegativeLevel) || s.CanCast));
         }
         return GetCastablePreparedSpells().Count > 0;
     }

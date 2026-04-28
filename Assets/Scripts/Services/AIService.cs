@@ -57,6 +57,23 @@ public class AIService : MonoBehaviour
         _gameManager.CombatUI.ShowCombatLog($"<color={turnColor}>{turnIcon} {_gameManager.GetSummonDisplayName(npc)}'s turn begins</color>");
         yield return new WaitForSeconds(0.6f);
 
+        if (_gameManager.TryGetConfusedTurnDecisionForAI(npc, out ConfusedBehaviorController.ConfusedTurnDecision confusedDecision))
+        {
+            if (confusedDecision.Mode != ConfusedBehaviorController.ConfusedTurnMode.ActNormally)
+            {
+                yield return _gameManager.StartCoroutine(_gameManager.ExecuteConfusedTurnDecisionForAI(npc, confusedDecision));
+                yield break;
+            }
+
+            _gameManager.CombatUI?.ShowCombatLog($"🌀 {npc.Stats.CharacterName} is confused but acts normally.");
+        }
+
+        if (_gameManager.TryGetCharmedTurnDecisionForAI(npc, out CharmedBehaviorController.CharmedTurnDecision charmedDecision))
+        {
+            yield return _gameManager.StartCoroutine(_gameManager.ExecuteCharmedTurnDecisionForAI(npc, charmedDecision));
+            yield break;
+        }
+
         CharacterController targetPC = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
         if (targetPC == null)
         {
@@ -759,6 +776,9 @@ public class AIService : MonoBehaviour
             if (!_gameManager.IsEnemyTeamForAI(npc, candidate))
                 continue;
 
+            if (ShouldExcludeTargetBecauseOfCharm(npc, candidate))
+                continue;
+
             if (CanSeeTarget(npc, candidate))
             {
                 visibleTargets.Add(candidate);
@@ -846,6 +866,43 @@ public class AIService : MonoBehaviour
 
         bool incomingIsRangedAttack = npc.IsEquippedWeaponRanged();
         return npc.CanSee(target, incomingIsRangedAttack);
+    }
+
+    private bool ShouldExcludeTargetBecauseOfCharm(CharacterController npc, CharacterController candidate)
+    {
+        if (_gameManager == null || npc == null || candidate == null)
+            return false;
+
+        if (!npc.HasCondition(CombatConditionType.Charmed))
+            return false;
+
+        List<ConditionService.ActiveCondition> active = _gameManager.GetActiveConditions(npc);
+        if (active == null || active.Count == 0)
+            return false;
+
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionService.ActiveCondition condition = active[i];
+            if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Charmed)
+                continue;
+
+            CharacterController source = condition.Source;
+            if (source == null && condition.Data is CharmedConditionData charmData)
+                source = charmData.Caster;
+
+            if (source != null && source == candidate)
+                return true;
+
+            if (source == null
+                && !string.IsNullOrWhiteSpace(condition.SourceName)
+                && candidate.Stats != null
+                && string.Equals(condition.SourceName, candidate.Stats.CharacterName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private CharacterController SelectBestTargetFromProfile(CharacterController npc, List<CharacterController> allCombatants, AIProfile profile)

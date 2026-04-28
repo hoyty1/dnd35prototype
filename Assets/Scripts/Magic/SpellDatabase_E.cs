@@ -149,6 +149,22 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
+                    SpellId = "enervation",
+                    Name = "Enervation",
+                    Description = "Ranged touch attack bestows 1d4 negative levels. No save. PHB p.226",
+                    SpellLevel = 4, School = "Necromancy",
+                    ClassList = new[] { "Wizard" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Close,
+                    IsTouch = true,
+                    IsRangedTouch = true,
+                    EffectType = SpellEffectType.Debuff,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        Register(new SpellData
+                {
                     SpellId = "expeditious_retreat",
                     Name = "Expeditious Retreat",
                     Description = "Your base speed increases by 30 ft (+6 squares). Duration 1 min/level. PHB p.228",

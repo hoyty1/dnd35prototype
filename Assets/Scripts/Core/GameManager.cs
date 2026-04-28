@@ -88,6 +88,7 @@ public partial class GameManager : MonoBehaviour
     private const string TrueStrikeTestPresetId = "true_strike_test";
     private const string WizardSpellTestPresetId = "wizard_spell_test";
     private const string ClericSpellTestPresetId = "cleric_spell_test";
+    private const string CharmPersonTestPresetId = "charm_person_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
     private bool _isGreaseTestEncounter;
@@ -108,6 +109,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isTrueStrikeTestEncounter;
     private bool _isWizardSpellTestEncounter;
     private bool _isClericSpellTestEncounter;
+    private bool _isCharmPersonTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
 
     // D&D timing: 1 in-game day = 14,400 rounds.
@@ -143,6 +145,9 @@ public partial class GameManager : MonoBehaviour
     [SerializeField] private ConditionService _conditionService;
     [SerializeField] private AIService _aiService;
     [SerializeField] private CombatFlowService _combatFlowService;
+
+    private ConfusedBehaviorController _confusedBehaviorController;
+    private CharmedBehaviorController _charmedBehaviorController;
 
     /// <summary>Current combatant in initiative order (PC or NPC).</summary>
     public CharacterController CurrentCharacter => _turnService != null ? _turnService.CurrentCharacter : null;
@@ -372,6 +377,9 @@ public partial class GameManager : MonoBehaviour
 
         _combatFlowService ??= gameObject.GetComponent<CombatFlowService>() ?? gameObject.AddComponent<CombatFlowService>();
         _combatFlowService.Initialize(this);
+
+        _confusedBehaviorController ??= new ConfusedBehaviorController();
+        _charmedBehaviorController ??= new CharmedBehaviorController();
 
         turnUndeadSystem ??= gameObject.GetComponent<TurnUndeadSystem>() ?? gameObject.AddComponent<TurnUndeadSystem>();
         grappleSystem ??= gameObject.GetComponent<GrappleSystem>() ?? gameObject.AddComponent<GrappleSystem>();
@@ -617,6 +625,7 @@ public partial class GameManager : MonoBehaviour
         _isTrueStrikeTestEncounter = string.Equals(presetId, TrueStrikeTestPresetId, StringComparison.Ordinal);
         _isWizardSpellTestEncounter = string.Equals(presetId, WizardSpellTestPresetId, StringComparison.Ordinal);
         _isClericSpellTestEncounter = string.Equals(presetId, ClericSpellTestPresetId, StringComparison.Ordinal);
+        _isCharmPersonTestEncounter = string.Equals(presetId, CharmPersonTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.NPCIds != null && preset.NPCIds.Count > 0)
         {
@@ -669,6 +678,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureWizardSpellTestParty();
         else if (_isClericSpellTestEncounter)
             ConfigureClericSpellTestParty();
+        else if (_isCharmPersonTestEncounter)
+            ConfigureCharmPersonTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -2718,6 +2729,101 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   If you end your next turn without attacking, True Strike should expire automatically.");
     }
 
+    private void ConfigureCharmPersonTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+        SpellDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats enchanterStats = new CharacterStats(
+            name: "Selene the Enchanter",
+            level: 5,
+            characterClass: "Wizard",
+            str: 8, dex: 14, con: 12, wis: 12, intelligence: 18, cha: 12,
+            bab: 2,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 26,
+            raceName: "Human"
+        );
+
+        Vector2Int enchanterStart = new Vector2Int(3, 9);
+        Sprite enchanterAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        PC1.Init(enchanterStats, enchanterStart, enchanterAlive, pcDead);
+
+        InventoryComponent enchanterInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        enchanterInventory.Init(enchanterStats);
+        enchanterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        enchanterInventory.CharacterInventory.RecalculateStats();
+
+        SpellcastingComponent enchanterSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
+        enchanterSpellComp.KnownSpells.Clear();
+        enchanterSpellComp.SelectedSpellIds = new List<string>
+        {
+            "detect_magic_wiz", "read_magic", "charm_person", "magic_missile"
+        };
+        enchanterSpellComp.PreparedSpellSlotIds = new List<string>
+        {
+            "charm_person", "charm_person", "magic_missile", "magic_missile"
+        };
+        enchanterSpellComp.Init(enchanterStats);
+
+        // Start slightly injured so charmed healers can immediately demonstrate supportive behavior.
+        enchanterStats.TakeDamage(8);
+
+        StatusEffectManager enchanterStatusMgr = PC1.gameObject.GetComponent<StatusEffectManager>() ?? PC1.gameObject.AddComponent<StatusEffectManager>();
+        enchanterStatusMgr.Init(enchanterStats);
+
+        ConcentrationManager enchanterConcentration = PC1.gameObject.GetComponent<ConcentrationManager>() ?? PC1.gameObject.AddComponent<ConcentrationManager>();
+        enchanterConcentration.Init(enchanterStats, PC1);
+
+        CharacterStats guardStats = new CharacterStats(
+            name: "Rook the Guard",
+            level: 5,
+            characterClass: "Fighter",
+            str: 16, dex: 12, con: 14, wis: 10, intelligence: 10, cha: 10,
+            bab: 5,
+            armorBonus: 4,
+            shieldBonus: 2,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 44,
+            raceName: "Human"
+        );
+
+        Vector2Int guardStart = new Vector2Int(5, 9);
+        Sprite guardAlive = IconLoader.GetToken("Fighter") ?? pcAliveFallback;
+        PC2.Init(guardStats, guardStart, guardAlive, pcDead);
+
+        InventoryComponent guardInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
+        guardInventory.Init(guardStats);
+        guardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
+        guardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        guardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        guardInventory.CharacterInventory.RecalculateStats();
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, true, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("💞 Charm Person Test: Selene (Wizard 5) and Rook (Fighter 5) vs humanoid targets.");
+        CombatUI?.ShowCombatLog("   Validation goals: humanoid-only + 4 HD cap, +5 Will if threatened by caster side, and charmed AI non-hostility/support behavior.");
+        CombatUI?.ShowCombatLog("   Selene begins lightly injured so charmed heal-capable targets can demonstrate emergency aid.");
+    }
+
     private void ConfigureClericSpellTestParty()
     {
         RaceDatabase.Init();
@@ -3967,6 +4073,46 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog($"<color=#99CCFF>{msg}</color>");
     }
 
+    public void BreakCharmOnHostileAction(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null || target.Stats == null)
+            return;
+
+        if (!HasCondition(target, CombatConditionType.Charmed))
+            return;
+
+        List<ConditionService.ActiveCondition> active = GetActiveConditions(target);
+        if (active == null || active.Count == 0)
+            return;
+
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionService.ActiveCondition condition = active[i];
+            if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Charmed)
+                continue;
+
+            CharacterController source = condition.Source;
+            CharmedConditionData charmData = condition.Data as CharmedConditionData;
+            if (source == null && charmData != null)
+                source = charmData.Caster;
+
+            bool casterMatch = source == attacker
+                || (!string.IsNullOrWhiteSpace(condition.SourceName)
+                    && attacker.Stats != null
+                    && string.Equals(condition.SourceName, attacker.Stats.CharacterName, StringComparison.Ordinal));
+
+            if (!casterMatch)
+                continue;
+
+            if (RemoveCondition(target, CombatConditionType.Charmed))
+            {
+                CombatUI?.ShowCombatLog($"💔 {target.Stats.CharacterName} is no longer charmed after being attacked by {attacker.Stats.CharacterName}.");
+            }
+
+            return;
+        }
+    }
+
     private bool IsActiveCombatant(CharacterController c)
     {
         return c != null && c.gameObject != null && c.gameObject.activeInHierarchy && c.Stats != null;
@@ -4322,7 +4468,39 @@ public partial class GameManager : MonoBehaviour
         // Update initiative UI to highlight current character
         UpdateInitiativeUI();
 
+        if (TryBeginConfusedPCTurn(pc))
+            return;
+
         ShowActionChoices();
+    }
+
+    private bool TryBeginConfusedPCTurn(CharacterController pc)
+    {
+        _confusedBehaviorController ??= new ConfusedBehaviorController();
+        if (!_confusedBehaviorController.TryRollDecision(this, pc, out ConfusedBehaviorController.ConfusedTurnDecision decision))
+            return false;
+
+        if (decision.Mode == ConfusedBehaviorController.ConfusedTurnMode.ActNormally)
+        {
+            CombatUI?.ShowCombatLog($"🌀 {pc.Stats.CharacterName} is confused but acts normally this turn.");
+            return false;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CombatUI?.SetActionButtonsVisible(false);
+        StartCoroutine(ExecuteConfusedForcedPCTurn(pc, decision));
+        return true;
+    }
+
+    private IEnumerator ExecuteConfusedForcedPCTurn(CharacterController pc, ConfusedBehaviorController.ConfusedTurnDecision decision)
+    {
+        if (_confusedBehaviorController == null)
+            yield break;
+
+        yield return StartCoroutine(_confusedBehaviorController.ExecuteDecision(this, pc, decision));
+
+        if (CurrentPhase == TurnPhase.PCTurn && CurrentCharacter == pc)
+            EndCurrentTurn();
     }
 
     // Legacy helper
@@ -9131,6 +9309,16 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
+        if (spell.SpellId == "charm_person")
+        {
+            // D&D 3.5e Charm Person: one humanoid creature of 4 HD or less.
+            if (!IsEnemyTeam(caster, target)) return false;
+            if (!IsHumanoid(target)) return false;
+            if (GetTargetHitDice(target) > 4) return false;
+            if (IsImmuneToMindAffecting(target)) return false;
+            return true;
+        }
+
         switch (spell.TargetType)
         {
             case SpellTargetType.SingleEnemy:
@@ -10576,15 +10764,15 @@ public partial class GameManager : MonoBehaviour
 
         if (spell != null && (spell.SpellId == "blindness_deafness_wiz" || spell.SpellId == "blindness_deafness_clr"))
         {
-            int blindRounds = spell.BuffDurationRounds;
+            int rounds = spell.BuffDurationRounds;
             string sourceName = spell.Name;
 
             if (_conditionService != null)
             {
                 _conditionService.ApplyCondition(
                     target,
-                    CombatConditionType.Blinded,
-                    blindRounds,
+                    CombatConditionType.Deafened,
+                    rounds,
                     source: caster,
                     sourceNameOverride: sourceName,
                     sourceCategory: "Spell",
@@ -10593,11 +10781,123 @@ public partial class GameManager : MonoBehaviour
             else
             {
                 string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
-                target.ApplyCondition(CombatConditionType.Blinded, blindRounds, fallbackSource);
+                target.ApplyCondition(CombatConditionType.Deafened, rounds, fallbackSource);
             }
 
-            CombatUI?.ShowCombatLog($"<color=#FF9966>👁️ {target.Stats.CharacterName} is blinded by {spell.Name}!</color>");
-            Debug.Log($"[GameManager] {spell.Name} applied Blinded to {target.Stats.CharacterName}");
+            CombatUI?.ShowCombatLog($"<color=#FF9966>🔔 {target.Stats.CharacterName} is deafened by {spell.Name}!</color>");
+            Debug.Log($"[GameManager] {spell.Name} applied Deafened to {target.Stats.CharacterName}");
+            return null;
+        }
+
+        if (spell != null && spell.SpellId == "confusion")
+        {
+            int confusionRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 1);
+            string sourceName = spell.Name;
+
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Confused,
+                    confusionRounds,
+                    source: caster,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+            }
+            else
+            {
+                string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
+                target.ApplyCondition(CombatConditionType.Confused, confusionRounds, fallbackSource);
+            }
+
+            CombatUI?.ShowCombatLog($"<color=#FFCC99>🌀 {target.Stats.CharacterName} is confused for {confusionRounds} round(s)!</color>");
+            return null;
+        }
+
+        if (spell != null && spell.SpellId == "charm_person")
+        {
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int charmRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+            string sourceName = spell.Name;
+
+            var charmData = new CharmedConditionData
+            {
+                Caster = caster,
+                CasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName,
+                RemainingRounds = charmRounds,
+                SourceSpellId = spell.SpellId,
+                SourceEffectName = spell.Name
+            };
+
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Charmed,
+                    charmRounds,
+                    source: caster,
+                    data: charmData,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+            }
+            else
+            {
+                string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
+                target.ApplyCondition(CombatConditionType.Charmed, charmRounds, fallbackSource);
+            }
+
+            CombatUI?.ShowCombatLog($"<color=#FFD699>💞 {target.Stats.CharacterName} is charmed by {charmData.CasterName} for {charmRounds} round(s)!</color>");
+            return null;
+        }
+
+        if (spell != null && spell.SpellId == "enervation")
+        {
+            string sourceName = spell.Name;
+            int negativeLevels = Random.Range(1, 5);
+            int total = NegativeLevelSystem.ApplyNegativeLevels(target, negativeLevels, sourceName);
+            CombatUI?.ShowCombatLog($"<color=#9966CC>☠ {target.Stats.CharacterName} gains {negativeLevels} negative level(s) from Enervation (total {total}).</color>");
+            return null;
+        }
+
+        if (spell != null && spell.SpellId == "flesh_to_stone")
+        {
+            string sourceName = spell.Name;
+            int rounds = spell.BuffDurationRounds;
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Petrified,
+                    rounds,
+                    source: caster,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+            }
+            else
+            {
+                string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
+                target.ApplyCondition(CombatConditionType.Petrified, rounds, fallbackSource);
+            }
+
+            CombatUI?.ShowCombatLog($"<color=#AAAAAA>🪨 {target.Stats.CharacterName} is petrified!</color>");
+            return null;
+        }
+
+        if (spell != null && spell.SpellId == "stone_to_flesh")
+        {
+            bool removed = target.RemoveCondition(CombatConditionType.Petrified);
+            if (removed)
+                CombatUI?.ShowCombatLog($"<color=#99FF99>✨ {target.Stats.CharacterName} returns to flesh.</color>");
+            return null;
+        }
+
+        if (spell != null && (spell.SpellId == "restoration" || spell.SpellId == "greater_restoration"))
+        {
+            int removed = NegativeLevelSystem.RemoveNegativeLevels(target, int.MaxValue, spell.Name);
+            CombatUI?.ShowCombatLog($"<color=#99FFCC>✨ {target.Stats.CharacterName} recovers {removed} negative level(s).</color>");
             return null;
         }
 
@@ -11417,6 +11717,30 @@ public partial class GameManager : MonoBehaviour
         => _conditionService != null ? _conditionService.GetConditionDuration(target, type) : 0;
     public List<ConditionService.ActiveCondition> GetActiveConditions(CharacterController target)
         => _conditionService != null ? _conditionService.GetActiveConditions(target) : new List<ConditionService.ActiveCondition>();
+
+    public bool TryGetConfusedTurnDecisionForAI(CharacterController actor, out ConfusedBehaviorController.ConfusedTurnDecision decision)
+    {
+        _confusedBehaviorController ??= new ConfusedBehaviorController();
+        return _confusedBehaviorController.TryRollDecision(this, actor, out decision);
+    }
+
+    public IEnumerator ExecuteConfusedTurnDecisionForAI(CharacterController actor, ConfusedBehaviorController.ConfusedTurnDecision decision)
+    {
+        _confusedBehaviorController ??= new ConfusedBehaviorController();
+        yield return StartCoroutine(_confusedBehaviorController.ExecuteDecision(this, actor, decision));
+    }
+
+    public bool TryGetCharmedTurnDecisionForAI(CharacterController actor, out CharmedBehaviorController.CharmedTurnDecision decision)
+    {
+        _charmedBehaviorController ??= new CharmedBehaviorController();
+        return _charmedBehaviorController.TryBuildDecision(this, actor, out decision);
+    }
+
+    public IEnumerator ExecuteCharmedTurnDecisionForAI(CharacterController actor, CharmedBehaviorController.CharmedTurnDecision decision)
+    {
+        _charmedBehaviorController ??= new CharmedBehaviorController();
+        yield return StartCoroutine(_charmedBehaviorController.ExecuteDecision(this, actor, decision));
+    }
 
     // Public delegation helpers for AIService.
     public NPCAIBehavior GetNPCBehaviorForAI(CharacterController npc)

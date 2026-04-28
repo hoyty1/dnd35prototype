@@ -52,6 +52,9 @@ public sealed class ConditionDefinition
     public bool GrantsCombatAdvantage;
     public bool CoupDeGraceVulnerable;
 
+    // Defensive state (e.g., petrified hardness).
+    public int Hardness;
+
     public ConditionDefinition CloneFor(CombatConditionType type)
     {
         return new ConditionDefinition
@@ -79,7 +82,8 @@ public sealed class ConditionDefinition
             IsFearCondition = IsFearCondition,
             DeniesDexToAc = DeniesDexToAc,
             GrantsCombatAdvantage = GrantsCombatAdvantage,
-            CoupDeGraceVulnerable = CoupDeGraceVulnerable
+            CoupDeGraceVulnerable = CoupDeGraceVulnerable,
+            Hardness = Hardness
         };
     }
 }
@@ -327,6 +331,16 @@ public static class ConditionRules
 
         Add(new ConditionDefinition
         {
+            Type = CombatConditionType.Charmed,
+            DisplayName = "Charmed",
+            ShortLabel = "CHM",
+            Description = "Treats source as a trusted friend. Will not attack source and may assist them.",
+            StackingRule = ConditionStackingRule.Refresh,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
             Type = CombatConditionType.Fatigued,
             DisplayName = "Fatigued",
             ShortLabel = "FT",
@@ -485,7 +499,7 @@ public static class ConditionRules
             Type = CombatConditionType.Petrified,
             DisplayName = "Petrified",
             ShortLabel = "PT",
-            Description = "Turned to stone; inert and helpless.",
+            Description = "Turned to stone; inert and helpless. Hardness 8.",
             StackingRule = ConditionStackingRule.Refresh,
             PreventsMovement = true,
             PreventsStandardActions = true,
@@ -495,7 +509,8 @@ public static class ConditionRules
             PreventsThreatening = true,
             MovementMultiplier = 0f,
             GrantsCombatAdvantage = true,
-            CoupDeGraceVulnerable = true
+            CoupDeGraceVulnerable = true,
+            Hardness = 8
         });
 
         Add(new ConditionDefinition

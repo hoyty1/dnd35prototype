@@ -29,12 +29,16 @@ public class SpellSlot
     /// <summary>Whether this slot has been used (spell cast) today.</summary>
     public bool IsUsed;
 
+    /// <summary>True when this slot is temporarily disabled by negative levels.</summary>
+    public bool DisabledByNegativeLevel;
+
     /// <summary>Create a new empty spell slot at the given level.</summary>
     public SpellSlot(int level)
     {
         Level = level;
         PreparedSpell = null;
         IsUsed = false;
+        DisabledByNegativeLevel = false;
     }
 
     /// <summary>Create a spell slot with a specific spell already prepared.</summary>
@@ -43,10 +47,11 @@ public class SpellSlot
         Level = level;
         PreparedSpell = spell;
         IsUsed = false;
+        DisabledByNegativeLevel = false;
     }
 
-    /// <summary>Whether this slot can be cast (has a spell and hasn't been used).</summary>
-    public bool CanCast => PreparedSpell != null && !IsUsed;
+    /// <summary>Whether this slot can be cast (has a spell, isn't used, and isn't disabled).</summary>
+    public bool CanCast => PreparedSpell != null && !IsUsed && !DisabledByNegativeLevel;
 
     /// <summary>Whether this slot has a spell prepared (regardless of used status).</summary>
     public bool HasSpell => PreparedSpell != null;
@@ -86,7 +91,7 @@ public class SpellSlot
     public override string ToString()
     {
         string spellName = PreparedSpell != null ? PreparedSpell.Name : "(empty)";
-        string status = IsUsed ? "USED" : "ready";
+        string status = DisabledByNegativeLevel ? "DISABLED" : (IsUsed ? "USED" : "ready");
         return $"Lv{Level} [{spellName}] ({status})";
     }
 }

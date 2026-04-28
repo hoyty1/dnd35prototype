@@ -123,6 +123,34 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
+                    SpellId = "restoration",
+                    Name = "Restoration",
+                    Description = "Dispels temporary negative levels and restores drained abilities. PHB p.272",
+                    SpellLevel = 4, School = "Conjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Healing,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        Register(new SpellData
+                {
+                    SpellId = "greater_restoration",
+                    Name = "Greater Restoration",
+                    Description = "Restores all temporary negative levels and ability damage. PHB p.246",
+                    SpellLevel = 7, School = "Conjuration",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Healing,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        Register(new SpellData
+                {
                     SpellId = "resist_energy",
                     Name = "Resist Energy",
                     Description = "Grants resistance 10 to specified energy type (fire, cold, acid, electricity, sonic). 10 min/level. PHB p.272",

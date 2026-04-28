@@ -329,6 +329,20 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
+                    SpellId = "stone_to_flesh",
+                    Name = "Stone to Flesh",
+                    Description = "Restores petrified creature to normal flesh. PHB p.284",
+                    SpellLevel = 6, School = "Transmutation",
+                    ClassList = new[] { "Wizard" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Healing,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        Register(new SpellData
+                {
                     SpellId = "status",
                     Name = "Status",
                     Description = "Monitors condition and position of allies. Duration 1 hr/level. PHB p.284",

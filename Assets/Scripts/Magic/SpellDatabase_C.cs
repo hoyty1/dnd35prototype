@@ -94,24 +94,25 @@ public static partial class SpellDatabase
                 {
                     SpellId = "charm_person",
                     Name = "Charm Person",
-                    Description = "Makes one humanoid creature friendly to you. Will save negates. Duration 1 hr/level. PHB p.209",
-                    SpellLevel = 1, School = "Enchantment",
-                    ClassList = new[] { "Wizard" },
+                    Description = "Enchantment (Charm) [Mind-Affecting]. One humanoid creature of 4 HD or less regards you as a trusted ally. Will negates. Duration 1 hour/level. SR: Yes. PHB p.209",
+                    SpellLevel = 1,
+                    School = "Enchantment",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.SingleEnemy,
-                    // D&D 3.5e: Close range (25 ft + 5 ft / 2 levels).
-                    // Keeping this as a fixed 25 ft caused long-range test casters (like Vhalzor, CL10)
-                    // to never attempt Charm Person in the Protection from Evil benchmark encounter.
                     RangeCategory = SpellRangeCategory.Close,
                     EffectType = SpellEffectType.Debuff,
                     IsMindAffecting = true,
                     BlockedByProtectionFromAlignment = true,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
-                    BuffDurationRounds = -1,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    // Legacy fallback value for systems still reading BuffDurationRounds directly.
+                    BuffDurationRounds = 600,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Charm/mind control not implemented in combat]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
@@ -239,6 +240,23 @@ public static partial class SpellDatabase
                     ProvokesAoO = true,
                     IsPlaceholder = true,
                     PlaceholderReason = "[PLACEHOLDER - Area consecration not implemented]"
+                });
+
+        Register(new SpellData
+                {
+                    SpellId = "confusion",
+                    Name = "Confusion",
+                    Description = "Targets behave unpredictably for 1 round/level. Will negates. PHB p.212",
+                    SpellLevel = 4, School = "Enchantment",
+                    ClassList = new[] { "Wizard" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    BuffDurationRounds = 4,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData

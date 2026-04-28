@@ -1573,6 +1573,9 @@ public class CharacterController : MonoBehaviour
             Stats.ApplyCondition(type, rounds, sourceName);
 
         EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
+
+        SpellcastingComponent spellComp = GetComponent<SpellcastingComponent>();
+        spellComp?.ApplyNegativeLevelSlotLoss();
     }
 
     public bool RemoveCondition(CombatConditionType type)
@@ -1589,7 +1592,11 @@ public class CharacterController : MonoBehaviour
             : Stats.RemoveCondition(type);
 
         if (removed)
+        {
             EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
+            SpellcastingComponent spellComp = GetComponent<SpellcastingComponent>();
+            spellComp?.ApplyNegativeLevelSlotLoss();
+        }
 
         return removed;
     }
@@ -1608,6 +1615,8 @@ public class CharacterController : MonoBehaviour
             : Stats.TickConditions();
 
         EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
+        SpellcastingComponent spellComp = GetComponent<SpellcastingComponent>();
+        spellComp?.ApplyNegativeLevelSlotLoss();
         return expired;
     }
 
@@ -1621,6 +1630,47 @@ public class CharacterController : MonoBehaviour
     public bool IsFeintedCondition => EnsureConditions().IsFeinted;
     public bool IsFlatFootedCondition => EnsureConditions().IsFlatFooted;
     public bool IsDexDenied => EnsureConditions().IsDexDenied;
+    public int NegativeLevelCount => Stats != null ? Stats.NegativeLevelCount : 0;
+
+    public int ApplyNegativeLevels(int count, string sourceName)
+    {
+        if (Stats == null || count <= 0)
+            return 0;
+
+        string source = string.IsNullOrWhiteSpace(sourceName) ? "Negative Energy" : sourceName;
+        for (int i = 0; i < count; i++)
+            ApplyCondition(CombatConditionType.EnergyDrained, -1, source);
+
+        Stats.RefreshNegativeLevelState();
+        return Stats.NegativeLevelCount;
+    }
+
+    public int RemoveNegativeLevels(int count)
+    {
+        if (Stats == null || count <= 0)
+            return 0;
+
+        int removed = 0;
+        for (int i = Stats.ActiveConditions.Count - 1; i >= 0 && removed < count; i--)
+        {
+            StatusEffect effect = Stats.ActiveConditions[i];
+            if (effect == null || ConditionRules.Normalize(effect.Type) != CombatConditionType.EnergyDrained)
+                continue;
+
+            Stats.ActiveConditions.RemoveAt(i);
+            removed++;
+        }
+
+        if (removed > 0)
+        {
+            Stats.RefreshNegativeLevelState();
+            EnsureStatusTagManager().UpdateStatusEffectTags(GetActiveConditionsDirect());
+            SpellcastingComponent spellComp = GetComponent<SpellcastingComponent>();
+            spellComp?.ApplyNegativeLevelSlotLoss();
+        }
+
+        return removed;
+    }
 
     public void SetProne(bool prone)
     {
@@ -2638,6 +2688,9 @@ public class CharacterController : MonoBehaviour
             if (!string.IsNullOrEmpty(reloadStateMessage))
                 Debug.Log($"[Reload] {Stats.CharacterName}: {reloadStateMessage}");
         }
+
+        if (GameManager.Instance != null)
+            GameManager.Instance.BreakCharmOnHostileAction(this, target);
 
         HasAttackedThisTurn = true;
         return result;

@@ -110,6 +110,23 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
+                    SpellId = "flesh_to_stone",
+                    Name = "Flesh to Stone",
+                    Description = "Turns a creature to stone. Fortitude negates. PHB p.232",
+                    SpellLevel = 6, School = "Transmutation",
+                    ClassList = new[] { "Wizard" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    BuffDurationRounds = -1,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        Register(new SpellData
+                {
                     SpellId = "flaming_sphere",
                     Name = "Flaming Sphere",
                     Description = "Rolling ball of fire, 2d6 fire damage. Reflex negates. Lasts 1 round/level, movable. PHB p.232",

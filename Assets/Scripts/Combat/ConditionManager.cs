@@ -13,12 +13,22 @@ using UnityEngine;
 public class ConditionManager : MonoBehaviour
 {
     private CharacterStats _stats;
+    private SpriteRenderer _spriteRenderer;
+    private Color _baseColor = Color.white;
+    private bool _capturedBaseColor;
 
     public void Init(CharacterStats stats)
     {
         _stats = stats;
         if (_stats != null && _stats.ActiveConditions == null)
             _stats.ActiveConditions = new List<StatusEffect>();
+
+        _spriteRenderer = GetComponent<SpriteRenderer>();
+        if (_spriteRenderer != null)
+        {
+            _baseColor = _spriteRenderer.color;
+            _capturedBaseColor = true;
+        }
     }
 
     public IReadOnlyList<StatusEffect> ActiveConditions
@@ -44,10 +54,7 @@ public class ConditionManager : MonoBehaviour
 
         if (def.StackingRule == ConditionStackingRule.StackBySource)
         {
-            var existingSameSource = _stats.ActiveConditions.FirstOrDefault(c =>
-                ConditionRules.Normalize(c.Type) == normalized && c.SourceName == sourceName);
-
-            if (existingSameSource == null)
+            if (normalized == CombatConditionType.EnergyDrained)
             {
                 var created = new StatusEffect(normalized, sourceName, rounds);
                 _stats.ActiveConditions.Add(created);
@@ -55,10 +62,23 @@ public class ConditionManager : MonoBehaviour
             }
             else
             {
-                RefreshDuration(existingSameSource, rounds);
+                var existingSameSource = _stats.ActiveConditions.FirstOrDefault(c =>
+                    ConditionRules.Normalize(c.Type) == normalized && c.SourceName == sourceName);
+
+                if (existingSameSource == null)
+                {
+                    var created = new StatusEffect(normalized, sourceName, rounds);
+                    _stats.ActiveConditions.Add(created);
+                    OnConditionApplied(created);
+                }
+                else
+                {
+                    RefreshDuration(existingSameSource, rounds);
+                }
             }
 
             EnsureLinkedParalyzedHelpless(rounds, sourceName, normalized);
+            _stats?.RefreshNegativeLevelState();
             return;
         }
 
@@ -77,6 +97,7 @@ public class ConditionManager : MonoBehaviour
         }
 
         EnsureLinkedParalyzedHelpless(rounds, sourceName, normalized);
+        _stats?.RefreshNegativeLevelState();
     }
 
     private void EnsureLinkedParalyzedHelpless(int rounds, string sourceName, CombatConditionType normalized)
@@ -113,6 +134,7 @@ public class ConditionManager : MonoBehaviour
         if (normalized == CombatConditionType.Paralyzed)
             RemoveLinkedHelplessIfNoOtherDriver(removed != null ? removed.SourceName : null);
 
+        _stats?.RefreshNegativeLevelState();
         return true;
     }
 
@@ -135,6 +157,7 @@ public class ConditionManager : MonoBehaviour
                 RemoveLinkedHelplessIfNoOtherDriver(cond != null ? cond.SourceName : null);
         }
 
+        _stats?.RefreshNegativeLevelState();
         return expired;
     }
 
@@ -245,6 +268,10 @@ public class ConditionManager : MonoBehaviour
             case CombatConditionType.Invisible:
                 Debug.Log($"[ConditionManager] {_stats.CharacterName}: Invisible applied (visibility/combat advantage stub hook)");
                 break;
+            case CombatConditionType.Petrified:
+                ApplyPetrifiedVisual();
+                Debug.Log($"[ConditionManager] {_stats.CharacterName}: Petrified applied (stone visual + hardness).");
+                break;
         }
     }
 
@@ -263,6 +290,38 @@ public class ConditionManager : MonoBehaviour
             case CombatConditionType.Invisible:
                 Debug.Log($"[ConditionManager] {_stats.CharacterName}: {condition.Type} removed (stub hook)");
                 break;
+            case CombatConditionType.Petrified:
+                RemovePetrifiedVisual();
+                Debug.Log($"[ConditionManager] {_stats.CharacterName}: Petrified removed (stone visual reset).");
+                break;
         }
+    }
+
+    private void ApplyPetrifiedVisual()
+    {
+        if (_spriteRenderer == null)
+            _spriteRenderer = GetComponent<SpriteRenderer>();
+
+        if (_spriteRenderer == null)
+            return;
+
+        if (!_capturedBaseColor)
+        {
+            _baseColor = _spriteRenderer.color;
+            _capturedBaseColor = true;
+        }
+
+        _spriteRenderer.color = new Color(0.62f, 0.62f, 0.62f, _baseColor.a);
+    }
+
+    private void RemovePetrifiedVisual()
+    {
+        if (_spriteRenderer == null)
+            _spriteRenderer = GetComponent<SpriteRenderer>();
+
+        if (_spriteRenderer == null || !_capturedBaseColor)
+            return;
+
+        _spriteRenderer.color = _baseColor;
     }
 }

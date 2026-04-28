@@ -73,6 +73,24 @@ public static class SpellCaster
             effectiveSpellLevel = metamagic.HeightenToLevel;
         }
 
+        // ========== DEAFENED VERBAL SPELL FAILURE ==========
+        if (casterStats != null
+            && spell != null
+            && spell.HasVerbalComponent
+            && HasCondition(casterStats, CombatConditionType.Deafened))
+        {
+            int failureRoll = Random.Range(1, 101);
+            result.SaveRoll = 0;
+            if (failureRoll <= 20)
+            {
+                result.Success = false;
+                result.TargetHPBefore = targetStats != null ? targetStats.CurrentHP : 0;
+                result.TargetHPAfter = result.TargetHPBefore;
+                result.NoEffectReason = $"Spell fails due to deafness (20% verbal component failure, d%={failureRoll:00}).";
+                return result;
+            }
+        }
+
         // ========== ATTACK ROLL (touch attacks) ==========
         // AoE spells do not use touch attack rolls.
         bool isAoESpell = spell.TargetType == SpellTargetType.Area;
@@ -191,6 +209,17 @@ public static class SpellCaster
             return result;
         }
 
+        // Breaking charm: if the charm caster makes a hostile action against their charmed target,
+        // the charm ends immediately.
+        if (result.AttackHit
+            && casterController != null
+            && targetController != null
+            && (spell.EffectType == SpellEffectType.Damage || spell.EffectType == SpellEffectType.Debuff)
+            && GameManager.Instance != null)
+        {
+            GameManager.Instance.BreakCharmOnHostileAction(casterController, targetController);
+        }
+
         // ========== SPELL RESISTANCE ==========
         if (result.AttackHit && spell.SpellResistanceApplies && targetStats != null && targetStats.SpellResistance > 0)
         {
@@ -237,7 +266,7 @@ public static class SpellCaster
             else
             {
                 int saveRoll = Random.Range(1, 21);
-                int saveMod = GetSaveModifier(targetStats, spell, protection, out int protectionSaveBonus);
+                int saveMod = GetSaveModifier(targetStats, spell, protection, casterController, targetController, out int protectionSaveBonus);
                 result.SaveRoll = saveRoll;
                 result.SaveMod = saveMod;
                 result.ProtectionSaveBonus = protectionSaveBonus;
@@ -254,7 +283,8 @@ public static class SpellCaster
             if (spell.AutoHit && spell.MissileCount > 0)
             {
                 // Magic Missile: 1 + (CL-1)/2 missiles, max 5
-                int missileCount = Mathf.Min(5, 1 + (casterStats.Level - 1) / 2);
+                int effectiveCasterLevel = casterStats != null ? Mathf.Max(1, casterStats.GetCasterLevel()) : 1;
+                int missileCount = Mathf.Min(5, 1 + (effectiveCasterLevel - 1) / 2);
                 result.MissileCount = missileCount;
                 result.MissileDamages = new int[missileCount];
                 int totalDmg = 0;
@@ -316,7 +346,7 @@ public static class SpellCaster
             if (result.DamageDealt > 0)
                 result.DamageDealt = Mathf.Max(1, result.DamageDealt);
 
-            int effectiveRangeSquares = spell.GetRangeSquaresForCasterLevel(casterStats != null ? casterStats.Level : 0);
+            int effectiveRangeSquares = spell.GetRangeSquaresForCasterLevel(casterStats != null ? casterStats.GetCasterLevel() : 0);
             bool isRangedSpellDamage = result.RequiredAttackRoll
                 ? result.IsRangedTouch
                 : (effectiveRangeSquares > 1 || spell.TargetType == SpellTargetType.Area);
@@ -612,7 +642,7 @@ public static class SpellCaster
         if (casterLevel > 0)
             return casterLevel;
 
-        return Mathf.Max(1, casterStats.Level);
+        return Mathf.Max(1, casterStats.EffectiveCharacterLevel);
     }
 
     /// <summary>
@@ -668,10 +698,31 @@ public static class SpellCaster
     /// Get the appropriate saving throw modifier for a character,
     /// including conditional bonuses such as Still Mind (+2 vs enchantment effects).
     /// </summary>
+    private static bool HasCondition(CharacterStats stats, CombatConditionType condition)
+    {
+        if (stats == null || stats.ActiveConditions == null)
+            return false;
+
+        CombatConditionType normalized = ConditionRules.Normalize(condition);
+        for (int i = 0; i < stats.ActiveConditions.Count; i++)
+        {
+            StatusEffect active = stats.ActiveConditions[i];
+            if (active == null)
+                continue;
+
+            if (ConditionRules.Normalize(active.Type) == normalized)
+                return true;
+        }
+
+        return false;
+    }
+
     private static int GetSaveModifier(
         CharacterStats stats,
         SpellData spell,
         AlignmentProtectionBenefits protection,
+        CharacterController casterController,
+        CharacterController targetController,
         out int protectionSaveBonus)
     {
         protectionSaveBonus = 0;
@@ -702,6 +753,14 @@ public static class SpellCaster
         if (spell.SavingThrowType == "Will" && isEnchantment && stats.StillMindBonus > 0)
             baseSave += stats.StillMindBonus;
 
+        // D&D 3.5e Charm Person: +5 bonus on save if threatened/attacked by caster side.
+        if (spell.SavingThrowType == "Will"
+            && string.Equals(spell.SpellId, "charm_person", System.StringComparison.Ordinal)
+            && IsBeingThreatenedBy(targetController, casterController))
+        {
+            baseSave += 5;
+        }
+
         if (protection.HasMatch && protection.ResistanceSaveBonus > 0)
         {
             protectionSaveBonus = protection.ResistanceSaveBonus;
@@ -709,5 +768,47 @@ public static class SpellCaster
         }
 
         return baseSave;
+    }
+
+    /// <summary>
+    /// Returns true when a target would receive the Charm Person "threatened or attacked" save bonus.
+    /// </summary>
+    public static bool IsBeingThreatenedBy(CharacterController target, CharacterController caster)
+    {
+        if (target == null || caster == null || target.Stats == null || caster.Stats == null)
+            return false;
+
+        GameManager gm = GameManager.Instance;
+        if (gm == null)
+            return false;
+
+        if (!gm.IsEnemyTeamForAI(caster, target))
+            return false;
+
+        List<CharacterController> allCombatants = GetAllCombatCharactersSnapshot();
+        if (allCombatants == null || allCombatants.Count == 0)
+            return false;
+
+        // Direct melee threat by the caster.
+        List<CharacterController> threateningEnemies = ThreatSystem.GetThreateningEnemies(target.GridPosition, target, allCombatants);
+        for (int i = 0; i < threateningEnemies.Count; i++)
+        {
+            CharacterController threat = threateningEnemies[i];
+            if (threat == null || threat.Stats == null || threat.Stats.IsDead)
+                continue;
+
+            if (threat == caster)
+                return true;
+
+            if (threat.Team == caster.Team)
+                return true;
+        }
+
+        // If the target has already taken damage while hostile to the caster side this encounter,
+        // treat as "being attacked" for the charm save bonus.
+        if (target.Stats.CurrentHP < target.Stats.TotalMaxHP && target.Team != caster.Team)
+            return true;
+
+        return false;
     }
 }
