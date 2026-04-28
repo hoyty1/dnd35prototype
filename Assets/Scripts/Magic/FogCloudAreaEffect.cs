@@ -11,6 +11,7 @@ public class FogCloudAreaEffect : PersistentAreaEffect
 
     private readonly List<SquareCell> _highlightedCells = new List<SquareCell>();
     private static readonly Color FogColor = new Color(0.60f, 0.60f, 0.60f, 0.40f);
+    private bool _gridHighlightApplied;
 
     protected override void Awake()
     {
@@ -33,6 +34,23 @@ public class FogCloudAreaEffect : PersistentAreaEffect
         LogEffect("A dense fog forms in a 20-ft radius spread.");
         LogEffect("Creatures in the fog gain concealment (20% miss chance).");
         ApplyGridHighlight();
+    }
+
+    private void Update()
+    {
+        // Keep occupancy/concealment state synchronized while creatures move mid-round.
+        UpdateCharacterTracking();
+
+        // Defensive re-apply in case grid initializes slightly after the area object.
+        if (!_gridHighlightApplied)
+            ApplyGridHighlight();
+    }
+
+    public override void OnRoundStart()
+    {
+        base.OnRoundStart();
+        if (!_gridHighlightApplied)
+            ApplyGridHighlight();
     }
 
     protected override void OnCreatureEntersArea(CharacterController character, bool isInitial)
@@ -123,6 +141,21 @@ public class FogCloudAreaEffect : PersistentAreaEffect
 
     private void RemoveConcealment(CharacterController character)
     {
+        if (character == null)
+            return;
+
+        // Do not remove concealment if the character still stands inside another active fog cloud area.
+        var fogAreas = AreaEffectManager.Instance.GetEffectsOfType<FogCloudAreaEffect>();
+        for (int i = 0; i < fogAreas.Count; i++)
+        {
+            FogCloudAreaEffect other = fogAreas[i];
+            if (other == null || other == this)
+                continue;
+
+            if (other.IsCharacterInArea(character))
+                return;
+        }
+
         StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
         if (statusMgr == null || statusMgr.ActiveEffects == null || statusMgr.ActiveEffects.Count == 0)
             return;
@@ -139,10 +172,12 @@ public class FogCloudAreaEffect : PersistentAreaEffect
     {
         if (gameManager == null || gameManager.Grid == null)
         {
+            _gridHighlightApplied = false;
             Debug.LogWarning("[FogCloudAreaEffect] Grid not found - cannot apply fog highlight.");
             return;
         }
 
+        _highlightedCells.Clear();
         foreach (Vector2Int cellCoord in AffectedCells)
         {
             SquareCell cell = gameManager.Grid.GetCell(cellCoord);
@@ -152,6 +187,8 @@ public class FogCloudAreaEffect : PersistentAreaEffect
             cell.SetHighlight(FogColor);
             _highlightedCells.Add(cell);
         }
+
+        _gridHighlightApplied = _highlightedCells.Count > 0;
     }
 
     private void RemoveGridHighlight()
@@ -164,5 +201,6 @@ public class FogCloudAreaEffect : PersistentAreaEffect
         }
 
         _highlightedCells.Clear();
+        _gridHighlightApplied = false;
     }
 }

@@ -11,6 +11,7 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
 
     private readonly List<SquareCell> _highlightedCells = new List<SquareCell>();
     private static readonly Color MistColor = new Color(0.70f, 0.70f, 0.70f, 0.30f);
+    private bool _gridHighlightApplied;
 
     protected override void Awake()
     {
@@ -33,6 +34,23 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
         LogEffect("Mist billows across a 20-ft radius spread.");
         LogEffect("Creatures in the mist gain concealment (20% miss chance).");
         ApplyGridHighlight();
+    }
+
+    private void Update()
+    {
+        // Keep occupancy/concealment state synchronized while creatures move mid-round.
+        UpdateCharacterTracking();
+
+        // Defensive re-apply in case grid initializes slightly after the area object.
+        if (!_gridHighlightApplied)
+            ApplyGridHighlight();
+    }
+
+    public override void OnRoundStart()
+    {
+        base.OnRoundStart();
+        if (!_gridHighlightApplied)
+            ApplyGridHighlight();
     }
 
     protected override void OnCreatureEntersArea(CharacterController character, bool isInitial)
@@ -123,6 +141,21 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
 
     private void RemoveConcealment(CharacterController character)
     {
+        if (character == null)
+            return;
+
+        // Do not remove concealment if the character still stands inside another active obscuring mist area.
+        var mistAreas = AreaEffectManager.Instance.GetEffectsOfType<ObscuringMistAreaEffect>();
+        for (int i = 0; i < mistAreas.Count; i++)
+        {
+            ObscuringMistAreaEffect other = mistAreas[i];
+            if (other == null || other == this)
+                continue;
+
+            if (other.IsCharacterInArea(character))
+                return;
+        }
+
         StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
         if (statusMgr == null || statusMgr.ActiveEffects == null || statusMgr.ActiveEffects.Count == 0)
             return;
@@ -139,10 +172,12 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
     {
         if (gameManager == null || gameManager.Grid == null)
         {
+            _gridHighlightApplied = false;
             Debug.LogWarning("[ObscuringMistAreaEffect] Grid not found - cannot apply mist highlight.");
             return;
         }
 
+        _highlightedCells.Clear();
         foreach (Vector2Int cellCoord in AffectedCells)
         {
             SquareCell cell = gameManager.Grid.GetCell(cellCoord);
@@ -152,6 +187,8 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
             cell.SetHighlight(MistColor);
             _highlightedCells.Add(cell);
         }
+
+        _gridHighlightApplied = _highlightedCells.Count > 0;
     }
 
     private void RemoveGridHighlight()
@@ -164,5 +201,6 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
         }
 
         _highlightedCells.Clear();
+        _gridHighlightApplied = false;
     }
 }

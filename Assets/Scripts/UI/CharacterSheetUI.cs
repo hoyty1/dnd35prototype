@@ -1101,11 +1101,11 @@ public class CharacterSheetUI : MonoBehaviour
 
         AddSeparator(content);
 
-        bool usesSlotSystem = (stats.IsWizard || stats.IsCleric) && spellComp.SpellSlots.Count > 0;
+        bool usesSlotSystem = (stats.IsWizard || stats.IsCleric || string.Equals(stats.CharacterClass, "Druid", System.StringComparison.OrdinalIgnoreCase)) && spellComp.SpellSlots.Count > 0;
 
         if (usesSlotSystem)
         {
-            // ======== WIZARD/CLERIC: Show slot-based prepared spells ========
+            // ======== PREPARED SLOT CASTER: Show slot-based prepared spells ========
             RefreshSlotSpellsTab(content, spellComp);
         }
         else

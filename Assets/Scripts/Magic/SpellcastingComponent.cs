@@ -85,8 +85,15 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>Whether this character is currently holding a melee touch spell charge.</summary>
     public bool HasHeldTouchCharge => HeldTouchSpell != null;
-    /// <summary>Whether this character has any spellcasting ability.</summary>
-    public bool CanCastSpells => Stats != null && (Stats.IsWizard || Stats.IsCleric);
+    /// <summary>Whether this character has any supported spellcasting ability.</summary>
+    public bool CanCastSpells => UsesPreparedSlotSystem;
+
+    private static bool IsDruidClass(CharacterStats stats)
+    {
+        return stats != null && string.Equals(stats.CharacterClass, "Druid", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool UsesPreparedSlotSystem => Stats != null && (Stats.IsWizard || Stats.IsCleric || IsDruidClass(Stats));
 
     /// <summary>
     /// SpellIds selected during character creation.
@@ -121,8 +128,12 @@ public class SpellcastingComponent : MonoBehaviour
         {
             InitCleric(stats.Level);
         }
+        else if (IsDruidClass(stats))
+        {
+            InitDruid(stats.Level);
+        }
 
-        // Both Wizards and Clerics use slot-based preparation now
+        // Prepared slot-based casters use the same preparation flow.
         if (stats.IsWizard)
         {
             // Use creation preparation data if available, otherwise auto-prepare
@@ -151,11 +162,24 @@ public class SpellcastingComponent : MonoBehaviour
             }
             SyncPreparedSpellsFromSlots();
         }
+        else if (IsDruidClass(stats))
+        {
+            if (PreparedSpellSlotIds != null && PreparedSpellSlotIds.Count > 0)
+            {
+                ApplyPreparedSpellSlotIds();
+                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied {PreparedSpellSlotIds.Count} preparation choices from character creation.");
+            }
+            else
+            {
+                AutoPrepareDruidSlots();
+            }
+            SyncPreparedSpellsFromSlots();
+        }
 
         Debug.Log($"[Spellcasting] {stats.CharacterName} ({stats.CharacterClass}): " +
                   $"{KnownSpells.Count} known, {PreparedSpells.Count} prepared, slots: {GetSlotSummary()}");
 
-        if (stats.IsWizard || stats.IsCleric)
+        if (stats.IsWizard || stats.IsCleric || IsDruidClass(stats))
         {
             Debug.Log($"[Spellcasting] {stats.CharacterName} slot details: {GetSlotDetails()}");
         }
@@ -275,6 +299,46 @@ public class SpellcastingComponent : MonoBehaviour
         KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 2));
     }
 
+    private void InitDruid(int level)
+    {
+        int wisMod = Mathf.Max(0, Stats.WISMod);
+
+        // Druid baseline progression mirrors other 9-level prepared casters at this implemented tier.
+        int bonus1st = wisMod >= 1 ? 1 : 0;
+        int bonus2nd = wisMod >= 2 ? 1 : 0;
+
+        SlotsMax = new int[] { 4, 2 + bonus1st, 1 + bonus2nd };
+        SlotsRemaining = (int[])SlotsMax.Clone();
+
+        SpellSlots.Clear();
+        for (int spellLevel = 0; spellLevel < SlotsMax.Length; spellLevel++)
+        {
+            for (int i = 0; i < SlotsMax[spellLevel]; i++)
+                SpellSlots.Add(new SpellSlot(spellLevel));
+        }
+
+        Debug.Log($"[Spellcasting] Druid created {SpellSlots.Count} spell slots: " +
+                  $"L0={SlotsMax[0]}, L1={SlotsMax[1]}, L2={SlotsMax[2]}");
+
+        if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
+        {
+            foreach (string spellId in SelectedSpellIds)
+            {
+                SpellData spell = SpellDatabase.GetSpell(spellId);
+                if (spell != null)
+                    KnownSpells.Add(spell);
+            }
+            Debug.Log($"[Spellcasting] Druid loaded {SelectedSpellIds.Count} selected spells.");
+        }
+        else
+        {
+            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Druid", 0));
+            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Druid", 1));
+            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Druid", 2));
+            Debug.Log("[Spellcasting] Druid: no spell selection found, added all available spells (Lv0-2).");
+        }
+    }
+
     // ========== SPELL SLOT PREPARATION ==========
 
     /// <summary>
@@ -375,6 +439,36 @@ public class SpellcastingComponent : MonoBehaviour
 
         SyncSlotsRemainingFromSpellSlots();
         Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared cleric spell slots");
+    }
+
+    public void AutoPrepareDruidSlots()
+    {
+        if (Stats == null || !IsDruidClass(Stats)) return;
+
+        for (int level = 0; level < SlotsMax.Length; level++)
+        {
+            var slotsAtLevel = GetSlotsForLevel(level);
+            var spellsAtLevel = KnownSpells.Where(s => s.SpellLevel == level).ToList();
+
+            if (spellsAtLevel.Count == 0)
+            {
+                foreach (var slot in slotsAtLevel)
+                    slot.Clear();
+                continue;
+            }
+
+            var functional = spellsAtLevel.Where(s => !s.IsPlaceholder).ToList();
+            var candidates = functional.Count > 0 ? functional : spellsAtLevel;
+
+            for (int i = 0; i < slotsAtLevel.Count; i++)
+                slotsAtLevel[i].Prepare(candidates[i % candidates.Count]);
+
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared {slotsAtLevel.Count} level-{level} druid slots " +
+                      $"(from {spellsAtLevel.Count} known, {functional.Count} functional)");
+        }
+
+        SyncSlotsRemainingFromSpellSlots();
+        Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared druid spell slots");
     }
 
     /// <summary>
@@ -867,7 +961,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public List<SpellData> GetPreparedSpellsByLevel(int level)
     {
-        if (Stats != null && (Stats.IsWizard || Stats.IsCleric) && SpellSlots.Count > 0)
+        if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
             return GetUniqueAvailableSpells(level);
         }
@@ -885,7 +979,7 @@ public class SpellcastingComponent : MonoBehaviour
         int level = spell.SpellLevel;
         if (level >= SlotsRemaining.Length) return false;
 
-        if (Stats != null && (Stats.IsWizard || Stats.IsCleric) && SpellSlots.Count > 0)
+        if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
             return CountAvailablePreparedSpell(spell) > 0;
         }
@@ -902,7 +996,7 @@ public class SpellcastingComponent : MonoBehaviour
     {
         var castable = new List<SpellData>();
 
-        if (Stats != null && (Stats.IsWizard || Stats.IsCleric) && SpellSlots.Count > 0)
+        if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
             var seen = new HashSet<string>();
             foreach (var slot in SpellSlots)
@@ -935,7 +1029,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public bool HasAnyCastablePreparedSpell()
     {
-        if (Stats != null && (Stats.IsWizard || Stats.IsCleric) && SpellSlots.Count > 0)
+        if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
             // Any cantrip prepared OR any level 1+ slot with spell and not used
             return SpellSlots.Any(s => s.HasSpell && (s.Level == 0 || s.CanCast));
@@ -954,7 +1048,7 @@ public class SpellcastingComponent : MonoBehaviour
         if (spell == null || SlotsRemaining == null) return false;
         if (spell.SpellLevel >= SlotsRemaining.Length) return false;
 
-        if (Stats != null && (Stats.IsWizard || Stats.IsCleric) && SpellSlots.Count > 0)
+        if (UsesPreparedSlotSystem && SpellSlots.Count > 0)
         {
             return CountAvailablePreparedSpell(spell) > 0;
         }

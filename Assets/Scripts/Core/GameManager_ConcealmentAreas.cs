@@ -46,8 +46,15 @@ public partial class GameManager
         }
 
         int durationRounds = ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel);
+        bool usedFallbackDuration = false;
         if (durationRounds <= 0)
+        {
+            usedFallbackDuration = true;
+            // Defensive fallback for malformed spell definitions; default to 10 rounds (1 minute).
             durationRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 10);
+            Debug.LogWarning($"[ConcealmentArea] {spell.SpellId} returned non-positive duration from CalculateDurationRounds. " +
+                             $"Using fallback duration: {durationRounds} rounds (caster level {casterLevel}).");
+        }
 
         Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
 
@@ -62,6 +69,8 @@ public partial class GameManager
         sb.AppendLine($"✨ {caster.Stats.CharacterName} casts {spellName}!");
         sb.AppendLine($"  Area: 20-ft radius spread ({aoeCells.Count} squares)");
         sb.AppendLine($"  Duration: {durationRounds} rounds");
+        if (usedFallbackDuration)
+            sb.AppendLine("  ⚠ Duration fallback was used (definition returned non-positive duration).");
         sb.AppendLine("  Effect: Creatures inside have concealment (20% miss chance)");
 
         if (targets != null && targets.Count > 0)
