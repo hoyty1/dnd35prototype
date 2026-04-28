@@ -633,7 +633,48 @@ public class CharacterStats
         {
             IsFatigued = false;
             RemoveCondition(CombatConditionType.Fatigued);
+            HealAllAbilityDamage(1);
         }
+    }
+
+    public int ApplyAbilityDamage(AbilityType ability, int amount)
+    {
+        return AbilityScoreDamage.ApplyDamage(ability, amount);
+    }
+
+    public int ApplyAbilityDrain(AbilityType ability, int amount)
+    {
+        return AbilityScoreDamage.ApplyDrain(ability, amount);
+    }
+
+    public int HealAbilityDamage(AbilityType ability, int amount)
+    {
+        return AbilityScoreDamage.HealDamage(ability, amount);
+    }
+
+    public int RemoveAbilityDrain(AbilityType ability, int amount)
+    {
+        return AbilityScoreDamage.RemoveDrain(ability, amount);
+    }
+
+    public bool HasAnyAbilityDamageOrDrain()
+    {
+        return AbilityScoreDamage.HasAnyDamageOrDrain();
+    }
+
+    public int HealAllAbilityDamage(int amountPerAbility)
+    {
+        if (amountPerAbility <= 0)
+            return 0;
+
+        int healed = 0;
+        healed += AbilityScoreDamage.HealDamage(AbilityType.STR, amountPerAbility);
+        healed += AbilityScoreDamage.HealDamage(AbilityType.DEX, amountPerAbility);
+        healed += AbilityScoreDamage.HealDamage(AbilityType.CON, amountPerAbility);
+        healed += AbilityScoreDamage.HealDamage(AbilityType.INT, amountPerAbility);
+        healed += AbilityScoreDamage.HealDamage(AbilityType.WIS, amountPerAbility);
+        healed += AbilityScoreDamage.HealDamage(AbilityType.CHA, amountPerAbility);
+        return healed;
     }
 
     /// <summary>Rage AC penalty (-2 while raging).</summary>
@@ -959,6 +1000,9 @@ public class CharacterStats
     public int INT; // Intelligence
     public int CHA; // Charisma
 
+    [SerializeField] private AbilityScoreDamage _abilityScoreDamage = new AbilityScoreDamage();
+    public AbilityScoreDamage AbilityScoreDamage => _abilityScoreDamage ?? (_abilityScoreDamage = new AbilityScoreDamage());
+
     // ========== EQUIPMENT / BONUSES ==========
     public int ArmorBonus;      // From worn armor (e.g., chain shirt = +4)
     public int ShieldBonus;     // From shield
@@ -1148,15 +1192,22 @@ public class CharacterStats
         }
     }
 
-    public int EffectiveStrengthScore => Mathf.Max(1, STR - StrengthConditionPenalty);
-    public int EffectiveDexterityScore => Mathf.Max(1, DEX - DexterityConditionPenalty);
+    public int EffectiveSTRScore => Mathf.Max(0, STR - AbilityScoreDamage.GetTotalPenalty(AbilityType.STR));
+    public int EffectiveDEXScore => Mathf.Max(0, DEX - AbilityScoreDamage.GetTotalPenalty(AbilityType.DEX));
+    public int EffectiveCONScore => Mathf.Max(0, CON - AbilityScoreDamage.GetTotalPenalty(AbilityType.CON));
+    public int EffectiveINTScore => Mathf.Max(0, INT - AbilityScoreDamage.GetTotalPenalty(AbilityType.INT));
+    public int EffectiveWISScore => Mathf.Max(0, WIS - AbilityScoreDamage.GetTotalPenalty(AbilityType.WIS));
+    public int EffectiveCHAScore => Mathf.Max(0, CHA - AbilityScoreDamage.GetTotalPenalty(AbilityType.CHA));
+
+    public int EffectiveStrengthScore => Mathf.Max(0, EffectiveSTRScore - StrengthConditionPenalty);
+    public int EffectiveDexterityScore => Mathf.Max(0, EffectiveDEXScore - DexterityConditionPenalty);
 
     public int STRMod => GetModifier(EffectiveStrengthScore);
     public int DEXMod => GetModifier(EffectiveDexterityScore);
-    public int CONMod => GetModifier(CON);
-    public int WISMod => GetModifier(WIS);
-    public int INTMod => GetModifier(INT);
-    public int CHAMod => GetModifier(CHA);
+    public int CONMod => GetModifier(EffectiveCONScore);
+    public int WISMod => GetModifier(EffectiveWISScore);
+    public int INTMod => GetModifier(EffectiveINTScore);
+    public int CHAMod => GetModifier(EffectiveCHAScore);
 
     /// <summary>Max HP = Base hit die HP + (CON modifier × level).</summary>
     public int MaxHP { get; private set; }

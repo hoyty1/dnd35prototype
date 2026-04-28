@@ -741,12 +741,12 @@ public class CharacterSheetUI : MonoBehaviour
 
         // === Ability Scores ===
         AddLine(content, "ABILITY SCORES", 12, GoldText, FontStyle.Bold, 16);
-        AddAbilityLine(content, "STR", stats.STR, stats.STRMod);
-        AddAbilityLine(content, "DEX", stats.DEX, stats.DEXMod);
-        AddAbilityLine(content, "CON", stats.CON, stats.CONMod);
-        AddAbilityLine(content, "INT", stats.INT, stats.INTMod);
-        AddAbilityLine(content, "WIS", stats.WIS, stats.WISMod);
-        AddAbilityLine(content, "CHA", stats.CHA, stats.CHAMod);
+        AddAbilityLine(content, "STR", stats.EffectiveSTRScore, stats.STRMod);
+        AddAbilityLine(content, "DEX", stats.EffectiveDEXScore, stats.DEXMod);
+        AddAbilityLine(content, "CON", stats.EffectiveCONScore, stats.CONMod);
+        AddAbilityLine(content, "INT", stats.EffectiveINTScore, stats.INTMod);
+        AddAbilityLine(content, "WIS", stats.EffectiveWISScore, stats.WISMod);
+        AddAbilityLine(content, "CHA", stats.EffectiveCHAScore, stats.CHAMod);
 
         AddSeparator(content);
 

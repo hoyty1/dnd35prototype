@@ -379,6 +379,11 @@ public class CharacterController : MonoBehaviour
     private readonly List<FeintWindow> _activeFeintWindows = new List<FeintWindow>();
     private int _turnsStartedCount;
 
+    // Tracks whether ability-score-zero logic applied these specific conditions,
+    // so recovery can safely remove only what this system added.
+    private bool _abilityZeroAppliedHelpless;
+    private bool _abilityZeroAppliedUnconscious;
+
     // Tracks attackers that currently have an active feint window against this defender.
     // Used only for visual/status indication on the defender token.
     private readonly HashSet<CharacterController> _incomingFeintSources = new HashSet<CharacterController>();
@@ -1248,6 +1253,7 @@ public class CharacterController : MonoBehaviour
         RefreshGridOccupancy();
         UpdateVisualSize(false);
         RefreshAllTags();
+        CheckAbilityScoreZeroEffects();
     }
 
     private SquareGrid CurrentGrid => GameManager.Instance != null ? GameManager.Instance.Grid : SquareGrid.Instance;
@@ -1613,6 +1619,167 @@ public class CharacterController : MonoBehaviour
     public void StandUp()
     {
         SetProne(false);
+    }
+
+    public void ApplyAbilityDamage(AbilityType ability, int amount, string source = "")
+    {
+        if (Stats == null || amount <= 0)
+            return;
+
+        int applied = Stats.ApplyAbilityDamage(ability, amount);
+        if (applied <= 0)
+            return;
+
+        LogAbilityScoreMessage($"💢 {Stats.CharacterName} takes {applied} {GetAbilityName(ability)} damage{FormatSource(source)}.");
+        RecalculateStatsFromAbilityScoreChange();
+        CheckAbilityScoreZeroEffects();
+    }
+
+    public void ApplyAbilityDrain(AbilityType ability, int amount, string source = "")
+    {
+        if (Stats == null || amount <= 0)
+            return;
+
+        int applied = Stats.ApplyAbilityDrain(ability, amount);
+        if (applied <= 0)
+            return;
+
+        LogAbilityScoreMessage($"🕸 {Stats.CharacterName} suffers {applied} {GetAbilityName(ability)} drain{FormatSource(source)}.");
+        RecalculateStatsFromAbilityScoreChange();
+        CheckAbilityScoreZeroEffects();
+    }
+
+    public int HealAbilityDamage(AbilityType ability, int amount, string source = "Natural healing")
+    {
+        if (Stats == null || amount <= 0)
+            return 0;
+
+        int healed = Stats.HealAbilityDamage(ability, amount);
+        if (healed > 0)
+        {
+            LogAbilityScoreMessage($"💚 {Stats.CharacterName} heals {healed} {GetAbilityName(ability)} damage{FormatSource(source)}.");
+            RecalculateStatsFromAbilityScoreChange();
+            CheckAbilityScoreZeroEffects();
+        }
+
+        return healed;
+    }
+
+    public int RemoveAbilityDrain(AbilityType ability, int amount, string source = "Restoration")
+    {
+        if (Stats == null || amount <= 0)
+            return 0;
+
+        int removed = Stats.RemoveAbilityDrain(ability, amount);
+        if (removed > 0)
+        {
+            LogAbilityScoreMessage($"✨ {Stats.CharacterName} recovers {removed} {GetAbilityName(ability)} drain{FormatSource(source)}.");
+            RecalculateStatsFromAbilityScoreChange();
+            CheckAbilityScoreZeroEffects();
+        }
+
+        return removed;
+    }
+
+    public void HealAbilityDamageDaily(int amountPerAbility = 1, string source = "Daily recovery")
+    {
+        if (Stats == null || amountPerAbility <= 0)
+            return;
+
+        int totalHealed = Stats.HealAllAbilityDamage(amountPerAbility);
+        if (totalHealed <= 0)
+            return;
+
+        LogAbilityScoreMessage($"🌅 {Stats.CharacterName} naturally recovers {totalHealed} total ability damage{FormatSource(source)}.");
+        RecalculateStatsFromAbilityScoreChange();
+        CheckAbilityScoreZeroEffects();
+    }
+
+    public void CheckAbilityScoreZeroEffects()
+    {
+        if (Stats == null)
+            return;
+
+        bool strengthZero = Stats.EffectiveSTRScore <= 0;
+        bool dexterityZero = Stats.EffectiveDEXScore <= 0;
+        bool constitutionZero = Stats.EffectiveCONScore <= 0;
+        bool intelligenceZero = Stats.EffectiveINTScore <= 0;
+        bool wisdomZero = Stats.EffectiveWISScore <= 0;
+        bool charismaZero = Stats.EffectiveCHAScore <= 0;
+
+        bool shouldBeHelpless = strengthZero || dexterityZero || intelligenceZero || wisdomZero || charismaZero;
+        bool shouldBeUnconscious = intelligenceZero || wisdomZero;
+
+        if (shouldBeHelpless && !_abilityZeroAppliedHelpless)
+        {
+            _abilityZeroAppliedHelpless = true;
+            ApplyCondition(CombatConditionType.Helpless, -1, "Ability Score 0");
+            LogAbilityScoreMessage($"⚠ {Stats.CharacterName} becomes helpless (an ability score reached 0).");
+        }
+        else if (!shouldBeHelpless && _abilityZeroAppliedHelpless)
+        {
+            _abilityZeroAppliedHelpless = false;
+            RemoveCondition(CombatConditionType.Helpless);
+            LogAbilityScoreMessage($"✅ {Stats.CharacterName} is no longer helpless from ability score loss.");
+        }
+
+        if (shouldBeUnconscious && !_abilityZeroAppliedUnconscious)
+        {
+            _abilityZeroAppliedUnconscious = true;
+            ApplyCondition(CombatConditionType.Unconscious, -1, "Ability Score 0");
+            LogAbilityScoreMessage($"💤 {Stats.CharacterName} falls unconscious (Intelligence or Wisdom reached 0).");
+        }
+        else if (!shouldBeUnconscious && _abilityZeroAppliedUnconscious)
+        {
+            _abilityZeroAppliedUnconscious = false;
+            if (_currentHPState != HPState.Unconscious && _currentHPState != HPState.Dying && _currentHPState != HPState.Stable && _currentHPState != HPState.Dead)
+                RemoveCondition(CombatConditionType.Unconscious);
+            LogAbilityScoreMessage($"✅ {Stats.CharacterName} regains consciousness from ability score recovery.");
+        }
+
+        if (constitutionZero && _currentHPState != HPState.Dead)
+        {
+            LogAbilityScoreMessage($"☠ {Stats.CharacterName} dies (Constitution reduced to 0).");
+            Stats.CurrentHP = Mathf.Min(Stats.CurrentHP, -10);
+            SyncHPStateFromCurrentHP(emitLog: true);
+        }
+    }
+
+    private void RecalculateStatsFromAbilityScoreChange()
+    {
+        Inventory inventoryData = GetInventoryData();
+        if (inventoryData != null)
+            inventoryData.RecalculateStats();
+    }
+
+    private void LogAbilityScoreMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
+            GameManager.Instance.CombatUI.ShowCombatLog(message);
+        else
+            Debug.Log(message);
+    }
+
+    private static string GetAbilityName(AbilityType ability)
+    {
+        switch (ability)
+        {
+            case AbilityType.STR: return "Strength";
+            case AbilityType.DEX: return "Dexterity";
+            case AbilityType.CON: return "Constitution";
+            case AbilityType.INT: return "Intelligence";
+            case AbilityType.WIS: return "Wisdom";
+            case AbilityType.CHA: return "Charisma";
+            default: return ability.ToString();
+        }
+    }
+
+    private static string FormatSource(string source)
+    {
+        return string.IsNullOrWhiteSpace(source) ? string.Empty : $" from {source}";
     }
 
     public int GetConditionACModifier()
