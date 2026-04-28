@@ -2185,43 +2185,42 @@ public partial class GameManager : MonoBehaviour
         Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
         Sprite pcDead = LoadSprite("Sprites/pc_dead");
 
-        // Player caster #1: Druid for repeat Obscuring Mist + Gust of Wind coverage.
+        // Player caster #1: Wizard focused on repeat Obscuring Mist coverage.
         CharacterStats druidStats = new CharacterStats(
             name: "Zephyr Windcaller",
             level: 5,
-            characterClass: "Druid",
-            str: 10, dex: 12, con: 14, wis: 16, intelligence: 10, cha: 12,
-            bab: 3,
-            armorBonus: 3,
+            characterClass: "Wizard",
+            str: 10, dex: 12, con: 14, wis: 12, intelligence: 16, cha: 12,
+            bab: 2,
+            armorBonus: 0,
             shieldBonus: 0,
-            damageDice: 6,
+            damageDice: 4,
             damageCount: 1,
             bonusDamage: 0,
             baseSpeed: 6,
             atkRange: 1,
-            baseHitDieHP: 35,
+            baseHitDieHP: 22,
             raceName: "Human"
         );
 
         Vector2Int druidStart = new Vector2Int(5, 5);
-        Sprite druidAlive = IconLoader.GetToken("Druid") ?? pcAliveFallback;
+        Sprite druidAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
         PC1.Init(druidStats, druidStart, druidAlive, pcDead);
 
         InventoryComponent druidInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         druidInventory.Init(druidStats);
         druidInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
-        druidInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("hide_armor"), EquipSlot.Armor);
         druidInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent druidSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
         druidSpellComp.KnownSpells.Clear();
         druidSpellComp.SelectedSpellIds = new List<string>
         {
-            "obscuring_mist", "gust_of_wind"
+            "obscuring_mist"
         };
         druidSpellComp.PreparedSpellSlotIds = new List<string>
         {
-            "obscuring_mist", "obscuring_mist", "obscuring_mist", "gust_of_wind", "gust_of_wind"
+            "obscuring_mist", "obscuring_mist", "obscuring_mist"
         };
         druidSpellComp.Init(druidStats);
 
@@ -2231,7 +2230,7 @@ public partial class GameManager : MonoBehaviour
         ConcentrationManager druidConcentrationMgr = PC1.gameObject.GetComponent<ConcentrationManager>() ?? PC1.gameObject.AddComponent<ConcentrationManager>();
         druidConcentrationMgr.Init(druidStats, PC1);
 
-        // Player caster #2: Wizard for additional Gust + ranged control spell.
+        // Player caster #2: Wizard for additional mist + ranged control spell.
         CharacterStats wizardStats = new CharacterStats(
             name: "Misty Veilweaver",
             level: 5,
@@ -2262,11 +2261,11 @@ public partial class GameManager : MonoBehaviour
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            "obscuring_mist", "gust_of_wind", "magic_missile"
+            "obscuring_mist", "magic_missile"
         };
         wizardSpellComp.PreparedSpellSlotIds = new List<string>
         {
-            "obscuring_mist", "gust_of_wind", "magic_missile"
+            "obscuring_mist", "magic_missile"
         };
         wizardSpellComp.Init(wizardStats);
 
@@ -2282,14 +2281,13 @@ public partial class GameManager : MonoBehaviour
         SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
 
         CombatUI?.ShowCombatLog("╔══════════════════════════════════════════════════════╗");
-        CombatUI?.ShowCombatLog("║     GUST OF WIND & OBSCURING MIST TEST SCENARIO     ║");
+        CombatUI?.ShowCombatLog("║           OBSCURING MIST TEST SCENARIO              ║");
         CombatUI?.ShowCombatLog("╚══════════════════════════════════════════════════════╝");
-        CombatUI?.ShowCombatLog("Party: Zephyr Windcaller (Druid 5) + Misty Veilweaver (Wizard 5)");
+        CombatUI?.ShowCombatLog("Party: Zephyr Windcaller (Wizard 5) + Misty Veilweaver (Wizard 5)");
         CombatUI?.ShowCombatLog("Enemy line: Small + Medium + Medium (high Fort) + Large + off-line Archer");
-        CombatUI?.ShowCombatLog("Phase 1: Cast Obscuring Mist, observe 20% miss chance on attacks.");
-        CombatUI?.ShowCombatLog("Phase 2: Cast Gust of Wind through mist, confirm instant dispersion.");
-        CombatUI?.ShowCombatLog("Phase 3: Validate size effects (Small knockback, Medium prone, Large checked).");
-        CombatUI?.ShowCombatLog("Phase 4: Recast mist and test selective second dispersion lane.");
+        CombatUI?.ShowCombatLog("Phase 1: Cast Obscuring Mist and verify 20% miss chance on attacks.");
+        CombatUI?.ShowCombatLog("Phase 2: Move units through/around mist and confirm concealment updates correctly.");
+        CombatUI?.ShowCombatLog("Phase 3: Recast mist in a second lane and verify persistent area indicators remain visible.");
     }
 
     private void ConfigureDisruptUndeadTestParty()

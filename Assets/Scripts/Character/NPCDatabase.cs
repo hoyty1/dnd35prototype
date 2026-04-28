@@ -95,7 +95,7 @@ public static class NPCDatabase
             new EncounterPreset("summon_monster_test", "🌀 Summon Monster Test", "Cleric + wizard summon drill with Summon Monster I/II prepared on both casters for selection UI, placement, and command validation.", new List<string> { "orc_berserker", "skeleton_archer", "goblin_warchief" }),
             new EncounterPreset("npc_magic_missile_test", "🧪 NPC Magic Missile Test", "Enemy evoker only casts Magic Missile; Shield should block damage during resolution (not targeting).", new List<string> { "arcane_missile_adept" }),
             new EncounterPreset("protection_from_evil_test", "🛡️ Protection from Evil Test", "Single protected wizard versus evil and non-evil threats to validate mental-control block, summoned contact barrier, +2 AC/save bonuses vs Evil, and no bonus vs non-Evil controls.", new List<string> { "evil_enchanter_test", "fiendish_wolf", "evil_goblin_test", "neutral_bandit_test", "neutral_mage_test", "evil_acolyte_test" }),
-            new EncounterPreset("wind_dispersion_test", "🌬️ Gust of Wind & Obscuring Mist", "Comprehensive wind mechanics test: concealment in mist, instant dispersion by Gust of Wind, and size-based effects (Small knockback, Medium prone, Large checked).", new List<string> { "test_halfling_gust", "test_fighter_gust", "test_barbarian_gust", "test_ogre_gust", "test_archer_gust" }),
+            new EncounterPreset("wind_dispersion_test", "🌫️ Obscuring Mist Test", "Focused concealment test for Obscuring Mist (20% miss chance) with mixed target sizes and ranged pressure.", new List<string> { "test_halfling_gust", "test_fighter_gust", "test_barbarian_gust", "test_ogre_gust", "test_archer_gust" }),
             new EncounterPreset("disrupt_undead_test", "☀️ Disrupt Undead Test", "Wizard cantrip drill versus mixed targets: skeletons + zombie + one living orc to confirm undead-only damage.", new List<string> { "skeleton_warrior", "skeleton_warrior", "zombie_shambler", "orc_berserker" }),
             new EncounterPreset("wizard_spell_test", "📘 Wizard Spell Test", "Single wizard scenario with every implemented wizard spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("cleric_spell_test", "📖 Cleric Spell Test", "Single cleric scenario with every implemented cleric spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
@@ -1754,34 +1754,33 @@ public static class NPCDatabase
             Id = "gust_druid",
             Name = "Zephyr Windcaller",
             Level = 5,
-            CharacterClass = "Druid",
+            CharacterClass = "Wizard",
             CreatureType = "Humanoid",
             HitDice = 5,
             SizeCategory = SizeCategory.Medium,
             STR = 10,
             DEX = 12,
             CON = 14,
-            WIS = 16,
-            INT = 10,
+            WIS = 12,
+            INT = 16,
             CHA = 12,
-            BAB = 3,
+            BAB = 2,
             BaseSpeed = 6,
-            BaseHitDieHP = 35,
+            BaseHitDieHP = 22,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand),
-                new EquipmentSlotPair("hide_armor", EquipSlot.Armor)
+                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string>(),
-            KnownSpellIds = new List<string> { "obscuring_mist", "gust_of_wind" },
-            PreparedSpellSlotIds = new List<string> { "obscuring_mist", "obscuring_mist", "obscuring_mist", "gust_of_wind", "gust_of_wind" },
-            CreatureTags = new List<string> { "Humanoid", "Divine", "WindDispersionTest" },
+            KnownSpellIds = new List<string> { "obscuring_mist" },
+            PreparedSpellSlotIds = new List<string> { "obscuring_mist", "obscuring_mist", "obscuring_mist" },
+            CreatureTags = new List<string> { "Humanoid", "Arcane", "WindDispersionTest" },
             AIBehavior = NPCAIBehavior.RangedKiter,
-            AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
+            AIProfileArchetype = NPCAIProfileArchetype.Evoker,
             SpriteColor = new Color(0.58f, 0.84f, 0.72f, 1f),
             PanelColor = new Color(0.14f, 0.28f, 0.22f, 0.88f),
             NameColor = new Color(0.86f, 1f, 0.92f),
-            Description = "Primary player druid for Gust of Wind / Obscuring Mist test coverage."
+            Description = "Primary caster for Obscuring Mist concealment test coverage."
         });
 
         Register(new NPCDefinition
@@ -1807,15 +1806,15 @@ public static class NPCDatabase
                 new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string>(),
-            KnownSpellIds = new List<string> { "obscuring_mist", "gust_of_wind", "magic_missile" },
-            PreparedSpellSlotIds = new List<string> { "obscuring_mist", "magic_missile", "gust_of_wind" },
+            KnownSpellIds = new List<string> { "obscuring_mist", "magic_missile" },
+            PreparedSpellSlotIds = new List<string> { "obscuring_mist", "magic_missile" },
             CreatureTags = new List<string> { "Humanoid", "Arcane", "WindDispersionTest" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Evoker,
             SpriteColor = new Color(0.76f, 0.80f, 0.92f, 1f),
             PanelColor = new Color(0.18f, 0.20f, 0.30f, 0.88f),
             NameColor = new Color(0.92f, 0.94f, 1f),
-            Description = "Support wizard for concealment + wind-dispersion verification and force spell control."
+            Description = "Support wizard for concealment verification and force spell control."
         });
 
         Register(new NPCDefinition

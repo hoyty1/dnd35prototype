@@ -224,13 +224,14 @@ public class SquareCell : MonoBehaviour
 
         GameObject overlayGO = new GameObject("CustomHighlightOverlay");
         overlayGO.transform.SetParent(transform, false);
-        overlayGO.transform.localPosition = new Vector3(0f, 0f, -0.005f);
-        overlayGO.transform.localScale = Vector3.one;
+        overlayGO.transform.localPosition = new Vector3(0f, 0f, -0.01f);
+        overlayGO.transform.localScale = new Vector3(SquareGridUtils.CellSize, SquareGridUtils.CellSize, 1f);
 
         _customHighlightOverlay = overlayGO.AddComponent<SpriteRenderer>();
-        _customHighlightOverlay.sprite = _sr.sprite != null ? _sr.sprite : GetOrCreateCustomHighlightSprite();
+        // Always use a solid white sprite so the mist tint is visible independently of base tile artwork.
+        _customHighlightOverlay.sprite = GetOrCreateCustomHighlightSprite();
         _customHighlightOverlay.sortingLayerID = _sr.sortingLayerID;
-        _customHighlightOverlay.sortingOrder = _sr.sortingOrder + 1;
+        _customHighlightOverlay.sortingOrder = _sr.sortingOrder + 2;
         _customHighlightOverlay.enabled = false;
     }
 
