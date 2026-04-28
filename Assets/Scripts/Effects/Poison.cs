@@ -24,8 +24,18 @@ public class PoisonData
     public int FortitudeDC;
     public List<AbilityDamageEffect> InitialDamage;
     public List<AbilityDamageEffect> SecondaryDamage;
+    public List<PoisonSpecialEffect> InitialSpecialEffects;
+    public List<PoisonSpecialEffect> SecondarySpecialEffects;
     public int PriceInGold;
     public string Description;
+
+    public PoisonData()
+    {
+        InitialDamage = new List<AbilityDamageEffect>();
+        SecondaryDamage = new List<AbilityDamageEffect>();
+        InitialSpecialEffects = new List<PoisonSpecialEffect>();
+        SecondarySpecialEffects = new List<PoisonSpecialEffect>();
+    }
 
     /// <summary>
     /// Delay to secondary effect in seconds.

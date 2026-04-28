@@ -46,7 +46,14 @@ public class DiseaseData
     public int FortitudeDC;
     public string IncubationPeriod;
     public List<AbilityDamageEffect> DamageEffects;
+    public List<PoisonSpecialEffect> SpecialEffects;
     public string Description;
+
+    public DiseaseData()
+    {
+        DamageEffects = new List<AbilityDamageEffect>();
+        SpecialEffects = new List<PoisonSpecialEffect>();
+    }
 
     public int RollIncubationDays()
     {

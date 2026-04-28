@@ -1034,7 +1034,11 @@ public class CharacterController : MonoBehaviour
 
     public HPState CurrentHPState => _currentHPState;
     public bool IsDead => _currentHPState == HPState.Dead;
-    public bool IsUnconscious => _currentHPState == HPState.Unconscious || _currentHPState == HPState.Dying || _currentHPState == HPState.Stable || _currentHPState == HPState.Dead;
+    public bool IsUnconscious => _currentHPState == HPState.Unconscious
+                                 || _currentHPState == HPState.Dying
+                                 || _currentHPState == HPState.Stable
+                                 || _currentHPState == HPState.Dead
+                                 || HasConditionDirect(CombatConditionType.Unconscious);
 
     public bool CanTakeTurnActions()
     {
@@ -1752,7 +1756,10 @@ public class CharacterController : MonoBehaviour
         };
 
         if (total < dc)
+        {
             ApplyAbilityEffectList(poison.InitialDamage, $"{poison.Name} (initial)");
+            ApplySpecialEffectList(poison.InitialSpecialEffects, poison.Name, applyForInitial: true, applyForSecondary: false);
+        }
 
         _activePoisons.Add(activePoison);
     }
@@ -1774,7 +1781,10 @@ public class CharacterController : MonoBehaviour
 
         poison.SecondarySaveSucceeded = total >= dc;
         if (!poison.SecondarySaveSucceeded)
+        {
             ApplyAbilityEffectList(poison.PoisonData.SecondaryDamage, $"{poison.PoisonData.Name} (secondary)");
+            ApplySpecialEffectList(poison.PoisonData.SecondarySpecialEffects, poison.PoisonData.Name, applyForInitial: false, applyForSecondary: true);
+        }
 
         poison.SecondaryResolved = true;
     }
@@ -1833,6 +1843,7 @@ public class CharacterController : MonoBehaviour
             {
                 active.ConsecutiveSuccessfulSaves = 0;
                 ApplyAbilityEffectList(active.DiseaseData.DamageEffects, active.DiseaseData.Name);
+                ApplySpecialEffectList(active.DiseaseData.SpecialEffects, active.DiseaseData.Name, applyForInitial: true, applyForSecondary: true);
             }
         }
     }
@@ -1867,6 +1878,63 @@ public class CharacterController : MonoBehaviour
         }
 
         return string.Join("; ", parts);
+    }
+
+    private void ApplySpecialEffectList(
+        List<PoisonSpecialEffect> effects,
+        string source,
+        bool applyForInitial,
+        bool applyForSecondary)
+    {
+        if (effects == null || effects.Count == 0 || Stats == null)
+            return;
+
+        for (int i = 0; i < effects.Count; i++)
+        {
+            PoisonSpecialEffect effect = effects[i];
+            if (effect == null || effect.EffectType == PoisonEffectType.None)
+                continue;
+
+            bool shouldApply = true;
+            if (applyForInitial && !applyForSecondary)
+                shouldApply = effect.AppliesToInitial || !effect.AppliesToSecondary;
+            else if (applyForSecondary && !applyForInitial)
+                shouldApply = effect.AppliesToSecondary || !effect.AppliesToInitial;
+
+            if (!shouldApply)
+                continue;
+
+            ApplySpecialEffect(effect, source);
+        }
+    }
+
+    private void ApplySpecialEffect(PoisonSpecialEffect effect, string source)
+    {
+        if (effect == null || Stats == null)
+            return;
+
+        string sourceName = string.IsNullOrWhiteSpace(source) ? "Poison/Disease" : source;
+
+        if (effect.EffectType == PoisonEffectType.Death)
+        {
+            LogAbilityScoreMessage($"☠ {Stats.CharacterName} dies from {sourceName}.");
+            Stats.CurrentHP = Mathf.Min(Stats.CurrentHP, -10);
+            SyncHPStateFromCurrentHP(emitLog: true);
+            return;
+        }
+
+        int rounds = effect.RollDurationInRounds();
+        CombatConditionType conditionType = effect.ToConditionType();
+        if (conditionType != CombatConditionType.None)
+        {
+            ApplyCondition(conditionType, rounds, sourceName);
+
+            if (conditionType == CombatConditionType.Paralyzed || conditionType == CombatConditionType.Unconscious)
+                ApplyCondition(CombatConditionType.Helpless, rounds, sourceName);
+
+            string durationLabel = rounds < 0 ? "permanent" : $"{rounds} rounds";
+            LogAbilityScoreMessage($"⚠ {Stats.CharacterName} is {ConditionRules.GetDefinition(conditionType).DisplayName.ToLowerInvariant()} from {sourceName} ({durationLabel}).");
+        }
     }
 
     private void ApplyAbilityEffectList(List<AbilityDamageEffect> effects, string source)

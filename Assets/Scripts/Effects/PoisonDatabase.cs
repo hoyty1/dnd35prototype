@@ -62,10 +62,22 @@ public static class PoisonDatabase
             Name = "Carrion Crawler Brain Juice",
             Type = PoisonType.Injury,
             FortitudeDC = 13,
-            InitialDamage = Damage(AbilityType.DEX, "10"),
-            SecondaryDamage = Damage(AbilityType.DEX, "0"),
+            InitialDamage = new List<AbilityDamageEffect>(),
+            SecondaryDamage = new List<AbilityDamageEffect>(),
+            InitialSpecialEffects = new List<PoisonSpecialEffect>
+            {
+                new PoisonSpecialEffect
+                {
+                    EffectType = PoisonEffectType.Paralysis,
+                    DurationFormula = "2d6 minutes",
+                    AppliesToInitial = true,
+                    AppliesToSecondary = false,
+                    Description = "Paralyzes victim for 2d6 minutes."
+                }
+            },
+            SecondarySpecialEffects = new List<PoisonSpecialEffect>(),
             PriceInGold = 200,
-            Description = "Paralyzing toxin from carrion crawler tentacles; represented as severe Dexterity damage."
+            Description = "Paralyzing toxin from carrion crawler tentacles."
         };
 
         _poisons["dark_reaver_powder"] = new PoisonData
@@ -330,10 +342,22 @@ public static class PoisonDatabase
             Name = "Oil of Taggit",
             Type = PoisonType.Ingested,
             FortitudeDC = 15,
-            InitialDamage = Damage(AbilityType.WIS, "0"),
-            SecondaryDamage = Damage(AbilityType.WIS, "10"),
+            InitialDamage = new List<AbilityDamageEffect>(),
+            SecondaryDamage = new List<AbilityDamageEffect>(),
+            InitialSpecialEffects = new List<PoisonSpecialEffect>(),
+            SecondarySpecialEffects = new List<PoisonSpecialEffect>
+            {
+                new PoisonSpecialEffect
+                {
+                    EffectType = PoisonEffectType.Unconsciousness,
+                    DurationFormula = "1d3 hours",
+                    AppliesToInitial = false,
+                    AppliesToSecondary = true,
+                    Description = "Victim falls unconscious for 1d3 hours."
+                }
+            },
             PriceInGold = 90,
-            Description = "Sleep-inducing poison; represented as severe Wisdom damage for unconsciousness."
+            Description = "Sleep-inducing poison. Victim becomes unconscious for 1d3 hours on a failed secondary save."
         };
 
         _poisons["striped_toadstool"] = new PoisonData
