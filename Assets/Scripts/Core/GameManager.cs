@@ -3551,6 +3551,23 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
+        if (_isSummonMonsterTestEncounter)
+        {
+            npc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
+
+            Alignment summonTestAlignment = Alignment.NeutralEvil;
+            if (string.Equals(enemyId, "orc_berserker", StringComparison.Ordinal))
+                summonTestAlignment = Alignment.ChaoticEvil;
+            else if (string.Equals(enemyId, "goblin_warchief", StringComparison.Ordinal))
+                summonTestAlignment = Alignment.LawfulEvil;
+            else if (string.Equals(enemyId, "skeleton_archer", StringComparison.Ordinal))
+                summonTestAlignment = Alignment.NeutralEvil;
+
+            npc.Stats.CharacterAlignment = summonTestAlignment;
+            npc.Tags.AddTag("ScenarioOverride:SummonMonsterTestEvilEnemy");
+            Debug.Log($"[SummonMonsterTest] Enemy override applied to {enemyId}: Team=Enemy, Alignment={npc.Stats.CharacterAlignment}.");
+        }
+
         if (_isProtectionFromEvilTestEncounter)
         {
             npc.ConfigureTeamControl(CharacterTeam.Enemy, controllable: false);
