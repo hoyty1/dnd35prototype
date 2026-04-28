@@ -10562,11 +10562,29 @@ public partial class GameManager : MonoBehaviour
                     sourceNameOverride: sourceName,
                     sourceCategory: "Spell",
                     sourceId: spell.SpellId);
+            }
+            else
+            {
+                string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
+                target.ApplyCondition(CombatConditionType.Paralyzed, holdRounds, fallbackSource);
+            }
 
+            CombatUI?.ShowCombatLog($"<color=#FF9966>⛓ {target.Stats.CharacterName} is paralyzed by Hold Person for {holdRounds} round(s)!</color>");
+            Debug.Log($"[GameManager] Hold Person applied Paralyzed to {target.Stats.CharacterName} for {holdRounds} rounds");
+            return null;
+        }
+
+        if (spell != null && (spell.SpellId == "blindness_deafness_wiz" || spell.SpellId == "blindness_deafness_clr"))
+        {
+            int blindRounds = spell.BuffDurationRounds;
+            string sourceName = spell.Name;
+
+            if (_conditionService != null)
+            {
                 _conditionService.ApplyCondition(
                     target,
-                    CombatConditionType.Helpless,
-                    holdRounds,
+                    CombatConditionType.Blinded,
+                    blindRounds,
                     source: caster,
                     sourceNameOverride: sourceName,
                     sourceCategory: "Spell",
@@ -10575,12 +10593,75 @@ public partial class GameManager : MonoBehaviour
             else
             {
                 string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
-                target.ApplyCondition(CombatConditionType.Paralyzed, holdRounds, fallbackSource);
-                target.ApplyCondition(CombatConditionType.Helpless, holdRounds, fallbackSource);
+                target.ApplyCondition(CombatConditionType.Blinded, blindRounds, fallbackSource);
             }
 
-            CombatUI?.ShowCombatLog($"<color=#FF9966>⛓ {target.Stats.CharacterName} is paralyzed by Hold Person for {holdRounds} round(s)!</color>");
-            Debug.Log($"[GameManager] Hold Person applied Paralyzed to {target.Stats.CharacterName} for {holdRounds} rounds");
+            CombatUI?.ShowCombatLog($"<color=#FF9966>👁️ {target.Stats.CharacterName} is blinded by {spell.Name}!</color>");
+            Debug.Log($"[GameManager] {spell.Name} applied Blinded to {target.Stats.CharacterName}");
+            return null;
+        }
+
+        if (spell != null && spell.SpellId == "sleep")
+        {
+            int sleepRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 10);
+            string sourceName = spell.Name;
+
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Unconscious,
+                    sleepRounds,
+                    source: caster,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Helpless,
+                    sleepRounds,
+                    source: caster,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+            }
+            else
+            {
+                string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
+                target.ApplyCondition(CombatConditionType.Unconscious, sleepRounds, fallbackSource);
+                target.ApplyCondition(CombatConditionType.Helpless, sleepRounds, fallbackSource);
+            }
+
+            CombatUI?.ShowCombatLog($"<color=#99CCFF>💤 {target.Stats.CharacterName} falls asleep (unconscious) for {sleepRounds} round(s)!</color>");
+            Debug.Log($"[GameManager] Sleep applied Unconscious/Helpless to {target.Stats.CharacterName} for {sleepRounds} rounds");
+            return null;
+        }
+
+        if (spell != null && spell.SpellId == "power_word_stun")
+        {
+            int stunRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 1);
+            string sourceName = spell.Name;
+
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Stunned,
+                    stunRounds,
+                    source: caster,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+            }
+            else
+            {
+                string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
+                target.ApplyCondition(CombatConditionType.Stunned, stunRounds, fallbackSource);
+            }
+
+            CombatUI?.ShowCombatLog($"<color=#FFCC66>💫 {target.Stats.CharacterName} is stunned by {spell.Name} for {stunRounds} round(s)!</color>");
+            Debug.Log($"[GameManager] {spell.Name} applied Stunned to {target.Stats.CharacterName} for {stunRounds} rounds");
             return null;
         }
 

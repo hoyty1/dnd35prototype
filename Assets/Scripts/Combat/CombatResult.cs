@@ -100,6 +100,8 @@ public class CombatResult
     public bool MissedDueToConcealment;
     public string ConcealmentDescription = "";
 
+    public string SpecialAttackNote = "";
+
     public int BreakdownBAB;
     public int BreakdownAbilityMod;
     public string BreakdownAbilityName;
@@ -207,6 +209,8 @@ public class CombatResult
         }
         if (ProtectionSummonedBarrierBlocked && !string.IsNullOrEmpty(ProtectionBarrierNote))
             sb.AppendLine($"  Barrier: {ProtectionBarrierNote}");
+        if (!string.IsNullOrEmpty(SpecialAttackNote))
+            sb.AppendLine($"  Special: {SpecialAttackNote}");
 
         sb.AppendLine();
         sb.AppendLine("  Attack Roll:");
@@ -328,6 +332,8 @@ public class CombatResult
         }
         if (ProtectionSummonedBarrierBlocked && !string.IsNullOrEmpty(ProtectionBarrierNote))
             sb.AppendLine($"      Barrier: {ProtectionBarrierNote}");
+        if (!string.IsNullOrEmpty(SpecialAttackNote))
+            sb.AppendLine($"      Special: {SpecialAttackNote}");
 
         if (BreakdownBAB != 0) sb.AppendLine($"      {FormatModLine(BreakdownBAB, "BAB")}");
         if (BreakdownAbilityMod != 0) sb.AppendLine($"      {FormatModLine(BreakdownAbilityMod, string.IsNullOrEmpty(BreakdownAbilityName) ? "STR" : BreakdownAbilityName)}");

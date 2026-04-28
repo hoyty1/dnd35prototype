@@ -52,10 +52,13 @@ public class ConditionManager : MonoBehaviour
                 var created = new StatusEffect(normalized, sourceName, rounds);
                 _stats.ActiveConditions.Add(created);
                 OnConditionApplied(created);
-                return;
+            }
+            else
+            {
+                RefreshDuration(existingSameSource, rounds);
             }
 
-            RefreshDuration(existingSameSource, rounds);
+            EnsureLinkedParalyzedHelpless(rounds, sourceName, normalized);
             return;
         }
 
@@ -66,11 +69,33 @@ public class ConditionManager : MonoBehaviour
             var created = new StatusEffect(normalized, sourceName, rounds);
             _stats.ActiveConditions.Add(created);
             OnConditionApplied(created);
+        }
+        else
+        {
+            existing.SourceName = sourceName;
+            RefreshDuration(existing, rounds);
+        }
+
+        EnsureLinkedParalyzedHelpless(rounds, sourceName, normalized);
+    }
+
+    private void EnsureLinkedParalyzedHelpless(int rounds, string sourceName, CombatConditionType normalized)
+    {
+        if (normalized != CombatConditionType.Paralyzed)
+            return;
+
+        // Paralyzed creatures are helpless by rule. Ensure helpless is present and at least as long.
+        var helpless = _stats.ActiveConditions.FirstOrDefault(c => ConditionRules.Normalize(c.Type) == CombatConditionType.Helpless);
+        if (helpless == null)
+        {
+            var linkedHelpless = new StatusEffect(CombatConditionType.Helpless, sourceName, rounds);
+            _stats.ActiveConditions.Add(linkedHelpless);
+            OnConditionApplied(linkedHelpless);
             return;
         }
 
-        existing.SourceName = sourceName;
-        RefreshDuration(existing, rounds);
+        helpless.SourceName = sourceName;
+        RefreshDuration(helpless, rounds);
     }
 
     public bool RemoveCondition(CombatConditionType type)
@@ -84,6 +109,10 @@ public class ConditionManager : MonoBehaviour
         StatusEffect removed = _stats.ActiveConditions[idx];
         _stats.ActiveConditions.RemoveAt(idx);
         OnConditionRemoved(removed);
+
+        if (normalized == CombatConditionType.Paralyzed)
+            RemoveLinkedHelplessIfNoOtherDriver(removed != null ? removed.SourceName : null);
+
         return true;
     }
 
@@ -97,12 +126,48 @@ public class ConditionManager : MonoBehaviour
             var cond = _stats.ActiveConditions[i];
             if (!cond.Tick()) continue;
 
+            CombatConditionType normalized = ConditionRules.Normalize(cond.Type);
             expired.Add(cond);
             _stats.ActiveConditions.RemoveAt(i);
             OnConditionRemoved(cond);
+
+            if (normalized == CombatConditionType.Paralyzed)
+                RemoveLinkedHelplessIfNoOtherDriver(cond != null ? cond.SourceName : null);
         }
 
         return expired;
+    }
+
+    private void RemoveLinkedHelplessIfNoOtherDriver(string paralyzedSourceName)
+    {
+        if (_stats == null || _stats.ActiveConditions == null)
+            return;
+
+        bool hasOtherHelplessDriver = _stats.ActiveConditions.Any(c =>
+        {
+            if (c == null)
+                return false;
+
+            CombatConditionType normalized = ConditionRules.Normalize(c.Type);
+            return normalized != CombatConditionType.Helpless
+                && normalized != CombatConditionType.Paralyzed
+                && ConditionRules.IsHelplessLike(normalized);
+        });
+
+        if (hasOtherHelplessDriver)
+            return;
+
+        int helplessIndex = _stats.ActiveConditions.FindIndex(c => ConditionRules.Normalize(c.Type) == CombatConditionType.Helpless);
+        if (helplessIndex < 0)
+            return;
+
+        StatusEffect helpless = _stats.ActiveConditions[helplessIndex];
+        bool linkedSource = string.Equals(helpless != null ? helpless.SourceName : null, paralyzedSourceName, System.StringComparison.Ordinal);
+        if (!linkedSource && !string.IsNullOrEmpty(paralyzedSourceName))
+            return;
+
+        _stats.ActiveConditions.RemoveAt(helplessIndex);
+        OnConditionRemoved(helpless);
     }
 
     public string GetConditionSummary()
@@ -158,6 +223,18 @@ public class ConditionManager : MonoBehaviour
         switch (ConditionRules.Normalize(condition.Type))
         {
             case CombatConditionType.Stunned:
+            {
+                CharacterController owner = GetComponent<CharacterController>();
+                if (owner != null)
+                {
+                    int dropped = owner.DropHeldItemsDueToCondition("stunned");
+                    if (dropped > 0)
+                        Debug.Log($"[ConditionManager] {_stats.CharacterName}: dropped {dropped} held item(s) from Stunned.");
+                }
+
+                Debug.Log($"[ConditionManager] {_stats.CharacterName}: {condition.Type} applied (action-limiting stub hook)");
+                break;
+            }
             case CombatConditionType.Paralyzed:
             case CombatConditionType.Helpless:
             case CombatConditionType.Dazed:

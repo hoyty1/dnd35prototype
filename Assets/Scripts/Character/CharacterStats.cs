@@ -326,6 +326,25 @@ public class CharacterStats
         return total;
     }
 
+    public bool DeniedDexToAcByCondition
+    {
+        get
+        {
+            for (int i = 0; i < ActiveConditions.Count; i++)
+            {
+                StatusEffect active = ActiveConditions[i];
+                if (active == null)
+                    continue;
+
+                ConditionDefinition def = ConditionRules.GetDefinition(active.Type);
+                if (def.DeniesDexToAc)
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>Quick flags for common conditions.</summary>
     public bool IsProne => HasNormalizedCondition(CombatConditionType.Prone);
     public bool IsGrappled => HasNormalizedCondition(CombatConditionType.Grappled);
@@ -518,25 +537,41 @@ public class CharacterStats
                 ConditionRules.Normalize(c.Type) == normalized && c.SourceName == sourceName);
 
             if (existingBySource == null)
-            {
                 ActiveConditions.Add(new StatusEffect(normalized, sourceName, rounds));
-                return;
-            }
+            else
+                RefreshConditionDuration(existingBySource, rounds);
 
-            RefreshConditionDuration(existingBySource, rounds);
+            EnsureLinkedParalyzedHelpless(normalized, rounds, sourceName);
             return;
         }
 
         var existing = ActiveConditions.FirstOrDefault(c => ConditionRules.Normalize(c.Type) == normalized);
         if (existing == null)
-        {
             ActiveConditions.Add(new StatusEffect(normalized, sourceName, rounds));
+        else
+        {
+            // Refresh semantics: latest applier becomes the active source label.
+            existing.SourceName = sourceName;
+            RefreshConditionDuration(existing, rounds);
+        }
+
+        EnsureLinkedParalyzedHelpless(normalized, rounds, sourceName);
+    }
+
+    private void EnsureLinkedParalyzedHelpless(CombatConditionType normalized, int rounds, string sourceName)
+    {
+        if (normalized != CombatConditionType.Paralyzed)
+            return;
+
+        var helpless = ActiveConditions.FirstOrDefault(c => ConditionRules.Normalize(c.Type) == CombatConditionType.Helpless);
+        if (helpless == null)
+        {
+            ActiveConditions.Add(new StatusEffect(CombatConditionType.Helpless, sourceName, rounds));
             return;
         }
 
-        // Refresh semantics: latest applier becomes the active source label.
-        existing.SourceName = sourceName;
-        RefreshConditionDuration(existing, rounds);
+        helpless.SourceName = sourceName;
+        RefreshConditionDuration(helpless, rounds);
     }
 
     private static void RefreshConditionDuration(StatusEffect existing, int rounds)
@@ -554,7 +589,13 @@ public class CharacterStats
         CombatConditionType normalized = ConditionRules.Normalize(type);
         int idx = ActiveConditions.FindIndex(c => ConditionRules.Normalize(c.Type) == normalized);
         if (idx < 0) return false;
+
+        StatusEffect removed = ActiveConditions[idx];
         ActiveConditions.RemoveAt(idx);
+
+        if (normalized == CombatConditionType.Paralyzed)
+            RemoveLinkedHelplessIfNoOtherDriver(removed != null ? removed.SourceName : null);
+
         return true;
     }
 
@@ -567,13 +608,46 @@ public class CharacterStats
         for (int i = ActiveConditions.Count - 1; i >= 0; i--)
         {
             var cond = ActiveConditions[i];
-            if (cond.Tick())
-            {
-                expired.Add(cond);
-                ActiveConditions.RemoveAt(i);
-            }
+            if (!cond.Tick())
+                continue;
+
+            CombatConditionType normalized = ConditionRules.Normalize(cond.Type);
+            expired.Add(cond);
+            ActiveConditions.RemoveAt(i);
+
+            if (normalized == CombatConditionType.Paralyzed)
+                RemoveLinkedHelplessIfNoOtherDriver(cond != null ? cond.SourceName : null);
         }
+
         return expired;
+    }
+
+    private void RemoveLinkedHelplessIfNoOtherDriver(string paralyzedSourceName)
+    {
+        bool hasOtherHelplessDriver = ActiveConditions.Any(c =>
+        {
+            if (c == null)
+                return false;
+
+            CombatConditionType normalized = ConditionRules.Normalize(c.Type);
+            return normalized != CombatConditionType.Helpless
+                && normalized != CombatConditionType.Paralyzed
+                && ConditionRules.IsHelplessLike(normalized);
+        });
+
+        if (hasOtherHelplessDriver)
+            return;
+
+        int helplessIndex = ActiveConditions.FindIndex(c => ConditionRules.Normalize(c.Type) == CombatConditionType.Helpless);
+        if (helplessIndex < 0)
+            return;
+
+        StatusEffect helpless = ActiveConditions[helplessIndex];
+        bool linkedSource = string.Equals(helpless != null ? helpless.SourceName : null, paralyzedSourceName, System.StringComparison.Ordinal);
+        if (!linkedSource && !string.IsNullOrEmpty(paralyzedSourceName))
+            return;
+
+        ActiveConditions.RemoveAt(helplessIndex);
     }
 
     /// <summary>
@@ -1311,7 +1385,7 @@ public class CharacterStats
     {
         get
         {
-            int dexToAC = DEXMod;
+            int dexToAC = DeniedDexToAcByCondition ? 0 : DEXMod;
             if (MaxDexBonus >= 0 && dexToAC > MaxDexBonus)
                 dexToAC = MaxDexBonus;
             // Mage Armor is an armor bonus — it doesn't stack with worn armor.
@@ -2790,22 +2864,34 @@ public class CharacterStats
     {
         int total = 0;
 
+        Skill skill = null;
+        if (!string.IsNullOrEmpty(skillName))
+            Skills.TryGetValue(skillName, out skill);
+
         for (int i = 0; i < ActiveConditions.Count; i++)
         {
             StatusEffect active = ActiveConditions[i];
             if (active == null)
                 continue;
 
-            ConditionDefinition def = ConditionRules.GetDefinition(active.Type);
+            CombatConditionType normalized = ConditionRules.Normalize(active.Type);
+            ConditionDefinition def = ConditionRules.GetDefinition(normalized);
             total += def.SkillCheckModifier;
 
             // Dazzled explicitly applies only to sight-based checks by SRD text.
-            if (ConditionRules.Normalize(active.Type) == CombatConditionType.Dazzled)
+            if (normalized == CombatConditionType.Dazzled)
             {
                 bool sightBased = string.Equals(skillName, "Spot", System.StringComparison.OrdinalIgnoreCase)
                                   || string.Equals(skillName, "Search", System.StringComparison.OrdinalIgnoreCase);
                 if (!sightBased)
                     total -= def.SkillCheckModifier;
+            }
+
+            // Blinded: -4 penalty on STR- and DEX-based skill checks.
+            if (normalized == CombatConditionType.Blinded && skill != null)
+            {
+                if (skill.KeyAbility == AbilityType.STR || skill.KeyAbility == AbilityType.DEX)
+                    total -= 4;
             }
         }
 

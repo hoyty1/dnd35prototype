@@ -112,15 +112,14 @@ public static class ConditionRules
             Type = CombatConditionType.Blinded,
             DisplayName = "Blinded",
             ShortLabel = "BL",
-            Description = "Cannot see. -2 AC, -2 attack, loses DEX to AC, moves carefully.",
+            Description = "Cannot see. -2 AC, -2 attack, loses DEX to AC, 50% miss chance on attacks, half speed.",
             StackingRule = ConditionStackingRule.Refresh,
             AttackModifier = -2,
             ArmorClassModifier = -2,
-            SkillCheckModifier = -4,
             DeniesDexToAc = true,
             PreventsAoO = true,
             PreventsThreatening = true,
-            MovementMultiplier = 1f
+            MovementMultiplier = 0.5f
         });
 
         Add(new ConditionDefinition
@@ -389,9 +388,8 @@ public static class ConditionRules
             Type = CombatConditionType.Helpless,
             DisplayName = "Helpless",
             ShortLabel = "HP",
-            Description = "Cannot defend, move, or act; vulnerable to coup de grace.",
+            Description = "Cannot defend, move, or act; loses DEX to AC and is vulnerable to coup de grace.",
             StackingRule = ConditionStackingRule.Refresh,
-            ArmorClassModifier = -4,
             DeniesDexToAc = true,
             PreventsMovement = true,
             PreventsStandardActions = true,

@@ -3588,6 +3588,9 @@ public class CharacterController : MonoBehaviour
         if (target == null || target.Stats == null)
             return 0;
 
+        if (target.Stats.DeniedDexToAcByCondition)
+            return 0;
+
         int dexToAc = target.Stats.DEXMod;
         if (target.Stats.MaxDexBonus >= 0 && dexToAc > target.Stats.MaxDexBonus)
             dexToAc = target.Stats.MaxDexBonus;
@@ -3977,7 +3980,11 @@ public class CharacterController : MonoBehaviour
         bool trueStrikeActive = trueStrike != null && trueStrike.IsActive();
         bool ignoreConcealmentForThisAttack = trueStrikeActive;
         int trueStrikeBonus = trueStrikeActive ? trueStrike.GetAttackBonus() : 0;
-        int totalAtkModWithTrueStrike = totalAtkMod + trueStrikeBonus;
+
+        bool targetIsHelplessLike = !isRangedAttack && target != null && target.IsHelplessForCoupDeGrace();
+        int helplessMeleeAttackBonus = targetIsHelplessLike ? 4 : 0;
+
+        int totalAtkModWithTrueStrike = totalAtkMod + trueStrikeBonus + helplessMeleeAttackBonus;
 
         if (TryResolveLastKnownPositionAutoMiss(target, isRangedAttack, weapon, out CombatResult emptySquareMiss))
             return emptySquareMiss;
@@ -4052,6 +4059,12 @@ public class CharacterController : MonoBehaviour
         if (trueStrikeActive && trueStrikeBonus != 0)
             result.AddAttackBuffDebuffModifier("True Strike (insight)", trueStrikeBonus);
 
+        if (helplessMeleeAttackBonus > 0)
+        {
+            result.AddAttackBuffDebuffModifier("Melee vs helpless target", helplessMeleeAttackBonus);
+            result.SpecialAttackNote = "Target is helpless: +4 melee attack bonus applied.";
+        }
+
         // D&D 3.5e True Strike is consumed on the next attack roll (hit or miss).
         if (trueStrikeActive)
             trueStrike.ConsumeOnAttackRoll();
@@ -4064,17 +4077,56 @@ public class CharacterController : MonoBehaviour
 
         if (hit)
         {
-            int missChance = target.GetMissChance(this, isRangedAttack);
+            int targetMissChance = target.GetMissChance(this, isRangedAttack);
+            int blindedAttackerMissChance = HasCondition(CombatConditionType.Blinded) ? 50 : 0;
+            int missChance = Mathf.Max(targetMissChance, blindedAttackerMissChance);
             if (missChance > 0)
             {
                 result.ConcealmentMissChance = missChance;
-                result.ConcealmentDescription = target.GetConcealmentDescription(this, isRangedAttack);
 
-                if (ignoreConcealmentForThisAttack)
+                string concealmentDescription = targetMissChance > 0
+                    ? target.GetConcealmentDescription(this, isRangedAttack)
+                    : string.Empty;
+
+                if (blindedAttackerMissChance > 0)
                 {
-                    // True Strike negates miss chance from concealment for this attack.
-                    result.ConcealmentRoll = 100;
-                    result.ConcealmentDescription = $"{result.ConcealmentDescription} (ignored by True Strike)";
+                    string blindDescription = "Attacker is blinded (50% miss chance)";
+                    concealmentDescription = string.IsNullOrEmpty(concealmentDescription)
+                        ? blindDescription
+                        : $"{concealmentDescription}; {blindDescription}";
+                }
+
+                result.ConcealmentDescription = string.IsNullOrEmpty(concealmentDescription)
+                    ? "Concealment"
+                    : concealmentDescription;
+
+                if (ignoreConcealmentForThisAttack && targetMissChance > 0)
+                {
+                    // True Strike negates miss chance from target concealment for this attack,
+                    // but does not negate misses from the attacker being blinded.
+                    if (blindedAttackerMissChance <= 0)
+                    {
+                        result.ConcealmentRoll = 100;
+                        result.ConcealmentDescription = $"{result.ConcealmentDescription} (ignored by True Strike)";
+                    }
+                    else
+                    {
+                        missChance = blindedAttackerMissChance;
+                        result.ConcealmentMissChance = missChance;
+                        int concealmentRoll = Random.Range(1, 101);
+                        result.ConcealmentRoll = concealmentRoll;
+
+                        if (concealmentRoll <= missChance)
+                        {
+                            result.Hit = false;
+                            result.MissedDueToConcealment = true;
+                            result.Damage = 0;
+                            result.BaseDamageRoll = 0;
+                            result.RawTotalDamage = 0;
+                            result.FinalDamageDealt = 0;
+                            return result;
+                        }
+                    }
                 }
                 else
                 {
@@ -4109,19 +4161,43 @@ public class CharacterController : MonoBehaviour
                 return result;
             }
 
-            isThreat = CharacterStats.IsCritThreat(roll, critThreatMin);
-            result.IsCritThreat = isThreat;
+            bool autoCritOnParalyzed = !isRangedAttack
+                && target != null
+                && target.HasCondition(CombatConditionType.Paralyzed)
+                && GetMinimumDistanceToTarget(target, chebyshev: true) == 1
+                && !target.IsImmuneToCriticalHits();
 
-            if (isThreat)
+            if (autoCritOnParalyzed)
             {
-                // Roll confirmation with the same attack modifier
-                var (confirmed, confRoll, confTotal) = Stats.RollCritConfirmation(totalAtkModWithTrueStrike, targetAC);
-                critConfirmed = confirmed;
-                confirmRoll = confRoll;
-                confirmTotal = confTotal;
-                result.CritConfirmed = critConfirmed;
+                isThreat = true;
+                critConfirmed = true;
+                confirmRoll = 20;
+                confirmTotal = 20 + totalAtkModWithTrueStrike;
+
+                result.IsCritThreat = true;
+                result.CritConfirmed = true;
                 result.ConfirmationRoll = confirmRoll;
                 result.ConfirmationTotal = confirmTotal;
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                    ? "Adjacent melee hit vs paralyzed target: automatic critical hit."
+                    : $"{result.SpecialAttackNote} Adjacent melee hit vs paralyzed target: automatic critical hit.";
+            }
+            else
+            {
+                isThreat = CharacterStats.IsCritThreat(roll, critThreatMin);
+                result.IsCritThreat = isThreat;
+
+                if (isThreat)
+                {
+                    // Roll confirmation with the same attack modifier
+                    var (confirmed, confRoll, confTotal) = Stats.RollCritConfirmation(totalAtkModWithTrueStrike, targetAC);
+                    critConfirmed = confirmed;
+                    confirmRoll = confRoll;
+                    confirmTotal = confTotal;
+                    result.CritConfirmed = critConfirmed;
+                    result.ConfirmationRoll = confirmRoll;
+                    result.ConfirmationTotal = confirmTotal;
+                }
             }
 
             // Step 3: Roll weapon damage (feat bonus added as flat bonus, not multiplied on crit)
@@ -8404,6 +8480,34 @@ public class CharacterController : MonoBehaviour
         SquareCell cell = grid != null ? grid.GetCell(owner.GridPosition) : null;
         if (cell != null)
             cell.AddGroundItem(item);
+    }
+
+    public int DropHeldItemsDueToCondition(string reason)
+    {
+        CharacterInventory inventory = EnsureInventory();
+        if (inventory == null)
+            return 0;
+
+        int droppedCount = 0;
+        string ownerName = Stats != null ? Stats.CharacterName : name;
+
+        ItemData rightHand = inventory.RemoveEquippedHeldItem(EquipSlot.RightHand);
+        if (rightHand != null)
+        {
+            DropItemToGround(this, rightHand);
+            droppedCount++;
+            GameManager.Instance?.CombatUI?.ShowCombatLog($"💨 {ownerName} drops {rightHand.Name} ({reason}).");
+        }
+
+        ItemData leftHand = inventory.RemoveEquippedHeldItem(EquipSlot.LeftHand);
+        if (leftHand != null)
+        {
+            DropItemToGround(this, leftHand);
+            droppedCount++;
+            GameManager.Instance?.CombatUI?.ShowCombatLog($"💨 {ownerName} drops {leftHand.Name} ({reason}).");
+        }
+
+        return droppedCount;
     }
 
     private static int GetDisarmHeldItemModifier(CharacterController character)
