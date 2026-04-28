@@ -262,8 +262,15 @@ public class CharacterInfoPanel : MonoBehaviour
             ? $"✋ Holding: {spellComp.HeldTouchSpell.Name}"
             : "";
         string condStr = ch.Stats.GetConditionSummary();
+        string diseaseStr = ch.GetActiveDiseaseSummary();
+        string poisonStr = ch.GetActivePoisonSummary();
 
-        if (string.IsNullOrEmpty(buffStr) && string.IsNullOrEmpty(concStr) && string.IsNullOrEmpty(heldStr) && string.IsNullOrEmpty(condStr))
+        if (string.IsNullOrEmpty(buffStr)
+            && string.IsNullOrEmpty(concStr)
+            && string.IsNullOrEmpty(heldStr)
+            && string.IsNullOrEmpty(condStr)
+            && string.IsNullOrEmpty(diseaseStr)
+            && string.IsNullOrEmpty(poisonStr))
         {
             buffText.text = "";
             buffText.gameObject.SetActive(false);
@@ -277,8 +284,10 @@ public class CharacterInfoPanel : MonoBehaviour
         if (!string.IsNullOrEmpty(concStr)) parts.Add(concStr);
         if (!string.IsNullOrEmpty(heldStr)) parts.Add(heldStr);
         if (!string.IsNullOrEmpty(condStr)) parts.Add(condStr);
+        if (!string.IsNullOrEmpty(diseaseStr)) parts.Add($"🦠 {diseaseStr}");
+        if (!string.IsNullOrEmpty(poisonStr)) parts.Add($"☠ {poisonStr}");
         if (!string.IsNullOrEmpty(buffStr)) parts.Add(buffStr);
-        buffText.text = string.Join(" ", parts);
+        buffText.text = string.Join(" | ", parts);
     }
 
     private static string FormatBonusDetail(int value, string label)

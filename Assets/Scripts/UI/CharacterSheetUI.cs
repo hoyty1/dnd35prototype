@@ -737,6 +737,26 @@ public class CharacterSheetUI : MonoBehaviour
 
             AddSeparator(content);
         }
+
+        if (selectedPC != null)
+        {
+            string diseaseSummary = selectedPC.GetActiveDiseaseSummary();
+            string poisonSummary = selectedPC.GetActivePoisonSummary();
+
+            if (!string.IsNullOrEmpty(diseaseSummary) || !string.IsNullOrEmpty(poisonSummary))
+            {
+                AddLine(content, "DISEASE & POISON", 12, new Color(0.74f, 0.9f, 0.63f), FontStyle.Bold, 16);
+
+                if (!string.IsNullOrEmpty(diseaseSummary))
+                    AddLine(content, $"  🦠 Disease: {diseaseSummary}", 10, new Color(0.8f, 1f, 0.75f), FontStyle.Normal, 13);
+
+                if (!string.IsNullOrEmpty(poisonSummary))
+                    AddLine(content, $"  ☠ Poison: {poisonSummary}", 10, new Color(1f, 0.84f, 0.7f), FontStyle.Normal, 13);
+
+                AddSeparator(content);
+            }
+        }
+
         AddSeparator(content);
 
         // === Ability Scores ===

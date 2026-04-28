@@ -384,6 +384,13 @@ public class CharacterController : MonoBehaviour
     private bool _abilityZeroAppliedHelpless;
     private bool _abilityZeroAppliedUnconscious;
 
+    [Header("Disease & Poison")]
+    [SerializeField] private List<ActiveDisease> _activeDiseases = new List<ActiveDisease>();
+    [SerializeField] private List<ActivePoison> _activePoisons = new List<ActivePoison>();
+
+    public List<ActiveDisease> ActiveDiseases => _activeDiseases;
+    public List<ActivePoison> ActivePoisons => _activePoisons;
+
     // Tracks attackers that currently have an active feint window against this defender.
     // Used only for visual/status indication on the defender token.
     private readonly HashSet<CharacterController> _incomingFeintSources = new HashSet<CharacterController>();
@@ -1234,6 +1241,9 @@ public class CharacterController : MonoBehaviour
         DeadSprite = dead;
         GridPosition = startPos;
 
+        _activeDiseases.Clear();
+        _activePoisons.Clear();
+
         if (Stats != null)
         {
             Stats.CurrentHPChanged += OnCurrentHPChanged;
@@ -1693,6 +1703,192 @@ public class CharacterController : MonoBehaviour
         LogAbilityScoreMessage($"🌅 {Stats.CharacterName} naturally recovers {totalHealed} total ability damage{FormatSource(source)}.");
         RecalculateStatsFromAbilityScoreChange();
         CheckAbilityScoreZeroEffects();
+    }
+
+    /// <summary>
+    /// Apply disease exposure and resolve the initial infection Fortitude save.
+    /// </summary>
+    public void ExposeToDisease(DiseaseType diseaseType, int dcModifier = 0)
+    {
+        DiseaseData disease = DiseaseDatabase.GetDisease(diseaseType);
+        if (disease == null || Stats == null)
+            return;
+
+        int dc = Mathf.Max(0, disease.FortitudeDC + dcModifier);
+        int roll = Random.Range(1, 21);
+        int total = roll + Stats.FortitudeSave;
+
+        LogAbilityScoreMessage($"🦠 {Stats.CharacterName} is exposed to {disease.Name} (Fort DC {dc}).");
+        LogAbilityScoreMessage($"   Fortitude: d20({roll}) + {Stats.FortitudeSave} = {total} {(total >= dc ? "SUCCESS" : "FAIL")}");
+
+        if (total >= dc)
+            return;
+
+        _activeDiseases.Add(new ActiveDisease(disease));
+        ActiveDisease added = _activeDiseases[_activeDiseases.Count - 1];
+        LogAbilityScoreMessage($"⚠ {Stats.CharacterName} contracts {disease.Name}! Incubation: {added.DaysUntilActive} day(s).");
+    }
+
+    /// <summary>
+    /// Apply poison exposure and resolve initial poison save/damage.
+    /// Secondary damage is handled after a delay by GameManager poison ticking.
+    /// </summary>
+    public void ApplyPoison(string poisonId, int dcModifier = 0)
+    {
+        PoisonData poison = PoisonDatabase.GetPoison(poisonId);
+        if (poison == null || Stats == null)
+            return;
+
+        int dc = Mathf.Max(0, poison.FortitudeDC + dcModifier);
+        int roll = Random.Range(1, 21);
+        int total = roll + Stats.FortitudeSave;
+
+        LogAbilityScoreMessage($"☠ {Stats.CharacterName} is exposed to {poison.Name} ({poison.Type}, Fort DC {dc}).");
+        LogAbilityScoreMessage($"   Initial save: d20({roll}) + {Stats.FortitudeSave} = {total} {(total >= dc ? "SUCCESS" : "FAIL")}");
+
+        ActivePoison activePoison = new ActivePoison(poison)
+        {
+            InitialSaveSucceeded = total >= dc
+        };
+
+        if (total < dc)
+            ApplyAbilityEffectList(poison.InitialDamage, $"{poison.Name} (initial)");
+
+        _activePoisons.Add(activePoison);
+    }
+
+    /// <summary>
+    /// Called by GameManager when the poison's secondary timer expires.
+    /// </summary>
+    public void ProcessPoisonSecondaryDamage(ActivePoison poison)
+    {
+        if (poison == null || poison.PoisonData == null || poison.SecondaryResolved || Stats == null)
+            return;
+
+        int dc = poison.PoisonData.FortitudeDC;
+        int roll = Random.Range(1, 21);
+        int total = roll + Stats.FortitudeSave;
+
+        LogAbilityScoreMessage($"☣ {Stats.CharacterName} makes secondary save vs {poison.PoisonData.Name} (DC {dc}).");
+        LogAbilityScoreMessage($"   Secondary save: d20({roll}) + {Stats.FortitudeSave} = {total} {(total >= dc ? "SUCCESS" : "FAIL")}");
+
+        poison.SecondarySaveSucceeded = total >= dc;
+        if (!poison.SecondarySaveSucceeded)
+            ApplyAbilityEffectList(poison.PoisonData.SecondaryDamage, $"{poison.PoisonData.Name} (secondary)");
+
+        poison.SecondaryResolved = true;
+    }
+
+    /// <summary>
+    /// Called once per in-game day to progress incubation and active disease damage.
+    /// </summary>
+    public void ProcessDiseaseEffectsDaily()
+    {
+        if (Stats == null || _activeDiseases.Count == 0)
+            return;
+
+        for (int i = _activeDiseases.Count - 1; i >= 0; i--)
+        {
+            ActiveDisease active = _activeDiseases[i];
+            if (active == null || active.DiseaseData == null)
+            {
+                _activeDiseases.RemoveAt(i);
+                continue;
+            }
+
+            if (active.IsIncubating)
+            {
+                active.DaysUntilActive--;
+                if (active.DaysUntilActive <= 0)
+                {
+                    active.IsIncubating = false;
+                    active.DaysUntilActive = 0;
+                    LogAbilityScoreMessage($"🧫 {Stats.CharacterName}'s {active.DiseaseData.Name} incubation ends.");
+                }
+                else
+                {
+                    LogAbilityScoreMessage($"🧫 {active.DiseaseData.Name} incubating ({active.DaysUntilActive} day(s) remaining).");
+                }
+
+                continue;
+            }
+
+            int dc = active.DiseaseData.FortitudeDC;
+            int roll = Random.Range(1, 21);
+            int total = roll + Stats.FortitudeSave;
+            bool success = total >= dc;
+
+            LogAbilityScoreMessage($"🦠 Daily save vs {active.DiseaseData.Name}: d20({roll}) + {Stats.FortitudeSave} = {total} vs DC {dc} {(success ? "SUCCESS" : "FAIL")}");
+
+            if (success)
+            {
+                active.ConsecutiveSuccessfulSaves++;
+                if (active.ConsecutiveSuccessfulSaves >= 2)
+                {
+                    LogAbilityScoreMessage($"✅ {Stats.CharacterName} recovers from {active.DiseaseData.Name}.");
+                    _activeDiseases.RemoveAt(i);
+                }
+            }
+            else
+            {
+                active.ConsecutiveSuccessfulSaves = 0;
+                ApplyAbilityEffectList(active.DiseaseData.DamageEffects, active.DiseaseData.Name);
+            }
+        }
+    }
+
+    public string GetActiveDiseaseSummary()
+    {
+        if (_activeDiseases == null || _activeDiseases.Count == 0)
+            return string.Empty;
+
+        List<string> parts = new List<string>();
+        for (int i = 0; i < _activeDiseases.Count; i++)
+        {
+            ActiveDisease disease = _activeDiseases[i];
+            if (disease != null)
+                parts.Add(disease.GetStatusSummary());
+        }
+
+        return string.Join("; ", parts);
+    }
+
+    public string GetActivePoisonSummary()
+    {
+        if (_activePoisons == null || _activePoisons.Count == 0)
+            return string.Empty;
+
+        List<string> parts = new List<string>();
+        for (int i = 0; i < _activePoisons.Count; i++)
+        {
+            ActivePoison poison = _activePoisons[i];
+            if (poison != null && !poison.SecondaryResolved)
+                parts.Add(poison.GetStatusSummary());
+        }
+
+        return string.Join("; ", parts);
+    }
+
+    private void ApplyAbilityEffectList(List<AbilityDamageEffect> effects, string source)
+    {
+        if (effects == null || effects.Count == 0)
+            return;
+
+        for (int i = 0; i < effects.Count; i++)
+        {
+            AbilityDamageEffect effect = effects[i];
+            if (effect == null)
+                continue;
+
+            int amount = effect.RollDamage();
+            if (amount <= 0)
+                continue;
+
+            if (effect.IsDrain)
+                ApplyAbilityDrain(effect.Ability, amount, source);
+            else
+                ApplyAbilityDamage(effect.Ability, amount, source);
+        }
     }
 
     public void CheckAbilityScoreZeroEffects()

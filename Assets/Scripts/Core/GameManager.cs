@@ -110,6 +110,9 @@ public partial class GameManager : MonoBehaviour
     private bool _isClericSpellTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
 
+    // D&D timing: 1 in-game day = 14,400 rounds.
+    private const int RoundsPerDay = 14400;
+
     // Game state
     public enum TurnPhase { PCTurn, NPCTurn, CombatOver }
 
@@ -332,6 +335,8 @@ public partial class GameManager : MonoBehaviour
             return;
         }
         Instance = this;
+
+        InitializeDiseaseAndPoisonDatabases();
 
         _turnService ??= gameObject.GetComponent<TurnService>() ?? gameObject.AddComponent<TurnService>();
         _turnService.OnTurnStarted += OnTurnStarted;
@@ -874,6 +879,9 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private void Update()
     {
+        // Poison secondary timers continue regardless of input/turn state.
+        UpdatePoisonTimers();
+
         // Skip all game input during character creation / encounter selection.
         if (WaitingForCharacterCreation || WaitingForEncounterSelection)
         {
@@ -904,6 +912,73 @@ public partial class GameManager : MonoBehaviour
 
         if (CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
             UpdateChargeHoverPreview();
+    }
+
+    private void InitializeDiseaseAndPoisonDatabases()
+    {
+        DiseaseDatabase.Initialize();
+        PoisonDatabase.Initialize();
+    }
+
+    private void UpdatePoisonTimers()
+    {
+        List<CharacterController> characters = GetAllCharacters();
+        if (characters == null || characters.Count == 0)
+            return;
+
+        for (int c = 0; c < characters.Count; c++)
+        {
+            CharacterController character = characters[c];
+            if (character == null || character.ActivePoisons == null || character.ActivePoisons.Count == 0)
+                continue;
+
+            for (int i = character.ActivePoisons.Count - 1; i >= 0; i--)
+            {
+                ActivePoison poison = character.ActivePoisons[i];
+                if (poison == null || poison.PoisonData == null)
+                {
+                    character.ActivePoisons.RemoveAt(i);
+                    continue;
+                }
+
+                if (poison.SecondaryResolved)
+                {
+                    character.ActivePoisons.RemoveAt(i);
+                    continue;
+                }
+
+                poison.TimeUntilSecondary -= Time.deltaTime;
+                if (poison.TimeUntilSecondary <= 0f)
+                {
+                    character.ProcessPoisonSecondaryDamage(poison);
+
+                    if (poison.SecondaryResolved)
+                        character.ActivePoisons.RemoveAt(i);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Apply once-per-day disease progression and natural ability damage recovery.
+    /// Can be called by future rest/day systems; also auto-called every 14,400 rounds.
+    /// </summary>
+    public void ProcessDailyEffects()
+    {
+        List<CharacterController> characters = GetAllCharacters();
+        if (characters == null || characters.Count == 0)
+            return;
+
+        foreach (CharacterController character in characters)
+        {
+            if (character == null || character.Stats == null || character.Stats.IsDead)
+                continue;
+
+            character.ProcessDiseaseEffectsDaily();
+            character.HealAbilityDamageDaily(1, "Daily recovery");
+        }
+
+        UpdateCombatUI();
     }
 
     private InputService.InputMode ResolveInputMode()
@@ -4057,6 +4132,9 @@ public partial class GameManager : MonoBehaviour
         // Keep Turn Undead tracker table aligned with condition expiration.
         PruneTurnUndeadTrackers();
         LogOngoingTurnUndeadStatusAtRoundStart();
+
+        if (round > 0 && round % RoundsPerDay == 0)
+            ProcessDailyEffects();
     }
 
     private void OnCombatEnded()

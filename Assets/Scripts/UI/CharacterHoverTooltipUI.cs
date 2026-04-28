@@ -194,6 +194,16 @@ public class CharacterHoverTooltipUI : MonoBehaviour
             if (character.Conditions != null)
                 hash = (hash * 31) + character.Conditions.GetActiveConditionsCount();
 
+            hash = (hash * 31) + character.ActiveDiseases.Count;
+            hash = (hash * 31) + character.ActivePoisons.Count;
+
+            string diseaseSummary = character.GetActiveDiseaseSummary();
+            string poisonSummary = character.GetActivePoisonSummary();
+            if (!string.IsNullOrEmpty(diseaseSummary))
+                hash = (hash * 31) + diseaseSummary.GetHashCode();
+            if (!string.IsNullOrEmpty(poisonSummary))
+                hash = (hash * 31) + poisonSummary.GetHashCode();
+
             return hash;
         }
     }
@@ -247,6 +257,14 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         string specialAbilities = character.Stats.GetSpecialAbilitiesSummary();
         if (!string.IsNullOrEmpty(specialAbilities))
             sb.Append("\nTraits: ").Append(specialAbilities);
+
+        string diseaseSummary = character.GetActiveDiseaseSummary();
+        if (!string.IsNullOrEmpty(diseaseSummary))
+            sb.Append("\nDisease: ").Append(diseaseSummary);
+
+        string poisonSummary = character.GetActivePoisonSummary();
+        if (!string.IsNullOrEmpty(poisonSummary))
+            sb.Append("\nPoison: ").Append(poisonSummary);
 
         return sb.ToString();
     }
