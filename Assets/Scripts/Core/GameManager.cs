@@ -14178,7 +14178,8 @@ public partial class GameManager : MonoBehaviour
         if (!smiteEvil && !smiteGood)
             return false;
 
-        int attackBonus = Mathf.Max(1, summon.Stats.CHAMod + 2);
+        // Smite uses Charisma modifier "if any"; clamp to 0 so low CHA never creates a penalty.
+        int attackBonus = Mathf.Max(0, summon.Stats.CHAMod + 2);
         int damageBonus = Mathf.Max(1, summon.Stats.Level + 2);
 
         summon.Stats.MoraleAttackBonus += attackBonus;
