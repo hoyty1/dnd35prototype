@@ -272,6 +272,8 @@ public class StatusEffectIndicator : MonoBehaviour
         {
             case CombatConditionType.Invisible:
                 return new Color(0.38f, 0.72f, 0.95f, 0.88f);
+            case CombatConditionType.Asleep:
+                return new Color(0.45f, 0.65f, 1f, 0.9f);
             case CombatConditionType.Flanked:
                 return new Color(1f, 0.55f, 0.2f, 0.9f);
             case CombatConditionType.Turned:

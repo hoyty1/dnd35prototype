@@ -341,6 +341,25 @@ public static class ConditionRules
 
         Add(new ConditionDefinition
         {
+            Type = CombatConditionType.Asleep,
+            DisplayName = "Asleep",
+            ShortLabel = "Zzz",
+            Description = "Sleeping state. Creature is unconscious and helpless until awakened or duration expires.",
+            StackingRule = ConditionStackingRule.Refresh,
+            DeniesDexToAc = true,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f,
+            GrantsCombatAdvantage = true,
+            CoupDeGraceVulnerable = true
+        });
+
+        Add(new ConditionDefinition
+        {
             Type = CombatConditionType.Fatigued,
             DisplayName = "Fatigued",
             ShortLabel = "FT",

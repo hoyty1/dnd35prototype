@@ -18,6 +18,7 @@ public enum SpecialAttackType
     Overrun,
     Feint,
     AidAnother,
+    WakeSleepingAlly,
     CoupDeGrace,
     TurnUndead
 }
@@ -2172,6 +2173,12 @@ public class CharacterController : MonoBehaviour
     {
         HPState next = DetermineStateFromHPTransition(oldHP, newHP);
         SetHPState(next, emitLog: true);
+
+        if (newHP < oldHP && GameManager.Instance != null && GameManager.Instance.IsCharacterAsleep(this))
+        {
+            if (GameManager.Instance.TryWakeSleepingCharacter(this, "takes damage", suppressLog: true))
+                GameManager.Instance.CombatUI?.ShowCombatLog($"💥 {Stats.CharacterName} wakes from taking damage.");
+        }
     }
 
     private void OnNonlethalDamageChanged(int oldValue, int newValue)
@@ -2181,6 +2188,12 @@ public class CharacterController : MonoBehaviour
 
         HPState next = DetermineStateFromHPTransition(Stats.CurrentHP, Stats.CurrentHP);
         SetHPState(next, emitLog: true);
+
+        if (newValue > oldValue && GameManager.Instance != null && GameManager.Instance.IsCharacterAsleep(this))
+        {
+            if (GameManager.Instance.TryWakeSleepingCharacter(this, "takes nonlethal damage", suppressLog: true))
+                GameManager.Instance.CombatUI?.ShowCombatLog($"💥 {Stats.CharacterName} wakes from taking damage.");
+        }
     }
 
     /// <summary>

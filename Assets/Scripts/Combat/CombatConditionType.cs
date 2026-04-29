@@ -23,6 +23,7 @@ public enum CombatConditionType
     Exhausted,
     Fascinated,
     Charmed,
+    Asleep,
     Fatigued,
     FlatFooted,
     Frightened,

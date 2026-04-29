@@ -223,17 +223,29 @@ public static partial class SpellDatabase
                 {
                     SpellId = "sleep",
                     Name = "Sleep",
-                    Description = "Puts 4 HD of creatures into magical slumber. Will save negates. Range: Medium. PHB p.280",
-                    SpellLevel = 1, School = "Enchantment",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.SingleEnemy,
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. A 10-ft radius burst affects creatures with lowest HD first from a 4d4 HD pool. Only creatures with 4 HD or less are affected. Will negates. Duration 1 min/level. SR: Yes. PHB p.280",
+                    SpellLevel = 1,
+                    School = "Enchantment",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 2, // 10-ft radius
+                    AoERangeSquares = 0, // use Medium range profile
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
-                    BuffDurationRounds = 10, // 1 min/level
-                    ActionType = SpellActionType.FullRound,
-                    ProvokesAoO = true
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    BlockedByProtectionFromAlignment = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 10, // legacy fallback; runtime uses duration system
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    IsPlaceholder = false
                 });
 
         Register(new SpellData

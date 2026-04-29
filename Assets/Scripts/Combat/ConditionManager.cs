@@ -77,7 +77,7 @@ public class ConditionManager : MonoBehaviour
                 }
             }
 
-            EnsureLinkedParalyzedHelpless(rounds, sourceName, normalized);
+            EnsureLinkedUnconsciousOrParalyzedHelpless(rounds, sourceName, normalized);
             _stats?.RefreshNegativeLevelState();
             return;
         }
@@ -96,16 +96,16 @@ public class ConditionManager : MonoBehaviour
             RefreshDuration(existing, rounds);
         }
 
-        EnsureLinkedParalyzedHelpless(rounds, sourceName, normalized);
+        EnsureLinkedUnconsciousOrParalyzedHelpless(rounds, sourceName, normalized);
         _stats?.RefreshNegativeLevelState();
     }
 
-    private void EnsureLinkedParalyzedHelpless(int rounds, string sourceName, CombatConditionType normalized)
+    private void EnsureLinkedUnconsciousOrParalyzedHelpless(int rounds, string sourceName, CombatConditionType normalized)
     {
-        if (normalized != CombatConditionType.Paralyzed)
+        if (normalized != CombatConditionType.Paralyzed && normalized != CombatConditionType.Unconscious)
             return;
 
-        // Paralyzed creatures are helpless by rule. Ensure helpless is present and at least as long.
+        // Unconscious and paralyzed creatures are helpless by rule. Ensure helpless is present and at least as long.
         var helpless = _stats.ActiveConditions.FirstOrDefault(c => ConditionRules.Normalize(c.Type) == CombatConditionType.Helpless);
         if (helpless == null)
         {
@@ -131,7 +131,7 @@ public class ConditionManager : MonoBehaviour
         _stats.ActiveConditions.RemoveAt(idx);
         OnConditionRemoved(removed);
 
-        if (normalized == CombatConditionType.Paralyzed)
+        if (normalized == CombatConditionType.Paralyzed || normalized == CombatConditionType.Unconscious)
             RemoveLinkedHelplessIfNoOtherDriver(removed != null ? removed.SourceName : null);
 
         _stats?.RefreshNegativeLevelState();
@@ -153,7 +153,7 @@ public class ConditionManager : MonoBehaviour
             _stats.ActiveConditions.RemoveAt(i);
             OnConditionRemoved(cond);
 
-            if (normalized == CombatConditionType.Paralyzed)
+            if (normalized == CombatConditionType.Paralyzed || normalized == CombatConditionType.Unconscious)
                 RemoveLinkedHelplessIfNoOtherDriver(cond != null ? cond.SourceName : null);
         }
 
@@ -174,6 +174,7 @@ public class ConditionManager : MonoBehaviour
             CombatConditionType normalized = ConditionRules.Normalize(c.Type);
             return normalized != CombatConditionType.Helpless
                 && normalized != CombatConditionType.Paralyzed
+                && normalized != CombatConditionType.Unconscious
                 && ConditionRules.IsHelplessLike(normalized);
         });
 
@@ -260,6 +261,7 @@ public class ConditionManager : MonoBehaviour
             }
             case CombatConditionType.Paralyzed:
             case CombatConditionType.Helpless:
+            case CombatConditionType.Asleep:
             case CombatConditionType.Dazed:
             case CombatConditionType.Nauseated:
             case CombatConditionType.Panicked:
@@ -284,6 +286,7 @@ public class ConditionManager : MonoBehaviour
             case CombatConditionType.Stunned:
             case CombatConditionType.Paralyzed:
             case CombatConditionType.Helpless:
+            case CombatConditionType.Asleep:
             case CombatConditionType.Dazed:
             case CombatConditionType.Nauseated:
             case CombatConditionType.Panicked:

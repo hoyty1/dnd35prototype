@@ -16,6 +16,12 @@ public partial class GameManager
         Offense
     }
 
+    public enum AidAnotherActionType
+    {
+        GrantBonus,
+        WakeSleepingAlly
+    }
+
     [Serializable]
     public class AidBonus
     {
@@ -45,6 +51,7 @@ public partial class GameManager
     // Aid Another multi-step selection state
     private CharacterController _aidAnotherSelectedEnemy;
     private AidType? _aidAnotherSelectedType;
+    private AidAnotherActionType? _aidAnotherSelectedActionType;
 
     // Pending charge state
     private CharacterController _chargeTarget;
@@ -88,6 +95,29 @@ public partial class GameManager
         }
 
         return allies;
+    }
+
+    private List<CharacterController> GetAdjacentSleepingAllies(CharacterController character)
+    {
+        var sleepingAllies = new List<CharacterController>();
+        if (character == null || character.Stats == null)
+            return sleepingAllies;
+
+        List<CharacterController> allies = GetAllAllies(character);
+        for (int i = 0; i < allies.Count; i++)
+        {
+            CharacterController ally = allies[i];
+            if (ally == null || ally.Stats == null || ally.Stats.IsDead)
+                continue;
+            if (!IsAdjacent(character, ally))
+                continue;
+            if (!IsCharacterAsleep(ally))
+                continue;
+
+            sleepingAllies.Add(ally);
+        }
+
+        return sleepingAllies;
     }
 
     /// <summary>
@@ -321,7 +351,10 @@ public partial class GameManager
             return false;
         }
 
-        if (GetThreatenedEnemies(actor).Count == 0)
+        bool hasBonusAidTarget = GetThreatenedEnemies(actor).Count > 0;
+        bool hasWakeTarget = GetAdjacentSleepingAllies(actor).Count > 0;
+
+        if (!hasBonusAidTarget && !hasWakeTarget)
         {
             reason = "No target";
             return false;
@@ -540,10 +573,72 @@ public partial class GameManager
 
         _aidAnotherSelectedEnemy = null;
         _aidAnotherSelectedType = null;
+        _aidAnotherSelectedActionType = null;
         Debug.Log($"[AidAnother] {pc.Stats.CharacterName} initiating Aid Another");
 
-        // New D&D 3.5e flow: Enemy -> Aid Type -> Ally
-        ShowAidAnotherEnemySelection(pc);
+        ShowAidAnotherActionTypeSelection(pc);
+    }
+
+    private void ShowAidAnotherActionTypeSelection(CharacterController initiator)
+    {
+        if (initiator == null || initiator.Stats == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        bool canGrantBonus = GetThreatenedEnemies(initiator).Count > 0;
+        bool canWakeAlly = GetAdjacentSleepingAllies(initiator).Count > 0;
+
+        if (canGrantBonus && !canWakeAlly)
+        {
+            _aidAnotherSelectedActionType = AidAnotherActionType.GrantBonus;
+            ShowAidAnotherEnemySelection(initiator);
+            return;
+        }
+
+        if (!canGrantBonus && canWakeAlly)
+        {
+            _aidAnotherSelectedActionType = AidAnotherActionType.WakeSleepingAlly;
+            ShowAidAnotherWakeAllySelection(initiator);
+            return;
+        }
+
+        if (!canGrantBonus && !canWakeAlly)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {initiator.Stats.CharacterName} has no valid Aid Another targets.");
+            ShowActionChoices();
+            return;
+        }
+
+        var options = new List<string>
+        {
+            "Aid Attack/Defense",
+            "Wake Sleeping Ally"
+        };
+
+        CombatUI?.ShowPickUpItemSelection(
+            initiator.Stats.CharacterName,
+            options,
+            onSelect: selectedIndex =>
+            {
+                _aidAnotherSelectedActionType = selectedIndex == 0
+                    ? AidAnotherActionType.GrantBonus
+                    : AidAnotherActionType.WakeSleepingAlly;
+
+                if (_aidAnotherSelectedActionType == AidAnotherActionType.WakeSleepingAlly)
+                    ShowAidAnotherWakeAllySelection(initiator);
+                else
+                    ShowAidAnotherEnemySelection(initiator);
+            },
+            onCancel: () =>
+            {
+                Debug.Log("[AidAnother] Action type selection cancelled");
+                ShowActionChoices();
+            },
+            titleOverride: "Aid Another",
+            bodyOverride: "Choose Aid Another action:",
+            optionButtonColorOverride: new Color(0.3f, 0.4f, 0.6f, 1f));
     }
 
     private void ShowAidAnotherEnemySelection(CharacterController initiator)
@@ -684,6 +779,76 @@ public partial class GameManager
 
         Debug.Log($"[AidAnother] Ally selected: {ally.Stats?.CharacterName ?? "Unknown"} | enemy={enemy.Stats?.CharacterName ?? "Unknown"} | type={aidType}");
         ExecuteAidAnother(initiator, ally, enemy, aidType);
+    }
+
+    private void ShowAidAnotherWakeAllySelection(CharacterController initiator)
+    {
+        if (initiator == null || initiator.Stats == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        List<CharacterController> sleepingAllies = GetAdjacentSleepingAllies(initiator);
+        if (sleepingAllies.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ No adjacent sleeping ally for {initiator.Stats.CharacterName} to wake.");
+            ShowActionChoices();
+            return;
+        }
+
+        CombatUI?.ShowCharacterSelectionUI(
+            title: "Aid Another - Wake Sleeping Ally",
+            body: "Choose an adjacent sleeping ally to shake awake:",
+            characters: sleepingAllies,
+            onSelect: ally => ExecuteAidAnotherWakeSleepingAlly(initiator, ally),
+            onCancel: () =>
+            {
+                Debug.Log("[AidAnother] Wake ally selection cancelled");
+                ShowActionChoices();
+            },
+            optionButtonColorOverride: new Color(0.34f, 0.28f, 0.56f, 1f));
+    }
+
+    private void ExecuteAidAnotherWakeSleepingAlly(CharacterController aider, CharacterController ally)
+    {
+        if (aider == null || ally == null || aider.Stats == null || ally.Stats == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        if (!aider.Actions.HasStandardAction)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {aider.Stats.CharacterName} has no standard action remaining to wake an ally.");
+            ShowActionChoices();
+            return;
+        }
+
+        if (!IsAdjacent(aider, ally))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {ally.Stats.CharacterName} is not adjacent to {aider.Stats.CharacterName}.");
+            ShowActionChoices();
+            return;
+        }
+
+        if (!IsCharacterAsleep(ally))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {ally.Stats.CharacterName} is not asleep.");
+            ShowActionChoices();
+            return;
+        }
+
+        aider.CommitStandardAction();
+
+        bool woke = TryWakeSleepingCharacter(ally, "shaken awake", aider, suppressLog: true);
+        if (woke)
+            CombatUI?.ShowCombatLog($"🤝 {aider.Stats.CharacterName} shakes {ally.Stats.CharacterName} awake.");
+        else
+            CombatUI?.ShowCombatLog($"⚠ {aider.Stats.CharacterName} cannot wake {ally.Stats.CharacterName} right now.");
+
+        UpdateAllStatsUI();
+        StartCoroutine(AfterAttackDelay(aider, 0.9f));
     }
 
     public void ExecuteAidAnother(CharacterController aider, CharacterController ally, CharacterController enemy, AidType aidType)

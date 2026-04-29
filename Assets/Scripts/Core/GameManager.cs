@@ -89,6 +89,7 @@ public partial class GameManager : MonoBehaviour
     private const string WizardSpellTestPresetId = "wizard_spell_test";
     private const string ClericSpellTestPresetId = "cleric_spell_test";
     private const string CharmPersonTestPresetId = "charm_person_test";
+    private const string SleepSpellTestPresetId = "sleep_spell_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
     private bool _isGreaseTestEncounter;
@@ -110,6 +111,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isWizardSpellTestEncounter;
     private bool _isClericSpellTestEncounter;
     private bool _isCharmPersonTestEncounter;
+    private bool _isSleepSpellTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
 
     // D&D timing: 1 in-game day = 14,400 rounds.
@@ -628,6 +630,7 @@ public partial class GameManager : MonoBehaviour
         _isWizardSpellTestEncounter = string.Equals(presetId, WizardSpellTestPresetId, StringComparison.Ordinal);
         _isClericSpellTestEncounter = string.Equals(presetId, ClericSpellTestPresetId, StringComparison.Ordinal);
         _isCharmPersonTestEncounter = string.Equals(presetId, CharmPersonTestPresetId, StringComparison.Ordinal);
+        _isSleepSpellTestEncounter = string.Equals(presetId, SleepSpellTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.NPCIds != null && preset.NPCIds.Count > 0)
         {
@@ -682,6 +685,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureClericSpellTestParty();
         else if (_isCharmPersonTestEncounter)
             ConfigureCharmPersonTestParty();
+        else if (_isSleepSpellTestEncounter)
+            ConfigureSleepSpellTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -2826,6 +2831,34 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   Selene begins lightly injured so charmed heal-capable targets can demonstrate emergency aid.");
     }
 
+    private void ConfigureSleepSpellTestParty()
+    {
+        ConfigureWizardSpellTestParty();
+
+        if (PC1 != null && PC1.GetComponent<SpellcastingComponent>() is SpellcastingComponent spellComp)
+        {
+            spellComp.KnownSpells.Clear();
+            spellComp.SelectedSpellIds = new List<string>
+            {
+                "detect_magic_wiz",
+                "read_magic",
+                "sleep",
+                "magic_missile"
+            };
+            spellComp.PreparedSpellSlotIds = new List<string>
+            {
+                "sleep",
+                "sleep",
+                "magic_missile",
+                "magic_missile"
+            };
+            spellComp.Init(PC1.Stats);
+        }
+
+        CombatUI?.ShowCombatLog("💤 Sleep Spell Test: Cast Sleep on clustered enemies to validate 4d4 HD pool, lowest-HD-first, 4 HD cap, and wake conditions.");
+        CombatUI?.ShowCombatLog("   Use Aid Another → Wake Sleeping Ally to test manual wake action.");
+    }
+
     private void ConfigureClericSpellTestParty()
     {
         RaceDatabase.Init();
@@ -4068,6 +4101,17 @@ public partial class GameManager : MonoBehaviour
         CombatConditionType normalizedType = ConditionRules.Normalize(condition.Type);
         if (normalizedType == CombatConditionType.Turned)
             _activeTurnUndeadTrackers.Remove(character);
+
+        if (normalizedType == CombatConditionType.Asleep)
+        {
+            RemoveCondition(character, CombatConditionType.Unconscious);
+            character.SyncHPStateFromCurrentHP(emitLog: false);
+
+            string wakeMsg = $"⏱ {character.Stats.CharacterName} wakes as sleep duration expires.";
+            Debug.Log($"[Condition] {wakeMsg}");
+            CombatUI?.ShowCombatLog($"<color=#99CCFF>{wakeMsg}</color>");
+            return;
+        }
 
         string conditionLabel = condition.Type.ToString();
         string msg = $"⏱ {character.Stats.CharacterName} is no longer {conditionLabel}.";
@@ -10720,6 +10764,12 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
+            if (string.Equals(_pendingSpell.SpellId, "sleep", StringComparison.Ordinal))
+            {
+                ResolveSleepSpell(caster, targets, aoeCells);
+                return;
+            }
+
             // Build the combat log header
             var logBuilder = new System.Text.StringBuilder();
             string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
@@ -10857,7 +10907,7 @@ public partial class GameManager : MonoBehaviour
             return;
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
-        int castingAbilityMod = caster.Stats.IsWizard ? caster.Stats.INTMod : caster.Stats.WISMod;
+        int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
         int saveDc = 10 + _pendingSpell.SpellLevel + castingAbilityMod;
         int hdPool = UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5); // 2d4
         int fascinatedRounds = UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5); // 2d4
@@ -11021,6 +11071,238 @@ public partial class GameManager : MonoBehaviour
         _pendingSpell = null;
         _pendingMetamagic = null;
         StartCoroutine(AfterAttackDelay(caster, 1.5f));
+    }
+
+    private int GetSpellSaveAbilityModifier(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || caster.Stats == null)
+            return 0;
+
+        // Default by class; this keeps custom/legacy classes stable for now.
+        if (caster.Stats.IsWizard)
+            return caster.Stats.INTMod;
+        if (caster.Stats.IsCleric)
+            return caster.Stats.WISMod;
+
+        string className = caster.Stats.CharacterClass ?? string.Empty;
+        if (string.Equals(className, "Druid", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(className, "Ranger", StringComparison.OrdinalIgnoreCase))
+            return caster.Stats.WISMod;
+
+        if (string.Equals(className, "Sorcerer", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(className, "Bard", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(className, "Paladin", StringComparison.OrdinalIgnoreCase))
+            return caster.Stats.CHAMod;
+
+        return caster.Stats.WISMod;
+    }
+
+    private void ResolveSleepSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    {
+        if (caster == null || caster.Stats == null || _pendingSpell == null)
+            return;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
+        int saveDc = 10 + _pendingSpell.SpellLevel + castingAbilityMod;
+        int hdPool = UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5); // 4d4
+        int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(_pendingSpell, casterLevel));
+
+        List<CharacterController> candidates = new List<CharacterController>();
+        for (int i = 0; i < targets.Count; i++)
+        {
+            CharacterController target = targets[i];
+            if (target == null || target.Stats == null || target.Stats.IsDead)
+                continue;
+            if (IsImmuneToSleepEffects(target))
+                continue;
+
+            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+            if (targetHd > 4)
+                continue;
+
+            candidates.Add(target);
+        }
+
+        candidates.Sort((a, b) =>
+        {
+            int aHd = GetTargetHitDice(a);
+            int bHd = GetTargetHitDice(b);
+            int hdCompare = aHd.CompareTo(bHd);
+            if (hdCompare != 0)
+                return hdCompare;
+
+            int distA = SquareGridUtils.GetDistance(caster.GridPosition, a.GridPosition);
+            int distB = SquareGridUtils.GetDistance(caster.GridPosition, b.GridPosition);
+            return distA.CompareTo(distB);
+        });
+
+        var logBuilder = new System.Text.StringBuilder();
+        logBuilder.AppendLine("═══════════════════════════════════");
+        logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts Sleep! (10-ft burst)");
+        logBuilder.AppendLine($"  HD Pool: {hdPool} (4d4) | Duration: {sleepRounds} rounds | Will DC {saveDc}");
+        logBuilder.AppendLine($"  Candidates: {candidates.Count} in area ({aoeCells.Count} squares)");
+        logBuilder.AppendLine();
+
+        int remainingPool = hdPool;
+        int affectedCount = 0;
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            CharacterController target = candidates[i];
+            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+            if (targetHd > remainingPool)
+            {
+                logBuilder.AppendLine($"  • {target.Stats.CharacterName} ({targetHd} HD) exceeds remaining pool ({remainingPool}) — skipped.");
+                continue;
+            }
+
+            remainingPool -= targetHd;
+
+            if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            {
+                int srRoll = UnityEngine.Random.Range(1, 21);
+                int srTotal = srRoll + casterLevel;
+                if (srTotal < target.Stats.SpellResistance)
+                {
+                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
+                    continue;
+                }
+            }
+
+            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveTotal = saveRoll + target.Stats.WillSave;
+            if (saveTotal >= saveDc)
+            {
+                logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
+                continue;
+            }
+
+            ApplySleepState(caster, target, sleepRounds, saveDc, _pendingSpell);
+            affectedCount++;
+            logBuilder.AppendLine($"  • {target.Stats.CharacterName}: falls asleep for {sleepRounds} rounds (Will {saveTotal} vs DC {saveDc}).");
+        }
+
+        logBuilder.AppendLine();
+        logBuilder.AppendLine($"  Result: {affectedCount} target(s) asleep. Remaining HD pool: {remainingPool}.");
+        logBuilder.Append("═══════════════════════════════════");
+
+        _lastCombatLog = logBuilder.ToString();
+        CombatUI?.ShowCombatLog(_lastCombatLog);
+        UpdateAllStatsUI();
+        Grid.ClearAllHighlights();
+
+        if (AreAllNPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+
+        if (AreAllPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
+            CombatUI.SetActionButtonsVisible(false);
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+    }
+
+    private bool IsImmuneToSleepEffects(CharacterController target)
+    {
+        if (target == null || target.Stats == null)
+            return true;
+
+        if (IsImmuneToMindAffecting(target))
+            return true;
+
+        if (target.Stats.Race != null && target.Stats.Race.ImmunityToSleep)
+            return true;
+
+        return false;
+    }
+
+    private void ApplySleepState(CharacterController caster, CharacterController target, int sleepRounds, int wakeDc, SpellData sourceSpell)
+    {
+        if (target == null || target.Stats == null || sourceSpell == null)
+            return;
+
+        var asleepData = new AsleepConditionData
+        {
+            Caster = caster,
+            CasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceSpell.Name,
+            RemainingRounds = sleepRounds,
+            WakeDC = Mathf.Max(1, wakeDc),
+            SourceSpellId = sourceSpell.SpellId,
+            SourceEffectName = sourceSpell.Name
+        };
+
+        if (_conditionService != null)
+        {
+            _conditionService.ApplyCondition(
+                target,
+                CombatConditionType.Asleep,
+                sleepRounds,
+                source: caster,
+                data: asleepData,
+                sourceNameOverride: sourceSpell.Name,
+                sourceCategory: "Spell",
+                sourceId: sourceSpell.SpellId);
+
+            _conditionService.ApplyCondition(
+                target,
+                CombatConditionType.Unconscious,
+                sleepRounds,
+                source: caster,
+                sourceNameOverride: sourceSpell.Name,
+                sourceCategory: "Spell",
+                sourceId: sourceSpell.SpellId);
+        }
+        else
+        {
+            string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceSpell.Name;
+            target.ApplyCondition(CombatConditionType.Asleep, sleepRounds, fallbackSource);
+            target.ApplyCondition(CombatConditionType.Unconscious, sleepRounds, fallbackSource);
+            target.ApplyCondition(CombatConditionType.Helpless, sleepRounds, fallbackSource);
+        }
+    }
+
+    public bool IsCharacterAsleep(CharacterController character)
+    {
+        return character != null && HasCondition(character, CombatConditionType.Asleep);
+    }
+
+    public bool TryWakeSleepingCharacter(CharacterController target, string reason, CharacterController waker = null, bool suppressLog = false)
+    {
+        if (target == null || target.Stats == null)
+            return false;
+
+        if (!HasCondition(target, CombatConditionType.Asleep))
+            return false;
+
+        RemoveCondition(target, CombatConditionType.Asleep);
+        RemoveCondition(target, CombatConditionType.Unconscious);
+        target.SyncHPStateFromCurrentHP(emitLog: false);
+
+        if (!suppressLog)
+        {
+            string wakerText = waker != null && waker.Stats != null
+                ? $" by {waker.Stats.CharacterName}"
+                : string.Empty;
+            string reasonText = string.IsNullOrWhiteSpace(reason) ? "" : $" ({reason})";
+            CombatUI?.ShowCombatLog($"💤 {target.Stats.CharacterName} wakes{wakerText}{reasonText}.");
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -11218,38 +11500,14 @@ public partial class GameManager : MonoBehaviour
 
         if (spell != null && spell.SpellId == "sleep")
         {
-            int sleepRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 10);
-            string sourceName = spell.Name;
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+            int wakeDc = 10 + spell.SpellLevel + GetSpellSaveAbilityModifier(caster, spell);
 
-            if (_conditionService != null)
-            {
-                _conditionService.ApplyCondition(
-                    target,
-                    CombatConditionType.Unconscious,
-                    sleepRounds,
-                    source: caster,
-                    sourceNameOverride: sourceName,
-                    sourceCategory: "Spell",
-                    sourceId: spell.SpellId);
+            ApplySleepState(caster, target, sleepRounds, wakeDc, spell);
 
-                _conditionService.ApplyCondition(
-                    target,
-                    CombatConditionType.Helpless,
-                    sleepRounds,
-                    source: caster,
-                    sourceNameOverride: sourceName,
-                    sourceCategory: "Spell",
-                    sourceId: spell.SpellId);
-            }
-            else
-            {
-                string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
-                target.ApplyCondition(CombatConditionType.Unconscious, sleepRounds, fallbackSource);
-                target.ApplyCondition(CombatConditionType.Helpless, sleepRounds, fallbackSource);
-            }
-
-            CombatUI?.ShowCombatLog($"<color=#99CCFF>💤 {target.Stats.CharacterName} falls asleep (unconscious) for {sleepRounds} round(s)!</color>");
-            Debug.Log($"[GameManager] Sleep applied Unconscious/Helpless to {target.Stats.CharacterName} for {sleepRounds} rounds");
+            CombatUI?.ShowCombatLog($"<color=#99CCFF>💤 {target.Stats.CharacterName} falls asleep for {sleepRounds} round(s)!</color>");
+            Debug.Log($"[GameManager] Sleep applied Asleep/Unconscious to {target.Stats.CharacterName} for {sleepRounds} rounds");
             return null;
         }
 
