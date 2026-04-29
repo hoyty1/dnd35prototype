@@ -6200,12 +6200,9 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        if (pc.Stats.MovementBlockedByCondition || IsEntangledAndAnchored(pc) || GetCurrentMoveRangeSquares(pc) <= 0)
+        if (pc.Stats.MovementBlockedByCondition || GetCurrentMoveRangeSquares(pc) <= 0)
         {
-            string reason = IsEntangledAndAnchored(pc)
-                ? "while anchored by entanglement"
-                : "due to an active condition";
-            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot move {reason}.");
+            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot move due to an active condition.");
             return;
         }
 
@@ -8942,7 +8939,6 @@ public partial class GameManager : MonoBehaviour
             LastKnownTargetPosition = target.GridPosition,
             RopeDestroyed = false,
             RopeDroppedToGround = false,
-            Anchored = true,
             SourceSpellId = spell.SpellId,
             SourceSpellName = spell.Name
         };
@@ -8964,7 +8960,7 @@ public partial class GameManager : MonoBehaviour
             target.ApplyCondition(CombatConditionType.Entangled, durationRounds, spell.Name);
         }
 
-        CombatUI?.ShowCombatLog($"🪢 {target.Stats.CharacterName} is entangled by anchored {ropeItem.Name}! Movement is prevented while anchored, -2 attack, -4 DEX. Escape with STR vs DC {breakDc} or Escape Artist DC 20.");
+        CombatUI?.ShowCombatLog($"🪢 {target.Stats.CharacterName} is entangled by {ropeItem.Name}! Movement is reduced to half speed, -2 attack, -4 DEX. Escape with STR vs DC {breakDc} or Escape Artist DC 20.");
         return true;
     }
 
@@ -13394,35 +13390,12 @@ public partial class GameManager : MonoBehaviour
     public List<ConditionService.ActiveCondition> GetActiveConditions(CharacterController target)
         => _conditionService != null ? _conditionService.GetActiveConditions(target) : new List<ConditionService.ActiveCondition>();
 
-    public bool IsEntangledAndAnchored(CharacterController target)
-    {
-        if (target == null || target.Stats == null || !target.HasCondition(CombatConditionType.Entangled))
-            return false;
-
-        List<ConditionService.ActiveCondition> activeConditions = GetActiveConditions(target);
-        for (int i = 0; i < activeConditions.Count; i++)
-        {
-            ConditionService.ActiveCondition condition = activeConditions[i];
-            if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Entangled)
-                continue;
-
-            if (condition.Data is AnimateRopeEntangledConditionData ropeData && ropeData.Anchored)
-                return true;
-        }
-
-        return false;
-    }
-
     public int GetCurrentMoveRangeSquares(CharacterController target)
     {
         if (target == null || target.Stats == null)
             return 0;
 
-        int baseRange = Mathf.Max(0, target.Stats.MoveRange);
-        if (baseRange <= 0)
-            return 0;
-
-        return IsEntangledAndAnchored(target) ? 0 : baseRange;
+        return Mathf.Max(0, target.Stats.MoveRange);
     }
 
     public bool TryGetConfusedTurnDecisionForAI(CharacterController actor, out ConfusedBehaviorController.ConfusedTurnDecision decision)

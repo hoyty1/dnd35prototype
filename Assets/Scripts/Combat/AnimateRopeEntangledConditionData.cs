@@ -15,7 +15,6 @@ public sealed class AnimateRopeEntangledConditionData
     public Vector2Int LastKnownTargetPosition;
     public bool RopeDestroyed;
     public bool RopeDroppedToGround;
-    public bool Anchored;
     public string SourceSpellId = "animate_rope";
     public string SourceSpellName = "Animate Rope";
 }

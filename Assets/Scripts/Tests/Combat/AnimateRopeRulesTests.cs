@@ -27,8 +27,9 @@ public static class AnimateRopeRulesTests
         TestRopeItemsDefinition();
         TestEntangledConditionDefinitionMatchesPhb();
         TestEntangledHalvesSpeedAndBlocksRunCharge();
+        TestAnimateRopeEntangledTargetCanStillMoveAtHalfSpeed();
         TestEntangledConcentrationDcScalesWithSpellLevel();
-        TestAnimateRopeConditionDataSupportsAnchoredEntanglement();
+        TestAnimateRopeConditionDataUsesStandardEntangledMetadata();
 
         Debug.Log($"====== Animate Rope Rules Results: {_passed} passed, {_failed} failed ======");
     }
@@ -128,6 +129,21 @@ public static class AnimateRopeRulesTests
             "Entangled prevents run and charge actions");
     }
 
+    private static void TestAnimateRopeEntangledTargetCanStillMoveAtHalfSpeed()
+    {
+        CharacterStats stats = BuildStats("AnimateRopeTarget");
+        int baseSpeedFeet = stats.EffectiveSpeedFeet;
+
+        stats.ApplyCondition(CombatConditionType.Entangled, 3, "Animate Rope");
+
+        int expectedSpeedFeet = Mathf.FloorToInt((baseSpeedFeet * 0.5f) / 5f) * 5;
+        Assert(stats.EffectiveSpeedFeet == expectedSpeedFeet,
+            "Animate Rope uses standard Entangled half-speed movement",
+            $"expected={expectedSpeedFeet}, observed={stats.EffectiveSpeedFeet}");
+        Assert(stats.EffectiveSpeedFeet > 0,
+            "Animate Rope entangled targets are still able to move");
+    }
+
     private static void TestEntangledConcentrationDcScalesWithSpellLevel()
     {
         SpellData fireball = SpellDatabase.GetSpell("fireball");
@@ -162,14 +178,17 @@ public static class AnimateRopeRulesTests
         }
     }
 
-    private static void TestAnimateRopeConditionDataSupportsAnchoredEntanglement()
+    private static void TestAnimateRopeConditionDataUsesStandardEntangledMetadata()
     {
         var data = new AnimateRopeEntangledConditionData
         {
-            Anchored = true
+            RopeBreakDC = 24,
+            SourceSpellId = "animate_rope",
+            SourceSpellName = "Animate Rope"
         };
 
-        Assert(data.Anchored, "Animate Rope condition data includes anchored flag for immobile entanglement");
+        Assert(data.RopeBreakDC == 24, "Animate Rope condition data keeps rope break DC metadata");
+        Assert(data.SourceSpellId == "animate_rope", "Animate Rope condition data tracks spell source id");
     }
 }
 }
