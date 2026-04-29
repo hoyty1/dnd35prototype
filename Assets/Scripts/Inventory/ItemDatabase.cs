@@ -845,7 +845,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "padded_armor", Name = "Padded Armor", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.NonMetal,
             Description = "Layers of quilted cloth. The lightest armor available.",
             ArmorBonus = 1, MaxDexBonus = 8, ArmorCheckPenalty = 0,
             ArcaneSpellFailure = 5, WeightLbs = 10f,
@@ -857,7 +857,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "leather_armor", Name = "Leather Armor", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.NonMetal,
             Description = "Light armor made from hardened leather.",
             ArmorBonus = 2, MaxDexBonus = 6, ArmorCheckPenalty = 0,
             ArcaneSpellFailure = 10, WeightLbs = 15f,
@@ -869,7 +869,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "studded_leather", Name = "Studded Leather", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.Mixed,
             Description = "Leather armor reinforced with metal studs.",
             ArmorBonus = 3, MaxDexBonus = 5, ArmorCheckPenalty = 1,
             ArcaneSpellFailure = 15, WeightLbs = 20f,
@@ -881,7 +881,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "chain_shirt", Name = "Chain Shirt", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "A shirt of interlocking metal rings. Best light armor.",
             ArmorBonus = 4, MaxDexBonus = 4, ArmorCheckPenalty = 2,
             ArcaneSpellFailure = 20, WeightLbs = 25f,
@@ -899,7 +899,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "hide_armor", Name = "Hide Armor", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.NonMetal,
             Description = "Thick furs and pelts of animals, crudely prepared.",
             ArmorBonus = 3, MaxDexBonus = 4, ArmorCheckPenalty = 3,
             ArcaneSpellFailure = 20, WeightLbs = 25f,
@@ -911,7 +911,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "scale_mail", Name = "Scale Mail", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "Overlapping metal scales on a leather coat.",
             ArmorBonus = 4, MaxDexBonus = 3, ArmorCheckPenalty = 4,
             ArcaneSpellFailure = 25, WeightLbs = 30f,
@@ -923,7 +923,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "chainmail", Name = "Chainmail", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "A full suit of interlocking metal rings covering the body.",
             ArmorBonus = 5, MaxDexBonus = 2, ArmorCheckPenalty = 5,
             ArcaneSpellFailure = 30, WeightLbs = 40f,
@@ -935,7 +935,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "breastplate", Name = "Breastplate", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "A fitted metal chest plate. Best medium armor for most characters.",
             ArmorBonus = 5, MaxDexBonus = 3, ArmorCheckPenalty = 4,
             ArcaneSpellFailure = 25, WeightLbs = 30f,
@@ -953,7 +953,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "splint_mail", Name = "Splint Mail", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "Strips of metal between layers of leather and chain.",
             ArmorBonus = 6, MaxDexBonus = 0, ArmorCheckPenalty = 7,
             ArcaneSpellFailure = 40, WeightLbs = 45f,
@@ -965,7 +965,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "banded_mail", Name = "Banded Mail", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "Overlapping strips of metal banded over chain and leather.",
             ArmorBonus = 6, MaxDexBonus = 1, ArmorCheckPenalty = 6,
             ArcaneSpellFailure = 35, WeightLbs = 35f,
@@ -977,7 +977,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "half_plate", Name = "Half-Plate", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "Plate armor covering most of the body with chain and leather.",
             ArmorBonus = 7, MaxDexBonus = 0, ArmorCheckPenalty = 7,
             ArcaneSpellFailure = 40, WeightLbs = 50f,
@@ -989,7 +989,7 @@ public static class ItemDatabase
         Register(new ItemData
         {
             Id = "full_plate", Name = "Full Plate", Type = ItemType.Armor,
-            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy,
+            Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "A complete suit of heavy plate armor. The finest protection available.",
             ArmorBonus = 8, MaxDexBonus = 1, ArmorCheckPenalty = 6,
             ArcaneSpellFailure = 35, WeightLbs = 50f,
@@ -1413,7 +1413,7 @@ public static class ItemDatabase
             CritThreatMin = src.CritThreatMin, CritMultiplier = src.CritMultiplier,
             // Armor/Shield properties
             ArmorBonus = src.ArmorBonus, ShieldBonus = src.ShieldBonus,
-            ArmorCat = src.ArmorCat, MaxDexBonus = src.MaxDexBonus,
+            ArmorCat = src.ArmorCat, ArmorMaterial = src.ArmorMaterial, MaxDexBonus = src.MaxDexBonus,
             ArmorCheckPenalty = src.ArmorCheckPenalty,
             ArcaneSpellFailure = src.ArcaneSpellFailure, WeightLbs = src.WeightLbs,
             VisualTags = src.VisualTags != null ? new HashSet<string>(src.VisualTags) : new HashSet<string>(),

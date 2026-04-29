@@ -1053,6 +1053,9 @@ public class CharacterStats
     /// <summary>Broad creature type used by some spells (e.g., Humanoid-only effects).</summary>
     public string CreatureType = "Humanoid";
 
+    /// <summary>Broad body-material composition used for spell/item interactions.</summary>
+    public MaterialComposition MaterialComposition = MaterialComposition.Organic;
+
     /// <summary>Monster HD used for creature-type progression math. Defaults to character level.</summary>
     public int HitDice;
 

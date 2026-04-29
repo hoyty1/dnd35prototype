@@ -166,6 +166,7 @@ public class NPCDefinition
     public int Level;
     public string CharacterClass;
     public string CreatureType = "Humanoid";
+    public MaterialComposition MaterialComposition = MaterialComposition.Organic;
     public int HitDice = 1;
     public BABProgression? BABOverride;
     public int? BaseAttackBonusOverride;

@@ -27,6 +27,8 @@ public class SpellResult
     public int ShootingIntoMeleePenalty;         // -4 when shooting into melee (unless negated)
     public bool PreciseShotNegated;
     public int TargetFightingDefensivelyACBonus; // +2 dodge AC on touch AC if active
+    public int SituationalAttackBonus;           // e.g., Shocking Grasp +3 vs metal
+    public string SituationalAttackBonusSource;
 
     // ========== SAVING THROW ==========
     public bool RequiredSave;
@@ -165,6 +167,13 @@ public class SpellResult
                 sb.AppendLine($"    {FormatModLine(ShootingIntoMeleePenalty, "shooting into melee")}");
             else if (PreciseShotNegated)
                 sb.AppendLine("    + 0 (Precise Shot negates shooting into melee penalty)");
+            if (SituationalAttackBonus != 0)
+            {
+                string source = string.IsNullOrWhiteSpace(SituationalAttackBonusSource)
+                    ? "situational spell modifier"
+                    : SituationalAttackBonusSource;
+                sb.AppendLine($"    {FormatModLine(SituationalAttackBonus, source)}");
+            }
             if (TargetFightingDefensivelyACBonus > 0)
                 sb.AppendLine($"    Defender stance: +{TargetFightingDefensivelyACBonus} Touch AC (Fighting Defensively)");
             if (ProtectionAcBonus > 0)

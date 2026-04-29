@@ -128,6 +128,14 @@ public static class SpellCaster
                 ? casterStats.BaseAttackBonus + casterStats.DEXMod + casterStats.SizeModifier
                 : casterStats.BaseAttackBonus + casterStats.STRMod + casterStats.SizeModifier;
 
+            int situationalSpellAttackBonus = 0;
+            string situationalSpellAttackSource = string.Empty;
+            if (ShouldApplyShockingGraspMetalBonus(spell, targetController, targetStats, out string shockingGraspBonusSource))
+            {
+                situationalSpellAttackBonus += 3;
+                situationalSpellAttackSource = shockingGraspBonusSource;
+            }
+
             int fightingDefensivelyPenalty = (casterController != null && casterController.IsFightingDefensively) ? -4 : 0;
             bool preciseShotNegated = false;
             int shootingIntoMeleePenalty = 0;
@@ -146,10 +154,12 @@ public static class SpellCaster
             }
 
             int roll = Random.Range(1, 21);
-            int total = roll + atkBonus + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
+            int total = roll + atkBonus + situationalSpellAttackBonus + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
 
             result.AttackRoll = roll;
             result.AttackBonus = atkBonus;
+            result.SituationalAttackBonus = situationalSpellAttackBonus;
+            result.SituationalAttackBonusSource = situationalSpellAttackSource;
             result.AttackTotal = total;
             result.TouchAC = touchAC;
             result.FightingDefensivelyAttackPenalty = fightingDefensivelyPenalty;
@@ -427,6 +437,72 @@ public static class SpellCaster
         }
 
         return result;
+    }
+
+    private static bool ShouldApplyShockingGraspMetalBonus(
+        SpellData spell,
+        CharacterController targetController,
+        CharacterStats targetStats,
+        out string bonusSource)
+    {
+        bonusSource = string.Empty;
+        if (spell == null || !string.Equals(spell.SpellId, "shocking_grasp", System.StringComparison.Ordinal))
+            return false;
+
+        if (IsTargetWearingMetalArmor(targetController))
+        {
+            bonusSource = "Shocking Grasp +3 vs metal armor";
+            return true;
+        }
+
+        if (IsTargetComposedOfMetal(targetController, targetStats))
+        {
+            bonusSource = "Shocking Grasp +3 vs metal body";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsTargetWearingMetalArmor(CharacterController targetController)
+    {
+        if (targetController == null)
+            return false;
+
+        InventoryComponent invComponent = targetController.GetComponent<InventoryComponent>();
+        ItemData armor = invComponent != null ? invComponent.CharacterInventory?.GetEquipped(EquipSlot.Armor) : null;
+        if (armor == null)
+            return false;
+
+        if (armor.ArmorMaterial == ArmorMaterialType.Metal || armor.ArmorMaterial == ArmorMaterialType.Mixed)
+            return true;
+
+        // Backward-compatible fallback in case legacy items were not tagged yet.
+        string armorName = string.IsNullOrWhiteSpace(armor.Name) ? string.Empty : armor.Name.ToLowerInvariant();
+        string armorId = string.IsNullOrWhiteSpace(armor.Id) ? string.Empty : armor.Id.ToLowerInvariant();
+        return armorName.Contains("chain")
+            || armorName.Contains("scale")
+            || armorName.Contains("plate")
+            || armorName.Contains("banded")
+            || armorName.Contains("splint")
+            || armorId.Contains("chain")
+            || armorId.Contains("scale")
+            || armorId.Contains("plate")
+            || armorId.Contains("banded")
+            || armorId.Contains("splint");
+    }
+
+    private static bool IsTargetComposedOfMetal(CharacterController targetController, CharacterStats targetStats)
+    {
+        MaterialComposition composition = MaterialComposition.Unknown;
+
+        if (targetController != null && targetController.Stats != null)
+            composition = targetController.Stats.MaterialComposition;
+
+        if (composition == MaterialComposition.Unknown && targetStats != null)
+            composition = targetStats.MaterialComposition;
+
+        return composition == MaterialComposition.Metal || composition == MaterialComposition.Mixed;
     }
 
     private static bool IsMagicMissileSpell(SpellData spell)

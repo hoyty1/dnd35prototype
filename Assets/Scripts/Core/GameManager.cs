@@ -3896,6 +3896,7 @@ public partial class GameManager : MonoBehaviour
 
         FeatManager.ApplyPassiveFeats(stats);
         stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Humanoid" : def.CreatureType;
+        stats.MaterialComposition = def.MaterialComposition;
         stats.SetBaseSizeCategory(def.SizeCategory);
         stats.IsTallCreature = def.IsTallCreature;
         stats.NaturalArmorBonus = def.NaturalArmorBonus;

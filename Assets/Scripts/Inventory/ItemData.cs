@@ -111,6 +111,31 @@ public enum ArmorCategory
 }
 
 /// <summary>
+/// Material profile used for armor interactions (for example Shocking Grasp metal bonus).
+/// </summary>
+public enum ArmorMaterialType
+{
+    Unknown,
+    NonMetal,
+    Metal,
+    Mixed
+}
+
+/// <summary>
+/// Broad body composition used for creature-material interactions.
+/// </summary>
+public enum MaterialComposition
+{
+    Unknown,
+    Organic,
+    Metal,
+    Stone,
+    Wood,
+    Energy,
+    Mixed
+}
+
+/// <summary>
 /// D&D 3.5 reload action required for crossbows.
 /// </summary>
 public enum ReloadActionType
@@ -192,6 +217,7 @@ public class ItemData
     public int ArmorBonus;          // AC bonus when equipped as armor
     public int ShieldBonus;         // AC bonus when equipped as shield
     public ArmorCategory ArmorCat;  // Light, Medium, Heavy, Shield
+    public ArmorMaterialType ArmorMaterial = ArmorMaterialType.Unknown;
     public int MaxDexBonus;         // Maximum DEX bonus to AC while wearing (-1 = no limit)
     public int ArmorCheckPenalty;   // Penalty to STR/DEX skills (stored as positive, applied as negative)
     public int ArcaneSpellFailure;  // Percentage chance of arcane spell failure (0-100)
