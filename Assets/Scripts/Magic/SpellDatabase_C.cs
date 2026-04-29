@@ -158,17 +158,27 @@ public static partial class SpellDatabase
                 {
                     SpellId = "color_spray",
                     Name = "Color Spray",
-                    Description = "Knocks unconscious, blinds, and/or stuns weak creatures in 15-ft cone. Will save negates. PHB p.210",
-                    SpellLevel = 1, School = "Illusion",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.SingleEnemy, // Simplified from cone
+                    Description = "Illusion (Pattern) [Mind-Affecting]. Creatures in a 15-ft cone are stunned, blinded, and possibly knocked unconscious based on HD. Will negates. SR: Yes. Duration special (cascading by HD). PHB p.210",
+                    SpellLevel = 1,
+                    School = "Illusion",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.Area,
                     RangeSquares = 3,
+                    AoEShapeType = AoEShape.Cone,
+                    AoESizeSquares = 3, // 15-ft cone
+                    AoERangeSquares = 0, // Cone originates from caster
+                    AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
-                    BuffDurationRounds = 3, // Varies by HD
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    BuffDurationRounds = 1, // legacy fallback; runtime uses staged duration data
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
+                    ProvokesAoO = true,
+                    IsPlaceholder = false
                 });
 
         Register(new SpellData

@@ -4114,6 +4114,14 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        if (TryHandleColorSprayConditionExpiry(character, condition))
+            return;
+
+        bool fromColorSpray = string.Equals(condition.SourceId, "color_spray", StringComparison.Ordinal)
+            || string.Equals(condition.SourceName, "Color Spray", StringComparison.Ordinal);
+        if (fromColorSpray && (normalizedType == CombatConditionType.Unconscious || normalizedType == CombatConditionType.Blinded))
+            return;
+
         string conditionLabel = condition.Type.ToString();
         string msg = $"⏱ {character.Stats.CharacterName} is no longer {conditionLabel}.";
         Debug.Log($"[Condition] {msg}");
@@ -10771,6 +10779,12 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
+            if (string.Equals(_pendingSpell.SpellId, "color_spray", StringComparison.Ordinal))
+            {
+                ResolveColorSpraySpell(caster, targets, aoeCells);
+                return;
+            }
+
             // Build the combat log header
             var logBuilder = new System.Text.StringBuilder();
             string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
@@ -11216,6 +11230,271 @@ public partial class GameManager : MonoBehaviour
         _pendingSpell = null;
         _pendingMetamagic = null;
         StartCoroutine(AfterAttackDelay(caster, 1.5f));
+    }
+
+    private void ResolveColorSpraySpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    {
+        if (caster == null || caster.Stats == null || _pendingSpell == null)
+            return;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
+        int saveDc = 10 + _pendingSpell.SpellLevel + castingAbilityMod;
+
+        var logBuilder = new System.Text.StringBuilder();
+        logBuilder.AppendLine("═══════════════════════════════════");
+        logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts Color Spray! (15-ft cone)");
+        logBuilder.AppendLine($"  Will DC {saveDc} | Targets in cone: {targets.Count} ({aoeCells.Count} squares)");
+        logBuilder.AppendLine();
+
+        int affectedCount = 0;
+        for (int i = 0; i < targets.Count; i++)
+        {
+            CharacterController target = targets[i];
+            if (target == null || target.Stats == null || target.Stats.IsDead)
+                continue;
+            if (target == caster)
+                continue;
+
+            if (IsImmuneToMindAffecting(target))
+            {
+                logBuilder.AppendLine($"  • {target.Stats.CharacterName}: immune to mind-affecting effects.");
+                continue;
+            }
+
+            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+
+            if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            {
+                int srRoll = UnityEngine.Random.Range(1, 21);
+                int srTotal = srRoll + casterLevel;
+                if (srTotal < target.Stats.SpellResistance)
+                {
+                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks Color Spray (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
+                    continue;
+                }
+            }
+
+            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveTotal = saveRoll + target.Stats.WillSave;
+            if (saveTotal >= saveDc)
+            {
+                logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
+                continue;
+            }
+
+            ColorSprayEffectData effectData = BuildColorSprayEffectData(caster, targetHd);
+            ApplyColorSprayStageConditions(target, effectData, _pendingSpell);
+            affectedCount++;
+
+            string stageSummary = effectData.HdTier switch
+            {
+                1 => "unconscious, blinded, and stunned",
+                2 => "blinded and stunned",
+                _ => "stunned"
+            };
+
+            logBuilder.AppendLine($"  • {target.Stats.CharacterName} {stageSummary} by Color Spray ({effectData.RemainingDuration} rounds) [HD {targetHd}].");
+        }
+
+        logBuilder.AppendLine();
+        logBuilder.AppendLine($"  Result: {affectedCount} target(s) affected.");
+        logBuilder.Append("═══════════════════════════════════");
+
+        _lastCombatLog = logBuilder.ToString();
+        CombatUI?.ShowCombatLog(_lastCombatLog);
+        UpdateAllStatsUI();
+        Grid.ClearAllHighlights();
+
+        if (AreAllNPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+
+        if (AreAllPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
+            CombatUI.SetActionButtonsVisible(false);
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+    }
+
+    private ColorSprayEffectData BuildColorSprayEffectData(CharacterController caster, int targetHd)
+    {
+        int hd = Mathf.Max(1, targetHd);
+
+        int stage1Duration;
+        int stage2Duration;
+        int stage3Duration;
+        int hdTier;
+
+        if (hd <= 2)
+        {
+            hdTier = 1;
+            stage1Duration = UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5); // 2d4
+            stage2Duration = UnityEngine.Random.Range(1, 5); // 1d4
+            stage3Duration = 1;
+        }
+        else if (hd <= 4)
+        {
+            hdTier = 2;
+            stage1Duration = UnityEngine.Random.Range(1, 5); // 1d4
+            stage2Duration = 1;
+            stage3Duration = 0;
+        }
+        else
+        {
+            hdTier = 3;
+            stage1Duration = 1;
+            stage2Duration = 0;
+            stage3Duration = 0;
+        }
+
+        return new ColorSprayEffectData
+        {
+            Caster = caster,
+            CasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Color Spray",
+            SourceSpellId = "color_spray",
+            SourceEffectName = "Color Spray",
+            HitDice = hd,
+            HdTier = hdTier,
+            CurrentStage = 1,
+            RemainingDuration = stage1Duration,
+            NextStage = GetColorSprayNextStage(hdTier, 1),
+            Stage1Duration = stage1Duration,
+            Stage2Duration = stage2Duration,
+            Stage3Duration = stage3Duration
+        };
+    }
+
+    private static int GetColorSprayNextStage(int hdTier, int currentStage)
+    {
+        if (hdTier <= 1)
+        {
+            if (currentStage == 1) return 2;
+            if (currentStage == 2) return 3;
+            return 0;
+        }
+
+        if (hdTier == 2)
+            return currentStage == 1 ? 2 : 0;
+
+        return 0;
+    }
+
+    private static int GetColorSprayStageDuration(ColorSprayEffectData data, int stage)
+    {
+        if (data == null)
+            return 0;
+
+        return stage switch
+        {
+            1 => data.Stage1Duration,
+            2 => data.Stage2Duration,
+            3 => data.Stage3Duration,
+            _ => 0
+        };
+    }
+
+    private void ApplyColorSprayStageConditions(CharacterController target, ColorSprayEffectData data, SpellData sourceSpell)
+    {
+        if (target == null || target.Stats == null || data == null || sourceSpell == null)
+            return;
+
+        int duration = Mathf.Max(1, GetColorSprayStageDuration(data, data.CurrentStage));
+        data.RemainingDuration = duration;
+        data.NextStage = GetColorSprayNextStage(data.HdTier, data.CurrentStage);
+
+        bool applyUnconscious = data.CurrentStage == 1 && data.HdTier == 1;
+        bool applyBlinded = (data.CurrentStage == 1 && data.HdTier <= 2) || (data.CurrentStage == 2 && data.HdTier == 1);
+        bool applyStunned = true;
+
+        string sourceName = sourceSpell.Name;
+        if (_conditionService != null)
+        {
+            if (applyUnconscious)
+            {
+                _conditionService.ApplyCondition(target, CombatConditionType.Unconscious, duration,
+                    source: data.Caster, data: data,
+                    sourceNameOverride: sourceName, sourceCategory: "Spell", sourceId: sourceSpell.SpellId);
+            }
+
+            if (applyBlinded)
+            {
+                _conditionService.ApplyCondition(target, CombatConditionType.Blinded, duration,
+                    source: data.Caster, data: data,
+                    sourceNameOverride: sourceName, sourceCategory: "Spell", sourceId: sourceSpell.SpellId);
+            }
+
+            if (applyStunned)
+            {
+                _conditionService.ApplyCondition(target, CombatConditionType.Stunned, duration,
+                    source: data.Caster, data: data,
+                    sourceNameOverride: sourceName, sourceCategory: "Spell", sourceId: sourceSpell.SpellId);
+            }
+        }
+        else
+        {
+            string fallbackSource = data.Caster != null && data.Caster.Stats != null ? data.Caster.Stats.CharacterName : sourceName;
+            if (applyUnconscious)
+                target.ApplyCondition(CombatConditionType.Unconscious, duration, fallbackSource);
+            if (applyBlinded)
+                target.ApplyCondition(CombatConditionType.Blinded, duration, fallbackSource);
+            if (applyStunned)
+                target.ApplyCondition(CombatConditionType.Stunned, duration, fallbackSource);
+        }
+    }
+
+    private bool TryHandleColorSprayConditionExpiry(CharacterController character, ConditionService.ActiveCondition condition)
+    {
+        if (character == null || character.Stats == null || condition == null)
+            return false;
+
+        CombatConditionType normalizedType = ConditionRules.Normalize(condition.Type);
+        if (normalizedType != CombatConditionType.Stunned)
+            return false;
+
+        if (condition.Data is not ColorSprayEffectData data)
+            return false;
+
+        int nextStage = GetColorSprayNextStage(data.HdTier, data.CurrentStage);
+        if (nextStage <= 0)
+        {
+            CombatUI?.ShowCombatLog($"⏱ {character.Stats.CharacterName} is no longer stunned.");
+            return true;
+        }
+
+        if (data.CurrentStage == 1 && data.HdTier == 1)
+            CombatUI?.ShowCombatLog($"⏱ {character.Stats.CharacterName} no longer unconscious, still blinded and stunned ({Mathf.Max(1, GetColorSprayStageDuration(data, nextStage))} rounds).");
+        else if (((data.CurrentStage == 2 && data.HdTier == 1) || (data.CurrentStage == 1 && data.HdTier == 2)))
+            CombatUI?.ShowCombatLog($"⏱ {character.Stats.CharacterName} no longer blinded, still stunned ({Mathf.Max(1, GetColorSprayStageDuration(data, nextStage))} round{(Mathf.Max(1, GetColorSprayStageDuration(data, nextStage)) == 1 ? string.Empty : "s")}).");
+
+        RemoveCondition(character, CombatConditionType.Unconscious);
+        RemoveCondition(character, CombatConditionType.Blinded);
+        RemoveCondition(character, CombatConditionType.Stunned);
+
+        data.CurrentStage = nextStage;
+        data.RemainingDuration = Mathf.Max(1, GetColorSprayStageDuration(data, nextStage));
+        data.NextStage = GetColorSprayNextStage(data.HdTier, nextStage);
+
+        SpellData sourceSpell = SpellDatabase.GetSpell(data.SourceSpellId);
+        if (sourceSpell == null)
+            sourceSpell = new SpellData { SpellId = "color_spray", Name = "Color Spray" };
+
+        ApplyColorSprayStageConditions(character, data, sourceSpell);
+        return true;
     }
 
     private bool IsImmuneToSleepEffects(CharacterController target)

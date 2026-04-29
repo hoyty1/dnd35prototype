@@ -154,6 +154,11 @@ public class ConditionService : MonoBehaviour
         if (!IsValidCharacter(target))
             return expired;
 
+        List<ActiveCondition> previousConditions = GetActiveConditions(target);
+        List<bool> consumedPreviousCondition = previousConditions != null
+            ? new List<bool>(new bool[previousConditions.Count])
+            : null;
+
         List<StatusEffect> expiredEffects = target.TickConditionsDirect();
         if (expiredEffects == null || expiredEffects.Count == 0)
         {
@@ -165,6 +170,21 @@ public class ConditionService : MonoBehaviour
         {
             StatusEffect effect = expiredEffects[i];
             ActiveCondition condition = ConvertToActiveCondition(effect, ResolveSourceCharacter(effect));
+
+            int metadataIndex = FindBestMetadataMatchIndex(previousConditions, consumedPreviousCondition, effect);
+            if (metadataIndex >= 0)
+            {
+                ActiveCondition metadata = previousConditions[metadataIndex];
+                condition.Source = metadata.Source;
+                condition.SourceName = !string.IsNullOrWhiteSpace(condition.SourceName) ? condition.SourceName : metadata.SourceName;
+                condition.SourceCategory = metadata.SourceCategory;
+                condition.SourceId = metadata.SourceId;
+                condition.Data = metadata.Data;
+                condition.ExpiresAtEndOfTurn = metadata.ExpiresAtEndOfTurn;
+                condition.ExpiresAtStartOfTurn = metadata.ExpiresAtStartOfTurn;
+                consumedPreviousCondition[metadataIndex] = true;
+            }
+
             expired.Add(condition);
             OnConditionExpired?.Invoke(target, condition);
         }
@@ -436,6 +456,43 @@ public class ConditionService : MonoBehaviour
             default:
                 return stats.WillSave;
         }
+    }
+
+    private static int FindBestMetadataMatchIndex(List<ActiveCondition> previousConditions, List<bool> consumed, StatusEffect effect)
+    {
+        if (previousConditions == null || effect == null)
+            return -1;
+
+        CombatConditionType normalized = ConditionRules.Normalize(effect.Type);
+        string sourceName = effect.SourceName ?? string.Empty;
+
+        for (int i = 0; i < previousConditions.Count; i++)
+        {
+            ActiveCondition candidate = previousConditions[i];
+            if (candidate == null)
+                continue;
+            if (consumed != null && i < consumed.Count && consumed[i])
+                continue;
+            if (ConditionRules.Normalize(candidate.Type) != normalized)
+                continue;
+
+            string candidateSourceName = candidate.SourceName ?? string.Empty;
+            if (string.Equals(candidateSourceName, sourceName, StringComparison.Ordinal))
+                return i;
+        }
+
+        for (int i = 0; i < previousConditions.Count; i++)
+        {
+            ActiveCondition candidate = previousConditions[i];
+            if (candidate == null)
+                continue;
+            if (consumed != null && i < consumed.Count && consumed[i])
+                continue;
+            if (ConditionRules.Normalize(candidate.Type) == normalized)
+                return i;
+        }
+
+        return -1;
     }
 
     private static string ResolveSourceName(CharacterController target, CharacterController source, string sourceNameOverride)
