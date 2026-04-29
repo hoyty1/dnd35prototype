@@ -116,6 +116,21 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (statusMgr != null && statusMgr.HasEffect("jump"))
+        {
+            int rounds = statusMgr.GetRemainingRounds("jump");
+            int jumpBonus = _character.Stats != null ? Mathf.Max(0, _character.Stats.JumpEnhancementBonus) : 0;
+
+            list.Add(new IconData
+            {
+                Key = "Jump",
+                ShortLabel = "JP",
+                Tooltip = $"Jump\n+{jumpBonus} enhancement to Jump checks\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Color = new Color(0.35f, 0.85f, 0.55f, 0.9f),
+                Duration = rounds
+            });
+        }
+
         bool hasFatigueCondition = _character.Stats.HasFatiguedCondition;
         bool hasExhaustedCondition = _character.Stats.HasExhaustedCondition;
 

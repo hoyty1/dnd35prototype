@@ -72,6 +72,8 @@ public class CombatResult
     public bool PointBlankShotActive;
     public int WeaponFocusBonus;
     public int WeaponSpecBonus;
+    public int WeaponEnhancementAttackBonus;
+    public int WeaponEnhancementDamageBonus;
     public int CombatExpertisePenalty;
     public int FightingDefensivelyAttackPenalty;
     public int ShootingIntoMeleePenalty;
@@ -177,6 +179,15 @@ public class CombatResult
         if (PointBlankShotActive) activeFeats.Add("Point Blank Shot (+1 atk/+1 dmg)");
         if (WeaponFocusBonus > 0) activeFeats.Add($"Weapon Focus (+{WeaponFocusBonus} atk)");
         if (WeaponSpecBonus > 0) activeFeats.Add($"Weapon Spec (+{WeaponSpecBonus} dmg)");
+        if (WeaponEnhancementAttackBonus > 0 || WeaponEnhancementDamageBonus > 0)
+        {
+            string attackText = WeaponEnhancementAttackBonus > 0 ? $"+{WeaponEnhancementAttackBonus} atk" : null;
+            string damageText = WeaponEnhancementDamageBonus > 0 ? $"+{WeaponEnhancementDamageBonus} dmg" : null;
+            string combined = attackText;
+            if (!string.IsNullOrEmpty(damageText))
+                combined = string.IsNullOrEmpty(combined) ? damageText : $"{combined}/{damageText}";
+            activeFeats.Add($"Weapon Enhancement ({combined})");
+        }
         if (CombatExpertisePenalty != 0) activeFeats.Add($"Combat Expertise ({CombatExpertisePenalty} atk/+{-CombatExpertisePenalty} AC)");
         if (FightingDefensivelyAttackPenalty != 0) activeFeats.Add($"Fighting Defensively ({FightingDefensivelyAttackPenalty} atk/+2 AC)");
         if (ShootingIntoMeleePenalty != 0) activeFeats.Add($"Shooting into melee ({ShootingIntoMeleePenalty} atk)");
@@ -226,6 +237,7 @@ public class CombatResult
         if (RapidShotActive) sb.AppendLine($"    {FormatModLine(-2, "Rapid Shot")}");
         if (PointBlankShotActive) sb.AppendLine($"    {FormatModLine(1, "Point Blank Shot")}");
         if (WeaponFocusBonus > 0) sb.AppendLine($"    {FormatModLine(WeaponFocusBonus, "Weapon Focus")}");
+        if (WeaponEnhancementAttackBonus > 0) sb.AppendLine($"    {FormatModLine(WeaponEnhancementAttackBonus, "weapon enhancement")}");
         if (CombatExpertisePenalty != 0) sb.AppendLine($"    {FormatModLine(CombatExpertisePenalty, "Combat Expertise")}");
         if (FightingDefensivelyAttackPenalty != 0) sb.AppendLine($"    {FormatModLine(FightingDefensivelyAttackPenalty, "Fighting Defensively")}");
         if (ShootingIntoMeleePenalty != 0) sb.AppendLine($"    {FormatModLine(ShootingIntoMeleePenalty, "shooting into melee")}");
@@ -294,6 +306,7 @@ public class CombatResult
             if (PowerAttackDamageBonus > 0) sb.AppendLine($"    {FormatModLine(PowerAttackDamageBonus, "Power Attack")}");
             if (PointBlankShotActive) sb.AppendLine($"    {FormatModLine(1, "Point Blank Shot")}");
             if (WeaponSpecBonus > 0) sb.AppendLine($"    {FormatModLine(WeaponSpecBonus, "Weapon Spec")}");
+            if (WeaponEnhancementDamageBonus > 0) sb.AppendLine($"    {FormatModLine(WeaponEnhancementDamageBonus, "weapon enhancement")}");
 
             if (SneakAttackApplied)
             {
@@ -344,6 +357,7 @@ public class CombatResult
         if (RapidShotActive) sb.AppendLine($"      {FormatModLine(-2, "Rapid Shot")}");
         if (PointBlankShotActive) sb.AppendLine($"      {FormatModLine(1, "Point Blank Shot")}");
         if (WeaponFocusBonus > 0) sb.AppendLine($"      {FormatModLine(WeaponFocusBonus, "Weapon Focus")}");
+        if (WeaponEnhancementAttackBonus > 0) sb.AppendLine($"      {FormatModLine(WeaponEnhancementAttackBonus, "weapon enhancement")}");
         if (CombatExpertisePenalty != 0) sb.AppendLine($"      {FormatModLine(CombatExpertisePenalty, "Combat Expertise")}");
         if (FightingDefensivelyAttackPenalty != 0) sb.AppendLine($"      {FormatModLine(FightingDefensivelyAttackPenalty, "Fighting Defensively")}");
         if (ShootingIntoMeleePenalty != 0) sb.AppendLine($"      {FormatModLine(ShootingIntoMeleePenalty, "shooting into melee")}");
@@ -389,6 +403,9 @@ public class CombatResult
                 sb.AppendLine($"    Damage: {CritDamageDice} = {Damage - FeatDamageBonus} (crit)");
             else
                 sb.AppendLine($"    Damage: {(!string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?")} = {BaseDamageRoll}");
+            if (WeaponEnhancementDamageBonus > 0)
+                sb.AppendLine($"      {FormatModLine(WeaponEnhancementDamageBonus, "weapon enhancement")}");
+
             if (SneakAttackApplied)
             {
                 string trigger = string.IsNullOrEmpty(SneakAttackTriggerReason) ? "" : $" [{SneakAttackTriggerReason}]";

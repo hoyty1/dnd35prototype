@@ -1469,6 +1469,9 @@ public class CharacterStats
     /// <summary>Competence bonus to Disguise checks from active effects (e.g., Disguise Self).</summary>
     public int DisguiseCompetenceBonus;
 
+    /// <summary>Enhancement bonus to Jump checks from active effects (e.g., Jump spell).</summary>
+    public int JumpEnhancementBonus;
+
     /// <summary>Temporary hit points from spells (e.g., False Life).</summary>
     public int TempHP;
 
@@ -3063,7 +3066,7 @@ public class CharacterStats
             modifier += DisguiseCompetenceBonus;
 
         if (string.Equals(skillName, "Jump", System.StringComparison.OrdinalIgnoreCase))
-            modifier += JumpSpeedModifier;
+            modifier += JumpSpeedModifier + JumpEnhancementBonus;
 
         return modifier;
     }

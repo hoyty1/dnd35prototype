@@ -88,18 +88,18 @@ public static partial class SpellDatabase
                 {
                     SpellId = "magic_weapon",
                     Name = "Magic Weapon",
-                    Description = "Weapon gains +1 enhancement bonus on attack and damage. 1 min/level. PHB p.251",
+                    Description = "Weapon touched gains +1 enhancement bonus on attack and damage rolls and counts as magic for bypass. Duration 1 min/level. PHB p.251",
                     SpellLevel = 1, School = "Transmutation",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer", "Cleric", "Paladin" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
-                    BuffAttackBonus = 1,
-                    BuffDamageBonus = 1,
-                    BuffDurationRounds = 30,
                     BuffType = "enhancement",
                     BuffBonusType = BonusType.Enhancement,
                     BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

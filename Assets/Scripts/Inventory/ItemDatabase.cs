@@ -1474,6 +1474,29 @@ public static class ItemDatabase
         clone.CurrentHitPoints = src.CurrentHitPoints;
         clone.IsBroken = src.IsBroken;
         clone.IsDestroyed = src.IsDestroyed;
+        clone.ActiveSpellEffects = new List<ItemSpellEffect>();
+        if (src.ActiveSpellEffects != null)
+        {
+            for (int i = 0; i < src.ActiveSpellEffects.Count; i++)
+            {
+                ItemSpellEffect effect = src.ActiveSpellEffects[i];
+                if (effect == null)
+                    continue;
+
+                clone.ActiveSpellEffects.Add(new ItemSpellEffect
+                {
+                    SpellId = effect.SpellId,
+                    SpellName = effect.SpellName,
+                    CasterName = effect.CasterName,
+                    CasterLevel = effect.CasterLevel,
+                    RemainingRounds = effect.RemainingRounds,
+                    BonusType = effect.BonusType,
+                    EnhancementBonusAttack = effect.EnhancementBonusAttack,
+                    EnhancementBonusDamage = effect.EnhancementBonusDamage,
+                    CountsAsMagicForBypass = effect.CountsAsMagicForBypass
+                });
+            }
+        }
 
         // Other
         clone.ConsumableEffect = src.ConsumableEffect;

@@ -45,6 +45,8 @@ public class ActiveSpellEffect
     public int AppliedStatBonus;
     public string AppliedSecondaryStatName;
     public int AppliedSecondaryStatBonus;
+    public string AppliedSkillName;
+    public int AppliedSkillBonus;
     public int AppliedSpeedBonusFeet;
 
     /// <summary>Temporary size-category shift applied by this effect (e.g., Enlarge +1, Reduce -1).</summary>
@@ -227,6 +229,7 @@ public class ActiveSpellEffect
         if (AppliedTempHP != 0) mods += $" TempHP:{AppliedTempHP}";
         if (!string.IsNullOrEmpty(AppliedStatName)) mods += $" {AppliedStatName}:{AppliedStatBonus:+#;-#}";
         if (!string.IsNullOrEmpty(AppliedSecondaryStatName)) mods += $" {AppliedSecondaryStatName}:{AppliedSecondaryStatBonus:+#;-#}";
+        if (!string.IsNullOrEmpty(AppliedSkillName) && AppliedSkillBonus != 0) mods += $" Skill[{AppliedSkillName}]:{AppliedSkillBonus:+#;-#}";
         if (AppliedSpeedBonusFeet != 0) mods += $" Speed:{AppliedSpeedBonusFeet:+#;-#}ft";
         if (AppliedSizeCategoryShift != 0)
         {

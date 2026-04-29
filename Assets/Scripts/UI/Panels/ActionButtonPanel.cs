@@ -59,6 +59,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button DischargeTouchButton => _combatUI != null ? _combatUI.DischargeTouchButton : null;
     private Button DismissDisguiseSelfButton => _combatUI != null ? _combatUI.DismissDisguiseSelfButton : null;
     private Button DismissExpeditiousRetreatButton => _combatUI != null ? _combatUI.DismissExpeditiousRetreatButton : null;
+    private Button DismissJumpButton => _combatUI != null ? _combatUI.DismissJumpButton : null;
     private Button AttackDefensivelyButton => _combatUI != null ? _combatUI.AttackDefensivelyButton : null;
     private Button FullAttackDefensivelyButton => _combatUI != null ? _combatUI.FullAttackDefensivelyButton : null;
 
@@ -712,6 +713,13 @@ public class ActionButtonPanel : MonoBehaviour
             ? "Dismiss Expeditious Retreat (Free)"
             : "Dismiss Expeditious Retreat";
         states.Set(DismissExpeditiousRetreatButton, new ActionButtonState(hasActiveExpeditiousRetreat, canDismissExpeditiousRetreat, dismissExpeditiousLabel));
+
+        bool hasActiveJump = context.Gm != null && context.Gm.HasActiveJump(pc);
+        bool canDismissJump = hasActiveJump && context.Actions.HasStandardAction && !context.IsTurned;
+        string dismissJumpLabel = hasActiveJump
+            ? (canDismissJump ? "Dismiss Jump (Standard)" : "Dismiss Jump (Used)")
+            : "Dismiss Jump";
+        states.Set(DismissJumpButton, new ActionButtonState(hasActiveJump, canDismissJump, dismissJumpLabel));
     }
 
     private void ComputeEquipmentActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
@@ -946,6 +954,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
         if (DismissDisguiseSelfButton != null) DismissDisguiseSelfButton.gameObject.SetActive(false);
         if (DismissExpeditiousRetreatButton != null) DismissExpeditiousRetreatButton.gameObject.SetActive(false);
+        if (DismissJumpButton != null) DismissJumpButton.gameObject.SetActive(false);
     }
 
     public void HideAllActionButtons()
@@ -991,6 +1000,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
         if (DismissDisguiseSelfButton != null) DismissDisguiseSelfButton.gameObject.SetActive(false);
         if (DismissExpeditiousRetreatButton != null) DismissExpeditiousRetreatButton.gameObject.SetActive(false);
+        if (DismissJumpButton != null) DismissJumpButton.gameObject.SetActive(false);
         if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
         if (FullAttackDefensivelyButton != null) FullAttackDefensivelyButton.gameObject.SetActive(false);
     }

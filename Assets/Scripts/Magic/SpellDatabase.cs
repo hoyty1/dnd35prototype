@@ -49,6 +49,7 @@ public static partial class SpellDatabase
         RegisterSpellsG();
         RegisterSpellsH();
         RegisterSpellsI();
+        RegisterSpellsJ();
         RegisterSpellsK();
         RegisterSpellsL();
         RegisterSpellsM();

@@ -190,6 +190,7 @@ public partial class GameManager : MonoBehaviour
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
     private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
     private ItemData _pendingAnimateRopeItem; // Selected rope material component reserved for the pending Animate Rope cast
+    private ItemData _pendingMagicWeaponItem; // Selected weapon to receive the pending Magic Weapon spell
     private string _pendingDisguiseSelfRace;
     private SummonMonsterOption _pendingSummonSelection; // Selected summon option waiting for placement
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
@@ -8681,6 +8682,15 @@ public partial class GameManager : MonoBehaviour
         return statusMgr != null && statusMgr.HasEffect("expeditious_retreat");
     }
 
+    public bool HasActiveJump(CharacterController character)
+    {
+        if (character == null)
+            return false;
+
+        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        return statusMgr != null && statusMgr.HasEffect("jump");
+    }
+
     public void OnDismissExpeditiousRetreatButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -8698,6 +8708,27 @@ public partial class GameManager : MonoBehaviour
         ExpeditiousRetreatEffectData removed = pc.RemoveExpeditiousRetreatEffect();
         int removedBonus = removed != null ? Mathf.Max(0, removed.SpeedBonusFeet) : 30;
         CombatUI?.ShowCombatLog($"<color=#88CCFF>💨 {pc.Stats.CharacterName} dismisses Expeditious Retreat (speed -{removedBonus} ft).</color>");
+        UpdateAllStatsUI();
+        ShowActionChoices();
+    }
+
+    public void OnDismissJumpButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Actions.HasStandardAction)
+            return;
+
+        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+        if (statusMgr == null || !statusMgr.HasEffect("jump"))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Jump spell to dismiss.");
+            return;
+        }
+
+        pc.CommitStandardAction();
+        statusMgr.RemoveEffectsBySpellId("jump");
+
+        CombatUI?.ShowCombatLog($"<color=#88CCFF>🦘 {pc.Stats.CharacterName} dismisses Jump.</color>");
         UpdateAllStatsUI();
         ShowActionChoices();
     }
@@ -8733,6 +8764,7 @@ public partial class GameManager : MonoBehaviour
         _pendingMetamagic = metamagic;
         _pendingSpellFromHeldCharge = false;
         _pendingAnimateRopeItem = null;
+        _pendingMagicWeaponItem = null;
         _pendingDisguiseSelfRace = null;
         _pendingSummonSelection = null;
 
@@ -8927,6 +8959,167 @@ public partial class GameManager : MonoBehaviour
 
         _pendingAnimateRopeItem = null;
         return selected;
+    }
+
+    private static bool IsMagicWeaponSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, "magic_weapon", StringComparison.Ordinal);
+    }
+
+    private bool TryHandleMagicWeaponWeaponSelection(CharacterController caster, CharacterController target)
+    {
+        if (!IsMagicWeaponSpell(_pendingSpell))
+        {
+            _pendingMagicWeaponItem = null;
+            return false;
+        }
+
+        if (target == null || target.Stats == null)
+            return false;
+
+        if (_pendingMagicWeaponItem != null)
+            return false;
+
+        if (!TryGetMagicWeaponInventoryOptions(target, out List<ItemData> weaponOptions, out List<string> weaponLabels))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {target.Stats.CharacterName} has no weapon in inventory to enchant with Magic Weapon.");
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            _pendingAnimateRopeItem = null;
+            _pendingMagicWeaponItem = null;
+            ShowActionChoices();
+            return true;
+        }
+
+        if (weaponOptions.Count == 1)
+        {
+            _pendingMagicWeaponItem = weaponOptions[0];
+            return false;
+        }
+
+        CombatUI?.ShowPickUpItemSelection(
+            actorName: caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster",
+            itemOptions: weaponLabels,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= weaponOptions.Count)
+                {
+                    _pendingSpell = null;
+                    _pendingMetamagic = null;
+                    _pendingSpellFromHeldCharge = false;
+                    _pendingAnimateRopeItem = null;
+                    _pendingMagicWeaponItem = null;
+                    ShowActionChoices();
+                    return;
+                }
+
+                _pendingMagicWeaponItem = weaponOptions[selectedIndex];
+                PerformSpellCast(caster, target);
+            },
+            onCancel: () =>
+            {
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingAnimateRopeItem = null;
+                _pendingMagicWeaponItem = null;
+                ShowActionChoices();
+            },
+            titleOverride: "Magic Weapon - Select Weapon",
+            bodyOverride: $"Choose which weapon from {target.Stats.CharacterName}'s inventory to enchant.",
+            optionButtonColorOverride: new Color(0.24f, 0.34f, 0.56f, 1f));
+
+        return true;
+    }
+
+    private static bool TryGetMagicWeaponInventoryOptions(CharacterController target, out List<ItemData> weapons, out List<string> labels)
+    {
+        weapons = new List<ItemData>();
+        labels = new List<string>();
+
+        if (target == null)
+            return false;
+
+        InventoryComponent inventoryComponent = target.GetComponent<InventoryComponent>();
+        Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
+        if (inventory == null)
+            return false;
+
+        // Equipped locations.
+        TryAddMagicWeaponOption(inventory.RightHandSlot, "Right Hand", weapons, labels);
+        TryAddMagicWeaponOption(inventory.LeftHandSlot, "Left Hand", weapons, labels);
+        TryAddMagicWeaponOption(inventory.HandsSlot, "Hands", weapons, labels);
+
+        // Full backpack/general inventory.
+        if (inventory.GeneralSlots != null)
+        {
+            for (int i = 0; i < inventory.GeneralSlots.Length; i++)
+            {
+                ItemData item = inventory.GeneralSlots[i];
+                if (item == null)
+                    continue;
+
+                TryAddMagicWeaponOption(item, $"Backpack Slot {i + 1}", weapons, labels);
+            }
+        }
+
+        return weapons.Count > 0;
+    }
+
+    private static void TryAddMagicWeaponOption(ItemData item, string locationLabel, List<ItemData> weapons, List<string> labels)
+    {
+        if (item == null || !item.IsWeapon || weapons == null || labels == null)
+            return;
+
+        for (int i = 0; i < weapons.Count; i++)
+        {
+            if (ReferenceEquals(weapons[i], item))
+                return;
+        }
+
+        int currentEnhancement = item.GetHighestWeaponEnhancementBonus();
+        string enhancementText = currentEnhancement > 0 ? $"+{currentEnhancement}" : "+0";
+        weapons.Add(item);
+        labels.Add($"{item.Name} ({locationLabel}, current enhancement {enhancementText})");
+    }
+
+    private bool TryApplyMagicWeaponToPendingItem(CharacterController caster, CharacterController target, SpellData spell)
+    {
+        if (!IsMagicWeaponSpell(spell))
+            return false;
+
+        ItemData weapon = _pendingMagicWeaponItem;
+        _pendingMagicWeaponItem = null;
+
+        if (weapon == null)
+        {
+            CombatUI?.ShowCombatLog("⚠ Magic Weapon failed: no weapon selected.");
+            return true;
+        }
+
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int rounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
+
+        var effect = new ItemSpellEffect(spell.SpellId, spell.Name, casterName, casterLevel, rounds)
+        {
+            BonusType = BonusType.Enhancement,
+            EnhancementBonusAttack = 1,
+            EnhancementBonusDamage = 1,
+            CountsAsMagicForBypass = true
+        };
+
+        weapon.AddOrReplaceItemSpellEffect(effect);
+
+        int effectiveAttackBonus = weapon.GetEnhancementAttackBonus();
+        int effectiveDamageBonus = weapon.GetEnhancementDamageBonus();
+        bool magicBypass = weapon.IsMagicForBypass;
+        string recipientName = target != null && target.Stats != null ? target.Stats.CharacterName : "target";
+
+        CombatUI?.ShowCombatLog($"<color=#88FFEE>✨ {spell.Name} enchants {recipientName}'s {weapon.Name}: +1 enhancement for {effect.GetDurationDisplayString()}.</color>");
+        CombatUI?.ShowCombatLog($"<color=#88FFEE>🗡 {weapon.Name} effective enhancement now +{Mathf.Max(effectiveAttackBonus, effectiveDamageBonus)} (attack +{effectiveAttackBonus}, damage +{effectiveDamageBonus}); counts as magic: {(magicBypass ? "yes" : "no")}.</color>");
+        return true;
     }
 
     private bool TryResolveAnimateRopeSpellEffect(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
@@ -10353,9 +10546,13 @@ public partial class GameManager : MonoBehaviour
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
+            _pendingMagicWeaponItem = null;
             ShowActionChoices();
             return;
         }
+
+        if (TryHandleMagicWeaponWeaponSelection(caster, target))
+            return;
 
         CaptureSpellcastResourceSnapshot(caster);
 
@@ -12688,6 +12885,13 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
+        if (spell != null && spell.SpellId == "magic_weapon")
+        {
+            TryApplyMagicWeaponToPendingItem(caster, target, spell);
+            UpdateAllStatsUI();
+            return null;
+        }
+
         // Use StatusEffectManager for tracked buff application
         var statusMgr = target.GetComponent<StatusEffectManager>();
         if (statusMgr != null)
@@ -12891,6 +13095,67 @@ public partial class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Ray of Enfeeblement expires on {character.Stats.CharacterName}: STR +{amount} restored (source: {sourceName}).</color>");
         }
 
+        TickCharacterItemSpellDurations(character);
+    }
+
+    private void TickCharacterItemSpellDurations(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return;
+
+        InventoryComponent inventoryComponent = character.GetComponent<InventoryComponent>();
+        Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
+        if (inventory == null)
+            return;
+
+        var processed = new HashSet<ItemData>();
+
+        // Equipped slots.
+        TickItemSlotSpellDurations(character, inventory.RightHandSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.LeftHandSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.HandsSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.HeadSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.FaceEyesSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.NeckSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.TorsoSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.ArmorRobeSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.WaistSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.BackSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.WristsSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.LeftRingSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.RightRingSlot, processed);
+        TickItemSlotSpellDurations(character, inventory.FeetSlot, processed);
+
+        // Full backpack inventory.
+        if (inventory.GeneralSlots != null)
+        {
+            for (int i = 0; i < inventory.GeneralSlots.Length; i++)
+                TickItemSlotSpellDurations(character, inventory.GeneralSlots[i], processed);
+        }
+    }
+
+    private void TickItemSlotSpellDurations(CharacterController owner, ItemData item, HashSet<ItemData> processed)
+    {
+        if (owner == null || item == null || processed == null)
+            return;
+
+        if (processed.Contains(item))
+            return;
+
+        processed.Add(item);
+        List<ItemSpellEffect> expired = item.TickItemSpellEffects();
+        if (expired == null || expired.Count == 0)
+            return;
+
+        for (int i = 0; i < expired.Count; i++)
+        {
+            ItemSpellEffect effect = expired[i];
+            if (effect == null)
+                continue;
+
+            string spellName = string.IsNullOrWhiteSpace(effect.SpellName) ? "Item Spell" : effect.SpellName;
+            CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {spellName} expires on {owner.Stats.CharacterName}'s {item.Name}.</color>");
+        }
     }
 
 

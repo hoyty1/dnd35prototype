@@ -412,6 +412,11 @@ public class SpellData
     /// <summary>Save bonus (morale, luck, etc.).</summary>
     public int BuffSaveBonus;
 
+    /// <summary>Skill to buff (e.g., "Jump").</summary>
+    public string BuffSkillName;
+    /// <summary>Skill bonus amount. If 0, spell-specific logic can compute it from caster level.</summary>
+    public int BuffSkillBonus;
+
     /// <summary>Land speed bonus in feet (e.g., Expeditious Retreat +30 ft enhancement).</summary>
     public int BuffSpeedBonusFeet;
 

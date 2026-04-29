@@ -133,6 +133,8 @@ public class StatusEffectManager : MonoBehaviour
         effect.AppliedStatBonus = spell.BuffStatBonus;
         effect.AppliedSecondaryStatName = null;
         effect.AppliedSecondaryStatBonus = 0;
+        effect.AppliedSkillName = spell.BuffSkillName;
+        effect.AppliedSkillBonus = spell.BuffSkillBonus;
         effect.AppliedSpeedBonusFeet = spell.BuffSpeedBonusFeet;
         effect.AppliedSizeCategoryShift = 0;
         effect.AppliedDamageResistanceAmount = spell.BuffDamageResistanceAmount;
@@ -141,6 +143,12 @@ public class StatusEffectManager : MonoBehaviour
         effect.AppliedDamageReductionAmount = spell.BuffDamageReductionAmount;
         effect.AppliedDamageReductionBypass = spell.BuffDamageReductionBypass;
         effect.AppliedDamageReductionRangedOnly = spell.BuffDamageReductionRangedOnly;
+
+        if (spell.SpellId == "jump" && string.Equals(effect.AppliedSkillName, "Jump", System.StringComparison.OrdinalIgnoreCase) && effect.AppliedSkillBonus == 0)
+        {
+            int level = Mathf.Max(1, casterLevel);
+            effect.AppliedSkillBonus = level >= 7 ? 30 : (level >= 3 ? 20 : 10);
+        }
 
         // Protection from alignment grants conditional AC/save bonuses and ward effects.
         // It should NOT apply unconditional Deflection/Save bonuses directly to stats.
@@ -374,6 +382,9 @@ public class StatusEffectManager : MonoBehaviour
         if (newSpell.BuffAttackBonus != 0 && existing.AppliedAttackBonus != 0) return true;
         // If both modify land speed
         if (newSpell.BuffSpeedBonusFeet != 0 && existing.AppliedSpeedBonusFeet != 0) return true;
+        // If both modify the same skill
+        if (!string.IsNullOrEmpty(newSpell.BuffSkillName) && !string.IsNullOrEmpty(existing.AppliedSkillName)
+            && string.Equals(newSpell.BuffSkillName, existing.AppliedSkillName, System.StringComparison.OrdinalIgnoreCase)) return true;
         // If both modify damage bonus
         if (newSpell.BuffDamageBonus != 0 && existing.AppliedDamageBonus != 0) return true;
         // If both modify save bonus
@@ -477,6 +488,9 @@ public class StatusEffectManager : MonoBehaviour
         {
             ApplyStatBonus(effect.AppliedSecondaryStatName, effect.AppliedSecondaryStatBonus);
         }
+
+        if (!string.IsNullOrEmpty(effect.AppliedSkillName) && effect.AppliedSkillBonus != 0)
+            ApplySkillBonus(effect.AppliedSkillName, effect.AppliedSkillBonus);
     }
 
     /// <summary>Reverse stat modifications from an expired/removed effect.</summary>
@@ -537,6 +551,9 @@ public class StatusEffectManager : MonoBehaviour
         {
             ApplyStatBonus(effect.AppliedSecondaryStatName, -effect.AppliedSecondaryStatBonus);
         }
+
+        if (!string.IsNullOrEmpty(effect.AppliedSkillName) && effect.AppliedSkillBonus != 0)
+            ApplySkillBonus(effect.AppliedSkillName, -effect.AppliedSkillBonus);
     }
 
     /// <summary>
@@ -653,6 +670,15 @@ public class StatusEffectManager : MonoBehaviour
         }
     }
 
+    private void ApplySkillBonus(string skillName, int bonus)
+    {
+        if (_stats == null || string.IsNullOrWhiteSpace(skillName) || bonus == 0)
+            return;
+
+        if (string.Equals(skillName, "Jump", System.StringComparison.OrdinalIgnoreCase))
+            _stats.JumpEnhancementBonus += bonus;
+    }
+
     /// <summary>Get the "power" of an existing effect for stacking comparison.</summary>
     private int GetEffectPower(ActiveSpellEffect effect)
     {
@@ -665,6 +691,7 @@ public class StatusEffectManager : MonoBehaviour
         power += Mathf.Abs(effect.AppliedDeflectionBonus);
         power += Mathf.Abs(effect.AppliedStatBonus);
         power += Mathf.Abs(effect.AppliedSecondaryStatBonus);
+        power += Mathf.Abs(effect.AppliedSkillBonus);
         power += Mathf.Abs(effect.AppliedSpeedBonusFeet);
         power += Mathf.Abs(effect.AppliedSizeCategoryShift) * 2;
         power += Mathf.Abs(effect.AppliedDamageResistanceAmount);
@@ -684,6 +711,7 @@ public class StatusEffectManager : MonoBehaviour
         power += Mathf.Abs(spell.BuffShieldBonus);
         power += Mathf.Abs(spell.BuffDeflectionBonus);
         power += Mathf.Abs(spell.BuffStatBonus);
+        power += Mathf.Abs(spell.BuffSkillBonus);
         power += Mathf.Abs(spell.BuffSpeedBonusFeet);
         power += Mathf.Abs(spell.BuffDamageResistanceAmount);
         power += Mathf.Abs(spell.BuffDamageReductionAmount);

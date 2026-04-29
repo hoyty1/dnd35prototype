@@ -1447,6 +1447,7 @@ public class CharacterController : MonoBehaviour
         {
             Stats.SetEnfeeblementStrengthPenalty(0);
             Stats.LandSpeedEnhancementBonusFeet = 0;
+            Stats.JumpEnhancementBonus = 0;
         }
         _displayedRace = ActualRace;
         RefreshAllTags();
@@ -4236,7 +4237,12 @@ public class CharacterController : MonoBehaviour
         bool targetIsHelplessLike = !isRangedAttack && target != null && target.IsHelplessForCoupDeGrace();
         int helplessMeleeAttackBonus = targetIsHelplessLike ? 4 : 0;
 
-        int totalAtkModWithTrueStrike = totalAtkMod + trueStrikeBonus + helplessMeleeAttackBonus;
+        int weaponEnhancementAttackBonus = weapon != null ? weapon.GetEnhancementAttackBonus() : 0;
+        int weaponEnhancementDamageBonus = weapon != null ? weapon.GetEnhancementDamageBonus() : 0;
+        result.WeaponEnhancementAttackBonus = weaponEnhancementAttackBonus;
+        result.WeaponEnhancementDamageBonus = weaponEnhancementDamageBonus;
+
+        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus;
 
         if (TryResolveLastKnownPositionAutoMiss(target, isRangedAttack, weapon, out CombatResult emptySquareMiss))
             return emptySquareMiss;
@@ -4307,6 +4313,9 @@ public class CharacterController : MonoBehaviour
         result.NaturalTwenty = (roll == 20);
         result.NaturalOne = (roll == 1);
         AttachAttackBuffDebuffBreakdown(result);
+
+        if (weaponEnhancementAttackBonus != 0)
+            result.AddAttackBuffDebuffModifier("Weapon enhancement", weaponEnhancementAttackBonus);
 
         if (trueStrikeActive && trueStrikeBonus != 0)
             result.AddAttackBuffDebuffModifier("True Strike (insight)", trueStrikeBonus);
@@ -4462,13 +4471,14 @@ public class CharacterController : MonoBehaviour
                 baseDmgRoll = Stats.RollBaseDamage(damageDice, totalCritDice);
                 rawWeaponDamage = baseDmgRoll + damageModifier + bonusDamage;
                 rawWeaponDamage += featDamageBonus; // Feat bonus added after crit multiplication
-                result.CritDamageDice = $"{totalCritDice}d{damageDice}+{damageModifier + bonusDamage}";
+                rawWeaponDamage += weaponEnhancementDamageBonus;
+                result.CritDamageDice = $"{totalCritDice}d{damageDice}+{damageModifier + bonusDamage + weaponEnhancementDamageBonus}";
             }
             else
             {
                 // Normal damage - roll weapon dice separately for breakdown
                 baseDmgRoll = Stats.RollBaseDamage(damageDice, damageCount);
-                rawWeaponDamage = baseDmgRoll + damageModifier + bonusDamage + featDamageBonus;
+                rawWeaponDamage = baseDmgRoll + damageModifier + bonusDamage + featDamageBonus + weaponEnhancementDamageBonus;
             }
             rawWeaponDamage = Mathf.Max(1, rawWeaponDamage); // Weapon hit always deals at least 1 before mitigation
             result.Damage = rawWeaponDamage;

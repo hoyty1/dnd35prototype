@@ -236,6 +236,9 @@ public class ItemData
     public bool IsBroken;           // Broken at <= half max HP (until repaired)
     public bool IsDestroyed;        // Destroyed at <= 0 HP
 
+    // --- Active item spell effects (duration tracked on item instance) ---
+    public List<ItemSpellEffect> ActiveSpellEffects = new List<ItemSpellEffect>();
+
     // --- Consumable ---
     public ConsumableEffectType ConsumableEffect; // Generic effect type for extensibility
     public string ConsumableSpellName;            // Spell name this consumable emulates (e.g., "Cure Light Wounds")
@@ -356,6 +359,133 @@ public class ItemData
         }
 
         return Mathf.Max(0, parsed);
+    }
+
+    public int GetHighestWeaponEnhancementBonus()
+    {
+        int best = Mathf.Max(0, ResolveEnhancementBonus());
+        if (ActiveSpellEffects == null)
+            return best;
+
+        for (int i = 0; i < ActiveSpellEffects.Count; i++)
+        {
+            ItemSpellEffect effect = ActiveSpellEffects[i];
+            if (effect == null)
+                continue;
+
+            int effectBest = Mathf.Max(effect.EnhancementBonusAttack, effect.EnhancementBonusDamage);
+            if (effectBest > best)
+                best = effectBest;
+        }
+
+        return best;
+    }
+
+    public bool HasMagicBypassFromActiveEffects()
+    {
+        if (ActiveSpellEffects == null)
+            return false;
+
+        for (int i = 0; i < ActiveSpellEffects.Count; i++)
+        {
+            ItemSpellEffect effect = ActiveSpellEffects[i];
+            if (effect != null && effect.CountsAsMagicForBypass)
+                return true;
+        }
+
+        return false;
+    }
+
+    public bool IsMagicForBypass => CountsAsMagicForBypass || HasMagicBypassFromActiveEffects() || GetHighestWeaponEnhancementBonus() > 0;
+
+    public int GetEnhancementAttackBonus()
+    {
+        int best = Mathf.Max(0, ResolveEnhancementBonus());
+        if (ActiveSpellEffects != null)
+        {
+            for (int i = 0; i < ActiveSpellEffects.Count; i++)
+            {
+                ItemSpellEffect effect = ActiveSpellEffects[i];
+                if (effect == null)
+                    continue;
+
+                if (effect.EnhancementBonusAttack > best)
+                    best = effect.EnhancementBonusAttack;
+            }
+        }
+
+        return best;
+    }
+
+    public int GetEnhancementDamageBonus()
+    {
+        int best = Mathf.Max(0, ResolveEnhancementBonus());
+        if (ActiveSpellEffects != null)
+        {
+            for (int i = 0; i < ActiveSpellEffects.Count; i++)
+            {
+                ItemSpellEffect effect = ActiveSpellEffects[i];
+                if (effect == null)
+                    continue;
+
+                if (effect.EnhancementBonusDamage > best)
+                    best = effect.EnhancementBonusDamage;
+            }
+        }
+
+        return best;
+    }
+
+    public void AddOrReplaceItemSpellEffect(ItemSpellEffect effect)
+    {
+        if (effect == null)
+            return;
+
+        if (ActiveSpellEffects == null)
+            ActiveSpellEffects = new List<ItemSpellEffect>();
+
+        for (int i = ActiveSpellEffects.Count - 1; i >= 0; i--)
+        {
+            ItemSpellEffect existing = ActiveSpellEffects[i];
+            if (existing == null)
+            {
+                ActiveSpellEffects.RemoveAt(i);
+                continue;
+            }
+
+            if (!string.IsNullOrEmpty(effect.SpellId)
+                && string.Equals(existing.SpellId, effect.SpellId, StringComparison.OrdinalIgnoreCase))
+            {
+                ActiveSpellEffects.RemoveAt(i);
+            }
+        }
+
+        ActiveSpellEffects.Add(effect);
+    }
+
+    public List<ItemSpellEffect> TickItemSpellEffects()
+    {
+        var expired = new List<ItemSpellEffect>();
+        if (ActiveSpellEffects == null || ActiveSpellEffects.Count == 0)
+            return expired;
+
+        for (int i = ActiveSpellEffects.Count - 1; i >= 0; i--)
+        {
+            ItemSpellEffect effect = ActiveSpellEffects[i];
+            if (effect == null)
+            {
+                ActiveSpellEffects.RemoveAt(i);
+                continue;
+            }
+
+            if (effect.Tick())
+            {
+                expired.Add(effect);
+                ActiveSpellEffects.RemoveAt(i);
+            }
+        }
+
+        return expired;
     }
 
     public int ApplySunderDamage(int incomingDamage, out int effectiveDamage, out int hpBefore, out int hpAfter)
@@ -482,7 +612,7 @@ public class ItemData
         if (dmgTypes.Contains(global::DamageType.Piercing)) tags |= DamageBypassTag.Piercing;
         if (dmgTypes.Contains(global::DamageType.Slashing)) tags |= DamageBypassTag.Slashing;
 
-        if (CountsAsMagicForBypass) tags |= DamageBypassTag.Magic;
+        if (IsMagicForBypass) tags |= DamageBypassTag.Magic;
         if (IsSilvered) tags |= DamageBypassTag.Silver;
         if (IsColdIron) tags |= DamageBypassTag.ColdIron;
         if (IsAdamantine) tags |= DamageBypassTag.Adamantine;
@@ -636,6 +766,26 @@ public class ItemData
                 durabilityLine += " (Broken)";
 
             stats = string.IsNullOrEmpty(stats) ? durabilityLine : $"{stats}\n{durabilityLine}";
+        }
+
+        if (ActiveSpellEffects != null && ActiveSpellEffects.Count > 0)
+        {
+            var lines = new List<string>();
+            for (int i = 0; i < ActiveSpellEffects.Count; i++)
+            {
+                ItemSpellEffect effect = ActiveSpellEffects[i];
+                if (effect == null)
+                    continue;
+
+                string spellLabel = string.IsNullOrWhiteSpace(effect.SpellName) ? "Spell Effect" : effect.SpellName;
+                lines.Add($"{spellLabel}: {effect.GetDurationDisplayString()}");
+            }
+
+            if (lines.Count > 0)
+            {
+                string effectSummary = "Item Effects: " + string.Join(", ", lines);
+                stats = string.IsNullOrEmpty(stats) ? effectSummary : $"{stats}\n{effectSummary}";
+            }
         }
 
         if (WeightLbs > 0f)
