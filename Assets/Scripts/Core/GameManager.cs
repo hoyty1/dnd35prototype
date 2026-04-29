@@ -10119,7 +10119,11 @@ public partial class GameManager : MonoBehaviour
 
             bool handledCauseFear = TryResolveCauseFearSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            bool handledRayOfEnfeeblement = false;
+            if (!handledCauseFear && result.Success && !effectNegatedBySave)
+                handledRayOfEnfeeblement = TryResolveRayOfEnfeeblementSpellEffect(caster, target, _pendingSpell, result);
+
+            if (!handledCauseFear && !handledRayOfEnfeeblement && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -11808,6 +11812,44 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    private static bool IsRayOfEnfeeblementSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, "ray_of_enfeeblement", StringComparison.Ordinal);
+    }
+
+    private static int CalculateRayOfEnfeeblementPenalty(CharacterController caster)
+    {
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int levelBonus = Mathf.Min(5, 1 + ((casterLevel - 1) / 2));
+        int d6 = UnityEngine.Random.Range(1, 7);
+        return d6 + levelBonus;
+    }
+
+    private bool TryResolveRayOfEnfeeblementSpellEffect(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
+    {
+        if (!IsRayOfEnfeeblementSpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        if (result == null || !result.Success || (result.RequiredAttackRoll && !result.AttackHit))
+            return false;
+
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1));
+        int penalty = CalculateRayOfEnfeeblementPenalty(caster);
+        EnfeebledConditionData effect = target.ApplyEnfeeblementEffect(penalty, durationRounds, caster);
+        if (effect == null)
+            return true;
+
+        int resultingStrength = target.Stats.EffectiveStrengthScore;
+        int totalPenalty = target.TotalEnfeeblementStrengthPenalty;
+
+        result.BuffApplied = true;
+        result.BuffDescription = $"Debuff: STR -{penalty} for {durationRounds} rounds (total enfeeblement {totalPenalty}, effective STR {resultingStrength}).";
+
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
+        CombatUI?.ShowCombatLog($"💀 {target.Stats.CharacterName} is enfeebled by {casterName}: STR -{penalty} for {durationRounds} rounds (total STR penalty {totalPenalty}, STR now {resultingStrength}).");
+        return true;
+    }
+
     /// <summary>
     /// Apply buff effects from a spell to the target character.
     /// Uses StatusEffectManager for proper duration tracking and stat modification reversal.
@@ -12322,6 +12364,20 @@ public partial class GameManager : MonoBehaviour
 
                     Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
                 }
+            }
+        }
+
+        List<EnfeebledConditionData> expiredEnfeeblements = character.TickEnfeeblementEffects();
+        if (expiredEnfeeblements != null && expiredEnfeeblements.Count > 0)
+        {
+            for (int i = 0; i < expiredEnfeeblements.Count; i++)
+            {
+                EnfeebledConditionData expired = expiredEnfeeblements[i];
+                int amount = expired != null ? Mathf.Max(0, expired.StrengthPenaltyAmount) : 0;
+                string sourceName = expired != null && !string.IsNullOrWhiteSpace(expired.CasterName)
+                    ? expired.CasterName
+                    : "an unknown caster";
+                CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Ray of Enfeeblement expires on {character.Stats.CharacterName}: STR +{amount} restored (source: {sourceName}).</color>");
             }
         }
 
@@ -16511,8 +16567,11 @@ public partial class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is immune to mind-affecting effects. {spell.Name} has no effect.");
 
         bool handledCauseFear = TryResolveCauseFearSpellEffect(npc, target, spell, result);
+        bool handledRayOfEnfeeblement = false;
+        if (!handledCauseFear && result.Success && !effectNegatedBySave)
+            handledRayOfEnfeeblement = TryResolveRayOfEnfeeblementSpellEffect(npc, target, spell, result);
 
-        if (!handledCauseFear && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        if (!handledCauseFear && !handledRayOfEnfeeblement && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             ApplySpellBuff(npc, target, spell, spellComp);
 
         if (result.DamageDealt > 0)

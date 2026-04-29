@@ -323,6 +323,9 @@ public class CharacterController : MonoBehaviour
 
     private string _displayedRace;
     public DisguiseSelfEffectData ActiveDisguiseSelfEffect { get; private set; }
+    private readonly List<EnfeebledConditionData> _activeEnfeeblementEffects = new List<EnfeebledConditionData>();
+    public IReadOnlyList<EnfeebledConditionData> ActiveEnfeeblementEffects => _activeEnfeeblementEffects;
+    public int TotalEnfeeblementStrengthPenalty => Stats != null ? Stats.EnfeeblementStrengthPenalty : 0;
     public string ActualRace => Stats != null && !string.IsNullOrWhiteSpace(Stats.RaceName) ? Stats.RaceName : "Unknown";
     public string DisplayedRace => !string.IsNullOrWhiteSpace(_displayedRace) ? _displayedRace : ActualRace;
     [HideInInspector] public bool HasMovedThisTurn;
@@ -1233,6 +1236,86 @@ public class CharacterController : MonoBehaviour
         ResetDisplayedRaceToActual();
     }
 
+    public EnfeebledConditionData ApplyEnfeeblementEffect(int strengthPenaltyAmount, int durationRemainingRounds, CharacterController caster)
+    {
+        int penalty = Mathf.Max(0, strengthPenaltyAmount);
+        int rounds = Mathf.Max(0, durationRemainingRounds);
+        if (penalty <= 0 || rounds <= 0)
+            return null;
+
+        var effect = new EnfeebledConditionData
+        {
+            Caster = caster,
+            CasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : string.Empty,
+            StrengthPenaltyAmount = penalty,
+            RemainingRounds = rounds,
+            SourceSpellId = "ray_of_enfeeblement",
+            SourceEffectName = "Ray of Enfeeblement"
+        };
+
+        _activeEnfeeblementEffects.Add(effect);
+        RefreshEnfeeblementDerivedState();
+        return effect;
+    }
+
+    public List<EnfeebledConditionData> TickEnfeeblementEffects()
+    {
+        var expired = new List<EnfeebledConditionData>();
+        if (_activeEnfeeblementEffects.Count == 0)
+            return expired;
+
+        for (int i = _activeEnfeeblementEffects.Count - 1; i >= 0; i--)
+        {
+            EnfeebledConditionData effect = _activeEnfeeblementEffects[i];
+            if (effect == null)
+            {
+                _activeEnfeeblementEffects.RemoveAt(i);
+                continue;
+            }
+
+            effect.RemainingRounds = Mathf.Max(0, effect.RemainingRounds - 1);
+            if (effect.RemainingRounds > 0)
+                continue;
+
+            expired.Add(effect);
+            _activeEnfeeblementEffects.RemoveAt(i);
+        }
+
+        if (expired.Count > 0)
+            RefreshEnfeeblementDerivedState();
+
+        expired.Reverse();
+        return expired;
+    }
+
+    public void ClearEnfeeblementEffects()
+    {
+        if (_activeEnfeeblementEffects.Count == 0)
+            return;
+
+        _activeEnfeeblementEffects.Clear();
+        RefreshEnfeeblementDerivedState();
+    }
+
+    private void RefreshEnfeeblementDerivedState()
+    {
+        int totalPenalty = 0;
+        for (int i = 0; i < _activeEnfeeblementEffects.Count; i++)
+        {
+            EnfeebledConditionData effect = _activeEnfeeblementEffects[i];
+            if (effect == null)
+                continue;
+
+            totalPenalty += Mathf.Max(0, effect.StrengthPenaltyAmount);
+        }
+
+        Stats?.SetEnfeeblementStrengthPenalty(totalPenalty);
+
+        Inventory inventoryData = GetInventoryData();
+        if (inventoryData != null)
+            inventoryData.RecalculateStats();
+    }
+
     private void OnValidate()
     {
         NormalizeTeamControlState();
@@ -1316,6 +1399,8 @@ public class CharacterController : MonoBehaviour
         UpdateVisualSize(false);
 
         ActiveDisguiseSelfEffect = null;
+        _activeEnfeeblementEffects.Clear();
+        Stats?.SetEnfeeblementStrengthPenalty(0);
         _displayedRace = ActualRace;
         RefreshAllTags();
         CheckAbilityScoreZeroEffects();
@@ -5986,6 +6071,16 @@ public class CharacterController : MonoBehaviour
                 result.AddAttackBuffDebuffModifier(conditionLabel, attackModifier);
                 conditionAttackBonusTotal += attackModifier;
             }
+        }
+
+        int enfeeblementPenalty = Stats.EnfeeblementStrengthPenalty;
+        if (enfeeblementPenalty > 0)
+        {
+            int strengthWithoutEnfeeblement = Mathf.Max(1, Stats.EffectiveSTRScore - Stats.StrengthConditionPenalty);
+            int modWithoutEnfeeblement = CharacterStats.GetModifier(strengthWithoutEnfeeblement);
+            int attackModifierDelta = Stats.STRMod - modWithoutEnfeeblement;
+            if (attackModifierDelta != 0)
+                result.AddAttackBuffDebuffModifier($"Ray of Enfeeblement (Str -{enfeeblementPenalty})", attackModifierDelta);
         }
 
         int remainingConditionAttackBonus = Stats.ConditionAttackPenalty - conditionAttackBonusTotal;

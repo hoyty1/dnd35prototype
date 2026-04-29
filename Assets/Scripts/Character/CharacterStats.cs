@@ -396,6 +396,14 @@ public class CharacterStats
     public int StrengthConditionPenalty => IsExhaustedState ? 6 : (IsFatiguedState ? 2 : 0);
     public int DexterityConditionPenalty => IsExhaustedState ? 6 : (IsFatiguedState ? 2 : 0);
 
+    /// <summary>Total Strength penalty from active Ray of Enfeeblement effects (stacking).</summary>
+    public int EnfeeblementStrengthPenalty { get; private set; }
+
+    public void SetEnfeeblementStrengthPenalty(int totalPenalty)
+    {
+        EnfeeblementStrengthPenalty = Mathf.Max(0, totalPenalty);
+    }
+
     /// <summary>Aggregate attack modifier from active conditions.</summary>
     public int ConditionAttackPenalty => SumConditionValue(d => d.AttackModifier);
 
@@ -1347,7 +1355,7 @@ public class CharacterStats
     public int EffectiveWISScore => Mathf.Max(0, WIS - AbilityScoreDamage.GetTotalPenalty(AbilityType.WIS));
     public int EffectiveCHAScore => Mathf.Max(0, CHA - AbilityScoreDamage.GetTotalPenalty(AbilityType.CHA));
 
-    public int EffectiveStrengthScore => Mathf.Max(0, EffectiveSTRScore - StrengthConditionPenalty);
+    public int EffectiveStrengthScore => Mathf.Max(1, EffectiveSTRScore - StrengthConditionPenalty - EnfeeblementStrengthPenalty);
     public int EffectiveDexterityScore => Mathf.Max(0, EffectiveDEXScore - DexterityConditionPenalty);
 
     public int STRMod => GetModifier(EffectiveStrengthScore);

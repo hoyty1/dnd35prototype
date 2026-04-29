@@ -13,17 +13,21 @@ public static partial class SpellDatabase
                 {
                     SpellId = "ray_of_enfeeblement",
                     Name = "Ray of Enfeeblement",
-                    Description = "Ranged touch attack. Target takes 1d6+1 per 2 CL (max +5) STR penalty. No save. 1 min/level. PHB p.269",
-                    SpellLevel = 1, School = "Necromancy",
-                    ClassList = new[] { "Wizard" },
+                    Description = "Ranged touch attack. On hit: target takes 1d6 + (1 per 2 caster levels, max +5) Strength penalty. No save. Duration 1 min/level. SR applies. PHB p.269",
+                    SpellLevel = 1,
+                    School = "Necromancy",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Close,
                     IsTouch = true,
                     IsRangedTouch = true,
                     EffectType = SpellEffectType.Debuff,
-                    DamageDice = 6, DamageCount = 1, BonusDamage = 1, // 1d6+1 STR penalty at CL3
-                    DamageType = "str_penalty",
-                    BuffDurationRounds = 30,
+                    DamageType = "strength_penalty",
+                    SpellResistanceApplies = true,
+                    AllowsSavingThrow = false,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

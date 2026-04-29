@@ -237,11 +237,21 @@ public class CombatFlowService : MonoBehaviour
             : string.Empty;
 
         string damageModeLabel = result.AttackDamageMode == AttackDamageMode.Nonlethal ? "nonlethal" : "lethal";
+        string strengthPenaltyLabel = GetEnfeeblementStrengthPenaltyLabel(attacker);
         string damageModePrefix = result.DamageModeAttackPenalty != 0
-            ? $"🗡 Attacking with {damageModeLabel} damage ({result.DamageModeAttackPenalty} penalty).\n"
-            : $"🗡 Attacking with {damageModeLabel} damage.\n";
+            ? $"🗡 Attacking with {damageModeLabel} damage ({result.DamageModeAttackPenalty} penalty){strengthPenaltyLabel}.\n"
+            : $"🗡 Attacking with {damageModeLabel} damage{strengthPenaltyLabel}.\n";
 
         return flankLogPrefix + damageModePrefix + result.GetDetailedSummary();
+    }
+
+    private static string GetEnfeeblementStrengthPenaltyLabel(CharacterController attacker)
+    {
+        if (attacker == null || attacker.Stats == null)
+            return string.Empty;
+
+        int penalty = Mathf.Max(0, attacker.Stats.EnfeeblementStrengthPenalty);
+        return penalty > 0 ? $" (Str -{penalty})" : string.Empty;
     }
 
     private bool ResolveRangedAttackAoOIfProvoked(CharacterController attacker)
@@ -458,6 +468,7 @@ public class CombatFlowService : MonoBehaviour
         CombatResult result;
         string attackModeLog;
         int attackNumber = _gameManager.Combat_GetTotalAttacksUsed() + 1;
+        string strengthPenaltySuffix = GetEnfeeblementStrengthPenaltyLabel(attacker);
 
         if (useNaturalFullAttackStep)
         {
@@ -485,7 +496,7 @@ public class CombatFlowService : MonoBehaviour
             string naturalLabel = (naturalStep.AttackLabels != null && naturalStep.AttackLabels.Count > 0)
                 ? naturalStep.AttackLabels[0]
                 : "Natural attack";
-            attackModeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} (Melee) {naturalLabel}";
+            attackModeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} (Melee{strengthPenaltySuffix}) {naturalLabel}";
         }
         else
         {
@@ -507,7 +518,7 @@ public class CombatFlowService : MonoBehaviour
                     ? $", dual-wield penalty {CharacterStats.FormatMod(_gameManager.Combat_GetMainHandPenalty())}"
                     : string.Empty;
 
-            attackModeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} ({modeLabel}) at BAB {CharacterStats.FormatMod(_gameManager.Combat_GetCurrentAttackBAB())}{dwPenaltyInfo}";
+            attackModeLog = $"↻ Attack #{attackNumber}/{_gameManager.Combat_GetTotalAttackBudget()} ({modeLabel}{strengthPenaltySuffix}) at BAB {CharacterStats.FormatMod(_gameManager.Combat_GetCurrentAttackBAB())}{dwPenaltyInfo}";
         }
 
         _gameManager.CombatUI?.ShowCombatLog(attackModeLog);
