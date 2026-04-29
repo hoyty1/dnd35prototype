@@ -241,7 +241,8 @@ public sealed class ConfusedBehaviorController
         if (gameManager == null || gameManager.Grid == null || actor == null || actor.Stats == null)
             return null;
 
-        List<SquareCell> candidates = gameManager.Grid.GetCellsInRange(actor.GridPosition, Mathf.Max(1, actor.Stats.MoveRange));
+        int moveRange = gameManager.GetCurrentMoveRangeSquares(actor);
+        List<SquareCell> candidates = gameManager.Grid.GetCellsInRange(actor.GridPosition, Mathf.Max(0, moveRange));
         SquareCell best = null;
         int bestDistance = maximizeDistance ? int.MinValue : int.MaxValue;
 

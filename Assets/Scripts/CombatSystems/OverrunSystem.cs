@@ -89,7 +89,7 @@ public partial class GameManager
         if (attacker == null || attacker.Stats == null)
             return;
 
-        int movementSpeed = Mathf.Max(0, attacker.Stats.MoveRange);
+        int movementSpeed = GetCurrentMoveRangeSquares(attacker);
         List<SquareCell> candidateCells = Grid.GetCellsInRange(attacker.GridPosition, movementSpeed);
 
         for (int i = 0; i < candidateCells.Count; i++)
@@ -160,7 +160,7 @@ public partial class GameManager
             return;
         }
 
-        int movementSpeed = Mathf.Max(0, attacker.Stats.MoveRange);
+        int movementSpeed = GetCurrentMoveRangeSquares(attacker);
 
         AoOPathResult overrunPathResult = FindPath(
             attacker,
@@ -847,7 +847,7 @@ public partial class GameManager
             && attacker.IsControllable
             && attacker.Actions.HasMoveAction)
         {
-            int remainingMovement = Mathf.Max(0, attacker.Stats.MoveRange - movementSpentByOverrun);
+            int remainingMovement = Mathf.Max(0, GetCurrentMoveRangeSquares(attacker) - movementSpentByOverrun);
             if (ShowOverrunContinuationPromptIfAvailable(attacker, overrunDirection, remainingMovement))
                 return;
         }

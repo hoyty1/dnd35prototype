@@ -272,7 +272,7 @@ public sealed class CharmedBehaviorController
             if (gameManager.Grid == null || !gameManager.Grid.CanPlaceCreature(candidate, actor.GetVisualSquaresOccupied(), actor))
                 continue;
 
-            AoOPathResult pathResult = gameManager.FindPath(actor, candidate, avoidThreats: false, maxRangeOverride: actor.Stats.MoveRange);
+            AoOPathResult pathResult = gameManager.FindPath(actor, candidate, avoidThreats: false, maxRangeOverride: gameManager.GetCurrentMoveRangeSquares(actor));
             if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
                 continue;
 
@@ -297,8 +297,9 @@ public sealed class CharmedBehaviorController
         if (gameManager == null || actor == null || target == null)
             return false;
 
+        int moveRange = gameManager.GetCurrentMoveRangeSquares(actor);
         List<SquareCell> moveCells = gameManager.Grid != null
-            ? gameManager.Grid.GetCellsInRange(actor.GridPosition, actor.Stats.MoveRange)
+            ? gameManager.Grid.GetCellsInRange(actor.GridPosition, moveRange)
             : null;
 
         if (moveCells == null || moveCells.Count == 0)
@@ -316,7 +317,7 @@ public sealed class CharmedBehaviorController
             if (gameManager.Grid == null || !gameManager.Grid.CanPlaceCreature(cell.Coords, actor.GetVisualSquaresOccupied(), actor))
                 continue;
 
-            AoOPathResult pathResult = gameManager.FindPath(actor, cell.Coords, avoidThreats: false, maxRangeOverride: actor.Stats.MoveRange);
+            AoOPathResult pathResult = gameManager.FindPath(actor, cell.Coords, avoidThreats: false, maxRangeOverride: moveRange);
             if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
                 continue;
 

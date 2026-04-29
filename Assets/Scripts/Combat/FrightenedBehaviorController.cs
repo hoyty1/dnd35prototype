@@ -134,9 +134,10 @@ public sealed class FrightenedBehaviorController
         if (gameManager == null || gameManager.Grid == null || actor == null || actor.Stats == null)
             return null;
 
+        int moveRange = gameManager.GetCurrentMoveRangeSquares(actor);
         int maxRange = withdraw
-            ? Mathf.Max(1, actor.Stats.MoveRange * 2)
-            : Mathf.Max(1, actor.Stats.MoveRange);
+            ? Mathf.Max(0, moveRange * 2)
+            : Mathf.Max(0, moveRange);
 
         List<SquareCell> candidates = gameManager.Grid.GetCellsInRange(actor.GridPosition, maxRange);
         SquareCell best = null;

@@ -6200,9 +6200,12 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        if (pc.Stats.MovementBlockedByCondition)
+        if (pc.Stats.MovementBlockedByCondition || IsEntangledAndAnchored(pc) || GetCurrentMoveRangeSquares(pc) <= 0)
         {
-            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot move due to an active condition.");
+            string reason = IsEntangledAndAnchored(pc)
+                ? "while anchored by entanglement"
+                : "due to an active condition";
+            CombatUI.ShowCombatLog($"⚠ {pc.Stats.CharacterName} cannot move {reason}.");
             return;
         }
 
@@ -6230,12 +6233,13 @@ public partial class GameManager : MonoBehaviour
         CombatUI.SetTurnIndicator($"{pc.Stats.CharacterName} - Click a tile to move (right-click/ESC or own tile to cancel)");
     }
 
-    private static int GetWithdrawMoveRangeSquares(CharacterController character)
+    private int GetWithdrawMoveRangeSquares(CharacterController character)
     {
-        if (character == null || character.Stats == null)
+        int baseRange = GetCurrentMoveRangeSquares(character);
+        if (baseRange <= 0)
             return 0;
 
-        return Mathf.Max(1, character.Stats.MoveRange * 2);
+        return baseRange * 2;
     }
 
     public string GetWithdrawDisabledReason(CharacterController character)
@@ -8938,6 +8942,7 @@ public partial class GameManager : MonoBehaviour
             LastKnownTargetPosition = target.GridPosition,
             RopeDestroyed = false,
             RopeDroppedToGround = false,
+            Anchored = true,
             SourceSpellId = spell.SpellId,
             SourceSpellName = spell.Name
         };
@@ -8959,7 +8964,7 @@ public partial class GameManager : MonoBehaviour
             target.ApplyCondition(CombatConditionType.Entangled, durationRounds, spell.Name);
         }
 
-        CombatUI?.ShowCombatLog($"🪢 {target.Stats.CharacterName} is entangled by {ropeItem.Name}! No movement, -2 attack, -4 DEX. Escape with STR vs DC {breakDc} or Escape Artist DC 20.");
+        CombatUI?.ShowCombatLog($"🪢 {target.Stats.CharacterName} is entangled by anchored {ropeItem.Name}! Movement is prevented while anchored, -2 attack, -4 DEX. Escape with STR vs DC {breakDc} or Escape Artist DC 20.");
         return true;
     }
 
@@ -12851,7 +12856,7 @@ public partial class GameManager : MonoBehaviour
         if (!caster.HasCondition(CombatConditionType.Entangled) || !spell.HasSomaticComponent)
             return true;
 
-        const int dc = 15;
+        int dc = 15 + Mathf.Max(0, spell.SpellLevel);
         int roll = UnityEngine.Random.Range(1, 21);
         int bonus = Mathf.Max(0, caster.Stats.GetCasterLevel()) + GetSpellSaveAbilityModifier(caster, spell);
         int total = roll + bonus;
@@ -13317,7 +13322,8 @@ public partial class GameManager : MonoBehaviour
         if (_movementService == null || pc == null)
             return;
 
-        List<SquareCell> moveCells = _movementService.CalculateMovementRange(pc, maxRangeOverride);
+        int resolvedMaxRange = maxRangeOverride >= 0 ? maxRangeOverride : GetCurrentMoveRangeSquares(pc);
+        List<SquareCell> moveCells = _movementService.CalculateMovementRange(pc, resolvedMaxRange);
         for (int i = 0; i < moveCells.Count; i++)
         {
             SquareCell cell = moveCells[i];
@@ -13387,6 +13393,37 @@ public partial class GameManager : MonoBehaviour
         => _conditionService != null ? _conditionService.GetConditionDuration(target, type) : 0;
     public List<ConditionService.ActiveCondition> GetActiveConditions(CharacterController target)
         => _conditionService != null ? _conditionService.GetActiveConditions(target) : new List<ConditionService.ActiveCondition>();
+
+    public bool IsEntangledAndAnchored(CharacterController target)
+    {
+        if (target == null || target.Stats == null || !target.HasCondition(CombatConditionType.Entangled))
+            return false;
+
+        List<ConditionService.ActiveCondition> activeConditions = GetActiveConditions(target);
+        for (int i = 0; i < activeConditions.Count; i++)
+        {
+            ConditionService.ActiveCondition condition = activeConditions[i];
+            if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Entangled)
+                continue;
+
+            if (condition.Data is AnimateRopeEntangledConditionData ropeData && ropeData.Anchored)
+                return true;
+        }
+
+        return false;
+    }
+
+    public int GetCurrentMoveRangeSquares(CharacterController target)
+    {
+        if (target == null || target.Stats == null)
+            return 0;
+
+        int baseRange = Mathf.Max(0, target.Stats.MoveRange);
+        if (baseRange <= 0)
+            return 0;
+
+        return IsEntangledAndAnchored(target) ? 0 : baseRange;
+    }
 
     public bool TryGetConfusedTurnDecisionForAI(CharacterController actor, out ConfusedBehaviorController.ConfusedTurnDecision decision)
     {
@@ -13749,7 +13786,7 @@ public partial class GameManager : MonoBehaviour
         // Grapple move selection is capped at half speed; post-grapple free reposition is adjacent only.
         int previewMaxRange = _isGrappleMoveSelection
             ? Mathf.Max(1, _grappleMoveMaxRangeSquares)
-            : (_isFreeAdjacentGrappleMoveSelection ? 1 : (_isSelectingWithdraw ? GetWithdrawMoveRangeSquares(pc) : pc.Stats.MoveRange));
+            : (_isFreeAdjacentGrappleMoveSelection ? 1 : (_isSelectingWithdraw ? GetWithdrawMoveRangeSquares(pc) : GetCurrentMoveRangeSquares(pc)));
         var pathResult = Grid.FindPathAoOAware(
             pc.GridPosition,
             gridCoord,
@@ -14696,7 +14733,7 @@ public partial class GameManager : MonoBehaviour
 
         bool interruptedByIncapacitation = false;
         bool interruptedByGreaseSlip = false;
-        int movementBudgetSquares = isWithdraw ? GetWithdrawMoveRangeSquares(pc) : Mathf.Max(1, pc.Stats.MoveRange);
+        int movementBudgetSquares = isWithdraw ? GetWithdrawMoveRangeSquares(pc) : GetCurrentMoveRangeSquares(pc);
         int movementCostConsumed = 0;
         Vector2Int previousCell = pc.GridPosition;
 
@@ -14885,7 +14922,10 @@ public partial class GameManager : MonoBehaviour
         if (destination == mover.GridPosition)
             yield break;
 
-        int maxRange = Mathf.Max(1, mover.Stats.MoveRange);
+        int maxRange = GetCurrentMoveRangeSquares(mover);
+        if (maxRange <= 0)
+            yield break;
+
         AoOPathResult pathResult = _movementService != null
             ? _movementService.FindPath(mover, destination, avoidThreats: false, maxRangeOverride: maxRange)
             : Grid.FindPathAoOAware(mover.GridPosition, destination, null, maxRange, mover.GetVisualSquaresOccupied(), mover);

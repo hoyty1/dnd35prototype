@@ -294,7 +294,8 @@ public class AIService : MonoBehaviour
         }
 
         Vector2Int mapCenter = new Vector2Int(_gameManager.Grid.Width / 2, _gameManager.Grid.Height / 2);
-        List<SquareCell> moveCells = _gameManager.Grid.GetCellsInRange(npc.GridPosition, npc.Stats.MoveRange);
+        int npcMoveRange = _gameManager.GetCurrentMoveRangeSquares(npc);
+        List<SquareCell> moveCells = _gameManager.Grid.GetCellsInRange(npc.GridPosition, npcMoveRange);
 
         SquareCell bestExplorationCell = null;
         float bestScore = float.NegativeInfinity;
@@ -308,7 +309,7 @@ public class AIService : MonoBehaviour
             if (!_gameManager.Grid.CanPlaceCreature(cell.Coords, npc.GetVisualSquaresOccupied(), npc))
                 continue;
 
-            AoOPathResult pathResult = _gameManager.FindPath(npc, cell.Coords, avoidThreats: false, maxRangeOverride: npc.Stats.MoveRange);
+            AoOPathResult pathResult = _gameManager.FindPath(npc, cell.Coords, avoidThreats: false, maxRangeOverride: npcMoveRange);
             if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
                 continue;
 
@@ -1279,7 +1280,8 @@ public class AIService : MonoBehaviour
         if (profile == null)
             profile = GetProfile(mover);
 
-        List<SquareCell> moveCells = _gameManager.Grid.GetCellsInRange(mover.GridPosition, mover.Stats.MoveRange);
+        int moverMoveRange = _gameManager.GetCurrentMoveRangeSquares(mover);
+        List<SquareCell> moveCells = _gameManager.Grid.GetCellsInRange(mover.GridPosition, moverMoveRange);
         List<CharacterController> allCombatants = targetCharacter != null ? _gameManager.GetAllCharactersForAI() : null;
 
         SquareCell bestCell = null;
@@ -1304,7 +1306,7 @@ public class AIService : MonoBehaviour
             if (!_gameManager.Grid.CanPlaceCreature(cell.Coords, mover.GetVisualSquaresOccupied(), mover))
                 continue;
 
-            AoOPathResult pathResult = _gameManager.FindPath(mover, cell.Coords, avoidThreats: false, maxRangeOverride: mover.Stats.MoveRange);
+            AoOPathResult pathResult = _gameManager.FindPath(mover, cell.Coords, avoidThreats: false, maxRangeOverride: moverMoveRange);
             if (pathResult == null || pathResult.Path == null)
                 continue;
 
@@ -1359,7 +1361,7 @@ public class AIService : MonoBehaviour
         if (mover == null || mover.Stats == null || _gameManager.Grid == null)
             return null;
 
-        int withdrawRange = Mathf.Max(1, mover.Stats.MoveRange * 2);
+        int withdrawRange = Mathf.Max(0, _gameManager.GetCurrentMoveRangeSquares(mover) * 2);
         List<SquareCell> moveCells = _gameManager.Grid.GetCellsInRange(mover.GridPosition, withdrawRange);
 
         SquareCell bestCell = null;

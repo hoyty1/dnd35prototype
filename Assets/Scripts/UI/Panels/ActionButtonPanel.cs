@@ -522,23 +522,25 @@ public class ActionButtonPanel : MonoBehaviour
         bool hasFullRound = context.Actions.HasFullRoundAction;
         bool hasMeleeThreat = pc.HasMeleeWeaponEquipped();
         bool fatigueRestricted = pc.Stats != null && pc.Stats.IsFatiguedOrExhausted;
+        bool entangledRestricted = pc.Stats != null && pc.Stats.IsEntangledState;
         bool isExhausted = pc.Stats != null && pc.Stats.IsExhaustedState;
         bool blockedByFiveFootStep = pc.HasTakenFiveFootStep;
         bool blockedByProne = context.IsProne;
         bool hasAnyChargeTarget = context.Gm != null && context.Gm.HasAnyValidChargeTarget(pc);
-        bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigueRestricted && !blockedByFiveFootStep && !blockedByProne && !context.IsPinned && !context.IsTurned && hasAnyChargeTarget;
+        bool canChargeTarget = hasFullRound && hasMeleeThreat && !fatigueRestricted && !entangledRestricted && !blockedByFiveFootStep && !blockedByProne && !context.IsPinned && !context.IsTurned && hasAnyChargeTarget;
 
         string chargeLabel;
         if (context.IsPinned) chargeLabel = "Charge (Pinned: no)";
         else if (context.IsTurned) chargeLabel = "Charge (Turned: no)";
         else if (!hasMeleeThreat) chargeLabel = "Charge (Need melee)";
         else if (fatigueRestricted) chargeLabel = isExhausted ? "Charge (Exhausted)" : "Charge (Fatigued)";
+        else if (entangledRestricted) chargeLabel = "Charge (Entangled)";
         else if (blockedByProne) chargeLabel = "Charge (Prone)";
         else if (blockedByFiveFootStep) chargeLabel = "Charge (After 5-ft step: no)";
         else if (!hasFullRound) chargeLabel = "Charge (Used)";
         else if (!hasAnyChargeTarget) chargeLabel = "Charge (No valid target)";
         else chargeLabel = "Charge (Full-Round)";
-        states.Set(ChargeButton, new ActionButtonState(hasMeleeThreat || fatigueRestricted || blockedByFiveFootStep || blockedByProne, canChargeTarget, chargeLabel));
+        states.Set(ChargeButton, new ActionButtonState(hasMeleeThreat || fatigueRestricted || entangledRestricted || blockedByFiveFootStep || blockedByProne, canChargeTarget, chargeLabel));
     }
 
     private void ComputeDualWieldAndFullAttackStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)

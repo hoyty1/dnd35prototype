@@ -561,7 +561,7 @@ public partial class GameManager
             return;
         }
 
-        int halfSpeedRange = Mathf.Max(0, actor.Stats.MoveRange / 2);
+        int halfSpeedRange = Mathf.Max(0, GetCurrentMoveRangeSquares(actor) / 2);
         if (halfSpeedRange <= 0)
         {
             CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} has no available movement (half speed is 0 squares). Grapple move action is spent.");

@@ -1106,11 +1106,18 @@ public partial class GameManager
             return false;
         }
 
+        if (charger.HasCondition(CombatConditionType.Entangled))
+        {
+            if (logFailures)
+                CombatUI?.ShowCombatLog("⚠ Entangled creatures cannot charge.");
+            return false;
+        }
+
         if (!TryBuildChargePath(charger, target, out _, out _, out ChargePathFailureReason failureReason))
         {
             if (logFailures)
             {
-                int maxDistanceFeet = Mathf.Max(MinChargeMovementSquares, charger.Stats.MoveRange * 2) * 5;
+                int maxDistanceFeet = Mathf.Max(MinChargeMovementSquares, GetCurrentMoveRangeSquares(charger) * 2) * 5;
                 switch (failureReason)
                 {
                     case ChargePathFailureReason.TooClose:
@@ -1160,7 +1167,7 @@ public partial class GameManager
         }
 
         int minDistance = MinChargeMovementSquares; // Must move beyond 2 squares (3+ squares)
-        int maxDistance = Mathf.Max(minDistance, charger.Stats.MoveRange * 2);
+        int maxDistance = Mathf.Max(minDistance, GetCurrentMoveRangeSquares(charger) * 2);
         int moverSizeSquares = Mathf.Max(1, charger.GetVisualSquaresOccupied());
         int searchRange = Mathf.Max(maxDistance, (Grid.Width + Grid.Height) * 2);
 

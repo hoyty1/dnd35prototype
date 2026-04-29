@@ -389,7 +389,8 @@ public class CharacterStats
     public bool IsExhaustedState => HasExhaustedCondition;
     public bool IsFatiguedOrExhausted => IsFatiguedState || IsExhaustedState;
 
-    public bool CannotRunOrCharge => IsFatiguedOrExhausted;
+    public bool IsEntangledState => HasCondition(CombatConditionType.Entangled);
+    public bool CannotRunOrCharge => IsFatiguedOrExhausted || IsEntangledState;
     public bool CanRun => !CannotRunOrCharge;
     public bool CanCharge => !CannotRunOrCharge;
 

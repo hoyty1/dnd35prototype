@@ -25,7 +25,10 @@ public static class AnimateRopeRulesTests
 
         TestAnimateRopeSpellDefinition();
         TestRopeItemsDefinition();
-        TestEntangledConditionDefinitionForAnimateRope();
+        TestEntangledConditionDefinitionMatchesPhb();
+        TestEntangledHalvesSpeedAndBlocksRunCharge();
+        TestEntangledConcentrationDcScalesWithSpellLevel();
+        TestAnimateRopeConditionDataSupportsAnchoredEntanglement();
 
         Debug.Log($"====== Animate Rope Rules Results: {_passed} passed, {_failed} failed ======");
     }
@@ -42,6 +45,30 @@ public static class AnimateRopeRulesTests
             _failed++;
             Debug.LogError($"  FAIL: {testName} {detail}");
         }
+    }
+
+    private static CharacterStats BuildStats(string name)
+    {
+        return new CharacterStats(
+            name: name,
+            level: 5,
+            characterClass: "Wizard",
+            str: 10,
+            dex: 14,
+            con: 14,
+            wis: 12,
+            intelligence: 16,
+            cha: 10,
+            bab: 2,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 20,
+            raceName: "Human");
     }
 
     private static void TestAnimateRopeSpellDefinition()
@@ -72,7 +99,7 @@ public static class AnimateRopeRulesTests
         Assert(silkRope != null && silkRope.BreakDC == 23, "Silk rope break DC is 23");
     }
 
-    private static void TestEntangledConditionDefinitionForAnimateRope()
+    private static void TestEntangledConditionDefinitionMatchesPhb()
     {
         ConditionDefinition def = ConditionRules.GetDefinition(CombatConditionType.Entangled);
         Assert(def != null, "Entangled condition definition exists");
@@ -80,7 +107,69 @@ public static class AnimateRopeRulesTests
             return;
 
         Assert(def.AttackModifier == -2, "Entangled applies -2 attack penalty", $"observed={def.AttackModifier}");
-        Assert(def.PreventsMovement, "Entangled prevents movement for Animate Rope behavior");
+        Assert(!def.PreventsMovement, "General Entangled does not hard-prevent movement");
+        Assert(Mathf.Approximately(def.MovementMultiplier, 0.5f),
+            "General Entangled applies half-speed movement",
+            $"observed={def.MovementMultiplier}");
+    }
+
+    private static void TestEntangledHalvesSpeedAndBlocksRunCharge()
+    {
+        CharacterStats stats = BuildStats("EntangledTarget");
+        int baseSpeedFeet = stats.EffectiveSpeedFeet;
+
+        stats.ApplyCondition(CombatConditionType.Entangled, 3, "UnitTest");
+
+        int expectedSpeedFeet = Mathf.FloorToInt((baseSpeedFeet * 0.5f) / 5f) * 5;
+        Assert(stats.EffectiveSpeedFeet == expectedSpeedFeet,
+            "Entangled halves movement speed",
+            $"expected={expectedSpeedFeet}, observed={stats.EffectiveSpeedFeet}");
+        Assert(!stats.CanRun && !stats.CanCharge,
+            "Entangled prevents run and charge actions");
+    }
+
+    private static void TestEntangledConcentrationDcScalesWithSpellLevel()
+    {
+        SpellData fireball = SpellDatabase.GetSpell("fireball");
+        Assert(fireball != null && fireball.SpellLevel == 3, "Fireball level data available for concentration test");
+        if (fireball == null)
+            return;
+
+        GameObject go = new GameObject("EntangledConcentrationTest");
+        try
+        {
+            CharacterController caster = go.AddComponent<CharacterController>();
+            caster.Stats = BuildStats("ConcentrationCaster");
+
+            ConcentrationManager concentration = go.AddComponent<ConcentrationManager>();
+            concentration.Init(caster.Stats, caster);
+            concentration.BeginConcentration(new ActiveSpellEffect
+            {
+                Spell = fireball,
+                CasterName = caster.Stats.CharacterName,
+                CasterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel()),
+                RemainingRounds = 1
+            });
+
+            ConcentrationCheckResult result = concentration.CheckConcentrationEntangled();
+            Assert(result.DC == 18,
+                "Entangled concentration check uses DC 15 + spell level",
+                $"expected=18, observed={result.DC}");
+        }
+        finally
+        {
+            Object.DestroyImmediate(go);
+        }
+    }
+
+    private static void TestAnimateRopeConditionDataSupportsAnchoredEntanglement()
+    {
+        var data = new AnimateRopeEntangledConditionData
+        {
+            Anchored = true
+        };
+
+        Assert(data.Anchored, "Animate Rope condition data includes anchored flag for immobile entanglement");
     }
 }
 }
