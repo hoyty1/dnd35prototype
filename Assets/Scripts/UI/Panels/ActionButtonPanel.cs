@@ -140,6 +140,8 @@ public class ActionButtonPanel : MonoBehaviour
         public int CurrentGrappleAttackBonus;
         public string IterativeTag;
         public string GrappleOpponentName;
+        public bool HasAnimateRopeEscapeAction;
+        public string AnimateRopeEscapeDisabledReason;
     }
 
     private sealed class NaturalAttackButtonOption
@@ -248,6 +250,9 @@ public class ActionButtonPanel : MonoBehaviour
         context.GrappleOpponentName = context.GrappleOpponent != null && context.GrappleOpponent.Stats != null
             ? context.GrappleOpponent.Stats.CharacterName
             : "Opponent";
+
+        context.AnimateRopeEscapeDisabledReason = string.Empty;
+        context.HasAnimateRopeEscapeAction = context.Gm != null && context.Gm.CanUseAnimateRopeEscapeAction(pc, out context.AnimateRopeEscapeDisabledReason);
 
         return context;
     }
@@ -782,11 +787,26 @@ public class ActionButtonPanel : MonoBehaviour
 
     private void ComputeGrappleEscapeStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
     {
+        bool hasAnimateRopeEscape = !context.IsGrappling && (context.HasAnimateRopeEscapeAction || !string.IsNullOrEmpty(context.AnimateRopeEscapeDisabledReason));
         bool canEscapeArtist = context.IsGrappling && context.Actions.HasStandardAction;
+        bool escapeArtistVisible = (context.IsGrappling && !context.ShowOnlyPinnerActions) || hasAnimateRopeEscape;
+        bool escapeArtistEnabled = context.IsGrappling ? canEscapeArtist : context.HasAnimateRopeEscapeAction;
+        string escapeArtistLabel;
+        if (context.IsGrappling)
+        {
+            escapeArtistLabel = canEscapeArtist ? "Grapple: Escape Artist (Std)" : "Grapple: Escape Artist (Used)";
+        }
+        else
+        {
+            escapeArtistLabel = context.HasAnimateRopeEscapeAction
+                ? "Animate Rope: Escape (Std)"
+                : $"Animate Rope: Escape ({context.AnimateRopeEscapeDisabledReason})";
+        }
+
         states.Set(GrappleEscapeArtistButton, new ActionButtonState(
-            context.IsGrappling && !context.ShowOnlyPinnerActions,
-            canEscapeArtist,
-            canEscapeArtist ? "Grapple: Escape Artist (Std)" : "Grapple: Escape Artist (Used)"));
+            escapeArtistVisible,
+            escapeArtistEnabled,
+            escapeArtistLabel));
 
         bool canEscapeCheck = context.IsGrappling
             && context.HasIterativeGrappleAttack

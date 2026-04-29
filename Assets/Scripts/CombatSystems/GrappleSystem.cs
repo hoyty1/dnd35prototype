@@ -203,7 +203,17 @@ public partial class GameManager
 
     public void OnGrapplePinButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.PinOpponent);
     public void OnGrappleBreakPinButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.BreakPin);
-    public void OnGrappleEscapeArtistButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.EscapeArtist);
+    public void OnGrappleEscapeArtistButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc != null && TryHandleAnimateRopeEscapeAction(pc, consumeStandardAction: true))
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        TryHandleDirectGrappleAction(GrappleActionType.EscapeArtist);
+    }
     public void OnGrappleEscapeCheckButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.OpposedGrappleEscape);
     public void OnGrappleMoveButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.MoveHalfSpeed);
     public void OnGrappleUseOpponentWeaponButtonPressed() => TryHandleDirectGrappleAction(GrappleActionType.UseOpponentWeapon);

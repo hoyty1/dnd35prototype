@@ -394,7 +394,16 @@ public class CharacterStats
     public bool CanCharge => !CannotRunOrCharge;
 
     public int StrengthConditionPenalty => IsExhaustedState ? 6 : (IsFatiguedState ? 2 : 0);
-    public int DexterityConditionPenalty => IsExhaustedState ? 6 : (IsFatiguedState ? 2 : 0);
+    public int DexterityConditionPenalty
+    {
+        get
+        {
+            int penalty = IsExhaustedState ? 6 : (IsFatiguedState ? 2 : 0);
+            if (HasCondition(CombatConditionType.Entangled))
+                penalty += 4;
+            return penalty;
+        }
+    }
 
     /// <summary>Total Strength penalty from active Ray of Enfeeblement effects (stacking).</summary>
     public int EnfeeblementStrengthPenalty { get; private set; }

@@ -134,17 +134,23 @@ public static partial class SpellDatabase
                 {
                     SpellId = "animate_rope",
                     Name = "Animate Rope",
-                    Description = "Makes a rope move at your command. Duration 1 round/level. PHB p.199",
-                    SpellLevel = 1, School = "Transmutation",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.Self,
-                    RangeSquares = 22,
-                    EffectType = SpellEffectType.Buff,
-                    BuffDurationRounds = 3,
+                    Description = "You hurl and animate a rope to entangle a target creature. Ranged touch attack, Reflex negates entanglement. Duration 1 round/level.",
+                    SpellLevel = 1,
+                    School = "Transmutation",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Custom,
+                    RangeSquares = 10, // 50 ft max (5 increments of 10 ft)
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SpellResistanceApplies = false,
+                    IsRangedTouch = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Rope animation not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData

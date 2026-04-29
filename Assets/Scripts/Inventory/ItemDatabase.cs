@@ -1250,12 +1250,37 @@ public static class ItemDatabase
             IconChar = "\u2600", IconColor = new Color(1f, 0.8f, 0.2f)
         });
 
-        Register(new ItemData
+        Register(new RopeItemData
         {
-            Id = "rope", Name = "Rope (50 ft)", Type = ItemType.Misc,
+            Id = "rope_hemp", Name = "Hemp Rope (50 ft)", Type = ItemType.Misc,
             Slot = EquipSlot.None,
-            Description = "A coil of hempen rope. Useful for climbing and binding.",
+            Description = "A 50-foot coil of hemp rope. Break DC 24.",
             WeightLbs = 10f,
+            BreakDC = 24,
+            LengthFeet = 50,
+            IconChar = "\u221E", IconColor = new Color(0.7f, 0.6f, 0.4f)
+        });
+
+        Register(new RopeItemData
+        {
+            Id = "rope_silk", Name = "Silk Rope (50 ft)", Type = ItemType.Misc,
+            Slot = EquipSlot.None,
+            Description = "A 50-foot coil of silk rope. Break DC 23.",
+            WeightLbs = 5f,
+            BreakDC = 23,
+            LengthFeet = 50,
+            IconChar = "\u221E", IconColor = new Color(0.82f, 0.74f, 0.58f)
+        });
+
+        // Backward-compatible alias for older references.
+        Register(new RopeItemData
+        {
+            Id = "rope", Name = "Hemp Rope (50 ft)", Type = ItemType.Misc,
+            Slot = EquipSlot.None,
+            Description = "A 50-foot coil of hemp rope. Break DC 24.",
+            WeightLbs = 10f,
+            BreakDC = 24,
+            LengthFeet = 50,
             IconChar = "\u221E", IconColor = new Color(0.7f, 0.6f, 0.4f)
         });
     }
@@ -1388,51 +1413,86 @@ public static class ItemDatabase
     {
         var src = Get(id);
         if (src == null) return null;
-        return new ItemData
+
+        ItemData clone = src is RopeItemData ? new RopeItemData() : new ItemData();
+
+        clone.Id = src.Id;
+        clone.Name = src.Name;
+        clone.Description = src.Description;
+        clone.Type = src.Type;
+        clone.Slot = src.Slot;
+
+        // Weapon properties
+        clone.Proficiency = src.Proficiency;
+        clone.WeaponCat = src.WeaponCat;
+        clone.WeaponSize = src.WeaponSize;
+        clone.DamageDice = src.DamageDice;
+        clone.DamageCount = src.DamageCount;
+        clone.BonusDamage = src.BonusDamage;
+        clone.DesignedForSize = src.DesignedForSize;
+        clone.AttackRange = src.AttackRange;
+        clone.IsLightWeapon = src.IsLightWeapon;
+        clone.IsTwoHanded = src.IsTwoHanded;
+        clone.HasReach = src.HasReach;
+        clone.ReachSquares = src.ReachSquares;
+        clone.CanAttackAdjacent = src.CanAttackAdjacent;
+        clone.IsReachWeapon = src.IsReachWeapon;
+        clone.DealsNonlethalDamage = src.DealsNonlethalDamage;
+        clone.WhipLikeArmorRestriction = src.WhipLikeArmorRestriction;
+        clone.DamageType = src.DamageType;
+        clone.CountsAsMagicForBypass = src.CountsAsMagicForBypass;
+        clone.IsSilvered = src.IsSilvered;
+        clone.IsColdIron = src.IsColdIron;
+        clone.IsAdamantine = src.IsAdamantine;
+        clone.IsAlignedGood = src.IsAlignedGood;
+        clone.IsAlignedEvil = src.IsAlignedEvil;
+        clone.IsAlignedLawful = src.IsAlignedLawful;
+        clone.IsAlignedChaotic = src.IsAlignedChaotic;
+        clone.DmgModType = src.DmgModType;
+        clone.CompositeRating = src.CompositeRating;
+        clone.IsThrown = src.IsThrown;
+        clone.RangeIncrement = src.RangeIncrement;
+        clone.RequiresReload = src.RequiresReload;
+        clone.IsLoaded = src.IsLoaded;
+        clone.ReloadAction = src.ReloadAction;
+        clone.CritThreatMin = src.CritThreatMin;
+        clone.CritMultiplier = src.CritMultiplier;
+
+        // Armor/Shield properties
+        clone.ArmorBonus = src.ArmorBonus;
+        clone.ShieldBonus = src.ShieldBonus;
+        clone.ArmorCat = src.ArmorCat;
+        clone.ArmorMaterial = src.ArmorMaterial;
+        clone.MaxDexBonus = src.MaxDexBonus;
+        clone.ArmorCheckPenalty = src.ArmorCheckPenalty;
+        clone.ArcaneSpellFailure = src.ArcaneSpellFailure;
+        clone.WeightLbs = src.WeightLbs;
+        clone.VisualTags = src.VisualTags != null ? new HashSet<string>(src.VisualTags) : new HashSet<string>();
+        clone.EnhancementBonus = src.EnhancementBonus;
+        clone.Hardness = src.Hardness;
+        clone.MaxHitPoints = src.MaxHitPoints;
+        clone.CurrentHitPoints = src.CurrentHitPoints;
+        clone.IsBroken = src.IsBroken;
+        clone.IsDestroyed = src.IsDestroyed;
+
+        // Other
+        clone.ConsumableEffect = src.ConsumableEffect;
+        clone.ConsumableSpellName = src.ConsumableSpellName;
+        clone.ConsumableMinimumCasterLevel = src.ConsumableMinimumCasterLevel;
+        clone.ConsumableModifier = src.ConsumableModifier;
+        clone.HealAmount = src.HealAmount;
+        clone.HealDiceCount = src.HealDiceCount;
+        clone.HealDiceSides = src.HealDiceSides;
+        clone.HealBonus = src.HealBonus;
+        clone.IconChar = src.IconChar;
+        clone.IconColor = src.IconColor;
+
+        if (clone is RopeItemData ropeClone && src is RopeItemData ropeSrc)
         {
-            Id = src.Id, Name = src.Name, Description = src.Description,
-            Type = src.Type, Slot = src.Slot,
-            // Weapon properties
-            Proficiency = src.Proficiency, WeaponCat = src.WeaponCat,
-            WeaponSize = src.WeaponSize,
-            DamageDice = src.DamageDice, DamageCount = src.DamageCount,
-            BonusDamage = src.BonusDamage, DesignedForSize = src.DesignedForSize, AttackRange = src.AttackRange,
-            IsLightWeapon = src.IsLightWeapon, IsTwoHanded = src.IsTwoHanded,
-            HasReach = src.HasReach, ReachSquares = src.ReachSquares,
-            CanAttackAdjacent = src.CanAttackAdjacent, IsReachWeapon = src.IsReachWeapon,
-            DealsNonlethalDamage = src.DealsNonlethalDamage, WhipLikeArmorRestriction = src.WhipLikeArmorRestriction,
-            DamageType = src.DamageType,
-            CountsAsMagicForBypass = src.CountsAsMagicForBypass,
-            IsSilvered = src.IsSilvered, IsColdIron = src.IsColdIron,
-            IsAdamantine = src.IsAdamantine,
-            IsAlignedGood = src.IsAlignedGood, IsAlignedEvil = src.IsAlignedEvil,
-            IsAlignedLawful = src.IsAlignedLawful, IsAlignedChaotic = src.IsAlignedChaotic,
-            DmgModType = src.DmgModType, CompositeRating = src.CompositeRating,
-            IsThrown = src.IsThrown, RangeIncrement = src.RangeIncrement,
-            RequiresReload = src.RequiresReload, IsLoaded = src.IsLoaded, ReloadAction = src.ReloadAction,
-            CritThreatMin = src.CritThreatMin, CritMultiplier = src.CritMultiplier,
-            // Armor/Shield properties
-            ArmorBonus = src.ArmorBonus, ShieldBonus = src.ShieldBonus,
-            ArmorCat = src.ArmorCat, ArmorMaterial = src.ArmorMaterial, MaxDexBonus = src.MaxDexBonus,
-            ArmorCheckPenalty = src.ArmorCheckPenalty,
-            ArcaneSpellFailure = src.ArcaneSpellFailure, WeightLbs = src.WeightLbs,
-            VisualTags = src.VisualTags != null ? new HashSet<string>(src.VisualTags) : new HashSet<string>(),
-            EnhancementBonus = src.EnhancementBonus,
-            Hardness = src.Hardness,
-            MaxHitPoints = src.MaxHitPoints,
-            CurrentHitPoints = src.CurrentHitPoints,
-            IsBroken = src.IsBroken,
-            IsDestroyed = src.IsDestroyed,
-            // Other
-            ConsumableEffect = src.ConsumableEffect,
-            ConsumableSpellName = src.ConsumableSpellName,
-            ConsumableMinimumCasterLevel = src.ConsumableMinimumCasterLevel,
-            ConsumableModifier = src.ConsumableModifier,
-            HealAmount = src.HealAmount,
-            HealDiceCount = src.HealDiceCount,
-            HealDiceSides = src.HealDiceSides,
-            HealBonus = src.HealBonus,
-            IconChar = src.IconChar, IconColor = src.IconColor
-        };
+            ropeClone.BreakDC = ropeSrc.BreakDC;
+            ropeClone.LengthFeet = ropeSrc.LengthFeet;
+        }
+
+        return clone;
     }
 }

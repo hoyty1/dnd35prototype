@@ -189,6 +189,7 @@ public partial class GameManager : MonoBehaviour
     private SpellData _pendingSpell; // Spell selected for casting
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
     private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
+    private ItemData _pendingAnimateRopeItem; // Selected rope material component reserved for the pending Animate Rope cast
     private string _pendingDisguiseSelfRace;
     private SummonMonsterOption _pendingSummonSelection; // Selected summon option waiting for placement
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
@@ -4121,6 +4122,9 @@ public partial class GameManager : MonoBehaviour
         }
 
         if (TryHandleColorSprayConditionExpiry(character, condition))
+            return;
+
+        if (TryHandleAnimateRopeConditionExpiry(character, condition))
             return;
 
         bool fromColorSpray = string.Equals(condition.SourceId, "color_spray", StringComparison.Ordinal)
@@ -8697,6 +8701,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSpell = spell;
         _pendingMetamagic = metamagic;
         _pendingSpellFromHeldCharge = false;
+        _pendingAnimateRopeItem = null;
         _pendingDisguiseSelfRace = null;
         _pendingSummonSelection = null;
 
@@ -8719,6 +8724,9 @@ public partial class GameManager : MonoBehaviour
         if (TryShowGreaseCastModePrompt(pc))
             return;
 
+        if (TryHandleAnimateRopeComponentSelection(pc))
+            return;
+
         if (ShouldShowTouchSpellPrompt(_pendingSpell))
         {
             CombatUI?.ShowTouchSpellPrompt(
@@ -8737,6 +8745,374 @@ public partial class GameManager : MonoBehaviour
         }
 
         BeginPendingSpellTargeting(pc);
+    }
+
+    private static bool IsAnimateRopeSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, "animate_rope", StringComparison.Ordinal);
+    }
+
+    private bool TryHandleAnimateRopeComponentSelection(CharacterController caster)
+    {
+        if (!IsAnimateRopeSpell(_pendingSpell))
+        {
+            _pendingAnimateRopeItem = null;
+            return false;
+        }
+
+        if (caster == null || caster.Stats == null)
+            return false;
+
+        if (!TryGetAnimateRopeInventoryOptions(caster, out List<ItemData> ropeOptions))
+        {
+            CombatUI?.ShowCombatLog("⚠ You need rope to cast this spell.");
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            _pendingAnimateRopeItem = null;
+            ShowActionChoices();
+            return true;
+        }
+
+        if (ropeOptions.Count == 1)
+        {
+            _pendingAnimateRopeItem = ropeOptions[0];
+            return false;
+        }
+
+        List<string> labels = new List<string>(ropeOptions.Count);
+        for (int i = 0; i < ropeOptions.Count; i++)
+        {
+            ItemData rope = ropeOptions[i];
+            int breakDc = GetRopeBreakDC(rope);
+            labels.Add($"{rope.Name} (Break DC {breakDc})");
+        }
+
+        if (CombatUI != null)
+        {
+            CombatUI.ShowPickUpItemSelection(
+                actorName: caster.Stats.CharacterName,
+                itemOptions: labels,
+                onSelect: selectedIndex =>
+                {
+                    if (selectedIndex < 0 || selectedIndex >= ropeOptions.Count)
+                    {
+                        _pendingSpell = null;
+                        _pendingMetamagic = null;
+                        _pendingSpellFromHeldCharge = false;
+                        _pendingAnimateRopeItem = null;
+                        ShowActionChoices();
+                        return;
+                    }
+
+                    _pendingAnimateRopeItem = ropeOptions[selectedIndex];
+                    BeginPendingSpellTargeting(caster);
+                },
+                onCancel: () =>
+                {
+                    _pendingSpell = null;
+                    _pendingMetamagic = null;
+                    _pendingSpellFromHeldCharge = false;
+                    _pendingAnimateRopeItem = null;
+                    ShowActionChoices();
+                },
+                titleOverride: "Animate Rope - Select Rope",
+                bodyOverride: "Choose which rope to animate.",
+                optionButtonColorOverride: new Color(0.24f, 0.34f, 0.56f, 1f));
+        }
+
+        return true;
+    }
+
+    private bool TryGetAnimateRopeInventoryOptions(CharacterController caster, out List<ItemData> ropeItems)
+    {
+        ropeItems = new List<ItemData>();
+        if (caster == null)
+            return false;
+
+        InventoryComponent inventoryComponent = caster.GetComponent<InventoryComponent>();
+        Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
+        if (inventory == null || inventory.GeneralSlots == null)
+            return false;
+
+        for (int i = 0; i < inventory.GeneralSlots.Length; i++)
+        {
+            ItemData item = inventory.GeneralSlots[i];
+            if (!IsRopeItem(item))
+                continue;
+
+            ropeItems.Add(item);
+        }
+
+        return ropeItems.Count > 0;
+    }
+
+    private static bool IsRopeItem(ItemData item)
+    {
+        if (item == null)
+            return false;
+
+        if (item is RopeItemData)
+            return true;
+
+        string id = item.Id ?? string.Empty;
+        return string.Equals(id, "rope", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(id, "rope_hemp", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(id, "rope_silk", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int GetRopeBreakDC(ItemData item)
+    {
+        if (item is RopeItemData rope && rope.BreakDC > 0)
+            return rope.BreakDC;
+
+        string id = item != null ? (item.Id ?? string.Empty) : string.Empty;
+        if (string.Equals(id, "rope_silk", StringComparison.OrdinalIgnoreCase))
+            return 23;
+
+        return 24;
+    }
+
+    private ItemData ConsumePendingAnimateRopeItem(CharacterController caster)
+    {
+        if (caster == null)
+            return null;
+
+        InventoryComponent inventoryComponent = caster.GetComponent<InventoryComponent>();
+        Inventory inventory = inventoryComponent != null ? inventoryComponent.CharacterInventory : null;
+        if (inventory == null)
+            return null;
+
+        ItemData selected = _pendingAnimateRopeItem;
+        if (selected == null)
+        {
+            if (!TryGetAnimateRopeInventoryOptions(caster, out List<ItemData> options) || options.Count == 0)
+                return null;
+            selected = options[0];
+        }
+
+        if (!inventory.RemoveItem(selected))
+            return null;
+
+        _pendingAnimateRopeItem = null;
+        return selected;
+    }
+
+    private bool TryResolveAnimateRopeSpellEffect(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
+    {
+        if (!IsAnimateRopeSpell(spell) || caster == null || target == null || result == null)
+            return false;
+
+        ItemData ropeItem = ConsumePendingAnimateRopeItem(caster);
+        if (ropeItem == null)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} has no rope available to animate.");
+            return true;
+        }
+
+        int breakDc = GetRopeBreakDC(ropeItem);
+
+        if (result.RequiredAttackRoll && !result.AttackHit)
+        {
+            DropAnimateRopeItemAt(target.GridPosition, ropeItem);
+            CombatUI?.ShowCombatLog($"🪢 Animate Rope misses. {ropeItem.Name} lands on the ground.");
+            return true;
+        }
+
+        if (result.RequiredSave && result.SaveSucceeded)
+        {
+            DropAnimateRopeItemAt(target.GridPosition, ropeItem);
+            CombatUI?.ShowCombatLog($"🪢 {target.Stats.CharacterName} dodges the rope with a successful Reflex save. {ropeItem.Name} falls to the ground.");
+            return true;
+        }
+
+        int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+
+        var conditionData = new AnimateRopeEntangledConditionData
+        {
+            Caster = caster,
+            Target = target,
+            RopeItem = ropeItem,
+            RopeBreakDC = breakDc,
+            LastKnownTargetPosition = target.GridPosition,
+            RopeDestroyed = false,
+            RopeDroppedToGround = false,
+            SourceSpellId = spell.SpellId,
+            SourceSpellName = spell.Name
+        };
+
+        if (_conditionService != null)
+        {
+            _conditionService.ApplyCondition(
+                target,
+                CombatConditionType.Entangled,
+                durationRounds,
+                source: caster,
+                data: conditionData,
+                sourceNameOverride: spell.Name,
+                sourceCategory: "Spell",
+                sourceId: spell.SpellId);
+        }
+        else
+        {
+            target.ApplyCondition(CombatConditionType.Entangled, durationRounds, spell.Name);
+        }
+
+        CombatUI?.ShowCombatLog($"🪢 {target.Stats.CharacterName} is entangled by {ropeItem.Name}! No movement, -2 attack, -4 DEX. Escape with STR vs DC {breakDc} or Escape Artist DC 20.");
+        return true;
+    }
+
+    private bool TryGetAnimateRopeEntangledCondition(CharacterController actor, out ConditionService.ActiveCondition condition, out AnimateRopeEntangledConditionData data)
+    {
+        condition = null;
+        data = null;
+
+        if (actor == null)
+            return false;
+
+        List<ConditionService.ActiveCondition> active = GetActiveConditions(actor);
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionService.ActiveCondition candidate = active[i];
+            if (candidate == null)
+                continue;
+            if (ConditionRules.Normalize(candidate.Type) != CombatConditionType.Entangled)
+                continue;
+
+            AnimateRopeEntangledConditionData ropeData = candidate.Data as AnimateRopeEntangledConditionData;
+            bool sourceMatches = string.Equals(candidate.SourceId, "animate_rope", StringComparison.Ordinal)
+                || (ropeData != null && string.Equals(ropeData.SourceSpellId, "animate_rope", StringComparison.Ordinal));
+            if (!sourceMatches)
+                continue;
+
+            condition = candidate;
+            data = ropeData;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void DropAnimateRopeItemAt(Vector2Int position, ItemData ropeItem)
+    {
+        if (ropeItem == null || Grid == null)
+            return;
+
+        SquareCell cell = Grid.GetCell(position);
+        if (cell == null)
+            return;
+
+        cell.AddGroundItem(ropeItem);
+    }
+
+    public bool CanUseAnimateRopeEscapeAction(CharacterController actor, out string reason)
+    {
+        reason = string.Empty;
+        if (actor == null || actor.Stats == null)
+        {
+            reason = "No active actor.";
+            return false;
+        }
+
+        if (!TryGetAnimateRopeEntangledCondition(actor, out _, out _))
+        {
+            reason = string.Empty;
+            return false;
+        }
+
+        if (!actor.Actions.HasStandardAction)
+        {
+            reason = "Standard action already used.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryHandleAnimateRopeEscapeAction(CharacterController actor, bool consumeStandardAction)
+    {
+        if (!TryGetAnimateRopeEntangledCondition(actor, out _, out AnimateRopeEntangledConditionData ropeData))
+            return false;
+
+        if (consumeStandardAction && (actor.Actions == null || !actor.Actions.HasStandardAction || !actor.CommitStandardAction()))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {actor.Stats.CharacterName} has no standard action available to attempt escape.");
+            return true;
+        }
+
+        int strBonus = actor.Stats != null ? actor.Stats.STRMod : 0;
+        int escapeArtistBonus = actor.Stats != null ? actor.Stats.GetSkillBonus("Escape Artist") : 0;
+        int breakDc = ropeData != null && ropeData.RopeBreakDC > 0 ? ropeData.RopeBreakDC : 24;
+
+        bool useStrength = (strBonus - breakDc) >= (escapeArtistBonus - 20);
+        int dc = useStrength ? breakDc : 20;
+        int bonus = useStrength ? strBonus : escapeArtistBonus;
+        string checkLabel = useStrength ? "Strength" : "Escape Artist";
+
+        int roll = UnityEngine.Random.Range(1, 21);
+        int total = roll + bonus;
+        bool success = total >= dc;
+
+        CombatUI?.ShowCombatLog($"🪢 {actor.Stats.CharacterName} attempts to escape Animate Rope ({checkLabel}): d20 {roll} + {bonus} = {total} vs DC {dc}.");
+
+        if (success)
+        {
+            actor.RemoveCondition(CombatConditionType.Entangled);
+            if (ropeData != null)
+            {
+                DropAnimateRopeItemAt(actor.GridPosition, ropeData.RopeItem);
+                ropeData.RopeDroppedToGround = true;
+                ropeData.LastKnownTargetPosition = actor.GridPosition;
+            }
+
+            CombatUI?.ShowCombatLog($"✅ {actor.Stats.CharacterName} escapes the animated rope.");
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog($"❌ {actor.Stats.CharacterName} fails to escape the animated rope.");
+        }
+
+        UpdateAllStatsUI();
+        return true;
+    }
+
+    public bool TryExecuteAnimateRopeEscapeForNpc(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null)
+            return false;
+
+        return TryHandleAnimateRopeEscapeAction(npc, consumeStandardAction: true);
+    }
+
+    private bool TryHandleAnimateRopeConditionExpiry(CharacterController character, ConditionService.ActiveCondition condition)
+    {
+        if (character == null || condition == null)
+            return false;
+
+        if (ConditionRules.Normalize(condition.Type) != CombatConditionType.Entangled)
+            return false;
+
+        AnimateRopeEntangledConditionData data = condition.Data as AnimateRopeEntangledConditionData;
+        bool isAnimateRope = string.Equals(condition.SourceId, "animate_rope", StringComparison.Ordinal)
+            || (data != null && string.Equals(data.SourceSpellId, "animate_rope", StringComparison.Ordinal));
+        if (!isAnimateRope)
+            return false;
+
+        Vector2Int dropPos = character.GridPosition;
+        if (data != null)
+        {
+            if (data.RopeDroppedToGround)
+                return true;
+
+            data.LastKnownTargetPosition = character.GridPosition;
+            dropPos = data.LastKnownTargetPosition;
+            DropAnimateRopeItemAt(dropPos, data.RopeItem);
+            data.RopeDroppedToGround = true;
+        }
+
+        CombatUI?.ShowCombatLog($"⏱ Animate Rope ends on {character.Stats.CharacterName}. The rope falls to the ground.");
+        return true;
     }
 
     private bool IsSummonMonsterSpell(SpellData spell)
@@ -8988,6 +9364,25 @@ public partial class GameManager : MonoBehaviour
             slotLevelToConsume = _pendingMetamagic.GetEffectiveSpellLevel(_pendingSpell.SpellLevel);
 
 
+        if (!ResolveEntangledSomaticCastingConcentration(
+                caster,
+                spellComp,
+                _pendingSpell,
+                _pendingMetamagic,
+                hasMetamagicApplied,
+                slotLevelToConsume,
+                false,
+                -1,
+                null))
+        {
+            HandleConcentrationOnCasting(caster, _pendingSpell);
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            _pendingAnimateRopeItem = null;
+            return false;
+        }
+
         if (!ResolveGrappledOrPinnedCastingConcentration(
                 caster,
                 spellComp,
@@ -9003,6 +9398,7 @@ public partial class GameManager : MonoBehaviour
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
+            _pendingAnimateRopeItem = null;
             return false;
         }
         if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
@@ -9989,6 +10385,31 @@ public partial class GameManager : MonoBehaviour
 
         if (!isDeliveringHeldCharge)
         {
+            if (!ResolveEntangledSomaticCastingConcentration(
+                    caster,
+                    spellComp,
+                    _pendingSpell,
+                    _pendingMetamagic,
+                    hasMetamagicApplied,
+                    slotLevelToConsume,
+                    isSpontaneous,
+                    spontaneousLevel,
+                    spontaneousSacrificedSpellId))
+            {
+                HandleConcentrationOnCasting(caster, _pendingSpell);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingMetamagic = null;
+                _pendingAnimateRopeItem = null;
+
+                ClearSpellcastResourceSnapshot();
+                StartCoroutine(AfterAttackDelay(caster, 1.0f));
+                return;
+            }
+
             if (!ResolveGrappledOrPinnedCastingConcentration(
                     caster,
                     spellComp,
@@ -10007,6 +10428,7 @@ public partial class GameManager : MonoBehaviour
                 _pendingSpell = null;
                 _pendingSpellFromHeldCharge = false;
                 _pendingMetamagic = null;
+                _pendingAnimateRopeItem = null;
 
                 ClearSpellcastResourceSnapshot();
                 StartCoroutine(AfterAttackDelay(caster, 1.0f));
@@ -10040,6 +10462,7 @@ public partial class GameManager : MonoBehaviour
                 _pendingSpell = null;
                 _pendingSpellFromHeldCharge = false;
                 _pendingMetamagic = null;
+                _pendingAnimateRopeItem = null;
 
                 ClearSpellcastResourceSnapshot();
                 StartCoroutine(AfterAttackDelay(caster, 1.0f));
@@ -10123,7 +10546,11 @@ public partial class GameManager : MonoBehaviour
             if (!handledCauseFear && result.Success && !effectNegatedBySave)
                 handledRayOfEnfeeblement = TryResolveRayOfEnfeeblementSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && !handledRayOfEnfeeblement && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            bool handledAnimateRope = false;
+            if (!handledCauseFear && !handledRayOfEnfeeblement)
+                handledAnimateRope = TryResolveAnimateRopeSpellEffect(caster, target, _pendingSpell, result);
+
+            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -10206,6 +10633,7 @@ public partial class GameManager : MonoBehaviour
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
+                    _pendingAnimateRopeItem = null;
                     ResetPendingGreaseCastMode();
                     return;
                 }
@@ -10217,6 +10645,7 @@ public partial class GameManager : MonoBehaviour
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
+                    _pendingAnimateRopeItem = null;
                     ResetPendingGreaseCastMode();
                     return;
                 }
@@ -10225,6 +10654,7 @@ public partial class GameManager : MonoBehaviour
             _pendingSpell = null;
             _pendingSpellFromHeldCharge = false;
             _pendingMetamagic = null;
+            _pendingAnimateRopeItem = null;
             _pendingDisguiseSelfRace = null;
             ResetPendingGreaseCastMode();
 
@@ -10601,6 +11031,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSpell = null;
         _pendingMetamagic = null;
         _pendingSpellFromHeldCharge = false;
+        _pendingAnimateRopeItem = null;
         ResetPendingGreaseCastMode();
 
         Grid.ClearAllHighlights();
@@ -10618,6 +11049,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSpell = null;
         _pendingSpellFromHeldCharge = false;
         _pendingMetamagic = null;
+        _pendingAnimateRopeItem = null;
         _pendingSummonSelection = null;
         ResetPendingGreaseCastMode();
         _pendingAttackMode = PendingAttackMode.Single;
@@ -12400,6 +12832,54 @@ public partial class GameManager : MonoBehaviour
         var threatening = ThreatSystem.GetThreateningEnemies(caster.GridPosition, caster, GetAllCharacters());
         threatening.RemoveAll(enemy => enemy == null || enemy.Stats == null || enemy.Stats.IsDead || !ThreatSystem.CanMakeAoO(enemy));
         return threatening;
+    }
+
+    private bool ResolveEntangledSomaticCastingConcentration(
+        CharacterController caster,
+        SpellcastingComponent spellComp,
+        SpellData spell,
+        MetamagicData metamagic,
+        bool hasMetamagicApplied,
+        int slotLevelToConsume,
+        bool isSpontaneous,
+        int spontaneousLevel,
+        string spontaneousSacrificedSpellId)
+    {
+        if (caster == null || caster.Stats == null || spell == null)
+            return false;
+
+        if (!caster.HasCondition(CombatConditionType.Entangled) || !spell.HasSomaticComponent)
+            return true;
+
+        const int dc = 15;
+        int roll = UnityEngine.Random.Range(1, 21);
+        int bonus = Mathf.Max(0, caster.Stats.GetCasterLevel()) + GetSpellSaveAbilityModifier(caster, spell);
+        int total = roll + bonus;
+        bool success = total >= dc;
+
+        CombatUI?.ShowCombatLog($"🪢 Entangled somatic concentration ({caster.Stats.CharacterName}, {spell.Name}): d20 {roll} + {bonus} = {total} vs DC {dc}.");
+
+        if (success)
+            return true;
+
+        bool consumed = ConsumePendingSpellSlot(
+            spellComp,
+            spell,
+            metamagic,
+            hasMetamagicApplied,
+            slotLevelToConsume,
+            isSpontaneous,
+            spontaneousLevel,
+            spontaneousSacrificedSpellId);
+
+        if (!consumed)
+        {
+            Debug.LogError($"[GameManager] Entangled concentration failure path: could not consume level {slotLevelToConsume} slot for {spell.Name}");
+            return false;
+        }
+
+        CombatUI?.ShowCombatLog($"⚠ {caster.Stats.CharacterName} fails the DC {dc} concentration check while entangled. {spell.Name} is lost and the spell slot is spent.");
+        return false;
     }
 
     private bool AttemptCastDefensively(CharacterController caster, SpellData spell)
@@ -14472,6 +14952,7 @@ public partial class GameManager : MonoBehaviour
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
+                _pendingAnimateRopeItem = null;
                 ResetPendingGreaseCastMode();
                 ShowActionChoices();
                 return;
@@ -16582,7 +17063,11 @@ public partial class GameManager : MonoBehaviour
         if (!handledCauseFear && result.Success && !effectNegatedBySave)
             handledRayOfEnfeeblement = TryResolveRayOfEnfeeblementSpellEffect(npc, target, spell, result);
 
-        if (!handledCauseFear && !handledRayOfEnfeeblement && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        bool handledAnimateRope = false;
+        if (!handledCauseFear && !handledRayOfEnfeeblement)
+            handledAnimateRope = TryResolveAnimateRopeSpellEffect(npc, target, spell, result);
+
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             ApplySpellBuff(npc, target, spell, spellComp);
 
         if (result.DamageDealt > 0)

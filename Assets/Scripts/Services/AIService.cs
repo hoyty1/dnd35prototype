@@ -97,6 +97,11 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        if (_gameManager.TryExecuteAnimateRopeEscapeForNpc(npc))
+        {
+            yield return new WaitForSeconds(0.35f);
+        }
+
         CharacterController targetPC = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
         if (targetPC == null)
         {

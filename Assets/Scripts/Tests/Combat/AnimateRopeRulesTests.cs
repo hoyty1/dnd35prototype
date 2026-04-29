@@ -1,0 +1,86 @@
+using UnityEngine;
+
+namespace Tests.Combat
+{
+/// <summary>
+/// Regression checks for Animate Rope implementation details.
+/// Run with AnimateRopeRulesTests.RunAll().
+/// </summary>
+public static class AnimateRopeRulesTests
+{
+    private static int _passed;
+    private static int _failed;
+
+    public static void RunAll()
+    {
+        _passed = 0;
+        _failed = 0;
+
+        Debug.Log("====== ANIMATE ROPE RULES TESTS ======");
+
+        RaceDatabase.Init();
+        ClassRegistry.Init();
+        ItemDatabase.Init();
+        SpellDatabase.Init();
+
+        TestAnimateRopeSpellDefinition();
+        TestRopeItemsDefinition();
+        TestEntangledConditionDefinitionForAnimateRope();
+
+        Debug.Log($"====== Animate Rope Rules Results: {_passed} passed, {_failed} failed ======");
+    }
+
+    private static void Assert(bool condition, string testName, string detail = "")
+    {
+        if (condition)
+        {
+            _passed++;
+            Debug.Log($"  PASS: {testName}");
+        }
+        else
+        {
+            _failed++;
+            Debug.LogError($"  FAIL: {testName} {detail}");
+        }
+    }
+
+    private static void TestAnimateRopeSpellDefinition()
+    {
+        SpellData spell = SpellDatabase.GetSpell("animate_rope");
+        Assert(spell != null, "Animate Rope spell exists");
+        if (spell == null)
+            return;
+
+        Assert(spell.IsRangedTouchSpell(), "Animate Rope is a ranged touch spell");
+        Assert(spell.AllowsSavingThrow && spell.SavingThrowType == "Reflex", "Animate Rope uses Reflex save");
+        Assert(spell.GetRangeSquaresForCasterLevel(20) == 10, "Animate Rope max range is 10 squares (50 ft)",
+            $"observed={spell.GetRangeSquaresForCasterLevel(20)}");
+    }
+
+    private static void TestRopeItemsDefinition()
+    {
+        ItemData hemp = ItemDatabase.Get("rope_hemp");
+        ItemData silk = ItemDatabase.Get("rope_silk");
+
+        Assert(hemp is RopeItemData, "Hemp rope uses RopeItemData");
+        Assert(silk is RopeItemData, "Silk rope uses RopeItemData");
+
+        RopeItemData hempRope = hemp as RopeItemData;
+        RopeItemData silkRope = silk as RopeItemData;
+
+        Assert(hempRope != null && hempRope.BreakDC == 24, "Hemp rope break DC is 24");
+        Assert(silkRope != null && silkRope.BreakDC == 23, "Silk rope break DC is 23");
+    }
+
+    private static void TestEntangledConditionDefinitionForAnimateRope()
+    {
+        ConditionDefinition def = ConditionRules.GetDefinition(CombatConditionType.Entangled);
+        Assert(def != null, "Entangled condition definition exists");
+        if (def == null)
+            return;
+
+        Assert(def.AttackModifier == -2, "Entangled applies -2 attack penalty", $"observed={def.AttackModifier}");
+        Assert(def.PreventsMovement, "Entangled prevents movement for Animate Rope behavior");
+    }
+}
+}

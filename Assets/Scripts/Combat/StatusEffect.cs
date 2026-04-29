@@ -292,11 +292,11 @@ public static class ConditionRules
             Type = CombatConditionType.Entangled,
             DisplayName = "Entangled",
             ShortLabel = "EN",
-            Description = "-2 attack, -2 AC, half movement.",
+            Description = "-2 attack, -4 DEX, cannot move. Somatic casting requires concentration.",
             StackingRule = ConditionStackingRule.Refresh,
             AttackModifier = -2,
-            ArmorClassModifier = -2,
-            MovementMultiplier = 0.5f
+            PreventsMovement = true,
+            MovementMultiplier = 0f
         });
 
         Add(new ConditionDefinition

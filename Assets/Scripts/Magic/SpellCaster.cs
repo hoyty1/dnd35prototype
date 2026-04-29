@@ -153,8 +153,32 @@ public static class SpellCaster
                 result.ProtectionAcBonus = protection.DeflectionAcBonus;
             }
 
+            int animateRopeRangePenalty = 0;
+            int animateRopeIncrement = 0;
+            if (isRanged
+                && spell != null
+                && string.Equals(spell.SpellId, "animate_rope", System.StringComparison.Ordinal)
+                && casterController != null
+                && targetController != null)
+            {
+                int distanceSquares = SquareGridUtils.GetDistance(casterController.GridPosition, targetController.GridPosition);
+                int distanceFeet = Mathf.Max(0, distanceSquares * 5);
+                animateRopeIncrement = Mathf.Max(1, Mathf.CeilToInt(distanceFeet / 10f));
+                if (animateRopeIncrement > 5)
+                {
+                    result.RequiredAttackRoll = true;
+                    result.IsRangedTouch = true;
+                    result.AttackHit = false;
+                    result.Success = false;
+                    result.NoEffectReason = $"Target is beyond Animate Rope maximum range (increment {animateRopeIncrement}/5).";
+                    return result;
+                }
+
+                animateRopeRangePenalty = -2 * Mathf.Max(0, animateRopeIncrement - 1);
+            }
+
             int roll = Random.Range(1, 21);
-            int total = roll + atkBonus + situationalSpellAttackBonus + fightingDefensivelyPenalty + shootingIntoMeleePenalty;
+            int total = roll + atkBonus + situationalSpellAttackBonus + fightingDefensivelyPenalty + shootingIntoMeleePenalty + animateRopeRangePenalty;
 
             result.AttackRoll = roll;
             result.AttackBonus = atkBonus;
@@ -166,6 +190,8 @@ public static class SpellCaster
             result.ShootingIntoMeleePenalty = shootingIntoMeleePenalty;
             result.PreciseShotNegated = preciseShotNegated;
             result.TargetFightingDefensivelyACBonus = (targetController != null && targetController.IsFightingDefensively) ? 2 : 0;
+            result.RangeIncrementNumber = animateRopeIncrement;
+            result.RangeIncrementPenalty = animateRopeRangePenalty;
 
             if (roll == 20)
                 result.AttackHit = true;

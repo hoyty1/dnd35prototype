@@ -29,6 +29,8 @@ public class SpellResult
     public int TargetFightingDefensivelyACBonus; // +2 dodge AC on touch AC if active
     public int SituationalAttackBonus;           // e.g., Shocking Grasp +3 vs metal
     public string SituationalAttackBonusSource;
+    public int RangeIncrementNumber;
+    public int RangeIncrementPenalty;
 
     // ========== SAVING THROW ==========
     public bool RequiredSave;
@@ -173,6 +175,16 @@ public class SpellResult
                     ? "situational spell modifier"
                     : SituationalAttackBonusSource;
                 sb.AppendLine($"    {FormatModLine(SituationalAttackBonus, source)}");
+            }
+            if (RangeIncrementNumber > 0)
+            {
+                string label = RangeIncrementPenalty < 0
+                    ? $"range increment {RangeIncrementNumber}"
+                    : $"range increment {RangeIncrementNumber} (no penalty)";
+                if (RangeIncrementPenalty != 0)
+                    sb.AppendLine($"    {FormatModLine(RangeIncrementPenalty, label)}");
+                else
+                    sb.AppendLine($"    + 0 ({label})");
             }
             if (TargetFightingDefensivelyACBonus > 0)
                 sb.AppendLine($"    Defender stance: +{TargetFightingDefensivelyACBonus} Touch AC (Fighting Defensively)");
