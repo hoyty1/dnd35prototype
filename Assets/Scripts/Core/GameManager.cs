@@ -151,6 +151,7 @@ public partial class GameManager : MonoBehaviour
     private ConfusedBehaviorController _confusedBehaviorController;
     private CharmedBehaviorController _charmedBehaviorController;
     private FascinatedBehaviorController _fascinatedBehaviorController;
+    private FrightenedBehaviorController _frightenedBehaviorController;
 
     /// <summary>Current combatant in initiative order (PC or NPC).</summary>
     public CharacterController CurrentCharacter => _turnService != null ? _turnService.CurrentCharacter : null;
@@ -385,6 +386,7 @@ public partial class GameManager : MonoBehaviour
         _confusedBehaviorController ??= new ConfusedBehaviorController();
         _charmedBehaviorController ??= new CharmedBehaviorController();
         _fascinatedBehaviorController ??= new FascinatedBehaviorController();
+        _frightenedBehaviorController ??= new FrightenedBehaviorController();
 
         turnUndeadSystem ??= gameObject.GetComponent<TurnUndeadSystem>() ?? gameObject.AddComponent<TurnUndeadSystem>();
         grappleSystem ??= gameObject.GetComponent<GrappleSystem>() ?? gameObject.AddComponent<GrappleSystem>();
@@ -4125,6 +4127,14 @@ public partial class GameManager : MonoBehaviour
             || string.Equals(condition.SourceName, "Color Spray", StringComparison.Ordinal);
         if (fromColorSpray && (normalizedType == CombatConditionType.Unconscious || normalizedType == CombatConditionType.Blinded))
             return;
+
+        if (normalizedType == CombatConditionType.Frightened)
+        {
+            string fearEnd = $"⏱ {character.Stats.CharacterName} is no longer frightened.";
+            Debug.Log($"[Condition] {fearEnd}");
+            CombatUI?.ShowCombatLog($"<color=#99CCFF>{fearEnd}</color>");
+            return;
+        }
 
         string conditionLabel = condition.Type.ToString();
         string msg = $"⏱ {character.Stats.CharacterName} is no longer {conditionLabel}.";
@@ -9560,6 +9570,26 @@ public partial class GameManager : MonoBehaviour
         return false;
     }
 
+    private static bool IsCauseFearSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, "cause_fear", StringComparison.Ordinal);
+    }
+
+    private bool IsLivingCreatureForFearSpell(CharacterController target)
+    {
+        if (target?.Stats == null)
+            return false;
+
+        string creatureType = string.IsNullOrWhiteSpace(target.Stats.CreatureType)
+            ? string.Empty
+            : target.Stats.CreatureType.Trim().ToLowerInvariant();
+
+        if (creatureType == "undead" || creatureType == "construct")
+            return false;
+
+        return true;
+    }
+
     private bool IsValidTargetForSpell(CharacterController caster, CharacterController target, SpellData spell)
     {
         if (caster == null || target == null || spell == null || target.Stats == null || target.Stats.IsDead)
@@ -10072,7 +10102,11 @@ public partial class GameManager : MonoBehaviour
             bool appliesTrackedEffect = _pendingSpell.EffectType == SpellEffectType.Buff ||
                                         _pendingSpell.EffectType == SpellEffectType.Debuff;
 
-            bool effectNegatedBySave = _pendingSpell.EffectType == SpellEffectType.Debuff && result.RequiredSave && result.SaveSucceeded;
+            bool causeFearSaveReduced = IsCauseFearSpell(_pendingSpell) && result.RequiredSave && result.SaveSucceeded;
+            bool effectNegatedBySave = _pendingSpell.EffectType == SpellEffectType.Debuff
+                                       && result.RequiredSave
+                                       && result.SaveSucceeded
+                                       && !causeFearSaveReduced;
             if (effectNegatedBySave)
             {
                 CombatUI?.ShowCombatLog($"🛡 {target.Stats.CharacterName} resists {_pendingSpell.Name} with a successful {result.SaveType} save.");
@@ -10083,7 +10117,9 @@ public partial class GameManager : MonoBehaviour
                 CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is immune to mind-affecting effects. {_pendingSpell.Name} has no effect.");
             }
 
-            if (result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            bool handledCauseFear = TryResolveCauseFearSpellEffect(caster, target, _pendingSpell, result);
+
+            if (!handledCauseFear && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -11672,6 +11708,106 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    private bool TryResolveCauseFearSpellEffect(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
+    {
+        if (!IsCauseFearSpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        if (result != null && result.MindAffectingImmunityBlocked)
+            return true;
+
+        string targetName = target.Stats.CharacterName;
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+
+        CombatUI?.ShowCombatLog($"✨ {casterName} casts Cause Fear on {targetName}.");
+
+        if (!IsLivingCreatureForFearSpell(target))
+        {
+            if (result != null)
+            {
+                result.Success = false;
+                result.NoEffectReason = $"{targetName} is immune to fear (not a living creature).";
+            }
+
+            CombatUI?.ShowCombatLog($"🧟 {targetName} is immune to fear effects.");
+            return true;
+        }
+
+        int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+        if (targetHd > 5)
+        {
+            if (result != null)
+            {
+                result.Success = false;
+                result.NoEffectReason = $"{targetName} is too powerful to be frightened.";
+            }
+
+            CombatUI?.ShowCombatLog($"⚠ {targetName} is too powerful to be frightened.");
+            return true;
+        }
+
+        if (result != null && result.RequiredSave && result.SaveSucceeded)
+        {
+            const int shakenRounds = 1;
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Shaken,
+                    shakenRounds,
+                    source: caster,
+                    sourceNameOverride: spell.Name,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+            }
+            else
+            {
+                target.ApplyCondition(CombatConditionType.Shaken, shakenRounds, casterName);
+            }
+
+            result.BuffApplied = true;
+            result.BuffDescription = "Debuff: Shaken for 1 round (successful Will save reduces Cause Fear).";
+            CombatUI?.ShowCombatLog($"😰 {targetName} resists the worst of Cause Fear and is shaken for 1 round.");
+            return true;
+        }
+
+        int frightenedRounds = UnityEngine.Random.Range(1, 5);
+        var fearData = new FrightenedConditionData
+        {
+            Caster = caster,
+            CasterName = casterName,
+            RemainingRounds = frightenedRounds,
+            SourceSpellId = spell.SpellId,
+            SourceEffectName = spell.Name
+        };
+
+        if (_conditionService != null)
+        {
+            _conditionService.ApplyCondition(
+                target,
+                CombatConditionType.Frightened,
+                frightenedRounds,
+                source: caster,
+                data: fearData,
+                sourceNameOverride: spell.Name,
+                sourceCategory: "Spell",
+                sourceId: spell.SpellId);
+        }
+        else
+        {
+            target.ApplyCondition(CombatConditionType.Frightened, frightenedRounds, casterName);
+        }
+
+        if (result != null)
+        {
+            result.BuffApplied = true;
+            result.BuffDescription = $"Debuff: Frightened for {frightenedRounds} rounds.";
+        }
+
+        CombatUI?.ShowCombatLog($"😱 {targetName} fails Will save - Frightened for {frightenedRounds} rounds! ({casterName} is the source of fear)");
+        return true;
+    }
+
     /// <summary>
     /// Apply buff effects from a spell to the target character.
     /// Uses StatusEffectManager for proper duration tracking and stat modification reversal.
@@ -12733,6 +12869,18 @@ public partial class GameManager : MonoBehaviour
     {
         _fascinatedBehaviorController ??= new FascinatedBehaviorController();
         return _fascinatedBehaviorController.TryBuildDecision(this, actor, out decision);
+    }
+
+    public bool TryGetFrightenedTurnDecisionForAI(CharacterController actor, out FrightenedBehaviorController.FrightenedTurnDecision decision)
+    {
+        _frightenedBehaviorController ??= new FrightenedBehaviorController();
+        return _frightenedBehaviorController.TryBuildDecision(this, actor, out decision);
+    }
+
+    public IEnumerator ExecuteFrightenedTurnDecisionForAI(CharacterController actor, FrightenedBehaviorController.FrightenedTurnDecision decision)
+    {
+        _frightenedBehaviorController ??= new FrightenedBehaviorController();
+        yield return StartCoroutine(_frightenedBehaviorController.ExecuteDecision(this, actor, decision));
     }
 
     // Public delegation helpers for AIService.
@@ -16350,7 +16498,11 @@ public partial class GameManager : MonoBehaviour
         SpellResult result = SpellCaster.Cast(spell, npc.Stats, target.Stats, null, skipFriendlyTouchAttackRoll, forceTargetToFailSave, npc, target);
 
         bool appliesTrackedEffect = spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Debuff;
-        bool effectNegatedBySave = spell.EffectType == SpellEffectType.Debuff && result.RequiredSave && result.SaveSucceeded;
+        bool causeFearSaveReduced = IsCauseFearSpell(spell) && result.RequiredSave && result.SaveSucceeded;
+        bool effectNegatedBySave = spell.EffectType == SpellEffectType.Debuff
+                                   && result.RequiredSave
+                                   && result.SaveSucceeded
+                                   && !causeFearSaveReduced;
 
         if (effectNegatedBySave)
             CombatUI?.ShowCombatLog($"🛡 {target.Stats.CharacterName} resists {spell.Name} with a successful {result.SaveType} save.");
@@ -16358,7 +16510,9 @@ public partial class GameManager : MonoBehaviour
         if (result.MindAffectingImmunityBlocked)
             CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is immune to mind-affecting effects. {spell.Name} has no effect.");
 
-        if (result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        bool handledCauseFear = TryResolveCauseFearSpellEffect(npc, target, spell, result);
+
+        if (!handledCauseFear && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             ApplySpellBuff(npc, target, spell, spellComp);
 
         if (result.DamageDealt > 0)

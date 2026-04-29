@@ -410,6 +410,9 @@ public class CharacterStats
     /// <summary>Aggregate initiative modifier from active conditions.</summary>
     public int ConditionInitiativeModifier => SumConditionValue(d => d.InitiativeModifier);
 
+    /// <summary>Aggregate ability-check modifier from active conditions.</summary>
+    public int ConditionAbilityCheckModifier => SumConditionValue(d => d.AbilityCheckModifier);
+
     /// <summary>Movement blocked if any active condition prevents movement.</summary>
     public bool MovementBlockedByCondition => ActiveConditions.Any(c => ConditionRules.GetDefinition(c.Type).PreventsMovement);
 

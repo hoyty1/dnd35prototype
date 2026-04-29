@@ -91,6 +91,12 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        if (_gameManager.TryGetFrightenedTurnDecisionForAI(npc, out FrightenedBehaviorController.FrightenedTurnDecision frightenedDecision))
+        {
+            yield return _gameManager.StartCoroutine(_gameManager.ExecuteFrightenedTurnDecisionForAI(npc, frightenedDecision));
+            yield break;
+        }
+
         CharacterController targetPC = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
         if (targetPC == null)
         {
@@ -796,6 +802,9 @@ public class AIService : MonoBehaviour
             if (ShouldExcludeTargetBecauseOfCharm(npc, candidate))
                 continue;
 
+            if (ShouldExcludeTargetBecauseOfFrightenedSource(npc, candidate))
+                continue;
+
             if (CanSeeTarget(npc, candidate))
             {
                 visibleTargets.Add(candidate);
@@ -906,6 +915,43 @@ public class AIService : MonoBehaviour
             CharacterController source = condition.Source;
             if (source == null && condition.Data is CharmedConditionData charmData)
                 source = charmData.Caster;
+
+            if (source != null && source == candidate)
+                return true;
+
+            if (source == null
+                && !string.IsNullOrWhiteSpace(condition.SourceName)
+                && candidate.Stats != null
+                && string.Equals(condition.SourceName, candidate.Stats.CharacterName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool ShouldExcludeTargetBecauseOfFrightenedSource(CharacterController npc, CharacterController candidate)
+    {
+        if (_gameManager == null || npc == null || candidate == null)
+            return false;
+
+        if (!npc.HasCondition(CombatConditionType.Frightened))
+            return false;
+
+        List<ConditionService.ActiveCondition> active = _gameManager.GetActiveConditions(npc);
+        if (active == null || active.Count == 0)
+            return false;
+
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionService.ActiveCondition condition = active[i];
+            if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Frightened)
+                continue;
+
+            CharacterController source = condition.Source;
+            if (source == null && condition.Data is FrightenedConditionData fearData)
+                source = fearData.Caster;
 
             if (source != null && source == candidate)
                 return true;

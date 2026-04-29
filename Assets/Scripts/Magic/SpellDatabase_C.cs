@@ -77,15 +77,17 @@ public static partial class SpellDatabase
                 {
                     SpellId = "cause_fear",
                     Name = "Cause Fear",
-                    Description = "One creature of 5 HD or less flees for 1d4 rounds. Will save: shaken for 1 round instead. PHB p.208",
+                    Description = "Necromancy [Fear, Mind-Affecting]. One living creature of 5 HD or less becomes frightened for 1d4 rounds; a successful Will save leaves it shaken for 1 round. SR: Yes. PHB p.208",
                     SpellLevel = 1, School = "Necromancy",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Close,
                     EffectType = SpellEffectType.Debuff,
+                    IsMindAffecting = true,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
-                    BuffDurationRounds = 3, // 1d4 rounds avg
+                    SpellResistanceApplies = true,
+                    BuffDurationRounds = 2,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

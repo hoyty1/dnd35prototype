@@ -398,6 +398,7 @@ public static class ConditionRules
             ReflexModifier = -2,
             WillModifier = -2,
             SkillCheckModifier = -2,
+            AbilityCheckModifier = -2,
             IsFearCondition = true,
             MovementMultiplier = 1f
         });
