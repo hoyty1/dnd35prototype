@@ -11835,18 +11835,33 @@ public partial class GameManager : MonoBehaviour
 
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1));
         int penalty = CalculateRayOfEnfeeblementPenalty(caster);
+
+        EnfeebledConditionData previousEffect = target.ActiveEnfeeblementEffect;
+        int previousPenalty = previousEffect != null ? Mathf.Max(0, previousEffect.StrengthPenaltyAmount) : 0;
+        if (previousEffect != null)
+            target.RemoveEnfeeblementEffect();
+
         EnfeebledConditionData effect = target.ApplyEnfeeblementEffect(penalty, durationRounds, caster);
         if (effect == null)
             return true;
 
         int resultingStrength = target.Stats.EffectiveStrengthScore;
-        int totalPenalty = target.TotalEnfeeblementStrengthPenalty;
 
         result.BuffApplied = true;
-        result.BuffDescription = $"Debuff: STR -{penalty} for {durationRounds} rounds (total enfeeblement {totalPenalty}, effective STR {resultingStrength}).";
+        result.BuffDescription = $"Debuff: STR -{penalty} for {durationRounds} rounds (effective STR {resultingStrength}).";
 
         string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
-        CombatUI?.ShowCombatLog($"💀 {target.Stats.CharacterName} is enfeebled by {casterName}: STR -{penalty} for {durationRounds} rounds (total STR penalty {totalPenalty}, STR now {resultingStrength}).");
+        if (previousEffect != null)
+        {
+            string replacementDescriptor = penalty > previousPenalty
+                ? "stronger"
+                : (penalty < previousPenalty ? "weaker" : "equally strong");
+            string article = replacementDescriptor == "equally strong" ? "an" : "a";
+            CombatUI?.ShowCombatLog($"♻ Previous enfeeblement replaced on {target.Stats.CharacterName}.");
+            CombatUI?.ShowCombatLog($"💀 {target.Stats.CharacterName}'s enfeeblement is replaced by {article} {replacementDescriptor} effect (old STR -{previousPenalty} → new STR -{penalty}).");
+        }
+
+        CombatUI?.ShowCombatLog($"💀 {target.Stats.CharacterName} is enfeebled by {casterName}: STR -{penalty} for {durationRounds} rounds (STR now {resultingStrength}).");
         return true;
     }
 
@@ -12367,18 +12382,14 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
-        List<EnfeebledConditionData> expiredEnfeeblements = character.TickEnfeeblementEffects();
-        if (expiredEnfeeblements != null && expiredEnfeeblements.Count > 0)
+        EnfeebledConditionData expiredEnfeeblement = character.TickEnfeeblementEffect();
+        if (expiredEnfeeblement != null)
         {
-            for (int i = 0; i < expiredEnfeeblements.Count; i++)
-            {
-                EnfeebledConditionData expired = expiredEnfeeblements[i];
-                int amount = expired != null ? Mathf.Max(0, expired.StrengthPenaltyAmount) : 0;
-                string sourceName = expired != null && !string.IsNullOrWhiteSpace(expired.CasterName)
-                    ? expired.CasterName
-                    : "an unknown caster";
-                CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Ray of Enfeeblement expires on {character.Stats.CharacterName}: STR +{amount} restored (source: {sourceName}).</color>");
-            }
+            int amount = Mathf.Max(0, expiredEnfeeblement.StrengthPenaltyAmount);
+            string sourceName = !string.IsNullOrWhiteSpace(expiredEnfeeblement.CasterName)
+                ? expiredEnfeeblement.CasterName
+                : "an unknown caster";
+            CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Ray of Enfeeblement expires on {character.Stats.CharacterName}: STR +{amount} restored (source: {sourceName}).</color>");
         }
 
     }

@@ -27,7 +27,7 @@ public static class RayOfEnfeeblementRulesTests
         TestRayDefinitionMatchesCoreRules();
         TestRangedTouchAttackUsesTouchAcAndCanMiss();
         TestPenaltyFormulaScalingAndCapAcrossLevels();
-        TestEnfeeblementStacksAndExpiresIndependently();
+        TestEnfeeblementReplacesExistingEffectAndUsesLatestDuration();
         TestStrengthFloorAndCombatStatImpact();
 
         Debug.Log($"====== Ray of Enfeeblement Rules Results: {_passed} passed, {_failed} failed ======");
@@ -184,7 +184,7 @@ public static class RayOfEnfeeblementRulesTests
         }
     }
 
-    private static void TestEnfeeblementStacksAndExpiresIndependently()
+    private static void TestEnfeeblementReplacesExistingEffectAndUsesLatestDuration()
     {
         CharacterController target = null;
         CharacterController caster = null;
@@ -193,22 +193,27 @@ public static class RayOfEnfeeblementRulesTests
             target = CreateController(BuildStats("Target", level: 4, str: 14), CharacterTeam.Enemy, new Vector2Int(3, 3));
             caster = CreateController(BuildStats("Caster", level: 6), CharacterTeam.Player, new Vector2Int(1, 1));
 
-            target.ApplyEnfeeblementEffect(strengthPenaltyAmount: 4, durationRemainingRounds: 2, caster: caster);
-            target.ApplyEnfeeblementEffect(strengthPenaltyAmount: 3, durationRemainingRounds: 4, caster: caster);
+            EnfeebledConditionData first = target.ApplyEnfeeblementEffect(strengthPenaltyAmount: 4, durationRemainingRounds: 2, caster: caster);
+            Assert(first != null, "First Ray effect applies");
+            Assert(target.ActiveEnfeeblementEffect != null, "Target tracks a single active Ray effect");
+            Assert(target.TotalEnfeeblementStrengthPenalty == 4, "Initial Ray penalty applied", $"total={target.TotalEnfeeblementStrengthPenalty}");
 
-            Assert(target.ActiveEnfeeblementEffects.Count == 2, "Multiple Ray effects are tracked separately");
-            Assert(target.TotalEnfeeblementStrengthPenalty == 7, "Ray penalties stack by summation", $"total={target.TotalEnfeeblementStrengthPenalty}");
+            EnfeebledConditionData second = target.ApplyEnfeeblementEffect(strengthPenaltyAmount: 3, durationRemainingRounds: 4, caster: caster);
+            Assert(second != null, "Second Ray effect applies");
+            Assert(target.ActiveEnfeeblementEffect == second, "New Ray replaces the old effect instance");
+            Assert(target.TotalEnfeeblementStrengthPenalty == 3, "Ray penalties do not stack; latest value wins", $"total={target.TotalEnfeeblementStrengthPenalty}");
+            Assert(target.ActiveEnfeeblementEffect.RemainingRounds == 4, "Ray duration is reset to the newest duration", $"rounds={target.ActiveEnfeeblementEffect.RemainingRounds}");
 
-            var expiredAtRound2 = target.TickEnfeeblementEffects();
-            Assert(expiredAtRound2.Count == 0, "No Ray effect expires after first tick");
-            expiredAtRound2 = target.TickEnfeeblementEffects();
-            Assert(expiredAtRound2.Count == 1, "One Ray effect expires on second tick");
-            Assert(target.TotalEnfeeblementStrengthPenalty == 3, "Remaining Ray penalty persists after first expiry", $"total={target.TotalEnfeeblementStrengthPenalty}");
+            target.TickEnfeeblementEffect();
+            target.TickEnfeeblementEffect();
+            target.TickEnfeeblementEffect();
+            Assert(target.ActiveEnfeeblementEffect != null, "Newest Ray remains active before its duration ends");
 
-            target.TickEnfeeblementEffects();
-            var expiredAtRound4 = target.TickEnfeeblementEffects();
-            Assert(expiredAtRound4.Count == 1, "Second Ray effect expires on fourth tick");
-            Assert(target.TotalEnfeeblementStrengthPenalty == 0, "Total Ray penalty returns to zero after all effects expire");
+            EnfeebledConditionData expired = target.TickEnfeeblementEffect();
+            Assert(expired != null, "Newest Ray expires after its full duration");
+            Assert(expired == second, "Expired effect is the most recently applied Ray");
+            Assert(target.ActiveEnfeeblementEffect == null, "No Ray remains after expiration");
+            Assert(target.TotalEnfeeblementStrengthPenalty == 0, "Total Ray penalty returns to zero after expiry");
         }
         finally
         {

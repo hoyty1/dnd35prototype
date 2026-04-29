@@ -323,8 +323,8 @@ public class CharacterController : MonoBehaviour
 
     private string _displayedRace;
     public DisguiseSelfEffectData ActiveDisguiseSelfEffect { get; private set; }
-    private readonly List<EnfeebledConditionData> _activeEnfeeblementEffects = new List<EnfeebledConditionData>();
-    public IReadOnlyList<EnfeebledConditionData> ActiveEnfeeblementEffects => _activeEnfeeblementEffects;
+    private EnfeebledConditionData _activeEnfeeblementEffect;
+    public EnfeebledConditionData ActiveEnfeeblementEffect => _activeEnfeeblementEffect;
     public int TotalEnfeeblementStrengthPenalty => Stats != null ? Stats.EnfeeblementStrengthPenalty : 0;
     public string ActualRace => Stats != null && !string.IsNullOrWhiteSpace(Stats.RaceName) ? Stats.RaceName : "Unknown";
     public string DisplayedRace => !string.IsNullOrWhiteSpace(_displayedRace) ? _displayedRace : ActualRace;
@@ -1243,7 +1243,7 @@ public class CharacterController : MonoBehaviour
         if (penalty <= 0 || rounds <= 0)
             return null;
 
-        var effect = new EnfeebledConditionData
+        _activeEnfeeblementEffect = new EnfeebledConditionData
         {
             Caster = caster,
             CasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : string.Empty,
@@ -1253,61 +1253,50 @@ public class CharacterController : MonoBehaviour
             SourceEffectName = "Ray of Enfeeblement"
         };
 
-        _activeEnfeeblementEffects.Add(effect);
         RefreshEnfeeblementDerivedState();
-        return effect;
+        return _activeEnfeeblementEffect;
     }
 
-    public List<EnfeebledConditionData> TickEnfeeblementEffects()
+    public EnfeebledConditionData TickEnfeeblementEffect()
     {
-        var expired = new List<EnfeebledConditionData>();
-        if (_activeEnfeeblementEffects.Count == 0)
-            return expired;
+        if (_activeEnfeeblementEffect == null)
+            return null;
 
-        for (int i = _activeEnfeeblementEffects.Count - 1; i >= 0; i--)
-        {
-            EnfeebledConditionData effect = _activeEnfeeblementEffects[i];
-            if (effect == null)
-            {
-                _activeEnfeeblementEffects.RemoveAt(i);
-                continue;
-            }
+        _activeEnfeeblementEffect.RemainingRounds = Mathf.Max(0, _activeEnfeeblementEffect.RemainingRounds - 1);
+        if (_activeEnfeeblementEffect.RemainingRounds > 0)
+            return null;
 
-            effect.RemainingRounds = Mathf.Max(0, effect.RemainingRounds - 1);
-            if (effect.RemainingRounds > 0)
-                continue;
-
-            expired.Add(effect);
-            _activeEnfeeblementEffects.RemoveAt(i);
-        }
-
-        if (expired.Count > 0)
-            RefreshEnfeeblementDerivedState();
-
-        expired.Reverse();
+        EnfeebledConditionData expired = _activeEnfeeblementEffect;
+        _activeEnfeeblementEffect = null;
+        RefreshEnfeeblementDerivedState();
         return expired;
+    }
+
+    public EnfeebledConditionData RemoveEnfeeblementEffect()
+    {
+        if (_activeEnfeeblementEffect == null)
+            return null;
+
+        EnfeebledConditionData removed = _activeEnfeeblementEffect;
+        _activeEnfeeblementEffect = null;
+        RefreshEnfeeblementDerivedState();
+        return removed;
     }
 
     public void ClearEnfeeblementEffects()
     {
-        if (_activeEnfeeblementEffects.Count == 0)
+        if (_activeEnfeeblementEffect == null)
             return;
 
-        _activeEnfeeblementEffects.Clear();
+        _activeEnfeeblementEffect = null;
         RefreshEnfeeblementDerivedState();
     }
 
     private void RefreshEnfeeblementDerivedState()
     {
-        int totalPenalty = 0;
-        for (int i = 0; i < _activeEnfeeblementEffects.Count; i++)
-        {
-            EnfeebledConditionData effect = _activeEnfeeblementEffects[i];
-            if (effect == null)
-                continue;
-
-            totalPenalty += Mathf.Max(0, effect.StrengthPenaltyAmount);
-        }
+        int totalPenalty = _activeEnfeeblementEffect != null
+            ? Mathf.Max(0, _activeEnfeeblementEffect.StrengthPenaltyAmount)
+            : 0;
 
         Stats?.SetEnfeeblementStrengthPenalty(totalPenalty);
 
@@ -1399,7 +1388,7 @@ public class CharacterController : MonoBehaviour
         UpdateVisualSize(false);
 
         ActiveDisguiseSelfEffect = null;
-        _activeEnfeeblementEffects.Clear();
+        _activeEnfeeblementEffect = null;
         Stats?.SetEnfeeblementStrengthPenalty(0);
         _displayedRace = ActualRace;
         RefreshAllTags();
