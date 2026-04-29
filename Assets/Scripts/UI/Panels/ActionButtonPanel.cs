@@ -57,6 +57,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Text RageStatusText => _combatUI != null ? _combatUI.RageStatusText : null;
     private Button CastSpellButton => _combatUI != null ? _combatUI.CastSpellButton : null;
     private Button DischargeTouchButton => _combatUI != null ? _combatUI.DischargeTouchButton : null;
+    private Button DismissDisguiseSelfButton => _combatUI != null ? _combatUI.DismissDisguiseSelfButton : null;
     private Button AttackDefensivelyButton => _combatUI != null ? _combatUI.AttackDefensivelyButton : null;
     private Button FullAttackDefensivelyButton => _combatUI != null ? _combatUI.FullAttackDefensivelyButton : null;
 
@@ -689,6 +690,13 @@ public class ActionButtonPanel : MonoBehaviour
         bool hasHeldTouchCharge = pc.Stats.IsSpellcaster && touchSpellComp != null && touchSpellComp.HasHeldTouchCharge && touchSpellComp.HeldTouchSpell != null;
         string heldName = hasHeldTouchCharge ? touchSpellComp.HeldTouchSpell.Name : "Touch";
         states.Set(DischargeTouchButton, new ActionButtonState(hasHeldTouchCharge, hasHeldTouchCharge, $"Discharge {heldName}"));
+
+        bool hasActiveDisguiseSelf = context.Gm != null && context.Gm.HasActiveDisguiseSelf(pc);
+        bool canDismissDisguiseSelf = hasActiveDisguiseSelf && context.Actions.HasStandardAction && !context.IsTurned;
+        string dismissLabel = hasActiveDisguiseSelf
+            ? (canDismissDisguiseSelf ? "Dismiss Disguise Self (Standard)" : "Dismiss Disguise Self (Used)")
+            : "Dismiss Disguise Self";
+        states.Set(DismissDisguiseSelfButton, new ActionButtonState(hasActiveDisguiseSelf, canDismissDisguiseSelf, dismissLabel));
     }
 
     private void ComputeEquipmentActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
@@ -906,6 +914,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
         if (DamageModeToggleButton != null) DamageModeToggleButton.gameObject.SetActive(false);
         if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
+        if (DismissDisguiseSelfButton != null) DismissDisguiseSelfButton.gameObject.SetActive(false);
     }
 
     public void HideAllActionButtons()
@@ -949,6 +958,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (RageButton != null) RageButton.gameObject.SetActive(false);
         if (CastSpellButton != null) CastSpellButton.gameObject.SetActive(false);
         if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
+        if (DismissDisguiseSelfButton != null) DismissDisguiseSelfButton.gameObject.SetActive(false);
         if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
         if (FullAttackDefensivelyButton != null) FullAttackDefensivelyButton.gameObject.SetActive(false);
     }

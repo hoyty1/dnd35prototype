@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// Static database of D&D 3.5 racial data.
@@ -7,6 +9,7 @@ using System.Collections.Generic;
 public static class RaceDatabase
 {
     private static Dictionary<string, RaceData> _races;
+    private static readonly Dictionary<SizeCategory, List<string>> _raceNamesBySizeCategory = new Dictionary<SizeCategory, List<string>>();
     private static bool _initialized;
 
     /// <summary>Initialize the race database with all available races.</summary>
@@ -24,6 +27,8 @@ public static class RaceDatabase
         RegisterHalfOrc();
         RegisterHalfling();
         RegisterHuman();
+
+        RebuildRaceSizeLookup();
     }
 
     /// <summary>Get a race by name (case-insensitive).</summary>
@@ -40,6 +45,56 @@ public static class RaceDatabase
     {
         Init();
         return new List<string>(_races.Keys);
+    }
+
+    /// <summary>
+    /// Returns all races whose size category matches <paramref name="sizeCategory"/>.
+    /// Results are display names (for UI) sorted alphabetically.
+    /// </summary>
+    public static List<string> GetRaceNamesBySizeCategory(SizeCategory sizeCategory)
+    {
+        Init();
+
+        if (_raceNamesBySizeCategory.TryGetValue(sizeCategory, out List<string> raceNames) && raceNames != null)
+            return new List<string>(raceNames);
+
+        return new List<string>();
+    }
+
+    /// <summary>Resolve a race's size category from race name. Returns false if race is unknown.</summary>
+    public static bool TryGetRaceSizeCategory(string raceName, out SizeCategory sizeCategory)
+    {
+        sizeCategory = SizeCategory.Medium;
+        RaceData race = GetRace(raceName);
+        if (race == null)
+            return false;
+
+        sizeCategory = race.RaceSize.ToSizeCategory();
+        return true;
+    }
+
+    private static void RebuildRaceSizeLookup()
+    {
+        _raceNamesBySizeCategory.Clear();
+
+        foreach (RaceData race in _races.Values)
+        {
+            if (race == null || string.IsNullOrWhiteSpace(race.RaceName))
+                continue;
+
+            SizeCategory size = race.RaceSize.ToSizeCategory();
+            if (!_raceNamesBySizeCategory.TryGetValue(size, out List<string> namesForSize))
+            {
+                namesForSize = new List<string>();
+                _raceNamesBySizeCategory[size] = namesForSize;
+            }
+
+            if (!namesForSize.Contains(race.RaceName, StringComparer.OrdinalIgnoreCase))
+                namesForSize.Add(race.RaceName);
+        }
+
+        foreach (List<string> names in _raceNamesBySizeCategory.Values)
+            names.Sort(StringComparer.OrdinalIgnoreCase);
     }
 
     // ========== DWARF ==========

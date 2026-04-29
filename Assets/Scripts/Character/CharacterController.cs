@@ -320,6 +320,11 @@ public class CharacterController : MonoBehaviour
 
     [HideInInspector] public CharacterStats Stats;
     [HideInInspector] public Vector2Int GridPosition;
+
+    private string _displayedRace;
+    public DisguiseSelfEffectData ActiveDisguiseSelfEffect { get; private set; }
+    public string ActualRace => Stats != null && !string.IsNullOrWhiteSpace(Stats.RaceName) ? Stats.RaceName : "Unknown";
+    public string DisplayedRace => !string.IsNullOrWhiteSpace(_displayedRace) ? _displayedRace : ActualRace;
     [HideInInspector] public bool HasMovedThisTurn;
     [HideInInspector] public bool HasTakenFiveFootStep;
     [HideInInspector] public bool HasAttackedThisTurn;
@@ -1186,6 +1191,48 @@ public class CharacterController : MonoBehaviour
         EnsureStatusTagManager().RefreshAllTags();
     }
 
+    public void SetDisplayedRace(string raceName)
+    {
+        if (string.IsNullOrWhiteSpace(raceName))
+            raceName = ActualRace;
+
+        _displayedRace = raceName;
+        RefreshAllTags();
+    }
+
+    public void ResetDisplayedRaceToActual()
+    {
+        _displayedRace = ActualRace;
+        RefreshAllTags();
+    }
+
+    public void ApplyDisguiseSelfEffect(string disguisedRace, int durationRemainingRounds, CharacterController caster)
+    {
+        ActiveDisguiseSelfEffect = new DisguiseSelfEffectData
+        {
+            OriginalRace = ActualRace,
+            DisguisedRace = string.IsNullOrWhiteSpace(disguisedRace) ? ActualRace : disguisedRace,
+            DurationRemainingRounds = Mathf.Max(0, durationRemainingRounds)
+        };
+
+        ActiveDisguiseSelfEffect.SetCaster(caster);
+        SetDisplayedRace(ActiveDisguiseSelfEffect.DisguisedRace);
+    }
+
+    public void UpdateDisguiseSelfDuration(int durationRemainingRounds)
+    {
+        if (ActiveDisguiseSelfEffect == null)
+            return;
+
+        ActiveDisguiseSelfEffect.DurationRemainingRounds = Mathf.Max(0, durationRemainingRounds);
+    }
+
+    public void ClearDisguiseSelfEffect()
+    {
+        ActiveDisguiseSelfEffect = null;
+        ResetDisplayedRaceToActual();
+    }
+
     private void OnValidate()
     {
         NormalizeTeamControlState();
@@ -1267,6 +1314,9 @@ public class CharacterController : MonoBehaviour
 
         RefreshGridOccupancy();
         UpdateVisualSize(false);
+
+        ActiveDisguiseSelfEffect = null;
+        _displayedRace = ActualRace;
         RefreshAllTags();
         CheckAbilityScoreZeroEffects();
     }

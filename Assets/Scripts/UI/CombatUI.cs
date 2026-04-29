@@ -134,6 +134,7 @@ public class CombatUI : MonoBehaviour
     [Header("Spellcasting")]
     public Button CastSpellButton;         // Cast Spell (Standard Action)
     public Button DischargeTouchButton;    // Deliver currently held touch charge (Free Action)
+    public Button DismissDisguiseSelfButton; // Dismiss Disguise Self (Standard Action)
     public Text SpellSlotsText;            // Shows remaining spell slots
     [Header("Feat Controls")]
     public GameObject PowerAttackPanel;     // Panel containing Power Attack slider
@@ -319,8 +320,25 @@ public class CombatUI : MonoBehaviour
             HideBullRushExtraPushChoice();
             HidePickUpItemSelection();
             HideDropEquippedItemSelection();
+            HideDisguiseSelfRaceSelector();
             ResetDamageModeToggleVisual();
         }
+    }
+
+    public void ShowDisguiseSelfRaceSelector(string casterName, SizeCategory sizeCategory, List<string> raceOptions, System.Action<string> onSelect, System.Action onCancel)
+    {
+        EnsureDisguiseSelfRaceSelector();
+        _disguiseSelfRaceSelector?.Show(casterName, sizeCategory, raceOptions, onSelect, onCancel);
+    }
+
+    public void HideDisguiseSelfRaceSelector()
+    {
+        _disguiseSelfRaceSelector?.Hide();
+    }
+
+    public bool IsDisguiseSelfRaceSelectorOpen()
+    {
+        return _disguiseSelfRaceSelector != null && _disguiseSelfRaceSelector.IsOpen;
     }
 
     public void ResetFloatingWindowLayout()
@@ -371,6 +389,7 @@ public class CombatUI : MonoBehaviour
     private bool _specialStyleMenuWasActiveLastFrame;
 
     private GameObject _confirmationPanel;
+    private DisguiseSelfRaceSelector _disguiseSelfRaceSelector;
     private ActionButtonPanel _actionButtonPanel;
     private CombatLogPanel _combatLogPanel;
     private CharacterInfoPanel _characterInfoPanel;
@@ -549,6 +568,15 @@ public class CombatUI : MonoBehaviour
             _actionButtonPanel = gameObject.AddComponent<ActionButtonPanel>();
 
         _actionButtonPanel.Initialize(this);
+    }
+
+    private void EnsureDisguiseSelfRaceSelector()
+    {
+        if (_disguiseSelfRaceSelector == null)
+            _disguiseSelfRaceSelector = GetComponent<DisguiseSelfRaceSelector>();
+
+        if (_disguiseSelfRaceSelector == null)
+            _disguiseSelfRaceSelector = gameObject.AddComponent<DisguiseSelfRaceSelector>();
     }
 
     private void EnsureCharacterInfoPanel()

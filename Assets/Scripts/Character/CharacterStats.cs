@@ -1444,6 +1444,9 @@ public class CharacterStats
     /// <summary>Morale bonus to saving throws from spells (e.g., Bless).</summary>
     public int MoraleSaveBonus;
 
+    /// <summary>Competence bonus to Disguise checks from active effects (e.g., Disguise Self).</summary>
+    public int DisguiseCompetenceBonus;
+
     /// <summary>Temporary hit points from spells (e.g., False Life).</summary>
     public int TempHP;
 
@@ -3004,6 +3007,17 @@ public class CharacterStats
         return total;
     }
 
+    private int GetSpellSkillModifier(string skillName)
+    {
+        if (string.IsNullOrWhiteSpace(skillName))
+            return 0;
+
+        if (!string.Equals(skillName, "Disguise", System.StringComparison.OrdinalIgnoreCase))
+            return 0;
+
+        return DisguiseCompetenceBonus;
+    }
+
     /// <summary>
     /// Get the total bonus for a skill (ranks + ability mod + feat bonuses + condition modifiers).
     /// Returns 0 if skill not found.
@@ -3016,7 +3030,8 @@ public class CharacterStats
         int featBonus = GetFeatSkillBonus(skillName);
         int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
         int conditionModifier = GetConditionSkillModifier(skillName);
-        return baseBonus + featBonus + acpPenalty + conditionModifier;
+        int spellModifier = GetSpellSkillModifier(skillName);
+        return baseBonus + featBonus + acpPenalty + conditionModifier + spellModifier;
     }
 
     /// <summary>
@@ -3053,12 +3068,14 @@ public class CharacterStats
         int featBonus = GetFeatSkillBonus(skillName);
         int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
         int conditionModifier = GetConditionSkillModifier(skillName);
-        int total = d20 + totalBonus + featBonus + acpPenalty + conditionModifier;
+        int spellModifier = GetSpellSkillModifier(skillName);
+        int total = d20 + totalBonus + featBonus + acpPenalty + conditionModifier + spellModifier;
 
         string featStr = featBonus > 0 ? $" + {featBonus}(feat)" : "";
         string acpStr = acpPenalty < 0 ? $" {acpPenalty}(ACP)" : "";
         string conditionStr = conditionModifier != 0 ? $" {conditionModifier}(condition)" : "";
-        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr}{conditionStr} = {total}");
+        string spellStr = spellModifier != 0 ? $" + {spellModifier}(spell)" : "";
+        Debug.Log($"[Skills] {CharacterName} rolls {skillName}: d20({d20}) + {skill.Ranks}(ranks) + {abilityMod}({skill.KeyAbility}){featStr}{acpStr}{conditionStr}{spellStr} = {total}");
 
         return total;
     }

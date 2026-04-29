@@ -146,7 +146,10 @@ public class StatusTagManager
         tags.RemoveTagsByPrefix(ClassPrefix);
 
         CharacterStats stats = _character != null ? _character.Stats : null;
-        string race = (stats != null && !string.IsNullOrWhiteSpace(stats.RaceName)) ? stats.RaceName : "Unknown";
+        string race = _character != null ? _character.DisplayedRace : "Unknown";
+        if (string.IsNullOrWhiteSpace(race))
+            race = "Unknown";
+
         string characterClass = (stats != null && !string.IsNullOrWhiteSpace(stats.CharacterClass)) ? stats.CharacterClass : "Unknown";
 
         tags.AddTag($"{RacePrefix}{race}");

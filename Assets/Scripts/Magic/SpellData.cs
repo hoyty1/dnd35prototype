@@ -371,6 +371,8 @@ public class SpellData
     public int DurationValue;
     /// <summary>Whether duration scales with caster level (e.g., "1 min/level" = true, "3 rounds" = false).</summary>
     public bool DurationScalesWithLevel;
+    /// <summary>Whether the caster can dismiss the spell early as a standard action.</summary>
+    public bool IsDismissible;
 
     // ========== HEALING ==========
     public int HealDice;                // Sides of healing die

@@ -269,17 +269,21 @@ public static partial class SpellDatabase
                 {
                     SpellId = "disguise_self",
                     Name = "Disguise Self",
-                    Description = "Changes your appearance. Duration 10 min/level. Will disbelief (if interacted). PHB p.222",
-                    SpellLevel = 1, School = "Illusion",
-                    ClassList = new[] { "Wizard" },
+                    Description = "Illusion (Glamer). Caster appears as a humanoid of the same size category. Grants +10 competence bonus on Disguise checks. Duration 10 min/level (D). PHB p.222",
+                    SpellLevel = 1,
+                    School = "Illusion",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
-                    BuffDurationRounds = -1,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Disguise not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData

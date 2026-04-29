@@ -188,6 +188,7 @@ public partial class GameManager : MonoBehaviour
     private SpellData _pendingSpell; // Spell selected for casting
     private MetamagicData _pendingMetamagic; // Metamagic applied to pending spell
     private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
+    private string _pendingDisguiseSelfRace;
     private SummonMonsterOption _pendingSummonSelection; // Selected summon option waiting for placement
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
     private string _pendingNaturalAttackLabel; // Display label for selected natural-weapon single attack
@@ -1054,6 +1055,9 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         if (CharacterSheetUI != null && CharacterSheetUI.IsOpen)
+            return false;
+
+        if (CombatUI != null && CombatUI.IsDisguiseSelfRaceSelectorOpen())
             return false;
 
         return true;
@@ -4756,6 +4760,7 @@ public partial class GameManager : MonoBehaviour
         ClearPendingNaturalAttackSelection();
         EndGrappleContextMenuDisplayLock();
         CombatUI.HideSummonContextMenu();
+        CombatUI.HideDisguiseSelfRaceSelector();
 
         _waitingForAoOConfirmation = false;
         _pendingAoOAction = null;
@@ -8643,6 +8648,36 @@ public partial class GameManager : MonoBehaviour
         ShowSpellTargets(pc, _pendingSpell);
     }
 
+    public bool HasActiveDisguiseSelf(CharacterController character)
+    {
+        if (character == null)
+            return false;
+
+        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        return statusMgr != null && statusMgr.HasEffect("disguise_self");
+    }
+
+    public void OnDismissDisguiseSelfButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Actions.HasStandardAction)
+            return;
+
+        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+        if (statusMgr == null || !statusMgr.HasEffect("disguise_self"))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Disguise Self to dismiss.");
+            return;
+        }
+
+        pc.CommitStandardAction();
+        statusMgr.RemoveEffectsBySpellId("disguise_self");
+
+        CombatUI?.ShowCombatLog($"<color=#88CCFF>🎭 {pc.Stats.CharacterName} dismisses Disguise Self and appears as {pc.DisplayedRace}.</color>");
+        UpdateAllStatsUI();
+        ShowActionChoices();
+    }
+
     /// <summary>Called when a spell is chosen from the spell selection panel (with optional metamagic).</summary>
     private void OnSpellSelectedWithMetamagic(SpellData spell, MetamagicData metamagic)
     {
@@ -8652,6 +8687,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSpell = spell;
         _pendingMetamagic = metamagic;
         _pendingSpellFromHeldCharge = false;
+        _pendingDisguiseSelfRace = null;
         _pendingSummonSelection = null;
 
         // Casting another spell while holding a touch charge ends the held charge.
@@ -9373,6 +9409,12 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        if (string.Equals(_pendingSpell.SpellId, "disguise_self", StringComparison.Ordinal))
+        {
+            ShowDisguiseSelfRaceSelection(caster);
+            return;
+        }
+
         // ===== AoE SPELLS: Enter AoE targeting mode =====
         if (_pendingSpell.AoEShapeType != AoEShape.None)
         {
@@ -9401,6 +9443,48 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
+    private void ShowDisguiseSelfRaceSelection(CharacterController caster)
+    {
+        if (caster == null || caster.Stats == null || CombatUI == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        SizeCategory casterSize = caster.Stats.CurrentSizeCategory;
+        List<string> raceOptions = RaceDatabase.GetRaceNamesBySizeCategory(casterSize);
+        if (raceOptions == null || raceOptions.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"⚠ No races available for size {casterSize}. Disguise Self cancelled.");
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            _pendingDisguiseSelfRace = null;
+            ShowActionChoices();
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.ChoosingAction;
+        CombatUI.SetActionButtonsVisible(false);
+        CombatUI.ShowDisguiseSelfRaceSelector(
+            caster.Stats.CharacterName,
+            casterSize,
+            raceOptions,
+            onSelect: selectedRace =>
+            {
+                _pendingDisguiseSelfRace = selectedRace;
+                PerformSpellCast(caster, caster);
+            },
+            onCancel: () =>
+            {
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingDisguiseSelfRace = null;
+                ShowActionChoices();
+            });
+    }
+
     private bool ShouldShowTouchSpellPrompt(SpellData spell)
     {
         if (spell == null) return false;
@@ -9418,6 +9502,7 @@ public partial class GameManager : MonoBehaviour
     /// <summary>Called when spell selection is cancelled.</summary>
     private void OnSpellSelectionCancelled()
     {
+        _pendingDisguiseSelfRace = null;
         ShowActionChoices();
     }
 
@@ -9802,6 +9887,7 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private void PerformSpellCast(CharacterController caster, CharacterController target)
     {
+        CombatUI?.HideDisguiseSelfRaceSelector();
         CurrentSubPhase = PlayerSubPhase.Animating;
 
         if (!IsValidTargetForSpell(caster, target, _pendingSpell))
@@ -10099,6 +10185,7 @@ public partial class GameManager : MonoBehaviour
             _pendingSpell = null;
             _pendingSpellFromHeldCharge = false;
             _pendingMetamagic = null;
+            _pendingDisguiseSelfRace = null;
             ResetPendingGreaseCastMode();
 
             // After standard action, check for remaining actions
@@ -11878,6 +11965,45 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
+        if (spell != null && spell.SpellId == "disguise_self")
+        {
+            CharacterController recipient = caster ?? target;
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            if (recipientStatusMgr == null)
+                recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+            recipientStatusMgr.Init(recipient.Stats);
+
+            string selectedRace = string.IsNullOrWhiteSpace(_pendingDisguiseSelfRace)
+                ? recipient.ActualRace
+                : _pendingDisguiseSelfRace;
+
+            if (RaceDatabase.TryGetRaceSizeCategory(selectedRace, out SizeCategory selectedRaceSize)
+                && selectedRaceSize != recipient.Stats.CurrentSizeCategory)
+            {
+                selectedRace = recipient.ActualRace;
+            }
+
+            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
+            if (effect != null)
+            {
+                recipient.ApplyDisguiseSelfEffect(selectedRace, effect.RemainingRounds, caster);
+
+                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                if (recipientSpellComp != null)
+                    recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                CombatUI?.ShowCombatLog($"<color=#88FFEE>🎭 {recipient.Stats.CharacterName} now appears as {recipient.DisplayedRace} ({effect.GetDurationDisplayString()}).</color>");
+            }
+
+            _pendingDisguiseSelfRace = null;
+            UpdateAllStatsUI();
+            return effect;
+        }
+
         // Use StatusEffectManager for tracked buff application
         var statusMgr = target.GetComponent<StatusEffectManager>();
         if (statusMgr != null)
@@ -12044,12 +12170,20 @@ public partial class GameManager : MonoBehaviour
                 string msg = $"⏱ {effect.Spell?.Name ?? "Unknown"} has expired on {character.Stats.CharacterName}!";
                 Debug.Log($"[SpellDuration] {msg}");
                 CombatUI?.ShowCombatLog($"<color=#FFAA44>{msg}</color>");
+
+                if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "disguise_self", StringComparison.Ordinal))
+                {
+                    CombatUI?.ShowCombatLog($"<color=#88CCFF>🎭 {character.Stats.CharacterName}'s disguise fades; visible race returns to {character.DisplayedRace}.</color>");
+                }
             }
 
             if (statusMgr.ActiveEffectCount > 0)
             {
                 foreach (var effect in statusMgr.ActiveEffects)
                 {
+                    if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "disguise_self", StringComparison.Ordinal))
+                        character.UpdateDisguiseSelfDuration(effect.RemainingRounds);
+
                     Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
                 }
             }

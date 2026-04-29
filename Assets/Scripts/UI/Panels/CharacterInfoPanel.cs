@@ -158,7 +158,8 @@ public class CharacterInfoPanel : MonoBehaviour
 
         if (nameText != null)
         {
-            string raceStr = !string.IsNullOrEmpty(s.RaceName) ? $"{s.RaceName} " : "";
+            string shownRace = ch != null ? ch.DisplayedRace : s.RaceName;
+            string raceStr = !string.IsNullOrEmpty(shownRace) ? $"{shownRace} " : "";
             string sizeStr = (s.SizeCategoryName != "Medium") ? $" [{s.SizeCategoryName}]" : "";
             string displayName = s.CharacterName;
             if (GameManager.Instance != null)

@@ -807,6 +807,8 @@ public class SceneBootstrap : MonoBehaviour
             "Rage", new Color(0.6f, 0.2f, 0.1f));
         combatUI.CastSpellButton = CreateGridButton(btnGrid.transform, "CastSpellBtn",
             "Cast Spell", new Color(0.4f, 0.2f, 0.6f));
+        combatUI.DismissDisguiseSelfButton = CreateGridButton(btnGrid.transform, "DismissDisguiseSelfBtn",
+            "Dismiss Disguise Self", new Color(0.36f, 0.2f, 0.48f));
         combatUI.ReloadButton = CreateGridButton(btnGrid.transform, "ReloadBtn",
             "Reload", new Color(0.38f, 0.44f, 0.16f));
         combatUI.DropEquippedItemButton = CreateGridButton(btnGrid.transform, "DropEquippedBtn",
@@ -1133,6 +1135,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.RageButton.onClick.AddListener(() => GameManager.Instance.OnRageButtonPressed());
         if (ui.CastSpellButton != null)
             ui.CastSpellButton.onClick.AddListener(() => GameManager.Instance.OnCastSpellButtonPressed());
+        if (ui.DismissDisguiseSelfButton != null)
+            ui.DismissDisguiseSelfButton.onClick.AddListener(() => GameManager.Instance.OnDismissDisguiseSelfButtonPressed());
         if (ui.ReloadButton != null)
             ui.ReloadButton.onClick.AddListener(() => GameManager.Instance.OnReloadButtonPressed());
         if (ui.DropEquippedItemButton != null)

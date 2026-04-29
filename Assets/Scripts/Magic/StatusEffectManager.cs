@@ -541,6 +541,21 @@ public class StatusEffectManager : MonoBehaviour
         string spellId = effect.Spell.SpellId;
         if (string.IsNullOrEmpty(spellId)) return;
 
+        if (spellId == "disguise_self")
+        {
+            if (applying)
+            {
+                _stats.DisguiseCompetenceBonus += 10;
+            }
+            else
+            {
+                _stats.DisguiseCompetenceBonus = Mathf.Max(0, _stats.DisguiseCompetenceBonus - 10);
+                _controller?.ClearDisguiseSelfEffect();
+            }
+
+            return;
+        }
+
         if (spellId == "enlarge_person" || spellId == "reduce_person")
         {
             int shift = (spellId == "enlarge_person") ? 1 : -1;
