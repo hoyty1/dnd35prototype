@@ -218,6 +218,9 @@ public static class SpellCaster
             && GameManager.Instance != null)
         {
             GameManager.Instance.BreakCharmOnHostileAction(casterController, targetController);
+            GameManager.Instance.BreakFascinationOnHostileAction(casterController, targetController, "spell attack");
+            Vector2Int noiseOrigin = targetController != null ? targetController.GridPosition : casterController.GridPosition;
+            GameManager.Instance.BreakFascinationFromLoudNoise(casterController, noiseOrigin, radiusSquares: 6);
         }
 
         // ========== SPELL RESISTANCE ==========

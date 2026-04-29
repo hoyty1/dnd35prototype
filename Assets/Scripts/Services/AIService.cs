@@ -74,6 +74,23 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        if (_gameManager.TryGetFascinatedTurnDecisionForAI(npc, out FascinatedBehaviorController.FascinatedTurnDecision fascinatedDecision))
+        {
+            CharacterController source = fascinatedDecision != null ? fascinatedDecision.CasterSource : null;
+            if (source == null || source.Stats == null || source.Stats.IsDead)
+            {
+                _gameManager.RemoveCondition(npc, CombatConditionType.Fascinated);
+                _gameManager.CombatUI?.ShowCombatLog($"👁 {npc.Stats.CharacterName} is no longer fascinated.");
+            }
+            else
+            {
+                _gameManager.CombatUI?.ShowCombatLog($"👁 {npc.Stats.CharacterName} stares blankly at {source.Stats.CharacterName} and takes no actions.");
+            }
+
+            yield return new WaitForSeconds(0.25f);
+            yield break;
+        }
+
         CharacterController targetPC = SelectBestTarget(npc, _gameManager.GetAllCharactersForAI());
         if (targetPC == null)
         {

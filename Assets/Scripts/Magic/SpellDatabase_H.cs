@@ -141,19 +141,28 @@ public static partial class SpellDatabase
                 {
                     SpellId = "hypnotism",
                     Name = "Hypnotism",
-                    Description = "Fascinates 2d4 HD of creatures. Will save negates. PHB p.242",
-                    SpellLevel = 1, School = "Enchantment",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.SingleEnemy,
-                    RangeSquares = 5,
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. Fascinates creatures in a 15-ft radius burst with a 2d4 HD pool, lowest HD first. Targets must be able to see or hear you. Will negates. Duration 2d4 rounds. SR: Yes. PHB p.242",
+                    SpellLevel = 1,
+                    School = "Enchantment",
+                    ClassList = new[] { "Wizard", "Bard" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Close,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 3, // 15-ft radius burst
+                    AoERangeSquares = 0, // use Close range profile
+                    AoEFilter = AoETargetFilter.EnemiesOnly,
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
-                    BuffDurationRounds = 3,
-                    ActionType = SpellActionType.FullRound,
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    BlockedByProtectionFromAlignment = true,
+                    ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Fascination mechanics not implemented]"
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 0, // resolved at runtime (2d4 rounds)
+                    DurationScalesWithLevel = false,
+                    IsPlaceholder = false
                 });
 
     }

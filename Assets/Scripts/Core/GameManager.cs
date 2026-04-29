@@ -148,6 +148,7 @@ public partial class GameManager : MonoBehaviour
 
     private ConfusedBehaviorController _confusedBehaviorController;
     private CharmedBehaviorController _charmedBehaviorController;
+    private FascinatedBehaviorController _fascinatedBehaviorController;
 
     /// <summary>Current combatant in initiative order (PC or NPC).</summary>
     public CharacterController CurrentCharacter => _turnService != null ? _turnService.CurrentCharacter : null;
@@ -380,6 +381,7 @@ public partial class GameManager : MonoBehaviour
 
         _confusedBehaviorController ??= new ConfusedBehaviorController();
         _charmedBehaviorController ??= new CharmedBehaviorController();
+        _fascinatedBehaviorController ??= new FascinatedBehaviorController();
 
         turnUndeadSystem ??= gameObject.GetComponent<TurnUndeadSystem>() ?? gameObject.AddComponent<TurnUndeadSystem>();
         grappleSystem ??= gameObject.GetComponent<GrappleSystem>() ?? gameObject.AddComponent<GrappleSystem>();
@@ -4110,6 +4112,141 @@ public partial class GameManager : MonoBehaviour
             }
 
             return;
+        }
+    }
+
+    public void BreakFascinationOnHostileAction(CharacterController attacker, CharacterController target, string disturbanceReason = "hostile action")
+    {
+        if (attacker == null || attacker.Stats == null || target == null || target.Stats == null)
+            return;
+
+        if (!HasCondition(target, CombatConditionType.Fascinated))
+            return;
+
+        List<ConditionService.ActiveCondition> active = GetActiveConditions(target);
+        if (active == null || active.Count == 0)
+            return;
+
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionService.ActiveCondition condition = active[i];
+            if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Fascinated)
+                continue;
+
+            CharacterController source = ResolveFascinationSource(condition);
+            if (source == null || source.Stats == null)
+                continue;
+
+            bool hostileBySourceSide = attacker == source || IsAllyTeam(attacker, source);
+            if (!hostileBySourceSide)
+                continue;
+
+            TryDisturbFascinatedTarget(target, condition, disturbanceReason, attacker);
+            return;
+        }
+    }
+
+    private CharacterController ResolveFascinationSource(ConditionService.ActiveCondition condition)
+    {
+        if (condition == null)
+            return null;
+
+        if (condition.Source != null)
+            return condition.Source;
+
+        if (condition.Data is FascinatedConditionData fascinatedData && fascinatedData.Caster != null)
+            return fascinatedData.Caster;
+
+        if (string.IsNullOrWhiteSpace(condition.SourceName))
+            return null;
+
+        List<CharacterController> all = GetAllCharacters();
+        for (int i = 0; i < all.Count; i++)
+        {
+            CharacterController candidate = all[i];
+            if (candidate == null || candidate.Stats == null)
+                continue;
+
+            if (string.Equals(candidate.Stats.CharacterName, condition.SourceName, StringComparison.Ordinal))
+                return candidate;
+        }
+
+        return null;
+    }
+
+    private void TryDisturbFascinatedTarget(
+        CharacterController target,
+        ConditionService.ActiveCondition fascinatedCondition,
+        string reason,
+        CharacterController disturber)
+    {
+        if (target == null || target.Stats == null || fascinatedCondition == null)
+            return;
+
+        CharacterController source = ResolveFascinationSource(fascinatedCondition);
+        FascinatedConditionData data = fascinatedCondition.Data as FascinatedConditionData;
+
+        string reasonText = string.IsNullOrWhiteSpace(reason) ? "disturbance" : reason;
+        int disturbanceDc = 10;
+        if (data != null)
+            disturbanceDc = Mathf.Max(1, data.DisturbanceSaveDC);
+
+        int saveRoll = UnityEngine.Random.Range(1, 21);
+        int saveTotal = saveRoll + target.Stats.WillSave;
+        bool saveSucceeded = saveTotal >= disturbanceDc;
+
+        if (saveSucceeded)
+        {
+            if (RemoveCondition(target, CombatConditionType.Fascinated))
+            {
+                CombatUI?.ShowCombatLog($"🔔 {target.Stats.CharacterName} is disturbed by {reasonText} and breaks free of fascination (Will {saveTotal} vs DC {disturbanceDc}).");
+            }
+            return;
+        }
+
+        string sourceName = source != null && source.Stats != null ? source.Stats.CharacterName : fascinatedCondition.SourceName;
+        string disturberName = disturber != null && disturber.Stats != null ? disturber.Stats.CharacterName : "disturbance";
+        if (!string.IsNullOrWhiteSpace(sourceName))
+            CombatUI?.ShowCombatLog($"👁 {target.Stats.CharacterName} remains fascinated by {sourceName} despite {disturberName}'s {reasonText} (Will {saveTotal} vs DC {disturbanceDc}).");
+    }
+
+    public void BreakFascinationFromLoudNoise(CharacterController noiseSource, Vector2Int noiseOrigin, int radiusSquares = 6)
+    {
+        if (noiseSource == null || noiseSource.Stats == null)
+            return;
+
+        List<CharacterController> all = GetAllCharacters();
+        for (int i = 0; i < all.Count; i++)
+        {
+            CharacterController candidate = all[i];
+            if (candidate == null || candidate == noiseSource || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+
+            int dist = SquareGridUtils.GetDistance(noiseOrigin, candidate.GridPosition);
+            if (dist > Mathf.Max(1, radiusSquares))
+                continue;
+
+            List<ConditionService.ActiveCondition> active = GetActiveConditions(candidate);
+            if (active == null || active.Count == 0)
+                continue;
+
+            for (int condIndex = 0; condIndex < active.Count; condIndex++)
+            {
+                ConditionService.ActiveCondition condition = active[condIndex];
+                if (condition == null || ConditionRules.Normalize(condition.Type) != CombatConditionType.Fascinated)
+                    continue;
+
+                CharacterController fascinationSource = ResolveFascinationSource(condition);
+                if (fascinationSource == null || fascinationSource.Stats == null)
+                    continue;
+
+                bool fromSourceSide = noiseSource == fascinationSource || IsAllyTeam(noiseSource, fascinationSource);
+                if (!fromSourceSide)
+                    continue;
+
+                TryDisturbFascinatedTarget(candidate, condition, "loud noise", noiseSource);
+                break;
+            }
         }
     }
 
@@ -10577,6 +10714,12 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
+            if (string.Equals(_pendingSpell.SpellId, "hypnotism", StringComparison.Ordinal))
+            {
+                ResolveHypnotismSpell(caster, targets, aoeCells);
+                return;
+            }
+
             // Build the combat log header
             var logBuilder = new System.Text.StringBuilder();
             string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
@@ -10706,6 +10849,178 @@ public partial class GameManager : MonoBehaviour
 
             StartCoroutine(AfterAttackDelay(caster, 1.5f));
         });
+    }
+
+    private void ResolveHypnotismSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    {
+        if (caster == null || caster.Stats == null || _pendingSpell == null)
+            return;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int castingAbilityMod = caster.Stats.IsWizard ? caster.Stats.INTMod : caster.Stats.WISMod;
+        int saveDc = 10 + _pendingSpell.SpellLevel + castingAbilityMod;
+        int hdPool = UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5); // 2d4
+        int fascinatedRounds = UnityEngine.Random.Range(1, 5) + UnityEngine.Random.Range(1, 5); // 2d4
+
+        List<CharacterController> candidates = new List<CharacterController>();
+        for (int i = 0; i < targets.Count; i++)
+        {
+            CharacterController target = targets[i];
+            if (target == null || target.Stats == null || target.Stats.IsDead)
+                continue;
+            if (!IsEnemyTeam(caster, target))
+                continue;
+            if (IsImmuneToMindAffecting(target))
+                continue;
+
+            bool canSeeCaster = target.CanSee(caster);
+            bool canHearCaster = !target.HasCondition(CombatConditionType.Deafened);
+            if (!canSeeCaster && !canHearCaster)
+                continue;
+
+            candidates.Add(target);
+        }
+
+        candidates.Sort((a, b) =>
+        {
+            int aHd = GetTargetHitDice(a);
+            int bHd = GetTargetHitDice(b);
+            int hdCompare = aHd.CompareTo(bHd);
+            if (hdCompare != 0)
+                return hdCompare;
+
+            int distA = SquareGridUtils.GetDistance(caster.GridPosition, a.GridPosition);
+            int distB = SquareGridUtils.GetDistance(caster.GridPosition, b.GridPosition);
+            return distA.CompareTo(distB);
+        });
+
+        int threatenedCount = 0;
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            if (SpellCaster.IsBeingThreatenedBy(candidates[i], caster))
+                threatenedCount++;
+        }
+
+        int saveContextModifier = 0;
+        string saveContextLabel = "normal";
+        if (threatenedCount >= 2)
+        {
+            saveContextModifier = 2;
+            saveContextLabel = "+2 combat";
+        }
+        else if (candidates.Count == 1 && threatenedCount == 0)
+        {
+            saveContextModifier = -2;
+            saveContextLabel = "-2 single target out of combat";
+        }
+
+        var logBuilder = new System.Text.StringBuilder();
+        logBuilder.AppendLine("═══════════════════════════════════");
+        logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts Hypnotism! (15-ft burst)");
+        logBuilder.AppendLine($"  HD Pool: {hdPool} | Duration: {fascinatedRounds} rounds | Will DC {saveDc} ({saveContextLabel})");
+        logBuilder.AppendLine($"  Candidates: {candidates.Count} in area ({aoeCells.Count} squares)");
+        logBuilder.AppendLine();
+
+        int remainingPool = hdPool;
+        int affectedCount = 0;
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            CharacterController target = candidates[i];
+            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+            if (targetHd > remainingPool)
+            {
+                logBuilder.AppendLine($"  • {target.Stats.CharacterName} ({targetHd} HD) exceeds remaining pool ({remainingPool}) — skipped.");
+                continue;
+            }
+
+            remainingPool -= targetHd;
+
+            int srTotal = 0;
+            int srRoll = 0;
+            if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            {
+                srRoll = UnityEngine.Random.Range(1, 21);
+                srTotal = srRoll + casterLevel;
+                if (srTotal < target.Stats.SpellResistance)
+                {
+                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
+                    continue;
+                }
+            }
+
+            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveTotal = saveRoll + target.Stats.WillSave + saveContextModifier;
+            bool saved = saveTotal >= saveDc;
+            if (saved)
+            {
+                logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
+                continue;
+            }
+
+            var fascinatedData = new FascinatedConditionData
+            {
+                Caster = caster,
+                CasterName = caster.Stats.CharacterName,
+                RemainingRounds = fascinatedRounds,
+                DisturbanceSaveDC = saveDc,
+                SourceSpellId = _pendingSpell.SpellId,
+                SourceEffectName = _pendingSpell.Name
+            };
+
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Fascinated,
+                    fascinatedRounds,
+                    source: caster,
+                    data: fascinatedData,
+                    sourceNameOverride: _pendingSpell.Name,
+                    sourceCategory: "Spell",
+                    sourceId: _pendingSpell.SpellId);
+            }
+            else
+            {
+                target.ApplyCondition(CombatConditionType.Fascinated, fascinatedRounds, caster.Stats.CharacterName);
+            }
+
+            affectedCount++;
+            logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Fascinated for {fascinatedRounds} rounds (Will {saveTotal} vs DC {saveDc}).");
+        }
+
+        logBuilder.AppendLine();
+        logBuilder.AppendLine($"  Result: {affectedCount} target(s) fascinated. Remaining HD pool: {remainingPool}.");
+        logBuilder.Append("═══════════════════════════════════");
+
+        _lastCombatLog = logBuilder.ToString();
+        CombatUI?.ShowCombatLog(_lastCombatLog);
+        UpdateAllStatsUI();
+        Grid.ClearAllHighlights();
+
+        if (AreAllNPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
+            CombatUI.SetActionButtonsVisible(false);
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+
+        if (AreAllPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
+            CombatUI.SetActionButtonsVisible(false);
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+        StartCoroutine(AfterAttackDelay(caster, 1.5f));
     }
 
     /// <summary>
@@ -11740,6 +12055,12 @@ public partial class GameManager : MonoBehaviour
     {
         _charmedBehaviorController ??= new CharmedBehaviorController();
         yield return StartCoroutine(_charmedBehaviorController.ExecuteDecision(this, actor, decision));
+    }
+
+    public bool TryGetFascinatedTurnDecisionForAI(CharacterController actor, out FascinatedBehaviorController.FascinatedTurnDecision decision)
+    {
+        _fascinatedBehaviorController ??= new FascinatedBehaviorController();
+        return _fascinatedBehaviorController.TryBuildDecision(this, actor, out decision);
     }
 
     // Public delegation helpers for AIService.
@@ -13924,6 +14245,8 @@ public partial class GameManager : MonoBehaviour
                 }
             }
         }
+
+        BreakFascinationOnHostileAction(attacker, target, "threatening movement");
 
         SpecialAttackResult result = attacker.ExecuteSpecialAttack(
             type,

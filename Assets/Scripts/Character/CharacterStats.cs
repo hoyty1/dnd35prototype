@@ -2985,6 +2985,17 @@ public class CharacterStats
                 if (skill.KeyAbility == AbilityType.STR || skill.KeyAbility == AbilityType.DEX)
                     total -= 4;
             }
+
+            // Fascinated: -4 penalty on reaction Listen/Spot checks.
+            // The current skill subsystem does not distinguish reaction-vs-proactive checks,
+            // so we apply this to all Listen/Spot rolls while fascinated.
+            if (normalized == CombatConditionType.Fascinated)
+            {
+                bool isListenOrSpot = string.Equals(skillName, "Listen", System.StringComparison.OrdinalIgnoreCase)
+                                      || string.Equals(skillName, "Spot", System.StringComparison.OrdinalIgnoreCase);
+                if (isListenOrSpot)
+                    total -= 4;
+            }
         }
 
         return total;

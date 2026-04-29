@@ -2690,7 +2690,11 @@ public class CharacterController : MonoBehaviour
         }
 
         if (GameManager.Instance != null)
+        {
             GameManager.Instance.BreakCharmOnHostileAction(this, target);
+            GameManager.Instance.BreakFascinationOnHostileAction(this, target, "attack");
+            GameManager.Instance.BreakFascinationFromLoudNoise(this, target != null ? target.GridPosition : GridPosition, radiusSquares: 4);
+        }
 
         HasAttackedThisTurn = true;
         return result;
