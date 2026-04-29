@@ -3245,7 +3245,10 @@ public class CharacterStats
             modifier += JumpSpeedModifier + JumpEnhancementBonus;
 
         if (string.Equals(skillName, "Hide", System.StringComparison.OrdinalIgnoreCase) && OwnerCharacter != null)
+        {
             modifier += OwnerCharacter.GetInvisibilityHideBonus();
+            modifier += OwnerCharacter.GetGlitterdustHidePenalty();
+        }
 
         return modifier;
     }
@@ -3264,6 +3267,25 @@ public class CharacterStats
         int conditionModifier = GetConditionSkillModifier(skillName);
         int spellModifier = GetSpellSkillModifier(skillName);
         return baseBonus + featBonus + acpPenalty + conditionModifier + spellModifier;
+    }
+
+    /// <summary>
+    /// Hide bonus resolver used for observer-specific perception checks.
+    /// See Invisibility removes only invisibility-derived Hide bonuses,
+    /// while preserving mundane Hide modifiers (ranks, DEX, size, feats, etc.).
+    /// </summary>
+    public int GetHideSkillBonusAgainstObserver(CharacterController observer)
+    {
+        int totalHide = GetSkillBonus("Hide");
+        if (OwnerCharacter == null)
+            return totalHide;
+
+        int baseInvisibilityHide = OwnerCharacter.GetInvisibilityHideBonus();
+        if (baseInvisibilityHide <= 0)
+            return totalHide;
+
+        int observerSpecificInvisibilityHide = OwnerCharacter.GetInvisibilityHideBonusAgainst(observer);
+        return totalHide - baseInvisibilityHide + observerSpecificInvisibilityHide;
     }
 
     /// <summary>

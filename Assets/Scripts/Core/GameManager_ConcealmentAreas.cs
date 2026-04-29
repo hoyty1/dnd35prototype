@@ -140,4 +140,108 @@ public partial class GameManager
         int centerY = Mathf.RoundToInt(sumY / count);
         return SquareGridUtils.GridToWorld(centerX, centerY);
     }
+
+    private bool TryResolveGlitterdustSpell(CharacterController caster, SpellData spell, List<CharacterController> targets, HashSet<Vector2Int> aoeCells, out string log)
+    {
+        log = string.Empty;
+        if (caster == null || caster.Stats == null || spell == null || !string.Equals(spell.SpellId, "glitterdust", System.StringComparison.Ordinal))
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int saveDc = GetSpellSaveDC(caster, spell);
+
+        Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
+        CreateGlitterdustArea(centerPosition, durationRounds, casterLevel, caster);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"✨ {caster.Stats.CharacterName} casts Glitterdust! (10-ft radius spread)");
+        sb.AppendLine($"  Duration: {durationRounds} rounds | Will DC {saveDc} negates blindness only");
+        sb.AppendLine($"  Outlined: all creatures in area | Invisibility concealment negated | Hide -40");
+        sb.AppendLine();
+
+        int affectedCount = 0;
+        int blindedCount = 0;
+
+        if (targets != null)
+        {
+            for (int i = 0; i < targets.Count; i++)
+            {
+                CharacterController target = targets[i];
+                if (target == null || target.Stats == null || target.Stats.IsDead)
+                    continue;
+
+                StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
+                if (statusMgr == null)
+                    statusMgr = target.gameObject.AddComponent<StatusEffectManager>();
+                statusMgr.Init(target.Stats);
+
+                ActiveSpellEffect effect = statusMgr.AddEffect(
+                    spell,
+                    caster.Stats.CharacterName,
+                    casterLevel);
+
+                int trackedDuration = effect != null ? effect.RemainingRounds : Mathf.Max(1, statusMgr.GetRemainingRounds("glitterdust"));
+
+                bool blinded = false;
+                int saveRoll = Random.Range(1, 21);
+                int saveTotal = saveRoll + target.Stats.WillSave;
+                if (saveTotal < saveDc)
+                {
+                    blinded = true;
+                    blindedCount++;
+                    if (_conditionService != null)
+                    {
+                        _conditionService.ApplyCondition(
+                            target,
+                            CombatConditionType.Blinded,
+                            trackedDuration,
+                            source: caster,
+                            sourceNameOverride: spell.Name,
+                            sourceCategory: "Spell",
+                            sourceId: spell.SpellId);
+                    }
+                    else
+                    {
+                        target.ApplyCondition(CombatConditionType.Blinded, trackedDuration, spell.Name);
+                    }
+                }
+
+                target.ApplyGlitterdustEffect(trackedDuration, caster, blindedByFailedSave: blinded);
+                target.SetGlitterdustBlindedState(blinded);
+                affectedCount++;
+
+                string blindText = blinded
+                    ? $"FAILED Will d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} vs DC {saveDc} → BLINDED"
+                    : $"Will d20({saveRoll}) + {target.Stats.WillSave} = {saveTotal} vs DC {saveDc} → not blinded";
+
+                sb.AppendLine($"  • {target.Stats.CharacterName}: outlined in golden dust; {blindText}.");
+
+                if (target.HasActiveInvisibilityEffect)
+                    sb.AppendLine($"    👁 Invisibility concealment suppressed for all observers.");
+            }
+        }
+
+        if (affectedCount == 0)
+            sb.AppendLine("  No creatures in area.");
+
+        sb.AppendLine();
+        sb.AppendLine($"  Result: {affectedCount} outlined, {blindedCount} blinded.");
+        sb.Append("═══════════════════════════════════");
+        log = sb.ToString();
+        return true;
+    }
+
+    public void CreateGlitterdustArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
+    {
+        GameObject glitterObj = new GameObject("Glitterdust_Area");
+        glitterObj.transform.position = centerPosition;
+
+        GlitterdustAreaEffect glitter = glitterObj.AddComponent<GlitterdustAreaEffect>();
+        glitter.CenterPosition = centerPosition;
+        glitter.RoundsRemaining = Mathf.Max(1, durationRounds);
+        glitter.CasterLevel = Mathf.Max(1, casterLevel);
+        glitter.Caster = caster;
+    }
 }

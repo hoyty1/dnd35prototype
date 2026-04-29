@@ -28,6 +28,7 @@ public static class InvisibilityRulesTests
         TestConcealmentAndHideBonuses();
         TestBreaksOnAttackRoll();
         TestDirectVisibilityBlockedWhileInvisible();
+        TestGlitterdustRevealsInvisibleCreatures();
 
         Debug.Log($"====== Invisibility Rules Results: {_passed} passed, {_failed} failed ======");
     }
@@ -210,6 +211,50 @@ public static class InvisibilityRulesTests
         {
             DestroyController(caster);
             DestroyController(invisibleTarget);
+        }
+    }
+
+    private static void TestGlitterdustRevealsInvisibleCreatures()
+    {
+        CharacterController caster = null;
+        CharacterController invisibleTarget = null;
+        CharacterController observer = null;
+
+        try
+        {
+            caster = CreateController("GlitterCaster", "Wizard", 5);
+            invisibleTarget = CreateController("GlitterTarget", "Rogue", 5);
+            observer = CreateController("Observer", "Fighter", 5);
+
+            SpellData glitterdust = SpellDatabase.GetSpell("glitterdust");
+            Assert(glitterdust != null, "Glitterdust definition exists");
+            if (glitterdust == null)
+                return;
+
+            int baseHide = invisibleTarget.Stats.GetSkillBonus("Hide");
+            ApplyInvisibility(invisibleTarget, caster, 5);
+
+            StatusEffectManager statusMgr = invisibleTarget.GetComponent<StatusEffectManager>();
+            ActiveSpellEffect glitterEffect = statusMgr.AddEffect(glitterdust, caster.Stats.CharacterName, 5);
+            int duration = glitterEffect != null ? glitterEffect.RemainingRounds : 5;
+            invisibleTarget.ApplyGlitterdustEffect(duration, caster, blindedByFailedSave: false);
+
+            Assert(invisibleTarget.HasActiveGlitterdustEffect, "Glitterdust outlined effect is active on target");
+            Assert(invisibleTarget.GetMissChance(observer, incomingIsRangedAttack: false) == 0,
+                "Glitterdust removes invisibility concealment for all observers");
+            Assert(observer.CanSee(invisibleTarget, incomingIsRangedAttack: false),
+                "Observer can directly see glitterdusted invisible target");
+
+            int hideAfterGlitterdust = invisibleTarget.Stats.GetSkillBonus("Hide");
+            Assert(hideAfterGlitterdust - baseHide == -40,
+                "Glitterdust applies net Hide -40 and suppresses invisibility Hide bonus",
+                $"base={baseHide}, actual={hideAfterGlitterdust}");
+        }
+        finally
+        {
+            DestroyController(caster);
+            DestroyController(invisibleTarget);
+            DestroyController(observer);
         }
     }
 }

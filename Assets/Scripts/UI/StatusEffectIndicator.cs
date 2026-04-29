@@ -132,6 +132,34 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (statusMgr != null && statusMgr.HasEffect("see_invisibility"))
+        {
+            int rounds = statusMgr.GetRemainingRounds("see_invisibility");
+            list.Add(new IconData
+            {
+                Key = "SeeInvisibility",
+                ShortLabel = "SI",
+                Tooltip = $"See Invisibility\nCan see invisible creatures and objects normally\nNegates invisibility miss chance and invisibility Hide bonus\nDoes not negate mundane hiding\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Color = new Color(0.22f, 0.88f, 0.96f, 0.92f),
+                Duration = rounds
+            });
+        }
+
+        if (_character.HasActiveGlitterdustEffect)
+        {
+            GlitterdustEffectData glitterdust = _character.ActiveGlitterdustEffect;
+            int rounds = glitterdust != null ? Mathf.Max(0, glitterdust.DurationRemainingRounds) : 0;
+            bool blinded = glitterdust != null && glitterdust.IsBlinded;
+            list.Add(new IconData
+            {
+                Key = "Glitterdust",
+                ShortLabel = "GD",
+                Tooltip = $"Glitterdust (Outlined)\nGolden dust outline is visible to everyone\nInvisibility provides no concealment\nHide checks: -40 penalty\nCannot be removed before expiry\nBlinded from save failure: {(blinded ? "Yes" : "No")}\nDuration: {(rounds < 0 ? "∞" : $"{rounds} rounds")}",
+                Color = new Color(1f, 0.82f, 0.18f, 0.95f),
+                Duration = rounds
+            });
+        }
+
         if (statusMgr != null && statusMgr.HasEffect("jump"))
         {
             int rounds = statusMgr.GetRemainingRounds("jump");
@@ -345,6 +373,10 @@ public class StatusEffectIndicator : MonoBehaviour
 
     private static string GetConditionLabel(CombatConditionType type)
     {
+        CombatConditionType normalized = ConditionRules.Normalize(type);
+        if (normalized == CombatConditionType.Blinded)
+            return "BLIND";
+
         var def = ConditionRules.GetDefinition(type);
         if (!string.IsNullOrEmpty(def.ShortLabel))
             return def.ShortLabel;

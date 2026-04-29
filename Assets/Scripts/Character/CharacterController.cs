@@ -325,6 +325,8 @@ public class CharacterController : MonoBehaviour
     public DisguiseSelfEffectData ActiveDisguiseSelfEffect { get; private set; }
     public ExpeditiousRetreatEffectData ActiveExpeditiousRetreatEffect { get; private set; }
     public InvisibilityEffectData ActiveInvisibilityEffect { get; private set; }
+    public SeeInvisibilityEffectData ActiveSeeInvisibilityEffect { get; private set; }
+    public GlitterdustEffectData ActiveGlitterdustEffect { get; private set; }
     private EnfeebledConditionData _activeEnfeeblementEffect;
     public EnfeebledConditionData ActiveEnfeeblementEffect => _activeEnfeeblementEffect;
     public int TotalEnfeeblementStrengthPenalty => Stats != null ? Stats.EnfeeblementStrengthPenalty : 0;
@@ -1025,6 +1027,8 @@ public class CharacterController : MonoBehaviour
     }
 
     private SpriteRenderer _sr;
+    private ParticleSystem _glitterdustParticles;
+    private GameObject _glitterdustParticlesObject;
     private ConditionManager _conditionManager;
     private CharacterCombatStats _combatStats;
     private CharacterEquipment _equipment;
@@ -1292,6 +1296,9 @@ public class CharacterController : MonoBehaviour
     }
 
     public bool HasActiveInvisibilityEffect => ActiveInvisibilityEffect != null && ActiveInvisibilityEffect.IsInvisible;
+    public bool HasActiveSeeInvisibilityEffect => ActiveSeeInvisibilityEffect != null && ActiveSeeInvisibilityEffect.CanSeeInvisible;
+    public bool HasActiveGlitterdustEffect => ActiveGlitterdustEffect != null && ActiveGlitterdustEffect.OutlinedByDust && ActiveGlitterdustEffect.DurationRemainingRounds > 0;
+    public bool IsOutlinedByGlitterdust => HasActiveGlitterdustEffect;
 
     public void ApplyInvisibilityEffect(int durationRemainingRounds, CharacterController caster, bool isMoving = false)
     {
@@ -1307,6 +1314,88 @@ public class CharacterController : MonoBehaviour
         ActiveInvisibilityEffect.IsMoving = isMoving;
         ActiveInvisibilityEffect.SetCaster(caster);
         RefreshInvisibilityVisual();
+    }
+
+    public void ApplySeeInvisibilityEffect(int durationRemainingRounds, CharacterController caster)
+    {
+        int rounds = Mathf.Max(0, durationRemainingRounds);
+        if (rounds <= 0)
+            return;
+
+        if (ActiveSeeInvisibilityEffect == null)
+            ActiveSeeInvisibilityEffect = new SeeInvisibilityEffectData();
+
+        ActiveSeeInvisibilityEffect.CanSeeInvisible = true;
+        ActiveSeeInvisibilityEffect.DurationRemainingRounds = rounds;
+        ActiveSeeInvisibilityEffect.SetCaster(caster != null ? caster : this);
+    }
+
+    public void ApplyGlitterdustEffect(int durationRemainingRounds, CharacterController caster, bool blindedByFailedSave)
+    {
+        int rounds = Mathf.Max(0, durationRemainingRounds);
+        if (rounds <= 0)
+            return;
+
+        if (ActiveGlitterdustEffect == null)
+            ActiveGlitterdustEffect = new GlitterdustEffectData();
+
+        ActiveGlitterdustEffect.OutlinedByDust = true;
+        ActiveGlitterdustEffect.DurationRemainingRounds = Mathf.Max(rounds, ActiveGlitterdustEffect.DurationRemainingRounds);
+        ActiveGlitterdustEffect.IsBlinded = ActiveGlitterdustEffect.IsBlinded || blindedByFailedSave;
+        ActiveGlitterdustEffect.SetCaster(caster);
+
+        RefreshInvisibilityVisual();
+        UpdateGlitterdustVisual();
+    }
+
+    public void UpdateSeeInvisibilityDuration(int durationRemainingRounds)
+    {
+        if (ActiveSeeInvisibilityEffect == null)
+            return;
+
+        ActiveSeeInvisibilityEffect.DurationRemainingRounds = Mathf.Max(0, durationRemainingRounds);
+    }
+
+    public void UpdateGlitterdustDuration(int durationRemainingRounds)
+    {
+        if (ActiveGlitterdustEffect == null)
+            return;
+
+        ActiveGlitterdustEffect.DurationRemainingRounds = Mathf.Max(0, durationRemainingRounds);
+        if (ActiveGlitterdustEffect.DurationRemainingRounds <= 0)
+            ClearGlitterdustEffect();
+        else
+            UpdateGlitterdustVisual();
+    }
+
+    public void SetGlitterdustBlindedState(bool isBlinded)
+    {
+        if (ActiveGlitterdustEffect == null)
+            return;
+
+        ActiveGlitterdustEffect.IsBlinded = isBlinded;
+    }
+
+    public void ClearSeeInvisibilityEffect()
+    {
+        ActiveSeeInvisibilityEffect = null;
+    }
+
+    public void ClearGlitterdustEffect()
+    {
+        ActiveGlitterdustEffect = null;
+        UpdateGlitterdustVisual(forceDisable: true);
+        RefreshInvisibilityVisual();
+    }
+
+    public bool CanSeeInvisible(CharacterController target = null)
+    {
+        if (!HasActiveSeeInvisibilityEffect)
+            return false;
+
+        // See Invisibility only reveals invisible creatures/objects and does not pierce walls.
+        // LOS/cover constraints are handled by existing targeting and concealment systems.
+        return true;
     }
 
     public void UpdateInvisibilityDuration(int durationRemainingRounds)
@@ -1327,10 +1416,26 @@ public class CharacterController : MonoBehaviour
 
     public int GetInvisibilityHideBonus()
     {
-        if (!HasActiveInvisibilityEffect)
+        if (!HasActiveInvisibilityEffect || IsOutlinedByGlitterdust)
             return 0;
 
         return ActiveInvisibilityEffect.IsMoving ? 20 : 40;
+    }
+
+    public int GetInvisibilityHideBonusAgainst(CharacterController observer)
+    {
+        if (!HasActiveInvisibilityEffect || IsOutlinedByGlitterdust)
+            return 0;
+
+        if (observer != null && observer != this && observer.CanSeeInvisible(this))
+            return 0;
+
+        return GetInvisibilityHideBonus();
+    }
+
+    public int GetGlitterdustHidePenalty()
+    {
+        return IsOutlinedByGlitterdust ? -40 : 0;
     }
 
     public bool BreakInvisibility(string reason, CharacterController hostileTarget = null)
@@ -1364,15 +1469,81 @@ public class CharacterController : MonoBehaviour
 
     private void RefreshInvisibilityVisual()
     {
+        RefreshInvisibilityVisualForObserver(null);
+    }
+
+    public void RefreshInvisibilityVisualForObserver(CharacterController observer)
+    {
         if (_sr == null)
             _sr = GetComponent<SpriteRenderer>();
 
         if (_sr == null)
             return;
 
+        float alpha = 1f;
+        if (HasActiveInvisibilityEffect)
+        {
+            bool observerCanSeeInvisible = observer != null && observer != this && observer.CanSeeInvisible(this);
+            alpha = (observerCanSeeInvisible || IsOutlinedByGlitterdust) ? 0.92f : 0.45f;
+        }
+
         Color c = _sr.color;
-        c.a = HasActiveInvisibilityEffect ? 0.45f : 1f;
+        c.a = alpha;
         _sr.color = c;
+
+        UpdateGlitterdustVisual();
+    }
+
+    private void UpdateGlitterdustVisual(bool forceDisable = false)
+    {
+        bool shouldShow = !forceDisable && IsOutlinedByGlitterdust;
+        if (!shouldShow)
+        {
+            if (_glitterdustParticlesObject != null)
+                _glitterdustParticlesObject.SetActive(false);
+            return;
+        }
+
+        if (_glitterdustParticlesObject == null)
+            CreateGlitterdustParticles();
+
+        if (_glitterdustParticlesObject == null)
+            return;
+
+        _glitterdustParticlesObject.SetActive(true);
+        if (_glitterdustParticles != null && !_glitterdustParticles.isPlaying)
+            _glitterdustParticles.Play();
+    }
+
+    private void CreateGlitterdustParticles()
+    {
+        _glitterdustParticlesObject = new GameObject("GlitterdustParticles");
+        _glitterdustParticlesObject.transform.SetParent(transform, false);
+        _glitterdustParticlesObject.transform.localPosition = new Vector3(0f, 0.1f, -0.05f);
+
+        _glitterdustParticles = _glitterdustParticlesObject.AddComponent<ParticleSystem>();
+        ParticleSystem.MainModule main = _glitterdustParticles.main;
+        main.loop = true;
+        main.playOnAwake = true;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.4f, 0.9f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(0.08f, 0.24f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.08f);
+        main.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(1f, 0.9f, 0.35f, 0.65f),
+            new Color(1f, 0.78f, 0.2f, 0.9f));
+        main.simulationSpace = ParticleSystemSimulationSpace.Local;
+        main.maxParticles = 80;
+
+        ParticleSystem.EmissionModule emission = _glitterdustParticles.emission;
+        emission.rateOverTime = 22f;
+
+        ParticleSystem.ShapeModule shape = _glitterdustParticles.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.38f;
+
+        ParticleSystemRenderer renderer = _glitterdustParticlesObject.GetComponent<ParticleSystemRenderer>();
+        if (renderer != null)
+            renderer.sortingOrder = 20;
     }
 
     public EnfeebledConditionData ApplyEnfeeblementEffect(int strengthPenaltyAmount, int durationRemainingRounds, CharacterController caster)
@@ -1530,7 +1701,10 @@ public class CharacterController : MonoBehaviour
         ActiveDisguiseSelfEffect = null;
         ActiveExpeditiousRetreatEffect = null;
         ActiveInvisibilityEffect = null;
+        ActiveSeeInvisibilityEffect = null;
+        ActiveGlitterdustEffect = null;
         _activeEnfeeblementEffect = null;
+        UpdateGlitterdustVisual(forceDisable: true);
         if (Stats != null)
         {
             Stats.SetEnfeeblementStrengthPenalty(0);
@@ -4336,7 +4510,9 @@ public class CharacterController : MonoBehaviour
         result.WeaponEnhancementAttackBonus = weaponEnhancementAttackBonus;
         result.WeaponEnhancementDamageBonus = weaponEnhancementDamageBonus;
 
-        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus;
+        int blindedTargetAttackBonus = target != null && target.HasCondition(CombatConditionType.Blinded) ? 2 : 0;
+
+        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus;
 
         // D&D 3.5e: making an attack roll (or attempting to attack) breaks invisibility immediately.
         BreakInvisibility("attack roll", target);
@@ -4438,6 +4614,14 @@ public class CharacterController : MonoBehaviour
             int targetMissChance = target.GetMissChance(this, isRangedAttack);
             int blindedAttackerMissChance = HasCondition(CombatConditionType.Blinded) ? 50 : 0;
             int missChance = Mathf.Max(targetMissChance, blindedAttackerMissChance);
+
+            if (target.HasActiveInvisibilityEffect && CanSeeInvisible(target) && targetMissChance <= 0)
+            {
+                string attackerName = Stats != null ? Stats.CharacterName : name;
+                string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+                GameManager.Instance?.CombatUI?.ShowCombatLog($"<color=#A6F3FF>👁 {attackerName} sees invisible {targetName} clearly (no concealment).</color>");
+            }
+
             if (missChance > 0)
             {
                 result.ConcealmentMissChance = missChance;
@@ -5966,6 +6150,13 @@ public class CharacterController : MonoBehaviour
         return Mathf.Clamp(effect.MissChance, 0, 100);
     }
 
+    private static bool IsInvisibilityConcealmentEffect(ActiveSpellEffect effect)
+    {
+        return effect != null
+               && effect.Spell != null
+               && string.Equals(effect.Spell.SpellId, "invisibility", StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// Returns the highest concealment miss chance currently protecting this character.
     /// D&D 3.5e concealment miss chances do not stack; use the highest applicable source.
@@ -5987,6 +6178,14 @@ public class CharacterController : MonoBehaviour
             ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
             if (effect == null || effect.MissChance <= 0)
                 continue;
+
+            if (IsInvisibilityConcealmentEffect(effect)
+                && ((attacker != null && attacker.CanSeeInvisible(this)) || IsOutlinedByGlitterdust))
+            {
+                // See Invisibility and Glitterdust both ignore concealment granted by Invisibility only.
+                // Other concealment sources (fog, darkness, blur, etc.) still apply normally.
+                continue;
+            }
 
             int normalized = EvaluateEffectMissChanceAgainstAttacker(effect, attacker, incomingIsRangedAttack);
             if (normalized > bestMissChance)
@@ -6082,6 +6281,12 @@ public class CharacterController : MonoBehaviour
             ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
             if (effect == null || effect.MissChance <= 0)
                 continue;
+
+            if (IsInvisibilityConcealmentEffect(effect)
+                && ((attacker != null && attacker.CanSeeInvisible(this)) || IsOutlinedByGlitterdust))
+            {
+                continue;
+            }
 
             int normalized = EvaluateEffectMissChanceAgainstAttacker(effect, attacker, incomingIsRangedAttack);
             if (normalized == missChance)

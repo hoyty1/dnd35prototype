@@ -608,6 +608,14 @@ public class StatusEffectManager : MonoBehaviour
             return;
         }
 
+        if (spellId == "glitterdust")
+        {
+            if (!applying)
+                _controller?.ClearGlitterdustEffect();
+
+            return;
+        }
+
         if (spellId == "enlarge_person" || spellId == "reduce_person")
         {
             int shift = (spellId == "enlarge_person") ? 1 : -1;
