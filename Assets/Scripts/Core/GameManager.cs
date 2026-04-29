@@ -4663,6 +4663,7 @@ public partial class GameManager : MonoBehaviour
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
         _conditionService?.OnTurnStart(pc);
+        ApplyMelfsAcidArrowTurnStartDamage(pc);
         CloseInventoryIfOpen();
 
         // Tick Aid Another expiry counters before actions; this keeps bonuses available for one full beneficiary turn.
@@ -11010,11 +11011,15 @@ public partial class GameManager : MonoBehaviour
             if (!handledCauseFear && result.Success && !effectNegatedBySave)
                 handledRayOfEnfeeblement = TryResolveRayOfEnfeeblementSpellEffect(caster, target, _pendingSpell, result);
 
+            bool handledMelfsAcidArrow = false;
+            if (!handledCauseFear && !handledRayOfEnfeeblement && result.Success && !effectNegatedBySave)
+                handledMelfsAcidArrow = TryResolveMelfsAcidArrowSpellEffect(caster, target, _pendingSpell, result);
+
             bool handledAnimateRope = false;
-            if (!handledCauseFear && !handledRayOfEnfeeblement)
+            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledMelfsAcidArrow)
                 handledAnimateRope = TryResolveAnimateRopeSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -12793,6 +12798,93 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    private static bool IsMelfsAcidArrowSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, "melfs_acid_arrow", StringComparison.Ordinal);
+    }
+
+    private static int CalculateMelfsAcidArrowAdditionalRounds(CharacterController caster)
+    {
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        return Mathf.Min(6, casterLevel / 3);
+    }
+
+    private bool TryResolveMelfsAcidArrowSpellEffect(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
+    {
+        if (!IsMelfsAcidArrowSpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        if (result == null)
+            return true;
+
+        if (result.RequiredAttackRoll && !result.AttackHit)
+        {
+            target.ClearMelfsAcidArrowEffect();
+            return true;
+        }
+
+        int initialDamage = Mathf.Max(0, result.DamageDealt);
+        CombatUI?.ShowCombatLog($"🧪 Melf's Acid Arrow hits for {initialDamage} damage");
+
+        int lingeringRounds = CalculateMelfsAcidArrowAdditionalRounds(caster);
+        if (lingeringRounds > 0)
+            target.ApplyMelfsAcidArrowEffect(lingeringRounds, caster);
+        else
+            target.ClearMelfsAcidArrowEffect();
+
+        return true;
+    }
+
+    private void ApplyMelfsAcidArrowTurnStartDamage(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return;
+
+        MelfsAcidArrowEffectData effectData = character.ActiveMelfsAcidArrowEffect;
+        if (effectData == null || !effectData.IsActive || effectData.RemainingDamageRounds <= 0)
+            return;
+
+        int diceCount = Mathf.Max(1, effectData.DamageDiceCount);
+        int diceSides = Mathf.Max(2, effectData.DamageDiceSides);
+        int rolledDamage = 0;
+        for (int i = 0; i < diceCount; i++)
+            rolledDamage += UnityEngine.Random.Range(1, diceSides + 1);
+
+        var packet = new DamagePacket
+        {
+            RawDamage = rolledDamage,
+            Types = new HashSet<DamageType> { DamageType.Acid },
+            AttackTags = DamageBypassTag.None,
+            IsRanged = true,
+            IsNonlethal = false,
+            Source = AttackSource.Spell,
+            SourceName = "Melf's Acid Arrow (Lingering)"
+        };
+
+        DamageResolutionResult mitigation = character.Stats.ApplyIncomingDamage(rolledDamage, packet);
+        int damageDealt = mitigation.FinalDamage;
+
+        int roundsLeft = Mathf.Max(0, effectData.RemainingDamageRounds - 1);
+        character.UpdateMelfsAcidArrowDuration(roundsLeft);
+
+        if (damageDealt > 0)
+            CheckConcentrationOnDamage(character, damageDealt);
+
+        CombatUI?.ShowCombatLog($"🧪 Acid continues to burn for {damageDealt} damage ({roundsLeft} rounds left)");
+
+        if (character.Stats.IsDead)
+        {
+            character.OnDeath();
+            HandleSummonDeathCleanup(character);
+        }
+
+        if (roundsLeft <= 0)
+        {
+            character.ClearMelfsAcidArrowEffect();
+            CombatUI?.ShowCombatLog("⏱ Acid effect expires");
+        }
+    }
+
     /// <summary>
     /// Apply buff effects from a spell to the target character.
     /// Uses StatusEffectManager for proper duration tracking and stat modification reversal.
@@ -14252,6 +14344,7 @@ public partial class GameManager : MonoBehaviour
             return;
 
         _conditionService?.OnTurnStart(npc);
+        ApplyMelfsAcidArrowTurnStartDamage(npc);
         npc.StartNewTurn();
         ProcessNPCRoundStartPerception(npc);
         PruneTurnUndeadTrackers();
@@ -17876,11 +17969,15 @@ public partial class GameManager : MonoBehaviour
         if (!handledCauseFear && result.Success && !effectNegatedBySave)
             handledRayOfEnfeeblement = TryResolveRayOfEnfeeblementSpellEffect(npc, target, spell, result);
 
+        bool handledMelfsAcidArrow = false;
+        if (!handledCauseFear && !handledRayOfEnfeeblement && result.Success && !effectNegatedBySave)
+            handledMelfsAcidArrow = TryResolveMelfsAcidArrowSpellEffect(npc, target, spell, result);
+
         bool handledAnimateRope = false;
-        if (!handledCauseFear && !handledRayOfEnfeeblement)
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledMelfsAcidArrow)
             handledAnimateRope = TryResolveAnimateRopeSpellEffect(npc, target, spell, result);
 
-        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             ApplySpellBuff(npc, target, spell, spellComp);
 
         if (result.DamageDealt > 0)

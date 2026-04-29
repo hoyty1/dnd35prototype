@@ -160,6 +160,20 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (_character.HasActiveMelfsAcidArrowEffect)
+        {
+            MelfsAcidArrowEffectData acid = _character.ActiveMelfsAcidArrowEffect;
+            int rounds = acid != null ? Mathf.Max(0, acid.RemainingDamageRounds) : 0;
+            list.Add(new IconData
+            {
+                Key = "MelfsAcidArrow",
+                ShortLabel = "ACD",
+                Tooltip = $"Melf's Acid Arrow\nAcid continues to burn for 2d4 damage at start of turn\nNo save, no spell resistance\nRounds remaining: {rounds}",
+                Color = new Color(0.18f, 0.82f, 0.35f, 0.95f),
+                Duration = rounds
+            });
+        }
+
         if (statusMgr != null && statusMgr.HasEffect("jump"))
         {
             int rounds = statusMgr.GetRemainingRounds("jump");

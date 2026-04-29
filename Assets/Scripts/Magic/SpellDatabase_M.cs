@@ -69,6 +69,31 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
+                    SpellId = "melfs_acid_arrow",
+                    Name = "Melf's Acid Arrow",
+                    Description = "Ranged touch attack deals 2d4 acid immediately, then 2d4 acid each round for 1 + 1/3 caster levels (max 7 rounds total at CL 18). No save, no SR.",
+                    SpellLevel = 2,
+                    School = "Conjuration (Creation) [Acid]",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Long,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 4,
+                    DamageCount = 2,
+                    DamageType = "acid",
+                    IsTouch = true,
+                    IsRangedTouch = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        Register(new SpellData
+                {
                     SpellId = "domain_magic_stone",
                     Name = "Magic Stone",
                     Description = "Three stones gain +1 on attack and deal 1d6+1 damage.",

@@ -327,6 +327,7 @@ public class CharacterController : MonoBehaviour
     public InvisibilityEffectData ActiveInvisibilityEffect { get; private set; }
     public SeeInvisibilityEffectData ActiveSeeInvisibilityEffect { get; private set; }
     public GlitterdustEffectData ActiveGlitterdustEffect { get; private set; }
+    public MelfsAcidArrowEffectData ActiveMelfsAcidArrowEffect { get; private set; }
     private EnfeebledConditionData _activeEnfeeblementEffect;
     public EnfeebledConditionData ActiveEnfeeblementEffect => _activeEnfeeblementEffect;
     public int TotalEnfeeblementStrengthPenalty => Stats != null ? Stats.EnfeeblementStrengthPenalty : 0;
@@ -1298,7 +1299,39 @@ public class CharacterController : MonoBehaviour
     public bool HasActiveInvisibilityEffect => ActiveInvisibilityEffect != null && ActiveInvisibilityEffect.IsInvisible;
     public bool HasActiveSeeInvisibilityEffect => ActiveSeeInvisibilityEffect != null && ActiveSeeInvisibilityEffect.CanSeeInvisible;
     public bool HasActiveGlitterdustEffect => ActiveGlitterdustEffect != null && ActiveGlitterdustEffect.OutlinedByDust && ActiveGlitterdustEffect.DurationRemainingRounds > 0;
+    public bool HasActiveMelfsAcidArrowEffect => ActiveMelfsAcidArrowEffect != null && ActiveMelfsAcidArrowEffect.IsActive && ActiveMelfsAcidArrowEffect.RemainingDamageRounds > 0;
     public bool IsOutlinedByGlitterdust => HasActiveGlitterdustEffect;
+
+    public void ApplyMelfsAcidArrowEffect(int remainingDamageRounds, CharacterController caster)
+    {
+        int rounds = Mathf.Max(0, remainingDamageRounds);
+        if (rounds <= 0)
+        {
+            ClearMelfsAcidArrowEffect();
+            return;
+        }
+
+        if (ActiveMelfsAcidArrowEffect == null)
+            ActiveMelfsAcidArrowEffect = new MelfsAcidArrowEffectData();
+
+        ActiveMelfsAcidArrowEffect.IsActive = true;
+        ActiveMelfsAcidArrowEffect.RemainingDamageRounds = rounds;
+        ActiveMelfsAcidArrowEffect.SetCaster(caster);
+    }
+
+    public void UpdateMelfsAcidArrowDuration(int remainingDamageRounds)
+    {
+        if (ActiveMelfsAcidArrowEffect == null)
+            return;
+
+        ActiveMelfsAcidArrowEffect.RemainingDamageRounds = Mathf.Max(0, remainingDamageRounds);
+        ActiveMelfsAcidArrowEffect.IsActive = ActiveMelfsAcidArrowEffect.RemainingDamageRounds > 0;
+    }
+
+    public void ClearMelfsAcidArrowEffect()
+    {
+        ActiveMelfsAcidArrowEffect = null;
+    }
 
     public void ApplyInvisibilityEffect(int durationRemainingRounds, CharacterController caster, bool isMoving = false)
     {
@@ -1703,6 +1736,7 @@ public class CharacterController : MonoBehaviour
         ActiveInvisibilityEffect = null;
         ActiveSeeInvisibilityEffect = null;
         ActiveGlitterdustEffect = null;
+        ActiveMelfsAcidArrowEffect = null;
         _activeEnfeeblementEffect = null;
         UpdateGlitterdustVisual(forceDisable: true);
         if (Stats != null)
