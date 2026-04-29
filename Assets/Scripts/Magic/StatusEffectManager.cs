@@ -244,6 +244,9 @@ public class StatusEffectManager : MonoBehaviour
 
         ActiveEffects.Remove(effect);
 
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "protection_from_arrows", System.StringComparison.Ordinal) && _stats != null)
+            _stats.ActiveProtectionFromArrowsEffect = null;
+
         // Also remove from SpellcastingComponent's ActiveBuffs for backward compat
         if (_spellComp != null && effect.Spell != null)
         {

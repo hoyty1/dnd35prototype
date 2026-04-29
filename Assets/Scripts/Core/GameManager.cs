@@ -12885,6 +12885,43 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
+        if (spell != null && spell.SpellId == "protection_from_arrows")
+        {
+            CharacterController recipient = target ?? caster;
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            if (recipientStatusMgr == null)
+                recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+            recipientStatusMgr.Init(recipient.Stats);
+
+            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
+            if (effect != null)
+            {
+                int maxPool = Mathf.Min(100, Mathf.Max(1, casterLevel) * 10);
+                int drAmount = effect.AppliedDamageReductionAmount > 0 ? effect.AppliedDamageReductionAmount : 10;
+                recipient.Stats.ActiveProtectionFromArrowsEffect = new ProtectionFromArrowsEffectData
+                {
+                    DamageReductionAmount = drAmount,
+                    TotalAbsorptionPool = maxPool,
+                    CurrentAbsorbedDamage = 0,
+                    DurationRemainingRounds = effect.RemainingRounds,
+                    AttacksBlocked = 0
+                };
+
+                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                if (recipientSpellComp != null)
+                    recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                CombatUI?.ShowCombatLog($"<color=#88FFEE>🛡 {recipient.Stats.CharacterName} gains Protection from Arrows (DR {drAmount}/magic vs ranged weapons, {maxPool} absorption pool).</color>");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
         if (spell != null && spell.SpellId == "magic_weapon")
         {
             TryApplyMagicWeaponToPendingItem(caster, target, spell);
@@ -13069,6 +13106,11 @@ public partial class GameManager : MonoBehaviour
                     int speedDelta = expiredData != null ? Mathf.Max(0, expiredData.SpeedBonusFeet) : Mathf.Max(0, effect.AppliedSpeedBonusFeet);
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Expeditious Retreat expires on {character.Stats.CharacterName}: speed -{speedDelta} ft.</color>");
                 }
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "protection_from_arrows", StringComparison.Ordinal))
+                {
+                    character.Stats.ActiveProtectionFromArrowsEffect = null;
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Protection from Arrows expires on {character.Stats.CharacterName}.</color>");
+                }
             }
 
             if (statusMgr.ActiveEffectCount > 0)
@@ -13079,6 +13121,12 @@ public partial class GameManager : MonoBehaviour
                         character.UpdateDisguiseSelfDuration(effect.RemainingRounds);
                     else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "expeditious_retreat", StringComparison.Ordinal))
                         character.UpdateExpeditiousRetreatDuration(effect.RemainingRounds);
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "protection_from_arrows", StringComparison.Ordinal))
+                    {
+                        ProtectionFromArrowsEffectData protection = character.Stats.ActiveProtectionFromArrowsEffect;
+                        if (protection != null)
+                            protection.DurationRemainingRounds = effect.RemainingRounds;
+                    }
 
                     Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
                 }

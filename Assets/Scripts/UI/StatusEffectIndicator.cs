@@ -131,6 +131,25 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (statusMgr != null && statusMgr.HasEffect("protection_from_arrows"))
+        {
+            int rounds = statusMgr.GetRemainingRounds("protection_from_arrows");
+            ProtectionFromArrowsEffectData protection = _character.Stats != null ? _character.Stats.ActiveProtectionFromArrowsEffect : null;
+            int totalPool = protection != null ? Mathf.Max(0, protection.TotalAbsorptionPool) : 0;
+            int remainingPool = protection != null ? Mathf.Max(0, protection.RemainingAbsorptionPool) : 0;
+            int blocked = protection != null ? Mathf.Max(0, protection.AttacksBlocked) : 0;
+            int drAmount = protection != null ? Mathf.Max(0, protection.DamageReductionAmount) : 10;
+
+            list.Add(new IconData
+            {
+                Key = "ProtectionFromArrows",
+                ShortLabel = "PA",
+                Tooltip = $"Protection from Arrows\nDR {drAmount}/magic vs ranged weapons\nAbsorption pool: {remainingPool}/{totalPool}\nAttacks blocked: {blocked}\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Color = new Color(0.38f, 0.62f, 0.95f, 0.92f),
+                Duration = rounds
+            });
+        }
+
         bool hasFatigueCondition = _character.Stats.HasFatiguedCondition;
         bool hasExhaustedCondition = _character.Stats.HasExhaustedCondition;
 

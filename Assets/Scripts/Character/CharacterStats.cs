@@ -1141,6 +1141,12 @@ public class CharacterStats
     /// <summary>Typed immunities (e.g., Immune Cold).</summary>
     public List<DamageType> DamageImmunities = new List<DamageType>();
 
+    /// <summary>Runtime state for Protection from Arrows (if currently active).</summary>
+    [NonSerialized] public ProtectionFromArrowsEffectData ActiveProtectionFromArrowsEffect;
+
+    /// <summary>Owning character controller (bound by CharacterController.Init).</summary>
+    [NonSerialized] public CharacterController OwnerCharacter;
+
     /// <summary>Spell Resistance (SR), if any. 0 means no SR.</summary>
     public int SpellResistance;
 
@@ -2119,6 +2125,8 @@ public class CharacterStats
         bool sourceCountsAsWeapon = packet.Source == AttackSource.Weapon || packet.Source == AttackSource.Natural;
         bool hasRangedOnlyDr = false;
         bool bestDrWasRangedOnly = false;
+        bool rangedOnlyDrBypassed = false;
+        bool rangedOnlyDrBypassedByMagic = false;
 
         if (result.DamageAfterResistance > 0)
         {
@@ -2140,6 +2148,13 @@ public class CharacterStats
                 }
 
                 bool bypassed = (dr.BypassAnyTag != DamageBypassTag.None) && ((packet.AttackTags & dr.BypassAnyTag) != 0);
+                if (dr.AppliesToRangedOnly && bypassed)
+                {
+                    rangedOnlyDrBypassed = true;
+                    if ((packet.AttackTags & DamageBypassTag.Magic) != 0)
+                        rangedOnlyDrBypassedByMagic = true;
+                }
+
                 if (!bypassed && dr.Amount > bestApplicableDr)
                 {
                     bestApplicableDr = dr.Amount;
@@ -2155,7 +2170,46 @@ public class CharacterStats
             string sourceName = string.IsNullOrWhiteSpace(packet.SourceName) ? "Spell attack" : packet.SourceName;
             result.Notes.Add($"{sourceName} bypasses Protection from Arrows (spell attack)");
         }
-        else if (drApplied > 0 && bestDrWasRangedOnly)
+
+        if (bestDrWasRangedOnly)
+        {
+            ProtectionFromArrowsEffectData protectionData = ActiveProtectionFromArrowsEffect;
+            if (protectionData == null || protectionData.RemainingAbsorptionPool <= 0)
+            {
+                drApplied = 0;
+                if (protectionData != null && protectionData.RemainingAbsorptionPool <= 0)
+                    TryDischargeProtectionFromArrows();
+            }
+            else if (drApplied > 0)
+            {
+                int poolBefore = protectionData.RemainingAbsorptionPool;
+                int absorbed = Mathf.Min(drApplied, poolBefore);
+                drApplied = absorbed;
+
+                if (absorbed > 0)
+                {
+                    protectionData.CurrentAbsorbedDamage = Mathf.Min(protectionData.TotalAbsorptionPool, protectionData.CurrentAbsorbedDamage + absorbed);
+                    protectionData.AttacksBlocked++;
+
+                    int poolAfter = protectionData.RemainingAbsorptionPool;
+                    result.Notes.Add($"{absorbed} damage absorbed ({poolAfter} remaining)");
+
+                    if (poolAfter <= 0)
+                    {
+                        result.Notes.Add("Protection from Arrows discharged!");
+                        TryDischargeProtectionFromArrows();
+                    }
+                }
+            }
+        }
+        else if (rangedOnlyDrBypassed)
+        {
+            string sourceName = string.IsNullOrWhiteSpace(packet.SourceName) ? "ranged attack" : packet.SourceName;
+            if (rangedOnlyDrBypassedByMagic)
+                result.Notes.Add($"{sourceName} is magical and bypasses Protection from Arrows.");
+        }
+
+        if (drApplied > 0 && bestDrWasRangedOnly)
         {
             string sourceName = string.IsNullOrWhiteSpace(packet.SourceName) ? "ranged attack" : packet.SourceName;
             result.Notes.Add($"Protection from Arrows blocked {drApplied} damage from {sourceName}!");
@@ -2196,6 +2250,25 @@ public class CharacterStats
         }
 
         return result;
+    }
+
+    private void TryDischargeProtectionFromArrows()
+    {
+        if (ActiveProtectionFromArrowsEffect == null)
+            return;
+
+        ActiveProtectionFromArrowsEffect = null;
+
+        CharacterController owner = OwnerCharacter;
+        if (owner == null)
+            return;
+
+        StatusEffectManager statusMgr = owner.GetComponent<StatusEffectManager>();
+        if (statusMgr != null && statusMgr.HasEffect("protection_from_arrows"))
+            statusMgr.RemoveEffectsBySpellId("protection_from_arrows");
+
+        if (GameManager.Instance != null && GameManager.Instance.CombatUI != null && owner.Stats != null)
+            GameManager.Instance.CombatUI.ShowCombatLog($"<color=#FFAA44>🛡 Protection from Arrows discharged on {owner.Stats.CharacterName}!</color>");
     }
 
     /// <summary>

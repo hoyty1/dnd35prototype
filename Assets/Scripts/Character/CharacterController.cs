@@ -1423,6 +1423,7 @@ public class CharacterController : MonoBehaviour
 
         if (Stats != null)
         {
+            Stats.OwnerCharacter = this;
             Stats.CurrentHPChanged += OnCurrentHPChanged;
             Stats.NonlethalDamageChanged += OnNonlethalDamageChanged;
         }
@@ -1448,6 +1449,7 @@ public class CharacterController : MonoBehaviour
             Stats.SetEnfeeblementStrengthPenalty(0);
             Stats.LandSpeedEnhancementBonusFeet = 0;
             Stats.JumpEnhancementBonus = 0;
+            Stats.ActiveProtectionFromArrowsEffect = null;
         }
         _displayedRace = ActualRace;
         RefreshAllTags();
