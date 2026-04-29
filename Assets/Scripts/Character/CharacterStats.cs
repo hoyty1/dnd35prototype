@@ -1144,6 +1144,9 @@ public class CharacterStats
     /// <summary>Runtime state for Protection from Arrows (if currently active).</summary>
     [NonSerialized] public ProtectionFromArrowsEffectData ActiveProtectionFromArrowsEffect;
 
+    /// <summary>Runtime Resist Energy effects (can hold different energy types simultaneously).</summary>
+    [NonSerialized] public List<ResistEnergyEffectData> ActiveResistEnergyEffects = new List<ResistEnergyEffectData>();
+
     /// <summary>Owning character controller (bound by CharacterController.Init).</summary>
     [NonSerialized] public CharacterController OwnerCharacter;
 
@@ -2106,19 +2109,28 @@ public class CharacterStats
         }
 
         // 2) Resistance check: use highest resistance among matching damage types
-        int resistance = 0;
+        int typedResistance = 0;
         foreach (var type in packet.Types)
         {
             for (int i = 0; i < DamageResistances.Count; i++)
             {
                 var entry = DamageResistances[i];
                 if (entry != null && entry.Type == type)
-                    resistance = Mathf.Max(resistance, entry.Amount);
+                    typedResistance = Mathf.Max(typedResistance, entry.Amount);
             }
         }
 
-        result.ResistanceApplied = Mathf.Min(result.RawDamage, Mathf.Max(0, resistance));
+        int resistEnergyResistance = GetResistEnergyResistanceForTypes(packet.Types, out DamageType resistEnergyTypeMatched);
+        int finalResistance = Mathf.Max(typedResistance, resistEnergyResistance);
+
+        result.ResistanceApplied = Mathf.Min(result.RawDamage, Mathf.Max(0, finalResistance));
         result.DamageAfterResistance = Mathf.Max(0, result.RawDamage - result.ResistanceApplied);
+
+        if (resistEnergyResistance > 0 && resistEnergyResistance >= typedResistance && resistEnergyTypeMatched != DamageType.Untyped && result.ResistanceApplied > 0)
+        {
+            string typeLabel = DamageTextUtils.GetDamageTypeDisplay(resistEnergyTypeMatched);
+            result.Notes.Add($"{result.RawDamage} {typeLabel} damage reduced to {result.DamageAfterResistance} by Resist Energy ({typeLabel} {resistEnergyResistance})");
+        }
 
         // 3) DR check: applies only to physical weapon-like attacks (weapon or natural)
         int drApplied = 0;
@@ -2339,6 +2351,85 @@ public class CharacterStats
         return Mathf.Max(0, CurrentHP - hpBefore);
     }
 
+    public void SetResistEnergyEffect(ResistEnergyEffectData newEffect)
+    {
+        if (newEffect == null)
+            return;
+
+        if (ActiveResistEnergyEffects == null)
+            ActiveResistEnergyEffects = new List<ResistEnergyEffectData>();
+
+        DamageType incomingType = newEffect.ToDamageType();
+        int existingIndex = -1;
+
+        for (int i = 0; i < ActiveResistEnergyEffects.Count; i++)
+        {
+            ResistEnergyEffectData existing = ActiveResistEnergyEffects[i];
+            if (existing == null || existing.ToDamageType() != incomingType)
+                continue;
+
+            if (existingIndex < 0)
+                existingIndex = i;
+        }
+
+        // Same type: keep strongest. If equal strength, keep longer duration.
+        if (existingIndex >= 0)
+        {
+            ResistEnergyEffectData existing = ActiveResistEnergyEffects[existingIndex];
+            bool isStronger = newEffect.ResistanceAmount > existing.ResistanceAmount;
+            bool isLongerEqualStrength = newEffect.ResistanceAmount == existing.ResistanceAmount
+                && newEffect.DurationRemainingRounds > existing.DurationRemainingRounds;
+
+            if (isStronger || isLongerEqualStrength)
+            {
+                existing.ResistanceAmount = newEffect.ResistanceAmount;
+                existing.DurationRemainingRounds = newEffect.DurationRemainingRounds;
+                existing.Caster = newEffect.Caster;
+            }
+
+            // Remove any duplicate entries of same type; keep canonical single entry.
+            for (int i = ActiveResistEnergyEffects.Count - 1; i >= 0; i--)
+            {
+                if (i == existingIndex)
+                    continue;
+
+                ResistEnergyEffectData duplicate = ActiveResistEnergyEffects[i];
+                if (duplicate != null && duplicate.ToDamageType() == incomingType)
+                    ActiveResistEnergyEffects.RemoveAt(i);
+            }
+
+            return;
+        }
+
+        ActiveResistEnergyEffects.Add(newEffect);
+    }
+
+    public int GetResistEnergyResistanceForTypes(HashSet<DamageType> incomingTypes, out DamageType matchedType)
+    {
+        matchedType = DamageType.Untyped;
+        if (incomingTypes == null || incomingTypes.Count == 0 || ActiveResistEnergyEffects == null || ActiveResistEnergyEffects.Count == 0)
+            return 0;
+
+        int resistance = 0;
+        foreach (DamageType type in incomingTypes)
+        {
+            for (int i = 0; i < ActiveResistEnergyEffects.Count; i++)
+            {
+                ResistEnergyEffectData effect = ActiveResistEnergyEffects[i];
+                if (effect == null || effect.ToDamageType() != type)
+                    continue;
+
+                if (effect.ResistanceAmount > resistance)
+                {
+                    resistance = effect.ResistanceAmount;
+                    matchedType = type;
+                }
+            }
+        }
+
+        return Mathf.Max(0, resistance);
+    }
+
     public void AddDamageResistance(DamageType type, int amount)
     {
         if (amount <= 0) return;
@@ -2416,6 +2507,18 @@ public class CharacterStats
                 var r = DamageResistances[i];
                 if (r != null && r.Amount > 0)
                     parts.Add(r.GetDisplayString());
+            }
+        }
+
+        if (ActiveResistEnergyEffects != null && ActiveResistEnergyEffects.Count > 0)
+        {
+            for (int i = 0; i < ActiveResistEnergyEffects.Count; i++)
+            {
+                ResistEnergyEffectData effect = ActiveResistEnergyEffects[i];
+                if (effect == null || effect.ResistanceAmount <= 0)
+                    continue;
+
+                parts.Add($"Resist Energy ({DamageTextUtils.GetDamageTypeDisplay(effect.ToDamageType())} {effect.ResistanceAmount})");
             }
         }
 

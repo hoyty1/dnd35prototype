@@ -150,6 +150,27 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (_character.Stats != null && _character.Stats.ActiveResistEnergyEffects != null && _character.Stats.ActiveResistEnergyEffects.Count > 0)
+        {
+            for (int i = 0; i < _character.Stats.ActiveResistEnergyEffects.Count; i++)
+            {
+                ResistEnergyEffectData resist = _character.Stats.ActiveResistEnergyEffects[i];
+                if (resist == null || resist.ResistanceAmount <= 0)
+                    continue;
+
+                string typeLabel = DamageTextUtils.GetDamageTypeDisplay(resist.ToDamageType());
+                int rounds = resist.DurationRemainingRounds;
+                list.Add(new IconData
+                {
+                    Key = $"ResistEnergy_{typeLabel}_{resist.ResistanceAmount}",
+                    ShortLabel = "RE",
+                    Tooltip = $"Resist Energy ({char.ToUpperInvariant(typeLabel[0]) + typeLabel.Substring(1)} {resist.ResistanceAmount})\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                    Color = new Color(0.3f, 0.78f, 0.9f, 0.92f),
+                    Duration = rounds
+                });
+            }
+        }
+
         bool hasFatigueCondition = _character.Stats.HasFatiguedCondition;
         bool hasExhaustedCondition = _character.Stats.HasExhaustedCondition;
 

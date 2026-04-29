@@ -191,6 +191,7 @@ public partial class GameManager : MonoBehaviour
     private bool _pendingSpellFromHeldCharge; // True when delivering an already-held touch spell charge
     private ItemData _pendingAnimateRopeItem; // Selected rope material component reserved for the pending Animate Rope cast
     private ItemData _pendingMagicWeaponItem; // Selected weapon to receive the pending Magic Weapon spell
+    private ResistEnergyType? _pendingResistEnergyType;
     private string _pendingDisguiseSelfRace;
     private SummonMonsterOption _pendingSummonSelection; // Selected summon option waiting for placement
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
@@ -8764,6 +8765,7 @@ public partial class GameManager : MonoBehaviour
         _pendingMetamagic = metamagic;
         _pendingSpellFromHeldCharge = false;
         _pendingAnimateRopeItem = null;
+        _pendingResistEnergyType = null;
         _pendingMagicWeaponItem = null;
         _pendingDisguiseSelfRace = null;
         _pendingSummonSelection = null;
@@ -8820,6 +8822,7 @@ public partial class GameManager : MonoBehaviour
         if (!IsAnimateRopeSpell(_pendingSpell))
         {
             _pendingAnimateRopeItem = null;
+            _pendingResistEnergyType = null;
             return false;
         }
 
@@ -8833,6 +8836,7 @@ public partial class GameManager : MonoBehaviour
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
             _pendingAnimateRopeItem = null;
+            _pendingResistEnergyType = null;
             ShowActionChoices();
             return true;
         }
@@ -8864,6 +8868,7 @@ public partial class GameManager : MonoBehaviour
                         _pendingMetamagic = null;
                         _pendingSpellFromHeldCharge = false;
                         _pendingAnimateRopeItem = null;
+                        _pendingResistEnergyType = null;
                         ShowActionChoices();
                         return;
                     }
@@ -8877,6 +8882,7 @@ public partial class GameManager : MonoBehaviour
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
                     _pendingAnimateRopeItem = null;
+                    _pendingResistEnergyType = null;
                     ShowActionChoices();
                 },
                 titleOverride: "Animate Rope - Select Rope",
@@ -8958,6 +8964,7 @@ public partial class GameManager : MonoBehaviour
             return null;
 
         _pendingAnimateRopeItem = null;
+        _pendingResistEnergyType = null;
         return selected;
     }
 
@@ -8987,6 +8994,7 @@ public partial class GameManager : MonoBehaviour
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
             _pendingAnimateRopeItem = null;
+            _pendingResistEnergyType = null;
             _pendingMagicWeaponItem = null;
             ShowActionChoices();
             return true;
@@ -9009,6 +9017,7 @@ public partial class GameManager : MonoBehaviour
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
                     _pendingAnimateRopeItem = null;
+                    _pendingResistEnergyType = null;
                     _pendingMagicWeaponItem = null;
                     ShowActionChoices();
                     return;
@@ -9023,6 +9032,7 @@ public partial class GameManager : MonoBehaviour
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
                 _pendingAnimateRopeItem = null;
+                _pendingResistEnergyType = null;
                 _pendingMagicWeaponItem = null;
                 ShowActionChoices();
             },
@@ -9604,6 +9614,7 @@ public partial class GameManager : MonoBehaviour
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
             _pendingAnimateRopeItem = null;
+            _pendingResistEnergyType = null;
             return false;
         }
 
@@ -9623,6 +9634,7 @@ public partial class GameManager : MonoBehaviour
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
             _pendingAnimateRopeItem = null;
+            _pendingResistEnergyType = null;
             return false;
         }
         if (TryRollArcaneSpellFailure(caster, _pendingSpell, false, out int asfRoll, out int asfChance))
@@ -10045,6 +10057,12 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        if (string.Equals(_pendingSpell.SpellId, "resist_energy", StringComparison.Ordinal) && !_pendingResistEnergyType.HasValue)
+        {
+            ShowResistEnergyTypeSelection(caster);
+            return;
+        }
+
         // ===== AoE SPELLS: Enter AoE targeting mode =====
         if (_pendingSpell.AoEShapeType != AoEShape.None)
         {
@@ -10115,6 +10133,60 @@ public partial class GameManager : MonoBehaviour
             });
     }
 
+    private void ShowResistEnergyTypeSelection(CharacterController caster)
+    {
+        if (caster == null || caster.Stats == null || CombatUI == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.ChoosingAction;
+        CombatUI.SetActionButtonsVisible(false);
+
+        List<string> options = new List<string>
+        {
+            "Acid",
+            "Cold",
+            "Electricity",
+            "Fire",
+            "Sonic"
+        };
+
+        CombatUI.ShowPickUpItemSelection(
+            actorName: caster.Stats.CharacterName,
+            itemOptions: options,
+            onSelect: selectedIndex =>
+            {
+                if (selectedIndex < 0 || selectedIndex >= options.Count)
+                {
+                    _pendingSpell = null;
+                    _pendingMetamagic = null;
+                    _pendingSpellFromHeldCharge = false;
+                    _pendingResistEnergyType = null;
+                    CombatUI?.ShowCombatLog("⚠ Resist Energy cancelled: no energy type selected.");
+                    ShowActionChoices();
+                    return;
+                }
+
+                _pendingResistEnergyType = (ResistEnergyType)selectedIndex;
+                CombatUI?.ShowCombatLog($"✨ Resist Energy prepared for {options[selectedIndex].ToLowerInvariant()}.");
+                BeginPendingSpellTargeting(caster);
+            },
+            onCancel: () =>
+            {
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingResistEnergyType = null;
+                CombatUI?.ShowCombatLog("↩ Resist Energy cancelled (energy type not selected).");
+                ShowActionChoices();
+            },
+            titleOverride: "Resist Energy - Choose Energy Type",
+            bodyOverride: "Select one energy type to resist: acid, cold, electricity, fire, or sonic.",
+            optionButtonColorOverride: new Color(0.24f, 0.4f, 0.62f, 1f));
+    }
+
     private bool ShouldShowTouchSpellPrompt(SpellData spell)
     {
         if (spell == null) return false;
@@ -10132,6 +10204,7 @@ public partial class GameManager : MonoBehaviour
     /// <summary>Called when spell selection is cancelled.</summary>
     private void OnSpellSelectionCancelled()
     {
+        _pendingResistEnergyType = null;
         _pendingDisguiseSelfRace = null;
         ShowActionChoices();
     }
@@ -10547,7 +10620,15 @@ public partial class GameManager : MonoBehaviour
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
             _pendingMagicWeaponItem = null;
+            _pendingResistEnergyType = null;
             ShowActionChoices();
+            return;
+        }
+
+        if (string.Equals(_pendingSpell.SpellId, "resist_energy", StringComparison.Ordinal) && !_pendingResistEnergyType.HasValue)
+        {
+            CombatUI?.ShowCombatLog("⚠ Resist Energy requires selecting an energy type before casting.");
+            ShowResistEnergyTypeSelection(caster);
             return;
         }
 
@@ -10632,6 +10713,7 @@ public partial class GameManager : MonoBehaviour
                 _pendingSpellFromHeldCharge = false;
                 _pendingMetamagic = null;
                 _pendingAnimateRopeItem = null;
+                _pendingResistEnergyType = null;
 
                 ClearSpellcastResourceSnapshot();
                 StartCoroutine(AfterAttackDelay(caster, 1.0f));
@@ -10657,6 +10739,7 @@ public partial class GameManager : MonoBehaviour
                 _pendingSpellFromHeldCharge = false;
                 _pendingMetamagic = null;
                 _pendingAnimateRopeItem = null;
+                _pendingResistEnergyType = null;
 
                 ClearSpellcastResourceSnapshot();
                 StartCoroutine(AfterAttackDelay(caster, 1.0f));
@@ -10691,6 +10774,7 @@ public partial class GameManager : MonoBehaviour
                 _pendingSpellFromHeldCharge = false;
                 _pendingMetamagic = null;
                 _pendingAnimateRopeItem = null;
+                _pendingResistEnergyType = null;
 
                 ClearSpellcastResourceSnapshot();
                 StartCoroutine(AfterAttackDelay(caster, 1.0f));
@@ -10862,6 +10946,7 @@ public partial class GameManager : MonoBehaviour
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
                     _pendingAnimateRopeItem = null;
+                    _pendingResistEnergyType = null;
                     ResetPendingGreaseCastMode();
                     return;
                 }
@@ -10874,6 +10959,7 @@ public partial class GameManager : MonoBehaviour
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
                     _pendingAnimateRopeItem = null;
+                    _pendingResistEnergyType = null;
                     ResetPendingGreaseCastMode();
                     return;
                 }
@@ -10883,6 +10969,7 @@ public partial class GameManager : MonoBehaviour
             _pendingSpellFromHeldCharge = false;
             _pendingMetamagic = null;
             _pendingAnimateRopeItem = null;
+            _pendingResistEnergyType = null;
             _pendingDisguiseSelfRace = null;
             ResetPendingGreaseCastMode();
 
@@ -11260,6 +11347,7 @@ public partial class GameManager : MonoBehaviour
         _pendingMetamagic = null;
         _pendingSpellFromHeldCharge = false;
         _pendingAnimateRopeItem = null;
+        _pendingResistEnergyType = null;
         ResetPendingGreaseCastMode();
 
         Grid.ClearAllHighlights();
@@ -11278,6 +11366,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSpellFromHeldCharge = false;
         _pendingMetamagic = null;
         _pendingAnimateRopeItem = null;
+        _pendingResistEnergyType = null;
         _pendingSummonSelection = null;
         ResetPendingGreaseCastMode();
         _pendingAttackMode = PendingAttackMode.Single;
@@ -12885,6 +12974,52 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
+        if (spell != null && spell.SpellId == "resist_energy")
+        {
+            CharacterController recipient = target ?? caster;
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            if (!_pendingResistEnergyType.HasValue)
+            {
+                if (caster != null && !caster.IsControllable)
+                    _pendingResistEnergyType = ResistEnergyType.Fire;
+                else
+                {
+                    CombatUI?.ShowCombatLog("⚠ Resist Energy failed: no energy type selected.");
+                    return null;
+                }
+            }
+
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int resistance = casterLevel >= 11 ? 30 : (casterLevel >= 7 ? 20 : 10);
+            int durationRounds = ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel);
+
+            DamageType chosenDamageType = DamageType.Fire;
+            switch (_pendingResistEnergyType.Value)
+            {
+                case ResistEnergyType.Acid: chosenDamageType = DamageType.Acid; break;
+                case ResistEnergyType.Cold: chosenDamageType = DamageType.Cold; break;
+                case ResistEnergyType.Electricity: chosenDamageType = DamageType.Electricity; break;
+                case ResistEnergyType.Fire: chosenDamageType = DamageType.Fire; break;
+                case ResistEnergyType.Sonic: chosenDamageType = DamageType.Sonic; break;
+            }
+
+            recipient.Stats.SetResistEnergyEffect(new ResistEnergyEffectData
+            {
+                EnergyType = _pendingResistEnergyType.Value,
+                ResistanceAmount = resistance,
+                DurationRemainingRounds = durationRounds,
+                Caster = caster
+            });
+
+            string energyLabel = DamageTextUtils.GetDamageTypeDisplay(chosenDamageType);
+            CombatUI?.ShowCombatLog($"<color=#88FFEE>🛡 {recipient.Stats.CharacterName} gains Resist Energy ({energyLabel} {resistance}) for {Mathf.Max(0, durationRounds)} rounds.</color>");
+            _pendingResistEnergyType = null;
+            UpdateAllStatsUI();
+            return null;
+        }
+
         if (spell != null && spell.SpellId == "protection_from_arrows")
         {
             CharacterController recipient = target ?? caster;
@@ -13129,6 +13264,29 @@ public partial class GameManager : MonoBehaviour
                     }
 
                     Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
+                }
+            }
+        }
+
+        if (character.Stats != null && character.Stats.ActiveResistEnergyEffects != null && character.Stats.ActiveResistEnergyEffects.Count > 0)
+        {
+            for (int i = character.Stats.ActiveResistEnergyEffects.Count - 1; i >= 0; i--)
+            {
+                ResistEnergyEffectData effect = character.Stats.ActiveResistEnergyEffects[i];
+                if (effect == null)
+                {
+                    character.Stats.ActiveResistEnergyEffects.RemoveAt(i);
+                    continue;
+                }
+
+                if (effect.DurationRemainingRounds >= 0)
+                    effect.DurationRemainingRounds--;
+
+                if (effect.DurationRemainingRounds <= 0)
+                {
+                    string energyLabel = DamageTextUtils.GetDamageTypeDisplay(effect.ToDamageType());
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Resist Energy ({energyLabel}) expires on {character.Stats.CharacterName}.</color>");
+                    character.Stats.ActiveResistEnergyEffects.RemoveAt(i);
                 }
             }
         }
@@ -15345,6 +15503,7 @@ public partial class GameManager : MonoBehaviour
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
                 _pendingAnimateRopeItem = null;
+                _pendingResistEnergyType = null;
                 ResetPendingGreaseCastMode();
                 ShowActionChoices();
                 return;

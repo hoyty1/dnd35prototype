@@ -1450,6 +1450,8 @@ public class CharacterController : MonoBehaviour
             Stats.LandSpeedEnhancementBonusFeet = 0;
             Stats.JumpEnhancementBonus = 0;
             Stats.ActiveProtectionFromArrowsEffect = null;
+            if (Stats.ActiveResistEnergyEffects != null)
+                Stats.ActiveResistEnergyEffects.Clear();
         }
         _displayedRace = ActualRace;
         RefreshAllTags();

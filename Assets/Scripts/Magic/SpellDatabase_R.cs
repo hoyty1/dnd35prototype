@@ -157,18 +157,21 @@ public static partial class SpellDatabase
                 {
                     SpellId = "resist_energy",
                     Name = "Resist Energy",
-                    Description = "Grants resistance 10 to specified energy type (fire, cold, acid, electricity, sonic). 10 min/level. PHB p.272",
+                    Description = "Choose one energy type (acid, cold, electricity, fire, or sonic). Grants resistance 10/20/30 based on caster level. Duration 10 min/level. PHB p.272",
                     SpellLevel = 2, School = "Abjuration",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
                     BuffType = "energy_resistance",
-                    BuffDamageResistanceAmount = 10,
-                    BuffDamageResistanceType = DamageType.Fire, // TODO: replace with player-selected energy type
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
                 });
 
         Register(new SpellData
@@ -208,6 +211,9 @@ public static partial class SpellDatabase
         // Aliases
         RegisterClassSpellAlias("read_magic_clr", "read_magic", "Cleric", 0);
         RegisterClassSpellAlias("resist_energy_clr", "resist_energy", "Cleric", 2);
+        RegisterClassSpellAlias("resist_energy_dru", "resist_energy", "Druid", 2);
+        RegisterClassSpellAlias("resist_energy_pal", "resist_energy", "Paladin", 2);
+        RegisterClassSpellAlias("resist_energy_rgr", "resist_energy", "Ranger", 1);
         RegisterClassSpellAlias("resistance_clr", "resistance_wiz", "Cleric", 0);
 
     }
