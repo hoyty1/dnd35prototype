@@ -135,6 +135,7 @@ public class CombatUI : MonoBehaviour
     public Button CastSpellButton;         // Cast Spell (Standard Action)
     public Button DischargeTouchButton;    // Deliver currently held touch charge (Free Action)
     public Button DismissDisguiseSelfButton; // Dismiss Disguise Self (Standard Action)
+    public Button DismissExpeditiousRetreatButton; // Dismiss Expeditious Retreat (Free Action)
     public Text SpellSlotsText;            // Shows remaining spell slots
     [Header("Feat Controls")]
     public GameObject PowerAttackPanel;     // Panel containing Power Attack slider

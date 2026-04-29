@@ -323,6 +323,7 @@ public class CharacterController : MonoBehaviour
 
     private string _displayedRace;
     public DisguiseSelfEffectData ActiveDisguiseSelfEffect { get; private set; }
+    public ExpeditiousRetreatEffectData ActiveExpeditiousRetreatEffect { get; private set; }
     private EnfeebledConditionData _activeEnfeeblementEffect;
     public EnfeebledConditionData ActiveEnfeeblementEffect => _activeEnfeeblementEffect;
     public int TotalEnfeeblementStrengthPenalty => Stats != null ? Stats.EnfeeblementStrengthPenalty : 0;
@@ -1236,6 +1237,58 @@ public class CharacterController : MonoBehaviour
         ResetDisplayedRaceToActual();
     }
 
+    public void ApplyExpeditiousRetreatEffect(int speedBonusFeet, int durationRemainingRounds, CharacterController caster)
+    {
+        int bonus = Mathf.Max(0, speedBonusFeet);
+        int rounds = Mathf.Max(0, durationRemainingRounds);
+        if (bonus <= 0 || rounds <= 0)
+            return;
+
+        ActiveExpeditiousRetreatEffect = new ExpeditiousRetreatEffectData
+        {
+            SpeedBonusFeet = bonus,
+            DurationRemainingRounds = rounds
+        };
+        ActiveExpeditiousRetreatEffect.SetCaster(caster);
+    }
+
+    public void UpdateExpeditiousRetreatDuration(int durationRemainingRounds)
+    {
+        if (ActiveExpeditiousRetreatEffect == null)
+            return;
+
+        ActiveExpeditiousRetreatEffect.DurationRemainingRounds = Mathf.Max(0, durationRemainingRounds);
+    }
+
+    public ExpeditiousRetreatEffectData TickExpeditiousRetreatEffect()
+    {
+        if (ActiveExpeditiousRetreatEffect == null)
+            return null;
+
+        ActiveExpeditiousRetreatEffect.DurationRemainingRounds = Mathf.Max(0, ActiveExpeditiousRetreatEffect.DurationRemainingRounds - 1);
+        if (ActiveExpeditiousRetreatEffect.DurationRemainingRounds > 0)
+            return null;
+
+        ExpeditiousRetreatEffectData expired = ActiveExpeditiousRetreatEffect;
+        ActiveExpeditiousRetreatEffect = null;
+        return expired;
+    }
+
+    public ExpeditiousRetreatEffectData RemoveExpeditiousRetreatEffect()
+    {
+        if (ActiveExpeditiousRetreatEffect == null)
+            return null;
+
+        ExpeditiousRetreatEffectData removed = ActiveExpeditiousRetreatEffect;
+        ActiveExpeditiousRetreatEffect = null;
+        return removed;
+    }
+
+    public void ClearExpeditiousRetreatEffect()
+    {
+        ActiveExpeditiousRetreatEffect = null;
+    }
+
     public EnfeebledConditionData ApplyEnfeeblementEffect(int strengthPenaltyAmount, int durationRemainingRounds, CharacterController caster)
     {
         int penalty = Mathf.Max(0, strengthPenaltyAmount);
@@ -1388,8 +1441,13 @@ public class CharacterController : MonoBehaviour
         UpdateVisualSize(false);
 
         ActiveDisguiseSelfEffect = null;
+        ActiveExpeditiousRetreatEffect = null;
         _activeEnfeeblementEffect = null;
-        Stats?.SetEnfeeblementStrengthPenalty(0);
+        if (Stats != null)
+        {
+            Stats.SetEnfeeblementStrengthPenalty(0);
+            Stats.LandSpeedEnhancementBonusFeet = 0;
+        }
         _displayedRace = ActualRace;
         RefreshAllTags();
         CheckAbilityScoreZeroEffects();

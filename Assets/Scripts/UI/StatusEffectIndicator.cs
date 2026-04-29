@@ -98,6 +98,24 @@ public class StatusEffectIndicator : MonoBehaviour
             }
         }
 
+        StatusEffectManager statusMgr = _character.GetComponent<StatusEffectManager>();
+        if (statusMgr != null && statusMgr.HasEffect("expeditious_retreat"))
+        {
+            int rounds = statusMgr.GetRemainingRounds("expeditious_retreat");
+            int speedBonus = _character.ActiveExpeditiousRetreatEffect != null
+                ? Mathf.Max(0, _character.ActiveExpeditiousRetreatEffect.SpeedBonusFeet)
+                : 30;
+
+            list.Add(new IconData
+            {
+                Key = "ExpeditiousRetreat",
+                ShortLabel = "ER",
+                Tooltip = $"Expeditious Retreat\n+{speedBonus} ft enhancement to land speed\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Color = new Color(0.28f, 0.72f, 1f, 0.9f),
+                Duration = rounds
+            });
+        }
+
         bool hasFatigueCondition = _character.Stats.HasFatiguedCondition;
         bool hasExhaustedCondition = _character.Stats.HasExhaustedCondition;
 

@@ -8672,6 +8672,36 @@ public partial class GameManager : MonoBehaviour
         return statusMgr != null && statusMgr.HasEffect("disguise_self");
     }
 
+    public bool HasActiveExpeditiousRetreat(CharacterController character)
+    {
+        if (character == null)
+            return false;
+
+        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        return statusMgr != null && statusMgr.HasEffect("expeditious_retreat");
+    }
+
+    public void OnDismissExpeditiousRetreatButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null)
+            return;
+
+        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+        if (statusMgr == null || !statusMgr.HasEffect("expeditious_retreat"))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Expeditious Retreat to dismiss.");
+            return;
+        }
+
+        statusMgr.RemoveEffectsBySpellId("expeditious_retreat");
+        ExpeditiousRetreatEffectData removed = pc.RemoveExpeditiousRetreatEffect();
+        int removedBonus = removed != null ? Mathf.Max(0, removed.SpeedBonusFeet) : 30;
+        CombatUI?.ShowCombatLog($"<color=#88CCFF>💨 {pc.Stats.CharacterName} dismisses Expeditious Retreat (speed -{removedBonus} ft).</color>");
+        UpdateAllStatsUI();
+        ShowActionChoices();
+    }
+
     public void OnDismissDisguiseSelfButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -12630,6 +12660,34 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
+        if (spell != null && spell.SpellId == "expeditious_retreat")
+        {
+            CharacterController recipient = caster ?? target;
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            if (recipientStatusMgr == null)
+                recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+            recipientStatusMgr.Init(recipient.Stats);
+
+            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
+            if (effect != null)
+            {
+                recipient.ApplyExpeditiousRetreatEffect(effect.AppliedSpeedBonusFeet, effect.RemainingRounds, caster);
+
+                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                if (recipientSpellComp != null)
+                    recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                CombatUI?.ShowCombatLog($"<color=#88FFEE>💨 {recipient.Stats.CharacterName}'s land speed increases by +{effect.AppliedSpeedBonusFeet} ft ({effect.GetDurationDisplayString()}).</color>");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
         // Use StatusEffectManager for tracked buff application
         var statusMgr = target.GetComponent<StatusEffectManager>();
         if (statusMgr != null)
@@ -12801,6 +12859,12 @@ public partial class GameManager : MonoBehaviour
                 {
                     CombatUI?.ShowCombatLog($"<color=#88CCFF>🎭 {character.Stats.CharacterName}'s disguise fades; visible race returns to {character.DisplayedRace}.</color>");
                 }
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "expeditious_retreat", StringComparison.Ordinal))
+                {
+                    ExpeditiousRetreatEffectData expiredData = character.RemoveExpeditiousRetreatEffect();
+                    int speedDelta = expiredData != null ? Mathf.Max(0, expiredData.SpeedBonusFeet) : Mathf.Max(0, effect.AppliedSpeedBonusFeet);
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Expeditious Retreat expires on {character.Stats.CharacterName}: speed -{speedDelta} ft.</color>");
+                }
             }
 
             if (statusMgr.ActiveEffectCount > 0)
@@ -12809,6 +12873,8 @@ public partial class GameManager : MonoBehaviour
                 {
                     if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "disguise_self", StringComparison.Ordinal))
                         character.UpdateDisguiseSelfDuration(effect.RemainingRounds);
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "expeditious_retreat", StringComparison.Ordinal))
+                        character.UpdateExpeditiousRetreatDuration(effect.RemainingRounds);
 
                     Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
                 }

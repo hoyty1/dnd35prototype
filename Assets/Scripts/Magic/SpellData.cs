@@ -412,6 +412,9 @@ public class SpellData
     /// <summary>Save bonus (morale, luck, etc.).</summary>
     public int BuffSaveBonus;
 
+    /// <summary>Land speed bonus in feet (e.g., Expeditious Retreat +30 ft enhancement).</summary>
+    public int BuffSpeedBonusFeet;
+
 
     // ========== ADVANCED MITIGATION BUFFS ==========
     /// <summary>Typed damage resistance amount granted by this spell (e.g., Resist Fire 10).</summary>
@@ -489,6 +492,8 @@ public class SpellData
         {
             if (BuffACBonus > 0)
                 effectStr = $"+{BuffACBonus} AC ({BuffType})";
+            else if (BuffSpeedBonusFeet > 0)
+                effectStr = $"+{BuffSpeedBonusFeet} ft speed";
         }
 
         // AoE info

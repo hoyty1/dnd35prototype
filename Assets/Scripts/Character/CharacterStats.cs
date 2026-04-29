@@ -1195,6 +1195,7 @@ public class CharacterStats
     public int BonusDamage;     // Extra flat damage (magic weapon, etc.)
     public int AttackRange;     // Square tiles for attack reach (1 = melee)
     public int BaseSpeed;       // Base movement speed in squares
+    public int LandSpeedEnhancementBonusFeet; // Typed enhancement bonus to land speed (e.g., Expeditious Retreat)
     public int CritThreatMin;   // Minimum natural d20 roll for crit threat (from equipped weapon, default 20)
     public int CritMultiplier;  // Crit damage multiplier (from equipped weapon, default 2)
 
@@ -1538,7 +1539,8 @@ public class CharacterStats
             if (CurrentEncumbrance == EncumbranceLevel.Overloaded) return 0;
 
             int baseFeet = (Race != null ? Race.BaseSpeedFeet : BaseSpeed * 5)
-                           + (MonkFastMovementBonus + BarbarianFastMovementBonus) * 5;
+                           + (MonkFastMovementBonus + BarbarianFastMovementBonus) * 5
+                           + Mathf.Max(0, LandSpeedEnhancementBonusFeet);
 
             float speed = baseFeet;
             if (!SpeedNotReducedByArmor)
@@ -2827,6 +2829,28 @@ public class CharacterStats
     /// <summary>Current speed in feet for display and movement UI.</summary>
     public int SpeedInFeet => EffectiveSpeedFeet;
 
+    /// <summary>
+    /// D&D 3.5e Jump speed modifier: +4 per 10 ft above 30 ft, -6 per 10 ft below 30 ft.
+    /// Speeds not crossing a full 10-ft increment from 30 ft give no modifier.
+    /// </summary>
+    public int JumpSpeedModifier
+    {
+        get
+        {
+            int speedDelta = SpeedInFeet - 30;
+            if (speedDelta >= 0)
+                return (speedDelta / 10) * 4;
+
+            return -((Mathf.Abs(speedDelta) / 10) * 6);
+        }
+    }
+
+    /// <summary>
+    /// Equivalent Jump DC adjustment from current speed.
+    /// Positive values mean DC is reduced; negative means DC increases.
+    /// </summary>
+    public int JumpDcAdjustmentFromSpeed => JumpSpeedModifier;
+
 
     /// <summary>
     /// Sets both base and current size category (used by monster definitions and initialization overrides).
@@ -3033,10 +3057,15 @@ public class CharacterStats
         if (string.IsNullOrWhiteSpace(skillName))
             return 0;
 
-        if (!string.Equals(skillName, "Disguise", System.StringComparison.OrdinalIgnoreCase))
-            return 0;
+        int modifier = 0;
 
-        return DisguiseCompetenceBonus;
+        if (string.Equals(skillName, "Disguise", System.StringComparison.OrdinalIgnoreCase))
+            modifier += DisguiseCompetenceBonus;
+
+        if (string.Equals(skillName, "Jump", System.StringComparison.OrdinalIgnoreCase))
+            modifier += JumpSpeedModifier;
+
+        return modifier;
     }
 
     /// <summary>

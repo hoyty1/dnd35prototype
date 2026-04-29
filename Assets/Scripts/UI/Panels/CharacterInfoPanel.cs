@@ -204,6 +204,8 @@ public class CharacterInfoPanel : MonoBehaviour
         if (speedText != null)
         {
             string speedExtra = $" | Load: {s.EncumbranceSummary}";
+            if (s.LandSpeedEnhancementBonusFeet > 0)
+                speedExtra += $" | ER +{s.LandSpeedEnhancementBonusFeet} ft";
             if (s.SpeedNotReducedByArmor)
                 speedExtra += " (no armor speed reduction)";
             speedText.text = $"Speed: {s.MoveRange} sq ({s.SpeedInFeet} ft){speedExtra}";

@@ -133,6 +133,7 @@ public class StatusEffectManager : MonoBehaviour
         effect.AppliedStatBonus = spell.BuffStatBonus;
         effect.AppliedSecondaryStatName = null;
         effect.AppliedSecondaryStatBonus = 0;
+        effect.AppliedSpeedBonusFeet = spell.BuffSpeedBonusFeet;
         effect.AppliedSizeCategoryShift = 0;
         effect.AppliedDamageResistanceAmount = spell.BuffDamageResistanceAmount;
         effect.AppliedDamageResistanceType = spell.BuffDamageResistanceType;
@@ -371,6 +372,8 @@ public class StatusEffectManager : MonoBehaviour
 
         // If both modify attack bonus
         if (newSpell.BuffAttackBonus != 0 && existing.AppliedAttackBonus != 0) return true;
+        // If both modify land speed
+        if (newSpell.BuffSpeedBonusFeet != 0 && existing.AppliedSpeedBonusFeet != 0) return true;
         // If both modify damage bonus
         if (newSpell.BuffDamageBonus != 0 && existing.AppliedDamageBonus != 0) return true;
         // If both modify save bonus
@@ -445,6 +448,10 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.AppliedTempHP != 0)
             _stats.TempHP += effect.AppliedTempHP;
 
+        // Land speed enhancement bonus (feet).
+        if (effect.AppliedSpeedBonusFeet != 0)
+            _stats.LandSpeedEnhancementBonusFeet += effect.AppliedSpeedBonusFeet;
+
         // Typed resistance
         if (effect.AppliedDamageResistanceAmount > 0 && effect.AppliedDamageResistanceType != DamageType.Untyped)
             _stats.AddDamageResistance(effect.AppliedDamageResistanceType, effect.AppliedDamageResistanceAmount);
@@ -507,6 +514,8 @@ public class StatusEffectManager : MonoBehaviour
             _stats.TempHP = Mathf.Max(0, _stats.TempHP - effect.AppliedTempHP);
         }
 
+        if (effect.AppliedSpeedBonusFeet != 0)
+            _stats.LandSpeedEnhancementBonusFeet = Mathf.Max(0, _stats.LandSpeedEnhancementBonusFeet - effect.AppliedSpeedBonusFeet);
 
         if (effect.AppliedDamageResistanceAmount > 0 && effect.AppliedDamageResistanceType != DamageType.Untyped)
             _stats.RemoveDamageResistance(effect.AppliedDamageResistanceType, effect.AppliedDamageResistanceAmount);
@@ -552,6 +561,14 @@ public class StatusEffectManager : MonoBehaviour
                 _stats.DisguiseCompetenceBonus = Mathf.Max(0, _stats.DisguiseCompetenceBonus - 10);
                 _controller?.ClearDisguiseSelfEffect();
             }
+
+            return;
+        }
+
+        if (spellId == "expeditious_retreat")
+        {
+            if (!applying)
+                _controller?.ClearExpeditiousRetreatEffect();
 
             return;
         }
@@ -648,6 +665,7 @@ public class StatusEffectManager : MonoBehaviour
         power += Mathf.Abs(effect.AppliedDeflectionBonus);
         power += Mathf.Abs(effect.AppliedStatBonus);
         power += Mathf.Abs(effect.AppliedSecondaryStatBonus);
+        power += Mathf.Abs(effect.AppliedSpeedBonusFeet);
         power += Mathf.Abs(effect.AppliedSizeCategoryShift) * 2;
         power += Mathf.Abs(effect.AppliedDamageResistanceAmount);
         power += Mathf.Abs(effect.AppliedDamageReductionAmount);
@@ -666,6 +684,7 @@ public class StatusEffectManager : MonoBehaviour
         power += Mathf.Abs(spell.BuffShieldBonus);
         power += Mathf.Abs(spell.BuffDeflectionBonus);
         power += Mathf.Abs(spell.BuffStatBonus);
+        power += Mathf.Abs(spell.BuffSpeedBonusFeet);
         power += Mathf.Abs(spell.BuffDamageResistanceAmount);
         power += Mathf.Abs(spell.BuffDamageReductionAmount);
         if (spell.BuffDamageImmunityType != DamageType.Untyped) power += 999;
@@ -699,6 +718,7 @@ public class StatusEffectManager : MonoBehaviour
             case "Owl's Wisdom": return "OwlWis";
             case "Eagle's Splendor": return "EglSpl";
             case "Fox's Cunning": return "FoxCun";
+            case "Expeditious Retreat": return "ExpRet";
             default:
                 // Truncate to 7 chars
                 return fullName.Substring(0, 7) + "…";
