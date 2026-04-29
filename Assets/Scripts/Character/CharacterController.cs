@@ -5861,8 +5861,14 @@ public class CharacterController : MonoBehaviour
         if (effect.MissChanceAgainstMeleeOnly && incomingIsRangedAttack)
             return 0;
 
-        if (effect.SourceAreaEffect is ObscuringMistAreaEffect mist && attacker != null)
-            return Mathf.Clamp(mist.GetConcealmentMissChance(attacker, this), 0, 100);
+        if (attacker != null)
+        {
+            if (effect.SourceAreaEffect is ObscuringMistAreaEffect mist)
+                return Mathf.Clamp(mist.GetConcealmentMissChance(attacker, this), 0, 100);
+
+            if (effect.SourceAreaEffect is FogCloudAreaEffect fog)
+                return Mathf.Clamp(fog.GetConcealmentMissChance(attacker, this), 0, 100);
+        }
 
         return Mathf.Clamp(effect.MissChance, 0, 100);
     }
@@ -5996,7 +6002,8 @@ public class CharacterController : MonoBehaviour
             ? sourceEffect.ConcealmentSource
             : "Unknown source";
 
-        if (sourceEffect != null && sourceEffect.SourceAreaEffect is ObscuringMistAreaEffect && attacker != null)
+        if (sourceEffect != null && attacker != null &&
+            (sourceEffect.SourceAreaEffect is ObscuringMistAreaEffect || sourceEffect.SourceAreaEffect is FogCloudAreaEffect))
         {
             int distance = attacker.GetMinimumDistanceToTarget(this, chebyshev: true);
             string distanceLabel = distance <= 1 ? "within 5 ft" : "beyond 5 ft";

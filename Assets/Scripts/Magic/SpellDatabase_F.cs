@@ -183,9 +183,9 @@ public static partial class SpellDatabase
                 {
                     SpellId = "fog_cloud",
                     Name = "Fog Cloud",
-                    Description = "Fog obscures vision in a 20-ft radius spread. Creatures within gain concealment (20% miss chance). Duration 10 min/level. PHB p.232",
+                    Description = "Conjuration (Creation). Fog obscures all sight, including darkvision, beyond 5 feet in a 20-ft radius spread. Creatures inside gain concealment (20% miss chance), with total concealment beyond 5 feet. Duration 10 min/level. PHB p.232",
                     SpellLevel = 2, School = "Conjuration",
-                    ClassList = new[] { "Wizard", "Sorcerer", "Druid", "Cleric" },
+                    ClassList = new[] { "Wizard", "Sorcerer", "Druid" },
                     TargetType = SpellTargetType.Area,
                     RangeCategory = SpellRangeCategory.Medium,
                     RangeSquares = 22,

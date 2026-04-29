@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Fog Cloud (PHB 3.5e): creatures inside gain concealment (20% miss chance).
+/// Fog Cloud (PHB 3.5e): same concealment mechanics as Obscuring Mist.
 /// Visual uses shaded grid squares instead of opaque 3D volume.
 /// </summary>
 public class FogCloudAreaEffect : PersistentAreaEffect
@@ -29,8 +29,8 @@ public class FogCloudAreaEffect : PersistentAreaEffect
 
     protected override void OnAreaCreated()
     {
-        LogEffect("A dense fog forms in a 20-ft radius spread.");
-        LogEffect("Creatures in the fog gain concealment (20% miss chance).");
+        LogEffect("Fog fills a 20-ft radius spread.");
+        LogEffect("Within the fog: adjacent attackers suffer 20% miss chance; attackers farther than 5 ft suffer 50% (total concealment).");
     }
 
     private void Update()
@@ -106,6 +106,7 @@ public class FogCloudAreaEffect : PersistentAreaEffect
                 existing.MissChance = 20;
                 existing.IsTotalConcealment = false;
                 existing.ConcealmentSource = "Fog Cloud";
+                existing.SourceAreaEffect = this;
                 return;
             }
         }
@@ -123,11 +124,31 @@ public class FogCloudAreaEffect : PersistentAreaEffect
             IsApplied = true,
             MissChance = 20,
             IsTotalConcealment = false,
-            ConcealmentSource = "Fog Cloud"
+            ConcealmentSource = "Fog Cloud",
+            SourceAreaEffect = this
         };
 
         statusMgr.ActiveEffects.Add(effect);
-        LogEffect($"{character.Stats.CharacterName} gains concealment (20% miss chance).");
+        LogEffect($"{character.Stats.CharacterName} is shrouded by fog (20% at 5 ft, 50% beyond 5 ft).");
+    }
+
+    public int GetConcealmentMissChance(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null)
+            return 0;
+
+        // Concealment is granted by the target being inside the fog.
+        // The attacker can be inside or outside; distance to the target determines partial vs total concealment.
+        if (!IsCharacterInArea(target))
+            return 0;
+
+        int distanceSquares = attacker.GetMinimumDistanceToTarget(target, chebyshev: true);
+        return distanceSquares <= 1 ? 20 : 50;
+    }
+
+    public bool GrantsTotalConcealmentAgainst(CharacterController attacker, CharacterController target)
+    {
+        return GetConcealmentMissChance(attacker, target) >= 50;
     }
 
     private void RemoveConcealment(CharacterController character)
@@ -158,5 +179,4 @@ public class FogCloudAreaEffect : PersistentAreaEffect
                 statusMgr.RemoveEffect(effect);
         }
     }
-
 }
