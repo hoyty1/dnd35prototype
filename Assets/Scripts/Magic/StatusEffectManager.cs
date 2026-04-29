@@ -593,6 +593,21 @@ public class StatusEffectManager : MonoBehaviour
             return;
         }
 
+        if (spellId == "invisibility")
+        {
+            if (applying)
+            {
+                int rounds = Mathf.Max(0, effect.RemainingRounds);
+                _controller?.ApplyInvisibilityEffect(rounds, caster: _controller, isMoving: false);
+            }
+            else
+            {
+                _controller?.ClearInvisibilityEffect();
+            }
+
+            return;
+        }
+
         if (spellId == "enlarge_person" || spellId == "reduce_person")
         {
             int shift = (spellId == "enlarge_person") ? 1 : -1;

@@ -4188,6 +4188,74 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
+    private bool IsHostileSpellCast(CharacterController caster, SpellData spell, CharacterController primaryTarget, List<CharacterController> areaTargets, out CharacterController hostileTarget)
+    {
+        hostileTarget = null;
+
+        if (caster == null || spell == null)
+            return false;
+
+        if (primaryTarget != null && primaryTarget.Stats != null && IsEnemyTeam(caster, primaryTarget))
+        {
+            hostileTarget = primaryTarget;
+            return true;
+        }
+
+        if (areaTargets == null || areaTargets.Count == 0)
+            return false;
+
+        for (int i = 0; i < areaTargets.Count; i++)
+        {
+            CharacterController candidate = areaTargets[i];
+            if (candidate == null || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+
+            if (!IsEnemyTeam(caster, candidate))
+                continue;
+
+            hostileTarget = candidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void BreakInvisibilityOnHostileSpellCast(CharacterController caster, SpellData spell, CharacterController primaryTarget = null, List<CharacterController> areaTargets = null)
+    {
+        if (caster == null || spell == null)
+            return;
+
+        if (!caster.HasActiveInvisibilityEffect)
+            return;
+
+        if (!IsHostileSpellCast(caster, spell, primaryTarget, areaTargets, out CharacterController hostileTarget))
+            return;
+
+        caster.BreakInvisibility("hostile spell", hostileTarget);
+    }
+
+    private void UpdateEnemyLastKnownPositionForInvisibility(CharacterController invisibleCharacter)
+    {
+        if (invisibleCharacter == null || invisibleCharacter.Stats == null)
+            return;
+
+        List<CharacterController> allCharacters = GetAllCharacters();
+        for (int i = 0; i < allCharacters.Count; i++)
+        {
+            CharacterController observer = allCharacters[i];
+            if (observer == null || observer == invisibleCharacter || observer.Stats == null || observer.Stats.IsDead)
+                continue;
+
+            if (!IsEnemyTeam(observer, invisibleCharacter))
+                continue;
+
+            observer.UpdateLastKnownPosition(invisibleCharacter, incomingIsRangedAttack: observer.IsEquippedWeaponRanged());
+
+            LastKnownPositionTracker tracker = observer.GetComponent<LastKnownPositionTracker>();
+            tracker?.UpdateLastKnownPosition(invisibleCharacter);
+        }
+    }
+
     public void BreakFascinationOnHostileAction(CharacterController attacker, CharacterController target, string disturbanceReason = "hostile action")
     {
         if (attacker == null || attacker.Stats == null || target == null || target.Stats == null)
@@ -8692,6 +8760,15 @@ public partial class GameManager : MonoBehaviour
         return statusMgr != null && statusMgr.HasEffect("jump");
     }
 
+    public bool HasActiveInvisibility(CharacterController character)
+    {
+        if (character == null)
+            return false;
+
+        StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
+        return statusMgr != null && statusMgr.HasEffect("invisibility");
+    }
+
     public void OnDismissExpeditiousRetreatButtonPressed()
     {
         CharacterController pc = ActivePC;
@@ -8730,6 +8807,28 @@ public partial class GameManager : MonoBehaviour
         statusMgr.RemoveEffectsBySpellId("jump");
 
         CombatUI?.ShowCombatLog($"<color=#88CCFF>🦘 {pc.Stats.CharacterName} dismisses Jump.</color>");
+        UpdateAllStatsUI();
+        ShowActionChoices();
+    }
+
+    public void OnDismissInvisibilityButtonPressed()
+    {
+        CharacterController pc = ActivePC;
+        if (pc == null || !pc.Actions.HasStandardAction)
+            return;
+
+        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+        if (statusMgr == null || !statusMgr.HasEffect("invisibility"))
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Invisibility spell to dismiss.");
+            return;
+        }
+
+        pc.CommitStandardAction();
+        statusMgr.RemoveEffectsBySpellId("invisibility");
+        pc.ClearInvisibilityEffect();
+
+        CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {pc.Stats.CharacterName} dismisses Invisibility.</color>");
         UpdateAllStatsUI();
         ShowActionChoices();
     }
@@ -10317,6 +10416,15 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
+        // Direct enemy targeting requires line of sight; invisible/total-concealment enemies cannot be
+        // selected as direct spell targets. Area spells are evaluated separately and still function normally.
+        if (spell.TargetType == SpellTargetType.SingleEnemy && IsEnemyTeam(caster, target))
+        {
+            bool isRangedTouch = spell.IsRangedTouchSpell();
+            if (!caster.CanSee(target, isRangedTouch))
+                return false;
+        }
+
         switch (spell.TargetType)
         {
             case SpellTargetType.SingleEnemy:
@@ -10829,6 +10937,7 @@ public partial class GameManager : MonoBehaviour
 
             // Resolve the spell with metamagic.
             // D&D 3.5e: willing friendly targets for melee touch delivery should auto-succeed.
+            BreakInvisibilityOnHostileSpellCast(caster, _pendingSpell, target, null);
             bool skipFriendlyTouchAttackRoll = _pendingSpell.IsMeleeTouchSpell() && IsFriendlyTarget(caster, target);
             bool forceTargetToFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
             SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, forceTargetToFailSave, caster, target);
@@ -11617,6 +11726,8 @@ public partial class GameManager : MonoBehaviour
             }
 
             ClearSpellcastResourceSnapshot();
+
+            BreakInvisibilityOnHostileSpellCast(caster, _pendingSpell, null, targets);
 
             if (TryHandleConcealmentAreaSpellCast(caster, _pendingSpell, aoeCells, targets, out string concealmentAreaLog))
             {
@@ -12974,6 +13085,35 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
+        if (spell != null && spell.SpellId == "invisibility")
+        {
+            CharacterController recipient = target ?? caster;
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            if (recipientStatusMgr == null)
+                recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+            recipientStatusMgr.Init(recipient.Stats);
+
+            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
+            if (effect != null)
+            {
+                recipient.ApplyInvisibilityEffect(effect.RemainingRounds, caster, isMoving: false);
+
+                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                if (recipientSpellComp != null)
+                    recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                UpdateEnemyLastKnownPositionForInvisibility(recipient);
+                CombatUI?.ShowCombatLog($"<color=#88FFEE>👁 {recipient.Stats.CharacterName} becomes invisible ({effect.GetDurationDisplayString()}).</color>");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
         if (spell != null && spell.SpellId == "resist_energy")
         {
             CharacterController recipient = target ?? caster;
@@ -13241,6 +13381,11 @@ public partial class GameManager : MonoBehaviour
                     int speedDelta = expiredData != null ? Mathf.Max(0, expiredData.SpeedBonusFeet) : Mathf.Max(0, effect.AppliedSpeedBonusFeet);
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Expeditious Retreat expires on {character.Stats.CharacterName}: speed -{speedDelta} ft.</color>");
                 }
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "invisibility", StringComparison.Ordinal))
+                {
+                    character.ClearInvisibilityEffect();
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Invisibility expires on {character.Stats.CharacterName}.</color>");
+                }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "protection_from_arrows", StringComparison.Ordinal))
                 {
                     character.Stats.ActiveProtectionFromArrowsEffect = null;
@@ -13256,6 +13401,8 @@ public partial class GameManager : MonoBehaviour
                         character.UpdateDisguiseSelfDuration(effect.RemainingRounds);
                     else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "expeditious_retreat", StringComparison.Ordinal))
                         character.UpdateExpeditiousRetreatDuration(effect.RemainingRounds);
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "invisibility", StringComparison.Ordinal))
+                        character.UpdateInvisibilityDuration(effect.RemainingRounds);
                     else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "protection_from_arrows", StringComparison.Ordinal))
                     {
                         ProtectionFromArrowsEffectData protection = character.Stats.ActiveProtectionFromArrowsEffect;
@@ -17591,6 +17738,8 @@ public partial class GameManager : MonoBehaviour
             UpdateAllStatsUI();
             return true;
         }
+
+        BreakInvisibilityOnHostileSpellCast(npc, spell, target, null);
 
         bool skipFriendlyTouchAttackRoll = spell.IsMeleeTouchSpell() && IsFriendlyTarget(npc, target);
         bool forceTargetToFailSave = ShouldForceTargetToAcceptSave(npc, target, spell);

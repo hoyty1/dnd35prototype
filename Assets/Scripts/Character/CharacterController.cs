@@ -324,6 +324,7 @@ public class CharacterController : MonoBehaviour
     private string _displayedRace;
     public DisguiseSelfEffectData ActiveDisguiseSelfEffect { get; private set; }
     public ExpeditiousRetreatEffectData ActiveExpeditiousRetreatEffect { get; private set; }
+    public InvisibilityEffectData ActiveInvisibilityEffect { get; private set; }
     private EnfeebledConditionData _activeEnfeeblementEffect;
     public EnfeebledConditionData ActiveEnfeeblementEffect => _activeEnfeeblementEffect;
     public int TotalEnfeeblementStrengthPenalty => Stats != null ? Stats.EnfeeblementStrengthPenalty : 0;
@@ -1175,6 +1176,7 @@ public class CharacterController : MonoBehaviour
         EnsureConditions();
         EnsureTags();
         EnsureStatusTagManager();
+        RefreshInvisibilityVisual();
         RefreshAllTags();
     }
 
@@ -1287,6 +1289,90 @@ public class CharacterController : MonoBehaviour
     public void ClearExpeditiousRetreatEffect()
     {
         ActiveExpeditiousRetreatEffect = null;
+    }
+
+    public bool HasActiveInvisibilityEffect => ActiveInvisibilityEffect != null && ActiveInvisibilityEffect.IsInvisible;
+
+    public void ApplyInvisibilityEffect(int durationRemainingRounds, CharacterController caster, bool isMoving = false)
+    {
+        int rounds = Mathf.Max(0, durationRemainingRounds);
+        if (rounds <= 0)
+            return;
+
+        if (ActiveInvisibilityEffect == null)
+            ActiveInvisibilityEffect = new InvisibilityEffectData();
+
+        ActiveInvisibilityEffect.IsInvisible = true;
+        ActiveInvisibilityEffect.DurationRemainingRounds = rounds;
+        ActiveInvisibilityEffect.IsMoving = isMoving;
+        ActiveInvisibilityEffect.SetCaster(caster);
+        RefreshInvisibilityVisual();
+    }
+
+    public void UpdateInvisibilityDuration(int durationRemainingRounds)
+    {
+        if (ActiveInvisibilityEffect == null)
+            return;
+
+        ActiveInvisibilityEffect.DurationRemainingRounds = Mathf.Max(0, durationRemainingRounds);
+    }
+
+    public void UpdateInvisibilityMovementState(bool isMoving)
+    {
+        if (ActiveInvisibilityEffect == null || !ActiveInvisibilityEffect.IsInvisible)
+            return;
+
+        ActiveInvisibilityEffect.IsMoving = isMoving;
+    }
+
+    public int GetInvisibilityHideBonus()
+    {
+        if (!HasActiveInvisibilityEffect)
+            return 0;
+
+        return ActiveInvisibilityEffect.IsMoving ? 20 : 40;
+    }
+
+    public bool BreakInvisibility(string reason, CharacterController hostileTarget = null)
+    {
+        if (!HasActiveInvisibilityEffect)
+            return false;
+
+        StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+        if (statusMgr != null)
+            statusMgr.RemoveEffectsBySpellId("invisibility");
+
+        string actorName = Stats != null ? Stats.CharacterName : name;
+        string reasonLabel = string.IsNullOrWhiteSpace(reason) ? "hostile action" : reason;
+        string targetLabel = hostileTarget != null && hostileTarget.Stats != null
+            ? $" against {hostileTarget.Stats.CharacterName}"
+            : string.Empty;
+        GameManager.Instance?.CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {actorName}'s invisibility ends ({reasonLabel}{targetLabel}).</color>");
+
+        if (HasCondition(CombatConditionType.Invisible))
+            RemoveCondition(CombatConditionType.Invisible);
+
+        ClearInvisibilityEffect();
+        return true;
+    }
+
+    public void ClearInvisibilityEffect()
+    {
+        ActiveInvisibilityEffect = null;
+        RefreshInvisibilityVisual();
+    }
+
+    private void RefreshInvisibilityVisual()
+    {
+        if (_sr == null)
+            _sr = GetComponent<SpriteRenderer>();
+
+        if (_sr == null)
+            return;
+
+        Color c = _sr.color;
+        c.a = HasActiveInvisibilityEffect ? 0.45f : 1f;
+        _sr.color = c;
     }
 
     public EnfeebledConditionData ApplyEnfeeblementEffect(int strengthPenaltyAmount, int durationRemainingRounds, CharacterController caster)
@@ -1443,6 +1529,7 @@ public class CharacterController : MonoBehaviour
 
         ActiveDisguiseSelfEffect = null;
         ActiveExpeditiousRetreatEffect = null;
+        ActiveInvisibilityEffect = null;
         _activeEnfeeblementEffect = null;
         if (Stats != null)
         {
@@ -1454,6 +1541,7 @@ public class CharacterController : MonoBehaviour
                 Stats.ActiveResistEnergyEffects.Clear();
         }
         _displayedRace = ActualRace;
+        RefreshInvisibilityVisual();
         RefreshAllTags();
         CheckAbilityScoreZeroEffects();
     }
@@ -1647,6 +1735,7 @@ public class CharacterController : MonoBehaviour
         RefreshGridOccupancy();
         UpdatePositionForSize();
 
+        UpdateInvisibilityMovementState(true);
         if (markAsMoved)
             HasMovedThisTurn = true;
     }
@@ -1706,6 +1795,7 @@ public class CharacterController : MonoBehaviour
 
         RefreshGridOccupancy();
         UpdatePositionForSize();
+        UpdateInvisibilityMovementState(true);
         if (markAsMoved)
             HasMovedThisTurn = true;
 
@@ -4247,6 +4337,9 @@ public class CharacterController : MonoBehaviour
         result.WeaponEnhancementDamageBonus = weaponEnhancementDamageBonus;
 
         int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus;
+
+        // D&D 3.5e: making an attack roll (or attempting to attack) breaks invisibility immediately.
+        BreakInvisibility("attack roll", target);
 
         if (TryResolveLastKnownPositionAutoMiss(target, isRangedAttack, weapon, out CombatResult emptySquareMiss))
             return emptySquareMiss;
@@ -7443,6 +7536,7 @@ public class CharacterController : MonoBehaviour
         PruneExpiredFeintWindows();
 
         HasMovedThisTurn = false;
+        UpdateInvisibilityMovementState(false);
         HasTakenFiveFootStep = false;
         HasAttackedThisTurn = false;
         IsWithdrawing = false;
@@ -7513,6 +7607,18 @@ public class CharacterController : MonoBehaviour
                 Log = $"{attackerName} cannot perform {maneuverName} while wielding a ranged-only loadout."
             };
         }
+
+        bool breaksInvisibility = type == SpecialAttackType.Trip
+                                 || type == SpecialAttackType.Disarm
+                                 || type == SpecialAttackType.Grapple
+                                 || type == SpecialAttackType.Sunder
+                                 || type == SpecialAttackType.BullRushAttack
+                                 || type == SpecialAttackType.BullRushCharge
+                                 || type == SpecialAttackType.Overrun
+                                 || type == SpecialAttackType.CoupDeGrace;
+
+        if (breaksInvisibility && target != null && target.Team != Team)
+            BreakInvisibility("attack action", target);
 
         switch (type)
         {

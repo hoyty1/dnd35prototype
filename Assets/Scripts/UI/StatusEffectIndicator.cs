@@ -116,6 +116,22 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (statusMgr != null && statusMgr.HasEffect("invisibility"))
+        {
+            int rounds = statusMgr.GetRemainingRounds("invisibility");
+            int hideBonus = _character != null ? _character.GetInvisibilityHideBonus() : 0;
+            bool moving = _character != null && _character.ActiveInvisibilityEffect != null && _character.ActiveInvisibilityEffect.IsMoving;
+
+            list.Add(new IconData
+            {
+                Key = "Invisibility",
+                ShortLabel = "INV",
+                Tooltip = $"Invisibility\nTotal concealment (50% miss chance)\nHide bonus: +{hideBonus} ({(moving ? "moving" : "stationary")})\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Color = new Color(0.38f, 0.72f, 0.95f, 0.92f),
+                Duration = rounds
+            });
+        }
+
         if (statusMgr != null && statusMgr.HasEffect("jump"))
         {
             int rounds = statusMgr.GetRemainingRounds("jump");

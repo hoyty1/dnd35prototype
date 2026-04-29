@@ -90,15 +90,18 @@ public static partial class SpellDatabase
                 {
                     SpellId = "invisibility",
                     Name = "Invisibility",
-                    Description = "Subject is invisible for 1 min/level or until it attacks. +2 attack on first strike. PHB p.245",
-                    SpellLevel = 2, School = "Illusion",
-                    ClassList = new[] { "Wizard" },
+                    Description = "Illusion (Glamer). Subject touched (or caster) becomes invisible. Grants total concealment (50% miss chance), +20 Hide while moving / +40 while stationary. Breaks on attack or hostile spell. Duration 1 min/level, dismissible. Components: V, S, M/DF. PHB p.245",
+                    SpellLevel = 2,
+                    School = "Illusion",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
-                    BuffAttackBonus = 2, // Simplified: +2 from invisibility on first attack
-                    BuffDurationRounds = 30,
                     BuffType = "invisibility",
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

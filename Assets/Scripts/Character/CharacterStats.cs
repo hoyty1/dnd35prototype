@@ -3244,6 +3244,9 @@ public class CharacterStats
         if (string.Equals(skillName, "Jump", System.StringComparison.OrdinalIgnoreCase))
             modifier += JumpSpeedModifier + JumpEnhancementBonus;
 
+        if (string.Equals(skillName, "Hide", System.StringComparison.OrdinalIgnoreCase) && OwnerCharacter != null)
+            modifier += OwnerCharacter.GetInvisibilityHideBonus();
+
         return modifier;
     }
 

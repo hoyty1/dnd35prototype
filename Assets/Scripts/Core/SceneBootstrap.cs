@@ -813,6 +813,8 @@ public class SceneBootstrap : MonoBehaviour
             "Dismiss Expeditious Retreat", new Color(0.28f, 0.22f, 0.62f));
         combatUI.DismissJumpButton = CreateGridButton(btnGrid.transform, "DismissJumpBtn",
             "Dismiss Jump", new Color(0.22f, 0.36f, 0.62f));
+        combatUI.DismissInvisibilityButton = CreateGridButton(btnGrid.transform, "DismissInvisibilityBtn",
+            "Dismiss Invisibility", new Color(0.22f, 0.5f, 0.68f));
         combatUI.ReloadButton = CreateGridButton(btnGrid.transform, "ReloadBtn",
             "Reload", new Color(0.38f, 0.44f, 0.16f));
         combatUI.DropEquippedItemButton = CreateGridButton(btnGrid.transform, "DropEquippedBtn",
@@ -1145,6 +1147,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.DismissExpeditiousRetreatButton.onClick.AddListener(() => GameManager.Instance.OnDismissExpeditiousRetreatButtonPressed());
         if (ui.DismissJumpButton != null)
             ui.DismissJumpButton.onClick.AddListener(() => GameManager.Instance.OnDismissJumpButtonPressed());
+        if (ui.DismissInvisibilityButton != null)
+            ui.DismissInvisibilityButton.onClick.AddListener(() => GameManager.Instance.OnDismissInvisibilityButtonPressed());
         if (ui.ReloadButton != null)
             ui.ReloadButton.onClick.AddListener(() => GameManager.Instance.OnReloadButtonPressed());
         if (ui.DropEquippedItemButton != null)
