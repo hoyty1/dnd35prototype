@@ -302,6 +302,10 @@ public class PreCombatInventoryUI : MonoBehaviour
 
     private GameObject _tooltipPanel;
     private Text _tooltipText;
+    private bool _tooltipActive;
+
+    private static readonly Vector2 TooltipCursorOffset = new Vector2(15f, -15f);
+    private const float TooltipEdgePadding = 8f;
 
     private GameObject _contextMenuRoot;
     private Button _contextPrimaryButton;
@@ -376,6 +380,12 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         if (_panel != null)
             _panel.SetActive(false);
+    }
+
+    private void Update()
+    {
+        if (_tooltipActive)
+            UpdateTooltipPosition();
     }
 
     private void EnsureBuilt()
@@ -906,12 +916,16 @@ public class PreCombatInventoryUI : MonoBehaviour
         _tooltipPanel = CreatePanel(
             _panel.transform,
             "TooltipPanel",
-            new Vector2(1f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(-14f, -96f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 1f),
+            Vector2.zero,
             new Vector2(330f, 190f),
             new Color(0.03f, 0.03f, 0.07f, 0.96f));
+
+        Image tooltipBackground = _tooltipPanel.GetComponent<Image>();
+        if (tooltipBackground != null)
+            tooltipBackground.raycastTarget = false;
 
         Outline outline = _tooltipPanel.AddComponent<Outline>();
         outline.effectDistance = new Vector2(1f, -1f);
@@ -932,8 +946,10 @@ public class PreCombatInventoryUI : MonoBehaviour
             TextAnchor.UpperLeft);
         _tooltipText.verticalOverflow = VerticalWrapMode.Overflow;
         _tooltipText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        _tooltipText.raycastTarget = false;
 
         _tooltipPanel.SetActive(false);
+        _tooltipActive = false;
     }
 
     private void BuildContextMenu()
@@ -2354,19 +2370,78 @@ public class PreCombatInventoryUI : MonoBehaviour
         string desc = string.IsNullOrWhiteSpace(item.Description) ? "No description." : item.Description;
         _tooltipText.text = $"<b>{item.Name}</b>\n{statSummary}\n\n{desc}";
 
-        RectTransform tooltipRt = _tooltipPanel.GetComponent<RectTransform>();
-        RectTransform panelRt = _panel.GetComponent<RectTransform>();
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(panelRt, Input.mousePosition, null, out Vector2 localPoint);
-
-        float x = Mathf.Clamp(localPoint.x + 174f, -panelRt.rect.width * 0.5f + 170f, panelRt.rect.width * 0.5f - 170f);
-        float y = Mathf.Clamp(localPoint.y - 16f, -panelRt.rect.height * 0.5f + 95f, panelRt.rect.height * 0.5f - 95f);
-        tooltipRt.anchoredPosition = new Vector2(x, y);
-
         _tooltipPanel.SetActive(true);
+        _tooltipActive = true;
+        UpdateTooltipPosition();
+    }
+
+    private void UpdateTooltipPosition()
+    {
+        if (!_tooltipActive || _tooltipPanel == null || !_tooltipPanel.activeSelf || _panel == null)
+            return;
+
+        RectTransform panelRt = _panel.GetComponent<RectTransform>();
+        RectTransform tooltipRt = _tooltipPanel.GetComponent<RectTransform>();
+        if (panelRt == null || tooltipRt == null)
+            return;
+
+        Camera eventCamera = GetCanvasEventCamera();
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(panelRt, Input.mousePosition, eventCamera, out Vector2 mouseLocalPoint))
+            return;
+
+        Vector2 tooltipSize = tooltipRt.rect.size;
+        Vector2 position = GetSmartTooltipPosition(mouseLocalPoint, tooltipSize, panelRt.rect.size);
+        tooltipRt.anchoredPosition = position;
+    }
+
+    private Vector2 GetSmartTooltipPosition(Vector2 mouseLocalPoint, Vector2 tooltipSize, Vector2 panelSize)
+    {
+        Vector2 topLeftPosition = mouseLocalPoint + TooltipCursorOffset;
+
+        float rightBoundary = panelSize.x * 0.5f - TooltipEdgePadding;
+        float bottomBoundary = -panelSize.y * 0.5f + TooltipEdgePadding;
+
+        if (topLeftPosition.x + tooltipSize.x > rightBoundary)
+            topLeftPosition.x = mouseLocalPoint.x - TooltipCursorOffset.x - tooltipSize.x;
+
+        if (topLeftPosition.y - tooltipSize.y < bottomBoundary)
+            topLeftPosition.y = mouseLocalPoint.y + Mathf.Abs(TooltipCursorOffset.y) + tooltipSize.y;
+
+        return ClampTooltipToPanel(topLeftPosition, tooltipSize, panelSize);
+    }
+
+    private Vector2 ClampTooltipToPanel(Vector2 topLeftPosition, Vector2 tooltipSize, Vector2 panelSize)
+    {
+        float minX = -panelSize.x * 0.5f + TooltipEdgePadding;
+        float maxX = panelSize.x * 0.5f - tooltipSize.x - TooltipEdgePadding;
+
+        float minY = -panelSize.y * 0.5f + tooltipSize.y + TooltipEdgePadding;
+        float maxY = panelSize.y * 0.5f - TooltipEdgePadding;
+
+        topLeftPosition.x = Mathf.Clamp(topLeftPosition.x, minX, maxX);
+        topLeftPosition.y = Mathf.Clamp(topLeftPosition.y, minY, maxY);
+        return topLeftPosition;
+    }
+
+    private Camera GetCanvasEventCamera()
+    {
+        Canvas canvas = _panel != null ? _panel.GetComponentInParent<Canvas>() : null;
+        if (canvas == null)
+            return null;
+
+        if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+            return null;
+
+        if (canvas.worldCamera != null)
+            return canvas.worldCamera;
+
+        return Camera.main;
     }
 
     private void HideTooltip()
     {
+        _tooltipActive = false;
+
         if (_tooltipPanel != null)
             _tooltipPanel.SetActive(false);
     }
