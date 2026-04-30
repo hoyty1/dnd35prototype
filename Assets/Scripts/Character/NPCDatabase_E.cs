@@ -17,6 +17,7 @@ public static partial class NPCDatabase
         {
             Id = "eagle",
             Name = "Eagle",
+            ChallengeRating = "1/2",
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",

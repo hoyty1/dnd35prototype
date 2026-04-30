@@ -31,13 +31,16 @@ public class EncounterSelectionUI : MonoBehaviour
 
     public bool IsOpen => _panel != null && _panel.activeSelf;
 
-    public void Open(List<EncounterPreset> presets, Action<string> onSelect, Action onCancel = null)
+    private int _partyAverageLevel = 3;
+
+    public void Open(List<EncounterPreset> presets, Action<string> onSelect, Action onCancel = null, int partyAverageLevel = 3)
     {
         EnsureBuilt();
         if (_panel == null) return;
 
         _onSelect = onSelect;
         _onCancel = onCancel;
+        _partyAverageLevel = Mathf.Max(1, partyAverageLevel);
 
         _panel.SetActive(true);
         _descriptionText.text = "Select an encounter. Scroll to view all mechanics tests and full scenarios.";
@@ -452,8 +455,8 @@ public class EncounterSelectionUI : MonoBehaviour
         cardImage.color = CardColor;
 
         LayoutElement le = card.GetComponent<LayoutElement>();
-        le.preferredHeight = 104f;
-        le.minHeight = 104f;
+        le.preferredHeight = 128f;
+        le.minHeight = 128f;
 
         Outline outline = card.GetComponent<Outline>();
         outline.effectColor = new Color(0.95f, 0.87f, 0.45f, 0.95f);
@@ -535,6 +538,31 @@ public class EncounterSelectionUI : MonoBehaviour
         descLayout.minHeight = 52f;
         descText.horizontalOverflow = HorizontalWrapMode.Wrap;
         descText.verticalOverflow = VerticalWrapMode.Truncate;
+
+        EncounterDifficultySummary summary = ChallengeRatingUtils.CalculateEncounterDifficulty(preset, _partyAverageLevel);
+        string summaryText = summary.CreatureCount > 0
+            ? summary.BuildDisplayLine()
+            : "CR/XP unavailable for one or more creatures in this preset";
+
+        CreateText(
+            contentRoot.transform,
+            summaryText,
+            12,
+            FontStyle.Bold,
+            new Color(0.97f, 0.86f, 0.53f, 1f),
+            new Vector2(0f, 0.5f),
+            new Vector2(1f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            new Vector2(0f, 22f),
+            TextAnchor.MiddleLeft,
+            out Text summaryLabel
+        );
+        LayoutElement summaryLayout = summaryLabel.gameObject.AddComponent<LayoutElement>();
+        summaryLayout.preferredHeight = 22f;
+        summaryLayout.minHeight = 22f;
+        summaryLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+        summaryLabel.verticalOverflow = VerticalWrapMode.Truncate;
 
         _cardImages[preset.Id] = cardImage;
         _cardOutlines[preset.Id] = outline;

@@ -21,6 +21,7 @@ public static partial class NPCDatabase
         {
             Id = "viper_tiny",
             Name = "Viper (Tiny)",
+            ChallengeRating = "1/3",
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
@@ -56,6 +57,7 @@ public static partial class NPCDatabase
         {
             Id = "viper_small",
             Name = "Viper (Small)",
+            ChallengeRating = "1/2",
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
@@ -91,6 +93,7 @@ public static partial class NPCDatabase
         {
             Id = "viper_medium",
             Name = "Viper (Medium)",
+            ChallengeRating = "1",
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
@@ -126,6 +129,7 @@ public static partial class NPCDatabase
         {
             Id = "viper_large",
             Name = "Viper (Large)",
+            ChallengeRating = "2",
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
@@ -161,6 +165,7 @@ public static partial class NPCDatabase
         {
             Id = "viper_huge",
             Name = "Viper (Huge)",
+            ChallengeRating = "4",
             Level = 6,
             CharacterClass = "Warrior",
             CreatureType = "Animal",

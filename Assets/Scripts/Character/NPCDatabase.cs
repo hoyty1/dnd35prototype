@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 /// <summary>
@@ -163,6 +164,12 @@ public class NPCDefinition
     public string Id;
     public string Name;
     public string Description;
+
+    /// <summary>
+    /// D&D 3.5e Challenge Rating (CR). Stored as string to preserve fractions
+    /// such as "1/8", "1/4", "1/3", "1/2".
+    /// </summary>
+    public string ChallengeRating;
 
     // Core D&D 3.5 stats
     public int Level;
@@ -405,4 +412,205 @@ public enum NPCAIBehavior
 
     /// <summary>Advance cautiously, use Combat Expertise for extra AC, hold position.</summary>
     DefensiveMelee
+}
+
+/// <summary>
+/// Utility helpers for D&D 3.5e Challenge Rating parsing/formatting and
+/// light-weight encounter difficulty estimation.
+/// </summary>
+public static class ChallengeRatingUtils
+{
+    private static readonly Dictionary<string, float> FractionToValue = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "1/10", 0.1f },
+        { "1/8", 0.125f },
+        { "1/6", 1f / 6f },
+        { "1/4", 0.25f },
+        { "1/3", 1f / 3f },
+        { "1/2", 0.5f }
+    };
+
+    private static readonly List<(float Value, string Label)> DisplayOrder = new List<(float, string)>
+    {
+        (0.1f, "1/10"),
+        (0.125f, "1/8"),
+        (1f / 6f, "1/6"),
+        (0.25f, "1/4"),
+        (1f / 3f, "1/3"),
+        (0.5f, "1/2")
+    };
+
+    // DMG 3.5-style XP table (sufficient for current monster set).
+    private static readonly Dictionary<float, int> CrToXp = new Dictionary<float, int>
+    {
+        { 0.1f, 15 },
+        { 0.125f, 25 },
+        { 1f / 6f, 35 },
+        { 0.25f, 75 },
+        { 1f / 3f, 100 },
+        { 0.5f, 150 },
+        { 1f, 300 },
+        { 2f, 600 },
+        { 3f, 900 },
+        { 4f, 1200 },
+        { 5f, 1600 },
+        { 6f, 2400 },
+        { 7f, 3200 },
+        { 8f, 4800 },
+        { 9f, 6400 },
+        { 10f, 9600 },
+        { 11f, 12800 },
+        { 12f, 19200 },
+        { 13f, 25600 },
+        { 14f, 38400 },
+        { 15f, 51200 },
+        { 16f, 76800 },
+        { 17f, 102400 },
+        { 18f, 153600 },
+        { 19f, 204800 },
+        { 20f, 307200 }
+    };
+
+    public static bool TryParse(string challengeRating, out float value)
+    {
+        value = 0f;
+        if (string.IsNullOrWhiteSpace(challengeRating))
+            return false;
+
+        string normalized = challengeRating.Trim();
+        if (FractionToValue.TryGetValue(normalized, out float fractionValue))
+        {
+            value = fractionValue;
+            return true;
+        }
+
+        if (float.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed))
+        {
+            value = Mathf.Max(0f, parsed);
+            return true;
+        }
+
+        return false;
+    }
+
+    public static string Format(string challengeRating)
+    {
+        if (!TryParse(challengeRating, out float parsed))
+            return "—";
+
+        return Format(parsed);
+    }
+
+    public static string Format(float value)
+    {
+        if (value <= 0f)
+            return "0";
+
+        for (int i = 0; i < DisplayOrder.Count; i++)
+        {
+            if (Mathf.Abs(value - DisplayOrder[i].Value) < 0.0001f)
+                return DisplayOrder[i].Label;
+        }
+
+        if (Mathf.Abs(value - Mathf.Round(value)) < 0.0001f)
+            return Mathf.RoundToInt(value).ToString(CultureInfo.InvariantCulture);
+
+        return value.ToString("0.##", CultureInfo.InvariantCulture);
+    }
+
+    public static int GetXpForCr(float cr)
+    {
+        if (CrToXp.TryGetValue(cr, out int xp))
+            return xp;
+
+        // Fallback for non-table CR values: nearest known CR.
+        float nearest = 1f;
+        float bestDelta = float.MaxValue;
+        foreach (var kv in CrToXp)
+        {
+            float delta = Mathf.Abs(kv.Key - cr);
+            if (delta < bestDelta)
+            {
+                bestDelta = delta;
+                nearest = kv.Key;
+            }
+        }
+
+        return CrToXp[nearest];
+    }
+
+    public static float GetEquivalentCrForTotalXp(int totalXp)
+    {
+        if (totalXp <= 0)
+            return 0f;
+
+        float bestCr = 0.5f;
+        int bestXp = int.MaxValue;
+        foreach (var kv in CrToXp)
+        {
+            if (kv.Value >= totalXp && kv.Value < bestXp)
+            {
+                bestXp = kv.Value;
+                bestCr = kv.Key;
+            }
+        }
+
+        if (bestXp == int.MaxValue)
+            return 20f;
+
+        return bestCr;
+    }
+
+    public static EncounterDifficultySummary CalculateEncounterDifficulty(EncounterPreset preset, int partyAverageLevel)
+    {
+        int totalXp = 0;
+        int creatureCount = 0;
+
+        if (preset?.NPCIds != null)
+        {
+            for (int i = 0; i < preset.NPCIds.Count; i++)
+            {
+                NPCDefinition def = NPCDatabase.Get(preset.NPCIds[i]);
+                if (def == null || !TryParse(def.ChallengeRating, out float crValue))
+                    continue;
+
+                totalXp += GetXpForCr(crValue);
+                creatureCount++;
+            }
+        }
+
+        float equivalentCr = GetEquivalentCrForTotalXp(totalXp);
+        int apl = Mathf.Max(1, partyAverageLevel);
+        float delta = equivalentCr - apl;
+
+        string tier;
+        if (delta <= -2f) tier = "Easy";
+        else if (delta <= -0.5f) tier = "Moderate";
+        else if (delta <= 0.5f) tier = "Challenging";
+        else if (delta <= 2f) tier = "Hard";
+        else tier = "Deadly";
+
+        return new EncounterDifficultySummary
+        {
+            CreatureCount = creatureCount,
+            TotalXp = totalXp,
+            EquivalentCR = equivalentCr,
+            DifficultyTier = tier,
+            PartyAverageLevel = apl
+        };
+    }
+}
+
+public struct EncounterDifficultySummary
+{
+    public int CreatureCount;
+    public int TotalXp;
+    public float EquivalentCR;
+    public string DifficultyTier;
+    public int PartyAverageLevel;
+
+    public string BuildDisplayLine()
+    {
+        return $"CR {ChallengeRatingUtils.Format(EquivalentCR)} • XP {TotalXp} • {DifficultyTier} vs APL {PartyAverageLevel}";
+    }
 }

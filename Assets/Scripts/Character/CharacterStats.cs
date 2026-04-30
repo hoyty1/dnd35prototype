@@ -86,6 +86,14 @@ public class CharacterStats
     public int Level;
     public string CharacterClass; // e.g., "Fighter", "Rogue", "Warrior"
     public string SourceNpcDefinitionId;
+
+    /// <summary>
+    /// D&D 3.5e Challenge Rating for monsters/NPCs (fractional values stored as strings, e.g. "1/3").
+    /// Null/empty for PCs and custom non-CR-tagged entries.
+    /// </summary>
+    public string ChallengeRating;
+    public string ChallengeRatingDisplay => ChallengeRatingUtils.Format(ChallengeRating);
+
     public Alignment CharacterAlignment = Alignment.None;
 
     /// <summary>Full alignment name for display (e.g., "Lawful Good").</summary>

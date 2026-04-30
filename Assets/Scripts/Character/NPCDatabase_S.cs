@@ -29,6 +29,17 @@ public static partial class NPCDatabase
         {
             Id = id,
             Name = name,
+            ChallengeRating = id switch
+            {
+                "monstrous_scorpion_tiny" => "1/4",
+                "monstrous_scorpion_small" => "1/2",
+                "monstrous_scorpion_medium" => "1",
+                "monstrous_scorpion_large" => "3",
+                "monstrous_scorpion_huge" => "7",
+                "monstrous_scorpion_gargantuan" => "10",
+                "monstrous_scorpion_colossal" => "12",
+                _ => null
+            },
             Level = Mathf.Max(1, hitDice),
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
@@ -85,6 +96,17 @@ public static partial class NPCDatabase
         {
             Id = id,
             Name = name,
+            ChallengeRating = id switch
+            {
+                "monstrous_spider_tiny" => "1/4",
+                "monstrous_spider_small" => "1/2",
+                "monstrous_spider_medium" => "1",
+                "monstrous_spider_large" => "2",
+                "monstrous_spider_huge" => "5",
+                "monstrous_spider_gargantuan" => "8",
+                "monstrous_spider_colossal" => "11",
+                _ => null
+            },
             Level = Mathf.Max(1, hitDice),
             CharacterClass = "Warrior",
             CreatureType = "Vermin",

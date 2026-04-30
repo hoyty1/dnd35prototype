@@ -28,6 +28,17 @@ public static partial class NPCDatabase
         {
             Id = id,
             Name = name,
+            ChallengeRating = id switch
+            {
+                "monstrous_centipede_tiny" => "1/8",
+                "monstrous_centipede_small" => "1/4",
+                "monstrous_centipede_medium" => "1/2",
+                "monstrous_centipede_large" => "1",
+                "monstrous_centipede_huge" => "2",
+                "monstrous_centipede_gargantuan" => "6",
+                "monstrous_centipede_colossal" => "8",
+                _ => null
+            },
             Level = Mathf.Max(1, hitDice),
             CharacterClass = "Warrior",
             CreatureType = "Vermin",

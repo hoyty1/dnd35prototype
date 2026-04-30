@@ -17,6 +17,7 @@ public static partial class NPCDatabase
         {
             Id = "lemure",
             Name = "Lemure",
+            ChallengeRating = "1",
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Outsider",

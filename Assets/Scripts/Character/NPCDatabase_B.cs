@@ -19,6 +19,7 @@ public static partial class NPCDatabase
         {
             Id = "badger",
             Name = "Badger",
+            ChallengeRating = "1/2",
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
@@ -55,6 +56,7 @@ public static partial class NPCDatabase
         {
             Id = "giant_bee",
             Name = "Giant Bee",
+            ChallengeRating = "1",
             Level = 3,
             CharacterClass = "Warrior",
             CreatureType = "Vermin",
@@ -107,6 +109,7 @@ public static partial class NPCDatabase
         {
             Id = "giant_bombardier_beetle",
             Name = "Giant Bombardier Beetle",
+            ChallengeRating = "2",
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Vermin",

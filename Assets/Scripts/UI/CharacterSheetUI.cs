@@ -675,6 +675,8 @@ public class CharacterSheetUI : MonoBehaviour
         string alignDisplay = stats.CharacterAlignment != Alignment.None
             ? $"  {stats.AlignmentName}" : "";
         AddLine(content, $"Level {stats.Level}  {stats.RaceName}  {stats.CharacterClass}{alignDisplay}", 11, LightText, FontStyle.Normal, 14);
+        if (!string.IsNullOrWhiteSpace(stats.ChallengeRating))
+            AddLine(content, $"⚔ Challenge Rating: {stats.ChallengeRatingDisplay}", 11, new Color(0.98f, 0.86f, 0.56f), FontStyle.Bold, 14);
 
         // Deity display
         if (!string.IsNullOrEmpty(stats.DeityId))

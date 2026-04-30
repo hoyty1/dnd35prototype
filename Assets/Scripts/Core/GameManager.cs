@@ -609,7 +609,31 @@ public partial class GameManager : MonoBehaviour
                 _selectedEncounterPresetId = "goblin_raiders";
                 ApplyEncounterPreset(_selectedEncounterPresetId);
                 StartCombat();
-            });
+            },
+            partyAverageLevel: GetCurrentPartyAverageLevel());
+    }
+
+    private int GetCurrentPartyAverageLevel()
+    {
+        if (PCs == null || PCs.Count == 0)
+            return 3;
+
+        int total = 0;
+        int count = 0;
+        for (int i = 0; i < PCs.Count; i++)
+        {
+            CharacterController pc = PCs[i];
+            if (pc == null || pc.Stats == null)
+                continue;
+
+            total += Mathf.Max(1, pc.Stats.Level);
+            count++;
+        }
+
+        if (count == 0)
+            return 3;
+
+        return Mathf.Max(1, Mathf.RoundToInt((float)total / count));
     }
 
     private void ApplyEncounterPreset(string presetId)
@@ -3905,6 +3929,7 @@ public partial class GameManager : MonoBehaviour
 
         FeatManager.ApplyPassiveFeats(stats);
         stats.SourceNpcDefinitionId = def.Id;
+        stats.ChallengeRating = def.ChallengeRating;
         stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Humanoid" : def.CreatureType;
         stats.MaterialComposition = def.MaterialComposition;
         stats.SetBaseSizeCategory(def.SizeCategory);

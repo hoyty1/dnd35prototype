@@ -168,6 +168,8 @@ public class CharacterHoverTooltipUI : MonoBehaviour
             {
                 hash = (hash * 31) + character.Stats.CurrentHP;
                 hash = (hash * 31) + character.Stats.MaxHP;
+                if (!string.IsNullOrWhiteSpace(character.Stats.ChallengeRating))
+                    hash = (hash * 31) + character.Stats.ChallengeRating.GetHashCode();
             }
 
             InventoryComponent inventoryComponent = character.GetComponent<InventoryComponent>();
@@ -227,6 +229,9 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         string race = ExtractTagValue(character, "Race: ");
         if (!string.IsNullOrWhiteSpace(race) && race != "Unknown")
             sb.Append("\nRace: ").Append(race);
+
+        if (!string.IsNullOrWhiteSpace(character.Stats.ChallengeRating))
+            sb.Append("\nCR: ").Append(character.Stats.ChallengeRatingDisplay);
 
         List<string> wielding = GetWieldingTags(tags);
         if (wielding.Count > 0)

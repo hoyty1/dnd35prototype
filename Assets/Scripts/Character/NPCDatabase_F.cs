@@ -17,6 +17,7 @@ public static partial class NPCDatabase
         {
             Id = "giant_fire_beetle",
             Name = "Giant Fire Beetle",
+            ChallengeRating = "1/3",
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Vermin",

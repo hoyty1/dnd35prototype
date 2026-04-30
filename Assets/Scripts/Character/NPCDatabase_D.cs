@@ -19,6 +19,7 @@ public static partial class NPCDatabase
         {
             Id = "dog",
             Name = "Dog",
+            ChallengeRating = "1/3",
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
@@ -54,6 +55,7 @@ public static partial class NPCDatabase
         {
             Id = "riding_dog",
             Name = "Riding Dog",
+            ChallengeRating = "1",
             Level = 2,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
@@ -95,6 +97,7 @@ public static partial class NPCDatabase
         {
             Id = "dire_rat",
             Name = "Dire Rat",
+            ChallengeRating = "1/3",
             Level = 1,
             CharacterClass = "Warrior",
             CreatureType = "Animal",
