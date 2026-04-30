@@ -399,6 +399,15 @@ public class PreCombatInventoryUI : MonoBehaviour
     private Button _equipOrStashStashButton;
     private Button _equipOrStashCancelButton;
 
+    private GameObject _stackQuantityPromptRoot;
+    private Text _stackQuantityItemText;
+    private Slider _stackQuantitySlider;
+    private InputField _stackQuantityInput;
+    private Button _stackQuantityMoveButton;
+    private Button _stackQuantityCancelButton;
+    private Action<int> _pendingQuantityConfirm;
+    private bool _syncingQuantityControls;
+
     private GameObject _dragPreview;
     private Text _dragPreviewText;
 
@@ -466,6 +475,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         HideTooltip();
         HideContextMenu();
         HideEquipOrStashPrompt();
+        HideStackQuantityPrompt();
         ShowMessage("Drag items between stash, equipment, and backpack. Right-click for quick actions.", true);
         RefreshAll();
     }
@@ -492,6 +502,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         HideTooltip();
         HideContextMenu();
         HideEquipOrStashPrompt();
+        HideStackQuantityPrompt();
         if (_dragDropManager != null && _dragDropManager.IsDragging)
             _dragDropManager.ForceCleanup();
         HideDragPreview();
@@ -610,6 +621,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         BuildTooltip();
         BuildContextMenu();
         BuildEquipOrStashPrompt();
+        BuildStackQuantityPrompt();
         BuildDragPreview();
         BuildWindowResizeBehavior();
 
@@ -1291,22 +1303,296 @@ public class PreCombatInventoryUI : MonoBehaviour
         _equipOrStashPromptRoot.SetActive(false);
     }
 
-    private void ShowEquipOrStashPrompt(SlotRef stackSlot, ItemData item)
+    private void BuildStackQuantityPrompt()
+    {
+        _stackQuantityPromptRoot = CreatePanel(
+            _panel.transform,
+            "StackQuantityPrompt",
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            new Color(0f, 0f, 0f, 0.72f));
+
+        Image overlayImage = _stackQuantityPromptRoot.GetComponent<Image>();
+        if (overlayImage != null)
+            overlayImage.raycastTarget = true;
+
+        GameObject panel = CreatePanel(
+            _stackQuantityPromptRoot.transform,
+            "PromptPanel",
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            new Vector2(470f, 260f),
+            new Color(0.14f, 0.16f, 0.24f, 0.98f));
+
+        Outline panelOutline = panel.AddComponent<Outline>();
+        panelOutline.effectDistance = new Vector2(2f, -2f);
+        panelOutline.effectColor = new Color(0f, 0f, 0f, 0.65f);
+
+        CreateText(
+            panel.transform,
+            "Title",
+            "How many to move?",
+            new Vector2(0.08f, 0.77f),
+            new Vector2(0.92f, 0.92f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            16,
+            FontStyle.Bold,
+            new Color(0.94f, 0.95f, 1f),
+            TextAnchor.MiddleCenter);
+
+        _stackQuantityItemText = CreateText(
+            panel.transform,
+            "ItemText",
+            string.Empty,
+            new Vector2(0.08f, 0.64f),
+            new Vector2(0.92f, 0.76f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            12,
+            FontStyle.Normal,
+            new Color(0.82f, 0.88f, 0.98f),
+            TextAnchor.MiddleCenter);
+
+        GameObject sliderGO = new GameObject("QuantitySlider", typeof(RectTransform), typeof(Slider));
+        sliderGO.transform.SetParent(panel.transform, false);
+        RectTransform sliderRt = sliderGO.GetComponent<RectTransform>();
+        sliderRt.anchorMin = new Vector2(0.12f, 0.45f);
+        sliderRt.anchorMax = new Vector2(0.88f, 0.55f);
+        sliderRt.offsetMin = Vector2.zero;
+        sliderRt.offsetMax = Vector2.zero;
+
+        GameObject sliderBackgroundGO = CreatePanel(
+            sliderGO.transform,
+            "Background",
+            new Vector2(0f, 0.35f),
+            new Vector2(1f, 0.65f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            new Color(0.1f, 0.12f, 0.18f, 1f));
+
+        GameObject fillAreaGO = new GameObject("FillArea", typeof(RectTransform));
+        fillAreaGO.transform.SetParent(sliderGO.transform, false);
+        RectTransform fillAreaRt = fillAreaGO.GetComponent<RectTransform>();
+        fillAreaRt.anchorMin = new Vector2(0f, 0.35f);
+        fillAreaRt.anchorMax = new Vector2(1f, 0.65f);
+        fillAreaRt.offsetMin = new Vector2(10f, 0f);
+        fillAreaRt.offsetMax = new Vector2(-10f, 0f);
+
+        GameObject fillGO = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+        fillGO.transform.SetParent(fillAreaGO.transform, false);
+        RectTransform fillRt = fillGO.GetComponent<RectTransform>();
+        fillRt.anchorMin = new Vector2(0f, 0f);
+        fillRt.anchorMax = new Vector2(1f, 1f);
+        fillRt.offsetMin = Vector2.zero;
+        fillRt.offsetMax = Vector2.zero;
+        Image fillImage = fillGO.GetComponent<Image>();
+        fillImage.color = new Color(0.26f, 0.62f, 0.9f, 1f);
+
+        GameObject handleAreaGO = new GameObject("HandleArea", typeof(RectTransform));
+        handleAreaGO.transform.SetParent(sliderGO.transform, false);
+        RectTransform handleAreaRt = handleAreaGO.GetComponent<RectTransform>();
+        handleAreaRt.anchorMin = new Vector2(0f, 0f);
+        handleAreaRt.anchorMax = new Vector2(1f, 1f);
+        handleAreaRt.offsetMin = new Vector2(10f, 0f);
+        handleAreaRt.offsetMax = new Vector2(-10f, 0f);
+
+        GameObject handleGO = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+        handleGO.transform.SetParent(handleAreaGO.transform, false);
+        RectTransform handleRt = handleGO.GetComponent<RectTransform>();
+        handleRt.sizeDelta = new Vector2(18f, 22f);
+        Image handleImage = handleGO.GetComponent<Image>();
+        handleImage.color = new Color(0.95f, 0.96f, 1f, 1f);
+
+        _stackQuantitySlider = sliderGO.GetComponent<Slider>();
+        _stackQuantitySlider.minValue = 1;
+        _stackQuantitySlider.maxValue = 1;
+        _stackQuantitySlider.wholeNumbers = true;
+        _stackQuantitySlider.value = 1;
+        _stackQuantitySlider.targetGraphic = handleImage;
+        _stackQuantitySlider.fillRect = fillRt;
+        _stackQuantitySlider.handleRect = handleRt;
+
+        GameObject inputBackgroundGO = CreatePanel(
+            panel.transform,
+            "InputBackground",
+            new Vector2(0.36f, 0.28f),
+            new Vector2(0.64f, 0.4f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            new Color(0.1f, 0.12f, 0.18f, 1f));
+
+        _stackQuantityInput = inputBackgroundGO.AddComponent<InputField>();
+        _stackQuantityInput.contentType = InputField.ContentType.IntegerNumber;
+        _stackQuantityInput.lineType = InputField.LineType.SingleLine;
+        Image inputBgImage = inputBackgroundGO.GetComponent<Image>();
+        if (inputBgImage != null)
+            _stackQuantityInput.targetGraphic = inputBgImage;
+
+        Text inputText = CreateText(
+            inputBackgroundGO.transform,
+            "Text",
+            "1",
+            new Vector2(0f, 0f),
+            new Vector2(1f, 1f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            new Vector2(-10f, -4f),
+            16,
+            FontStyle.Bold,
+            Color.white,
+            TextAnchor.MiddleCenter);
+
+        Text placeholderText = CreateText(
+            inputBackgroundGO.transform,
+            "Placeholder",
+            "1",
+            new Vector2(0f, 0f),
+            new Vector2(1f, 1f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            new Vector2(-10f, -4f),
+            16,
+            FontStyle.Italic,
+            new Color(0.65f, 0.7f, 0.78f, 0.9f),
+            TextAnchor.MiddleCenter);
+
+        _stackQuantityInput.textComponent = inputText;
+        _stackQuantityInput.placeholder = placeholderText;
+        _stackQuantityInput.text = "1";
+
+        _stackQuantityMoveButton = CreateButton(
+            panel.transform,
+            "MoveButton",
+            "Move",
+            new Vector2(0.1f, 0.08f),
+            new Vector2(0.45f, 0.22f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            new Color(0.2f, 0.45f, 0.25f, 1f),
+            null);
+
+        _stackQuantityCancelButton = CreateButton(
+            panel.transform,
+            "CancelButton",
+            "Cancel",
+            new Vector2(0.55f, 0.08f),
+            new Vector2(0.9f, 0.22f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            new Color(0.55f, 0.23f, 0.23f, 1f),
+            null);
+
+        if (_stackQuantitySlider != null)
+        {
+            _stackQuantitySlider.onValueChanged.AddListener(value =>
+            {
+                if (_syncingQuantityControls || _stackQuantityInput == null)
+                    return;
+
+                _syncingQuantityControls = true;
+                _stackQuantityInput.text = Mathf.RoundToInt(value).ToString();
+                _syncingQuantityControls = false;
+            });
+        }
+
+        if (_stackQuantityInput != null)
+        {
+            _stackQuantityInput.onValueChanged.AddListener(text =>
+            {
+                if (_syncingQuantityControls || _stackQuantitySlider == null)
+                    return;
+
+                if (!int.TryParse(text, out int parsed))
+                    return;
+
+                _syncingQuantityControls = true;
+                parsed = Mathf.Clamp(parsed, Mathf.RoundToInt(_stackQuantitySlider.minValue), Mathf.RoundToInt(_stackQuantitySlider.maxValue));
+                _stackQuantitySlider.value = parsed;
+                _stackQuantityInput.text = parsed.ToString();
+                _syncingQuantityControls = false;
+            });
+        }
+
+        if (_stackQuantityMoveButton != null)
+        {
+            _stackQuantityMoveButton.onClick.RemoveAllListeners();
+            _stackQuantityMoveButton.onClick.AddListener(() =>
+            {
+                int selectedQuantity = _stackQuantitySlider != null
+                    ? Mathf.RoundToInt(_stackQuantitySlider.value)
+                    : 1;
+                Debug.Log($"[QuantityPrompt] Confirmed move quantity={selectedQuantity}");
+                _pendingQuantityConfirm?.Invoke(selectedQuantity);
+                HideStackQuantityPrompt();
+            });
+        }
+
+        if (_stackQuantityCancelButton != null)
+        {
+            _stackQuantityCancelButton.onClick.RemoveAllListeners();
+            _stackQuantityCancelButton.onClick.AddListener(() =>
+            {
+                Debug.Log("[QuantityPrompt] Cancel clicked");
+                HideStackQuantityPrompt();
+            });
+        }
+
+        if (sliderBackgroundGO != null)
+        {
+            Image sliderBg = sliderBackgroundGO.GetComponent<Image>();
+            if (sliderBg != null)
+                sliderBg.raycastTarget = false;
+        }
+
+        _stackQuantityPromptRoot.SetActive(false);
+    }
+
+    private void ShowEquipOrStashPrompt(SlotRef stackSlot, ItemData item, int quantityToMove = 1)
     {
         if (_equipOrStashPromptRoot == null || stackSlot == null || item == null)
             return;
 
         HideContextMenu();
+        HideStackQuantityPrompt();
 
+        int clampedQuantity = Mathf.Max(1, quantityToMove);
         if (_equipOrStashPromptText != null)
-            _equipOrStashPromptText.text = $"What would you like to do with {item.Name}?";
+        {
+            _equipOrStashPromptText.text = clampedQuantity > 1
+                ? $"{item.Name} ×{clampedQuantity}: Equip one, or move all selected to stash?"
+                : $"What would you like to do with {item.Name}?";
+        }
 
         if (_equipOrStashEquipButton != null)
         {
             _equipOrStashEquipButton.onClick.RemoveAllListeners();
             _equipOrStashEquipButton.onClick.AddListener(() =>
             {
+                Debug.Log($"[EquipPrompt] Equip clicked for {item.Name} (selectedQty={clampedQuantity})");
                 HandleEquipFromInventoryStackClick(stackSlot, item);
+
+                if (clampedQuantity > 1)
+                {
+                    int remainderToStash = clampedQuantity - 1;
+                    if (remainderToStash > 0)
+                    {
+                        Debug.Log($"[EquipPrompt] Moving remainder to stash: {remainderToStash}");
+                        TransferStackFromInventoryToStash(stackSlot.Character, stackSlot.ItemGroup, remainderToStash);
+                    }
+                }
+
                 HideEquipOrStashPrompt();
             });
         }
@@ -1316,7 +1602,8 @@ public class PreCombatInventoryUI : MonoBehaviour
             _equipOrStashStashButton.onClick.RemoveAllListeners();
             _equipOrStashStashButton.onClick.AddListener(() =>
             {
-                TransferStackFromInventoryToStash(stackSlot.Character, stackSlot.ItemGroup);
+                Debug.Log($"[EquipPrompt] Stash clicked for {item.Name} qty={clampedQuantity}");
+                TransferStackFromInventoryToStash(stackSlot.Character, stackSlot.ItemGroup, clampedQuantity);
                 HideEquipOrStashPrompt();
             });
         }
@@ -1324,17 +1611,59 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (_equipOrStashCancelButton != null)
         {
             _equipOrStashCancelButton.onClick.RemoveAllListeners();
-            _equipOrStashCancelButton.onClick.AddListener(HideEquipOrStashPrompt);
+            _equipOrStashCancelButton.onClick.AddListener(() =>
+            {
+                Debug.Log("[EquipPrompt] Cancel clicked");
+                HideEquipOrStashPrompt();
+            });
         }
 
         _equipOrStashPromptRoot.SetActive(true);
-        Debug.Log("[Prompt] Showing equip-or-stash prompt");
+        Debug.Log($"[Prompt] Showing equip-or-stash prompt for {item.Name} (qty={clampedQuantity})");
+    }
+
+    private void ShowStackQuantityPrompt(ItemStackGroup stack, Action<int> onConfirm)
+    {
+        if (stack == null || stack.Quantity <= 1 || _stackQuantityPromptRoot == null)
+        {
+            onConfirm?.Invoke(1);
+            return;
+        }
+
+        _pendingQuantityConfirm = onConfirm;
+
+        if (_stackQuantityItemText != null)
+            _stackQuantityItemText.text = $"{stack.Prototype?.Name ?? "Item"} (×{stack.Quantity} available)";
+
+        if (_stackQuantitySlider != null)
+        {
+            _stackQuantitySlider.minValue = 1;
+            _stackQuantitySlider.maxValue = stack.Quantity;
+            _stackQuantitySlider.value = stack.Quantity;
+        }
+
+        if (_stackQuantityInput != null)
+        {
+            _syncingQuantityControls = true;
+            _stackQuantityInput.text = stack.Quantity.ToString();
+            _syncingQuantityControls = false;
+        }
+
+        _stackQuantityPromptRoot.SetActive(true);
+        Debug.Log($"[QuantityPrompt] Showing prompt for {stack.Prototype?.Name ?? "item"} stackSize={stack.Quantity}");
     }
 
     private void HideEquipOrStashPrompt()
     {
         if (_equipOrStashPromptRoot != null)
             _equipOrStashPromptRoot.SetActive(false);
+    }
+
+    private void HideStackQuantityPrompt()
+    {
+        _pendingQuantityConfirm = null;
+        if (_stackQuantityPromptRoot != null)
+            _stackQuantityPromptRoot.SetActive(false);
     }
 
     private void BuildDragPreview()
@@ -1852,6 +2181,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         DropTarget target = slotGO.AddComponent<DropTarget>();
         target.Init(this, () => slotRef, background, background != null ? background.color : EquipmentSlotEmptyColor);
         _dropTargets.Add(target);
+        Debug.Log($"[EquipSlot] Created {slot} with DropTarget (raycast={(background != null && background.raycastTarget)})");
     }
 
     private void BuildInventorySlots(CharacterController character, Inventory inv)
@@ -2054,6 +2384,7 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         HideContextMenu();
         HideEquipOrStashPrompt();
+        HideStackQuantityPrompt();
         ShowDragPreview(manager.DragItem);
         UpdateDropTargetHighlights();
         Debug.Log($"[Drag] Preview shown for {manager.DragItem.Name}");
@@ -2134,21 +2465,50 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         if (slot.Container == SlotContainerType.Stash)
         {
-            TransferStackFromStashToSelectedCharacter(slot.ItemGroup);
+            if (slot.ItemGroup != null && slot.ItemGroup.Quantity > 1)
+            {
+                ShowStackQuantityPrompt(slot.ItemGroup, quantity =>
+                {
+                    Debug.Log($"[QuantityPrompt] Moving {quantity}/{slot.ItemGroup.Quantity} from stash to character");
+                    TransferStackFromStashToSelectedCharacter(slot.ItemGroup, quantity);
+                });
+            }
+            else
+            {
+                TransferStackFromStashToSelectedCharacter(slot.ItemGroup, 1);
+            }
+
             return;
         }
 
         if (slot.Container == SlotContainerType.InventoryStack)
         {
-            if (CanItemBeEquipped(slot.Character, item))
+            bool canEquip = CanItemBeEquipped(slot.Character, item);
+            int stackQty = slot.ItemGroup != null ? slot.ItemGroup.Quantity : 1;
+
+            if (stackQty > 1)
+            {
+                ShowStackQuantityPrompt(slot.ItemGroup, quantity =>
+                {
+                    Debug.Log($"[QuantityPrompt] Selected quantity {quantity}/{stackQty} for {item.Name}");
+                    if (canEquip)
+                        ShowEquipOrStashPrompt(slot, item, quantity);
+                    else
+                        TransferStackFromInventoryToStash(slot.Character, slot.ItemGroup, quantity);
+                });
+
+                return;
+            }
+
+            if (canEquip)
             {
                 Debug.Log($"[InvClick] {item.Name} can be equipped. Prompting equip/stash.");
-                ShowEquipOrStashPrompt(slot, item);
+                ShowEquipOrStashPrompt(slot, item, 1);
             }
             else
             {
-                Debug.Log($"[InvClick] {item.Name} cannot be equipped. Moving stack to stash.");
-                TransferStackFromInventoryToStash(slot.Character, slot.ItemGroup);
+                Debug.Log($"[InvClick] {item.Name} cannot be equipped. Moving to stash.");
+                TransferStackFromInventoryToStash(slot.Character, slot.ItemGroup, 1);
             }
         }
     }
@@ -2201,7 +2561,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         RefreshAll();
     }
 
-    private void TransferStackFromStashToSelectedCharacter(ItemStackGroup stack)
+    private void TransferStackFromStashToSelectedCharacter(ItemStackGroup stack, int quantity)
     {
         if (stack == null || stack.Quantity <= 0)
             return;
@@ -2226,12 +2586,16 @@ public class PreCombatInventoryUI : MonoBehaviour
             return;
         }
 
+        int targetQuantity = Mathf.Clamp(quantity, 1, stack.Quantity);
         int moved = 0;
         List<ItemData> toMove = new List<ItemData>(stack.Instances);
         foreach (ItemData stackItem in toMove)
         {
             if (stackItem == null)
                 continue;
+
+            if (moved >= targetQuantity)
+                break;
 
             if (!_stash.RemoveItem(stackItem))
                 continue;
@@ -2246,7 +2610,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
 
         string stackName = stack.Prototype != null ? stack.Prototype.Name : "item";
-        Debug.Log($"[StashClick] Moving {stackName} x{moved} from stash to {selected.Stats.CharacterName}");
+        Debug.Log($"[Transfer] Moved {moved}/{targetQuantity} {stackName} from stash to {selected.Stats.CharacterName}");
         ShowMessage(moved > 0
             ? $"Moved {moved}× {stackName} to {selected.Stats.CharacterName}."
             : "Backpack is full.",
@@ -2254,7 +2618,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         RefreshAll();
     }
 
-    private void TransferStackFromInventoryToStash(CharacterController owner, ItemStackGroup stack)
+    private void TransferStackFromInventoryToStash(CharacterController owner, ItemStackGroup stack, int quantity)
     {
         if (owner == null || stack == null || stack.Quantity <= 0)
             return;
@@ -2272,12 +2636,16 @@ public class PreCombatInventoryUI : MonoBehaviour
             return;
         }
 
+        int targetQuantity = Mathf.Clamp(quantity, 1, stack.Quantity);
         int moved = 0;
         List<ItemData> toMove = new List<ItemData>(stack.Instances);
         foreach (ItemData stackItem in toMove)
         {
             if (stackItem == null)
                 continue;
+
+            if (moved >= targetQuantity)
+                break;
 
             if (!inv.RemoveItem(stackItem))
                 continue;
@@ -2292,7 +2660,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
 
         string stackName = stack.Prototype != null ? stack.Prototype.Name : "item";
-        Debug.Log($"[MoveToStash] Moving {stackName} x{moved} from {owner.Stats.CharacterName} to stash");
+        Debug.Log($"[Transfer] Moved {moved}/{targetQuantity} {stackName} from {owner.Stats.CharacterName} to stash");
         ShowMessage(moved > 0
             ? $"Moved {moved}× {stackName} to stash."
             : "Transfer failed.",
@@ -2311,13 +2679,10 @@ public class PreCombatInventoryUI : MonoBehaviour
                 ? eventData.pointerDrag.GetComponent<DraggableItem>()
                 : null;
             if (draggedComponent == null)
-            {
-                Debug.LogWarning("[Drop] OnDrop called but pointerDrag has no DraggableItem.");
-                return;
-            }
+                Debug.LogWarning("[Drop] OnDrop pointerDrag had no DraggableItem; continuing with drag manager state.");
         }
 
-        Debug.Log($"[Drop] OnDrop: {_dragDropManager.DragItem.Name} -> {target.Slot?.Container}");
+        Debug.Log($"[Drop] OnDrop: {_dragDropManager.DragItem.Name} -> {target.Slot?.Container} {(target.Slot != null && target.Slot.Container == SlotContainerType.Equipment ? target.Slot.EquipSlot.ToString() : string.Empty)}");
 
         SlotRef source = _dragDropManager.DragSource;
         SlotRef destination = target.Slot;
@@ -2693,13 +3058,35 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (source.Container == SlotContainerType.InventoryStack)
         {
             Inventory sourceInv = GetInventory(source.Character);
-            if (sourceInv == null || !sourceInv.RemoveItem(item))
+            if (sourceInv == null)
+            {
+                feedback = "Source backpack unavailable.";
+                return false;
+            }
+
+            // Same-character stack drag: equip directly from the real inventory index.
+            if (sourceInv == inv)
+            {
+                int localSourceIndex = FindFirstIndexOfReference(inv.GeneralSlots, item);
+                Debug.Log($"[EquipDrop] Same inventory stack equip attempt | item={item.Name} | slot={targetSlot} | index={localSourceIndex}");
+                if (localSourceIndex < 0 || !inv.EquipFromInventory(localSourceIndex, targetSlot))
+                {
+                    feedback = "Cannot equip item into that slot.";
+                    return false;
+                }
+
+                feedback = $"Equipped {item.Name} to {GetEquipSlotLabel(targetSlot)}.";
+                return true;
+            }
+
+            // Cross-character stack drag: transfer one item into target backpack, then equip.
+            if (!sourceInv.RemoveItem(item))
             {
                 feedback = "Could not remove source item from backpack stack.";
                 return false;
             }
 
-            if (sourceInv != inv && !inv.AddItem(item))
+            if (!inv.AddItem(item))
             {
                 sourceInv.AddItem(item);
                 feedback = "Target backpack is full.";
@@ -2707,6 +3094,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             }
 
             int sourceIndex = FindFirstIndexOfReference(inv.GeneralSlots, item);
+            Debug.Log($"[EquipDrop] Cross inventory stack equip | item={item.Name} | slot={targetSlot} | index={sourceIndex}");
             if (sourceIndex < 0 || !inv.EquipFromInventory(sourceIndex, targetSlot))
             {
                 inv.RemoveItem(item);
@@ -3049,7 +3437,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             {
                 if (slot.Container == SlotContainerType.InventoryStack)
                 {
-                    TransferStackFromInventoryToStash(slot.Character, slot.ItemGroup);
+                    TransferStackFromInventoryToStash(slot.Character, slot.ItemGroup, slot.ItemGroup != null ? slot.ItemGroup.Quantity : 1);
                     return;
                 }
 
