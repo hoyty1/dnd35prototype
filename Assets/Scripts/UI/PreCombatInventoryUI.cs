@@ -15,8 +15,14 @@ public class PreCombatInventoryUI : MonoBehaviour
     private const int InventoryGridColumns = 6;
     private const float SlotSize = 60f;
     private const float SlotSpacing = 8f;
-    private const int MinStashColumns = 4;
-    private const int MaxStashColumns = 10;
+
+    // Window layout split: 30% stash (left) / 70% character management (right).
+    private const float StashWidthRatio = 0.30f;
+    private const float DividerAnchorX = 0.30f;
+    private const float CharacterSectionStartRatio = 0.30f;
+
+    private const int MinStashColumns = 3;
+    private const int MaxStashColumns = 8;
 
     private enum SlotContainerType
     {
@@ -283,6 +289,8 @@ public class PreCombatInventoryUI : MonoBehaviour
     private GridLayoutGroup _inventoryGridLayout;
     private ResizableWindow _resizableWindow;
 
+    private int _lastLoggedStashColumns = -1;
+
     private Text _stashStatusText;
     private Text _stashInfoText;
     private Text _characterHeaderText;
@@ -483,8 +491,8 @@ public class PreCombatInventoryUI : MonoBehaviour
         GameObject divider = CreatePanel(
             contentRootRt,
             "PanelDivider",
-            new Vector2(0.6f, 0f),
-            new Vector2(0.6f, 1f),
+            new Vector2(DividerAnchorX, 0f),
+            new Vector2(DividerAnchorX, 1f),
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
             new Vector2(2f, 0f),
@@ -494,7 +502,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         GameObject characterRoot = CreatePanel(
             contentRootRt,
             "CharacterPanel",
-            new Vector2(0.61f, 0f),
+            new Vector2(CharacterSectionStartRatio, 0f),
             new Vector2(1f, 1f),
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
@@ -508,6 +516,8 @@ public class PreCombatInventoryUI : MonoBehaviour
         BuildContextMenu();
         BuildDragPreview();
         BuildWindowResizeBehavior();
+
+        Debug.Log($"[PreCombatUI] Layout split: Stash {StashWidthRatio * 100f:0}% | Character {(1f - StashWidthRatio) * 100f:0}%");
 
         ReflowResponsiveLayout();
         _panel.SetActive(false);
@@ -591,12 +601,15 @@ public class PreCombatInventoryUI : MonoBehaviour
 
     private void BuildWindowResizeBehavior()
     {
+        const float minWindowWidth = 1000f;
+        const float minWindowHeight = 600f;
+
         _resizableWindow = _panel.AddComponent<ResizableWindow>();
         _resizableWindow.WindowRect = _panelRect;
-        _resizableWindow.MinSize = new Vector2(800f, 600f);
+        _resizableWindow.MinSize = new Vector2(minWindowWidth, minWindowHeight);
         _resizableWindow.MaxSize = new Vector2(
-            Mathf.Max(800f, Screen.width - 100f),
-            Mathf.Max(600f, Screen.height - 100f));
+            Mathf.Max(minWindowWidth, Screen.width - 100f),
+            Mathf.Max(minWindowHeight, Screen.height - 100f));
         _resizableWindow.PersistenceKey = "ui_window_precombat_inventory";
         _resizableWindow.SavePositionToPlayerPrefs = true;
         _resizableWindow.SaveSizeToPlayerPrefs = true;
@@ -639,7 +652,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             parent,
             "StashSection",
             new Vector2(0f, 0f),
-            new Vector2(0.595f, 1f),
+            new Vector2(StashWidthRatio, 1f),
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
             Vector2.zero,
@@ -726,7 +739,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         _stashGridLayout.spacing = new Vector2(SlotSpacing, SlotSpacing);
         _stashGridLayout.padding = new RectOffset(6, 6, 6, 6);
         _stashGridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        _stashGridLayout.constraintCount = 7;
+        _stashGridLayout.constraintCount = 5;
         _stashGridLayout.childAlignment = TextAnchor.UpperLeft;
 
         ContentSizeFitter fitter = _stashContent.gameObject.AddComponent<ContentSizeFitter>();
@@ -1116,7 +1129,7 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         float viewportWidth = _stashViewportRect != null && _stashViewportRect.rect.width > 0f
             ? _stashViewportRect.rect.width
-            : (_panelRect != null ? _panelRect.rect.width * 0.56f : 720f);
+            : (_panelRect != null ? _panelRect.rect.width * StashWidthRatio : 720f);
 
         float cellPlusSpacing = SlotSize + SlotSpacing;
         int columns = Mathf.FloorToInt((viewportWidth + SlotSpacing) / Mathf.Max(1f, cellPlusSpacing));
@@ -1124,6 +1137,15 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         _stashGridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         _stashGridLayout.constraintCount = columns;
+
+        if (_lastLoggedStashColumns != columns)
+        {
+            float panelWidth = _panelRect != null ? _panelRect.rect.width : 0f;
+            float characterWidth = Mathf.Max(0f, panelWidth * (1f - CharacterSectionStartRatio));
+            Debug.Log($"[PreCombatUI] Stash width: {viewportWidth:0}px | Columns: {columns}");
+            Debug.Log($"[PreCombatUI] Character width: {characterWidth:0}px");
+            _lastLoggedStashColumns = columns;
+        }
     }
 
     private void RefreshAll()
