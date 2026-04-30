@@ -129,6 +129,9 @@ public partial class GameManager : MonoBehaviour
     public int TotalLootItemsCollected { get; private set; }
     public int TotalEncounterXPDefeated { get; private set; }
 
+    // Defeated enemy tracking for end-of-combat XP award display.
+    private readonly List<CharacterController> _defeatedEnemiesThisCombat = new List<CharacterController>();
+
     // D&D timing: 1 in-game day = 14,400 rounds.
     private const int RoundsPerDay = 14400;
 
@@ -5197,8 +5200,47 @@ public partial class GameManager : MonoBehaviour
         return string.Join("; ", entries);
     }
 
+    private void RegisterDefeatedEnemyForXP(CharacterController character, string sourceContext)
+    {
+        if (character == null || character.Stats == null)
+            return;
+
+        if (character.Team != CharacterTeam.Enemy)
+            return;
+
+        bool countsAsDefeated = character.Stats.CurrentHP <= 0 && !HasRegenerationOrFastHealing(character, logMatches: false);
+        if (!countsAsDefeated)
+            return;
+
+        if (_defeatedEnemiesThisCombat.Contains(character))
+            return;
+
+        _defeatedEnemiesThisCombat.Add(character);
+        string enemyName = string.IsNullOrWhiteSpace(character.Stats.CharacterName) ? "Unknown Enemy" : character.Stats.CharacterName;
+        string cr = string.IsNullOrWhiteSpace(character.Stats.ChallengeRating) ? "—" : character.Stats.ChallengeRatingDisplay;
+        Debug.Log($"[Combat] Enemy defeated tracked: {enemyName} (CR {cr}) | source={sourceContext}");
+    }
+
+    private void CaptureDefeatedEnemiesSnapshotForXP(string sourceContext)
+    {
+        if (NPCs == null)
+            return;
+
+        for (int i = 0; i < NPCs.Count; i++)
+            RegisterDefeatedEnemyForXP(NPCs[i], sourceContext);
+
+        Debug.Log($"[XP] Defeated enemy snapshot captured | source={sourceContext} | tracked={_defeatedEnemiesThisCombat.Count}");
+    }
+
+    public List<CharacterController> GetDefeatedEnemiesForXP()
+    {
+        return new List<CharacterController>(_defeatedEnemiesThisCombat);
+    }
+
     private bool CheckCombatVictory(string sourceContext, CharacterController defeatedTarget = null)
     {
+        RegisterDefeatedEnemyForXP(defeatedTarget, sourceContext);
+
         string targetName = defeatedTarget != null && defeatedTarget.Stats != null ? defeatedTarget.Stats.CharacterName : "<none>";
         Debug.Log($"[VictoryCheck] ENTER | source={sourceContext} | frame={Time.frameCount} | phase={CurrentPhase} | target={targetName} | targetDead={(defeatedTarget != null && defeatedTarget.Stats != null && defeatedTarget.Stats.IsDead)}");
 
@@ -5248,6 +5290,8 @@ public partial class GameManager : MonoBehaviour
             Debug.LogWarning("[LootUI] LootCollectionUI reference is null before BeginPostCombatLootCollection. Initialization will be attempted.");
         if (PartyStash == null)
             Debug.LogWarning("[LootFlow] PartyStash is null before BeginPostCombatLootCollection. Initialization will be attempted.");
+
+        CaptureDefeatedEnemiesSnapshotForXP($"{sourceContext}.Victory");
 
         Debug.Log($"[CombatEnd] Triggering post-combat loot collection | source={sourceContext} | waitingBefore={WaitingForLootCollection}");
         BeginPostCombatLootCollection();
@@ -5323,6 +5367,8 @@ public partial class GameManager : MonoBehaviour
 
         WaitingForPreCombatInventory = false;
         ResetPostCombatLootCollectionState("StartCombat");
+        _defeatedEnemiesThisCombat.Clear();
+        Debug.Log("[XP] Cleared defeated enemy tracker for new combat.");
 
         if (PreCombatInventoryUI != null && PreCombatInventoryUI.IsOpen)
         {

@@ -71,12 +71,67 @@ public partial class GameManager
                 else
                     CombatUI?.ShowCombatLog("📦 Loot window closed. Party stash unlocked.");
 
-                Debug.Log($"[LootFlow] Transitioning from loot to encounter selection | lootedCount={lootedCount} | waitingLoot={WaitingForLootCollection} | phase={CurrentPhase} | subPhase={CurrentSubPhase}");
-                RegisterCombatLoopCompletion(lootedCount);
-                RestorePartyAfterCombat();
-                ReturnToEncounterSelection();
+                Debug.Log($"[LootFlow] Transitioning from loot to XP flow | lootedCount={lootedCount} | waitingLoot={WaitingForLootCollection} | phase={CurrentPhase} | subPhase={CurrentSubPhase}");
+                ShowPostCombatXPFlow(lootedCount);
             },
             onExitLoop: ExitCombatLoopToMenu);
+    }
+
+    private void ShowPostCombatXPFlow(int lootedCount)
+    {
+        RegisterCombatLoopCompletion(lootedCount);
+
+        CaptureDefeatedEnemiesSnapshotForXP("PostLoot.XPFlow");
+
+        List<CharacterController> partyMembers = new List<CharacterController>();
+        if (PCs != null)
+        {
+            for (int i = 0; i < PCs.Count; i++)
+            {
+                CharacterController pc = PCs[i];
+                if (pc == null || pc.Stats == null || !IsActiveCombatant(pc))
+                    continue;
+
+                partyMembers.Add(pc);
+            }
+        }
+
+        List<CharacterController> defeatedEnemies = GetDefeatedEnemiesForXP();
+        Debug.Log($"[XP] Preparing post-combat XP flow | party={partyMembers.Count} | defeatedTracked={defeatedEnemies.Count}");
+
+        if (partyMembers.Count == 0 || defeatedEnemies.Count == 0)
+        {
+            Debug.Log("[XP] Skipping XP UI because party or defeated-enemy list is empty.");
+            RestorePartyAfterCombat();
+            ReturnToEncounterSelection();
+            return;
+        }
+
+        ExperienceCalculator.CombatXPResult xpResult = ExperienceCalculator.Instance.CalculateXPForCombat(partyMembers, defeatedEnemies);
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            Debug.LogWarning("[XP UI] No canvas found for XP display. Continuing without XP panel.");
+            RestorePartyAfterCombat();
+            ReturnToEncounterSelection();
+            return;
+        }
+
+        CombatEndXPUI xpUi = canvas.GetComponentInChildren<CombatEndXPUI>(true);
+        if (xpUi == null)
+        {
+            GameObject uiObj = new GameObject("CombatEndXPUI");
+            uiObj.transform.SetParent(canvas.transform, false);
+            xpUi = uiObj.AddComponent<CombatEndXPUI>();
+        }
+
+        xpUi.ShowXPAwards(xpResult, () =>
+        {
+            Debug.Log("[XP UI] XP panel complete. Restoring party and returning to encounter selection.");
+            RestorePartyAfterCombat();
+            ReturnToEncounterSelection();
+        });
     }
 
     private void EnsureLootCollectionUIInitialized()

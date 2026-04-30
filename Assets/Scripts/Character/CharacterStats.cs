@@ -84,6 +84,10 @@ public class CharacterStats
     // ========== IDENTITY ==========
     public string CharacterName;
     public int Level;
+
+    [Header("Experience")]
+    public int ExperiencePoints = 0;
+
     public string CharacterClass; // e.g., "Fighter", "Rogue", "Warrior"
     public string SourceNpcDefinitionId;
 
@@ -1711,6 +1715,84 @@ public class CharacterStats
 
         // Auto-grant feats based on class
         InitFeats();
+    }
+
+    public void AddExperience(int xp)
+    {
+        int gain = Mathf.Max(0, xp);
+        if (gain <= 0)
+            return;
+
+        int oldXp = ExperiencePoints;
+        int oldLevel = Mathf.Max(1, Level);
+
+        ExperiencePoints += gain;
+        Debug.Log($"[XP] {CharacterName} gained {gain} XP (Total: {ExperiencePoints})");
+
+        int newLevel = CalculateLevelFromXP(ExperiencePoints);
+        if (newLevel > oldLevel)
+        {
+            Level = newLevel;
+            OnLevelUp(oldLevel, newLevel);
+        }
+
+        if (newLevel < oldLevel)
+            Level = oldLevel;
+
+        Debug.Log($"[XP] {CharacterName}: {oldXp} → {ExperiencePoints} XP (Level {oldLevel} → {Level})");
+    }
+
+    public int CalculateLevelFromXP(int xp)
+    {
+        int safeXp = Mathf.Max(0, xp);
+        for (int level = 20; level >= 1; level--)
+        {
+            if (safeXp >= ExperienceCalculator.GetXPForLevel(level))
+                return level;
+        }
+
+        return 1;
+    }
+
+    private void OnLevelUp(int oldLevel, int newLevel)
+    {
+        Debug.Log($"[LevelUp] ⭐ {CharacterName} leveled up! {oldLevel} → {newLevel} ⭐");
+
+        int levelsGained = Mathf.Max(1, newLevel - oldLevel);
+        int totalHpGain = 0;
+        int hitDieSize = GetClassHitDieSizeForLevelUp();
+
+        for (int i = 0; i < levelsGained; i++)
+        {
+            int hpGain = UnityEngine.Random.Range(1, hitDieSize + 1) + CONMod;
+            hpGain = Mathf.Max(1, hpGain);
+            totalHpGain += hpGain;
+        }
+
+        MaxHP += totalHpGain;
+        CurrentHP = Mathf.Min(TotalMaxHP, CurrentHP + totalHpGain);
+
+        Debug.Log($"[LevelUp] HP increased by {totalHpGain} (now {MaxHP}, current {CurrentHP})");
+        Debug.Log("[LevelUp] TODO: implement class progression increases (BAB, saves, spells, feats, skills).");
+    }
+
+    private int GetClassHitDieSizeForLevelUp()
+    {
+        switch (CharacterClass)
+        {
+            case "Barbarian": return 12;
+            case "Fighter":
+            case "Paladin":
+            case "Ranger": return 10;
+            case "Cleric":
+            case "Druid":
+            case "Monk":
+            case "Rogue":
+            case "Bard": return 8;
+            case "Wizard":
+            case "Sorcerer": return 4;
+            default: return 8;
+        }
     }
 
     private bool IsValidNaturalAttack(NaturalAttackDefinition attack)
