@@ -1575,7 +1575,8 @@ public class CharacterStats
         }
     }
 
-    public bool IsDead => CurrentHP <= -10;
+    // Combat-resolution semantics: treat HP <= 0 as down/defeated.
+    public bool IsDead => CurrentHP <= 0;
 
     // ========== CONSTRUCTOR ==========
 

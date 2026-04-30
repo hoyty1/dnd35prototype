@@ -4996,9 +4996,50 @@ public partial class GameManager : MonoBehaviour
         return c != null && c.gameObject != null && c.gameObject.activeInHierarchy && c.Stats != null;
     }
 
-    /// <summary>Check if all hostile (enemy-team) combatants are dead.</summary>
+    private bool HasRegenerationOrFastHealing(CharacterController npc, bool logMatches = true)
+    {
+        if (npc == null || npc.Stats == null)
+            return false;
+
+        CharacterStats stats = npc.Stats;
+        string npcName = string.IsNullOrWhiteSpace(stats.CharacterName) ? npc.name : stats.CharacterName;
+
+        if (npc.HasRegeneration)
+        {
+            if (logMatches)
+                Debug.Log($"[VictoryCheck] {npcName} can recover (innate regeneration configured).");
+            return true;
+        }
+
+        if (stats.SpecialAbilities != null)
+        {
+            for (int i = 0; i < stats.SpecialAbilities.Count; i++)
+            {
+                string ability = stats.SpecialAbilities[i];
+                if (string.IsNullOrWhiteSpace(ability))
+                    continue;
+
+                string normalized = ability.Trim().ToLowerInvariant();
+                if (normalized.Contains("regeneration") || normalized.Contains("fast healing"))
+                {
+                    if (logMatches)
+                        Debug.Log($"[VictoryCheck] {npcName} can recover via trait '{ability}'.");
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Check if all hostile (enemy-team) combatants are defeated for combat-resolution purposes.
+    /// D&D 3.5e handling: HP <= 0 counts as down/defeated unless the target has regeneration/fast healing and can recover.
+    /// </summary>
     private bool AreAllNPCsDead()
     {
+        Debug.Log("[VictoryCheck] Checking if all enemies are defeated (HP <= 0 unless recoverable).");
+
         if (NPCs == null)
         {
             Debug.Log("[VictoryCheck] AreAllNPCsDead called with null NPC list. Treating as victory-safe true.");
@@ -5011,7 +5052,6 @@ public partial class GameManager : MonoBehaviour
             CharacterController npc = NPCs[i];
             bool active = IsActiveCombatant(npc);
             bool isEnemy = active && npc.Team == CharacterTeam.Enemy;
-            bool isDead = active && npc.Stats != null && npc.Stats.IsDead;
             string npcName = npc != null && npc.Stats != null ? npc.Stats.CharacterName : $"<npc:{i}>";
 
             if (!active || !isEnemy)
@@ -5020,14 +5060,25 @@ public partial class GameManager : MonoBehaviour
                 continue;
             }
 
-            if (!isDead)
+            int hp = npc.Stats.CurrentHP;
+            bool atZeroOrBelow = hp <= 0;
+            bool canRecover = HasRegenerationOrFastHealing(npc);
+            bool isDefeated = atZeroOrBelow && !canRecover;
+
+            Debug.Log($"[VictoryCheck] Enemy #{i}: {npcName} | hp={hp} | atOrBelowZero={atZeroOrBelow} | canRecover={canRecover} | countsAsAlive={!isDefeated}");
+
+            if (!isDefeated)
             {
                 aliveEnemies++;
-                Debug.Log($"[VictoryCheck] Enemy still alive | idx={i} | name={npcName} | hp={npc.Stats.CurrentHP}");
+
+                if (atZeroOrBelow && canRecover)
+                    Debug.Log($"[VictoryCheck] {npcName} is down but can recover; still counted as alive.");
+                else
+                    Debug.Log($"[VictoryCheck] {npcName} is still fighting.");
             }
             else
             {
-                Debug.Log($"[VictoryCheck] Enemy dead | idx={i} | name={npcName} | hp={npc.Stats.CurrentHP}");
+                Debug.Log($"[VictoryCheck] {npcName} is defeated for victory checks.");
             }
         }
 
@@ -5058,9 +5109,18 @@ public partial class GameManager : MonoBehaviour
         int count = 0;
         foreach (var npc in NPCs)
         {
-            if (!IsActiveCombatant(npc)) continue;
-            if (npc.Team != CharacterTeam.Enemy) continue;
-            if (!npc.Stats.IsDead) count++;
+            if (!IsActiveCombatant(npc))
+                continue;
+
+            if (npc.Team != CharacterTeam.Enemy)
+                continue;
+
+            bool atZeroOrBelow = npc.Stats.CurrentHP <= 0;
+            bool canRecover = HasRegenerationOrFastHealing(npc, logMatches: false);
+            bool isDefeated = atZeroOrBelow && !canRecover;
+
+            if (!isDefeated)
+                count++;
         }
 
         Debug.Log($"[VictoryCheck] GetAliveNPCCount -> {count} | snapshot={BuildEnemyStatusSnapshot()}");
@@ -5087,7 +5147,9 @@ public partial class GameManager : MonoBehaviour
             bool enemy = npc.Team == CharacterTeam.Enemy;
             int hp = npc.Stats != null ? npc.Stats.CurrentHP : 0;
             bool dead = npc.Stats != null && npc.Stats.IsDead;
-            entries.Add($"#{i}:{name}[active={active},enemy={enemy},dead={dead},hp={hp}]");
+            bool canRecover = HasRegenerationOrFastHealing(npc, logMatches: false);
+            bool defeatedForVictory = hp <= 0 && !canRecover;
+            entries.Add($"#{i}:{name}[active={active},enemy={enemy},dead={dead},hp={hp},canRecover={canRecover},defeatedForVictory={defeatedForVictory}]");
         }
 
         return string.Join("; ", entries);
