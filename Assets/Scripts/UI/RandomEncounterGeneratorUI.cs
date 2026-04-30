@@ -420,7 +420,7 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         previewRect.anchorMax = new Vector2(1f, 1f);
         previewRect.offsetMin = new Vector2(2f, 2f);
         previewRect.offsetMax = new Vector2(-2f, -2f);
-        _previewText.verticalOverflow = VerticalWrapMode.Truncate;
+        _previewText.verticalOverflow = VerticalWrapMode.Overflow;
     }
 
     private void CreateActionButtonsSection(Transform parent)
@@ -533,26 +533,36 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
 
     private void OnGenerateEncounterPressed()
     {
+        GenerateEncounter();
+    }
+
+    private void OnGenerateAgainPressed()
+    {
+        GenerateEncounter();
+    }
+
+    private void GenerateEncounter()
+    {
         RandomEncounterRequest request = BuildRequestFromUI();
+        Debug.Log($"[RandomEncounterGeneratorUI] GenerateEncounter pressed | difficulty={request.Difficulty} | apl={_apl} | env='{request.EnvironmentFilter}' | type='{request.CreatureTypeFilter}' | min={request.MinCreatures?.ToString() ?? "-"} | max={request.MaxCreatures?.ToString() ?? "-"}");
+
         RandomEncounterSystem generator = new RandomEncounterSystem();
         _lastGeneratedEncounter = generator.Generate(request);
 
         if (_lastGeneratedEncounter == null)
         {
-            _previewText.text = "No valid encounter found for current filters.\nTry loosening filters or creature count limits.";
-            AdjustPreviewSectionHeight();
+            Debug.LogWarning("[RandomEncounterGeneratorUI] GenerateEncounter returned null encounter.");
+            UpdatePreviewText("No valid encounter found for current filters.\nTry loosening filters or creature count limits.");
             UpdateActionButtonState();
             return;
         }
 
-        _previewText.text = BuildDetailedPreview(_lastGeneratedEncounter);
-        AdjustPreviewSectionHeight();
-        UpdateActionButtonState();
-    }
+        int npcCount = _lastGeneratedEncounter.NpcIds != null ? _lastGeneratedEncounter.NpcIds.Count : 0;
+        int groupCount = _lastGeneratedEncounter.Groups != null ? _lastGeneratedEncounter.Groups.Count : 0;
+        Debug.Log($"[RandomEncounterGeneratorUI] Encounter generated | groups={groupCount} | npcIds={npcCount} | actualEl={ChallengeRatingUtils.Format(_lastGeneratedEncounter.ActualEL)} | targetEl={_lastGeneratedEncounter.TargetEL} | xp={_lastGeneratedEncounter.TotalXP} | strategy={_lastGeneratedEncounter.Strategy}");
 
-    private void OnGenerateAgainPressed()
-    {
-        OnGenerateEncounterPressed();
+        UpdatePreviewText(BuildDetailedPreview(_lastGeneratedEncounter));
+        UpdateActionButtonState();
     }
 
     private void OnStartEncounterPressed()
@@ -614,11 +624,32 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
 
     private void SetPreviewPlaceholder()
     {
-        if (_previewText != null)
+        UpdatePreviewText("No encounter generated yet.\n\nChoose a difficulty and click GENERATE ENCOUNTER.");
+    }
+
+    private void UpdatePreviewText(string text)
+    {
+        if (_previewText == null)
         {
-            _previewText.text = "No encounter generated yet.\n\nChoose a difficulty and click GENERATE ENCOUNTER.";
-            AdjustPreviewSectionHeight();
+            Debug.LogError("[RandomEncounterGeneratorUI] Preview text component is missing.");
+            return;
         }
+
+        if (_previewText.font == null)
+            _previewText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+        _previewText.enabled = true;
+        if (_previewText.gameObject != null)
+            _previewText.gameObject.SetActive(true);
+
+        Color previewColor = _previewText.color;
+        if (previewColor.a < 0.9f)
+            _previewText.color = new Color(previewColor.r, previewColor.g, previewColor.b, 1f);
+
+        _previewText.text = text ?? string.Empty;
+        Debug.Log($"[RandomEncounterGeneratorUI] Preview updated | chars={_previewText.text.Length} | active={_previewText.gameObject.activeInHierarchy} | enabled={_previewText.enabled}");
+
+        AdjustPreviewSectionHeight();
     }
 
     private void UpdateActionButtonState()
@@ -660,25 +691,77 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
 
     private static string BuildDetailedPreview(GeneratedRandomEncounter encounter)
     {
+        if (encounter == null)
+            return "No encounter generated.";
+
         StringBuilder sb = new StringBuilder();
-        sb.AppendLine($"<b>{encounter.BuildHeaderLine()}</b>");
+        sb.AppendLine($"<b>{encounter.Difficulty} Encounter (EL {ChallengeRatingUtils.Format(encounter.ActualEL)} vs APL {encounter.APL})</b>");
+        sb.AppendLine($"Difficulty: {BuildDifficultyStars(encounter.Difficulty)} {encounter.Difficulty}");
+        sb.AppendLine($"Strategy: {FormatStrategy(encounter.Strategy)}");
         sb.AppendLine();
         sb.AppendLine("Enemies:");
 
-        for (int i = 0; i < encounter.Groups.Count; i++)
+        List<RandomEncounterCreatureGroup> groups = encounter.Groups;
+        if (groups == null || groups.Count == 0)
         {
-            RandomEncounterCreatureGroup group = encounter.Groups[i];
-            sb.AppendLine($" • {group.Count}x {group.DisplayName} (CR {ChallengeRatingUtils.Format(group.ChallengeRatingValue)})");
+            sb.AppendLine("• (No creature groups returned)");
+        }
+        else
+        {
+            for (int i = 0; i < groups.Count; i++)
+            {
+                RandomEncounterCreatureGroup group = groups[i];
+                if (group == null)
+                    continue;
+
+                int count = Mathf.Max(1, group.Count);
+                string name = string.IsNullOrWhiteSpace(group.DisplayName) ? (group.NpcId ?? "Unknown Monster") : group.DisplayName;
+                string cr = ChallengeRatingUtils.Format(group.ChallengeRatingValue);
+                sb.AppendLine($"• {count} × {name} (CR {cr})");
+            }
         }
 
         sb.AppendLine();
-        sb.AppendLine($"Encounter Level (EL): {ChallengeRatingUtils.Format(encounter.ActualEL)}");
-        sb.AppendLine($"Target EL: {encounter.TargetEL}");
-        sb.AppendLine($"Total XP: {encounter.TotalXP}");
-        sb.AppendLine($"Difficulty Tier: {encounter.Difficulty}");
-        sb.AppendLine($"Strategy: {encounter.Strategy}");
-
+        sb.AppendLine($"Total: {Mathf.Max(0, encounter.TotalCreatureCount)} creatures");
+        sb.AppendLine($"EL: {ChallengeRatingUtils.Format(encounter.ActualEL)}");
+        sb.AppendLine($"XP: {encounter.TotalXP:N0}");
         return sb.ToString().TrimEnd();
+    }
+
+    private static string BuildDifficultyStars(RandomEncounterDifficulty difficulty)
+    {
+        switch (difficulty)
+        {
+            case RandomEncounterDifficulty.Easy:
+                return "⭐";
+            case RandomEncounterDifficulty.Average:
+                return "⭐⭐";
+            case RandomEncounterDifficulty.Challenging:
+                return "⭐⭐";
+            case RandomEncounterDifficulty.Hard:
+                return "⭐⭐⭐";
+            case RandomEncounterDifficulty.Epic:
+                return "⭐⭐⭐⭐";
+            default:
+                return "⭐";
+        }
+    }
+
+    private static string FormatStrategy(RandomEncounterStrategy strategy)
+    {
+        switch (strategy)
+        {
+            case RandomEncounterStrategy.SingleBoss:
+                return "Single Boss";
+            case RandomEncounterStrategy.EliteSquad:
+                return "Elite Squad";
+            case RandomEncounterStrategy.Swarm:
+                return "Swarm";
+            case RandomEncounterStrategy.MixedGroup:
+                return "Mixed Group";
+            default:
+                return strategy.ToString();
+        }
     }
 
     private GameObject CreateSectionPanel(Transform parent, string name, Color color, float preferredHeight)
