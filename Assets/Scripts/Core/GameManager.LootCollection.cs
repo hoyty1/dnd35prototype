@@ -141,14 +141,45 @@ public partial class GameManager
             return;
         }
 
+        Debug.Log($"[LootCollection] Gathering loot from battlefield | npcCount={NPCs.Count}");
+
         int defeatedEnemyCount = 0;
         int foundItemCount = 0;
+        HashSet<int> lootedEnemyIds = new HashSet<int>();
 
         for (int i = 0; i < NPCs.Count; i++)
         {
             CharacterController enemy = NPCs[i];
-            if (enemy == null || enemy.Stats == null || !enemy.Stats.IsDead)
+            if (enemy == null)
+            {
+                Debug.Log($"[Loot] Skipping NPC index {i}: null reference.");
                 continue;
+            }
+
+            var stats = enemy.Stats;
+            if (stats == null)
+            {
+                Debug.Log($"[Loot] Skipping '{enemy.name}': missing stats.");
+                continue;
+            }
+
+            bool isEnemy = enemy.Team == CharacterTeam.Enemy;
+            int hp = stats.CurrentHP;
+            bool isUnconscious = stats.IsUnconscious;
+            bool isDead = stats.IsDead;
+            bool willLoot = isEnemy && hp <= 0;
+
+            Debug.Log($"[Loot] Checking {stats.CharacterName}\n  - IsEnemy: {isEnemy}\n  - HP: {hp}\n  - IsUnconscious: {isUnconscious}\n  - IsDead: {isDead}\n  - Will Loot: {willLoot}");
+
+            if (!willLoot)
+                continue;
+
+            int enemyInstanceId = enemy.GetInstanceID();
+            if (!lootedEnemyIds.Add(enemyInstanceId))
+            {
+                Debug.Log($"[Loot] {stats.CharacterName} already processed for loot in this pass, skipping duplicate entry.");
+                continue;
+            }
 
             defeatedEnemyCount++;
 
@@ -159,8 +190,9 @@ public partial class GameManager
                 continue;
             }
 
-            string sourceLabel = $"From {enemy.Stats.CharacterName}";
-            string sourceGroupKey = $"enemy:{enemy.GetInstanceID()}";
+            string sourceLabel = $"From {stats.CharacterName}";
+            string sourceGroupKey = $"enemy:{enemyInstanceId}";
+            int enemyItemCount = 0;
 
             foreach (EquipSlot slot in Inventory.AllEquipmentSlots)
             {
@@ -168,25 +200,31 @@ public partial class GameManager
                 if (!IsValidLootItem(equipped))
                     continue;
 
+                enemyItemCount++;
                 foundItemCount++;
+                Debug.Log($"[Loot] + {equipped.Name} from {stats.CharacterName}'s equipment ({slot})");
                 AddLootInstance(ordered, sourceGroupKey, sourceLabel, equipped, LootCollectionUI.LootSourceType.Enemy, enemy, Vector2Int.zero);
             }
 
-            if (inventory.GeneralSlots == null)
-                continue;
-
-            for (int slotIndex = 0; slotIndex < inventory.GeneralSlots.Length; slotIndex++)
+            if (inventory.GeneralSlots != null)
             {
-                ItemData item = inventory.GeneralSlots[slotIndex];
-                if (!IsValidLootItem(item))
-                    continue;
+                for (int slotIndex = 0; slotIndex < inventory.GeneralSlots.Length; slotIndex++)
+                {
+                    ItemData item = inventory.GeneralSlots[slotIndex];
+                    if (!IsValidLootItem(item))
+                        continue;
 
-                foundItemCount++;
-                AddLootInstance(ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Enemy, enemy, Vector2Int.zero);
+                    enemyItemCount++;
+                    foundItemCount++;
+                    Debug.Log($"[Loot] + {item.Name} from {stats.CharacterName}'s inventory slot {slotIndex}");
+                    AddLootInstance(ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Enemy, enemy, Vector2Int.zero);
+                }
             }
+
+            Debug.Log($"[Loot] Collected {enemyItemCount} item(s) from {stats.CharacterName}");
         }
 
-        Debug.Log($"[LootFlow] GatherLootFromDefeatedEnemies complete | defeatedEnemies={defeatedEnemyCount} | itemInstances={foundItemCount}");
+        Debug.Log($"[LootCollection] GatherLootFromDefeatedEnemies complete | defeatedEnemies={defeatedEnemyCount} | itemInstances={foundItemCount}");
     }
 
     private void GatherLootFromGround(List<LootCollectionUI.LootStackEntry> ordered)
@@ -218,11 +256,12 @@ public partial class GameManager
                     continue;
 
                 foundGroundItemCount++;
+                Debug.Log($"[Loot] Collecting ground item: {item.Name} at ({kvp.Key.x},{kvp.Key.y})");
                 AddLootInstance(ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Ground, null, kvp.Key);
             }
         }
 
-        Debug.Log($"[LootFlow] GatherLootFromGround complete | occupiedCells={occupiedGroundCells} | itemInstances={foundGroundItemCount}");
+        Debug.Log($"[LootCollection] GatherLootFromGround complete | occupiedCells={occupiedGroundCells} | itemInstances={foundGroundItemCount}");
     }
 
     private void AddLootInstance(
