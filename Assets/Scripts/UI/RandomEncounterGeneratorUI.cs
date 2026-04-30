@@ -10,6 +10,8 @@ using UnityEngine.UI;
 public class RandomEncounterGeneratorUI : MonoBehaviour
 {
     private const int DefaultFontSize = 22;
+    private const float PreviewSectionMinHeight = 180f;
+    private const float PreviewSectionVerticalChrome = 74f;
 
     private sealed class OptionSelector
     {
@@ -397,7 +399,7 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
 
     private void CreatePreviewSection(Transform parent)
     {
-        GameObject section = CreateSectionPanel(parent, "PreviewSection", new Color(0.07f, 0.09f, 0.16f, 0.98f), 320f);
+        GameObject section = CreateSectionPanel(parent, "PreviewSection", new Color(0.07f, 0.09f, 0.16f, 0.98f), PreviewSectionMinHeight);
         _previewSectionLayout = section.GetComponent<LayoutElement>();
         CreateSectionTitle(section.transform, "5) ENCOUNTER PREVIEW", 22, TextAnchor.UpperLeft, new Color(0.95f, 0.86f, 0.45f, 1f));
 
@@ -420,7 +422,12 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         previewRect.anchorMax = new Vector2(1f, 1f);
         previewRect.offsetMin = new Vector2(2f, 2f);
         previewRect.offsetMax = new Vector2(-2f, -2f);
+        _previewText.resizeTextForBestFit = true;
+        _previewText.resizeTextMinSize = 16;
+        _previewText.resizeTextMaxSize = 20;
         _previewText.verticalOverflow = VerticalWrapMode.Overflow;
+
+        AdjustPreviewSectionHeight();
     }
 
     private void CreateActionButtonsSection(Transform parent)
@@ -670,14 +677,27 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         Canvas.ForceUpdateCanvases();
 
         float availableWidth = Mathf.Max(320f, _previewText.rectTransform.rect.width);
-        TextGenerationSettings settings = _previewText.GetGenerationSettings(new Vector2(availableWidth, 0f));
-        float preferredHeight = _previewText.cachedTextGeneratorForLayout.GetPreferredHeight(_previewText.text ?? string.Empty, settings) / _previewText.pixelsPerUnit;
+        float preferredTextHeight = LayoutUtility.GetPreferredHeight(_previewText.rectTransform);
 
-        float sectionHeight = Mathf.Clamp(preferredHeight + 74f, 220f, 520f);
+        if (preferredTextHeight <= 0f)
+        {
+            TextGenerationSettings settings = _previewText.GetGenerationSettings(new Vector2(availableWidth, 0f));
+            preferredTextHeight = _previewText.cachedTextGeneratorForLayout.GetPreferredHeight(_previewText.text ?? string.Empty, settings) / _previewText.pixelsPerUnit;
+        }
+
+        float sectionHeight = Mathf.Max(PreviewSectionMinHeight, preferredTextHeight + PreviewSectionVerticalChrome);
         _previewSectionLayout.minHeight = sectionHeight;
         _previewSectionLayout.preferredHeight = sectionHeight;
 
+        if (_previewText.rectTransform != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_previewText.rectTransform);
+
         RefreshMainLayout();
+
+        if (_mainScrollRect != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_mainScrollRect.content);
+
+        Debug.Log($"[RandomEncounterGeneratorUI] Preview layout rebuilt | chars={(_previewText.text ?? string.Empty).Length} | preferredTextHeight={preferredTextHeight:F1} | sectionHeight={sectionHeight:F1}");
     }
 
     private void RefreshMainLayout()
