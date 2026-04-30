@@ -14,7 +14,7 @@ public class PreCombatInventoryUI : MonoBehaviour
 {
     private const int InventoryGridColumns = 6;
     private const float SlotSize = 60f;
-    private const float SlotSpacing = 6f;
+    private const float SlotSpacing = 8f;
     private const int MinStashColumns = 4;
     private const int MaxStashColumns = 10;
 
@@ -677,6 +677,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         _stashGridLayout = _stashContent.gameObject.AddComponent<GridLayoutGroup>();
         _stashGridLayout.cellSize = new Vector2(SlotSize, SlotSize);
         _stashGridLayout.spacing = new Vector2(SlotSpacing, SlotSpacing);
+        _stashGridLayout.padding = new RectOffset(6, 6, 6, 6);
         _stashGridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         _stashGridLayout.constraintCount = 7;
         _stashGridLayout.childAlignment = TextAnchor.UpperLeft;
@@ -862,6 +863,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         _inventoryGridLayout = _inventoryContent.gameObject.AddComponent<GridLayoutGroup>();
         _inventoryGridLayout.cellSize = new Vector2(SlotSize, SlotSize);
         _inventoryGridLayout.spacing = new Vector2(SlotSpacing, SlotSpacing);
+        _inventoryGridLayout.padding = new RectOffset(6, 6, 6, 6);
         _inventoryGridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         _inventoryGridLayout.constraintCount = InventoryGridColumns;
         _inventoryGridLayout.childAlignment = TextAnchor.UpperLeft;
