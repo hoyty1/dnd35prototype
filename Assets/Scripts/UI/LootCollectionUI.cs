@@ -94,6 +94,7 @@ public class LootCollectionUI : MonoBehaviour
     private bool _isOpen;
     private int _lootedCount;
     private float _savedScrollPosition = 1f;
+    private int _openedFrame = -1;
 
     public bool IsOpen => _isOpen && _root != null && _root.activeSelf;
 
@@ -102,9 +103,14 @@ public class LootCollectionUI : MonoBehaviour
         Action<LootItemInstance, Action<bool>> onLootSingle,
         Action<int> onClosed)
     {
+        Debug.Log($"[LootUI] Open requested | incomingEntries={(entries != null ? entries.Count : 0)}");
+
         EnsureBuilt();
         if (_root == null)
+        {
+            Debug.LogError("[LootUI] Open aborted: _root was not built.");
             return;
+        }
 
         _onLootSingle = onLootSingle;
         _onClosed = onClosed;
@@ -128,8 +134,13 @@ public class LootCollectionUI : MonoBehaviour
             }
         }
 
+        _root.transform.SetAsLastSibling();
         _root.SetActive(true);
         _isOpen = true;
+        _openedFrame = Time.frameCount;
+
+        Debug.Log($"[LootUI] Opened | filteredEntries={_entries.Count} | rootActive={_root.activeSelf} | frame={_openedFrame}");
+
         RebuildContent();
         UpdateFooter();
         ShowStatus(_entries.Count == 0 ? "No loot found." : "Double-click an item to loot it to stash.", false);
@@ -137,6 +148,8 @@ public class LootCollectionUI : MonoBehaviour
 
     public void Close()
     {
+        Debug.Log($"[LootUI] Close requested | isOpen={_isOpen} | lootedCount={_lootedCount}");
+
         if (_root != null)
             _root.SetActive(false);
 
@@ -165,6 +178,21 @@ public class LootCollectionUI : MonoBehaviour
         }
     }
 
+    private void OnOverlayClicked()
+    {
+        if (!IsOpen)
+            return;
+
+        if (Time.frameCount <= _openedFrame + 1)
+        {
+            Debug.Log($"[LootUI] Ignoring overlay click on open frame | openFrame={_openedFrame} currentFrame={Time.frameCount}");
+            return;
+        }
+
+        Debug.Log("[LootUI] Overlay clicked; closing loot window.");
+        Close();
+    }
+
     private void EnsureBuilt()
     {
         if (_root != null)
@@ -179,6 +207,8 @@ public class LootCollectionUI : MonoBehaviour
             Debug.LogError("[LootCollectionUI] No Canvas found.");
             return;
         }
+
+        Debug.Log($"[LootUI] Building loot UI root on canvas '{canvas.name}'");
 
         _root = new GameObject("LootCollectionRoot", typeof(RectTransform), typeof(Image), typeof(CanvasGroup), typeof(Button));
         _root.transform.SetParent(canvas.transform, false);
@@ -198,7 +228,7 @@ public class LootCollectionUI : MonoBehaviour
 
         Button overlayButton = _root.GetComponent<Button>();
         overlayButton.transition = Selectable.Transition.None;
-        overlayButton.onClick.AddListener(Close); // Optional QoL: click outside closes.
+        overlayButton.onClick.AddListener(OnOverlayClicked); // Optional QoL: click outside closes.
 
         _dialog = CreatePanel(
             _root.transform,
@@ -292,6 +322,8 @@ public class LootCollectionUI : MonoBehaviour
 
         _root.SetActive(false);
         _isOpen = false;
+
+        Debug.Log("[LootUI] Build complete.");
     }
 
     private void BuildFooter()

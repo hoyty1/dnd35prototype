@@ -4767,6 +4767,8 @@ public partial class GameManager : MonoBehaviour
 
     private void OnCombatEnded()
     {
+        Debug.Log($"[LootFlow] OnCombatEnded triggered | frame={Time.frameCount} | activeNPCs={(NPCs != null ? NPCs.Count : 0)} | activePCs={(PCs != null ? PCs.Count : 0)}");
+
         CurrentPhase = TurnPhase.CombatOver;
         ClearAllActiveGreaseEffects();
         _conditionService?.CleanupOnCombatEnd(GetAllCharacters());

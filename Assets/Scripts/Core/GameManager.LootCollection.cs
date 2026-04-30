@@ -12,6 +12,8 @@ public partial class GameManager
 
     private void BeginPostCombatLootCollection()
     {
+        Debug.Log($"[LootFlow] BeginPostCombatLootCollection START | frame={Time.frameCount} | phase={CurrentPhase}");
+
         EnsurePartyStashInitialized();
         PartyStash?.Unlock();
 
@@ -19,21 +21,22 @@ public partial class GameManager
         if (LootCollectionUI == null)
         {
             WaitingForLootCollection = false;
+            Debug.LogError("[LootFlow] LootCollectionUI is null after initialization attempt. Cannot open loot window.");
             CombatUI?.ShowCombatLog("⚠ Loot window unavailable. Stash unlocked.");
             return;
         }
 
         List<LootCollectionUI.LootStackEntry> lootEntries = GatherPostCombatLootEntries();
-        if (lootEntries.Count == 0)
-        {
-            WaitingForLootCollection = false;
-            CombatUI?.ShowCombatLog("📭 No loot found after combat. Party stash unlocked.");
-            return;
-        }
+        int totalItems = CountTotalItems(lootEntries);
+        Debug.Log($"[LootFlow] Gather complete | stacks={lootEntries.Count} | totalItems={totalItems}");
 
         WaitingForLootCollection = true;
-        CombatUI?.ShowCombatLog($"💰 Loot available: {CountTotalItems(lootEntries)} item(s). Collect loot before continuing.");
+        if (totalItems > 0)
+            CombatUI?.ShowCombatLog($"💰 Loot available: {totalItems} item(s). Collect loot before continuing.");
+        else
+            CombatUI?.ShowCombatLog("📭 No loot found. Review results and close loot window to continue.");
 
+        Debug.Log($"[LootFlow] Opening loot window | waitingForLootCollection={WaitingForLootCollection}");
         LootCollectionUI.Open(
             lootEntries,
             onLootSingle: TryTransferLootItemInstanceToStash,
@@ -41,6 +44,8 @@ public partial class GameManager
             {
                 WaitingForLootCollection = false;
                 PartyStash?.Unlock();
+
+                Debug.Log($"[LootFlow] Loot window closed | lootedCount={lootedCount} | stashLocked={PartyStash != null && PartyStash.IsLocked}");
 
                 if (lootedCount > 0)
                     CombatUI?.ShowCombatLog($"📦 {lootedCount} item(s) looted to party stash. Stash unlocked.");
@@ -52,19 +57,33 @@ public partial class GameManager
     private void EnsureLootCollectionUIInitialized()
     {
         if (LootCollectionUI != null)
+        {
+            Debug.Log($"[LootFlow] LootCollectionUI already assigned on GameManager | object='{LootCollectionUI.gameObject.name}'");
             return;
+        }
 
         LootCollectionUI = FindObjectOfType<LootCollectionUI>();
-        if (LootCollectionUI == null)
+        if (LootCollectionUI != null)
         {
-            Canvas canvas = FindObjectOfType<Canvas>();
-            if (canvas != null)
-                LootCollectionUI = canvas.gameObject.AddComponent<LootCollectionUI>();
+            Debug.Log($"[LootFlow] Found existing LootCollectionUI in scene | object='{LootCollectionUI.gameObject.name}'");
+            return;
         }
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            Debug.LogError("[LootFlow] Unable to initialize LootCollectionUI because no Canvas was found.");
+            return;
+        }
+
+        LootCollectionUI = canvas.gameObject.AddComponent<LootCollectionUI>();
+        Debug.Log($"[LootFlow] Created LootCollectionUI on Canvas '{canvas.name}'");
     }
 
     private List<LootCollectionUI.LootStackEntry> GatherPostCombatLootEntries()
     {
+        Debug.Log("[LootFlow] GatherPostCombatLootEntries START");
+
         Dictionary<string, LootCollectionUI.LootStackEntry> stackMap = new Dictionary<string, LootCollectionUI.LootStackEntry>();
         List<LootCollectionUI.LootStackEntry> ordered = new List<LootCollectionUI.LootStackEntry>();
 
@@ -86,6 +105,7 @@ public partial class GameManager
             return string.Compare(aName, bName, StringComparison.OrdinalIgnoreCase);
         });
 
+        Debug.Log($"[LootFlow] GatherPostCombatLootEntries END | stackCount={ordered.Count} | itemCount={CountTotalItems(ordered)}");
         return ordered;
     }
 
@@ -94,7 +114,13 @@ public partial class GameManager
         List<LootCollectionUI.LootStackEntry> ordered)
     {
         if (NPCs == null)
+        {
+            Debug.Log("[LootFlow] GatherLootFromDefeatedEnemies skipped: NPC list is null.");
             return;
+        }
+
+        int defeatedEnemyCount = 0;
+        int foundItemCount = 0;
 
         for (int i = 0; i < NPCs.Count; i++)
         {
@@ -102,9 +128,14 @@ public partial class GameManager
             if (enemy == null || enemy.Stats == null || !enemy.Stats.IsDead)
                 continue;
 
+            defeatedEnemyCount++;
+
             Inventory inventory = GetCharacterInventory(enemy);
             if (inventory == null)
+            {
+                Debug.LogWarning($"[LootFlow] Defeated enemy '{enemy.name}' has no inventory component.");
                 continue;
+            }
 
             string sourceLabel = $"From {enemy.Stats.CharacterName}";
             string sourceGroupKey = $"enemy:{enemy.GetInstanceID()}";
@@ -115,6 +146,7 @@ public partial class GameManager
                 if (!IsValidLootItem(equipped))
                     continue;
 
+                foundItemCount++;
                 AddLootInstance(stackMap, ordered, sourceGroupKey, sourceLabel, equipped, LootCollectionUI.LootSourceType.Enemy, enemy, Vector2Int.zero);
             }
 
@@ -127,9 +159,12 @@ public partial class GameManager
                 if (!IsValidLootItem(item))
                     continue;
 
+                foundItemCount++;
                 AddLootInstance(stackMap, ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Enemy, enemy, Vector2Int.zero);
             }
         }
+
+        Debug.Log($"[LootFlow] GatherLootFromDefeatedEnemies complete | defeatedEnemies={defeatedEnemyCount} | itemInstances={foundItemCount}");
     }
 
     private void GatherLootFromGround(
@@ -137,13 +172,21 @@ public partial class GameManager
         List<LootCollectionUI.LootStackEntry> ordered)
     {
         if (Grid == null || Grid.Cells == null)
+        {
+            Debug.Log("[LootFlow] GatherLootFromGround skipped: grid/cells unavailable.");
             return;
+        }
+
+        int occupiedGroundCells = 0;
+        int foundGroundItemCount = 0;
 
         foreach (KeyValuePair<Vector2Int, SquareCell> kvp in Grid.Cells)
         {
             SquareCell cell = kvp.Value;
             if (cell == null || cell.GroundItems == null || cell.GroundItems.Count == 0)
                 continue;
+
+            occupiedGroundCells++;
 
             string sourceLabel = $"Items on Ground ({kvp.Key.x},{kvp.Key.y})";
             string sourceGroupKey = $"ground:{kvp.Key.x}:{kvp.Key.y}";
@@ -154,9 +197,12 @@ public partial class GameManager
                 if (!IsValidLootItem(item))
                     continue;
 
+                foundGroundItemCount++;
                 AddLootInstance(stackMap, ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Ground, null, kvp.Key);
             }
         }
+
+        Debug.Log($"[LootFlow] GatherLootFromGround complete | occupiedCells={occupiedGroundCells} | itemInstances={foundGroundItemCount}");
     }
 
     private void AddLootInstance(
@@ -205,6 +251,7 @@ public partial class GameManager
 
         if (lootInstance == null || !lootInstance.IsValid)
         {
+            Debug.LogWarning("[LootFlow] Rejecting loot transfer: loot instance is null/invalid.");
             done?.Invoke(false);
             return;
         }
@@ -218,6 +265,7 @@ public partial class GameManager
         bool removedFromSource = RemoveItemFromLootSource(lootInstance);
         if (!removedFromSource)
         {
+            Debug.LogWarning($"[LootFlow] Failed removing '{lootInstance.Item.Name}' from source '{lootInstance.SourceLabel}'.");
             done?.Invoke(false);
             return;
         }
@@ -225,7 +273,12 @@ public partial class GameManager
         success = PartyStash.AddItem(lootInstance.Item);
         if (!success)
         {
+            Debug.LogWarning($"[LootFlow] Failed adding '{lootInstance.Item.Name}' to stash. Restoring item to source.");
             RestoreItemToLootSource(lootInstance);
+        }
+        else
+        {
+            Debug.Log($"[LootFlow] Looted '{lootInstance.Item.Name}' from '{lootInstance.SourceLabel}' into stash.");
         }
 
         done?.Invoke(success);

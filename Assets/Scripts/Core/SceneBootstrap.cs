@@ -1047,6 +1047,7 @@ public class SceneBootstrap : MonoBehaviour
             // Post-combat loot collection modal.
             LootCollectionUI lootCollectionUI = canvas.gameObject.AddComponent<LootCollectionUI>();
             gm.LootCollectionUI = lootCollectionUI;
+            Debug.Log($"[LootFlow] SceneBootstrap created LootCollectionUI on canvas '{canvas.name}' and assigned to GameManager.");
         }
 
         StartCoroutine(WireButtons(combatUI));
