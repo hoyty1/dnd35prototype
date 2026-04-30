@@ -224,11 +224,15 @@ public partial class GameManager
         if (result != null && result.TargetKilled)
         {
             Combat_HandleSummonDeathCleanup(target);
-            if (target.Team == CharacterTeam.Enemy && Combat_AreAllNPCsDead())
+            if (target.Team == CharacterTeam.Enemy)
             {
-                Combat_SetPhase(TurnPhase.CombatOver);
-                CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
-                CombatUI?.SetActionButtonsVisible(false);
+                bool allEnemiesDead = Combat_AreAllNPCsDead();
+                Debug.Log($"[Smite] Target killed. Victory probe | allEnemiesDead={allEnemiesDead} | target={target.Stats?.CharacterName ?? target.name}");
+                if (allEnemiesDead)
+                {
+                    Debug.Log("[Smite] All enemies defeated. Triggering centralized victory check.");
+                    Combat_CheckCombatVictory("TemplateSmite.Resolve", target);
+                }
             }
         }
 

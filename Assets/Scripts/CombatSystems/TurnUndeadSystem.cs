@@ -863,12 +863,14 @@ public partial class GameManager
 
         UpdateAllStatsUI();
 
-        if (AreAllNPCsDead())
+        bool allEnemiesDead = AreAllNPCsDead();
+        Debug.Log($"[TurnUndead] Resolution complete. Victory probe | allEnemiesDead={allEnemiesDead} | destroyed={destroyedCount} | turned={turnedCount}");
+        if (allEnemiesDead)
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
-            CombatUI?.SetActionButtonsVisible(false);
-            return;
+            Debug.Log("[TurnUndead] All enemies defeated. Triggering centralized victory check.");
+            CheckCombatVictory("TurnUndead.Resolve", null);
+            if (CurrentPhase == TurnPhase.CombatOver)
+                return;
         }
 
         StartCoroutine(AfterAttackDelay(context.Turner, 0.9f));

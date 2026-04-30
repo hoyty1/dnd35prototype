@@ -832,12 +832,17 @@ public partial class GameManager
 
         UpdateAllStatsUI();
 
-        if (target.Stats.IsDead && target.Team == CharacterTeam.Enemy && AreAllNPCsDead())
+        if (target.Stats.IsDead && target.Team == CharacterTeam.Enemy)
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-            CombatUI.SetActionButtonsVisible(false);
-            return;
+            bool allEnemiesDead = AreAllNPCsDead();
+            Debug.Log($"[Overrun] Target killed. Victory probe | allEnemiesDead={allEnemiesDead} | target={target.Stats?.CharacterName ?? target.name}");
+            if (allEnemiesDead)
+            {
+                Debug.Log("[Overrun] All enemies defeated. Triggering centralized victory check.");
+                CheckCombatVictory("Overrun.Resolve", target);
+                if (CurrentPhase == TurnPhase.CombatOver)
+                    return;
+            }
         }
 
         if (result.DefenderAvoided

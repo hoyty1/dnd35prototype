@@ -1434,6 +1434,8 @@ public partial class GameManager
 
     private IEnumerator ExecuteCharge(CharacterController charger, CharacterController target)
     {
+        Debug.Log($"[Charge] Starting charge attack | attacker={charger?.Stats?.CharacterName ?? charger?.name ?? "<null>"} | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | frame={Time.frameCount}");
+
         if (!CanChargeTarget(charger, target, logFailures: true))
         {
             ShowActionChoices();
@@ -1580,7 +1582,10 @@ public partial class GameManager
                         {
                             CombatResult rakeAttack = pounceRakeResult.Attacks[i];
                             if (rakeAttack != null && rakeAttack.Hit && rakeAttack.TotalDamage > 0)
+                            {
+                                Debug.Log($"[Charge] Rake attack dealt {rakeAttack.TotalDamage} damage to {target?.Stats?.CharacterName ?? target?.name ?? "<null>"}.");
                                 CheckConcentrationOnDamage(target, rakeAttack.TotalDamage);
+                            }
                         }
                     }
 
@@ -1591,7 +1596,10 @@ public partial class GameManager
                             continue;
 
                         if (attackResult.Hit && attackResult.TotalDamage > 0)
+                        {
+                            Debug.Log($"[Charge] Pounce attack dealt {attackResult.TotalDamage} damage to {target?.Stats?.CharacterName ?? target?.name ?? "<null>"}.");
                             CheckConcentrationOnDamage(target, attackResult.TotalDamage);
+                        }
 
                         if (improvedGrabAttempted || improvedGrabSucceeded || target.Stats.IsDead)
                             continue;
@@ -1654,7 +1662,12 @@ public partial class GameManager
 
                     CombatUI.ShowCombatLog($"⚡ Charge Attack (+2): {result.GetDetailedSummary()}");
                     if (result.Hit && result.TotalDamage > 0)
+                    {
+                        Debug.Log($"[Charge] Target {target?.Stats?.CharacterName ?? target?.name ?? "<null>"} took {result.TotalDamage} charge damage.");
                         CheckConcentrationOnDamage(target, result.TotalDamage);
+                    }
+
+                    Debug.Log($"[Charge] Post-hit target state | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | hp={target?.Stats?.CurrentHP ?? 0} | dead={(target != null && target.Stats != null && target.Stats.IsDead)}");
 
                     if (charger.Stats != null && charger.Stats.HasImprovedGrab && result.Hit && IsImprovedGrabTriggerAttack(charger, result) && !target.Stats.IsDead)
                     {
@@ -1694,13 +1707,22 @@ public partial class GameManager
 
         UpdateAllStatsUI();
 
-        if (target.Stats.IsDead && target.Team == CharacterTeam.Enemy && AreAllNPCsDead())
+        Debug.Log($"[Charge] Coroutine ending | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | targetDead={(target != null && target.Stats != null && target.Stats.IsDead)} | phase={CurrentPhase}");
+
+        if (target != null && target.Team == CharacterTeam.Enemy && CurrentPhase != TurnPhase.CombatOver)
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-            CombatUI.SetActionButtonsVisible(false);
-            yield break;
+            bool allEnemiesDead = AreAllNPCsDead();
+            Debug.Log($"[Charge] Final victory probe | allEnemiesDead={allEnemiesDead} | targetDead={(target.Stats != null && target.Stats.IsDead)}");
+
+            if (allEnemiesDead)
+            {
+                Debug.Log("[Charge] All enemies defeated! Triggering centralized victory check.");
+                CheckCombatVictory("ExecuteCharge.Final", target);
+            }
         }
+
+        if (CurrentPhase == TurnPhase.CombatOver)
+            yield break;
 
         StartCoroutine(AfterAttackDelay(charger, 1.0f));
     }
@@ -1949,6 +1971,18 @@ public partial class GameManager
 
         ApplyChargePenaltyUntilStartOfNextTurn(npc);
         UpdateAllStatsUI();
+
+        Debug.Log($"[Charge][NPC] Coroutine ending | attacker={npc?.Stats?.CharacterName ?? npc?.name ?? "<null>"} | target={target?.Stats?.CharacterName ?? target?.name ?? "<null>"} | targetDead={(target != null && target.Stats != null && target.Stats.IsDead)} | phase={CurrentPhase}");
+        if (target != null && target.Team == CharacterTeam.Enemy && CurrentPhase != TurnPhase.CombatOver)
+        {
+            bool allEnemiesDead = AreAllNPCsDead();
+            Debug.Log($"[Charge][NPC] Final victory probe | allEnemiesDead={allEnemiesDead}");
+            if (allEnemiesDead)
+                CheckCombatVictory("NPCExecuteCharge.Final", target);
+        }
+
+        if (CurrentPhase == TurnPhase.CombatOver)
+            yield break;
 
         yield return new WaitForSeconds(0.8f);
     }
