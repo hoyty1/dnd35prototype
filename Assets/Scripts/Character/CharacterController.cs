@@ -1038,8 +1038,6 @@ public class CharacterController : MonoBehaviour
     }
 
     private SpriteRenderer _sr;
-    private ParticleSystem _glitterdustParticles;
-    private GameObject _glitterdustParticlesObject;
     private ConditionManager _conditionManager;
     private CharacterCombatStats _combatStats;
     private CharacterEquipment _equipment;
@@ -1539,54 +1537,31 @@ public class CharacterController : MonoBehaviour
 
     private void UpdateGlitterdustVisual(bool forceDisable = false)
     {
-        bool shouldShow = !forceDisable && IsOutlinedByGlitterdust;
-        if (!shouldShow)
-        {
-            if (_glitterdustParticlesObject != null)
-                _glitterdustParticlesObject.SetActive(false);
+        if (_sr == null)
+            _sr = GetComponent<SpriteRenderer>();
+
+        if (_sr == null)
             return;
+
+        bool shouldShow = !forceDisable && IsOutlinedByGlitterdust;
+        Color c = _sr.color;
+
+        // Keep Glitterdust visuals lightweight and package-independent:
+        // we use a subtle golden tint instead of ParticleSystem effects.
+        if (shouldShow)
+        {
+            c.r = 1f;
+            c.g = 0.92f;
+            c.b = 0.55f;
+        }
+        else
+        {
+            c.r = 1f;
+            c.g = 1f;
+            c.b = 1f;
         }
 
-        if (_glitterdustParticlesObject == null)
-            CreateGlitterdustParticles();
-
-        if (_glitterdustParticlesObject == null)
-            return;
-
-        _glitterdustParticlesObject.SetActive(true);
-        if (_glitterdustParticles != null && !_glitterdustParticles.isPlaying)
-            _glitterdustParticles.Play();
-    }
-
-    private void CreateGlitterdustParticles()
-    {
-        _glitterdustParticlesObject = new GameObject("GlitterdustParticles");
-        _glitterdustParticlesObject.transform.SetParent(transform, false);
-        _glitterdustParticlesObject.transform.localPosition = new Vector3(0f, 0.1f, -0.05f);
-
-        _glitterdustParticles = _glitterdustParticlesObject.AddComponent<ParticleSystem>();
-        ParticleSystem.MainModule main = _glitterdustParticles.main;
-        main.loop = true;
-        main.playOnAwake = true;
-        main.startLifetime = new ParticleSystem.MinMaxCurve(0.4f, 0.9f);
-        main.startSpeed = new ParticleSystem.MinMaxCurve(0.08f, 0.24f);
-        main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.08f);
-        main.startColor = new ParticleSystem.MinMaxGradient(
-            new Color(1f, 0.9f, 0.35f, 0.65f),
-            new Color(1f, 0.78f, 0.2f, 0.9f));
-        main.simulationSpace = ParticleSystemSimulationSpace.Local;
-        main.maxParticles = 80;
-
-        ParticleSystem.EmissionModule emission = _glitterdustParticles.emission;
-        emission.rateOverTime = 22f;
-
-        ParticleSystem.ShapeModule shape = _glitterdustParticles.shape;
-        shape.shapeType = ParticleSystemShapeType.Sphere;
-        shape.radius = 0.38f;
-
-        ParticleSystemRenderer renderer = _glitterdustParticlesObject.GetComponent<ParticleSystemRenderer>();
-        if (renderer != null)
-            renderer.sortingOrder = 20;
+        _sr.color = c;
     }
 
     public EnfeebledConditionData ApplyEnfeeblementEffect(int strengthPenaltyAmount, int durationRemainingRounds, CharacterController caster)
