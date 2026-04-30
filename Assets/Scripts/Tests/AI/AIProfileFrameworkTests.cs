@@ -195,7 +195,7 @@ namespace Tests.AI
                 profile.Maneuvers.AttemptSunder = false;
                 profile.GrappleBehavior = GrappleBehavior.Avoid;
 
-                Inventory inv = defender.GetComponent<InventoryComponent>().CharacterInventory;
+                global::Inventory inv = defender.GetComponent<InventoryComponent>().CharacterInventory;
                 inv.RightHandSlot = null;
                 inv.LeftHandSlot = null;
                 inv.RecalculateStats();
@@ -226,7 +226,7 @@ namespace Tests.AI
                 profile.Maneuvers.AttemptSunder = true;
                 profile.GrappleBehavior = GrappleBehavior.Avoid;
 
-                Inventory inv = defender.GetComponent<InventoryComponent>().CharacterInventory;
+                global::Inventory inv = defender.GetComponent<InventoryComponent>().CharacterInventory;
                 inv.RightHandSlot = null;
                 inv.LeftHandSlot = null;
                 inv.ArmorRobeSlot = null;
@@ -921,7 +921,7 @@ namespace Tests.AI
                 offHandThreatener.IsPlayerControlled = true;
                 adjacentThreatener.IsPlayerControlled = true;
 
-                Inventory offHandInventory = offHandThreatener.GetComponent<InventoryComponent>().CharacterInventory;
+                global::Inventory offHandInventory = offHandThreatener.GetComponent<InventoryComponent>().CharacterInventory;
                 offHandInventory.DirectEquip(ItemDatabase.CloneItem("shortbow"), EquipSlot.RightHand);
                 offHandInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.LeftHand);
 

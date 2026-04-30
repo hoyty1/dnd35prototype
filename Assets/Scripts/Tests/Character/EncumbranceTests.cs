@@ -83,7 +83,7 @@ public static class EncumbranceTests
     private static void TestMediumLoadPenalties()
     {
         var stats = MakeChar("MediumLoad", str: 10, dex: 18);
-        var inv = new Inventory { OwnerStats = stats };
+        var inv = new global::Inventory { OwnerStats = stats };
 
         inv.AddItem(ItemDatabase.CloneItem("full_plate")); // 50 lbs -> medium for STR 10 (max 100)
 
@@ -101,7 +101,7 @@ public static class EncumbranceTests
     private static void TestHeavyLoadPenaltiesAndSpeed()
     {
         var stats = MakeChar("HeavyLoad", str: 10, dex: 18);
-        var inv = new Inventory { OwnerStats = stats };
+        var inv = new global::Inventory { OwnerStats = stats };
 
         inv.AddItem(ItemDatabase.CloneItem("full_plate"));
         inv.AddItem(ItemDatabase.CloneItem("full_plate")); // 100 lbs total => heavy for STR 10
@@ -123,7 +123,7 @@ public static class EncumbranceTests
     private static void TestOverloadedCannotMove()
     {
         var stats = MakeChar("Overloaded", str: 10, dex: 18);
-        var inv = new Inventory { OwnerStats = stats };
+        var inv = new global::Inventory { OwnerStats = stats };
 
         inv.AddItem(ItemDatabase.CloneItem("full_plate"));
         inv.AddItem(ItemDatabase.CloneItem("full_plate"));
@@ -140,7 +140,7 @@ public static class EncumbranceTests
     private static void TestMostRestrictiveArmorVsLoadCaps()
     {
         var stats = MakeChar("MixedCaps", str: 18, dex: 20);
-        var inv = new Inventory { OwnerStats = stats };
+        var inv = new global::Inventory { OwnerStats = stats };
 
         inv.DirectEquip(ItemDatabase.CloneItem("full_plate"), EquipSlot.Armor); // Armor cap +1, ACP 6
         inv.AddItem(ItemDatabase.CloneItem("full_plate"));
