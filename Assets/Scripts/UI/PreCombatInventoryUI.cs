@@ -29,6 +29,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         None,
         Stash,
         Inventory,
+        InventoryStack,
         Equipment
     }
 
@@ -48,7 +49,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         Value
     }
 
-    private sealed class StashGroup
+    private sealed class ItemStackGroup
     {
         public string Key;
         public ItemData Prototype;
@@ -63,7 +64,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         public CharacterController Character;
         public int InventoryIndex = -1;
         public EquipSlot EquipSlot = EquipSlot.None;
-        public StashGroup StashGroup;
+        public ItemStackGroup ItemGroup;
 
         public bool IsSameLocation(SlotRef other)
         {
@@ -73,7 +74,8 @@ public class PreCombatInventoryUI : MonoBehaviour
             switch (Container)
             {
                 case SlotContainerType.Stash:
-                    return StashGroup == other.StashGroup;
+                case SlotContainerType.InventoryStack:
+                    return ItemGroup == other.ItemGroup;
                 case SlotContainerType.Inventory:
                     return Character == other.Character && InventoryIndex == other.InventoryIndex;
                 case SlotContainerType.Equipment:
@@ -207,6 +209,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             {
                 Debug.Log($"[PreCombatUI] Item clicked: {(item != null ? item.Name : "<none>")}");
                 _owner.HideContextMenu();
+                _owner.HandleLeftClickTransfer(slot, item);
             }
         }
 
@@ -1431,7 +1434,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (_stash == null)
             return;
 
-        List<StashGroup> groups = BuildStashGroups();
+        List<ItemStackGroup> groups = BuildStashGroups();
         ApplyStashSort(groups);
 
         if (groups.Count == 0)
@@ -1440,12 +1443,12 @@ public class PreCombatInventoryUI : MonoBehaviour
             return;
         }
 
-        foreach (StashGroup group in groups)
+        foreach (ItemStackGroup group in groups)
         {
             SlotRef slot = new SlotRef
             {
                 Container = SlotContainerType.Stash,
-                StashGroup = group
+                ItemGroup = group
             };
 
             CreateItemSlotVisual(_stashContent, slot, group.Prototype, group.Quantity, $"x{group.Quantity}");
@@ -1545,18 +1548,39 @@ public class PreCombatInventoryUI : MonoBehaviour
 
     private void BuildInventorySlots(CharacterController character, Inventory inv)
     {
+        List<ItemStackGroup> groupedInventory = BuildInventoryGroups(inv);
+        Debug.Log($"[Stacking] Inventory grouped for {character.Stats.CharacterName}: {groupedInventory.Count} stack(s)");
+
+        foreach (ItemStackGroup group in groupedInventory)
+        {
+            SlotRef stackSlot = new SlotRef
+            {
+                Container = SlotContainerType.InventoryStack,
+                Character = character,
+                ItemGroup = group
+            };
+
+            CreateItemSlotVisual(
+                _inventoryContent,
+                stackSlot,
+                group.Prototype,
+                quantity: group.Quantity,
+                quantityLabel: $"x{group.Quantity}");
+        }
+
         for (int index = 0; index < Inventory.GeneralSlotCount; index++)
         {
-            ItemData item = index < inv.GeneralSlots.Length ? inv.GeneralSlots[index] : null;
+            if (index >= inv.GeneralSlots.Length || inv.GeneralSlots[index] != null)
+                continue;
 
-            SlotRef slot = new SlotRef
+            SlotRef emptySlot = new SlotRef
             {
                 Container = SlotContainerType.Inventory,
                 Character = character,
                 InventoryIndex = index
             };
 
-            CreateItemSlotVisual(_inventoryContent, slot, item, quantity: 1, quantityLabel: string.Empty);
+            CreateItemSlotVisual(_inventoryContent, emptySlot, null, quantity: 1, quantityLabel: string.Empty, slotPlaceholder: "+");
         }
     }
 
@@ -1753,6 +1777,122 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
     }
 
+    private void HandleLeftClickTransfer(SlotRef slot, ItemData item)
+    {
+        if (slot == null || item == null)
+            return;
+
+        if (slot.Container == SlotContainerType.Stash)
+        {
+            TransferStackFromStashToSelectedCharacter(slot.ItemGroup);
+            return;
+        }
+
+        if (slot.Container == SlotContainerType.InventoryStack)
+        {
+            TransferStackFromInventoryToStash(slot.Character, slot.ItemGroup);
+        }
+    }
+
+    private void TransferStackFromStashToSelectedCharacter(ItemStackGroup stack)
+    {
+        if (stack == null || stack.Quantity <= 0)
+            return;
+
+        CharacterController selected = GetSelectedCharacter();
+        if (selected == null)
+        {
+            ShowMessage("Select a character first.", false);
+            return;
+        }
+
+        if (_stash == null || _stash.IsLocked)
+        {
+            ShowMessage("Stash is locked.", false);
+            return;
+        }
+
+        Inventory inv = GetInventory(selected);
+        if (inv == null)
+        {
+            ShowMessage("Selected character has no inventory.", false);
+            return;
+        }
+
+        int moved = 0;
+        List<ItemData> toMove = new List<ItemData>(stack.Instances);
+        foreach (ItemData stackItem in toMove)
+        {
+            if (stackItem == null)
+                continue;
+
+            if (!_stash.RemoveItem(stackItem))
+                continue;
+
+            if (!inv.AddItem(stackItem))
+            {
+                _stash.AddItem(stackItem);
+                break;
+            }
+
+            moved++;
+        }
+
+        string stackName = stack.Prototype != null ? stack.Prototype.Name : "item";
+        Debug.Log($"[Transfer] Stash -> {selected.Stats.CharacterName} | {stackName} x{moved}");
+        ShowMessage(moved > 0
+            ? $"Moved {moved}× {stackName} to {selected.Stats.CharacterName}."
+            : "Backpack is full.",
+            moved > 0);
+        RefreshAll();
+    }
+
+    private void TransferStackFromInventoryToStash(CharacterController owner, ItemStackGroup stack)
+    {
+        if (owner == null || stack == null || stack.Quantity <= 0)
+            return;
+
+        if (_stash == null || _stash.IsLocked)
+        {
+            ShowMessage("Stash is locked.", false);
+            return;
+        }
+
+        Inventory inv = GetInventory(owner);
+        if (inv == null)
+        {
+            ShowMessage("Inventory unavailable.", false);
+            return;
+        }
+
+        int moved = 0;
+        List<ItemData> toMove = new List<ItemData>(stack.Instances);
+        foreach (ItemData stackItem in toMove)
+        {
+            if (stackItem == null)
+                continue;
+
+            if (!inv.RemoveItem(stackItem))
+                continue;
+
+            if (!_stash.AddItem(stackItem))
+            {
+                inv.AddItem(stackItem);
+                break;
+            }
+
+            moved++;
+        }
+
+        string stackName = stack.Prototype != null ? stack.Prototype.Name : "item";
+        Debug.Log($"[Transfer] {owner.Stats.CharacterName} -> Stash | {stackName} x{moved}");
+        ShowMessage(moved > 0
+            ? $"Moved {moved}× {stackName} to stash."
+            : "Transfer failed.",
+            moved > 0);
+        RefreshAll();
+    }
+
     private void OnItemDroppedOnTarget(DropTarget target)
     {
         if (_dragDropManager == null || _dragDropManager.DragItem == null || target == null)
@@ -1851,6 +1991,26 @@ public class PreCombatInventoryUI : MonoBehaviour
                 }
 
                 feedback = $"Moved {removed.Name} to stash.";
+                return true;
+            }
+
+            case SlotContainerType.InventoryStack:
+            {
+                Inventory inv = GetInventory(source.Character);
+                if (inv == null || !inv.RemoveItem(item))
+                {
+                    feedback = "Failed to remove item from backpack stack.";
+                    return false;
+                }
+
+                if (!_stash.AddItem(item))
+                {
+                    inv.AddItem(item);
+                    feedback = "Failed to move item to stash.";
+                    return false;
+                }
+
+                feedback = $"Moved {item.Name} to stash.";
                 return true;
             }
 
@@ -2048,6 +2208,35 @@ public class PreCombatInventoryUI : MonoBehaviour
             return true;
         }
 
+        if (source.Container == SlotContainerType.InventoryStack)
+        {
+            Inventory sourceInv = GetInventory(source.Character);
+            if (sourceInv == null || !sourceInv.RemoveItem(item))
+            {
+                feedback = "Could not remove source item from backpack stack.";
+                return false;
+            }
+
+            if (sourceInv != inv && !inv.AddItem(item))
+            {
+                sourceInv.AddItem(item);
+                feedback = "Target backpack is full.";
+                return false;
+            }
+
+            int sourceIndex = FindFirstIndexOfReference(inv.GeneralSlots, item);
+            if (sourceIndex < 0 || !inv.EquipFromInventory(sourceIndex, targetSlot))
+            {
+                inv.RemoveItem(item);
+                sourceInv.AddItem(item);
+                feedback = "Cannot equip item into that slot.";
+                return false;
+            }
+
+            feedback = $"Equipped {item.Name} to {GetEquipSlotLabel(targetSlot)}.";
+            return true;
+        }
+
         if (source.Container == SlotContainerType.Stash)
         {
             if (_stash == null || _stash.IsLocked)
@@ -2180,6 +2369,9 @@ public class PreCombatInventoryUI : MonoBehaviour
                 if (sourceInv != null && sourceInv.EmptySlots <= 0)
                     return DropValidationResult.Invalid("Backpack full; cannot unequip item.");
             }
+
+            if (source.Container == SlotContainerType.InventoryStack)
+                return DropValidationResult.Invalid("Stacked backpack items cannot be dragged into specific backpack slots.");
 
             return DropValidationResult.Valid("Moved to backpack.");
         }
@@ -2379,7 +2571,7 @@ public class PreCombatInventoryUI : MonoBehaviour
                 }
             }
         }
-        else if (slot.Container == SlotContainerType.Inventory)
+        else if (slot.Container == SlotContainerType.Inventory || slot.Container == SlotContainerType.InventoryStack)
         {
             SlotRef equipTarget = FindBestEquipmentTargetSlot(slot.Character, item);
             if (equipTarget != null)
@@ -2397,6 +2589,12 @@ public class PreCombatInventoryUI : MonoBehaviour
 
             actions.Add((null, "Transfer to Stash", () =>
             {
+                if (slot.Container == SlotContainerType.InventoryStack)
+                {
+                    TransferStackFromInventoryToStash(slot.Character, slot.ItemGroup);
+                    return;
+                }
+
                 SlotRef stashTarget = new SlotRef { Container = SlotContainerType.Stash };
                 if (TryExecuteTransfer(slot, stashTarget, item, out string fb))
                     ShowMessage(fb, true);
@@ -2406,19 +2604,22 @@ public class PreCombatInventoryUI : MonoBehaviour
                 RefreshAll();
             }));
 
-            actions.Add((null, "Drop Item", () =>
+            if (slot.Container == SlotContainerType.Inventory)
             {
-                Inventory inv = GetInventory(slot.Character);
-                if (inv == null)
+                actions.Add((null, "Drop Item", () =>
                 {
-                    ShowMessage("Inventory unavailable.", false);
-                    return;
-                }
+                    Inventory inv = GetInventory(slot.Character);
+                    if (inv == null)
+                    {
+                        ShowMessage("Inventory unavailable.", false);
+                        return;
+                    }
 
-                ItemData removed = inv.RemoveItemAt(slot.InventoryIndex);
-                ShowMessage(removed != null ? $"Dropped {removed.Name}." : "No item to drop.", removed != null);
-                RefreshAll();
-            }));
+                    ItemData removed = inv.RemoveItemAt(slot.InventoryIndex);
+                    ShowMessage(removed != null ? $"Dropped {removed.Name}." : "No item to drop.", removed != null);
+                    RefreshAll();
+                }));
+            }
         }
         else if (slot.Container == SlotContainerType.Equipment)
         {
@@ -2493,17 +2694,19 @@ public class PreCombatInventoryUI : MonoBehaviour
             return;
         }
 
-        ShowTooltip(item);
+        int quantity = slot != null && slot.ItemGroup != null ? slot.ItemGroup.Quantity : 1;
+        ShowTooltip(item, quantity);
     }
 
-    private void ShowTooltip(ItemData item)
+    private void ShowTooltip(ItemData item, int quantity)
     {
         if (_tooltipPanel == null || _tooltipText == null || _panel == null || item == null)
             return;
 
         string statSummary = item.GetStatSummary();
         string desc = string.IsNullOrWhiteSpace(item.Description) ? "No description." : item.Description;
-        _tooltipText.text = $"<b>{item.Name}</b>\n{statSummary}\n\n{desc}";
+        string quantityLine = quantity > 1 ? $"\nQty: {quantity}" : string.Empty;
+        _tooltipText.text = $"<b>{item.Name}</b>{quantityLine}\n{statSummary}\n\n{desc}";
 
         _tooltipPanel.SetActive(true);
         _tooltipActive = true;
@@ -2618,7 +2821,8 @@ public class PreCombatInventoryUI : MonoBehaviour
         switch (slot.Container)
         {
             case SlotContainerType.Stash:
-                return slot.StashGroup != null ? slot.StashGroup.FirstItem : null;
+            case SlotContainerType.InventoryStack:
+                return slot.ItemGroup != null ? slot.ItemGroup.FirstItem : null;
             case SlotContainerType.Inventory:
             {
                 Inventory inv = GetInventory(slot.Character);
@@ -2636,25 +2840,45 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
     }
 
-    private List<StashGroup> BuildStashGroups()
+    private List<ItemStackGroup> BuildStashGroups()
     {
-        List<StashGroup> groups = new List<StashGroup>();
         if (_stash == null)
+            return new List<ItemStackGroup>();
+
+        return GroupItemsIntoStacks(_stash.GetItems(), PassesStashFilter);
+    }
+
+    private List<ItemStackGroup> BuildInventoryGroups(Inventory inv)
+    {
+        if (inv == null || inv.GeneralSlots == null)
+            return new List<ItemStackGroup>();
+
+        return GroupItemsIntoStacks(inv.GeneralSlots, item => item != null);
+    }
+
+    private List<ItemStackGroup> GroupItemsIntoStacks(IEnumerable<ItemData> items, Func<ItemData, bool> includePredicate)
+    {
+        List<ItemStackGroup> groups = new List<ItemStackGroup>();
+        Dictionary<string, ItemStackGroup> map = new Dictionary<string, ItemStackGroup>();
+        if (items == null)
             return groups;
 
-        IReadOnlyList<ItemData> items = _stash.GetItems();
-        Dictionary<string, StashGroup> map = new Dictionary<string, StashGroup>();
-
-        for (int i = 0; i < items.Count; i++)
+        int uniqueCounter = 0;
+        foreach (ItemData item in items)
         {
-            ItemData item = items[i];
-            if (item == null || !PassesStashFilter(item))
+            if (item == null)
                 continue;
 
-            string key = BuildGroupKey(item);
-            if (!map.TryGetValue(key, out StashGroup group))
+            if (includePredicate != null && !includePredicate(item))
+                continue;
+
+            string key = IsStackable(item)
+                ? BuildStackKey(item)
+                : $"unique_{uniqueCounter++}_{BuildStackKey(item)}";
+
+            if (!map.TryGetValue(key, out ItemStackGroup group))
             {
-                group = new StashGroup
+                group = new ItemStackGroup
                 {
                     Key = key,
                     Prototype = item
@@ -2666,10 +2890,29 @@ public class PreCombatInventoryUI : MonoBehaviour
             group.Instances.Add(item);
         }
 
+        Debug.Log($"[Stacking] Grouped items into {groups.Count} stack(s).");
         return groups;
     }
 
-    private void ApplyStashSort(List<StashGroup> groups)
+    private bool IsStackable(ItemData item)
+    {
+        if (item == null)
+            return false;
+
+        if (item.Type == ItemType.Consumable)
+            return true;
+
+        string name = item.Name ?? string.Empty;
+        string id = item.Id ?? string.Empty;
+        return name.IndexOf("arrow", StringComparison.OrdinalIgnoreCase) >= 0
+            || name.IndexOf("bolt", StringComparison.OrdinalIgnoreCase) >= 0
+            || name.IndexOf("bullet", StringComparison.OrdinalIgnoreCase) >= 0
+            || id.IndexOf("arrow", StringComparison.OrdinalIgnoreCase) >= 0
+            || id.IndexOf("bolt", StringComparison.OrdinalIgnoreCase) >= 0
+            || id.IndexOf("bullet", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private void ApplyStashSort(List<ItemStackGroup> groups)
     {
         groups.Sort((a, b) =>
         {
@@ -2752,9 +2995,14 @@ public class PreCombatInventoryUI : MonoBehaviour
         return value;
     }
 
-    private string BuildGroupKey(ItemData item)
+    private string BuildStackKey(ItemData item)
     {
-        return $"{item.Id}|{item.Name}|{item.Type}";
+        if (item == null)
+            return "null-item";
+
+        string id = string.IsNullOrWhiteSpace(item.Id) ? "no-id" : item.Id;
+        string name = string.IsNullOrWhiteSpace(item.Name) ? "no-name" : item.Name;
+        return $"{id}|{name}|{item.Type}";
     }
 
     private string GetFilterLabel(StashFilterMode mode)
@@ -3048,9 +3296,9 @@ public class PreCombatInventoryUI : MonoBehaviour
             SlotRef source = new SlotRef
             {
                 Container = SlotContainerType.Stash,
-                StashGroup = new StashGroup { Prototype = item }
+                ItemGroup = new ItemStackGroup { Prototype = item }
             };
-            source.StashGroup.Instances.Add(item);
+            source.ItemGroup.Instances.Add(item);
 
             SlotRef destination = FindFirstEmptyInventorySlot(selected);
             if (destination == null)
