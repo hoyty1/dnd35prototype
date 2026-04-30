@@ -186,7 +186,7 @@ public static class JumpAndMagicWeaponRulesTests
 
     private static void TestMagicWeaponEnhancementAndBypass()
     {
-        ItemData weapon = ItemDatabase.GetItem("longsword");
+        ItemData weapon = ItemDatabase.CloneItem("longsword");
         weapon.AddOrReplaceItemSpellEffect(new ItemSpellEffect("magic_weapon", "Magic Weapon", "Tester", 3, 30)
         {
             BonusType = BonusType.Enhancement,
@@ -202,7 +202,7 @@ public static class JumpAndMagicWeaponRulesTests
 
     private static void TestMagicWeaponHighestEnhancementOnly()
     {
-        ItemData plusTwoWeapon = ItemDatabase.GetItem("longsword");
+        ItemData plusTwoWeapon = ItemDatabase.CloneItem("longsword");
         plusTwoWeapon.EnhancementBonus = 2;
         plusTwoWeapon.AddOrReplaceItemSpellEffect(new ItemSpellEffect("magic_weapon", "Magic Weapon", "Tester", 3, 30)
         {
@@ -228,7 +228,7 @@ public static class JumpAndMagicWeaponRulesTests
             defender = CreateController("MwDefender", level: 3);
 
             Inventory attackerInventory = attacker.GetComponent<InventoryComponent>().CharacterInventory;
-            ItemData weapon = ItemDatabase.GetItem("longsword");
+            ItemData weapon = ItemDatabase.CloneItem("longsword");
             weapon.AddOrReplaceItemSpellEffect(new ItemSpellEffect("magic_weapon", "Magic Weapon", "Tester", 3, 30)
             {
                 EnhancementBonusAttack = 1,
@@ -255,8 +255,8 @@ public static class JumpAndMagicWeaponRulesTests
 
     private static void TestMagicWeaponDurationPerWeapon()
     {
-        ItemData weaponA = ItemDatabase.GetItem("longsword");
-        ItemData weaponB = ItemDatabase.GetItem("dagger");
+        ItemData weaponA = ItemDatabase.CloneItem("longsword");
+        ItemData weaponB = ItemDatabase.CloneItem("dagger");
 
         weaponA.AddOrReplaceItemSpellEffect(new ItemSpellEffect("magic_weapon", "Magic Weapon", "Tester", 3, 2)
         {
@@ -293,8 +293,8 @@ public static class JumpAndMagicWeaponRulesTests
             InventoryComponent invComp = controller.GetComponent<InventoryComponent>();
             Inventory inv = invComp.CharacterInventory;
 
-            ItemData equipped = ItemDatabase.GetItem("longsword");
-            ItemData backpackWeapon = ItemDatabase.GetItem("dagger");
+            ItemData equipped = ItemDatabase.CloneItem("longsword");
+            ItemData backpackWeapon = ItemDatabase.CloneItem("dagger");
 
             inv.DirectEquip(equipped, EquipSlot.RightHand);
             bool added = inv.AddItem(backpackWeapon);

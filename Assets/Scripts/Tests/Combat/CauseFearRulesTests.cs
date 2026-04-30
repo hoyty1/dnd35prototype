@@ -83,7 +83,7 @@ public static class CauseFearRulesTests
         GameObject go = new GameObject($"CauseFearRules_{stats.CharacterName}");
         CharacterController controller = go.AddComponent<CharacterController>();
         controller.Stats = stats;
-        controller.Team = team;
+        controller.SetTeam(team);
         controller.GridPosition = gridPos;
 
         InventoryComponent inv = go.AddComponent<InventoryComponent>();

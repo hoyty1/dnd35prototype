@@ -78,7 +78,7 @@ public static class HypnotismRulesTests
         GameObject go = new GameObject($"HypnotismTest_{stats.CharacterName}");
         CharacterController controller = go.AddComponent<CharacterController>();
         controller.Stats = stats;
-        controller.Team = team;
+        controller.SetTeam(team);
         controller.GridPosition = gridPos;
 
         InventoryComponent inv = go.AddComponent<InventoryComponent>();

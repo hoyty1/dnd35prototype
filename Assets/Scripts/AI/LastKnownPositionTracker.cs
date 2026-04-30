@@ -162,9 +162,9 @@ public class LastKnownPositionTracker : MonoBehaviour
 
                     if (gameManager != null && gameManager.CombatUI != null)
                     {
-                        string ownerName = _owner.Stats != null ? _owner.Stats.CharacterName : _owner.name;
+                        string seeInvisibleOwnerName = _owner.Stats != null ? _owner.Stats.CharacterName : _owner.name;
                         string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
-                        gameManager.CombatUI.ShowCombatLog($"👁 {ownerName} sees invisible {targetName} clearly (Spot d20({spotRoll})={spotTotal} vs Hide d20({hideRoll})={hideTotal}).");
+                        gameManager.CombatUI.ShowCombatLog($"👁 {seeInvisibleOwnerName} sees invisible {targetName} clearly (Spot d20({spotRoll})={spotTotal} vs Hide d20({hideRoll})={hideTotal}).");
                     }
 
                     continue;

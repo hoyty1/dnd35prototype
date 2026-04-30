@@ -392,7 +392,7 @@ public class CharacterStats
     public bool IsExhaustedState => HasExhaustedCondition;
     public bool IsFatiguedOrExhausted => IsFatiguedState || IsExhaustedState;
 
-    public bool IsEntangledState => HasCondition(CombatConditionType.Entangled);
+    public bool IsEntangledState => HasNormalizedCondition(CombatConditionType.Entangled);
     public bool CannotRunOrCharge => IsFatiguedOrExhausted || IsEntangledState;
     public bool CanRun => !CannotRunOrCharge;
     public bool CanCharge => !CannotRunOrCharge;
@@ -403,7 +403,7 @@ public class CharacterStats
         get
         {
             int penalty = IsExhaustedState ? 6 : (IsFatiguedState ? 2 : 0);
-            if (HasCondition(CombatConditionType.Entangled))
+            if (HasNormalizedCondition(CombatConditionType.Entangled))
                 penalty += 4;
             return penalty;
         }

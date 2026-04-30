@@ -1002,7 +1002,7 @@ public partial class GameManager : MonoBehaviour
             character.HealAbilityDamageDaily(1, "Daily recovery");
         }
 
-        UpdateCombatUI();
+        UpdateAllStatsUI();
     }
 
     private InputService.InputMode ResolveInputMode()
@@ -13037,7 +13037,7 @@ public partial class GameManager : MonoBehaviour
         if (spell != null && spell.SpellId == "enervation")
         {
             string sourceName = spell.Name;
-            int negativeLevels = Random.Range(1, 5);
+            int negativeLevels = UnityEngine.Random.Range(1, 5);
             int total = NegativeLevelSystem.ApplyNegativeLevels(target, negativeLevels, sourceName);
             CombatUI?.ShowCombatLog($"<color=#9966CC>☠ {target.Stats.CharacterName} gains {negativeLevels} negative level(s) from Enervation (total {total}).</color>");
             return null;
