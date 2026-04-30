@@ -7,11 +7,11 @@ using TMPro;
 
 /// <summary>
 /// Post-combat modal loot collection window.
-/// Shows loot in a compact scrollable grid and supports double-click looting + Loot All.
+/// Shows loot in a scrollable grid with one slot per item instance and supports Loot All.
 /// </summary>
 public class LootCollectionUI : MonoBehaviour
 {
-    private static readonly Vector2 LootCellSize = new Vector2(110f, 128f);
+    private static readonly Vector2 LootCellSize = new Vector2(110f, 110f);
     private static readonly Vector2 LootCellSpacing = new Vector2(10f, 10f);
 
     private RectOffset _lootGridPadding;
@@ -64,11 +64,11 @@ public class LootCollectionUI : MonoBehaviour
     private class ItemTileRefs
     {
         public LootStackEntry Entry;
+        public LootItemInstance Instance;
         public GameObject Root;
         public Image Bg;
         public TMP_Text Icon;
         public TMP_Text Label;
-        public TMP_Text Quantity;
     }
 
     private GameObject _root;
@@ -87,7 +87,7 @@ public class LootCollectionUI : MonoBehaviour
     private readonly List<LootStackEntry> _entries = new List<LootStackEntry>();
     private readonly List<ItemTileRefs> _tiles = new List<ItemTileRefs>();
 
-    private LootStackEntry _selectedEntry;
+    private LootItemInstance _selectedInstance;
     private Action<LootItemInstance, Action<bool>> _onLootSingle;
     private Action<int> _onClosed;
     private Action _onExitLoop;
@@ -123,7 +123,7 @@ public class LootCollectionUI : MonoBehaviour
         _onClosed = onClosed;
         _onExitLoop = onExitLoop;
         _lootedCount = 0;
-        _selectedEntry = null;
+        _selectedInstance = null;
         _savedScrollPosition = 1f;
 
         _entries.Clear();
@@ -154,7 +154,7 @@ public class LootCollectionUI : MonoBehaviour
 
         RebuildContent();
         UpdateFooter();
-        ShowStatus(_entries.Count == 0 ? "No loot found." : "Double-click an item to loot it to stash.", false);
+        ShowStatus(_entries.Count == 0 ? "No loot found." : "Click an item to loot it to stash.", false);
     }
 
     public void Close(bool invokeClosedCallback = true)
@@ -434,21 +434,35 @@ public class LootCollectionUI : MonoBehaviour
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
         int displayedItems = 0;
+        List<string> exampleNames = new List<string>();
+
         for (int i = 0; i < _entries.Count; i++)
         {
             LootStackEntry entry = _entries[i];
             if (entry == null || entry.Prototype == null || entry.RemainingQuantity <= 0)
                 continue;
 
-            ItemTileRefs tile = BuildItemTile(_contentRoot, entry);
-            _tiles.Add(tile);
-            displayedItems++;
+            for (int j = 0; j < entry.RemainingInstances.Count; j++)
+            {
+                LootItemInstance instance = entry.RemainingInstances[j];
+                if (instance == null || !instance.IsValid)
+                    continue;
+
+                ItemTileRefs tile = BuildItemTile(_contentRoot, entry, instance);
+                _tiles.Add(tile);
+                displayedItems++;
+
+                if (exampleNames.Count < 3)
+                    exampleNames.Add(SafeItemName(instance.Item));
+            }
         }
 
         if (_tiles.Count == 0)
             BuildNoLootMessage();
 
-        Debug.Log($"[LootUI] Displaying {displayedItems} items");
+        Debug.Log($"[LootUI] Showing {displayedItems} unstacked items");
+        if (exampleNames.Count > 0)
+            Debug.Log($"[LootUI] Example items: {string.Join(", ", exampleNames)}");
         Debug.Log($"[LootUI] Grid cell size: {grid.cellSize}, spacing: {grid.spacing}, padding: L{grid.padding.left} R{grid.padding.right} T{grid.padding.top} B{grid.padding.bottom}");
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(_contentRoot);
@@ -458,7 +472,7 @@ public class LootCollectionUI : MonoBehaviour
             _scrollRect.verticalNormalizedPosition = Mathf.Clamp01(_savedScrollPosition);
     }
 
-    private ItemTileRefs BuildItemTile(Transform parent, LootStackEntry entry)
+    private ItemTileRefs BuildItemTile(Transform parent, LootStackEntry entry, LootItemInstance instance)
     {
         GameObject tile = new GameObject("LootTile", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement), typeof(VerticalLayoutGroup));
         tile.transform.SetParent(parent, false);
@@ -519,41 +533,17 @@ public class LootCollectionUI : MonoBehaviour
             preferredHeight: 34f,
             useEllipsis: true);
 
-        TMP_Text qtyText = CreateTMPLabel(
-            tile.transform,
-            "Quantity",
-            "×" + Mathf.Max(1, entry.RemainingQuantity),
-            12,
-            FontStyles.Bold,
-            new Color(0.98f, 0.9f, 0.58f, 1f),
-            TextAlignmentOptions.Center,
-            preferredHeight: 22f,
-            useEllipsis: false);
-
         ItemTileRefs refs = new ItemTileRefs
         {
             Entry = entry,
+            Instance = instance,
             Root = tile,
             Bg = bg,
             Icon = iconText,
-            Label = titleText,
-            Quantity = qtyText
+            Label = titleText
         };
 
-        button.onClick.AddListener(() => SelectEntry(refs.Entry));
-
-        AddEventTrigger(tile, EventTriggerType.PointerClick, data =>
-        {
-            PointerEventData pointer = data as PointerEventData;
-            if (pointer != null && pointer.clickCount >= 2)
-            {
-                LootEntryStack(entry);
-            }
-            else
-            {
-                SelectEntry(entry);
-            }
-        });
+        button.onClick.AddListener(() => LootSingleInstance(refs.Entry, refs.Instance));
 
         AddEventTrigger(tile, EventTriggerType.PointerEnter, data => ShowTooltip(entry));
         AddEventTrigger(tile, EventTriggerType.PointerExit, data => HideTooltip());
@@ -579,66 +569,36 @@ public class LootCollectionUI : MonoBehaviour
         text.text = "No loot found.";
     }
 
-    private void SelectEntry(LootStackEntry entry)
+    private void LootSingleInstance(LootStackEntry entry, LootItemInstance instance)
     {
-        _selectedEntry = entry;
-
-        for (int i = 0; i < _tiles.Count; i++)
-        {
-            ItemTileRefs tile = _tiles[i];
-            if (tile == null || tile.Bg == null)
-                continue;
-
-            bool selected = tile.Entry == _selectedEntry;
-            Color baseColor = GetItemTypeColor(tile.Entry != null ? tile.Entry.Prototype : null);
-            tile.Bg.color = selected
-                ? Color.Lerp(baseColor, new Color(1f, 0.95f, 0.62f, 1f), 0.45f)
-                : baseColor;
-        }
-    }
-
-    private void LootEntryStack(LootStackEntry entry)
-    {
-        if (entry == null || entry.RemainingQuantity <= 0)
+        if (entry == null || instance == null || !instance.IsValid)
             return;
 
-        int moved = 0;
-        List<LootItemInstance> snapshot = new List<LootItemInstance>(entry.RemainingInstances);
-        for (int i = 0; i < snapshot.Count; i++)
+        _selectedInstance = instance;
+
+        bool transferCompleted = false;
+        _onLootSingle?.Invoke(instance, success => transferCompleted = success);
+        if (!transferCompleted)
         {
-            LootItemInstance instance = snapshot[i];
-            if (instance == null || !instance.IsValid)
-                continue;
-
-            bool transferCompleted = false;
-            _onLootSingle?.Invoke(instance, success => transferCompleted = success);
-            if (!transferCompleted)
-                continue;
-
-            if (entry.RemainingInstances.Remove(instance))
-            {
-                moved++;
-                entry.LootedQuantity++;
-                _lootedCount++;
-            }
+            ShowStatus($"Could not loot {SafeItemName(instance.Item)}.", false);
+            return;
         }
 
-        if (moved > 0)
+        if (entry.RemainingInstances.Remove(instance))
         {
-            ShowStatus($"Looted {moved}x {SafeItemName(entry.Prototype)}.", true);
-            RemoveEmptyEntries();
-            RebuildContent();
-            UpdateFooter();
-
-            if (_entries.Count == 0)
-            {
-                ShowStatus("All looted!", true);
-                Close();
-            }
+            entry.LootedQuantity++;
+            _lootedCount++;
+            ShowStatus($"Looted 1x {SafeItemName(instance.Item)}.", true);
         }
-        else
+
+        RemoveEmptyEntries();
+        RebuildContent();
+        UpdateFooter();
+
+        if (_entries.Count == 0)
         {
-            ShowStatus($"Could not loot {SafeItemName(entry.Prototype)}.", false);
+            ShowStatus("All looted!", true);
+            Close();
         }
     }
 
@@ -712,7 +672,7 @@ public class LootCollectionUI : MonoBehaviour
 
     private void UpdateFooter()
     {
-        int totalStacks = 0;
+        int uniqueTypes = 0;
         int remainingItems = 0;
         for (int i = 0; i < _entries.Count; i++)
         {
@@ -721,13 +681,13 @@ public class LootCollectionUI : MonoBehaviour
                 continue;
 
             if (entry.RemainingQuantity > 0)
-                totalStacks++;
+                uniqueTypes++;
 
             remainingItems += Mathf.Max(0, entry.RemainingQuantity);
         }
 
         if (_summaryText != null)
-            _summaryText.text = $"Stacks: {totalStacks}   •   Remaining Items: {remainingItems}   •   Looted: {_lootedCount}";
+            _summaryText.text = $"Visible Slots: {remainingItems}   •   Item Types: {uniqueTypes}   •   Looted: {_lootedCount}";
 
         if (_goldSummaryText != null)
         {
@@ -738,7 +698,7 @@ public class LootCollectionUI : MonoBehaviour
         if (_lootAllButton != null)
             _lootAllButton.interactable = remainingItems > 0;
 
-        Debug.Log($"[LootUI] Footer updated | stacks={totalStacks} | remaining={remainingItems} | looted={_lootedCount}");
+        Debug.Log($"[LootUI] Footer updated | visibleSlots={remainingItems} | itemTypes={uniqueTypes} | looted={_lootedCount}");
     }
 
     private int CalculateGoldTotal()

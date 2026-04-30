@@ -108,11 +108,10 @@ public partial class GameManager
     {
         Debug.Log("[LootFlow] GatherPostCombatLootEntries START");
 
-        Dictionary<string, LootCollectionUI.LootStackEntry> stackMap = new Dictionary<string, LootCollectionUI.LootStackEntry>();
         List<LootCollectionUI.LootStackEntry> ordered = new List<LootCollectionUI.LootStackEntry>();
 
-        GatherLootFromDefeatedEnemies(stackMap, ordered);
-        GatherLootFromGround(stackMap, ordered);
+        GatherLootFromDefeatedEnemies(ordered);
+        GatherLootFromGround(ordered);
 
         ordered.Sort((a, b) =>
         {
@@ -133,9 +132,7 @@ public partial class GameManager
         return ordered;
     }
 
-    private void GatherLootFromDefeatedEnemies(
-        Dictionary<string, LootCollectionUI.LootStackEntry> stackMap,
-        List<LootCollectionUI.LootStackEntry> ordered)
+    private void GatherLootFromDefeatedEnemies(List<LootCollectionUI.LootStackEntry> ordered)
     {
         if (NPCs == null)
         {
@@ -171,7 +168,7 @@ public partial class GameManager
                     continue;
 
                 foundItemCount++;
-                AddLootInstance(stackMap, ordered, sourceGroupKey, sourceLabel, equipped, LootCollectionUI.LootSourceType.Enemy, enemy, Vector2Int.zero);
+                AddLootInstance(ordered, sourceGroupKey, sourceLabel, equipped, LootCollectionUI.LootSourceType.Enemy, enemy, Vector2Int.zero);
             }
 
             if (inventory.GeneralSlots == null)
@@ -184,16 +181,14 @@ public partial class GameManager
                     continue;
 
                 foundItemCount++;
-                AddLootInstance(stackMap, ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Enemy, enemy, Vector2Int.zero);
+                AddLootInstance(ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Enemy, enemy, Vector2Int.zero);
             }
         }
 
         Debug.Log($"[LootFlow] GatherLootFromDefeatedEnemies complete | defeatedEnemies={defeatedEnemyCount} | itemInstances={foundItemCount}");
     }
 
-    private void GatherLootFromGround(
-        Dictionary<string, LootCollectionUI.LootStackEntry> stackMap,
-        List<LootCollectionUI.LootStackEntry> ordered)
+    private void GatherLootFromGround(List<LootCollectionUI.LootStackEntry> ordered)
     {
         if (Grid == null || Grid.Cells == null)
         {
@@ -222,7 +217,7 @@ public partial class GameManager
                     continue;
 
                 foundGroundItemCount++;
-                AddLootInstance(stackMap, ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Ground, null, kvp.Key);
+                AddLootInstance(ordered, sourceGroupKey, sourceLabel, item, LootCollectionUI.LootSourceType.Ground, null, kvp.Key);
             }
         }
 
@@ -230,7 +225,6 @@ public partial class GameManager
     }
 
     private void AddLootInstance(
-        Dictionary<string, LootCollectionUI.LootStackEntry> stackMap,
         List<LootCollectionUI.LootStackEntry> ordered,
         string sourceGroupKey,
         string sourceLabel,
@@ -243,21 +237,15 @@ public partial class GameManager
             return;
 
         string itemIdentity = !string.IsNullOrWhiteSpace(item.Id) ? item.Id : item.Name;
-        string stackKey = $"{sourceGroupKey}|{itemIdentity}";
+        string stackKey = $"{sourceGroupKey}|{itemIdentity}|{ordered.Count}";
 
-        if (!stackMap.TryGetValue(stackKey, out LootCollectionUI.LootStackEntry stack))
+        LootCollectionUI.LootStackEntry stack = new LootCollectionUI.LootStackEntry
         {
-            stack = new LootCollectionUI.LootStackEntry
-            {
-                StackKey = stackKey,
-                SourceGroupKey = sourceGroupKey,
-                SourceLabel = sourceLabel,
-                Prototype = item
-            };
-
-            stackMap[stackKey] = stack;
-            ordered.Add(stack);
-        }
+            StackKey = stackKey,
+            SourceGroupKey = sourceGroupKey,
+            SourceLabel = sourceLabel,
+            Prototype = item
+        };
 
         stack.RemainingInstances.Add(new LootCollectionUI.LootItemInstance
         {
@@ -267,6 +255,8 @@ public partial class GameManager
             GroundPosition = groundPos,
             SourceLabel = sourceLabel
         });
+
+        ordered.Add(stack);
     }
 
     private void TryTransferLootItemInstanceToStash(LootCollectionUI.LootItemInstance lootInstance, Action<bool> done)
