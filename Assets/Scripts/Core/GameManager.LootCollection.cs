@@ -10,9 +10,27 @@ public partial class GameManager
     /// <summary>Whether the game is waiting for the player to finish loot collection.</summary>
     public bool WaitingForLootCollection { get; private set; }
 
+    /// <summary>Tracks whether loot collection was already triggered for the current combat.</summary>
+    private bool _postCombatLootCollectionTriggered;
+
+    private void ResetPostCombatLootCollectionState(string context)
+    {
+        _postCombatLootCollectionTriggered = false;
+        WaitingForLootCollection = false;
+        Debug.Log($"[LootFlow] Reset post-combat loot state | context={context} | frame={Time.frameCount}");
+    }
+
     private void BeginPostCombatLootCollection()
     {
         Debug.Log($"[LootFlow] BeginPostCombatLootCollection START | frame={Time.frameCount} | phase={CurrentPhase}");
+
+        if (_postCombatLootCollectionTriggered)
+        {
+            Debug.Log($"[LootFlow] BeginPostCombatLootCollection SKIP | alreadyTriggered=true | waiting={WaitingForLootCollection}");
+            return;
+        }
+
+        _postCombatLootCollectionTriggered = true;
 
         EnsurePartyStashInitialized();
         PartyStash?.Unlock();

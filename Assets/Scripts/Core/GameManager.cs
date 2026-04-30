@@ -605,7 +605,7 @@ public partial class GameManager : MonoBehaviour
         PreCombatInventoryUI?.Close();
         LootCollectionUI?.Close();
         WaitingForPreCombatInventory = false;
-        WaitingForLootCollection = false;
+        ResetPostCombatLootCollectionState("PromptEncounterSelection");
         WaitingForEncounterSelection = true;
 
         var presets = NPCDatabase.ListEncounterPresets();
@@ -4644,6 +4644,18 @@ public partial class GameManager : MonoBehaviour
         return null;
     }
 
+    private void HandleCombatVictoryDetected(string sourceContext)
+    {
+        Debug.Log($"[CombatEnd] Victory detected | source={sourceContext} | frame={Time.frameCount} | phaseBefore={CurrentPhase}");
+
+        CurrentPhase = TurnPhase.CombatOver;
+        CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
+        CombatUI?.SetActionButtonsVisible(false);
+
+        Debug.Log($"[CombatEnd] Triggering post-combat loot collection | source={sourceContext} | waitingBefore={WaitingForLootCollection}");
+        BeginPostCombatLootCollection();
+    }
+
     private Sprite LoadSprite(string path)
     {
         Sprite s = Resources.Load<Sprite>(path);
@@ -4679,7 +4691,7 @@ public partial class GameManager : MonoBehaviour
     public void StartCombat()
     {
         WaitingForPreCombatInventory = false;
-        WaitingForLootCollection = false;
+        ResetPostCombatLootCollectionState("StartCombat");
         PreCombatInventoryUI?.Close();
         LootCollectionUI?.Close();
         PartyStash?.Lock();
@@ -4767,17 +4779,27 @@ public partial class GameManager : MonoBehaviour
 
     private void OnCombatEnded()
     {
-        Debug.Log($"[LootFlow] OnCombatEnded triggered | frame={Time.frameCount} | activeNPCs={(NPCs != null ? NPCs.Count : 0)} | activePCs={(PCs != null ? PCs.Count : 0)}");
+        bool isVictory = AreAllNPCsDead() && !AreAllPCsDead();
+
+        Debug.Log($"[LootFlow] OnCombatEnded triggered | frame={Time.frameCount} | activeNPCs={(NPCs != null ? NPCs.Count : 0)} | activePCs={(PCs != null ? PCs.Count : 0)} | victory={isVictory}");
 
         CurrentPhase = TurnPhase.CombatOver;
         ClearAllActiveGreaseEffects();
         _conditionService?.CleanupOnCombatEnd(GetAllCharacters());
 
-        CombatUI.SetTurnIndicator("Combat has ended.");
+        CombatUI.SetTurnIndicator(isVictory ? "VICTORY! All enemies defeated!" : "Combat has ended.");
         CombatUI.SetActionButtonsVisible(false);
         UpdateInitiativeUI();
 
-        BeginPostCombatLootCollection();
+        if (isVictory)
+        {
+            Debug.Log("[CombatEnd] OnCombatEnded detected victory; invoking loot collection.");
+            BeginPostCombatLootCollection();
+        }
+        else
+        {
+            Debug.Log("[CombatEnd] OnCombatEnded without victory; skipping loot collection.");
+        }
     }
 
     private void ProcessEndOfTurnHPState(CharacterController character)
@@ -11296,9 +11318,8 @@ public partial class GameManager : MonoBehaviour
             {
                 if (AreAllNPCsDead())
                 {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
+                    Debug.Log("[CombatEnd] Victory condition met after spell target kill.");
+                    HandleCombatVictoryDetected("ResolveSingleTargetSpell");
                     _pendingSpell = null;
                     _pendingMetamagic = null;
                     _pendingSpellFromHeldCharge = false;
@@ -12152,9 +12173,8 @@ public partial class GameManager : MonoBehaviour
             // Check for victory/defeat
             if (AreAllNPCsDead())
             {
-                CurrentPhase = TurnPhase.CombatOver;
-                CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                CombatUI.SetActionButtonsVisible(false);
+                Debug.Log("[CombatEnd] Victory condition met after AoE spell resolution.");
+                HandleCombatVictoryDetected("ResolveAOESpell");
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 return;
@@ -12325,9 +12345,8 @@ public partial class GameManager : MonoBehaviour
 
         if (AreAllNPCsDead())
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-            CombatUI.SetActionButtonsVisible(false);
+            Debug.Log("[CombatEnd] Victory condition met after Hypnotism spell resolution.");
+            HandleCombatVictoryDetected("ResolveHypnotismSpell");
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -12469,9 +12488,8 @@ public partial class GameManager : MonoBehaviour
 
         if (AreAllNPCsDead())
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-            CombatUI.SetActionButtonsVisible(false);
+            Debug.Log("[CombatEnd] Victory condition met after Sleep spell resolution.");
+            HandleCombatVictoryDetected("ResolveSleepSpell");
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -12568,9 +12586,8 @@ public partial class GameManager : MonoBehaviour
 
         if (AreAllNPCsDead())
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-            CombatUI.SetActionButtonsVisible(false);
+            Debug.Log("[CombatEnd] Victory condition met after Color Spray resolution.");
+            HandleCombatVictoryDetected("ResolveColorSpraySpell");
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -16243,9 +16260,8 @@ public partial class GameManager : MonoBehaviour
                     _offHandAttackUsedThisTurn = true;
                     _isSelectingOffHandTarget = false;
                     _isSelectingOffHandThrownTarget = false;
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
+                    Debug.Log("[CombatEnd] Victory condition met after off-hand attack kill.");
+                    HandleCombatVictoryDetected("ResolveOffHandAttack");
                     return;
                 }
             }
@@ -16848,9 +16864,8 @@ public partial class GameManager : MonoBehaviour
 
         if (target != null && target.Stats != null && target.Stats.IsDead && target.Team == CharacterTeam.Enemy && AreAllNPCsDead())
         {
-            CurrentPhase = TurnPhase.CombatOver;
-            CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-            CombatUI.SetActionButtonsVisible(false);
+            Debug.Log("[CombatEnd] Victory condition met after special attack resolution.");
+            HandleCombatVictoryDetected("FinalizeSpecialAttackResolution");
             return;
         }
 
@@ -17086,9 +17101,8 @@ public partial class GameManager : MonoBehaviour
 
                 if (currentTarget.Team == CharacterTeam.Enemy && AreAllNPCsDead())
                 {
-                    CurrentPhase = TurnPhase.CombatOver;
-                    CombatUI.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    CombatUI.SetActionButtonsVisible(false);
+                    Debug.Log("[CombatEnd] Victory condition met during full attack sequence.");
+                    HandleCombatVictoryDetected("ExecuteFullAttackSequence");
                     yield break;
                 }
 
