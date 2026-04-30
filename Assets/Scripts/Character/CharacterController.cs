@@ -2729,7 +2729,11 @@ public class CharacterController : MonoBehaviour
 
     private void OnCurrentHPChanged(int oldHP, int newHP)
     {
+        string name = Stats != null ? Stats.CharacterName : gameObject.name;
+        Debug.Log($"[DeathFlow][HPChanged] {name} HP changed | old={oldHP} -> new={newHP} | stateBefore={_currentHPState} | deadNow={newHP <= -10}");
+
         HPState next = DetermineStateFromHPTransition(oldHP, newHP);
+        Debug.Log($"[DeathFlow][HPChanged] {name} resolved next HP state={next}");
         SetHPState(next, emitLog: true);
 
         if (newHP < oldHP && GameManager.Instance != null && GameManager.Instance.IsCharacterAsleep(this))
@@ -7813,8 +7817,14 @@ public class CharacterController : MonoBehaviour
     /// </summary>
     public void OnDeath()
     {
+        string who = Stats != null ? Stats.CharacterName : gameObject.name;
+        Debug.Log($"[DeathFlow][OnDeath] ENTER | who={who} | hp={(Stats != null ? Stats.CurrentHP : 0)} | alreadyProcessed={_hasProcessedDeath}");
+
         if (_hasProcessedDeath)
+        {
+            Debug.Log($"[DeathFlow][OnDeath] SKIP duplicate death processing for {who}.");
             return;
+        }
 
         _hasProcessedDeath = true;
 
@@ -7838,6 +7848,8 @@ public class CharacterController : MonoBehaviour
         ClearOwnedFeintWindowsAndIndicators();
         ClearIncomingFeintIndicators();
         ReleaseGrappleState("death");
+
+        Debug.Log($"[DeathFlow][OnDeath] EXIT | who={who} | hp={(Stats != null ? Stats.CurrentHP : 0)}");
     }
 
     public void ProcessPinnedDurationAtTurnEnd()

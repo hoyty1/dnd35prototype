@@ -174,11 +174,17 @@ public class TurnService : MonoBehaviour
 
     public void StartTurnAtCurrentIndex()
     {
+        Debug.Log($"[TurnService][Flow] StartTurnAtCurrentIndex ENTER | combatActive={_combatActive} | initiativeCount={_initiativeOrder.Count} | index={_currentInitiativeIndex} | round={_currentRound}");
+
         if (!_combatActive)
+        {
+            Debug.Log("[TurnService][Flow] EARLY RETURN | reason=combat inactive");
             return;
+        }
 
         if (_initiativeOrder.Count == 0)
         {
+            Debug.Log("[TurnService][Flow] No initiative entries remain; ending combat.");
             EndCombat();
             return;
         }
@@ -227,11 +233,14 @@ public class TurnService : MonoBehaviour
 
     public void EndCombat()
     {
+        Debug.Log($"[TurnService][Flow] EndCombat ENTER | combatActive={_combatActive} | initiativeCount={_initiativeOrder.Count} | currentRound={_currentRound}");
         _combatActive = false;
         _currentCharacter = null;
         _initiativeOrder.Clear();
         _currentInitiativeIndex = 0;
+        Debug.Log("[TurnService][Flow] EndCombat invoking OnCombatEnded event.");
         OnCombatEnded?.Invoke();
+        Debug.Log("[TurnService][Flow] EndCombat EXIT");
     }
 
     public void AddToInitiative(CharacterController combatant, bool isPC, CharacterController insertAfter = null)
@@ -314,7 +323,9 @@ public class TurnService : MonoBehaviour
 
     public bool HasInitiativeEntries()
     {
-        return _initiativeOrder.Count > 0;
+        bool hasEntries = _initiativeOrder.Count > 0;
+        Debug.Log($"[TurnService][Flow] HasInitiativeEntries -> {hasEntries} (count={_initiativeOrder.Count})");
+        return hasEntries;
     }
 
     public string GetInitiativeOrderString()

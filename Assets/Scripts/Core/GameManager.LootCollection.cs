@@ -22,7 +22,8 @@ public partial class GameManager
 
     private void BeginPostCombatLootCollection()
     {
-        Debug.Log($"[LootFlow] BeginPostCombatLootCollection START | frame={Time.frameCount} | phase={CurrentPhase}");
+        Canvas canvas = FindObjectOfType<Canvas>();
+        Debug.Log($"[LootFlow] BeginPostCombatLootCollection START | frame={Time.frameCount} | phase={CurrentPhase} | lootUiAssigned={LootCollectionUI != null} | partyStashAssigned={PartyStash != null} | partyStashLocked={(PartyStash != null && PartyStash.IsLocked)} | canvasFound={canvas != null}");
 
         if (_postCombatLootCollectionTriggered)
         {

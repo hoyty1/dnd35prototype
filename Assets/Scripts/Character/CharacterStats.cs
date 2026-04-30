@@ -2301,21 +2301,30 @@ public class CharacterStats
     /// </summary>
     public void TakeDamage(int amount)
     {
+        string ownerName = OwnerCharacter != null && OwnerCharacter.Stats != null ? OwnerCharacter.Stats.CharacterName : "<unknown>";
+        int hpBefore = CurrentHP;
+        int tempHpBefore = TempHP;
+        Debug.Log($"[DeathFlow][TakeDamage] ENTER | target={ownerName} | incoming={amount} | hpBefore={hpBefore} | tempHpBefore={tempHpBefore} | isDeadBefore={IsDead}");
+
         // Temp HP absorbs damage first
         if (TempHP > 0 && amount > 0)
         {
             if (amount <= TempHP)
             {
                 TempHP -= amount;
+                Debug.Log($"[DeathFlow][TakeDamage] Temp HP fully absorbed damage | target={ownerName} | hpAfter={CurrentHP} | tempHpAfter={TempHP} | isDeadAfter={IsDead}");
                 return;
             }
             else
             {
                 amount -= TempHP;
                 TempHP = 0;
+                Debug.Log($"[DeathFlow][TakeDamage] Temp HP depleted | target={ownerName} | remainingDamage={amount}");
             }
         }
+
         CurrentHP = Mathf.Max(-10, CurrentHP - amount);
+        Debug.Log($"[DeathFlow][TakeDamage] EXIT | target={ownerName} | hpBefore={hpBefore} | hpAfter={CurrentHP} | finalApplied={Mathf.Max(0, hpBefore - CurrentHP)} | isDeadAfter={IsDead}");
     }
 
     /// <summary>

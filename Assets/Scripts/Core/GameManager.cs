@@ -4808,13 +4808,41 @@ public partial class GameManager : MonoBehaviour
     /// <summary>Check if all hostile (enemy-team) combatants are dead.</summary>
     private bool AreAllNPCsDead()
     {
-        foreach (var npc in NPCs)
+        if (NPCs == null)
         {
-            if (!IsActiveCombatant(npc)) continue;
-            if (npc.Team != CharacterTeam.Enemy) continue; // allied/neutral units should not block victory
-            if (!npc.Stats.IsDead) return false;
+            Debug.Log("[VictoryCheck] AreAllNPCsDead called with null NPC list. Treating as victory-safe true.");
+            return true;
         }
-        return true;
+
+        int aliveEnemies = 0;
+        for (int i = 0; i < NPCs.Count; i++)
+        {
+            CharacterController npc = NPCs[i];
+            bool active = IsActiveCombatant(npc);
+            bool isEnemy = active && npc.Team == CharacterTeam.Enemy;
+            bool isDead = active && npc.Stats != null && npc.Stats.IsDead;
+            string npcName = npc != null && npc.Stats != null ? npc.Stats.CharacterName : $"<npc:{i}>";
+
+            if (!active || !isEnemy)
+            {
+                Debug.Log($"[VictoryCheck] Skipping NPC in victory scan | idx={i} | name={npcName} | active={active} | isEnemy={isEnemy}");
+                continue;
+            }
+
+            if (!isDead)
+            {
+                aliveEnemies++;
+                Debug.Log($"[VictoryCheck] Enemy still alive | idx={i} | name={npcName} | hp={npc.Stats.CurrentHP}");
+            }
+            else
+            {
+                Debug.Log($"[VictoryCheck] Enemy dead | idx={i} | name={npcName} | hp={npc.Stats.CurrentHP}");
+            }
+        }
+
+        bool allDead = aliveEnemies == 0;
+        Debug.Log($"[VictoryCheck] AreAllNPCsDead result={allDead} | aliveEnemies={aliveEnemies} | snapshot={BuildEnemyStatusSnapshot()}");
+        return allDead;
     }
 
     /// <summary>Check if all active PCs in the party are dead.</summary>
@@ -4833,6 +4861,9 @@ public partial class GameManager : MonoBehaviour
     /// <summary>Count remaining alive hostile (enemy-team) NPCs.</summary>
     private int GetAliveNPCCount()
     {
+        if (NPCs == null)
+            return 0;
+
         int count = 0;
         foreach (var npc in NPCs)
         {
@@ -4840,7 +4871,61 @@ public partial class GameManager : MonoBehaviour
             if (npc.Team != CharacterTeam.Enemy) continue;
             if (!npc.Stats.IsDead) count++;
         }
+
+        Debug.Log($"[VictoryCheck] GetAliveNPCCount -> {count} | snapshot={BuildEnemyStatusSnapshot()}");
         return count;
+    }
+
+    private string BuildEnemyStatusSnapshot()
+    {
+        if (NPCs == null)
+            return "NPCs=<null>";
+
+        List<string> entries = new List<string>();
+        for (int i = 0; i < NPCs.Count; i++)
+        {
+            CharacterController npc = NPCs[i];
+            if (npc == null)
+            {
+                entries.Add($"#{i}:<null>");
+                continue;
+            }
+
+            string name = npc.Stats != null ? npc.Stats.CharacterName : npc.name;
+            bool active = IsActiveCombatant(npc);
+            bool enemy = npc.Team == CharacterTeam.Enemy;
+            int hp = npc.Stats != null ? npc.Stats.CurrentHP : 0;
+            bool dead = npc.Stats != null && npc.Stats.IsDead;
+            entries.Add($"#{i}:{name}[active={active},enemy={enemy},dead={dead},hp={hp}]");
+        }
+
+        return string.Join("; ", entries);
+    }
+
+    private bool CheckCombatVictory(string sourceContext, CharacterController defeatedTarget = null)
+    {
+        string targetName = defeatedTarget != null && defeatedTarget.Stats != null ? defeatedTarget.Stats.CharacterName : "<none>";
+        Debug.Log($"[VictoryCheck] ENTER | source={sourceContext} | frame={Time.frameCount} | phase={CurrentPhase} | target={targetName} | targetDead={(defeatedTarget != null && defeatedTarget.Stats != null && defeatedTarget.Stats.IsDead)}");
+
+        int aliveBefore = GetAliveNPCCount();
+
+        if (CurrentPhase == TurnPhase.CombatOver)
+        {
+            Debug.Log($"[VictoryCheck] EARLY RETURN | source={sourceContext} | reason=CurrentPhase already CombatOver | aliveBefore={aliveBefore}");
+            return false;
+        }
+
+        bool allEnemiesDead = AreAllNPCsDead();
+        int aliveAfter = GetAliveNPCCount();
+        Debug.Log($"[VictoryCheck] EVALUATED | source={sourceContext} | aliveBefore={aliveBefore} | aliveAfter={aliveAfter} | allEnemiesDead={allEnemiesDead}");
+
+        if (!allEnemiesDead)
+            return false;
+
+        Debug.Log($"[VictoryCheck] All enemies dead. Calling HandleCombatVictoryDetected | source={sourceContext}");
+        HandleCombatVictoryDetected(sourceContext);
+        Debug.Log($"[VictoryCheck] EXIT after HandleCombatVictoryDetected | source={sourceContext} | waitingLoot={WaitingForLootCollection} | phaseNow={CurrentPhase}");
+        return true;
     }
 
     /// <summary>Get first alive hostile NPC (for backward compat in single-target scenarios).</summary>
@@ -4857,14 +4942,21 @@ public partial class GameManager : MonoBehaviour
 
     private void HandleCombatVictoryDetected(string sourceContext)
     {
-        Debug.Log($"[CombatEnd] Victory detected | source={sourceContext} | frame={Time.frameCount} | phaseBefore={CurrentPhase}");
+        Debug.Log($"[CombatEnd] Victory detected | source={sourceContext} | frame={Time.frameCount} | phaseBefore={CurrentPhase} | waitingLootBefore={WaitingForLootCollection}");
 
         CurrentPhase = TurnPhase.CombatOver;
         CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
         CombatUI?.SetActionButtonsVisible(false);
 
+        Debug.Log($"[CombatEnd] Loot safeguards | source={sourceContext} | lootUiAssigned={LootCollectionUI != null} | partyStashAssigned={PartyStash != null}");
+        if (LootCollectionUI == null)
+            Debug.LogWarning("[LootUI] LootCollectionUI reference is null before BeginPostCombatLootCollection. Initialization will be attempted.");
+        if (PartyStash == null)
+            Debug.LogWarning("[LootFlow] PartyStash is null before BeginPostCombatLootCollection. Initialization will be attempted.");
+
         Debug.Log($"[CombatEnd] Triggering post-combat loot collection | source={sourceContext} | waitingBefore={WaitingForLootCollection}");
         BeginPostCombatLootCollection();
+        Debug.Log($"[CombatEnd] Post-combat loot collection invoked | source={sourceContext} | waitingAfter={WaitingForLootCollection} | phaseAfter={CurrentPhase}");
     }
 
     private Sprite LoadSprite(string path)
@@ -4990,9 +5082,12 @@ public partial class GameManager : MonoBehaviour
 
     private void OnCombatEnded()
     {
-        bool isVictory = AreAllNPCsDead() && !AreAllPCsDead();
+        int aliveEnemiesBefore = GetAliveNPCCount();
+        bool allNpcsDead = AreAllNPCsDead();
+        bool allPcsDead = AreAllPCsDead();
+        bool isVictory = allNpcsDead && !allPcsDead;
 
-        Debug.Log($"[LootFlow] OnCombatEnded triggered | frame={Time.frameCount} | activeNPCs={(NPCs != null ? NPCs.Count : 0)} | activePCs={(PCs != null ? PCs.Count : 0)} | victory={isVictory}");
+        Debug.Log($"[LootFlow] OnCombatEnded triggered | frame={Time.frameCount} | activeNPCs={(NPCs != null ? NPCs.Count : 0)} | activePCs={(PCs != null ? PCs.Count : 0)} | aliveEnemiesBefore={aliveEnemiesBefore} | allNpcsDead={allNpcsDead} | allPcsDead={allPcsDead} | victory={isVictory}");
 
         CurrentPhase = TurnPhase.CombatOver;
         ClearAllActiveGreaseEffects();
@@ -5006,6 +5101,7 @@ public partial class GameManager : MonoBehaviour
         {
             Debug.Log("[CombatEnd] OnCombatEnded detected victory; invoking loot collection.");
             BeginPostCombatLootCollection();
+            Debug.Log($"[LootFlow] OnCombatEnded post-invoke state | waitingLoot={WaitingForLootCollection} | lootUiAssigned={LootCollectionUI != null}");
         }
         else
         {
@@ -8613,7 +8709,41 @@ public partial class GameManager : MonoBehaviour
     private void EndAttackSequence()
     {
         Debug.Log("[Attack][Sequence] Ending attack sequence");
-        Debug.Log($"[Attack][Sequence] Final state before teardown: attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}, offHandUsed={_offHandAttackUsedThisTurn}, offHandAvailable={_offHandAttackAvailableThisTurn}");
+        Debug.Log($"[Attack][Sequence] Final state before teardown: attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}, offHandUsed={_offHandAttackUsedThisTurn}, offHandAvailable={_offHandAttackAvailableThisTurn}, phase={CurrentPhase}");
+
+        // Nuclear safety net: if attack flow ended and every enemy is dead, force victory handling.
+        if (CurrentPhase == TurnPhase.PCTurn || CurrentPhase == TurnPhase.NPCTurn)
+        {
+            int aliveEnemies = GetAliveNPCCount();
+            int totalEnemyCombatants = 0;
+            if (NPCs != null)
+            {
+                for (int i = 0; i < NPCs.Count; i++)
+                {
+                    CharacterController npc = NPCs[i];
+                    if (!IsActiveCombatant(npc))
+                        continue;
+                    if (npc.Team != CharacterTeam.Enemy)
+                        continue;
+                    totalEnemyCombatants++;
+                }
+            }
+
+            Debug.Log($"[Attack][ForceCheck] EndAttackSequence enemy status | aliveEnemies={aliveEnemies} | totalEnemyCombatants={totalEnemyCombatants} | snapshot={BuildEnemyStatusSnapshot()}");
+            if (aliveEnemies == 0 && totalEnemyCombatants > 0)
+            {
+                Debug.Log("[Attack][ForceCheck] FORCING victory detection from EndAttackSequence");
+                CheckCombatVictory("EndAttackSequence.ForceCheck");
+            }
+            else
+            {
+                Debug.Log("[Attack][ForceCheck] No force trigger needed.");
+            }
+        }
+        else
+        {
+            Debug.Log($"[Attack][ForceCheck] Skipped force check due to phase={CurrentPhase}");
+        }
 
         _totalAttacksUsed = 0;
         _totalAttackBudget = 0;
@@ -9034,8 +9164,12 @@ public partial class GameManager : MonoBehaviour
     public void EndCurrentTurn()
     {
         if (CurrentPhase == TurnPhase.CombatOver)
+        {
+            Debug.Log("[CombatEnd] EndCurrentTurn early return because phase is already CombatOver.");
             return;
+        }
 
+        Debug.Log($"[TurnFlow] EndCurrentTurn | isPlayerTurn={IsPlayerTurn} | phase={CurrentPhase} | subPhase={CurrentSubPhase}");
         if (IsPlayerTurn)
             EndActivePCTurn();
         else
@@ -17151,11 +17285,18 @@ public partial class GameManager : MonoBehaviour
     private void PerformIterativeSequenceAttack(CharacterController attacker, CharacterController target,
         bool isFlanking, int flankBonus, string partnerName, RangeInfo rangeInfo = null)
     {
+        string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "<null>";
+        string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "<null>";
+        Debug.Log($"[AttackFlow] PerformIterativeSequenceAttack ENTER | attacker={attackerName} | target={targetName} | phase={CurrentPhase} | subPhase={CurrentSubPhase} | inSequence={_isInAttackSequence} | attacksUsed={_totalAttacksUsed}/{_totalAttackBudget}");
+
         if (_combatFlowService != null)
         {
             _combatFlowService.PerformIterativeSequenceAttack(attacker, target, isFlanking, flankBonus, partnerName, rangeInfo);
+            Debug.Log($"[AttackFlow] PerformIterativeSequenceAttack EXIT via service | attacker={attackerName} | target={targetName} | targetDead={(target != null && target.Stats != null && target.Stats.IsDead)} | phase={CurrentPhase} | waitingLoot={WaitingForLootCollection}");
             return;
         }
+
+        Debug.LogWarning("[AttackFlow] PerformIterativeSequenceAttack skipped because _combatFlowService is null.");
     }
 
     private void PerformSingleAttack(CharacterController attacker, CharacterController target,

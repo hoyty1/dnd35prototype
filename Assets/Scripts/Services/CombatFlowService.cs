@@ -310,6 +310,44 @@ public class CombatFlowService : MonoBehaviour
         return currentType == GameManager.AttackType.Ranged || currentType == GameManager.AttackType.Thrown;
     }
 
+    private void LogDeathPoint(string context, CharacterController attacker, CharacterController target)
+    {
+        string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "<null>";
+        string targetName = target != null && target.Stats != null ? target.Stats.CharacterName : "<null>";
+        bool targetDead = target != null && target.Stats != null && target.Stats.IsDead;
+        int targetHp = target != null && target.Stats != null ? target.Stats.CurrentHP : 0;
+        Debug.Log($"[DeathFlow] {context} | attacker={attackerName} | target={targetName} | targetDead={targetDead} | targetHP={targetHp} | phase={(_gameManager != null ? _gameManager.CurrentPhase.ToString() : "<no-gm>")}");
+    }
+
+    private bool TryHandleVictoryAfterEnemyDeath(string context, CharacterController attacker, CharacterController target)
+    {
+        if (_gameManager == null)
+            return false;
+
+        LogDeathPoint($"{context}:ENTRY", attacker, target);
+
+        if (target == null || target.Stats == null)
+        {
+            Debug.Log($"[VictoryCheck] {context} skip: target is null.");
+            return false;
+        }
+
+        if (target.Team != CharacterTeam.Enemy)
+        {
+            Debug.Log($"[VictoryCheck] {context} skip: target is not enemy (team={target.Team}).");
+            return false;
+        }
+
+        int aliveBefore = _gameManager.Combat_GetAliveNPCCount();
+        Debug.Log($"[VictoryCheck] {context} before check | aliveEnemies={aliveBefore}");
+
+        bool handled = _gameManager.Combat_CheckCombatVictory(context, target);
+
+        int aliveAfter = _gameManager.Combat_GetAliveNPCCount();
+        Debug.Log($"[VictoryCheck] {context} after check | handled={handled} | aliveEnemies={aliveAfter} | phase={_gameManager.CurrentPhase} | waitingLoot={_gameManager.WaitingForLootCollection}");
+        return handled;
+    }
+
     public CombatResult ExecuteOffHandAttack(CharacterController attacker, CharacterController target, int attackBab, ItemData offHandWeapon, bool useThrownRange)
     {
         if (_gameManager == null || attacker == null || target == null || offHandWeapon == null)
@@ -458,6 +496,7 @@ public class CombatFlowService : MonoBehaviour
 
         if (IsRangedOrThrownAttack(rangeInfo) && !ResolveRangedAttackAoOIfProvoked(attacker))
         {
+            Debug.Log("[AttackFlow] Early return in PerformIterativeSequenceAttack: attacker died/aborted from AoO before attack resolution.");
             _gameManager.Combat_EndAttackSequence();
             return;
         }
@@ -538,16 +577,16 @@ public class CombatFlowService : MonoBehaviour
 
         if (result.TargetKilled)
         {
+            LogDeathPoint("PerformIterativeSequenceAttack:TargetKilled", attacker, target);
             _gameManager.Combat_HandleSummonDeathCleanup(target);
             if (target.Team == CharacterTeam.Enemy)
             {
                 _gameManager.Combat_UpdateAllStatsUI();
-                if (_gameManager.Combat_AreAllNPCsDead())
+                Debug.Log("[AttackFlow] Attack sequence ended");
+                Debug.Log("[AttackFlow] Target died, checking victory");
+                if (TryHandleVictoryAfterEnemyDeath("PerformIterativeSequenceAttack", attacker, target))
                 {
                     _gameManager.Combat_EndAttackSequence();
-                    _gameManager.Combat_SetPhase(GameManager.TurnPhase.CombatOver);
-                    _gameManager.CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    _gameManager.CombatUI?.SetActionButtonsVisible(false);
                     return;
                 }
 
@@ -573,9 +612,11 @@ public class CombatFlowService : MonoBehaviour
         }
         else
         {
+            Debug.Log("[AttackFlow] No more attacks available. Ending attack sequence.");
             _gameManager.Combat_EndAttackSequence();
         }
 
+        Debug.Log("[AttackFlow] Scheduling AfterAttackDelay from PerformIterativeSequenceAttack.");
         _gameManager.Combat_StartAfterAttackDelay(attacker, 1.5f);
     }
 
@@ -739,17 +780,13 @@ public class CombatFlowService : MonoBehaviour
 
         if (result.TargetKilled)
         {
+            LogDeathPoint("PerformSingleAttack:TargetKilled", attacker, target);
             _gameManager.Combat_HandleSummonDeathCleanup(target);
             if (target.Team == CharacterTeam.Enemy)
             {
                 _gameManager.Combat_UpdateAllStatsUI();
-                if (_gameManager.Combat_AreAllNPCsDead())
-                {
-                    _gameManager.Combat_SetPhase(GameManager.TurnPhase.CombatOver);
-                    _gameManager.CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    _gameManager.CombatUI?.SetActionButtonsVisible(false);
+                if (TryHandleVictoryAfterEnemyDeath("PerformSingleAttack", attacker, target))
                     return;
-                }
 
                 _gameManager.CombatUI?.ShowCombatLog(log + $"\n⚔️ {target.Stats.CharacterName} is slain! {_gameManager.Combat_GetAliveNPCCount()} enemies remain.");
             }
@@ -822,17 +859,13 @@ public class CombatFlowService : MonoBehaviour
 
         if (result.TargetKilled)
         {
+            LogDeathPoint("PerformFullAttack:TargetKilled", attacker, target);
             _gameManager.Combat_HandleSummonDeathCleanup(target);
             if (target.Team == CharacterTeam.Enemy)
             {
                 _gameManager.Combat_UpdateAllStatsUI();
-                if (_gameManager.Combat_AreAllNPCsDead())
-                {
-                    _gameManager.Combat_SetPhase(GameManager.TurnPhase.CombatOver);
-                    _gameManager.CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    _gameManager.CombatUI?.SetActionButtonsVisible(false);
+                if (TryHandleVictoryAfterEnemyDeath("PerformFullAttack", attacker, target))
                     return;
-                }
             }
         }
 
@@ -870,17 +903,13 @@ public class CombatFlowService : MonoBehaviour
 
         if (result.TargetKilled)
         {
+            LogDeathPoint("PerformDualWieldAttack:TargetKilled", attacker, target);
             _gameManager.Combat_HandleSummonDeathCleanup(target);
             if (target.Team == CharacterTeam.Enemy)
             {
                 _gameManager.Combat_UpdateAllStatsUI();
-                if (_gameManager.Combat_AreAllNPCsDead())
-                {
-                    _gameManager.Combat_SetPhase(GameManager.TurnPhase.CombatOver);
-                    _gameManager.CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    _gameManager.CombatUI?.SetActionButtonsVisible(false);
+                if (TryHandleVictoryAfterEnemyDeath("PerformDualWieldAttack", attacker, target))
                     return;
-                }
             }
         }
 
@@ -918,17 +947,13 @@ public class CombatFlowService : MonoBehaviour
 
         if (result.TargetKilled)
         {
+            LogDeathPoint("PerformFlurryOfBlows:TargetKilled", attacker, target);
             _gameManager.Combat_HandleSummonDeathCleanup(target);
             if (target.Team == CharacterTeam.Enemy)
             {
                 _gameManager.Combat_UpdateAllStatsUI();
-                if (_gameManager.Combat_AreAllNPCsDead())
-                {
-                    _gameManager.Combat_SetPhase(GameManager.TurnPhase.CombatOver);
-                    _gameManager.CombatUI?.SetTurnIndicator("VICTORY! All enemies defeated!");
-                    _gameManager.CombatUI?.SetActionButtonsVisible(false);
+                if (TryHandleVictoryAfterEnemyDeath("PerformFlurryOfBlows", attacker, target))
                     return;
-                }
             }
         }
 
