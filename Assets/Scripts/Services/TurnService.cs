@@ -243,6 +243,22 @@ public class TurnService : MonoBehaviour
         Debug.Log("[TurnService][Flow] EndCombat EXIT");
     }
 
+    /// <summary>
+    /// Force-clear initiative/combat state without emitting OnCombatEnded.
+    /// Used by encounter-loop reset paths after loot/rest to avoid stale turn state.
+    /// </summary>
+    public void ForceResetWithoutCallbacks(string context)
+    {
+        string safeContext = string.IsNullOrWhiteSpace(context) ? "unspecified" : context;
+        Debug.Log($"[TurnService][Flow] ForceResetWithoutCallbacks | context={safeContext} | active={_combatActive} | initiativeCount={_initiativeOrder.Count} | round={_currentRound}");
+
+        _combatActive = false;
+        _currentCharacter = null;
+        _initiativeOrder.Clear();
+        _currentInitiativeIndex = 0;
+        _currentRound = 0;
+    }
+
     public void AddToInitiative(CharacterController combatant, bool isPC, CharacterController insertAfter = null)
     {
         if (combatant == null || combatant.Stats == null)

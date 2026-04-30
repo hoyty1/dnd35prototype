@@ -285,6 +285,49 @@ public class CombatUI : MonoBehaviour
         _combatLogPanel?.ClearLog();
     }
 
+    public void ClearTurnOrderDisplay()
+    {
+        UpdateInitiativeDisplay(string.Empty);
+    }
+
+    /// <summary>
+    /// Resets combat UI widgets/panels to a clean baseline for the next encounter loop combat.
+    /// </summary>
+    public void ResetAllUI(bool clearCombatLog = true)
+    {
+        Debug.Log("[CombatUI] ResetAllUI ENTER");
+
+        SetActionButtonsVisible(false);
+        EnsureActionButtonPanel();
+        _actionButtonPanel?.HideAllActionButtons();
+
+        HideSpecialAttackMenu();
+        HideSpecialStyleSelectionMenu();
+        HideBullRushExtraPushChoice();
+        HideAoOConfirmationPrompt();
+        HideDisarmWeaponSelection();
+        HideTouchSpellPrompt();
+        HideSpellSelection();
+        HideSummonContextMenu();
+        HideSummonCreatureSelection();
+        HidePickUpItemSelection();
+        HideDropEquippedItemSelection();
+        HideDisguiseSelfRaceSelector();
+
+        ClearCurrentTarget();
+        SetActivePC(0);
+        SetActiveNPC(-1);
+        SetTurnIndicator(string.Empty);
+        ClearTurnOrderDisplay();
+        ResetDamageModeToggleVisual();
+        ClearSpontaneousCastState();
+
+        if (clearCombatLog)
+            ClearCombatLog();
+
+        Debug.Log("[CombatUI] ResetAllUI EXIT");
+    }
+
     public void AddCombatMessage(string message, MessageType type = MessageType.Normal)
     {
         EnsureCombatLogPanel();

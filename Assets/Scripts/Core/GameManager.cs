@@ -820,6 +820,170 @@ public partial class GameManager : MonoBehaviour
         UpdateAllStatsUI();
     }
 
+    private void ClearBattlefieldForEncounterLoopReset(string context)
+    {
+        string safeContext = string.IsNullOrWhiteSpace(context) ? "unspecified" : context;
+        Debug.Log($"[BattlefieldReset] Clearing battlefield | context={safeContext} | phase={CurrentPhase}");
+
+        if (_pathPreview != null)
+            _pathPreview.HidePath();
+        if (_hoverMarker != null)
+            _hoverMarker.Hide();
+
+        ClearAoEPreviewHighlights();
+        _isAoETargeting = false;
+        _currentAoECells = null;
+        _lastAoEHoverPos = new Vector2Int(-1, -1);
+        _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+        _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue);
+
+        if (Grid != null)
+            Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+
+        ClearAllActiveGreaseEffects();
+
+        if (AreaEffectManager.HasInstance)
+            AreaEffectManager.Instance.ClearAllEffects();
+        if (WindEffectManager.HasInstance)
+            WindEffectManager.Instance.ClearAllWindEffects();
+
+        Debug.Log($"[BattlefieldReset] Battlefield cleared | context={safeContext}");
+    }
+
+    private void ResetCombatStateForNextEncounter(string context)
+    {
+        string safeContext = string.IsNullOrWhiteSpace(context) ? "unspecified" : context;
+        int turnOrderCount = _turnService != null && _turnService.InitiativeOrder != null ? _turnService.InitiativeOrder.Count : 0;
+        int activeNpcs = 0;
+        if (NPCs != null)
+        {
+            for (int i = 0; i < NPCs.Count; i++)
+            {
+                CharacterController npc = NPCs[i];
+                if (npc != null && npc.gameObject != null && npc.gameObject.activeSelf)
+                    activeNpcs++;
+            }
+        }
+
+        string currentCharacterName = CurrentCharacter != null && CurrentCharacter.Stats != null
+            ? CurrentCharacter.Stats.CharacterName
+            : "None";
+
+        Debug.Log($"[CombatReset] ENTER | context={safeContext} | phase={CurrentPhase} | subPhase={CurrentSubPhase} | turnOrder={turnOrderCount} | currentCharacter={currentCharacterName} | activeNPCs={activeNpcs}");
+
+        StopAllCoroutines();
+        _turnService?.StopAllCoroutines();
+
+        EndAttackSequence();
+        EndThrownAttackSequence();
+        ResetOffHandTurnState();
+        ClearDisarmSequenceState();
+        ClearSunderSequenceState();
+
+        _waitingForAoOConfirmation = false;
+        _pendingAoOAction = null;
+        _spellcastProvocationCancelled = false;
+        ClearSpellcastResourceSnapshot();
+
+        _isSelectingWithdraw = false;
+        _isSelectingSpecialAttack = false;
+        _pendingDisarmUseOffHandSelection = false;
+        _pendingSunderUseOffHandSelection = false;
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+        _pendingSpellFromHeldCharge = false;
+        _pendingAnimateRopeItem = null;
+        _pendingMagicWeaponItem = null;
+        _pendingResistEnergyType = null;
+        _pendingDisguiseSelfRace = null;
+        _pendingSummonSelection = null;
+        _pendingNaturalAttackSequenceIndex = -1;
+        _pendingNaturalAttackLabel = null;
+        ResetPendingGreaseCastMode();
+
+        _isConfirmingSelfAoE = false;
+        _pendingSelfAoECells = null;
+        _pendingSelfAoETargets = null;
+
+        _chargeTarget = null;
+        _pendingChargePath.Clear();
+        _pendingChargeBullRush = false;
+
+        _isAwaitingRangedRetargetSelection = false;
+        _rangedRetargetSelectionCancelled = false;
+        _selectedRangedRetarget = null;
+        _isAwaitingFullAttackFiveFootStepSelection = false;
+        _fullAttackFiveFootStepSelectionCancelled = false;
+        _fullAttackFiveFootStepWasTaken = false;
+        _fullAttackFiveFootStepRequireReachableTarget = false;
+        _fullAttackFiveFootStepRangedMode = false;
+
+        _isSelectingTurnUndead = false;
+        _turnUndeadPendingInvoker = null;
+        CloseTurnUndeadSelectionPanel(clearHighlights: true);
+        _activeTurnUndeadSelectionContext = null;
+
+        ClearOverrunDestinationSelectionState();
+        ClearOverrunContinuationState();
+        ClearFreeAdjacentGrappleMoveSelectionState();
+        ClearGrappleMoveSelectionState();
+
+        ClearBattlefieldForEncounterLoopReset(safeContext);
+
+        if (Grid != null)
+        {
+            if (PCs != null)
+            {
+                for (int i = 0; i < PCs.Count; i++)
+                {
+                    CharacterController pc = PCs[i];
+                    if (pc == null)
+                        continue;
+
+                    Grid.ClearCreatureOccupancy(pc);
+                    if (pc.gameObject != null && pc.gameObject.activeInHierarchy)
+                        Grid.SetCreatureOccupancy(pc, pc.GridPosition, pc.GetVisualSquaresOccupied());
+                }
+            }
+
+            if (NPCs != null)
+            {
+                for (int i = 0; i < NPCs.Count; i++)
+                {
+                    CharacterController npc = NPCs[i];
+                    if (npc == null)
+                        continue;
+
+                    Grid.ClearCreatureOccupancy(npc);
+                    npc.GridPosition = new Vector2Int(-1000, -1000);
+                    if (npc.transform != null)
+                        npc.transform.position = new Vector3(-1000f, -1000f, 0f);
+                    if (npc.gameObject != null)
+                        npc.gameObject.SetActive(false);
+                }
+            }
+        }
+
+        _previewThreatenedSquares?.Clear();
+        InvalidatePreviewThreats();
+
+        _turnService?.ForceResetWithoutCallbacks($"ResetCombatStateForNextEncounter:{safeContext}");
+
+        WaitingForPreCombatInventory = false;
+        WaitingForLootCollection = false;
+        WaitingForEncounterSelection = false;
+        _postCombatLootCollectionTriggered = false;
+        CurrentPhase = TurnPhase.CombatOver;
+        CurrentSubPhase = PlayerSubPhase.ChoosingAction;
+
+        CombatUI?.ResetAllUI(clearCombatLog: true);
+
+        int turnOrderAfter = _turnService != null && _turnService.InitiativeOrder != null ? _turnService.InitiativeOrder.Count : 0;
+        Debug.Log($"[CombatReset] EXIT | context={safeContext} | phase={CurrentPhase} | subPhase={CurrentSubPhase} | turnOrder={turnOrderAfter}");
+    }
+
     private static void ClearTemporaryItemSpellEffects(ItemData item)
     {
         if (item == null || item.ActiveSpellEffects == null || item.ActiveSpellEffects.Count == 0)
@@ -855,13 +1019,15 @@ public partial class GameManager : MonoBehaviour
 
     public void ReturnToEncounterSelection()
     {
+        EnsurePartyStashInitialized();
+        PartyStash?.Unlock();
+
+        ResetCombatStateForNextEncounter("ReturnToEncounterSelection");
+
         WaitingForLootCollection = false;
         WaitingForPreCombatInventory = false;
         WaitingForEncounterSelection = false;
         CurrentPhase = TurnPhase.CombatOver;
-
-        EnsurePartyStashInitialized();
-        PartyStash?.Unlock();
 
         CombatUI?.ShowCombatLog($"📊 Combat Loop Stats — Fights: {CompletedCombatCount} | Loot Items: {TotalLootItemsCollected} | XP Defeated: {TotalEncounterXPDefeated}");
         PromptEncounterSelection();
@@ -5015,6 +5181,37 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     public void StartCombat()
     {
+        int turnOrderCountBefore = _turnService != null && _turnService.InitiativeOrder != null ? _turnService.InitiativeOrder.Count : 0;
+        string currentCharacterName = CurrentCharacter != null && CurrentCharacter.Stats != null
+            ? CurrentCharacter.Stats.CharacterName
+            : "None";
+        int activeNpcCountBefore = 0;
+        if (NPCs != null)
+        {
+            for (int i = 0; i < NPCs.Count; i++)
+            {
+                CharacterController npc = NPCs[i];
+                if (npc != null && npc.gameObject != null && npc.gameObject.activeSelf)
+                    activeNpcCountBefore++;
+            }
+        }
+
+        Debug.Log($"[CombatStart] Pre-start state | phase={CurrentPhase} | subPhase={CurrentSubPhase} | turnOrder={turnOrderCountBefore} | selectedCharacter={currentCharacterName} | activeNPCs={activeNpcCountBefore}");
+
+        bool hasLingeringTurnState = _turnService != null && _turnService.HasInitiativeEntries();
+        bool hasLingeringCombatSelections = _isInAttackSequence
+            || _isSelectingSpecialAttack
+            || _isSelectingWithdraw
+            || _isAoETargeting
+            || (_highlightedCells != null && _highlightedCells.Count > 0)
+            || _waitingForAoOConfirmation;
+
+        if (hasLingeringTurnState || hasLingeringCombatSelections)
+        {
+            Debug.LogWarning($"[CombatStart] Detected lingering combat state before StartCombat (turnState={hasLingeringTurnState}, selections={hasLingeringCombatSelections}). Forcing reset.");
+            ResetCombatStateForNextEncounter("StartCombat.DefensivePreInit");
+        }
+
         WaitingForPreCombatInventory = false;
         ResetPostCombatLootCollectionState("StartCombat");
         PreCombatInventoryUI?.Close();
