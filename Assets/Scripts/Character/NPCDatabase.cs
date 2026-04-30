@@ -31,6 +31,7 @@ public static partial class NPCDatabase
         RegisterCreatures_D();
         RegisterCreatures_E();
         RegisterCreatures_F();
+        RegisterCreatures_G();
         RegisterCreatures_H();
         RegisterCreatures_L();
         RegisterCreatures_M();
@@ -68,6 +69,7 @@ public static partial class NPCDatabase
     {
         return new List<EncounterPreset>
         {
+            new EncounterPreset("test_2_goblins", "🧪 Test: 2 Goblins", "Quick test encounter - 2 basic goblins for fast combat and loot validation.", new List<string> { "goblin", "goblin" }),
             new EncounterPreset("grapple_test", "🧪 Grapple Test Encounter", "Fighter vs orc in adjacent squares for dedicated grappling checks.", new List<string> { "orc_grapple_drill" }),
             new EncounterPreset("grease_test", "🧪 Grease Mechanics Test", "Wizard + fighter versus clustered low-Reflex grapplers for Grease area/object/armor mode and grapple-defense validation.", new List<string> { "grease_test_grappler1", "grease_test_grappler2", "grease_test_grappler3", "grease_test_grappler4" }),
             new EncounterPreset("feint_sneak_test", "🗡️ Feint & Sneak Attack Test", "Level 6 rogue vs one goblin tuned for Bluff feints and sneak attack validation.", new List<string> { "goblin_feint_drill" }),
