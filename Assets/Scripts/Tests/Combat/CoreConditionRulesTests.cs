@@ -204,7 +204,7 @@ public static class CoreConditionRulesTests
         {
             target = CreateController("StunnedTarget", bab: 6, str: 16, dex: 18);
 
-            Inventory inv = target.Inventory.GetInventory();
+            global::Inventory inv = target.Inventory.GetInventory();
             inv.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.RightHand);
             inv.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
             inv.RecalculateStats();
@@ -222,7 +222,7 @@ public static class CoreConditionRulesTests
 
             Assert(!target.CanAttack(), "Stunned target cannot attack/actions blocked");
 
-            Inventory inventoryData = target.Inventory.GetInventory();
+            global::Inventory inventoryData = target.Inventory.GetInventory();
             bool droppedHands = inventoryData != null && inventoryData.RightHandSlot == null && inventoryData.LeftHandSlot == null;
             Assert(droppedHands,
                 "Stunned target drops held items");

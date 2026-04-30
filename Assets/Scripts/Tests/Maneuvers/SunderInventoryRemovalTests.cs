@@ -1,4 +1,5 @@
 using UnityEngine;
+using InventoryData = global::Inventory;
 
 namespace Tests.Maneuvers
 {
@@ -82,12 +83,12 @@ public static class SunderInventoryRemovalTests
         return item;
     }
 
-    private static bool InventoryContainsReference(Inventory inv, ItemData item)
+    private static bool InventoryContainsReference(InventoryData inv, ItemData item)
     {
         if (item == null || inv == null)
             return false;
 
-        foreach (EquipSlot slot in Inventory.AllEquipmentSlots)
+        foreach (EquipSlot slot in InventoryData.AllEquipmentSlots)
         {
             if (ReferenceEquals(inv.GetEquipped(slot), item))
                 return true;

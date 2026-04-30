@@ -190,7 +190,7 @@ public static class DualWieldPenaltyTests
             controller = BuildDualWieldCharacter("Two-handed blocks off-hand", hasTWF: true, mainWeaponId: "greatsword", offWeaponId: "dagger");
 
             // Mirror in-game setup where a spiked gauntlet can be equipped in Hands.
-            Inventory inv = controller.GetInventoryData();
+            global::Inventory inv = controller.GetInventoryData();
             inv.DirectEquip(ItemDatabase.CloneItem("spiked_gauntlet"), EquipSlot.Hands);
             inv.RecalculateStats();
 

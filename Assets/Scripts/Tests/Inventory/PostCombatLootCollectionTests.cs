@@ -132,7 +132,7 @@ public static class PostCombatLootCollectionTests
     private static void TestGatherLootFromDeadEnemyInventoryAndEquipment()
     {
         GameManager gm = BuildTestGameManager(out CharacterController enemy, out SquareGrid grid);
-        Inventory inv = enemy.GetComponent<InventoryComponent>().CharacterInventory;
+        global::Inventory inv = enemy.GetComponent<InventoryComponent>().CharacterInventory;
 
         inv.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
         inv.AddItem(ItemDatabase.CloneItem("potion_cure_light_wounds"));
@@ -172,7 +172,7 @@ public static class PostCombatLootCollectionTests
     private static void TestDestroyedItemsExcluded()
     {
         GameManager gm = BuildTestGameManager(out CharacterController enemy, out SquareGrid grid);
-        Inventory inv = enemy.GetComponent<InventoryComponent>().CharacterInventory;
+        global::Inventory inv = enemy.GetComponent<InventoryComponent>().CharacterInventory;
 
         ItemData sword = ItemDatabase.CloneItem("longsword");
         sword.IsDestroyed = true;
@@ -197,7 +197,7 @@ public static class PostCombatLootCollectionTests
     private static void TestLootTransferMovesItemToStash()
     {
         GameManager gm = BuildTestGameManager(out CharacterController enemy, out SquareGrid grid);
-        Inventory inv = enemy.GetComponent<InventoryComponent>().CharacterInventory;
+        global::Inventory inv = enemy.GetComponent<InventoryComponent>().CharacterInventory;
 
         ItemData item = ItemDatabase.CloneItem("dagger");
         inv.AddItem(item);

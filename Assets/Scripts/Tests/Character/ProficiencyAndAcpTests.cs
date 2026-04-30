@@ -153,7 +153,7 @@ public static class ProficiencyAndAcpTests
         var fullPlate = ItemDatabase.Get("full_plate"); // Max Dex +1
         var heavyShield = ItemDatabase.Get("shield_heavy_steel");
 
-        var inv = new Inventory { OwnerStats = fighter, ArmorSlot = fullPlate, LeftHandSlot = heavyShield };
+        var inv = new global::Inventory { OwnerStats = fighter, ArmorSlot = fullPlate, LeftHandSlot = heavyShield };
         inv.RecalculateStats();
 
         Assert(fighter.MaxDexBonus == 1,
@@ -172,7 +172,7 @@ public static class ProficiencyAndAcpTests
 
         var towerShield = ItemDatabase.Get("tower_shield");
 
-        var inv = new Inventory { OwnerStats = rogue, ArmorSlot = null, LeftHandSlot = towerShield };
+        var inv = new global::Inventory { OwnerStats = rogue, ArmorSlot = null, LeftHandSlot = towerShield };
         inv.RecalculateStats();
 
         Assert(rogue.MaxDexBonus == -1,

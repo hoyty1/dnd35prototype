@@ -227,7 +227,7 @@ public static class JumpAndMagicWeaponRulesTests
             attacker = CreateController("MwAttacker", level: 3);
             defender = CreateController("MwDefender", level: 3);
 
-            Inventory attackerInventory = attacker.GetComponent<InventoryComponent>().CharacterInventory;
+            global::Inventory attackerInventory = attacker.GetComponent<InventoryComponent>().CharacterInventory;
             ItemData weapon = ItemDatabase.CloneItem("longsword");
             weapon.AddOrReplaceItemSpellEffect(new ItemSpellEffect("magic_weapon", "Magic Weapon", "Tester", 3, 30)
             {
@@ -291,7 +291,7 @@ public static class JumpAndMagicWeaponRulesTests
         {
             controller = CreateController("InventorySelect", level: 3);
             InventoryComponent invComp = controller.GetComponent<InventoryComponent>();
-            Inventory inv = invComp.CharacterInventory;
+            global::Inventory inv = invComp.CharacterInventory;
 
             ItemData equipped = ItemDatabase.CloneItem("longsword");
             ItemData backpackWeapon = ItemDatabase.CloneItem("dagger");
