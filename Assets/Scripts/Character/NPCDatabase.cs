@@ -28,8 +28,10 @@ public static partial class NPCDatabase
         RegisterCreatures_B();
         RegisterCreatures_C();
         RegisterCreatures_D();
+        RegisterCreatures_E();
         RegisterCreatures_F();
         RegisterCreatures_H();
+        RegisterCreatures_L();
         RegisterCreatures_M();
         RegisterCreatures_O();
         RegisterCreatures_R();
