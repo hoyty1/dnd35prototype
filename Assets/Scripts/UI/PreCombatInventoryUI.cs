@@ -174,6 +174,9 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            SlotRef slot = ResolveSlot();
+            ItemData item = _owner != null ? _owner.ResolveItem(slot) : null;
+            Debug.Log($"[PreCombatUI] Drag started | item={(item != null ? item.Name : "<none>")}");
             _owner?.TryBeginDrag(this);
         }
 
@@ -192,12 +195,17 @@ public class PreCombatInventoryUI : MonoBehaviour
             if (_owner == null || eventData == null)
                 return;
 
+            SlotRef slot = ResolveSlot();
+            ItemData item = _owner.ResolveItem(slot);
+
             if (eventData.button == PointerEventData.InputButton.Right)
             {
-                _owner.ShowContextMenu(ResolveSlot(), eventData.position);
+                Debug.Log($"[PreCombatUI] Item right-clicked: {(item != null ? item.Name : "<none>")}");
+                _owner.ShowContextMenu(slot, eventData.position);
             }
             else if (eventData.button == PointerEventData.InputButton.Left)
             {
+                Debug.Log($"[PreCombatUI] Item clicked: {(item != null ? item.Name : "<none>")}");
                 _owner.HideContextMenu();
             }
         }
@@ -358,6 +366,8 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (_panel == null)
             return;
 
+        EnsureInteractionInfrastructure();
+
         _stash = stash;
         _partyMembers = partyMembers != null ? new List<CharacterController>(partyMembers) : new List<CharacterController>();
         _onBeginCombat = onBeginCombat;
@@ -437,6 +447,11 @@ public class PreCombatInventoryUI : MonoBehaviour
         _isClosing = false;
     }
 
+    private void OnEnable()
+    {
+        EnsureInteractionInfrastructure();
+    }
+
     private void Update()
     {
         if (_tooltipActive)
@@ -457,6 +472,8 @@ public class PreCombatInventoryUI : MonoBehaviour
             Debug.LogError("[PreCombatInventoryUI] No Canvas found.");
             return;
         }
+
+        EnsureInteractionInfrastructure(canvas);
 
         _dragDropManager = new DragDropManager(this);
 
@@ -508,6 +525,9 @@ public class PreCombatInventoryUI : MonoBehaviour
             Vector2.zero,
             Vector2.zero,
             new Color(0.08f, 0.1f, 0.16f, 0.95f));
+        Image characterRootImage = characterRoot.GetComponent<Image>();
+        if (characterRootImage != null)
+            characterRootImage.raycastTarget = false;
 
         BuildCharacterSelectionSection(characterRoot.transform);
         BuildCharacterDetailSection(characterRoot.transform);
@@ -658,6 +678,13 @@ public class PreCombatInventoryUI : MonoBehaviour
             Vector2.zero,
             new Color(0.085f, 0.11f, 0.17f, 0.97f));
 
+        Image stashRootImage = stashRoot.GetComponent<Image>();
+        if (stashRootImage != null)
+        {
+            stashRootImage.raycastTarget = false;
+            Debug.Log("[PreCombatUI] Stash background raycast disabled");
+        }
+
         CreateText(
             stashRoot.transform,
             "StashHeader",
@@ -683,6 +710,16 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(150f, 28f),
             new Color(0.2f, 0.32f, 0.56f, 1f),
             OnFilterButtonPressed);
+        if (_filterButton != null)
+        {
+            _filterButton.interactable = true;
+            Image btnImage = _filterButton.GetComponent<Image>();
+            if (btnImage != null)
+                btnImage.raycastTarget = true;
+
+            Debug.Log($"[PreCombatUI] Filter button created: {_filterButton.name}");
+            Debug.Log($"[PreCombatUI] Button interactable: {_filterButton.interactable}");
+        }
 
         _sortButton = CreateButton(
             stashRoot.transform,
@@ -721,6 +758,8 @@ public class PreCombatInventoryUI : MonoBehaviour
             FontStyle.Normal,
             new Color(0.78f, 0.85f, 0.93f),
             TextAnchor.MiddleRight);
+        if (_stashInfoText != null)
+            _stashInfoText.raycastTarget = false;
 
         ScrollRect stashScroll = CreateScrollView(
             stashRoot.transform,
@@ -762,6 +801,9 @@ public class PreCombatInventoryUI : MonoBehaviour
             Vector2.zero,
             new Vector2(-8f, -8f),
             new Color(0.11f, 0.14f, 0.22f, 0.95f));
+        Image sectionImage = section.GetComponent<Image>();
+        if (sectionImage != null)
+            sectionImage.raycastTarget = false;
 
         CreateText(
             section.transform,
@@ -809,6 +851,9 @@ public class PreCombatInventoryUI : MonoBehaviour
             Vector2.zero,
             new Vector2(-8f, 0f),
             new Color(0.08f, 0.1f, 0.15f, 0.97f));
+        Image detailRootImage = detailRoot.GetComponent<Image>();
+        if (detailRootImage != null)
+            detailRootImage.raycastTarget = false;
 
         _characterHeaderText = CreateText(
             detailRoot.transform,
@@ -842,6 +887,9 @@ public class PreCombatInventoryUI : MonoBehaviour
             Vector2.zero,
             Vector2.zero,
             new Color(0.11f, 0.13f, 0.2f, 0.98f));
+        Image equipmentPanelImage = equipmentPanel.GetComponent<Image>();
+        if (equipmentPanelImage != null)
+            equipmentPanelImage.raycastTarget = false;
 
         CreateText(
             equipmentPanel.transform,
@@ -893,6 +941,9 @@ public class PreCombatInventoryUI : MonoBehaviour
             Vector2.zero,
             Vector2.zero,
             new Color(0.1f, 0.12f, 0.18f, 0.98f));
+        Image inventoryPanelImage = inventoryPanel.GetComponent<Image>();
+        if (inventoryPanelImage != null)
+            inventoryPanelImage.raycastTarget = false;
 
         CreateText(
             inventoryPanel.transform,
@@ -1541,12 +1592,13 @@ public class PreCombatInventoryUI : MonoBehaviour
             ? GetRarityTint(item)
             : new Color(0.16f, 0.18f, 0.26f, 0.95f);
         background.color = slotColor;
+        background.raycastTarget = true;
 
         Outline outline = slotGO.AddComponent<Outline>();
         outline.effectDistance = new Vector2(1f, -1f);
         outline.effectColor = new Color(0f, 0f, 0f, 0.4f);
 
-        CreateText(
+        Text iconText = CreateText(
             slotGO.transform,
             "Icon",
             item != null ? GetItemIcon(item) : slotPlaceholder,
@@ -1559,8 +1611,10 @@ public class PreCombatInventoryUI : MonoBehaviour
             FontStyle.Bold,
             item != null ? Color.white : new Color(0.54f, 0.6f, 0.72f),
             TextAnchor.MiddleCenter);
+        if (iconText != null)
+            iconText.raycastTarget = false;
 
-        CreateText(
+        Text nameText = CreateText(
             slotGO.transform,
             "Name",
             item != null ? BuildCompactItemName(item) : string.Empty,
@@ -1573,6 +1627,8 @@ public class PreCombatInventoryUI : MonoBehaviour
             FontStyle.Normal,
             new Color(0.92f, 0.94f, 0.98f),
             TextAnchor.LowerCenter);
+        if (nameText != null)
+            nameText.raycastTarget = false;
 
         if (item != null && quantity > 1)
         {
@@ -1586,11 +1642,15 @@ public class PreCombatInventoryUI : MonoBehaviour
                 new Vector2(20f, 14f),
                 new Color(0.12f, 0.14f, 0.24f, 0.92f));
 
+            Image badgeImage = badge.GetComponent<Image>();
+            if (badgeImage != null)
+                badgeImage.raycastTarget = false;
+
             Outline badgeOutline = badge.AddComponent<Outline>();
             badgeOutline.effectDistance = new Vector2(1f, -1f);
             badgeOutline.effectColor = new Color(0f, 0f, 0f, 0.6f);
 
-            CreateText(
+            Text qtyText = CreateText(
                 badge.transform,
                 "QtyText",
                 string.IsNullOrWhiteSpace(quantityLabel) ? quantity.ToString() : quantityLabel,
@@ -1603,6 +1663,8 @@ public class PreCombatInventoryUI : MonoBehaviour
                 FontStyle.Bold,
                 Color.white,
                 TextAnchor.MiddleCenter);
+            if (qtyText != null)
+                qtyText.raycastTarget = false;
         }
 
         DraggableItem draggable = slotGO.AddComponent<DraggableItem>();
@@ -1695,6 +1757,8 @@ public class PreCombatInventoryUI : MonoBehaviour
     {
         if (_dragDropManager == null || _dragDropManager.DragItem == null || target == null)
             return;
+
+        Debug.Log($"[PreCombatUI] Drop attempt | item={_dragDropManager.DragItem.Name} | target={target.name}");
 
         SlotRef source = _dragDropManager.DragSource;
         SlotRef destination = target.Slot;
@@ -2494,6 +2558,35 @@ public class PreCombatInventoryUI : MonoBehaviour
         return topLeftPosition;
     }
 
+    private void EnsureInteractionInfrastructure(Canvas canvasOverride = null)
+    {
+        Canvas canvas = canvasOverride;
+        if (canvas == null)
+            canvas = GetComponentInParent<Canvas>();
+        if (canvas == null && _panel != null)
+            canvas = _panel.GetComponentInParent<Canvas>();
+        if (canvas == null)
+            canvas = FindObjectOfType<Canvas>();
+
+        if (canvas == null)
+        {
+            Debug.LogError("[PreCombatUI] Interaction check failed: Canvas not found.");
+            return;
+        }
+
+        GraphicRaycaster raycaster = canvas.GetComponent<GraphicRaycaster>();
+        if (raycaster == null)
+        {
+            raycaster = canvas.gameObject.AddComponent<GraphicRaycaster>();
+            Debug.LogWarning("[PreCombatUI] No GraphicRaycaster on Canvas. Added one at runtime.");
+        }
+
+        if (EventSystem.current == null)
+            Debug.LogError("[PreCombatUI] No EventSystem found!");
+        else
+            Debug.Log("[PreCombatUI] EventSystem active");
+    }
+
     private Camera GetCanvasEventCamera()
     {
         Canvas canvas = _panel != null ? _panel.GetComponentInParent<Canvas>() : null;
@@ -2905,6 +2998,7 @@ public class PreCombatInventoryUI : MonoBehaviour
     {
         int next = ((int)_stashFilter + 1) % Enum.GetValues(typeof(StashFilterMode)).Length;
         _stashFilter = (StashFilterMode)next;
+        Debug.Log($"[PreCombatUI] Filter clicked: {GetFilterLabel(_stashFilter)}");
         RefreshAll();
     }
 
@@ -3064,6 +3158,7 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         Image viewportImage = viewport.GetComponent<Image>();
         viewportImage.color = new Color(0f, 0f, 0f, 0.05f);
+        viewportImage.raycastTarget = false;
 
         Mask mask = viewport.GetComponent<Mask>();
         mask.showMaskGraphic = false;
@@ -3181,6 +3276,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         text.supportRichText = true;
         text.horizontalOverflow = HorizontalWrapMode.Wrap;
         text.verticalOverflow = VerticalWrapMode.Truncate;
+        text.raycastTarget = false;
 
         return text;
     }
@@ -3209,9 +3305,11 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         Image image = buttonGO.GetComponent<Image>();
         image.color = color;
+        image.raycastTarget = true;
 
         Button button = buttonGO.GetComponent<Button>();
         button.targetGraphic = image;
+        button.interactable = true;
 
         ColorBlock cb = button.colors;
         cb.normalColor = color;
@@ -3251,9 +3349,11 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         Image image = buttonGO.GetComponent<Image>();
         image.color = color;
+        image.raycastTarget = true;
 
         Button button = buttonGO.GetComponent<Button>();
         button.targetGraphic = image;
+        button.interactable = true;
 
         ColorBlock cb = button.colors;
         cb.normalColor = color;
