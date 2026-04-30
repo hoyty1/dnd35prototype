@@ -343,6 +343,12 @@ public class PreCombatInventoryUI : MonoBehaviour
     private Button _contextSecondaryButton;
     private Button _contextTertiaryButton;
 
+    private GameObject _equipOrStashPromptRoot;
+    private Text _equipOrStashPromptText;
+    private Button _equipOrStashEquipButton;
+    private Button _equipOrStashStashButton;
+    private Button _equipOrStashCancelButton;
+
     private GameObject _dragPreview;
     private Text _dragPreviewText;
 
@@ -409,6 +415,7 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         HideTooltip();
         HideContextMenu();
+        HideEquipOrStashPrompt();
         ShowMessage("Drag items between stash, equipment, and backpack. Right-click for quick actions.", true);
         RefreshAll();
     }
@@ -434,6 +441,7 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         HideTooltip();
         HideContextMenu();
+        HideEquipOrStashPrompt();
         HideDragPreview();
 
         if (_panel != null)
@@ -549,6 +557,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         BuildFooter();
         BuildTooltip();
         BuildContextMenu();
+        BuildEquipOrStashPrompt();
         BuildDragPreview();
         BuildWindowResizeBehavior();
 
@@ -1144,6 +1153,138 @@ public class PreCombatInventoryUI : MonoBehaviour
         _contextMenuRoot.SetActive(false);
     }
 
+    private void BuildEquipOrStashPrompt()
+    {
+        _equipOrStashPromptRoot = CreatePanel(
+            _panel.transform,
+            "EquipOrStashPrompt",
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            new Color(0f, 0f, 0f, 0.72f));
+
+        Image overlayImage = _equipOrStashPromptRoot.GetComponent<Image>();
+        if (overlayImage != null)
+            overlayImage.raycastTarget = true;
+
+        GameObject panel = CreatePanel(
+            _equipOrStashPromptRoot.transform,
+            "PromptPanel",
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            new Vector2(460f, 250f),
+            new Color(0.14f, 0.16f, 0.24f, 0.98f));
+
+        Outline panelOutline = panel.AddComponent<Outline>();
+        panelOutline.effectDistance = new Vector2(2f, -2f);
+        panelOutline.effectColor = new Color(0f, 0f, 0f, 0.65f);
+
+        _equipOrStashPromptText = CreateText(
+            panel.transform,
+            "PromptText",
+            "What would you like to do with this item?",
+            new Vector2(0.08f, 0.58f),
+            new Vector2(0.92f, 0.9f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            16,
+            FontStyle.Bold,
+            new Color(0.94f, 0.95f, 1f),
+            TextAnchor.MiddleCenter);
+
+        _equipOrStashEquipButton = CreateButton(
+            panel.transform,
+            "EquipButton",
+            "Equip",
+            new Vector2(0.08f, 0.34f),
+            new Vector2(0.45f, 0.52f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            new Color(0.2f, 0.45f, 0.25f, 1f),
+            null);
+
+        _equipOrStashStashButton = CreateButton(
+            panel.transform,
+            "StashButton",
+            "Move to Stash",
+            new Vector2(0.55f, 0.34f),
+            new Vector2(0.92f, 0.52f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            new Color(0.25f, 0.33f, 0.57f, 1f),
+            null);
+
+        _equipOrStashCancelButton = CreateButton(
+            panel.transform,
+            "CancelButton",
+            "Cancel",
+            new Vector2(0.3f, 0.12f),
+            new Vector2(0.7f, 0.28f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            new Color(0.55f, 0.23f, 0.23f, 1f),
+            null);
+
+        if (_equipOrStashCancelButton != null)
+            _equipOrStashCancelButton.onClick.AddListener(HideEquipOrStashPrompt);
+
+        _equipOrStashPromptRoot.SetActive(false);
+    }
+
+    private void ShowEquipOrStashPrompt(SlotRef stackSlot, ItemData item)
+    {
+        if (_equipOrStashPromptRoot == null || stackSlot == null || item == null)
+            return;
+
+        HideContextMenu();
+
+        if (_equipOrStashPromptText != null)
+            _equipOrStashPromptText.text = $"What would you like to do with {item.Name}?";
+
+        if (_equipOrStashEquipButton != null)
+        {
+            _equipOrStashEquipButton.onClick.RemoveAllListeners();
+            _equipOrStashEquipButton.onClick.AddListener(() =>
+            {
+                HandleEquipFromInventoryStackClick(stackSlot, item);
+                HideEquipOrStashPrompt();
+            });
+        }
+
+        if (_equipOrStashStashButton != null)
+        {
+            _equipOrStashStashButton.onClick.RemoveAllListeners();
+            _equipOrStashStashButton.onClick.AddListener(() =>
+            {
+                TransferStackFromInventoryToStash(stackSlot.Character, stackSlot.ItemGroup);
+                HideEquipOrStashPrompt();
+            });
+        }
+
+        if (_equipOrStashCancelButton != null)
+        {
+            _equipOrStashCancelButton.onClick.RemoveAllListeners();
+            _equipOrStashCancelButton.onClick.AddListener(HideEquipOrStashPrompt);
+        }
+
+        _equipOrStashPromptRoot.SetActive(true);
+        Debug.Log("[Prompt] Showing equip-or-stash prompt");
+    }
+
+    private void HideEquipOrStashPrompt()
+    {
+        if (_equipOrStashPromptRoot != null)
+            _equipOrStashPromptRoot.SetActive(false);
+    }
+
     private void BuildDragPreview()
     {
         _dragPreview = CreatePanel(
@@ -1263,6 +1404,7 @@ public class PreCombatInventoryUI : MonoBehaviour
     {
         _dropTargets.Clear();
         HideContextMenu();
+        HideEquipOrStashPrompt();
         ReflowResponsiveLayout();
         RefreshStatusAndHeaderText();
         RefreshCharacterTabs();
@@ -1494,12 +1636,6 @@ public class PreCombatInventoryUI : MonoBehaviour
         List<ItemStackGroup> groups = BuildStashGroups();
         ApplyStashSort(groups);
 
-        if (groups.Count == 0)
-        {
-            CreateInfoLabel(_stashContent, "No stash items match current filter.");
-            return;
-        }
-
         foreach (ItemStackGroup group in groups)
         {
             SlotRef slot = new SlotRef
@@ -1510,6 +1646,9 @@ public class PreCombatInventoryUI : MonoBehaviour
 
             CreateItemSlotVisual(_stashContent, slot, group.Prototype, group.Quantity, $"x{group.Quantity}");
         }
+
+        CreateStashEmptyDropSlot();
+        Debug.Log($"[StashUI] {groups.Count} stack(s) + 1 empty drop slot");
     }
 
     private void RefreshCharacterDetail()
@@ -1629,8 +1768,12 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (background != null)
             background.raycastTarget = true;
 
-        DraggableItem draggable = slotGO.AddComponent<DraggableItem>();
-        draggable.Init(this, () => slotRef);
+        if (item != null)
+        {
+            DraggableItem draggable = slotGO.AddComponent<DraggableItem>();
+            draggable.Init(this, () => slotRef);
+            Debug.Log($"[DragSetup] Draggable enabled for equipped item {item.Name} in {slot}");
+        }
 
         DropTarget target = slotGO.AddComponent<DropTarget>();
         target.Init(this, () => slotRef, background, background != null ? background.color : EquipmentSlotEmptyColor);
@@ -1640,7 +1783,6 @@ public class PreCombatInventoryUI : MonoBehaviour
     private void BuildInventorySlots(CharacterController character, Inventory inv)
     {
         List<ItemStackGroup> groupedInventory = BuildInventoryGroups(inv);
-        Debug.Log($"[Inventory] Building backpack grid for {character.Stats.CharacterName}: {groupedInventory.Count} stack(s), no empty placeholder slots.");
 
         foreach (ItemStackGroup group in groupedInventory)
         {
@@ -1659,8 +1801,50 @@ public class PreCombatInventoryUI : MonoBehaviour
                 quantityLabel: $"x{group.Quantity}");
         }
 
-        if (groupedInventory.Count == 0)
-            CreateInfoLabel(_inventoryContent, "Backpack is empty.");
+        CreateInventoryEmptyDropSlot(character);
+        Debug.Log($"[CharInventory] {groupedInventory.Count} stack(s) + 1 empty drop slot for {character.Stats.CharacterName}");
+    }
+
+    private void CreateStashEmptyDropSlot()
+    {
+        SlotRef emptySlot = new SlotRef
+        {
+            Container = SlotContainerType.Stash
+        };
+
+        CreateItemSlotVisual(
+            _stashContent,
+            emptySlot,
+            item: null,
+            quantity: 0,
+            quantityLabel: string.Empty,
+            anchoredOverride: null,
+            slotPlaceholder: "+");
+
+        Debug.Log("[StashUI] Always showing at least 1 empty stash slot for drag-drop");
+    }
+
+    private void CreateInventoryEmptyDropSlot(CharacterController character)
+    {
+        if (character == null)
+            return;
+
+        SlotRef emptySlot = new SlotRef
+        {
+            Container = SlotContainerType.InventoryStack,
+            Character = character
+        };
+
+        CreateItemSlotVisual(
+            _inventoryContent,
+            emptySlot,
+            item: null,
+            quantity: 0,
+            quantityLabel: string.Empty,
+            anchoredOverride: null,
+            slotPlaceholder: "+");
+
+        Debug.Log("[CharInventory] Always showing at least 1 empty backpack slot for drag-drop");
     }
 
     private GameObject CreateItemSlotVisual(
@@ -1770,8 +1954,12 @@ public class PreCombatInventoryUI : MonoBehaviour
                 qtyText.raycastTarget = false;
         }
 
-        DraggableItem draggable = slotGO.AddComponent<DraggableItem>();
-        draggable.Init(this, () => slot);
+        if (item != null)
+        {
+            DraggableItem draggable = slotGO.AddComponent<DraggableItem>();
+            draggable.Init(this, () => slot);
+            Debug.Log($"[DragSetup] Draggable enabled for {item.Name} in {slot.Container}");
+        }
 
         DropTarget target = slotGO.AddComponent<DropTarget>();
         target.Init(this, () => slot, background, slotColor);
@@ -1791,6 +1979,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             return;
 
         HideContextMenu();
+        HideEquipOrStashPrompt();
         ShowDragPreview(manager.DragItem);
         UpdateDropTargetHighlights();
     }
@@ -1861,6 +2050,12 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (slot == null || item == null)
             return;
 
+        if (slot.Container == SlotContainerType.Equipment)
+        {
+            HandleEquipmentLeftClick(slot, item);
+            return;
+        }
+
         if (slot.Container == SlotContainerType.Stash)
         {
             TransferStackFromStashToSelectedCharacter(slot.ItemGroup);
@@ -1869,8 +2064,65 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         if (slot.Container == SlotContainerType.InventoryStack)
         {
-            TransferStackFromInventoryToStash(slot.Character, slot.ItemGroup);
+            if (CanItemBeEquipped(slot.Character, item))
+            {
+                Debug.Log($"[InvClick] {item.Name} can be equipped. Prompting equip/stash.");
+                ShowEquipOrStashPrompt(slot, item);
+            }
+            else
+            {
+                Debug.Log($"[InvClick] {item.Name} cannot be equipped. Moving stack to stash.");
+                TransferStackFromInventoryToStash(slot.Character, slot.ItemGroup);
+            }
         }
+    }
+
+    private void HandleEquipmentLeftClick(SlotRef slot, ItemData item)
+    {
+        if (slot == null || item == null || slot.Container != SlotContainerType.Equipment)
+            return;
+
+        SlotRef backpackTarget = new SlotRef
+        {
+            Container = SlotContainerType.InventoryStack,
+            Character = slot.Character
+        };
+
+        Debug.Log($"[EquipClick] Moving {item.Name} from {slot.EquipSlot} to backpack.");
+        if (TryExecuteTransfer(slot, backpackTarget, item, out string feedback))
+            ShowMessage(feedback, true);
+        else
+            ShowMessage(feedback, false);
+
+        RefreshAll();
+    }
+
+    private bool CanItemBeEquipped(CharacterController character, ItemData item)
+    {
+        if (character == null || item == null)
+            return false;
+
+        return FindBestEquipmentTargetSlot(character, item) != null;
+    }
+
+    private void HandleEquipFromInventoryStackClick(SlotRef stackSlot, ItemData item)
+    {
+        if (stackSlot == null || item == null)
+            return;
+
+        SlotRef equipTarget = FindBestEquipmentTargetSlot(stackSlot.Character, item);
+        if (equipTarget == null)
+        {
+            ShowMessage($"{item.Name} cannot be equipped.", false);
+            return;
+        }
+
+        if (TryExecuteTransfer(stackSlot, equipTarget, item, out string feedback))
+            ShowMessage(feedback, true);
+        else
+            ShowMessage(feedback, false);
+
+        RefreshAll();
     }
 
     private void TransferStackFromStashToSelectedCharacter(ItemStackGroup stack)
@@ -1918,7 +2170,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
 
         string stackName = stack.Prototype != null ? stack.Prototype.Name : "item";
-        Debug.Log($"[Transfer] Stash -> {selected.Stats.CharacterName} | {stackName} x{moved}");
+        Debug.Log($"[StashClick] Moving {stackName} x{moved} from stash to {selected.Stats.CharacterName}");
         ShowMessage(moved > 0
             ? $"Moved {moved}× {stackName} to {selected.Stats.CharacterName}."
             : "Backpack is full.",
@@ -1964,7 +2216,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
 
         string stackName = stack.Prototype != null ? stack.Prototype.Name : "item";
-        Debug.Log($"[Transfer] {owner.Stats.CharacterName} -> Stash | {stackName} x{moved}");
+        Debug.Log($"[MoveToStash] Moving {stackName} x{moved} from {owner.Stats.CharacterName} to stash");
         ShowMessage(moved > 0
             ? $"Moved {moved}× {stackName} to stash."
             : "Transfer failed.",
