@@ -13,7 +13,8 @@ public class LootCollectionUI : MonoBehaviour
 {
     private static readonly Vector2 LootCellSize = new Vector2(110f, 128f);
     private static readonly Vector2 LootCellSpacing = new Vector2(10f, 10f);
-    private static readonly RectOffset LootGridPadding = new RectOffset(14, 14, 14, 14);
+
+    private RectOffset _lootGridPadding;
 
     public enum LootSourceType
     {
@@ -97,6 +98,11 @@ public class LootCollectionUI : MonoBehaviour
     private int _openedFrame = -1;
 
     public bool IsOpen => _isOpen && _root != null && _root.activeSelf;
+
+    private void Awake()
+    {
+        _lootGridPadding = new RectOffset(14, 14, 14, 14);
+    }
 
     public void Open(
         List<LootStackEntry> entries,
@@ -412,7 +418,9 @@ public class LootCollectionUI : MonoBehaviour
 
         grid.cellSize = LootCellSize;
         grid.spacing = LootCellSpacing;
-        grid.padding = LootGridPadding;
+        if (_lootGridPadding == null)
+            _lootGridPadding = new RectOffset(14, 14, 14, 14);
+        grid.padding = _lootGridPadding;
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         grid.constraintCount = 7;
         grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
