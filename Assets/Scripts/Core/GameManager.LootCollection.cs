@@ -71,6 +71,7 @@ public partial class GameManager
                 else
                     CombatUI?.ShowCombatLog("📦 Loot window closed. Party stash unlocked.");
 
+                Debug.Log($"[LootFlow] Transitioning from loot to encounter selection | lootedCount={lootedCount} | waitingLoot={WaitingForLootCollection} | phase={CurrentPhase} | subPhase={CurrentSubPhase}");
                 RegisterCombatLoopCompletion(lootedCount);
                 RestorePartyAfterCombat();
                 ReturnToEncounterSelection();

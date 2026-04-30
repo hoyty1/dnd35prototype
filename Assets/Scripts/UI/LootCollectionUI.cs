@@ -159,7 +159,10 @@ public class LootCollectionUI : MonoBehaviour
 
     public void Close(bool invokeClosedCallback = true)
     {
-        Debug.Log($"[LootUI] Close requested | isOpen={_isOpen} | lootedCount={_lootedCount} | invokeCallback={invokeClosedCallback}");
+        bool rootWasActive = _root != null && _root.activeSelf;
+        bool wasOpen = _isOpen || rootWasActive;
+
+        Debug.Log($"[LootUI] Close requested | isOpen={_isOpen} | rootActive={rootWasActive} | lootedCount={_lootedCount} | invokeCallback={invokeClosedCallback}");
 
         if (_root != null)
             _root.SetActive(false);
@@ -171,8 +174,16 @@ public class LootCollectionUI : MonoBehaviour
         _onClosed = null;
         _onExitLoop = null;
 
-        if (invokeClosedCallback)
-            callback?.Invoke(_lootedCount);
+        if (!invokeClosedCallback)
+            return;
+
+        if (!wasOpen)
+        {
+            Debug.Log("[LootUI] Close callback suppressed because loot window was already closed.");
+            return;
+        }
+
+        callback?.Invoke(_lootedCount);
     }
 
     private void Update()

@@ -624,7 +624,8 @@ public partial class GameManager : MonoBehaviour
         }
 
         PreCombatInventoryUI?.Close();
-        LootCollectionUI?.Close();
+        LootCollectionUI?.Close(invokeClosedCallback: false);
+        Debug.Log($"[CombatReset] PromptEncounterSelection pre-open cleanup | lootUiAssigned={LootCollectionUI != null} | lootUiOpen={(LootCollectionUI != null && LootCollectionUI.IsOpen)} | waitingLoot={WaitingForLootCollection}");
         WaitingForPreCombatInventory = false;
         ResetPostCombatLootCollectionState("PromptEncounterSelection");
         WaitingForEncounterSelection = true;
@@ -1022,7 +1023,9 @@ public partial class GameManager : MonoBehaviour
         EnsurePartyStashInitialized();
         PartyStash?.Unlock();
 
+        Debug.Log($"[CombatReset] ReturnToEncounterSelection PRE reset | waitingLoot={WaitingForLootCollection} | lootTriggered={_postCombatLootCollectionTriggered} | lootUiAssigned={LootCollectionUI != null} | lootUiOpen={(LootCollectionUI != null && LootCollectionUI.IsOpen)}");
         ResetCombatStateForNextEncounter("ReturnToEncounterSelection");
+        Debug.Log($"[CombatReset] ReturnToEncounterSelection POST reset | waitingLoot={WaitingForLootCollection} | lootTriggered={_postCombatLootCollectionTriggered} | phase={CurrentPhase} | subPhase={CurrentSubPhase}");
 
         WaitingForLootCollection = false;
         WaitingForPreCombatInventory = false;
@@ -5215,7 +5218,8 @@ public partial class GameManager : MonoBehaviour
         WaitingForPreCombatInventory = false;
         ResetPostCombatLootCollectionState("StartCombat");
         PreCombatInventoryUI?.Close();
-        LootCollectionUI?.Close();
+        LootCollectionUI?.Close(invokeClosedCallback: false);
+        Debug.Log($"[CombatStart] Post-loot reset checkpoint | waitingLoot={WaitingForLootCollection} | lootTriggered={_postCombatLootCollectionTriggered} | lootUiAssigned={LootCollectionUI != null} | lootUiOpen={(LootCollectionUI != null && LootCollectionUI.IsOpen)}");
         PartyStash?.Lock();
 
         ClearAllActiveGreaseEffects();
