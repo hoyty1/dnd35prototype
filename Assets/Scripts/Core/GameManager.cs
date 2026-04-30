@@ -603,6 +603,12 @@ public partial class GameManager : MonoBehaviour
                 ApplyEncounterPreset(_selectedEncounterPresetId);
                 StartCombat();
             },
+            onStartRandomEncounter: (enemyIds, generated) =>
+            {
+                WaitingForEncounterSelection = false;
+                ApplyRandomEncounter(enemyIds, generated);
+                StartCombat();
+            },
             onCancel: () =>
             {
                 WaitingForEncounterSelection = false;
@@ -610,7 +616,9 @@ public partial class GameManager : MonoBehaviour
                 ApplyEncounterPreset(_selectedEncounterPresetId);
                 StartCombat();
             },
-            partyAverageLevel: GetCurrentPartyAverageLevel());
+            partyAverageLevel: GetCurrentPartyAverageLevel(),
+            partyLevels: GetCurrentPartyLevels(),
+            partySize: PCs != null ? PCs.Count : 4);
     }
 
     private int GetCurrentPartyAverageLevel()
@@ -634,6 +642,79 @@ public partial class GameManager : MonoBehaviour
             return 3;
 
         return Mathf.Max(1, Mathf.RoundToInt((float)total / count));
+    }
+
+    private List<int> GetCurrentPartyLevels()
+    {
+        List<int> levels = new List<int>();
+        if (PCs == null)
+            return levels;
+
+        for (int i = 0; i < PCs.Count; i++)
+        {
+            CharacterController pc = PCs[i];
+            if (pc == null || pc.Stats == null)
+                continue;
+
+            levels.Add(Mathf.Max(1, pc.Stats.Level));
+        }
+
+        return levels;
+    }
+
+    private void ApplyRandomEncounter(List<string> enemyIds, GeneratedRandomEncounter generated)
+    {
+        _selectedEncounterPresetId = "random_encounter";
+        _activeEncounterEnemyIds.Clear();
+
+        if (enemyIds != null)
+        {
+            for (int i = 0; i < enemyIds.Count; i++)
+            {
+                string id = enemyIds[i];
+                if (!string.IsNullOrWhiteSpace(id))
+                    _activeEncounterEnemyIds.Add(id);
+            }
+        }
+
+        if (_activeEncounterEnemyIds.Count == 0)
+        {
+            _activeEncounterEnemyIds.Add("goblin_warchief");
+            _activeEncounterEnemyIds.Add("hobgoblin_sergeant");
+            _activeEncounterEnemyIds.Add("skeleton_archer");
+        }
+
+        _isGrappleTestEncounter = false;
+        _isGreaseTestEncounter = false;
+        _isFeintSneakTestEncounter = false;
+        _isTurnUndeadTestEncounter = false;
+        _isArmorTargetingTestEncounter = false;
+        _isTigerHuntTestEncounter = false;
+        _isOgreBattleTestEncounter = false;
+        _isShieldBashTestEncounter = false;
+        _isCelestialTemplateTestEncounter = false;
+        _isFiendishTemplateTestEncounter = false;
+        _isSummonMonsterTestEncounter = false;
+        _isNpcMagicMissileTestEncounter = false;
+        _isProtectionFromEvilTestEncounter = false;
+        _isWindDispersionTestEncounter = false;
+        _isObscuringMistRangedOnlyTestEncounter = false;
+        _isDisruptUndeadTestEncounter = false;
+        _isTrueStrikeTestEncounter = false;
+        _isWizardSpellTestEncounter = false;
+        _isClericSpellTestEncounter = false;
+        _isCharmPersonTestEncounter = false;
+        _isSleepSpellTestEncounter = false;
+
+        RestoreStandardPartyLayout();
+        SetupEnemyEncounter(_activeEncounterEnemyIds);
+        SetupNPCIcons();
+        UpdateAllStatsUI();
+
+        if (generated != null)
+            CombatUI?.ShowCombatLog($"🎲 Random encounter loaded: {generated.BuildHeaderLine()} • XP {generated.TotalXP}");
+        else
+            CombatUI?.ShowCombatLog("🎲 Random encounter loaded.");
     }
 
     private void ApplyEncounterPreset(string presetId)

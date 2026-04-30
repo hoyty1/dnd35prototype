@@ -415,8 +415,20 @@ public enum NPCAIBehavior
 }
 
 /// <summary>
+/// Difficulty labels for DMG-style random encounters.
+/// </summary>
+public enum RandomEncounterDifficulty
+{
+    Easy,
+    Average,
+    Challenging,
+    Hard,
+    Epic
+}
+
+/// <summary>
 /// Utility helpers for D&D 3.5e Challenge Rating parsing/formatting and
-/// light-weight encounter difficulty estimation.
+/// encounter difficulty estimation.
 /// </summary>
 public static class ChallengeRatingUtils
 {
@@ -440,7 +452,7 @@ public static class ChallengeRatingUtils
         (0.5f, "1/2")
     };
 
-    // DMG 3.5-style XP table (sufficient for current monster set).
+    // DMG 3.5e XP table (CR/EL 1-20 + common fractions).
     private static readonly Dictionary<float, int> CrToXp = new Dictionary<float, int>
     {
         { 0.1f, 15 },
@@ -518,6 +530,62 @@ public static class ChallengeRatingUtils
         return value.ToString("0.##", CultureInfo.InvariantCulture);
     }
 
+    public static int CalculateAPL(IList<int> partyLevels, int partySize)
+    {
+        if (partyLevels == null || partyLevels.Count == 0)
+            return 1;
+
+        int total = 0;
+        int counted = 0;
+        for (int i = 0; i < partyLevels.Count; i++)
+        {
+            total += Mathf.Max(1, partyLevels[i]);
+            counted++;
+        }
+
+        if (counted == 0)
+            return 1;
+
+        int apl = Mathf.Max(1, Mathf.RoundToInt((float)total / counted));
+
+        int effectivePartySize = partySize > 0 ? partySize : counted;
+        if (effectivePartySize < 4)
+            apl = Mathf.Max(1, apl - 1);
+        else if (effectivePartySize > 6)
+            apl += 1;
+
+        return Mathf.Max(1, apl);
+    }
+
+    public static int GetTargetELForDifficulty(int apl, RandomEncounterDifficulty difficulty)
+    {
+        int clampedApl = Mathf.Max(1, apl);
+        int offset = 0;
+        switch (difficulty)
+        {
+            case RandomEncounterDifficulty.Easy:
+                offset = -1;
+                break;
+            case RandomEncounterDifficulty.Average:
+                offset = 0;
+                break;
+            case RandomEncounterDifficulty.Challenging:
+                offset = 1;
+                break;
+            case RandomEncounterDifficulty.Hard:
+                offset = 2;
+                break;
+            case RandomEncounterDifficulty.Epic:
+                offset = 3;
+                break;
+            default:
+                offset = 0;
+                break;
+        }
+
+        return Mathf.Max(1, clampedApl + offset);
+    }
+
     public static int GetXpForCr(float cr)
     {
         if (CrToXp.TryGetValue(cr, out int xp))
@@ -537,6 +605,11 @@ public static class ChallengeRatingUtils
         }
 
         return CrToXp[nearest];
+    }
+
+    public static int GetXpForEL(float el)
+    {
+        return GetXpForCr(el);
     }
 
     public static float GetEquivalentCrForTotalXp(int totalXp)
@@ -559,6 +632,55 @@ public static class ChallengeRatingUtils
             return 20f;
 
         return bestCr;
+    }
+
+    public static float GetEquivalentELForTotalXp(int totalXp)
+    {
+        return GetEquivalentCrForTotalXp(totalXp);
+    }
+
+    /// <summary>
+    /// DMG 3.5 same-CR group rule:
+    /// 1 creature = CR
+    /// 2 = CR+2, 3-4 = CR+3, 5-8 = CR+4, 9-16 = CR+5, etc.
+    /// </summary>
+    public static float GetELForSameCrGroup(float creatureCr, int count)
+    {
+        if (count <= 0)
+            return 0f;
+
+        if (count == 1)
+            return creatureCr;
+
+        // Equivalent compact form of DMG doubling table.
+        int bonus = 1 + Mathf.CeilToInt(Mathf.Log(count, 2f));
+        return creatureCr + bonus;
+    }
+
+    public static float CalculateEncounterEL(IList<float> creatureCrs)
+    {
+        if (creatureCrs == null || creatureCrs.Count == 0)
+            return 0f;
+
+        bool allSame = true;
+        float first = creatureCrs[0];
+        for (int i = 1; i < creatureCrs.Count; i++)
+        {
+            if (Mathf.Abs(creatureCrs[i] - first) > 0.0001f)
+            {
+                allSame = false;
+                break;
+            }
+        }
+
+        if (allSame)
+            return GetELForSameCrGroup(first, creatureCrs.Count);
+
+        int totalXp = 0;
+        for (int i = 0; i < creatureCrs.Count; i++)
+            totalXp += GetXpForCr(creatureCrs[i]);
+
+        return GetEquivalentELForTotalXp(totalXp);
     }
 
     public static EncounterDifficultySummary CalculateEncounterDifficulty(EncounterPreset preset, int partyAverageLevel)

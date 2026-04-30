@@ -4,8 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Modal used before combat to choose an encounter preset.
-/// Now uses a categorized, scrollable, card-based layout.
+/// Modal used before combat to choose a preset encounter or generate a random DMG-style encounter.
 /// </summary>
 public class EncounterSelectionUI : MonoBehaviour
 {
@@ -16,7 +15,21 @@ public class EncounterSelectionUI : MonoBehaviour
     private RectTransform _contentContainer;
     private Button _confirmButton;
 
+    // Random encounter controls
+    private Text _aplText;
+    private Text _randomPreviewText;
+    private InputField _environmentInput;
+    private InputField _creatureTypeInput;
+    private InputField _minCreaturesInput;
+    private InputField _maxCreaturesInput;
+    private Button _difficultyButton;
+    private Text _difficultyButtonText;
+    private Button _generateRandomButton;
+    private Button _generateAgainButton;
+    private Button _startRandomButton;
+
     private Action<string> _onSelect;
+    private Action<List<string>, GeneratedRandomEncounter> _onStartRandomEncounter;
     private Action _onCancel;
     private string _selectedPresetId;
 
@@ -29,21 +42,51 @@ public class EncounterSelectionUI : MonoBehaviour
     private static readonly Color CardSelectedColor = new Color(0.26f, 0.34f, 0.52f, 1f);
     private static readonly Color CategoryColor = new Color(0.98f, 0.83f, 0.35f, 1f);
 
+    private static readonly RandomEncounterDifficulty[] DifficultyCycle =
+    {
+        RandomEncounterDifficulty.Easy,
+        RandomEncounterDifficulty.Average,
+        RandomEncounterDifficulty.Challenging,
+        RandomEncounterDifficulty.Hard,
+        RandomEncounterDifficulty.Epic
+    };
+
     public bool IsOpen => _panel != null && _panel.activeSelf;
 
     private int _partyAverageLevel = 3;
+    private List<int> _partyLevels = new List<int>();
+    private int _partySize = 4;
+    private int _difficultyIndex = 2; // Challenging default
+    private GeneratedRandomEncounter _lastGeneratedEncounter;
 
-    public void Open(List<EncounterPreset> presets, Action<string> onSelect, Action onCancel = null, int partyAverageLevel = 3)
+    public void Open(
+        List<EncounterPreset> presets,
+        Action<string> onSelect,
+        Action<List<string>, GeneratedRandomEncounter> onStartRandomEncounter,
+        Action onCancel = null,
+        int partyAverageLevel = 3,
+        List<int> partyLevels = null,
+        int partySize = 4)
     {
         EnsureBuilt();
         if (_panel == null) return;
 
         _onSelect = onSelect;
+        _onStartRandomEncounter = onStartRandomEncounter;
         _onCancel = onCancel;
         _partyAverageLevel = Mathf.Max(1, partyAverageLevel);
+        _partyLevels = partyLevels != null ? new List<int>(partyLevels) : new List<int> { _partyAverageLevel, _partyAverageLevel, _partyAverageLevel, _partyAverageLevel };
+        _partySize = Mathf.Max(1, partySize);
+        _partyAverageLevel = ChallengeRatingUtils.CalculateAPL(_partyLevels, _partySize);
+        _lastGeneratedEncounter = null;
 
         _panel.SetActive(true);
-        _descriptionText.text = "Select an encounter. Scroll to view all mechanics tests and full scenarios.";
+        _descriptionText.text = "Pick a preset or generate a balanced random encounter using DMG Chapter 3 rules.";
+
+        RefreshAplDisplay();
+        RefreshDifficultyLabel();
+        SetRandomPreview("No random encounter generated yet.");
+        UpdateRandomButtonsState();
 
         BuildEncounterCards(presets);
 
@@ -130,6 +173,8 @@ public class EncounterSelectionUI : MonoBehaviour
             out _selectionHintText
         );
 
+        BuildRandomEncounterSection();
+
         CreateText(
             _panel.transform,
             "▲ Scroll Up",
@@ -139,7 +184,7 @@ public class EncounterSelectionUI : MonoBehaviour
             new Vector2(0.5f, 1f),
             new Vector2(0.5f, 1f),
             new Vector2(0.5f, 1f),
-            new Vector2(0f, -124f),
+            new Vector2(0f, -300f),
             new Vector2(220f, 20f),
             TextAnchor.MiddleCenter,
             out _
@@ -149,7 +194,7 @@ public class EncounterSelectionUI : MonoBehaviour
         scrollRoot.transform.SetParent(_panel.transform, false);
         RectTransform scrollRootRect = scrollRoot.GetComponent<RectTransform>();
         scrollRootRect.anchorMin = new Vector2(0.05f, 0.18f);
-        scrollRootRect.anchorMax = new Vector2(0.95f, 0.8f);
+        scrollRootRect.anchorMax = new Vector2(0.95f, 0.54f);
         scrollRootRect.offsetMin = Vector2.zero;
         scrollRootRect.offsetMax = Vector2.zero;
 
@@ -222,6 +267,319 @@ public class EncounterSelectionUI : MonoBehaviour
         BuildFooterButtons();
 
         _panel.SetActive(false);
+    }
+
+    private void BuildRandomEncounterSection()
+    {
+        GameObject randomPanel = new GameObject("RandomEncounterPanel", typeof(RectTransform), typeof(Image));
+        randomPanel.transform.SetParent(_panel.transform, false);
+
+        RectTransform panelRect = randomPanel.GetComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0.05f, 0.56f);
+        panelRect.anchorMax = new Vector2(0.95f, 0.79f);
+        panelRect.offsetMin = Vector2.zero;
+        panelRect.offsetMax = Vector2.zero;
+
+        Image panelImage = randomPanel.GetComponent<Image>();
+        panelImage.color = new Color(0.1f, 0.14f, 0.22f, 0.97f);
+
+        Outline panelOutline = randomPanel.AddComponent<Outline>();
+        panelOutline.effectColor = new Color(0.97f, 0.86f, 0.53f, 0.7f);
+        panelOutline.effectDistance = new Vector2(1.2f, -1.2f);
+
+        CreateText(
+            randomPanel.transform,
+            "🎲 RANDOM ENCOUNTER (DMG CH.3)",
+            15,
+            FontStyle.Bold,
+            new Color(0.98f, 0.9f, 0.56f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(10f, -8f),
+            new Vector2(500f, 20f),
+            TextAnchor.UpperLeft,
+            out _
+        );
+
+        CreateText(
+            randomPanel.transform,
+            "",
+            13,
+            FontStyle.Bold,
+            new Color(0.85f, 0.92f, 1f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(10f, -30f),
+            new Vector2(280f, 20f),
+            TextAnchor.MiddleLeft,
+            out _aplText
+        );
+
+        CreateButton(randomPanel.transform, "Difficulty", new Color(0.19f, 0.34f, 0.56f, 1f), OnDifficultyCyclePressed,
+            new Vector2(0.45f, 1f), new Vector2(0.73f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -28f), new Vector2(-8f, 24f), out _difficultyButton, out _difficultyButtonText);
+
+        _difficultyButtonText.fontSize = 12;
+
+        CreateButton(randomPanel.transform, "Random Encounter", new Color(0.21f, 0.45f, 0.28f, 1f), OnGenerateRandomPressed,
+            new Vector2(0.74f, 1f), new Vector2(0.99f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -28f), new Vector2(-8f, 24f), out _generateRandomButton, out _);
+
+        CreateInputField(randomPanel.transform, "Environment (optional)",
+            new Vector2(0f, 1f), new Vector2(0.33f, 1f), new Vector2(0f, 1f),
+            new Vector2(10f, -58f), new Vector2(-10f, 24f), out _environmentInput);
+
+        CreateInputField(randomPanel.transform, "Type (optional)",
+            new Vector2(0.34f, 1f), new Vector2(0.67f, 1f), new Vector2(0f, 1f),
+            new Vector2(0f, -58f), new Vector2(-10f, 24f), out _creatureTypeInput);
+
+        CreateInputField(randomPanel.transform, "Min #",
+            new Vector2(0.68f, 1f), new Vector2(0.83f, 1f), new Vector2(0f, 1f),
+            new Vector2(0f, -58f), new Vector2(-10f, 24f), out _minCreaturesInput);
+
+        CreateInputField(randomPanel.transform, "Max #",
+            new Vector2(0.84f, 1f), new Vector2(0.99f, 1f), new Vector2(0f, 1f),
+            new Vector2(0f, -58f), new Vector2(-8f, 24f), out _maxCreaturesInput);
+
+        CreateText(
+            randomPanel.transform,
+            "",
+            12,
+            FontStyle.Normal,
+            new Color(0.93f, 0.95f, 0.99f, 1f),
+            new Vector2(0f, 0f),
+            new Vector2(0f, 0f),
+            new Vector2(0f, 0f),
+            new Vector2(10f, 44f),
+            new Vector2(620f, 52f),
+            TextAnchor.UpperLeft,
+            out _randomPreviewText
+        );
+
+        CreateButton(randomPanel.transform, "Generate Again", new Color(0.24f, 0.38f, 0.62f, 1f), OnGenerateAgainPressed,
+            new Vector2(0f, 0f), new Vector2(0.32f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, 8f), new Vector2(-8f, 30f), out _generateAgainButton, out _);
+
+        CreateButton(randomPanel.transform, "Start Encounter", new Color(0.2f, 0.45f, 0.28f, 1f), OnStartRandomEncounterPressed,
+            new Vector2(0.33f, 0f), new Vector2(0.66f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, 8f), new Vector2(-8f, 30f), out _startRandomButton, out _);
+    }
+
+    private void RefreshAplDisplay()
+    {
+        int apl = ChallengeRatingUtils.CalculateAPL(_partyLevels, _partySize);
+        if (_aplText != null)
+            _aplText.text = $"APL: {apl} (Party size: {_partySize})";
+    }
+
+    private void RefreshDifficultyLabel()
+    {
+        if (_difficultyButtonText != null)
+            _difficultyButtonText.text = $"Difficulty: {DifficultyCycle[_difficultyIndex]}";
+    }
+
+    private void SetRandomPreview(string value)
+    {
+        if (_randomPreviewText != null)
+            _randomPreviewText.text = value;
+    }
+
+    private void UpdateRandomButtonsState()
+    {
+        bool hasEncounter = _lastGeneratedEncounter != null && _lastGeneratedEncounter.NpcIds != null && _lastGeneratedEncounter.NpcIds.Count > 0;
+
+        if (_generateAgainButton != null)
+            _generateAgainButton.interactable = hasEncounter;
+
+        if (_startRandomButton != null)
+            _startRandomButton.interactable = hasEncounter;
+    }
+
+    private void OnDifficultyCyclePressed()
+    {
+        _difficultyIndex = (_difficultyIndex + 1) % DifficultyCycle.Length;
+        RefreshDifficultyLabel();
+    }
+
+    private void OnGenerateRandomPressed()
+    {
+        RandomEncounterRequest request = BuildRandomRequestFromUI();
+        RandomEncounterSystem generator = new RandomEncounterSystem();
+        _lastGeneratedEncounter = generator.Generate(request);
+
+        if (_lastGeneratedEncounter == null)
+        {
+            SetRandomPreview("No valid random encounter found for current filters. Try relaxing filters or creature count limits.");
+            UpdateRandomButtonsState();
+            return;
+        }
+
+        SetRandomPreview(_lastGeneratedEncounter.BuildPreviewText());
+        UpdateRandomButtonsState();
+    }
+
+    private void OnGenerateAgainPressed()
+    {
+        OnGenerateRandomPressed();
+    }
+
+    private void OnStartRandomEncounterPressed()
+    {
+        if (_lastGeneratedEncounter == null || _lastGeneratedEncounter.NpcIds == null || _lastGeneratedEncounter.NpcIds.Count == 0)
+            return;
+
+        List<string> encounterNpcIds = new List<string>(_lastGeneratedEncounter.NpcIds);
+        Close();
+        _onStartRandomEncounter?.Invoke(encounterNpcIds, _lastGeneratedEncounter);
+    }
+
+    private RandomEncounterRequest BuildRandomRequestFromUI()
+    {
+        RandomEncounterRequest request = new RandomEncounterRequest
+        {
+            PartyLevels = new List<int>(_partyLevels),
+            PartySize = _partySize,
+            Difficulty = DifficultyCycle[_difficultyIndex],
+            EnvironmentFilter = _environmentInput != null ? _environmentInput.text : string.Empty,
+            CreatureTypeFilter = _creatureTypeInput != null ? _creatureTypeInput.text : string.Empty,
+            MinCreatures = ParseOptionalPositiveInt(_minCreaturesInput != null ? _minCreaturesInput.text : null),
+            MaxCreatures = ParseOptionalPositiveInt(_maxCreaturesInput != null ? _maxCreaturesInput.text : null)
+        };
+
+        if (request.MinCreatures.HasValue && request.MaxCreatures.HasValue && request.MinCreatures.Value > request.MaxCreatures.Value)
+        {
+            int temp = request.MinCreatures.Value;
+            request.MinCreatures = request.MaxCreatures.Value;
+            request.MaxCreatures = temp;
+        }
+
+        return request;
+    }
+
+    private int? ParseOptionalPositiveInt(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+
+        if (!int.TryParse(raw.Trim(), out int parsed))
+            return null;
+
+        return Mathf.Max(1, parsed);
+    }
+
+    private void CreateInputField(
+        Transform parent,
+        string placeholder,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        Vector2 pivot,
+        Vector2 anchoredPos,
+        Vector2 size,
+        out InputField inputField)
+    {
+        GameObject root = new GameObject($"Input_{placeholder}", typeof(RectTransform), typeof(Image), typeof(InputField));
+        root.transform.SetParent(parent, false);
+
+        RectTransform rt = root.GetComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.pivot = pivot;
+        rt.anchoredPosition = anchoredPos;
+        rt.sizeDelta = size;
+
+        Image bg = root.GetComponent<Image>();
+        bg.color = new Color(0.06f, 0.09f, 0.16f, 0.95f);
+
+        GameObject textGo = new GameObject("Text", typeof(RectTransform), typeof(Text));
+        textGo.transform.SetParent(root.transform, false);
+        RectTransform textRt = textGo.GetComponent<RectTransform>();
+        textRt.anchorMin = Vector2.zero;
+        textRt.anchorMax = Vector2.one;
+        textRt.offsetMin = new Vector2(8f, 2f);
+        textRt.offsetMax = new Vector2(-8f, -2f);
+
+        Text text = textGo.GetComponent<Text>();
+        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        text.fontSize = 11;
+        text.alignment = TextAnchor.MiddleLeft;
+        text.color = Color.white;
+
+        GameObject placeholderGo = new GameObject("Placeholder", typeof(RectTransform), typeof(Text));
+        placeholderGo.transform.SetParent(root.transform, false);
+        RectTransform placeholderRt = placeholderGo.GetComponent<RectTransform>();
+        placeholderRt.anchorMin = Vector2.zero;
+        placeholderRt.anchorMax = Vector2.one;
+        placeholderRt.offsetMin = new Vector2(8f, 2f);
+        placeholderRt.offsetMax = new Vector2(-8f, -2f);
+
+        Text placeholderText = placeholderGo.GetComponent<Text>();
+        placeholderText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        placeholderText.fontSize = 10;
+        placeholderText.alignment = TextAnchor.MiddleLeft;
+        placeholderText.color = new Color(0.65f, 0.72f, 0.86f, 0.9f);
+        placeholderText.text = placeholder;
+
+        inputField = root.GetComponent<InputField>();
+        inputField.textComponent = text;
+        inputField.placeholder = placeholderText;
+        inputField.lineType = InputField.LineType.SingleLine;
+    }
+
+    private void CreateButton(
+        Transform parent,
+        string label,
+        Color color,
+        Action onClick,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        Vector2 pivot,
+        Vector2 anchoredPos,
+        Vector2 size,
+        out Button button,
+        out Text buttonText)
+    {
+        GameObject buttonObj = new GameObject($"Button_{label}", typeof(RectTransform), typeof(Image), typeof(Button));
+        buttonObj.transform.SetParent(parent, false);
+
+        RectTransform rt = buttonObj.GetComponent<RectTransform>();
+        rt.anchorMin = anchorMin;
+        rt.anchorMax = anchorMax;
+        rt.pivot = pivot;
+        rt.anchoredPosition = anchoredPos;
+        rt.sizeDelta = size;
+
+        Image image = buttonObj.GetComponent<Image>();
+        image.color = color;
+
+        button = buttonObj.GetComponent<Button>();
+        button.targetGraphic = image;
+
+        ColorBlock colors = button.colors;
+        colors.normalColor = color;
+        colors.highlightedColor = Color.Lerp(color, Color.white, 0.2f);
+        colors.pressedColor = Color.Lerp(color, Color.black, 0.25f);
+        colors.selectedColor = colors.highlightedColor;
+        colors.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.9f);
+        button.colors = colors;
+
+        button.onClick.AddListener(() => onClick?.Invoke());
+
+        CreateText(
+            buttonObj.transform,
+            label,
+            13,
+            FontStyle.Bold,
+            Color.white,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            new Vector2(0f, 0f),
+            TextAnchor.MiddleCenter,
+            out buttonText
+        );
     }
 
     private void BuildVerticalScrollbar(Transform parent, out Scrollbar scrollbar)
