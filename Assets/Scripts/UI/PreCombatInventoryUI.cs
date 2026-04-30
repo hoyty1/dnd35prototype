@@ -16,9 +16,14 @@ public class PreCombatInventoryUI : MonoBehaviour
     private const float SlotSize = 60f;
     private const float SlotSpacing = 8f;
 
-    private const int EquipmentGridColumns = 3;
-    private const float EquipmentSlotSize = 70f;
-    private const float EquipmentGridSpacing = 8f;
+    // Equipment layout mirrors InventoryUI.BuildEquipmentSlots() for visual consistency.
+    private const int EquipmentGridPreferredColumns = 7;
+    private const float EquipmentCellWidth = 66f;
+    private const float EquipmentCellHeight = 74f;
+    private const float EquipmentSpacingX = 4f;
+    private const float EquipmentSpacingY = 8f;
+    private static readonly Color EquipmentSlotEmptyColor = new Color(0.15f, 0.15f, 0.2f, 0.8f);
+    private static readonly Color EquipmentSlotEquippedColor = new Color(0.25f, 0.25f, 0.35f, 0.9f);
 
     // Window layout split: 30% stash (left) / 70% character management (right).
     private const float StashWidthRatio = 0.30f;
@@ -300,11 +305,14 @@ public class PreCombatInventoryUI : MonoBehaviour
     private GameObject _panel;
     private RectTransform _panelRect;
     private RectTransform _stashViewportRect;
+    private RectTransform _equipmentViewportRect;
     private GridLayoutGroup _stashGridLayout;
+    private GridLayoutGroup _equipmentGridLayout;
     private GridLayoutGroup _inventoryGridLayout;
     private ResizableWindow _resizableWindow;
 
     private int _lastLoggedStashColumns = -1;
+    private int _lastLoggedEquipmentColumns = -1;
 
     private Text _stashStatusText;
     private Text _stashInfoText;
@@ -921,22 +929,22 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(6f, 6f),
             new Vector2(-6f, -24f),
             out _equipmentContent,
-            out _,
+            out _equipmentViewportRect,
             withVerticalScrollbar: true);
 
-        GridLayoutGroup equipLayout = _equipmentContent.gameObject.AddComponent<GridLayoutGroup>();
-        equipLayout.cellSize = new Vector2(118f, 104f);
-        equipLayout.spacing = new Vector2(EquipmentGridSpacing, EquipmentGridSpacing);
-        equipLayout.padding = new RectOffset(10, 10, 10, 10);
-        equipLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        equipLayout.constraintCount = EquipmentGridColumns;
-        equipLayout.childAlignment = TextAnchor.UpperLeft;
+        _equipmentGridLayout = _equipmentContent.gameObject.AddComponent<GridLayoutGroup>();
+        _equipmentGridLayout.cellSize = new Vector2(EquipmentCellWidth, EquipmentCellHeight);
+        _equipmentGridLayout.spacing = new Vector2(EquipmentSpacingX, EquipmentSpacingY);
+        _equipmentGridLayout.padding = new RectOffset(0, 0, 0, 0);
+        _equipmentGridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        _equipmentGridLayout.constraintCount = EquipmentGridPreferredColumns;
+        _equipmentGridLayout.childAlignment = TextAnchor.UpperLeft;
 
         ContentSizeFitter equipFitter = _equipmentContent.gameObject.AddComponent<ContentSizeFitter>();
         equipFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
         equipFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-        Debug.Log($"[Equipment] Grid configured: {equipLayout.cellSize.x:0}x{equipLayout.cellSize.y:0} cells, {EquipmentGridColumns} columns");
+        Debug.Log($"[PreCombatUI] Equipment grid configured to mirror normal InventoryUI: cell={EquipmentCellWidth:0}x{EquipmentCellHeight:0}, spacing={EquipmentSpacingX:0}x{EquipmentSpacingY:0}, preferredColumns={EquipmentGridPreferredColumns}");
 
         if (equipmentScroll != null)
             equipmentScroll.scrollSensitivity = 20f;
@@ -1187,6 +1195,7 @@ public class PreCombatInventoryUI : MonoBehaviour
     private void ReflowResponsiveLayout()
     {
         ReflowStashGridColumns();
+        ReflowEquipmentGridColumns();
 
         if (_equipmentContent != null)
             LayoutRebuilder.ForceRebuildLayoutImmediate(_equipmentContent);
@@ -1220,6 +1229,33 @@ public class PreCombatInventoryUI : MonoBehaviour
             Debug.Log($"[PreCombatUI] Stash width: {viewportWidth:0}px | Columns: {columns}");
             Debug.Log($"[PreCombatUI] Character width: {characterWidth:0}px");
             _lastLoggedStashColumns = columns;
+        }
+    }
+
+    private void ReflowEquipmentGridColumns()
+    {
+        if (_equipmentGridLayout == null)
+            return;
+
+        float viewportWidth = _equipmentViewportRect != null && _equipmentViewportRect.rect.width > 0f
+            ? _equipmentViewportRect.rect.width
+            : (_panelRect != null ? _panelRect.rect.width * 0.42f : 460f);
+
+        float cellPlusSpacing = EquipmentCellWidth + EquipmentSpacingX;
+        int responsiveColumns = Mathf.FloorToInt((viewportWidth + EquipmentSpacingX) / Mathf.Max(1f, cellPlusSpacing));
+        int columns = Mathf.Clamp(responsiveColumns, 1, EquipmentGridPreferredColumns);
+
+        _equipmentGridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        _equipmentGridLayout.constraintCount = columns;
+
+        if (_lastLoggedEquipmentColumns != columns)
+        {
+            Debug.Log($"[PreCombatUI] Equipment layout modeled after normal inventory");
+            Debug.Log($"[PreCombatUI] Cell size: {EquipmentCellWidth:0}x{EquipmentCellHeight:0} (matches InventoryUI)");
+            Debug.Log($"[PreCombatUI] Spacing: {EquipmentSpacingX:0}x{EquipmentSpacingY:0} (matches InventoryUI)");
+            Debug.Log($"[PreCombatUI] Columns: {columns} (responsive, max {EquipmentGridPreferredColumns} from InventoryUI)");
+            Debug.Log("[PreCombatUI] Visual consistency achieved");
+            _lastLoggedEquipmentColumns = columns;
         }
     }
 
@@ -1502,6 +1538,7 @@ public class PreCombatInventoryUI : MonoBehaviour
 
     private void BuildEquipmentSlots(CharacterController character, Inventory inv)
     {
+        // Slot order intentionally matches InventoryUI.VisibleEquipSlots ordering.
         EquipSlot[] displayOrder =
         {
             EquipSlot.Head,
@@ -1516,64 +1553,88 @@ public class PreCombatInventoryUI : MonoBehaviour
             EquipSlot.LeftRing,
             EquipSlot.RightRing,
             EquipSlot.Feet,
-            EquipSlot.RightHand,
-            EquipSlot.LeftHand
+            EquipSlot.LeftHand,
+            EquipSlot.RightHand
         };
 
         for (int i = 0; i < displayOrder.Length; i++)
         {
             EquipSlot slot = displayOrder[i];
             ItemData item = inv.GetEquipped(slot);
-
-            GameObject cell = CreatePanel(
-                _equipmentContent,
-                $"EquipCell_{slot}",
-                new Vector2(0f, 1f),
-                new Vector2(0f, 1f),
-                new Vector2(0f, 1f),
-                Vector2.zero,
-                new Vector2(118f, 104f),
-                new Color(0.12f, 0.14f, 0.22f, 0.92f));
-
-            CreateText(
-                cell.transform,
-                "SlotLabel",
-                GetEquipSlotLabel(slot),
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(0.5f, 1f),
-                new Vector2(0f, -2f),
-                new Vector2(-6f, 20f),
-                10,
-                FontStyle.Bold,
-                new Color(0.85f, 0.88f, 0.95f),
-                TextAnchor.MiddleCenter);
-
-            SlotRef slotRef = new SlotRef
-            {
-                Container = SlotContainerType.Equipment,
-                Character = character,
-                EquipSlot = slot
-            };
-
-            float slotX = (118f - EquipmentSlotSize) * 0.5f;
-            GameObject slotGO = CreateItemSlotVisual(
-                cell.transform,
-                slotRef,
-                item,
-                quantity: 1,
-                quantityLabel: string.Empty,
-                anchoredOverride: new Rect(slotX, 24f, EquipmentSlotSize, EquipmentSlotSize),
-                slotPlaceholder: GetEquipSlotShortLabel(slot));
-
-            Image bg = slotGO.GetComponent<Image>();
-            if (bg != null)
-                bg.color = item == null
-                    ? new Color(0.18f, 0.2f, 0.3f, 0.95f)
-                    : bg.color;
+            CreateEquipmentSlotVisual(character, slot, item);
         }
 
-        Debug.Log($"[Equipment] Built {displayOrder.Length} square slots ({EquipmentSlotSize:0}x{EquipmentSlotSize:0}) with spacing {EquipmentGridSpacing:0}.");
+        Debug.Log($"[PreCombatUI] Built equipment slots using normal inventory style: count={displayOrder.Length}, cell={EquipmentCellWidth:0}x{EquipmentCellHeight:0}, spacing={EquipmentSpacingX:0}x{EquipmentSpacingY:0}");
+    }
+
+    // Equipment slot visuals intentionally mirror InventoryUI.CreateEquipSlot() styling.
+    private void CreateEquipmentSlotVisual(CharacterController character, EquipSlot slot, ItemData item)
+    {
+        SlotRef slotRef = new SlotRef
+        {
+            Container = SlotContainerType.Equipment,
+            Character = character,
+            EquipSlot = slot
+        };
+
+        GameObject slotGO = CreatePanel(
+            _equipmentContent,
+            $"Equip_{slot}",
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(0f, 1f),
+            Vector2.zero,
+            new Vector2(EquipmentCellWidth, EquipmentCellHeight),
+            item != null ? EquipmentSlotEquippedColor : EquipmentSlotEmptyColor);
+
+        CreateText(
+            slotGO.transform,
+            "SlotLabel",
+            GetNormalInventoryEquipSlotLabel(slot),
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0f, -2f),
+            new Vector2(0f, 16f),
+            9,
+            FontStyle.Normal,
+            new Color(0.7f, 0.7f, 0.5f),
+            TextAnchor.MiddleCenter);
+
+        string itemTextValue = item != null
+            ? (string.IsNullOrEmpty(item.IconChar) ? item.Name : $"{item.IconChar}\n{item.Name}")
+            : "Empty";
+
+        Text itemText = CreateText(
+            slotGO.transform,
+            "ItemText",
+            itemTextValue,
+            Vector2.zero,
+            Vector2.one,
+            new Vector2(0.5f, 0.5f),
+            new Vector2(0f, -6f),
+            new Vector2(-4f, -18f),
+            11,
+            FontStyle.Normal,
+            item != null ? item.IconColor : new Color(0.4f, 0.4f, 0.4f),
+            TextAnchor.MiddleCenter);
+
+        if (itemText != null)
+        {
+            itemText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            itemText.verticalOverflow = VerticalWrapMode.Overflow;
+        }
+
+        Image background = slotGO.GetComponent<Image>();
+        if (background != null)
+            background.raycastTarget = true;
+
+        DraggableItem draggable = slotGO.AddComponent<DraggableItem>();
+        draggable.Init(this, () => slotRef);
+
+        DropTarget target = slotGO.AddComponent<DropTarget>();
+        target.Init(this, () => slotRef, background, background != null ? background.color : EquipmentSlotEmptyColor);
+        _dropTargets.Add(target);
     }
 
     private void BuildInventorySlots(CharacterController character, Inventory inv)
@@ -3137,6 +3198,29 @@ public class PreCombatInventoryUI : MonoBehaviour
             return new Color(0.34f, 0.34f, 0.4f, 0.95f); // common equipment
 
         return new Color(0.24f, 0.28f, 0.36f, 0.95f);
+    }
+
+    private string GetNormalInventoryEquipSlotLabel(EquipSlot slot)
+    {
+        switch (slot)
+        {
+            case EquipSlot.Head: return "HEAD";
+            case EquipSlot.FaceEyes: return "FACE/EYES";
+            case EquipSlot.Neck: return "NECK";
+            case EquipSlot.Torso: return "TORSO";
+            case EquipSlot.Armor:
+            case EquipSlot.ArmorRobe: return "ARMOR/ROBE";
+            case EquipSlot.Waist: return "WAIST";
+            case EquipSlot.Back: return "BACK";
+            case EquipSlot.Wrists: return "WRISTS";
+            case EquipSlot.Hands: return "HANDS";
+            case EquipSlot.LeftRing: return "L RING";
+            case EquipSlot.RightRing: return "R RING";
+            case EquipSlot.Feet: return "FEET";
+            case EquipSlot.LeftHand: return "L HAND";
+            case EquipSlot.RightHand: return "R HAND";
+            default: return slot.ToString().ToUpperInvariant();
+        }
     }
 
     private string GetEquipSlotLabel(EquipSlot slot)
