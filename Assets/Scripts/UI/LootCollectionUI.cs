@@ -3,13 +3,18 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using TMPro;
 
 /// <summary>
 /// Post-combat modal loot collection window.
-/// Shows loot grouped by source, supports double-click looting and Loot All.
+/// Shows loot in a compact scrollable grid and supports double-click looting + Loot All.
 /// </summary>
 public class LootCollectionUI : MonoBehaviour
 {
+    private static readonly Vector2 LootCellSize = new Vector2(110f, 128f);
+    private static readonly Vector2 LootCellSpacing = new Vector2(10f, 10f);
+    private static readonly RectOffset LootGridPadding = new RectOffset(14, 14, 14, 14);
+
     public enum LootSourceType
     {
         Enemy,
@@ -35,7 +40,7 @@ public class LootCollectionUI : MonoBehaviour
                 if (Item.IsDestroyed)
                     return false;
 
-                return !string.IsNullOrWhiteSpace(SourceLabel);
+                return true;
             }
         }
     }
@@ -60,15 +65,9 @@ public class LootCollectionUI : MonoBehaviour
         public LootStackEntry Entry;
         public GameObject Root;
         public Image Bg;
-        public Text Label;
-        public Text Quantity;
-    }
-
-    private class SourceSectionRefs
-    {
-        public string SourceGroupKey;
-        public RectTransform GridRoot;
-        public Text HeaderText;
+        public TMP_Text Icon;
+        public TMP_Text Label;
+        public TMP_Text Quantity;
     }
 
     private GameObject _root;
@@ -86,7 +85,6 @@ public class LootCollectionUI : MonoBehaviour
 
     private readonly List<LootStackEntry> _entries = new List<LootStackEntry>();
     private readonly List<ItemTileRefs> _tiles = new List<ItemTileRefs>();
-    private readonly List<SourceSectionRefs> _sections = new List<SourceSectionRefs>();
 
     private LootStackEntry _selectedEntry;
     private Action<LootItemInstance, Action<bool>> _onLootSingle;
@@ -128,7 +126,7 @@ public class LootCollectionUI : MonoBehaviour
             for (int i = 0; i < entries.Count; i++)
             {
                 LootStackEntry entry = entries[i];
-                if (entry == null || entry.Prototype == null || string.IsNullOrWhiteSpace(entry.SourceLabel))
+                if (entry == null || entry.Prototype == null)
                     continue;
 
                 if (entry.RemainingQuantity <= 0)
@@ -407,50 +405,43 @@ public class LootCollectionUI : MonoBehaviour
             Destroy(_contentRoot.GetChild(i).gameObject);
 
         _tiles.Clear();
-        _sections.Clear();
 
-        VerticalLayoutGroup sectionsLayout = _contentRoot.GetComponent<VerticalLayoutGroup>();
-        if (sectionsLayout == null)
-        {
-            sectionsLayout = _contentRoot.gameObject.AddComponent<VerticalLayoutGroup>();
-            sectionsLayout.padding = new RectOffset(4, 4, 4, 4);
-            sectionsLayout.spacing = 8f;
-            sectionsLayout.childAlignment = TextAnchor.UpperLeft;
-            sectionsLayout.childControlWidth = true;
-            sectionsLayout.childControlHeight = false;
-            sectionsLayout.childForceExpandWidth = true;
-            sectionsLayout.childForceExpandHeight = false;
-        }
+        GridLayoutGroup grid = _contentRoot.GetComponent<GridLayoutGroup>();
+        if (grid == null)
+            grid = _contentRoot.gameObject.AddComponent<GridLayoutGroup>();
+
+        grid.cellSize = LootCellSize;
+        grid.spacing = LootCellSpacing;
+        grid.padding = LootGridPadding;
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = 7;
+        grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+        grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+        grid.childAlignment = TextAnchor.UpperLeft;
 
         ContentSizeFitter fitter = _contentRoot.GetComponent<ContentSizeFitter>();
         if (fitter == null)
-        {
             fitter = _contentRoot.gameObject.AddComponent<ContentSizeFitter>();
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-        }
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-        Dictionary<string, SourceSectionRefs> sectionMap = new Dictionary<string, SourceSectionRefs>();
-
+        int displayedItems = 0;
         for (int i = 0; i < _entries.Count; i++)
         {
             LootStackEntry entry = _entries[i];
             if (entry == null || entry.Prototype == null || entry.RemainingQuantity <= 0)
                 continue;
 
-            string sourceKey = string.IsNullOrWhiteSpace(entry.SourceGroupKey) ? entry.SourceLabel : entry.SourceGroupKey;
-            if (!sectionMap.TryGetValue(sourceKey, out SourceSectionRefs section))
-            {
-                section = BuildSourceSection(sourceKey, entry.SourceLabel);
-                sectionMap[sourceKey] = section;
-                _sections.Add(section);
-            }
-
-            ItemTileRefs tile = BuildItemTile(section.GridRoot, entry);
+            ItemTileRefs tile = BuildItemTile(_contentRoot, entry);
             _tiles.Add(tile);
+            displayedItems++;
         }
 
         if (_tiles.Count == 0)
             BuildNoLootMessage();
+
+        Debug.Log($"[LootUI] Displaying {displayedItems} items");
+        Debug.Log($"[LootUI] Grid cell size: {grid.cellSize}, spacing: {grid.spacing}, padding: L{grid.padding.left} R{grid.padding.right} T{grid.padding.top} B{grid.padding.bottom}");
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(_contentRoot);
         Canvas.ForceUpdateCanvases();
@@ -459,84 +450,33 @@ public class LootCollectionUI : MonoBehaviour
             _scrollRect.verticalNormalizedPosition = Mathf.Clamp01(_savedScrollPosition);
     }
 
-    private SourceSectionRefs BuildSourceSection(string sourceKey, string label)
-    {
-        GameObject root = CreatePanel(
-            _contentRoot,
-            "SourceSection_" + sourceKey,
-            new Vector2(0f, 0f),
-            new Vector2(1f, 0f),
-            new Vector2(0.5f, 1f),
-            Vector2.zero,
-            Vector2.zero,
-            new Color(0.09f, 0.12f, 0.19f, 0.9f));
-
-        LayoutElement sectionLE = root.AddComponent<LayoutElement>();
-        sectionLE.minHeight = 110f;
-
-        VerticalLayoutGroup sectionLayout = root.AddComponent<VerticalLayoutGroup>();
-        sectionLayout.padding = new RectOffset(8, 8, 8, 8);
-        sectionLayout.spacing = 6f;
-        sectionLayout.childControlWidth = true;
-        sectionLayout.childControlHeight = false;
-        sectionLayout.childForceExpandWidth = true;
-        sectionLayout.childForceExpandHeight = false;
-
-        Text header = CreateText(
-            root.transform,
-            "SectionHeader",
-            string.IsNullOrWhiteSpace(label) ? "Loot" : label,
-            new Vector2(0f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(0.5f, 1f),
-            Vector2.zero,
-            new Vector2(0f, 24f),
-            14,
-            FontStyle.Bold,
-            new Color(0.94f, 0.84f, 0.48f),
-            TextAnchor.MiddleLeft);
-
-        LayoutElement headerLE = header.gameObject.AddComponent<LayoutElement>();
-        headerLE.preferredHeight = 24f;
-
-        GameObject gridGO = new GameObject("ItemGrid", typeof(RectTransform), typeof(GridLayoutGroup), typeof(ContentSizeFitter));
-        gridGO.transform.SetParent(root.transform, false);
-
-        RectTransform gridRT = gridGO.GetComponent<RectTransform>();
-        gridRT.anchorMin = new Vector2(0f, 1f);
-        gridRT.anchorMax = new Vector2(1f, 1f);
-        gridRT.pivot = new Vector2(0.5f, 1f);
-
-        GridLayoutGroup grid = gridGO.GetComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(180f, 72f);
-        grid.spacing = new Vector2(8f, 8f);
-        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        grid.constraintCount = 5;
-        grid.childAlignment = TextAnchor.UpperLeft;
-
-        ContentSizeFitter gridFitter = gridGO.GetComponent<ContentSizeFitter>();
-        gridFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        return new SourceSectionRefs
-        {
-            SourceGroupKey = sourceKey,
-            GridRoot = gridRT,
-            HeaderText = header
-        };
-    }
-
     private ItemTileRefs BuildItemTile(Transform parent, LootStackEntry entry)
     {
-        GameObject tile = new GameObject("LootTile", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+        GameObject tile = new GameObject("LootTile", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement), typeof(VerticalLayoutGroup));
         tile.transform.SetParent(parent, false);
 
         LayoutElement le = tile.GetComponent<LayoutElement>();
-        le.preferredWidth = 180f;
-        le.preferredHeight = 72f;
+        le.preferredWidth = LootCellSize.x;
+        le.preferredHeight = LootCellSize.y;
+        le.minWidth = LootCellSize.x;
+        le.minHeight = LootCellSize.y;
 
         Image bg = tile.GetComponent<Image>();
         Color normalColor = GetItemTypeColor(entry.Prototype);
         bg.color = normalColor;
+
+        Outline outline = tile.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.6f);
+        outline.effectDistance = new Vector2(1f, -1f);
+
+        VerticalLayoutGroup tileLayout = tile.GetComponent<VerticalLayoutGroup>();
+        tileLayout.padding = new RectOffset(8, 8, 8, 8);
+        tileLayout.spacing = 6f;
+        tileLayout.childAlignment = TextAnchor.UpperCenter;
+        tileLayout.childControlWidth = true;
+        tileLayout.childControlHeight = false;
+        tileLayout.childForceExpandWidth = true;
+        tileLayout.childForceExpandHeight = false;
 
         Button button = tile.GetComponent<Button>();
         button.targetGraphic = bg;
@@ -549,46 +489,45 @@ public class LootCollectionUI : MonoBehaviour
         cb.disabledColor = new Color(0.2f, 0.2f, 0.2f, 0.8f);
         button.colors = cb;
 
-        GameObject titleGO = new GameObject("Title", typeof(RectTransform), typeof(Text));
-        titleGO.transform.SetParent(tile.transform, false);
+        TMP_Text iconText = CreateTMPLabel(
+            tile.transform,
+            "Icon",
+            string.IsNullOrWhiteSpace(entry?.Prototype?.IconChar) ? "•" : entry.Prototype.IconChar,
+            30,
+            FontStyles.Bold,
+            Color.white,
+            TextAlignmentOptions.Center,
+            preferredHeight: 36f,
+            useEllipsis: false);
 
-        RectTransform titleRT = titleGO.GetComponent<RectTransform>();
-        titleRT.anchorMin = new Vector2(0f, 0.35f);
-        titleRT.anchorMax = new Vector2(1f, 1f);
-        titleRT.offsetMin = new Vector2(8f, 0f);
-        titleRT.offsetMax = new Vector2(-8f, -4f);
+        TMP_Text titleText = CreateTMPLabel(
+            tile.transform,
+            "Name",
+            SafeItemName(entry.Prototype),
+            12,
+            FontStyles.Bold,
+            new Color(0.95f, 0.97f, 1f, 1f),
+            TextAlignmentOptions.Center,
+            preferredHeight: 34f,
+            useEllipsis: true);
 
-        Text titleText = titleGO.GetComponent<Text>();
-        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        titleText.fontSize = 12;
-        titleText.color = Color.white;
-        titleText.alignment = TextAnchor.UpperLeft;
-        titleText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        titleText.verticalOverflow = VerticalWrapMode.Overflow;
-        titleText.text = BuildItemLabel(entry.Prototype);
-
-        GameObject qtyGO = new GameObject("Quantity", typeof(RectTransform), typeof(Text));
-        qtyGO.transform.SetParent(tile.transform, false);
-
-        RectTransform qtyRT = qtyGO.GetComponent<RectTransform>();
-        qtyRT.anchorMin = new Vector2(0f, 0f);
-        qtyRT.anchorMax = new Vector2(1f, 0.35f);
-        qtyRT.offsetMin = new Vector2(8f, 2f);
-        qtyRT.offsetMax = new Vector2(-8f, 0f);
-
-        Text qtyText = qtyGO.GetComponent<Text>();
-        qtyText.font = titleText.font;
-        qtyText.fontSize = 12;
-        qtyText.fontStyle = FontStyle.Bold;
-        qtyText.color = new Color(0.98f, 0.9f, 0.58f, 1f);
-        qtyText.alignment = TextAnchor.MiddleRight;
-        qtyText.text = "×" + Mathf.Max(1, entry.RemainingQuantity);
+        TMP_Text qtyText = CreateTMPLabel(
+            tile.transform,
+            "Quantity",
+            "×" + Mathf.Max(1, entry.RemainingQuantity),
+            12,
+            FontStyles.Bold,
+            new Color(0.98f, 0.9f, 0.58f, 1f),
+            TextAlignmentOptions.Center,
+            preferredHeight: 22f,
+            useEllipsis: false);
 
         ItemTileRefs refs = new ItemTileRefs
         {
             Entry = entry,
             Root = tile,
             Bg = bg,
+            Icon = iconText,
             Label = titleText,
             Quantity = qtyText
         };
@@ -616,18 +555,19 @@ public class LootCollectionUI : MonoBehaviour
 
     private void BuildNoLootMessage()
     {
-        GameObject noLoot = new GameObject("NoLootMessage", typeof(RectTransform), typeof(Text), typeof(LayoutElement));
+        GameObject noLoot = new GameObject("NoLootMessage", typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
         noLoot.transform.SetParent(_contentRoot, false);
 
         LayoutElement le = noLoot.GetComponent<LayoutElement>();
+        le.preferredWidth = 320f;
         le.preferredHeight = 42f;
 
-        Text text = noLoot.GetComponent<Text>();
-        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        text.fontSize = 14;
-        text.fontStyle = FontStyle.Italic;
+        TextMeshProUGUI text = noLoot.GetComponent<TextMeshProUGUI>();
+        text.fontSize = 16;
+        text.fontStyle = FontStyles.Italic;
         text.color = new Color(0.82f, 0.88f, 0.97f);
-        text.alignment = TextAnchor.MiddleCenter;
+        text.alignment = TextAlignmentOptions.Center;
+        text.overflowMode = TextOverflowModes.Ellipsis;
         text.text = "No loot found.";
     }
 
@@ -789,6 +729,8 @@ public class LootCollectionUI : MonoBehaviour
 
         if (_lootAllButton != null)
             _lootAllButton.interactable = remainingItems > 0;
+
+        Debug.Log($"[LootUI] Footer updated | stacks={totalStacks} | remaining={remainingItems} | looted={_lootedCount}");
     }
 
     private int CalculateGoldTotal()
@@ -811,15 +753,6 @@ public class LootCollectionUI : MonoBehaviour
         }
 
         return totalGold;
-    }
-
-    private string BuildItemLabel(ItemData item)
-    {
-        if (item == null)
-            return "Unknown Item";
-
-        string icon = string.IsNullOrWhiteSpace(item.IconChar) ? "•" : item.IconChar;
-        return icon + " " + SafeItemName(item);
     }
 
     private static string SafeItemName(ItemData item)
@@ -885,6 +818,35 @@ public class LootCollectionUI : MonoBehaviour
         _statusText.color = success
             ? new Color(0.58f, 0.95f, 0.62f)
             : new Color(0.98f, 0.68f, 0.56f);
+    }
+
+    private TMP_Text CreateTMPLabel(
+        Transform parent,
+        string name,
+        string content,
+        float fontSize,
+        FontStyles fontStyle,
+        Color color,
+        TextAlignmentOptions alignment,
+        float preferredHeight,
+        bool useEllipsis)
+    {
+        GameObject go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
+        go.transform.SetParent(parent, false);
+
+        LayoutElement le = go.GetComponent<LayoutElement>();
+        le.preferredHeight = preferredHeight;
+
+        TextMeshProUGUI text = go.GetComponent<TextMeshProUGUI>();
+        text.text = content;
+        text.fontSize = fontSize;
+        text.fontStyle = fontStyle;
+        text.color = color;
+        text.alignment = alignment;
+        text.enableWordWrapping = true;
+        text.overflowMode = useEllipsis ? TextOverflowModes.Ellipsis : TextOverflowModes.Overflow;
+
+        return text;
     }
 
     private Button CreateFooterButton(Transform parent, string label, Color color, Action onClick)
@@ -974,8 +936,41 @@ public class LootCollectionUI : MonoBehaviour
         content.anchoredPosition = Vector2.zero;
         content.sizeDelta = Vector2.zero;
 
+        GameObject scrollbarGO = new GameObject("VerticalScrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+        scrollbarGO.transform.SetParent(root.transform, false);
+
+        RectTransform scrollbarRT = scrollbarGO.GetComponent<RectTransform>();
+        scrollbarRT.anchorMin = new Vector2(1f, 0f);
+        scrollbarRT.anchorMax = new Vector2(1f, 1f);
+        scrollbarRT.pivot = new Vector2(1f, 1f);
+        scrollbarRT.sizeDelta = new Vector2(12f, 0f);
+        scrollbarRT.anchoredPosition = Vector2.zero;
+
+        Image scrollbarBg = scrollbarGO.GetComponent<Image>();
+        scrollbarBg.color = new Color(0.12f, 0.16f, 0.24f, 0.9f);
+
+        GameObject handleGO = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+        handleGO.transform.SetParent(scrollbarGO.transform, false);
+        RectTransform handleRT = handleGO.GetComponent<RectTransform>();
+        handleRT.anchorMin = Vector2.zero;
+        handleRT.anchorMax = Vector2.one;
+        handleRT.offsetMin = new Vector2(1f, 1f);
+        handleRT.offsetMax = new Vector2(-1f, -1f);
+
+        Image handleImage = handleGO.GetComponent<Image>();
+        handleImage.color = new Color(0.74f, 0.8f, 0.92f, 0.95f);
+
+        Scrollbar scrollbar = scrollbarGO.GetComponent<Scrollbar>();
+        scrollbar.targetGraphic = handleImage;
+        scrollbar.handleRect = handleRT;
+        scrollbar.direction = Scrollbar.Direction.BottomToTop;
+        scrollbar.size = 0.25f;
+
         scroll.viewport = viewportRT;
         scroll.content = content;
+        scroll.verticalScrollbar = scrollbar;
+        scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+        scroll.verticalScrollbarSpacing = 4f;
 
         return scroll;
     }
