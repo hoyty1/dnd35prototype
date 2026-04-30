@@ -10,8 +10,12 @@ using UnityEngine.UI;
 public class RandomEncounterGeneratorUI : MonoBehaviour
 {
     private const int DefaultFontSize = 22;
-    private const float PreviewSectionMinHeight = 180f;
-    private const float PreviewSectionVerticalChrome = 74f;
+    private const float LayoutSectionSpacing = 18f;
+    private const float LayoutSectionPadding = 12f;
+    private const float PreviewSectionMinHeight = 200f;
+    private const float PreviewSectionVerticalChrome = 96f;
+    private const float PreviewSectionBottomMargin = 12f;
+    private const float ActionsSectionMinHeight = 122f;
 
     private sealed class OptionSelector
     {
@@ -27,7 +31,15 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
     private RectTransform _mainContentRect;
     private Text _partyInfoText;
     private Text _previewText;
+    private VerticalLayoutGroup _contentLayoutGroup;
     private LayoutElement _previewSectionLayout;
+    private LayoutElement _actionsSectionLayout;
+    private RectTransform _partySectionRect;
+    private RectTransform _difficultySectionRect;
+    private RectTransform _filtersSectionRect;
+    private RectTransform _generateSectionRect;
+    private RectTransform _previewSectionRect;
+    private RectTransform _actionsSectionRect;
     private Text _filtersToggleLabel;
     private GameObject _filtersContent;
 
@@ -185,10 +197,11 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         _mainContentRect.sizeDelta = Vector2.zero;
 
         VerticalLayoutGroup rootLayout = content.GetComponent<VerticalLayoutGroup>();
-        rootLayout.spacing = 10f;
-        rootLayout.padding = new RectOffset(20, 20, 16, 16);
+        _contentLayoutGroup = rootLayout;
+        rootLayout.spacing = LayoutSectionSpacing;
+        rootLayout.padding = new RectOffset(20, 20, 18, 20);
         rootLayout.childControlWidth = true;
-        rootLayout.childControlHeight = false;
+        rootLayout.childControlHeight = true;
         rootLayout.childForceExpandWidth = true;
         rootLayout.childForceExpandHeight = false;
 
@@ -263,6 +276,7 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
     private void CreatePartyInfoSection(Transform parent)
     {
         GameObject section = CreateSectionPanel(parent, "PartyInfoSection", new Color(0.1f, 0.13f, 0.2f, 0.98f), 100f);
+        _partySectionRect = section.GetComponent<RectTransform>();
         CreateSectionTitle(section.transform, "1) PARTY INFO", 22, TextAnchor.UpperLeft, new Color(0.95f, 0.86f, 0.45f, 1f));
 
         _partyInfoText = CreateBodyText(section.transform, 20, new Color(0.9f, 0.94f, 1f, 1f));
@@ -276,6 +290,7 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
     private void CreateDifficultySection(Transform parent)
     {
         GameObject section = CreateSectionPanel(parent, "DifficultySection", new Color(0.11f, 0.13f, 0.22f, 0.98f), 138f);
+        _difficultySectionRect = section.GetComponent<RectTransform>();
         CreateSectionTitle(section.transform, "2) DIFFICULTY", 22, TextAnchor.UpperLeft, new Color(0.95f, 0.86f, 0.45f, 1f));
 
         GameObject row = new GameObject("DifficultyRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
@@ -314,6 +329,7 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
     private void CreateFiltersSection(Transform parent)
     {
         GameObject section = CreateSectionPanel(parent, "FiltersSection", new Color(0.11f, 0.14f, 0.24f, 0.98f), 170f);
+        _filtersSectionRect = section.GetComponent<RectTransform>();
         CreateSectionTitle(section.transform, "3) FILTERS (OPTIONAL)", 22, TextAnchor.UpperLeft, new Color(0.95f, 0.86f, 0.45f, 1f));
 
         GameObject toggleButtonObj = new GameObject("FiltersToggle", typeof(RectTransform), typeof(Image), typeof(Button));
@@ -384,6 +400,7 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
     private void CreateGenerateSection(Transform parent)
     {
         GameObject section = CreateSectionPanel(parent, "GenerateSection", new Color(0.1f, 0.13f, 0.2f, 0.98f), 88f);
+        _generateSectionRect = section.GetComponent<RectTransform>();
         CreateSectionTitle(section.transform, "4) GENERATE", 22, TextAnchor.UpperLeft, new Color(0.95f, 0.86f, 0.45f, 1f));
 
         CreateLargeButton(
@@ -404,6 +421,7 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
     private void CreatePreviewSection(Transform parent)
     {
         GameObject section = CreateSectionPanel(parent, "PreviewSection", new Color(0.07f, 0.09f, 0.16f, 0.98f), PreviewSectionMinHeight);
+        _previewSectionRect = section.GetComponent<RectTransform>();
         _previewSectionLayout = section.GetComponent<LayoutElement>();
         CreateSectionTitle(section.transform, "5) ENCOUNTER PREVIEW", 22, TextAnchor.UpperLeft, new Color(0.95f, 0.86f, 0.45f, 1f));
 
@@ -412,8 +430,8 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         RectTransform containerRect = previewContainer.GetComponent<RectTransform>();
         containerRect.anchorMin = new Vector2(0f, 0f);
         containerRect.anchorMax = new Vector2(1f, 1f);
-        containerRect.offsetMin = new Vector2(18f, 14f);
-        containerRect.offsetMax = new Vector2(-18f, -48f);
+        containerRect.offsetMin = new Vector2(18f, 14f + PreviewSectionBottomMargin);
+        containerRect.offsetMax = new Vector2(-18f, -50f);
 
         previewContainer.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.08f);
 
@@ -440,7 +458,9 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
 
     private void CreateActionButtonsSection(Transform parent)
     {
-        GameObject section = CreateSectionPanel(parent, "ActionButtonsSection", new Color(0.1f, 0.13f, 0.2f, 0.98f), 90f);
+        GameObject section = CreateSectionPanel(parent, "ActionButtonsSection", new Color(0.1f, 0.13f, 0.2f, 0.98f), ActionsSectionMinHeight);
+        _actionsSectionRect = section.GetComponent<RectTransform>();
+        _actionsSectionLayout = section.GetComponent<LayoutElement>();
         CreateSectionTitle(section.transform, "6) ACTIONS", 22, TextAnchor.UpperLeft, new Color(0.95f, 0.86f, 0.45f, 1f));
 
         GameObject row = new GameObject("ActionsRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
@@ -694,10 +714,17 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
             preferredTextHeight = _previewText.cachedTextGeneratorForLayout.GetPreferredHeight(_previewText.text ?? string.Empty, settings) / _previewText.pixelsPerUnit;
         }
 
-        float sectionHeight = Mathf.Max(PreviewSectionMinHeight, preferredTextHeight + PreviewSectionVerticalChrome);
+        float sectionHeight = Mathf.Max(PreviewSectionMinHeight, preferredTextHeight + PreviewSectionVerticalChrome + PreviewSectionBottomMargin);
         _previewSectionLayout.minHeight = sectionHeight;
         _previewSectionLayout.preferredHeight = sectionHeight;
         _previewSectionLayout.flexibleHeight = 0f;
+
+        if (_actionsSectionLayout != null)
+        {
+            _actionsSectionLayout.minHeight = ActionsSectionMinHeight;
+            _actionsSectionLayout.preferredHeight = ActionsSectionMinHeight;
+            _actionsSectionLayout.flexibleHeight = 0f;
+        }
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(previewRect);
         RefreshMainLayout();
@@ -712,6 +739,12 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
 
         EnsureScrollRectConfiguration();
 
+        if (_contentLayoutGroup != null && _contentLayoutGroup.spacing < 0f)
+        {
+            Debug.LogWarning($"[RandomEncounterGeneratorUI] Negative section spacing detected ({_contentLayoutGroup.spacing:F1}); clamping to {LayoutSectionSpacing:F1}.");
+            _contentLayoutGroup.spacing = LayoutSectionSpacing;
+        }
+
         Canvas.ForceUpdateCanvases();
         LayoutRebuilder.ForceRebuildLayoutImmediate(_mainContentRect);
 
@@ -724,6 +757,7 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         float contentHeight = _mainContentRect.rect.height;
         float viewportHeight = _mainViewportRect != null ? _mainViewportRect.rect.height : 0f;
         bool scrollable = contentHeight > viewportHeight + 0.5f;
+        LogSectionLayoutDiagnostics();
 
         Debug.Log($"[RandomEncounterGeneratorUI] Scroll layout refresh | contentHeight={contentHeight:F1} | viewportHeight={viewportHeight:F1} | scrollable={scrollable} | scrollEnabled={(_mainScrollRect != null && _mainScrollRect.enabled)} | hasScrollbar={(_mainScrollRect != null && _mainScrollRect.verticalScrollbar != null)}");
     }
@@ -759,6 +793,39 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         }
 
         Debug.Log($"[RandomEncounterGeneratorUI] ScrollRect verify | enabled={_mainScrollRect.enabled} | hasViewport={_mainScrollRect.viewport != null} | hasContent={_mainScrollRect.content != null} | hasScrollbar={_mainScrollRect.verticalScrollbar != null}");
+    }
+
+    private void LogSectionLayoutDiagnostics()
+    {
+        if (_mainContentRect == null)
+            return;
+
+        int sectionCount = _mainContentRect.childCount;
+        int partyIndex = _partySectionRect != null ? _partySectionRect.GetSiblingIndex() : -1;
+        int difficultyIndex = _difficultySectionRect != null ? _difficultySectionRect.GetSiblingIndex() : -1;
+        int filtersIndex = _filtersSectionRect != null ? _filtersSectionRect.GetSiblingIndex() : -1;
+        int generateIndex = _generateSectionRect != null ? _generateSectionRect.GetSiblingIndex() : -1;
+        int previewIndex = _previewSectionRect != null ? _previewSectionRect.GetSiblingIndex() : -1;
+        int actionsIndex = _actionsSectionRect != null ? _actionsSectionRect.GetSiblingIndex() : -1;
+
+        bool expectedOrder = partyIndex >= 0
+            && partyIndex < difficultyIndex
+            && difficultyIndex < filtersIndex
+            && filtersIndex < generateIndex
+            && generateIndex < previewIndex
+            && previewIndex < actionsIndex;
+
+        float spacing = _contentLayoutGroup != null ? _contentLayoutGroup.spacing : -1f;
+        bool invalidSpacing = spacing < 0f;
+
+        string previewLayout = _previewSectionRect != null
+            ? $"y={_previewSectionRect.anchoredPosition.y:F1}, h={_previewSectionRect.rect.height:F1}, min={(_previewSectionLayout != null ? _previewSectionLayout.minHeight : 0f):F1}, pref={(_previewSectionLayout != null ? _previewSectionLayout.preferredHeight : 0f):F1}"
+            : "missing";
+        string actionsLayout = _actionsSectionRect != null
+            ? $"y={_actionsSectionRect.anchoredPosition.y:F1}, h={_actionsSectionRect.rect.height:F1}, min={(_actionsSectionLayout != null ? _actionsSectionLayout.minHeight : 0f):F1}, pref={(_actionsSectionLayout != null ? _actionsSectionLayout.preferredHeight : 0f):F1}"
+            : "missing";
+
+        Debug.Log($"[RandomEncounterGeneratorUI] Section layout diagnostics | sectionCount={sectionCount} | spacing={spacing:F1} | invalidSpacing={invalidSpacing} | order={partyIndex}>{difficultyIndex}>{filtersIndex}>{generateIndex}>{previewIndex}>{actionsIndex} | expectedOrder={expectedOrder} | preview=({previewLayout}) | actions=({actionsLayout})");
     }
 
     private static string BuildDetailedPreview(GeneratedRandomEncounter encounter)
@@ -851,6 +918,7 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         LayoutElement layout = section.GetComponent<LayoutElement>();
         layout.preferredHeight = preferredHeight;
         layout.minHeight = preferredHeight;
+        layout.flexibleHeight = 0f;
 
         return section;
     }
@@ -862,8 +930,8 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         titleRect.anchorMin = new Vector2(0f, 1f);
         titleRect.anchorMax = new Vector2(1f, 1f);
         titleRect.pivot = new Vector2(0.5f, 1f);
-        titleRect.anchoredPosition = new Vector2(0f, -10f);
-        titleRect.sizeDelta = new Vector2(-24f, 32f);
+        titleRect.anchoredPosition = new Vector2(0f, -LayoutSectionPadding);
+        titleRect.sizeDelta = new Vector2(-(LayoutSectionPadding * 2f), 32f);
 
         if (!includeBottomDivider)
             return;
@@ -1050,7 +1118,10 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         rt.sizeDelta = sizeDelta ?? new Vector2(0f, 0f);
 
         LayoutElement layout = buttonObj.GetComponent<LayoutElement>();
-        layout.preferredHeight = Mathf.Max(42f, (sizeDelta ?? new Vector2(0f, 44f)).y);
+        float buttonHeight = Mathf.Max(42f, (sizeDelta ?? new Vector2(0f, 44f)).y);
+        layout.minHeight = buttonHeight;
+        layout.preferredHeight = buttonHeight;
+        layout.flexibleHeight = 0f;
 
         Image image = buttonObj.GetComponent<Image>();
         image.color = color;
