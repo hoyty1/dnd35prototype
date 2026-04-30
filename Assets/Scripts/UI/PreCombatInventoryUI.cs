@@ -2587,6 +2587,13 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
 
         int targetQuantity = Mathf.Clamp(quantity, 1, stack.Quantity);
+        ItemData prototype = stack.Prototype;
+        List<ItemData> existingStack = FindStackableItemsInInventory(prototype, inv);
+        int beforeCount = existingStack.Count;
+
+        Debug.Log($"[Stack] Checking destination character inventory for stackable items: {(prototype != null ? prototype.Name : "item")}");
+        Debug.Log($"[Stack] Found {beforeCount} existing stackable item(s) in character inventory.");
+
         int moved = 0;
         List<ItemData> toMove = new List<ItemData>(stack.Instances);
         foreach (ItemData stackItem in toMove)
@@ -2610,11 +2617,23 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
 
         string stackName = stack.Prototype != null ? stack.Prototype.Name : "item";
+        int afterCount = FindStackableItemsInInventory(prototype, inv).Count;
+
+        Debug.Log($"[Stack] Character transfer summary for {stackName}: before={beforeCount}, moved={moved}, after={afterCount}");
         Debug.Log($"[Transfer] Moved {moved}/{targetQuantity} {stackName} from stash to {selected.Stats.CharacterName}");
-        ShowMessage(moved > 0
-            ? $"Moved {moved}× {stackName} to {selected.Stats.CharacterName}."
-            : "Backpack is full.",
-            moved > 0);
+
+        if (moved > 0 && beforeCount > 0)
+        {
+            ShowMessage($"Combined {moved} {stackName} with existing stack (now ×{afterCount}).", true);
+        }
+        else
+        {
+            ShowMessage(moved > 0
+                ? $"Moved {moved}× {stackName} to {selected.Stats.CharacterName}."
+                : "Backpack is full.",
+                moved > 0);
+        }
+
         RefreshAll();
     }
 
@@ -2637,6 +2656,13 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
 
         int targetQuantity = Mathf.Clamp(quantity, 1, stack.Quantity);
+        ItemData prototype = stack.Prototype;
+        List<ItemData> existingStack = FindStackableItemsInStash(prototype, _stash);
+        int beforeCount = existingStack.Count;
+
+        Debug.Log($"[Stack] Checking destination stash for stackable items: {(prototype != null ? prototype.Name : "item")}");
+        Debug.Log($"[Stack] Found {beforeCount} existing stackable item(s) in stash.");
+
         int moved = 0;
         List<ItemData> toMove = new List<ItemData>(stack.Instances);
         foreach (ItemData stackItem in toMove)
@@ -2660,12 +2686,93 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
 
         string stackName = stack.Prototype != null ? stack.Prototype.Name : "item";
+        int afterCount = FindStackableItemsInStash(prototype, _stash).Count;
+
+        Debug.Log($"[Stack] Stash transfer summary for {stackName}: before={beforeCount}, moved={moved}, after={afterCount}");
         Debug.Log($"[Transfer] Moved {moved}/{targetQuantity} {stackName} from {owner.Stats.CharacterName} to stash");
-        ShowMessage(moved > 0
-            ? $"Moved {moved}× {stackName} to stash."
-            : "Transfer failed.",
-            moved > 0);
+
+        if (moved > 0 && beforeCount > 0)
+        {
+            ShowMessage($"Combined {moved} {stackName} with stash stack (now ×{afterCount}).", true);
+        }
+        else
+        {
+            ShowMessage(moved > 0
+                ? $"Moved {moved}× {stackName} to stash."
+                : "Transfer failed.",
+                moved > 0);
+        }
+
         RefreshAll();
+    }
+
+    private bool CanItemsStack(ItemData item1, ItemData item2)
+    {
+        if (item1 == null || item2 == null)
+            return false;
+
+        if (item1.Type != item2.Type)
+            return false;
+
+        if (!string.Equals(item1.Name, item2.Name, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!string.Equals(item1.Id, item2.Id, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        int enhancement1 = item1.Type == ItemType.Weapon
+            ? item1.GetHighestWeaponEnhancementBonus()
+            : Mathf.Max(0, item1.ResolveEnhancementBonus());
+        int enhancement2 = item2.Type == ItemType.Weapon
+            ? item2.GetHighestWeaponEnhancementBonus()
+            : Mathf.Max(0, item2.ResolveEnhancementBonus());
+
+        return enhancement1 == enhancement2;
+    }
+
+    private List<ItemData> FindStackableItemsInInventory(ItemData item, Inventory inventory, ItemData excludeItem = null)
+    {
+        List<ItemData> stackable = new List<ItemData>();
+        if (item == null || inventory == null || inventory.GeneralSlots == null)
+            return stackable;
+
+        for (int i = 0; i < inventory.GeneralSlots.Length; i++)
+        {
+            ItemData existingItem = inventory.GeneralSlots[i];
+            if (existingItem == null)
+                continue;
+
+            if (ReferenceEquals(existingItem, excludeItem))
+                continue;
+
+            if (CanItemsStack(item, existingItem))
+                stackable.Add(existingItem);
+        }
+
+        return stackable;
+    }
+
+    private List<ItemData> FindStackableItemsInStash(ItemData item, PartyStash stash, ItemData excludeItem = null)
+    {
+        List<ItemData> stackable = new List<ItemData>();
+        if (item == null || stash == null)
+            return stackable;
+
+        IReadOnlyList<ItemData> stashItems = stash.GetItems();
+        for (int i = 0; i < stashItems.Count; i++)
+        {
+            ItemData existingItem = stashItems[i];
+            if (existingItem == null)
+                continue;
+
+            if (ReferenceEquals(existingItem, excludeItem))
+                continue;
+
+            if (CanItemsStack(item, existingItem))
+                stackable.Add(existingItem);
+        }
+
+        return stackable;
     }
 
     private void OnItemDroppedOnTarget(DropTarget target, PointerEventData eventData)
@@ -2693,6 +2800,18 @@ public class PreCombatInventoryUI : MonoBehaviour
         {
             ShowMessage(validation.Message, false);
             return;
+        }
+
+        if (destination != null && destination.Container == SlotContainerType.Stash)
+        {
+            int existing = FindStackableItemsInStash(item, _stash, item).Count;
+            Debug.Log($"[Drop][Stack] Destination stash existing stack matches for {item.Name}: {existing}");
+        }
+        else if (destination != null && (destination.Container == SlotContainerType.Inventory || destination.Container == SlotContainerType.InventoryStack))
+        {
+            Inventory destinationInventory = GetInventory(destination.Character);
+            int existing = FindStackableItemsInInventory(item, destinationInventory, item).Count;
+            Debug.Log($"[Drop][Stack] Destination inventory existing stack matches for {item.Name}: {existing}");
         }
 
         if (TryExecuteTransfer(source, destination, item, out string feedback))
@@ -2754,6 +2873,9 @@ public class PreCombatInventoryUI : MonoBehaviour
             return false;
         }
 
+        int existingStackCount = FindStackableItemsInStash(item, _stash, item).Count;
+        Debug.Log($"[Stack] Destination stash has {existingStackCount} stackable match(es) for {item.Name} before move.");
+
         switch (source.Container)
         {
             case SlotContainerType.Inventory:
@@ -2780,7 +2902,11 @@ public class PreCombatInventoryUI : MonoBehaviour
                     return false;
                 }
 
-                feedback = $"Moved {removed.Name} to stash.";
+                int afterCount = FindStackableItemsInStash(removed, _stash).Count;
+                Debug.Log($"[Stack] MoveItemToStash complete for {removed.Name}: before={existingStackCount}, after={afterCount}");
+                feedback = existingStackCount > 0
+                    ? $"Combined {removed.Name} into existing stash stack (now ×{afterCount})."
+                    : $"Moved {removed.Name} to stash.";
                 return true;
             }
 
@@ -2800,7 +2926,11 @@ public class PreCombatInventoryUI : MonoBehaviour
                     return false;
                 }
 
-                feedback = $"Moved {item.Name} to stash.";
+                int afterCount = FindStackableItemsInStash(item, _stash).Count;
+                Debug.Log($"[Stack] MoveItemToStash complete for {item.Name}: before={existingStackCount}, after={afterCount}");
+                feedback = existingStackCount > 0
+                    ? $"Combined {item.Name} into existing stash stack (now ×{afterCount})."
+                    : $"Moved {item.Name} to stash.";
                 return true;
             }
 
@@ -2835,7 +2965,11 @@ public class PreCombatInventoryUI : MonoBehaviour
                     return false;
                 }
 
-                feedback = $"Moved {item.Name} to stash.";
+                int afterCount = FindStackableItemsInStash(removed, _stash).Count;
+                Debug.Log($"[Stack] MoveItemToStash complete for {removed.Name}: before={existingStackCount}, after={afterCount}");
+                feedback = existingStackCount > 0
+                    ? $"Combined {removed.Name} into existing stash stack (now ×{afterCount})."
+                    : $"Moved {removed.Name} to stash.";
                 return true;
             }
 
@@ -2863,6 +2997,9 @@ public class PreCombatInventoryUI : MonoBehaviour
             feedback = "Invalid target backpack slot.";
             return false;
         }
+
+        int existingInventoryStackCount = FindStackableItemsInInventory(item, targetInv, item).Count;
+        Debug.Log($"[Stack] Destination inventory ({destination.Character?.Stats?.CharacterName ?? "Unknown"}) has {existingInventoryStackCount} stackable match(es) for {item.Name} before move.");
 
         if (source.Container == SlotContainerType.Inventory && source.Character == destination.Character)
         {
@@ -2918,7 +3055,11 @@ public class PreCombatInventoryUI : MonoBehaviour
                 }
             }
 
-            feedback = $"Moved {item.Name} to backpack.";
+            int afterCount = FindStackableItemsInInventory(item, targetInv).Count;
+            Debug.Log($"[Stack] MoveItemToInventory complete for {item.Name}: before={existingInventoryStackCount}, after={afterCount}, autoAdd={autoAddTarget}");
+            feedback = autoAddTarget && existingInventoryStackCount > 0
+                ? $"Combined {item.Name} with existing backpack stack (now ×{afterCount})."
+                : $"Moved {item.Name} to backpack.";
             return true;
         }
 
@@ -2955,7 +3096,11 @@ public class PreCombatInventoryUI : MonoBehaviour
                 return false;
             }
 
-            feedback = $"Moved {item.Name} to {destination.Character.Stats.CharacterName}'s backpack.";
+            int afterCount = FindStackableItemsInInventory(item, targetInv).Count;
+            Debug.Log($"[Stack] MoveItemToInventory complete for {item.Name}: before={existingInventoryStackCount}, after={afterCount}, autoAdd={autoAddTarget}");
+            feedback = autoAddTarget && existingInventoryStackCount > 0
+                ? $"Combined {item.Name} with existing stack in {destination.Character.Stats.CharacterName}'s backpack (now ×{afterCount})."
+                : $"Moved {item.Name} to {destination.Character.Stats.CharacterName}'s backpack.";
             return true;
         }
 
@@ -3022,7 +3167,11 @@ public class PreCombatInventoryUI : MonoBehaviour
                 targetInv.RecalculateStats();
             }
 
-            feedback = $"Moved {item.Name} into backpack.";
+            int afterCount = FindStackableItemsInInventory(extracted, targetInv).Count;
+            Debug.Log($"[Stack] MoveItemToInventory complete for {extracted.Name}: before={existingInventoryStackCount}, after={afterCount}, autoAdd={autoAddTarget}");
+            feedback = autoAddTarget && existingInventoryStackCount > 0
+                ? $"Combined {extracted.Name} with existing backpack stack (now ×{afterCount})."
+                : $"Moved {item.Name} into backpack.";
             return true;
         }
 
@@ -3709,7 +3858,6 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (items == null)
             return groups;
 
-        int uniqueCounter = 0;
         foreach (ItemData item in items)
         {
             if (item == null)
@@ -3718,9 +3866,8 @@ public class PreCombatInventoryUI : MonoBehaviour
             if (includePredicate != null && !includePredicate(item))
                 continue;
 
-            string key = IsStackable(item)
-                ? BuildStackKey(item)
-                : $"unique_{uniqueCounter++}_{BuildStackKey(item)}";
+            string key = BuildStackKey(item);
+            Debug.Log($"[Stack] Stack key for '{item.Name}': {key}");
 
             if (!map.TryGetValue(key, out ItemStackGroup group))
             {
@@ -3738,24 +3885,6 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         Debug.Log($"[Stacking] Grouped items into {groups.Count} stack(s).");
         return groups;
-    }
-
-    private bool IsStackable(ItemData item)
-    {
-        if (item == null)
-            return false;
-
-        if (item.Type == ItemType.Consumable)
-            return true;
-
-        string name = item.Name ?? string.Empty;
-        string id = item.Id ?? string.Empty;
-        return name.IndexOf("arrow", StringComparison.OrdinalIgnoreCase) >= 0
-            || name.IndexOf("bolt", StringComparison.OrdinalIgnoreCase) >= 0
-            || name.IndexOf("bullet", StringComparison.OrdinalIgnoreCase) >= 0
-            || id.IndexOf("arrow", StringComparison.OrdinalIgnoreCase) >= 0
-            || id.IndexOf("bolt", StringComparison.OrdinalIgnoreCase) >= 0
-            || id.IndexOf("bullet", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private void ApplyStashSort(List<ItemStackGroup> groups)
@@ -3846,9 +3975,13 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (item == null)
             return "null-item";
 
-        string id = string.IsNullOrWhiteSpace(item.Id) ? "no-id" : item.Id;
-        string name = string.IsNullOrWhiteSpace(item.Name) ? "no-name" : item.Name;
-        return $"{id}|{name}|{item.Type}";
+        string id = string.IsNullOrWhiteSpace(item.Id) ? "no-id" : item.Id.Trim().ToLowerInvariant();
+        string name = string.IsNullOrWhiteSpace(item.Name) ? "no-name" : item.Name.Trim().ToLowerInvariant();
+        int enhancement = item.Type == ItemType.Weapon
+            ? item.GetHighestWeaponEnhancementBonus()
+            : Mathf.Max(0, item.ResolveEnhancementBonus());
+
+        return $"{id}|{name}|{item.Type}|enh:{enhancement}";
     }
 
     private string GetFilterLabel(StashFilterMode mode)
