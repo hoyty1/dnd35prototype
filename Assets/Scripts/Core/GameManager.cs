@@ -589,6 +589,15 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     public void OnCharacterCreationComplete4(CharacterCreationData[] pcDataArray)
     {
+        int partyCount = pcDataArray != null ? pcDataArray.Length : 0;
+        Debug.Log($"[PlayNow] GameManager received creation complete callback. partyCount={partyCount}");
+
+        if (pcDataArray == null || pcDataArray.Length == 0)
+        {
+            Debug.LogError("[PlayNow] Character creation completed with no character data. Cannot continue to encounter selection.");
+            return;
+        }
+
         WaitingForCharacterCreation = false;
         Debug.Log($"[GameManager] Character creation complete ({pcDataArray.Length} PCs)");
         SetupCreatedCharacters(pcDataArray);
@@ -599,6 +608,7 @@ public partial class GameManager : MonoBehaviour
 
     private void PromptEncounterSelection()
     {
+        Debug.Log("[PlayNow] PromptEncounterSelection invoked.");
         NPCDatabase.Init();
         EnsurePartyStashInitialized();
 
@@ -607,6 +617,12 @@ public partial class GameManager : MonoBehaviour
         if (EncounterSelectionUI == null)
             EncounterSelectionUI = gameObject.AddComponent<EncounterSelectionUI>();
 
+        if (EncounterSelectionUI == null)
+        {
+            Debug.LogError("[PlayNow] EncounterSelectionUI could not be resolved. Encounter selection cannot be shown.");
+            return;
+        }
+
         PreCombatInventoryUI?.Close();
         LootCollectionUI?.Close();
         WaitingForPreCombatInventory = false;
@@ -614,6 +630,8 @@ public partial class GameManager : MonoBehaviour
         WaitingForEncounterSelection = true;
 
         var presets = NPCDatabase.ListEncounterPresets();
+        int presetCount = presets != null ? presets.Count : 0;
+        Debug.Log($"[PlayNow] Opening encounter selection UI. presets={presetCount}, partyCount={(PCs != null ? PCs.Count : 0)}");
 
         // Show all available encounters so the player can scroll and select any scenario.
         EncounterSelectionUI.Open(presets,
@@ -621,12 +639,15 @@ public partial class GameManager : MonoBehaviour
             {
                 WaitingForEncounterSelection = false;
                 _selectedEncounterPresetId = string.IsNullOrEmpty(presetId) ? "goblin_raiders" : presetId;
+                Debug.Log($"[PlayNow] Encounter preset selected: {_selectedEncounterPresetId}");
                 ApplyEncounterPreset(_selectedEncounterPresetId);
                 OpenPreCombatInventoryPhase();
             },
             onStartRandomEncounter: (enemyIds, generated) =>
             {
                 WaitingForEncounterSelection = false;
+                int enemyCount = enemyIds != null ? enemyIds.Count : 0;
+                Debug.Log($"[PlayNow] Random encounter selected. enemies={enemyCount}, generated={(generated != null)}");
                 ApplyRandomEncounter(enemyIds, generated);
                 OpenPreCombatInventoryPhase();
             },
@@ -634,6 +655,7 @@ public partial class GameManager : MonoBehaviour
             {
                 WaitingForEncounterSelection = false;
                 _selectedEncounterPresetId = "goblin_raiders";
+                Debug.Log("[PlayNow] Encounter selection canceled. Falling back to goblin_raiders preset.");
                 ApplyEncounterPreset(_selectedEncounterPresetId);
                 OpenPreCombatInventoryPhase();
             },

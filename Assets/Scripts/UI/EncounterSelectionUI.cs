@@ -48,8 +48,13 @@ public class EncounterSelectionUI : MonoBehaviour
         List<int> partyLevels = null,
         int partySize = 4)
     {
+        Debug.Log("[PlayNow] EncounterSelectionUI.Open called.");
         EnsureBuilt();
-        if (_panel == null) return;
+        if (_panel == null)
+        {
+            Debug.LogError("[PlayNow] EncounterSelectionUI.Open aborted because panel is null after EnsureBuilt.");
+            return;
+        }
 
         _onSelect = onSelect;
         _onStartRandomEncounter = onStartRandomEncounter;
@@ -64,14 +69,21 @@ public class EncounterSelectionUI : MonoBehaviour
         _panel.SetActive(true);
         _descriptionText.text = "Pick a preset encounter or open the random encounter generator.";
 
+        int presetCount = presets != null ? presets.Count : 0;
+        Debug.Log($"[PlayNow] EncounterSelectionUI showing panel. presetCount={presetCount}, partyAPL={_partyAverageLevel}, partySize={_partySize}");
+
         BuildEncounterCards(presets);
 
         if (_scrollRect != null)
             _scrollRect.verticalNormalizedPosition = 1f;
+
+        Debug.Log($"[PlayNow] EncounterSelectionUI visible={(_panel != null && _panel.activeInHierarchy)}");
     }
 
     public void Close()
     {
+        Debug.Log("[PlayNow] EncounterSelectionUI.Close called.");
+
         if (_panel != null)
             _panel.SetActive(false);
 

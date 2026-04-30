@@ -2042,16 +2042,7 @@ public class CharacterCreationUI : MonoBehaviour
             IsComplete = true;
             HideCreationUI();
 
-            // Fire both callbacks for compatibility
-            if (OnCreationComplete4 != null)
-            {
-                OnCreationComplete4.Invoke(CreatedCharacters);
-            }
-            else if (OnCreationComplete != null)
-            {
-                // Legacy: only send first 2
-                OnCreationComplete.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
-            }
+            NotifyCreationComplete("StandardFlow");
         }
     }
 
@@ -2426,14 +2417,7 @@ public class CharacterCreationUI : MonoBehaviour
             IsComplete = true;
             HideCreationUI();
 
-            if (OnCreationComplete4 != null)
-            {
-                OnCreationComplete4.Invoke(CreatedCharacters);
-            }
-            else if (OnCreationComplete != null)
-            {
-                OnCreationComplete.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
-            }
+            NotifyCreationComplete("PremadeSelection");
 
             Debug.Log("[CharCreation] All characters created (mix of custom and pre-made). Starting game!");
         }
@@ -2463,7 +2447,8 @@ public class CharacterCreationUI : MonoBehaviour
     /// </summary>
     private void OnVeryQuickStart()
     {
-        Debug.Log("[VeryQuickStart] Creating instant party: Fighter, Rogue, Cleric, Wizard");
+        Debug.Log("[PlayNow] Button clicked (Very Quick Start).");
+        Debug.Log("[PlayNow] Creating instant party: Fighter, Rogue, Cleric, Wizard");
         InitializeQuickStartCharacters();
 
         string[] partyClasses = { "Fighter", "Rogue", "Cleric", "Wizard" };
@@ -2486,14 +2471,7 @@ public class CharacterCreationUI : MonoBehaviour
         IsComplete = true;
         HideCreationUI();
 
-        if (OnCreationComplete4 != null)
-        {
-            OnCreationComplete4.Invoke(CreatedCharacters);
-        }
-        else if (OnCreationComplete != null)
-        {
-            OnCreationComplete.Invoke(CreatedCharacters[0], CreatedCharacters[1]);
-        }
+        NotifyCreationComplete("VeryQuickStart");
 
         Debug.Log("[VeryQuickStart] Game started!");
     }
@@ -3019,15 +2997,43 @@ public class CharacterCreationUI : MonoBehaviour
         HideQSOverlay();
         HideCreationUI();
 
+        NotifyCreationComplete("QuickStartPartyBuilder");
+    }
+
+    private void NotifyCreationComplete(string flowSource)
+    {
+        int callbackPartySize = CreatedCharacters != null ? CreatedCharacters.Length : 0;
+        Debug.Log($"[PlayNow] Character creation complete callback dispatch from '{flowSource}'. partySlots={callbackPartySize}, hasOnCreationComplete4={OnCreationComplete4 != null}, hasLegacyCallback={OnCreationComplete != null}");
+
         if (OnCreationComplete4 != null)
         {
             OnCreationComplete4.Invoke(CreatedCharacters);
+            Debug.Log("[PlayNow] Invoked OnCreationComplete4 callback.");
+            return;
         }
-        else if (OnCreationComplete != null)
+
+        if (OnCreationComplete != null)
         {
-            OnCreationComplete.Invoke(CreatedCharacters[0],
-                CreatedCharacters.Length > 1 ? CreatedCharacters[1] : CreatedCharacters[0]);
+            CharacterCreationData first = (CreatedCharacters != null && CreatedCharacters.Length > 0)
+                ? CreatedCharacters[0]
+                : null;
+            CharacterCreationData second = (CreatedCharacters != null && CreatedCharacters.Length > 1)
+                ? CreatedCharacters[1]
+                : first;
+
+            OnCreationComplete.Invoke(first, second);
+            Debug.Log("[PlayNow] Invoked legacy OnCreationComplete callback.");
+            return;
         }
+
+        if (GameManager.Instance != null)
+        {
+            Debug.LogWarning("[PlayNow] No creation callbacks were assigned. Falling back to GameManager.Instance.OnCharacterCreationComplete4().");
+            GameManager.Instance.OnCharacterCreationComplete4(CreatedCharacters);
+            return;
+        }
+
+        Debug.LogError("[PlayNow] Unable to continue game flow: no creation callbacks and GameManager.Instance is null.");
     }
 
     // ========== SHOW / HIDE ==========
