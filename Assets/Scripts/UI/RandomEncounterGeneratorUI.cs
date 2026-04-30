@@ -20,8 +20,11 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
     }
 
     private GameObject _root;
+    private ScrollRect _mainScrollRect;
+    private RectTransform _mainContentRect;
     private Text _partyInfoText;
     private Text _previewText;
+    private LayoutElement _previewSectionLayout;
     private Text _filtersToggleLabel;
     private GameObject _filtersContent;
 
@@ -89,12 +92,16 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         _lastGeneratedEncounter = null;
 
         ResetFilterInputs();
+        _root.transform.SetAsLastSibling();
         _root.SetActive(true);
         RefreshPartyInfo();
         RefreshDifficultyButtons();
         RefreshFiltersToggleLabel();
         SetPreviewPlaceholder();
         UpdateActionButtonState();
+
+        if (_mainScrollRect != null)
+            _mainScrollRect.verticalNormalizedPosition = 1f;
     }
 
     public void Close()
@@ -116,8 +123,12 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
             return;
         }
 
-        _root = new GameObject("RandomEncounterGeneratorScreen", typeof(RectTransform), typeof(Image));
+        _root = new GameObject("RandomEncounterGeneratorScreen", typeof(RectTransform), typeof(Image), typeof(Canvas), typeof(GraphicRaycaster));
         _root.transform.SetParent(canvas.transform, false);
+
+        Canvas overlayCanvas = _root.GetComponent<Canvas>();
+        overlayCanvas.overrideSorting = true;
+        overlayCanvas.sortingOrder = canvas.sortingOrder + 20;
 
         RectTransform rootRect = _root.GetComponent<RectTransform>();
         rootRect.anchorMin = Vector2.zero;
@@ -128,13 +139,44 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         Image rootImage = _root.GetComponent<Image>();
         rootImage.color = new Color(0.04f, 0.05f, 0.08f, 0.97f);
 
-        GameObject safeArea = new GameObject("SafeArea", typeof(RectTransform), typeof(VerticalLayoutGroup));
-        safeArea.transform.SetParent(_root.transform, false);
-        RectTransform safeAreaRect = safeArea.GetComponent<RectTransform>();
-        safeAreaRect.anchorMin = new Vector2(0.05f, 0.05f);
-        safeAreaRect.anchorMax = new Vector2(0.95f, 0.95f);
-        safeAreaRect.offsetMin = Vector2.zero;
-        safeAreaRect.offsetMax = Vector2.zero;
+        GameObject scrollRoot = new GameObject("ScrollRoot", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+        scrollRoot.transform.SetParent(_root.transform, false);
+        RectTransform scrollRootRect = scrollRoot.GetComponent<RectTransform>();
+        scrollRootRect.anchorMin = new Vector2(0.05f, 0.05f);
+        scrollRootRect.anchorMax = new Vector2(0.95f, 0.95f);
+        scrollRootRect.offsetMin = Vector2.zero;
+        scrollRootRect.offsetMax = Vector2.zero;
+
+        Image scrollRootImage = scrollRoot.GetComponent<Image>();
+        scrollRootImage.color = new Color(0.03f, 0.04f, 0.07f, 0.7f);
+
+        _mainScrollRect = scrollRoot.GetComponent<ScrollRect>();
+        _mainScrollRect.horizontal = false;
+        _mainScrollRect.vertical = true;
+        _mainScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        _mainScrollRect.scrollSensitivity = 36f;
+
+        GameObject viewport = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+        viewport.transform.SetParent(scrollRoot.transform, false);
+        RectTransform viewportRect = viewport.GetComponent<RectTransform>();
+        viewportRect.anchorMin = Vector2.zero;
+        viewportRect.anchorMax = Vector2.one;
+        viewportRect.offsetMin = new Vector2(8f, 8f);
+        viewportRect.offsetMax = new Vector2(-26f, -8f);
+
+        Image viewportImage = viewport.GetComponent<Image>();
+        viewportImage.color = new Color(0f, 0f, 0f, 0.06f);
+        Mask viewportMask = viewport.GetComponent<Mask>();
+        viewportMask.showMaskGraphic = false;
+
+        GameObject safeArea = new GameObject("SafeArea", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+        safeArea.transform.SetParent(viewport.transform, false);
+        _mainContentRect = safeArea.GetComponent<RectTransform>();
+        _mainContentRect.anchorMin = new Vector2(0f, 1f);
+        _mainContentRect.anchorMax = new Vector2(1f, 1f);
+        _mainContentRect.pivot = new Vector2(0.5f, 1f);
+        _mainContentRect.anchoredPosition = Vector2.zero;
+        _mainContentRect.sizeDelta = Vector2.zero;
 
         VerticalLayoutGroup rootLayout = safeArea.GetComponent<VerticalLayoutGroup>();
         rootLayout.spacing = 10f;
@@ -144,6 +186,10 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         rootLayout.childForceExpandWidth = true;
         rootLayout.childForceExpandHeight = false;
 
+        ContentSizeFitter contentFitter = safeArea.GetComponent<ContentSizeFitter>();
+        contentFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        contentFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
         CreateHeader(safeArea.transform);
         CreatePartyInfoSection(safeArea.transform);
         CreateDifficultySection(safeArea.transform);
@@ -152,7 +198,54 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         CreatePreviewSection(safeArea.transform);
         CreateActionButtonsSection(safeArea.transform);
 
+        BuildVerticalScrollbar(scrollRoot.transform, out Scrollbar scrollbar);
+        _mainScrollRect.viewport = viewportRect;
+        _mainScrollRect.content = _mainContentRect;
+        _mainScrollRect.verticalScrollbar = scrollbar;
+        _mainScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+
+        LayoutRebuilder.ForceRebuildLayoutImmediate(_mainContentRect);
+
         _root.SetActive(false);
+    }
+
+    private void BuildVerticalScrollbar(Transform parent, out Scrollbar scrollbar)
+    {
+        GameObject scrollbarObj = new GameObject("VerticalScrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+        scrollbarObj.transform.SetParent(parent, false);
+        RectTransform scrollbarRect = scrollbarObj.GetComponent<RectTransform>();
+        scrollbarRect.anchorMin = new Vector2(1f, 0f);
+        scrollbarRect.anchorMax = new Vector2(1f, 1f);
+        scrollbarRect.pivot = new Vector2(1f, 1f);
+        scrollbarRect.offsetMin = new Vector2(-16f, 8f);
+        scrollbarRect.offsetMax = new Vector2(-4f, -8f);
+
+        Image scrollbarBg = scrollbarObj.GetComponent<Image>();
+        scrollbarBg.color = new Color(0.16f, 0.2f, 0.29f, 0.95f);
+
+        GameObject slidingArea = new GameObject("SlidingArea", typeof(RectTransform));
+        slidingArea.transform.SetParent(scrollbarObj.transform, false);
+        RectTransform slidingRect = slidingArea.GetComponent<RectTransform>();
+        slidingRect.anchorMin = Vector2.zero;
+        slidingRect.anchorMax = Vector2.one;
+        slidingRect.offsetMin = new Vector2(0f, 6f);
+        slidingRect.offsetMax = new Vector2(0f, -6f);
+
+        GameObject handleObj = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+        handleObj.transform.SetParent(slidingArea.transform, false);
+        RectTransform handleRect = handleObj.GetComponent<RectTransform>();
+        handleRect.anchorMin = new Vector2(0f, 1f);
+        handleRect.anchorMax = new Vector2(1f, 1f);
+        handleRect.pivot = new Vector2(0.5f, 1f);
+        handleRect.sizeDelta = new Vector2(0f, 96f);
+
+        Image handleImage = handleObj.GetComponent<Image>();
+        handleImage.color = new Color(0.52f, 0.67f, 0.96f, 0.95f);
+
+        scrollbar = scrollbarObj.GetComponent<Scrollbar>();
+        scrollbar.direction = Scrollbar.Direction.BottomToTop;
+        scrollbar.targetGraphic = handleImage;
+        scrollbar.handleRect = handleRect;
     }
 
     private void CreateHeader(Transform parent)
@@ -304,16 +397,30 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
 
     private void CreatePreviewSection(Transform parent)
     {
-        GameObject section = CreateSectionPanel(parent, "PreviewSection", new Color(0.07f, 0.09f, 0.16f, 0.98f), 240f);
+        GameObject section = CreateSectionPanel(parent, "PreviewSection", new Color(0.07f, 0.09f, 0.16f, 0.98f), 320f);
+        _previewSectionLayout = section.GetComponent<LayoutElement>();
         CreateSectionTitle(section.transform, "5) ENCOUNTER PREVIEW", 22, TextAnchor.UpperLeft, new Color(0.95f, 0.86f, 0.45f, 1f));
 
-        _previewText = CreateBodyText(section.transform, 20, new Color(0.9f, 0.95f, 1f, 1f));
+        GameObject previewMask = new GameObject("PreviewMask", typeof(RectTransform), typeof(Image), typeof(Mask));
+        previewMask.transform.SetParent(section.transform, false);
+        RectTransform maskRect = previewMask.GetComponent<RectTransform>();
+        maskRect.anchorMin = new Vector2(0f, 0f);
+        maskRect.anchorMax = new Vector2(1f, 1f);
+        maskRect.offsetMin = new Vector2(18f, 14f);
+        maskRect.offsetMax = new Vector2(-18f, -48f);
+
+        Image maskImage = previewMask.GetComponent<Image>();
+        maskImage.color = new Color(0f, 0f, 0f, 0.08f);
+        Mask mask = previewMask.GetComponent<Mask>();
+        mask.showMaskGraphic = false;
+
+        _previewText = CreateBodyText(previewMask.transform, 20, new Color(0.9f, 0.95f, 1f, 1f));
         RectTransform previewRect = _previewText.rectTransform;
         previewRect.anchorMin = new Vector2(0f, 0f);
         previewRect.anchorMax = new Vector2(1f, 1f);
-        previewRect.offsetMin = new Vector2(20f, 14f);
-        previewRect.offsetMax = new Vector2(-20f, -48f);
-        _previewText.verticalOverflow = VerticalWrapMode.Overflow;
+        previewRect.offsetMin = new Vector2(2f, 2f);
+        previewRect.offsetMax = new Vector2(-2f, -2f);
+        _previewText.verticalOverflow = VerticalWrapMode.Truncate;
     }
 
     private void CreateActionButtonsSection(Transform parent)
@@ -395,6 +502,7 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
             _filtersContent.SetActive(_filtersExpanded);
 
         RefreshFiltersToggleLabel();
+        RefreshMainLayout();
     }
 
     private void RefreshFiltersToggleLabel()
@@ -432,11 +540,13 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         if (_lastGeneratedEncounter == null)
         {
             _previewText.text = "No valid encounter found for current filters.\nTry loosening filters or creature count limits.";
+            AdjustPreviewSectionHeight();
             UpdateActionButtonState();
             return;
         }
 
         _previewText.text = BuildDetailedPreview(_lastGeneratedEncounter);
+        AdjustPreviewSectionHeight();
         UpdateActionButtonState();
     }
 
@@ -507,6 +617,7 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
         if (_previewText != null)
         {
             _previewText.text = "No encounter generated yet.\n\nChoose a difficulty and click GENERATE ENCOUNTER.";
+            AdjustPreviewSectionHeight();
         }
     }
 
@@ -518,6 +629,33 @@ public class RandomEncounterGeneratorUI : MonoBehaviour
             _generateAgainButton.interactable = hasEncounter;
         if (_startEncounterButton != null)
             _startEncounterButton.interactable = hasEncounter;
+    }
+
+    private void AdjustPreviewSectionHeight()
+    {
+        if (_previewSectionLayout == null || _previewText == null)
+            return;
+
+        Canvas.ForceUpdateCanvases();
+
+        float availableWidth = Mathf.Max(320f, _previewText.rectTransform.rect.width);
+        TextGenerationSettings settings = _previewText.GetGenerationSettings(new Vector2(availableWidth, 0f));
+        float preferredHeight = _previewText.cachedTextGeneratorForLayout.GetPreferredHeight(_previewText.text ?? string.Empty, settings) / _previewText.pixelsPerUnit;
+
+        float sectionHeight = Mathf.Clamp(preferredHeight + 74f, 220f, 520f);
+        _previewSectionLayout.minHeight = sectionHeight;
+        _previewSectionLayout.preferredHeight = sectionHeight;
+
+        RefreshMainLayout();
+    }
+
+    private void RefreshMainLayout()
+    {
+        if (_mainContentRect == null)
+            return;
+
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(_mainContentRect);
     }
 
     private static string BuildDetailedPreview(GeneratedRandomEncounter encounter)
