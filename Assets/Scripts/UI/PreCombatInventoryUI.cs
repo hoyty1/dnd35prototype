@@ -128,36 +128,57 @@ public class PreCombatInventoryUI : MonoBehaviour
         public SlotRef DragSource;
         public ItemData DragItem;
         public DraggableItem Draggable;
+        public bool IsDragging => DragItem != null;
 
         public DragDropManager(PreCombatInventoryUI owner)
         {
             _owner = owner;
         }
 
-        public void BeginDrag(DraggableItem draggable)
+        public bool BeginDrag(DraggableItem draggable)
         {
             if (draggable == null)
-                return;
+                return false;
 
             SlotRef slot = draggable.ResolveSlot();
             ItemData item = _owner.ResolveItem(slot);
             if (slot == null || item == null)
-                return;
+                return false;
 
             DragSource = slot;
             DragItem = item;
             Draggable = draggable;
+            Debug.Log($"[Drag] OnBeginDrag: {item.Name} from {slot.Container}");
             _owner.OnDragStarted(this);
+            return true;
         }
 
         public void UpdateDrag(PointerEventData eventData)
         {
+            if (!IsDragging)
+                return;
+
             _owner.OnDragUpdated(this, eventData);
         }
 
         public void EndDrag(PointerEventData eventData)
         {
+            if (!IsDragging)
+                return;
+
+            Debug.Log("[Drag] OnEndDrag: cleanup visual + state");
             _owner.OnDragEnded(this, eventData);
+            ClearState();
+        }
+
+        public void ForceCleanup()
+        {
+            _owner.OnDragEnded(this, null);
+            ClearState();
+        }
+
+        private void ClearState()
+        {
             DragSource = null;
             DragItem = null;
             Draggable = null;
@@ -171,11 +192,15 @@ public class PreCombatInventoryUI : MonoBehaviour
     {
         private PreCombatInventoryUI _owner;
         private Func<SlotRef> _slotResolver;
+        private CanvasGroup _canvasGroup;
 
         public void Init(PreCombatInventoryUI owner, Func<SlotRef> slotResolver)
         {
             _owner = owner;
             _slotResolver = slotResolver;
+            _canvasGroup = GetComponent<CanvasGroup>();
+            if (_canvasGroup == null)
+                _canvasGroup = gameObject.AddComponent<CanvasGroup>();
         }
 
         public SlotRef ResolveSlot()
@@ -187,8 +212,18 @@ public class PreCombatInventoryUI : MonoBehaviour
         {
             SlotRef slot = ResolveSlot();
             ItemData item = _owner != null ? _owner.ResolveItem(slot) : null;
-            Debug.Log($"[PreCombatUI] Drag started | item={(item != null ? item.Name : "<none>")}");
-            _owner?.TryBeginDrag(this);
+            if (item == null)
+                return;
+
+            bool started = _owner != null && _owner.TryBeginDrag(this);
+            if (!started)
+                return;
+
+            if (_canvasGroup != null)
+            {
+                _canvasGroup.alpha = 0.55f;
+                _canvasGroup.blocksRaycasts = false;
+            }
         }
 
         public void OnDrag(PointerEventData eventData)
@@ -199,6 +234,21 @@ public class PreCombatInventoryUI : MonoBehaviour
         public void OnEndDrag(PointerEventData eventData)
         {
             _owner?._dragDropManager?.EndDrag(eventData);
+            RestoreVisualState();
+        }
+
+        private void OnDisable()
+        {
+            RestoreVisualState();
+        }
+
+        private void RestoreVisualState()
+        {
+            if (_canvasGroup == null)
+                return;
+
+            _canvasGroup.alpha = 1f;
+            _canvasGroup.blocksRaycasts = true;
         }
 
         public void OnPointerClick(PointerEventData eventData)
@@ -288,7 +338,7 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         public void OnDrop(PointerEventData eventData)
         {
-            _owner?.OnItemDroppedOnTarget(this);
+            _owner?.OnItemDroppedOnTarget(this, eventData);
         }
 
         public void OnPointerEnter(PointerEventData eventData)
@@ -442,6 +492,8 @@ public class PreCombatInventoryUI : MonoBehaviour
         HideTooltip();
         HideContextMenu();
         HideEquipOrStashPrompt();
+        if (_dragDropManager != null && _dragDropManager.IsDragging)
+            _dragDropManager.ForceCleanup();
         HideDragPreview();
 
         if (_panel != null)
@@ -1400,16 +1452,38 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
     }
 
+    public void RefreshUI()
+    {
+        RefreshAll();
+    }
+
     private void RefreshAll()
     {
+        Debug.Log("[PreCombatUI] Refreshing entire UI");
+
+        if (_dragDropManager != null && _dragDropManager.IsDragging)
+            _dragDropManager.ForceCleanup();
+
         _dropTargets.Clear();
         HideContextMenu();
         HideEquipOrStashPrompt();
+        HideDragPreview();
+
         ReflowResponsiveLayout();
         RefreshStatusAndHeaderText();
         RefreshCharacterTabs();
         RefreshStashGrid();
         RefreshCharacterDetail();
+
+        Canvas.ForceUpdateCanvases();
+        if (_stashContent != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_stashContent);
+        if (_equipmentContent != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_equipmentContent);
+        if (_inventoryContent != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_inventoryContent);
+
+        Debug.Log("[PreCombatUI] UI refresh complete");
     }
 
     private void RefreshStatusAndHeaderText()
@@ -1968,9 +2042,9 @@ public class PreCombatInventoryUI : MonoBehaviour
         return slotGO;
     }
 
-    private void TryBeginDrag(DraggableItem draggable)
+    private bool TryBeginDrag(DraggableItem draggable)
     {
-        _dragDropManager?.BeginDrag(draggable);
+        return _dragDropManager != null && _dragDropManager.BeginDrag(draggable);
     }
 
     private void OnDragStarted(DragDropManager manager)
@@ -1982,6 +2056,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         HideEquipOrStashPrompt();
         ShowDragPreview(manager.DragItem);
         UpdateDropTargetHighlights();
+        Debug.Log($"[Drag] Preview shown for {manager.DragItem.Name}");
     }
 
     private void OnDragUpdated(DragDropManager manager, PointerEventData eventData)
@@ -1996,6 +2071,7 @@ public class PreCombatInventoryUI : MonoBehaviour
     {
         ClearDropTargetHighlights();
         HideDragPreview();
+        Debug.Log("[Drag] Drag visual destroyed and highlights reset");
     }
 
     private void OnDropTargetHovered(DropTarget target)
@@ -2224,12 +2300,24 @@ public class PreCombatInventoryUI : MonoBehaviour
         RefreshAll();
     }
 
-    private void OnItemDroppedOnTarget(DropTarget target)
+    private void OnItemDroppedOnTarget(DropTarget target, PointerEventData eventData)
     {
-        if (_dragDropManager == null || _dragDropManager.DragItem == null || target == null)
+        if (_dragDropManager == null || !_dragDropManager.IsDragging || target == null)
             return;
 
-        Debug.Log($"[PreCombatUI] Drop attempt | item={_dragDropManager.DragItem.Name} | target={target.name}");
+        if (eventData != null)
+        {
+            DraggableItem draggedComponent = eventData.pointerDrag != null
+                ? eventData.pointerDrag.GetComponent<DraggableItem>()
+                : null;
+            if (draggedComponent == null)
+            {
+                Debug.LogWarning("[Drop] OnDrop called but pointerDrag has no DraggableItem.");
+                return;
+            }
+        }
+
+        Debug.Log($"[Drop] OnDrop: {_dragDropManager.DragItem.Name} -> {target.Slot?.Container}");
 
         SlotRef source = _dragDropManager.DragSource;
         SlotRef destination = target.Slot;
@@ -2243,9 +2331,15 @@ public class PreCombatInventoryUI : MonoBehaviour
         }
 
         if (TryExecuteTransfer(source, destination, item, out string feedback))
+        {
+            Debug.Log($"[Transfer] Success: {item.Name} | {source.Container} -> {destination.Container}");
             ShowMessage(string.IsNullOrWhiteSpace(validation.Message) ? feedback : validation.Message, true);
+        }
         else
+        {
+            Debug.LogWarning($"[Transfer] Failed: {item.Name} | {source.Container} -> {destination.Container} | reason={feedback}");
             ShowMessage(string.IsNullOrWhiteSpace(feedback) ? "Transfer failed." : feedback, false);
+        }
 
         RefreshAll();
     }
