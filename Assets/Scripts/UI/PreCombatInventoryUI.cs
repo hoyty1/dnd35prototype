@@ -929,7 +929,7 @@ public class PreCombatInventoryUI : MonoBehaviour
                 CharacterStats stats = selected.Stats;
                 int hp = stats.CurrentHP;
                 int maxHp = Mathf.Max(1, stats.MaxHP);
-                int ac = stats.GetCurrentAC();
+                int ac = stats.ArmorClass;
                 _characterHeaderText.text =
                     $"{stats.CharacterName}  •  {stats.CharacterClass} Lv {Mathf.Max(1, stats.Level)}  •  HP {hp}/{maxHp}  •  AC {ac}";
             }
