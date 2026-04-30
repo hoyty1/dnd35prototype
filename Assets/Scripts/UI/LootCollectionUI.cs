@@ -82,6 +82,7 @@ public class LootCollectionUI : MonoBehaviour
     private GameObject _tooltipPanel;
     private Button _lootAllButton;
     private Button _closeButton;
+    private Button _exitLoopButton;
 
     private readonly List<LootStackEntry> _entries = new List<LootStackEntry>();
     private readonly List<ItemTileRefs> _tiles = new List<ItemTileRefs>();
@@ -90,6 +91,7 @@ public class LootCollectionUI : MonoBehaviour
     private LootStackEntry _selectedEntry;
     private Action<LootItemInstance, Action<bool>> _onLootSingle;
     private Action<int> _onClosed;
+    private Action _onExitLoop;
 
     private bool _isOpen;
     private int _lootedCount;
@@ -101,7 +103,8 @@ public class LootCollectionUI : MonoBehaviour
     public void Open(
         List<LootStackEntry> entries,
         Action<LootItemInstance, Action<bool>> onLootSingle,
-        Action<int> onClosed)
+        Action<int> onClosed,
+        Action onExitLoop = null)
     {
         Debug.Log($"[LootUI] Open requested | incomingEntries={(entries != null ? entries.Count : 0)}");
 
@@ -114,6 +117,7 @@ public class LootCollectionUI : MonoBehaviour
 
         _onLootSingle = onLootSingle;
         _onClosed = onClosed;
+        _onExitLoop = onExitLoop;
         _lootedCount = 0;
         _selectedEntry = null;
         _savedScrollPosition = 1f;
@@ -134,6 +138,9 @@ public class LootCollectionUI : MonoBehaviour
             }
         }
 
+        if (_exitLoopButton != null)
+            _exitLoopButton.gameObject.SetActive(_onExitLoop != null);
+
         _root.transform.SetAsLastSibling();
         _root.SetActive(true);
         _isOpen = true;
@@ -146,9 +153,9 @@ public class LootCollectionUI : MonoBehaviour
         ShowStatus(_entries.Count == 0 ? "No loot found." : "Double-click an item to loot it to stash.", false);
     }
 
-    public void Close()
+    public void Close(bool invokeClosedCallback = true)
     {
-        Debug.Log($"[LootUI] Close requested | isOpen={_isOpen} | lootedCount={_lootedCount}");
+        Debug.Log($"[LootUI] Close requested | isOpen={_isOpen} | lootedCount={_lootedCount} | invokeCallback={invokeClosedCallback}");
 
         if (_root != null)
             _root.SetActive(false);
@@ -158,7 +165,10 @@ public class LootCollectionUI : MonoBehaviour
 
         Action<int> callback = _onClosed;
         _onClosed = null;
-        callback?.Invoke(_lootedCount);
+        _onExitLoop = null;
+
+        if (invokeClosedCallback)
+            callback?.Invoke(_lootedCount);
     }
 
     private void Update()
@@ -347,6 +357,7 @@ public class LootCollectionUI : MonoBehaviour
 
         _lootAllButton = CreateFooterButton(footer.transform, "Loot All", new Color(0.22f, 0.52f, 0.3f, 1f), OnLootAllPressed);
         _closeButton = CreateFooterButton(footer.transform, "Close", new Color(0.4f, 0.24f, 0.24f, 1f), Close);
+        _exitLoopButton = CreateFooterButton(footer.transform, "Exit Loop", new Color(0.5f, 0.18f, 0.18f, 1f), OnExitLoopPressed);
     }
 
     private void BuildTooltip()
@@ -681,6 +692,16 @@ public class LootCollectionUI : MonoBehaviour
         {
             ShowStatus($"Could not loot {SafeItemName(entry.Prototype)}.", false);
         }
+    }
+
+    private void OnExitLoopPressed()
+    {
+        if (!IsOpen)
+            return;
+
+        Action onExitLoop = _onExitLoop;
+        Close(invokeClosedCallback: false);
+        onExitLoop?.Invoke();
     }
 
     private void OnLootAllPressed()
