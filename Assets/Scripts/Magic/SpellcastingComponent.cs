@@ -501,6 +501,107 @@ public class SpellcastingComponent : MonoBehaviour
         return true;
     }
 
+    public List<SpellData> GetAllAvailableSpells()
+    {
+        SpellDatabase.Init();
+
+        var available = new List<SpellData>();
+
+        if (Stats == null)
+            return available;
+
+        string className = Stats.CharacterClass ?? string.Empty;
+        bool useKnownListOnly = Stats.IsWizard ||
+                                className.Equals("Bard", System.StringComparison.OrdinalIgnoreCase) ||
+                                className.Equals("Sorcerer", System.StringComparison.OrdinalIgnoreCase);
+
+        if (useKnownListOnly)
+        {
+            available.AddRange(KnownSpells);
+        }
+        else
+        {
+            available.AddRange(SpellDatabase.GetSpellsForClass(className));
+            if (available.Count == 0)
+                available.AddRange(KnownSpells);
+        }
+
+        return available
+            .Where(s => s != null)
+            .GroupBy(s => s.SpellId)
+            .Select(g => g.First())
+            .OrderBy(s => s.SpellLevel)
+            .ThenBy(s => s.Name)
+            .ToList();
+    }
+
+    public List<SpellData> GetPreparedSpellsAtLevel(int level)
+    {
+        if (SpellSlots == null || SpellSlots.Count == 0)
+            return new List<SpellData>();
+
+        return SpellSlots
+            .Where(s => s != null && s.Level == level && s.HasSpell)
+            .Select(s => s.PreparedSpell)
+            .ToList();
+    }
+
+    public int GetSpellSlotsPerDay(int level)
+    {
+        if (level < 0)
+            return 0;
+
+        return GetSlotsForLevel(level).Count;
+    }
+
+    public void PrepareSpell(SpellData spell, int level, int slotIndex)
+    {
+        if (spell == null)
+        {
+            Debug.LogWarning("[SpellPrep] Cannot prepare null spell.");
+            return;
+        }
+
+        var slotsAtLevel = GetSlotsForLevel(level);
+        if (slotIndex < 0 || slotIndex >= slotsAtLevel.Count)
+        {
+            Debug.LogWarning($"[SpellPrep] Invalid slot index {slotIndex} for level {level} (slots={slotsAtLevel.Count}).");
+            return;
+        }
+
+        if (spell.SpellLevel != level)
+        {
+            Debug.LogWarning($"[SpellPrep] Spell level mismatch for {spell.Name}: spell is Lv{spell.SpellLevel}, slot is Lv{level}.");
+            return;
+        }
+
+        if (!GetAllAvailableSpells().Any(s => s.SpellId == spell.SpellId))
+        {
+            Debug.LogWarning($"[SpellPrep] Spell {spell.Name} is not available for {Stats?.CharacterName}.");
+            return;
+        }
+
+        Debug.Log($"[SpellPrep] Preparing {spell.Name} in level {level} slot {slotIndex}");
+
+        SpellSlot slot = slotsAtLevel[slotIndex];
+        slot.Prepare(spell);
+        SyncSlotsRemainingFromSpellSlots();
+        SyncPreparedSpellsFromSlots();
+    }
+
+    public void ClearPreparedSpells()
+    {
+        if (SpellSlots == null)
+            return;
+
+        for (int i = 0; i < SpellSlots.Count; i++)
+            SpellSlots[i]?.Clear();
+
+        PreparedSpells.Clear();
+        SyncSlotsRemainingFromSpellSlots();
+        SyncPreparedSpellsFromSlots();
+    }
+
     /// <summary>
     /// Clear all prepared spells from wizard slots (but keep the slots).
     /// </summary>

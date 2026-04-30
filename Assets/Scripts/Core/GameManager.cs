@@ -1083,15 +1083,21 @@ public partial class GameManager : MonoBehaviour
             {
                 WaitingForPreCombatInventory = false;
                 PartyStash.Lock();
-                CombatUI?.ShowCombatLog($"📦 Stash locked. Beginning encounter: {_selectedEncounterPresetId}.");
-                StartCombat();
+                CombatUI?.ShowCombatLog($"📦 Stash locked. Preparing spells for encounter: {_selectedEncounterPresetId}.");
+                ShowSpellPreparation(partyMembers, () =>
+                {
+                    StartCombat();
+                });
             },
             onSkipInventory: () =>
             {
                 WaitingForPreCombatInventory = false;
                 PartyStash.Lock();
-                CombatUI?.ShowCombatLog($"⏭ Inventory skipped. Beginning encounter: {_selectedEncounterPresetId}.");
-                StartCombat();
+                CombatUI?.ShowCombatLog($"⏭ Inventory skipped. Opening spell preparation: {_selectedEncounterPresetId}.");
+                ShowSpellPreparation(partyMembers, () =>
+                {
+                    StartCombat();
+                });
             },
             onBack: () =>
             {
@@ -1099,6 +1105,36 @@ public partial class GameManager : MonoBehaviour
                 PartyStash.Unlock();
                 PromptEncounterSelection();
             });
+    }
+
+    private void ShowSpellPreparation(List<CharacterController> party, System.Action onComplete)
+    {
+        SpellPreparationUI spellPrepUI = SpellPreparationUI;
+        if (spellPrepUI == null)
+            spellPrepUI = FindObjectOfType<SpellPreparationUI>();
+
+        if (spellPrepUI == null)
+        {
+            Debug.Log("[SpellPrep] SpellPreparationUI not found in scene. Creating runtime instance.");
+            GameObject uiObj = new GameObject("SpellPreparationUI");
+            spellPrepUI = uiObj.AddComponent<SpellPreparationUI>();
+
+            Canvas canvas = FindObjectOfType<Canvas>();
+            if (canvas != null)
+            {
+                uiObj.transform.SetParent(canvas.transform, false);
+                spellPrepUI.BuildUI(canvas);
+            }
+            else
+            {
+                Debug.LogWarning("[SpellPrep] No Canvas found for spell prep UI. Skipping preparation step.");
+                onComplete?.Invoke();
+                return;
+            }
+        }
+
+        SpellPreparationUI = spellPrepUI;
+        spellPrepUI.Show(party, onComplete);
     }
 
     private int GetCurrentPartyAverageLevel()

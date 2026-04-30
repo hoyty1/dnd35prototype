@@ -43,6 +43,13 @@ public class SpellPreparationUI : MonoBehaviour
     private Text _slotSummaryText;
     private Button _confirmButton;
     private Button _autoPrepareButton;
+    private Button _skipCharacterButton;
+
+    // Pre-combat multi-character preparation flow
+    private readonly List<CharacterController> _preparingCharacters = new List<CharacterController>();
+    private int _currentCharacterIndex = -1;
+    private Action _preCombatCompleteCallback;
+    private bool _isPreCombatFlowActive;
 
     // Slot UI rows
     private List<SlotRowUI> _slotRows = new List<SlotRowUI>();
@@ -160,22 +167,224 @@ public class SpellPreparationUI : MonoBehaviour
             "Confirm Preparation ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 16);
         _confirmButton.onClick.AddListener(OnConfirm);
 
+        _skipCharacterButton = MakeButton(_rootPanel.transform, "SkipCharacterBtn",
+            new Vector2(-360, btnY), new Vector2(160, 42),
+            "Skip Character", new Color(0.45f, 0.35f, 0.18f), Color.white, 14);
+        _skipCharacterButton.onClick.AddListener(OnSkipCharacterPressed);
+        _skipCharacterButton.gameObject.SetActive(false);
+
         _overlayPanel.SetActive(false);
     }
 
     // ========== OPEN / CLOSE ==========
 
     /// <summary>
-    /// Open the spell preparation UI for a Wizard or Cleric character.
+    /// Open pre-combat spell preparation flow for all prepared casters in the party.
+    /// Characters are shown one at a time and move forward on confirm/skip.
+    /// </summary>
+    public void Show(List<CharacterController> party, Action onCompleteCallback)
+    {
+        Debug.Log("[SpellPrep] Opening spell preparation UI");
+
+        EnsureBuilt();
+        if (_overlayPanel == null || _rootPanel == null)
+        {
+            Debug.LogWarning("[SpellPrep] UI was not built; skipping spell preparation flow.");
+            onCompleteCallback?.Invoke();
+            return;
+        }
+
+        _preCombatCompleteCallback = onCompleteCallback;
+        _isPreCombatFlowActive = true;
+        _preparingCharacters.Clear();
+
+        if (party != null)
+        {
+            for (int i = 0; i < party.Count; i++)
+            {
+                CharacterController character = party[i];
+                if (DoesPrepareSpells(character))
+                    _preparingCharacters.Add(character);
+            }
+        }
+
+        Debug.Log($"[SpellPrep] {_preparingCharacters.Count} characters need to prepare spells");
+
+        if (_preparingCharacters.Count == 0)
+        {
+            _isPreCombatFlowActive = false;
+            _preCombatCompleteCallback?.Invoke();
+            return;
+        }
+
+        _currentCharacterIndex = 0;
+        ShowCurrentCharacterFromFlow();
+    }
+
+    private bool DoesPrepareSpells(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return false;
+
+        string className = character.Stats.CharacterClass ?? string.Empty;
+        if (className.Equals("Sorcerer", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        bool isPreparedCasterClass =
+            className.Equals("Wizard", StringComparison.OrdinalIgnoreCase) ||
+            className.Equals("Cleric", StringComparison.OrdinalIgnoreCase) ||
+            className.Equals("Druid", StringComparison.OrdinalIgnoreCase) ||
+            className.Equals("Bard", StringComparison.OrdinalIgnoreCase) ||
+            className.Equals("Paladin", StringComparison.OrdinalIgnoreCase) ||
+            className.Equals("Ranger", StringComparison.OrdinalIgnoreCase);
+
+        if (!isPreparedCasterClass)
+            return false;
+
+        SpellcastingComponent spellComp = character.GetComponent<SpellcastingComponent>();
+        if (spellComp == null)
+            return false;
+
+        if (spellComp.SpellSlots == null || spellComp.SpellSlots.Count == 0)
+        {
+            Debug.Log($"[SpellPrep] {character.Stats.CharacterName} is a prepared caster but has no spell slots yet; skipping.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private void ShowCurrentCharacterFromFlow()
+    {
+        if (_currentCharacterIndex < 0 || _currentCharacterIndex >= _preparingCharacters.Count)
+        {
+            FinishPreparationFlow();
+            return;
+        }
+
+        CharacterController character = _preparingCharacters[_currentCharacterIndex];
+        SpellcastingComponent spellComp = character != null ? character.GetComponent<SpellcastingComponent>() : null;
+        if (spellComp == null)
+        {
+            Debug.LogWarning("[SpellPrep] Character missing SpellcastingComponent during flow; advancing.");
+            AdvanceToNextCharacter();
+            return;
+        }
+
+        Debug.Log($"[SpellPrep] Showing preparation for {character.Stats.CharacterName}");
+
+        UpdatePreCombatButtonState();
+        Open(spellComp);
+
+        string className = character.Stats != null ? character.Stats.CharacterClass : "Caster";
+        _titleText.text = $"SPELL PREPARATION — {character.Stats.CharacterName} ({className}) [{_currentCharacterIndex + 1}/{_preparingCharacters.Count}]";
+        OnPreparationConfirmed = OnCurrentCharacterDone;
+    }
+
+    private void OnCurrentCharacterDone()
+    {
+        if (!_isPreCombatFlowActive)
+            return;
+
+        CharacterController current = (_currentCharacterIndex >= 0 && _currentCharacterIndex < _preparingCharacters.Count)
+            ? _preparingCharacters[_currentCharacterIndex]
+            : null;
+        Debug.Log($"[SpellPrep] Done with {(current != null && current.Stats != null ? current.Stats.CharacterName : "unknown character")}");
+
+        AdvanceToNextCharacter();
+    }
+
+    private void OnSkipCharacterPressed()
+    {
+        if (!_isPreCombatFlowActive)
+            return;
+
+        CharacterController current = (_currentCharacterIndex >= 0 && _currentCharacterIndex < _preparingCharacters.Count)
+            ? _preparingCharacters[_currentCharacterIndex]
+            : null;
+        Debug.Log($"[SpellPrep] Skipping {(current != null && current.Stats != null ? current.Stats.CharacterName : "unknown character")}");
+
+        AdvanceToNextCharacter();
+    }
+
+    private void AdvanceToNextCharacter()
+    {
+        _currentCharacterIndex++;
+        if (_currentCharacterIndex < _preparingCharacters.Count)
+        {
+            ShowCurrentCharacterFromFlow();
+            return;
+        }
+
+        FinishPreparationFlow();
+    }
+
+    private void FinishPreparationFlow()
+    {
+        Debug.Log("[SpellPrep] All characters prepared, starting combat");
+
+        _isPreCombatFlowActive = false;
+        OnPreparationConfirmed = null;
+
+        if (_skipCharacterButton != null)
+            _skipCharacterButton.gameObject.SetActive(false);
+
+        Close();
+
+        Action callback = _preCombatCompleteCallback;
+        _preCombatCompleteCallback = null;
+        callback?.Invoke();
+    }
+
+    private void UpdatePreCombatButtonState()
+    {
+        if (_skipCharacterButton != null)
+            _skipCharacterButton.gameObject.SetActive(_isPreCombatFlowActive);
+
+        if (_confirmButton != null)
+        {
+            Text label = _confirmButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = _isPreCombatFlowActive ? "Done" : "Confirm Preparation ✓";
+        }
+
+        if (_autoPrepareButton != null)
+            _autoPrepareButton.gameObject.SetActive(true);
+    }
+
+    private void EnsureBuilt()
+    {
+        if (_overlayPanel != null && _rootPanel != null)
+            return;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null)
+            canvas = FindObjectOfType<Canvas>();
+
+        if (canvas == null)
+        {
+            Debug.LogError("[SpellPrep] No Canvas found. Cannot build SpellPreparationUI.");
+            return;
+        }
+
+        BuildUI(canvas);
+    }
+
+    /// <summary>
+    /// Open the spell preparation UI for a prepared caster character.
     /// Shows all spell slots with dropdowns to select spells.
-    /// Wizards select from spellbook; Clerics select from all cleric spells.
     /// </summary>
     public void Open(SpellcastingComponent spellComp)
     {
-        if (spellComp == null || spellComp.Stats == null ||
-            (!spellComp.Stats.IsWizard && !spellComp.Stats.IsCleric))
+        if (spellComp == null || spellComp.Stats == null)
         {
-            Debug.LogWarning("[SpellPreparationUI] Can only open for Wizard or Cleric characters!");
+            Debug.LogWarning("[SpellPreparationUI] Missing spellcasting data; cannot open.");
+            return;
+        }
+
+        if (spellComp.SpellSlots == null || spellComp.SpellSlots.Count == 0)
+        {
+            Debug.LogWarning("[SpellPreparationUI] Character has no spell slots to prepare.");
             return;
         }
 
@@ -406,12 +615,24 @@ public class SpellPreparationUI : MonoBehaviour
         IsOpen = false;
         _isCreationMode = false;
         _isClericCreationMode = false;
+
+        if (_skipCharacterButton != null)
+            _skipCharacterButton.gameObject.SetActive(false);
+
+        if (_confirmButton != null)
+        {
+            Text label = _confirmButton.GetComponentInChildren<Text>();
+            if (label != null)
+                label.text = "Confirm Preparation ✓";
+        }
     }
 
     // ========== POPULATE ==========
 
     private void PopulateSlotList()
     {
+        Debug.Log($"[SpellPrep] Building spell slots for {_spellComp?.Stats?.CharacterName ?? "Unknown"}");
+
         // Clear existing rows
         foreach (var row in _slotRows)
         {
@@ -1080,7 +1301,10 @@ public class SpellPreparationUI : MonoBehaviour
             int spellIdx = dropdownValue - 1;
             if (spellIdx < row.AvailableSpells.Count)
             {
-                row.Slot.Prepare(row.AvailableSpells[spellIdx]);
+                SpellData selectedSpell = row.AvailableSpells[spellIdx];
+                int levelSlotIndex = _spellComp.GetSlotsForLevel(row.Slot.Level).IndexOf(row.Slot);
+                Debug.Log($"[SpellPrep] Preparing {selectedSpell.Name} in level {row.Slot.Level} slot {Mathf.Max(0, levelSlotIndex)}");
+                row.Slot.Prepare(selectedSpell);
             }
         }
 
