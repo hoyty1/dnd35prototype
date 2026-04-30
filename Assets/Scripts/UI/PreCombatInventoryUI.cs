@@ -563,7 +563,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(-10f, 0f),
             new Vector2(34f, 30f),
             new Color(0.52f, 0.22f, 0.22f, 1f),
-            Close);
+            () => Close());
         Text closeText = closeButton.GetComponentInChildren<Text>();
         if (closeText != null)
             closeText.fontSize = 17;
