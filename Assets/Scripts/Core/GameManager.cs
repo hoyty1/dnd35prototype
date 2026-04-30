@@ -66,8 +66,17 @@ public partial class GameManager : MonoBehaviour
     /// <summary>Encounter preset selection overlay shown before combat starts.</summary>
     public EncounterSelectionUI EncounterSelectionUI;
 
+    /// <summary>Pre-combat inventory UI shown after encounter selection and before initiative.</summary>
+    public PreCombatInventoryUI PreCombatInventoryUI;
+
+    /// <summary>Shared party stash (session-only for now).</summary>
+    public PartyStash PartyStash = new PartyStash();
+
     /// <summary>Whether combat setup is waiting on encounter selection.</summary>
     public bool WaitingForEncounterSelection { get; private set; }
+
+    /// <summary>Whether the pre-combat inventory phase is currently active.</summary>
+    public bool WaitingForPreCombatInventory { get; private set; }
 
     private const string GrappleTestPresetId = "grapple_test";
     private const string GreaseTestPresetId = "grease_test";
@@ -113,6 +122,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isCharmPersonTestEncounter;
     private bool _isSleepSpellTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
+    private bool _partyStashSeeded;
 
     // D&D timing: 1 in-game day = 14,400 rounds.
     private const int RoundsPerDay = 14400;
@@ -585,13 +595,17 @@ public partial class GameManager : MonoBehaviour
     private void PromptEncounterSelection()
     {
         NPCDatabase.Init();
+        EnsurePartyStashInitialized();
 
         if (EncounterSelectionUI == null)
             EncounterSelectionUI = FindObjectOfType<EncounterSelectionUI>();
         if (EncounterSelectionUI == null)
             EncounterSelectionUI = gameObject.AddComponent<EncounterSelectionUI>();
 
+        PreCombatInventoryUI?.Close();
+        WaitingForPreCombatInventory = false;
         WaitingForEncounterSelection = true;
+
         var presets = NPCDatabase.ListEncounterPresets();
 
         // Show all available encounters so the player can scroll and select any scenario.
@@ -601,24 +615,86 @@ public partial class GameManager : MonoBehaviour
                 WaitingForEncounterSelection = false;
                 _selectedEncounterPresetId = string.IsNullOrEmpty(presetId) ? "goblin_raiders" : presetId;
                 ApplyEncounterPreset(_selectedEncounterPresetId);
-                StartCombat();
+                OpenPreCombatInventoryPhase();
             },
             onStartRandomEncounter: (enemyIds, generated) =>
             {
                 WaitingForEncounterSelection = false;
                 ApplyRandomEncounter(enemyIds, generated);
-                StartCombat();
+                OpenPreCombatInventoryPhase();
             },
             onCancel: () =>
             {
                 WaitingForEncounterSelection = false;
                 _selectedEncounterPresetId = "goblin_raiders";
                 ApplyEncounterPreset(_selectedEncounterPresetId);
-                StartCombat();
+                OpenPreCombatInventoryPhase();
             },
             partyAverageLevel: GetCurrentPartyAverageLevel(),
             partyLevels: GetCurrentPartyLevels(),
             partySize: PCs != null ? PCs.Count : 4);
+    }
+
+    private void EnsurePartyStashInitialized()
+    {
+        PartyStash ??= new PartyStash();
+
+        if (!_partyStashSeeded)
+        {
+            PartyStash.SeedDefaultItemsIfEmpty();
+            _partyStashSeeded = true;
+        }
+
+        if (CurrentPhase != TurnPhase.PCTurn && CurrentPhase != TurnPhase.NPCTurn)
+            PartyStash.Unlock();
+    }
+
+    private void OpenPreCombatInventoryPhase()
+    {
+        EnsurePartyStashInitialized();
+
+        if (PreCombatInventoryUI == null)
+            PreCombatInventoryUI = FindObjectOfType<PreCombatInventoryUI>();
+        if (PreCombatInventoryUI == null)
+            PreCombatInventoryUI = gameObject.AddComponent<PreCombatInventoryUI>();
+
+        List<CharacterController> partyMembers = new List<CharacterController>();
+        if (PCs != null)
+        {
+            for (int i = 0; i < PCs.Count; i++)
+            {
+                CharacterController pc = PCs[i];
+                if (pc != null && pc.gameObject != null && pc.gameObject.activeInHierarchy && pc.Stats != null && !pc.Stats.IsDead)
+                    partyMembers.Add(pc);
+            }
+        }
+
+        PartyStash.Unlock();
+        WaitingForPreCombatInventory = true;
+
+        PreCombatInventoryUI.Open(
+            PartyStash,
+            partyMembers,
+            onBeginCombat: () =>
+            {
+                WaitingForPreCombatInventory = false;
+                PartyStash.Lock();
+                CombatUI?.ShowCombatLog($"📦 Stash locked. Beginning encounter: {_selectedEncounterPresetId}.");
+                StartCombat();
+            },
+            onSkipInventory: () =>
+            {
+                WaitingForPreCombatInventory = false;
+                PartyStash.Lock();
+                CombatUI?.ShowCombatLog($"⏭ Inventory skipped. Beginning encounter: {_selectedEncounterPresetId}.");
+                StartCombat();
+            },
+            onBack: () =>
+            {
+                WaitingForPreCombatInventory = false;
+                PartyStash.Unlock();
+                PromptEncounterSelection();
+            });
     }
 
     private int GetCurrentPartyAverageLevel()
@@ -1011,8 +1087,8 @@ public partial class GameManager : MonoBehaviour
         // Poison secondary timers continue regardless of input/turn state.
         UpdatePoisonTimers();
 
-        // Skip all game input during character creation / encounter selection.
-        if (WaitingForCharacterCreation || WaitingForEncounterSelection)
+        // Skip all game input during character creation / encounter selection / pre-combat inventory.
+        if (WaitingForCharacterCreation || WaitingForEncounterSelection || WaitingForPreCombatInventory)
         {
             HideCharacterHoverTooltip();
             return;
@@ -4600,6 +4676,10 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     public void StartCombat()
     {
+        WaitingForPreCombatInventory = false;
+        PreCombatInventoryUI?.Close();
+        PartyStash?.Lock();
+
         ClearAllActiveGreaseEffects();
 
         var activePCs = new List<CharacterController>();
@@ -4686,6 +4766,13 @@ public partial class GameManager : MonoBehaviour
         CurrentPhase = TurnPhase.CombatOver;
         ClearAllActiveGreaseEffects();
         _conditionService?.CleanupOnCombatEnd(GetAllCharacters());
+
+        if (PartyStash != null)
+        {
+            PartyStash.Unlock();
+            CombatUI?.ShowCombatLog("📦 Party stash unlocked (post-combat). You can manage and stash loot now.");
+        }
+
         CombatUI.SetTurnIndicator("Combat has ended.");
         CombatUI.SetActionButtonsVisible(false);
         UpdateInitiativeUI();
