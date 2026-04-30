@@ -603,7 +603,9 @@ public partial class GameManager : MonoBehaviour
             EncounterSelectionUI = gameObject.AddComponent<EncounterSelectionUI>();
 
         PreCombatInventoryUI?.Close();
+        LootCollectionUI?.Close();
         WaitingForPreCombatInventory = false;
+        WaitingForLootCollection = false;
         WaitingForEncounterSelection = true;
 
         var presets = NPCDatabase.ListEncounterPresets();
@@ -1088,7 +1090,7 @@ public partial class GameManager : MonoBehaviour
         UpdatePoisonTimers();
 
         // Skip all game input during character creation / encounter selection / pre-combat inventory.
-        if (WaitingForCharacterCreation || WaitingForEncounterSelection || WaitingForPreCombatInventory)
+        if (WaitingForCharacterCreation || WaitingForEncounterSelection || WaitingForPreCombatInventory || WaitingForLootCollection)
         {
             HideCharacterHoverTooltip();
             return;
@@ -4677,7 +4679,9 @@ public partial class GameManager : MonoBehaviour
     public void StartCombat()
     {
         WaitingForPreCombatInventory = false;
+        WaitingForLootCollection = false;
         PreCombatInventoryUI?.Close();
+        LootCollectionUI?.Close();
         PartyStash?.Lock();
 
         ClearAllActiveGreaseEffects();
@@ -4767,15 +4771,11 @@ public partial class GameManager : MonoBehaviour
         ClearAllActiveGreaseEffects();
         _conditionService?.CleanupOnCombatEnd(GetAllCharacters());
 
-        if (PartyStash != null)
-        {
-            PartyStash.Unlock();
-            CombatUI?.ShowCombatLog("📦 Party stash unlocked (post-combat). You can manage and stash loot now.");
-        }
-
         CombatUI.SetTurnIndicator("Combat has ended.");
         CombatUI.SetActionButtonsVisible(false);
         UpdateInitiativeUI();
+
+        BeginPostCombatLootCollection();
     }
 
     private void ProcessEndOfTurnHPState(CharacterController character)

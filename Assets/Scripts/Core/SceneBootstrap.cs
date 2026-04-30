@@ -1043,6 +1043,10 @@ public class SceneBootstrap : MonoBehaviour
             spellPrepUI.BuildUI(canvas);
             gm.SpellPreparationUI = spellPrepUI;
             ccUI.SpellPrepUI = spellPrepUI;
+
+            // Post-combat loot collection modal.
+            LootCollectionUI lootCollectionUI = canvas.gameObject.AddComponent<LootCollectionUI>();
+            gm.LootCollectionUI = lootCollectionUI;
         }
 
         StartCoroutine(WireButtons(combatUI));
