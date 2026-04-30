@@ -5087,13 +5087,19 @@ public partial class GameManager : MonoBehaviour
         return allDead;
     }
 
-    /// <summary>Check if all active PCs in the party are dead.</summary>
+    /// <summary>
+    /// Check if all active PCs in the party are defeated (HP <= 0).
+    /// For combat resolution, unconscious/disabled/dying PCs count as unable to continue.
+    /// </summary>
     private bool AreAllPCsDead()
     {
         foreach (var pc in PCs)
         {
-            if (!IsActiveCombatant(pc)) continue;
-            if (!pc.Stats.IsDead) return false;
+            if (!IsActiveCombatant(pc))
+                continue;
+
+            if (pc.Stats.CurrentHP > 0)
+                return false;
         }
 
         // If no active PCs remain, treat the party as defeated.
@@ -11326,8 +11332,14 @@ public partial class GameManager : MonoBehaviour
 
     private bool IsValidTargetForSpell(CharacterController caster, CharacterController target, SpellData spell)
     {
-        if (caster == null || target == null || spell == null || target.Stats == null || target.Stats.IsDead)
+        if (caster == null || target == null || spell == null || target.Stats == null)
             return false;
+
+        if (target.Stats.IsDead)
+        {
+            Debug.Log($"[Targeting][Spell] Reject target '{target.Stats.CharacterName}' for {spell.Name}: HP={target.Stats.CurrentHP}, IsDead={target.Stats.IsDead}, IsUnconscious={target.Stats.IsUnconscious}");
+            return false;
+        }
 
         bool isPersonTransmutation = spell.SpellId == "enlarge_person" || spell.SpellId == "reduce_person";
         if (isPersonTransmutation)
@@ -17069,6 +17081,7 @@ public partial class GameManager : MonoBehaviour
             if (type == SpecialAttackType.CoupDeGrace)
             {
                 bool helplessTarget = c.Occupant.IsHelplessForCoupDeGrace() && !c.Occupant.IsImmuneToCriticalHits();
+                Debug.Log($"[Targeting][CoupDeGrace] candidate={c.Occupant.Stats.CharacterName} hp={c.Occupant.Stats.CurrentHP} dead={c.Occupant.Stats.IsDead} unconscious={c.Occupant.Stats.IsUnconscious} helpless={helplessTarget}");
                 c.SetHighlight(helplessTarget ? HighlightType.Attack : HighlightType.AttackDeadZone);
                 _highlightedCells.Add(c);
                 hasTarget = true;

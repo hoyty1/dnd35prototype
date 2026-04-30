@@ -1575,8 +1575,26 @@ public class CharacterStats
         }
     }
 
-    // Combat-resolution semantics: treat HP <= 0 as down/defeated.
-    public bool IsDead => CurrentHP <= 0;
+    /// <summary>
+    /// Truly dead (D&D 3.5): dead at -10 HP or lower.
+    /// </summary>
+    public bool IsDead => CurrentHP <= -10;
+
+    /// <summary>
+    /// Unconscious/down state (D&D 3.5): 0 to -9 HP.
+    /// Includes disabled (0 HP) and dying (-1 to -9 HP).
+    /// </summary>
+    public bool IsUnconscious => CurrentHP <= 0 && CurrentHP > -10;
+
+    /// <summary>
+    /// Disabled (D&D 3.5): exactly 0 HP.
+    /// </summary>
+    public bool IsDisabled => CurrentHP == 0;
+
+    /// <summary>
+    /// Dying (D&D 3.5): -1 to -9 HP.
+    /// </summary>
+    public bool IsDying => CurrentHP < 0 && CurrentHP > -10;
 
     // ========== CONSTRUCTOR ==========
 
