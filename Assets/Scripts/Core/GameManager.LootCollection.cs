@@ -69,7 +69,12 @@ public partial class GameManager
                     CombatUI?.ShowCombatLog($"📦 {lootedCount} item(s) looted to party stash. Stash unlocked.");
                 else
                     CombatUI?.ShowCombatLog("📦 Loot window closed. Party stash unlocked.");
-            });
+
+                RegisterCombatLoopCompletion(lootedCount);
+                RestorePartyAfterCombat();
+                ReturnToEncounterSelection();
+            },
+            onExitLoop: ExitCombatLoopToMenu);
     }
 
     private void EnsureLootCollectionUIInitialized()

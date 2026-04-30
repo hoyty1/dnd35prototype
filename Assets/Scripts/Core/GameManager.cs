@@ -124,6 +124,11 @@ public partial class GameManager : MonoBehaviour
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
     private bool _partyStashSeeded;
 
+    // Endless combat-loop session stats (persist while the session is running).
+    public int CompletedCombatCount { get; private set; }
+    public int TotalLootItemsCollected { get; private set; }
+    public int TotalEncounterXPDefeated { get; private set; }
+
     // D&D timing: 1 in-game day = 14,400 rounds.
     private const int RoundsPerDay = 14400;
 
@@ -649,6 +654,212 @@ public partial class GameManager : MonoBehaviour
 
         if (CurrentPhase != TurnPhase.PCTurn && CurrentPhase != TurnPhase.NPCTurn)
             PartyStash.Unlock();
+    }
+
+    public void RestorePartyAfterCombat()
+    {
+        EnsurePartyStashInitialized();
+
+        if (AreaEffectManager.HasInstance)
+            AreaEffectManager.Instance.ClearAllEffects();
+        if (WindEffectManager.HasInstance)
+            WindEffectManager.Instance.ClearAllWindEffects();
+
+        // Despawn any lingering summoned creatures from the finished combat.
+        for (int i = _activeSummons.Count - 1; i >= 0; i--)
+        {
+            ActiveSummonInstance activeSummon = _activeSummons[i];
+            if (activeSummon?.Controller == null)
+                continue;
+
+            Grid?.ClearCreatureOccupancy(activeSummon.Controller);
+            Destroy(activeSummon.Controller.gameObject);
+        }
+        _activeSummons.Clear();
+        _summonedAllies.Clear();
+        _summonedEnemies.Clear();
+
+        if (PCs == null || PCs.Count == 0)
+            return;
+
+        Vector2Int[] defaultRestPositions =
+        {
+            new Vector2Int(3, 6),
+            new Vector2Int(3, 9),
+            new Vector2Int(3, 12),
+            new Vector2Int(3, 15)
+        };
+
+        if (Grid != null)
+        {
+            for (int i = 0; i < PCs.Count; i++)
+            {
+                CharacterController pc = PCs[i];
+                if (pc != null)
+                    Grid.ClearCreatureOccupancy(pc);
+            }
+        }
+
+        for (int i = 0; i < PCs.Count; i++)
+        {
+            CharacterController pc = PCs[i];
+            if (pc == null || pc.Stats == null || pc.gameObject == null || !pc.gameObject.activeInHierarchy)
+                continue;
+
+            CharacterStats stats = pc.Stats;
+
+            if (stats.IsRaging)
+                stats.DeactivateRage();
+
+            StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+            statusMgr?.RemoveAllEffects();
+
+            SpellcastingComponent spellComp = pc.GetComponent<SpellcastingComponent>();
+            if (spellComp != null)
+            {
+                spellComp.ClearHeldTouchCharge("full rest");
+                spellComp.RestoreAllSlots();
+                spellComp.ActiveBuffs?.Clear();
+                spellComp.MageArmorActive = false;
+                spellComp.MageArmorACBonus = 0;
+            }
+
+            RemoveAllConditions(pc);
+            pc.ClearAllConditions();
+
+            pc.ClearDisguiseSelfEffect();
+            pc.ClearExpeditiousRetreatEffect();
+            pc.ClearInvisibilityEffect();
+            pc.ClearSeeInvisibilityEffect();
+            pc.ClearGlitterdustEffect();
+            pc.ClearMelfsAcidArrowEffect();
+            pc.ClearEnfeeblementEffects();
+            stats.ResetCurrentSizeToBase();
+            pc.UpdateVisualSize(false);
+
+            stats.ActiveResistEnergyEffects?.Clear();
+            stats.ActiveProtectionFromArrowsEffect = null;
+            stats.TemplateSmiteUsed = false;
+            stats.RagesUsedToday = 0;
+            stats.TurnUndeadAttemptsUsedToday = 0;
+            stats.IsFatigued = false;
+
+            if (pc.ActivePoisons != null)
+                pc.ActivePoisons.Clear();
+
+            Inventory inventory = pc.GetComponent<InventoryComponent>()?.CharacterInventory;
+            if (inventory != null)
+            {
+                ClearTemporaryItemSpellEffects(inventory.RightHandSlot);
+                ClearTemporaryItemSpellEffects(inventory.LeftHandSlot);
+                ClearTemporaryItemSpellEffects(inventory.HandsSlot);
+                ClearTemporaryItemSpellEffects(inventory.HeadSlot);
+                ClearTemporaryItemSpellEffects(inventory.FaceEyesSlot);
+                ClearTemporaryItemSpellEffects(inventory.NeckSlot);
+                ClearTemporaryItemSpellEffects(inventory.TorsoSlot);
+                ClearTemporaryItemSpellEffects(inventory.ArmorRobeSlot);
+                ClearTemporaryItemSpellEffects(inventory.WaistSlot);
+                ClearTemporaryItemSpellEffects(inventory.BackSlot);
+                ClearTemporaryItemSpellEffects(inventory.WristsSlot);
+                ClearTemporaryItemSpellEffects(inventory.LeftRingSlot);
+                ClearTemporaryItemSpellEffects(inventory.RightRingSlot);
+                ClearTemporaryItemSpellEffects(inventory.FeetSlot);
+
+                if (inventory.GeneralSlots != null)
+                {
+                    for (int slotIndex = 0; slotIndex < inventory.GeneralSlots.Length; slotIndex++)
+                        ClearTemporaryItemSpellEffects(inventory.GeneralSlots[slotIndex]);
+                }
+
+                inventory.RecalculateStats();
+            }
+
+            stats.NonlethalDamage = 0;
+            stats.TempHP = 0;
+            stats.BonusMaxHP = 0;
+            stats.CurrentHP = stats.TotalMaxHP;
+            pc.SyncHPStateFromCurrentHP(emitLog: false);
+
+            if (Grid != null && i < defaultRestPositions.Length)
+            {
+                SquareCell restCell = Grid.GetCell(defaultRestPositions[i]);
+                if (restCell != null)
+                    pc.MoveToCell(restCell, markAsMoved: false);
+            }
+
+            pc.StartNewTurn();
+        }
+
+        CombatUI?.SetTurnIndicator("Party Rested and Restored!");
+        CombatUI?.ShowCombatLog("✅ Party Rested and Restored!");
+        CombatUI?.ShowCombatLog("💖 HP and abilities fully recovered.");
+        CombatUI?.ShowCombatLog("⚔ Ready for next encounter.");
+
+        UpdateAllStatsUI();
+    }
+
+    private static void ClearTemporaryItemSpellEffects(ItemData item)
+    {
+        if (item == null || item.ActiveSpellEffects == null || item.ActiveSpellEffects.Count == 0)
+            return;
+
+        item.ActiveSpellEffects.Clear();
+    }
+
+    public void RegisterCombatLoopCompletion(int lootedCount)
+    {
+        CompletedCombatCount++;
+        TotalLootItemsCollected += Mathf.Max(0, lootedCount);
+
+        int encounterXp = 0;
+        if (NPCs != null)
+        {
+            for (int i = 0; i < NPCs.Count; i++)
+            {
+                CharacterController npc = NPCs[i];
+                if (npc == null || npc.Stats == null)
+                    continue;
+
+                if (!npc.Stats.IsDead)
+                    continue;
+
+                if (ChallengeRatingUtils.TryParse(npc.Stats.ChallengeRating, out float cr))
+                    encounterXp += ChallengeRatingUtils.GetXpForCr(cr);
+            }
+        }
+
+        TotalEncounterXPDefeated += Mathf.Max(0, encounterXp);
+    }
+
+    public void ReturnToEncounterSelection()
+    {
+        WaitingForLootCollection = false;
+        WaitingForPreCombatInventory = false;
+        WaitingForEncounterSelection = false;
+        CurrentPhase = TurnPhase.CombatOver;
+
+        EnsurePartyStashInitialized();
+        PartyStash?.Unlock();
+
+        CombatUI?.ShowCombatLog($"📊 Combat Loop Stats — Fights: {CompletedCombatCount} | Loot Items: {TotalLootItemsCollected} | XP Defeated: {TotalEncounterXPDefeated}");
+        PromptEncounterSelection();
+    }
+
+    public void ExitCombatLoopToMenu()
+    {
+        WaitingForLootCollection = false;
+        WaitingForPreCombatInventory = false;
+        WaitingForEncounterSelection = false;
+
+        EnsurePartyStashInitialized();
+        PartyStash?.Unlock();
+        CombatUI?.ShowCombatLog("🛑 Combat loop exited.");
+
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 
     private void OpenPreCombatInventoryPhase()
