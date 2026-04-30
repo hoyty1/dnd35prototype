@@ -6242,9 +6242,6 @@ public partial class GameManager : MonoBehaviour
         if (!TryGetAvailablePickUpItems(character, out _))
             return "No item on or adjacent";
 
-        if (inv.EmptySlots <= 0)
-            return "Inventory full";
-
         if (!(character.Actions.HasMoveAction || character.Actions.CanConvertStandardToMove || character.Actions.HasStandardAction))
             return "No move or standard action available";
 
@@ -6789,12 +6786,6 @@ public partial class GameManager : MonoBehaviour
         if (inv == null)
         {
             feedback = $"{actor.Stats.CharacterName} has no inventory.";
-            return false;
-        }
-
-        if (inv.EmptySlots <= 0)
-        {
-            feedback = $"{actor.Stats.CharacterName}'s inventory is full.";
             return false;
         }
 

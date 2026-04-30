@@ -3,13 +3,14 @@ using UnityEngine;
 using UnityEngine.Serialization;
 
 /// <summary>
-/// Per-character inventory with D&D 3.5e equipment slots and 20 general slots.
+/// Per-character inventory with D&D 3.5e equipment slots and dynamically growing general slots.
 /// Manages equipping/unequipping and stat recalculation.
 /// </summary>
 [System.Serializable]
 public class Inventory
 {
-    public const int GeneralSlotCount = 20;
+    public const int GeneralSlotCount = 20; // Initial/default visible capacity for legacy UIs.
+    private const int GeneralSlotGrowthStep = 20;
 
     // Equipment slots (D&D 3.5e + combat hand slots)
     public ItemData HeadSlot;
@@ -73,20 +74,24 @@ public class Inventory
         GeneralSlots = new ItemData[GeneralSlotCount];
     }
 
-    /// <summary>Try to add an item to the first empty general slot. Returns true on success.</summary>
+    /// <summary>Try to add an item to the first empty general slot. Grows capacity when needed.</summary>
     public bool AddItem(ItemData item)
     {
         if (item == null) return false;
-        for (int i = 0; i < GeneralSlots.Length; i++)
+
+        int emptyIndex = FindFirstEmptyGeneralSlotIndex();
+        if (emptyIndex < 0)
         {
-            if (GeneralSlots[i] == null)
-            {
-                GeneralSlots[i] = item;
-                if (!_isRecalculating) RecalculateStats();
-                return true;
-            }
+            EnsureGeneralSlotCapacity(Mathf.Max(GeneralSlots.Length + GeneralSlotGrowthStep, GeneralSlots.Length + 1));
+            emptyIndex = FindFirstEmptyGeneralSlotIndex();
         }
-        return false; // Inventory full
+
+        if (emptyIndex < 0)
+            return false;
+
+        GeneralSlots[emptyIndex] = item;
+        if (!_isRecalculating) RecalculateStats();
+        return true;
     }
 
     /// <summary>Remove an item from a general slot index. Returns the item.</summary>
@@ -191,24 +196,22 @@ public class Inventory
 
     /// <summary>
     /// Unequip an item from an equipment slot back to inventory.
-    /// Returns true on success (fails if inventory is full).
+    /// Returns true on success.
     /// </summary>
     public bool Unequip(EquipSlot slot)
     {
         ItemData item = GetEquipped(slot);
         if (item == null) return false;
 
-        // Find an empty general slot
-        int emptyIndex = -1;
-        for (int i = 0; i < GeneralSlots.Length; i++)
+        int emptyIndex = FindFirstEmptyGeneralSlotIndex();
+        if (emptyIndex < 0)
         {
-            if (GeneralSlots[i] == null)
-            {
-                emptyIndex = i;
-                break;
-            }
+            EnsureGeneralSlotCapacity(Mathf.Max(GeneralSlots.Length + GeneralSlotGrowthStep, GeneralSlots.Length + 1));
+            emptyIndex = FindFirstEmptyGeneralSlotIndex();
         }
-        if (emptyIndex == -1) return false; // No room
+
+        if (emptyIndex < 0)
+            return false;
 
         GeneralSlots[emptyIndex] = item;
         SetEquipSlot(slot, null);
@@ -450,6 +453,34 @@ public class Inventory
         return true;
     }
 
+    private int FindFirstEmptyGeneralSlotIndex()
+    {
+        if (GeneralSlots == null)
+            return -1;
+
+        for (int i = 0; i < GeneralSlots.Length; i++)
+        {
+            if (GeneralSlots[i] == null)
+                return i;
+        }
+
+        return -1;
+    }
+
+    private void EnsureGeneralSlotCapacity(int minLength)
+    {
+        int currentLength = GeneralSlots != null ? GeneralSlots.Length : 0;
+        if (currentLength >= minLength)
+            return;
+
+        int targetLength = Mathf.Max(minLength, currentLength + GeneralSlotGrowthStep);
+        if (targetLength <= 0)
+            targetLength = GeneralSlotCount;
+
+        Array.Resize(ref GeneralSlots, targetLength);
+        Debug.Log($"[Inventory] Expanded general slots to {targetLength}.");
+    }
+
     /// <summary>Count how many general slots are occupied.</summary>
     public int ItemCount
     {
@@ -463,5 +494,5 @@ public class Inventory
     }
 
     /// <summary>Count empty general slots.</summary>
-    public int EmptySlots => GeneralSlotCount - ItemCount;
+    public int EmptySlots => Mathf.Max(0, (GeneralSlots != null ? GeneralSlots.Length : 0) - ItemCount);
 }

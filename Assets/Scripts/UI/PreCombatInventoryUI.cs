@@ -16,6 +16,10 @@ public class PreCombatInventoryUI : MonoBehaviour
     private const float SlotSize = 60f;
     private const float SlotSpacing = 8f;
 
+    private const int EquipmentGridColumns = 3;
+    private const float EquipmentSlotSize = 70f;
+    private const float EquipmentGridSpacing = 8f;
+
     // Window layout split: 30% stash (left) / 70% character management (right).
     private const float StashWidthRatio = 0.30f;
     private const float DividerAnchorX = 0.30f;
@@ -920,17 +924,19 @@ public class PreCombatInventoryUI : MonoBehaviour
             out _,
             withVerticalScrollbar: true);
 
-        VerticalLayoutGroup equipLayout = _equipmentContent.gameObject.AddComponent<VerticalLayoutGroup>();
-        equipLayout.spacing = 4f;
-        equipLayout.padding = new RectOffset(2, 2, 2, 2);
+        GridLayoutGroup equipLayout = _equipmentContent.gameObject.AddComponent<GridLayoutGroup>();
+        equipLayout.cellSize = new Vector2(118f, 104f);
+        equipLayout.spacing = new Vector2(EquipmentGridSpacing, EquipmentGridSpacing);
+        equipLayout.padding = new RectOffset(10, 10, 10, 10);
+        equipLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        equipLayout.constraintCount = EquipmentGridColumns;
         equipLayout.childAlignment = TextAnchor.UpperLeft;
-        equipLayout.childControlWidth = true;
-        equipLayout.childControlHeight = false;
-        equipLayout.childForceExpandWidth = true;
-        equipLayout.childForceExpandHeight = false;
 
         ContentSizeFitter equipFitter = _equipmentContent.gameObject.AddComponent<ContentSizeFitter>();
+        equipFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
         equipFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        Debug.Log($"[Equipment] Grid configured: {equipLayout.cellSize.x:0}x{equipLayout.cellSize.y:0} cells, {EquipmentGridColumns} columns");
 
         if (equipmentScroll != null)
             equipmentScroll.scrollSensitivity = 20f;
@@ -983,10 +989,17 @@ public class PreCombatInventoryUI : MonoBehaviour
         _inventoryGridLayout.childAlignment = TextAnchor.UpperLeft;
 
         ContentSizeFitter invFitter = _inventoryContent.gameObject.AddComponent<ContentSizeFitter>();
+        invFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
         invFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
+        Debug.Log($"[Inventory] Grid configured: {_inventoryGridLayout.cellSize.x:0}x{_inventoryGridLayout.cellSize.y:0} cells, columns={InventoryGridColumns}");
+
         if (inventoryScroll != null)
+        {
+            inventoryScroll.vertical = true;
+            inventoryScroll.horizontal = false;
             inventoryScroll.scrollSensitivity = 20f;
+        }
     }
 
     private void BuildFooter()
@@ -1174,6 +1187,14 @@ public class PreCombatInventoryUI : MonoBehaviour
     private void ReflowResponsiveLayout()
     {
         ReflowStashGridColumns();
+
+        if (_equipmentContent != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_equipmentContent);
+
+        if (_inventoryContent != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_inventoryContent);
+
+        Debug.Log("[Layout] Reflow complete for stash/equipment/inventory sections.");
     }
 
     private void ReflowStashGridColumns()
@@ -1484,15 +1505,19 @@ public class PreCombatInventoryUI : MonoBehaviour
         EquipSlot[] displayOrder =
         {
             EquipSlot.Head,
+            EquipSlot.FaceEyes,
+            EquipSlot.Neck,
+            EquipSlot.Torso,
             EquipSlot.ArmorRobe,
-            EquipSlot.RightHand,
-            EquipSlot.LeftHand,
+            EquipSlot.Waist,
+            EquipSlot.Back,
+            EquipSlot.Wrists,
+            EquipSlot.Hands,
             EquipSlot.LeftRing,
             EquipSlot.RightRing,
-            EquipSlot.Neck,
-            EquipSlot.Hands,
             EquipSlot.Feet,
-            EquipSlot.Back
+            EquipSlot.RightHand,
+            EquipSlot.LeftHand
         };
 
         for (int i = 0; i < displayOrder.Length; i++)
@@ -1500,27 +1525,29 @@ public class PreCombatInventoryUI : MonoBehaviour
             EquipSlot slot = displayOrder[i];
             ItemData item = inv.GetEquipped(slot);
 
-            GameObject row = new GameObject($"EquipRow_{slot}", typeof(RectTransform), typeof(LayoutElement));
-            row.transform.SetParent(_equipmentContent, false);
-            LayoutElement le = row.GetComponent<LayoutElement>();
-            le.preferredHeight = SlotSize + 4f;
-
-            RectTransform rt = row.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(0f, SlotSize + 4f);
+            GameObject cell = CreatePanel(
+                _equipmentContent,
+                $"EquipCell_{slot}",
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                Vector2.zero,
+                new Vector2(118f, 104f),
+                new Color(0.12f, 0.14f, 0.22f, 0.92f));
 
             CreateText(
-                row.transform,
+                cell.transform,
                 "SlotLabel",
                 GetEquipSlotLabel(slot),
-                new Vector2(0f, 0f),
                 new Vector2(0f, 1f),
-                new Vector2(0f, 0.5f),
-                new Vector2(2f, 0f),
-                new Vector2(100f, 0f),
-                11,
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, -2f),
+                new Vector2(-6f, 20f),
+                10,
                 FontStyle.Bold,
                 new Color(0.85f, 0.88f, 0.95f),
-                TextAnchor.MiddleLeft);
+                TextAnchor.MiddleCenter);
 
             SlotRef slotRef = new SlotRef
             {
@@ -1529,13 +1556,14 @@ public class PreCombatInventoryUI : MonoBehaviour
                 EquipSlot = slot
             };
 
+            float slotX = (118f - EquipmentSlotSize) * 0.5f;
             GameObject slotGO = CreateItemSlotVisual(
-                row.transform,
+                cell.transform,
                 slotRef,
                 item,
                 quantity: 1,
                 quantityLabel: string.Empty,
-                anchoredOverride: new Rect(102f, 2f, SlotSize, SlotSize),
+                anchoredOverride: new Rect(slotX, 24f, EquipmentSlotSize, EquipmentSlotSize),
                 slotPlaceholder: GetEquipSlotShortLabel(slot));
 
             Image bg = slotGO.GetComponent<Image>();
@@ -1544,12 +1572,14 @@ public class PreCombatInventoryUI : MonoBehaviour
                     ? new Color(0.18f, 0.2f, 0.3f, 0.95f)
                     : bg.color;
         }
+
+        Debug.Log($"[Equipment] Built {displayOrder.Length} square slots ({EquipmentSlotSize:0}x{EquipmentSlotSize:0}) with spacing {EquipmentGridSpacing:0}.");
     }
 
     private void BuildInventorySlots(CharacterController character, Inventory inv)
     {
         List<ItemStackGroup> groupedInventory = BuildInventoryGroups(inv);
-        Debug.Log($"[Stacking] Inventory grouped for {character.Stats.CharacterName}: {groupedInventory.Count} stack(s)");
+        Debug.Log($"[Inventory] Building backpack grid for {character.Stats.CharacterName}: {groupedInventory.Count} stack(s), no empty placeholder slots.");
 
         foreach (ItemStackGroup group in groupedInventory)
         {
@@ -1568,20 +1598,8 @@ public class PreCombatInventoryUI : MonoBehaviour
                 quantityLabel: $"x{group.Quantity}");
         }
 
-        for (int index = 0; index < Inventory.GeneralSlotCount; index++)
-        {
-            if (index >= inv.GeneralSlots.Length || inv.GeneralSlots[index] != null)
-                continue;
-
-            SlotRef emptySlot = new SlotRef
-            {
-                Container = SlotContainerType.Inventory,
-                Character = character,
-                InventoryIndex = index
-            };
-
-            CreateItemSlotVisual(_inventoryContent, emptySlot, null, quantity: 1, quantityLabel: string.Empty, slotPlaceholder: "+");
-        }
+        if (groupedInventory.Count == 0)
+            CreateInfoLabel(_inventoryContent, "Backpack is empty.");
     }
 
     private GameObject CreateItemSlotVisual(
@@ -1938,7 +1956,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (destination.Container == SlotContainerType.Stash)
             return MoveItemToStash(source, dragItem, out feedback);
 
-        if (destination.Container == SlotContainerType.Inventory)
+        if (destination.Container == SlotContainerType.Inventory || destination.Container == SlotContainerType.InventoryStack)
             return MoveItemToInventorySlot(source, destination, dragItem, out feedback);
 
         if (destination.Container == SlotContainerType.Equipment)
@@ -2066,8 +2084,9 @@ public class PreCombatInventoryUI : MonoBehaviour
             return false;
         }
 
+        bool autoAddTarget = destination.Container == SlotContainerType.InventoryStack;
         int targetIndex = destination.InventoryIndex;
-        if (targetIndex < 0 || targetIndex >= targetInv.GeneralSlots.Length)
+        if (!autoAddTarget && (targetIndex < 0 || targetIndex >= targetInv.GeneralSlots.Length))
         {
             feedback = "Invalid target backpack slot.";
             return false;
@@ -2082,11 +2101,52 @@ public class PreCombatInventoryUI : MonoBehaviour
                 return false;
             }
 
+            if (autoAddTarget)
+            {
+                feedback = "Item is already in this backpack.";
+                return false;
+            }
+
             ItemData temp = inv.GeneralSlots[targetIndex];
             inv.GeneralSlots[targetIndex] = inv.GeneralSlots[source.InventoryIndex];
             inv.GeneralSlots[source.InventoryIndex] = temp;
             inv.RecalculateStats();
             feedback = "Reordered backpack slots.";
+            return true;
+        }
+
+        if (source.Container == SlotContainerType.InventoryStack)
+        {
+            Inventory sourceInv = GetInventory(source.Character);
+            if (sourceInv == null || !sourceInv.RemoveItem(item))
+            {
+                feedback = "Failed to remove item from source stack.";
+                return false;
+            }
+
+            if (!autoAddTarget)
+            {
+                if (targetInv.GeneralSlots[targetIndex] != null)
+                {
+                    sourceInv.AddItem(item);
+                    feedback = "Target inventory slot is occupied.";
+                    return false;
+                }
+
+                targetInv.GeneralSlots[targetIndex] = item;
+                targetInv.RecalculateStats();
+            }
+            else
+            {
+                if (!targetInv.AddItem(item))
+                {
+                    sourceInv.AddItem(item);
+                    feedback = "Failed to add item to backpack.";
+                    return false;
+                }
+            }
+
+            feedback = $"Moved {item.Name} to backpack.";
             return true;
         }
 
@@ -2098,20 +2158,31 @@ public class PreCombatInventoryUI : MonoBehaviour
                 return false;
             }
 
-            if (targetInv.GeneralSlots[targetIndex] != null)
-            {
-                feedback = "Target inventory slot is occupied.";
-                return false;
-            }
-
             if (!_stash.RemoveItem(item))
             {
                 feedback = "Item no longer in stash.";
                 return false;
             }
 
-            targetInv.GeneralSlots[targetIndex] = item;
-            targetInv.RecalculateStats();
+            if (!autoAddTarget)
+            {
+                if (targetInv.GeneralSlots[targetIndex] != null)
+                {
+                    _stash.AddItem(item);
+                    feedback = "Target inventory slot is occupied.";
+                    return false;
+                }
+
+                targetInv.GeneralSlots[targetIndex] = item;
+                targetInv.RecalculateStats();
+            }
+            else if (!targetInv.AddItem(item))
+            {
+                _stash.AddItem(item);
+                feedback = "Failed to add item to backpack.";
+                return false;
+            }
+
             feedback = $"Moved {item.Name} to {destination.Character.Stats.CharacterName}'s backpack.";
             return true;
         }
@@ -2125,15 +2196,9 @@ public class PreCombatInventoryUI : MonoBehaviour
                 return false;
             }
 
-            if (targetInv.GeneralSlots[targetIndex] != null)
-            {
-                feedback = "Target inventory slot is occupied.";
-                return false;
-            }
-
             if (!sourceInv.Unequip(source.EquipSlot))
             {
-                feedback = "Cannot unequip item (backpack full).";
+                feedback = "Cannot unequip item.";
                 return false;
             }
 
@@ -2151,8 +2216,15 @@ public class PreCombatInventoryUI : MonoBehaviour
                 return false;
             }
 
-            if (sourceInv == targetInv)
+            if (sourceInv == targetInv && !autoAddTarget)
             {
+                if (targetInv.GeneralSlots[targetIndex] != null)
+                {
+                    sourceInv.AddItem(extracted);
+                    feedback = "Target inventory slot is occupied.";
+                    return false;
+                }
+
                 targetInv.GeneralSlots[targetIndex] = extracted;
                 targetInv.RecalculateStats();
                 feedback = "Moved equipped item to backpack slot.";
@@ -2162,19 +2234,22 @@ public class PreCombatInventoryUI : MonoBehaviour
             if (!targetInv.AddItem(extracted))
             {
                 sourceInv.AddItem(extracted);
-                feedback = "Target backpack is full.";
+                feedback = "Failed to add item to backpack.";
                 return false;
             }
 
-            int addedIndex = FindFirstIndexOfReference(targetInv.GeneralSlots, extracted);
-            if (addedIndex >= 0 && addedIndex != targetIndex)
+            if (!autoAddTarget)
             {
-                ItemData t = targetInv.GeneralSlots[targetIndex];
-                targetInv.GeneralSlots[targetIndex] = targetInv.GeneralSlots[addedIndex];
-                targetInv.GeneralSlots[addedIndex] = t;
+                int addedIndex = FindFirstIndexOfReference(targetInv.GeneralSlots, extracted);
+                if (addedIndex >= 0 && addedIndex != targetIndex && targetInv.GeneralSlots[targetIndex] == null)
+                {
+                    targetInv.GeneralSlots[targetIndex] = targetInv.GeneralSlots[addedIndex];
+                    targetInv.GeneralSlots[addedIndex] = null;
+                }
+
+                targetInv.RecalculateStats();
             }
 
-            targetInv.RecalculateStats();
             feedback = $"Moved {item.Name} into backpack.";
             return true;
         }
@@ -2245,12 +2320,6 @@ public class PreCombatInventoryUI : MonoBehaviour
                 return false;
             }
 
-            if (inv.EmptySlots <= 0)
-            {
-                feedback = "Backpack full. Free one slot before equipping from stash.";
-                return false;
-            }
-
             if (!_stash.RemoveItem(item))
             {
                 feedback = "Item no longer in stash.";
@@ -2282,12 +2351,6 @@ public class PreCombatInventoryUI : MonoBehaviour
             if (source.EquipSlot == destination.EquipSlot)
             {
                 feedback = "Item already in that equipment slot.";
-                return false;
-            }
-
-            if (inv.EmptySlots <= 0)
-            {
-                feedback = "Backpack full. Need one free slot to swap equipment.";
                 return false;
             }
 
@@ -2345,35 +2408,29 @@ public class PreCombatInventoryUI : MonoBehaviour
             return DropValidationResult.Valid("Moved to stash.");
         }
 
-        if (destination.Container == SlotContainerType.Inventory)
+        if (destination.Container == SlotContainerType.Inventory || destination.Container == SlotContainerType.InventoryStack)
         {
             Inventory targetInv = GetInventory(destination.Character);
             if (targetInv == null)
                 return DropValidationResult.Invalid("Target inventory unavailable.");
 
-            if (destination.InventoryIndex < 0 || destination.InventoryIndex >= targetInv.GeneralSlots.Length)
-                return DropValidationResult.Invalid("Invalid inventory slot.");
-
-            if (source.Container == SlotContainerType.Stash)
+            bool autoAddTarget = destination.Container == SlotContainerType.InventoryStack;
+            if (!autoAddTarget)
             {
-                if (targetInv.GeneralSlots[destination.InventoryIndex] != null)
+                if (destination.InventoryIndex < 0 || destination.InventoryIndex >= targetInv.GeneralSlots.Length)
+                    return DropValidationResult.Invalid("Invalid inventory slot.");
+
+                if (targetInv.GeneralSlots[destination.InventoryIndex] != null &&
+                    (source.Container == SlotContainerType.Stash || source.Container == SlotContainerType.Equipment || source.Container == SlotContainerType.InventoryStack))
+                {
                     return DropValidationResult.Invalid("Backpack slot is occupied.");
+                }
             }
 
-            if (source.Container == SlotContainerType.Equipment)
-            {
-                if (targetInv.GeneralSlots[destination.InventoryIndex] != null)
-                    return DropValidationResult.Invalid("Backpack slot is occupied.");
+            if (source.Container == SlotContainerType.Inventory && source.Character == destination.Character && autoAddTarget)
+                return DropValidationResult.Invalid("Item is already in this backpack.");
 
-                Inventory sourceInv = GetInventory(source.Character);
-                if (sourceInv != null && sourceInv.EmptySlots <= 0)
-                    return DropValidationResult.Invalid("Backpack full; cannot unequip item.");
-            }
-
-            if (source.Container == SlotContainerType.InventoryStack)
-                return DropValidationResult.Invalid("Stacked backpack items cannot be dragged into specific backpack slots.");
-
-            return DropValidationResult.Valid("Moved to backpack.");
+            return DropValidationResult.Valid(autoAddTarget ? "Added to backpack." : "Moved to backpack.");
         }
 
         if (destination.Container == SlotContainerType.Equipment)
@@ -2404,12 +2461,6 @@ public class PreCombatInventoryUI : MonoBehaviour
                 if (showWarnings)
                     return DropValidationResult.ValidWithWarning(warning);
             }
-
-            if (source.Container == SlotContainerType.Stash && targetInv.EmptySlots <= 0)
-                return DropValidationResult.Invalid("Backpack full. Need one free slot to equip from stash.");
-
-            if (source.Container == SlotContainerType.Equipment && source.Character == destination.Character && targetInv.EmptySlots <= 0)
-                return DropValidationResult.Invalid("Backpack full. Need one free slot for equipment swap.");
 
             return DropValidationResult.Valid(proficiencyWarn
                 ? "Equipped with non-proficiency warning."
@@ -3093,16 +3144,20 @@ public class PreCombatInventoryUI : MonoBehaviour
         switch (slot)
         {
             case EquipSlot.Head: return "Head";
+            case EquipSlot.FaceEyes: return "Face/Eyes";
+            case EquipSlot.Neck: return "Neck";
+            case EquipSlot.Torso: return "Torso";
             case EquipSlot.Armor:
-            case EquipSlot.ArmorRobe: return "Body/Armor";
-            case EquipSlot.RightHand: return "Main Hand";
-            case EquipSlot.LeftHand: return "Off Hand";
+            case EquipSlot.ArmorRobe: return "Armor/Robe";
+            case EquipSlot.Waist: return "Waist";
+            case EquipSlot.Back: return "Back";
+            case EquipSlot.Wrists: return "Wrists";
+            case EquipSlot.Hands: return "Hands";
             case EquipSlot.LeftRing: return "Ring (L)";
             case EquipSlot.RightRing: return "Ring (R)";
-            case EquipSlot.Neck: return "Neck";
-            case EquipSlot.Hands: return "Hands";
             case EquipSlot.Feet: return "Feet";
-            case EquipSlot.Back: return "Back";
+            case EquipSlot.RightHand: return "Main Hand";
+            case EquipSlot.LeftHand: return "Off Hand";
             default: return slot.ToString();
         }
     }
@@ -3112,16 +3167,20 @@ public class PreCombatInventoryUI : MonoBehaviour
         switch (slot)
         {
             case EquipSlot.Head: return "H";
+            case EquipSlot.FaceEyes: return "FE";
+            case EquipSlot.Neck: return "N";
+            case EquipSlot.Torso: return "T";
             case EquipSlot.Armor:
-            case EquipSlot.ArmorRobe: return "B";
-            case EquipSlot.RightHand: return "MH";
-            case EquipSlot.LeftHand: return "OH";
+            case EquipSlot.ArmorRobe: return "AR";
+            case EquipSlot.Waist: return "W";
+            case EquipSlot.Back: return "BK";
+            case EquipSlot.Wrists: return "WR";
+            case EquipSlot.Hands: return "HD";
             case EquipSlot.LeftRing: return "R1";
             case EquipSlot.RightRing: return "R2";
-            case EquipSlot.Neck: return "N";
-            case EquipSlot.Hands: return "G";
             case EquipSlot.Feet: return "F";
-            case EquipSlot.Back: return "BK";
+            case EquipSlot.RightHand: return "MH";
+            case EquipSlot.LeftHand: return "OH";
             default: return "?";
         }
     }
@@ -3145,7 +3204,16 @@ public class PreCombatInventoryUI : MonoBehaviour
             }
         }
 
-        return null;
+        int previousLength = inv.GeneralSlots.Length;
+        System.Array.Resize(ref inv.GeneralSlots, previousLength + 1);
+        Debug.Log($"[Inventory] Expanded backpack slots in UI helper: {previousLength} -> {inv.GeneralSlots.Length}");
+
+        return new SlotRef
+        {
+            Container = SlotContainerType.Inventory,
+            Character = character,
+            InventoryIndex = previousLength
+        };
     }
 
     private SlotRef FindBestEquipmentTargetSlot(CharacterController character, ItemData item)
@@ -3159,12 +3227,16 @@ public class PreCombatInventoryUI : MonoBehaviour
             EquipSlot.LeftHand,
             EquipSlot.ArmorRobe,
             EquipSlot.Head,
+            EquipSlot.FaceEyes,
+            EquipSlot.Neck,
+            EquipSlot.Torso,
+            EquipSlot.Waist,
+            EquipSlot.Back,
+            EquipSlot.Wrists,
+            EquipSlot.Hands,
             EquipSlot.LeftRing,
             EquipSlot.RightRing,
-            EquipSlot.Neck,
-            EquipSlot.Hands,
-            EquipSlot.Feet,
-            EquipSlot.Back
+            EquipSlot.Feet
         };
 
         for (int i = 0; i < priority.Length; i++)
