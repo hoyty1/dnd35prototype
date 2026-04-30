@@ -2331,6 +2331,14 @@ public class CharacterStats
     }
 
     /// <summary>
+    /// Clears all accumulated nonlethal damage.
+    /// </summary>
+    public void ClearNonlethalDamage()
+    {
+        NonlethalDamage = 0;
+    }
+
+    /// <summary>
     /// Heal damage with D&D 3.5 nonlethal-first ordering.
     /// Healing removes nonlethal damage first, then restores lethal HP damage.
     /// Returns healed lethal HP and outputs removed nonlethal amount.

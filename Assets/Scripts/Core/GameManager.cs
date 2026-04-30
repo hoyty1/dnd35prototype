@@ -774,7 +774,7 @@ public partial class GameManager : MonoBehaviour
                 inventory.RecalculateStats();
             }
 
-            stats.NonlethalDamage = 0;
+            stats.ClearNonlethalDamage();
             stats.TempHP = 0;
             stats.BonusMaxHP = 0;
             stats.CurrentHP = stats.TotalMaxHP;

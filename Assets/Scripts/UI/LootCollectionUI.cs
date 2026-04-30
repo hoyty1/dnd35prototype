@@ -356,7 +356,7 @@ public class LootCollectionUI : MonoBehaviour
         layout.childForceExpandHeight = true;
 
         _lootAllButton = CreateFooterButton(footer.transform, "Loot All", new Color(0.22f, 0.52f, 0.3f, 1f), OnLootAllPressed);
-        _closeButton = CreateFooterButton(footer.transform, "Close", new Color(0.4f, 0.24f, 0.24f, 1f), Close);
+        _closeButton = CreateFooterButton(footer.transform, "Close", new Color(0.4f, 0.24f, 0.24f, 1f), () => Close());
         _exitLoopButton = CreateFooterButton(footer.transform, "Exit Loop", new Color(0.5f, 0.18f, 0.18f, 1f), OnExitLoopPressed);
     }
 
