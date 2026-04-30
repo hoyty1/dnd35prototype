@@ -120,6 +120,18 @@ public static class PoisonDatabase
             Description = "Potent venom from giant wasp."
         };
 
+        _poisons["giant_bee_poison"] = new PoisonData
+        {
+            Id = "giant_bee_poison",
+            Name = "Giant Bee Poison",
+            Type = PoisonType.Injury,
+            FortitudeDC = 11,
+            InitialDamage = Damage(AbilityType.DEX, "1d4"),
+            SecondaryDamage = Damage(AbilityType.DEX, "1d4"),
+            PriceInGold = 0,
+            Description = "Venom delivered by a giant bee sting."
+        };
+
         _poisons["greenblood_oil"] = new PoisonData
         {
             Id = "greenblood_oil",

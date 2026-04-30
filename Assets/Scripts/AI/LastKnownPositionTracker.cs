@@ -149,6 +149,28 @@ public class LastKnownPositionTracker : MonoBehaviour
             if (_owner.CanSee(target, incomingIsRangedAttack))
                 continue;
 
+            bool ownerHasSeeInvisibility = _owner.CanSeeInvisible(target);
+            bool targetIsInvisible = target.HasActiveInvisibilityEffect;
+            if (ownerHasSeeInvisibility && targetIsInvisible)
+            {
+                bool spotted = TryResolveSpotAgainstHide(target, out int spotRoll, out int spotTotal, out int hideRoll, out int hideTotal);
+                if (spotted)
+                {
+                    _pinpointedThisRound.Add(target);
+                    _consecutiveLastKnownAutoMisses[target] = 0;
+                    UpdateLastKnownPosition(target);
+
+                    if (gameManager != null && gameManager.CombatUI != null)
+                    {
+                        string ownerName = _owner.Stats != null ? _owner.Stats.CharacterName : _owner.name;
+                        string targetName = target.Stats != null ? target.Stats.CharacterName : target.name;
+                        gameManager.CombatUI.ShowCombatLog($"👁 {ownerName} sees invisible {targetName} clearly (Spot d20({spotRoll})={spotTotal} vs Hide d20({hideRoll})={hideTotal}).");
+                    }
+
+                    continue;
+                }
+            }
+
             validConcealedTargets.Add(target);
         }
 
@@ -252,6 +274,27 @@ public class LastKnownPositionTracker : MonoBehaviour
         _lastKnownGridPositions.Clear();
         _pinpointedThisRound.Clear();
         _consecutiveLastKnownAutoMisses.Clear();
+    }
+
+    private bool TryResolveSpotAgainstHide(CharacterController target, out int spotRoll, out int spotTotal, out int hideRoll, out int hideTotal)
+    {
+        spotRoll = 1;
+        spotTotal = 1;
+        hideRoll = 1;
+        hideTotal = 1;
+
+        if (_owner == null || _owner.Stats == null || target == null || target.Stats == null)
+            return false;
+
+        int spotBonus = _owner.Stats.GetSkillBonus("Spot");
+        int hideBonus = target.Stats.GetHideSkillBonusAgainstObserver(_owner);
+
+        spotRoll = Random.Range(1, 21);
+        hideRoll = Random.Range(1, 21);
+        spotTotal = spotRoll + spotBonus;
+        hideTotal = hideRoll + hideBonus;
+
+        return spotTotal >= hideTotal;
     }
 
     private int GetListenBonus()

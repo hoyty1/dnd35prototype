@@ -405,6 +405,16 @@ public class CharacterController : MonoBehaviour
     public List<ActiveDisease> ActiveDiseases => _activeDiseases;
     public List<ActivePoison> ActivePoisons => _activePoisons;
 
+    [Header("Innate Monster Abilities")]
+    [SerializeField] private int _bombardierAcidSprayCooldownRounds;
+    [SerializeField] private int _regenerationAmountPerRound;
+    [SerializeField] private DamageBypassTag _regenerationSuppressedBy = DamageBypassTag.None;
+    [SerializeField] private int _regenerationSuppressedRoundsRemaining;
+
+    public int BombardierAcidSprayCooldownRounds => Mathf.Max(0, _bombardierAcidSprayCooldownRounds);
+    public bool HasBombardierAcidSprayReady => _bombardierAcidSprayCooldownRounds <= 0;
+    public bool HasRegeneration => _regenerationAmountPerRound > 0;
+
     // Tracks attackers that currently have an active feint window against this defender.
     // Used only for visual/status indication on the defender token.
     private readonly HashSet<CharacterController> _incomingFeintSources = new HashSet<CharacterController>();
@@ -2269,6 +2279,88 @@ public class CharacterController : MonoBehaviour
         LogAbilityScoreMessage($"⚠ {Stats.CharacterName} contracts {disease.Name}! Incubation: {added.DaysUntilActive} day(s).");
     }
 
+    public void ConfigureBombardierAcidSprayCooldown(int rounds)
+    {
+        _bombardierAcidSprayCooldownRounds = Mathf.Max(0, rounds);
+    }
+
+    public void TickBombardierAcidSprayCooldown()
+    {
+        if (_bombardierAcidSprayCooldownRounds > 0)
+            _bombardierAcidSprayCooldownRounds--;
+    }
+
+    public void ConfigureRegeneration(int amountPerRound, DamageBypassTag suppressedBy)
+    {
+        _regenerationAmountPerRound = Mathf.Max(0, amountPerRound);
+        _regenerationSuppressedBy = suppressedBy;
+        _regenerationSuppressedRoundsRemaining = 0;
+    }
+
+    public void ApplyRegenerationAtTurnStart()
+    {
+        if (_regenerationAmountPerRound <= 0 || Stats == null || Stats.CurrentHP <= -10)
+            return;
+
+        if (_regenerationSuppressedRoundsRemaining > 0)
+        {
+            _regenerationSuppressedRoundsRemaining--;
+            return;
+        }
+
+        int hpBefore = Stats.CurrentHP;
+        int nonlethalBefore = Stats.NonlethalDamage;
+        int healedHp = Stats.HealDamage(_regenerationAmountPerRound, out int nonlethalHealed);
+
+        if (healedHp > 0 || nonlethalHealed > 0)
+        {
+            LogAbilityScoreMessage($"♻ {Stats.CharacterName} regenerates {healedHp} HP and removes {nonlethalHealed} nonlethal.");
+            if (GameManager.Instance != null && GameManager.Instance.CombatUI != null)
+                GameManager.Instance.CombatUI.ShowCombatLog($"♻ {Stats.CharacterName} regenerates ({hpBefore}→{Stats.CurrentHP} HP, nonlethal {nonlethalBefore}→{Stats.NonlethalDamage}).");
+        }
+    }
+
+    public void NotifyIncomingDamage(DamagePacket packet, int finalDamage)
+    {
+        if (finalDamage <= 0 || _regenerationAmountPerRound <= 0 || packet == null)
+            return;
+
+        if (_regenerationSuppressedBy != DamageBypassTag.None
+            && (packet.AttackTags & _regenerationSuppressedBy) != 0)
+        {
+            _regenerationSuppressedRoundsRemaining = Mathf.Max(_regenerationSuppressedRoundsRemaining, 1);
+        }
+    }
+
+    private bool IsImmuneToPoison()
+    {
+        if (Stats == null)
+            return false;
+
+        string creatureType = string.IsNullOrWhiteSpace(Stats.CreatureType)
+            ? string.Empty
+            : Stats.CreatureType.Trim().ToLowerInvariant();
+
+        if (creatureType == "undead" || creatureType == "construct" || creatureType == "elemental" || creatureType == "ooze" || creatureType == "plant")
+            return true;
+
+        if (Stats.SpecialAbilities == null)
+            return false;
+
+        for (int i = 0; i < Stats.SpecialAbilities.Count; i++)
+        {
+            string ability = Stats.SpecialAbilities[i];
+            if (string.IsNullOrWhiteSpace(ability))
+                continue;
+
+            string normalized = ability.ToLowerInvariant();
+            if (normalized.Contains("poison immunity") || normalized.Contains("immune to poison"))
+                return true;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Apply poison exposure and resolve initial poison save/damage.
     /// Secondary damage is handled after a delay by GameManager poison ticking.
@@ -2278,6 +2370,12 @@ public class CharacterController : MonoBehaviour
         PoisonData poison = PoisonDatabase.GetPoison(poisonId);
         if (poison == null || Stats == null)
             return;
+
+        if (IsImmuneToPoison())
+        {
+            LogAbilityScoreMessage($"☠ {Stats.CharacterName} is immune to poison and ignores {poison.Name}.");
+            return;
+        }
 
         int dc = Mathf.Max(0, poison.FortitudeDC + dcModifier);
         int roll = Random.Range(1, 21);
@@ -2902,6 +3000,18 @@ public class CharacterController : MonoBehaviour
         return true;
     }
 
+    private void TryApplyNaturalAttackOnHitEffects(CharacterController target, CombatResult attackResult, NaturalAttackDefinition naturalAttack)
+    {
+        if (target == null || attackResult == null || !attackResult.Hit || naturalAttack == null)
+            return;
+
+        string poisonId = naturalAttack.PoisonOnHitId;
+        if (string.IsNullOrWhiteSpace(poisonId))
+            return;
+
+        target.ApplyPoison(poisonId);
+    }
+
     // ========== SINGLE ATTACK (Standard Action) ==========
 
     /// <summary>
@@ -3120,6 +3230,10 @@ public class CharacterController : MonoBehaviour
         int totalFeatDmgBonus = powerAtkDmgBonus + pbsDmgBonus + weaponSpecBonus;
         ResolveBaseAttackDamageProfile(equippedWeapon, out int damageDice, out int damageCount, out int bonusDamage, out string attackLabel);
 
+        NaturalAttackDefinition naturalAttackForOnHit = null;
+        if (ShouldUseInnateNaturalAttackProfile(equippedWeapon))
+            naturalAttackForOnHit = Stats.GetPrimaryNaturalAttack();
+
         // Record HP before attack
         int hpBefore = target.Stats.CurrentHP;
 
@@ -3170,6 +3284,8 @@ public class CharacterController : MonoBehaviour
         }
         result.WeaponName = attackLabel;
         result.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
+
+        TryApplyNaturalAttackOnHitEffects(target, result, naturalAttackForOnHit);
 
         // HP tracking
         result.DefenderHPBefore = hpBefore;
@@ -3422,6 +3538,8 @@ public class CharacterController : MonoBehaviour
                     atk.BaseDamageDiceStr = $"{naturalDamageCount}d{naturalDamageDice}";
                     atk.DefenderHPBefore = hpBeforeAtk;
                     atk.DefenderHPAfter = target.Stats.CurrentHP;
+
+                    TryApplyNaturalAttackOnHitEffects(target, atk, naturalAttack);
 
                     result.Attacks.Add(atk);
                     string naturalLabel = string.IsNullOrWhiteSpace(naturalAttack.Name) ? "Natural" : naturalAttack.Name;

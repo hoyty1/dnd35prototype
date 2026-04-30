@@ -44,6 +44,7 @@ public class NaturalAttackDefinition
     public DamageBonusSource BonusDamageSource = DamageBonusSource.Strength;
     public int Range = 1;
     public bool IsPrimary = true;
+    public string PoisonOnHitId;
 
     public int GetDamageBonus(int strengthModifier)
     {
@@ -71,7 +72,8 @@ public class NaturalAttackDefinition
             Count = Mathf.Max(1, Count),
             BonusDamageSource = BonusDamageSource,
             Range = Mathf.Max(1, Range),
-            IsPrimary = IsPrimary
+            IsPrimary = IsPrimary,
+            PoisonOnHitId = PoisonOnHitId
         };
     }
 }
@@ -83,6 +85,7 @@ public class CharacterStats
     public string CharacterName;
     public int Level;
     public string CharacterClass; // e.g., "Fighter", "Rogue", "Warrior"
+    public string SourceNpcDefinitionId;
     public Alignment CharacterAlignment = Alignment.None;
 
     /// <summary>Full alignment name for display (e.g., "Lawful Good").</summary>
@@ -2260,6 +2263,8 @@ public class CharacterStats
         {
             TakeDamage(result.FinalDamage);
         }
+
+        OwnerCharacter?.NotifyIncomingDamage(packet, result.FinalDamage);
 
         return result;
     }

@@ -3904,6 +3904,7 @@ public partial class GameManager : MonoBehaviour
             stats.WeaponFocusChoice = def.WeaponFocusChoice;
 
         FeatManager.ApplyPassiveFeats(stats);
+        stats.SourceNpcDefinitionId = def.Id;
         stats.CreatureType = string.IsNullOrEmpty(def.CreatureType) ? "Humanoid" : def.CreatureType;
         stats.MaterialComposition = def.MaterialComposition;
         stats.SetBaseSizeCategory(def.SizeCategory);
@@ -3973,6 +3974,8 @@ public partial class GameManager : MonoBehaviour
         }
 
         npc.Init(stats, pos, alive, dead);
+        npc.ConfigureBombardierAcidSprayCooldown(0);
+        npc.ConfigureRegeneration(def.RegenerationAmount, def.RegenerationSuppressedBy);
 
         CharacterTeam npcTeam = def.IsAlly ? CharacterTeam.Player : CharacterTeam.Enemy;
         npc.ConfigureTeamControl(npcTeam, def.IsControllable);
@@ -4664,6 +4667,8 @@ public partial class GameManager : MonoBehaviour
 
         _conditionService?.OnTurnStart(pc);
         ApplyMelfsAcidArrowTurnStartDamage(pc);
+        pc.TickBombardierAcidSprayCooldown();
+        pc.ApplyRegenerationAtTurnStart();
         CloseInventoryIfOpen();
 
         // Tick Aid Another expiry counters before actions; this keeps bonuses available for one full beneficiary turn.
@@ -14345,6 +14350,8 @@ public partial class GameManager : MonoBehaviour
 
         _conditionService?.OnTurnStart(npc);
         ApplyMelfsAcidArrowTurnStartDamage(npc);
+        npc.TickBombardierAcidSprayCooldown();
+        npc.ApplyRegenerationAtTurnStart();
         npc.StartNewTurn();
         ProcessNPCRoundStartPerception(npc);
         PruneTurnUndeadTrackers();
@@ -17996,6 +18003,99 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    private static bool IsGiantBombardierBeetle(CharacterController npc)
+    {
+        if (npc?.Stats == null)
+            return false;
+
+        return string.Equals(npc.Stats.SourceNpcDefinitionId, "giant_bombardier_beetle", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool TryNPCUseBombardierAcidSpray(CharacterController npc, CharacterController primaryTarget)
+    {
+        if (!IsGiantBombardierBeetle(npc) || npc == null || npc.Stats == null || primaryTarget == null || primaryTarget.Stats == null)
+            return false;
+
+        if (!npc.HasBombardierAcidSprayReady || !npc.Actions.HasStandardAction)
+            return false;
+
+        int distanceSquares = SquareGridUtils.GetDistance(npc.GridPosition, primaryTarget.GridPosition);
+        if (distanceSquares > 2)
+            return false;
+
+        HashSet<Vector2Int> coneCells = AoESystem.GetConeCells(npc.GridPosition, primaryTarget.GridPosition, 2, Grid);
+        if (coneCells == null || coneCells.Count == 0)
+            return false;
+
+        List<CharacterController> victims = new List<CharacterController>();
+        foreach (Vector2Int pos in coneCells)
+        {
+            SquareCell cell = Grid != null ? Grid.GetCell(pos) : null;
+            if (cell == null || !cell.IsOccupied || cell.Occupant == null)
+                continue;
+
+            CharacterController occupant = cell.Occupant;
+            if (occupant == npc || occupant.Stats == null || occupant.Stats.IsDead)
+                continue;
+
+            if (!victims.Contains(occupant))
+                victims.Add(occupant);
+        }
+
+        if (victims.Count == 0)
+            return false;
+
+        if (!npc.CommitStandardAction())
+            return false;
+
+        CombatUI?.ShowCombatLog($"🧪 {npc.Stats.CharacterName} unleashes Acid Spray (10-ft cone)!");
+
+        for (int i = 0; i < victims.Count; i++)
+        {
+            CharacterController victim = victims[i];
+            int rawDamage = 0;
+            for (int d = 0; d < 6; d++)
+                rawDamage += UnityEngine.Random.Range(1, 5);
+
+            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveTotal = saveRoll + victim.Stats.ReflexSave;
+            bool saveSuccess = saveTotal >= 12;
+            int damageToApply = saveSuccess ? Mathf.FloorToInt(rawDamage * 0.5f) : rawDamage;
+
+            DamagePacket packet = new DamagePacket
+            {
+                RawDamage = damageToApply,
+                Types = new HashSet<DamageType> { DamageType.Acid },
+                AttackTags = DamageBypassTag.None,
+                IsRanged = true,
+                IsNonlethal = false,
+                Source = AttackSource.Other,
+                SourceName = "Bombardier Beetle Acid Spray"
+            };
+
+            DamageResolutionResult mitigation = victim.Stats.ApplyIncomingDamage(damageToApply, packet);
+            int finalDamage = mitigation.FinalDamage;
+
+            CombatUI?.ShowCombatLog($"   {victim.Stats.CharacterName}: Reflex d20({saveRoll}) + {victim.Stats.ReflexSave} = {saveTotal} {(saveSuccess ? "SUCCESS" : "FAIL")} | Acid {finalDamage} damage");
+
+            if (finalDamage > 0)
+                CheckConcentrationOnDamage(victim, finalDamage);
+
+            if (victim.Stats.IsDead)
+            {
+                victim.OnDeath();
+                HandleSummonDeathCleanup(victim);
+            }
+        }
+
+        int cooldown = UnityEngine.Random.Range(1, 5);
+        npc.ConfigureBombardierAcidSprayCooldown(cooldown);
+        CombatUI?.ShowCombatLog($"⏱ Acid spray recharges in {cooldown} rounds.");
+
+        UpdateAllStatsUI();
+        return true;
+    }
+
     private IEnumerator NPCPerformAttack(CharacterController npc, CharacterController target)
     {
         if (npc == null || npc.Stats == null)
@@ -18033,6 +18133,12 @@ public partial class GameManager : MonoBehaviour
         string partnerName = flankPartner != null && flankPartner.Stats != null
             ? flankPartner.Stats.CharacterName
             : null;
+
+        if (TryNPCUseBombardierAcidSpray(npc, target))
+        {
+            yield return new WaitForSeconds(1.0f);
+            yield break;
+        }
 
         bool canUseFullAttack = npc.Actions != null
             && npc.Actions.HasFullRoundAction

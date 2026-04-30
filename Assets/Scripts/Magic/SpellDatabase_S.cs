@@ -69,18 +69,19 @@ public static partial class SpellDatabase
                 {
                     SpellId = "see_invisibility",
                     Name = "See Invisibility",
-                    Description = "You can see invisible creatures and objects. Duration 10 min/level. PHB p.275",
+                    Description = "Divination. Personal. You can see invisible creatures and objects normally. Negates invisibility miss chance and invisibility Hide bonus against you (but not mundane hiding). Duration 10 min/level, dismissible. Components: V, S, M (talc and powdered silver). PHB p.275",
                     SpellLevel = 2, School = "Divination",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
-                    BuffDurationRounds = -1,
-                    BuffType = "see_invis",
+                    BuffType = "see_invisibility",
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Invisibility detection not implemented]"
+                    ProvokesAoO = true
                 });
 
         Register(new SpellData
@@ -424,6 +425,7 @@ public static partial class SpellDatabase
                 });
 
         // Aliases
+        RegisterClassSpellAlias("see_invisibility_brd", "see_invisibility", "Bard", 3);
         RegisterClassSpellAlias("summon_monster_1_clr", "summon_monster_1", "Cleric", 1);
         RegisterClassSpellAlias("summon_monster_2_clr", "summon_monster_2", "Cleric", 2);
 

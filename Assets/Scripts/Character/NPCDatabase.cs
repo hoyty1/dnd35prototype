@@ -197,6 +197,8 @@ public class NPCDefinition
     public bool DamageReductionRangedOnly;
     public List<DamageResistanceEntry> DamageResistances = new List<DamageResistanceEntry>();
     public List<DamageType> DamageImmunities = new List<DamageType>();
+    public int RegenerationAmount;
+    public DamageBypassTag RegenerationSuppressedBy = DamageBypassTag.None;
     public int SpellResistance;
     public int BaseHitDieHP;
 
@@ -262,7 +264,8 @@ public class NPCDefinition
                     Count = attack.Count,
                     BonusDamageSource = attack.BonusDamageSource,
                     Range = attack.Range,
-                    IsPrimary = attack.IsPrimary
+                    IsPrimary = attack.IsPrimary,
+                    PoisonOnHitId = attack.PoisonOnHitId
                 });
             }
         }
@@ -277,7 +280,8 @@ public class NPCDefinition
                 Count = RakeAttack.Count,
                 BonusDamageSource = RakeAttack.BonusDamageSource,
                 Range = RakeAttack.Range,
-                IsPrimary = RakeAttack.IsPrimary
+                IsPrimary = RakeAttack.IsPrimary,
+                PoisonOnHitId = RakeAttack.PoisonOnHitId
             };
 
         clone.DamageResistances = new List<DamageResistanceEntry>();
@@ -294,6 +298,8 @@ public class NPCDefinition
         clone.DamageImmunities = DamageImmunities != null
             ? new List<DamageType>(DamageImmunities)
             : new List<DamageType>();
+        clone.RegenerationAmount = RegenerationAmount;
+        clone.RegenerationSuppressedBy = RegenerationSuppressedBy;
         clone.CreatureTags = CreatureTags != null
             ? new List<string>(CreatureTags)
             : new List<string>();

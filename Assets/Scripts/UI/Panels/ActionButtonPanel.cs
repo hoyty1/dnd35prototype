@@ -61,6 +61,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button DismissExpeditiousRetreatButton => _combatUI != null ? _combatUI.DismissExpeditiousRetreatButton : null;
     private Button DismissJumpButton => _combatUI != null ? _combatUI.DismissJumpButton : null;
     private Button DismissInvisibilityButton => _combatUI != null ? _combatUI.DismissInvisibilityButton : null;
+    private Button DismissSeeInvisibilityButton => _combatUI != null ? _combatUI.DismissSeeInvisibilityButton : null;
     private Button AttackDefensivelyButton => _combatUI != null ? _combatUI.AttackDefensivelyButton : null;
     private Button FullAttackDefensivelyButton => _combatUI != null ? _combatUI.FullAttackDefensivelyButton : null;
 
@@ -728,6 +729,13 @@ public class ActionButtonPanel : MonoBehaviour
             ? (canDismissInvisibility ? "Dismiss Invisibility (Standard)" : "Dismiss Invisibility (Used)")
             : "Dismiss Invisibility";
         states.Set(DismissInvisibilityButton, new ActionButtonState(hasActiveInvisibility, canDismissInvisibility, dismissInvisibilityLabel));
+
+        bool hasActiveSeeInvisibility = context.Gm != null && context.Gm.HasActiveSeeInvisibility(pc);
+        bool canDismissSeeInvisibility = hasActiveSeeInvisibility && !context.IsTurned;
+        string dismissSeeInvisibilityLabel = hasActiveSeeInvisibility
+            ? "Dismiss See Invisibility (Free)"
+            : "Dismiss See Invisibility";
+        states.Set(DismissSeeInvisibilityButton, new ActionButtonState(hasActiveSeeInvisibility, canDismissSeeInvisibility, dismissSeeInvisibilityLabel));
     }
 
     private void ComputeEquipmentActionStates(CharacterController pc, ActionButtonContext context, ActionButtonStates states)
@@ -964,6 +972,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (DismissExpeditiousRetreatButton != null) DismissExpeditiousRetreatButton.gameObject.SetActive(false);
         if (DismissJumpButton != null) DismissJumpButton.gameObject.SetActive(false);
         if (DismissInvisibilityButton != null) DismissInvisibilityButton.gameObject.SetActive(false);
+        if (DismissSeeInvisibilityButton != null) DismissSeeInvisibilityButton.gameObject.SetActive(false);
     }
 
     public void HideAllActionButtons()
@@ -1011,6 +1020,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (DismissExpeditiousRetreatButton != null) DismissExpeditiousRetreatButton.gameObject.SetActive(false);
         if (DismissJumpButton != null) DismissJumpButton.gameObject.SetActive(false);
         if (DismissInvisibilityButton != null) DismissInvisibilityButton.gameObject.SetActive(false);
+        if (DismissSeeInvisibilityButton != null) DismissSeeInvisibilityButton.gameObject.SetActive(false);
         if (AttackDefensivelyButton != null) AttackDefensivelyButton.gameObject.SetActive(false);
         if (FullAttackDefensivelyButton != null) FullAttackDefensivelyButton.gameObject.SetActive(false);
     }

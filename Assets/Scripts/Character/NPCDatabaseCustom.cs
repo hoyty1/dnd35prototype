@@ -853,17 +853,18 @@ public static partial class NPCDatabase
             HitDice = 1,
             SizeCategory = SizeCategory.Small,
             IsTallCreature = false,
-            STR = 10, DEX = 15, CON = 12, WIS = 14, INT = 2, CHA = 7,
+            STR = 10, DEX = 15, CON = 12, WIS = 14, INT = 2, CHA = 6,
+            BAB = 2,
             NaturalArmorBonus = 1,
             NaturalAttacks = new List<NaturalAttackDefinition>
             {
-                new NaturalAttackDefinition { Name = "Talons", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
-                new NaturalAttackDefinition { Name = "Beak", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+                new NaturalAttackDefinition { Name = "Talons", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true }
             },
-            BaseSpeed = 10,
-            BaseHitDieHP = 7,
-            CreatureTags = new List<string> { "Animal", "SummonBase" },
-            HasScent = true,
+            BaseSpeed = 2,
+            BaseHitDieHP = 5,
+            CreatureTags = new List<string> { "Animal", "MM35", "Fly", "SummonBase" },
+            Feats = new List<string> { "Weapon Finesse" },
+            SpecialAbilities = new List<string> { "Low-light vision", "Fly 80 ft (average)", "Size bonus +1 AC/+1 attack" },
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
@@ -871,7 +872,7 @@ public static partial class NPCDatabase
             SpriteColor = new Color(0.78f, 0.73f, 0.64f, 1f),
             PanelColor = new Color(0.2f, 0.17f, 0.1f, 0.85f),
             NameColor = new Color(0.97f, 0.91f, 0.77f),
-            Description = "Summon Monster baseline eagle used for celestial eagle variants."
+            Description = "Monster Manual eagle. Small raptor with swift flight and a sharp talon strike."
         });
     }
 
