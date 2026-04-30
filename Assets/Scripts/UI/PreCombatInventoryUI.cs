@@ -330,6 +330,9 @@ public class PreCombatInventoryUI : MonoBehaviour
     private Action _onBeginCombat;
     private Action _onSkipInventory;
     private Action _onBack;
+    private Action _onClosed;
+    private bool _wasOpen;
+    private bool _isClosing;
 
     private DragDropManager _dragDropManager;
 
@@ -340,7 +343,8 @@ public class PreCombatInventoryUI : MonoBehaviour
         List<CharacterController> partyMembers,
         Action onBeginCombat,
         Action onSkipInventory,
-        Action onBack)
+        Action onBack,
+        Action onClosed = null)
     {
         EnsureBuilt();
         if (_panel == null)
@@ -351,13 +355,17 @@ public class PreCombatInventoryUI : MonoBehaviour
         _onBeginCombat = onBeginCombat;
         _onSkipInventory = onSkipInventory;
         _onBack = onBack;
+        _onClosed = onClosed;
+        _isClosing = false;
 
         if (_partyMembers.Count == 0)
             _selectedCharacterIndex = -1;
         else
             _selectedCharacterIndex = Mathf.Clamp(_selectedCharacterIndex, 0, _partyMembers.Count - 1);
 
+        _wasOpen = true;
         _panel.SetActive(true);
+        Debug.Log("[PreCombatUI] Window opened");
 
         if (_resizableWindow != null)
         {
@@ -372,14 +380,53 @@ public class PreCombatInventoryUI : MonoBehaviour
         RefreshAll();
     }
 
-    public void Close()
+    public void Close(bool suppressCallback = false)
     {
+        Debug.Log($"[PreCombatUI] Closing | wasOpen={_wasOpen} | suppress={suppressCallback} | isClosing={_isClosing}");
+
+        if (_isClosing)
+        {
+            Debug.Log("[PreCombatUI] Close already in progress, ignoring re-entrant request.");
+            return;
+        }
+
+        if (!_wasOpen)
+        {
+            Debug.Log("[PreCombatUI] Already closed, ignoring");
+            return;
+        }
+
+        _isClosing = true;
+        _wasOpen = false;
+
         HideTooltip();
         HideContextMenu();
         HideDragPreview();
 
         if (_panel != null)
             _panel.SetActive(false);
+
+        Action onClosed = _onClosed;
+        _onClosed = null;
+
+        if (suppressCallback)
+        {
+            _onBeginCombat = null;
+            _onSkipInventory = null;
+            _onBack = null;
+        }
+
+        if (!suppressCallback && onClosed != null)
+        {
+            Debug.Log("[PreCombatUI] Triggering onClosed callback");
+            onClosed.Invoke();
+        }
+        else
+        {
+            Debug.Log("[PreCombatUI] Callback suppressed or null");
+        }
+
+        _isClosing = false;
     }
 
     private void Update()
@@ -2912,20 +2959,46 @@ public class PreCombatInventoryUI : MonoBehaviour
             return;
         }
 
-        Close();
-        _onBeginCombat?.Invoke();
+        InvokeActionAfterClose(ref _onBeginCombat, "BeginCombat");
     }
 
     private void OnSkipPressed()
     {
-        Close();
-        _onSkipInventory?.Invoke();
+        InvokeActionAfterClose(ref _onSkipInventory, "SkipInventory");
     }
 
     private void OnBackPressed()
     {
-        Close();
-        _onBack?.Invoke();
+        InvokeActionAfterClose(ref _onBack, "Back");
+    }
+
+    private void InvokeActionAfterClose(ref Action callback, string reason)
+    {
+        if (_isClosing)
+        {
+            Debug.Log($"[PreCombatUI] Ignoring '{reason}' because close is already in progress.");
+            return;
+        }
+
+        Action callbackToInvoke = callback;
+        callback = null;
+
+        // Clear the other action callbacks too so button spam cannot re-enter game flow callbacks.
+        _onBeginCombat = null;
+        _onSkipInventory = null;
+        _onBack = null;
+
+        Close(suppressCallback: true);
+
+        if (callbackToInvoke != null)
+        {
+            Debug.Log($"[PreCombatUI] Invoking action callback for '{reason}'");
+            callbackToInvoke.Invoke();
+        }
+        else
+        {
+            Debug.Log($"[PreCombatUI] No action callback bound for '{reason}'");
+        }
     }
 
     private ScrollRect CreateScrollView(

@@ -328,6 +328,44 @@ public class CombatUI : MonoBehaviour
         Debug.Log("[CombatUI] ResetAllUI EXIT");
     }
 
+    public void InitializeForCombat()
+    {
+        Debug.Log("[CombatUI] Initializing for combat");
+
+        ResetAllUI(clearCombatLog: true);
+
+        if (gameObject != null && !gameObject.activeSelf)
+            gameObject.SetActive(true);
+
+        if (ActionPanel != null)
+            ActionPanel.SetActive(true);
+
+        ShowPositioningInstructions();
+
+        Debug.Log("[CombatUI] Combat UI initialized");
+    }
+
+    public void ShowPositioningInstructions()
+    {
+        SetTurnIndicator("Roll initiative and prepare actions.");
+    }
+
+    public void ShowActionButtonsForCharacter(CharacterController character)
+    {
+        string name = character != null && character.Stats != null ? character.Stats.CharacterName : "<null>";
+        Debug.Log($"[CombatUI] Showing action buttons for {name}");
+
+        SetActionButtonsVisible(true);
+
+        if (character != null)
+        {
+            UpdateActionButtons(character);
+            UpdateFeatControls(character);
+        }
+
+        Debug.Log("[CombatUI] Action buttons shown");
+    }
+
     public void AddCombatMessage(string message, MessageType type = MessageType.Normal)
     {
         EnsureCombatLogPanel();

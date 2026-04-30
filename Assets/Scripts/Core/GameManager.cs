@@ -623,9 +623,9 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        PreCombatInventoryUI?.Close();
+        PreCombatInventoryUI?.Close(suppressCallback: true);
         LootCollectionUI?.Close(invokeClosedCallback: false);
-        Debug.Log($"[CombatReset] PromptEncounterSelection pre-open cleanup | lootUiAssigned={LootCollectionUI != null} | lootUiOpen={(LootCollectionUI != null && LootCollectionUI.IsOpen)} | waitingLoot={WaitingForLootCollection}");
+        Debug.Log($"[CombatReset] PromptEncounterSelection pre-open cleanup | preCombatUiAssigned={PreCombatInventoryUI != null} | preCombatUiOpen={(PreCombatInventoryUI != null && PreCombatInventoryUI.IsOpen)} | lootUiAssigned={LootCollectionUI != null} | lootUiOpen={(LootCollectionUI != null && LootCollectionUI.IsOpen)} | waitingLoot={WaitingForLootCollection}");
         WaitingForPreCombatInventory = false;
         ResetPostCombatLootCollectionState("PromptEncounterSelection");
         WaitingForEncounterSelection = true;
@@ -5277,12 +5277,39 @@ public partial class GameManager : MonoBehaviour
             ResetCombatStateForNextEncounter("StartCombat.DefensivePreInit");
         }
 
+        Debug.Log("[CombatStart] Starting combat");
+
         WaitingForPreCombatInventory = false;
         ResetPostCombatLootCollectionState("StartCombat");
-        PreCombatInventoryUI?.Close();
+
+        if (PreCombatInventoryUI != null && PreCombatInventoryUI.IsOpen)
+        {
+            Debug.Log("[CombatStart] Closing pre-combat UI");
+            PreCombatInventoryUI.Close(suppressCallback: true);
+        }
+
         LootCollectionUI?.Close(invokeClosedCallback: false);
-        Debug.Log($"[CombatStart] Post-loot reset checkpoint | waitingLoot={WaitingForLootCollection} | lootTriggered={_postCombatLootCollectionTriggered} | lootUiAssigned={LootCollectionUI != null} | lootUiOpen={(LootCollectionUI != null && LootCollectionUI.IsOpen)}");
+        Debug.Log($"[CombatStart] Post-loot reset checkpoint | waitingLoot={WaitingForLootCollection} | lootTriggered={_postCombatLootCollectionTriggered} | preCombatUiOpen={(PreCombatInventoryUI != null && PreCombatInventoryUI.IsOpen)} | lootUiAssigned={LootCollectionUI != null} | lootUiOpen={(LootCollectionUI != null && LootCollectionUI.IsOpen)}");
         PartyStash?.Lock();
+
+        if (CombatUI == null)
+        {
+            Debug.LogError("[CombatStart] CombatUI is null. Cannot start combat.");
+            return;
+        }
+
+        if (!CombatUI.gameObject.activeSelf)
+        {
+            Debug.LogWarning("[CombatStart] CombatUI inactive, activating");
+            CombatUI.gameObject.SetActive(true);
+        }
+
+        TurnPhase previousPhase = CurrentPhase;
+        CurrentPhase = TurnPhase.PCTurn;
+        CurrentSubPhase = PlayerSubPhase.ChoosingAction;
+        Debug.Log($"[CombatPhase] Transitioning: {previousPhase} → {CurrentPhase} (combat bootstrap)");
+
+        CombatUI.InitializeForCombat();
 
         ClearAllActiveGreaseEffects();
 
@@ -5299,6 +5326,8 @@ public partial class GameManager : MonoBehaviour
             if (IsActiveCombatant(npc) && !npc.Stats.IsDead)
                 activeNPCs.Add(npc);
         }
+
+        Debug.Log($"[Initiative] Beginning initiative phase | activePCs={activePCs.Count} | activeNPCs={activeNPCs.Count}");
 
         List<CharacterController> forcedFirst = GetForcedFirstInitiativeActors();
         _turnService?.StartCombat(activePCs, activeNPCs, IsPC, forcedFirst);
@@ -5331,13 +5360,31 @@ public partial class GameManager : MonoBehaviour
 
     private void OnTurnStarted(CharacterController character)
     {
-        if (CurrentPhase == TurnPhase.CombatOver || character == null)
+        string characterName = character != null && character.Stats != null ? character.Stats.CharacterName : "<null>";
+        Debug.Log($"[CombatPhase] OnTurnStarted | phase={CurrentPhase} | subPhase={CurrentSubPhase} | character={characterName}");
+
+        if (character == null)
+        {
+            Debug.LogWarning("[CombatPhase] OnTurnStarted received null character.");
             return;
+        }
+
+        if (CurrentPhase == TurnPhase.CombatOver)
+        {
+            Debug.LogWarning($"[CombatPhase] Ignoring turn start for {characterName} because phase is CombatOver.");
+            return;
+        }
 
         if (IsPC(character))
+        {
+            Debug.Log($"[CombatPhase] Entering player turn for {characterName}");
             StartPCTurn(character);
+        }
         else
+        {
+            Debug.Log($"[CombatPhase] Entering NPC turn for {characterName}");
             StartCoroutine(SingleNPCTurnFromInitiative(character));
+        }
     }
 
     private void OnNewRound(int round)
@@ -5575,7 +5622,10 @@ public partial class GameManager : MonoBehaviour
         if (TryBeginConfusedPCTurn(pc))
             return;
 
+        Debug.Log($"[Turn] Beginning turn for {pc.Stats.CharacterName}");
+        Debug.Log("[Turn] Showing action buttons");
         ShowActionChoices();
+        Debug.Log("[Turn] Player turn ready");
     }
 
     private bool TryBeginConfusedPCTurn(CharacterController pc)
@@ -5704,10 +5754,8 @@ public partial class GameManager : MonoBehaviour
 
         HighlightCharacterFootprint(pc, HighlightType.Selected);
 
-        CombatUI.SetActionButtonsVisible(true);
+        CombatUI.ShowActionButtonsForCharacter(pc);
         CombatUI.HideSpecialAttackMenu();
-        CombatUI.UpdateActionButtons(pc);
-        CombatUI.UpdateFeatControls(pc);
 
         string pcName = pc.Stats.CharacterName;
         string actionInfo = pc.Actions.GetStatusString();
