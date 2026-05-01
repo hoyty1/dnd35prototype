@@ -25,10 +25,10 @@ public class PreCombatInventoryUI : MonoBehaviour
     private static readonly Color EquipmentSlotEmptyColor = new Color(0.15f, 0.15f, 0.2f, 0.8f);
     private static readonly Color EquipmentSlotEquippedColor = new Color(0.25f, 0.25f, 0.35f, 0.9f);
 
-    // Window layout split: narrower stash to prevent right-edge overflow.
-    private const float StashWidthRatio = 0.26f;
-    private const float DividerAnchorX = 0.26f;
-    private const float CharacterSectionStartRatio = 0.26f;
+    // Fullscreen layout split: character management on the left, party stash on the right.
+    private const float CharacterSectionWidthRatio = 0.64f;
+    private const float DividerAnchorX = 0.65f;
+    private const float StashWidthRatio = 0.34f;
 
     private const int MinStashColumns = 3;
     private const int MaxStashColumns = 6;
@@ -459,7 +459,7 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         _wasOpen = true;
         _panel.SetActive(true);
-        Debug.Log("[PreCombatUI] Window opened");
+        Debug.Log("[PreCombatInventory] Opened with new fullscreen layout");
 
         if (_resizableWindow != null)
         {
@@ -568,12 +568,13 @@ public class PreCombatInventoryUI : MonoBehaviour
             Vector2.zero,
             new Color(0.05f, 0.06f, 0.1f, 0.98f));
 
-        Debug.Log("[PreCombatInventory] Panel: (0,0) to (1,1) - FULLSCREEN");
-        Debug.Log("[PreCombatInventory] === WIDTH OVERFLOW FIX ===");
-        Debug.Log("[PreCombatInventory] Content margins: 20px shell with responsive split");
-        Debug.Log("[PreCombatInventory] Grid constraint: FixedColumnCount with responsive reflow + capped columns");
-        Debug.Log("[PreCombatInventory] ContentSizeFitter horizontal: Unconstrained where scroll content is used");
-        Debug.Log("[PreCombatInventory] All major sections anchored with flexible width");
+        Debug.Log("[PreCombatInventory] === NEW FULLSCREEN LAYOUT ===");
+        Debug.Log("[PreCombatInventory] Title Area: 8% (top)");
+        Debug.Log("[PreCombatInventory] Content Area: 82% (middle)");
+        Debug.Log("[PreCombatInventory]   - Characters: 65% (left)");
+        Debug.Log("[PreCombatInventory]   - Party Stash: 35% (right)");
+        Debug.Log("[PreCombatInventory] Button Area: 10% (bottom)");
+        Debug.Log("[PreCombatInventory] Clean, organized fullscreen layout");
 
         _panelRect = _panel.GetComponent<RectTransform>();
 
@@ -586,12 +587,23 @@ public class PreCombatInventoryUI : MonoBehaviour
         GameObject contentRoot = new GameObject("ContentRoot", typeof(RectTransform));
         contentRoot.transform.SetParent(_panel.transform, false);
         RectTransform contentRootRt = contentRoot.GetComponent<RectTransform>();
-        contentRootRt.anchorMin = new Vector2(0f, 0f);
-        contentRootRt.anchorMax = new Vector2(1f, 1f);
-        contentRootRt.offsetMin = new Vector2(20f, 110f);
-        contentRootRt.offsetMax = new Vector2(-20f, -112f);
+        contentRootRt.anchorMin = new Vector2(0.02f, 0.1f);
+        contentRootRt.anchorMax = new Vector2(0.98f, 0.92f);
+        contentRootRt.offsetMin = Vector2.zero;
+        contentRootRt.offsetMax = Vector2.zero;
 
-        BuildStashSection(contentRootRt);
+        GameObject characterRoot = CreatePanel(
+            contentRootRt,
+            "CharacterPanel",
+            new Vector2(0f, 0f),
+            new Vector2(CharacterSectionWidthRatio, 1f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            new Color(0.08f, 0.1f, 0.16f, 0.95f));
+        Image characterRootImage = characterRoot.GetComponent<Image>();
+        if (characterRootImage != null)
+            characterRootImage.raycastTarget = false;
 
         GameObject divider = CreatePanel(
             contentRootRt,
@@ -604,19 +616,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Color(0.72f, 0.75f, 0.86f, 0.22f));
         divider.GetComponent<Image>().raycastTarget = false;
 
-        GameObject characterRoot = CreatePanel(
-            contentRootRt,
-            "CharacterPanel",
-            new Vector2(CharacterSectionStartRatio, 0f),
-            new Vector2(1f, 1f),
-            new Vector2(0.5f, 0.5f),
-            Vector2.zero,
-            Vector2.zero,
-            new Color(0.08f, 0.1f, 0.16f, 0.95f));
-        Image characterRootImage = characterRoot.GetComponent<Image>();
-        if (characterRootImage != null)
-            characterRootImage.raycastTarget = false;
-
+        BuildStashSection(contentRootRt);
         BuildCharacterSelectionSection(characterRoot.transform);
         BuildCharacterDetailSection(characterRoot.transform);
         BuildFooter();
@@ -625,9 +625,8 @@ public class PreCombatInventoryUI : MonoBehaviour
         BuildEquipOrStashPrompt();
         BuildStackQuantityPrompt();
         BuildDragPreview();
-        BuildWindowResizeBehavior();
 
-        Debug.Log($"[PreCombatUI] Layout split: Stash {StashWidthRatio * 100f:0}% | Character {(1f - StashWidthRatio) * 100f:0}%");
+        Debug.Log($"[PreCombatUI] Layout split: Characters {CharacterSectionWidthRatio * 100f:0}% | Stash {StashWidthRatio * 100f:0}%");
         Debug.Log("[UI] Updates complete");
 
         ReflowResponsiveLayout();
@@ -639,39 +638,25 @@ public class PreCombatInventoryUI : MonoBehaviour
         GameObject header = CreatePanel(
             _panel.transform,
             "HeaderBar",
-            new Vector2(0f, 1f),
+            new Vector2(0f, 0.92f),
             new Vector2(1f, 1f),
-            new Vector2(0.5f, 1f),
+            new Vector2(0.5f, 0.5f),
             Vector2.zero,
-            new Vector2(0f, 58f),
+            Vector2.zero,
             new Color(0.11f, 0.14f, 0.22f, 0.98f));
 
         CreateText(
             header.transform,
             "Title",
-            "PRE-COMBAT INVENTORY MANAGEMENT",
-            new Vector2(0f, 0f),
-            new Vector2(1f, 1f),
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0f, -2f),
-            new Vector2(-96f, -8f),
+            "📦 PARTY INVENTORY MANAGEMENT",
+            new Vector2(0.03f, 0f),
+            new Vector2(0.76f, 1f),
+            new Vector2(0f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
             30,
             FontStyle.Bold,
             new Color(0.95f, 0.86f, 0.5f),
-            TextAnchor.MiddleCenter);
-
-        CreateText(
-            header.transform,
-            "DragHint",
-            "Drag header to move • Resize from right/bottom edges",
-            new Vector2(0f, 0f),
-            new Vector2(1f, 1f),
-            new Vector2(0f, 0.5f),
-            new Vector2(14f, -18f),
-            new Vector2(-280f, -28f),
-            13,
-            FontStyle.Italic,
-            new Color(0.76f, 0.82f, 0.92f),
             TextAnchor.MiddleLeft);
 
         Button closeButton = CreateButton(
@@ -690,24 +675,20 @@ public class PreCombatInventoryUI : MonoBehaviour
             closeText.fontSize = 24;
 
         _stashStatusText = CreateText(
-            _panel.transform,
+            header.transform,
             "StashStatusText",
             "Stash: Unlocked",
-            new Vector2(0.02f, 1f),
+            new Vector2(0.62f, 0f),
             new Vector2(0.98f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(0f, -62f),
-            new Vector2(0f, 20f),
-            13,
+            new Vector2(1f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
+            14,
             FontStyle.Bold,
             new Color(0.56f, 0.92f, 0.64f),
-            TextAnchor.MiddleLeft);
+            TextAnchor.MiddleRight);
 
-        DraggableWindow draggable = header.AddComponent<DraggableWindow>();
-        draggable.WindowRect = _panelRect;
-        draggable.ClampToCanvasBounds = true;
-        draggable.PersistenceKey = "ui_window_precombat_inventory";
-        draggable.SavePositionToPlayerPrefs = true;
+        // Fullscreen layout intentionally disables window dragging for a stable composition.
     }
 
     private void BuildWindowResizeBehavior()
@@ -762,8 +743,8 @@ public class PreCombatInventoryUI : MonoBehaviour
         GameObject stashRoot = CreatePanel(
             parent,
             "StashSection",
-            new Vector2(0f, 0f),
-            new Vector2(StashWidthRatio, 1f),
+            new Vector2(1f - StashWidthRatio, 0f),
+            new Vector2(1f, 1f),
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
             Vector2.zero,
@@ -794,45 +775,35 @@ public class PreCombatInventoryUI : MonoBehaviour
             stashRoot.transform,
             "FilterButton",
             "Filter: All",
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(10f, -33f),
-            new Vector2(190f, 40f),
+            new Vector2(0.03f, 0.885f),
+            new Vector2(0.49f, 0.945f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
             new Color(0.2f, 0.32f, 0.56f, 1f),
             OnFilterButtonPressed);
-        if (_filterButton != null)
-        {
-            _filterButton.interactable = true;
-            Image btnImage = _filterButton.GetComponent<Image>();
-            if (btnImage != null)
-                btnImage.raycastTarget = true;
-
-            Debug.Log($"[PreCombatUI] Filter button created: {_filterButton.name}");
-            Debug.Log($"[PreCombatUI] Button interactable: {_filterButton.interactable}");
-        }
 
         _sortButton = CreateButton(
             stashRoot.transform,
             "SortButton",
             "Sort: Name",
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(166f, -33f),
-            new Vector2(180f, 40f),
+            new Vector2(0.51f, 0.885f),
+            new Vector2(0.97f, 0.945f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
             new Color(0.16f, 0.4f, 0.56f, 1f),
             OnSortButtonPressed);
 
         _clearStashButton = CreateButton(
             stashRoot.transform,
             "ClearStashButton",
-            "Clear",
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(312f, -33f),
-            new Vector2(110f, 40f),
+            "Clear Stash",
+            new Vector2(0.03f, 0.82f),
+            new Vector2(0.42f, 0.88f),
+            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
             new Color(0.56f, 0.31f, 0.16f, 1f),
             OnClearStashPressed);
 
@@ -840,11 +811,11 @@ public class PreCombatInventoryUI : MonoBehaviour
             stashRoot.transform,
             "StashInfo",
             "0 items",
-            new Vector2(1f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(-10f, -33f),
-            new Vector2(360f, 40f),
+            new Vector2(0.44f, 0.82f),
+            new Vector2(0.97f, 0.88f),
+            new Vector2(1f, 0.5f),
+            Vector2.zero,
+            Vector2.zero,
             12,
             FontStyle.Normal,
             new Color(0.78f, 0.85f, 0.93f),
@@ -859,7 +830,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(1f, 1f),
             new Vector2(0.5f, 0.5f),
             new Vector2(8f, 8f),
-            new Vector2(-8f, -66f),
+            new Vector2(-8f, -128f),
             out _stashContent,
             out _stashViewportRect,
             withVerticalScrollbar: true);
@@ -1752,7 +1723,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (_lastLoggedStashColumns != columns)
         {
             float panelWidth = _panelRect != null ? _panelRect.rect.width : 0f;
-            float characterWidth = Mathf.Max(0f, panelWidth * (1f - CharacterSectionStartRatio));
+            float characterWidth = Mathf.Max(0f, panelWidth * CharacterSectionWidthRatio);
             Debug.Log($"[PreCombatUI] Stash width: {viewportWidth:0}px | Columns: {columns}");
             Debug.Log($"[PreCombatUI] Character width: {characterWidth:0}px");
             _lastLoggedStashColumns = columns;
