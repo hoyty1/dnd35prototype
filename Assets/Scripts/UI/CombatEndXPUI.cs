@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -144,22 +145,64 @@ public class CombatEndXPUI : MonoBehaviour
         return go;
     }
 
-    private static Text CreateText(Transform parent, string message, int fontSize, FontStyle style, Color color, TextAnchor align = TextAnchor.MiddleLeft)
+    private static GameObject CreateText(Transform parent, string message, int fontSize, FontStyle style, Color color, TextAnchor align = TextAnchor.MiddleLeft)
     {
-        GameObject textObj = CreateChild("Text", parent, typeof(RectTransform), typeof(Text));
+        GameObject textObj = CreateChild("Text", parent, typeof(RectTransform), typeof(TextMeshProUGUI));
         RectTransform rect = textObj.GetComponent<RectTransform>();
         rect.sizeDelta = new Vector2(0f, 30f);
 
-        Text text = textObj.GetComponent<Text>();
+        TextMeshProUGUI text = textObj.GetComponent<TextMeshProUGUI>();
         text.text = message;
-        text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         text.fontSize = fontSize;
-        text.fontStyle = style;
+        text.fontStyle = ConvertFontStyle(style);
         text.color = color;
-        text.alignment = align;
-        text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = VerticalWrapMode.Truncate;
-        return text;
+        text.alignment = ConvertAlignment(align);
+        text.enableWordWrapping = true;
+        text.overflowMode = TextOverflowModes.Truncate;
+
+        return textObj;
+    }
+
+    private static FontStyles ConvertFontStyle(FontStyle style)
+    {
+        switch (style)
+        {
+            case FontStyle.Bold:
+                return FontStyles.Bold;
+            case FontStyle.Italic:
+                return FontStyles.Italic;
+            case FontStyle.BoldAndItalic:
+                return FontStyles.Bold | FontStyles.Italic;
+            default:
+                return FontStyles.Normal;
+        }
+    }
+
+    private static TextAlignmentOptions ConvertAlignment(TextAnchor anchor)
+    {
+        switch (anchor)
+        {
+            case TextAnchor.UpperLeft:
+                return TextAlignmentOptions.TopLeft;
+            case TextAnchor.UpperCenter:
+                return TextAlignmentOptions.Top;
+            case TextAnchor.UpperRight:
+                return TextAlignmentOptions.TopRight;
+            case TextAnchor.MiddleLeft:
+                return TextAlignmentOptions.MidlineLeft;
+            case TextAnchor.MiddleCenter:
+                return TextAlignmentOptions.Center;
+            case TextAnchor.MiddleRight:
+                return TextAlignmentOptions.MidlineRight;
+            case TextAnchor.LowerLeft:
+                return TextAlignmentOptions.BottomLeft;
+            case TextAnchor.LowerCenter:
+                return TextAlignmentOptions.Bottom;
+            case TextAnchor.LowerRight:
+                return TextAlignmentOptions.BottomRight;
+            default:
+                return TextAlignmentOptions.Center;
+        }
     }
 
     private static void CreateSeparator(Transform parent)
