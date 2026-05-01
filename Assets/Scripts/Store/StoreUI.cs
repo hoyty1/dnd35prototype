@@ -24,7 +24,9 @@ public class StoreUI : MonoBehaviour
 
     private RectTransform _buyContent;
     private RectTransform _sellContent;
-    private Dropdown _categoryDropdown;
+    private RectTransform _categoryFilterRoot;
+    private readonly Dictionary<string, Image> _categoryButtonImages = new Dictionary<string, Image>();
+    private string _currentBuyCategory = "All";
 
     private PartyStash _partyStash;
     private List<CharacterController> _partyMembers = new List<CharacterController>();
@@ -176,112 +178,19 @@ public class StoreUI : MonoBehaviour
 
         Debug.Log("[Store] Buy panel bounds: fullscreen proportion (0.10 to 0.90)");
 
-        GameObject filterObj = new GameObject("CategoryDropdown", typeof(RectTransform), typeof(Image), typeof(Dropdown));
-        filterObj.transform.SetParent(_buyPanel.transform, false);
-        RectTransform filterRect = filterObj.GetComponent<RectTransform>();
-        filterRect.anchorMin = new Vector2(0f, 1f);
-        filterRect.anchorMax = new Vector2(0f, 1f);
-        filterRect.pivot = new Vector2(0f, 1f);
-        filterRect.anchoredPosition = new Vector2(20f, -14f);
-        filterRect.sizeDelta = new Vector2(300f, 48f);
+        CreateCategoryFilter();
+        CreateScrollList(_buyPanel.transform, "BuyScroll", new Vector2(0f, 0f), new Vector2(1f, 0.83f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _buyContent);
 
-        filterObj.GetComponent<Image>().color = new Color(0.2f, 0.24f, 0.34f, 1f);
-        _categoryDropdown = filterObj.GetComponent<Dropdown>();
-
-        Text ddLabel = CreateText(filterObj.transform, "Label", "All",
-            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            new Vector2(-24f, 0f), 18, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
-        ddLabel.rectTransform.offsetMin = new Vector2(10f, 0f);
-        ddLabel.rectTransform.offsetMax = new Vector2(-20f, 0f);
-
-        GameObject arrow = new GameObject("Arrow", typeof(RectTransform), typeof(Text));
-        arrow.transform.SetParent(filterObj.transform, false);
-        Text arrowText = arrow.GetComponent<Text>();
-        arrowText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        arrowText.text = "▼";
-        arrowText.fontSize = 18;
-        arrowText.color = Color.white;
-        arrowText.alignment = TextAnchor.MiddleCenter;
-        RectTransform arrowRect = arrow.GetComponent<RectTransform>();
-        arrowRect.anchorMin = new Vector2(1f, 0f);
-        arrowRect.anchorMax = new Vector2(1f, 1f);
-        arrowRect.pivot = new Vector2(1f, 0.5f);
-        arrowRect.sizeDelta = new Vector2(22f, 0f);
-        arrowRect.anchoredPosition = new Vector2(-2f, 0f);
-
-        GameObject template = new GameObject("Template", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
-        template.transform.SetParent(filterObj.transform, false);
-        RectTransform templateRect = template.GetComponent<RectTransform>();
-        templateRect.anchorMin = new Vector2(0f, 0f);
-        templateRect.anchorMax = new Vector2(1f, 0f);
-        templateRect.pivot = new Vector2(0.5f, 1f);
-        templateRect.anchoredPosition = new Vector2(0f, -2f);
-        templateRect.sizeDelta = new Vector2(0f, 220f);
-        template.GetComponent<Image>().color = new Color(0.13f, 0.16f, 0.24f, 1f);
-        template.SetActive(false);
-
-        GameObject viewport = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
-        viewport.transform.SetParent(template.transform, false);
-        RectTransform viewportRect = viewport.GetComponent<RectTransform>();
-        viewportRect.anchorMin = Vector2.zero;
-        viewportRect.anchorMax = Vector2.one;
-        viewportRect.offsetMin = Vector2.zero;
-        viewportRect.offsetMax = Vector2.zero;
-        viewport.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.05f);
-        viewport.GetComponent<Mask>().showMaskGraphic = false;
-
-        GameObject content = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
-        content.transform.SetParent(viewport.transform, false);
-        RectTransform contentRect = content.GetComponent<RectTransform>();
-        contentRect.anchorMin = new Vector2(0f, 1f);
-        contentRect.anchorMax = new Vector2(1f, 1f);
-        contentRect.pivot = new Vector2(0.5f, 1f);
-        contentRect.anchoredPosition = Vector2.zero;
-
-        VerticalLayoutGroup layout = content.GetComponent<VerticalLayoutGroup>();
-        layout.spacing = 0f;
-        layout.childForceExpandWidth = true;
-        layout.childForceExpandHeight = false;
-
-        ContentSizeFitter fitter = content.GetComponent<ContentSizeFitter>();
-        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-        GameObject item = new GameObject("Item", typeof(RectTransform), typeof(Toggle), typeof(Image));
-        item.transform.SetParent(content.transform, false);
-        item.GetComponent<Image>().color = new Color(0.18f, 0.22f, 0.3f, 1f);
-        RectTransform itemRect = item.GetComponent<RectTransform>();
-        itemRect.sizeDelta = new Vector2(0f, 42f);
-
-        Toggle toggle = item.GetComponent<Toggle>();
-
-        GameObject itemLabelObj = new GameObject("Item Label", typeof(RectTransform), typeof(Text));
-        itemLabelObj.transform.SetParent(item.transform, false);
-        Text itemLabel = itemLabelObj.GetComponent<Text>();
-        itemLabel.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        itemLabel.fontSize = 18;
-        itemLabel.color = Color.white;
-        itemLabel.alignment = TextAnchor.MiddleLeft;
-        RectTransform itemLabelRect = itemLabelObj.GetComponent<RectTransform>();
-        itemLabelRect.anchorMin = Vector2.zero;
-        itemLabelRect.anchorMax = Vector2.one;
-        itemLabelRect.offsetMin = new Vector2(10f, 0f);
-        itemLabelRect.offsetMax = new Vector2(-10f, 0f);
-
-        toggle.targetGraphic = item.GetComponent<Image>();
-        toggle.graphic = null;
-
-        ScrollRect templateScroll = template.GetComponent<ScrollRect>();
-        templateScroll.viewport = viewportRect;
-        templateScroll.content = contentRect;
-        templateScroll.horizontal = false;
-        templateScroll.vertical = true;
-
-        _categoryDropdown.template = templateRect;
-        _categoryDropdown.captionText = ddLabel;
-        _categoryDropdown.itemText = itemLabel;
-        _categoryDropdown.onValueChanged.AddListener(_ => RebuildBuyList());
-
-        CreateScrollList(_buyPanel.transform, "BuyScroll", new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(16f, 16f), new Vector2(-16f, -72f), out _buyContent);
+        Debug.Log("[Store] === ITEM WIDTH FIX ===");
+        Debug.Log("[Store] Item entries constrained to viewport width");
+        Debug.Log("[Store] Info section: flexible width");
+        Debug.Log("[Store] Price section: 70px fixed width");
+        Debug.Log("[Store] Button section: 55-70px fixed width");
+        Debug.Log("[Store] Total entry: fits within scroll view");
+        Debug.Log("[Store] === CATEGORY BUTTONS ===");
+        Debug.Log("[Store] Grid layout with wrapping");
+        Debug.Log("[Store] Button size: 90x35");
+        Debug.Log("[Store] Active category highlighted green");
     }
 
     private void BuildSellPanel()
@@ -295,27 +204,113 @@ public class StoreUI : MonoBehaviour
             new Vector2(0f, -16f), new Vector2(680f, 30f), 16, FontStyle.Italic,
             new Color(0.95f, 0.84f, 0.45f), TextAnchor.MiddleCenter);
 
-        CreateScrollList(_sellPanel.transform, "SellScroll", new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(16f, 16f), new Vector2(-16f, -56f), out _sellContent);
+        CreateScrollList(_sellPanel.transform, "SellScroll", new Vector2(0f, 0f), new Vector2(1f, 0.93f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _sellContent);
 
         _sellPanel.SetActive(false);
     }
 
     private void BuildCategoryOptions()
     {
-        if (_categoryDropdown == null)
+        if (_categoryFilterRoot == null)
             return;
 
+        ClearChildren(_categoryFilterRoot);
+        _categoryButtonImages.Clear();
+
         List<string> categories = StoreInventory.Instance.GetCategories();
-        _categoryDropdown.ClearOptions();
-        _categoryDropdown.AddOptions(categories);
-        _categoryDropdown.value = 0;
-        _categoryDropdown.RefreshShownValue();
+        if (categories == null || categories.Count == 0)
+            categories = new List<string> { "All" };
+
+        if (!categories.Contains(_currentBuyCategory))
+            _currentBuyCategory = categories[0];
+
+        Debug.Log($"[Store] Creating {categories.Count} category buttons");
+
+        for (int i = 0; i < categories.Count; i++)
+            CreateCategoryButton(_categoryFilterRoot, categories[i]);
+
+        RefreshCategoryButtons();
+    }
+
+    private void CreateCategoryFilter()
+    {
+        if (_buyPanel == null)
+            return;
+
+        GameObject filterObj = new GameObject("CategoryFilter", typeof(RectTransform), typeof(Image), typeof(GridLayoutGroup));
+        filterObj.transform.SetParent(_buyPanel.transform, false);
+
+        _categoryFilterRoot = filterObj.GetComponent<RectTransform>();
+        _categoryFilterRoot.anchorMin = new Vector2(0f, 0.85f);
+        _categoryFilterRoot.anchorMax = new Vector2(1f, 1f);
+        _categoryFilterRoot.offsetMin = Vector2.zero;
+        _categoryFilterRoot.offsetMax = Vector2.zero;
+
+        Image bg = filterObj.GetComponent<Image>();
+        bg.color = new Color(0.15f, 0.15f, 0.2f, 0.5f);
+
+        GridLayoutGroup grid = filterObj.GetComponent<GridLayoutGroup>();
+        grid.cellSize = new Vector2(90f, 35f);
+        grid.spacing = new Vector2(5f, 5f);
+        grid.padding = new RectOffset(5, 5, 5, 5);
+        grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+        grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+        grid.childAlignment = TextAnchor.UpperLeft;
+        grid.constraint = GridLayoutGroup.Constraint.Flexible;
+    }
+
+    private void CreateCategoryButton(Transform parent, string category)
+    {
+        GameObject buttonObj = new GameObject($"CategoryBtn_{category}", typeof(RectTransform), typeof(Image), typeof(Button));
+        buttonObj.transform.SetParent(parent, false);
+
+        Image buttonBg = buttonObj.GetComponent<Image>();
+        buttonBg.color = new Color(0.3f, 0.3f, 0.4f, 1f);
+
+        Button button = buttonObj.GetComponent<Button>();
+        button.onClick.AddListener(() =>
+        {
+            FilterByCategory(category);
+            RefreshCategoryButtons();
+        });
+
+        _categoryButtonImages[category] = buttonBg;
+
+        CreateText(buttonObj.transform, "Text", category,
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+
+        Debug.Log($"[Store] Created category button: {category}");
+    }
+
+    private void RefreshCategoryButtons()
+    {
+        foreach (KeyValuePair<string, Image> kvp in _categoryButtonImages)
+        {
+            if (kvp.Value == null)
+                continue;
+
+            kvp.Value.color = kvp.Key == _currentBuyCategory
+                ? new Color(0.4f, 0.6f, 0.4f, 1f)
+                : new Color(0.3f, 0.3f, 0.4f, 1f);
+        }
+
+        Debug.Log($"[Store] Refreshed category buttons, current: {_currentBuyCategory}");
+    }
+
+    private void FilterByCategory(string category)
+    {
+        Debug.Log($"[Store] Filtering by category: {category}");
+        _currentBuyCategory = category;
+        RebuildBuyList();
     }
 
     private void ShowBuyPanel()
     {
+        Debug.Log("[Store] Showing buy panel");
         if (_buyPanel != null) _buyPanel.SetActive(true);
         if (_sellPanel != null) _sellPanel.SetActive(false);
+        RefreshCategoryButtons();
         RebuildBuyList();
     }
 
@@ -333,9 +328,7 @@ public class StoreUI : MonoBehaviour
 
         ClearChildren(_buyContent);
 
-        string category = "All";
-        if (_categoryDropdown != null && _categoryDropdown.options != null && _categoryDropdown.options.Count > 0)
-            category = _categoryDropdown.options[_categoryDropdown.value].text;
+        string category = string.IsNullOrWhiteSpace(_currentBuyCategory) ? "All" : _currentBuyCategory;
 
         Debug.Log($"[Store] Player selected category: {category}");
 
@@ -422,7 +415,8 @@ public class StoreUI : MonoBehaviour
         HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
         layout.padding = new RectOffset(5, 5, 5, 5);
         layout.spacing = 5f;
-        layout.childControlWidth = true;
+        layout.childAlignment = TextAnchor.MiddleLeft;
+        layout.childControlWidth = false;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = false;
         layout.childForceExpandHeight = false;
@@ -441,7 +435,7 @@ public class StoreUI : MonoBehaviour
 
         LayoutElement infoLayoutElement = infoObj.GetComponent<LayoutElement>();
         infoLayoutElement.flexibleWidth = 1f;
-        infoLayoutElement.minWidth = 320f;
+        infoLayoutElement.minWidth = 150f;
 
         Text nameText = CreateText(infoObj.transform, "Name", template.Name,
             Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
@@ -459,15 +453,19 @@ public class StoreUI : MonoBehaviour
 
         Text priceText = CreateText(row.transform, "Price", $"{entry.PriceGp} gp",
             Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
-            new Vector2(110f, 76f), 18, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), TextAnchor.MiddleCenter);
+            new Vector2(70f, 70f), 16, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), TextAnchor.MiddleCenter);
         LayoutElement priceLayout = priceText.gameObject.AddComponent<LayoutElement>();
-        priceLayout.minWidth = 110f;
-        priceLayout.preferredWidth = 120f;
+        priceLayout.minWidth = 70f;
+        priceLayout.preferredWidth = 70f;
+        priceLayout.flexibleWidth = 0f;
 
         CreateSmallActionButton(row.transform, "BuyButton", "BUY", new Color(0.2f, 0.56f, 0.26f), () => BuyItem(entry));
 
         LayoutElement rowLayout = row.AddComponent<LayoutElement>();
         rowLayout.preferredHeight = 70f;
+        rowLayout.flexibleWidth = 1f;
+
+        Debug.Log($"[Store] Created buy entry for {template.Name} with proper width constraints");
     }
 
     private void CreateSellRow(Transform parent, SellEntry entry)
@@ -481,7 +479,8 @@ public class StoreUI : MonoBehaviour
         HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
         layout.padding = new RectOffset(5, 5, 5, 5);
         layout.spacing = 5f;
-        layout.childControlWidth = true;
+        layout.childAlignment = TextAnchor.MiddleLeft;
+        layout.childControlWidth = false;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = false;
         layout.childForceExpandHeight = false;
@@ -498,7 +497,7 @@ public class StoreUI : MonoBehaviour
 
         LayoutElement infoLayoutElement = infoObj.GetComponent<LayoutElement>();
         infoLayoutElement.flexibleWidth = 1f;
-        infoLayoutElement.minWidth = 330f;
+        infoLayoutElement.minWidth = 150f;
 
         Text nameText = CreateText(infoObj.transform, "Name", $"{entry.Item.Name} ({entry.OwnerName})",
             Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
@@ -517,6 +516,9 @@ public class StoreUI : MonoBehaviour
 
         LayoutElement rowLayout = row.AddComponent<LayoutElement>();
         rowLayout.preferredHeight = 70f;
+        rowLayout.flexibleWidth = 1f;
+
+        Debug.Log($"[Store] Created sell entry for {entry.Item.Name} with proper width constraints");
     }
 
     private void BuyItem(StoreInventory.StoreItemEntry entry)
@@ -643,6 +645,7 @@ public class StoreUI : MonoBehaviour
         layout.minWidth = isMultiLine ? 70f : 55f;
         layout.preferredWidth = isMultiLine ? 70f : 55f;
         layout.preferredHeight = isMultiLine ? 45f : 35f;
+        layout.flexibleWidth = 0f;
 
         Image image = buttonObj.GetComponent<Image>();
         image.color = color;
@@ -703,6 +706,7 @@ public class StoreUI : MonoBehaviour
 
         ContentSizeFitter fitter = content.GetComponent<ContentSizeFitter>();
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 
         ScrollRect sr = scrollObj.GetComponent<ScrollRect>();
         sr.viewport = viewportRect;
