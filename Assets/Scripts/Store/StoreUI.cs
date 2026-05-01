@@ -25,8 +25,19 @@ public class StoreUI : MonoBehaviour
     private RectTransform _buyContent;
     private RectTransform _sellContent;
     private RectTransform _categoryFilterRoot;
+    private RectTransform _sellCharacterFilterRoot;
+    private RectTransform _sellCharacterButtonsRoot;
+    private RectTransform _sellCategoryFilterRoot;
     private readonly Dictionary<string, Image> _categoryButtonImages = new Dictionary<string, Image>();
+    private readonly Dictionary<string, Image> _sellCharacterButtonImages = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Image> _sellCategoryButtonImages = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
     private string _currentBuyCategory = "All";
+    private string _currentSellCategory = "All";
+    private string _currentSellCharacterKey = SellCharacterAllKey;
+    private CharacterController _selectedSellCharacter;
+
+    private const string SellCharacterAllKey = "__all__";
+    private const string SellCharacterStashKey = "__stash__";
 
     private PartyStash _partyStash;
     private List<CharacterController> _partyMembers = new List<CharacterController>();
@@ -60,6 +71,14 @@ public class StoreUI : MonoBehaviour
 
         SubscribeGoldEvents();
         BuildCategoryOptions();
+
+        _currentSellCharacterKey = SellCharacterAllKey;
+        _selectedSellCharacter = null;
+        _currentSellCategory = "All";
+        BuildSellCharacterOptions(_sellCharacterButtonsRoot);
+        RefreshSellCharacterButtons();
+        RefreshSellCategoryButtons();
+
         ShowBuyPanel();
 
         Debug.Log($"[Store] Store opened with {StoreInventory.Instance.GetItemsByCategory("All").Count} items");
@@ -201,11 +220,23 @@ public class StoreUI : MonoBehaviour
             Vector2.zero, Vector2.zero, new Color(0.07f, 0.07f, 0.1f, 0.94f));
 
         CreateText(_sellPanel.transform, "Hint", "Items sell for 50% of listed value (D&D 3.5e)",
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -16f), new Vector2(680f, 30f), 16, FontStyle.Italic,
+            new Vector2(0.02f, 0.94f), new Vector2(0.98f, 0.99f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 16, FontStyle.Italic,
             new Color(0.95f, 0.84f, 0.45f), TextAnchor.MiddleCenter);
 
-        CreateScrollList(_sellPanel.transform, "SellScroll", new Vector2(0f, 0f), new Vector2(1f, 0.93f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _sellContent);
+        CreateSellCharacterFilter();
+        CreateSellCategoryFilter();
+
+        CreateScrollList(_sellPanel.transform, "SellScroll", new Vector2(0f, 0f), new Vector2(1f, 0.80f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _sellContent);
+
+        Debug.Log("[Store] === SELL MENU FILTERS ADDED ===");
+        Debug.Log("[Store] Character filter: All, Stash, and individual characters");
+        Debug.Log("[Store] Type filter: All, Weapon, Armor, Shield, Potion, Scroll, Ammunition, Gear");
+        Debug.Log("[Store] Filter area layout:");
+        Debug.Log("[Store]   - Character filter: 88-94% (top)");
+        Debug.Log("[Store]   - Type filter: 80-88% (middle)");
+        Debug.Log("[Store]   - Sell list: 0-80% (bottom)");
+        Debug.Log("[Store] Filters automatically reset when switching to SELL tab");
 
         _sellPanel.SetActive(false);
     }
@@ -306,6 +337,272 @@ public class StoreUI : MonoBehaviour
         RebuildBuyList();
     }
 
+    private void CreateSellCharacterFilter()
+    {
+        if (_sellPanel == null)
+            return;
+
+        GameObject filterObj = new GameObject("SellCharacterFilter", typeof(RectTransform), typeof(Image));
+        filterObj.transform.SetParent(_sellPanel.transform, false);
+
+        _sellCharacterFilterRoot = filterObj.GetComponent<RectTransform>();
+        _sellCharacterFilterRoot.anchorMin = new Vector2(0f, 0.88f);
+        _sellCharacterFilterRoot.anchorMax = new Vector2(1f, 0.94f);
+        _sellCharacterFilterRoot.offsetMin = Vector2.zero;
+        _sellCharacterFilterRoot.offsetMax = Vector2.zero;
+
+        Image bg = filterObj.GetComponent<Image>();
+        bg.color = new Color(0.15f, 0.15f, 0.2f, 0.55f);
+
+        CreateText(filterObj.transform, "Label", "CHARACTER:",
+            new Vector2(0.01f, 0f), new Vector2(0.14f, 1f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 14, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+
+        GameObject buttonRow = new GameObject("CharacterButtons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+        buttonRow.transform.SetParent(filterObj.transform, false);
+
+        RectTransform rowRect = buttonRow.GetComponent<RectTransform>();
+        rowRect.anchorMin = new Vector2(0.15f, 0.08f);
+        rowRect.anchorMax = new Vector2(0.99f, 0.92f);
+        rowRect.offsetMin = Vector2.zero;
+        rowRect.offsetMax = Vector2.zero;
+        _sellCharacterButtonsRoot = rowRect;
+
+        HorizontalLayoutGroup rowLayout = buttonRow.GetComponent<HorizontalLayoutGroup>();
+        rowLayout.spacing = 6f;
+        rowLayout.padding = new RectOffset(0, 0, 0, 0);
+        rowLayout.childAlignment = TextAnchor.MiddleLeft;
+        rowLayout.childControlWidth = false;
+        rowLayout.childControlHeight = true;
+        rowLayout.childForceExpandWidth = false;
+        rowLayout.childForceExpandHeight = true;
+
+        BuildSellCharacterOptions(buttonRow.transform);
+    }
+
+    private void BuildSellCharacterOptions(Transform parent)
+    {
+        if (parent == null)
+            return;
+
+        ClearChildren(parent);
+        _sellCharacterButtonImages.Clear();
+
+        CreateSellCharacterButton(parent, SellCharacterAllKey, "All", null);
+        CreateSellCharacterButton(parent, SellCharacterStashKey, "Stash", null);
+
+        for (int i = 0; i < _partyMembers.Count; i++)
+        {
+            CharacterController character = _partyMembers[i];
+            if (character == null)
+                continue;
+
+            string ownerName = character.Stats != null ? character.Stats.CharacterName : character.name;
+            if (string.IsNullOrWhiteSpace(ownerName))
+                ownerName = $"Character {i + 1}";
+
+            string key = character.GetInstanceID().ToString();
+            CreateSellCharacterButton(parent, key, ownerName, character);
+        }
+
+        RefreshSellCharacterButtons();
+        Debug.Log($"[Store] Character filter created with {_sellCharacterButtonImages.Count} buttons");
+    }
+
+    private void CreateSellCharacterButton(Transform parent, string key, string label, CharacterController character)
+    {
+        GameObject buttonObj = new GameObject($"SellCharBtn_{label}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+        buttonObj.transform.SetParent(parent, false);
+
+        LayoutElement layout = buttonObj.GetComponent<LayoutElement>();
+        layout.preferredWidth = 110f;
+        layout.minWidth = 90f;
+        layout.preferredHeight = 34f;
+
+        Image buttonBg = buttonObj.GetComponent<Image>();
+        buttonBg.color = new Color(0.3f, 0.3f, 0.4f, 1f);
+
+        Button button = buttonObj.GetComponent<Button>();
+        button.onClick.AddListener(() =>
+        {
+            SelectSellCharacterFilter(key, character);
+        });
+
+        _sellCharacterButtonImages[key] = buttonBg;
+
+        CreateText(buttonObj.transform, "Text", label,
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+    }
+
+    private void SelectSellCharacterFilter(string key, CharacterController character)
+    {
+        _currentSellCharacterKey = string.IsNullOrWhiteSpace(key) ? SellCharacterAllKey : key;
+
+        switch (_currentSellCharacterKey)
+        {
+            case SellCharacterAllKey:
+            case SellCharacterStashKey:
+                _selectedSellCharacter = null;
+                break;
+            default:
+                _selectedSellCharacter = character;
+                break;
+        }
+
+        RefreshSellCharacterButtons();
+        RebuildSellList();
+
+        string label = _currentSellCharacterKey == SellCharacterAllKey
+            ? "All"
+            : _currentSellCharacterKey == SellCharacterStashKey
+                ? "Stash"
+                : (character != null && character.Stats != null
+                    ? character.Stats.CharacterName
+                    : character != null ? character.name : "Unknown");
+        Debug.Log($"[Store] Sell filtered by character: {label}");
+    }
+
+    private void RefreshSellCharacterButtons()
+    {
+        string selectedKey = GetSelectedSellCharacterKey();
+
+        foreach (KeyValuePair<string, Image> kvp in _sellCharacterButtonImages)
+        {
+            if (kvp.Value == null)
+                continue;
+
+            bool selected = string.Equals(kvp.Key, selectedKey, StringComparison.OrdinalIgnoreCase);
+            kvp.Value.color = selected
+                ? new Color(0.4f, 0.6f, 0.7f, 1f)
+                : new Color(0.3f, 0.3f, 0.4f, 1f);
+        }
+    }
+
+    private void CreateSellCategoryFilter()
+    {
+        if (_sellPanel == null)
+            return;
+
+        GameObject filterObj = new GameObject("SellCategoryFilter", typeof(RectTransform), typeof(Image));
+        filterObj.transform.SetParent(_sellPanel.transform, false);
+
+        _sellCategoryFilterRoot = filterObj.GetComponent<RectTransform>();
+        _sellCategoryFilterRoot.anchorMin = new Vector2(0f, 0.80f);
+        _sellCategoryFilterRoot.anchorMax = new Vector2(1f, 0.88f);
+        _sellCategoryFilterRoot.offsetMin = Vector2.zero;
+        _sellCategoryFilterRoot.offsetMax = Vector2.zero;
+
+        Image bg = filterObj.GetComponent<Image>();
+        bg.color = new Color(0.15f, 0.15f, 0.2f, 0.55f);
+
+        CreateText(filterObj.transform, "Label", "TYPE:",
+            new Vector2(0.01f, 0f), new Vector2(0.14f, 1f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 14, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+
+        GameObject gridObj = new GameObject("CategoryButtons", typeof(RectTransform), typeof(GridLayoutGroup));
+        gridObj.transform.SetParent(filterObj.transform, false);
+
+        RectTransform gridRect = gridObj.GetComponent<RectTransform>();
+        gridRect.anchorMin = new Vector2(0.15f, 0.06f);
+        gridRect.anchorMax = new Vector2(0.99f, 0.94f);
+        gridRect.offsetMin = Vector2.zero;
+        gridRect.offsetMax = Vector2.zero;
+
+        GridLayoutGroup grid = gridObj.GetComponent<GridLayoutGroup>();
+        grid.cellSize = new Vector2(90f, 30f);
+        grid.spacing = new Vector2(5f, 4f);
+        grid.padding = new RectOffset(0, 0, 0, 0);
+        grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+        grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+        grid.childAlignment = TextAnchor.UpperLeft;
+        grid.constraint = GridLayoutGroup.Constraint.Flexible;
+
+        BuildSellCategoryOptions(gridObj.transform);
+    }
+
+    private void BuildSellCategoryOptions(Transform parent)
+    {
+        if (parent == null)
+            return;
+
+        ClearChildren(parent);
+        _sellCategoryButtonImages.Clear();
+
+        string[] categories =
+        {
+            "All",
+            "Weapon",
+            "Armor",
+            "Shield",
+            "Potion",
+            "Scroll",
+            "Ammunition",
+            "Gear"
+        };
+
+        for (int i = 0; i < categories.Length; i++)
+            CreateSellCategoryButton(parent, categories[i]);
+
+        RefreshSellCategoryButtons();
+        Debug.Log($"[Store] Sell category filter created with {categories.Length} categories");
+    }
+
+    private void CreateSellCategoryButton(Transform parent, string category)
+    {
+        GameObject buttonObj = new GameObject($"SellCategoryBtn_{category}", typeof(RectTransform), typeof(Image), typeof(Button));
+        buttonObj.transform.SetParent(parent, false);
+
+        Image bg = buttonObj.GetComponent<Image>();
+        bg.color = new Color(0.3f, 0.3f, 0.4f, 1f);
+
+        Button button = buttonObj.GetComponent<Button>();
+        button.onClick.AddListener(() =>
+        {
+            FilterSellByCategory(category);
+        });
+
+        _sellCategoryButtonImages[category] = bg;
+
+        CreateText(buttonObj.transform, "Text", category,
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+    }
+
+    private void FilterSellByCategory(string category)
+    {
+        _currentSellCategory = string.IsNullOrWhiteSpace(category) ? "All" : category;
+        RefreshSellCategoryButtons();
+        RebuildSellList();
+
+        Debug.Log($"[Store] Sell filtered by category: {_currentSellCategory}");
+    }
+
+    private void RefreshSellCategoryButtons()
+    {
+        foreach (KeyValuePair<string, Image> kvp in _sellCategoryButtonImages)
+        {
+            if (kvp.Value == null)
+                continue;
+
+            bool selected = string.Equals(kvp.Key, _currentSellCategory, StringComparison.OrdinalIgnoreCase);
+            kvp.Value.color = selected
+                ? new Color(0.4f, 0.6f, 0.4f, 1f)
+                : new Color(0.3f, 0.3f, 0.4f, 1f);
+        }
+    }
+
+    private string GetSelectedSellCharacterKey()
+    {
+        if (!string.IsNullOrWhiteSpace(_currentSellCharacterKey))
+            return _currentSellCharacterKey;
+
+        if (_selectedSellCharacter != null)
+            return _selectedSellCharacter.GetInstanceID().ToString();
+
+        return SellCharacterAllKey;
+    }
+
     private void ShowBuyPanel()
     {
         Debug.Log("[Store] Showing buy panel");
@@ -319,7 +616,15 @@ public class StoreUI : MonoBehaviour
     {
         if (_buyPanel != null) _buyPanel.SetActive(false);
         if (_sellPanel != null) _sellPanel.SetActive(true);
+
+        _currentSellCharacterKey = SellCharacterAllKey;
+        _selectedSellCharacter = null;
+        _currentSellCategory = "All";
+        RefreshSellCharacterButtons();
+        RefreshSellCategoryButtons();
         RebuildSellList();
+
+        Debug.Log("[Store] Switched to SELL tab with filters reset");
     }
 
     private void RebuildBuyList()
@@ -348,19 +653,25 @@ public class StoreUI : MonoBehaviour
         List<SellEntry> entries = BuildSellEntries();
         for (int i = 0; i < entries.Count; i++)
             CreateSellRow(_sellContent, entries[i]);
+
+        int totalCount = CountAllSellableItems();
+        Debug.Log($"[Store] Sell list refreshed: showing {entries.Count}/{totalCount} items (Character: {GetSellCharacterLabelForLogs()}, Category: {_currentSellCategory})");
     }
 
     private List<SellEntry> BuildSellEntries()
     {
         List<SellEntry> entries = new List<SellEntry>();
 
-        if (_partyStash != null)
+        bool includeStash = string.Equals(_currentSellCharacterKey, SellCharacterAllKey, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(_currentSellCharacterKey, SellCharacterStashKey, StringComparison.OrdinalIgnoreCase);
+
+        if (includeStash && _partyStash != null)
         {
             List<ItemData> stashItems = _partyStash.GetItemsSnapshot();
             for (int i = 0; i < stashItems.Count; i++)
             {
                 ItemData item = stashItems[i];
-                if (item == null)
+                if (item == null || !MatchesSellCategory(item))
                     continue;
 
                 entries.Add(new SellEntry
@@ -372,6 +683,111 @@ public class StoreUI : MonoBehaviour
             }
         }
 
+        if (!string.Equals(_currentSellCharacterKey, SellCharacterStashKey, StringComparison.OrdinalIgnoreCase))
+        {
+            for (int i = 0; i < _partyMembers.Count; i++)
+            {
+                CharacterController character = _partyMembers[i];
+                if (character == null)
+                    continue;
+
+                if (_selectedSellCharacter != null && character != _selectedSellCharacter)
+                    continue;
+
+                CharacterInventory inventory = character.GetComponent<CharacterInventory>();
+                if (inventory == null)
+                    continue;
+
+                List<ItemData> items = inventory.GetAllItems();
+                for (int j = 0; j < items.Count; j++)
+                {
+                    ItemData item = items[j];
+                    if (item == null || !MatchesSellCategory(item))
+                        continue;
+
+                    string ownerName = character.Stats != null ? character.Stats.CharacterName : character.name;
+                    entries.Add(new SellEntry
+                    {
+                        Item = item,
+                        FromStash = false,
+                        InventoryOwner = inventory,
+                        OwnerName = ownerName
+                    });
+                }
+            }
+        }
+
+        return entries;
+    }
+
+    private bool MatchesSellCategory(ItemData item)
+    {
+        if (item == null)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(_currentSellCategory)
+            || string.Equals(_currentSellCategory, "All", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        string itemCategory = GetSellItemCategory(item);
+        return string.Equals(itemCategory, _currentSellCategory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetSellItemCategory(ItemData item)
+    {
+        if (item == null)
+            return "Gear";
+
+        switch (item.Type)
+        {
+            case ItemType.Weapon:
+                return IsAmmunitionName(item.Name) ? "Ammunition" : "Weapon";
+            case ItemType.Armor:
+                return "Armor";
+            case ItemType.Shield:
+                return "Shield";
+            case ItemType.Consumable:
+                if (ContainsIgnoreCase(item.Name, "scroll"))
+                    return "Scroll";
+                if (ContainsIgnoreCase(item.Name, "potion"))
+                    return "Potion";
+                return "Gear";
+            default:
+                if (IsAmmunitionName(item.Name))
+                    return "Ammunition";
+                if (ContainsIgnoreCase(item.Name, "scroll"))
+                    return "Scroll";
+                if (ContainsIgnoreCase(item.Name, "potion"))
+                    return "Potion";
+                return "Gear";
+        }
+    }
+
+    private static bool ContainsIgnoreCase(string source, string value)
+    {
+        if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsAmmunitionName(string itemName)
+    {
+        if (string.IsNullOrWhiteSpace(itemName))
+            return false;
+
+        return ContainsIgnoreCase(itemName, "arrow")
+            || ContainsIgnoreCase(itemName, "bolt")
+            || ContainsIgnoreCase(itemName, "ammunition");
+    }
+
+    private int CountAllSellableItems()
+    {
+        int total = 0;
+
+        if (_partyStash != null)
+            total += _partyStash.GetItemsSnapshot().Count;
+
         for (int i = 0; i < _partyMembers.Count; i++)
         {
             CharacterController character = _partyMembers[i];
@@ -382,25 +798,23 @@ public class StoreUI : MonoBehaviour
             if (inventory == null)
                 continue;
 
-            List<ItemData> items = inventory.GetAllItems();
-            for (int j = 0; j < items.Count; j++)
-            {
-                ItemData item = items[j];
-                if (item == null)
-                    continue;
-
-                string ownerName = character.Stats != null ? character.Stats.CharacterName : character.name;
-                entries.Add(new SellEntry
-                {
-                    Item = item,
-                    FromStash = false,
-                    InventoryOwner = inventory,
-                    OwnerName = ownerName
-                });
-            }
+            total += inventory.GetAllItems().Count;
         }
 
-        return entries;
+        return total;
+    }
+
+    private string GetSellCharacterLabelForLogs()
+    {
+        if (string.Equals(_currentSellCharacterKey, SellCharacterStashKey, StringComparison.OrdinalIgnoreCase))
+            return "Stash";
+
+        if (_selectedSellCharacter == null)
+            return "All";
+
+        return _selectedSellCharacter.Stats != null
+            ? _selectedSellCharacter.Stats.CharacterName
+            : _selectedSellCharacter.name;
     }
 
     private static string GetItemDescription(ItemData item, string fallback)
