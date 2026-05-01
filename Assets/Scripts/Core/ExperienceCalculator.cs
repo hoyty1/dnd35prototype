@@ -107,6 +107,27 @@ public class ExperienceCalculator : MonoBehaviour
             result.Awards.Add(award);
 
             Debug.Log($"[XP] {award.EnemyName} (CR {ChallengeRatingUtils.Format(cr)}): {xpForThisEnemy} XP total");
+
+            bool isXpTestEnemy = !string.IsNullOrWhiteSpace(award.EnemyName)
+                && (award.EnemyName.Contains("Piñata")
+                    || award.EnemyName.Contains("Pinata")
+                    || award.EnemyName.Contains("Test"));
+            if (isXpTestEnemy)
+            {
+                int partySizeForLog = Mathf.Max(1, party.Count);
+                int xpPerCharacterForLog = xpForThisEnemy / partySizeForLog;
+                int crDifferenceForLog = Mathf.RoundToInt(cr - result.AveragePartyLevel);
+
+                Debug.Log("[XP TEST] =============================");
+                Debug.Log($"[XP TEST] Enemy: {award.EnemyName}");
+                Debug.Log($"[XP TEST] CR: {ChallengeRatingUtils.Format(cr)}");
+                Debug.Log($"[XP TEST] APL: {result.AveragePartyLevel:F1}");
+                Debug.Log($"[XP TEST] CR Difference: {(crDifferenceForLog >= 0 ? "+" : string.Empty)}{crDifferenceForLog}");
+                Debug.Log($"[XP TEST] XP for this enemy: {xpForThisEnemy}");
+                Debug.Log($"[XP TEST] Party size: {partySizeForLog}");
+                Debug.Log($"[XP TEST] XP per character: {xpPerCharacterForLog}");
+                Debug.Log("[XP TEST] =============================");
+            }
         }
 
         Debug.Log($"[XP] Total encounter XP: {totalEncounterXP}");

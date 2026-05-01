@@ -2092,4 +2092,41 @@ public static partial class NPCDatabase
             Description = "Training target with very low defenses that only performs basic melee attacks."
         });
     }
+
+    private static void RegisterXPPinataGoblin()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "xp_pinata_goblin",
+            Name = "XP Piñata Goblin",
+            Description = "A magically weakened goblin used for XP/level-up validation. It dies in one hit but awards CR 15 XP.",
+            ChallengeRating = "15",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            STR = 6,
+            DEX = 8,
+            CON = 6,
+            WIS = 6,
+            INT = 6,
+            CHA = 6,
+            BAB = 0,
+            BaseSpeed = 6,
+            BaseHitDieHP = 1,
+            NaturalArmorBonus = -5,
+            FortitudeSaveOverride = SaveProgression.Poor,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            CreatureTags = new List<string> { "Humanoid", "Goblin", "Goblinoid", "Training", "Test", "XP" },
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
+            SpriteColor = new Color(0.84f, 0.96f, 0.42f, 1f),
+            PanelColor = new Color(0.35f, 0.3f, 0.08f, 0.88f),
+            NameColor = new Color(1f, 0.96f, 0.62f)
+        });
+    }
 }
