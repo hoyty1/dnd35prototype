@@ -128,10 +128,68 @@ public partial class GameManager
 
         xpUi.ShowXPAwards(xpResult, () =>
         {
-            Debug.Log("[XP UI] XP panel complete. Restoring party and returning to encounter selection.");
-            RestorePartyAfterCombat();
-            ReturnToEncounterSelection();
+            Debug.Log("[XP UI] XP panel complete. Checking level-up wizard flow.");
+            CheckAndShowLevelUps(xpResult, () =>
+            {
+                Debug.Log("[XP UI] Level-up flow complete. Restoring party and returning to encounter selection.");
+                RestorePartyAfterCombat();
+                ReturnToEncounterSelection();
+            });
         });
+    }
+
+    private void CheckAndShowLevelUps(ExperienceCalculator.CombatXPResult xpResult, Action onComplete)
+    {
+        List<LevelUpData> levelUps = new List<LevelUpData>();
+
+        if (xpResult != null && xpResult.CharacterLeveledUp != null)
+        {
+            foreach (KeyValuePair<CharacterController, bool> kvp in xpResult.CharacterLeveledUp)
+            {
+                if (!kvp.Value)
+                    continue;
+
+                CharacterController character = kvp.Key;
+                if (character == null || character.Stats == null)
+                    continue;
+
+                int newLevel = Mathf.Max(1, character.Stats.Level);
+                int oldLevel = Mathf.Max(1, newLevel - 1); // Assume single level increase.
+
+                LevelUpData levelUpData = LevelUpCalculator.CalculateLevelUp(character, oldLevel, newLevel);
+                levelUps.Add(levelUpData);
+
+                string charName = !string.IsNullOrWhiteSpace(character.Stats.CharacterName) ? character.Stats.CharacterName : "Unknown";
+                Debug.Log($"[GameManager] {charName} needs level-up processing");
+            }
+        }
+
+        if (levelUps.Count > 0)
+        {
+            ShowLevelUpUI(levelUps, onComplete);
+        }
+        else
+        {
+            Debug.Log("[GameManager] No level-ups to process");
+            onComplete?.Invoke();
+        }
+    }
+
+    private void ShowLevelUpUI(List<LevelUpData> levelUps, Action onComplete)
+    {
+        LevelUpUI levelUpUI = FindObjectOfType<LevelUpUI>();
+
+        if (levelUpUI == null)
+        {
+            GameObject uiObj = new GameObject("LevelUpUI");
+            Canvas canvas = FindObjectOfType<Canvas>();
+            if (canvas != null)
+                uiObj.transform.SetParent(canvas.transform, false);
+
+            levelUpUI = uiObj.AddComponent<LevelUpUI>();
+        }
+
+        levelUpUI.ShowLevelUps(levelUps, onComplete);
     }
 
     private void EnsureLootCollectionUIInitialized()
