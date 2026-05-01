@@ -8,12 +8,31 @@ using UnityEngine.UI;
 /// </summary>
 public class StoreUI : MonoBehaviour
 {
-    private sealed class SellEntry
+    private sealed class SellItemSource
     {
         public ItemData Item;
         public bool FromStash;
         public CharacterInventory InventoryOwner;
         public string OwnerName;
+    }
+
+    private sealed class SellStack
+    {
+        public string StackKey;
+        public string ItemName;
+        public ItemData RepresentativeItem;
+        public int UnitSellPrice;
+        public readonly List<SellItemSource> Sources = new List<SellItemSource>();
+
+        public int Quantity => Sources.Count;
+
+        public void AddSource(SellItemSource source)
+        {
+            if (source == null || source.Item == null)
+                return;
+
+            Sources.Add(source);
+        }
     }
 
     private GameObject _root;
@@ -43,6 +62,7 @@ public class StoreUI : MonoBehaviour
     private List<CharacterController> _partyMembers = new List<CharacterController>();
     private Action _onBackToMenu;
     private Action _onStartEncounter;
+    private GameObject _sellQuantityDialog;
 
     private Action<int> _goldChangedHandler;
 
@@ -88,6 +108,13 @@ public class StoreUI : MonoBehaviour
     public void Close()
     {
         UnsubscribeGoldEvents();
+
+        if (_sellQuantityDialog != null)
+        {
+            Destroy(_sellQuantityDialog);
+            _sellQuantityDialog = null;
+        }
+
         if (_root != null)
             _root.SetActive(false);
     }
@@ -625,6 +652,12 @@ public class StoreUI : MonoBehaviour
         RebuildSellList();
 
         Debug.Log("[Store] Switched to SELL tab with filters reset");
+        Debug.Log("[Store] === SELL LIST IMPROVEMENTS ===");
+        Debug.Log("[Store] ✅ Equipped items hidden from sell list (only general inventory + stash shown)");
+        Debug.Log("[Store] ✅ Items stacked by name with quantity display");
+        Debug.Log("[Store] ✅ Quantity selector prompt for stacks");
+        Debug.Log("[Store] ✅ Sell 1 to max items from stack");
+        Debug.Log("[Store] ✅ Source tracking (characters + stash)");
     }
 
     private void RebuildBuyList()
@@ -650,17 +683,27 @@ public class StoreUI : MonoBehaviour
 
         ClearChildren(_sellContent);
 
-        List<SellEntry> entries = BuildSellEntries();
-        for (int i = 0; i < entries.Count; i++)
-            CreateSellRow(_sellContent, entries[i]);
+        if (_sellQuantityDialog != null)
+        {
+            Destroy(_sellQuantityDialog);
+            _sellQuantityDialog = null;
+        }
+
+        List<SellStack> stacks = BuildSellStacks();
+        for (int i = 0; i < stacks.Count; i++)
+            CreateSellRow(_sellContent, stacks[i]);
 
         int totalCount = CountAllSellableItems();
-        Debug.Log($"[Store] Sell list refreshed: showing {entries.Count}/{totalCount} items (Character: {GetSellCharacterLabelForLogs()}, Category: {_currentSellCategory})");
+        int stackedCount = 0;
+        for (int i = 0; i < stacks.Count; i++)
+            stackedCount += stacks[i].Quantity;
+
+        Debug.Log($"[Store] Sell list refreshed: showing {stacks.Count} stacks / {stackedCount} items from {totalCount} sellable items (Character: {GetSellCharacterLabelForLogs()}, Category: {_currentSellCategory})");
     }
 
-    private List<SellEntry> BuildSellEntries()
+    private List<SellStack> BuildSellStacks()
     {
-        List<SellEntry> entries = new List<SellEntry>();
+        Dictionary<string, SellStack> stackLookup = new Dictionary<string, SellStack>(StringComparer.OrdinalIgnoreCase);
 
         bool includeStash = string.Equals(_currentSellCharacterKey, SellCharacterAllKey, StringComparison.OrdinalIgnoreCase)
             || string.Equals(_currentSellCharacterKey, SellCharacterStashKey, StringComparison.OrdinalIgnoreCase);
@@ -674,12 +717,7 @@ public class StoreUI : MonoBehaviour
                 if (item == null || !MatchesSellCategory(item))
                     continue;
 
-                entries.Add(new SellEntry
-                {
-                    Item = item,
-                    FromStash = true,
-                    OwnerName = "Stash"
-                });
+                AddItemToSellStack(stackLookup, item, true, null, "Stash");
             }
         }
 
@@ -698,26 +736,63 @@ public class StoreUI : MonoBehaviour
                 if (inventory == null)
                     continue;
 
-                List<ItemData> items = inventory.GetAllItems();
-                for (int j = 0; j < items.Count; j++)
+                Inventory rawInventory = inventory.GetInventory();
+                if (rawInventory == null || rawInventory.GeneralSlots == null)
+                    continue;
+
+                string ownerName = character.Stats != null ? character.Stats.CharacterName : character.name;
+
+                for (int slotIndex = 0; slotIndex < rawInventory.GeneralSlots.Length; slotIndex++)
                 {
-                    ItemData item = items[j];
+                    ItemData item = rawInventory.GeneralSlots[slotIndex];
                     if (item == null || !MatchesSellCategory(item))
                         continue;
 
-                    string ownerName = character.Stats != null ? character.Stats.CharacterName : character.name;
-                    entries.Add(new SellEntry
-                    {
-                        Item = item,
-                        FromStash = false,
-                        InventoryOwner = inventory,
-                        OwnerName = ownerName
-                    });
+                    AddItemToSellStack(stackLookup, item, false, inventory, ownerName);
                 }
             }
         }
 
-        return entries;
+        List<SellStack> stacks = new List<SellStack>(stackLookup.Values);
+        stacks.Sort((a, b) => string.Compare(a.ItemName, b.ItemName, StringComparison.OrdinalIgnoreCase));
+        return stacks;
+    }
+
+    private void AddItemToSellStack(
+        Dictionary<string, SellStack> stackLookup,
+        ItemData item,
+        bool fromStash,
+        CharacterInventory inventoryOwner,
+        string ownerName)
+    {
+        if (item == null)
+            return;
+
+        string key = BuildSellStackKey(item);
+        if (!stackLookup.TryGetValue(key, out SellStack stack))
+        {
+            stack = new SellStack
+            {
+                StackKey = key,
+                ItemName = item.Name,
+                RepresentativeItem = item,
+                UnitSellPrice = StoreInventory.Instance.GetSellPrice(item)
+            };
+            stackLookup[key] = stack;
+        }
+
+        stack.AddSource(new SellItemSource
+        {
+            Item = item,
+            FromStash = fromStash,
+            InventoryOwner = inventoryOwner,
+            OwnerName = ownerName
+        });
+    }
+
+    private static string BuildSellStackKey(ItemData item)
+    {
+        return item != null ? (item.Name ?? string.Empty).Trim() : string.Empty;
     }
 
     private bool MatchesSellCategory(ItemData item)
@@ -798,7 +873,15 @@ public class StoreUI : MonoBehaviour
             if (inventory == null)
                 continue;
 
-            total += inventory.GetAllItems().Count;
+            Inventory rawInventory = inventory.GetInventory();
+            if (rawInventory == null || rawInventory.GeneralSlots == null)
+                continue;
+
+            for (int slotIndex = 0; slotIndex < rawInventory.GeneralSlots.Length; slotIndex++)
+            {
+                if (rawInventory.GeneralSlots[slotIndex] != null)
+                    total++;
+            }
         }
 
         return total;
@@ -960,11 +1043,14 @@ public class StoreUI : MonoBehaviour
         Debug.Log($"[Store] Created buy entry for {template.Name} with proper width constraints");
     }
 
-    private void CreateSellRow(Transform parent, SellEntry entry)
+    private void CreateSellRow(Transform parent, SellStack stack)
     {
-        int sellPrice = StoreInventory.Instance.GetSellPrice(entry.Item);
+        if (stack == null || stack.RepresentativeItem == null)
+            return;
 
-        GameObject row = CreatePanel(parent, $"Sell_{entry.Item.Name}",
+        int sellPrice = stack.UnitSellPrice;
+
+        GameObject row = CreatePanel(parent, $"Sell_{stack.ItemName}",
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
             Vector2.zero, new Vector2(0f, 70f), new Color(0.22f, 0.17f, 0.17f, 1f));
 
@@ -981,6 +1067,22 @@ public class StoreUI : MonoBehaviour
         layout.childControlHeight = true;
         layout.childForceExpandWidth = false;
         layout.childForceExpandHeight = true;
+
+        if (stack.Quantity > 1)
+        {
+            GameObject quantityObj = new GameObject("Quantity", typeof(RectTransform), typeof(LayoutElement));
+            quantityObj.transform.SetParent(row.transform, false);
+            LayoutElement quantityLayout = quantityObj.GetComponent<LayoutElement>();
+            quantityLayout.minWidth = 60f;
+            quantityLayout.preferredWidth = 60f;
+            quantityLayout.flexibleWidth = 0f;
+
+            Text quantityText = CreateText(quantityObj.transform, "QuantityText", $"x{stack.Quantity}",
+                Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+                Vector2.zero, 22, FontStyle.Bold, new Color(1f, 0.8f, 0.4f), TextAnchor.MiddleCenter);
+            quantityText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            quantityText.verticalOverflow = VerticalWrapMode.Overflow;
+        }
 
         GameObject infoObj = new GameObject("Info", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
         infoObj.transform.SetParent(row.transform, false);
@@ -999,7 +1101,7 @@ public class StoreUI : MonoBehaviour
         infoLayout.childForceExpandWidth = true;
         infoLayout.childForceExpandHeight = false;
 
-        Text nameText = CreateText(infoObj.transform, "Name", $"{entry.Item.Name} ({entry.OwnerName})",
+        Text nameText = CreateText(infoObj.transform, "Name", stack.ItemName,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
             Vector2.zero, 18, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
         LayoutElement nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
@@ -1009,10 +1111,12 @@ public class StoreUI : MonoBehaviour
         nameText.verticalOverflow = VerticalWrapMode.Overflow;
 
         int baseValue = sellPrice * 2;
-        string itemDescription = GetItemDescription(entry.Item, string.Empty);
+        string sourceSummary = BuildSellStackSourceSummary(stack);
+        string itemDescription = GetItemDescription(stack.RepresentativeItem, string.Empty);
         string valueLine = string.IsNullOrWhiteSpace(itemDescription)
-            ? $"Value {baseValue} gp -> Sell {sellPrice} gp"
-            : $"{itemDescription} | Value {baseValue} gp -> Sell {sellPrice} gp";
+            ? $"Value {baseValue} gp -> Sell {sellPrice} gp each{sourceSummary}"
+            : $"{itemDescription} | Value {baseValue} gp -> Sell {sellPrice} gp each{sourceSummary}";
+
         Text valueText = CreateText(infoObj.transform, "Value", valueLine,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
             Vector2.zero, 13, FontStyle.Normal, new Color(0.82f, 0.86f, 0.93f), TextAnchor.MiddleLeft);
@@ -1029,9 +1133,11 @@ public class StoreUI : MonoBehaviour
         priceLayout.preferredWidth = 90f;
         priceLayout.flexibleWidth = 0f;
 
-        Text priceText = CreateText(priceObj.transform, "PriceLabel", $"{sellPrice} gp",
+        string priceLabel = stack.Quantity > 1 ? $"{sellPrice} gp\neach" : $"{sellPrice} gp";
+        int priceFontSize = stack.Quantity > 1 ? 16 : 18;
+        Text priceText = CreateText(priceObj.transform, "PriceLabel", priceLabel,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            Vector2.zero, 18, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), TextAnchor.MiddleCenter);
+            Vector2.zero, priceFontSize, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), TextAnchor.MiddleCenter);
         priceText.horizontalOverflow = HorizontalWrapMode.Overflow;
         priceText.verticalOverflow = VerticalWrapMode.Overflow;
 
@@ -1042,9 +1148,51 @@ public class StoreUI : MonoBehaviour
         buttonLayout.preferredWidth = 70f;
         buttonLayout.flexibleWidth = 0f;
 
-        CreateSmallActionButton(buttonSection.transform, "SellButton", "SELL", new Color(0.58f, 0.37f, 0.18f), () => SellItem(entry));
+        CreateSmallActionButton(buttonSection.transform, "SellButton", "SELL", new Color(0.58f, 0.37f, 0.18f), () =>
+        {
+            if (stack.Quantity > 1)
+                ShowSellQuantityPrompt(stack);
+            else
+                SellStackItems(stack, 1);
+        });
 
-        Debug.Log($"[Store] Created sell entry for {entry.Item.Name} with proper width constraints");
+        Debug.Log($"[Store] Created sell stack row for {stack.ItemName} x{stack.Quantity}");
+    }
+
+    private string BuildSellStackSourceSummary(SellStack stack)
+    {
+        if (stack == null || stack.Quantity <= 0)
+            return string.Empty;
+
+        bool hasStash = false;
+        HashSet<string> characterNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < stack.Sources.Count; i++)
+        {
+            SellItemSource source = stack.Sources[i];
+            if (source == null)
+                continue;
+
+            if (source.FromStash)
+            {
+                hasStash = true;
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(source.OwnerName))
+                characterNames.Add(source.OwnerName);
+        }
+
+        if (characterNames.Count == 0 && !hasStash)
+            return string.Empty;
+
+        if (characterNames.Count > 0 && hasStash)
+            return $" (From {characterNames.Count} character(s) + stash)";
+
+        if (characterNames.Count > 0)
+            return $" (From {characterNames.Count} character(s))";
+
+        return " (From stash)";
     }
 
     private void BuyItem(StoreInventory.StoreItemEntry entry)
@@ -1078,33 +1226,243 @@ public class StoreUI : MonoBehaviour
             RebuildSellList();
     }
 
-    private void SellItem(SellEntry entry)
+    private void ShowSellQuantityPrompt(SellStack stack)
     {
-        if (entry == null || entry.Item == null)
-            return;
-
-        int sellPrice = StoreInventory.Instance.GetSellPrice(entry.Item);
-        Debug.Log($"[Store] Selling {entry.Item.Name} for {sellPrice} gp (50% of {sellPrice * 2} gp)");
-
-        bool removed = false;
-        if (entry.FromStash)
+        if (stack == null || stack.RepresentativeItem == null || stack.Quantity <= 1)
         {
-            removed = _partyStash != null && _partyStash.RemoveItem(entry.Item);
-        }
-        else
-        {
-            removed = entry.InventoryOwner != null && entry.InventoryOwner.RemoveItem(entry.Item);
-        }
-
-        if (!removed)
-        {
-            ShowMessage("Unable to sell item.", false);
+            SellStackItems(stack, 1);
             return;
         }
 
-        GameManager.Instance.AddGold(sellPrice);
-        Debug.Log($"[Gold] Transaction complete. New balance: {GameManager.Instance.PartyGold} gp");
-        ShowMessage($"Sold {entry.Item.Name} for {sellPrice} gp.", true);
+        if (_sellQuantityDialog != null)
+            Destroy(_sellQuantityDialog);
+
+        _sellQuantityDialog = CreatePanel(_root.transform, "SellQuantityPrompt",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.72f));
+
+        GameObject panel = CreatePanel(_sellQuantityDialog.transform, "Panel",
+            new Vector2(0.3f, 0.35f), new Vector2(0.7f, 0.65f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, new Color(0.15f, 0.15f, 0.2f, 1f));
+
+        VerticalLayoutGroup panelLayout = panel.AddComponent<VerticalLayoutGroup>();
+        panelLayout.spacing = 15f;
+        panelLayout.padding = new RectOffset(20, 20, 20, 20);
+        panelLayout.childAlignment = TextAnchor.UpperCenter;
+        panelLayout.childControlWidth = true;
+        panelLayout.childControlHeight = true;
+        panelLayout.childForceExpandWidth = true;
+        panelLayout.childForceExpandHeight = false;
+
+        CreateDialogText(panel.transform, "Title", "How many to sell?", 28, FontStyle.Bold, Color.white, 40f);
+
+        int sellPrice = stack.UnitSellPrice;
+        CreateDialogText(panel.transform, "Info", $"{stack.ItemName}\n{sellPrice} gp each × {stack.Quantity} available", 18, FontStyle.Normal, new Color(0.9f, 0.9f, 0.9f), 60f);
+
+        int currentQuantity = 1;
+
+        GameObject selectorContainer = new GameObject("QuantitySelector", typeof(RectTransform), typeof(LayoutElement), typeof(HorizontalLayoutGroup));
+        selectorContainer.transform.SetParent(panel.transform, false);
+        LayoutElement selectorLayout = selectorContainer.GetComponent<LayoutElement>();
+        selectorLayout.preferredHeight = 60f;
+        HorizontalLayoutGroup selectorHLayout = selectorContainer.GetComponent<HorizontalLayoutGroup>();
+        selectorHLayout.spacing = 12f;
+        selectorHLayout.childAlignment = TextAnchor.MiddleCenter;
+        selectorHLayout.childControlWidth = true;
+        selectorHLayout.childControlHeight = true;
+        selectorHLayout.childForceExpandWidth = false;
+        selectorHLayout.childForceExpandHeight = false;
+
+        GameObject minusButton = CreateSmallActionButton(selectorContainer.transform, "Minus", "-", new Color(0.5f, 0.3f, 0.3f), null).gameObject;
+
+        GameObject quantityDisplay = new GameObject("QuantityDisplay", typeof(RectTransform), typeof(LayoutElement), typeof(Image));
+        quantityDisplay.transform.SetParent(selectorContainer.transform, false);
+        LayoutElement quantityDisplayLayout = quantityDisplay.GetComponent<LayoutElement>();
+        quantityDisplayLayout.minWidth = 120f;
+        quantityDisplayLayout.preferredWidth = 120f;
+        quantityDisplayLayout.preferredHeight = 50f;
+        quantityDisplay.GetComponent<Image>().color = new Color(0.25f, 0.25f, 0.3f, 1f);
+
+        Text quantityText = CreateText(quantityDisplay.transform, "QuantityValue", currentQuantity.ToString(),
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 32, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+
+        GameObject plusButton = CreateSmallActionButton(selectorContainer.transform, "Plus", "+", new Color(0.3f, 0.5f, 0.3f), null).gameObject;
+
+        GameObject maxButton = CreateSmallActionButton(selectorContainer.transform, "Max", "MAX", new Color(0.4f, 0.4f, 0.5f), null).gameObject;
+        LayoutElement maxLayout = maxButton.GetComponent<LayoutElement>();
+        if (maxLayout != null)
+        {
+            maxLayout.minWidth = 80f;
+            maxLayout.preferredWidth = 80f;
+        }
+
+        Text totalText = CreateDialogText(panel.transform, "Total", string.Empty, 24, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), 40f);
+
+        Action updateTotal = () =>
+        {
+            quantityText.text = currentQuantity.ToString();
+            totalText.text = $"Total: {sellPrice * currentQuantity} gp";
+        };
+
+        Button minusButtonComp = minusButton.GetComponent<Button>();
+        if (minusButtonComp != null)
+        {
+            minusButtonComp.onClick.RemoveAllListeners();
+            minusButtonComp.onClick.AddListener(() =>
+            {
+                if (currentQuantity <= 1)
+                    return;
+
+                currentQuantity--;
+                updateTotal();
+            });
+        }
+
+        Button plusButtonComp = plusButton.GetComponent<Button>();
+        if (plusButtonComp != null)
+        {
+            plusButtonComp.onClick.RemoveAllListeners();
+            plusButtonComp.onClick.AddListener(() =>
+            {
+                if (currentQuantity >= stack.Quantity)
+                    return;
+
+                currentQuantity++;
+                updateTotal();
+            });
+        }
+
+        Button maxButtonComp = maxButton.GetComponent<Button>();
+        if (maxButtonComp != null)
+        {
+            maxButtonComp.onClick.RemoveAllListeners();
+            maxButtonComp.onClick.AddListener(() =>
+            {
+                currentQuantity = stack.Quantity;
+                updateTotal();
+            });
+        }
+
+        GameObject actionContainer = new GameObject("ActionButtons", typeof(RectTransform), typeof(LayoutElement), typeof(HorizontalLayoutGroup));
+        actionContainer.transform.SetParent(panel.transform, false);
+        LayoutElement actionLayout = actionContainer.GetComponent<LayoutElement>();
+        actionLayout.preferredHeight = 50f;
+        HorizontalLayoutGroup actionHLayout = actionContainer.GetComponent<HorizontalLayoutGroup>();
+        actionHLayout.spacing = 20f;
+        actionHLayout.childAlignment = TextAnchor.MiddleCenter;
+        actionHLayout.childControlWidth = true;
+        actionHLayout.childControlHeight = true;
+        actionHLayout.childForceExpandWidth = false;
+        actionHLayout.childForceExpandHeight = false;
+
+        GameObject cancelButton = CreateSmallActionButton(actionContainer.transform, "CancelButton", "Cancel", new Color(0.5f, 0.3f, 0.3f), () =>
+        {
+            if (_sellQuantityDialog != null)
+            {
+                Destroy(_sellQuantityDialog);
+                _sellQuantityDialog = null;
+            }
+        }).gameObject;
+        LayoutElement cancelLayout = cancelButton.GetComponent<LayoutElement>();
+        if (cancelLayout != null)
+        {
+            cancelLayout.minWidth = 120f;
+            cancelLayout.preferredWidth = 120f;
+        }
+
+        GameObject confirmButton = CreateSmallActionButton(actionContainer.transform, "ConfirmSellButton", "Sell", new Color(0.3f, 0.6f, 0.3f), () =>
+        {
+            if (_sellQuantityDialog != null)
+            {
+                Destroy(_sellQuantityDialog);
+                _sellQuantityDialog = null;
+            }
+
+            SellStackItems(stack, currentQuantity);
+        }).gameObject;
+        LayoutElement confirmLayout = confirmButton.GetComponent<LayoutElement>();
+        if (confirmLayout != null)
+        {
+            confirmLayout.minWidth = 120f;
+            confirmLayout.preferredWidth = 120f;
+        }
+
+        updateTotal();
+
+        Debug.Log($"[Store] Showing quantity prompt for {stack.ItemName} (max {stack.Quantity})");
+    }
+
+    private static Text CreateDialogText(
+        Transform parent,
+        string name,
+        string value,
+        int fontSize,
+        FontStyle fontStyle,
+        Color color,
+        float preferredHeight)
+    {
+        GameObject textObj = new GameObject(name, typeof(RectTransform), typeof(LayoutElement));
+        textObj.transform.SetParent(parent, false);
+
+        LayoutElement layout = textObj.GetComponent<LayoutElement>();
+        layout.preferredHeight = preferredHeight;
+
+        return CreateText(textObj.transform, "Label", value,
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, fontSize, fontStyle, color, TextAnchor.MiddleCenter);
+    }
+
+    private void SellStackItems(SellStack stack, int quantityToSell)
+    {
+        if (stack == null || stack.RepresentativeItem == null)
+            return;
+
+        if (quantityToSell <= 0 || quantityToSell > stack.Quantity)
+        {
+            Debug.LogError($"[Store] Invalid sell quantity for {stack.ItemName}: {quantityToSell}/{stack.Quantity}");
+            return;
+        }
+
+        int removedCount = 0;
+        int unitPrice = stack.UnitSellPrice;
+
+        for (int i = 0; i < stack.Sources.Count && removedCount < quantityToSell; i++)
+        {
+            SellItemSource source = stack.Sources[i];
+            if (source == null || source.Item == null)
+                continue;
+
+            bool removed;
+            if (source.FromStash)
+            {
+                removed = _partyStash != null && _partyStash.RemoveItem(source.Item);
+            }
+            else
+            {
+                removed = source.InventoryOwner != null && source.InventoryOwner.RemoveItem(source.Item);
+            }
+
+            if (!removed)
+                continue;
+
+            removedCount++;
+            string sourceLabel = source.FromStash ? "stash" : source.OwnerName;
+            Debug.Log($"[Store] Sold {source.Item.Name} from {sourceLabel} for {unitPrice} gp");
+        }
+
+        if (removedCount <= 0)
+        {
+            ShowMessage("Unable to sell item(s).", false);
+            return;
+        }
+
+        int totalGold = unitPrice * removedCount;
+        GameManager.Instance.AddGold(totalGold);
+
+        Debug.Log($"[Store] Sold {removedCount}x {stack.ItemName} for {totalGold} gp total");
+        ShowMessage($"Sold {removedCount}x {stack.ItemName} for {totalGold} gp.", true);
+
         RebuildSellList();
     }
 
