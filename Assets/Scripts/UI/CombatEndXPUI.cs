@@ -146,11 +146,13 @@ public class CombatEndXPUI : MonoBehaviour
         _panel = CreateChild("CombatEndXPPanel", _root.transform, typeof(RectTransform), typeof(Image));
 
         RectTransform panelRect = _panel.GetComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0.18f, 0.1f);
-        panelRect.anchorMax = new Vector2(0.82f, 0.9f);
+        panelRect.anchorMin = Vector2.zero;
+        panelRect.anchorMax = Vector2.one;
         panelRect.offsetMin = Vector2.zero;
         panelRect.offsetMax = Vector2.zero;
         panelRect.localScale = Vector3.one;
+
+        Debug.Log("[XP UI] Panel: (0,0) to (1,1) - FULLSCREEN");
 
         Image panelBg = _panel.GetComponent<Image>();
         panelBg.color = new Color(0.08f, 0.11f, 0.18f, 0.97f);
@@ -180,8 +182,8 @@ public class CombatEndXPUI : MonoBehaviour
         RectTransform scrollRect = scrollArea.GetComponent<RectTransform>();
         scrollRect.anchorMin = new Vector2(0f, 0f);
         scrollRect.anchorMax = new Vector2(1f, 1f);
-        scrollRect.offsetMin = new Vector2(20f, 100f); // leave room for footer button
-        scrollRect.offsetMax = new Vector2(-20f, -20f);
+        scrollRect.offsetMin = new Vector2(36f, 126f); // leave room for footer button
+        scrollRect.offsetMax = new Vector2(-36f, -30f);
 
         Image scrollBg = scrollArea.GetComponent<Image>();
         scrollBg.color = new Color(0f, 0f, 0f, 0.15f);
@@ -254,7 +256,7 @@ public class CombatEndXPUI : MonoBehaviour
         containerRect.anchorMax = new Vector2(1f, 0f);
         containerRect.pivot = new Vector2(0.5f, 0f);
         containerRect.anchoredPosition = new Vector2(0f, 12f);
-        containerRect.sizeDelta = new Vector2(-40f, 72f);
+        containerRect.sizeDelta = new Vector2(-80f, 94f);
 
         Image footerBg = buttonContainer.GetComponent<Image>();
         footerBg.color = new Color(0.05f, 0.07f, 0.12f, 0.9f);
@@ -264,8 +266,8 @@ public class CombatEndXPUI : MonoBehaviour
             typeof(RectTransform), typeof(Image), typeof(Button));
 
         RectTransform buttonRect = buttonObj.GetComponent<RectTransform>();
-        buttonRect.anchorMin = new Vector2(0.32f, 0.15f);
-        buttonRect.anchorMax = new Vector2(0.68f, 0.85f);
+        buttonRect.anchorMin = new Vector2(0.28f, 0.14f);
+        buttonRect.anchorMax = new Vector2(0.72f, 0.86f);
         buttonRect.offsetMin = Vector2.zero;
         buttonRect.offsetMax = Vector2.zero;
 
@@ -296,7 +298,7 @@ public class CombatEndXPUI : MonoBehaviour
 
         TextMeshProUGUI buttonText = textObj.GetComponent<TextMeshProUGUI>();
         buttonText.text = "Continue";
-        buttonText.fontSize = 24;
+        buttonText.fontSize = 30;
         buttonText.fontStyle = FontStyles.Bold;
         buttonText.color = Color.white;
         buttonText.alignment = TextAlignmentOptions.Center;
@@ -415,15 +417,15 @@ public class CombatEndXPUI : MonoBehaviour
     {
         GameObject textObj = CreateChild("Text", parent, typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
         RectTransform rect = textObj.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(0f, 30f);
+        rect.sizeDelta = new Vector2(0f, 38f);
 
         LayoutElement layoutElement = textObj.GetComponent<LayoutElement>();
-        layoutElement.minHeight = 30f;
+        layoutElement.minHeight = 38f;
         layoutElement.flexibleHeight = 0f;
 
         TextMeshProUGUI text = textObj.GetComponent<TextMeshProUGUI>();
         text.text = message;
-        text.fontSize = fontSize;
+        text.fontSize = fontSize + 2;
         text.fontStyle = ConvertFontStyle(style);
         text.color = color;
         text.alignment = ConvertAlignment(align);

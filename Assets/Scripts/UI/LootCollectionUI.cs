@@ -11,8 +11,8 @@ using TMPro;
 /// </summary>
 public class LootCollectionUI : MonoBehaviour
 {
-    private static readonly Vector2 LootCellSize = new Vector2(110f, 110f);
-    private static readonly Vector2 LootCellSpacing = new Vector2(10f, 10f);
+    private static readonly Vector2 LootCellSize = new Vector2(132f, 132f);
+    private static readonly Vector2 LootCellSpacing = new Vector2(14f, 14f);
 
     private RectOffset _lootGridPadding;
 
@@ -258,12 +258,14 @@ public class LootCollectionUI : MonoBehaviour
         _dialog = CreatePanel(
             _root.transform,
             "LootCollectionDialog",
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.one,
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
-            new Vector2(1120f, 680f),
+            Vector2.zero,
             new Color(0.08f, 0.1f, 0.15f, 0.98f));
+
+        Debug.Log("[Loot] Panel: (0,0) to (1,1) - FULLSCREEN");
 
         _dialog.AddComponent<LayoutElement>();
         Image dialogBg = _dialog.GetComponent<Image>();
@@ -287,8 +289,8 @@ public class LootCollectionUI : MonoBehaviour
             new Vector2(1f, 1f),
             new Vector2(0.5f, 1f),
             new Vector2(0f, -10f),
-            new Vector2(0f, 34f),
-            24,
+            new Vector2(0f, 46f),
+            34,
             FontStyle.Bold,
             new Color(0.96f, 0.87f, 0.54f),
             TextAnchor.MiddleCenter);
@@ -302,7 +304,7 @@ public class LootCollectionUI : MonoBehaviour
             new Vector2(0f, 1f),
             new Vector2(0f, -48f),
             new Vector2(0f, 24f),
-            13,
+            18,
             FontStyle.Normal,
             new Color(0.85f, 0.9f, 0.97f),
             TextAnchor.MiddleLeft);
@@ -316,7 +318,7 @@ public class LootCollectionUI : MonoBehaviour
             new Vector2(1f, 1f),
             new Vector2(0f, -48f),
             new Vector2(0f, 24f),
-            13,
+            18,
             FontStyle.Bold,
             new Color(1f, 0.89f, 0.43f),
             TextAnchor.MiddleRight);
@@ -330,7 +332,7 @@ public class LootCollectionUI : MonoBehaviour
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
             Vector2.zero,
-            13,
+            18,
             FontStyle.Normal,
             new Color(0.83f, 0.92f, 0.98f),
             TextAnchor.MiddleCenter);
@@ -338,8 +340,8 @@ public class LootCollectionUI : MonoBehaviour
         _scrollRect = CreateScrollView(
             _dialog.transform,
             "LootScroll",
-            new Vector2(0.02f, 0.2f),
-            new Vector2(0.98f, 0.86f),
+            new Vector2(0.08f, 0.18f),
+            new Vector2(0.92f, 0.85f),
             out _contentRoot);
 
         BuildTooltip();
@@ -357,8 +359,8 @@ public class LootCollectionUI : MonoBehaviour
         footer.transform.SetParent(_dialog.transform, false);
 
         RectTransform footerRT = footer.GetComponent<RectTransform>();
-        footerRT.anchorMin = new Vector2(0.08f, 0.02f);
-        footerRT.anchorMax = new Vector2(0.92f, 0.1f);
+        footerRT.anchorMin = new Vector2(0.1f, 0.03f);
+        footerRT.anchorMax = new Vector2(0.9f, 0.12f);
         footerRT.offsetMin = Vector2.zero;
         footerRT.offsetMax = Vector2.zero;
 
@@ -569,7 +571,7 @@ public class LootCollectionUI : MonoBehaviour
 
         LayoutElement le = noLoot.GetComponent<LayoutElement>();
         le.preferredWidth = 320f;
-        le.preferredHeight = 42f;
+        le.preferredHeight = 60f;
 
         TextMeshProUGUI text = noLoot.GetComponent<TextMeshProUGUI>();
         text.fontSize = 16;
@@ -834,7 +836,7 @@ public class LootCollectionUI : MonoBehaviour
         go.transform.SetParent(parent, false);
 
         LayoutElement le = go.GetComponent<LayoutElement>();
-        le.preferredHeight = 42f;
+        le.preferredHeight = 60f;
 
         Image image = go.GetComponent<Image>();
         image.color = color;
@@ -862,7 +864,7 @@ public class LootCollectionUI : MonoBehaviour
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
             Vector2.zero,
-            16,
+            20,
             FontStyle.Bold,
             Color.white,
             TextAnchor.MiddleCenter);

@@ -561,12 +561,14 @@ public class PreCombatInventoryUI : MonoBehaviour
         _panel = CreatePanel(
             canvas.transform,
             "PreCombatInventoryPanel",
-            new Vector2(0.5f, 0.5f),
-            new Vector2(0.5f, 0.5f),
+            Vector2.zero,
+            Vector2.one,
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
-            new Vector2(1240f, 760f),
+            Vector2.zero,
             new Color(0.05f, 0.06f, 0.1f, 0.98f));
+
+        Debug.Log("[PreCombatInventory] Panel: (0,0) to (1,1) - FULLSCREEN");
 
         _panelRect = _panel.GetComponent<RectTransform>();
 
@@ -581,8 +583,8 @@ public class PreCombatInventoryUI : MonoBehaviour
         RectTransform contentRootRt = contentRoot.GetComponent<RectTransform>();
         contentRootRt.anchorMin = new Vector2(0f, 0f);
         contentRootRt.anchorMax = new Vector2(1f, 1f);
-        contentRootRt.offsetMin = new Vector2(12f, 92f);
-        contentRootRt.offsetMax = new Vector2(-12f, -96f);
+        contentRootRt.offsetMin = new Vector2(20f, 110f);
+        contentRootRt.offsetMax = new Vector2(-20f, -112f);
 
         BuildStashSection(contentRootRt);
 
@@ -647,7 +649,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(0.5f, 0.5f),
             new Vector2(0f, -2f),
             new Vector2(-96f, -8f),
-            23,
+            30,
             FontStyle.Bold,
             new Color(0.95f, 0.86f, 0.5f),
             TextAnchor.MiddleCenter);
@@ -661,7 +663,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(0f, 0.5f),
             new Vector2(14f, -18f),
             new Vector2(-280f, -28f),
-            10,
+            13,
             FontStyle.Italic,
             new Color(0.76f, 0.82f, 0.92f),
             TextAnchor.MiddleLeft);
@@ -674,12 +676,12 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(1f, 0.5f),
             new Vector2(1f, 0.5f),
             new Vector2(-10f, 0f),
-            new Vector2(34f, 30f),
+            new Vector2(46f, 42f),
             new Color(0.52f, 0.22f, 0.22f, 1f),
             () => Close());
         Text closeText = closeButton.GetComponentInChildren<Text>();
         if (closeText != null)
-            closeText.fontSize = 17;
+            closeText.fontSize = 24;
 
         _stashStatusText = CreateText(
             _panel.transform,
@@ -790,7 +792,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(0f, 1f),
             new Vector2(0f, 1f),
             new Vector2(10f, -33f),
-            new Vector2(150f, 28f),
+            new Vector2(190f, 40f),
             new Color(0.2f, 0.32f, 0.56f, 1f),
             OnFilterButtonPressed);
         if (_filterButton != null)
@@ -812,7 +814,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(0f, 1f),
             new Vector2(0f, 1f),
             new Vector2(166f, -33f),
-            new Vector2(140f, 28f),
+            new Vector2(180f, 40f),
             new Color(0.16f, 0.4f, 0.56f, 1f),
             OnSortButtonPressed);
 
@@ -824,7 +826,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(0f, 1f),
             new Vector2(0f, 1f),
             new Vector2(312f, -33f),
-            new Vector2(88f, 28f),
+            new Vector2(110f, 40f),
             new Color(0.56f, 0.31f, 0.16f, 1f),
             OnClearStashPressed);
 
@@ -836,7 +838,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(1f, 1f),
             new Vector2(1f, 1f),
             new Vector2(-10f, -33f),
-            new Vector2(300f, 28f),
+            new Vector2(360f, 40f),
             12,
             FontStyle.Normal,
             new Color(0.78f, 0.85f, 0.93f),
@@ -1098,8 +1100,8 @@ public class PreCombatInventoryUI : MonoBehaviour
         footer.transform.SetParent(_panel.transform, false);
 
         RectTransform footerRect = footer.GetComponent<RectTransform>();
-        footerRect.anchorMin = new Vector2(0.06f, 0.02f);
-        footerRect.anchorMax = new Vector2(0.94f, 0.07f);
+        footerRect.anchorMin = new Vector2(0.08f, 0.02f);
+        footerRect.anchorMax = new Vector2(0.92f, 0.09f);
         footerRect.offsetMin = Vector2.zero;
         footerRect.offsetMax = Vector2.zero;
 
@@ -1127,7 +1129,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(0.5f, 0.5f),
             new Vector2(0f, 1f),
             Vector2.zero,
-            new Vector2(330f, 190f),
+            new Vector2(420f, 240f),
             new Color(0.03f, 0.03f, 0.07f, 0.96f));
 
         Image tooltipBackground = _tooltipPanel.GetComponent<Image>();
@@ -1952,7 +1954,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(0f, 0.5f),
             new Vector2(34f, 0f),
             new Vector2(-38f, 0f),
-            10,
+            13,
             FontStyle.Normal,
             new Color(0.77f, 0.84f, 0.94f),
             TextAnchor.MiddleLeft);

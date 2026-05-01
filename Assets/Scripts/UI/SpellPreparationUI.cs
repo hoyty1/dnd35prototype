@@ -72,8 +72,8 @@ public class SpellPreparationUI : MonoBehaviour
     private HashSet<int> _domainSlotIndices = new HashSet<int>(); // which slot indices are domain slots
 
     // Layout
-    private const float PANEL_W = 800f;
-    private const float PANEL_H = 650f;
+    private const float PANEL_W = 1200f;
+    private const float PANEL_H = 860f;
 
     private class SlotRowUI
     {
@@ -103,20 +103,20 @@ public class SpellPreparationUI : MonoBehaviour
 
         // Main panel
         _rootPanel = MakePanel(_overlayPanel.transform, "SpellPrepPanel",
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(PANEL_W, PANEL_H), new Color(0.12f, 0.12f, 0.18f, 0.98f));
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, new Color(0.12f, 0.12f, 0.18f, 0.98f));
 
         float headerTop = PANEL_H / 2f;
 
         // Title
         _titleText = MakeText(_rootPanel.transform, "Title",
             new Vector2(0, headerTop - 30), new Vector2(PANEL_W - 40, 40),
-            "SPELL PREPARATION", 22, Color.white, TextAnchor.MiddleCenter);
+            "SPELL PREPARATION", 30, Color.white, TextAnchor.MiddleCenter);
 
         // Slot summary
         _slotSummaryText = MakeText(_rootPanel.transform, "Summary",
             new Vector2(0, headerTop - 62), new Vector2(PANEL_W - 40, 24),
-            "", 14, new Color(0.7f, 0.8f, 1f), TextAnchor.MiddleCenter);
+            "", 18, new Color(0.7f, 0.8f, 1f), TextAnchor.MiddleCenter);
 
         // Scroll area for slot list
         float contentTop = headerTop - 90;
@@ -162,29 +162,29 @@ public class SpellPreparationUI : MonoBehaviour
         float btnY = -PANEL_H / 2f + 35;
 
         _autoPrepareButton = MakeButton(_rootPanel.transform, "AutoPrepBtn",
-            new Vector2(-140, btnY), new Vector2(220, 42),
+            new Vector2(-140, btnY), new Vector2(280, 56),
             "Auto-Prepare ⚡", new Color(0.3f, 0.3f, 0.5f), Color.white, 16);
         _autoPrepareButton.onClick.AddListener(OnAutoPrepare);
 
         _confirmButton = MakeButton(_rootPanel.transform, "ConfirmBtn",
-            new Vector2(140, btnY), new Vector2(220, 42),
+            new Vector2(140, btnY), new Vector2(280, 56),
             "Confirm Preparation ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 16);
         _confirmButton.onClick.AddListener(OnConfirm);
 
         _skipCharacterButton = MakeButton(_rootPanel.transform, "SkipCharacterBtn",
-            new Vector2(-360, btnY), new Vector2(140, 42),
+            new Vector2(-360, btnY), new Vector2(190, 56),
             "Skip", new Color(0.45f, 0.35f, 0.18f), Color.white, 14);
         _skipCharacterButton.onClick.AddListener(OnSkipCharacterPressed);
         _skipCharacterButton.gameObject.SetActive(false);
 
         _backToMenuButton = MakeButton(_rootPanel.transform, "BackToMenuBtn",
-            new Vector2(-210, btnY), new Vector2(140, 42),
+            new Vector2(-210, btnY), new Vector2(190, 56),
             "Back", new Color(0.5f, 0.24f, 0.24f), Color.white, 14);
         _backToMenuButton.onClick.AddListener(OnBackToMenuPressed);
         _backToMenuButton.gameObject.SetActive(false);
 
         _startEncounterButton = MakeButton(_rootPanel.transform, "StartEncounterBtn",
-            new Vector2(360, btnY), new Vector2(140, 42),
+            new Vector2(360, btnY), new Vector2(190, 56),
             "Start", new Color(0.2f, 0.56f, 0.26f), Color.white, 14);
         _startEncounterButton.onClick.AddListener(OnStartEncounterPressed);
         _startEncounterButton.gameObject.SetActive(false);
@@ -209,7 +209,7 @@ public class SpellPreparationUI : MonoBehaviour
         Action onBackToMenuCallback,
         Action onStartEncounterCallback)
     {
-        Debug.Log("[SpellPrep] Opening spell preparation UI");
+        Debug.Log("[SpellPrep] Opening spell preparation UI (FULLSCREEN)");
 
         EnsureBuilt();
         if (_overlayPanel == null || _rootPanel == null)
@@ -869,7 +869,7 @@ public class SpellPreparationUI : MonoBehaviour
         ddRT.anchorMax = new Vector2(0.5f, 0.5f);
         ddRT.pivot = new Vector2(0.5f, 0.5f);
         ddRT.anchoredPosition = new Vector2(60, 0);
-        ddRT.sizeDelta = new Vector2(350, 32);
+        ddRT.sizeDelta = new Vector2(430, 44);
 
         // Dropdown background image
         var ddBG = dropdownObj.AddComponent<Image>();
@@ -888,7 +888,7 @@ public class SpellPreparationUI : MonoBehaviour
         labelRT.offsetMax = new Vector2(-28, -2);
         var labelText = labelGO.AddComponent<Text>();
         labelText.font = _font;
-        labelText.fontSize = 13;
+        labelText.fontSize = 16;
         labelText.color = Color.white;
         labelText.alignment = TextAnchor.MiddleLeft;
 
@@ -983,7 +983,7 @@ public class SpellPreparationUI : MonoBehaviour
         ilRT.offsetMax = new Vector2(-4, -2);
         var ilText = itemLabel.AddComponent<Text>();
         ilText.font = _font;
-        ilText.fontSize = 12;
+        ilText.fontSize = 14;
         ilText.color = Color.white;
         ilText.alignment = TextAnchor.MiddleLeft;
 
@@ -1178,7 +1178,7 @@ public class SpellPreparationUI : MonoBehaviour
         ddRT.anchorMax = new Vector2(0.5f, 0.5f);
         ddRT.pivot = new Vector2(0.5f, 0.5f);
         ddRT.anchoredPosition = new Vector2(60, 0);
-        ddRT.sizeDelta = new Vector2(350, 32);
+        ddRT.sizeDelta = new Vector2(430, 44);
 
         var ddBG = dropdownObj.AddComponent<Image>();
         ddBG.color = new Color(0.15f, 0.15f, 0.25f, 1f);
@@ -1195,7 +1195,7 @@ public class SpellPreparationUI : MonoBehaviour
         labelRT.offsetMax = new Vector2(-28, -2);
         var labelText = labelGO.AddComponent<Text>();
         labelText.font = _font;
-        labelText.fontSize = 13;
+        labelText.fontSize = 16;
         labelText.color = Color.white;
         labelText.alignment = TextAnchor.MiddleLeft;
 
@@ -1287,7 +1287,7 @@ public class SpellPreparationUI : MonoBehaviour
         ilRT.offsetMax = new Vector2(-4, -2);
         var ilText = itemLabel.AddComponent<Text>();
         ilText.font = _font;
-        ilText.fontSize = 12;
+        ilText.fontSize = 14;
         ilText.color = Color.white;
         ilText.alignment = TextAnchor.MiddleLeft;
 
@@ -1582,7 +1582,7 @@ public class SpellPreparationUI : MonoBehaviour
 
         Text t = go.AddComponent<Text>();
         t.text = text;
-        t.fontSize = fontSize;
+        t.fontSize = fontSize + 2;
         t.color = color;
         t.alignment = align;
         t.font = _font;

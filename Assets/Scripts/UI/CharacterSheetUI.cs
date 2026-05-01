@@ -55,11 +55,11 @@ public class CharacterSheetUI : MonoBehaviour
     // ===== Layout constants =====
     private const float PanelWidth = 1060f;
     private const float PanelHeight = 700f;
-    private const float SidebarWidth = 80f;
-    private const float MiddleWidth = 420f;
-    private const float RightWidth = 500f;
-    private const float TitleBarHeight = 38f;
-    private const float TabBarHeight = 28f;
+    private const float SidebarWidth = 100f;
+    private const float MiddleWidth = 500f;
+    private const float RightWidth = 560f;
+    private const float TitleBarHeight = 52f;
+    private const float TabBarHeight = 36f;
     private const float Padding = 10f;
 
     public bool IsOpen => _panelRoot != null && _panelRoot.activeSelf;
@@ -77,8 +77,10 @@ public class CharacterSheetUI : MonoBehaviour
 
         // Main overlay panel
         _panelRoot = MakePanel(canvas.transform, "CharacterSheetPanel",
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(PanelWidth, PanelHeight), PanelBg);
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, PanelBg);
+
+        Debug.Log("[CharacterSheet] Panel: (0,0) to (1,1) - FULLSCREEN");
 
         BuildTitleBar();
         BuildCharacterSidebar();

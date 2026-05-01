@@ -146,8 +146,8 @@ public class CharacterCreationUI : MonoBehaviour
 
     // UI Layout constants
     private Font _font;
-    private const float PANEL_W = 900f;
-    private const float PANEL_H = 680f;
+    private const float PANEL_W = 1080f;
+    private const float PANEL_H = 800f;
 
     // ========== RACE/CLASS DATA ==========
     private static readonly string[] RaceNames = { "Dwarf", "Elf", "Gnome", "Half-Elf", "Half-Orc", "Halfling", "Human" };
@@ -185,8 +185,10 @@ public class CharacterCreationUI : MonoBehaviour
 
         // Main panel
         _rootPanel = CreatePanel(_overlayPanel.transform, "CCPanel",
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(PANEL_W, PANEL_H), new Color(0.12f, 0.12f, 0.18f, 0.98f));
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, new Color(0.12f, 0.12f, 0.18f, 0.98f));
+
+        Debug.Log("[CharacterCreation] Panel: (0,0) to (1,1) - FULLSCREEN");
 
         // Title
         _titleText = MakeText(_rootPanel.transform, "Title",
@@ -3063,7 +3065,7 @@ public class CharacterCreationUI : MonoBehaviour
     private Text MakeText(Transform parent, string name, Vector2 pos, Vector2 size,
         string text, int fontSize, Color color, TextAnchor align)
     {
-        Text t = UIFactory.CreateLabel(parent, text, fontSize, align, color, name, _font);
+        Text t = UIFactory.CreateLabel(parent, text, fontSize + 2, align, color, name, _font);
         RectTransform rt = t.GetComponent<RectTransform>();
         UIFactory.SetRectTransform(rt,
             new Vector2(0.5f, 0.5f),
@@ -3078,7 +3080,8 @@ public class CharacterCreationUI : MonoBehaviour
     private Button MakeButton(Transform parent, string name, Vector2 pos, Vector2 size,
         string label, Color bgColor, Color textColor, int fontSize)
     {
-        Button btn = UIFactory.CreateButton(parent, label, null, size, bgColor, name, _font, fontSize, textColor);
+        Vector2 adjustedSize = new Vector2(size.x * 1.08f, size.y * 1.15f);
+        Button btn = UIFactory.CreateButton(parent, label, null, adjustedSize, bgColor, name, _font, fontSize + 2, textColor);
 
         RectTransform rt = btn.GetComponent<RectTransform>();
         UIFactory.SetRectTransform(rt,
@@ -3086,7 +3089,7 @@ public class CharacterCreationUI : MonoBehaviour
             new Vector2(0.5f, 0.5f),
             new Vector2(0.5f, 0.5f),
             pos,
-            size);
+            adjustedSize);
 
         ColorBlock cb = btn.colors;
         cb.normalColor = bgColor;

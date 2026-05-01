@@ -106,10 +106,13 @@ public class EncounterSelectionUI : MonoBehaviour
         _panel.transform.SetParent(canvas.transform, false);
 
         RectTransform panelRect = (RectTransform)_panel.transform;
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMin = Vector2.zero;
+        panelRect.anchorMax = Vector2.one;
         panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.sizeDelta = new Vector2(760f, 640f);
+        panelRect.offsetMin = Vector2.zero;
+        panelRect.offsetMax = Vector2.zero;
+
+        Debug.Log("[EncounterSelection] Panel: (0,0) to (1,1) - FULLSCREEN");
 
         Image panelImage = _panel.GetComponent<Image>();
         panelImage.color = PanelColor;
@@ -121,7 +124,7 @@ public class EncounterSelectionUI : MonoBehaviour
         CreateText(
             _panel.transform,
             "SELECT ENCOUNTER",
-            30,
+            40,
             FontStyle.Bold,
             Color.white,
             new Vector2(0.5f, 1f),
@@ -136,7 +139,7 @@ public class EncounterSelectionUI : MonoBehaviour
         CreateText(
             _panel.transform,
             "",
-            16,
+            20,
             FontStyle.Normal,
             new Color(0.85f, 0.89f, 0.95f, 1f),
             new Vector2(0.5f, 1f),
@@ -151,7 +154,7 @@ public class EncounterSelectionUI : MonoBehaviour
         CreateText(
             _panel.transform,
             "",
-            14,
+            18,
             FontStyle.Italic,
             new Color(0.75f, 0.82f, 0.95f, 1f),
             new Vector2(0.5f, 1f),
@@ -166,8 +169,8 @@ public class EncounterSelectionUI : MonoBehaviour
         GameObject scrollRoot = new GameObject("ScrollRoot", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
         scrollRoot.transform.SetParent(_panel.transform, false);
         RectTransform scrollRootRect = scrollRoot.GetComponent<RectTransform>();
-        scrollRootRect.anchorMin = new Vector2(0.05f, 0.18f);
-        scrollRootRect.anchorMax = new Vector2(0.95f, 0.84f);
+        scrollRootRect.anchorMin = new Vector2(0.08f, 0.18f);
+        scrollRootRect.anchorMax = new Vector2(0.92f, 0.84f);
         scrollRootRect.offsetMin = Vector2.zero;
         scrollRootRect.offsetMax = Vector2.zero;
 
@@ -297,9 +300,9 @@ public class EncounterSelectionUI : MonoBehaviour
         buttonObj.transform.SetParent(parent, false);
 
         LayoutElement le = buttonObj.GetComponent<LayoutElement>();
-        le.preferredWidth = 180f;
-        le.preferredHeight = 44f;
-        le.minHeight = 44f;
+        le.preferredWidth = 220f;
+        le.preferredHeight = 58f;
+        le.minHeight = 58f;
 
         Image image = buttonObj.GetComponent<Image>();
         image.color = color;
@@ -321,7 +324,7 @@ public class EncounterSelectionUI : MonoBehaviour
         CreateText(
             buttonObj.transform,
             label,
-            17,
+            22,
             FontStyle.Bold,
             Color.white,
             new Vector2(0.5f, 0.5f),
@@ -459,8 +462,8 @@ public class EncounterSelectionUI : MonoBehaviour
         cardImage.color = CardColor;
 
         LayoutElement le = card.GetComponent<LayoutElement>();
-        le.preferredHeight = 128f;
-        le.minHeight = 128f;
+        le.preferredHeight = 160f;
+        le.minHeight = 160f;
 
         Outline outline = card.GetComponent<Outline>();
         outline.effectColor = new Color(0.95f, 0.87f, 0.45f, 0.95f);
@@ -506,7 +509,7 @@ public class EncounterSelectionUI : MonoBehaviour
         CreateText(
             contentRoot.transform,
             preset.DisplayName,
-            17,
+            22,
             FontStyle.Bold,
             Color.white,
             new Vector2(0f, 0.5f),
@@ -526,7 +529,7 @@ public class EncounterSelectionUI : MonoBehaviour
         CreateText(
             contentRoot.transform,
             preset.Description,
-            13,
+            16,
             FontStyle.Normal,
             new Color(0.85f, 0.88f, 0.94f, 1f),
             new Vector2(0f, 0.5f),
@@ -551,7 +554,7 @@ public class EncounterSelectionUI : MonoBehaviour
         CreateText(
             contentRoot.transform,
             summaryText,
-            12,
+            15,
             FontStyle.Bold,
             new Color(0.97f, 0.86f, 0.53f, 1f),
             new Vector2(0f, 0.5f),

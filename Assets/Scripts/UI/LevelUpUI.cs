@@ -333,20 +333,22 @@ public class LevelUpUI : MonoBehaviour
         _panel.transform.SetParent(transform, false);
 
         RectTransform panelRect = _panel.AddComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0.12f, 0.08f);
-        panelRect.anchorMax = new Vector2(0.88f, 0.92f);
+        panelRect.anchorMin = Vector2.zero;
+        panelRect.anchorMax = Vector2.one;
         panelRect.offsetMin = Vector2.zero;
         panelRect.offsetMax = Vector2.zero;
 
         Image panelBg = _panel.AddComponent<Image>();
-        panelBg.color = new Color(0.07f, 0.09f, 0.15f, 0.95f);
+        panelBg.color = new Color(0.12f, 0.09f, 0.18f, 0.95f);
+
+        Debug.Log("[LevelUp] Panel: (0,0) to (1,1) - FULLSCREEN");
 
         GameObject viewportObj = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
         viewportObj.transform.SetParent(_panel.transform, false);
 
         RectTransform viewportRect = viewportObj.GetComponent<RectTransform>();
-        viewportRect.anchorMin = new Vector2(0.04f, 0.04f);
-        viewportRect.anchorMax = new Vector2(0.96f, 0.96f);
+        viewportRect.anchorMin = new Vector2(0.06f, 0.06f);
+        viewportRect.anchorMax = new Vector2(0.94f, 0.94f);
         viewportRect.offsetMin = Vector2.zero;
         viewportRect.offsetMax = Vector2.zero;
 
@@ -381,8 +383,8 @@ public class LevelUpUI : MonoBehaviour
         contentRect.sizeDelta = Vector2.zero;
 
         VerticalLayoutGroup contentLayout = content.GetComponent<VerticalLayoutGroup>();
-        contentLayout.spacing = 10f;
-        contentLayout.padding = new RectOffset(24, 24, 20, 20);
+        contentLayout.spacing = 14f;
+        contentLayout.padding = new RectOffset(34, 34, 28, 28);
         contentLayout.childAlignment = TextAnchor.UpperCenter;
         contentLayout.childControlWidth = true;
         contentLayout.childControlHeight = false;
@@ -439,7 +441,7 @@ public class LevelUpUI : MonoBehaviour
 
         TextMeshProUGUI tmp = textObj.GetComponent<TextMeshProUGUI>();
         tmp.text = text;
-        tmp.fontSize = fontSize;
+        tmp.fontSize = fontSize + 2;
         tmp.fontStyle = style;
         tmp.color = color;
         tmp.alignment = alignment;
@@ -464,7 +466,7 @@ public class LevelUpUI : MonoBehaviour
         sepRect.sizeDelta = new Vector2(0f, 14f);
     }
 
-    private void CreateButton(string label, Action onClick, float height = 42f)
+    private void CreateButton(string label, Action onClick, float height = 56f)
     {
         GameObject btnObj = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
         btnObj.transform.SetParent(_contentContainer, false);
@@ -489,7 +491,7 @@ public class LevelUpUI : MonoBehaviour
 
         TextMeshProUGUI text = textObj.GetComponent<TextMeshProUGUI>();
         text.text = label;
-        text.fontSize = 15;
+        text.fontSize = 20;
         text.fontStyle = FontStyles.Bold;
         text.alignment = TextAlignmentOptions.Center;
         text.color = Color.white;

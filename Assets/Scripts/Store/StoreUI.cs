@@ -111,41 +111,41 @@ public class StoreUI : MonoBehaviour
         }
 
         _root = CreatePanel(canvas.transform, "StoreRoot",
-            new Vector2(0.1f, 0.1f), new Vector2(0.9f, 0.9f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, Vector2.zero, new Color(0.08f, 0.1f, 0.15f, 0.98f));
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, new Color(0.08f, 0.1f, 0.15f, 0.985f));
 
-        Debug.Log("[Store] Main panel bounds: 0.1 to 0.9 (screen percentage)");
+        Debug.Log("[Store] Main panel bounds: FULLSCREEN (0.0 to 1.0)");
 
         CreateText(_root.transform, "Title", "MERCHANT SHOP",
-            new Vector2(0.05f, 0.92f), new Vector2(0.95f, 0.97f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, Vector2.zero, 28, FontStyle.Bold,
+            new Vector2(0.1f, 0.94f), new Vector2(0.9f, 0.99f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 36, FontStyle.Bold,
             new Color(0.98f, 0.88f, 0.45f), TextAnchor.MiddleCenter);
 
         Debug.Log("[Store] Title bounds: 0.05 to 0.95 (within panel)");
 
         _goldText = CreateText(_root.transform, "GoldText", "Gold: 0 gp",
-            new Vector2(0.6f, 0.88f), new Vector2(0.95f, 0.92f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, Vector2.zero, 18, FontStyle.Bold,
+            new Vector2(0.62f, 0.89f), new Vector2(0.9f, 0.93f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 24, FontStyle.Bold,
             new Color(1f, 0.92f, 0.2f), TextAnchor.MiddleCenter);
 
-        CreateTabButton("BuyTab", "BUY", new Vector2(0.1f, 0.82f), new Vector2(0.35f, 0.87f), new Color(0.22f, 0.5f, 0.28f), ShowBuyPanel);
-        CreateTabButton("SellTab", "SELL", new Vector2(0.37f, 0.82f), new Vector2(0.62f, 0.87f), new Color(0.56f, 0.35f, 0.18f), ShowSellPanel);
+        CreateTabButton("BuyTab", "BUY", new Vector2(0.12f, 0.84f), new Vector2(0.38f, 0.9f), new Color(0.22f, 0.5f, 0.28f), ShowBuyPanel);
+        CreateTabButton("SellTab", "SELL", new Vector2(0.4f, 0.84f), new Vector2(0.66f, 0.9f), new Color(0.56f, 0.35f, 0.18f), ShowSellPanel);
 
         BuildBuyPanel();
         BuildSellPanel();
 
         _messageText = CreateText(_root.transform, "MessageText", string.Empty,
-            new Vector2(0.05f, 0.09f), new Vector2(0.95f, 0.13f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, Vector2.zero, 14, FontStyle.Bold,
+            new Vector2(0.1f, 0.11f), new Vector2(0.9f, 0.16f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 18, FontStyle.Bold,
             new Color(0.84f, 0.9f, 1f), TextAnchor.MiddleCenter);
 
-        CreateBottomButton("BackButton", "Back to Menu", new Vector2(0.08f, 0.03f), new Vector2(0.46f, 0.09f), new Color(0.48f, 0.25f, 0.25f), () =>
+        CreateBottomButton("BackButton", "Back to Menu", new Vector2(0.1f, 0.03f), new Vector2(0.44f, 0.09f), new Color(0.48f, 0.25f, 0.25f), () =>
         {
             Close();
             _onBackToMenu?.Invoke();
         });
 
-        CreateBottomButton("StartButton", "Start Encounter", new Vector2(0.54f, 0.03f), new Vector2(0.92f, 0.09f), new Color(0.2f, 0.58f, 0.28f), () =>
+        CreateBottomButton("StartButton", "Start Encounter", new Vector2(0.56f, 0.03f), new Vector2(0.9f, 0.09f), new Color(0.2f, 0.58f, 0.28f), () =>
         {
             Close();
             _onStartEncounter?.Invoke();
@@ -153,16 +153,20 @@ public class StoreUI : MonoBehaviour
 
         Debug.Log("[Store] All elements within safe area");
 
+        Debug.Log("[UI] === FULLSCREEN UI UPDATES ===");
+        Debug.Log("[Store] Panel: (0,0) to (1,1) - FULLSCREEN");
+        Debug.Log("[UI] Store window updated with fullscreen proportions and larger typography/buttons.");
+
         _root.SetActive(false);
     }
 
     private void BuildBuyPanel()
     {
         _buyPanel = CreatePanel(_root.transform, "BuyPanel",
-            new Vector2(0.05f, 0.12f), new Vector2(0.95f, 0.8f), new Vector2(0.5f, 0.5f),
+            new Vector2(0.1f, 0.17f), new Vector2(0.9f, 0.83f), new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero, new Color(0.06f, 0.08f, 0.12f, 0.94f));
 
-        Debug.Log("[Store] Buy panel bounds: 0.05 to 0.95 (within panel)");
+        Debug.Log("[Store] Buy panel bounds: fullscreen proportion (0.10 to 0.90)");
 
         GameObject filterObj = new GameObject("CategoryDropdown", typeof(RectTransform), typeof(Image), typeof(Dropdown));
         filterObj.transform.SetParent(_buyPanel.transform, false);
@@ -170,15 +174,15 @@ public class StoreUI : MonoBehaviour
         filterRect.anchorMin = new Vector2(0f, 1f);
         filterRect.anchorMax = new Vector2(0f, 1f);
         filterRect.pivot = new Vector2(0f, 1f);
-        filterRect.anchoredPosition = new Vector2(14f, -10f);
-        filterRect.sizeDelta = new Vector2(230f, 34f);
+        filterRect.anchoredPosition = new Vector2(20f, -14f);
+        filterRect.sizeDelta = new Vector2(300f, 48f);
 
         filterObj.GetComponent<Image>().color = new Color(0.2f, 0.24f, 0.34f, 1f);
         _categoryDropdown = filterObj.GetComponent<Dropdown>();
 
         Text ddLabel = CreateText(filterObj.transform, "Label", "All",
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            new Vector2(-24f, 0f), 14, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+            new Vector2(-24f, 0f), 18, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
         ddLabel.rectTransform.offsetMin = new Vector2(10f, 0f);
         ddLabel.rectTransform.offsetMax = new Vector2(-20f, 0f);
 
@@ -187,7 +191,7 @@ public class StoreUI : MonoBehaviour
         Text arrowText = arrow.GetComponent<Text>();
         arrowText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         arrowText.text = "▼";
-        arrowText.fontSize = 14;
+        arrowText.fontSize = 18;
         arrowText.color = Color.white;
         arrowText.alignment = TextAnchor.MiddleCenter;
         RectTransform arrowRect = arrow.GetComponent<RectTransform>();
@@ -204,7 +208,7 @@ public class StoreUI : MonoBehaviour
         templateRect.anchorMax = new Vector2(1f, 0f);
         templateRect.pivot = new Vector2(0.5f, 1f);
         templateRect.anchoredPosition = new Vector2(0f, -2f);
-        templateRect.sizeDelta = new Vector2(0f, 150f);
+        templateRect.sizeDelta = new Vector2(0f, 220f);
         template.GetComponent<Image>().color = new Color(0.13f, 0.16f, 0.24f, 1f);
         template.SetActive(false);
 
@@ -238,7 +242,7 @@ public class StoreUI : MonoBehaviour
         item.transform.SetParent(content.transform, false);
         item.GetComponent<Image>().color = new Color(0.18f, 0.22f, 0.3f, 1f);
         RectTransform itemRect = item.GetComponent<RectTransform>();
-        itemRect.sizeDelta = new Vector2(0f, 28f);
+        itemRect.sizeDelta = new Vector2(0f, 42f);
 
         Toggle toggle = item.GetComponent<Toggle>();
 
@@ -246,7 +250,7 @@ public class StoreUI : MonoBehaviour
         itemLabelObj.transform.SetParent(item.transform, false);
         Text itemLabel = itemLabelObj.GetComponent<Text>();
         itemLabel.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        itemLabel.fontSize = 14;
+        itemLabel.fontSize = 18;
         itemLabel.color = Color.white;
         itemLabel.alignment = TextAnchor.MiddleLeft;
         RectTransform itemLabelRect = itemLabelObj.GetComponent<RectTransform>();
@@ -269,21 +273,21 @@ public class StoreUI : MonoBehaviour
         _categoryDropdown.itemText = itemLabel;
         _categoryDropdown.onValueChanged.AddListener(_ => RebuildBuyList());
 
-        CreateScrollList(_buyPanel.transform, "BuyScroll", new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(12f, 12f), new Vector2(-12f, -52f), out _buyContent);
+        CreateScrollList(_buyPanel.transform, "BuyScroll", new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(16f, 16f), new Vector2(-16f, -72f), out _buyContent);
     }
 
     private void BuildSellPanel()
     {
         _sellPanel = CreatePanel(_root.transform, "SellPanel",
-            new Vector2(0.05f, 0.12f), new Vector2(0.95f, 0.8f), new Vector2(0.5f, 0.5f),
+            new Vector2(0.1f, 0.17f), new Vector2(0.9f, 0.83f), new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero, new Color(0.07f, 0.07f, 0.1f, 0.94f));
 
         CreateText(_sellPanel.transform, "Hint", "Items sell for 50% of listed value (D&D 3.5e)",
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -16f), new Vector2(540f, 24f), 13, FontStyle.Italic,
+            new Vector2(0f, -16f), new Vector2(680f, 30f), 16, FontStyle.Italic,
             new Color(0.95f, 0.84f, 0.45f), TextAnchor.MiddleCenter);
 
-        CreateScrollList(_sellPanel.transform, "SellScroll", new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(12f, 12f), new Vector2(-12f, -40f), out _sellContent);
+        CreateScrollList(_sellPanel.transform, "SellScroll", new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(16f, 16f), new Vector2(-16f, -56f), out _sellContent);
 
         _sellPanel.SetActive(false);
     }
@@ -405,11 +409,11 @@ public class StoreUI : MonoBehaviour
 
         GameObject row = CreatePanel(parent, $"Buy_{entry.ItemId}",
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
-            Vector2.zero, new Vector2(0f, 72f), new Color(0.16f, 0.18f, 0.25f, 1f));
+            Vector2.zero, new Vector2(0f, 92f), new Color(0.16f, 0.18f, 0.25f, 1f));
 
         HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
-        layout.padding = new RectOffset(6, 6, 5, 5);
-        layout.spacing = 5f;
+        layout.padding = new RectOffset(10, 10, 8, 8);
+        layout.spacing = 10f;
         layout.childControlWidth = true;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = false;
@@ -429,33 +433,33 @@ public class StoreUI : MonoBehaviour
 
         LayoutElement infoLayoutElement = infoObj.GetComponent<LayoutElement>();
         infoLayoutElement.flexibleWidth = 1f;
-        infoLayoutElement.minWidth = 200f;
+        infoLayoutElement.minWidth = 320f;
 
         Text nameText = CreateText(infoObj.transform, "Name", template.Name,
             Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
-            new Vector2(0f, 30f), 14, FontStyle.Bold, Color.white, TextAnchor.UpperLeft);
+            new Vector2(0f, 36f), 18, FontStyle.Bold, Color.white, TextAnchor.UpperLeft);
         LayoutElement nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
-        nameLayout.preferredHeight = 30f;
+        nameLayout.preferredHeight = 36f;
 
         Text detailText = CreateText(infoObj.transform, "Details", details,
             Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
-            new Vector2(0f, 30f), 11, FontStyle.Normal, new Color(0.8f, 0.85f, 0.95f), TextAnchor.UpperLeft);
+            new Vector2(0f, 36f), 14, FontStyle.Normal, new Color(0.8f, 0.85f, 0.95f), TextAnchor.UpperLeft);
         detailText.horizontalOverflow = HorizontalWrapMode.Wrap;
         detailText.verticalOverflow = VerticalWrapMode.Truncate;
         LayoutElement detailsLayout = detailText.gameObject.AddComponent<LayoutElement>();
-        detailsLayout.preferredHeight = 30f;
+        detailsLayout.preferredHeight = 36f;
 
         Text priceText = CreateText(row.transform, "Price", $"{entry.PriceGp} gp",
             Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
-            new Vector2(70f, 60f), 14, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), TextAnchor.MiddleCenter);
+            new Vector2(110f, 76f), 18, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), TextAnchor.MiddleCenter);
         LayoutElement priceLayout = priceText.gameObject.AddComponent<LayoutElement>();
-        priceLayout.minWidth = 70f;
-        priceLayout.preferredWidth = 72f;
+        priceLayout.minWidth = 110f;
+        priceLayout.preferredWidth = 120f;
 
         CreateSmallActionButton(row.transform, "BuyButton", "BUY", new Color(0.2f, 0.56f, 0.26f), () => BuyItem(entry));
 
         LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-        rowLayout.preferredHeight = 72f;
+        rowLayout.preferredHeight = 92f;
     }
 
     private void CreateSellRow(Transform parent, SellEntry entry)
@@ -464,11 +468,11 @@ public class StoreUI : MonoBehaviour
 
         GameObject row = CreatePanel(parent, $"Sell_{entry.Item.Name}",
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
-            Vector2.zero, new Vector2(0f, 68f), new Color(0.22f, 0.17f, 0.17f, 1f));
+            Vector2.zero, new Vector2(0f, 88f), new Color(0.22f, 0.17f, 0.17f, 1f));
 
         HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
-        layout.padding = new RectOffset(6, 6, 5, 5);
-        layout.spacing = 5f;
+        layout.padding = new RectOffset(10, 10, 8, 8);
+        layout.spacing = 10f;
         layout.childControlWidth = true;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = false;
@@ -486,25 +490,25 @@ public class StoreUI : MonoBehaviour
 
         LayoutElement infoLayoutElement = infoObj.GetComponent<LayoutElement>();
         infoLayoutElement.flexibleWidth = 1f;
-        infoLayoutElement.minWidth = 220f;
+        infoLayoutElement.minWidth = 330f;
 
         Text nameText = CreateText(infoObj.transform, "Name", $"{entry.Item.Name} ({entry.OwnerName})",
             Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
-            new Vector2(0f, 28f), 13, FontStyle.Bold, Color.white, TextAnchor.UpperLeft);
+            new Vector2(0f, 36f), 17, FontStyle.Bold, Color.white, TextAnchor.UpperLeft);
         LayoutElement nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
-        nameLayout.preferredHeight = 28f;
+        nameLayout.preferredHeight = 36f;
 
         int baseValue = sellPrice * 2;
         Text valueText = CreateText(infoObj.transform, "Value", $"Value {baseValue} gp → Sell {sellPrice} gp",
             Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
-            new Vector2(0f, 28f), 11, FontStyle.Normal, new Color(0.82f, 0.86f, 0.93f), TextAnchor.UpperLeft);
+            new Vector2(0f, 36f), 14, FontStyle.Normal, new Color(0.82f, 0.86f, 0.93f), TextAnchor.UpperLeft);
         LayoutElement valueLayout = valueText.gameObject.AddComponent<LayoutElement>();
-        valueLayout.preferredHeight = 28f;
+        valueLayout.preferredHeight = 36f;
 
         CreateSmallActionButton(row.transform, "SellButton", $"SELL\n{sellPrice} gp", new Color(0.58f, 0.37f, 0.18f), () => SellItem(entry));
 
         LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-        rowLayout.preferredHeight = 68f;
+        rowLayout.preferredHeight = 88f;
     }
 
     private void BuyItem(StoreInventory.StoreItemEntry entry)
@@ -596,7 +600,7 @@ public class StoreUI : MonoBehaviour
 
         CreateText(tabObj.transform, "Label", label,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            Vector2.zero, 16, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            Vector2.zero, 20, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
     }
 
     private void CreateBottomButton(string name, string label, Vector2 anchorMin, Vector2 anchorMax, Color color, Action onClick)
@@ -618,7 +622,7 @@ public class StoreUI : MonoBehaviour
 
         CreateText(buttonObj.transform, "Label", label,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            Vector2.zero, 16, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            Vector2.zero, 20, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
     }
 
     private static Button CreateSmallActionButton(Transform parent, string name, string label, Color color, Action onClick)
@@ -627,9 +631,9 @@ public class StoreUI : MonoBehaviour
         buttonObj.transform.SetParent(parent, false);
 
         LayoutElement layout = buttonObj.GetComponent<LayoutElement>();
-        layout.minWidth = 55f;
-        layout.preferredWidth = 70f;
-        layout.preferredHeight = 35f;
+        layout.minWidth = 100f;
+        layout.preferredWidth = 120f;
+        layout.preferredHeight = 50f;
 
         Image image = buttonObj.GetComponent<Image>();
         image.color = color;
@@ -639,7 +643,7 @@ public class StoreUI : MonoBehaviour
 
         CreateText(buttonObj.transform, "Label", label,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            Vector2.zero, 16, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
 
         return button;
     }
