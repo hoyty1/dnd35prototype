@@ -52,10 +52,9 @@ public class StoreUI : MonoBehaviour
     private readonly Dictionary<string, Image> _sellCategoryButtonImages = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
     private string _currentBuyCategory = "All";
     private string _currentSellCategory = "All";
-    private string _currentSellCharacterKey = SellCharacterAllKey;
+    private string _currentSellCharacterKey = SellCharacterStashKey;
     private CharacterController _selectedSellCharacter;
 
-    private const string SellCharacterAllKey = "__all__";
     private const string SellCharacterStashKey = "__stash__";
 
     private PartyStash _partyStash;
@@ -92,7 +91,7 @@ public class StoreUI : MonoBehaviour
         SubscribeGoldEvents();
         BuildCategoryOptions();
 
-        _currentSellCharacterKey = SellCharacterAllKey;
+        _currentSellCharacterKey = SellCharacterStashKey;
         _selectedSellCharacter = null;
         _currentSellCategory = "All";
         BuildSellCharacterOptions(_sellCharacterButtonsRoot);
@@ -415,7 +414,6 @@ public class StoreUI : MonoBehaviour
         ClearChildren(parent);
         _sellCharacterButtonImages.Clear();
 
-        CreateSellCharacterButton(parent, SellCharacterAllKey, "All", null);
         CreateSellCharacterButton(parent, SellCharacterStashKey, "Stash", null);
 
         for (int i = 0; i < _partyMembers.Count; i++)
@@ -432,8 +430,18 @@ public class StoreUI : MonoBehaviour
             CreateSellCharacterButton(parent, key, ownerName, character);
         }
 
+        _currentSellCharacterKey = SellCharacterStashKey;
+        _selectedSellCharacter = null;
+
         RefreshSellCharacterButtons();
-        Debug.Log($"[Store] Character filter created with {_sellCharacterButtonImages.Count} buttons");
+        Debug.Log($"[Store] Character filter created: Stash + {_partyMembers.Count} characters (no 'All' option)");
+        Debug.Log("[Store] === CHARACTER FILTER UPDATE ===");
+        Debug.Log("[Store] ✅ Removed 'All' characters option");
+        Debug.Log("[Store] ✅ Default selection: Stash");
+        Debug.Log("[Store] Available filters:");
+        Debug.Log("[Store]   - Stash (party shared items)");
+        Debug.Log("[Store]   - Individual characters");
+        Debug.Log("[Store] Players must choose specific source");
     }
 
     private void CreateSellCharacterButton(Transform parent, string key, string label, CharacterController character)
@@ -464,29 +472,19 @@ public class StoreUI : MonoBehaviour
 
     private void SelectSellCharacterFilter(string key, CharacterController character)
     {
-        _currentSellCharacterKey = string.IsNullOrWhiteSpace(key) ? SellCharacterAllKey : key;
-
-        switch (_currentSellCharacterKey)
-        {
-            case SellCharacterAllKey:
-            case SellCharacterStashKey:
-                _selectedSellCharacter = null;
-                break;
-            default:
-                _selectedSellCharacter = character;
-                break;
-        }
+        _currentSellCharacterKey = string.IsNullOrWhiteSpace(key) ? SellCharacterStashKey : key;
+        _selectedSellCharacter = string.Equals(_currentSellCharacterKey, SellCharacterStashKey, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : character;
 
         RefreshSellCharacterButtons();
         RebuildSellList();
 
-        string label = _currentSellCharacterKey == SellCharacterAllKey
-            ? "All"
-            : _currentSellCharacterKey == SellCharacterStashKey
-                ? "Stash"
-                : (character != null && character.Stats != null
-                    ? character.Stats.CharacterName
-                    : character != null ? character.name : "Unknown");
+        string label = _currentSellCharacterKey == SellCharacterStashKey
+            ? "Stash"
+            : (character != null && character.Stats != null
+                ? character.Stats.CharacterName
+                : character != null ? character.name : "Unknown");
         Debug.Log($"[Store] Sell filtered by character: {label}");
     }
 
@@ -627,7 +625,7 @@ public class StoreUI : MonoBehaviour
         if (_selectedSellCharacter != null)
             return _selectedSellCharacter.GetInstanceID().ToString();
 
-        return SellCharacterAllKey;
+        return SellCharacterStashKey;
     }
 
     private void ShowBuyPanel()
@@ -644,14 +642,14 @@ public class StoreUI : MonoBehaviour
         if (_buyPanel != null) _buyPanel.SetActive(false);
         if (_sellPanel != null) _sellPanel.SetActive(true);
 
-        _currentSellCharacterKey = SellCharacterAllKey;
+        _currentSellCharacterKey = SellCharacterStashKey;
         _selectedSellCharacter = null;
         _currentSellCategory = "All";
         RefreshSellCharacterButtons();
         RefreshSellCategoryButtons();
         RebuildSellList();
 
-        Debug.Log("[Store] Switched to SELL tab with filters reset");
+        Debug.Log("[Store] Switched to SELL tab (default: Stash, All types)");
         Debug.Log("[Store] === SELL LIST IMPROVEMENTS ===");
         Debug.Log("[Store] ✅ Equipped items hidden from sell list (only general inventory + stash shown)");
         Debug.Log("[Store] ✅ Items stacked by name with quantity display");
@@ -705,41 +703,32 @@ public class StoreUI : MonoBehaviour
     {
         Dictionary<string, SellStack> stackLookup = new Dictionary<string, SellStack>(StringComparer.OrdinalIgnoreCase);
 
-        bool includeStash = string.Equals(_currentSellCharacterKey, SellCharacterAllKey, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(_currentSellCharacterKey, SellCharacterStashKey, StringComparison.OrdinalIgnoreCase);
+        bool stashSelected = string.Equals(_currentSellCharacterKey, SellCharacterStashKey, StringComparison.OrdinalIgnoreCase)
+            || _selectedSellCharacter == null;
 
-        if (includeStash && _partyStash != null)
+        if (stashSelected)
         {
-            List<ItemData> stashItems = _partyStash.GetItemsSnapshot();
-            for (int i = 0; i < stashItems.Count; i++)
+            if (_partyStash != null)
             {
-                ItemData item = stashItems[i];
-                if (item == null || !MatchesSellCategory(item))
-                    continue;
+                List<ItemData> stashItems = _partyStash.GetItemsSnapshot();
+                for (int i = 0; i < stashItems.Count; i++)
+                {
+                    ItemData item = stashItems[i];
+                    if (item == null || !MatchesSellCategory(item))
+                        continue;
 
-                AddItemToSellStack(stackLookup, item, true, null, "Stash");
+                    AddItemToSellStack(stackLookup, item, true, null, "Stash");
+                }
             }
         }
-
-        if (!string.Equals(_currentSellCharacterKey, SellCharacterStashKey, StringComparison.OrdinalIgnoreCase))
+        else
         {
-            for (int i = 0; i < _partyMembers.Count; i++)
+            CharacterController character = _selectedSellCharacter;
+            CharacterInventory inventory = character != null ? character.GetComponent<CharacterInventory>() : null;
+            Inventory rawInventory = inventory != null ? inventory.GetInventory() : null;
+
+            if (rawInventory != null && rawInventory.GeneralSlots != null)
             {
-                CharacterController character = _partyMembers[i];
-                if (character == null)
-                    continue;
-
-                if (_selectedSellCharacter != null && character != _selectedSellCharacter)
-                    continue;
-
-                CharacterInventory inventory = character.GetComponent<CharacterInventory>();
-                if (inventory == null)
-                    continue;
-
-                Inventory rawInventory = inventory.GetInventory();
-                if (rawInventory == null || rawInventory.GeneralSlots == null)
-                    continue;
-
                 string ownerName = character.Stats != null ? character.Stats.CharacterName : character.name;
 
                 for (int slotIndex = 0; slotIndex < rawInventory.GeneralSlots.Length; slotIndex++)
@@ -889,11 +878,9 @@ public class StoreUI : MonoBehaviour
 
     private string GetSellCharacterLabelForLogs()
     {
-        if (string.Equals(_currentSellCharacterKey, SellCharacterStashKey, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(_currentSellCharacterKey, SellCharacterStashKey, StringComparison.OrdinalIgnoreCase)
+            || _selectedSellCharacter == null)
             return "Stash";
-
-        if (_selectedSellCharacter == null)
-            return "All";
 
         return _selectedSellCharacter.Stats != null
             ? _selectedSellCharacter.Stats.CharacterName
