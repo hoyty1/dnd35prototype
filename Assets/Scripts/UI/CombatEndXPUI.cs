@@ -22,23 +22,53 @@ public class CombatEndXPUI : MonoBehaviour
 
         if (xpResult == null)
         {
+            Debug.LogWarning("[XP UI] XP result is null. Invoking callback immediately.");
             onComplete?.Invoke();
             return;
         }
 
         _onComplete = onComplete;
 
-        EnsureBuilt();
-        if (_root == null)
+        if (_root == null || _panel == null)
         {
+            Debug.Log("[XP UI] Root/panel missing, calling BuildUI()");
+            BuildUI();
+        }
+        else
+        {
+            Debug.Log("[XP UI] Root/panel already exists, reusing");
+        }
+
+        Debug.Log($"[XP UI] Root null after BuildUI: {_root == null}");
+        Debug.Log($"[XP UI] Panel null after BuildUI: {_panel == null}");
+        Debug.Log($"[XP UI] Root parent: {(_root != null ? _root.transform.parent?.name : "null")}");
+        Debug.Log($"[XP UI] Panel parent: {(_panel != null ? _panel.transform.parent?.name : "null")}");
+        Debug.Log($"[XP UI] Root active: {(_root != null && _root.activeSelf)}");
+        Debug.Log($"[XP UI] Panel active: {(_panel != null && _panel.activeSelf)}");
+
+        if (_root == null || _panel == null)
+        {
+            Debug.LogError("[XP UI] Root/panel was not built. Invoking callback to avoid flow lock.");
             _onComplete?.Invoke();
             return;
         }
 
         BuildContent(xpResult);
+
         _root.SetActive(true);
         _root.transform.SetAsLastSibling();
+        _panel.SetActive(true);
+        _panel.transform.SetAsLastSibling();
+
+        RectTransform rootRect = _root.GetComponent<RectTransform>();
+        RectTransform panelRect = _panel.GetComponent<RectTransform>();
         Debug.Log("[XP UI] Panel activated");
+        Debug.Log($"[XP UI] Root position: {_root.transform.position}");
+        Debug.Log($"[XP UI] Root rect: {(rootRect != null ? rootRect.rect.ToString() : "null")}");
+        Debug.Log($"[XP UI] Panel position: {_panel.transform.position}");
+        Debug.Log($"[XP UI] Panel rect: {(panelRect != null ? panelRect.rect.ToString() : "null")}");
+
+        LogUIHierarchy();
     }
 
     private void OnContinueClicked()
@@ -53,35 +83,72 @@ public class CombatEndXPUI : MonoBehaviour
         Debug.Log("[XP UI] Callback invoked");
     }
 
-    private void EnsureBuilt()
+    private void BuildUI()
     {
-        if (_root != null)
-            return;
+        Debug.Log("[XP UI] BuildUI started");
 
-        _root = new GameObject("XPAwardRoot", typeof(RectTransform), typeof(Image));
-        _root.transform.SetParent(transform, false);
+        if (_root != null)
+        {
+            Debug.Log("[XP UI] Existing root found, destroying before rebuild");
+            Destroy(_root);
+            _root = null;
+            _panel = null;
+        }
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            Debug.LogWarning("[XP UI] No Canvas found via FindObjectOfType. Attempting parent traversal.");
+            Transform canvasTransform = transform.parent;
+            while (canvasTransform != null)
+            {
+                Canvas parentCanvas = canvasTransform.GetComponent<Canvas>();
+                if (parentCanvas != null)
+                {
+                    canvas = parentCanvas;
+                    Debug.Log($"[XP UI] Found Canvas via parent traversal: {canvas.name}");
+                    break;
+                }
+
+                canvasTransform = canvasTransform.parent;
+            }
+        }
+
+        if (canvas == null)
+        {
+            Debug.LogError("[XP UI] FATAL: No Canvas found in scene. Cannot build XP UI.");
+            return;
+        }
+
+        Debug.Log($"[XP UI] Using Canvas: {canvas.name}");
+        Debug.Log($"[XP UI] Canvas activeInHierarchy: {canvas.gameObject.activeInHierarchy}");
+        Debug.Log($"[XP UI] Canvas enabled: {canvas.enabled}");
+        Debug.Log($"[XP UI] Canvas renderMode: {canvas.renderMode}");
+        Debug.Log($"[XP UI] Canvas sortingLayerID: {canvas.sortingLayerID}, sortingOrder: {canvas.sortingOrder}");
+        Debug.Log($"[XP UI] Canvas camera: {(canvas.worldCamera != null ? canvas.worldCamera.name : "null")}");
+
+        _root = new GameObject("CombatEndXPOverlay", typeof(RectTransform), typeof(Image));
+        _root.transform.SetParent(canvas.transform, false);
 
         RectTransform overlayRect = _root.GetComponent<RectTransform>();
         overlayRect.anchorMin = Vector2.zero;
         overlayRect.anchorMax = Vector2.one;
         overlayRect.offsetMin = Vector2.zero;
         overlayRect.offsetMax = Vector2.zero;
+        overlayRect.localScale = Vector3.one;
 
         Image overlay = _root.GetComponent<Image>();
         overlay.color = new Color(0f, 0f, 0f, 0.72f);
-    }
+        overlay.raycastTarget = true;
 
-    private void BuildContent(ExperienceCalculator.CombatXPResult xpResult)
-    {
-        for (int i = _root.transform.childCount - 1; i >= 0; i--)
-            Destroy(_root.transform.GetChild(i).gameObject);
+        _panel = CreateChild("CombatEndXPPanel", _root.transform, typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
 
-        _panel = CreateChild("Panel", _root.transform, typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
         RectTransform panelRect = _panel.GetComponent<RectTransform>();
         panelRect.anchorMin = new Vector2(0.18f, 0.1f);
         panelRect.anchorMax = new Vector2(0.82f, 0.9f);
         panelRect.offsetMin = Vector2.zero;
         panelRect.offsetMax = Vector2.zero;
+        panelRect.localScale = Vector3.one;
 
         Image panelBg = _panel.GetComponent<Image>();
         panelBg.color = new Color(0.08f, 0.11f, 0.18f, 0.97f);
@@ -94,6 +161,30 @@ public class CombatEndXPUI : MonoBehaviour
 
         ContentSizeFitter fitter = _panel.GetComponent<ContentSizeFitter>();
         fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+        _root.transform.SetAsLastSibling();
+        _panel.transform.SetAsLastSibling();
+        _root.SetActive(false);
+
+        Debug.Log("[XP UI] BuildUI complete");
+        Debug.Log($"[XP UI] Root: {_root.name}, Parent: {_root.transform.parent?.name}");
+        Debug.Log($"[XP UI] Panel: {_panel.name}, Parent: {_panel.transform.parent?.name}");
+        Debug.Log($"[XP UI] Root Rect: {overlayRect.rect}");
+        Debug.Log($"[XP UI] Panel Rect: {panelRect.rect}");
+        Debug.Log($"[XP UI] Root Position: {overlayRect.position}");
+        Debug.Log($"[XP UI] Panel Position: {panelRect.position}");
+    }
+
+    private void BuildContent(ExperienceCalculator.CombatXPResult xpResult)
+    {
+        if (_panel == null)
+        {
+            Debug.LogError("[XP UI] BuildContent called with null panel.");
+            return;
+        }
+
+        for (int i = _panel.transform.childCount - 1; i >= 0; i--)
+            Destroy(_panel.transform.GetChild(i).gameObject);
 
         CreateText(_panel.transform, "EXPERIENCE GAINED", 28, FontStyle.Bold, new Color(1f, 0.92f, 0.45f));
         CreateText(_panel.transform, $"Average Party Level: {xpResult.AveragePartyLevel:F1}", 18, FontStyle.Normal, Color.white);
@@ -159,6 +250,43 @@ public class CombatEndXPUI : MonoBehaviour
 
         button.onClick.RemoveAllListeners();
         button.onClick.AddListener(OnContinueClicked);
+    }
+
+    private void LogUIHierarchy()
+    {
+        if (_panel == null)
+        {
+            Debug.LogError("[XP UI] Panel is null!");
+            return;
+        }
+
+        Debug.Log("[XP UI] === UI HIERARCHY ===");
+        Debug.Log($"[XP UI] Root: {(_root != null ? _root.name : "null")}");
+        Debug.Log($"[XP UI] Root Active: {(_root != null && _root.activeSelf)}");
+        Debug.Log($"[XP UI] Root ActiveInHierarchy: {(_root != null && _root.activeInHierarchy)}");
+        Debug.Log($"[XP UI] Root Parent: {(_root != null ? _root.transform.parent?.name : "null")}");
+        Debug.Log($"[XP UI] Panel: {_panel.name}");
+        Debug.Log($"[XP UI] Panel Active: {_panel.activeSelf}");
+        Debug.Log($"[XP UI] Panel ActiveInHierarchy: {_panel.activeInHierarchy}");
+        Debug.Log($"[XP UI] Panel Parent: {_panel.transform.parent?.name}");
+        Debug.Log($"[XP UI] Panel Position: {_panel.transform.position}");
+        Debug.Log($"[XP UI] Panel Scale: {_panel.transform.localScale}");
+
+        RectTransform panelRect = _panel.GetComponent<RectTransform>();
+        if (panelRect != null)
+        {
+            Debug.Log($"[XP UI] Panel Rect: {panelRect.rect}");
+            Debug.Log($"[XP UI] Panel AnchoredPosition: {panelRect.anchoredPosition}");
+            Debug.Log($"[XP UI] Panel SizeDelta: {panelRect.sizeDelta}");
+        }
+
+        Image image = _panel.GetComponent<Image>();
+        if (image != null)
+            Debug.Log($"[XP UI] Panel Background Color: {image.color}");
+
+        Debug.Log($"[XP UI] Root child count: {(_root != null ? _root.transform.childCount : 0)}");
+        Debug.Log($"[XP UI] Panel child count: {_panel.transform.childCount}");
+        Debug.Log("[XP UI] ==================");
     }
 
     private static GameObject CreateChild(string name, Transform parent, params Type[] components)

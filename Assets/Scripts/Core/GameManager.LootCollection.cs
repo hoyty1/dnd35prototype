@@ -135,17 +135,48 @@ public partial class GameManager
 
     private CombatEndXPUI FindOrCreateXPUI()
     {
+        CombatEndXPUI xpUi = FindObjectOfType<CombatEndXPUI>();
+        if (xpUi != null)
+        {
+            Debug.Log($"[GameManager][XP UI] Using existing active CombatEndXPUI on '{xpUi.gameObject.name}' (parent={xpUi.transform.parent?.name})");
+            return xpUi;
+        }
+
+        Debug.Log("[GameManager][XP UI] No active CombatEndXPUI found. Creating or recovering one.");
+
         Canvas canvas = FindObjectOfType<Canvas>();
         if (canvas == null)
+        {
+            Debug.LogError("[GameManager][XP UI] No Canvas found!");
             return null;
+        }
 
-        CombatEndXPUI xpUi = canvas.GetComponentInChildren<CombatEndXPUI>(true);
+        Debug.Log($"[GameManager][XP UI] Canvas found: {canvas.name}, active={canvas.gameObject.activeInHierarchy}, enabled={canvas.enabled}, renderMode={canvas.renderMode}, sortingOrder={canvas.sortingOrder}");
+
+        xpUi = canvas.GetComponentInChildren<CombatEndXPUI>(true);
         if (xpUi != null)
+        {
+            Debug.Log($"[GameManager][XP UI] Recovered existing inactive CombatEndXPUI on '{xpUi.gameObject.name}'");
             return xpUi;
+        }
 
-        GameObject uiObj = new GameObject("CombatEndXPUI");
+        GameObject uiObj = new GameObject("CombatEndXPUI", typeof(RectTransform));
         uiObj.transform.SetParent(canvas.transform, false);
-        return uiObj.AddComponent<CombatEndXPUI>();
+        uiObj.transform.SetAsLastSibling();
+
+        RectTransform uiRect = uiObj.GetComponent<RectTransform>();
+        if (uiRect != null)
+        {
+            uiRect.anchorMin = Vector2.zero;
+            uiRect.anchorMax = Vector2.one;
+            uiRect.offsetMin = Vector2.zero;
+            uiRect.offsetMax = Vector2.zero;
+            uiRect.localScale = Vector3.one;
+        }
+
+        xpUi = uiObj.AddComponent<CombatEndXPUI>();
+        Debug.Log($"[GameManager][XP UI] CombatEndXPUI created and parented to {canvas.name}");
+        return xpUi;
     }
 
     private void ContinueToRestAndNextCombat()
