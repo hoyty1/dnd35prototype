@@ -1403,6 +1403,15 @@ public class CharacterStats
     /// <summary>Max HP = Base hit die HP + (CON modifier × level).</summary>
     public int MaxHP { get; private set; }
 
+    /// <summary>Most recent HP gained during level-up (used by UI summary).</summary>
+    public int LastLevelUpHPGain { get; private set; }
+
+    /// <summary>Max HP before the most recent level-up.</summary>
+    public int LastLevelUpOldMaxHP { get; private set; }
+
+    /// <summary>Max HP after the most recent level-up.</summary>
+    public int LastLevelUpNewMaxHP { get; private set; }
+
     /// <summary>Current HP (can be negative under D&D 3.5e dying rules).</summary>
     private int _currentHP;
     public int CurrentHP
@@ -1788,19 +1797,118 @@ public class CharacterStats
         int levelsGained = Mathf.Max(1, newLevel - oldLevel);
         int totalHpGain = 0;
         int hitDieSize = GetClassHitDieSizeForLevelUp();
+        int oldMaxHp = MaxHP;
+        int currentConMod = CONMod;
+
+        // ========================================
+        // HP CALCULATION MODE SYSTEM
+        // ========================================
+        // TODO: This is currently stubbed out for future difficulty options.
+        // To fully expose this feature:
+        // 1. Add a settings menu UI
+        // 2. Allow player to choose HP calculation mode
+        // 3. Save/load this setting
+        // 4. Decide whether the setting is global or per-save/per-character
+        //
+        // Current modes:
+        // - Roll: Standard D&D 3.5e (roll HD + CON)
+        // - Average: Simplified (average HD + CON) - currently debug-only
+        // - Maximum: Very easy (max HD + CON) - currently debug-only
+        // ========================================
+
+        Debug.Log("[HP] === LEVEL-UP HP CALCULATION ===");
+        Debug.Log($"[HP] Character: {CharacterName}");
+        Debug.Log($"[HP] Class: {CharacterClass}");
+        Debug.Log($"[HP] Old Level: {oldLevel}");
+        Debug.Log($"[HP] New Level: {newLevel}");
+        Debug.Log($"[HP] Levels Gained: {levelsGained}");
+        Debug.Log($"[HP] Hit Die: d{hitDieSize}");
+        Debug.Log($"[HP] CON Modifier: {currentConMod}");
 
         for (int i = 0; i < levelsGained; i++)
         {
-            int hpGain = UnityEngine.Random.Range(1, hitDieSize + 1) + CONMod;
-            hpGain = Mathf.Max(1, hpGain);
+            int hpGain = CalculateHPGainForSingleLevel(hitDieSize, currentConMod);
             totalHpGain += hpGain;
+            Debug.Log($"[HP] Level +{i + 1}: gained {hpGain} HP");
         }
 
         MaxHP += totalHpGain;
         CurrentHP = Mathf.Min(TotalMaxHP, CurrentHP + totalHpGain);
 
-        Debug.Log($"[LevelUp] HP increased by {totalHpGain} (now {MaxHP}, current {CurrentHP})");
+        LastLevelUpOldMaxHP = oldMaxHp;
+        LastLevelUpNewMaxHP = MaxHP;
+        LastLevelUpHPGain = MaxHP - oldMaxHp;
+
+        Debug.Log($"[HP] HP Gained Total: {LastLevelUpHPGain}");
+        Debug.Log($"[HP] Old Max HP: {LastLevelUpOldMaxHP}");
+        Debug.Log($"[HP] New Max HP: {LastLevelUpNewMaxHP}");
+        Debug.Log("[HP] ================================");
+
+        Debug.Log($"[LevelUp] HP increased by {LastLevelUpHPGain} (now {MaxHP}, current {CurrentHP})");
         Debug.Log("[LevelUp] TODO: implement class progression increases (BAB, saves, spells, feats, skills).");
+    }
+
+    private int CalculateHPGainForSingleLevel(int hitDieSize, int conMod)
+    {
+        HPCalculationMode mode = GameSettings.Instance != null
+            ? GameSettings.Instance.hpCalculationMode
+            : HPCalculationMode.Roll;
+
+        int hpGain;
+        switch (mode)
+        {
+            case HPCalculationMode.Roll:
+            {
+                int roll = UnityEngine.Random.Range(1, hitDieSize + 1);
+                hpGain = roll + conMod;
+                Debug.Log($"[HP] Mode=Roll | Rolled {roll} on d{hitDieSize} + {conMod} CON = {hpGain} HP");
+                break;
+            }
+
+            case HPCalculationMode.Average:
+            {
+                int average = GetAverageHitPointsForHitDie(hitDieSize);
+                hpGain = average + conMod;
+                Debug.Log($"[HP] Mode=Average | {average} (d{hitDieSize} average) + {conMod} CON = {hpGain} HP");
+                break;
+            }
+
+            case HPCalculationMode.Maximum:
+                hpGain = hitDieSize + conMod;
+                Debug.Log($"[HP] Mode=Maximum | {hitDieSize} (d{hitDieSize} max) + {conMod} CON = {hpGain} HP");
+                break;
+
+            default:
+            {
+                int fallbackRoll = UnityEngine.Random.Range(1, hitDieSize + 1);
+                hpGain = fallbackRoll + conMod;
+                Debug.LogWarning($"[HP] Unknown HP mode {mode}; fallback roll {fallbackRoll} + {conMod} = {hpGain}");
+                break;
+            }
+        }
+
+        if (hpGain < 1)
+        {
+            Debug.LogWarning($"[HP] HP gain was {hpGain}; enforcing minimum 1 HP per level.");
+            hpGain = 1;
+        }
+
+        return hpGain;
+    }
+
+    private int GetAverageHitPointsForHitDie(int hitDie)
+    {
+        switch (hitDie)
+        {
+            case 4: return 3;  // 2.5 -> 3
+            case 6: return 4;  // 3.5 -> 4
+            case 8: return 5;  // 4.5 -> 5
+            case 10: return 6; // 5.5 -> 6
+            case 12: return 7; // 6.5 -> 7
+            default:
+                Debug.LogWarning($"[HP] Unknown hit die d{hitDie}; using fallback average formula.");
+                return Mathf.CeilToInt(hitDie / 2f + 0.5f);
+        }
     }
 
     private int GetClassHitDieSizeForLevelUp()

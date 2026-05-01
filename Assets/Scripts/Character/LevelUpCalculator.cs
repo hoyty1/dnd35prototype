@@ -40,10 +40,21 @@ public static class LevelUpCalculator
             return data;
         }
 
-        // HP increase (already rolled in CharacterStats.OnLevelUp). Exact per-level gain history isn't tracked,
-        // so estimate from expected progression and clamp to at least 1 for a level-up summary line.
-        int expectedOldHp = GetExpectedHPForLevel(className, oldLevel, stats.CONMod);
-        data.HPGained = Mathf.Max(1, stats.MaxHP - expectedOldHp);
+        // HP increase (already rolled in CharacterStats.OnLevelUp).
+        // Prefer tracked values from CharacterStats to avoid display drift.
+        int trackedHpGain = stats.LastLevelUpHPGain;
+        if (trackedHpGain > 0)
+        {
+            data.HPGained = trackedHpGain;
+            Debug.Log($"[LevelUp] Using tracked HP gain for {characterName}: +{data.HPGained} (from {stats.LastLevelUpOldMaxHP} to {stats.LastLevelUpNewMaxHP})");
+        }
+        else
+        {
+            // Fallback for legacy characters/saves where tracking is unavailable.
+            int expectedOldHp = GetExpectedHPForLevel(className, oldLevel, stats.CONMod);
+            data.HPGained = Mathf.Max(1, stats.MaxHP - expectedOldHp);
+            Debug.LogWarning($"[LevelUp] Missing tracked HP gain for {characterName}; fallback estimate used: +{data.HPGained}");
+        }
 
         // BAB and saves
         data.OldBAB = CalculateBAB(className, oldLevel);
