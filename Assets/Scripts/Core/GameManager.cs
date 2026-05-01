@@ -52,6 +52,8 @@ public partial class GameManager : MonoBehaviour
     public CharacterCreationUI CharacterCreationUI;
     public SkillsUIPanel SkillsUI;
     public SpellPreparationUI SpellPreparationUI;
+    public PreCombatHubUI PreCombatHubUI;
+    public StoreUI StoreUI;
 
     [Header("Combat Systems")]
     public TurnUndeadSystem turnUndeadSystem;
@@ -123,6 +125,50 @@ public partial class GameManager : MonoBehaviour
     private bool _isSleepSpellTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
     private bool _partyStashSeeded;
+
+    // Party resources (runtime-only for now).
+    private int partyGold = 1000;
+    public event Action<int> OnGoldChanged;
+
+    public int PartyGold
+    {
+        get => partyGold;
+        set
+        {
+            int clamped = Mathf.Max(0, value);
+            if (partyGold == clamped)
+                return;
+
+            partyGold = clamped;
+            Debug.Log($"[Gold] Party gold is now {partyGold} gp");
+            OnGoldChanged?.Invoke(partyGold);
+        }
+    }
+
+    public bool SpendGold(int amount)
+    {
+        if (amount <= 0)
+            return true;
+
+        if (partyGold >= amount)
+        {
+            PartyGold -= amount;
+            Debug.Log($"[Gold] Spent {amount} gp. Remaining: {partyGold} gp");
+            return true;
+        }
+
+        Debug.LogWarning($"[Gold] Not enough gold! Need {amount} gp, have {partyGold} gp");
+        return false;
+    }
+
+    public void AddGold(int amount)
+    {
+        if (amount <= 0)
+            return;
+
+        PartyGold += amount;
+        Debug.Log($"[Gold] Gained {amount} gp. Total: {partyGold} gp");
+    }
 
     // Endless combat-loop session stats (persist while the session is running).
     public int CompletedCombatCount { get; private set; }
@@ -626,6 +672,9 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        PreCombatHubUI?.Close();
+        StoreUI?.Close();
+        SpellPreparationUI?.Close();
         PreCombatInventoryUI?.Close(suppressCallback: true);
         LootCollectionUI?.Close(invokeClosedCallback: false);
         Debug.Log($"[CombatReset] PromptEncounterSelection pre-open cleanup | preCombatUiAssigned={PreCombatInventoryUI != null} | preCombatUiOpen={(PreCombatInventoryUI != null && PreCombatInventoryUI.IsOpen)} | lootUiAssigned={LootCollectionUI != null} | lootUiOpen={(LootCollectionUI != null && LootCollectionUI.IsOpen)} | waitingLoot={WaitingForLootCollection}");
@@ -645,7 +694,7 @@ public partial class GameManager : MonoBehaviour
                 _selectedEncounterPresetId = string.IsNullOrEmpty(presetId) ? "goblin_raiders" : presetId;
                 Debug.Log($"[PlayNow] Encounter preset selected: {_selectedEncounterPresetId}");
                 ApplyEncounterPreset(_selectedEncounterPresetId);
-                OpenPreCombatInventoryPhase();
+                OpenPreCombatHubPhase();
             },
             onStartRandomEncounter: (enemyIds, generated) =>
             {
@@ -653,7 +702,7 @@ public partial class GameManager : MonoBehaviour
                 int enemyCount = enemyIds != null ? enemyIds.Count : 0;
                 Debug.Log($"[PlayNow] Random encounter selected. enemies={enemyCount}, generated={(generated != null)}");
                 ApplyRandomEncounter(enemyIds, generated);
-                OpenPreCombatInventoryPhase();
+                OpenPreCombatHubPhase();
             },
             onCancel: () =>
             {
@@ -661,7 +710,7 @@ public partial class GameManager : MonoBehaviour
                 _selectedEncounterPresetId = "goblin_raiders";
                 Debug.Log("[PlayNow] Encounter selection canceled. Falling back to goblin_raiders preset.");
                 ApplyEncounterPreset(_selectedEncounterPresetId);
-                OpenPreCombatInventoryPhase();
+                OpenPreCombatHubPhase();
             },
             partyAverageLevel: GetCurrentPartyAverageLevel(),
             partyLevels: GetCurrentPartyLevels(),
@@ -1056,7 +1105,64 @@ public partial class GameManager : MonoBehaviour
 #endif
     }
 
-    private void OpenPreCombatInventoryPhase()
+    private List<CharacterController> GetActivePartyMembersForPreCombat()
+    {
+        List<CharacterController> partyMembers = new List<CharacterController>();
+        if (PCs == null)
+            return partyMembers;
+
+        for (int i = 0; i < PCs.Count; i++)
+        {
+            CharacterController pc = PCs[i];
+            if (pc != null && pc.gameObject != null && pc.gameObject.activeInHierarchy && pc.Stats != null && !pc.Stats.IsDead)
+                partyMembers.Add(pc);
+        }
+
+        return partyMembers;
+    }
+
+    private StoreInventory EnsureStoreInventoryInitialized()
+    {
+        StoreInventory storeInventory = StoreInventory.Instance;
+        if (storeInventory == null)
+            storeInventory = gameObject.GetComponent<StoreInventory>() ?? gameObject.AddComponent<StoreInventory>();
+
+        return storeInventory;
+    }
+
+    private void OpenPreCombatHubPhase()
+    {
+        EnsurePartyStashInitialized();
+        EnsureStoreInventoryInitialized();
+
+        if (PreCombatHubUI == null)
+            PreCombatHubUI = FindObjectOfType<PreCombatHubUI>();
+        if (PreCombatHubUI == null)
+            PreCombatHubUI = gameObject.AddComponent<PreCombatHubUI>();
+
+        List<CharacterController> partyMembers = GetActivePartyMembersForPreCombat();
+        PartyStash.Unlock();
+        WaitingForPreCombatInventory = true;
+
+        Debug.Log($"[PreCombatHub] Opening pre-combat hub for encounter '{_selectedEncounterPresetId}'. partyMembers={partyMembers.Count}");
+        Debug.Log($"[Store] Store opened with {StoreInventory.Instance.GetItemsByCategory("All").Count} items");
+        Debug.Log($"[Store] Party has {PartyGold} gp");
+
+        PreCombatHubUI.Open(
+            onOpenStore: () => OpenStoreFromPreCombat(partyMembers),
+            onOpenInventory: () => OpenInventoryFromPreCombat(partyMembers),
+            onOpenSpellPreparation: () => OpenSpellPreparationFromPreCombat(partyMembers),
+            onStartEncounter: () => StartEncounterFromPreCombat("Hub.StartEncounter"),
+            onBackToEncounterSelection: () =>
+            {
+                WaitingForPreCombatInventory = false;
+                PartyStash.Unlock();
+                PreCombatHubUI?.Close();
+                PromptEncounterSelection();
+            });
+    }
+
+    private void OpenInventoryFromPreCombat(List<CharacterController> partyMembers)
     {
         EnsurePartyStashInitialized();
 
@@ -1065,52 +1171,84 @@ public partial class GameManager : MonoBehaviour
         if (PreCombatInventoryUI == null)
             PreCombatInventoryUI = gameObject.AddComponent<PreCombatInventoryUI>();
 
-        List<CharacterController> partyMembers = new List<CharacterController>();
-        if (PCs != null)
-        {
-            for (int i = 0; i < PCs.Count; i++)
-            {
-                CharacterController pc = PCs[i];
-                if (pc != null && pc.gameObject != null && pc.gameObject.activeInHierarchy && pc.Stats != null && !pc.Stats.IsDead)
-                    partyMembers.Add(pc);
-            }
-        }
-
+        PreCombatHubUI?.HideMenu();
         PartyStash.Unlock();
-        WaitingForPreCombatInventory = true;
 
         PreCombatInventoryUI.Open(
             PartyStash,
             partyMembers,
-            onBeginCombat: () =>
-            {
-                WaitingForPreCombatInventory = false;
-                PartyStash.Lock();
-                CombatUI?.ShowCombatLog($"📦 Stash locked. Preparing spells for encounter: {_selectedEncounterPresetId}.");
-                ShowSpellPreparation(partyMembers, () =>
-                {
-                    StartCombat();
-                });
-            },
-            onSkipInventory: () =>
-            {
-                WaitingForPreCombatInventory = false;
-                PartyStash.Lock();
-                CombatUI?.ShowCombatLog($"⏭ Inventory skipped. Opening spell preparation: {_selectedEncounterPresetId}.");
-                ShowSpellPreparation(partyMembers, () =>
-                {
-                    StartCombat();
-                });
-            },
-            onBack: () =>
-            {
-                WaitingForPreCombatInventory = false;
-                PartyStash.Unlock();
-                PromptEncounterSelection();
-            });
+            onBeginCombat: () => StartEncounterFromPreCombat("Stash.BeginCombat"),
+            onSkipInventory: () => StartEncounterFromPreCombat("Stash.SkipInventory"),
+            onBack: () => ReturnToPreCombatHubFromSubWindow("Stash.Back"));
     }
 
-    private void ShowSpellPreparation(List<CharacterController> party, System.Action onComplete)
+    private void OpenStoreFromPreCombat(List<CharacterController> partyMembers)
+    {
+        EnsurePartyStashInitialized();
+        EnsureStoreInventoryInitialized();
+
+        StoreUI storeUI = StoreUI;
+        if (storeUI == null)
+            storeUI = FindObjectOfType<StoreUI>();
+        if (storeUI == null)
+            storeUI = gameObject.AddComponent<StoreUI>();
+
+        StoreUI = storeUI;
+        PreCombatHubUI?.HideMenu();
+
+        storeUI.ShowStore(
+            PartyStash,
+            partyMembers,
+            onBackToMenu: () => ReturnToPreCombatHubFromSubWindow("Store.Back"),
+            onStartEncounter: () => StartEncounterFromPreCombat("Store.StartEncounter"));
+    }
+
+    private void OpenSpellPreparationFromPreCombat(List<CharacterController> partyMembers)
+    {
+        PreCombatHubUI?.HideMenu();
+
+        ShowSpellPreparation(
+            partyMembers,
+            onComplete: () =>
+            {
+                CombatUI?.ShowCombatLog("🔮 Spell preparation complete. Returning to pre-combat menu.");
+                ReturnToPreCombatHubFromSubWindow("SpellPrep.Done");
+            },
+            onBackToMenu: () => ReturnToPreCombatHubFromSubWindow("SpellPrep.Back"),
+            onStartEncounter: () => StartEncounterFromPreCombat("SpellPrep.StartEncounter"));
+    }
+
+    private void ReturnToPreCombatHubFromSubWindow(string source)
+    {
+        Debug.Log($"[PreCombatHub] Returning from sub-window: {source}");
+        EnsurePartyStashInitialized();
+        PartyStash.Unlock();
+        WaitingForPreCombatInventory = true;
+        PreCombatHubUI?.ShowMenu();
+    }
+
+    private void StartEncounterFromPreCombat(string source)
+    {
+        Debug.Log($"[PreCombatHub] Start encounter requested from {source}");
+        WaitingForPreCombatInventory = false;
+
+        PreCombatHubUI?.Close();
+        if (StoreUI != null && StoreUI.IsOpen)
+            StoreUI.Close();
+        if (PreCombatInventoryUI != null && PreCombatInventoryUI.IsOpen)
+            PreCombatInventoryUI.Close(suppressCallback: true);
+        if (SpellPreparationUI != null && SpellPreparationUI.IsOpen)
+            SpellPreparationUI.Close();
+
+        PartyStash.Lock();
+        StartCombat();
+    }
+
+    private void ShowSpellPreparation(
+        List<CharacterController> party,
+        System.Action onComplete,
+        System.Action onBackToMenu = null,
+        System.Action onStartEncounter = null)
     {
         SpellPreparationUI spellPrepUI = SpellPreparationUI;
         if (spellPrepUI == null)
@@ -1137,7 +1275,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         SpellPreparationUI = spellPrepUI;
-        spellPrepUI.Show(party, onComplete);
+        spellPrepUI.Show(party, onComplete, onBackToMenu, onStartEncounter);
     }
 
     private int GetCurrentPartyAverageLevel()
@@ -5369,6 +5507,12 @@ public partial class GameManager : MonoBehaviour
         ResetPostCombatLootCollectionState("StartCombat");
         _defeatedEnemiesThisCombat.Clear();
         Debug.Log("[XP] Cleared defeated enemy tracker for new combat.");
+
+        PreCombatHubUI?.Close();
+        if (StoreUI != null && StoreUI.IsOpen)
+            StoreUI.Close();
+        if (SpellPreparationUI != null && SpellPreparationUI.IsOpen)
+            SpellPreparationUI.Close();
 
         if (PreCombatInventoryUI != null && PreCombatInventoryUI.IsOpen)
         {

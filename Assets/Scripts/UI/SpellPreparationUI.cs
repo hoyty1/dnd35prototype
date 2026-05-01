@@ -44,11 +44,15 @@ public class SpellPreparationUI : MonoBehaviour
     private Button _confirmButton;
     private Button _autoPrepareButton;
     private Button _skipCharacterButton;
+    private Button _backToMenuButton;
+    private Button _startEncounterButton;
 
     // Pre-combat multi-character preparation flow
     private readonly List<CharacterController> _preparingCharacters = new List<CharacterController>();
     private int _currentCharacterIndex = -1;
     private Action _preCombatCompleteCallback;
+    private Action _preCombatBackCallback;
+    private Action _preCombatStartEncounterCallback;
     private bool _isPreCombatFlowActive;
 
     // Slot UI rows
@@ -168,10 +172,22 @@ public class SpellPreparationUI : MonoBehaviour
         _confirmButton.onClick.AddListener(OnConfirm);
 
         _skipCharacterButton = MakeButton(_rootPanel.transform, "SkipCharacterBtn",
-            new Vector2(-360, btnY), new Vector2(160, 42),
-            "Skip Character", new Color(0.45f, 0.35f, 0.18f), Color.white, 14);
+            new Vector2(-360, btnY), new Vector2(140, 42),
+            "Skip", new Color(0.45f, 0.35f, 0.18f), Color.white, 14);
         _skipCharacterButton.onClick.AddListener(OnSkipCharacterPressed);
         _skipCharacterButton.gameObject.SetActive(false);
+
+        _backToMenuButton = MakeButton(_rootPanel.transform, "BackToMenuBtn",
+            new Vector2(-210, btnY), new Vector2(140, 42),
+            "Back", new Color(0.5f, 0.24f, 0.24f), Color.white, 14);
+        _backToMenuButton.onClick.AddListener(OnBackToMenuPressed);
+        _backToMenuButton.gameObject.SetActive(false);
+
+        _startEncounterButton = MakeButton(_rootPanel.transform, "StartEncounterBtn",
+            new Vector2(360, btnY), new Vector2(140, 42),
+            "Start", new Color(0.2f, 0.56f, 0.26f), Color.white, 14);
+        _startEncounterButton.onClick.AddListener(OnStartEncounterPressed);
+        _startEncounterButton.gameObject.SetActive(false);
 
         _overlayPanel.SetActive(false);
     }
@@ -184,6 +200,15 @@ public class SpellPreparationUI : MonoBehaviour
     /// </summary>
     public void Show(List<CharacterController> party, Action onCompleteCallback)
     {
+        Show(party, onCompleteCallback, null, null);
+    }
+
+    public void Show(
+        List<CharacterController> party,
+        Action onCompleteCallback,
+        Action onBackToMenuCallback,
+        Action onStartEncounterCallback)
+    {
         Debug.Log("[SpellPrep] Opening spell preparation UI");
 
         EnsureBuilt();
@@ -195,6 +220,8 @@ public class SpellPreparationUI : MonoBehaviour
         }
 
         _preCombatCompleteCallback = onCompleteCallback;
+        _preCombatBackCallback = onBackToMenuCallback;
+        _preCombatStartEncounterCallback = onStartEncounterCallback;
         _isPreCombatFlowActive = true;
         _preparingCharacters.Clear();
 
@@ -213,7 +240,11 @@ public class SpellPreparationUI : MonoBehaviour
         if (_preparingCharacters.Count == 0)
         {
             _isPreCombatFlowActive = false;
-            _preCombatCompleteCallback?.Invoke();
+            Action callback = _preCombatCompleteCallback;
+            _preCombatCompleteCallback = null;
+            _preCombatBackCallback = null;
+            _preCombatStartEncounterCallback = null;
+            callback?.Invoke();
             return;
         }
 
@@ -307,6 +338,40 @@ public class SpellPreparationUI : MonoBehaviour
         AdvanceToNextCharacter();
     }
 
+    private void OnBackToMenuPressed()
+    {
+        if (!_isPreCombatFlowActive)
+            return;
+
+        Debug.Log("[SpellPrep] Back to pre-combat menu requested.");
+        _isPreCombatFlowActive = false;
+        OnPreparationConfirmed = null;
+        Close();
+
+        Action callback = _preCombatBackCallback;
+        _preCombatCompleteCallback = null;
+        _preCombatBackCallback = null;
+        _preCombatStartEncounterCallback = null;
+        callback?.Invoke();
+    }
+
+    private void OnStartEncounterPressed()
+    {
+        if (!_isPreCombatFlowActive)
+            return;
+
+        Debug.Log("[SpellPrep] Start encounter requested from spell preparation window.");
+        _isPreCombatFlowActive = false;
+        OnPreparationConfirmed = null;
+        Close();
+
+        Action callback = _preCombatStartEncounterCallback;
+        _preCombatCompleteCallback = null;
+        _preCombatBackCallback = null;
+        _preCombatStartEncounterCallback = null;
+        callback?.Invoke();
+    }
+
     private void AdvanceToNextCharacter()
     {
         _currentCharacterIndex++;
@@ -321,18 +386,24 @@ public class SpellPreparationUI : MonoBehaviour
 
     private void FinishPreparationFlow()
     {
-        Debug.Log("[SpellPrep] All characters prepared, starting combat");
+        Debug.Log("[SpellPrep] All characters prepared.");
 
         _isPreCombatFlowActive = false;
         OnPreparationConfirmed = null;
 
         if (_skipCharacterButton != null)
             _skipCharacterButton.gameObject.SetActive(false);
+        if (_backToMenuButton != null)
+            _backToMenuButton.gameObject.SetActive(false);
+        if (_startEncounterButton != null)
+            _startEncounterButton.gameObject.SetActive(false);
 
         Close();
 
         Action callback = _preCombatCompleteCallback;
         _preCombatCompleteCallback = null;
+        _preCombatBackCallback = null;
+        _preCombatStartEncounterCallback = null;
         callback?.Invoke();
     }
 
@@ -340,6 +411,12 @@ public class SpellPreparationUI : MonoBehaviour
     {
         if (_skipCharacterButton != null)
             _skipCharacterButton.gameObject.SetActive(_isPreCombatFlowActive);
+
+        if (_backToMenuButton != null)
+            _backToMenuButton.gameObject.SetActive(_isPreCombatFlowActive && _preCombatBackCallback != null);
+
+        if (_startEncounterButton != null)
+            _startEncounterButton.gameObject.SetActive(_isPreCombatFlowActive && _preCombatStartEncounterCallback != null);
 
         if (_confirmButton != null)
         {
@@ -624,6 +701,10 @@ public class SpellPreparationUI : MonoBehaviour
 
         if (_skipCharacterButton != null)
             _skipCharacterButton.gameObject.SetActive(false);
+        if (_backToMenuButton != null)
+            _backToMenuButton.gameObject.SetActive(false);
+        if (_startEncounterButton != null)
+            _startEncounterButton.gameObject.SetActive(false);
 
         if (_confirmButton != null)
         {
