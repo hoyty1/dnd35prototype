@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,10 +11,14 @@ using UnityEngine.UI;
 public class CombatEndXPUI : MonoBehaviour
 {
     private GameObject _root;
+    private GameObject _panel;
+    private Action _onComplete;
 
     public void ShowXPAwards(ExperienceCalculator.CombatXPResult xpResult, Action onComplete = null)
     {
-        Debug.Log("[XP UI] Displaying XP awards");
+        Debug.Log("[XP UI] ShowXPAwards called");
+        Debug.Log($"[XP UI] XP Result: {(xpResult != null ? xpResult.TotalXPPerCharacter : 0)} XP per character");
+        Debug.Log($"[XP UI] Callback is null: {onComplete == null}");
 
         if (xpResult == null)
         {
@@ -21,16 +26,31 @@ public class CombatEndXPUI : MonoBehaviour
             return;
         }
 
+        _onComplete = onComplete;
+
         EnsureBuilt();
         if (_root == null)
         {
-            onComplete?.Invoke();
+            _onComplete?.Invoke();
             return;
         }
 
-        BuildContent(xpResult, onComplete);
+        BuildContent(xpResult);
         _root.SetActive(true);
         _root.transform.SetAsLastSibling();
+        Debug.Log("[XP UI] Panel activated");
+    }
+
+    private void OnContinueClicked()
+    {
+        Debug.Log("[XP UI] Continue clicked");
+
+        if (_root != null)
+            _root.SetActive(false);
+
+        Debug.Log("[XP UI] Invoking completion callback");
+        _onComplete?.Invoke();
+        Debug.Log("[XP UI] Callback invoked");
     }
 
     private void EnsureBuilt()
@@ -51,53 +71,60 @@ public class CombatEndXPUI : MonoBehaviour
         overlay.color = new Color(0f, 0f, 0f, 0.72f);
     }
 
-    private void BuildContent(ExperienceCalculator.CombatXPResult xpResult, Action onComplete)
+    private void BuildContent(ExperienceCalculator.CombatXPResult xpResult)
     {
         for (int i = _root.transform.childCount - 1; i >= 0; i--)
             Destroy(_root.transform.GetChild(i).gameObject);
 
-        GameObject panel = CreateChild("Panel", _root.transform, typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
-        RectTransform panelRect = panel.GetComponent<RectTransform>();
+        _panel = CreateChild("Panel", _root.transform, typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+        RectTransform panelRect = _panel.GetComponent<RectTransform>();
         panelRect.anchorMin = new Vector2(0.18f, 0.1f);
         panelRect.anchorMax = new Vector2(0.82f, 0.9f);
         panelRect.offsetMin = Vector2.zero;
         panelRect.offsetMax = Vector2.zero;
 
-        Image panelBg = panel.GetComponent<Image>();
+        Image panelBg = _panel.GetComponent<Image>();
         panelBg.color = new Color(0.08f, 0.11f, 0.18f, 0.97f);
 
-        VerticalLayoutGroup layout = panel.GetComponent<VerticalLayoutGroup>();
+        VerticalLayoutGroup layout = _panel.GetComponent<VerticalLayoutGroup>();
         layout.padding = new RectOffset(18, 18, 18, 18);
         layout.spacing = 10f;
         layout.childForceExpandHeight = false;
         layout.childControlHeight = true;
 
-        ContentSizeFitter fitter = panel.GetComponent<ContentSizeFitter>();
+        ContentSizeFitter fitter = _panel.GetComponent<ContentSizeFitter>();
         fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
 
-        CreateText(panel.transform, "EXPERIENCE GAINED", 28, FontStyle.Bold, new Color(1f, 0.92f, 0.45f));
-        CreateText(panel.transform, $"Average Party Level: {xpResult.AveragePartyLevel:F1}", 18, FontStyle.Normal, Color.white);
+        CreateText(_panel.transform, "EXPERIENCE GAINED", 28, FontStyle.Bold, new Color(1f, 0.92f, 0.45f));
+        CreateText(_panel.transform, $"Average Party Level: {xpResult.AveragePartyLevel:F1}", 18, FontStyle.Normal, Color.white);
 
-        CreateText(panel.transform, "Enemies Defeated:", 20, FontStyle.Bold, new Color(0.72f, 0.88f, 1f));
+        CreateText(_panel.transform, "Enemies Defeated:", 20, FontStyle.Bold, new Color(0.72f, 0.88f, 1f));
         if (xpResult.Awards.Count == 0)
-            CreateText(panel.transform, "• None", 16, FontStyle.Italic, new Color(0.8f, 0.8f, 0.8f));
+        {
+            CreateText(_panel.transform, "• None", 16, FontStyle.Italic, new Color(0.8f, 0.8f, 0.8f));
+        }
         else
         {
             for (int i = 0; i < xpResult.Awards.Count; i++)
             {
                 ExperienceCalculator.XPAward award = xpResult.Awards[i];
-                string line = $"• {award.EnemyName} (CR {ChallengeRatingUtils.Format(award.ChallengeRating)}): {award.XPPerCharacter} XP";
-                CreateText(panel.transform, line, 16, FontStyle.Normal, Color.white);
+                string line = $"• {award.EnemyName} (CR {ChallengeRatingUtils.Format(award.ChallengeRating)}): {award.XPTotal} XP";
+                CreateText(_panel.transform, line, 16, FontStyle.Normal, Color.white);
             }
         }
 
-        CreateSeparator(panel.transform);
-        CreateText(panel.transform, $"Total XP per Character: {xpResult.TotalXPPerCharacter} XP", 22, FontStyle.Bold, new Color(1f, 0.95f, 0.35f));
+        CreateSeparator(_panel.transform);
 
-        CreateText(panel.transform, "Character XP:", 20, FontStyle.Bold, new Color(0.72f, 1f, 0.74f));
+        int totalEncounterXP = xpResult.Awards.Sum(a => a.XPTotal);
+        int partySize = Mathf.Max(1, xpResult.CharacterXPGained.Count);
+        CreateText(_panel.transform, $"Total Encounter XP: {totalEncounterXP}", 19, FontStyle.Bold, new Color(1f, 0.95f, 0.35f));
+        CreateText(_panel.transform, $"Party Size: {partySize}", 17, FontStyle.Normal, Color.white);
+        CreateText(_panel.transform, $"XP per Character: {totalEncounterXP} / {partySize} = {xpResult.TotalXPPerCharacter}", 21, FontStyle.Bold, Color.yellow);
+
+        CreateText(_panel.transform, "Character XP:", 20, FontStyle.Bold, new Color(0.72f, 1f, 0.74f));
         if (xpResult.CharacterXPGained.Count == 0)
         {
-            CreateText(panel.transform, "• None", 16, FontStyle.Italic, new Color(0.8f, 0.8f, 0.8f));
+            CreateText(_panel.transform, "• None", 16, FontStyle.Italic, new Color(0.8f, 0.8f, 0.8f));
         }
         else
         {
@@ -110,11 +137,11 @@ public class CombatEndXPUI : MonoBehaviour
                 string charName = character != null && character.Stats != null ? character.Stats.CharacterName : "Unknown";
                 string levelUpTag = leveledUp ? " ⭐ LEVEL UP! ⭐" : string.Empty;
                 Color textColor = leveledUp ? new Color(0.58f, 1f, 0.58f) : Color.white;
-                CreateText(panel.transform, $"• {charName}: +{gained} XP{levelUpTag}", 16, FontStyle.Normal, textColor);
+                CreateText(_panel.transform, $"• {charName}: +{gained} XP{levelUpTag}", 16, FontStyle.Normal, textColor);
             }
         }
 
-        GameObject buttonObj = CreateChild("ContinueButton", panel.transform, typeof(RectTransform), typeof(Image), typeof(Button));
+        GameObject buttonObj = CreateChild("ContinueButton", _panel.transform, typeof(RectTransform), typeof(Image), typeof(Button));
         RectTransform btnRect = buttonObj.GetComponent<RectTransform>();
         btnRect.sizeDelta = new Vector2(0f, 48f);
 
@@ -131,11 +158,7 @@ public class CombatEndXPUI : MonoBehaviour
         CreateText(buttonObj.transform, "Continue", 20, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
 
         button.onClick.RemoveAllListeners();
-        button.onClick.AddListener(() =>
-        {
-            _root.SetActive(false);
-            onComplete?.Invoke();
-        });
+        button.onClick.AddListener(OnContinueClicked);
     }
 
     private static GameObject CreateChild(string name, Transform parent, params Type[] components)

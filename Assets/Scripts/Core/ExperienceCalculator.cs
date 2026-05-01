@@ -24,7 +24,7 @@ public class ExperienceCalculator : MonoBehaviour
         }
     }
 
-    // DMG 3.5e XP award table: XP per character by (CR - APL) delta.
+    // DMG 3.5e XP award table: total XP for defeating one creature by (CR - APL) delta.
     private static readonly Dictionary<int, int> XPTable = new Dictionary<int, int>
     {
         { -8, 13 },
@@ -55,14 +55,14 @@ public class ExperienceCalculator : MonoBehaviour
     {
         public CharacterController Enemy;
         public float ChallengeRating;
-        public int XPPerCharacter;
+        public int XPTotal;
         public string EnemyName;
 
-        public XPAward(CharacterController enemy, float challengeRating, int xpPerCharacter)
+        public XPAward(CharacterController enemy, float challengeRating, int xpTotal)
         {
             Enemy = enemy;
             ChallengeRating = challengeRating;
-            XPPerCharacter = xpPerCharacter;
+            XPTotal = xpTotal;
             EnemyName = enemy != null && enemy.Stats != null && !string.IsNullOrWhiteSpace(enemy.Stats.CharacterName)
                 ? enemy.Stats.CharacterName
                 : "Unknown Enemy";
@@ -91,6 +91,8 @@ public class ExperienceCalculator : MonoBehaviour
         result.AveragePartyLevel = CalculateAPL(party);
         Debug.Log($"[XP] Average Party Level: {result.AveragePartyLevel:F1}");
 
+        int totalEncounterXP = 0;
+
         for (int i = 0; i < defeatedEnemies.Count; i++)
         {
             CharacterController enemy = defeatedEnemies[i];
@@ -98,16 +100,27 @@ public class ExperienceCalculator : MonoBehaviour
                 continue;
 
             float cr = GetChallengeRating(enemy);
-            int xpPerCharacter = GetXPForCR(cr, result.AveragePartyLevel);
+            int xpForThisEnemy = GetXPForCR(cr, result.AveragePartyLevel);
+            totalEncounterXP += xpForThisEnemy;
 
-            XPAward award = new XPAward(enemy, cr, xpPerCharacter);
+            XPAward award = new XPAward(enemy, cr, xpForThisEnemy);
             result.Awards.Add(award);
 
-            Debug.Log($"[XP] {award.EnemyName} (CR {ChallengeRatingUtils.Format(cr)}): {xpPerCharacter} XP per character");
+            Debug.Log($"[XP] {award.EnemyName} (CR {ChallengeRatingUtils.Format(cr)}): {xpForThisEnemy} XP total");
         }
 
-        result.TotalXPPerCharacter = result.Awards.Sum(a => a.XPPerCharacter);
-        Debug.Log($"[XP] Total XP per character: {result.TotalXPPerCharacter}");
+        Debug.Log($"[XP] Total encounter XP: {totalEncounterXP}");
+
+        if (party.Count > 0)
+        {
+            result.TotalXPPerCharacter = totalEncounterXP / party.Count;
+            Debug.Log($"[XP] XP per character: {totalEncounterXP} / {party.Count} = {result.TotalXPPerCharacter}");
+        }
+        else
+        {
+            result.TotalXPPerCharacter = 0;
+            Debug.Log("[XP] XP per character: 0 (party size is 0)");
+        }
 
         for (int i = 0; i < party.Count; i++)
         {

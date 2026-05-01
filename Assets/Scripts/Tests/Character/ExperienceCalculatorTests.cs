@@ -62,7 +62,7 @@ public static class ExperienceCalculatorTests
         var enemy = BuildCharacter("CR4 Enemy", 1, challengeRating: "4");
         var result = calc.CalculateXPForCombat(party, new List<CharacterController> { enemy });
 
-        Assert(result.TotalXPPerCharacter == 300, "CR = APL gives 300 XP", $"expected 300, got {result.TotalXPPerCharacter}");
+        Assert(result.TotalXPPerCharacter == 100, "CR = APL with 3 PCs gives 100 XP each", $"expected 100, got {result.TotalXPPerCharacter}");
 
         CleanupCharacter(enemy);
         for (int i = 0; i < party.Count; i++)

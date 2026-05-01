@@ -22,6 +22,8 @@ public partial class GameManager
 
     private void BeginPostCombatLootCollection()
     {
+        Debug.Log("[LootFlow] Beginning post-combat loot collection");
+
         Canvas canvas = FindObjectOfType<Canvas>();
         Debug.Log($"[LootFlow] BeginPostCombatLootCollection START | frame={Time.frameCount} | phase={CurrentPhase} | lootUiAssigned={LootCollectionUI != null} | partyStashAssigned={PartyStash != null} | partyStashLocked={(PartyStash != null && PartyStash.IsLocked)} | canvasFound={canvas != null}");
 
@@ -65,6 +67,7 @@ public partial class GameManager
                 PartyStash?.Unlock();
 
                 Debug.Log($"[LootFlow] Loot window closed | lootedCount={lootedCount} | stashLocked={PartyStash != null && PartyStash.IsLocked}");
+                Debug.Log($"[LootFlow] Loot collection complete, {lootedCount} items looted");
 
                 if (lootedCount > 0)
                     CombatUI?.ShowCombatLog($"📦 {lootedCount} item(s) looted to party stash. Stash unlocked.");
@@ -79,6 +82,7 @@ public partial class GameManager
 
     private void ShowPostCombatXPFlow(int lootedCount)
     {
+        Debug.Log("[LootFlow] Starting XP flow");
         RegisterCombatLoopCompletion(lootedCount);
 
         CaptureDefeatedEnemiesSnapshotForXP("PostLoot.XPFlow");
@@ -97,45 +101,57 @@ public partial class GameManager
         }
 
         List<CharacterController> defeatedEnemies = GetDefeatedEnemiesForXP();
+        Debug.Log($"[LootFlow] Found {defeatedEnemies.Count} defeated enemies");
         Debug.Log($"[XP] Preparing post-combat XP flow | party={partyMembers.Count} | defeatedTracked={defeatedEnemies.Count}");
 
         if (partyMembers.Count == 0 || defeatedEnemies.Count == 0)
         {
             Debug.Log("[XP] Skipping XP UI because party or defeated-enemy list is empty.");
-            RestorePartyAfterCombat();
-            ReturnToEncounterSelection();
+            ContinueToRestAndNextCombat();
             return;
         }
 
         ExperienceCalculator.CombatXPResult xpResult = ExperienceCalculator.Instance.CalculateXPForCombat(partyMembers, defeatedEnemies);
+        Debug.Log($"[LootFlow] XP calculated: {xpResult.TotalXPPerCharacter} per character");
 
-        Canvas canvas = FindObjectOfType<Canvas>();
-        if (canvas == null)
-        {
-            Debug.LogWarning("[XP UI] No canvas found for XP display. Continuing without XP panel.");
-            RestorePartyAfterCombat();
-            ReturnToEncounterSelection();
-            return;
-        }
-
-        CombatEndXPUI xpUi = canvas.GetComponentInChildren<CombatEndXPUI>(true);
+        CombatEndXPUI xpUi = FindOrCreateXPUI();
         if (xpUi == null)
         {
-            GameObject uiObj = new GameObject("CombatEndXPUI");
-            uiObj.transform.SetParent(canvas.transform, false);
-            xpUi = uiObj.AddComponent<CombatEndXPUI>();
+            Debug.LogWarning("[XP UI] Unable to create/find XP display. Continuing without XP panel.");
+            ContinueToRestAndNextCombat();
+            return;
         }
 
         xpUi.ShowXPAwards(xpResult, () =>
         {
-            Debug.Log("[XP UI] XP panel complete. Checking level-up wizard flow.");
+            Debug.Log("[LootFlow] XP UI complete, checking level-ups");
             CheckAndShowLevelUps(xpResult, () =>
             {
-                Debug.Log("[XP UI] Level-up flow complete. Restoring party and returning to encounter selection.");
-                RestorePartyAfterCombat();
-                ReturnToEncounterSelection();
+                Debug.Log("[LootFlow] Level-ups complete, continuing to rest");
+                ContinueToRestAndNextCombat();
             });
         });
+    }
+
+    private CombatEndXPUI FindOrCreateXPUI()
+    {
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+            return null;
+
+        CombatEndXPUI xpUi = canvas.GetComponentInChildren<CombatEndXPUI>(true);
+        if (xpUi != null)
+            return xpUi;
+
+        GameObject uiObj = new GameObject("CombatEndXPUI");
+        uiObj.transform.SetParent(canvas.transform, false);
+        return uiObj.AddComponent<CombatEndXPUI>();
+    }
+
+    private void ContinueToRestAndNextCombat()
+    {
+        RestorePartyAfterCombat();
+        ReturnToEncounterSelection();
     }
 
     private void CheckAndShowLevelUps(ExperienceCalculator.CombatXPResult xpResult, Action onComplete)
@@ -166,11 +182,13 @@ public partial class GameManager
 
         if (levelUps.Count > 0)
         {
+            Debug.Log($"[LootFlow] Showing level-up UI for {levelUps.Count} character(s)");
             ShowLevelUpUI(levelUps, onComplete);
         }
         else
         {
             Debug.Log("[GameManager] No level-ups to process");
+            Debug.Log("[LootFlow] Level-up callback invoked immediately (no level-ups)");
             onComplete?.Invoke();
         }
     }
