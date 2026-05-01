@@ -127,11 +127,29 @@ public class CharacterCreationManager : MonoBehaviour
 
     private void ShowSpellSelection()
     {
+        Debug.Log("[CharacterCreation] Step 5: Spell Selection (Level-Up)");
+
         if (_levelUpData == null || !_levelUpData.NeedsSpellSelection)
         {
             CompleteLevelUp();
             return;
         }
+
+        CharacterStats stats = _levelingCharacter != null ? _levelingCharacter.Stats : null;
+        if (stats == null)
+        {
+            CompleteLevelUp();
+            return;
+        }
+
+        if (!IsSpellcaster(stats.CharacterClass))
+        {
+            Debug.Log($"[CharacterCreation] {stats.CharacterClass} is not a spellcaster");
+            CompleteLevelUp();
+            return;
+        }
+
+        Debug.Log($"[CharacterCreation] {stats.CharacterClass} can learn new spells");
 
         SpellSelectionUI spellUI = FindOrCreateSpellSelectionUI();
         if (spellUI == null)
@@ -144,6 +162,7 @@ public class CharacterCreationManager : MonoBehaviour
         spellUI.ShowForLevelUp(_levelingCharacter, selectedSpellIds =>
         {
             ApplyLevelUpSpellSelection(selectedSpellIds);
+            Debug.Log("[CharacterCreation] Spells selected, level-up complete");
             CompleteLevelUp();
         });
     }
@@ -162,37 +181,34 @@ public class CharacterCreationManager : MonoBehaviour
 
         SpellDatabase.Init();
 
-        if (spellcasting.SelectedSpellIds == null)
-            spellcasting.SelectedSpellIds = new List<string>();
-
+        int learnedCount = 0;
         for (int i = 0; i < selectedSpellIds.Count; i++)
         {
             string spellId = selectedSpellIds[i];
             if (string.IsNullOrWhiteSpace(spellId))
                 continue;
 
-            if (!spellcasting.SelectedSpellIds.Contains(spellId))
-                spellcasting.SelectedSpellIds.Add(spellId);
-
-            SpellData spell = SpellDatabase.GetSpell(spellId);
-            if (spell != null && !spellcasting.KnownSpells.Exists(s => s != null && s.SpellId == spellId))
-                spellcasting.KnownSpells.Add(spell);
+            bool alreadyKnown = spellcasting.KnownSpells.Exists(s => s != null && s.SpellId == spellId);
+            spellcasting.LearnSpell(spellId);
+            if (!alreadyKnown)
+                learnedCount++;
         }
 
-        CharacterStats stats = _levelingCharacter.Stats;
-        if (stats != null)
-        {
-            if (stats.IsWizard)
-                spellcasting.AutoPrepareWizardSlots();
-            else if (stats.IsCleric)
-                spellcasting.AutoPrepareClericSlots();
-            else if (string.Equals(stats.CharacterClass, "Druid", StringComparison.OrdinalIgnoreCase))
-                spellcasting.AutoPrepareDruidSlots();
+        spellcasting.SyncPreparedSpellsFromSlots();
 
-            spellcasting.SyncPreparedSpellsFromSlots();
-        }
+        Debug.Log($"[CharacterCreationManager] Applied {learnedCount} level-up spell selection(s) for {_levelingCharacter.Stats.CharacterName}.");
+    }
 
-        Debug.Log($"[CharacterCreationManager] Applied {selectedSpellIds.Count} level-up spell selection(s) for {_levelingCharacter.Stats.CharacterName}.");
+    private bool IsSpellcaster(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return false;
+
+        return string.Equals(className, "Wizard", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(className, "Cleric", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(className, "Druid", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(className, "Sorcerer", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(className, "Bard", StringComparison.OrdinalIgnoreCase);
     }
 
     private void CompleteLevelUp()

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -58,6 +59,14 @@ public class SpellSelectionUI : MonoBehaviour
     private List<SpellData> _availableSpells = new List<SpellData>();
     private HashSet<string> _selectedSpellIds = new HashSet<string>();
     private Dictionary<string, SpellRowUI> _spellRows = new Dictionary<string, SpellRowUI>();
+
+    // Level-up mode state
+    private bool _isLevelUpMode;
+    private CharacterController _levelUpCharacter;
+    private SpellcastingComponent _levelUpSpellcasting;
+    private HashSet<string> _alreadyKnownSpellIds = new HashSet<string>();
+    private int _levelUpSpellsToSelect;
+    private int _levelUpMaxSpellLevel;
 
     // Layout constants
     private const float PANEL_W = 1020f;
@@ -226,6 +235,7 @@ public class SpellSelectionUI : MonoBehaviour
     /// </summary>
     public void OpenForWizard(int intModifier, int characterLevel)
     {
+        _isLevelUpMode = false;
         _className = "Wizard";
         _intMod = intModifier;
 
@@ -283,6 +293,7 @@ public class SpellSelectionUI : MonoBehaviour
     /// </summary>
     public void OpenForCleric()
     {
+        _isLevelUpMode = false;
         _className = "Cleric";
         _maxCantrips = 4;
         _maxSpells1st = 0; // Clerics don't select higher-level spells (they know all)
@@ -324,37 +335,168 @@ public class SpellSelectionUI : MonoBehaviour
         if (_overlayPanel != null)
             _overlayPanel.SetActive(false);
         IsOpen = false;
+
+        _isLevelUpMode = false;
+        _levelUpCharacter = null;
+        _levelUpSpellcasting = null;
+        _alreadyKnownSpellIds.Clear();
+        _levelUpSpellsToSelect = 0;
+        _levelUpMaxSpellLevel = 0;
     }
 
     /// <summary>
     /// Reuses the creation spell selection panel during level-up.
+    /// Wizards select 2 new spells from any spell level they can currently cast.
     /// </summary>
     public void ShowForLevelUp(CharacterController character, Action<List<string>> onComplete)
     {
         if (character == null || character.Stats == null)
         {
-            Debug.LogWarning("[SpellSelectionUI] ShowForLevelUp called with null character/stats.");
+            Debug.LogWarning("[SpellSelection] ShowForLevelUp called with null character/stats.");
             onComplete?.Invoke(new List<string>());
             return;
         }
 
-        string className = character.Stats.CharacterClass ?? string.Empty;
         OnSpellsConfirmed = selected => onComplete?.Invoke(selected ?? new List<string>());
+
+        _isLevelUpMode = true;
+        _levelUpCharacter = character;
+        _levelUpSpellcasting = character.GetComponent<SpellcastingComponent>();
+
+        string className = character.Stats.CharacterClass ?? string.Empty;
+        string characterName = !string.IsNullOrWhiteSpace(character.Stats.CharacterName) ? character.Stats.CharacterName : character.name;
+        Debug.Log($"[SpellSelection] ShowForLevelUp called for {characterName}");
+
+        if (_levelUpSpellcasting == null)
+        {
+            Debug.LogError($"[SpellSelection] {characterName} has no SpellcastingComponent!");
+            _isLevelUpMode = false;
+            onComplete?.Invoke(new List<string>());
+            return;
+        }
 
         if (string.Equals(className, "Wizard", StringComparison.OrdinalIgnoreCase))
         {
-            OpenForWizard(character.Stats.INTMod, Mathf.Max(1, character.Stats.Level));
+            OpenForLevelUpWizard();
             return;
         }
 
-        if (string.Equals(className, "Cleric", StringComparison.OrdinalIgnoreCase))
-        {
-            OpenForCleric();
-            return;
-        }
-
-        Debug.Log($"[SpellSelectionUI] Level-up spell selection currently not implemented for class '{className}'. Skipping.");
+        Debug.Log($"[SpellSelection] Level-up spell selection not required for class '{className}'.");
+        _isLevelUpMode = false;
         onComplete?.Invoke(new List<string>());
+    }
+
+    private void OpenForLevelUpWizard()
+    {
+        if (_levelUpCharacter == null || _levelUpCharacter.Stats == null || _levelUpSpellcasting == null)
+        {
+            Debug.LogWarning("[SpellSelection] OpenForLevelUpWizard missing character/spellcasting state.");
+            OnSpellsConfirmed?.Invoke(new List<string>());
+            return;
+        }
+
+        _className = "Wizard";
+        _intMod = _levelUpCharacter.Stats.INTMod;
+        _maxCantrips = 0;
+        _maxSpells1st = 0;
+        _maxSpells2nd = 0;
+        _cantripSelectionRequired = false;
+        _autoAddedCantripCount = 0;
+        _levelUpSpellsToSelect = 2;
+        _selectedSpellIds.Clear();
+
+        LoadExistingLevelUpSpells();
+        DetermineLevelUpSpellRange();
+
+        SpellDatabase.Init();
+        _availableSpells.Clear();
+        for (int level = 0; level <= _levelUpMaxSpellLevel; level++)
+        {
+            _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", level));
+        }
+
+        _availableSpells = _availableSpells
+            .Where(s => s != null)
+            .GroupBy(s => s.SpellId)
+            .Select(g => g.First())
+            .OrderBy(s => s.SpellLevel)
+            .ThenBy(s => s.Name)
+            .ToList();
+
+        string characterName = !string.IsNullOrWhiteSpace(_levelUpCharacter.Stats.CharacterName) ? _levelUpCharacter.Stats.CharacterName : _levelUpCharacter.name;
+        Debug.Log($"[SpellSelection] Wizard {characterName} leveling up:");
+        Debug.Log($"[SpellSelection] - Current spellbook: {_alreadyKnownSpellIds.Count} spells");
+        Debug.Log($"[SpellSelection] - Can select: {_levelUpSpellsToSelect} new spells");
+        Debug.Log($"[SpellSelection] - Can choose from levels: 0-{_levelUpMaxSpellLevel}");
+
+        foreach (string knownSpellId in _alreadyKnownSpellIds.OrderBy(id => id))
+        {
+            SpellData knownSpell = SpellDatabase.GetSpell(knownSpellId);
+            string knownLabel = knownSpell != null ? knownSpell.Name : knownSpellId;
+            Debug.Log($"[SpellSelection] - Already knows: {knownLabel}");
+        }
+
+        _titleText.text = "SPELL SELECTION - LEVEL UP";
+        _subtitleText.text = $"Select {_levelUpSpellsToSelect} new spells for your spellbook.";
+
+        _overlayPanel.SetActive(true);
+        IsOpen = true;
+
+        _currentFilterLevel = -1;
+        if (_filter0Button != null) _filter0Button.gameObject.SetActive(_levelUpMaxSpellLevel >= 0);
+        if (_filter1Button != null) _filter1Button.gameObject.SetActive(_levelUpMaxSpellLevel >= 1);
+        if (_filter2Button != null) _filter2Button.gameObject.SetActive(_levelUpMaxSpellLevel >= 2);
+
+        PopulateSpellList();
+        RefreshUI();
+    }
+
+    private void LoadExistingLevelUpSpells()
+    {
+        _alreadyKnownSpellIds.Clear();
+
+        if (_levelUpSpellcasting == null)
+            return;
+
+        Debug.Log("[SpellSelection] Loading existing spellbook");
+
+        List<string> knownSpellIds = _levelUpSpellcasting.GetAllKnownSpells();
+        for (int i = 0; i < knownSpellIds.Count; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(knownSpellIds[i]))
+                _alreadyKnownSpellIds.Add(knownSpellIds[i]);
+        }
+
+        Debug.Log($"[SpellSelection] Character already knows {_alreadyKnownSpellIds.Count} spells");
+    }
+
+    private void DetermineLevelUpSpellRange()
+    {
+        _levelUpMaxSpellLevel = 0;
+
+        if (_levelUpSpellcasting == null)
+            return;
+
+        int highestSlotLevel = _levelUpSpellcasting.GetHighestSlotLevel();
+        _levelUpMaxSpellLevel = Mathf.Max(0, highestSlotLevel);
+
+        while (_levelUpMaxSpellLevel > 0)
+        {
+            var spellsAtLevel = SpellDatabase.GetSpellsForClassAtLevel("Wizard", _levelUpMaxSpellLevel);
+            if (spellsAtLevel != null && spellsAtLevel.Count > 0)
+                break;
+            _levelUpMaxSpellLevel--;
+        }
+
+        Debug.Log($"[SpellSelection] Wizard level-up: Select {_levelUpSpellsToSelect} new spells");
+    }
+
+    private bool IsKnownInLevelUpMode(SpellData spell)
+    {
+        if (!_isLevelUpMode || spell == null)
+            return false;
+
+        return _alreadyKnownSpellIds.Contains(spell.SpellId);
     }
 
     // ========== POPULATE LIST ==========
@@ -390,7 +532,13 @@ public class SpellSelectionUI : MonoBehaviour
                 lastLevel = spell.SpellLevel;
                 string cantripLabel = _className == "Cleric" ? "ORISONS" : "CANTRIPS";
                 string headerLabel;
-                if (spell.SpellLevel == 0)
+                if (_isLevelUpMode)
+                {
+                    int knownAtLevel = _availableSpells.Count(s => s.SpellLevel == spell.SpellLevel && IsKnownInLevelUpMode(s));
+                    int totalAtLevel = _availableSpells.Count(s => s.SpellLevel == spell.SpellLevel);
+                    headerLabel = $"═══ LEVEL {spell.SpellLevel} SPELLS — Known {knownAtLevel}/{totalAtLevel} ═══";
+                }
+                else if (spell.SpellLevel == 0)
                 {
                     int selectCount = _cantripSelectionRequired ? _maxCantrips : 0;
                     headerLabel = selectCount > 0 ? $"═══ {cantripLabel} (Level 0) — Select {selectCount} ═══" :
@@ -458,9 +606,20 @@ public class SpellSelectionUI : MonoBehaviour
         string sid = spell.SpellId;
         rowButton.onClick.AddListener(() => ShowSpellDetail(sid));
 
-        // Select button — shown for cantrips (both classes) and higher-level spells (Wizard only)
+        bool isAlreadyKnown = IsKnownInLevelUpMode(spell);
+        if (_isLevelUpMode)
+        {
+            if (isAlreadyKnown)
+                Debug.Log($"[SpellSelection] {spell.Name} - Already Known (grayed out)");
+            else
+                Debug.Log($"[SpellSelection] {spell.Name} - Available to select");
+        }
+
+        // Select button — shown for level-up and existing creation modes.
         bool showSelect = false;
-        if (spell.SpellLevel == 0 && _cantripSelectionRequired)
+        if (_isLevelUpMode)
+            showSelect = true;
+        else if (spell.SpellLevel == 0 && _cantripSelectionRequired)
             showSelect = true;
         else if (_className == "Wizard" && spell.SpellLevel > 0)
             showSelect = true;
@@ -477,11 +636,21 @@ public class SpellSelectionUI : MonoBehaviour
             float btnX = -LIST_W / 2f + selectBtnW / 2f + 8f; // 8px left margin
             row.SelectButton = MakeButton(row.Row.transform, "SelBtn",
                 new Vector2(btnX, 0), new Vector2(selectBtnW, selectBtnH),
-                "○", new Color(0.2f, 0.2f, 0.35f), Color.white, 20);
-            string spellId = spell.SpellId;
-            row.SelectButton.onClick.AddListener(() => ToggleSpell(spellId));
+                isAlreadyKnown ? "✓" : "○", new Color(0.2f, 0.2f, 0.35f), Color.white, 20);
+
+            if (!isAlreadyKnown)
+            {
+                string spellId = spell.SpellId;
+                row.SelectButton.onClick.AddListener(() => ToggleSpell(spellId));
+            }
+
             row.ButtonText = row.SelectButton.GetComponentInChildren<Text>();
             textStartX = btnX + selectBtnW / 2f + textLeftPadding;
+
+            if (isAlreadyKnown)
+            {
+                row.SelectButton.interactable = false;
+            }
         }
         else
         {
@@ -508,9 +677,10 @@ public class SpellSelectionUI : MonoBehaviour
 
         // Info line (lower portion of row — school, effect)
         string effectStr = GetEffectString(spell);
+        string knownTag = isAlreadyKnown ? " | <color=#A0A0A0>Already Known</color>" : string.Empty;
         row.InfoText = MakeText(row.Row.transform, "Info",
             new Vector2(textCenterX, -10), new Vector2(textW, 18),
-            $"<color=#888888>{spell.School}</color> | {effectStr}", 11,
+            $"<color=#888888>{spell.School}</color> | {effectStr}{knownTag}", 11,
             new Color(0.65f, 0.65f, 0.6f), TextAnchor.MiddleLeft);
         row.InfoText.raycastTarget = false; // don't block row/button clicks
 
@@ -566,6 +736,35 @@ public class SpellSelectionUI : MonoBehaviour
         SpellData spell = SpellDatabase.GetSpell(spellId);
         if (spell == null) return;
 
+        if (_isLevelUpMode)
+        {
+            if (IsKnownInLevelUpMode(spell))
+            {
+                Debug.Log($"[SpellSelection] {spell.Name} is already known and cannot be selected.");
+                return;
+            }
+
+            if (_selectedSpellIds.Contains(spellId))
+            {
+                _selectedSpellIds.Remove(spellId);
+                Debug.Log($"[SpellSelection] Deselected {spell.Name}, {_selectedSpellIds.Count}/{_levelUpSpellsToSelect} selected");
+            }
+            else
+            {
+                if (_selectedSpellIds.Count >= _levelUpSpellsToSelect)
+                {
+                    Debug.Log($"[SpellSelection] Already selected {_levelUpSpellsToSelect} spells, cannot select more");
+                    return;
+                }
+
+                _selectedSpellIds.Add(spellId);
+                Debug.Log($"[SpellSelection] Selected {spell.Name}, {_selectedSpellIds.Count}/{_levelUpSpellsToSelect} selected");
+            }
+
+            RefreshUI();
+            return;
+        }
+
         // Clerics can only toggle cantrips/orisons (level 0), not higher-level spells
         if (_className == "Cleric" && spell.SpellLevel > 0) return;
 
@@ -616,7 +815,15 @@ public class SpellSelectionUI : MonoBehaviour
         int sel1 = CountSelectedAtLevel(1);
         int sel2 = CountSelectedAtLevel(2);
 
-        if (_className == "Wizard")
+        if (_isLevelUpMode)
+        {
+            int selectedCount = _selectedSpellIds.Count;
+            string selectedColor = selectedCount >= _levelUpSpellsToSelect ? "#44FF44" : "#FFDD44";
+            _selectionCountText.text = $"<color={selectedColor}>Selected: {selectedCount}/{_levelUpSpellsToSelect}</color>   |   " +
+                                       $"<color=#AAAAAA>Already Known: {_alreadyKnownSpellIds.Count}</color>";
+            _confirmButton.interactable = selectedCount == _levelUpSpellsToSelect;
+        }
+        else if (_className == "Wizard")
         {
             if (_autoAddedCantripCount > 0)
             {
@@ -663,35 +870,59 @@ public class SpellSelectionUI : MonoBehaviour
             var row = kvp.Value;
             bool isSelected = _selectedSpellIds.Contains(kvp.Key);
             bool isCantrip = row.Spell.SpellLevel == 0;
+            bool isKnown = IsKnownInLevelUpMode(row.Spell);
             row.IsSelected = isSelected;
 
             if (row.SelectButton != null)
             {
-                row.ButtonText.text = isSelected ? "✓" : "○";
-                var colors = row.SelectButton.colors;
-                colors.normalColor = isSelected ? new Color(0.15f, 0.45f, 0.15f) : new Color(0.2f, 0.2f, 0.35f);
-                colors.highlightedColor = colors.normalColor * 1.2f;
-                row.SelectButton.colors = colors;
-
-                // Disable if max reached and not selected
-                if (!isSelected)
+                if (_isLevelUpMode)
                 {
-                    int lvl = row.Spell.SpellLevel;
-                    int max;
-                    if (lvl == 0) max = _maxCantrips;
-                    else if (lvl == 1) max = _maxSpells1st;
-                    else max = _maxSpells2nd;
-                    row.SelectButton.interactable = CountSelectedAtLevel(lvl) < max;
+                    if (isKnown)
+                    {
+                        row.ButtonText.text = "✓";
+                        row.SelectButton.interactable = false;
+                    }
+                    else
+                    {
+                        row.ButtonText.text = isSelected ? "✓" : "○";
+                        bool canSelectMore = _selectedSpellIds.Count < _levelUpSpellsToSelect;
+                        row.SelectButton.interactable = isSelected || canSelectMore;
+                    }
                 }
                 else
                 {
-                    row.SelectButton.interactable = true;
+                    row.ButtonText.text = isSelected ? "✓" : "○";
+
+                    // Disable if max reached and not selected
+                    if (!isSelected)
+                    {
+                        int lvl = row.Spell.SpellLevel;
+                        int max;
+                        if (lvl == 0) max = _maxCantrips;
+                        else if (lvl == 1) max = _maxSpells1st;
+                        else max = _maxSpells2nd;
+                        row.SelectButton.interactable = CountSelectedAtLevel(lvl) < max;
+                    }
+                    else
+                    {
+                        row.SelectButton.interactable = true;
+                    }
                 }
+
+                var colors = row.SelectButton.colors;
+                if (isKnown)
+                    colors.normalColor = new Color(0.35f, 0.35f, 0.35f, 0.85f);
+                else
+                    colors.normalColor = isSelected ? new Color(0.15f, 0.45f, 0.15f) : new Color(0.2f, 0.2f, 0.35f);
+                colors.highlightedColor = colors.normalColor * 1.2f;
+                row.SelectButton.colors = colors;
             }
 
             // Row background
-            if (isSelected)
-                row.Background.color = isCantrip ? new Color(0.12f, 0.22f, 0.12f, 0.8f) : new Color(0.12f, 0.22f, 0.12f, 0.8f);
+            if (isKnown)
+                row.Background.color = new Color(0.24f, 0.24f, 0.24f, 0.5f);
+            else if (isSelected)
+                row.Background.color = new Color(0.12f, 0.30f, 0.12f, 0.85f);
             else if (isCantrip)
                 row.Background.color = new Color(0.12f, 0.14f, 0.12f, 0.6f);
             else
@@ -824,20 +1055,47 @@ public class SpellSelectionUI : MonoBehaviour
     {
         List<string> result = new List<string>(_selectedSpellIds);
 
-        int cantripCount = 0;
-        int spell1Count = 0;
-        int spell2Count = 0;
-        foreach (string id in result)
+        if (_isLevelUpMode)
         {
-            SpellData s = SpellDatabase.GetSpell(id);
-            if (s == null) continue;
-            if (s.SpellLevel == 0) cantripCount++;
-            else if (s.SpellLevel == 1) spell1Count++;
-            else if (s.SpellLevel == 2) spell2Count++;
-        }
+            if (result.Count < _levelUpSpellsToSelect)
+            {
+                Debug.Log($"[SpellSelection] Not enough spells selected: {result.Count}/{_levelUpSpellsToSelect}");
+                return;
+            }
 
-        Debug.Log($"[SpellSelectionUI] Confirmed {result.Count} spells for {_className}: " +
-                  $"{cantripCount} cantrips, {spell1Count} 1st-level, {spell2Count} 2nd-level");
+            if (result.Count > _levelUpSpellsToSelect)
+            {
+                result = result.Take(_levelUpSpellsToSelect).ToList();
+            }
+
+            string characterName = _levelUpCharacter != null && _levelUpCharacter.Stats != null && !string.IsNullOrWhiteSpace(_levelUpCharacter.Stats.CharacterName)
+                ? _levelUpCharacter.Stats.CharacterName
+                : (_levelUpCharacter != null ? _levelUpCharacter.name : "Unknown");
+            Debug.Log($"[SpellSelection] Confirm clicked");
+            Debug.Log($"[SpellSelection] Applying {result.Count} new spells to {characterName}");
+            foreach (string spellId in result)
+            {
+                SpellData spell = SpellDatabase.GetSpell(spellId);
+                Debug.Log($"[SpellSelection] Adding spell: {(spell != null ? spell.Name : spellId)}");
+            }
+        }
+        else
+        {
+            int cantripCount = 0;
+            int spell1Count = 0;
+            int spell2Count = 0;
+            foreach (string id in result)
+            {
+                SpellData s = SpellDatabase.GetSpell(id);
+                if (s == null) continue;
+                if (s.SpellLevel == 0) cantripCount++;
+                else if (s.SpellLevel == 1) spell1Count++;
+                else if (s.SpellLevel == 2) spell2Count++;
+            }
+
+            Debug.Log($"[SpellSelectionUI] Confirmed {result.Count} spells for {_className}: " +
+                      $"{cantripCount} cantrips, {spell1Count} 1st-level, {spell2Count} 2nd-level");
+        }
 
         Close();
 

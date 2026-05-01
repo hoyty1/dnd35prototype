@@ -535,6 +535,100 @@ public class SpellcastingComponent : MonoBehaviour
             .ToList();
     }
 
+    /// <summary>
+    /// Returns all known spell IDs in the spellbook grouped across spell levels.
+    /// </summary>
+    public List<string> GetAllKnownSpells()
+    {
+        Debug.Log("[Spellcasting] Getting all known spells");
+
+        var allSpells = new List<string>();
+        for (int level = 0; level <= 9; level++)
+        {
+            List<string> spellsAtLevel = GetKnownSpellsAtLevel(level);
+            if (spellsAtLevel.Count > 0)
+            {
+                allSpells.AddRange(spellsAtLevel);
+                Debug.Log($"[Spellcasting] Level {level}: {spellsAtLevel.Count} spells");
+            }
+        }
+
+        Debug.Log($"[Spellcasting] Total: {allSpells.Count} spells known");
+        return allSpells;
+    }
+
+    /// <summary>
+    /// Returns known spell IDs at the requested spell level.
+    /// </summary>
+    public List<string> GetKnownSpellsAtLevel(int spellLevel)
+    {
+        return KnownSpells
+            .Where(s => s != null && s.SpellLevel == spellLevel && !string.IsNullOrWhiteSpace(s.SpellId))
+            .GroupBy(s => s.SpellId)
+            .Select(g => g.First().SpellId)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Learns a new spell and adds it to the spellbook if not already known.
+    /// Accepts spell ID (preferred) or spell name.
+    /// </summary>
+    public void LearnSpell(string spellIdOrName)
+    {
+        if (string.IsNullOrWhiteSpace(spellIdOrName))
+            return;
+
+        SpellDatabase.Init();
+
+        SpellData spell = SpellDatabase.GetSpell(spellIdOrName);
+        if (spell == null)
+        {
+            spell = SpellDatabase.GetAllSpells()
+                .FirstOrDefault(s => s != null &&
+                                     string.Equals(s.Name, spellIdOrName, System.StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (spell == null)
+        {
+            Debug.LogError($"[Spellcasting] Spell not found: {spellIdOrName}");
+            return;
+        }
+
+        if (KnownSpells.Any(s => s != null && s.SpellId == spell.SpellId))
+        {
+            Debug.Log($"[Spellcasting] Spell already known: {spell.Name}");
+            return;
+        }
+
+        KnownSpells.Add(spell);
+        if (SelectedSpellIds == null)
+            SelectedSpellIds = new List<string>();
+        if (!SelectedSpellIds.Contains(spell.SpellId))
+            SelectedSpellIds.Add(spell.SpellId);
+
+        Debug.Log($"[Spellcasting] ✓ Added {spell.Name} (level {spell.SpellLevel}) to spellbook");
+
+        if (Stats != null && Stats.IsWizard)
+            AutoPrepareNewWizardSpell(spell);
+
+        SyncPreparedSpellsFromSlots();
+    }
+
+    private void AutoPrepareNewWizardSpell(SpellData spell)
+    {
+        if (spell == null || SpellSlots == null || SpellSlots.Count == 0)
+            return;
+
+        SpellSlot emptySlot = SpellSlots.FirstOrDefault(s =>
+            s != null && s.Level == spell.SpellLevel && !s.HasSpell && !s.DisabledByNegativeLevel);
+
+        if (emptySlot == null)
+            return;
+
+        emptySlot.Prepare(spell);
+        Debug.Log($"[Spellcasting] Auto-prepared {spell.Name}");
+    }
+
     public List<SpellData> GetPreparedSpellsAtLevel(int level)
     {
         if (SpellSlots == null || SpellSlots.Count == 0)
