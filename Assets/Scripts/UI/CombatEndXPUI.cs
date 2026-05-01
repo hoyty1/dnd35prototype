@@ -12,6 +12,8 @@ public class CombatEndXPUI : MonoBehaviour
 {
     private GameObject _root;
     private GameObject _panel;
+    private RectTransform _contentParent;
+    private Button _continueButton;
     private Action _onComplete;
 
     public void ShowXPAwards(ExperienceCalculator.CombatXPResult xpResult, Action onComplete = null)
@@ -29,26 +31,19 @@ public class CombatEndXPUI : MonoBehaviour
 
         _onComplete = onComplete;
 
-        if (_root == null || _panel == null)
+        if (_root == null || _panel == null || _contentParent == null || _continueButton == null)
         {
-            Debug.Log("[XP UI] Root/panel missing, calling BuildUI()");
+            Debug.Log("[XP UI] UI references missing, calling BuildUI()");
             BuildUI();
         }
         else
         {
-            Debug.Log("[XP UI] Root/panel already exists, reusing");
+            Debug.Log("[XP UI] Reusing existing XP UI");
         }
 
-        Debug.Log($"[XP UI] Root null after BuildUI: {_root == null}");
-        Debug.Log($"[XP UI] Panel null after BuildUI: {_panel == null}");
-        Debug.Log($"[XP UI] Root parent: {(_root != null ? _root.transform.parent?.name : "null")}");
-        Debug.Log($"[XP UI] Panel parent: {(_panel != null ? _panel.transform.parent?.name : "null")}");
-        Debug.Log($"[XP UI] Root active: {(_root != null && _root.activeSelf)}");
-        Debug.Log($"[XP UI] Panel active: {(_panel != null && _panel.activeSelf)}");
-
-        if (_root == null || _panel == null)
+        if (_root == null || _panel == null || _contentParent == null || _continueButton == null)
         {
-            Debug.LogError("[XP UI] Root/panel was not built. Invoking callback to avoid flow lock.");
+            Debug.LogError("[XP UI] UI build failed. Invoking callback to avoid flow lock.");
             _onComplete?.Invoke();
             return;
         }
@@ -60,27 +55,39 @@ public class CombatEndXPUI : MonoBehaviour
         _panel.SetActive(true);
         _panel.transform.SetAsLastSibling();
 
-        RectTransform rootRect = _root.GetComponent<RectTransform>();
-        RectTransform panelRect = _panel.GetComponent<RectTransform>();
         Debug.Log("[XP UI] Panel activated");
-        Debug.Log($"[XP UI] Root position: {_root.transform.position}");
-        Debug.Log($"[XP UI] Root rect: {(rootRect != null ? rootRect.rect.ToString() : "null")}");
-        Debug.Log($"[XP UI] Panel position: {_panel.transform.position}");
-        Debug.Log($"[XP UI] Panel rect: {(panelRect != null ? panelRect.rect.ToString() : "null")}");
-
         LogUIHierarchy();
     }
 
     private void OnContinueClicked()
     {
-        Debug.Log("[XP UI] Continue clicked");
+        Debug.Log("[XP UI] Continue button clicked");
+
+        if (_panel == null)
+        {
+            Debug.LogError("[XP UI] Panel is null in OnContinueClicked!");
+            return;
+        }
 
         if (_root != null)
+        {
+            Debug.Log("[XP UI] Deactivating root overlay");
             _root.SetActive(false);
+        }
+        else
+        {
+            Debug.LogWarning("[XP UI] Root overlay is null in OnContinueClicked");
+        }
+
+        if (_onComplete == null)
+        {
+            Debug.LogWarning("[XP UI] onComplete callback is null!");
+            return;
+        }
 
         Debug.Log("[XP UI] Invoking completion callback");
-        _onComplete?.Invoke();
-        Debug.Log("[XP UI] Callback invoked");
+        _onComplete.Invoke();
+        Debug.Log("[XP UI] Callback invoked successfully");
     }
 
     private void BuildUI()
@@ -93,6 +100,8 @@ public class CombatEndXPUI : MonoBehaviour
             Destroy(_root);
             _root = null;
             _panel = null;
+            _contentParent = null;
+            _continueButton = null;
         }
 
         Canvas canvas = FindObjectOfType<Canvas>();
@@ -120,13 +129,6 @@ public class CombatEndXPUI : MonoBehaviour
             return;
         }
 
-        Debug.Log($"[XP UI] Using Canvas: {canvas.name}");
-        Debug.Log($"[XP UI] Canvas activeInHierarchy: {canvas.gameObject.activeInHierarchy}");
-        Debug.Log($"[XP UI] Canvas enabled: {canvas.enabled}");
-        Debug.Log($"[XP UI] Canvas renderMode: {canvas.renderMode}");
-        Debug.Log($"[XP UI] Canvas sortingLayerID: {canvas.sortingLayerID}, sortingOrder: {canvas.sortingOrder}");
-        Debug.Log($"[XP UI] Canvas camera: {(canvas.worldCamera != null ? canvas.worldCamera.name : "null")}");
-
         _root = new GameObject("CombatEndXPOverlay", typeof(RectTransform), typeof(Image));
         _root.transform.SetParent(canvas.transform, false);
 
@@ -141,7 +143,7 @@ public class CombatEndXPUI : MonoBehaviour
         overlay.color = new Color(0f, 0f, 0f, 0.72f);
         overlay.raycastTarget = true;
 
-        _panel = CreateChild("CombatEndXPPanel", _root.transform, typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+        _panel = CreateChild("CombatEndXPPanel", _root.transform, typeof(RectTransform), typeof(Image));
 
         RectTransform panelRect = _panel.GetComponent<RectTransform>();
         panelRect.anchorMin = new Vector2(0.18f, 0.1f);
@@ -153,46 +155,182 @@ public class CombatEndXPUI : MonoBehaviour
         Image panelBg = _panel.GetComponent<Image>();
         panelBg.color = new Color(0.08f, 0.11f, 0.18f, 0.97f);
 
-        VerticalLayoutGroup layout = _panel.GetComponent<VerticalLayoutGroup>();
-        layout.padding = new RectOffset(18, 18, 18, 18);
-        layout.spacing = 10f;
-        layout.childForceExpandHeight = false;
-        layout.childControlHeight = true;
-
-        ContentSizeFitter fitter = _panel.GetComponent<ContentSizeFitter>();
-        fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+        CreateScrollableContent();
+        CreateContinueButton();
 
         _root.transform.SetAsLastSibling();
         _panel.transform.SetAsLastSibling();
         _root.SetActive(false);
 
         Debug.Log("[XP UI] BuildUI complete");
-        Debug.Log($"[XP UI] Root: {_root.name}, Parent: {_root.transform.parent?.name}");
-        Debug.Log($"[XP UI] Panel: {_panel.name}, Parent: {_panel.transform.parent?.name}");
-        Debug.Log($"[XP UI] Root Rect: {overlayRect.rect}");
-        Debug.Log($"[XP UI] Panel Rect: {panelRect.rect}");
-        Debug.Log($"[XP UI] Root Position: {overlayRect.position}");
-        Debug.Log($"[XP UI] Panel Position: {panelRect.position}");
+        LogUIHierarchy();
+    }
+
+    private void CreateScrollableContent()
+    {
+        if (_panel == null)
+        {
+            Debug.LogError("[XP UI] Cannot create scroll content; panel is null.");
+            return;
+        }
+
+        GameObject scrollArea = CreateChild("ContentScrollArea", _panel.transform,
+            typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+
+        RectTransform scrollRect = scrollArea.GetComponent<RectTransform>();
+        scrollRect.anchorMin = new Vector2(0f, 0f);
+        scrollRect.anchorMax = new Vector2(1f, 1f);
+        scrollRect.offsetMin = new Vector2(20f, 100f); // leave room for footer button
+        scrollRect.offsetMax = new Vector2(-20f, -20f);
+
+        Image scrollBg = scrollArea.GetComponent<Image>();
+        scrollBg.color = new Color(0f, 0f, 0f, 0.15f);
+        scrollBg.raycastTarget = true;
+
+        GameObject viewport = CreateChild("Viewport", scrollArea.transform,
+            typeof(RectTransform), typeof(Image), typeof(Mask));
+
+        RectTransform viewportRect = viewport.GetComponent<RectTransform>();
+        viewportRect.anchorMin = Vector2.zero;
+        viewportRect.anchorMax = Vector2.one;
+        viewportRect.offsetMin = Vector2.zero;
+        viewportRect.offsetMax = Vector2.zero;
+
+        Image viewportImage = viewport.GetComponent<Image>();
+        viewportImage.color = new Color(1f, 1f, 1f, 0.02f);
+        viewportImage.raycastTarget = true;
+
+        Mask viewportMask = viewport.GetComponent<Mask>();
+        viewportMask.showMaskGraphic = false;
+
+        GameObject content = CreateChild("Content", viewport.transform,
+            typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+
+        _contentParent = content.GetComponent<RectTransform>();
+        _contentParent.anchorMin = new Vector2(0f, 1f);
+        _contentParent.anchorMax = new Vector2(1f, 1f);
+        _contentParent.pivot = new Vector2(0.5f, 1f);
+        _contentParent.anchoredPosition = Vector2.zero;
+        _contentParent.sizeDelta = new Vector2(0f, 0f);
+
+        VerticalLayoutGroup layout = content.GetComponent<VerticalLayoutGroup>();
+        layout.padding = new RectOffset(10, 10, 10, 10);
+        layout.spacing = 8f;
+        layout.childControlHeight = true;
+        layout.childForceExpandHeight = false;
+        layout.childControlWidth = true;
+        layout.childForceExpandWidth = true;
+
+        ContentSizeFitter fitter = content.GetComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        ScrollRect sr = scrollArea.GetComponent<ScrollRect>();
+        sr.viewport = viewportRect;
+        sr.content = _contentParent;
+        sr.horizontal = false;
+        sr.vertical = true;
+        sr.movementType = ScrollRect.MovementType.Clamped;
+        sr.scrollSensitivity = 40f;
+
+        Debug.Log("[XP UI] Scroll content adjusted to make room for button");
+    }
+
+    private void CreateContinueButton()
+    {
+        Debug.Log("[XP UI] === CREATING CONTINUE BUTTON ===");
+
+        if (_panel == null)
+        {
+            Debug.LogError("[XP UI] Panel is null while creating Continue button.");
+            return;
+        }
+
+        GameObject buttonContainer = CreateChild("ButtonContainer", _panel.transform,
+            typeof(RectTransform), typeof(Image));
+
+        RectTransform containerRect = buttonContainer.GetComponent<RectTransform>();
+        containerRect.anchorMin = new Vector2(0f, 0f);
+        containerRect.anchorMax = new Vector2(1f, 0f);
+        containerRect.pivot = new Vector2(0.5f, 0f);
+        containerRect.anchoredPosition = new Vector2(0f, 12f);
+        containerRect.sizeDelta = new Vector2(-40f, 72f);
+
+        Image footerBg = buttonContainer.GetComponent<Image>();
+        footerBg.color = new Color(0.05f, 0.07f, 0.12f, 0.9f);
+        footerBg.raycastTarget = true;
+
+        GameObject buttonObj = CreateChild("ContinueButton", buttonContainer.transform,
+            typeof(RectTransform), typeof(Image), typeof(Button));
+
+        RectTransform buttonRect = buttonObj.GetComponent<RectTransform>();
+        buttonRect.anchorMin = new Vector2(0.32f, 0.15f);
+        buttonRect.anchorMax = new Vector2(0.68f, 0.85f);
+        buttonRect.offsetMin = Vector2.zero;
+        buttonRect.offsetMax = Vector2.zero;
+
+        Image buttonBg = buttonObj.GetComponent<Image>();
+        buttonBg.color = new Color(0.2f, 0.5f, 0.8f, 1f);
+        buttonBg.raycastTarget = true;
+
+        _continueButton = buttonObj.GetComponent<Button>();
+        _continueButton.targetGraphic = buttonBg;
+        _continueButton.transition = Selectable.Transition.ColorTint;
+
+        ColorBlock colors = _continueButton.colors;
+        colors.normalColor = new Color(0.2f, 0.5f, 0.8f, 1f);
+        colors.highlightedColor = new Color(0.3f, 0.6f, 0.9f, 1f);
+        colors.pressedColor = new Color(0.15f, 0.4f, 0.7f, 1f);
+        colors.selectedColor = new Color(0.25f, 0.55f, 0.85f, 1f);
+        _continueButton.colors = colors;
+
+        _continueButton.onClick.RemoveAllListeners();
+        _continueButton.onClick.AddListener(OnContinueClicked);
+
+        GameObject textObj = CreateChild("Text", buttonObj.transform, typeof(RectTransform), typeof(TextMeshProUGUI));
+        RectTransform textRect = textObj.GetComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+
+        TextMeshProUGUI buttonText = textObj.GetComponent<TextMeshProUGUI>();
+        buttonText.text = "Continue";
+        buttonText.fontSize = 24;
+        buttonText.fontStyle = FontStyles.Bold;
+        buttonText.color = Color.white;
+        buttonText.alignment = TextAlignmentOptions.Center;
+
+        Debug.Log($"[XP UI] Button GameObject: {buttonObj.name}");
+        Debug.Log($"[XP UI] Button Parent: {(buttonObj.transform.parent != null ? buttonObj.transform.parent.name : "null")}");
+        Debug.Log($"[XP UI] Button Active: {buttonObj.activeSelf}");
+        Debug.Log($"[XP UI] Button Rect Size: {buttonRect.rect.size}");
+        Debug.Log($"[XP UI] Button Position: {buttonRect.position}");
+        Debug.Log($"[XP UI] Button component: {_continueButton != null}");
+        Debug.Log($"[XP UI] Button interactable: {_continueButton != null && _continueButton.interactable}");
+        Debug.Log("[XP UI] === BUTTON CREATION COMPLETE ===");
     }
 
     private void BuildContent(ExperienceCalculator.CombatXPResult xpResult)
     {
-        if (_panel == null)
+        Debug.Log("[XP UI] BuildContent started");
+
+        if (_contentParent == null)
         {
-            Debug.LogError("[XP UI] BuildContent called with null panel.");
+            Debug.LogError("[XP UI] BuildContent called with null content parent.");
             return;
         }
 
-        for (int i = _panel.transform.childCount - 1; i >= 0; i--)
-            Destroy(_panel.transform.GetChild(i).gameObject);
+        for (int i = _contentParent.childCount - 1; i >= 0; i--)
+            Destroy(_contentParent.GetChild(i).gameObject);
 
-        CreateText(_panel.transform, "EXPERIENCE GAINED", 28, FontStyle.Bold, new Color(1f, 0.92f, 0.45f));
-        CreateText(_panel.transform, $"Average Party Level: {xpResult.AveragePartyLevel:F1}", 18, FontStyle.Normal, Color.white);
+        CreateText(_contentParent, "EXPERIENCE GAINED", 28, FontStyle.Bold, new Color(1f, 0.92f, 0.45f));
+        CreateText(_contentParent, $"Average Party Level: {xpResult.AveragePartyLevel:F1}", 18, FontStyle.Normal, Color.white);
 
-        CreateText(_panel.transform, "Enemies Defeated:", 20, FontStyle.Bold, new Color(0.72f, 0.88f, 1f));
+        CreateText(_contentParent, "Enemies Defeated:", 20, FontStyle.Bold, new Color(0.72f, 0.88f, 1f));
         if (xpResult.Awards.Count == 0)
         {
-            CreateText(_panel.transform, "• None", 16, FontStyle.Italic, new Color(0.8f, 0.8f, 0.8f));
+            CreateText(_contentParent, "• None", 16, FontStyle.Italic, new Color(0.8f, 0.8f, 0.8f));
         }
         else
         {
@@ -200,22 +338,22 @@ public class CombatEndXPUI : MonoBehaviour
             {
                 ExperienceCalculator.XPAward award = xpResult.Awards[i];
                 string line = $"• {award.EnemyName} (CR {ChallengeRatingUtils.Format(award.ChallengeRating)}): {award.XPTotal} XP";
-                CreateText(_panel.transform, line, 16, FontStyle.Normal, Color.white);
+                CreateText(_contentParent, line, 16, FontStyle.Normal, Color.white);
             }
         }
 
-        CreateSeparator(_panel.transform);
+        CreateSeparator(_contentParent);
 
         int totalEncounterXP = xpResult.Awards.Sum(a => a.XPTotal);
         int partySize = Mathf.Max(1, xpResult.CharacterXPGained.Count);
-        CreateText(_panel.transform, $"Total Encounter XP: {totalEncounterXP}", 19, FontStyle.Bold, new Color(1f, 0.95f, 0.35f));
-        CreateText(_panel.transform, $"Party Size: {partySize}", 17, FontStyle.Normal, Color.white);
-        CreateText(_panel.transform, $"XP per Character: {totalEncounterXP} / {partySize} = {xpResult.TotalXPPerCharacter}", 21, FontStyle.Bold, Color.yellow);
+        CreateText(_contentParent, $"Total Encounter XP: {totalEncounterXP}", 19, FontStyle.Bold, new Color(1f, 0.95f, 0.35f));
+        CreateText(_contentParent, $"Party Size: {partySize}", 17, FontStyle.Normal, Color.white);
+        CreateText(_contentParent, $"XP per Character: {totalEncounterXP} / {partySize} = {xpResult.TotalXPPerCharacter}", 21, FontStyle.Bold, Color.yellow);
 
-        CreateText(_panel.transform, "Character XP:", 20, FontStyle.Bold, new Color(0.72f, 1f, 0.74f));
+        CreateText(_contentParent, "Character XP:", 20, FontStyle.Bold, new Color(0.72f, 1f, 0.74f));
         if (xpResult.CharacterXPGained.Count == 0)
         {
-            CreateText(_panel.transform, "• None", 16, FontStyle.Italic, new Color(0.8f, 0.8f, 0.8f));
+            CreateText(_contentParent, "• None", 16, FontStyle.Italic, new Color(0.8f, 0.8f, 0.8f));
         }
         else
         {
@@ -228,28 +366,23 @@ public class CombatEndXPUI : MonoBehaviour
                 string charName = character != null && character.Stats != null ? character.Stats.CharacterName : "Unknown";
                 string levelUpTag = leveledUp ? " ⭐ LEVEL UP! ⭐" : string.Empty;
                 Color textColor = leveledUp ? new Color(0.58f, 1f, 0.58f) : Color.white;
-                CreateText(_panel.transform, $"• {charName}: +{gained} XP{levelUpTag}", 16, FontStyle.Normal, textColor);
+                CreateText(_contentParent, $"• {charName}: +{gained} XP{levelUpTag}", 16, FontStyle.Normal, textColor);
             }
         }
 
-        GameObject buttonObj = CreateChild("ContinueButton", _panel.transform, typeof(RectTransform), typeof(Image), typeof(Button));
-        RectTransform btnRect = buttonObj.GetComponent<RectTransform>();
-        btnRect.sizeDelta = new Vector2(0f, 48f);
+        if (_continueButton == null)
+        {
+            Debug.LogWarning("[XP UI] Continue button missing during BuildContent; rebuilding button.");
+            CreateContinueButton();
+        }
+        else
+        {
+            _continueButton.onClick.RemoveAllListeners();
+            _continueButton.onClick.AddListener(OnContinueClicked);
+            _continueButton.interactable = true;
+        }
 
-        Image btnBg = buttonObj.GetComponent<Image>();
-        btnBg.color = new Color(0.16f, 0.35f, 0.74f, 1f);
-
-        Button button = buttonObj.GetComponent<Button>();
-        button.transition = Selectable.Transition.ColorTint;
-        ColorBlock cb = button.colors;
-        cb.highlightedColor = new Color(0.22f, 0.45f, 0.9f, 1f);
-        cb.pressedColor = new Color(0.1f, 0.24f, 0.52f, 1f);
-        button.colors = cb;
-
-        CreateText(buttonObj.transform, "Continue", 20, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
-
-        button.onClick.RemoveAllListeners();
-        button.onClick.AddListener(OnContinueClicked);
+        Debug.Log("[XP UI] BuildContent complete");
     }
 
     private void LogUIHierarchy()
@@ -263,29 +396,11 @@ public class CombatEndXPUI : MonoBehaviour
         Debug.Log("[XP UI] === UI HIERARCHY ===");
         Debug.Log($"[XP UI] Root: {(_root != null ? _root.name : "null")}");
         Debug.Log($"[XP UI] Root Active: {(_root != null && _root.activeSelf)}");
-        Debug.Log($"[XP UI] Root ActiveInHierarchy: {(_root != null && _root.activeInHierarchy)}");
-        Debug.Log($"[XP UI] Root Parent: {(_root != null ? _root.transform.parent?.name : "null")}");
         Debug.Log($"[XP UI] Panel: {_panel.name}");
         Debug.Log($"[XP UI] Panel Active: {_panel.activeSelf}");
-        Debug.Log($"[XP UI] Panel ActiveInHierarchy: {_panel.activeInHierarchy}");
-        Debug.Log($"[XP UI] Panel Parent: {_panel.transform.parent?.name}");
-        Debug.Log($"[XP UI] Panel Position: {_panel.transform.position}");
-        Debug.Log($"[XP UI] Panel Scale: {_panel.transform.localScale}");
-
-        RectTransform panelRect = _panel.GetComponent<RectTransform>();
-        if (panelRect != null)
-        {
-            Debug.Log($"[XP UI] Panel Rect: {panelRect.rect}");
-            Debug.Log($"[XP UI] Panel AnchoredPosition: {panelRect.anchoredPosition}");
-            Debug.Log($"[XP UI] Panel SizeDelta: {panelRect.sizeDelta}");
-        }
-
-        Image image = _panel.GetComponent<Image>();
-        if (image != null)
-            Debug.Log($"[XP UI] Panel Background Color: {image.color}");
-
-        Debug.Log($"[XP UI] Root child count: {(_root != null ? _root.transform.childCount : 0)}");
         Debug.Log($"[XP UI] Panel child count: {_panel.transform.childCount}");
+        Debug.Log($"[XP UI] Content child count: {(_contentParent != null ? _contentParent.childCount : 0)}");
+        Debug.Log($"[XP UI] Continue button present: {_continueButton != null}");
         Debug.Log("[XP UI] ==================");
     }
 
@@ -298,9 +413,13 @@ public class CombatEndXPUI : MonoBehaviour
 
     private static GameObject CreateText(Transform parent, string message, int fontSize, FontStyle style, Color color, TextAnchor align = TextAnchor.MiddleLeft)
     {
-        GameObject textObj = CreateChild("Text", parent, typeof(RectTransform), typeof(TextMeshProUGUI));
+        GameObject textObj = CreateChild("Text", parent, typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
         RectTransform rect = textObj.GetComponent<RectTransform>();
         rect.sizeDelta = new Vector2(0f, 30f);
+
+        LayoutElement layoutElement = textObj.GetComponent<LayoutElement>();
+        layoutElement.minHeight = 30f;
+        layoutElement.flexibleHeight = 0f;
 
         TextMeshProUGUI text = textObj.GetComponent<TextMeshProUGUI>();
         text.text = message;
@@ -358,9 +477,13 @@ public class CombatEndXPUI : MonoBehaviour
 
     private static void CreateSeparator(Transform parent)
     {
-        GameObject sepObj = CreateChild("Separator", parent, typeof(RectTransform), typeof(Image));
+        GameObject sepObj = CreateChild("Separator", parent, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
         RectTransform rect = sepObj.GetComponent<RectTransform>();
         rect.sizeDelta = new Vector2(0f, 2f);
+
+        LayoutElement layoutElement = sepObj.GetComponent<LayoutElement>();
+        layoutElement.minHeight = 2f;
+        layoutElement.preferredHeight = 2f;
 
         Image image = sepObj.GetComponent<Image>();
         image.color = new Color(0.55f, 0.62f, 0.82f, 0.95f);
