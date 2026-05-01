@@ -1717,29 +1717,44 @@ public class CharacterStats
         InitFeats();
     }
 
-    public void AddExperience(int xp)
+    public bool AddExperience(int xp)
     {
         int gain = Mathf.Max(0, xp);
         if (gain <= 0)
-            return;
+        {
+            Debug.Log($"[XP] {CharacterName} received non-positive XP ({xp}); skipping.");
+            return false;
+        }
 
         int oldXp = ExperiencePoints;
         int oldLevel = Mathf.Max(1, Level);
+
+        int minimumXpForCurrentLevel = ExperienceCalculator.GetXPForLevel(oldLevel);
+        if (ExperiencePoints < minimumXpForCurrentLevel)
+        {
+            Debug.LogWarning($"[XP] {CharacterName} had XP ({ExperiencePoints}) below level {oldLevel} floor ({minimumXpForCurrentLevel}). Syncing baseline before award.");
+            ExperiencePoints = minimumXpForCurrentLevel;
+        }
 
         ExperiencePoints += gain;
         Debug.Log($"[XP] {CharacterName} gained {gain} XP (Total: {ExperiencePoints})");
 
         int newLevel = CalculateLevelFromXP(ExperiencePoints);
-        if (newLevel > oldLevel)
+        bool leveledUp = newLevel > oldLevel;
+
+        if (leveledUp)
         {
             Level = newLevel;
             OnLevelUp(oldLevel, newLevel);
         }
-
-        if (newLevel < oldLevel)
+        else if (newLevel < oldLevel)
+        {
+            Debug.LogWarning($"[XP] {CharacterName} computed lower level ({newLevel}) than current level ({oldLevel}); preserving current level.");
             Level = oldLevel;
+        }
 
-        Debug.Log($"[XP] {CharacterName}: {oldXp} → {ExperiencePoints} XP (Level {oldLevel} → {Level})");
+        Debug.Log($"[XP] {CharacterName}: {oldLevel} → {Level} (Level up: {leveledUp}) | XP {oldXp} → {ExperiencePoints}");
+        return leveledUp;
     }
 
     public int CalculateLevelFromXP(int xp)

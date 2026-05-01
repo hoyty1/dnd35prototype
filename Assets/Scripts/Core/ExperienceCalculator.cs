@@ -149,23 +149,30 @@ public class ExperienceCalculator : MonoBehaviour
             if (character == null || character.Stats == null)
                 continue;
 
-            int oldXp = character.Stats.ExperiencePoints;
+            string charName = !string.IsNullOrWhiteSpace(character.Stats.CharacterName) ? character.Stats.CharacterName : "Unknown";
             int oldLevel = Mathf.Max(1, character.Stats.Level);
+            int oldXp = character.Stats.ExperiencePoints;
 
-            character.Stats.AddExperience(result.TotalXPPerCharacter);
+            bool addExperienceReportedLevelUp = character.Stats.AddExperience(result.TotalXPPerCharacter);
 
             int newXp = character.Stats.ExperiencePoints;
             int newLevel = Mathf.Max(1, character.Stats.Level);
             bool leveledUp = newLevel > oldLevel;
 
+            if (addExperienceReportedLevelUp != leveledUp)
+            {
+                Debug.LogWarning($"[XP] Level-up mismatch for {charName}: AddExperience={addExperienceReportedLevelUp}, computed={leveledUp}");
+            }
+
             result.CharacterXPGained[character] = result.TotalXPPerCharacter;
             result.CharacterLeveledUp[character] = leveledUp;
 
-            string charName = !string.IsNullOrWhiteSpace(character.Stats.CharacterName) ? character.Stats.CharacterName : "Unknown";
-            Debug.Log($"[XP] {charName}: {oldXp} → {newXp} XP (Level {oldLevel} → {newLevel})");
+            Debug.Log($"[XP] {charName}: Level {oldLevel} → {newLevel}, LeveledUp={leveledUp}, XP {oldXp} → {newXp}");
 
             if (leveledUp)
-                Debug.Log($"[XP] ⭐ {charName} leveled up to {newLevel}! ⭐");
+            {
+                Debug.Log($"[XP] ⭐⭐⭐ {charName} LEVELED UP to {newLevel}! ⭐⭐⭐");
+            }
         }
 
         return result;

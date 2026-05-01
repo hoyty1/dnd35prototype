@@ -26,6 +26,28 @@ public class LevelUpUI : MonoBehaviour
     private LevelUpStep _currentStep;
     private Transform _contentContainer;
 
+    public void ShowForCharacter(CharacterController character, Action onComplete)
+    {
+        string characterName = character != null && character.Stats != null && !string.IsNullOrWhiteSpace(character.Stats.CharacterName)
+            ? character.Stats.CharacterName
+            : "Unknown";
+        Debug.Log($"[LevelUpUI] ShowForCharacter called for {characterName}");
+
+        if (character == null || character.Stats == null)
+        {
+            Debug.LogWarning("[LevelUpUI] Cannot show level-up UI because character/stats is null.");
+            onComplete?.Invoke();
+            return;
+        }
+
+        int newLevel = Mathf.Max(1, character.Stats.Level);
+        int oldLevel = Mathf.Max(1, newLevel - 1);
+        LevelUpData levelUpData = LevelUpCalculator.CalculateLevelUp(character, oldLevel, newLevel);
+
+        ShowLevelUps(new List<LevelUpData> { levelUpData }, onComplete);
+        Debug.Log("[LevelUpUI] Panel activated");
+    }
+
     public void ShowLevelUps(List<LevelUpData> levelUps, Action onCompleteCallback)
     {
         int count = levelUps != null ? levelUps.Count : 0;
@@ -66,6 +88,7 @@ public class LevelUpUI : MonoBehaviour
         _currentLevelUp = _levelUpQueue[_currentIndex];
         string name = GetCharacterName(_currentLevelUp.Character);
         Debug.Log($"[LevelUpUI] Showing level-up for {name}");
+        Debug.Log($"[LevelUpUI] Building content for {name}");
 
         _currentStep = LevelUpStep.Summary;
         ShowCurrentStep();
