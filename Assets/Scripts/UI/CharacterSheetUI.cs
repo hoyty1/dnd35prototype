@@ -659,6 +659,50 @@ public class CharacterSheetUI : MonoBehaviour
             : new Color(0.45f, 0.72f, 1f);
     }
 
+    private void AddExperienceSection(Transform content, CharacterStats stats)
+    {
+        int currentXP = Mathf.Max(0, stats.ExperiencePoints);
+        int currentLevel = Mathf.Max(1, stats.Level);
+        int xpForCurrentLevel = ExperienceCalculator.GetXPForLevel(currentLevel);
+        int xpForNextLevel = ExperienceCalculator.GetXPForLevel(currentLevel + 1);
+
+        Debug.Log($"[CharacterSheet] Current XP: {currentXP}");
+        Debug.Log($"[CharacterSheet] Current Level: {currentLevel}");
+        Debug.Log($"[CharacterSheet] XP for Level {currentLevel}: {xpForCurrentLevel}");
+        Debug.Log($"[CharacterSheet] XP for Level {currentLevel + 1}: {xpForNextLevel}");
+
+        string xpText;
+        if (currentLevel >= 20)
+        {
+            xpText = $"{currentXP:N0} (Max Level)";
+        }
+        else
+        {
+            xpText = $"{currentXP:N0} / {xpForNextLevel:N0}";
+        }
+
+        Debug.Log($"[CharacterSheet] XP Display: {xpText}");
+        AddLine(content, $"✦ Experience: {xpText}", 11, new Color(0.45f, 0.9f, 1f), FontStyle.Bold, 14);
+
+        if (currentLevel >= 20)
+            return;
+
+        int xpIntoLevel = Mathf.Clamp(currentXP - xpForCurrentLevel, 0, Mathf.Max(0, xpForNextLevel - xpForCurrentLevel));
+        int xpNeededForLevel = Mathf.Max(1, xpForNextLevel - xpForCurrentLevel);
+        float progress = Mathf.Clamp01((float)xpIntoLevel / xpNeededForLevel);
+
+        Debug.Log($"[CharacterSheet] Progress: {progress * 100f:F1}%");
+
+        AddLine(content, $"  {BuildXpProgressBar(progress)} {progress * 100f:F0}%", 10, new Color(0.60f, 0.95f, 0.70f), FontStyle.Normal, 13);
+    }
+
+    private static string BuildXpProgressBar(float progress)
+    {
+        const int totalSegments = 20;
+        int filled = Mathf.Clamp(Mathf.RoundToInt(progress * totalSegments), 0, totalSegments);
+        return new string('█', filled) + new string('░', totalSegments - filled);
+    }
+
     // ----- Stats Tab -----
 
     private void RefreshStatsTab()
@@ -689,6 +733,7 @@ public class CharacterSheetUI : MonoBehaviour
             AddLine(content, $"\u2726 Domains: {stats.DomainsDisplay}", 11, new Color(0.7f, 0.85f, 1f), FontStyle.Normal, 14);
         }
 
+        AddExperienceSection(content, stats);
         AddSeparator(content);
 
         // === HP / Movement / Initiative ===

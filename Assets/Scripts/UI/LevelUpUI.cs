@@ -377,10 +377,13 @@ public class LevelUpUI : MonoBehaviour
         contentRect.anchorMin = new Vector2(0f, 1f);
         contentRect.anchorMax = new Vector2(1f, 1f);
         contentRect.pivot = new Vector2(0.5f, 1f);
+        contentRect.anchoredPosition = Vector2.zero;
+        contentRect.sizeDelta = Vector2.zero;
 
         VerticalLayoutGroup contentLayout = content.GetComponent<VerticalLayoutGroup>();
         contentLayout.spacing = 10f;
-        contentLayout.padding = new RectOffset(20, 20, 20, 20);
+        contentLayout.padding = new RectOffset(24, 24, 20, 20);
+        contentLayout.childAlignment = TextAnchor.UpperCenter;
         contentLayout.childControlWidth = true;
         contentLayout.childControlHeight = false;
         contentLayout.childForceExpandWidth = true;
@@ -405,37 +408,51 @@ public class LevelUpUI : MonoBehaviour
 
     private void CreateTitle(string text)
     {
-        GameObject titleObj = new GameObject("Title", typeof(RectTransform), typeof(TextMeshProUGUI));
-        titleObj.transform.SetParent(_contentContainer, false);
-
-        RectTransform titleRect = titleObj.GetComponent<RectTransform>();
-        titleRect.sizeDelta = new Vector2(0f, 54f);
-
-        TextMeshProUGUI titleText = titleObj.GetComponent<TextMeshProUGUI>();
-        titleText.text = text;
-        titleText.fontSize = 28;
-        titleText.fontStyle = FontStyles.Bold;
-        titleText.alignment = TextAlignmentOptions.Center;
-        titleText.color = new Color(0.9f, 0.8f, 0.5f);
-        titleText.enableWordWrapping = true;
+        CreateText(_contentContainer, "Title", text, 28, FontStyles.Bold, new Color(0.9f, 0.8f, 0.5f), TextAlignmentOptions.Center, 54f);
     }
 
     private void CreateInfoText(string text, bool bold = false, Color? color = null)
     {
-        GameObject textObj = new GameObject("Info", typeof(RectTransform), typeof(TextMeshProUGUI));
-        textObj.transform.SetParent(_contentContainer, false);
+        FontStyles style = bold ? FontStyles.Bold : FontStyles.Normal;
+        CreateText(_contentContainer, "Info", text, 16, style, color ?? Color.white, TextAlignmentOptions.Center, 36f);
+    }
+
+    private void CreateText(
+        Transform parent,
+        string objectName,
+        string text,
+        int fontSize,
+        FontStyles style,
+        Color color,
+        TextAlignmentOptions alignment,
+        float preferredHeight)
+    {
+        GameObject textObj = new GameObject(objectName, typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
+        textObj.transform.SetParent(parent, false);
 
         RectTransform textRect = textObj.GetComponent<RectTransform>();
-        textRect.sizeDelta = new Vector2(0f, 32f);
+        textRect.anchorMin = new Vector2(0f, 0.5f);
+        textRect.anchorMax = new Vector2(1f, 0.5f);
+        textRect.pivot = new Vector2(0.5f, 0.5f);
+        textRect.anchoredPosition = Vector2.zero;
+        textRect.sizeDelta = new Vector2(0f, preferredHeight);
 
         TextMeshProUGUI tmp = textObj.GetComponent<TextMeshProUGUI>();
         tmp.text = text;
-        tmp.fontSize = 16;
-        tmp.fontStyle = bold ? FontStyles.Bold : FontStyles.Normal;
-        tmp.alignment = TextAlignmentOptions.MidlineLeft;
-        tmp.color = color ?? Color.white;
+        tmp.fontSize = fontSize;
+        tmp.fontStyle = style;
+        tmp.color = color;
+        tmp.alignment = alignment;
         tmp.enableWordWrapping = true;
-        tmp.overflowMode = TextOverflowModes.Overflow;
+        tmp.overflowMode = TextOverflowModes.Ellipsis;
+        tmp.margin = new Vector4(12f, 4f, 12f, 4f);
+
+        LayoutElement layout = textObj.GetComponent<LayoutElement>();
+        layout.preferredHeight = preferredHeight;
+        layout.minHeight = preferredHeight;
+        layout.flexibleWidth = 1f;
+
+        Debug.Log($"[LevelUpUI] Created text: '{text}' with alignment {tmp.alignment}");
     }
 
     private void CreateSeparator()
