@@ -50,10 +50,34 @@ public class StoreUI : MonoBehaviour
     private readonly Dictionary<string, Image> _categoryButtonImages = new Dictionary<string, Image>();
     private readonly Dictionary<string, Image> _sellCharacterButtonImages = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Image> _sellCategoryButtonImages = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
+    private enum SortMode
+    {
+        Alphabetical,
+        Price
+    }
+
+    private enum SortDirection
+    {
+        Ascending,
+        Descending
+    }
+
     private string _currentBuyCategory = "All";
     private string _currentSellCategory = "All";
     private string _currentSellCharacterKey = SellCharacterStashKey;
     private CharacterController _selectedSellCharacter;
+
+    private SortMode _buySortMode = SortMode.Alphabetical;
+    private SortDirection _buySortDirection = SortDirection.Ascending;
+    private SortMode _sellSortMode = SortMode.Alphabetical;
+    private SortDirection _sellSortDirection = SortDirection.Ascending;
+
+    private RectTransform _buySortRoot;
+    private RectTransform _sellSortRoot;
+    private readonly Dictionary<SortMode, Image> _buySortButtonImages = new Dictionary<SortMode, Image>();
+    private readonly Dictionary<SortMode, Image> _sellSortButtonImages = new Dictionary<SortMode, Image>();
+    private Text _buySortDirectionText;
+    private Text _sellSortDirectionText;
 
     private const string SellCharacterStashKey = "__stash__";
 
@@ -94,9 +118,17 @@ public class StoreUI : MonoBehaviour
         _currentSellCharacterKey = SellCharacterStashKey;
         _selectedSellCharacter = null;
         _currentSellCategory = "All";
+
+        _buySortMode = SortMode.Alphabetical;
+        _buySortDirection = SortDirection.Ascending;
+        _sellSortMode = SortMode.Alphabetical;
+        _sellSortDirection = SortDirection.Ascending;
+
         BuildSellCharacterOptions(_sellCharacterButtonsRoot);
         RefreshSellCharacterButtons();
         RefreshSellCategoryButtons();
+        RefreshBuySortButtons();
+        RefreshSellSortButtons();
 
         ShowBuyPanel();
 
@@ -212,6 +244,20 @@ public class StoreUI : MonoBehaviour
         Debug.Log("[UI] Button text: 14-16px (reverted from 18-20px)");
         Debug.Log("[UI] Fullscreen panels maintained");
 
+        Debug.Log("[Store] === SORT FUNCTIONALITY ADDED ===");
+        Debug.Log("[Store] BUY tab sort:");
+        Debug.Log("[Store]   - Name - alphabetical sorting");
+        Debug.Log("[Store]   - Price - sort by item value");
+        Debug.Log("[Store]   - ↑ ASC / ↓ DESC - direction toggle");
+        Debug.Log("[Store] SELL tab sort:");
+        Debug.Log("[Store]   - Name - alphabetical sorting");
+        Debug.Log("[Store]   - Price - sort by sell price");
+        Debug.Log("[Store]   - ↑ ASC / ↓ DESC - direction toggle");
+        Debug.Log("[Store] Sort areas layout:");
+        Debug.Log("[Store]   - Buy sort: 84-93%");
+        Debug.Log("[Store]   - Sell sort: 72-80%");
+        Debug.Log("[Store] Active sort highlighted in green");
+
         _root.SetActive(false);
     }
 
@@ -224,7 +270,8 @@ public class StoreUI : MonoBehaviour
         Debug.Log("[Store] Buy panel bounds: fullscreen proportion (0.10 to 0.90)");
 
         CreateCategoryFilter();
-        CreateScrollList(_buyPanel.transform, "BuyScroll", new Vector2(0f, 0f), new Vector2(1f, 0.83f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _buyContent);
+        CreateBuySortArea();
+        CreateScrollList(_buyPanel.transform, "BuyScroll", new Vector2(0f, 0f), new Vector2(1f, 0.84f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _buyContent);
 
         Debug.Log("[Store] === ITEM ROW WIDTH FIX ===");
         Debug.Log("[Store] Info section: minWidth=200, preferredWidth=300, flexibleWidth=1");
@@ -252,8 +299,9 @@ public class StoreUI : MonoBehaviour
 
         CreateSellCharacterFilter();
         CreateSellCategoryFilter();
+        CreateSellSortArea();
 
-        CreateScrollList(_sellPanel.transform, "SellScroll", new Vector2(0f, 0f), new Vector2(1f, 0.80f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _sellContent);
+        CreateScrollList(_sellPanel.transform, "SellScroll", new Vector2(0f, 0f), new Vector2(1f, 0.72f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _sellContent);
 
         Debug.Log("[Store] === SELL MENU FILTERS ADDED ===");
         Debug.Log("[Store] Character filter: All, Stash, and individual characters");
@@ -261,7 +309,8 @@ public class StoreUI : MonoBehaviour
         Debug.Log("[Store] Filter area layout:");
         Debug.Log("[Store]   - Character filter: 88-94% (top)");
         Debug.Log("[Store]   - Type filter: 80-88% (middle)");
-        Debug.Log("[Store]   - Sell list: 0-80% (bottom)");
+        Debug.Log("[Store]   - Sort filter: 72-80% (middle-lower)");
+        Debug.Log("[Store]   - Sell list: 0-72% (bottom)");
         Debug.Log("[Store] Filters automatically reset when switching to SELL tab");
 
         _sellPanel.SetActive(false);
@@ -299,7 +348,7 @@ public class StoreUI : MonoBehaviour
         filterObj.transform.SetParent(_buyPanel.transform, false);
 
         _categoryFilterRoot = filterObj.GetComponent<RectTransform>();
-        _categoryFilterRoot.anchorMin = new Vector2(0f, 0.85f);
+        _categoryFilterRoot.anchorMin = new Vector2(0f, 0.93f);
         _categoryFilterRoot.anchorMax = new Vector2(1f, 1f);
         _categoryFilterRoot.offsetMin = Vector2.zero;
         _categoryFilterRoot.offsetMax = Vector2.zero;
@@ -361,6 +410,61 @@ public class StoreUI : MonoBehaviour
         Debug.Log($"[Store] Filtering by category: {category}");
         _currentBuyCategory = category;
         RebuildBuyList();
+    }
+
+    private void CreateBuySortArea()
+    {
+        if (_buyPanel == null)
+            return;
+
+        GameObject sortObj = new GameObject("BuySortFilter", typeof(RectTransform), typeof(Image));
+        sortObj.transform.SetParent(_buyPanel.transform, false);
+
+        _buySortRoot = sortObj.GetComponent<RectTransform>();
+        _buySortRoot.anchorMin = new Vector2(0f, 0.84f);
+        _buySortRoot.anchorMax = new Vector2(1f, 0.93f);
+        _buySortRoot.offsetMin = Vector2.zero;
+        _buySortRoot.offsetMax = Vector2.zero;
+
+        Image bg = sortObj.GetComponent<Image>();
+        bg.color = new Color(0.15f, 0.15f, 0.2f, 0.55f);
+
+        CreateText(sortObj.transform, "Label", "SORT BY:",
+            new Vector2(0.01f, 0f), new Vector2(0.13f, 1f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 14, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+
+        GameObject rowObj = new GameObject("SortButtons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+        rowObj.transform.SetParent(sortObj.transform, false);
+
+        RectTransform rowRect = rowObj.GetComponent<RectTransform>();
+        rowRect.anchorMin = new Vector2(0.14f, 0.08f);
+        rowRect.anchorMax = new Vector2(0.99f, 0.92f);
+        rowRect.offsetMin = Vector2.zero;
+        rowRect.offsetMax = Vector2.zero;
+
+        HorizontalLayoutGroup rowLayout = rowObj.GetComponent<HorizontalLayoutGroup>();
+        rowLayout.spacing = 8f;
+        rowLayout.padding = new RectOffset(0, 0, 0, 0);
+        rowLayout.childAlignment = TextAnchor.MiddleLeft;
+        rowLayout.childControlWidth = false;
+        rowLayout.childControlHeight = true;
+        rowLayout.childForceExpandWidth = false;
+        rowLayout.childForceExpandHeight = true;
+
+        _buySortButtonImages.Clear();
+
+        Image alphaImage = CreateSortControlButton(rowObj.transform, "BuySortName", "Name", () => SetBuySortMode(SortMode.Alphabetical));
+        if (alphaImage != null)
+            _buySortButtonImages[SortMode.Alphabetical] = alphaImage;
+
+        Image priceImage = CreateSortControlButton(rowObj.transform, "BuySortPrice", "Price", () => SetBuySortMode(SortMode.Price));
+        if (priceImage != null)
+            _buySortButtonImages[SortMode.Price] = priceImage;
+
+        _buySortDirectionText = CreateSortDirectionButton(rowObj.transform, "BuyDirection", () => ToggleBuySortDirection());
+
+        RefreshBuySortButtons();
+        Debug.Log("[Store] Buy sort area created (Name, Price, Direction toggle)");
     }
 
     private void CreateSellCharacterFilter()
@@ -617,6 +721,183 @@ public class StoreUI : MonoBehaviour
         }
     }
 
+    private void CreateSellSortArea()
+    {
+        if (_sellPanel == null)
+            return;
+
+        GameObject sortObj = new GameObject("SellSortFilter", typeof(RectTransform), typeof(Image));
+        sortObj.transform.SetParent(_sellPanel.transform, false);
+
+        _sellSortRoot = sortObj.GetComponent<RectTransform>();
+        _sellSortRoot.anchorMin = new Vector2(0f, 0.72f);
+        _sellSortRoot.anchorMax = new Vector2(1f, 0.80f);
+        _sellSortRoot.offsetMin = Vector2.zero;
+        _sellSortRoot.offsetMax = Vector2.zero;
+
+        Image bg = sortObj.GetComponent<Image>();
+        bg.color = new Color(0.15f, 0.15f, 0.2f, 0.55f);
+
+        CreateText(sortObj.transform, "Label", "SORT BY:",
+            new Vector2(0.01f, 0f), new Vector2(0.13f, 1f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, 14, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+
+        GameObject rowObj = new GameObject("SortButtons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+        rowObj.transform.SetParent(sortObj.transform, false);
+
+        RectTransform rowRect = rowObj.GetComponent<RectTransform>();
+        rowRect.anchorMin = new Vector2(0.14f, 0.08f);
+        rowRect.anchorMax = new Vector2(0.99f, 0.92f);
+        rowRect.offsetMin = Vector2.zero;
+        rowRect.offsetMax = Vector2.zero;
+
+        HorizontalLayoutGroup rowLayout = rowObj.GetComponent<HorizontalLayoutGroup>();
+        rowLayout.spacing = 8f;
+        rowLayout.padding = new RectOffset(0, 0, 0, 0);
+        rowLayout.childAlignment = TextAnchor.MiddleLeft;
+        rowLayout.childControlWidth = false;
+        rowLayout.childControlHeight = true;
+        rowLayout.childForceExpandWidth = false;
+        rowLayout.childForceExpandHeight = true;
+
+        _sellSortButtonImages.Clear();
+
+        Image alphaImage = CreateSortControlButton(rowObj.transform, "SellSortName", "Name", () => SetSellSortMode(SortMode.Alphabetical));
+        if (alphaImage != null)
+            _sellSortButtonImages[SortMode.Alphabetical] = alphaImage;
+
+        Image priceImage = CreateSortControlButton(rowObj.transform, "SellSortPrice", "Price", () => SetSellSortMode(SortMode.Price));
+        if (priceImage != null)
+            _sellSortButtonImages[SortMode.Price] = priceImage;
+
+        _sellSortDirectionText = CreateSortDirectionButton(rowObj.transform, "SellDirection", () => ToggleSellSortDirection());
+
+        RefreshSellSortButtons();
+        Debug.Log("[Store] Sell sort area created (Name, Price, Direction toggle)");
+    }
+
+    private Image CreateSortControlButton(Transform parent, string name, string label, Action onClick)
+    {
+        GameObject buttonObj = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+        buttonObj.transform.SetParent(parent, false);
+
+        LayoutElement layout = buttonObj.GetComponent<LayoutElement>();
+        layout.minWidth = 110f;
+        layout.preferredWidth = 110f;
+        layout.preferredHeight = 32f;
+        layout.flexibleWidth = 0f;
+
+        Image image = buttonObj.GetComponent<Image>();
+        image.color = new Color(0.3f, 0.3f, 0.4f, 1f);
+
+        Button button = buttonObj.GetComponent<Button>();
+        button.onClick.AddListener(() => onClick?.Invoke());
+
+        CreateText(buttonObj.transform, "Label", label,
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+
+        return image;
+    }
+
+    private Text CreateSortDirectionButton(Transform parent, string name, Action onClick)
+    {
+        GameObject buttonObj = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+        buttonObj.transform.SetParent(parent, false);
+
+        LayoutElement layout = buttonObj.GetComponent<LayoutElement>();
+        layout.minWidth = 100f;
+        layout.preferredWidth = 100f;
+        layout.preferredHeight = 32f;
+        layout.flexibleWidth = 0f;
+
+        Image image = buttonObj.GetComponent<Image>();
+        image.color = new Color(0.4f, 0.5f, 0.6f, 1f);
+
+        Button button = buttonObj.GetComponent<Button>();
+        button.onClick.AddListener(() => onClick?.Invoke());
+
+        return CreateText(buttonObj.transform, "Label", "↑ ASC",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+    }
+
+    private void SetBuySortMode(SortMode mode)
+    {
+        _buySortMode = mode;
+        RefreshBuySortButtons();
+        RebuildBuyList();
+
+        Debug.Log($"[Store] Buy sort mode: {_buySortMode}");
+    }
+
+    private void ToggleBuySortDirection()
+    {
+        _buySortDirection = _buySortDirection == SortDirection.Ascending
+            ? SortDirection.Descending
+            : SortDirection.Ascending;
+
+        RefreshBuySortButtons();
+        RebuildBuyList();
+
+        Debug.Log($"[Store] Buy sort direction: {_buySortDirection}");
+    }
+
+    private void RefreshBuySortButtons()
+    {
+        foreach (KeyValuePair<SortMode, Image> kvp in _buySortButtonImages)
+        {
+            if (kvp.Value == null)
+                continue;
+
+            bool selected = kvp.Key == _buySortMode;
+            kvp.Value.color = selected
+                ? new Color(0.4f, 0.6f, 0.4f, 1f)
+                : new Color(0.3f, 0.3f, 0.4f, 1f);
+        }
+
+        if (_buySortDirectionText != null)
+            _buySortDirectionText.text = _buySortDirection == SortDirection.Ascending ? "↑ ASC" : "↓ DESC";
+    }
+
+    private void SetSellSortMode(SortMode mode)
+    {
+        _sellSortMode = mode;
+        RefreshSellSortButtons();
+        RebuildSellList();
+
+        Debug.Log($"[Store] Sell sort mode: {_sellSortMode}");
+    }
+
+    private void ToggleSellSortDirection()
+    {
+        _sellSortDirection = _sellSortDirection == SortDirection.Ascending
+            ? SortDirection.Descending
+            : SortDirection.Ascending;
+
+        RefreshSellSortButtons();
+        RebuildSellList();
+
+        Debug.Log($"[Store] Sell sort direction: {_sellSortDirection}");
+    }
+
+    private void RefreshSellSortButtons()
+    {
+        foreach (KeyValuePair<SortMode, Image> kvp in _sellSortButtonImages)
+        {
+            if (kvp.Value == null)
+                continue;
+
+            bool selected = kvp.Key == _sellSortMode;
+            kvp.Value.color = selected
+                ? new Color(0.4f, 0.6f, 0.4f, 1f)
+                : new Color(0.3f, 0.3f, 0.4f, 1f);
+        }
+
+        if (_sellSortDirectionText != null)
+            _sellSortDirectionText.text = _sellSortDirection == SortDirection.Ascending ? "↑ ASC" : "↓ DESC";
+    }
+
     private string GetSelectedSellCharacterKey()
     {
         if (!string.IsNullOrWhiteSpace(_currentSellCharacterKey))
@@ -634,6 +915,7 @@ public class StoreUI : MonoBehaviour
         if (_buyPanel != null) _buyPanel.SetActive(true);
         if (_sellPanel != null) _sellPanel.SetActive(false);
         RefreshCategoryButtons();
+        RefreshBuySortButtons();
         RebuildBuyList();
     }
 
@@ -647,6 +929,7 @@ public class StoreUI : MonoBehaviour
         _currentSellCategory = "All";
         RefreshSellCharacterButtons();
         RefreshSellCategoryButtons();
+        RefreshSellSortButtons();
         RebuildSellList();
 
         Debug.Log("[Store] Switched to SELL tab (default: Stash, All types)");
@@ -666,12 +949,13 @@ public class StoreUI : MonoBehaviour
         ClearChildren(_buyContent);
 
         string category = string.IsNullOrWhiteSpace(_currentBuyCategory) ? "All" : _currentBuyCategory;
+        List<StoreInventory.StoreItemEntry> filteredItems = StoreInventory.Instance.GetItemsByCategory(category);
+        List<StoreInventory.StoreItemEntry> sortedItems = SortBuyItems(filteredItems);
 
-        Debug.Log($"[Store] Player selected category: {category}");
+        for (int i = 0; i < sortedItems.Count; i++)
+            CreateBuyRow(_buyContent, sortedItems[i]);
 
-        List<StoreInventory.StoreItemEntry> items = StoreInventory.Instance.GetItemsByCategory(category);
-        for (int i = 0; i < items.Count; i++)
-            CreateBuyRow(_buyContent, items[i]);
+        Debug.Log($"[Store] Buy list refreshed: {sortedItems.Count} items (Category: {category}, Sort: {_buySortMode} {_buySortDirection})");
     }
 
     private void RebuildSellList()
@@ -688,15 +972,86 @@ public class StoreUI : MonoBehaviour
         }
 
         List<SellStack> stacks = BuildSellStacks();
-        for (int i = 0; i < stacks.Count; i++)
-            CreateSellRow(_sellContent, stacks[i]);
+        List<SellStack> sortedStacks = SortSellStacks(stacks);
+        for (int i = 0; i < sortedStacks.Count; i++)
+            CreateSellRow(_sellContent, sortedStacks[i]);
 
         int totalCount = CountAllSellableItems();
         int stackedCount = 0;
-        for (int i = 0; i < stacks.Count; i++)
-            stackedCount += stacks[i].Quantity;
+        for (int i = 0; i < sortedStacks.Count; i++)
+            stackedCount += sortedStacks[i].Quantity;
 
-        Debug.Log($"[Store] Sell list refreshed: showing {stacks.Count} stacks / {stackedCount} items from {totalCount} sellable items (Character: {GetSellCharacterLabelForLogs()}, Category: {_currentSellCategory})");
+        Debug.Log($"[Store] Sell list refreshed: showing {sortedStacks.Count} stacks / {stackedCount} items from {totalCount} sellable items (Character: {GetSellCharacterLabelForLogs()}, Category: {_currentSellCategory}, Sort: {_sellSortMode} {_sellSortDirection})");
+    }
+
+    private List<StoreInventory.StoreItemEntry> SortBuyItems(List<StoreInventory.StoreItemEntry> items)
+    {
+        List<StoreInventory.StoreItemEntry> sorted = items != null
+            ? new List<StoreInventory.StoreItemEntry>(items)
+            : new List<StoreInventory.StoreItemEntry>();
+
+        sorted.Sort((a, b) =>
+        {
+            string aName = a != null && a.GetTemplate() != null ? (a.GetTemplate().Name ?? string.Empty) : string.Empty;
+            string bName = b != null && b.GetTemplate() != null ? (b.GetTemplate().Name ?? string.Empty) : string.Empty;
+            int aPrice = a != null ? a.PriceGp : 0;
+            int bPrice = b != null ? b.PriceGp : 0;
+
+            if (_buySortMode == SortMode.Price)
+            {
+                int priceCompare = aPrice.CompareTo(bPrice);
+                if (priceCompare != 0)
+                    return priceCompare;
+
+                return string.Compare(aName, bName, StringComparison.OrdinalIgnoreCase);
+            }
+
+            int nameCompare = string.Compare(aName, bName, StringComparison.OrdinalIgnoreCase);
+            if (nameCompare != 0)
+                return nameCompare;
+
+            return aPrice.CompareTo(bPrice);
+        });
+
+        if (_buySortDirection == SortDirection.Descending)
+            sorted.Reverse();
+
+        return sorted;
+    }
+
+    private List<SellStack> SortSellStacks(List<SellStack> stacks)
+    {
+        List<SellStack> sorted = stacks != null
+            ? new List<SellStack>(stacks)
+            : new List<SellStack>();
+
+        sorted.Sort((a, b) =>
+        {
+            string aName = a != null ? a.ItemName : string.Empty;
+            string bName = b != null ? b.ItemName : string.Empty;
+            int aPrice = a != null ? a.UnitSellPrice : 0;
+            int bPrice = b != null ? b.UnitSellPrice : 0;
+
+            if (_sellSortMode == SortMode.Price)
+            {
+                int priceCompare = aPrice.CompareTo(bPrice);
+                if (priceCompare != 0)
+                    return priceCompare;
+
+                return string.Compare(aName, bName, StringComparison.OrdinalIgnoreCase);
+            }
+
+            int nameCompare = string.Compare(aName, bName, StringComparison.OrdinalIgnoreCase);
+            if (nameCompare != 0)
+                return nameCompare;
+
+            return aPrice.CompareTo(bPrice);
+        });
+
+        if (_sellSortDirection == SortDirection.Descending)
+            sorted.Reverse();
+
+        return sorted;
     }
 
     private List<SellStack> BuildSellStacks()
@@ -742,9 +1097,7 @@ public class StoreUI : MonoBehaviour
             }
         }
 
-        List<SellStack> stacks = new List<SellStack>(stackLookup.Values);
-        stacks.Sort((a, b) => string.Compare(a.ItemName, b.ItemName, StringComparison.OrdinalIgnoreCase));
-        return stacks;
+        return new List<SellStack>(stackLookup.Values);
     }
 
     private void AddItemToSellStack(
