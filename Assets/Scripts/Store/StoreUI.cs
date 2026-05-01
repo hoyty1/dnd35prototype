@@ -181,12 +181,13 @@ public class StoreUI : MonoBehaviour
         CreateCategoryFilter();
         CreateScrollList(_buyPanel.transform, "BuyScroll", new Vector2(0f, 0f), new Vector2(1f, 0.83f), new Vector2(16f, 16f), new Vector2(-16f, -4f), out _buyContent);
 
-        Debug.Log("[Store] === ITEM WIDTH FIX ===");
-        Debug.Log("[Store] Item entries constrained to viewport width");
-        Debug.Log("[Store] Info section: flexible width");
-        Debug.Log("[Store] Price section: 70px fixed width");
-        Debug.Log("[Store] Button section: 55-70px fixed width");
-        Debug.Log("[Store] Total entry: fits within scroll view");
+        Debug.Log("[Store] === ITEM ROW WIDTH FIX ===");
+        Debug.Log("[Store] Info section: minWidth=200, preferredWidth=300, flexibleWidth=1");
+        Debug.Log("[Store] Price section: fixed 90px width");
+        Debug.Log("[Store] Button section: fixed 70px width");
+        Debug.Log("[Store] Left padding increased to 15px");
+        Debug.Log("[Store] Text overflow mode: Overflow (no clipping)");
+        Debug.Log("[Store] Full item names and descriptions now visible");
         Debug.Log("[Store] === CATEGORY BUTTONS ===");
         Debug.Log("[Store] Grid layout with wrapping");
         Debug.Log("[Store] Button size: 90x35");
@@ -402,6 +403,63 @@ public class StoreUI : MonoBehaviour
         return entries;
     }
 
+    private static string GetItemDescription(ItemData item, string fallback)
+    {
+        if (item == null)
+            return string.IsNullOrWhiteSpace(fallback) ? "Unknown item" : fallback;
+
+        if (!string.IsNullOrWhiteSpace(item.Description))
+            return item.Description;
+
+        string name = item.Name ?? string.Empty;
+
+        if (name.Contains("Longsword", StringComparison.OrdinalIgnoreCase))
+            return "1d8 slashing, versatile (1d10)";
+        if (name.Contains("Shortsword", StringComparison.OrdinalIgnoreCase))
+            return "1d6 piercing, light, finesse";
+        if (name.Contains("Greatsword", StringComparison.OrdinalIgnoreCase))
+            return "2d6 slashing, heavy, two-handed";
+        if (name.Contains("Battleaxe", StringComparison.OrdinalIgnoreCase))
+            return "1d8 slashing, versatile (1d10)";
+        if (name.Contains("Handaxe", StringComparison.OrdinalIgnoreCase))
+            return "1d6 slashing, light, thrown";
+        if (name.Contains("Greataxe", StringComparison.OrdinalIgnoreCase))
+            return "1d12 slashing, heavy, two-handed";
+        if (name.Contains("Dagger", StringComparison.OrdinalIgnoreCase))
+            return "1d4 piercing, finesse, light, thrown";
+        if (name.Contains("Mace", StringComparison.OrdinalIgnoreCase))
+            return "1d6 bludgeoning";
+        if (name.Contains("Warhammer", StringComparison.OrdinalIgnoreCase))
+            return "1d8 bludgeoning, versatile (1d10)";
+        if (name.Contains("Rapier", StringComparison.OrdinalIgnoreCase))
+            return "1d8 piercing, finesse";
+        if (name.Contains("Longbow", StringComparison.OrdinalIgnoreCase))
+            return "1d8 piercing, heavy, two-handed, range 100 ft";
+        if (name.Contains("Shortbow", StringComparison.OrdinalIgnoreCase))
+            return "1d6 piercing, two-handed, range 60 ft";
+        if (name.Contains("Crossbow", StringComparison.OrdinalIgnoreCase))
+            return "Piercing ranged weapon, loading";
+        if (name.Contains("Plate", StringComparison.OrdinalIgnoreCase))
+            return "Heavy armor, high AC";
+        if (name.Contains("Chain", StringComparison.OrdinalIgnoreCase))
+            return "Medium/heavy armor with armor check penalty";
+        if (name.Contains("Leather", StringComparison.OrdinalIgnoreCase))
+            return "Light armor";
+        if (name.Contains("Shield", StringComparison.OrdinalIgnoreCase))
+            return "Shield bonus to AC";
+        if (name.Contains("Potion", StringComparison.OrdinalIgnoreCase))
+            return "Consumable magical effect";
+        if (name.Contains("Scroll", StringComparison.OrdinalIgnoreCase))
+            return "Single-use spell scroll";
+        if (name.Contains("Arrow", StringComparison.OrdinalIgnoreCase) || name.Contains("Bolt", StringComparison.OrdinalIgnoreCase))
+            return "Ammunition";
+
+        if (item.Type != ItemType.Misc)
+            return item.Type.ToString();
+
+        return string.IsNullOrWhiteSpace(fallback) ? "Miscellaneous item" : fallback;
+    }
+
     private void CreateBuyRow(Transform parent, StoreInventory.StoreItemEntry entry)
     {
         ItemData template = entry.GetTemplate();
@@ -412,58 +470,78 @@ public class StoreUI : MonoBehaviour
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
             Vector2.zero, new Vector2(0f, 70f), new Color(0.16f, 0.18f, 0.25f, 1f));
 
+        LayoutElement rowLayout = row.AddComponent<LayoutElement>();
+        rowLayout.minHeight = 70f;
+        rowLayout.preferredHeight = 70f;
+        rowLayout.flexibleWidth = 1f;
+
         HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
-        layout.padding = new RectOffset(5, 5, 5, 5);
-        layout.spacing = 5f;
+        layout.padding = new RectOffset(15, 10, 5, 5);
+        layout.spacing = 10f;
         layout.childAlignment = TextAnchor.MiddleLeft;
-        layout.childControlWidth = false;
+        layout.childControlWidth = true;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = false;
-        layout.childForceExpandHeight = false;
+        layout.childForceExpandHeight = true;
 
-        string details = string.IsNullOrWhiteSpace(template.Description) ? entry.Category : template.Description;
+        string details = GetItemDescription(template, entry.Category);
 
         GameObject infoObj = new GameObject("Info", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
         infoObj.transform.SetParent(row.transform, false);
+
+        LayoutElement infoLayoutElement = infoObj.GetComponent<LayoutElement>();
+        infoLayoutElement.minWidth = 200f;
+        infoLayoutElement.preferredWidth = 300f;
+        infoLayoutElement.flexibleWidth = 1f;
+
         VerticalLayoutGroup infoLayout = infoObj.GetComponent<VerticalLayoutGroup>();
         infoLayout.spacing = 2f;
-        infoLayout.childAlignment = TextAnchor.UpperLeft;
+        infoLayout.padding = new RectOffset(0, 0, 5, 5);
+        infoLayout.childAlignment = TextAnchor.MiddleLeft;
         infoLayout.childControlWidth = true;
         infoLayout.childControlHeight = true;
         infoLayout.childForceExpandWidth = true;
         infoLayout.childForceExpandHeight = false;
 
-        LayoutElement infoLayoutElement = infoObj.GetComponent<LayoutElement>();
-        infoLayoutElement.flexibleWidth = 1f;
-        infoLayoutElement.minWidth = 150f;
-
         Text nameText = CreateText(infoObj.transform, "Name", template.Name,
-            Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
-            new Vector2(0f, 36f), 18, FontStyle.Bold, Color.white, TextAnchor.UpperLeft);
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 18, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
         LayoutElement nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
-        nameLayout.preferredHeight = 36f;
+        nameLayout.preferredHeight = 24f;
+        nameLayout.flexibleWidth = 1f;
+        nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        nameText.verticalOverflow = VerticalWrapMode.Overflow;
 
         Text detailText = CreateText(infoObj.transform, "Details", details,
-            Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
-            new Vector2(0f, 36f), 14, FontStyle.Normal, new Color(0.8f, 0.85f, 0.95f), TextAnchor.UpperLeft);
-        detailText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        detailText.verticalOverflow = VerticalWrapMode.Truncate;
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 13, FontStyle.Normal, new Color(0.8f, 0.85f, 0.95f), TextAnchor.MiddleLeft);
         LayoutElement detailsLayout = detailText.gameObject.AddComponent<LayoutElement>();
-        detailsLayout.preferredHeight = 36f;
+        detailsLayout.preferredHeight = 18f;
+        detailsLayout.flexibleWidth = 1f;
+        detailText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        detailText.verticalOverflow = VerticalWrapMode.Overflow;
 
-        Text priceText = CreateText(row.transform, "Price", $"{entry.PriceGp} gp",
-            Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
-            new Vector2(70f, 70f), 16, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), TextAnchor.MiddleCenter);
-        LayoutElement priceLayout = priceText.gameObject.AddComponent<LayoutElement>();
-        priceLayout.minWidth = 70f;
-        priceLayout.preferredWidth = 70f;
+        GameObject priceObj = new GameObject("Price", typeof(RectTransform), typeof(LayoutElement));
+        priceObj.transform.SetParent(row.transform, false);
+        LayoutElement priceLayout = priceObj.GetComponent<LayoutElement>();
+        priceLayout.minWidth = 90f;
+        priceLayout.preferredWidth = 90f;
         priceLayout.flexibleWidth = 0f;
 
-        CreateSmallActionButton(row.transform, "BuyButton", "BUY", new Color(0.2f, 0.56f, 0.26f), () => BuyItem(entry));
+        Text priceText = CreateText(priceObj.transform, "PriceLabel", $"{entry.PriceGp} gp",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 18, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), TextAnchor.MiddleCenter);
+        priceText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        priceText.verticalOverflow = VerticalWrapMode.Overflow;
 
-        LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-        rowLayout.preferredHeight = 70f;
-        rowLayout.flexibleWidth = 1f;
+        GameObject buttonSection = new GameObject("ButtonSection", typeof(RectTransform), typeof(LayoutElement));
+        buttonSection.transform.SetParent(row.transform, false);
+        LayoutElement buttonLayout = buttonSection.GetComponent<LayoutElement>();
+        buttonLayout.minWidth = 70f;
+        buttonLayout.preferredWidth = 70f;
+        buttonLayout.flexibleWidth = 0f;
+
+        CreateSmallActionButton(buttonSection.transform, "BuyButton", "BUY", new Color(0.2f, 0.56f, 0.26f), () => BuyItem(entry));
 
         Debug.Log($"[Store] Created buy entry for {template.Name} with proper width constraints");
     }
@@ -476,47 +554,81 @@ public class StoreUI : MonoBehaviour
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
             Vector2.zero, new Vector2(0f, 70f), new Color(0.22f, 0.17f, 0.17f, 1f));
 
+        LayoutElement rowLayout = row.AddComponent<LayoutElement>();
+        rowLayout.minHeight = 70f;
+        rowLayout.preferredHeight = 70f;
+        rowLayout.flexibleWidth = 1f;
+
         HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
-        layout.padding = new RectOffset(5, 5, 5, 5);
-        layout.spacing = 5f;
+        layout.padding = new RectOffset(15, 10, 5, 5);
+        layout.spacing = 10f;
         layout.childAlignment = TextAnchor.MiddleLeft;
-        layout.childControlWidth = false;
+        layout.childControlWidth = true;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = false;
-        layout.childForceExpandHeight = false;
+        layout.childForceExpandHeight = true;
 
         GameObject infoObj = new GameObject("Info", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
         infoObj.transform.SetParent(row.transform, false);
+
+        LayoutElement infoLayoutElement = infoObj.GetComponent<LayoutElement>();
+        infoLayoutElement.minWidth = 200f;
+        infoLayoutElement.preferredWidth = 300f;
+        infoLayoutElement.flexibleWidth = 1f;
+
         VerticalLayoutGroup infoLayout = infoObj.GetComponent<VerticalLayoutGroup>();
         infoLayout.spacing = 2f;
-        infoLayout.childAlignment = TextAnchor.UpperLeft;
+        infoLayout.padding = new RectOffset(0, 0, 5, 5);
+        infoLayout.childAlignment = TextAnchor.MiddleLeft;
         infoLayout.childControlWidth = true;
         infoLayout.childControlHeight = true;
         infoLayout.childForceExpandWidth = true;
         infoLayout.childForceExpandHeight = false;
 
-        LayoutElement infoLayoutElement = infoObj.GetComponent<LayoutElement>();
-        infoLayoutElement.flexibleWidth = 1f;
-        infoLayoutElement.minWidth = 150f;
-
         Text nameText = CreateText(infoObj.transform, "Name", $"{entry.Item.Name} ({entry.OwnerName})",
-            Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
-            new Vector2(0f, 36f), 17, FontStyle.Bold, Color.white, TextAnchor.UpperLeft);
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 18, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
         LayoutElement nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
-        nameLayout.preferredHeight = 36f;
+        nameLayout.preferredHeight = 24f;
+        nameLayout.flexibleWidth = 1f;
+        nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        nameText.verticalOverflow = VerticalWrapMode.Overflow;
 
         int baseValue = sellPrice * 2;
-        Text valueText = CreateText(infoObj.transform, "Value", $"Value {baseValue} gp → Sell {sellPrice} gp",
-            Vector2.zero, Vector2.zero, new Vector2(0f, 0.5f), Vector2.zero,
-            new Vector2(0f, 36f), 14, FontStyle.Normal, new Color(0.82f, 0.86f, 0.93f), TextAnchor.UpperLeft);
+        string itemDescription = GetItemDescription(entry.Item, string.Empty);
+        string valueLine = string.IsNullOrWhiteSpace(itemDescription)
+            ? $"Value {baseValue} gp -> Sell {sellPrice} gp"
+            : $"{itemDescription} | Value {baseValue} gp -> Sell {sellPrice} gp";
+        Text valueText = CreateText(infoObj.transform, "Value", valueLine,
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 13, FontStyle.Normal, new Color(0.82f, 0.86f, 0.93f), TextAnchor.MiddleLeft);
         LayoutElement valueLayout = valueText.gameObject.AddComponent<LayoutElement>();
-        valueLayout.preferredHeight = 36f;
+        valueLayout.preferredHeight = 18f;
+        valueLayout.flexibleWidth = 1f;
+        valueText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        valueText.verticalOverflow = VerticalWrapMode.Overflow;
 
-        CreateSmallActionButton(row.transform, "SellButton", $"SELL\n{sellPrice} gp", new Color(0.58f, 0.37f, 0.18f), () => SellItem(entry));
+        GameObject priceObj = new GameObject("Price", typeof(RectTransform), typeof(LayoutElement));
+        priceObj.transform.SetParent(row.transform, false);
+        LayoutElement priceLayout = priceObj.GetComponent<LayoutElement>();
+        priceLayout.minWidth = 90f;
+        priceLayout.preferredWidth = 90f;
+        priceLayout.flexibleWidth = 0f;
 
-        LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-        rowLayout.preferredHeight = 70f;
-        rowLayout.flexibleWidth = 1f;
+        Text priceText = CreateText(priceObj.transform, "PriceLabel", $"{sellPrice} gp",
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            Vector2.zero, 18, FontStyle.Bold, new Color(1f, 0.93f, 0.24f), TextAnchor.MiddleCenter);
+        priceText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        priceText.verticalOverflow = VerticalWrapMode.Overflow;
+
+        GameObject buttonSection = new GameObject("ButtonSection", typeof(RectTransform), typeof(LayoutElement));
+        buttonSection.transform.SetParent(row.transform, false);
+        LayoutElement buttonLayout = buttonSection.GetComponent<LayoutElement>();
+        buttonLayout.minWidth = 70f;
+        buttonLayout.preferredWidth = 70f;
+        buttonLayout.flexibleWidth = 0f;
+
+        CreateSmallActionButton(buttonSection.transform, "SellButton", "SELL", new Color(0.58f, 0.37f, 0.18f), () => SellItem(entry));
 
         Debug.Log($"[Store] Created sell entry for {entry.Item.Name} with proper width constraints");
     }
@@ -641,10 +753,9 @@ public class StoreUI : MonoBehaviour
         buttonObj.transform.SetParent(parent, false);
 
         LayoutElement layout = buttonObj.GetComponent<LayoutElement>();
-        bool isMultiLine = !string.IsNullOrEmpty(label) && label.Contains("\n");
-        layout.minWidth = isMultiLine ? 70f : 55f;
-        layout.preferredWidth = isMultiLine ? 70f : 55f;
-        layout.preferredHeight = isMultiLine ? 45f : 35f;
+        layout.minWidth = 70f;
+        layout.preferredWidth = 70f;
+        layout.preferredHeight = 55f;
         layout.flexibleWidth = 0f;
 
         Image image = buttonObj.GetComponent<Image>();
@@ -695,10 +806,13 @@ public class StoreUI : MonoBehaviour
         contentRect.anchorMax = new Vector2(1f, 1f);
         contentRect.pivot = new Vector2(0.5f, 1f);
         contentRect.anchoredPosition = Vector2.zero;
+        contentRect.offsetMin = Vector2.zero;
+        contentRect.offsetMax = Vector2.zero;
 
         VerticalLayoutGroup layout = content.GetComponent<VerticalLayoutGroup>();
         layout.padding = new RectOffset(5, 5, 5, 5);
         layout.spacing = 5f;
+        layout.childAlignment = TextAnchor.UpperCenter;
         layout.childControlWidth = true;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = true;
@@ -714,6 +828,8 @@ public class StoreUI : MonoBehaviour
         sr.horizontal = false;
         sr.vertical = true;
         sr.scrollSensitivity = 25f;
+
+        Debug.Log($"[Store] {name} created with proper viewport constraints");
     }
 
     private static void ClearChildren(Transform parent)
