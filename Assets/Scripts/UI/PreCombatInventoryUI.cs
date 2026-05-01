@@ -25,13 +25,13 @@ public class PreCombatInventoryUI : MonoBehaviour
     private static readonly Color EquipmentSlotEmptyColor = new Color(0.15f, 0.15f, 0.2f, 0.8f);
     private static readonly Color EquipmentSlotEquippedColor = new Color(0.25f, 0.25f, 0.35f, 0.9f);
 
-    // Window layout split: 30% stash (left) / 70% character management (right).
-    private const float StashWidthRatio = 0.30f;
-    private const float DividerAnchorX = 0.30f;
-    private const float CharacterSectionStartRatio = 0.30f;
+    // Window layout split: narrower stash to prevent right-edge overflow.
+    private const float StashWidthRatio = 0.26f;
+    private const float DividerAnchorX = 0.26f;
+    private const float CharacterSectionStartRatio = 0.26f;
 
     private const int MinStashColumns = 3;
-    private const int MaxStashColumns = 8;
+    private const int MaxStashColumns = 6;
 
     private enum SlotContainerType
     {
@@ -569,6 +569,11 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Color(0.05f, 0.06f, 0.1f, 0.98f));
 
         Debug.Log("[PreCombatInventory] Panel: (0,0) to (1,1) - FULLSCREEN");
+        Debug.Log("[PreCombatInventory] === WIDTH OVERFLOW FIX ===");
+        Debug.Log("[PreCombatInventory] Content margins: 20px shell with responsive split");
+        Debug.Log("[PreCombatInventory] Grid constraint: FixedColumnCount with responsive reflow + capped columns");
+        Debug.Log("[PreCombatInventory] ContentSizeFitter horizontal: Unconstrained where scroll content is used");
+        Debug.Log("[PreCombatInventory] All major sections anchored with flexible width");
 
         _panelRect = _panel.GetComponent<RectTransform>();
 
@@ -623,6 +628,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         BuildWindowResizeBehavior();
 
         Debug.Log($"[PreCombatUI] Layout split: Stash {StashWidthRatio * 100f:0}% | Character {(1f - StashWidthRatio) * 100f:0}%");
+        Debug.Log("[UI] Updates complete");
 
         ReflowResponsiveLayout();
         _panel.SetActive(false);

@@ -106,10 +106,15 @@ public class SpellSelectionUI : MonoBehaviour
         overlayRT.offsetMax = Vector2.zero;
         _canvasGroup = _overlayPanel.AddComponent<CanvasGroup>();
 
-        // Main panel — centered, generous sizing
+        // Main panel - fullscreen
         _rootPanel = MakePanel(_overlayPanel.transform, "SpellSelPanel",
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(PANEL_W, PANEL_H), new Color(0.12f, 0.12f, 0.18f, 0.98f));
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, new Color(0.12f, 0.12f, 0.18f, 0.98f));
+        RectTransform rootRT = _rootPanel.GetComponent<RectTransform>();
+        rootRT.offsetMin = Vector2.zero;
+        rootRT.offsetMax = Vector2.zero;
+
+        Debug.Log("[Spellbook] Panel: (0,0) to (1,1) - FULLSCREEN");
 
         // ── Header area (top 100px) ──
         float headerTop = PANEL_H / 2f;

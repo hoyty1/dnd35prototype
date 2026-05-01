@@ -94,10 +94,15 @@ public class FeatSelectionUI : MonoBehaviour
         overlayImg.color = new Color(0, 0, 0, 0.7f);
         _canvasGroup = _overlay.AddComponent<CanvasGroup>();
 
-        // Root panel (centered, large)
+        // Root panel - fullscreen
         _rootPanel = CreatePanel(_overlay.transform, "FeatPanel",
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(900, 620), COLOR_BG);
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, COLOR_BG);
+        var rootRT = _rootPanel.GetComponent<RectTransform>();
+        rootRT.offsetMin = Vector2.zero;
+        rootRT.offsetMax = Vector2.zero;
+
+        Debug.Log("[FeatSelection] Panel: (0,0) to (1,1) - FULLSCREEN");
 
         // Title
         _titleText = MakeText(_rootPanel.transform, "Title",

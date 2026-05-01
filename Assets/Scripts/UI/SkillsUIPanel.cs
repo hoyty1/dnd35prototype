@@ -68,10 +68,16 @@ public class SkillsUIPanel : MonoBehaviour
         // Add CanvasGroup so we can control raycast blocking when hidden
         _canvasGroup = _overlay.AddComponent<CanvasGroup>();
 
-        // Main panel
+        // Main panel - fullscreen
         _rootPanel = CreatePanel(_overlay.transform, "SkillsPanel",
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(PANEL_W, PANEL_H), new Color(0.1f, 0.1f, 0.16f, 0.98f));
+            Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+            Vector2.zero, Vector2.zero, new Color(0.1f, 0.1f, 0.16f, 0.98f));
+        RectTransform rootRT = _rootPanel.GetComponent<RectTransform>();
+        rootRT.offsetMin = Vector2.zero;
+        rootRT.offsetMax = Vector2.zero;
+
+        Debug.Log("[UI] === FULLSCREEN UI UPDATES (PART 2) ===");
+        Debug.Log("[SkillAllocation] Panel: (0,0) to (1,1) - FULLSCREEN");
 
         // Title
         _titleText = MakeText(_rootPanel.transform, "SkillsTitle",
