@@ -95,6 +95,23 @@ public class SpellcastingComponent : MonoBehaviour
 
     private bool UsesPreparedSlotSystem => Stats != null && (Stats.IsWizard || Stats.IsCleric || IsDruidClass(Stats));
 
+    private void SyncDomainsFromStats()
+    {
+        Domains.Clear();
+        if (Stats?.ChosenDomains == null)
+            return;
+
+        for (int i = 0; i < Stats.ChosenDomains.Count; i++)
+        {
+            string domain = Stats.ChosenDomains[i];
+            if (!string.IsNullOrWhiteSpace(domain) && !Domains.Contains(domain))
+                Domains.Add(domain);
+        }
+
+        if (Domains.Count > 0)
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Domains loaded [{string.Join(", ", Domains)}]");
+    }
+
     /// <summary>
     /// SpellIds selected during character creation.
     /// For Wizards: includes cantrips + 1st/2nd level spells for the spellbook.
@@ -113,11 +130,24 @@ public class SpellcastingComponent : MonoBehaviour
     public List<string> PreparedSpellSlotIds { get; set; }
 
     /// <summary>
+    /// Cleric domain names for this character (e.g., "Good", "Healing").
+    /// Derived from CharacterStats.ChosenDomains when available.
+    /// </summary>
+    public List<string> Domains { get; private set; } = new List<string>();
+
+    /// <summary>Regular (non-domain) slots by spell level.</summary>
+    private int[] _regularSlotsMax = new int[0];
+
+    /// <summary>Domain slots by spell level (typically 1 at each level 1+ that the cleric can cast).</summary>
+    private int[] _domainSlotsMax = new int[0];
+
+    /// <summary>
     /// Initialize spellcasting for a character based on their class and level.
     /// </summary>
     public void Init(CharacterStats stats)
     {
         Stats = stats;
+        SyncDomainsFromStats();
         SpellDatabase.Init();
 
         if (stats.IsWizard)
@@ -306,6 +336,7 @@ public class SpellcastingComponent : MonoBehaviour
 
         string characterName = !string.IsNullOrWhiteSpace(Stats.CharacterName) ? Stats.CharacterName : gameObject.name;
         int level = Mathf.Max(1, Stats.Level);
+        SyncDomainsFromStats();
 
         Debug.Log($"[Spellcasting] RefreshSpellSlots called for {characterName} ({Stats.CharacterClass}) at level {level}");
 
@@ -316,7 +347,8 @@ public class SpellcastingComponent : MonoBehaviour
                 Level = slot.Level,
                 PreparedSpell = slot.PreparedSpell,
                 IsUsed = slot.IsUsed,
-                DisabledByNegativeLevel = slot.DisabledByNegativeLevel
+                DisabledByNegativeLevel = slot.DisabledByNegativeLevel,
+                IsDomainSlot = slot.IsDomainSlot
             })
             .ToList();
 
@@ -375,7 +407,9 @@ public class SpellcastingComponent : MonoBehaviour
         int bonusFirst = intMod >= 1 ? 1 : 0;
         int bonusSecond = intMod >= 2 ? 1 : 0;
 
-        return new[] { baseCantrips, baseFirst + bonusFirst, baseSecond + bonusSecond };
+        _regularSlotsMax = new[] { baseCantrips, baseFirst + bonusFirst, baseSecond + bonusSecond };
+        _domainSlotsMax = new int[_regularSlotsMax.Length];
+        return (int[])_regularSlotsMax.Clone();
     }
 
     private int[] GetClericSlotsForLevel(int level)
@@ -383,34 +417,63 @@ public class SpellcastingComponent : MonoBehaviour
         int safeLevel = Mathf.Max(1, level);
         int wisMod = Mathf.Max(0, Stats != null ? Stats.WISMod : 0);
 
-        int baseCantrips;
-        int baseFirstWithDomain;
-        int baseSecondWithDomain;
+        int[] baseRegularSlots = GetClericBaseRegularSlotsForCasterLevel(safeLevel);
+        _regularSlotsMax = (int[])baseRegularSlots.Clone();
 
-        switch (safeLevel)
+        // Bonus spells apply to regular spell slots (not to domain slots).
+        for (int spellLevel = 1; spellLevel < _regularSlotsMax.Length; spellLevel++)
         {
-            case 1:
-                baseCantrips = 3;
-                baseFirstWithDomain = 2;
-                baseSecondWithDomain = 0;
-                break;
-            case 2:
-                baseCantrips = 4;
-                baseFirstWithDomain = 3;
-                baseSecondWithDomain = 0;
-                break;
-            default:
-                // Preserve existing prototype behavior at level 3+.
-                baseCantrips = 4;
-                baseFirstWithDomain = 3;
-                baseSecondWithDomain = 2;
-                break;
+            if (_regularSlotsMax[spellLevel] <= 0)
+                continue;
+
+            if (wisMod >= spellLevel)
+                _regularSlotsMax[spellLevel] += 1;
         }
 
-        int bonusFirst = wisMod >= 1 ? 1 : 0;
-        int bonusSecond = wisMod >= 2 ? 1 : 0;
+        _domainSlotsMax = new int[_regularSlotsMax.Length];
+        bool hasAnyDomains = Domains != null && Domains.Count > 0;
+        for (int spellLevel = 1; spellLevel < _regularSlotsMax.Length; spellLevel++)
+        {
+            // D&D 3.5e: one domain slot at each spell level the cleric can cast (1+).
+            _domainSlotsMax[spellLevel] = hasAnyDomains && _regularSlotsMax[spellLevel] > 0 ? 1 : 0;
+        }
 
-        return new[] { baseCantrips, baseFirstWithDomain + bonusFirst, baseSecondWithDomain + bonusSecond };
+        int[] totalSlots = new int[_regularSlotsMax.Length];
+        for (int i = 0; i < totalSlots.Length; i++)
+            totalSlots[i] = _regularSlotsMax[i] + _domainSlotsMax[i];
+
+        Debug.Log($"[Spellcasting] Calculating Cleric spell slots for level {safeLevel}");
+        for (int spellLevel = 0; spellLevel < totalSlots.Length; spellLevel++)
+        {
+            if (totalSlots[spellLevel] <= 0)
+                continue;
+
+            int regular = GetMaxSpellSlotsAtLevel(spellLevel);
+            int domain = GetMaxDomainSlotsAtLevel(spellLevel);
+            Debug.Log($"[Spellcasting] Level {spellLevel}: {regular} regular slots");
+            if (domain > 0)
+                Debug.Log($"[Spellcasting] Level {spellLevel}: {domain} domain slot");
+        }
+
+        return totalSlots;
+    }
+
+    private int[] GetClericBaseRegularSlotsForCasterLevel(int level)
+    {
+        // D&D 3.5e PHB cleric spells/day progression (base, no bonus spells, no domain slots).
+        // Prototype currently supports prepared spells up to level 2, but keep progression data up to level 9 for correctness.
+        switch (Mathf.Clamp(level, 1, 9))
+        {
+            case 1: return new[] { 3, 1, 0, 0, 0, 0 };
+            case 2: return new[] { 4, 2, 0, 0, 0, 0 };
+            case 3: return new[] { 4, 2, 1, 0, 0, 0 };
+            case 4: return new[] { 5, 3, 2, 0, 0, 0 };
+            case 5: return new[] { 5, 3, 2, 1, 0, 0 };
+            case 6: return new[] { 5, 3, 3, 2, 0, 0 };
+            case 7: return new[] { 6, 4, 3, 2, 1, 0 };
+            case 8: return new[] { 6, 4, 3, 3, 2, 0 };
+            default: return new[] { 6, 4, 4, 3, 2, 1 }; // level 9
+        }
     }
 
     private int[] GetDruidSlotsForLevel(int level)
@@ -445,7 +508,9 @@ public class SpellcastingComponent : MonoBehaviour
         int bonusFirst = wisMod >= 1 ? 1 : 0;
         int bonusSecond = wisMod >= 2 ? 1 : 0;
 
-        return new[] { baseCantrips, baseFirst + bonusFirst, baseSecond + bonusSecond };
+        _regularSlotsMax = new[] { baseCantrips, baseFirst + bonusFirst, baseSecond + bonusSecond };
+        _domainSlotsMax = new int[_regularSlotsMax.Length];
+        return (int[])_regularSlotsMax.Clone();
     }
 
     private void InitializeSpellSlotCollection()
@@ -456,10 +521,15 @@ public class SpellcastingComponent : MonoBehaviour
 
         for (int spellLevel = 0; spellLevel < SlotsMax.Length; spellLevel++)
         {
-            for (int i = 0; i < SlotsMax[spellLevel]; i++)
-            {
-                SpellSlots.Add(new SpellSlot(spellLevel));
-            }
+            int regularSlots = GetMaxSpellSlotsAtLevel(spellLevel);
+            int domainSlots = GetMaxDomainSlotsAtLevel(spellLevel);
+
+            for (int i = 0; i < regularSlots; i++)
+                SpellSlots.Add(new SpellSlot(spellLevel, isDomainSlot: false));
+
+            // Keep domain slots last within each level for stable indexing and clear UI labeling.
+            for (int i = 0; i < domainSlots; i++)
+                SpellSlots.Add(new SpellSlot(spellLevel, isDomainSlot: true));
         }
     }
 
@@ -508,14 +578,28 @@ public class SpellcastingComponent : MonoBehaviour
                 .Where(s => s != null && s.SpellLevel == level)
                 .ToList();
 
-            if (spellsAtLevel.Count == 0)
-                continue;
+            List<SpellData> domainSpellsAtLevel = GetAvailableDomainSpells(level);
 
-            int nextSpellIndex = 0;
+            int nextRegularSpellIndex = 0;
+            int nextDomainSpellIndex = 0;
+
             foreach (SpellSlot slot in SpellSlots.Where(s => s != null && s.Level == level && !s.HasSpell))
             {
-                slot.Prepare(spellsAtLevel[nextSpellIndex % spellsAtLevel.Count]);
-                nextSpellIndex++;
+                if (slot.IsDomainSlot)
+                {
+                    if (domainSpellsAtLevel.Count == 0)
+                        continue;
+
+                    slot.Prepare(domainSpellsAtLevel[nextDomainSpellIndex % domainSpellsAtLevel.Count]);
+                    nextDomainSpellIndex++;
+                    continue;
+                }
+
+                if (spellsAtLevel.Count == 0)
+                    continue;
+
+                slot.Prepare(spellsAtLevel[nextRegularSpellIndex % spellsAtLevel.Count]);
+                nextRegularSpellIndex++;
             }
         }
     }
@@ -538,6 +622,7 @@ public class SpellcastingComponent : MonoBehaviour
         public SpellData PreparedSpell;
         public bool IsUsed;
         public bool DisabledByNegativeLevel;
+        public bool IsDomainSlot;
     }
 
     // ========== SPELL SLOT PREPARATION ==========
@@ -560,13 +645,16 @@ public class SpellcastingComponent : MonoBehaviour
         for (int i = 0; i < SpellSlots.Count && i < PreparedSpellSlotIds.Count; i++)
         {
             string spellId = PreparedSpellSlotIds[i];
-            if (!string.IsNullOrEmpty(spellId))
+            if (string.IsNullOrEmpty(spellId))
+                continue;
+
+            SpellData spell = SpellDatabase.GetSpell(spellId);
+            if (spell == null)
+                continue;
+
+            if (!PrepareSpellInSlot(i, spell))
             {
-                SpellData spell = SpellDatabase.GetSpell(spellId);
-                if (spell != null)
-                {
-                    SpellSlots[i].Prepare(spell);
-                }
+                Debug.LogWarning($"[Spellcasting] Ignored invalid prepared spell '{spellId}' for slot index {i}.");
             }
         }
     }
@@ -615,27 +703,38 @@ public class SpellcastingComponent : MonoBehaviour
         for (int level = 0; level < SlotsMax.Length; level++)
         {
             var slotsAtLevel = GetSlotsForLevel(level);
-            var spellsAtLevel = KnownSpells.Where(s => s.SpellLevel == level).ToList();
+            var regularSlotsAtLevel = slotsAtLevel.Where(s => s != null && !s.IsDomainSlot).ToList();
+            var domainSlotsAtLevel = slotsAtLevel.Where(s => s != null && s.IsDomainSlot).ToList();
 
-            if (spellsAtLevel.Count == 0)
-            {
-                foreach (var slot in slotsAtLevel)
-                    slot.Clear();
-                continue;
-            }
-
-            // Prioritize functional spells over placeholders for auto-preparation
+            var spellsAtLevel = KnownSpells.Where(s => s != null && s.SpellLevel == level).ToList();
             var functional = spellsAtLevel.Where(s => !s.IsPlaceholder).ToList();
-            var candidates = functional.Count > 0 ? functional : spellsAtLevel;
+            var regularCandidates = functional.Count > 0 ? functional : spellsAtLevel;
 
-            // Only fill as many slots as we have — each slot gets one spell
-            for (int i = 0; i < slotsAtLevel.Count; i++)
+            if (regularCandidates.Count == 0)
             {
-                slotsAtLevel[i].Prepare(candidates[i % candidates.Count]);
+                foreach (var slot in regularSlotsAtLevel)
+                    slot.Clear();
+            }
+            else
+            {
+                for (int i = 0; i < regularSlotsAtLevel.Count; i++)
+                    regularSlotsAtLevel[i].Prepare(regularCandidates[i % regularCandidates.Count]);
             }
 
-            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared {slotsAtLevel.Count} level-{level} cleric slots " +
-                      $"(from {spellsAtLevel.Count} known, {functional.Count} functional)");
+            List<SpellData> domainCandidates = GetAvailableDomainSpells(level);
+            if (domainCandidates.Count == 0)
+            {
+                foreach (var slot in domainSlotsAtLevel)
+                    slot.Clear();
+            }
+            else
+            {
+                for (int i = 0; i < domainSlotsAtLevel.Count; i++)
+                    domainSlotsAtLevel[i].Prepare(domainCandidates[i % domainCandidates.Count]);
+            }
+
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared level {level} cleric slots " +
+                      $"(regular={regularSlotsAtLevel.Count}, domain={domainSlotsAtLevel.Count}, regularCandidates={regularCandidates.Count}, domainCandidates={domainCandidates.Count})");
         }
 
         SyncSlotsRemainingFromSpellSlots();
@@ -672,20 +771,58 @@ public class SpellcastingComponent : MonoBehaviour
         Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared druid spell slots");
     }
 
+    private bool IsDomainSpellForCharacter(SpellData spell)
+    {
+        if (spell == null || Domains == null || Domains.Count == 0)
+            return false;
+
+        for (int i = 0; i < Domains.Count; i++)
+        {
+            if (SpellDatabase.IsSpellInDomain(spell.SpellId, Domains[i]))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool IsValidSpellForSlot(SpellData spell, SpellSlot slot, bool logOnFailure)
+    {
+        if (slot == null || spell == null)
+            return true;
+
+        if (spell.SpellLevel != slot.Level)
+        {
+            if (logOnFailure)
+                Debug.LogWarning($"[Spellcasting] Cannot prepare level {spell.SpellLevel} spell in level {slot.Level} slot!");
+            return false;
+        }
+
+        if (slot.IsDomainSlot)
+        {
+            bool validDomainSpell = IsDomainSpellForCharacter(spell);
+            if (!validDomainSpell)
+            {
+                if (logOnFailure)
+                    Debug.LogWarning($"[Spellcasting] {spell.Name} is not in any chosen domain for domain slot Lv{slot.Level}.");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// Prepare a specific spell into a specific slot.
     /// For Wizards: spell must be in the spellbook. For Clerics: any cleric spell of matching level.
+    /// Domain slots can only contain domain spells.
     /// </summary>
     public bool PrepareSpellInSlot(int slotIndex, SpellData spell)
     {
         if (slotIndex < 0 || slotIndex >= SpellSlots.Count) return false;
         var slot = SpellSlots[slotIndex];
 
-        if (spell != null && spell.SpellLevel != slot.Level)
-        {
-            Debug.LogWarning($"[Spellcasting] Cannot prepare level {spell.SpellLevel} spell in level {slot.Level} slot!");
+        if (!IsValidSpellForSlot(spell, slot, logOnFailure: true))
             return false;
-        }
 
         // Wizards must have spell in spellbook; Clerics can prepare any known cleric spell
         if (spell != null && !KnownSpells.Contains(spell))
@@ -874,9 +1011,12 @@ public class SpellcastingComponent : MonoBehaviour
             return;
         }
 
-        Debug.Log($"[SpellPrep] Preparing {spell.Name} in level {level} slot {slotIndex}");
-
         SpellSlot slot = slotsAtLevel[slotIndex];
+        if (!IsValidSpellForSlot(spell, slot, logOnFailure: true))
+            return;
+
+        Debug.Log($"[SpellPrep] Preparing {spell.Name} in level {level} slot {slotIndex} (domain={slot.IsDomainSlot})");
+
         slot.Prepare(spell);
         SyncSlotsRemainingFromSpellSlots();
         SyncPreparedSpellsFromSlots();
@@ -908,10 +1048,110 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Get all spell slots for a specific spell level.
+    /// Domain slots are always placed last in the returned list for stable indexing.
     /// </summary>
     public List<SpellSlot> GetSlotsForLevel(int level)
     {
-        return SpellSlots.Where(s => s.Level == level).ToList();
+        return SpellSlots
+            .Where(s => s != null && s.Level == level)
+            .OrderBy(s => s.IsDomainSlot ? 1 : 0)
+            .ToList();
+    }
+
+    /// <summary>Get max regular (non-domain) slots for a spell level.</summary>
+    public int GetMaxSpellSlotsAtLevel(int spellLevel)
+    {
+        if (_regularSlotsMax == null || spellLevel < 0 || spellLevel >= _regularSlotsMax.Length)
+            return 0;
+        return _regularSlotsMax[spellLevel];
+    }
+
+    /// <summary>Get max domain slots for a spell level.</summary>
+    public int GetMaxDomainSlotsAtLevel(int spellLevel)
+    {
+        if (_domainSlotsMax == null || spellLevel < 0 || spellLevel >= _domainSlotsMax.Length)
+            return 0;
+        return _domainSlotsMax[spellLevel];
+    }
+
+    /// <summary>
+    /// Returns true if a level-local slot index points to a domain slot.
+    /// Domain slots are the last slot(s) at each spell level.
+    /// </summary>
+    public bool IsDomainSlot(int spellLevel, int slotIndex)
+    {
+        List<SpellSlot> slotsAtLevel = GetSlotsForLevel(spellLevel);
+        if (slotIndex < 0 || slotIndex >= slotsAtLevel.Count)
+            return false;
+
+        SpellSlot slot = slotsAtLevel[slotIndex];
+        return slot != null && slot.IsDomainSlot;
+    }
+
+    /// <summary>Get the prepared spell name at the provided level-local slot index.</summary>
+    public string GetPreparedSpellAtSlot(int spellLevel, int slotIndex)
+    {
+        List<SpellSlot> slotsAtLevel = GetSlotsForLevel(spellLevel);
+        if (slotIndex < 0 || slotIndex >= slotsAtLevel.Count)
+            return string.Empty;
+
+        SpellData prepared = slotsAtLevel[slotIndex]?.PreparedSpell;
+        return prepared != null ? prepared.Name : string.Empty;
+    }
+
+    /// <summary>Prepare spell by display name at the provided level-local slot index.</summary>
+    public bool PrepareSpellAtSlot(int spellLevel, int slotIndex, string spellName)
+    {
+        if (string.IsNullOrWhiteSpace(spellName))
+            return false;
+
+        SpellData spell = SpellDatabase.GetSpellByName(spellName);
+        if (spell == null)
+            return false;
+
+        List<SpellSlot> slotsAtLevel = GetSlotsForLevel(spellLevel);
+        if (slotIndex < 0 || slotIndex >= slotsAtLevel.Count)
+            return false;
+
+        int globalSlotIndex = SpellSlots.IndexOf(slotsAtLevel[slotIndex]);
+        if (globalSlotIndex < 0)
+            return false;
+
+        bool success = PrepareSpellInSlot(globalSlotIndex, spell);
+        if (success)
+            Debug.Log($"[Spellcasting] Prepared {spell.Name} in level {spellLevel} slot {slotIndex}");
+        return success;
+    }
+
+    /// <summary>
+    /// Returns all domain spells available for this cleric at a spell level.
+    /// </summary>
+    public List<SpellData> GetAvailableDomainSpells(int spellLevel)
+    {
+        var result = new List<SpellData>();
+
+        if (Stats == null || !Stats.IsCleric)
+            return result;
+
+        Debug.Log($"[Spellcasting] Getting available domain spells for level {spellLevel}");
+
+        for (int i = 0; i < Domains.Count; i++)
+        {
+            string domain = Domains[i];
+            List<SpellData> domainSpells = SpellDatabase.GetDomainSpells(domain, spellLevel);
+            Debug.Log($"[Spellcasting] Domain '{domain}' level {spellLevel}: {domainSpells.Count} spells");
+            result.AddRange(domainSpells);
+        }
+
+        List<SpellData> deduped = result
+            .Where(s => s != null)
+            .GroupBy(s => s.SpellId)
+            .Select(g => g.First())
+            .OrderBy(s => s.Name)
+            .ToList();
+
+        Debug.Log($"[Spellcasting] Total domain spells available: {deduped.Count}");
+        return deduped;
     }
 
     /// <summary>
@@ -1062,8 +1302,8 @@ public class SpellcastingComponent : MonoBehaviour
             return SpellSlots.Any(s => s.Level == 0 && s.HasSpell && !s.DisabledByNegativeLevel);
         }
 
-        // For level 1+: need at least one unused slot at this level
-        return SpellSlots.Any(s => s.Level == spellLevel && !s.IsUsed && s.HasSpell);
+        // For level 1+: need at least one unused non-domain slot at this level.
+        return SpellSlots.Any(s => s.Level == spellLevel && !s.IsUsed && s.HasSpell && !s.IsDomainSlot);
     }
 
     /// <summary>
@@ -1102,9 +1342,8 @@ public class SpellcastingComponent : MonoBehaviour
             return true;
         }
 
-        // Level 1+: consume any unused slot at this level (prefer non-domain slots first,
-        // but in our slot system all slots are equivalent)
-        var slot = SpellSlots.FirstOrDefault(s => s.Level == spellLevel && !s.IsUsed && s.HasSpell);
+        // Level 1+: consume an unused non-domain slot at this level.
+        var slot = SpellSlots.FirstOrDefault(s => s.Level == spellLevel && !s.IsUsed && s.HasSpell && !s.IsDomainSlot);
         if (slot == null)
         {
             Debug.LogWarning($"[Spellcasting] No available slot at level {spellLevel} for spontaneous casting!");
@@ -1139,7 +1378,7 @@ public class SpellcastingComponent : MonoBehaviour
 
         // Find the specific slot with this spell that is unused
         var slot = SpellSlots.FirstOrDefault(s =>
-            s.HasSpell && !s.IsUsed &&
+            s.HasSpell && !s.IsUsed && !s.IsDomainSlot &&
             s.PreparedSpell.SpellId == sacrificedSpellId);
 
         if (slot == null)
@@ -1174,7 +1413,7 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Check if a specific prepared spell can be spontaneously converted.
-    /// Domain spells (SpellId starting with "domain_") cannot be converted.
+    /// Domain spell slots cannot be converted (D&D 3.5e cleric spontaneous casting rule).
     /// The spell must have an available (unused) slot.
     /// </summary>
     public bool CanConvertSpellToSpontaneous(SpellData spell)
@@ -1182,9 +1421,6 @@ public class SpellcastingComponent : MonoBehaviour
         if (spell == null) return false;
         if (Stats == null || !Stats.IsCleric) return false;
         if (Stats.SpontaneousCasting == SpontaneousCastingType.None) return false;
-
-        // Domain spells cannot be spontaneously converted (D&D 3.5e rule)
-        if (spell.SpellId.StartsWith("domain_")) return false;
 
         // Check that a spontaneous spell exists at this level
         SpellData spontSpell = GetSpontaneousSpell(spell.SpellLevel);
@@ -1196,9 +1432,11 @@ public class SpellcastingComponent : MonoBehaviour
             return SpellSlots.Any(s => s.Level == 0 && s.HasSpell && s.PreparedSpell.SpellId == spell.SpellId && !s.DisabledByNegativeLevel);
         }
 
-        // For level 1+: need at least one unused slot with this specific spell
+        // Domain slots cannot be converted (D&D 3.5e rule).
+        // If the same spell appears in both regular and domain slots, conversion is allowed only when
+        // at least one regular prepared slot exists and is unused.
         return SpellSlots.Any(s =>
-            s.Level == spell.SpellLevel && !s.IsUsed && s.HasSpell &&
+            s.Level == spell.SpellLevel && !s.IsUsed && s.HasSpell && !s.IsDomainSlot &&
             s.PreparedSpell.SpellId == spell.SpellId);
     }
 
@@ -1338,8 +1576,12 @@ public class SpellcastingComponent : MonoBehaviour
                 status = "∞"; // Cantrips are unlimited
             else
                 status = slot.IsUsed ? "✗" : "✓";
+
             string spellName = slot.HasSpell ? slot.PreparedSpell.Name : "(empty)";
-            parts.Add($"{status} Slot{slotNum}(L{slot.Level}): {spellName}");
+            string slotLabel = slot.IsDomainSlot
+                ? $"DomainSlot{slotNum}(L{slot.Level})"
+                : $"Slot{slotNum}(L{slot.Level})";
+            parts.Add($"{status} {slotLabel}: {spellName}");
             slotNum++;
         }
         return string.Join(", ", parts);

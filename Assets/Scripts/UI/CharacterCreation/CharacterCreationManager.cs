@@ -16,6 +16,8 @@ public class CharacterCreationManager : MonoBehaviour
     private FeatSelectionUI _featSelectionUI;
     private SkillsUIPanel _skillsUI;
     private SpellSelectionUI _spellSelectionUI;
+    private DomainSelectionUI _domainSelectionUI;
+    private bool _domainSelectionAttemptedThisFlow;
 
     /// <summary>
     /// Existing/new-character creation entry point (placeholder for compatibility).
@@ -42,6 +44,7 @@ public class CharacterCreationManager : MonoBehaviour
         _levelingCharacter = character;
         _levelUpData = levelUpData ?? new LevelUpData { Character = character };
         _levelUpCompleteCallback = onComplete;
+        _domainSelectionAttemptedThisFlow = false;
 
         Debug.Log($"[CharacterCreationManager] Starting level-up flow for {character.Stats.CharacterName} (level {character.Stats.Level})");
 
@@ -125,6 +128,40 @@ public class CharacterCreationManager : MonoBehaviour
         skillsUI.ShowForLevelUp(_levelingCharacter, points, ShowSpellSelection);
     }
 
+    private void ShowDomainSelection()
+    {
+        Debug.Log("[CharacterCreation] Showing domain selection for Cleric");
+
+        if (_levelingCharacter == null || _levelingCharacter.Stats == null)
+        {
+            ShowSpellSelection();
+            return;
+        }
+
+        DomainSelectionUI domainUI = FindOrCreateDomainSelectionUI();
+        if (domainUI == null)
+        {
+            Debug.LogWarning("[CharacterCreationManager] DomainSelectionUI unavailable. Continuing without changes.");
+            ShowSpellSelection();
+            return;
+        }
+
+        domainUI.Show(_levelingCharacter, 2, selectedDomains =>
+        {
+            List<string> domains = selectedDomains ?? new List<string>();
+            _levelingCharacter.Stats.ChosenDomains = new List<string>(domains);
+            Debug.Log($"[CharacterCreation] Domains selected: {string.Join(", ", domains)}");
+
+            SpellcastingComponent spellcasting = _levelingCharacter.GetComponent<SpellcastingComponent>();
+            if (spellcasting != null)
+            {
+                spellcasting.RefreshSpellSlots();
+            }
+
+            ShowSpellSelection();
+        });
+    }
+
     private void ShowSpellSelection()
     {
         Debug.Log("[CharacterCreation] Step 5: Spell Selection (Level-Up)");
@@ -146,6 +183,15 @@ public class CharacterCreationManager : MonoBehaviour
         {
             Debug.Log($"[CharacterCreation] {stats.CharacterClass} is not a spellcaster");
             CompleteLevelUp();
+            return;
+        }
+
+        if (string.Equals(stats.CharacterClass, "Cleric", StringComparison.OrdinalIgnoreCase)
+            && (stats.ChosenDomains == null || stats.ChosenDomains.Count == 0)
+            && !_domainSelectionAttemptedThisFlow)
+        {
+            _domainSelectionAttemptedThisFlow = true;
+            ShowDomainSelection();
             return;
         }
 
@@ -235,6 +281,7 @@ public class CharacterCreationManager : MonoBehaviour
         _levelingCharacter = null;
         _levelUpData = null;
         _levelUpCompleteCallback = null;
+        _domainSelectionAttemptedThisFlow = false;
 
         callback?.Invoke();
     }
@@ -297,5 +344,25 @@ public class CharacterCreationManager : MonoBehaviour
         _spellSelectionUI = uiObj.AddComponent<SpellSelectionUI>();
         _spellSelectionUI.BuildUI(canvas);
         return _spellSelectionUI;
+    }
+
+    private DomainSelectionUI FindOrCreateDomainSelectionUI()
+    {
+        if (_domainSelectionUI != null)
+            return _domainSelectionUI;
+
+        _domainSelectionUI = FindObjectOfType<DomainSelectionUI>();
+        if (_domainSelectionUI != null)
+            return _domainSelectionUI;
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+            return null;
+
+        GameObject uiObj = new GameObject("DomainSelectionUI", typeof(RectTransform));
+        uiObj.transform.SetParent(canvas.transform, false);
+        _domainSelectionUI = uiObj.AddComponent<DomainSelectionUI>();
+        _domainSelectionUI.BuildUI(canvas);
+        return _domainSelectionUI;
     }
 }

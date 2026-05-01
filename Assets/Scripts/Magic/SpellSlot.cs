@@ -32,22 +32,38 @@ public class SpellSlot
     /// <summary>True when this slot is temporarily disabled by negative levels.</summary>
     public bool DisabledByNegativeLevel;
 
+    /// <summary>
+    /// True when this slot is a cleric domain slot.
+    /// Domain slots can only be prepared with spells from one of the cleric's chosen domains.
+    /// </summary>
+    public bool IsDomainSlot;
+
+    /// <summary>
+    /// Optional domain hint for UI/debugging (e.g., "Healing").
+    /// Not required for validation because validation can use the full domain list.
+    /// </summary>
+    public string DomainHint;
+
     /// <summary>Create a new empty spell slot at the given level.</summary>
-    public SpellSlot(int level)
+    public SpellSlot(int level, bool isDomainSlot = false)
     {
         Level = level;
         PreparedSpell = null;
         IsUsed = false;
         DisabledByNegativeLevel = false;
+        IsDomainSlot = isDomainSlot;
+        DomainHint = null;
     }
 
     /// <summary>Create a spell slot with a specific spell already prepared.</summary>
-    public SpellSlot(int level, SpellData spell)
+    public SpellSlot(int level, SpellData spell, bool isDomainSlot = false)
     {
         Level = level;
         PreparedSpell = spell;
         IsUsed = false;
         DisabledByNegativeLevel = false;
+        IsDomainSlot = isDomainSlot;
+        DomainHint = null;
     }
 
     /// <summary>Whether this slot can be cast (has a spell, isn't used, and isn't disabled).</summary>
@@ -92,6 +108,7 @@ public class SpellSlot
     {
         string spellName = PreparedSpell != null ? PreparedSpell.Name : "(empty)";
         string status = DisabledByNegativeLevel ? "DISABLED" : (IsUsed ? "USED" : "ready");
-        return $"Lv{Level} [{spellName}] ({status})";
+        string domainTag = IsDomainSlot ? " [DOMAIN]" : string.Empty;
+        return $"Lv{Level}{domainTag} [{spellName}] ({status})";
     }
 }

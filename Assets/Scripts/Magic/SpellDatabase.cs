@@ -242,6 +242,53 @@ public static partial class SpellDatabase
         return result;
     }
 
+    /// <summary>Compatibility alias used by some UIs.</summary>
+    public static List<SpellData> GetSpellsByLevelAndClass(int spellLevel, string className)
+    {
+        return GetSpellsForClassAtLevel(className, spellLevel);
+    }
+
+    /// <summary>Get all spells for a specific domain at a spell level.</summary>
+    public static List<SpellData> GetDomainSpells(string domainName, int spellLevel)
+    {
+        Init();
+
+        var result = new List<SpellData>();
+        foreach (SpellData spell in _spells.Values)
+        {
+            if (spell == null || spell.AvailableFor == null)
+                continue;
+
+            bool matches = spell.AvailableFor.Any(a =>
+                a != null &&
+                a.MatchesClass("Cleric") &&
+                a.Level == spellLevel &&
+                a.MatchesDomain(domainName));
+
+            if (matches)
+                result.Add(spell);
+        }
+
+        result.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        return result;
+    }
+
+    /// <summary>Returns true if a spell belongs to a domain spell list.</summary>
+    public static bool IsSpellInDomain(string spellIdOrName, string domainName)
+    {
+        if (string.IsNullOrWhiteSpace(spellIdOrName) || string.IsNullOrWhiteSpace(domainName))
+            return false;
+
+        SpellData spell = GetSpell(spellIdOrName) ?? GetSpellByName(spellIdOrName);
+        if (spell == null || spell.AvailableFor == null)
+            return false;
+
+        return spell.AvailableFor.Any(a =>
+            a != null &&
+            a.MatchesClass("Cleric") &&
+            a.MatchesDomain(domainName));
+    }
+
     /// <summary>Get all non-placeholder spells of a specific level for a class.</summary>
     public static List<SpellData> GetImplementedSpellsForClassAtLevel(string className, int spellLevel)
     {

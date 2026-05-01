@@ -389,7 +389,13 @@ public class SpellPreparationUI : MonoBehaviour
         }
 
         _spellComp = spellComp;
-        _titleText.text = $"SPELL PREPARATION \u2014 {spellComp.Stats.CharacterName}";
+        _clericDomains = spellComp.Domains != null ? new List<string>(spellComp.Domains) : new List<string>();
+        _domainSlotIndices.Clear();
+
+        string domainSuffix = (_clericDomains.Count > 0 && spellComp.Stats.IsCleric)
+            ? $" — Domains: {string.Join(", ", _clericDomains)}"
+            : string.Empty;
+        _titleText.text = $"SPELL PREPARATION — {spellComp.Stats.CharacterName}{domainSuffix}";
 
         PopulateSlotList();
         RefreshSummary();
@@ -652,49 +658,62 @@ public class SpellPreparationUI : MonoBehaviour
         float yPos = -8f;
         float rowHeight = 40f;
         float spacing = 4f;
-        int lastLevel = -1;
-        int slotIndex = 0;
+        _domainSlotIndices.Clear();
 
-        foreach (var slot in _spellComp.SpellSlots)
+        int maxLevel = _spellComp.SlotsMax != null ? _spellComp.SlotsMax.Length - 1 : 0;
+        for (int spellLevel = 0; spellLevel <= maxLevel; spellLevel++)
         {
-            // Level header
-            if (slot.Level != lastLevel)
+            List<SpellSlot> slotsAtLevel = _spellComp.GetSlotsForLevel(spellLevel);
+            if (slotsAtLevel.Count == 0)
+                continue;
+
+            Debug.Log($"[SpellPrep] Creating section for spell level {spellLevel}");
+            if (spellLevel > 0) yPos -= 8f;
+
+            string cantripName = (_spellComp.Stats != null && _spellComp.Stats.IsCleric)
+                ? "ORISONS" : "CANTRIPS";
+
+            int regularSlots = _spellComp.GetMaxSpellSlotsAtLevel(spellLevel);
+            int domainSlots = _spellComp.GetMaxDomainSlotsAtLevel(spellLevel);
+            int totalSlots = slotsAtLevel.Count;
+            Debug.Log($"[SpellPrep] Level {spellLevel}: {regularSlots} regular + {domainSlots} domain = {totalSlots} total");
+
+            string levelLabel = spellLevel == 0
+                ? $"═══ {cantripName} (Level 0 — Unlimited) ═══"
+                : $"═══ LEVEL {spellLevel} SPELLS ═══";
+            levelLabel += $"  ({totalSlots} slots)";
+
+            var headerGO = new GameObject("Header" + spellLevel);
+            headerGO.transform.SetParent(scrollContent, false);
+            var hRT = headerGO.AddComponent<RectTransform>();
+            hRT.anchorMin = new Vector2(0, 1);
+            hRT.anchorMax = new Vector2(1, 1);
+            hRT.pivot = new Vector2(0.5f, 1);
+            hRT.anchoredPosition = new Vector2(0, yPos);
+            hRT.sizeDelta = new Vector2(0, 28);
+            var hText = headerGO.AddComponent<Text>();
+            hText.text = levelLabel;
+            hText.font = _font;
+            hText.fontSize = 13;
+            hText.color = new Color(0.7f, 0.8f, 1f);
+            hText.alignment = TextAnchor.MiddleCenter;
+            hText.supportRichText = true;
+            hText.raycastTarget = false;
+            yPos -= 30f;
+
+            for (int levelSlotIndex = 0; levelSlotIndex < slotsAtLevel.Count; levelSlotIndex++)
             {
-                if (lastLevel >= 0) yPos -= 8f;
-                lastLevel = slot.Level;
+                SpellSlot slot = slotsAtLevel[levelSlotIndex];
+                int slotIndex = _slotRows.Count;
+                if (slot.IsDomainSlot)
+                    _domainSlotIndices.Add(slotIndex);
 
-                string cantripName = (_spellComp.Stats != null && _spellComp.Stats.IsCleric)
-                    ? "ORISONS" : "CANTRIPS";
-                string levelLabel = slot.Level == 0
-                    ? $"\u2550\u2550\u2550 {cantripName} (Level 0 \u2014 Unlimited) \u2550\u2550\u2550"
-                    : $"\u2550\u2550\u2550 LEVEL {slot.Level} SPELLS \u2550\u2550\u2550";
-                int slotsAtLevel = _spellComp.GetSlotsForLevel(slot.Level).Count;
-                levelLabel += $"  ({slotsAtLevel} slots)";
+                var rowUI = CreateSlotRow(scrollContent, slot, slotIndex, yPos);
+                _slotRows.Add(rowUI);
 
-                var headerGO = new GameObject("Header" + slot.Level);
-                headerGO.transform.SetParent(scrollContent, false);
-                var hRT = headerGO.AddComponent<RectTransform>();
-                hRT.anchorMin = new Vector2(0, 1);
-                hRT.anchorMax = new Vector2(1, 1);
-                hRT.pivot = new Vector2(0.5f, 1);
-                hRT.anchoredPosition = new Vector2(0, yPos);
-                hRT.sizeDelta = new Vector2(0, 28);
-                var hText = headerGO.AddComponent<Text>();
-                hText.text = levelLabel;
-                hText.font = _font;
-                hText.fontSize = 13;
-                hText.color = new Color(0.7f, 0.8f, 1f);
-                hText.alignment = TextAnchor.MiddleCenter;
-                hText.supportRichText = true;
-                hText.raycastTarget = false;
-                yPos -= 30f;
+                Debug.Log($"[SpellPrep] Created slot {levelSlotIndex} at level {spellLevel}, domain={slot.IsDomainSlot}");
+                yPos -= (rowHeight + spacing);
             }
-
-            // Slot row
-            var rowUI = CreateSlotRow(scrollContent, slot, slotIndex, yPos);
-            _slotRows.Add(rowUI);
-            yPos -= (rowHeight + spacing);
-            slotIndex++;
         }
 
         // Set content height
@@ -708,11 +727,22 @@ public class SpellPreparationUI : MonoBehaviour
         row.Slot = slot;
         row.SlotIndex = index;
 
-        // Get available spells at this level from spellbook
-        row.AvailableSpells = _spellComp.KnownSpells
-            .Where(s => s.SpellLevel == slot.Level)
-            .OrderBy(s => s.Name)
-            .ToList();
+        bool isDomainSlot = slot.IsDomainSlot;
+
+        // Domain slots only allow domain spells from chosen domains.
+        if (isDomainSlot)
+        {
+            row.AvailableSpells = _spellComp.GetAvailableDomainSpells(slot.Level)
+                .OrderBy(s => s.Name)
+                .ToList();
+        }
+        else
+        {
+            row.AvailableSpells = _spellComp.KnownSpells
+                .Where(s => s != null && s.SpellLevel == slot.Level)
+                .OrderBy(s => s.Name)
+                .ToList();
+        }
 
         // Row container
         row.Row = new GameObject($"SlotRow_{index}");
@@ -729,13 +759,26 @@ public class SpellPreparationUI : MonoBehaviour
         bg.color = new Color(0.1f, 0.1f, 0.15f, 0.6f);
 
         // Slot label (left side)
-        int levelSlotNum = _spellComp.GetSlotsForLevel(slot.Level).IndexOf(slot) + 1;
-        string cantripLabel = (_spellComp.Stats != null && _spellComp.Stats.IsCleric) ? "Orison" : "Cantrip";
-        string slotLabel = slot.Level == 0 ? $"{cantripLabel} Slot {levelSlotNum}:" : $"Level {slot.Level} Slot {levelSlotNum}:";
+        List<SpellSlot> levelSlots = _spellComp.GetSlotsForLevel(slot.Level);
+        int levelSlotNum = levelSlots.IndexOf(slot) + 1;
+        int domainSlotNum = levelSlots.Where(s => s.IsDomainSlot).ToList().IndexOf(slot) + 1;
 
+        string cantripLabel = (_spellComp.Stats != null && _spellComp.Stats.IsCleric) ? "Orison" : "Cantrip";
+        string slotLabel;
+        if (slot.Level == 0)
+            slotLabel = $"{cantripLabel} Slot {levelSlotNum}:";
+        else if (isDomainSlot)
+            slotLabel = $"🌟 Domain Slot {domainSlotNum}:";
+        else
+            slotLabel = $"Level {slot.Level} Slot {levelSlotNum}:";
+
+        Color labelColor = isDomainSlot ? new Color(1f, 0.85f, 0.3f) : new Color(0.8f, 0.8f, 0.7f);
         row.LabelText = MakeText(row.Row.transform, "Label",
             new Vector2(-280, 0), new Vector2(180, 30),
-            slotLabel, 13, new Color(0.8f, 0.8f, 0.7f), TextAnchor.MiddleRight);
+            slotLabel, 13, labelColor, TextAnchor.MiddleRight);
+
+        if (isDomainSlot)
+            bg.color = new Color(0.15f, 0.12f, 0.05f, 0.75f);
 
         // Dropdown for spell selection (right side)
         GameObject dropdownObj = new GameObject("Dropdown");
@@ -881,6 +924,9 @@ public class SpellPreparationUI : MonoBehaviour
         foreach (var spell in row.AvailableSpells)
         {
             string optLabel = spell.Name;
+            string domainTag = GetDomainTagForSpell(spell);
+            if (!string.IsNullOrEmpty(domainTag))
+                optLabel += $" [{domainTag}]";
             if (spell.IsPlaceholder) optLabel += " [PH]";
             options.Add(new Dropdown.OptionData(optLabel));
         }
@@ -1286,28 +1332,62 @@ public class SpellPreparationUI : MonoBehaviour
 
     // ========== EVENTS ==========
 
+    private string GetDomainTagForSpell(SpellData spell)
+    {
+        if (spell == null || _clericDomains == null || _clericDomains.Count == 0)
+            return string.Empty;
+
+        var matches = new List<string>();
+        for (int i = 0; i < _clericDomains.Count; i++)
+        {
+            string domain = _clericDomains[i];
+            if (SpellDatabase.IsSpellInDomain(spell.SpellId, domain))
+                matches.Add(domain);
+        }
+
+        return matches.Count > 0 ? string.Join("/", matches) : string.Empty;
+    }
+
     private void OnSlotChanged(int slotIndex, int dropdownValue)
     {
         if (slotIndex < 0 || slotIndex >= _slotRows.Count) return;
         var row = _slotRows[slotIndex];
+        int levelSlotIndex = _spellComp.GetSlotsForLevel(row.Slot.Level).IndexOf(row.Slot);
+
+        Debug.Log($"[SpellPrep] Change clicked for level {row.Slot.Level} slot {Mathf.Max(0, levelSlotIndex)}, domain={row.Slot.IsDomainSlot}");
 
         if (dropdownValue == 0)
         {
-            // Empty
             row.Slot.Prepare(null);
-        }
-        else
-        {
-            int spellIdx = dropdownValue - 1;
-            if (spellIdx < row.AvailableSpells.Count)
-            {
-                SpellData selectedSpell = row.AvailableSpells[spellIdx];
-                int levelSlotIndex = _spellComp.GetSlotsForLevel(row.Slot.Level).IndexOf(row.Slot);
-                Debug.Log($"[SpellPrep] Preparing {selectedSpell.Name} in level {row.Slot.Level} slot {Mathf.Max(0, levelSlotIndex)}");
-                row.Slot.Prepare(selectedSpell);
-            }
+            _spellComp.SyncPreparedSpellsFromSlots();
+            RefreshSummary();
+            return;
         }
 
+        int spellIdx = dropdownValue - 1;
+        if (spellIdx >= row.AvailableSpells.Count)
+            return;
+
+        SpellData selectedSpell = row.AvailableSpells[spellIdx];
+        Debug.Log($"[SpellPrep] Spell selected: {selectedSpell.Name} for level {row.Slot.Level} slot {Mathf.Max(0, levelSlotIndex)}");
+
+        int globalSlotIndex = _spellComp.SpellSlots.IndexOf(row.Slot);
+        if (globalSlotIndex < 0)
+            return;
+
+        bool prepared = _spellComp.PrepareSpellInSlot(globalSlotIndex, selectedSpell);
+        if (!prepared)
+        {
+            Debug.LogError($"[SpellPrep] Failed to prepare {selectedSpell.Name} in slot.");
+            int currentSpellIndex = row.Slot.HasSpell
+                ? row.AvailableSpells.FindIndex(s => s.SpellId == row.Slot.PreparedSpell.SpellId) + 1
+                : 0;
+            if (row.SpellDropdown != null)
+                row.SpellDropdown.value = Mathf.Max(0, currentSpellIndex);
+            return;
+        }
+
+        Debug.Log($"[SpellPrep] Prepared {selectedSpell.Name} in level {row.Slot.Level} slot {Mathf.Max(0, levelSlotIndex)}");
         _spellComp.SyncPreparedSpellsFromSlots();
         RefreshSummary();
     }
@@ -1322,6 +1402,8 @@ public class SpellPreparationUI : MonoBehaviour
         {
             if (_spellComp.Stats != null && _spellComp.Stats.IsCleric)
                 _spellComp.AutoPrepareClericSlots();
+            else if (_spellComp.Stats != null && string.Equals(_spellComp.Stats.CharacterClass, "Druid", StringComparison.OrdinalIgnoreCase))
+                _spellComp.AutoPrepareDruidSlots();
             else
                 _spellComp.AutoPrepareWizardSlots();
         }
@@ -1389,7 +1471,11 @@ public class SpellPreparationUI : MonoBehaviour
             }
             else
             {
-                string label = $"Lv{level}";
+                int domainSlots = _spellComp.GetMaxDomainSlotsAtLevel(level);
+                int regularSlots = _spellComp.GetMaxSpellSlotsAtLevel(level);
+                string label = domainSlots > 0
+                    ? $"Lv{level} ({regularSlots}+{domainSlots}D)"
+                    : $"Lv{level}";
                 string color = filled >= total ? "#44FF44" : "#FFDD44";
                 parts.Add($"<color={color}>{label}: {filled}/{total}</color>");
             }
