@@ -190,34 +190,15 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>
     /// Initialize Wizard spellcasting with D&D 3.5e slot-based preparation.
     /// Creates individual SpellSlot objects for each available slot.
-    /// D&D 3.5e PHB Level 3: 4/2+bonus/1+bonus (cantrips/1st/2nd)
-    /// Bonus spell slots from INT: +1 slot at spell level N if INT mod >= N
     /// </summary>
     private void InitWizard(int level)
     {
-        int intMod = Mathf.Max(0, Stats.INTMod);
-
-        // D&D 3.5e Wizard spell slots at level 3:
-        // Base: 4 cantrips, 2 first, 1 second
-        // Bonus: +1 per level where intMod >= level
-        int bonus1st = intMod >= 1 ? 1 : 0;
-        int bonus2nd = intMod >= 2 ? 1 : 0;
-
-        SlotsMax = new int[] { 4, 2 + bonus1st, 1 + bonus2nd };
+        int safeLevel = Mathf.Max(1, level);
+        SlotsMax = GetWizardSlotsForLevel(safeLevel);
         SlotsRemaining = (int[])SlotsMax.Clone();
+        InitializeSpellSlotCollection();
 
-        // Create individual SpellSlot objects
-        SpellSlots.Clear();
-        for (int spellLevel = 0; spellLevel < SlotsMax.Length; spellLevel++)
-        {
-            for (int i = 0; i < SlotsMax[spellLevel]; i++)
-            {
-                SpellSlots.Add(new SpellSlot(spellLevel));
-            }
-        }
-
-        Debug.Log($"[Spellcasting] Wizard created {SpellSlots.Count} spell slots: " +
-                  $"L0={SlotsMax[0]}, L1={SlotsMax[1]}, L2={SlotsMax[2]}");
+        Debug.Log($"[Spellcasting] Wizard created {SpellSlots.Count} spell slots at level {safeLevel}: {GetSlotArrayDebugString(SlotsMax)}");
 
         // Load spells into spellbook (KnownSpells)
         if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
@@ -244,36 +225,16 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Initialize Cleric spellcasting with D&D 3.5e slot-based preparation.
-    /// Creates individual SpellSlot objects for each available slot.
-    /// D&D 3.5e PHB Level 3: 4/2+1domain+bonus/1+1domain+bonus
     /// Clerics can prepare ANY cleric spell of appropriate level (no spellbook restriction).
-    /// Bonus spell slots from WIS: +1 slot at spell level N if WIS mod >= N
     /// </summary>
     private void InitCleric(int level)
     {
-        int wisMod = Mathf.Max(0, Stats.WISMod);
-
-        // D&D 3.5e Cleric spell slots at level 3:
-        // Base: 4 cantrips, 2 first + 1 domain, 1 second + 1 domain
-        // Bonus: +1 per level where wisMod >= level
-        int bonus1st = wisMod >= 1 ? 1 : 0;
-        int bonus2nd = wisMod >= 2 ? 1 : 0;
-
-        SlotsMax = new int[] { 4, 3 + bonus1st, 2 + bonus2nd }; // 2 base + 1 domain + bonus for each
+        int safeLevel = Mathf.Max(1, level);
+        SlotsMax = GetClericSlotsForLevel(safeLevel);
         SlotsRemaining = (int[])SlotsMax.Clone();
+        InitializeSpellSlotCollection();
 
-        // Create individual SpellSlot objects (same as wizard system)
-        SpellSlots.Clear();
-        for (int spellLevel = 0; spellLevel < SlotsMax.Length; spellLevel++)
-        {
-            for (int i = 0; i < SlotsMax[spellLevel]; i++)
-            {
-                SpellSlots.Add(new SpellSlot(spellLevel));
-            }
-        }
-
-        Debug.Log($"[Spellcasting] Cleric created {SpellSlots.Count} spell slots: " +
-                  $"L0={SlotsMax[0]}, L1={SlotsMax[1]}, L2={SlotsMax[2]}");
+        Debug.Log($"[Spellcasting] Cleric created {SpellSlots.Count} spell slots at level {safeLevel}: {GetSlotArrayDebugString(SlotsMax)}");
 
         // For orisons (level 0): only add selected ones if available
         if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
@@ -303,24 +264,12 @@ public class SpellcastingComponent : MonoBehaviour
 
     private void InitDruid(int level)
     {
-        int wisMod = Mathf.Max(0, Stats.WISMod);
-
-        // Druid baseline progression mirrors other 9-level prepared casters at this implemented tier.
-        int bonus1st = wisMod >= 1 ? 1 : 0;
-        int bonus2nd = wisMod >= 2 ? 1 : 0;
-
-        SlotsMax = new int[] { 4, 2 + bonus1st, 1 + bonus2nd };
+        int safeLevel = Mathf.Max(1, level);
+        SlotsMax = GetDruidSlotsForLevel(safeLevel);
         SlotsRemaining = (int[])SlotsMax.Clone();
+        InitializeSpellSlotCollection();
 
-        SpellSlots.Clear();
-        for (int spellLevel = 0; spellLevel < SlotsMax.Length; spellLevel++)
-        {
-            for (int i = 0; i < SlotsMax[spellLevel]; i++)
-                SpellSlots.Add(new SpellSlot(spellLevel));
-        }
-
-        Debug.Log($"[Spellcasting] Druid created {SpellSlots.Count} spell slots: " +
-                  $"L0={SlotsMax[0]}, L1={SlotsMax[1]}, L2={SlotsMax[2]}");
+        Debug.Log($"[Spellcasting] Druid created {SpellSlots.Count} spell slots at level {safeLevel}: {GetSlotArrayDebugString(SlotsMax)}");
 
         if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
         {
@@ -339,6 +288,256 @@ public class SpellcastingComponent : MonoBehaviour
             KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Druid", 2));
             Debug.Log("[Spellcasting] Druid: no spell selection found, added all available spells (Lv0-2).");
         }
+    }
+
+    public void RefreshSpellSlots()
+    {
+        if (Stats == null)
+        {
+            Debug.LogWarning("[Spellcasting] RefreshSpellSlots called with null Stats.");
+            return;
+        }
+
+        if (!(Stats.IsWizard || Stats.IsCleric || IsDruidClass(Stats)))
+        {
+            Debug.Log($"[Spellcasting] RefreshSpellSlots skipped for non-prepared caster {Stats.CharacterClass}.");
+            return;
+        }
+
+        string characterName = !string.IsNullOrWhiteSpace(Stats.CharacterName) ? Stats.CharacterName : gameObject.name;
+        int level = Mathf.Max(1, Stats.Level);
+
+        Debug.Log($"[Spellcasting] RefreshSpellSlots called for {characterName} ({Stats.CharacterClass}) at level {level}");
+
+        var previousSlots = SpellSlots
+            .Where(slot => slot != null)
+            .Select(slot => new SpellSlotSnapshot
+            {
+                Level = slot.Level,
+                PreparedSpell = slot.PreparedSpell,
+                IsUsed = slot.IsUsed,
+                DisabledByNegativeLevel = slot.DisabledByNegativeLevel
+            })
+            .ToList();
+
+        if (Stats.IsWizard)
+            SlotsMax = GetWizardSlotsForLevel(level);
+        else if (Stats.IsCleric)
+            SlotsMax = GetClericSlotsForLevel(level);
+        else
+            SlotsMax = GetDruidSlotsForLevel(level);
+
+        SlotsRemaining = (int[])SlotsMax.Clone();
+        InitializeSpellSlotCollection();
+        RestoreSlotStateFromSnapshot(previousSlots);
+        PrepareAnyEmptySlotsAfterRefresh();
+
+        SyncPreparedSpellsFromSlots();
+        ApplyNegativeLevelSlotLoss();
+
+        Debug.Log($"[Spellcasting] Refresh complete for {characterName}: {GetSlotSummary()}");
+    }
+
+    private int[] GetWizardSlotsForLevel(int level)
+    {
+        int safeLevel = Mathf.Max(1, level);
+        int intMod = Mathf.Max(0, Stats != null ? Stats.INTMod : 0);
+
+        int baseCantrips;
+        int baseFirst;
+        int baseSecond;
+
+        switch (safeLevel)
+        {
+            case 1:
+                baseCantrips = 3;
+                baseFirst = 1;
+                baseSecond = 0;
+                break;
+            case 2:
+                baseCantrips = 4;
+                baseFirst = 2;
+                baseSecond = 0;
+                break;
+            case 3:
+                baseCantrips = 4;
+                baseFirst = 2;
+                baseSecond = 1;
+                break;
+            default:
+                // Level 4+ currently capped to implemented prototype progression tier.
+                baseCantrips = 4;
+                baseFirst = 3;
+                baseSecond = 2;
+                break;
+        }
+
+        int bonusFirst = intMod >= 1 ? 1 : 0;
+        int bonusSecond = intMod >= 2 ? 1 : 0;
+
+        return new[] { baseCantrips, baseFirst + bonusFirst, baseSecond + bonusSecond };
+    }
+
+    private int[] GetClericSlotsForLevel(int level)
+    {
+        int safeLevel = Mathf.Max(1, level);
+        int wisMod = Mathf.Max(0, Stats != null ? Stats.WISMod : 0);
+
+        int baseCantrips;
+        int baseFirstWithDomain;
+        int baseSecondWithDomain;
+
+        switch (safeLevel)
+        {
+            case 1:
+                baseCantrips = 3;
+                baseFirstWithDomain = 2;
+                baseSecondWithDomain = 0;
+                break;
+            case 2:
+                baseCantrips = 4;
+                baseFirstWithDomain = 3;
+                baseSecondWithDomain = 0;
+                break;
+            default:
+                // Preserve existing prototype behavior at level 3+.
+                baseCantrips = 4;
+                baseFirstWithDomain = 3;
+                baseSecondWithDomain = 2;
+                break;
+        }
+
+        int bonusFirst = wisMod >= 1 ? 1 : 0;
+        int bonusSecond = wisMod >= 2 ? 1 : 0;
+
+        return new[] { baseCantrips, baseFirstWithDomain + bonusFirst, baseSecondWithDomain + bonusSecond };
+    }
+
+    private int[] GetDruidSlotsForLevel(int level)
+    {
+        int safeLevel = Mathf.Max(1, level);
+        int wisMod = Mathf.Max(0, Stats != null ? Stats.WISMod : 0);
+
+        int baseCantrips;
+        int baseFirst;
+        int baseSecond;
+
+        switch (safeLevel)
+        {
+            case 1:
+                baseCantrips = 3;
+                baseFirst = 1;
+                baseSecond = 0;
+                break;
+            case 2:
+                baseCantrips = 4;
+                baseFirst = 2;
+                baseSecond = 0;
+                break;
+            default:
+                // Preserve existing prototype behavior at level 3+.
+                baseCantrips = 4;
+                baseFirst = 2;
+                baseSecond = 1;
+                break;
+        }
+
+        int bonusFirst = wisMod >= 1 ? 1 : 0;
+        int bonusSecond = wisMod >= 2 ? 1 : 0;
+
+        return new[] { baseCantrips, baseFirst + bonusFirst, baseSecond + bonusSecond };
+    }
+
+    private void InitializeSpellSlotCollection()
+    {
+        SpellSlots.Clear();
+        if (SlotsMax == null)
+            return;
+
+        for (int spellLevel = 0; spellLevel < SlotsMax.Length; spellLevel++)
+        {
+            for (int i = 0; i < SlotsMax[spellLevel]; i++)
+            {
+                SpellSlots.Add(new SpellSlot(spellLevel));
+            }
+        }
+    }
+
+    private void RestoreSlotStateFromSnapshot(List<SpellSlotSnapshot> previousSlots)
+    {
+        if (previousSlots == null || previousSlots.Count == 0)
+            return;
+
+        var previousByLevel = previousSlots
+            .GroupBy(s => s.Level)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var currentByLevel = SpellSlots
+            .GroupBy(s => s.Level)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var kvp in currentByLevel)
+        {
+            int level = kvp.Key;
+            List<SpellSlot> currentSlots = kvp.Value;
+
+            if (!previousByLevel.TryGetValue(level, out List<SpellSlotSnapshot> previousLevelSlots))
+                continue;
+
+            int sharedCount = Mathf.Min(currentSlots.Count, previousLevelSlots.Count);
+            for (int i = 0; i < sharedCount; i++)
+            {
+                SpellSlot current = currentSlots[i];
+                SpellSlotSnapshot previous = previousLevelSlots[i];
+
+                current.PreparedSpell = previous.PreparedSpell;
+                current.IsUsed = previous.IsUsed;
+                current.DisabledByNegativeLevel = previous.DisabledByNegativeLevel;
+            }
+        }
+    }
+
+    private void PrepareAnyEmptySlotsAfterRefresh()
+    {
+        if (KnownSpells == null || KnownSpells.Count == 0)
+            return;
+
+        for (int level = 0; level < SlotsMax.Length; level++)
+        {
+            List<SpellData> spellsAtLevel = KnownSpells
+                .Where(s => s != null && s.SpellLevel == level)
+                .ToList();
+
+            if (spellsAtLevel.Count == 0)
+                continue;
+
+            int nextSpellIndex = 0;
+            foreach (SpellSlot slot in SpellSlots.Where(s => s != null && s.Level == level && !s.HasSpell))
+            {
+                slot.Prepare(spellsAtLevel[nextSpellIndex % spellsAtLevel.Count]);
+                nextSpellIndex++;
+            }
+        }
+    }
+
+    private string GetSlotArrayDebugString(int[] slots)
+    {
+        if (slots == null || slots.Length == 0)
+            return "none";
+
+        var parts = new List<string>();
+        for (int i = 0; i < slots.Length; i++)
+            parts.Add($"L{i}={slots[i]}");
+
+        return string.Join(", ", parts);
+    }
+
+    private sealed class SpellSlotSnapshot
+    {
+        public int Level;
+        public SpellData PreparedSpell;
+        public bool IsUsed;
+        public bool DisabledByNegativeLevel;
     }
 
     // ========== SPELL SLOT PREPARATION ==========

@@ -1746,6 +1746,18 @@ public class CharacterStats
         {
             Level = newLevel;
             OnLevelUp(oldLevel, newLevel);
+
+            Debug.Log($"[XP] ⭐⭐⭐ {CharacterName} LEVELED UP to {newLevel}! ⭐⭐⭐");
+
+            if (OwnerCharacter != null)
+            {
+                SpellcastingComponent spellcasting = OwnerCharacter.GetComponent<SpellcastingComponent>();
+                if (spellcasting != null)
+                {
+                    Debug.Log($"[XP] Refreshing spell slots for {CharacterName} at level {newLevel}");
+                    spellcasting.RefreshSpellSlots();
+                }
+            }
         }
         else if (newLevel < oldLevel)
         {

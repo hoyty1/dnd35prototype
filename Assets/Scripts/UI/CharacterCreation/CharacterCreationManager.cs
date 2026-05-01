@@ -219,6 +219,16 @@ public class CharacterCreationManager : MonoBehaviour
 
         Debug.Log($"[CharacterCreationManager] Level-up flow complete for {name}");
 
+        if (_levelingCharacter != null)
+        {
+            SpellcastingComponent spellcasting = _levelingCharacter.GetComponent<SpellcastingComponent>();
+            if (spellcasting != null)
+            {
+                Debug.Log($"[CharacterCreationManager] Refreshing spell slots after level-up for {name}");
+                spellcasting.RefreshSpellSlots();
+            }
+        }
+
         Action callback = _levelUpCompleteCallback;
 
         _isLevelUpMode = false;
