@@ -365,7 +365,7 @@ public class LootCollectionUI : MonoBehaviour
         footerRT.offsetMax = Vector2.zero;
 
         HorizontalLayoutGroup layout = footer.GetComponent<HorizontalLayoutGroup>();
-        layout.spacing = 16f;
+        layout.spacing = 5f;
         layout.childAlignment = TextAnchor.MiddleCenter;
         layout.childControlWidth = true;
         layout.childControlHeight = true;
@@ -836,7 +836,10 @@ public class LootCollectionUI : MonoBehaviour
         go.transform.SetParent(parent, false);
 
         LayoutElement le = go.GetComponent<LayoutElement>();
-        le.preferredHeight = 60f;
+        le.minWidth = 150f;
+        le.preferredWidth = 150f;
+        le.minHeight = 40f;
+        le.preferredHeight = 40f;
 
         Image image = go.GetComponent<Image>();
         image.color = color;
@@ -864,7 +867,7 @@ public class LootCollectionUI : MonoBehaviour
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
             Vector2.zero,
-            20,
+            16,
             FontStyle.Bold,
             Color.white,
             TextAnchor.MiddleCenter);

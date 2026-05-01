@@ -199,7 +199,7 @@ public class PreCombatHubUI : MonoBehaviour
         rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
         rect.anchoredPosition = anchoredPos;
-        rect.sizeDelta = new Vector2(620f, 74f);
+        rect.sizeDelta = new Vector2(620f, 60f);
 
         Image image = buttonObj.GetComponent<Image>();
         image.color = color;
@@ -209,7 +209,7 @@ public class PreCombatHubUI : MonoBehaviour
 
         CreateText(buttonObj.transform, "Label", label,
             new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, Vector2.zero, 24, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            Vector2.zero, Vector2.zero, 18, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
 
         return button;
     }

@@ -1106,7 +1106,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         footerRect.offsetMax = Vector2.zero;
 
         HorizontalLayoutGroup footerLayout = footer.GetComponent<HorizontalLayoutGroup>();
-        footerLayout.spacing = 12f;
+        footerLayout.spacing = 5f;
         footerLayout.childAlignment = TextAnchor.MiddleCenter;
         footerLayout.childControlWidth = true;
         footerLayout.childControlHeight = true;
@@ -4609,7 +4609,10 @@ public class PreCombatInventoryUI : MonoBehaviour
         buttonGO.transform.SetParent(parent, false);
 
         LayoutElement le = buttonGO.GetComponent<LayoutElement>();
-        le.preferredHeight = 36f;
+        le.minWidth = 150f;
+        le.preferredWidth = 150f;
+        le.minHeight = 40f;
+        le.preferredHeight = 40f;
 
         Image image = buttonGO.GetComponent<Image>();
         image.color = color;
@@ -4639,7 +4642,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             new Vector2(0.5f, 0.5f),
             Vector2.zero,
             Vector2.zero,
-            14,
+            16,
             FontStyle.Bold,
             Color.white,
             TextAnchor.MiddleCenter);

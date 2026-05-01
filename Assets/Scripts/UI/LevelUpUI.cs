@@ -466,7 +466,7 @@ public class LevelUpUI : MonoBehaviour
         sepRect.sizeDelta = new Vector2(0f, 14f);
     }
 
-    private void CreateButton(string label, Action onClick, float height = 56f)
+    private void CreateButton(string label, Action onClick, float height = 40f)
     {
         GameObject btnObj = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
         btnObj.transform.SetParent(_contentContainer, false);
@@ -491,7 +491,7 @@ public class LevelUpUI : MonoBehaviour
 
         TextMeshProUGUI text = textObj.GetComponent<TextMeshProUGUI>();
         text.text = label;
-        text.fontSize = 20;
+        text.fontSize = 16;
         text.fontStyle = FontStyles.Bold;
         text.alignment = TextAlignmentOptions.Center;
         text.color = Color.white;

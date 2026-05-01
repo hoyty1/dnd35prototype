@@ -256,7 +256,7 @@ public class CombatEndXPUI : MonoBehaviour
         containerRect.anchorMax = new Vector2(1f, 0f);
         containerRect.pivot = new Vector2(0.5f, 0f);
         containerRect.anchoredPosition = new Vector2(0f, 12f);
-        containerRect.sizeDelta = new Vector2(-80f, 94f);
+        containerRect.sizeDelta = new Vector2(-80f, 64f);
 
         Image footerBg = buttonContainer.GetComponent<Image>();
         footerBg.color = new Color(0.05f, 0.07f, 0.12f, 0.9f);
@@ -266,10 +266,11 @@ public class CombatEndXPUI : MonoBehaviour
             typeof(RectTransform), typeof(Image), typeof(Button));
 
         RectTransform buttonRect = buttonObj.GetComponent<RectTransform>();
-        buttonRect.anchorMin = new Vector2(0.28f, 0.14f);
-        buttonRect.anchorMax = new Vector2(0.72f, 0.86f);
-        buttonRect.offsetMin = Vector2.zero;
-        buttonRect.offsetMax = Vector2.zero;
+        buttonRect.anchorMin = new Vector2(0.5f, 0.5f);
+        buttonRect.anchorMax = new Vector2(0.5f, 0.5f);
+        buttonRect.pivot = new Vector2(0.5f, 0.5f);
+        buttonRect.anchoredPosition = Vector2.zero;
+        buttonRect.sizeDelta = new Vector2(150f, 40f);
 
         Image buttonBg = buttonObj.GetComponent<Image>();
         buttonBg.color = new Color(0.2f, 0.5f, 0.8f, 1f);
@@ -298,7 +299,7 @@ public class CombatEndXPUI : MonoBehaviour
 
         TextMeshProUGUI buttonText = textObj.GetComponent<TextMeshProUGUI>();
         buttonText.text = "Continue";
-        buttonText.fontSize = 30;
+        buttonText.fontSize = 16;
         buttonText.fontStyle = FontStyles.Bold;
         buttonText.color = Color.white;
         buttonText.alignment = TextAlignmentOptions.Center;

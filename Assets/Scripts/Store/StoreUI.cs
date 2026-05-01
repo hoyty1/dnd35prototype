@@ -156,6 +156,14 @@ public class StoreUI : MonoBehaviour
         Debug.Log("[UI] === FULLSCREEN UI UPDATES ===");
         Debug.Log("[Store] Panel: (0,0) to (1,1) - FULLSCREEN");
         Debug.Log("[UI] Store window updated with fullscreen proportions and larger typography/buttons.");
+        Debug.Log("[UI] Reverting button sizes to prevent overlapping");
+        Debug.Log("[UI] Action buttons: 150x40 (reverted from 200x60)");
+        Debug.Log("[UI] Category buttons: 80x30 (reverted from 120x45)");
+        Debug.Log("[UI] Item buttons: 55-70x35-45 (reverted from 80x50)");
+        Debug.Log("[UI] Spacing: 5px (reverted from 10px)");
+        Debug.Log("[UI] Padding: 5px (reverted from 10-20px)");
+        Debug.Log("[UI] Button text: 14-16px (reverted from 18-20px)");
+        Debug.Log("[UI] Fullscreen panels maintained");
 
         _root.SetActive(false);
     }
@@ -409,11 +417,11 @@ public class StoreUI : MonoBehaviour
 
         GameObject row = CreatePanel(parent, $"Buy_{entry.ItemId}",
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
-            Vector2.zero, new Vector2(0f, 92f), new Color(0.16f, 0.18f, 0.25f, 1f));
+            Vector2.zero, new Vector2(0f, 70f), new Color(0.16f, 0.18f, 0.25f, 1f));
 
         HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
-        layout.padding = new RectOffset(10, 10, 8, 8);
-        layout.spacing = 10f;
+        layout.padding = new RectOffset(5, 5, 5, 5);
+        layout.spacing = 5f;
         layout.childControlWidth = true;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = false;
@@ -459,7 +467,7 @@ public class StoreUI : MonoBehaviour
         CreateSmallActionButton(row.transform, "BuyButton", "BUY", new Color(0.2f, 0.56f, 0.26f), () => BuyItem(entry));
 
         LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-        rowLayout.preferredHeight = 92f;
+        rowLayout.preferredHeight = 70f;
     }
 
     private void CreateSellRow(Transform parent, SellEntry entry)
@@ -468,11 +476,11 @@ public class StoreUI : MonoBehaviour
 
         GameObject row = CreatePanel(parent, $"Sell_{entry.Item.Name}",
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
-            Vector2.zero, new Vector2(0f, 88f), new Color(0.22f, 0.17f, 0.17f, 1f));
+            Vector2.zero, new Vector2(0f, 70f), new Color(0.22f, 0.17f, 0.17f, 1f));
 
         HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
-        layout.padding = new RectOffset(10, 10, 8, 8);
-        layout.spacing = 10f;
+        layout.padding = new RectOffset(5, 5, 5, 5);
+        layout.spacing = 5f;
         layout.childControlWidth = true;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = false;
@@ -508,7 +516,7 @@ public class StoreUI : MonoBehaviour
         CreateSmallActionButton(row.transform, "SellButton", $"SELL\n{sellPrice} gp", new Color(0.58f, 0.37f, 0.18f), () => SellItem(entry));
 
         LayoutElement rowLayout = row.AddComponent<LayoutElement>();
-        rowLayout.preferredHeight = 88f;
+        rowLayout.preferredHeight = 70f;
     }
 
     private void BuyItem(StoreInventory.StoreItemEntry entry)
@@ -631,9 +639,10 @@ public class StoreUI : MonoBehaviour
         buttonObj.transform.SetParent(parent, false);
 
         LayoutElement layout = buttonObj.GetComponent<LayoutElement>();
-        layout.minWidth = 100f;
-        layout.preferredWidth = 120f;
-        layout.preferredHeight = 50f;
+        bool isMultiLine = !string.IsNullOrEmpty(label) && label.Contains("\n");
+        layout.minWidth = isMultiLine ? 70f : 55f;
+        layout.preferredWidth = isMultiLine ? 70f : 55f;
+        layout.preferredHeight = isMultiLine ? 45f : 35f;
 
         Image image = buttonObj.GetComponent<Image>();
         image.color = color;
@@ -643,7 +652,7 @@ public class StoreUI : MonoBehaviour
 
         CreateText(buttonObj.transform, "Label", label,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            Vector2.zero, 16, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            Vector2.zero, 13, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
 
         return button;
     }
@@ -685,8 +694,8 @@ public class StoreUI : MonoBehaviour
         contentRect.anchoredPosition = Vector2.zero;
 
         VerticalLayoutGroup layout = content.GetComponent<VerticalLayoutGroup>();
-        layout.padding = new RectOffset(6, 6, 6, 6);
-        layout.spacing = 6f;
+        layout.padding = new RectOffset(5, 5, 5, 5);
+        layout.spacing = 5f;
         layout.childControlWidth = true;
         layout.childControlHeight = true;
         layout.childForceExpandWidth = true;

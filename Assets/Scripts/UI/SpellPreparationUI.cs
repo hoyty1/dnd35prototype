@@ -162,29 +162,29 @@ public class SpellPreparationUI : MonoBehaviour
         float btnY = -PANEL_H / 2f + 35;
 
         _autoPrepareButton = MakeButton(_rootPanel.transform, "AutoPrepBtn",
-            new Vector2(-140, btnY), new Vector2(280, 56),
-            "Auto-Prepare ⚡", new Color(0.3f, 0.3f, 0.5f), Color.white, 16);
+            new Vector2(-165, btnY), new Vector2(150, 40),
+            "Auto-Prepare ⚡", new Color(0.3f, 0.3f, 0.5f), Color.white, 14);
         _autoPrepareButton.onClick.AddListener(OnAutoPrepare);
 
         _confirmButton = MakeButton(_rootPanel.transform, "ConfirmBtn",
-            new Vector2(140, btnY), new Vector2(280, 56),
-            "Confirm Preparation ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 16);
+            new Vector2(0, btnY), new Vector2(150, 40),
+            "Confirm Preparation ✓", new Color(0.2f, 0.6f, 0.2f), Color.white, 14);
         _confirmButton.onClick.AddListener(OnConfirm);
 
         _skipCharacterButton = MakeButton(_rootPanel.transform, "SkipCharacterBtn",
-            new Vector2(-360, btnY), new Vector2(190, 56),
+            new Vector2(-330, btnY), new Vector2(150, 40),
             "Skip", new Color(0.45f, 0.35f, 0.18f), Color.white, 14);
         _skipCharacterButton.onClick.AddListener(OnSkipCharacterPressed);
         _skipCharacterButton.gameObject.SetActive(false);
 
         _backToMenuButton = MakeButton(_rootPanel.transform, "BackToMenuBtn",
-            new Vector2(-210, btnY), new Vector2(190, 56),
+            new Vector2(165, btnY), new Vector2(150, 40),
             "Back", new Color(0.5f, 0.24f, 0.24f), Color.white, 14);
         _backToMenuButton.onClick.AddListener(OnBackToMenuPressed);
         _backToMenuButton.gameObject.SetActive(false);
 
         _startEncounterButton = MakeButton(_rootPanel.transform, "StartEncounterBtn",
-            new Vector2(360, btnY), new Vector2(190, 56),
+            new Vector2(330, btnY), new Vector2(150, 40),
             "Start", new Color(0.2f, 0.56f, 0.26f), Color.white, 14);
         _startEncounterButton.onClick.AddListener(OnStartEncounterPressed);
         _startEncounterButton.gameObject.SetActive(false);

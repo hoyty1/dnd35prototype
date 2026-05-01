@@ -206,8 +206,8 @@ public class EncounterSelectionUI : MonoBehaviour
         _contentContainer.sizeDelta = new Vector2(0f, 0f);
 
         VerticalLayoutGroup layoutGroup = content.GetComponent<VerticalLayoutGroup>();
-        layoutGroup.spacing = 8f;
-        layoutGroup.padding = new RectOffset(8, 8, 8, 8);
+        layoutGroup.spacing = 5f;
+        layoutGroup.padding = new RectOffset(5, 5, 5, 5);
         layoutGroup.childAlignment = TextAnchor.UpperCenter;
         layoutGroup.childControlHeight = false;
         layoutGroup.childControlWidth = true;
@@ -281,7 +281,7 @@ public class EncounterSelectionUI : MonoBehaviour
         footerRect.offsetMax = Vector2.zero;
 
         HorizontalLayoutGroup footerLayout = footer.GetComponent<HorizontalLayoutGroup>();
-        footerLayout.spacing = 12f;
+        footerLayout.spacing = 5f;
         footerLayout.childAlignment = TextAnchor.MiddleCenter;
         footerLayout.childControlWidth = true;
         footerLayout.childControlHeight = true;
@@ -300,9 +300,10 @@ public class EncounterSelectionUI : MonoBehaviour
         buttonObj.transform.SetParent(parent, false);
 
         LayoutElement le = buttonObj.GetComponent<LayoutElement>();
-        le.preferredWidth = 220f;
-        le.preferredHeight = 58f;
-        le.minHeight = 58f;
+        le.minWidth = 150f;
+        le.preferredWidth = 150f;
+        le.preferredHeight = 40f;
+        le.minHeight = 40f;
 
         Image image = buttonObj.GetComponent<Image>();
         image.color = color;
@@ -324,7 +325,7 @@ public class EncounterSelectionUI : MonoBehaviour
         CreateText(
             buttonObj.transform,
             label,
-            22,
+            16,
             FontStyle.Bold,
             Color.white,
             new Vector2(0.5f, 0.5f),

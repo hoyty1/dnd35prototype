@@ -3080,8 +3080,8 @@ public class CharacterCreationUI : MonoBehaviour
     private Button MakeButton(Transform parent, string name, Vector2 pos, Vector2 size,
         string label, Color bgColor, Color textColor, int fontSize)
     {
-        Vector2 adjustedSize = new Vector2(size.x * 1.08f, size.y * 1.15f);
-        Button btn = UIFactory.CreateButton(parent, label, null, adjustedSize, bgColor, name, _font, fontSize + 2, textColor);
+        Vector2 adjustedSize = size;
+        Button btn = UIFactory.CreateButton(parent, label, null, adjustedSize, bgColor, name, _font, fontSize, textColor);
 
         RectTransform rt = btn.GetComponent<RectTransform>();
         UIFactory.SetRectTransform(rt,
