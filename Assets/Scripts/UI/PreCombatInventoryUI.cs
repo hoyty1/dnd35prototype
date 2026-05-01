@@ -378,7 +378,6 @@ public class PreCombatInventoryUI : MonoBehaviour
     private Button _sortButton;
     private Button _clearStashButton;
     private Button _beginCombatButton;
-    private Button _skipButton;
     private Button _backButton;
 
     private GameObject _tooltipPanel;
@@ -424,7 +423,6 @@ public class PreCombatInventoryUI : MonoBehaviour
     private StashSortMode _stashSort = StashSortMode.Name;
 
     private Action _onBeginCombat;
-    private Action _onSkipInventory;
     private Action _onBack;
     private Action _onClosed;
     private bool _wasOpen;
@@ -438,7 +436,6 @@ public class PreCombatInventoryUI : MonoBehaviour
         PartyStash stash,
         List<CharacterController> partyMembers,
         Action onBeginCombat,
-        Action onSkipInventory,
         Action onBack,
         Action onClosed = null)
     {
@@ -451,7 +448,6 @@ public class PreCombatInventoryUI : MonoBehaviour
         _stash = stash;
         _partyMembers = partyMembers != null ? new List<CharacterController>(partyMembers) : new List<CharacterController>();
         _onBeginCombat = onBeginCombat;
-        _onSkipInventory = onSkipInventory;
         _onBack = onBack;
         _onClosed = onClosed;
         _isClosing = false;
@@ -516,7 +512,6 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (suppressCallback)
         {
             _onBeginCombat = null;
-            _onSkipInventory = null;
             _onBack = null;
         }
 
@@ -1116,9 +1111,11 @@ public class PreCombatInventoryUI : MonoBehaviour
         footerLayout.childForceExpandWidth = true;
         footerLayout.childForceExpandHeight = true;
 
-        _backButton = CreateFooterButton(footer.transform, "Back", new Color(0.45f, 0.22f, 0.22f), OnBackPressed);
-        _skipButton = CreateFooterButton(footer.transform, "Skip Inventory", new Color(0.22f, 0.34f, 0.58f), OnSkipPressed);
-        _beginCombatButton = CreateFooterButton(footer.transform, "Begin Combat", new Color(0.2f, 0.52f, 0.29f), OnBeginCombatPressed);
+        _backButton = CreateFooterButton(footer.transform, "Back to Hub", new Color(0.45f, 0.22f, 0.22f), OnBackPressed);
+        _beginCombatButton = CreateFooterButton(footer.transform, "Start Combat", new Color(0.2f, 0.52f, 0.29f), OnBeginCombatPressed);
+
+        Debug.Log("[PreCombatInventory] Skip button has been removed");
+        Debug.Log("[PreCombatInventory] Available buttons: Back to Hub, Start Combat");
     }
 
     private void BuildTooltip()
@@ -4349,11 +4346,6 @@ public class PreCombatInventoryUI : MonoBehaviour
         InvokeActionAfterClose(ref _onBeginCombat, "BeginCombat");
     }
 
-    private void OnSkipPressed()
-    {
-        InvokeActionAfterClose(ref _onSkipInventory, "SkipInventory");
-    }
-
     private void OnBackPressed()
     {
         InvokeActionAfterClose(ref _onBack, "Back");
@@ -4372,7 +4364,6 @@ public class PreCombatInventoryUI : MonoBehaviour
 
         // Clear the other action callbacks too so button spam cannot re-enter game flow callbacks.
         _onBeginCombat = null;
-        _onSkipInventory = null;
         _onBack = null;
 
         Close(suppressCallback: true);

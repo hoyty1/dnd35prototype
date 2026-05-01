@@ -1178,7 +1178,6 @@ public partial class GameManager : MonoBehaviour
             PartyStash,
             partyMembers,
             onBeginCombat: () => StartEncounterFromPreCombat("Stash.BeginCombat"),
-            onSkipInventory: () => StartEncounterFromPreCombat("Stash.SkipInventory"),
             onBack: () => ReturnToPreCombatHubFromSubWindow("Stash.Back"));
     }
 
