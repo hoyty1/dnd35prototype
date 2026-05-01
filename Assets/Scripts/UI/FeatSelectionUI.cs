@@ -353,6 +353,37 @@ public class FeatSelectionUI : MonoBehaviour
         Debug.Log("[FeatSelectionUI] Closed.");
     }
 
+    /// <summary>
+    /// Reuses the existing feat selection panel for level-up flow.
+    /// </summary>
+    public void ShowForLevelUp(CharacterController character, int featsToSelect, Action<List<string>> onComplete)
+    {
+        if (character == null || character.Stats == null)
+        {
+            Debug.LogWarning("[FeatSelectionUI] ShowForLevelUp called with null character/stats.");
+            onComplete?.Invoke(new List<string>());
+            return;
+        }
+
+        int safeFeatCount = Mathf.Max(0, featsToSelect);
+        if (safeFeatCount == 0)
+        {
+            Debug.Log($"[FeatSelectionUI] No feats to select for {character.Stats.CharacterName}.");
+            onComplete?.Invoke(new List<string>());
+            return;
+        }
+
+        Debug.Log($"[FeatSelectionUI] Showing level-up feat selection for {character.Stats.CharacterName} ({safeFeatCount} feat(s))");
+
+        OnFeatsConfirmed = selected => onComplete?.Invoke(selected ?? new List<string>());
+        OpenForSelection(
+            character.Stats,
+            safeFeatCount,
+            fighterBonusOnly: false,
+            title: safeFeatCount > 1 ? $"Select {safeFeatCount} Level-Up Feats" : "Select Level-Up Feat",
+            subtitle: "Choose your new feat(s) for this level.");
+    }
+
     // ========================================================================
     // POPULATE FEAT LIST
     // ========================================================================

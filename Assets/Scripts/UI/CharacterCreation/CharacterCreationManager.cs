@@ -1,0 +1,275 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// Reuses character creation selection panels during post-combat level-up.
+/// This manager currently orchestrates feat, skill, and spell choices.
+/// </summary>
+public class CharacterCreationManager : MonoBehaviour
+{
+    private bool _isLevelUpMode;
+    private CharacterController _levelingCharacter;
+    private LevelUpData _levelUpData;
+    private Action _levelUpCompleteCallback;
+
+    private FeatSelectionUI _featSelectionUI;
+    private SkillsUIPanel _skillsUI;
+    private SpellSelectionUI _spellSelectionUI;
+
+    /// <summary>
+    /// Existing/new-character creation entry point (placeholder for compatibility).
+    /// </summary>
+    public void StartCharacterCreation(Action onComplete)
+    {
+        _isLevelUpMode = false;
+        onComplete?.Invoke();
+    }
+
+    /// <summary>
+    /// Starts level-up flow using existing character creation components.
+    /// </summary>
+    public void StartLevelUpFlow(CharacterController character, LevelUpData levelUpData, Action onComplete)
+    {
+        if (character == null || character.Stats == null)
+        {
+            Debug.LogWarning("[CharacterCreationManager] StartLevelUpFlow called with null character/stats.");
+            onComplete?.Invoke();
+            return;
+        }
+
+        _isLevelUpMode = true;
+        _levelingCharacter = character;
+        _levelUpData = levelUpData ?? new LevelUpData { Character = character };
+        _levelUpCompleteCallback = onComplete;
+
+        Debug.Log($"[CharacterCreationManager] Starting level-up flow for {character.Stats.CharacterName} (level {character.Stats.Level})");
+
+        DetermineLevelUpChoices();
+    }
+
+    private void DetermineLevelUpChoices()
+    {
+        if (!_isLevelUpMode || _levelingCharacter == null)
+        {
+            CompleteLevelUp();
+            return;
+        }
+
+        StartLevelUpSequence();
+    }
+
+    private void StartLevelUpSequence()
+    {
+        // Class selection and ability score are currently handled outside this manager.
+        // This manager focuses on reusing existing feat/skill/spell panels.
+        ShowFeatSelection();
+    }
+
+    private void ShowFeatSelection()
+    {
+        if (_levelUpData == null || !_levelUpData.NeedsFeat)
+        {
+            ShowSkillSelection();
+            return;
+        }
+
+        FeatSelectionUI featUI = FindOrCreateFeatSelectionUI();
+        if (featUI == null)
+        {
+            Debug.LogWarning("[CharacterCreationManager] FeatSelectionUI unavailable. Skipping feat step.");
+            ShowSkillSelection();
+            return;
+        }
+
+        featUI.ShowForLevelUp(_levelingCharacter, 1, selectedFeats =>
+        {
+            CharacterStats stats = _levelingCharacter != null ? _levelingCharacter.Stats : null;
+            if (stats != null && selectedFeats != null)
+            {
+                for (int i = 0; i < selectedFeats.Count; i++)
+                {
+                    string featName = selectedFeats[i];
+                    if (string.IsNullOrWhiteSpace(featName))
+                        continue;
+
+                    if (!stats.Feats.Contains(featName))
+                    {
+                        stats.Feats.Add(featName);
+                        Debug.Log($"[CharacterCreationManager] Applied level-up feat: {featName}");
+                    }
+                }
+            }
+
+            ShowSkillSelection();
+        });
+    }
+
+    private void ShowSkillSelection()
+    {
+        int points = _levelUpData != null ? Mathf.Max(0, _levelUpData.SkillPointsToAllocate) : 0;
+        if (points <= 0)
+        {
+            ShowSpellSelection();
+            return;
+        }
+
+        SkillsUIPanel skillsUI = FindOrCreateSkillSelectionUI();
+        if (skillsUI == null)
+        {
+            Debug.LogWarning("[CharacterCreationManager] SkillsUIPanel unavailable. Skipping skill step.");
+            ShowSpellSelection();
+            return;
+        }
+
+        skillsUI.ShowForLevelUp(_levelingCharacter, points, ShowSpellSelection);
+    }
+
+    private void ShowSpellSelection()
+    {
+        if (_levelUpData == null || !_levelUpData.NeedsSpellSelection)
+        {
+            CompleteLevelUp();
+            return;
+        }
+
+        SpellSelectionUI spellUI = FindOrCreateSpellSelectionUI();
+        if (spellUI == null)
+        {
+            Debug.LogWarning("[CharacterCreationManager] SpellSelectionUI unavailable. Skipping spell step.");
+            CompleteLevelUp();
+            return;
+        }
+
+        spellUI.ShowForLevelUp(_levelingCharacter, selectedSpellIds =>
+        {
+            ApplyLevelUpSpellSelection(selectedSpellIds);
+            CompleteLevelUp();
+        });
+    }
+
+    private void ApplyLevelUpSpellSelection(List<string> selectedSpellIds)
+    {
+        if (_levelingCharacter == null || selectedSpellIds == null || selectedSpellIds.Count == 0)
+            return;
+
+        SpellcastingComponent spellcasting = _levelingCharacter.GetComponent<SpellcastingComponent>();
+        if (spellcasting == null)
+        {
+            Debug.LogWarning("[CharacterCreationManager] No SpellcastingComponent found while applying level-up spells.");
+            return;
+        }
+
+        SpellDatabase.Init();
+
+        if (spellcasting.SelectedSpellIds == null)
+            spellcasting.SelectedSpellIds = new List<string>();
+
+        for (int i = 0; i < selectedSpellIds.Count; i++)
+        {
+            string spellId = selectedSpellIds[i];
+            if (string.IsNullOrWhiteSpace(spellId))
+                continue;
+
+            if (!spellcasting.SelectedSpellIds.Contains(spellId))
+                spellcasting.SelectedSpellIds.Add(spellId);
+
+            SpellData spell = SpellDatabase.GetSpell(spellId);
+            if (spell != null && !spellcasting.KnownSpells.Exists(s => s != null && s.SpellId == spellId))
+                spellcasting.KnownSpells.Add(spell);
+        }
+
+        CharacterStats stats = _levelingCharacter.Stats;
+        if (stats != null)
+        {
+            if (stats.IsWizard)
+                spellcasting.AutoPrepareWizardSlots();
+            else if (stats.IsCleric)
+                spellcasting.AutoPrepareClericSlots();
+            else if (string.Equals(stats.CharacterClass, "Druid", StringComparison.OrdinalIgnoreCase))
+                spellcasting.AutoPrepareDruidSlots();
+
+            spellcasting.SyncPreparedSpellsFromSlots();
+        }
+
+        Debug.Log($"[CharacterCreationManager] Applied {selectedSpellIds.Count} level-up spell selection(s) for {_levelingCharacter.Stats.CharacterName}.");
+    }
+
+    private void CompleteLevelUp()
+    {
+        string name = _levelingCharacter != null && _levelingCharacter.Stats != null
+            ? _levelingCharacter.Stats.CharacterName
+            : "Unknown";
+
+        Debug.Log($"[CharacterCreationManager] Level-up flow complete for {name}");
+
+        Action callback = _levelUpCompleteCallback;
+
+        _isLevelUpMode = false;
+        _levelingCharacter = null;
+        _levelUpData = null;
+        _levelUpCompleteCallback = null;
+
+        callback?.Invoke();
+    }
+
+    private FeatSelectionUI FindOrCreateFeatSelectionUI()
+    {
+        if (_featSelectionUI != null)
+            return _featSelectionUI;
+
+        _featSelectionUI = FindObjectOfType<FeatSelectionUI>();
+        if (_featSelectionUI != null)
+            return _featSelectionUI;
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+            return null;
+
+        GameObject uiObj = new GameObject("FeatSelectionUI", typeof(RectTransform));
+        uiObj.transform.SetParent(canvas.transform, false);
+        _featSelectionUI = uiObj.AddComponent<FeatSelectionUI>();
+        _featSelectionUI.BuildUI(canvas);
+        return _featSelectionUI;
+    }
+
+    private SkillsUIPanel FindOrCreateSkillSelectionUI()
+    {
+        if (_skillsUI != null)
+            return _skillsUI;
+
+        _skillsUI = FindObjectOfType<SkillsUIPanel>();
+        if (_skillsUI != null)
+            return _skillsUI;
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+            return null;
+
+        GameObject uiObj = new GameObject("SkillsUIPanel", typeof(RectTransform));
+        uiObj.transform.SetParent(canvas.transform, false);
+        _skillsUI = uiObj.AddComponent<SkillsUIPanel>();
+        _skillsUI.BuildUI(canvas);
+        return _skillsUI;
+    }
+
+    private SpellSelectionUI FindOrCreateSpellSelectionUI()
+    {
+        if (_spellSelectionUI != null)
+            return _spellSelectionUI;
+
+        _spellSelectionUI = FindObjectOfType<SpellSelectionUI>();
+        if (_spellSelectionUI != null)
+            return _spellSelectionUI;
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+            return null;
+
+        GameObject uiObj = new GameObject("SpellSelectionUI", typeof(RectTransform));
+        uiObj.transform.SetParent(canvas.transform, false);
+        _spellSelectionUI = uiObj.AddComponent<SpellSelectionUI>();
+        _spellSelectionUI.BuildUI(canvas);
+        return _spellSelectionUI;
+    }
+}

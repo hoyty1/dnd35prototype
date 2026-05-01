@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -13,18 +12,18 @@ public class LevelUpUI : MonoBehaviour
     private LevelUpData _currentLevelUp;
 
     private Action _onComplete;
+    private Transform _contentContainer;
+    private CharacterCreationManager _characterCreationManager;
 
     private enum LevelUpStep
     {
         Summary,
         AbilityIncrease,
-        FeatSelection,
-        SkillAllocation,
-        SpellSelection
+        ReuseCharacterCreationFlow
     }
 
     private LevelUpStep _currentStep;
-    private Transform _contentContainer;
+    private bool _waitingForExternalFlow;
 
     public void ShowForCharacter(CharacterController character, Action onComplete)
     {
@@ -45,7 +44,6 @@ public class LevelUpUI : MonoBehaviour
         LevelUpData levelUpData = LevelUpCalculator.CalculateLevelUp(character, oldLevel, newLevel);
 
         ShowLevelUps(new List<LevelUpData> { levelUpData }, onComplete);
-        Debug.Log("[LevelUpUI] Panel activated");
     }
 
     public void ShowLevelUps(List<LevelUpData> levelUps, Action onCompleteCallback)
@@ -88,8 +86,8 @@ public class LevelUpUI : MonoBehaviour
         _currentLevelUp = _levelUpQueue[_currentIndex];
         string name = GetCharacterName(_currentLevelUp.Character);
         Debug.Log($"[LevelUpUI] Showing level-up for {name}");
-        Debug.Log($"[LevelUpUI] Building content for {name}");
 
+        _waitingForExternalFlow = false;
         _currentStep = LevelUpStep.Summary;
         ShowCurrentStep();
     }
@@ -109,25 +107,8 @@ public class LevelUpUI : MonoBehaviour
                     NextStep();
                 break;
 
-            case LevelUpStep.FeatSelection:
-                if (_currentLevelUp.NeedsFeat)
-                    ShowFeatSelection();
-                else
-                    NextStep();
-                break;
-
-            case LevelUpStep.SkillAllocation:
-                if (_currentLevelUp.SkillPointsToAllocate > 0)
-                    ShowSkillAllocation();
-                else
-                    NextStep();
-                break;
-
-            case LevelUpStep.SpellSelection:
-                if (_currentLevelUp.NeedsSpellSelection)
-                    ShowSpellSelection();
-                else
-                    NextStep();
+            case LevelUpStep.ReuseCharacterCreationFlow:
+                BeginReusableSelectionFlow();
                 break;
         }
     }
@@ -136,20 +117,26 @@ public class LevelUpUI : MonoBehaviour
     {
         _currentStep++;
 
-        if (_currentStep > LevelUpStep.SpellSelection)
+        if (_currentStep > LevelUpStep.ReuseCharacterCreationFlow)
         {
-            ApplyLevelUp();
-            _currentIndex++;
-            ShowNextCharacter();
+            CompleteCurrentCharacter();
             return;
         }
 
         ShowCurrentStep();
     }
 
+    private void CompleteCurrentCharacter()
+    {
+        string name = GetCharacterName(_currentLevelUp.Character);
+        Debug.Log($"[LevelUpUI] Level-up complete for {name}");
+
+        _currentIndex++;
+        ShowNextCharacter();
+    }
+
     private void ShowSummary()
     {
-        Debug.Log("[LevelUpUI] Showing summary");
         ClearContent();
 
         CharacterStats stats = _currentLevelUp.Character != null ? _currentLevelUp.Character.Stats : null;
@@ -197,7 +184,6 @@ public class LevelUpUI : MonoBehaviour
 
     private void ShowAbilityIncrease()
     {
-        Debug.Log("[LevelUpUI] Showing ability increase");
         ClearContent();
 
         CreateTitle("Choose Ability Score Increase");
@@ -232,10 +218,30 @@ public class LevelUpUI : MonoBehaviour
 
         CreateButton(label, () =>
         {
-            _currentLevelUp.SelectedAbility = code;
-            Debug.Log($"[LevelUpUI] Selected {abilityName} increase");
+            ApplyAbilityIncrease(code);
             NextStep();
         });
+    }
+
+    private void ApplyAbilityIncrease(string abilityCode)
+    {
+        CharacterStats stats = _currentLevelUp.Character != null ? _currentLevelUp.Character.Stats : null;
+        if (stats == null)
+            return;
+
+        _currentLevelUp.SelectedAbility = abilityCode;
+
+        switch (abilityCode)
+        {
+            case "STR": stats.BaseSTR++; stats.STR++; break;
+            case "DEX": stats.BaseDEX++; stats.DEX++; break;
+            case "CON": stats.BaseCON++; stats.CON++; break;
+            case "INT": stats.BaseINT++; stats.INT++; break;
+            case "WIS": stats.BaseWIS++; stats.WIS++; break;
+            case "CHA": stats.BaseCHA++; stats.CHA++; break;
+        }
+
+        Debug.Log($"[LevelUpUI] Applied +1 to {abilityCode}");
     }
 
     private static int GetModifier(int score)
@@ -243,227 +249,75 @@ public class LevelUpUI : MonoBehaviour
         return Mathf.FloorToInt((score - 10) / 2f);
     }
 
-    private void ShowFeatSelection()
+    private void BeginReusableSelectionFlow()
     {
-        Debug.Log("[LevelUpUI] Showing feat selection");
-        ClearContent();
-
-        CreateTitle("Choose Feat");
-        CreateInfoText("Select a feat from the list:");
-        CreateSeparator();
-
-        List<FeatData> availableFeats = GetAvailableFeats(_currentLevelUp.Character);
-        if (availableFeats.Count == 0)
-        {
-            CreateInfoText("No valid feats available right now. Skipping feat selection.", true, Color.yellow);
-            CreateButton("Continue", NextStep);
+        if (_waitingForExternalFlow)
             return;
-        }
 
-        for (int i = 0; i < availableFeats.Count; i++)
-            CreateFeatButton(availableFeats[i]);
-    }
+        _waitingForExternalFlow = true;
 
-    private List<FeatData> GetAvailableFeats(CharacterController character)
-    {
-        CharacterStats stats = character != null ? character.Stats : null;
-        if (stats == null)
-            return new List<FeatData>();
+        ClearContent();
+        CreateTitle("Level-Up Choices");
+        CreateInfoText("Opening existing character creation selection panels...", true, Color.cyan);
 
-        FeatDefinitions.Init();
-
-        List<FeatDefinition> availableDefs = FeatDefinitions.GetAvailableFeats(stats, fighterBonusOnly: false);
-        availableDefs.Sort((a, b) => string.Compare(a.FeatName, b.FeatName, StringComparison.Ordinal));
-
-        List<FeatData> feats = new List<FeatData>();
-        for (int i = 0; i < availableDefs.Count; i++)
+        CharacterController character = _currentLevelUp != null ? _currentLevelUp.Character : null;
+        if (character == null || character.Stats == null)
         {
-            FeatDefinition feat = availableDefs[i];
-            feats.Add(new FeatData(
-                feat.FeatName,
-                feat.Description,
-                feat.GetPrerequisitesString(),
-                feat.Benefit != null ? feat.Benefit.Description : string.Empty));
-        }
-
-        return feats;
-    }
-
-    private void CreateFeatButton(FeatData feat)
-    {
-        string prereq = string.IsNullOrWhiteSpace(feat.Prerequisites) ? "None" : feat.Prerequisites;
-        string benefit = string.IsNullOrWhiteSpace(feat.Benefit) ? feat.Description : feat.Benefit;
-        string label = $"{feat.FeatName}\nPrereq: {prereq}\n{benefit}";
-
-        CreateButton(label, () =>
-        {
-            _currentLevelUp.SelectedFeat = feat;
-            Debug.Log($"[LevelUpUI] Selected feat: {feat.FeatName}");
+            Debug.LogWarning("[LevelUpUI] Missing character data for reusable level-up flow.");
+            _waitingForExternalFlow = false;
             NextStep();
-        }, 76f);
-    }
-
-    private void ShowSkillAllocation()
-    {
-        Debug.Log("[LevelUpUI] Showing skill allocation");
-        ClearContent();
-
-        CreateTitle("Allocate Skill Points");
-        CreateInfoText($"You have {_currentLevelUp.SkillPointsToAllocate} skill points to allocate.");
-
-        CreateSeparator();
-        CreateInfoText("Auto-allocating skill points based on class skills for now.");
-
-        AutoAllocateSkills();
-
-        foreach (KeyValuePair<string, int> allocation in _currentLevelUp.SkillPointsAllocated)
-            CreateInfoText($"• {allocation.Key}: +{allocation.Value}");
-
-        CreateButton("Continue", NextStep);
-    }
-
-    private void AutoAllocateSkills()
-    {
-        _currentLevelUp.SkillPointsAllocated.Clear();
-
-        CharacterStats stats = _currentLevelUp.Character != null ? _currentLevelUp.Character.Stats : null;
-        int points = Mathf.Max(0, _currentLevelUp.SkillPointsToAllocate);
-
-        if (stats == null || stats.Skills == null || stats.Skills.Count == 0 || points == 0)
-        {
-            if (points > 0)
-                _currentLevelUp.SkillPointsAllocated["Auto"] = points;
-            Debug.Log($"[LevelUpUI] Auto-allocated {points} skill points");
             return;
         }
 
-        List<Skill> classSkills = stats.Skills.Values
-            .Where(s => s != null && s.IsClassSkill)
-            .OrderBy(s => s.Ranks)
-            .ThenBy(s => s.SkillName)
-            .ToList();
-
-        if (classSkills.Count == 0)
-            classSkills = stats.Skills.Values.Where(s => s != null).OrderBy(s => s.Ranks).ThenBy(s => s.SkillName).ToList();
-
-        int idx = 0;
-        while (points > 0 && classSkills.Count > 0)
+        CharacterCreationManager manager = GetOrCreateCharacterCreationManager();
+        if (manager == null)
         {
-            Skill skill = classSkills[idx % classSkills.Count];
-            if (!_currentLevelUp.SkillPointsAllocated.ContainsKey(skill.SkillName))
-                _currentLevelUp.SkillPointsAllocated[skill.SkillName] = 0;
-
-            _currentLevelUp.SkillPointsAllocated[skill.SkillName]++;
-            points--;
-            idx++;
+            Debug.LogWarning("[LevelUpUI] CharacterCreationManager unavailable. Finishing level-up without reusable panels.");
+            _waitingForExternalFlow = false;
+            NextStep();
+            return;
         }
 
-        Debug.Log($"[LevelUpUI] Auto-allocated {_currentLevelUp.SkillPointsToAllocate} skill points");
+        _panel.SetActive(false);
+
+        manager.StartLevelUpFlow(character, _currentLevelUp, () =>
+        {
+            if (_panel != null)
+                _panel.SetActive(true);
+
+            _waitingForExternalFlow = false;
+            NextStep();
+        });
     }
 
-    private void ShowSpellSelection()
+    private CharacterCreationManager GetOrCreateCharacterCreationManager()
     {
-        Debug.Log("[LevelUpUI] Showing spell selection");
-        ClearContent();
+        if (_characterCreationManager != null)
+            return _characterCreationManager;
 
-        CreateTitle("Learn New Spells");
+        _characterCreationManager = FindObjectOfType<CharacterCreationManager>();
+        if (_characterCreationManager != null)
+            return _characterCreationManager;
 
-        CharacterStats stats = _currentLevelUp.Character != null ? _currentLevelUp.Character.Stats : null;
-        string className = stats != null ? stats.CharacterClass : string.Empty;
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+            return null;
 
-        if (className == "Wizard")
-        {
-            CreateInfoText("Wizards learn 2 new spells per level.");
-            CreateInfoText("(Auto-selecting for now)");
-            AutoSelectSpells(2);
-        }
-        else if (className == "Sorcerer")
-        {
-            CreateInfoText("Sorcerers learn 1 new spell at certain levels.");
-            CreateInfoText("(Auto-selecting for now)");
-            AutoSelectSpells(1);
-        }
-        else if (className == "Cleric" || className == "Druid")
-        {
-            CreateInfoText("Divine casters gain access to all spells of available levels.");
-        }
-        else if (className == "Bard" || className == "Paladin" || className == "Ranger")
-        {
-            CreateInfoText("Known spell progression applies; selection UI is placeholder for now.");
-            AutoSelectSpells(1);
-        }
-        else
-        {
-            CreateInfoText("No spell updates needed.");
-        }
-
-        CreateButton("Continue", NextStep);
+        GameObject managerObj = new GameObject("CharacterCreationManager", typeof(RectTransform));
+        managerObj.transform.SetParent(canvas.transform, false);
+        _characterCreationManager = managerObj.AddComponent<CharacterCreationManager>();
+        return _characterCreationManager;
     }
 
     private static string GetSpellSummaryText(string className)
     {
         if (className == "Wizard")
-            return "Learn 2 wizard spells";
+            return "Learn wizard spell(s)";
         if (className == "Sorcerer")
             return "Learn sorcerer spell(s)";
         if (className == "Cleric" || className == "Druid")
             return "Access higher-level divine spells";
         return "Review spell progression";
-    }
-
-    private void AutoSelectSpells(int count)
-    {
-        Debug.Log($"[LevelUpUI] Auto-selecting {count} spells");
-        // TODO: Connect to spell-learning system once known/learned spell tracking is exposed.
-    }
-
-    private void ApplyLevelUp()
-    {
-        string name = GetCharacterName(_currentLevelUp.Character);
-        Debug.Log($"[LevelUpUI] Applying level-up for {name}");
-
-        CharacterStats stats = _currentLevelUp.Character != null ? _currentLevelUp.Character.Stats : null;
-        if (stats == null)
-        {
-            Debug.LogWarning("[LevelUpUI] Cannot apply level-up choices because CharacterStats is null.");
-            return;
-        }
-
-        if (!string.IsNullOrEmpty(_currentLevelUp.SelectedAbility))
-        {
-            switch (_currentLevelUp.SelectedAbility)
-            {
-                case "STR": stats.BaseSTR++; stats.STR++; break;
-                case "DEX": stats.BaseDEX++; stats.DEX++; break;
-                case "CON": stats.BaseCON++; stats.CON++; break;
-                case "INT": stats.BaseINT++; stats.INT++; break;
-                case "WIS": stats.BaseWIS++; stats.WIS++; break;
-                case "CHA": stats.BaseCHA++; stats.CHA++; break;
-            }
-
-            Debug.Log($"[LevelUpUI] Applied +1 to {_currentLevelUp.SelectedAbility}");
-        }
-
-        if (_currentLevelUp.SelectedFeat != null && !string.IsNullOrWhiteSpace(_currentLevelUp.SelectedFeat.FeatName))
-        {
-            stats.Feats.Add(_currentLevelUp.SelectedFeat.FeatName);
-            Debug.Log($"[LevelUpUI] Applied feat: {_currentLevelUp.SelectedFeat.FeatName}");
-        }
-
-        if (_currentLevelUp.SkillPointsAllocated.Count > 0 && stats.Skills != null)
-        {
-            int grantedPoints = Mathf.Max(0, _currentLevelUp.SkillPointsToAllocate);
-            stats.TotalSkillPoints += grantedPoints;
-            stats.AvailableSkillPoints += grantedPoints;
-
-            foreach (KeyValuePair<string, int> allocation in _currentLevelUp.SkillPointsAllocated)
-            {
-                for (int i = 0; i < allocation.Value; i++)
-                    stats.AddSkillRank(allocation.Key);
-            }
-        }
-
-        Debug.Log($"[LevelUpUI] Level-up complete for {name}");
     }
 
     private string GetCharacterName(CharacterController character)

@@ -326,6 +326,37 @@ public class SpellSelectionUI : MonoBehaviour
         IsOpen = false;
     }
 
+    /// <summary>
+    /// Reuses the creation spell selection panel during level-up.
+    /// </summary>
+    public void ShowForLevelUp(CharacterController character, Action<List<string>> onComplete)
+    {
+        if (character == null || character.Stats == null)
+        {
+            Debug.LogWarning("[SpellSelectionUI] ShowForLevelUp called with null character/stats.");
+            onComplete?.Invoke(new List<string>());
+            return;
+        }
+
+        string className = character.Stats.CharacterClass ?? string.Empty;
+        OnSpellsConfirmed = selected => onComplete?.Invoke(selected ?? new List<string>());
+
+        if (string.Equals(className, "Wizard", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenForWizard(character.Stats.INTMod, Mathf.Max(1, character.Stats.Level));
+            return;
+        }
+
+        if (string.Equals(className, "Cleric", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenForCleric();
+            return;
+        }
+
+        Debug.Log($"[SpellSelectionUI] Level-up spell selection currently not implemented for class '{className}'. Skipping.");
+        onComplete?.Invoke(new List<string>());
+    }
+
     // ========== POPULATE LIST ==========
 
     private void PopulateSpellList()

@@ -216,6 +216,38 @@ public class SkillsUIPanel : MonoBehaviour
     }
 
     /// <summary>
+    /// Reuses the allocation UI for level-up skill point spending.
+    /// Grants the requested points before opening the panel.
+    /// </summary>
+    public void ShowForLevelUp(CharacterController character, int skillPointsToAllocate, System.Action onComplete)
+    {
+        if (character == null || character.Stats == null)
+        {
+            Debug.LogWarning("[SkillsUI] ShowForLevelUp called with null character/stats.");
+            onComplete?.Invoke();
+            return;
+        }
+
+        CharacterStats stats = character.Stats;
+        int pointsToGrant = Mathf.Max(0, skillPointsToAllocate);
+
+        if (pointsToGrant <= 0)
+        {
+            Debug.Log($"[SkillsUI] No level-up skill points to allocate for {stats.CharacterName}.");
+            onComplete?.Invoke();
+            return;
+        }
+
+        stats.TotalSkillPoints += pointsToGrant;
+        stats.AvailableSkillPoints += pointsToGrant;
+
+        Debug.Log($"[SkillsUI] Level-up allocation for {stats.CharacterName}: granted {pointsToGrant} points (available now {stats.AvailableSkillPoints}).");
+
+        OnAllocationConfirmed = onComplete;
+        OpenForAllocation(stats);
+    }
+
+    /// <summary>
     /// Show or hide the panel, ensuring CanvasGroup properly blocks/allows raycasts.
     /// </summary>
     private void SetPanelVisible(bool visible)
