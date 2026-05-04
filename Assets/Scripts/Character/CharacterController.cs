@@ -2240,6 +2240,12 @@ public class CharacterController : MonoBehaviour
         if (disease == null || Stats == null)
             return;
 
+        if (Stats.IsImmuneToDisease())
+        {
+            LogAbilityScoreMessage($"🦠 {Stats.CharacterName} is immune to disease and ignores {disease.Name}.");
+            return;
+        }
+
         int dc = Mathf.Max(0, disease.FortitudeDC + dcModifier);
         int roll = Random.Range(1, 21);
         int total = roll + Stats.FortitudeSave;
@@ -2310,31 +2316,7 @@ public class CharacterController : MonoBehaviour
 
     private bool IsImmuneToPoison()
     {
-        if (Stats == null)
-            return false;
-
-        string creatureType = string.IsNullOrWhiteSpace(Stats.CreatureType)
-            ? string.Empty
-            : Stats.CreatureType.Trim().ToLowerInvariant();
-
-        if (creatureType == "undead" || creatureType == "construct" || creatureType == "elemental" || creatureType == "ooze" || creatureType == "plant")
-            return true;
-
-        if (Stats.SpecialAbilities == null)
-            return false;
-
-        for (int i = 0; i < Stats.SpecialAbilities.Count; i++)
-        {
-            string ability = Stats.SpecialAbilities[i];
-            if (string.IsNullOrWhiteSpace(ability))
-                continue;
-
-            string normalized = ability.ToLowerInvariant();
-            if (normalized.Contains("poison immunity") || normalized.Contains("immune to poison"))
-                return true;
-        }
-
-        return false;
+        return Stats != null && Stats.IsImmuneToPoison();
     }
 
     /// <summary>
@@ -2381,6 +2363,13 @@ public class CharacterController : MonoBehaviour
     {
         if (poison == null || poison.PoisonData == null || poison.SecondaryResolved || Stats == null)
             return;
+
+        if (Stats.IsImmuneToPoison())
+        {
+            LogAbilityScoreMessage($"☣ {Stats.CharacterName} is immune to poison; secondary effect from {poison.PoisonData.Name} is negated.");
+            poison.SecondaryResolved = true;
+            return;
+        }
 
         int dc = poison.PoisonData.FortitudeDC;
         int roll = Random.Range(1, 21);
@@ -4453,6 +4442,9 @@ public class CharacterController : MonoBehaviour
         if (target == null || target.Stats == null)
             return false;
 
+        if (target.Stats.Immunities != null && target.Stats.Immunities.immuneToSneakAttack)
+            return true;
+
         string creatureType = string.IsNullOrEmpty(target.Stats.CreatureType)
             ? string.Empty
             : target.Stats.CreatureType.Trim().ToLowerInvariant();
@@ -4475,6 +4467,9 @@ public class CharacterController : MonoBehaviour
     {
         if (Stats == null)
             return false;
+
+        if (Stats.Immunities != null && Stats.Immunities.immuneToCriticalHits)
+            return true;
 
         string creatureType = string.IsNullOrEmpty(Stats.CreatureType)
             ? string.Empty
@@ -8790,6 +8785,16 @@ public class CharacterController : MonoBehaviour
 
     private SpecialAttackResult ResolveFeint(CharacterController target)
     {
+        if (Stats != null && Stats.IsSkillBlockedByMindless("Bluff"))
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Feint",
+                Success = false,
+                Log = Stats.GetMindlessSkillRestrictionMessage("Bluff")
+            };
+        }
+
         int bluffRoll = Random.Range(1, 21);
         int opposedRoll = Random.Range(1, 21);
 
@@ -8799,7 +8804,7 @@ public class CharacterController : MonoBehaviour
         if (target.Stats != null && !string.IsNullOrEmpty(target.Stats.CreatureType))
             targetIsHumanoid = target.Stats.CreatureType.Trim().ToLowerInvariant().Contains("humanoid");
 
-        bool useBabWisDefense = !targetIsHumanoid;
+        bool useBabWisDefense = !targetIsHumanoid || (target.Stats != null && target.Stats.IsMindless);
         int opposedBonus = useBabWisDefense
             ? (target.Stats.BaseAttackBonus + target.Stats.WISMod)
             : target.Stats.GetSkillBonus("Sense Motive");
@@ -8809,7 +8814,7 @@ public class CharacterController : MonoBehaviour
         bool success = bluffTotal >= opposedTotal;
 
         string opposedLabel = useBabWisDefense
-            ? "BAB + WIS (non-humanoid)"
+            ? (target.Stats != null && target.Stats.IsMindless ? "BAB + WIS (mindless)" : "BAB + WIS (non-humanoid)")
             : "Sense Motive";
 
         if (success)

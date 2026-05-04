@@ -125,7 +125,12 @@ public class SpellResult
         // ========== MIND-AFFECTING IMMUNITY ==========
         if (MindAffectingImmunityBlocked)
         {
-            sb.AppendLine("  Mind-affecting immunity: target is immune — spell has no effect.");
+            if (!string.IsNullOrWhiteSpace(NoEffectReason))
+                sb.AppendLine($"  {NoEffectReason}");
+            else
+                sb.AppendLine("  Mind-affecting immunity: target is immune — spell has no effect.");
+
+            sb.AppendLine("  Spell has no effect.");
             sb.Append($"═══════════════════════════════════");
             return sb.ToString();
         }

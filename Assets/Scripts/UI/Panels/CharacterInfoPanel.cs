@@ -215,12 +215,16 @@ public class CharacterInfoPanel : MonoBehaviour
         if (abilityText != null)
         {
             abilityText.supportRichText = true;
+            string intDisplay = s.IsMindless
+                ? "INT —"
+                : s.GetAbilityStringWithRacial("INT", s.INT, s.GetRacialModifier("INT"));
+
             abilityText.text =
                 $"{s.GetAbilityStringWithRacial("STR", s.STR, s.GetRacialModifier("STR"))} " +
                 $"{s.GetAbilityStringWithRacial("DEX", s.DEX, s.GetRacialModifier("DEX"))} " +
                 $"{s.GetAbilityStringWithRacial("CON", s.CON, s.GetRacialModifier("CON"))}\n" +
                 $"{s.GetAbilityStringWithRacial("WIS", s.WIS, s.GetRacialModifier("WIS"))} " +
-                $"{s.GetAbilityStringWithRacial("INT", s.INT, s.GetRacialModifier("INT"))} " +
+                $"{intDisplay} " +
                 $"{s.GetAbilityStringWithRacial("CHA", s.CHA, s.GetRacialModifier("CHA"))}";
         }
 

@@ -210,6 +210,8 @@ public class NPCDefinition
     public bool DamageReductionRangedOnly;
     public List<DamageResistanceEntry> DamageResistances = new List<DamageResistanceEntry>();
     public List<DamageType> DamageImmunities = new List<DamageType>();
+    public CreatureImmunities Immunities = new CreatureImmunities();
+    public bool IsMindless;
     public int RegenerationAmount;
     public DamageBypassTag RegenerationSuppressedBy = DamageBypassTag.None;
     public int SpellResistance;
@@ -311,6 +313,8 @@ public class NPCDefinition
         clone.DamageImmunities = DamageImmunities != null
             ? new List<DamageType>(DamageImmunities)
             : new List<DamageType>();
+        clone.Immunities = Immunities != null ? Immunities.Clone() : new CreatureImmunities();
+        clone.IsMindless = IsMindless;
         clone.RegenerationAmount = RegenerationAmount;
         clone.RegenerationSuppressedBy = RegenerationSuppressedBy;
         clone.CreatureTags = CreatureTags != null

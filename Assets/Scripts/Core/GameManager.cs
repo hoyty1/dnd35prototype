@@ -4705,6 +4705,11 @@ public partial class GameManager : MonoBehaviour
                 stats.AddDamageImmunity(imm);
         }
 
+        if (def.Immunities != null)
+            stats.Immunities.MergeFrom(def.Immunities);
+
+        stats.ApplyMindlessTrait(def.IsMindless);
+
         stats.SpellResistance = Mathf.Max(0, def.SpellResistance);
 
         bool hasCelestialTemplate = false;

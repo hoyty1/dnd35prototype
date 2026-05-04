@@ -233,6 +233,9 @@ public static class SpellCaster
         {
             result.MindAffectingImmunityBlocked = true;
             result.Success = false;
+            result.NoEffectReason = targetStats != null && targetStats.IsMindless
+                ? "Target is mindless and immune to mind-affecting effects."
+                : "Target is immune to mind-affecting effects.";
             return result;
         }
 
@@ -773,31 +776,7 @@ public static class SpellCaster
 
     private static bool IsImmuneToMindAffecting(CharacterStats targetStats)
     {
-        if (targetStats == null)
-            return false;
-
-        string creatureType = string.IsNullOrWhiteSpace(targetStats.CreatureType)
-            ? string.Empty
-            : targetStats.CreatureType.Trim().ToLowerInvariant();
-
-        if (creatureType == "undead" || creatureType == "construct" || creatureType == "ooze" || creatureType == "plant" || creatureType == "vermin")
-            return true;
-
-        if (targetStats.SpecialAbilities != null)
-        {
-            for (int i = 0; i < targetStats.SpecialAbilities.Count; i++)
-            {
-                string trait = targetStats.SpecialAbilities[i];
-                if (string.IsNullOrWhiteSpace(trait))
-                    continue;
-
-                string normalized = trait.ToLowerInvariant();
-                if (normalized.Contains("mind-affect") || normalized.Contains("mind affecting") || normalized.Contains("mindless"))
-                    return true;
-            }
-        }
-
-        return false;
+        return targetStats != null && targetStats.IsImmuneToMindAffecting();
     }
 
     /// <summary>

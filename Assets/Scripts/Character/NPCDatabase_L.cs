@@ -42,6 +42,8 @@ public static partial class NPCDatabase
                 new DamageResistanceEntry { Type = DamageType.Cold, Amount = 10 }
             },
             DamageImmunities = new List<DamageType> { DamageType.Fire },
+            Immunities = ImmunityPresets.Combine(ImmunityPresets.DevilImmunities(), ImmunityPresets.MindlessImmunities()),
+            IsMindless = true,
             RegenerationAmount = 2,
             RegenerationSuppressedBy = DamageBypassTag.Good | DamageBypassTag.Silver,
             SpecialAbilities = new List<string>

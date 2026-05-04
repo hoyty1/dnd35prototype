@@ -1157,6 +1157,20 @@ public class CharacterStats
     /// <summary>Typed immunities (e.g., Immune Cold).</summary>
     public List<DamageType> DamageImmunities = new List<DamageType>();
 
+    /// <summary>
+    /// Trait/effect immunities (poison, disease, mind-affecting, etc.) separate from typed damage immunity.
+    /// </summary>
+    public CreatureImmunities Immunities = new CreatureImmunities();
+
+    /// <summary>
+    /// D&D 3.5e mindless trait (MM glossary): creature has no Intelligence score (shown as "—")
+    /// and is immune to mind-affecting effects.
+    /// </summary>
+    public bool IsMindless;
+
+    /// <summary>Display-friendly intelligence string. Mindless creatures show an em dash.</summary>
+    public string IntelligenceDisplay => IsMindless ? "—" : EffectiveINTScore.ToString();
+
     /// <summary>Runtime state for Protection from Arrows (if currently active).</summary>
     [NonSerialized] public ProtectionFromArrowsEffectData ActiveProtectionFromArrowsEffect;
 
@@ -2076,6 +2090,7 @@ public class CharacterStats
         if (HasPounce) traits.Add("Pounce");
         if (HasRake) traits.Add("Rake");
         if (HasScent) traits.Add("Scent");
+        if (IsMindless) traits.Add("Mindless (Intelligence —)");
 
         if (HasTemplateSmiteEvil)
             traits.Add(TemplateSmiteUsed ? "Smite Evil (used)" : "Smite Evil 1/day");
@@ -2088,6 +2103,15 @@ public class CharacterStats
         string mitigationSummary = GetMitigationSummaryString();
         if (!string.IsNullOrWhiteSpace(mitigationSummary))
             traits.Add(mitigationSummary);
+
+        if (Immunities != null)
+        {
+            foreach (string immunityTrait in Immunities.GetDisplayTraits())
+            {
+                if (!string.IsNullOrWhiteSpace(immunityTrait))
+                    traits.Add(immunityTrait);
+            }
+        }
 
         if (SpecialAbilities != null)
         {
@@ -2113,6 +2137,103 @@ public class CharacterStats
         }
 
         return traits.Count > 0 ? string.Join(", ", traits) : string.Empty;
+    }
+
+    public void ApplyMindlessTrait(bool isMindless)
+    {
+        IsMindless = isMindless;
+        if (IsMindless)
+        {
+            INT = 0;
+            BaseINT = 0;
+            if (Immunities == null)
+                Immunities = new CreatureImmunities();
+            Immunities.immuneToMindAffecting = true;
+        }
+    }
+
+    public bool IsImmuneToMindAffecting()
+    {
+        if (Immunities != null && Immunities.immuneToMindAffecting)
+            return true;
+
+        if (IsMindless)
+            return true;
+
+        string creatureType = string.IsNullOrWhiteSpace(CreatureType)
+            ? string.Empty
+            : CreatureType.Trim().ToLowerInvariant();
+
+        return creatureType == "undead"
+            || creatureType == "construct"
+            || creatureType == "ooze"
+            || creatureType == "plant"
+            || creatureType == "vermin";
+    }
+
+    public bool IsImmuneToPoison()
+    {
+        if (Immunities != null && Immunities.immuneToPoison)
+            return true;
+
+        string creatureType = string.IsNullOrWhiteSpace(CreatureType)
+            ? string.Empty
+            : CreatureType.Trim().ToLowerInvariant();
+
+        return creatureType == "undead"
+            || creatureType == "construct"
+            || creatureType == "ooze"
+            || creatureType == "elemental"
+            || creatureType == "plant";
+    }
+
+    public bool IsImmuneToDisease()
+    {
+        if (Immunities != null && Immunities.immuneToDisease)
+            return true;
+
+        string creatureType = string.IsNullOrWhiteSpace(CreatureType)
+            ? string.Empty
+            : CreatureType.Trim().ToLowerInvariant();
+
+        return creatureType == "undead"
+            || creatureType == "construct"
+            || creatureType == "ooze"
+            || creatureType == "elemental";
+    }
+
+    public bool IsSkillBlockedByMindless(string skillName, Skill skill = null)
+    {
+        if (!IsMindless)
+            return false;
+
+        if (skill != null && skill.KeyAbility == AbilityType.INT)
+            return true;
+
+        if (string.IsNullOrWhiteSpace(skillName))
+            return false;
+
+        string normalized = skillName.Trim().ToLowerInvariant();
+        return normalized == "bluff"
+            || normalized == "diplomacy"
+            || normalized == "sense motive"
+            || normalized == "sense_motive"
+            || normalized == "use magic device"
+            || normalized == "use_magic_device"
+            || normalized == "decipher script"
+            || normalized == "decipher_script"
+            || normalized == "forgery"
+            || normalized == "disable device"
+            || normalized == "disable_device"
+            || normalized == "search"
+            || normalized == "knowledge"
+            || normalized.StartsWith("knowledge(")
+            || normalized.StartsWith("knowledge_");
+    }
+
+    public string GetMindlessSkillRestrictionMessage(string skillName)
+    {
+        return $"{CharacterName} is mindless and cannot use {skillName}.";
     }
 
     public string GetNaturalAttackSummary()
@@ -2344,7 +2465,10 @@ public class CharacterStats
         // 1) Immunity check: any matching type negates all damage
         foreach (var type in packet.Types)
         {
-            if (DamageImmunities.Contains(type))
+            bool hasTypedImmunity = DamageImmunities.Contains(type)
+                || (Immunities != null && Immunities.IsImmuneTo(type));
+
+            if (hasTypedImmunity)
             {
                 result.ImmunityTriggered = true;
                 result.ImmunityType = type;
@@ -2721,11 +2845,73 @@ public class CharacterStats
         if (type == DamageType.Untyped) return;
         if (!DamageImmunities.Contains(type))
             DamageImmunities.Add(type);
+
+        if (Immunities == null)
+            Immunities = new CreatureImmunities();
+
+        switch (type)
+        {
+            case DamageType.Fire:
+                Immunities.immuneToFire = true;
+                break;
+            case DamageType.Cold:
+                Immunities.immuneToCold = true;
+                break;
+            case DamageType.Electricity:
+                Immunities.immuneToElectricity = true;
+                break;
+            case DamageType.Acid:
+                Immunities.immuneToAcid = true;
+                break;
+            case DamageType.Sonic:
+                Immunities.immuneToSonic = true;
+                break;
+            case DamageType.Force:
+                Immunities.immuneToForce = true;
+                break;
+            case DamageType.Positive:
+                Immunities.immuneToPositive = true;
+                break;
+            case DamageType.Negative:
+                Immunities.immuneToNegative = true;
+                break;
+        }
     }
 
     public void RemoveDamageImmunity(DamageType type)
     {
         DamageImmunities.Remove(type);
+
+        if (Immunities == null)
+            return;
+
+        switch (type)
+        {
+            case DamageType.Fire:
+                Immunities.immuneToFire = false;
+                break;
+            case DamageType.Cold:
+                Immunities.immuneToCold = false;
+                break;
+            case DamageType.Electricity:
+                Immunities.immuneToElectricity = false;
+                break;
+            case DamageType.Acid:
+                Immunities.immuneToAcid = false;
+                break;
+            case DamageType.Sonic:
+                Immunities.immuneToSonic = false;
+                break;
+            case DamageType.Force:
+                Immunities.immuneToForce = false;
+                break;
+            case DamageType.Positive:
+                Immunities.immuneToPositive = false;
+                break;
+            case DamageType.Negative:
+                Immunities.immuneToNegative = false;
+                break;
+        }
     }
 
     public void AddDamageReduction(int amount, DamageBypassTag bypassTags, bool rangedOnly = false)
@@ -3528,6 +3714,10 @@ public class CharacterStats
     {
         if (!Skills.ContainsKey(skillName)) return 0;
         Skill skill = Skills[skillName];
+
+        if (IsSkillBlockedByMindless(skillName, skill))
+            return 0;
+
         int baseBonus = skill.GetTotalBonus(GetAbilityModForSkill(skill));
         int featBonus = GetFeatSkillBonus(skillName);
         int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
@@ -3569,6 +3759,12 @@ public class CharacterStats
         }
 
         Skill skill = Skills[skillName];
+        if (IsSkillBlockedByMindless(skillName, skill))
+        {
+            Debug.Log($"[Skills] {GetMindlessSkillRestrictionMessage(skillName)}");
+            return -1;
+        }
+
         int abilityMod = GetAbilityModForSkill(skill);
 
         if (HasNormalizedCondition(CombatConditionType.Deafened)

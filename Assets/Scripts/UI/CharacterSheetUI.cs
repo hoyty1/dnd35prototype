@@ -813,7 +813,7 @@ public class CharacterSheetUI : MonoBehaviour
         AddAbilityLine(content, "STR", stats.EffectiveSTRScore, stats.STRMod);
         AddAbilityLine(content, "DEX", stats.EffectiveDEXScore, stats.DEXMod);
         AddAbilityLine(content, "CON", stats.EffectiveCONScore, stats.CONMod);
-        AddAbilityLine(content, "INT", stats.EffectiveINTScore, stats.INTMod);
+        AddAbilityLine(content, "INT", stats.IntelligenceDisplay, stats.INTMod);
         AddAbilityLine(content, "WIS", stats.EffectiveWISScore, stats.WISMod);
         AddAbilityLine(content, "CHA", stats.EffectiveCHAScore, stats.CHAMod);
 
@@ -941,6 +941,11 @@ public class CharacterSheetUI : MonoBehaviour
 
     private void AddAbilityLine(Transform content, string name, int score, int mod)
     {
+        AddAbilityLine(content, name, score.ToString(), mod);
+    }
+
+    private void AddAbilityLine(Transform content, string name, string scoreDisplay, int mod)
+    {
         string modStr = FormatMod(mod);
         Color modColor = mod >= 0 ? new Color(0.5f, 0.9f, 0.5f) : new Color(0.9f, 0.4f, 0.4f);
 
@@ -961,7 +966,7 @@ public class CharacterSheetUI : MonoBehaviour
         MakeText(entryGO.transform, "Score",
             new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
             new Vector2(60, 0), new Vector2(30, 0),
-            score.ToString(), 12, LightText, TextAnchor.MiddleRight, FontStyle.Bold);
+            scoreDisplay, 12, LightText, TextAnchor.MiddleRight, FontStyle.Bold);
 
         // Modifier
         MakeText(entryGO.transform, "Mod",
