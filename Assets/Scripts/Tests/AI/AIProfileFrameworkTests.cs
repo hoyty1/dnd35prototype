@@ -975,8 +975,7 @@ namespace Tests.AI
                     "Swarm AI keeps current target while it is alive",
                     $"(selected={second?.Stats?.CharacterName ?? "null"})");
 
-                nearEnemy.Stats.CurrentHP = 0;
-                nearEnemy.Stats.IsDead = true;
+                nearEnemy.Stats.CurrentHP = -10;
                 CharacterController third = profile.ResolveTarget(swarm, enemies);
                 Assert(third == fartherEnemy,
                     "Swarm AI switches only after current target dies",

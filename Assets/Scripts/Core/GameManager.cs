@@ -14842,9 +14842,9 @@ public partial class GameManager : MonoBehaviour
         int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
         int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
 
-        int intDamage = Random.Range(1, 7);
-        int wisDamage = Random.Range(1, 7);
-        int chaDamage = Random.Range(1, 7);
+        int intDamage = UnityEngine.Random.Range(1, 7);
+        int wisDamage = UnityEngine.Random.Range(1, 7);
+        int chaDamage = UnityEngine.Random.Range(1, 7);
 
         TouchOfIdiocyConditionData previous = target.ActiveTouchOfIdiocyEffect;
         if (previous != null)

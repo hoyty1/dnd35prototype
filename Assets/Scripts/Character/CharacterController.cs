@@ -1056,7 +1056,7 @@ public class CharacterController : MonoBehaviour
 
         string id = (weapon.Id ?? string.Empty).Trim();
         return string.Equals(id, ItemIDs.TORCH, StringComparison.OrdinalIgnoreCase)
-            || weapon.itemID == ItemID.WeaponTorch;
+            || weapon.IdEnum == ItemID.WeaponTorch;
     }
 
     private SpriteRenderer _sr;
