@@ -3,13 +3,14 @@
 // Part of the SpellDatabase partial class.
 // ============================================================================
 
+using DND35e.Identifiers;
 public static partial class SpellDatabase
 {
     private static void RegisterSpellsJ()
     {
         Register(new SpellData
                 {
-                    SpellId = "jump",
+                    SpellId = SpellNames.JUMP,
                     Name = "Jump",
                     Description = "Touched creature gains an enhancement bonus on Jump checks: +10 (CL 1-2), +20 (CL 3-6), +30 (CL 7+). Duration 1 min/level (dismissible). PHB p.246",
                     SpellLevel = 1,

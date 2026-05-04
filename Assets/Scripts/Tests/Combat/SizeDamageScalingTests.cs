@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -87,7 +88,7 @@ public static class SizeDamageScalingTests
 
     private static void TestWeaponProgressionLongsword()
     {
-        ItemData longsword = ItemDatabase.CloneItem("longsword");
+        ItemData longsword = ItemDatabase.CloneItem(ItemIDs.LONGSWORD);
         AssertScaled(longsword, SizeCategory.Small, 1, 6, "Longsword Medium->Small = 1d6");
         AssertScaled(longsword, SizeCategory.Medium, 1, 8, "Longsword Medium->Medium = 1d8");
         AssertScaled(longsword, SizeCategory.Large, 2, 6, "Longsword Medium->Large = 2d6");
@@ -95,7 +96,7 @@ public static class SizeDamageScalingTests
 
     private static void TestWeaponProgressionGreatsword()
     {
-        ItemData greatsword = ItemDatabase.CloneItem("greatsword");
+        ItemData greatsword = ItemDatabase.CloneItem(ItemIDs.GREATSWORD);
         AssertScaled(greatsword, SizeCategory.Small, 1, 10, "Greatsword Medium->Small = 1d10");
         AssertScaled(greatsword, SizeCategory.Medium, 2, 6, "Greatsword Medium->Medium = 2d6");
         AssertScaled(greatsword, SizeCategory.Large, 3, 6, "Greatsword Medium->Large = 3d6");
@@ -136,7 +137,7 @@ public static class SizeDamageScalingTests
         CharacterController controller = null;
         try
         {
-            controller = BuildEquippedCharacter("ResizeLongsword", "longsword");
+            controller = BuildEquippedCharacter("ResizeLongsword", ItemIDs.LONGSWORD);
 
             Assert(controller.Stats.BaseDamageCount == 1 && controller.Stats.BaseDamageDice == 8,
                 "Initial equipped longsword damage is 1d8",

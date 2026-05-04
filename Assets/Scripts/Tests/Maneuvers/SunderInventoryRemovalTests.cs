@@ -1,5 +1,6 @@
 using UnityEngine;
 using InventoryData = global::Inventory;
+using DND35e.Identifiers;
 
 namespace Tests.Maneuvers
 {
@@ -116,7 +117,7 @@ public static class SunderInventoryRemovalTests
             var attackerInv = attacker.GetComponent<InventoryComponent>().CharacterInventory;
             var targetInv = target.GetComponent<InventoryComponent>().CharacterInventory;
 
-            ItemData attackerWeapon = ItemDatabase.CloneItem("greatsword");
+            ItemData attackerWeapon = ItemDatabase.CloneItem(ItemIDs.GREATSWORD);
             attackerInv.DirectEquip(attackerWeapon, EquipSlot.RightHand);
 
             ItemData destroyedItem = CreateFragileItem(targetItemId);
@@ -151,17 +152,17 @@ public static class SunderInventoryRemovalTests
 
     private static void TestDestroyedMainHandWeaponRemoved()
     {
-        ValidateDestroyedItemRemoval(EquipSlot.RightHand, "morningstar", "Main-hand weapon destroyed");
+        ValidateDestroyedItemRemoval(EquipSlot.RightHand, ItemIDs.MORNINGSTAR, "Main-hand weapon destroyed");
     }
 
     private static void TestDestroyedArmorRemoved()
     {
-        ValidateDestroyedItemRemoval(EquipSlot.ArmorRobe, "leather_armor", "Armor destroyed");
+        ValidateDestroyedItemRemoval(EquipSlot.ArmorRobe, ItemIDs.LEATHER_ARMOR, "Armor destroyed");
     }
 
     private static void TestDestroyedShieldRemoved()
     {
-        ValidateDestroyedItemRemoval(EquipSlot.LeftHand, "shield_light_wooden", "Shield destroyed");
+        ValidateDestroyedItemRemoval(EquipSlot.LeftHand, ItemIDs.SHIELD_LIGHT_WOODEN, "Shield destroyed");
     }
 }
 

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -174,7 +175,7 @@ public static class MediumConditionRulesTests
             int listenResult = caster.Stats.RollSkillCheck("Listen");
             Assert(listenResult == -1, "Deafened causes automatic Listen check failure", $"listen={listenResult}");
 
-            SpellData magicMissile = SpellDatabase.GetSpell("magic_missile");
+            SpellData magicMissile = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE);
             bool sawFailure = false;
             bool sawSuccess = false;
 

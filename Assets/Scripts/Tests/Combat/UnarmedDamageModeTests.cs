@@ -1,5 +1,6 @@
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -122,7 +123,7 @@ public static class UnarmedDamageModeTests
     {
         var c = CreateTestCharacter("GauntletDefault");
         var inv = c.GetComponent<InventoryComponent>();
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("gauntlet"), EquipSlot.Hands);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.GAUNTLET), EquipSlot.Hands);
 
         c.ResetAttackDamageMode();
         object profile = ResolveUnarmedDamageProfile(c);
@@ -172,7 +173,7 @@ public static class UnarmedDamageModeTests
         defender.GridPosition = new Vector2Int(1, 0);
 
         var inv = attacker.GetComponent<InventoryComponent>();
-        ItemData longsword = ItemDatabase.CloneItem("longsword");
+        ItemData longsword = ItemDatabase.CloneItem(ItemIDs.LONGSWORD);
         inv.CharacterInventory.DirectEquip(longsword, EquipSlot.RightHand);
 
         attacker.SetAttackDamageMode(AttackDamageMode.Nonlethal);
@@ -201,7 +202,7 @@ public static class UnarmedDamageModeTests
     {
         var c = CreateTestCharacter("LongswordLethal");
         var inv = c.GetComponent<InventoryComponent>();
-        ItemData longsword = ItemDatabase.CloneItem("longsword");
+        ItemData longsword = ItemDatabase.CloneItem(ItemIDs.LONGSWORD);
         inv.CharacterInventory.DirectEquip(longsword, EquipSlot.RightHand);
 
         c.SetAttackDamageMode(AttackDamageMode.Lethal);

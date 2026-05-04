@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Represents an active spell effect on a character with duration tracking.
@@ -335,16 +336,16 @@ public static class AlignmentProtectionRules
 
         switch (spellId)
         {
-            case "protection_from_evil":
+            case SpellNames.PROTECTION_FROM_EVIL:
                 type = AlignmentProtectionType.Evil;
                 return true;
-            case "protection_from_good":
+            case SpellNames.PROTECTION_FROM_GOOD:
                 type = AlignmentProtectionType.Good;
                 return true;
-            case "protection_from_law":
+            case SpellNames.PROTECTION_FROM_LAW:
                 type = AlignmentProtectionType.Law;
                 return true;
-            case "protection_from_chaos":
+            case SpellNames.PROTECTION_FROM_CHAOS:
                 type = AlignmentProtectionType.Chaos;
                 return true;
             // Backward compatibility aliases.

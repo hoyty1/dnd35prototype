@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public enum PartyStashState
 {
@@ -95,17 +96,17 @@ public class PartyStash
 
         ItemDatabase.Init();
 
-        AddClonedItem("longsword", 1);
-        AddClonedItem("shortbow", 1);
-        AddClonedItem("dagger", 2);
-        AddClonedItem("shield_heavy_steel", 1);
-        AddClonedItem("chain_shirt", 1);
-        AddClonedItem("breastplate", 1);
-        AddClonedItem("potion_cure_light_wounds", 30);
-        AddClonedItem("potion_shield_of_faith", 4);
-        AddClonedItem("crossbow_bolts_20", 2);
-        AddClonedItem("rope_hemp", 1);
-        AddClonedItem("torch", 3);
+        AddClonedItem(ItemIDs.LONGSWORD, 1);
+        AddClonedItem(ItemIDs.SHORTBOW, 1);
+        AddClonedItem(ItemIDs.DAGGER, 2);
+        AddClonedItem(ItemIDs.SHIELD_HEAVY_STEEL, 1);
+        AddClonedItem(ItemIDs.CHAIN_SHIRT, 1);
+        AddClonedItem(ItemIDs.BREASTPLATE, 1);
+        AddClonedItem(ItemIDs.POTION_CURE_LIGHT_WOUNDS, 30);
+        AddClonedItem(ItemIDs.POTION_SHIELD_OF_FAITH, 4);
+        AddClonedItem(ItemIDs.CROSSBOW_BOLTS_20, 2);
+        AddClonedItem(ItemIDs.ROPE_HEMP, 1);
+        AddClonedItem(ItemIDs.TORCH, 3);
     }
 
     private void AddClonedItem(string itemId, int count)

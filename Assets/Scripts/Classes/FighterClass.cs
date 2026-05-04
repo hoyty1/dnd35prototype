@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Fighter class definition (D&D 3.5 PHB).
@@ -37,18 +38,18 @@ public class FighterClass : ICharacterClass
     public void SetupStartingEquipment(InventoryComponent inv)
     {
         ItemDatabase.Init();
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("scale_mail"), EquipSlot.Armor);
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("spiked_gauntlet"), EquipSlot.Hands);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SCALE_MAIL), EquipSlot.Armor);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_WOODEN), EquipSlot.LeftHand);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SPIKED_GAUNTLET), EquipSlot.Hands);
 
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("longspear"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("gauntlet"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("torch"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.SHORTBOW));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.LONGSPEAR));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.GAUNTLET));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_SHIELD_OF_FAITH));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.TORCH));
         Debug.Log("[Fighter] Equipment: Scale Mail, Heavy Shield, Longsword, Spiked Gauntlet, Shortbow, Longspear");
     }
 

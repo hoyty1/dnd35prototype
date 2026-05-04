@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "knock",
+                    SpellId = SpellNames.KNOCK,
                     Name = "Knock",
                     Description = "Opens locked or magically sealed door. PHB p.246",
                     SpellLevel = 2, School = "Transmutation",

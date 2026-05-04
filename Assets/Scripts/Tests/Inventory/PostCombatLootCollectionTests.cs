@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Inventory
 {
@@ -134,8 +135,8 @@ public static class PostCombatLootCollectionTests
         GameManager gm = BuildTestGameManager(out CharacterController enemy, out SquareGrid grid);
         global::Inventory inv = enemy.GetComponent<InventoryComponent>().CharacterInventory;
 
-        inv.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        inv.AddItem(ItemDatabase.CloneItem("potion_cure_light_wounds"));
+        inv.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
+        inv.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_CURE_LIGHT_WOUNDS));
 
         List<LootCollectionUI.LootStackEntry> entries = InvokeGather(gm);
         int totalItems = 0;
@@ -151,7 +152,7 @@ public static class PostCombatLootCollectionTests
     {
         GameManager gm = BuildTestGameManager(out CharacterController enemy, out SquareGrid grid);
         SquareCell cell = grid.GetCell(1, 1);
-        cell.AddGroundItem(ItemDatabase.CloneItem("dagger"));
+        cell.AddGroundItem(ItemDatabase.CloneItem(ItemIDs.DAGGER));
 
         List<LootCollectionUI.LootStackEntry> entries = InvokeGather(gm);
         bool foundGround = false;
@@ -174,7 +175,7 @@ public static class PostCombatLootCollectionTests
         GameManager gm = BuildTestGameManager(out CharacterController enemy, out SquareGrid grid);
         global::Inventory inv = enemy.GetComponent<InventoryComponent>().CharacterInventory;
 
-        ItemData sword = ItemDatabase.CloneItem("longsword");
+        ItemData sword = ItemDatabase.CloneItem(ItemIDs.LONGSWORD);
         sword.IsDestroyed = true;
         inv.AddItem(sword);
 
@@ -199,7 +200,7 @@ public static class PostCombatLootCollectionTests
         GameManager gm = BuildTestGameManager(out CharacterController enemy, out SquareGrid grid);
         global::Inventory inv = enemy.GetComponent<InventoryComponent>().CharacterInventory;
 
-        ItemData item = ItemDatabase.CloneItem("dagger");
+        ItemData item = ItemDatabase.CloneItem(ItemIDs.DAGGER);
         inv.AddItem(item);
 
         LootCollectionUI.LootItemInstance instance = new LootCollectionUI.LootItemInstance

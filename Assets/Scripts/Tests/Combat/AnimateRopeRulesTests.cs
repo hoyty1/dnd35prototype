@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -74,7 +75,7 @@ public static class AnimateRopeRulesTests
 
     private static void TestAnimateRopeSpellDefinition()
     {
-        SpellData spell = SpellDatabase.GetSpell("animate_rope");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.ANIMATE_ROPE);
         Assert(spell != null, "Animate Rope spell exists");
         if (spell == null)
             return;
@@ -87,8 +88,8 @@ public static class AnimateRopeRulesTests
 
     private static void TestRopeItemsDefinition()
     {
-        ItemData hemp = ItemDatabase.Get("rope_hemp");
-        ItemData silk = ItemDatabase.Get("rope_silk");
+        ItemData hemp = ItemDatabase.Get(ItemIDs.ROPE_HEMP);
+        ItemData silk = ItemDatabase.Get(ItemIDs.ROPE_SILK);
 
         Assert(hemp is RopeItemData, "Hemp rope uses RopeItemData");
         Assert(silk is RopeItemData, "Silk rope uses RopeItemData");
@@ -183,12 +184,12 @@ public static class AnimateRopeRulesTests
         var data = new AnimateRopeEntangledConditionData
         {
             RopeBreakDC = 24,
-            SourceSpellId = "animate_rope",
+            SourceSpellId = SpellNames.ANIMATE_ROPE,
             SourceSpellName = "Animate Rope"
         };
 
         Assert(data.RopeBreakDC == 24, "Animate Rope condition data keeps rope break DC metadata");
-        Assert(data.SourceSpellId == "animate_rope", "Animate Rope condition data tracks spell source id");
+        Assert(data.SourceSpellId == SpellNames.ANIMATE_ROPE, "Animate Rope condition data tracks spell source id");
     }
 }
 }

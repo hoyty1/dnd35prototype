@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "zone_of_truth",
+                    SpellId = SpellNames.ZONE_OF_TRUTH,
                     Name = "Zone of Truth",
                     Description = "Subjects in area can't lie. Will negates. 20-ft radius. 1 min/level. PHB p.303",
                     SpellLevel = 2, School = "Enchantment",

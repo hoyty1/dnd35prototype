@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "nystuls_magic_aura",
+                    SpellId = SpellNames.NYSTULS_MAGIC_AURA,
                     Name = "Nystul's Magic Aura",
                     Description = "Alters an object's magic aura. Duration 1 day/level. PHB p.257",
                     SpellLevel = 1, School = "Illusion",

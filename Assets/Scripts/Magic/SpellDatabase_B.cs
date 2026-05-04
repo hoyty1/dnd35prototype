@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "bane",
+                    SpellId = SpellNames.BANE,
                     Name = "Bane",
                     Description = "Enemies take –1 on attack rolls and saves vs fear. 1 min/level. Will save negates. PHB p.203",
                     SpellLevel = 1, School = "Enchantment",
@@ -31,7 +32,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "domain_barkskin",
+                    SpellId = SpellNames.DOMAIN_BARKSKIN,
                     Name = "Barkskin",
                     Description = "Grants +2 enhancement bonus to natural armor (+1 for every three levels above 3rd, max +5 at 12th).",
                     SpellLevel = 2,
@@ -49,7 +50,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "bears_endurance",
+                    SpellId = SpellNames.BEARS_ENDURANCE,
                     Name = "Bear's Endurance",
                     Description = "Subject gains +4 enhancement bonus to CON for 1 min/level. PHB p.203",
                     SpellLevel = 2, School = "Transmutation",
@@ -72,7 +73,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "bless",
+                    SpellId = SpellNames.BLESS,
                     Name = "Bless",
                     Description = "Allies in 50-ft burst gain +1 morale bonus on attack rolls and saves vs fear. 1 min/level. PHB p.205",
                     SpellLevel = 1, School = "Enchantment",
@@ -102,7 +103,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "blindness_deafness_wiz",
+                    SpellId = SpellNames.BLINDNESS_DEAFNESS_WIZ,
                     Name = "Blindness/Deafness",
                     Description = "Makes subject blind or deaf. Fortitude negates. Permanent. PHB p.206",
                     SpellLevel = 2, School = "Necromancy",
@@ -119,7 +120,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "blur",
+                    SpellId = SpellNames.BLUR,
                     Name = "Blur",
                     Description = "Attacks against subject have 20% miss chance. Duration 1 min/level. PHB p.206",
                     SpellLevel = 2, School = "Illusion",
@@ -136,7 +137,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "bulls_strength",
+                    SpellId = SpellNames.BULLS_STRENGTH,
                     Name = "Bull's Strength",
                     Description = "Subject gains +4 enhancement bonus to STR for 1 min/level. PHB p.207",
                     SpellLevel = 2, School = "Transmutation",
@@ -159,7 +160,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "burning_hands",
+                    SpellId = SpellNames.BURNING_HANDS,
                     Name = "Burning Hands",
                     Description = "1d4/level fire damage (max 5d4) in 15-ft cone. Reflex half. PHB p.207",
                     SpellLevel = 1, School = "Evocation",
@@ -183,8 +184,8 @@ public static partial class SpellDatabase
                 });
 
         // Aliases
-        RegisterClassSpellAlias("bears_endurance_clr", "bears_endurance", "Cleric", 2);
-        RegisterClassSpellAlias("bulls_strength_clr", "bulls_strength", "Cleric", 2);
+        RegisterClassSpellAlias("bears_endurance_clr", SpellNames.BEARS_ENDURANCE, "Cleric", 2);
+        RegisterClassSpellAlias("bulls_strength_clr", SpellNames.BULLS_STRENGTH, "Cleric", 2);
 
     }
 }

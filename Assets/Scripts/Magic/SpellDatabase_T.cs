@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "touch_of_fatigue",
+                    SpellId = SpellNames.TOUCH_OF_FATIGUE,
                     Name = "Touch of Fatigue",
                     Description = "Necromancy cantrip. Melee touch attack; target becomes fatigued for 1 round/level. Fortitude negates. A fatigued target becomes exhausted; exhausted targets are unaffected. SR applies.",
                     SpellLevel = 0, School = "Necromancy",
@@ -34,7 +35,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "touch_of_idiocy",
+                    SpellId = SpellNames.TOUCH_OF_IDIOCY,
                     Name = "Touch of Idiocy",
                     Description = "Touch attack reduces target's INT, WIS, and CHA by 1d6 each. No save. 10 min/level. PHB p.294",
                     SpellLevel = 2, School = "Enchantment",
@@ -53,7 +54,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "true_strike",
+                    SpellId = SpellNames.TRUE_STRIKE,
                     Name = "True Strike",
                     Description = "You gain +20 insight on your next single attack roll before end of your next turn, and that attack ignores concealment miss chance. PHB p.296",
                     SpellLevel = 1, School = "Divination",

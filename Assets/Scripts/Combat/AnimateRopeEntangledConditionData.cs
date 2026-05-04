@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Runtime metadata attached to an Entangled condition created by Animate Rope.
@@ -15,6 +16,6 @@ public sealed class AnimateRopeEntangledConditionData
     public Vector2Int LastKnownTargetPosition;
     public bool RopeDestroyed;
     public bool RopeDroppedToGround;
-    public string SourceSpellId = "animate_rope";
+    public string SourceSpellId = SpellNames.ANIMATE_ROPE;
     public string SourceSpellName = "Animate Rope";
 }

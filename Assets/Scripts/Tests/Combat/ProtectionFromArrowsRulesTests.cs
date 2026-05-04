@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -88,7 +89,7 @@ public static class ProtectionFromArrowsRulesTests
 
     private static void ApplyProtectionFromArrows(CharacterController target, int casterLevel)
     {
-        SpellData spell = SpellDatabase.GetSpell("protection_from_arrows");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.PROTECTION_FROM_ARROWS);
         StatusEffectManager mgr = target.GetComponent<StatusEffectManager>();
         ActiveSpellEffect effect = mgr.AddEffect(spell, "Tester", casterLevel);
         int pool = Mathf.Min(100, Mathf.Max(1, casterLevel) * 10);
@@ -117,7 +118,7 @@ public static class ProtectionFromArrowsRulesTests
 
     private static void TestSpellDefinition()
     {
-        SpellData spell = SpellDatabase.GetSpell("protection_from_arrows");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.PROTECTION_FROM_ARROWS);
         Assert(spell != null, "Protection from Arrows definition exists");
         if (spell == null)
             return;
@@ -245,7 +246,7 @@ public static class ProtectionFromArrowsRulesTests
 
             Assert(result.DamageReductionApplied == 10, "Final blocked attack still benefits from DR before discharge");
             Assert(target.Stats.ActiveProtectionFromArrowsEffect == null, "Protection from Arrows data cleared on discharge");
-            Assert(mgr != null && !mgr.HasEffect("protection_from_arrows"), "Protection from Arrows status effect removed on discharge");
+            Assert(mgr != null && !mgr.HasEffect(SpellNames.PROTECTION_FROM_ARROWS), "Protection from Arrows status effect removed on discharge");
             Assert(result.GetMitigationSummary().Contains("Protection from Arrows discharged!"),
                 "Mitigation summary includes discharge message",
                 $"summary={result.GetMitigationSummary()}");

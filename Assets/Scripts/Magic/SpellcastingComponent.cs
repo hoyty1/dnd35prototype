@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Manages spellcasting for a character: known/prepared spells, spell slots, and casting.
@@ -1866,15 +1867,15 @@ public class SpellcastingComponent : MonoBehaviour
     {
         int duration = spell.BuffDurationRounds;
 
-        if (spell.SpellId == "mage_armor")
+        if (spell.SpellId == SpellNames.MAGE_ARMOR)
         {
             MageArmorACBonus = spell.BuffACBonus;
-            ActiveBuffs["mage_armor"] = duration;
+            ActiveBuffs[SpellNames.MAGE_ARMOR] = duration;
             Debug.Log($"[Spellcasting] {Stats.CharacterName}: Mage Armor active, +{spell.BuffACBonus} AC (armor)");
         }
-        else if (spell.SpellId == "shield")
+        else if (spell.SpellId == SpellNames.SHIELD)
         {
-            ActiveBuffs["shield"] = duration;
+            ActiveBuffs[SpellNames.SHIELD] = duration;
             Debug.Log($"[Spellcasting] {Stats.CharacterName}: Shield active, +{spell.BuffShieldBonus} shield AC");
         }
         else if (!string.IsNullOrEmpty(spell.BuffStatName) && spell.BuffStatBonus != 0)
@@ -1921,7 +1922,7 @@ public class SpellcastingComponent : MonoBehaviour
         if (sc != null)
         {
             sc.MageArmorACBonus = spell.BuffACBonus;
-            sc.ActiveBuffs["mage_armor"] = -1;
+            sc.ActiveBuffs[SpellNames.MAGE_ARMOR] = -1;
         }
         else
         {
@@ -1931,7 +1932,7 @@ public class SpellcastingComponent : MonoBehaviour
             sc.SlotsMax = new int[0];
             sc.SlotsRemaining = new int[0];
             sc.MageArmorACBonus = spell.BuffACBonus;
-            sc.ActiveBuffs["mage_armor"] = -1;
+            sc.ActiveBuffs[SpellNames.MAGE_ARMOR] = -1;
         }
         Debug.Log($"[Spellcasting] Mage Armor applied to {target.Stats.CharacterName}: +{spell.BuffACBonus} AC");
     }
@@ -1964,7 +1965,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>Remove a specific buff.</summary>
     public void RemoveBuff(string spellId)
     {
-        if (spellId == "mage_armor")
+        if (spellId == SpellNames.MAGE_ARMOR)
         {
             MageArmorACBonus = 0;
             Debug.Log($"[Spellcasting] {Stats.CharacterName}: Mage Armor expired");

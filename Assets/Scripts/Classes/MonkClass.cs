@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Monk class definition (D&D 3.5 PHB).
@@ -43,12 +44,12 @@ public class MonkClass : ICharacterClass
     public void SetupStartingEquipment(InventoryComponent inv)
     {
         ItemDatabase.Init();
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
 
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("sling"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.SLING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_SHIELD_OF_FAITH));
         Debug.Log("[Monk] Equipment: Quarterstaff, Sling (unarmored for WIS AC bonus)");
     }
 

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -92,7 +93,7 @@ public static class DisguiseSelfRulesTests
 
     private static void TestDisguiseSelfSpellDefinition()
     {
-        SpellData spell = SpellDatabase.GetSpell("disguise_self");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.DISGUISE_SELF);
         Assert(spell != null, "Disguise Self definition exists");
         if (spell == null)
             return;
@@ -156,7 +157,7 @@ public static class DisguiseSelfRulesTests
         {
             controller = CreateController("SkillBonusTest", "Human");
             StatusEffectManager statusMgr = controller.GetComponent<StatusEffectManager>();
-            SpellData spell = SpellDatabase.GetSpell("disguise_self");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.DISGUISE_SELF);
 
             int baseline = controller.Stats.GetSkillBonus("Disguise");
             ActiveSpellEffect effect = statusMgr.AddEffect(spell, "Tester", 3);
@@ -165,7 +166,7 @@ public static class DisguiseSelfRulesTests
             int boosted = controller.Stats.GetSkillBonus("Disguise");
             Assert(boosted - baseline == 10, "Disguise Self grants +10 competence to Disguise", $"baseline={baseline}, boosted={boosted}");
 
-            statusMgr.RemoveEffectsBySpellId("disguise_self");
+            statusMgr.RemoveEffectsBySpellId(SpellNames.DISGUISE_SELF);
             int reverted = controller.Stats.GetSkillBonus("Disguise");
             Assert(reverted == baseline, "Disguise bonus removed when effect removed", $"baseline={baseline}, reverted={reverted}");
         }
@@ -183,7 +184,7 @@ public static class DisguiseSelfRulesTests
         {
             controller = CreateController("DurationTest", "Human");
             StatusEffectManager statusMgr = controller.GetComponent<StatusEffectManager>();
-            SpellData spell = SpellDatabase.GetSpell("disguise_self");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.DISGUISE_SELF);
 
             ActiveSpellEffect effect = statusMgr.AddEffect(spell, "Tester", 1);
             controller.ApplyDisguiseSelfEffect("Elf", effect != null ? effect.RemainingRounds : 0, controller);
@@ -191,13 +192,13 @@ public static class DisguiseSelfRulesTests
             Assert(controller.DisplayedRace == "Elf", "Precondition: race is disguised to Elf");
 
             int safety = 0;
-            while (statusMgr.HasEffect("disguise_self") && safety < 120)
+            while (statusMgr.HasEffect(SpellNames.DISGUISE_SELF) && safety < 120)
             {
                 safety++;
                 statusMgr.TickAllEffects();
             }
 
-            Assert(!statusMgr.HasEffect("disguise_self"), "Disguise Self expires after duration ticks");
+            Assert(!statusMgr.HasEffect(SpellNames.DISGUISE_SELF), "Disguise Self expires after duration ticks");
             Assert(controller.DisplayedRace == "Human", "Displayed race reverted after expiration", $"displayed={controller.DisplayedRace}");
         }
         finally

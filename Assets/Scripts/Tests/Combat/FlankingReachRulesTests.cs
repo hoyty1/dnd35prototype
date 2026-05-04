@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -30,10 +31,10 @@ public class FlankingReachRulesTests : MonoBehaviour
 
         // Weapon reach semantics for threat ring ranges.
         ItemDatabase.Init();
-        AssertThreatBand("longspear", expectedMin: 2, expectedMax: 2, ref passed, ref failed);
-        AssertThreatBand("spiked_chain", expectedMin: 1, expectedMax: 2, ref passed, ref failed);
-        AssertThreatBand("whip", expectedMin: 2, expectedMax: 3, ref passed, ref failed);
-        AssertThreatBand("longsword", expectedMin: 1, expectedMax: 1, ref passed, ref failed);
+        AssertThreatBand(ItemIDs.LONGSPEAR, expectedMin: 2, expectedMax: 2, ref passed, ref failed);
+        AssertThreatBand(ItemIDs.SPIKED_CHAIN, expectedMin: 1, expectedMax: 2, ref passed, ref failed);
+        AssertThreatBand(ItemIDs.WHIP, expectedMin: 2, expectedMax: 3, ref passed, ref failed);
+        AssertThreatBand(ItemIDs.LONGSWORD, expectedMin: 1, expectedMax: 1, ref passed, ref failed);
 
         Debug.Log($"[FlankReachTest] === RESULTS: {passed} passed, {failed} failed ===");
     }

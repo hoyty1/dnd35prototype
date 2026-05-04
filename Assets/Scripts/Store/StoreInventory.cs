@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Store catalog + buy/sell pricing. Uses existing ItemDatabase item definitions.
@@ -49,53 +50,53 @@ public class StoreInventory : MonoBehaviour
         _priceLookup.Clear();
 
         // Weapons
-        Add("longsword", "Weapon", 15);
-        Add("greatsword", "Weapon", 50);
-        Add("battleaxe", "Weapon", 10);
-        Add("greataxe", "Weapon", 20);
-        Add("rapier", "Weapon", 20);
-        Add("short_sword", "Weapon", 10);
-        Add("dagger", "Weapon", 2);
-        Add("shortbow", "Weapon", 30);
-        Add("longbow", "Weapon", 75);
-        Add("crossbow_heavy", "Weapon", 50);
-        Add("crossbow_light", "Weapon", 35);
-        Add("mace_heavy", "Weapon", 8);
-        Add("morningstar", "Weapon", 8);
-        Add("warhammer", "Weapon", 12);
-        Add("spear", "Weapon", 2);
-        Add("javelin", "Weapon", 1);
+        Add(ItemIDs.LONGSWORD, "Weapon", 15);
+        Add(ItemIDs.GREATSWORD, "Weapon", 50);
+        Add(ItemIDs.BATTLEAXE, "Weapon", 10);
+        Add(ItemIDs.GREATAXE, "Weapon", 20);
+        Add(ItemIDs.RAPIER, "Weapon", 20);
+        Add(ItemIDs.SHORT_SWORD, "Weapon", 10);
+        Add(ItemIDs.DAGGER, "Weapon", 2);
+        Add(ItemIDs.SHORTBOW, "Weapon", 30);
+        Add(ItemIDs.LONGBOW, "Weapon", 75);
+        Add(ItemIDs.CROSSBOW_HEAVY, "Weapon", 50);
+        Add(ItemIDs.CROSSBOW_LIGHT, "Weapon", 35);
+        Add(ItemIDs.MACE_HEAVY, "Weapon", 8);
+        Add(ItemIDs.MORNINGSTAR, "Weapon", 8);
+        Add(ItemIDs.WARHAMMER, "Weapon", 12);
+        Add(ItemIDs.SPEAR, "Weapon", 2);
+        Add(ItemIDs.JAVELIN, "Weapon", 1);
 
         // Armor
-        Add("chain_shirt", "Armor", 100);
-        Add("scale_mail", "Armor", 50);
-        Add("chainmail", "Armor", 150);
-        Add("breastplate", "Armor", 200);
-        Add("splint_mail", "Armor", 200);
-        Add("banded_mail", "Armor", 250);
-        Add("half_plate", "Armor", 600);
-        Add("full_plate", "Armor", 1500);
-        Add("leather_armor", "Armor", 10);
-        Add("studded_leather", "Armor", 25);
-        Add("hide_armor", "Armor", 15);
+        Add(ItemIDs.CHAIN_SHIRT, "Armor", 100);
+        Add(ItemIDs.SCALE_MAIL, "Armor", 50);
+        Add(ItemIDs.CHAINMAIL, "Armor", 150);
+        Add(ItemIDs.BREASTPLATE, "Armor", 200);
+        Add(ItemIDs.SPLINT_MAIL, "Armor", 200);
+        Add(ItemIDs.BANDED_MAIL, "Armor", 250);
+        Add(ItemIDs.HALF_PLATE, "Armor", 600);
+        Add(ItemIDs.FULL_PLATE, "Armor", 1500);
+        Add(ItemIDs.LEATHER_ARMOR, "Armor", 10);
+        Add(ItemIDs.STUDDED_LEATHER, "Armor", 25);
+        Add(ItemIDs.HIDE_ARMOR, "Armor", 15);
 
         // Shields
-        Add("buckler", "Shield", 15);
-        Add("shield_light_wooden", "Shield", 3);
-        Add("shield_light_steel", "Shield", 9);
-        Add("shield_heavy_wooden", "Shield", 7);
-        Add("shield_heavy_steel", "Shield", 20);
-        Add("tower_shield", "Shield", 30);
+        Add(ItemIDs.BUCKLER, "Shield", 15);
+        Add(ItemIDs.SHIELD_LIGHT_WOODEN, "Shield", 3);
+        Add(ItemIDs.SHIELD_LIGHT_STEEL, "Shield", 9);
+        Add(ItemIDs.SHIELD_HEAVY_WOODEN, "Shield", 7);
+        Add(ItemIDs.SHIELD_HEAVY_STEEL, "Shield", 20);
+        Add(ItemIDs.TOWER_SHIELD, "Shield", 30);
 
         // Consumables
-        Add("potion_cure_light_wounds", "Potion", 50);
-        Add("potion_shield_of_faith", "Potion", 50);
+        Add(ItemIDs.POTION_CURE_LIGHT_WOUNDS, "Potion", 50);
+        Add(ItemIDs.POTION_SHIELD_OF_FAITH, "Potion", 50);
 
         // Adventuring gear / misc
-        Add("crossbow_bolts_20", "Ammunition", 1);
-        Add("torch", "Gear", 1);
-        Add("rope_hemp", "Gear", 1);
-        Add("rope_silk", "Gear", 10);
+        Add(ItemIDs.CROSSBOW_BOLTS_20, "Ammunition", 1);
+        Add(ItemIDs.TORCH, "Gear", 1);
+        Add(ItemIDs.ROPE_HEMP, "Gear", 1);
+        Add(ItemIDs.ROPE_SILK, "Gear", 10);
 
         Debug.Log($"[Store] Initialized with {_availableItems.Count} items");
     }

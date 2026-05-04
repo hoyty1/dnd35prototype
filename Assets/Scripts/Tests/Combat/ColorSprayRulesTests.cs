@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -100,7 +101,7 @@ public static class ColorSprayRulesTests
 
     private static void TestColorSprayDefinitionMatchesCoreRules()
     {
-        SpellData colorSpray = SpellDatabase.GetSpell("color_spray");
+        SpellData colorSpray = SpellDatabase.GetSpell(SpellNames.COLOR_SPRAY);
         Assert(colorSpray != null, "Color Spray spell definition exists");
         if (colorSpray == null)
             return;
@@ -208,7 +209,7 @@ public static class ColorSprayRulesTests
             FieldInfo conditionField = typeof(GameManager).GetField("_conditionService", BindingFlags.NonPublic | BindingFlags.Instance);
             conditionField?.SetValue(gm, conditionService);
 
-            SpellData spell = SpellDatabase.GetSpell("color_spray");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.COLOR_SPRAY);
             MethodInfo applyStage = typeof(GameManager).GetMethod("ApplyColorSprayStageConditions", BindingFlags.NonPublic | BindingFlags.Instance);
             MethodInfo handleExpiry = typeof(GameManager).GetMethod("TryHandleColorSprayConditionExpiry", BindingFlags.NonPublic | BindingFlags.Instance);
 
@@ -216,7 +217,7 @@ public static class ColorSprayRulesTests
             {
                 Caster = caster,
                 CasterName = caster.Stats.CharacterName,
-                SourceSpellId = "color_spray",
+                SourceSpellId = SpellNames.COLOR_SPRAY,
                 SourceEffectName = "Color Spray",
                 HdTier = hdTier,
                 HitDice = hdTier == 1 ? 2 : hdTier == 2 ? 4 : 6,
@@ -241,7 +242,7 @@ public static class ColorSprayRulesTests
             {
                 Type = CombatConditionType.Stunned,
                 SourceName = "Color Spray",
-                SourceId = "color_spray",
+                SourceId = SpellNames.COLOR_SPRAY,
                 Data = data
             };
 

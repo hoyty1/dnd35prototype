@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "obscure_object",
+                    SpellId = SpellNames.OBSCURE_OBJECT,
                     Name = "Obscure Object",
                     Description = "Masks object against scrying. Duration 8 hours. PHB p.258",
                     SpellLevel = 2, School = "Abjuration",
@@ -28,7 +29,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "obscuring_mist",
+                    SpellId = SpellNames.OBSCURING_MIST,
                     Name = "Obscuring Mist",
                     Description = "Mist spreads in a 20-ft radius and grants concealment (20% miss chance) to creatures inside. Duration 1 min/level. PHB p.258",
                     SpellLevel = 1, School = "Conjuration",
@@ -53,7 +54,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "open_close",
+                    SpellId = SpellNames.OPEN_CLOSE,
                     Name = "Open/Close",
                     Description = "Opens or closes small or light things (door, chest, bottle, etc.).",
                     SpellLevel = 0, School = "Transmutation",
@@ -69,7 +70,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "owls_wisdom",
+                    SpellId = SpellNames.OWLS_WISDOM,
                     Name = "Owl's Wisdom",
                     Description = "Subject gains +4 enhancement bonus to WIS for 1 min/level. PHB p.259",
                     SpellLevel = 2, School = "Transmutation",
@@ -91,8 +92,8 @@ public static partial class SpellDatabase
                 });
 
         // Aliases
-        RegisterClassSpellAlias("obscuring_mist_clr", "obscuring_mist", "Cleric", 1);
-        RegisterClassSpellAlias("owls_wisdom_clr", "owls_wisdom", "Cleric", 2);
+        RegisterClassSpellAlias("obscuring_mist_clr", SpellNames.OBSCURING_MIST, "Cleric", 1);
+        RegisterClassSpellAlias("owls_wisdom_clr", SpellNames.OWLS_WISDOM, "Cleric", 2);
 
     }
 }

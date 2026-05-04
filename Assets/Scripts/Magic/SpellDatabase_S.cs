@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "sanctuary",
+                    SpellId = SpellNames.SANCTUARY,
                     Name = "Sanctuary",
                     Description = "Opponents can't attack you unless they make a Will save. 1 round/level. PHB p.274",
                     SpellLevel = 1, School = "Abjuration",
@@ -22,7 +23,7 @@ public static partial class SpellDatabase
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
                     BuffDurationRounds = 3,
-                    BuffType = "sanctuary",
+                    BuffType = SpellNames.SANCTUARY,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -31,7 +32,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "scare",
+                    SpellId = SpellNames.SCARE,
                     Name = "Scare",
                     Description = "Frightens creatures of less than 6 HD. Will save negates. 1 round/level. PHB p.274",
                     SpellLevel = 2, School = "Necromancy",
@@ -48,7 +49,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "scorching_ray",
+                    SpellId = SpellNames.SCORCHING_RAY,
                     Name = "Scorching Ray",
                     Description = "Ranged touch attack, 4d6 fire damage per ray. 1 ray at CL3 (2 at CL7, 3 at CL11). PHB p.274",
                     SpellLevel = 2, School = "Evocation",
@@ -67,7 +68,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "see_invisibility",
+                    SpellId = SpellNames.SEE_INVISIBILITY,
                     Name = "See Invisibility",
                     Description = "Divination. Personal. You can see invisible creatures and objects normally. Negates invisibility miss chance and invisibility Hide bonus against you (but not mundane hiding). Duration 10 min/level, dismissible. Components: V, S, M (talc and powdered silver). PHB p.275",
                     SpellLevel = 2, School = "Divination",
@@ -75,7 +76,7 @@ public static partial class SpellDatabase
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
-                    BuffType = "see_invisibility",
+                    BuffType = SpellNames.SEE_INVISIBILITY,
                     DurationType = DurationType.Minutes,
                     DurationValue = 10,
                     DurationScalesWithLevel = true,
@@ -86,7 +87,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "shatter",
+                    SpellId = SpellNames.SHATTER,
                     Name = "Shatter",
                     Description = "Sonic vibration damages objects or crystalline creatures. 1d6/level (max 10d6) sonic. PHB p.278",
                     SpellLevel = 2, School = "Evocation",
@@ -105,7 +106,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "shield",
+                    SpellId = SpellNames.SHIELD,
                     Name = "Shield",
                     Description = "+4 shield bonus to AC, blocks Magic Missile. Duration 1 min/level. PHB p.278",
                     SpellLevel = 1, School = "Abjuration",
@@ -115,7 +116,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     BuffShieldBonus = 4,
                     BuffDurationRounds = 30,
-                    BuffType = "shield",
+                    BuffType = SpellNames.SHIELD,
                     BuffBonusType = BonusType.Shield,
                     BonusTypeExplicitlySet = true,
                     DurationType = DurationType.Minutes,
@@ -127,7 +128,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "shield_of_faith",
+                    SpellId = SpellNames.SHIELD_OF_FAITH,
                     Name = "Shield of Faith",
                     Description = "+2 deflection bonus to AC. Duration 1 min/level. PHB p.278",
                     SpellLevel = 1, School = "Abjuration",
@@ -149,7 +150,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "shield_other",
+                    SpellId = SpellNames.SHIELD_OTHER,
                     Name = "Shield Other",
                     Description = "+1 deflection AC and +1 resistance on saves. Caster takes half of subject's damage. 1 hr/level. PHB p.278",
                     SpellLevel = 2, School = "Abjuration",
@@ -160,14 +161,14 @@ public static partial class SpellDatabase
                     BuffDeflectionBonus = 1,
                     BuffSaveBonus = 1,
                     BuffDurationRounds = -1,
-                    BuffType = "shield_other",
+                    BuffType = SpellNames.SHIELD_OTHER,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
 
         Register(new SpellData
                 {
-                    SpellId = "shocking_grasp",
+                    SpellId = SpellNames.SHOCKING_GRASP,
                     Name = "Shocking Grasp",
                     Description = "Touch delivers 1d6/level electricity damage (max 5d6). +3 attack vs metal armor. PHB p.279",
                     SpellLevel = 1, School = "Evocation",
@@ -185,7 +186,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "silence",
+                    SpellId = SpellNames.SILENCE,
                     Name = "Silence",
                     Description = "Negates sound in 20-ft radius. Prevents spellcasting with verbal components. 1 round/level. PHB p.279",
                     SpellLevel = 2, School = "Illusion",
@@ -203,7 +204,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "silent_image",
+                    SpellId = SpellNames.SILENT_IMAGE,
                     Name = "Silent Image",
                     Description = "Creates minor illusion of your design. Concentration + 2 rounds. Will disbelief. PHB p.279",
                     SpellLevel = 1, School = "Illusion",
@@ -222,7 +223,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "sleep",
+                    SpellId = SpellNames.SLEEP,
                     Name = "Sleep",
                     Description = "Enchantment (Compulsion) [Mind-Affecting]. A 10-ft radius burst affects creatures with lowest HD first from a 4d4 HD pool. Only creatures with 4 HD or less are affected. Will negates. Duration 1 min/level. SR: Yes. PHB p.280",
                     SpellLevel = 1,
@@ -251,7 +252,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "domain_soften_earth",
+                    SpellId = SpellNames.DOMAIN_SOFTEN_EARTH,
                     Name = "Soften Earth and Stone",
                     Description = "Turns stone to clay or dirt to sand/mud.",
                     SpellLevel = 2,
@@ -269,7 +270,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "sound_burst",
+                    SpellId = SpellNames.SOUND_BURST,
                     Name = "Sound Burst",
                     Description = "Deals 1d8 sonic damage in 10-ft radius. Fortitude save or stunned for 1 round. PHB p.281",
                     SpellLevel = 2, School = "Evocation",
@@ -289,7 +290,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "spectral_hand",
+                    SpellId = SpellNames.SPECTRAL_HAND,
                     Name = "Spectral Hand",
                     Description = "Creates ghostly hand to deliver touch spells at range. +2 on touch attacks via hand. 1 min/level. PHB p.282",
                     SpellLevel = 2, School = "Necromancy",
@@ -299,14 +300,14 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     BuffAttackBonus = 2,
                     BuffDurationRounds = 30,
-                    BuffType = "spectral_hand",
+                    BuffType = SpellNames.SPECTRAL_HAND,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
 
         Register(new SpellData
                 {
-                    SpellId = "spider_climb",
+                    SpellId = SpellNames.SPIDER_CLIMB,
                     Name = "Spider Climb",
                     Description = "Grants ability to walk on walls and ceilings. Speed 20 ft. Duration 10 min/level. PHB p.283",
                     SpellLevel = 2, School = "Transmutation",
@@ -315,7 +316,7 @@ public static partial class SpellDatabase
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = -1,
-                    BuffType = "spider_climb",
+                    BuffType = SpellNames.SPIDER_CLIMB,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -324,7 +325,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "spiritual_weapon",
+                    SpellId = SpellNames.SPIRITUAL_WEAPON,
                     Name = "Spiritual Weapon",
                     Description = "Magic weapon attacks on its own. 1d8 + 1/3CL force damage. Lasts 1 round/level. No AoO. PHB p.283",
                     SpellLevel = 2, School = "Evocation",
@@ -342,7 +343,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "stone_to_flesh",
+                    SpellId = SpellNames.STONE_TO_FLESH,
                     Name = "Stone to Flesh",
                     Description = "Restores petrified creature to normal flesh. PHB p.284",
                     SpellLevel = 6, School = "Transmutation",
@@ -356,7 +357,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "status",
+                    SpellId = SpellNames.STATUS,
                     Name = "Status",
                     Description = "Monitors condition and position of allies. Duration 1 hr/level. PHB p.284",
                     SpellLevel = 2, School = "Divination",
@@ -373,7 +374,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "summon_monster_1",
+                    SpellId = SpellNames.SUMMON_MONSTER_1,
                     Name = "Summon Monster I",
                     Description = "Calls a creature to fight for you. Duration 1 round/level. PHB p.285",
                     SpellLevel = 1, School = "Conjuration",
@@ -390,7 +391,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "summon_monster_2",
+                    SpellId = SpellNames.SUMMON_MONSTER_2,
                     Name = "Summon Monster II",
                     Description = "Calls creature to fight for you. Duration 1 round/level. PHB p.286",
                     SpellLevel = 2, School = "Conjuration",
@@ -407,7 +408,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "summon_swarm",
+                    SpellId = SpellNames.SUMMON_SWARM,
                     Name = "Summon Swarm",
                     Description = "Summons swarm of bats, rats, or spiders. 2d6 damage/round. Concentration + 2 rounds. PHB p.289",
                     SpellLevel = 2, School = "Conjuration",
@@ -425,9 +426,9 @@ public static partial class SpellDatabase
                 });
 
         // Aliases
-        RegisterClassSpellAlias("see_invisibility_brd", "see_invisibility", "Bard", 3);
-        RegisterClassSpellAlias("summon_monster_1_clr", "summon_monster_1", "Cleric", 1);
-        RegisterClassSpellAlias("summon_monster_2_clr", "summon_monster_2", "Cleric", 2);
+        RegisterClassSpellAlias("see_invisibility_brd", SpellNames.SEE_INVISIBILITY, "Bard", 3);
+        RegisterClassSpellAlias("summon_monster_1_clr", SpellNames.SUMMON_MONSTER_1, "Cleric", 1);
+        RegisterClassSpellAlias("summon_monster_2_clr", SpellNames.SUMMON_MONSTER_2, "Cleric", 2);
 
     }
 }

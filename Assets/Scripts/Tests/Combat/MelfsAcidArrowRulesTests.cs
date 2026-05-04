@@ -1,5 +1,6 @@
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -98,7 +99,7 @@ public static class MelfsAcidArrowRulesTests
 
     private static void TestSpellDefinitionMatchesRules()
     {
-        SpellData spell = SpellDatabase.GetSpell("melfs_acid_arrow");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.MELFS_ACID_ARROW);
         Assert(spell != null, "Melf's Acid Arrow definition exists");
         if (spell == null)
             return;
@@ -157,7 +158,7 @@ public static class MelfsAcidArrowRulesTests
 
     private static void TestRangedTouchAttackUsesTouchAc()
     {
-        SpellData spell = SpellDatabase.GetSpell("melfs_acid_arrow");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.MELFS_ACID_ARROW);
         CharacterStats caster = BuildStats("Caster", level: 7, dex: 16, bab: 5);
         CharacterStats target = BuildStats("Target", level: 5, dex: 14, bab: 3);
 

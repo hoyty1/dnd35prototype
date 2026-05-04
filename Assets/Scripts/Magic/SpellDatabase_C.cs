@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "domain_calm_animals",
+                    SpellId = SpellNames.DOMAIN_CALM_ANIMALS,
                     Name = "Calm Animals",
                     Description = "Calms 2d4+level HD of animals, rendering them docile and harmless.",
                     SpellLevel = 1,
@@ -32,7 +33,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "calm_emotions",
+                    SpellId = SpellNames.CALM_EMOTIONS,
                     Name = "Calm Emotions",
                     Description = "Calms creatures in 20-ft radius, suppressing morale bonuses and emotion effects. Will negates. Concentration + 1 round/level. PHB p.207",
                     SpellLevel = 2, School = "Enchantment",
@@ -52,7 +53,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "cats_grace",
+                    SpellId = SpellNames.CATS_GRACE,
                     Name = "Cat's Grace",
                     Description = "Subject gains +4 enhancement bonus to DEX for 1 min/level. PHB p.208",
                     SpellLevel = 2, School = "Transmutation",
@@ -75,7 +76,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "cause_fear",
+                    SpellId = SpellNames.CAUSE_FEAR,
                     Name = "Cause Fear",
                     Description = "Necromancy [Fear, Mind-Affecting]. One living creature of 5 HD or less becomes frightened for 1d4 rounds; a successful Will save leaves it shaken for 1 round. SR: Yes. PHB p.208",
                     SpellLevel = 1, School = "Necromancy",
@@ -94,7 +95,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "charm_person",
+                    SpellId = SpellNames.CHARM_PERSON,
                     Name = "Charm Person",
                     Description = "Enchantment (Charm) [Mind-Affecting]. One humanoid creature of 4 HD or less regards you as a trusted ally. Will negates. Duration 1 hour/level. SR: Yes. PHB p.209",
                     SpellLevel = 1,
@@ -119,7 +120,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "chill_touch",
+                    SpellId = SpellNames.CHILL_TOUCH,
                     Name = "Chill Touch",
                     Description = "1 touch/level, each dealing 1d6 negative energy damage and 1 STR damage. Fort save negates STR damage.",
                     SpellLevel = 1, School = "Necromancy",
@@ -140,7 +141,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "chromatic_orb",
+                    SpellId = SpellNames.CHROMATIC_ORB,
                     Name = "Chromatic Orb",
                     Description = "Ranged touch attack deals 1d8 damage (type varies by caster level). At CL3: fire, 1d8.",
                     SpellLevel = 1, School = "Evocation",
@@ -158,7 +159,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "color_spray",
+                    SpellId = SpellNames.COLOR_SPRAY,
                     Name = "Color Spray",
                     Description = "Illusion (Pattern) [Mind-Affecting]. Creatures in a 15-ft cone are stunned, blinded, and possibly knocked unconscious based on HD. Will negates. SR: Yes. Duration special (cascading by HD). PHB p.210",
                     SpellLevel = 1,
@@ -185,7 +186,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "command",
+                    SpellId = SpellNames.COMMAND,
                     Name = "Command",
                     Description = "One subject obeys selected command for 1 round: approach, drop, fall, flee, halt. Will negates. PHB p.211",
                     SpellLevel = 1, School = "Enchantment",
@@ -202,7 +203,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "command_undead",
+                    SpellId = SpellNames.COMMAND_UNDEAD,
                     Name = "Command Undead",
                     Description = "Undead creature obeys your commands. Will save for intelligent undead. 1 day/level. PHB p.211",
                     SpellLevel = 2, School = "Necromancy",
@@ -221,7 +222,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "comprehend_languages",
+                    SpellId = SpellNames.COMPREHEND_LANGUAGES,
                     Name = "Comprehend Languages",
                     Description = "You understand all spoken and written languages. Duration 10 min/level. PHB p.212",
                     SpellLevel = 1, School = "Divination",
@@ -238,7 +239,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "consecrate",
+                    SpellId = SpellNames.CONSECRATE,
                     Name = "Consecrate",
                     Description = "Fills area with positive energy. Undead suffer penalties. 20-ft radius. 2 hr/level. PHB p.212",
                     SpellLevel = 2, School = "Evocation",
@@ -256,7 +257,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "confusion",
+                    SpellId = SpellNames.CONFUSION,
                     Name = "Confusion",
                     Description = "Targets behave unpredictably for 1 round/level. Will negates. PHB p.212",
                     SpellLevel = 4, School = "Enchantment",
@@ -273,7 +274,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "continual_flame",
+                    SpellId = SpellNames.CONTINUAL_FLAME,
                     Name = "Continual Flame",
                     Description = "Makes a permanent, heatless flame. Requires 50 gp ruby dust. PHB p.213",
                     SpellLevel = 2, School = "Evocation",
@@ -290,7 +291,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "create_water",
+                    SpellId = SpellNames.CREATE_WATER,
                     Name = "Create Water",
                     Description = "Creates 2 gallons/level of pure water.",
                     SpellLevel = 0, School = "Conjuration",
@@ -306,7 +307,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "cure_light_wounds",
+                    SpellId = SpellNames.CURE_LIGHT_WOUNDS,
                     Name = "Cure Light Wounds",
                     Description = "Heals 1d8 + caster level (max +5) HP. PHB p.215",
                     SpellLevel = 1, School = "Conjuration",
@@ -323,7 +324,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "cure_minor_wounds",
+                    SpellId = SpellNames.CURE_MINOR_WOUNDS,
                     Name = "Cure Minor Wounds",
                     Description = "Cures 1 point of damage. Touch range.",
                     SpellLevel = 0, School = "Conjuration",
@@ -338,7 +339,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "cure_moderate_wounds",
+                    SpellId = SpellNames.CURE_MODERATE_WOUNDS,
                     Name = "Cure Moderate Wounds",
                     Description = "Heals 2d8 + CL (max +10) HP. Touch range. PHB p.216",
                     SpellLevel = 2, School = "Conjuration",
@@ -354,8 +355,8 @@ public static partial class SpellDatabase
                 });
 
         // Aliases
-        RegisterClassSpellAlias("cause_fear_clr", "cause_fear", "Cleric", 1);
-        RegisterClassSpellAlias("comprehend_languages_clr", "comprehend_languages", "Cleric", 1);
+        RegisterClassSpellAlias("cause_fear_clr", SpellNames.CAUSE_FEAR, "Cleric", 1);
+        RegisterClassSpellAlias("comprehend_languages_clr", SpellNames.COMPREHEND_LANGUAGES, "Cleric", 1);
 
     }
 }

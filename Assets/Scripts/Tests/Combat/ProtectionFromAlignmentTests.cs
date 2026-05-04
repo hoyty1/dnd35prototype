@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -105,7 +106,7 @@ public static class ProtectionFromAlignmentTests
 
     private static void TestSpellDefinitionsExistAndDurationScalePerMinutePerLevel()
     {
-        string[] ids = { "protection_from_evil", "protection_from_good", "protection_from_law", "protection_from_chaos" };
+        string[] ids = { SpellNames.PROTECTION_FROM_EVIL, SpellNames.PROTECTION_FROM_GOOD, SpellNames.PROTECTION_FROM_LAW, SpellNames.PROTECTION_FROM_CHAOS };
 
         for (int i = 0; i < ids.Length; i++)
         {
@@ -132,7 +133,7 @@ public static class ProtectionFromAlignmentTests
         try
         {
             target = CreateController(BuildStats("WardTarget", "Wizard", 5, Alignment.TrueNeutral, 10, 12, 12, 14, 16, 10, 2));
-            SpellData protection = SpellDatabase.GetSpell("protection_from_evil");
+            SpellData protection = SpellDatabase.GetSpell(SpellNames.PROTECTION_FROM_EVIL);
             ActiveSpellEffect effect = target.GetComponent<StatusEffectManager>().AddEffect(protection, "Tester", 5);
             Assert(effect != null, "Protection from Evil effect applied");
 
@@ -164,8 +165,8 @@ public static class ProtectionFromAlignmentTests
             caster = CreateController(BuildStats("EvilCleric", "Cleric", 5, Alignment.NeutralEvil, 10, 10, 12, 16, 12, 10, 3));
             target = CreateController(BuildStats("ProtectedAlly", "Wizard", 5, Alignment.TrueNeutral, 10, 12, 12, 14, 16, 10, 2));
 
-            SpellData protection = SpellDatabase.GetSpell("protection_from_evil");
-            SpellData command = SpellDatabase.GetSpell("command");
+            SpellData protection = SpellDatabase.GetSpell(SpellNames.PROTECTION_FROM_EVIL);
+            SpellData command = SpellDatabase.GetSpell(SpellNames.COMMAND);
 
             target.GetComponent<StatusEffectManager>().AddEffect(protection, "AllyCaster", 5);
 
@@ -202,8 +203,8 @@ public static class ProtectionFromAlignmentTests
             caster = CreateController(BuildStats("EvilEnchanter", "Wizard", 5, Alignment.NeutralEvil, 8, 14, 12, 12, 18, 10, 2));
             target = CreateController(BuildStats("WardedTarget", "Wizard", 5, Alignment.TrueNeutral, 10, 12, 12, 14, 16, 10, 2));
 
-            SpellData protection = SpellDatabase.GetSpell("protection_from_evil");
-            SpellData charmPerson = SpellDatabase.GetSpell("charm_person");
+            SpellData protection = SpellDatabase.GetSpell(SpellNames.PROTECTION_FROM_EVIL);
+            SpellData charmPerson = SpellDatabase.GetSpell(SpellNames.CHARM_PERSON);
             target.GetComponent<StatusEffectManager>().AddEffect(protection, "AllyCaster", 5);
 
             SpellResult result = SpellCaster.Cast(
@@ -242,7 +243,7 @@ public static class ProtectionFromAlignmentTests
             evilAttacker = CreateController(BuildStats("EvilMelee", "Fighter", 5, Alignment.NeutralEvil, 16, 12, 14, 10, 10, 8, 5));
             neutralAttacker = CreateController(BuildStats("NeutralMelee", "Fighter", 5, Alignment.TrueNeutral, 16, 12, 14, 10, 10, 8, 5));
 
-            SpellData protection = SpellDatabase.GetSpell("protection_from_evil");
+            SpellData protection = SpellDatabase.GetSpell(SpellNames.PROTECTION_FROM_EVIL);
             target.GetComponent<StatusEffectManager>().AddEffect(protection, "AllyCaster", 5);
 
             CombatResult evilAttack = evilAttacker.Attack(target);
@@ -279,7 +280,7 @@ public static class ProtectionFromAlignmentTests
             summonAttacker = CreateController(BuildStats("SummonedFiend", "Fighter", 5, Alignment.NeutralEvil, 16, 12, 14, 10, 10, 8, 5));
             summonCaster = CreateController(BuildStats("Summoner", "Wizard", 5, Alignment.NeutralEvil, 8, 14, 12, 12, 18, 10, 2));
 
-            SpellData protection = SpellDatabase.GetSpell("protection_from_evil");
+            SpellData protection = SpellDatabase.GetSpell(SpellNames.PROTECTION_FROM_EVIL);
             target.GetComponent<StatusEffectManager>().AddEffect(protection, "AllyCaster", 5);
 
             RegisterAsActiveSummon(gm, summonAttacker, summonCaster);

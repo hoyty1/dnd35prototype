@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "ventriloquism",
+                    SpellId = SpellNames.VENTRILOQUISM,
                     Name = "Ventriloquism",
                     Description = "Throws voice for 1 min/level. Will disbelief. PHB p.298",
                     SpellLevel = 1, School = "Illusion",
@@ -30,7 +31,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "virtue",
+                    SpellId = SpellNames.VIRTUE,
                     Name = "Virtue",
                     Description = "Subject gains 1 temporary hit point for 1 minute.",
                     SpellLevel = 0, School = "Transmutation",

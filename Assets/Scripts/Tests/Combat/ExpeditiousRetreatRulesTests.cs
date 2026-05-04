@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -94,7 +95,7 @@ public static class ExpeditiousRetreatRulesTests
 
     private static void TestSpellDefinition()
     {
-        SpellData spell = SpellDatabase.GetSpell("expeditious_retreat");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.EXPEDITIOUS_RETREAT);
         Assert(spell != null, "Spell definition exists");
         if (spell == null)
             return;
@@ -121,7 +122,7 @@ public static class ExpeditiousRetreatRulesTests
         {
             controller = CreateController("SpeedTest", level: 3);
             StatusEffectManager statusMgr = controller.GetComponent<StatusEffectManager>();
-            SpellData spell = SpellDatabase.GetSpell("expeditious_retreat");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.EXPEDITIOUS_RETREAT);
 
             int baseFeet = controller.Stats.SpeedInFeet;
             int baseRange = controller.Stats.MoveRange;
@@ -149,7 +150,7 @@ public static class ExpeditiousRetreatRulesTests
         {
             controller = CreateController("JumpTest", level: 3);
             StatusEffectManager statusMgr = controller.GetComponent<StatusEffectManager>();
-            SpellData spell = SpellDatabase.GetSpell("expeditious_retreat");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.EXPEDITIOUS_RETREAT);
 
             int baselineJump = controller.Stats.GetSkillBonus("Jump");
             int baselineJumpSpeedModifier = controller.Stats.JumpSpeedModifier;
@@ -182,7 +183,7 @@ public static class ExpeditiousRetreatRulesTests
         {
             controller = CreateController("DurationTest", level: 2);
             StatusEffectManager statusMgr = controller.GetComponent<StatusEffectManager>();
-            SpellData spell = SpellDatabase.GetSpell("expeditious_retreat");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.EXPEDITIOUS_RETREAT);
 
             int baseSpeed = controller.Stats.SpeedInFeet;
             ActiveSpellEffect effect = statusMgr.AddEffect(spell, "Tester", 2);
@@ -193,13 +194,13 @@ public static class ExpeditiousRetreatRulesTests
             for (int i = 0; i < 19; i++)
                 statusMgr.TickAllEffects();
 
-            Assert(statusMgr.HasEffect("expeditious_retreat"), "Effect remains active before final round");
+            Assert(statusMgr.HasEffect(SpellNames.EXPEDITIOUS_RETREAT), "Effect remains active before final round");
             Assert(controller.Stats.SpeedInFeet == baseSpeed + 30, "Speed bonus remains while active");
 
             statusMgr.TickAllEffects();
             controller.ClearExpeditiousRetreatEffect();
 
-            Assert(!statusMgr.HasEffect("expeditious_retreat"), "Effect expires after full duration");
+            Assert(!statusMgr.HasEffect(SpellNames.EXPEDITIOUS_RETREAT), "Effect expires after full duration");
             Assert(controller.Stats.SpeedInFeet == baseSpeed, "Speed returns to baseline after expiry", $"expected={baseSpeed}, actual={controller.Stats.SpeedInFeet}");
         }
         finally
@@ -215,13 +216,13 @@ public static class ExpeditiousRetreatRulesTests
         {
             controller = CreateController("DismissTest", level: 3);
             StatusEffectManager statusMgr = controller.GetComponent<StatusEffectManager>();
-            SpellData spell = SpellDatabase.GetSpell("expeditious_retreat");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.EXPEDITIOUS_RETREAT);
 
             int baseSpeed = controller.Stats.SpeedInFeet;
             ActiveSpellEffect effect = statusMgr.AddEffect(spell, "Tester", 3);
             controller.ApplyExpeditiousRetreatEffect(effect != null ? effect.AppliedSpeedBonusFeet : 0, effect != null ? effect.RemainingRounds : 0, controller);
 
-            statusMgr.RemoveEffectsBySpellId("expeditious_retreat");
+            statusMgr.RemoveEffectsBySpellId(SpellNames.EXPEDITIOUS_RETREAT);
             ExpeditiousRetreatEffectData removed = controller.RemoveExpeditiousRetreatEffect();
 
             Assert(removed != null, "Character tracks removable Expeditious Retreat effect data");

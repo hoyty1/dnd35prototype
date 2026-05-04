@@ -2,6 +2,7 @@ using UnityEngine;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DND35e.Identifiers;
 
 /// <summary>
 /// D&D 3.5 edition character stats system.
@@ -2525,8 +2526,8 @@ public class CharacterStats
             return;
 
         StatusEffectManager statusMgr = owner.GetComponent<StatusEffectManager>();
-        if (statusMgr != null && statusMgr.HasEffect("protection_from_arrows"))
-            statusMgr.RemoveEffectsBySpellId("protection_from_arrows");
+        if (statusMgr != null && statusMgr.HasEffect(SpellNames.PROTECTION_FROM_ARROWS))
+            statusMgr.RemoveEffectsBySpellId(SpellNames.PROTECTION_FROM_ARROWS);
 
         if (GameManager.Instance != null && GameManager.Instance.CombatUI != null && owner.Stats != null)
             GameManager.Instance.CombatUI.ShowCombatLog($"<color=#FFAA44>🛡 Protection from Arrows discharged on {owner.Stats.CharacterName}!</color>");
@@ -2864,33 +2865,33 @@ public class CharacterStats
 
     private static readonly HashSet<string> BardSpecificWeaponProficiencies = new HashSet<string>
     {
-        "crossbow_hand", "longsword", "rapier", "sap", "short_sword", "shortbow", "whip"
+        "crossbow_hand", ItemIDs.LONGSWORD, ItemIDs.RAPIER, "sap", ItemIDs.SHORT_SWORD, ItemIDs.SHORTBOW, ItemIDs.WHIP
     };
 
     private static readonly HashSet<string> DruidSpecificWeaponProficiencies = new HashSet<string>
     {
-        "club", "dagger", "dart", "quarterstaff", "scimitar", "sickle", "shortspear", "sling", "spear"
+        ItemIDs.CLUB, ItemIDs.DAGGER, ItemIDs.DART, ItemIDs.QUARTERSTAFF, ItemIDs.SCIMITAR, ItemIDs.SICKLE, ItemIDs.SHORTSPEAR, ItemIDs.SLING, ItemIDs.SPEAR
     };
 
     private static readonly HashSet<string> MonkSpecificWeaponProficiencies = new HashSet<string>
     {
-        "club", "crossbow_light", "crossbow_heavy", "dagger", "handaxe", "javelin",
-        "kama", "nunchaku", "quarterstaff", "sai", "shuriken", "siangham", "sling"
+        ItemIDs.CLUB, ItemIDs.CROSSBOW_LIGHT, ItemIDs.CROSSBOW_HEAVY, ItemIDs.DAGGER, ItemIDs.HANDAXE, ItemIDs.JAVELIN,
+        "kama", "nunchaku", ItemIDs.QUARTERSTAFF, "sai", "shuriken", "siangham", ItemIDs.SLING
     };
 
     private static readonly HashSet<string> RogueSpecificWeaponProficiencies = new HashSet<string>
     {
-        "crossbow_hand", "rapier", "sap", "shortbow", "short_sword"
+        "crossbow_hand", ItemIDs.RAPIER, "sap", ItemIDs.SHORTBOW, ItemIDs.SHORT_SWORD
     };
 
     private static readonly HashSet<string> WizardSpecificWeaponProficiencies = new HashSet<string>
     {
-        "club", "dagger", "crossbow_light", "crossbow_heavy", "quarterstaff"
+        ItemIDs.CLUB, ItemIDs.DAGGER, ItemIDs.CROSSBOW_LIGHT, ItemIDs.CROSSBOW_HEAVY, ItemIDs.QUARTERSTAFF
     };
 
     private static readonly HashSet<string> DnDArmorCheckPenaltySkills = new HashSet<string>
     {
-        "balance", "climb", "escape_artist", "hide", "jump", "move_silently", "sleight_of_hand", "swim", "tumble"
+        "balance", "climb", "escape_artist", "hide", SpellNames.JUMP, "move_silently", "sleight_of_hand", "swim", "tumble"
     };
 
     /// <summary>Whether this class has broad simple weapon proficiency (all simple weapons).</summary>
@@ -3071,7 +3072,7 @@ public class CharacterStats
 
         if (equippedItem.Type == ItemType.Shield)
         {
-            bool isTowerShield = NormalizeItemKey(equippedItem.Id).Contains("tower_shield")
+            bool isTowerShield = NormalizeItemKey(equippedItem.Id).Contains(ItemIDs.TOWER_SHIELD)
                 || (equippedItem.Name != null && equippedItem.Name.ToLowerInvariant().Contains("tower shield"));
             return isTowerShield ? HasTowerShieldProficiency() : HasShieldProficiency();
         }
@@ -3181,10 +3182,10 @@ public class CharacterStats
             return HasSimpleWeaponProficiency();
 
         // Armor/shield proficiency feat prerequisites occasionally use this query path.
-        if (key == "shield" || key == "shields" || key == "shield_proficiency")
+        if (key == SpellNames.SHIELD || key == "shields" || key == "shield_proficiency")
             return HasShieldProficiency();
 
-        if (key == "tower_shield" || key == "tower_shield_proficiency")
+        if (key == ItemIDs.TOWER_SHIELD || key == "tower_shield_proficiency")
             return HasTowerShieldProficiency();
 
         ItemDatabase.Init();

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Barbarian class definition (D&D 3.5 PHB).
@@ -38,15 +39,15 @@ public class BarbarianClass : ICharacterClass
     public void SetupStartingEquipment(InventoryComponent inv)
     {
         ItemDatabase.Init();
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("hide_armor"), EquipSlot.Armor);
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("greataxe"), EquipSlot.RightHand);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.HIDE_ARMOR), EquipSlot.Armor);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.GREATAXE), EquipSlot.RightHand);
 
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("javelin"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.JAVELIN));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.JAVELIN));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.JAVELIN));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_SHIELD_OF_FAITH));
         Debug.Log("[Barbarian] Equipment: Hide Armor, Greataxe, 3x Javelin");
     }
 

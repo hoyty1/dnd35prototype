@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -94,7 +95,7 @@ public static class InvisibilityRulesTests
     private static void ApplyInvisibility(CharacterController target, CharacterController caster, int casterLevel = 5)
     {
         StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
-        SpellData spell = SpellDatabase.GetSpell("invisibility");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.INVISIBILITY);
         ActiveSpellEffect effect = statusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster", casterLevel);
         if (effect != null)
             target.ApplyInvisibilityEffect(effect.RemainingRounds, caster, isMoving: false);
@@ -102,7 +103,7 @@ public static class InvisibilityRulesTests
 
     private static void TestSpellDefinition()
     {
-        SpellData spell = SpellDatabase.GetSpell("invisibility");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.INVISIBILITY);
         Assert(spell != null, "Invisibility definition exists");
         if (spell == null)
             return;
@@ -177,7 +178,7 @@ public static class InvisibilityRulesTests
             CombatResult result = attacker.Attack(defender, false, 0, null, null, null, null);
             Assert(result != null, "Attack resolves while invisible");
             Assert(!attacker.HasActiveInvisibilityEffect, "Invisibility effect data clears on attack action");
-            Assert(statusMgr != null && !statusMgr.HasEffect("invisibility"), "Invisibility spell effect removed on attack action");
+            Assert(statusMgr != null && !statusMgr.HasEffect(SpellNames.INVISIBILITY), "Invisibility spell effect removed on attack action");
         }
         finally
         {
@@ -201,7 +202,7 @@ public static class InvisibilityRulesTests
                 "Direct visibility check fails while target is invisible");
 
             StatusEffectManager statusMgr = invisibleTarget.GetComponent<StatusEffectManager>();
-            statusMgr.RemoveEffectsBySpellId("invisibility");
+            statusMgr.RemoveEffectsBySpellId(SpellNames.INVISIBILITY);
             invisibleTarget.ClearInvisibilityEffect();
 
             Assert(caster.CanSee(invisibleTarget, incomingIsRangedAttack: false),
@@ -226,7 +227,7 @@ public static class InvisibilityRulesTests
             invisibleTarget = CreateController("GlitterTarget", "Rogue", 5);
             observer = CreateController("Observer", "Fighter", 5);
 
-            SpellData glitterdust = SpellDatabase.GetSpell("glitterdust");
+            SpellData glitterdust = SpellDatabase.GetSpell(SpellNames.GLITTERDUST);
             Assert(glitterdust != null, "Glitterdust definition exists");
             if (glitterdust == null)
                 return;

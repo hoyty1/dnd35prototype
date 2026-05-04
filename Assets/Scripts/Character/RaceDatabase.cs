@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Static database of D&D 3.5 racial data.
@@ -212,10 +213,10 @@ public static class RaceDatabase
             // composite longbow, composite shortbow (treated as martial even for non-martial classes)
             RacialWeaponProficiencies = new List<string>
             {
-                "longsword",
-                "rapier",
-                "longbow",
-                "shortbow",
+                ItemIDs.LONGSWORD,
+                ItemIDs.RAPIER,
+                ItemIDs.LONGBOW,
+                ItemIDs.SHORTBOW,
                 "longbow_composite",
                 "shortbow_composite"
             },

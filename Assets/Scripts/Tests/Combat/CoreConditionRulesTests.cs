@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -205,8 +206,8 @@ public static class CoreConditionRulesTests
             target = CreateController("StunnedTarget", bab: 6, str: 16, dex: 18);
 
             global::Inventory inv = target.Inventory.GetInventory();
-            inv.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.RightHand);
-            inv.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
+            inv.DirectEquip(ItemDatabase.CloneItem(ItemIDs.DAGGER), EquipSlot.RightHand);
+            inv.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_WOODEN), EquipSlot.LeftHand);
             inv.RecalculateStats();
 
             int baseAc = target.Stats.ArmorClass;
@@ -294,9 +295,9 @@ public static class CoreConditionRulesTests
 
     private static void TestSpellConditionMappingsPresent()
     {
-        SpellData holdPerson = SpellDatabase.GetSpell("hold_person");
-        SpellData sleep = SpellDatabase.GetSpell("sleep");
-        SpellData blindness = SpellDatabase.GetSpell("blindness_deafness_wiz");
+        SpellData holdPerson = SpellDatabase.GetSpell(SpellNames.HOLD_PERSON);
+        SpellData sleep = SpellDatabase.GetSpell(SpellNames.SLEEP);
+        SpellData blindness = SpellDatabase.GetSpell(SpellNames.BLINDNESS_DEAFNESS_WIZ);
 
         Assert(holdPerson != null, "Hold Person spell definition exists for Paralyzed application");
         Assert(sleep != null, "Sleep spell definition exists for Unconscious application");

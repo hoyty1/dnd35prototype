@@ -1,5 +1,6 @@
 using UnityEngine;
 using Tests.Utilities;
+using DND35e.Identifiers;
 
 namespace Tests.Character
 {
@@ -64,7 +65,7 @@ public static class CharacterTagSystemTests
         try
         {
             InventoryComponent invComp = c.GetComponent<InventoryComponent>();
-            invComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
+            invComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAIN_SHIRT), EquipSlot.Armor);
 
             Assert(!c.Tags.HasTag("Unarmored"), "Equipping armor removes Unarmored tag");
             Assert(c.Tags.HasTag("Light Armor"), "Chain Shirt applies Light Armor classification tag");
@@ -82,8 +83,8 @@ public static class CharacterTagSystemTests
         try
         {
             InventoryComponent invComp = c.GetComponent<InventoryComponent>();
-            invComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
-            invComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("full_plate"), EquipSlot.Armor);
+            invComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAIN_SHIRT), EquipSlot.Armor);
+            invComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE), EquipSlot.Armor);
 
             Assert(!c.Tags.HasTag("Light Armor") && !c.Tags.HasTag("Chain Shirt"),
                 "Switching armor removes previous armor tags");
@@ -102,7 +103,7 @@ public static class CharacterTagSystemTests
         try
         {
             InventoryComponent invComp = c.GetComponent<InventoryComponent>();
-            invComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("full_plate"), EquipSlot.Armor);
+            invComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE), EquipSlot.Armor);
             bool unequipped = invComp.CharacterInventory.Unequip(EquipSlot.Armor);
 
             Assert(unequipped, "Unequip armor returns success");
@@ -124,8 +125,8 @@ public static class CharacterTagSystemTests
 
         try
         {
-            fighter.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem("full_plate"), EquipSlot.Armor);
-            rogue.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
+            fighter.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE), EquipSlot.Armor);
+            rogue.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LEATHER_ARMOR), EquipSlot.Armor);
 
             Assert(fighter.Tags.HasTag("Heavy Armor") && fighter.Tags.HasTag("Full Plate"),
                 "Fighter has heavy armor tags");

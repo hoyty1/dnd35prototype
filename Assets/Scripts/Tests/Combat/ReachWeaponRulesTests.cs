@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -20,14 +21,14 @@ public class ReachWeaponRulesTests : MonoBehaviour
         int passed = 0;
         int failed = 0;
 
-        AssertReach("longspear", expectedReach: 2, expectedAdjacent: false, expectedReachWeapon: true, ref passed, ref failed);
-        AssertReach("glaive", expectedReach: 2, expectedAdjacent: false, expectedReachWeapon: true, ref passed, ref failed);
-        AssertReach("halberd", expectedReach: 2, expectedAdjacent: false, expectedReachWeapon: true, ref passed, ref failed);
-        AssertReach("spiked_chain", expectedReach: 2, expectedAdjacent: true, expectedReachWeapon: true, ref passed, ref failed);
-        AssertReach("whip", expectedReach: 3, expectedAdjacent: false, expectedReachWeapon: true, ref passed, ref failed);
-        AssertReach("longsword", expectedReach: 1, expectedAdjacent: true, expectedReachWeapon: false, ref passed, ref failed);
+        AssertReach(ItemIDs.LONGSPEAR, expectedReach: 2, expectedAdjacent: false, expectedReachWeapon: true, ref passed, ref failed);
+        AssertReach(ItemIDs.GLAIVE, expectedReach: 2, expectedAdjacent: false, expectedReachWeapon: true, ref passed, ref failed);
+        AssertReach(ItemIDs.HALBERD, expectedReach: 2, expectedAdjacent: false, expectedReachWeapon: true, ref passed, ref failed);
+        AssertReach(ItemIDs.SPIKED_CHAIN, expectedReach: 2, expectedAdjacent: true, expectedReachWeapon: true, ref passed, ref failed);
+        AssertReach(ItemIDs.WHIP, expectedReach: 3, expectedAdjacent: false, expectedReachWeapon: true, ref passed, ref failed);
+        AssertReach(ItemIDs.LONGSWORD, expectedReach: 1, expectedAdjacent: true, expectedReachWeapon: false, ref passed, ref failed);
 
-        ItemData whip = ItemDatabase.Get("whip");
+        ItemData whip = ItemDatabase.Get(ItemIDs.WHIP);
         if (whip != null && whip.DealsNonlethalDamage && whip.WhipLikeArmorRestriction)
         {
             passed++;

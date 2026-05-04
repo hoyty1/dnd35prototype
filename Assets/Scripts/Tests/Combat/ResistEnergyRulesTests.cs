@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -109,7 +110,7 @@ public static class ResistEnergyRulesTests
 
     private static void TestSpellDefinition()
     {
-        SpellData spell = SpellDatabase.GetSpell("resist_energy");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.RESIST_ENERGY);
         Assert(spell != null, "Resist Energy definition exists");
         if (spell == null)
             return;

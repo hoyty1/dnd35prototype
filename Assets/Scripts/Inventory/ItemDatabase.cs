@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Static database of all items in the game.
@@ -39,7 +40,7 @@ public static class ItemDatabase
         // Unarmed Strike: 1d3, 20/×2, bludgeoning
         Register(new ItemData
         {
-            Id = "unarmed_strike", Name = "Unarmed Strike", Type = ItemType.Weapon,
+            Id = ItemIDs.UNARMED_STRIKE, Name = "Unarmed Strike", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A punch, kick, or other unarmed attack.",
@@ -54,7 +55,7 @@ public static class ItemDatabase
         // Gauntlet: 1d3, 20/×2, bludgeoning (equipped in Hands slot)
         Register(new ItemData
         {
-            Id = "gauntlet", Name = "Gauntlet", Type = ItemType.Weapon,
+            Id = ItemIDs.GAUNTLET, Name = "Gauntlet", Type = ItemType.Weapon,
             Slot = EquipSlot.Hands,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             WeaponSize = WeaponSizeCategory.Light,
@@ -71,7 +72,7 @@ public static class ItemDatabase
         // Dagger: 1d4, 19-20/×2, piercing or slashing, light
         Register(new ItemData
         {
-            Id = "dagger", Name = "Dagger", Type = ItemType.Weapon,
+            Id = ItemIDs.DAGGER, Name = "Dagger", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A small blade. Light and easy to conceal. Can be thrown.",
@@ -89,7 +90,7 @@ public static class ItemDatabase
         // Mace, Light: 1d6, 20/×2, bludgeoning, light
         Register(new ItemData
         {
-            Id = "mace_light", Name = "Mace, Light", Type = ItemType.Weapon,
+            Id = ItemIDs.MACE_LIGHT, Name = "Mace, Light", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A light bludgeoning weapon with a flanged metal head.",
@@ -105,7 +106,7 @@ public static class ItemDatabase
         // Sickle: 1d6, 20/×2, slashing, light
         Register(new ItemData
         {
-            Id = "sickle", Name = "Sickle", Type = ItemType.Weapon,
+            Id = ItemIDs.SICKLE, Name = "Sickle", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A curved blade on a short handle. Favored by druids.",
@@ -121,7 +122,7 @@ public static class ItemDatabase
         // Club: 1d6, 20/×2, bludgeoning
         Register(new ItemData
         {
-            Id = "club", Name = "Club", Type = ItemType.Weapon,
+            Id = ItemIDs.CLUB, Name = "Club", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A stout piece of wood, simple but effective.",
@@ -136,7 +137,7 @@ public static class ItemDatabase
         // Mace, Heavy: 1d8, 20/×2, bludgeoning
         Register(new ItemData
         {
-            Id = "mace_heavy", Name = "Mace, Heavy", Type = ItemType.Weapon,
+            Id = ItemIDs.MACE_HEAVY, Name = "Mace, Heavy", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A heavy bludgeoning weapon effective against armored foes.",
@@ -151,7 +152,7 @@ public static class ItemDatabase
         // Morningstar: 1d8, 20/×2, bludgeoning and piercing
         Register(new ItemData
         {
-            Id = "morningstar", Name = "Morningstar", Type = ItemType.Weapon,
+            Id = ItemIDs.MORNINGSTAR, Name = "Morningstar", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A spiked metal ball on the end of a handle. Deals bludgeoning and piercing.",
@@ -166,7 +167,7 @@ public static class ItemDatabase
         // Shortspear: 1d6, 20/×2, piercing
         Register(new ItemData
         {
-            Id = "shortspear", Name = "Shortspear", Type = ItemType.Weapon,
+            Id = ItemIDs.SHORTSPEAR, Name = "Shortspear", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A short thrusting spear. Can be thrown.",
@@ -183,7 +184,7 @@ public static class ItemDatabase
         // Quarterstaff: 1d6/1d6, 20/×2, bludgeoning, two-handed (double weapon)
         Register(new ItemData
         {
-            Id = "quarterstaff", Name = "Quarterstaff", Type = ItemType.Weapon,
+            Id = ItemIDs.QUARTERSTAFF, Name = "Quarterstaff", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A simple wooden staff. Reliable, versatile, and can be used as a double weapon.",
@@ -199,7 +200,7 @@ public static class ItemDatabase
         // Spear: 1d8, 20/×3, piercing, two-handed (can be thrown)
         Register(new ItemData
         {
-            Id = "spear", Name = "Spear", Type = ItemType.Weapon,
+            Id = ItemIDs.SPEAR, Name = "Spear", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A long thrusting weapon with a pointed tip. Two-handed. Can be thrown.",
@@ -217,7 +218,7 @@ public static class ItemDatabase
         // Longspear: 1d8, 20/×3, piercing, two-handed, reach (cannot attack adjacent)
         Register(new ItemData
         {
-            Id = "longspear", Name = "Longspear", Type = ItemType.Weapon,
+            Id = ItemIDs.LONGSPEAR, Name = "Longspear", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A long spear with 10-ft reach. Cannot attack adjacent creatures.",
@@ -231,10 +232,10 @@ public static class ItemDatabase
             IconChar = "\u2191", IconColor = new Color(0.65f, 0.55f, 0.4f)
         });
 
-        // Legacy alias: "mace" -> "mace_heavy" for backward compatibility
+        // Legacy alias: ItemIDs.MACE -> ItemIDs.MACE_HEAVY for backward compatibility
         Register(new ItemData
         {
-            Id = "mace", Name = "Mace, Heavy", Type = ItemType.Weapon,
+            Id = ItemIDs.MACE, Name = "Mace, Heavy", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Melee,
             Description = "A heavy bludgeoning weapon effective against armored foes.",
@@ -255,7 +256,7 @@ public static class ItemDatabase
         // Crossbow, Light: 1d8, 19-20/×2, piercing, range 80 ft
         Register(new ItemData
         {
-            Id = "crossbow_light", Name = "Crossbow, Light", Type = ItemType.Weapon,
+            Id = ItemIDs.CROSSBOW_LIGHT, Name = "Crossbow, Light", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Ranged,
             Description = "A light crossbow that fires bolts. Requires two hands to load.",
@@ -274,7 +275,7 @@ public static class ItemDatabase
         // Crossbow, Heavy: 1d10, 19-20/×2, piercing, range 120 ft
         Register(new ItemData
         {
-            Id = "crossbow_heavy", Name = "Crossbow, Heavy", Type = ItemType.Weapon,
+            Id = ItemIDs.CROSSBOW_HEAVY, Name = "Crossbow, Heavy", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Ranged,
             Description = "A heavy crossbow with greater range and damage than its lighter cousin.",
@@ -294,7 +295,7 @@ public static class ItemDatabase
         // (No per-shot ammo consumption yet; this exists for inventory visibility/logging.)
         Register(new ItemData
         {
-            Id = "crossbow_bolts_20", Name = "Crossbow Bolts (20)", Type = ItemType.Misc,
+            Id = ItemIDs.CROSSBOW_BOLTS_20, Name = "Crossbow Bolts (20)", Type = ItemType.Misc,
             Slot = EquipSlot.None,
             Description = "A bundle of 20 crossbow bolts.",
             WeightLbs = 2f,
@@ -304,7 +305,7 @@ public static class ItemDatabase
         // Dart: 1d4, 20/×2, piercing, range 20 ft
         Register(new ItemData
         {
-            Id = "dart", Name = "Dart", Type = ItemType.Weapon,
+            Id = ItemIDs.DART, Name = "Dart", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Ranged,
             Description = "A small throwable missile with a weighted tip.",
@@ -321,7 +322,7 @@ public static class ItemDatabase
         // Javelin: 1d6, 20/×2, piercing, range 30 ft
         Register(new ItemData
         {
-            Id = "javelin", Name = "Javelin", Type = ItemType.Weapon,
+            Id = ItemIDs.JAVELIN, Name = "Javelin", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Ranged,
             Description = "A light throwing spear designed for ranged combat.",
@@ -338,7 +339,7 @@ public static class ItemDatabase
         // Sling: 1d4, 20/×2, bludgeoning, range 50 ft
         Register(new ItemData
         {
-            Id = "sling", Name = "Sling", Type = ItemType.Weapon,
+            Id = ItemIDs.SLING, Name = "Sling", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Simple, WeaponCat = WeaponCategory.Ranged,
             Description = "A simple weapon that hurls stones at high velocity.",
@@ -362,7 +363,7 @@ public static class ItemDatabase
         // Handaxe: 1d6, 20/×3, slashing, light
         Register(new ItemData
         {
-            Id = "handaxe", Name = "Handaxe", Type = ItemType.Weapon,
+            Id = ItemIDs.HANDAXE, Name = "Handaxe", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A small axe suitable for one-handed combat. Can be thrown.",
@@ -380,7 +381,7 @@ public static class ItemDatabase
         // Shortsword: 1d6, 19-20/×2, piercing, light
         Register(new ItemData
         {
-            Id = "short_sword", Name = "Shortsword", Type = ItemType.Weapon,
+            Id = ItemIDs.SHORT_SWORD, Name = "Shortsword", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A light blade ideal for quick strikes and finesse.",
@@ -396,7 +397,7 @@ public static class ItemDatabase
         // Flail, Light: 1d8, 20/×2, bludgeoning, light
         Register(new ItemData
         {
-            Id = "flail_light", Name = "Flail, Light", Type = ItemType.Weapon,
+            Id = ItemIDs.FLAIL_LIGHT, Name = "Flail, Light", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A spiked ball on a chain. Difficult to parry.",
@@ -414,7 +415,7 @@ public static class ItemDatabase
         // Longsword: 1d8, 19-20/×2, slashing
         Register(new ItemData
         {
-            Id = "longsword", Name = "Longsword", Type = ItemType.Weapon,
+            Id = ItemIDs.LONGSWORD, Name = "Longsword", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A versatile one-handed sword favored by fighters.",
@@ -429,7 +430,7 @@ public static class ItemDatabase
         // Rapier: 1d6, 18-20/×2, piercing
         Register(new ItemData
         {
-            Id = "rapier", Name = "Rapier", Type = ItemType.Weapon,
+            Id = ItemIDs.RAPIER, Name = "Rapier", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "An elegant thrusting sword with a wide critical range.",
@@ -444,7 +445,7 @@ public static class ItemDatabase
         // Scimitar: 1d6, 18-20/×2, slashing
         Register(new ItemData
         {
-            Id = "scimitar", Name = "Scimitar", Type = ItemType.Weapon,
+            Id = ItemIDs.SCIMITAR, Name = "Scimitar", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A curved blade that excels at slashing attacks. Wide crit range.",
@@ -459,7 +460,7 @@ public static class ItemDatabase
         // Battleaxe: 1d8, 20/×3, slashing
         Register(new ItemData
         {
-            Id = "battleaxe", Name = "Battleaxe", Type = ItemType.Weapon,
+            Id = ItemIDs.BATTLEAXE, Name = "Battleaxe", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A sturdy one-handed axe capable of devastating critical hits.",
@@ -474,7 +475,7 @@ public static class ItemDatabase
         // Warhammer: 1d8, 20/×3, bludgeoning
         Register(new ItemData
         {
-            Id = "warhammer", Name = "Warhammer", Type = ItemType.Weapon,
+            Id = ItemIDs.WARHAMMER, Name = "Warhammer", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A heavy hammer designed for war. Devastating critical hits.",
@@ -489,7 +490,7 @@ public static class ItemDatabase
         // Trident: 1d8, 20/×2, piercing
         Register(new ItemData
         {
-            Id = "trident", Name = "Trident", Type = ItemType.Weapon,
+            Id = ItemIDs.TRIDENT, Name = "Trident", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A three-pronged spear. Can be thrown.",
@@ -506,7 +507,7 @@ public static class ItemDatabase
         // War Pick: 1d8, 20/×4, piercing
         Register(new ItemData
         {
-            Id = "warpick", Name = "War Pick", Type = ItemType.Weapon,
+            Id = ItemIDs.WARPICK, Name = "War Pick", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A pick designed for piercing armor. Extremely high crit multiplier.",
@@ -521,7 +522,7 @@ public static class ItemDatabase
         // Lance: 1d8, 20/×3, piercing, reach
         Register(new ItemData
         {
-            Id = "lance", Name = "Lance", Type = ItemType.Weapon,
+            Id = ItemIDs.LANCE, Name = "Lance", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A long thrusting weapon with reach. Double damage on a mounted charge.",
@@ -539,7 +540,7 @@ public static class ItemDatabase
         // Greatsword: 2d6, 19-20/×2, slashing, two-handed
         Register(new ItemData
         {
-            Id = "greatsword", Name = "Greatsword", Type = ItemType.Weapon,
+            Id = ItemIDs.GREATSWORD, Name = "Greatsword", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A massive two-handed sword dealing heavy damage.",
@@ -555,7 +556,7 @@ public static class ItemDatabase
         // Greataxe: 1d12, 20/×3, slashing, two-handed
         Register(new ItemData
         {
-            Id = "greataxe", Name = "Greataxe", Type = ItemType.Weapon,
+            Id = ItemIDs.GREATAXE, Name = "Greataxe", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A massive two-handed axe dealing devastating blows.",
@@ -571,7 +572,7 @@ public static class ItemDatabase
         // Greatclub: 1d10, 20/×2, bludgeoning, two-handed
         Register(new ItemData
         {
-            Id = "greatclub", Name = "Greatclub", Type = ItemType.Weapon,
+            Id = ItemIDs.GREATCLUB, Name = "Greatclub", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A massive wooden club requiring two hands.",
@@ -587,7 +588,7 @@ public static class ItemDatabase
         // Falchion: 2d4, 18-20/×2, slashing, two-handed
         Register(new ItemData
         {
-            Id = "falchion", Name = "Falchion", Type = ItemType.Weapon,
+            Id = ItemIDs.FALCHION, Name = "Falchion", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A heavy curved sword with a wide cutting edge and excellent crit range.",
@@ -603,7 +604,7 @@ public static class ItemDatabase
         // Flail, Heavy: 1d10, 19-20/×2, bludgeoning, two-handed
         Register(new ItemData
         {
-            Id = "flail_heavy", Name = "Flail, Heavy", Type = ItemType.Weapon,
+            Id = ItemIDs.FLAIL_HEAVY, Name = "Flail, Heavy", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A massive spiked ball on a heavy chain. Two-handed.",
@@ -619,7 +620,7 @@ public static class ItemDatabase
         // Guisarme: 2d4, 20/×3, slashing, two-handed, reach (cannot attack adjacent)
         Register(new ItemData
         {
-            Id = "guisarme", Name = "Guisarme", Type = ItemType.Weapon,
+            Id = ItemIDs.GUISARME, Name = "Guisarme", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A hooked polearm with reach. Cannot attack adjacent creatures.",
@@ -636,7 +637,7 @@ public static class ItemDatabase
         // Halberd: 1d10, 20/×3, piercing/slashing, two-handed, reach (cannot attack adjacent)
         Register(new ItemData
         {
-            Id = "halberd", Name = "Halberd", Type = ItemType.Weapon,
+            Id = ItemIDs.HALBERD, Name = "Halberd", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A polearm with axe and spear head. Reach weapon; cannot attack adjacent creatures.",
@@ -653,7 +654,7 @@ public static class ItemDatabase
         // Ranseur: 2d4, 20/×3, piercing, two-handed, reach (cannot attack adjacent)
         Register(new ItemData
         {
-            Id = "ranseur", Name = "Ranseur", Type = ItemType.Weapon,
+            Id = ItemIDs.RANSEUR, Name = "Ranseur", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A long polearm with side spikes. Reach weapon; cannot attack adjacent creatures.",
@@ -670,7 +671,7 @@ public static class ItemDatabase
         // Spiked Chain: 2d4, 20/×2, piercing, reach weapon that CAN attack adjacent
         Register(new ItemData
         {
-            Id = "spiked_chain", Name = "Spiked Chain", Type = ItemType.Weapon,
+            Id = ItemIDs.SPIKED_CHAIN, Name = "Spiked Chain", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Exotic, WeaponCat = WeaponCategory.Melee,
             Description = "A chain with spikes. Reach weapon that can attack adjacent and 10-ft targets.",
@@ -687,7 +688,7 @@ public static class ItemDatabase
         // Whip: 1d3, 20/×2, slashing, 15-ft reach, nonlethal, cannot attack adjacent, cannot harm armored/naturally armored +1+
         Register(new ItemData
         {
-            Id = "whip", Name = "Whip", Type = ItemType.Weapon,
+            Id = ItemIDs.WHIP, Name = "Whip", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Exotic, WeaponCat = WeaponCategory.Melee,
             Description = "A flexible lash. 15-ft reach; cannot attack adjacent. Deals nonlethal damage and cannot harm armor/natural armor +1+.",
@@ -704,7 +705,7 @@ public static class ItemDatabase
         // Glaive: 1d10, 20/×3, slashing, two-handed, reach
         Register(new ItemData
         {
-            Id = "glaive", Name = "Glaive", Type = ItemType.Weapon,
+            Id = ItemIDs.GLAIVE, Name = "Glaive", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Melee,
             Description = "A long polearm with a curved blade. Has reach.",
@@ -726,7 +727,7 @@ public static class ItemDatabase
         // Longbow: 1d8, 20/×3, piercing, range 100 ft, two-handed
         Register(new ItemData
         {
-            Id = "longbow", Name = "Longbow", Type = ItemType.Weapon,
+            Id = ItemIDs.LONGBOW, Name = "Longbow", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Ranged,
             Description = "A tall bow with excellent range. Requires two hands.",
@@ -743,7 +744,7 @@ public static class ItemDatabase
         // Shortbow: 1d6, 20/×3, piercing, range 60 ft, two-handed
         Register(new ItemData
         {
-            Id = "shortbow", Name = "Shortbow", Type = ItemType.Weapon,
+            Id = ItemIDs.SHORTBOW, Name = "Shortbow", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Ranged,
             Description = "A compact bow favored by mounted archers. Requires two hands.",
@@ -760,7 +761,7 @@ public static class ItemDatabase
         // Composite Longbow: 1d8, 20/×3, piercing, range 110 ft, two-handed
         Register(new ItemData
         {
-            Id = "composite_longbow", Name = "Composite Longbow", Type = ItemType.Weapon,
+            Id = ItemIDs.COMPOSITE_LONGBOW, Name = "Composite Longbow", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Ranged,
             Description = "A powerful composite bow with superior range. Allows STR bonus to damage.",
@@ -778,7 +779,7 @@ public static class ItemDatabase
         // Composite Shortbow: 1d6, 20/×3, piercing, range 70 ft, two-handed
         Register(new ItemData
         {
-            Id = "composite_shortbow", Name = "Composite Shortbow", Type = ItemType.Weapon,
+            Id = ItemIDs.COMPOSITE_SHORTBOW, Name = "Composite Shortbow", Type = ItemType.Weapon,
             Slot = EquipSlot.EitherHand,
             Proficiency = WeaponProficiency.Martial, WeaponCat = WeaponCategory.Ranged,
             Description = "A compact composite bow. Allows STR bonus to damage.",
@@ -844,7 +845,7 @@ public static class ItemDatabase
         // Padded: +1 AC, Max Dex +8, Check 0, Spell Failure 5%, 10 lbs
         Register(new ItemData
         {
-            Id = "padded_armor", Name = "Padded Armor", Type = ItemType.Armor,
+            Id = ItemIDs.PADDED_ARMOR, Name = "Padded Armor", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.NonMetal,
             Description = "Layers of quilted cloth. The lightest armor available.",
             ArmorBonus = 1, MaxDexBonus = 8, ArmorCheckPenalty = 0,
@@ -856,7 +857,7 @@ public static class ItemDatabase
         // Leather: +2 AC, Max Dex +6, Check 0, Spell Failure 10%, 15 lbs
         Register(new ItemData
         {
-            Id = "leather_armor", Name = "Leather Armor", Type = ItemType.Armor,
+            Id = ItemIDs.LEATHER_ARMOR, Name = "Leather Armor", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.NonMetal,
             Description = "Light armor made from hardened leather.",
             ArmorBonus = 2, MaxDexBonus = 6, ArmorCheckPenalty = 0,
@@ -868,7 +869,7 @@ public static class ItemDatabase
         // Studded Leather: +3 AC, Max Dex +5, Check -1, Spell Failure 15%, 20 lbs
         Register(new ItemData
         {
-            Id = "studded_leather", Name = "Studded Leather", Type = ItemType.Armor,
+            Id = ItemIDs.STUDDED_LEATHER, Name = "Studded Leather", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.Mixed,
             Description = "Leather armor reinforced with metal studs.",
             ArmorBonus = 3, MaxDexBonus = 5, ArmorCheckPenalty = 1,
@@ -880,7 +881,7 @@ public static class ItemDatabase
         // Chain Shirt: +4 AC, Max Dex +4, Check -2, Spell Failure 20%, 25 lbs
         Register(new ItemData
         {
-            Id = "chain_shirt", Name = "Chain Shirt", Type = ItemType.Armor,
+            Id = ItemIDs.CHAIN_SHIRT, Name = "Chain Shirt", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Light, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "A shirt of interlocking metal rings. Best light armor.",
             ArmorBonus = 4, MaxDexBonus = 4, ArmorCheckPenalty = 2,
@@ -898,7 +899,7 @@ public static class ItemDatabase
         // Hide: +3 AC, Max Dex +4, Check -3, Spell Failure 20%, 25 lbs
         Register(new ItemData
         {
-            Id = "hide_armor", Name = "Hide Armor", Type = ItemType.Armor,
+            Id = ItemIDs.HIDE_ARMOR, Name = "Hide Armor", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.NonMetal,
             Description = "Thick furs and pelts of animals, crudely prepared.",
             ArmorBonus = 3, MaxDexBonus = 4, ArmorCheckPenalty = 3,
@@ -910,7 +911,7 @@ public static class ItemDatabase
         // Scale Mail: +4 AC, Max Dex +3, Check -4, Spell Failure 25%, 30 lbs
         Register(new ItemData
         {
-            Id = "scale_mail", Name = "Scale Mail", Type = ItemType.Armor,
+            Id = ItemIDs.SCALE_MAIL, Name = "Scale Mail", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "Overlapping metal scales on a leather coat.",
             ArmorBonus = 4, MaxDexBonus = 3, ArmorCheckPenalty = 4,
@@ -922,7 +923,7 @@ public static class ItemDatabase
         // Chainmail: +5 AC, Max Dex +2, Check -5, Spell Failure 30%, 40 lbs
         Register(new ItemData
         {
-            Id = "chainmail", Name = "Chainmail", Type = ItemType.Armor,
+            Id = ItemIDs.CHAINMAIL, Name = "Chainmail", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "A full suit of interlocking metal rings covering the body.",
             ArmorBonus = 5, MaxDexBonus = 2, ArmorCheckPenalty = 5,
@@ -934,7 +935,7 @@ public static class ItemDatabase
         // Breastplate: +5 AC, Max Dex +3, Check -4, Spell Failure 25%, 30 lbs
         Register(new ItemData
         {
-            Id = "breastplate", Name = "Breastplate", Type = ItemType.Armor,
+            Id = ItemIDs.BREASTPLATE, Name = "Breastplate", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Medium, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "A fitted metal chest plate. Best medium armor for most characters.",
             ArmorBonus = 5, MaxDexBonus = 3, ArmorCheckPenalty = 4,
@@ -952,7 +953,7 @@ public static class ItemDatabase
         // Splint Mail: +6 AC, Max Dex +0, Check -7, Spell Failure 40%, 45 lbs
         Register(new ItemData
         {
-            Id = "splint_mail", Name = "Splint Mail", Type = ItemType.Armor,
+            Id = ItemIDs.SPLINT_MAIL, Name = "Splint Mail", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "Strips of metal between layers of leather and chain.",
             ArmorBonus = 6, MaxDexBonus = 0, ArmorCheckPenalty = 7,
@@ -964,7 +965,7 @@ public static class ItemDatabase
         // Banded Mail: +6 AC, Max Dex +1, Check -6, Spell Failure 35%, 35 lbs
         Register(new ItemData
         {
-            Id = "banded_mail", Name = "Banded Mail", Type = ItemType.Armor,
+            Id = ItemIDs.BANDED_MAIL, Name = "Banded Mail", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "Overlapping strips of metal banded over chain and leather.",
             ArmorBonus = 6, MaxDexBonus = 1, ArmorCheckPenalty = 6,
@@ -976,7 +977,7 @@ public static class ItemDatabase
         // Half-Plate: +7 AC, Max Dex +0, Check -7, Spell Failure 40%, 50 lbs
         Register(new ItemData
         {
-            Id = "half_plate", Name = "Half-Plate", Type = ItemType.Armor,
+            Id = ItemIDs.HALF_PLATE, Name = "Half-Plate", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "Plate armor covering most of the body with chain and leather.",
             ArmorBonus = 7, MaxDexBonus = 0, ArmorCheckPenalty = 7,
@@ -988,7 +989,7 @@ public static class ItemDatabase
         // Full Plate: +8 AC, Max Dex +1, Check -6, Spell Failure 35%, 50 lbs
         Register(new ItemData
         {
-            Id = "full_plate", Name = "Full Plate", Type = ItemType.Armor,
+            Id = ItemIDs.FULL_PLATE, Name = "Full Plate", Type = ItemType.Armor,
             Slot = EquipSlot.Armor, ArmorCat = ArmorCategory.Heavy, ArmorMaterial = ArmorMaterialType.Metal,
             Description = "A complete suit of heavy plate armor. The finest protection available.",
             ArmorBonus = 8, MaxDexBonus = 1, ArmorCheckPenalty = 6,
@@ -1006,7 +1007,7 @@ public static class ItemDatabase
         // Buckler: +1 AC, Max Dex -, Check -1, Spell Failure 5%, 5 lbs
         Register(new ItemData
         {
-            Id = "buckler", Name = "Buckler", Type = ItemType.Shield,
+            Id = ItemIDs.BUCKLER, Name = "Buckler", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A small round shield strapped to the forearm.",
             ShieldBonus = 1, MaxDexBonus = -1, ArmorCheckPenalty = 1,
@@ -1017,7 +1018,7 @@ public static class ItemDatabase
         // Shield, Light Wooden: +1 AC, bash 1d3 bludgeoning (martial, light off-hand)
         Register(new ItemData
         {
-            Id = "shield_light_wooden", Name = "Shield, Light Wooden", Type = ItemType.Shield,
+            Id = ItemIDs.SHIELD_LIGHT_WOODEN, Name = "Shield, Light Wooden", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A light shield made of wood. Can be used for shield bashes.",
             ShieldBonus = 1, MaxDexBonus = -1, ArmorCheckPenalty = 1,
@@ -1034,7 +1035,7 @@ public static class ItemDatabase
         // Shield, Light Steel: +1 AC, bash 1d3 bludgeoning (martial, light off-hand)
         Register(new ItemData
         {
-            Id = "shield_light_steel", Name = "Shield, Light Steel", Type = ItemType.Shield,
+            Id = ItemIDs.SHIELD_LIGHT_STEEL, Name = "Shield, Light Steel", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A light shield made of steel. Can be used for shield bashes.",
             ShieldBonus = 1, MaxDexBonus = -1, ArmorCheckPenalty = 1,
@@ -1051,7 +1052,7 @@ public static class ItemDatabase
         // Shield, Light Steel (Spiked): +1 AC, bash 1d4 piercing (martial, light off-hand)
         Register(new ItemData
         {
-            Id = "shield_light_steel_spiked", Name = "Shield, Light Steel (Spiked)", Type = ItemType.Shield,
+            Id = ItemIDs.SHIELD_LIGHT_STEEL_SPIKED, Name = "Shield, Light Steel (Spiked)", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A light steel shield fitted with shield spikes. Shield spikes increase bash damage die by one step and change damage to piercing.",
             ShieldBonus = 1, MaxDexBonus = -1, ArmorCheckPenalty = 1,
@@ -1068,7 +1069,7 @@ public static class ItemDatabase
         // Shield, Heavy Wooden: +2 AC, bash 1d4 bludgeoning (martial)
         Register(new ItemData
         {
-            Id = "shield_heavy_wooden", Name = "Shield, Heavy Wooden", Type = ItemType.Shield,
+            Id = ItemIDs.SHIELD_HEAVY_WOODEN, Name = "Shield, Heavy Wooden", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A heavy shield made of wood. Provides solid protection and can be used for shield bashes.",
             ShieldBonus = 2, MaxDexBonus = -1, ArmorCheckPenalty = 2,
@@ -1085,7 +1086,7 @@ public static class ItemDatabase
         // Shield, Heavy Steel: +2 AC, bash 1d4 bludgeoning (martial)
         Register(new ItemData
         {
-            Id = "shield_heavy_steel", Name = "Shield, Heavy Steel", Type = ItemType.Shield,
+            Id = ItemIDs.SHIELD_HEAVY_STEEL, Name = "Shield, Heavy Steel", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A heavy shield made of steel. Standard protection for fighters, and usable for shield bashes.",
             ShieldBonus = 2, MaxDexBonus = -1, ArmorCheckPenalty = 2,
@@ -1102,7 +1103,7 @@ public static class ItemDatabase
         // Shield, Heavy Steel (Spiked): +2 AC, bash 1d6 piercing (martial)
         Register(new ItemData
         {
-            Id = "shield_heavy_steel_spiked", Name = "Shield, Heavy Steel (Spiked)", Type = ItemType.Shield,
+            Id = ItemIDs.SHIELD_HEAVY_STEEL_SPIKED, Name = "Shield, Heavy Steel (Spiked)", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A heavy steel shield fitted with shield spikes. Shield spikes increase bash damage die by one step and change damage to piercing.",
             ShieldBonus = 2, MaxDexBonus = -1, ArmorCheckPenalty = 2,
@@ -1119,7 +1120,7 @@ public static class ItemDatabase
         // Tower Shield: +4 AC, Max Dex -, Check -10, Spell Failure 50%, 45 lbs
         Register(new ItemData
         {
-            Id = "tower_shield", Name = "Tower Shield", Type = ItemType.Shield,
+            Id = ItemIDs.TOWER_SHIELD, Name = "Tower Shield", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A massive shield providing cover. Severe penalties to skills and attacks.",
             ShieldBonus = 4, MaxDexBonus = -1, ArmorCheckPenalty = 10,
@@ -1130,7 +1131,7 @@ public static class ItemDatabase
         // Legacy aliases for backward compatibility
         Register(new ItemData
         {
-            Id = "heavy_shield", Name = "Shield, Heavy Steel", Type = ItemType.Shield,
+            Id = ItemIDs.HEAVY_SHIELD, Name = "Shield, Heavy Steel", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A heavy shield made of steel. Standard protection for fighters, and usable for shield bashes.",
             ShieldBonus = 2, MaxDexBonus = -1, ArmorCheckPenalty = 2,
@@ -1146,7 +1147,7 @@ public static class ItemDatabase
 
         Register(new ItemData
         {
-            Id = "light_shield", Name = "Shield, Light Wooden", Type = ItemType.Shield,
+            Id = ItemIDs.LIGHT_SHIELD, Name = "Shield, Light Wooden", Type = ItemType.Shield,
             Slot = EquipSlot.LeftHand, ArmorCat = ArmorCategory.Shield,
             Description = "A light shield made of wood. Can be used for shield bashes.",
             ShieldBonus = 1, MaxDexBonus = -1, ArmorCheckPenalty = 1,
@@ -1167,7 +1168,7 @@ public static class ItemDatabase
     private static void RegisterConsumablesAndMisc()
     {
         RegisterSpellPotion(
-            id: "potion_cure_light_wounds",
+            id: ItemIDs.POTION_CURE_LIGHT_WOUNDS,
             name: "Potion of Cure Light Wounds",
             spellName: "Cure Light Wounds",
             description: "Standard D&D 3.5e potion. Mimics Cure Light Wounds at minimum caster level (1d8+1).",
@@ -1178,7 +1179,7 @@ public static class ItemDatabase
 
         // Backward-compatible alias used by existing class loadouts.
         RegisterSpellPotion(
-            id: "potion_healing",
+            id: ItemIDs.POTION_HEALING,
             name: "Potion of Cure Light Wounds",
             spellName: "Cure Light Wounds",
             description: "Standard D&D 3.5e potion. Mimics Cure Light Wounds at minimum caster level (1d8+1).",
@@ -1188,7 +1189,7 @@ public static class ItemDatabase
             iconColor: new Color(1f, 0.3f, 0.3f));
 
         RegisterSpellPotion(
-            id: "potion_shield_of_faith",
+            id: ItemIDs.POTION_SHIELD_OF_FAITH,
             name: "Potion of Shield of Faith",
             spellName: "Shield of Faith",
             description: "Grants a +2 deflection bonus to AC for 10 rounds (minimum caster level 1).",
@@ -1199,7 +1200,7 @@ public static class ItemDatabase
 
         Register(new ItemData
         {
-            Id = "potion_greater_healing", Name = "Potion of Greater Healing", Type = ItemType.Consumable,
+            Id = ItemIDs.POTION_GREATER_HEALING, Name = "Potion of Greater Healing", Type = ItemType.Consumable,
             Slot = EquipSlot.None,
             Description = "A glowing red potion that restores 4d4+4 hit points.",
             ConsumableEffect = ConsumableEffectType.HealHP,
@@ -1212,7 +1213,7 @@ public static class ItemDatabase
 
         Register(new ItemData
         {
-            Id = "spiked_gauntlet", Name = "Spiked Gauntlet", Type = ItemType.Weapon,
+            Id = ItemIDs.SPIKED_GAUNTLET, Name = "Spiked Gauntlet", Type = ItemType.Weapon,
             Slot = EquipSlot.Hands,
             Description = "A hand-slot spiked gauntlet setup. The gauntlet itself cannot be disarmed.",
             Proficiency = WeaponProficiency.Simple,
@@ -1235,7 +1236,7 @@ public static class ItemDatabase
 
         Register(new ItemData
         {
-            Id = "locked_gauntlet", Name = "Locked Gauntlet", Type = ItemType.Misc,
+            Id = ItemIDs.LOCKED_GAUNTLET, Name = "Locked Gauntlet", Type = ItemType.Misc,
             Slot = EquipSlot.Hands,
             Description = "A locking hand harness that secures held weapons. Grants +10 to resist disarm attempts.",
             WeightLbs = 5f,
@@ -1243,7 +1244,7 @@ public static class ItemDatabase
         });
         Register(new ItemData
         {
-            Id = "torch", Name = "Torch", Type = ItemType.Misc,
+            Id = ItemIDs.TORCH, Name = "Torch", Type = ItemType.Misc,
             Slot = EquipSlot.None,
             Description = "A simple wooden torch. Provides light in dark places.",
             WeightLbs = 1f,
@@ -1252,7 +1253,7 @@ public static class ItemDatabase
 
         Register(new RopeItemData
         {
-            Id = "rope_hemp", Name = "Hemp Rope (50 ft)", Type = ItemType.Misc,
+            Id = ItemIDs.ROPE_HEMP, Name = "Hemp Rope (50 ft)", Type = ItemType.Misc,
             Slot = EquipSlot.None,
             Description = "A 50-foot coil of hemp rope. Break DC 24.",
             WeightLbs = 10f,
@@ -1263,7 +1264,7 @@ public static class ItemDatabase
 
         Register(new RopeItemData
         {
-            Id = "rope_silk", Name = "Silk Rope (50 ft)", Type = ItemType.Misc,
+            Id = ItemIDs.ROPE_SILK, Name = "Silk Rope (50 ft)", Type = ItemType.Misc,
             Slot = EquipSlot.None,
             Description = "A 50-foot coil of silk rope. Break DC 23.",
             WeightLbs = 5f,
@@ -1275,7 +1276,7 @@ public static class ItemDatabase
         // Backward-compatible alias for older references.
         Register(new RopeItemData
         {
-            Id = "rope", Name = "Hemp Rope (50 ft)", Type = ItemType.Misc,
+            Id = ItemIDs.ROPE, Name = "Hemp Rope (50 ft)", Type = ItemType.Misc,
             Slot = EquipSlot.None,
             Description = "A 50-foot coil of hemp rope. Break DC 24.",
             WeightLbs = 10f,
@@ -1340,7 +1341,7 @@ public static class ItemDatabase
         {
             string id = (item.Id ?? string.Empty).ToLowerInvariant();
 
-            if (id == "unarmed_strike")
+            if (id == ItemIDs.UNARMED_STRIKE)
             {
                 item.WeaponSize = WeaponSizeCategory.Light;
             }
@@ -1353,10 +1354,10 @@ public static class ItemDatabase
                 item.WeaponSize = WeaponSizeCategory.Light;
             }
             else if (id.Contains("crossbow")
-                     || id.Contains("longbow")
-                     || id.Contains("shortbow")
-                     || id.Contains("composite_longbow")
-                     || id.Contains("composite_shortbow"))
+                     || id.Contains(ItemIDs.LONGBOW)
+                     || id.Contains(ItemIDs.SHORTBOW)
+                     || id.Contains(ItemIDs.COMPOSITE_LONGBOW)
+                     || id.Contains(ItemIDs.COMPOSITE_SHORTBOW))
             {
                 item.WeaponSize = WeaponSizeCategory.TwoHanded;
             }

@@ -1,5 +1,6 @@
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -103,7 +104,7 @@ public static class RayOfEnfeeblementRulesTests
 
     private static void TestRayDefinitionMatchesCoreRules()
     {
-        SpellData ray = SpellDatabase.GetSpell("ray_of_enfeeblement");
+        SpellData ray = SpellDatabase.GetSpell(SpellNames.RAY_OF_ENFEEBLEMENT);
         Assert(ray != null, "Ray of Enfeeblement spell definition exists");
         if (ray == null)
             return;
@@ -121,7 +122,7 @@ public static class RayOfEnfeeblementRulesTests
 
     private static void TestRangedTouchAttackUsesTouchAcAndCanMiss()
     {
-        SpellData ray = SpellDatabase.GetSpell("ray_of_enfeeblement");
+        SpellData ray = SpellDatabase.GetSpell(SpellNames.RAY_OF_ENFEEBLEMENT);
         CharacterStats caster = BuildStats("Caster", level: 5, dex: 14, bab: 5);
 
         CharacterStats lowTouchTarget = BuildStats("LowTouch", level: 3, dex: 8, bab: 2);

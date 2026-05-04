@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "ray_of_enfeeblement",
+                    SpellId = SpellNames.RAY_OF_ENFEEBLEMENT,
                     Name = "Ray of Enfeeblement",
                     Description = "Ranged touch attack. On hit: target takes 1d6 + (1 per 2 caster levels, max +5) Strength penalty. No save. Duration 1 min/level. SR applies. PHB p.269",
                     SpellLevel = 1,
@@ -34,7 +35,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "ray_of_frost",
+                    SpellId = SpellNames.RAY_OF_FROST,
                     Name = "Ray of Frost",
                     Description = "A ray of freezing air and ice deals 1d3 cold damage. Ranged touch attack.",
                     SpellLevel = 0, School = "Evocation",
@@ -52,7 +53,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "read_magic",
+                    SpellId = SpellNames.READ_MAGIC,
                     Name = "Read Magic",
                     Description = "Read scrolls and spellbooks. Duration 10 min/level.",
                     SpellLevel = 0, School = "Divination",
@@ -69,7 +70,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "reduce_person",
+                    SpellId = SpellNames.REDUCE_PERSON,
                     Name = "Reduce Person",
                     Description = "Humanoid creature halves in size. -2 STR, +2 DEX, +1 AC/attack (size). 1 min/level. PHB p.269",
                     SpellLevel = 1, School = "Transmutation",
@@ -94,7 +95,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "remove_fear",
+                    SpellId = SpellNames.REMOVE_FEAR,
                     Name = "Remove Fear",
                     Description = "Suppresses fear or gives +4 morale bonus vs fear for 10 min. One ally +1 per 4 CL. PHB p.271",
                     SpellLevel = 1, School = "Abjuration",
@@ -111,7 +112,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "remove_paralysis",
+                    SpellId = SpellNames.REMOVE_PARALYSIS,
                     Name = "Remove Paralysis",
                     Description = "Frees 1-4 creatures from paralysis or slow effect. PHB p.271",
                     SpellLevel = 2, School = "Conjuration",
@@ -127,7 +128,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "restoration",
+                    SpellId = SpellNames.RESTORATION,
                     Name = "Restoration",
                     Description = "Dispels temporary negative levels and restores drained abilities. PHB p.272",
                     SpellLevel = 4, School = "Conjuration",
@@ -141,7 +142,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "greater_restoration",
+                    SpellId = SpellNames.GREATER_RESTORATION,
                     Name = "Greater Restoration",
                     Description = "Restores all temporary negative levels and ability damage. PHB p.246",
                     SpellLevel = 7, School = "Conjuration",
@@ -155,7 +156,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "resist_energy",
+                    SpellId = SpellNames.RESIST_ENERGY,
                     Name = "Resist Energy",
                     Description = "Choose one energy type (acid, cold, electricity, fire, or sonic). Grants resistance 10/20/30 based on caster level. Duration 10 min/level. PHB p.272",
                     SpellLevel = 2, School = "Abjuration",
@@ -176,7 +177,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "resistance_wiz",
+                    SpellId = SpellNames.RESISTANCE_WIZ,
                     Name = "Resistance",
                     Description = "Subject gains +1 on saving throws for 1 minute.",
                     SpellLevel = 0, School = "Abjuration",
@@ -193,7 +194,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "rope_trick",
+                    SpellId = SpellNames.ROPE_TRICK,
                     Name = "Rope Trick",
                     Description = "As many as 8 creatures hide in extradimensional space. Duration 1 hr/level. PHB p.273",
                     SpellLevel = 2, School = "Transmutation",
@@ -209,12 +210,12 @@ public static partial class SpellDatabase
                 });
 
         // Aliases
-        RegisterClassSpellAlias("read_magic_clr", "read_magic", "Cleric", 0);
-        RegisterClassSpellAlias("resist_energy_clr", "resist_energy", "Cleric", 2);
-        RegisterClassSpellAlias("resist_energy_dru", "resist_energy", "Druid", 2);
-        RegisterClassSpellAlias("resist_energy_pal", "resist_energy", "Paladin", 2);
-        RegisterClassSpellAlias("resist_energy_rgr", "resist_energy", "Ranger", 1);
-        RegisterClassSpellAlias("resistance_clr", "resistance_wiz", "Cleric", 0);
+        RegisterClassSpellAlias("read_magic_clr", SpellNames.READ_MAGIC, "Cleric", 0);
+        RegisterClassSpellAlias("resist_energy_clr", SpellNames.RESIST_ENERGY, "Cleric", 2);
+        RegisterClassSpellAlias("resist_energy_dru", SpellNames.RESIST_ENERGY, "Druid", 2);
+        RegisterClassSpellAlias("resist_energy_pal", SpellNames.RESIST_ENERGY, "Paladin", 2);
+        RegisterClassSpellAlias("resist_energy_rgr", SpellNames.RESIST_ENERGY, "Ranger", 1);
+        RegisterClassSpellAlias("resistance_clr", SpellNames.RESISTANCE_WIZ, "Cleric", 0);
 
     }
 }

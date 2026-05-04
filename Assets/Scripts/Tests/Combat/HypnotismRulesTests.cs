@@ -1,5 +1,6 @@
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -101,7 +102,7 @@ public static class HypnotismRulesTests
 
     private static void TestHypnotismDefinitionMatchesCoreRules()
     {
-        SpellData hypnotism = SpellDatabase.GetSpell("hypnotism");
+        SpellData hypnotism = SpellDatabase.GetSpell(SpellNames.HYPNOTISM);
         Assert(hypnotism != null, "Hypnotism spell definition exists");
         if (hypnotism == null)
             return;
@@ -179,7 +180,7 @@ public static class HypnotismRulesTests
                 Caster = caster,
                 CasterName = caster.Stats.CharacterName,
                 DisturbanceSaveDC = 1,
-                SourceSpellId = "hypnotism",
+                SourceSpellId = SpellNames.HYPNOTISM,
                 SourceEffectName = "Hypnotism"
             };
 
@@ -191,7 +192,7 @@ public static class HypnotismRulesTests
                 data: data,
                 sourceNameOverride: "Hypnotism",
                 sourceCategory: "Spell",
-                sourceId: "hypnotism");
+                sourceId: SpellNames.HYPNOTISM);
 
             Assert(conditionService.HasCondition(target, CombatConditionType.Fascinated), "Precondition: target starts fascinated");
 

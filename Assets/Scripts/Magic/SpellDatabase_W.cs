@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "web",
+                    SpellId = SpellNames.WEB,
                     Name = "Web",
                     Description = "Fills 20-ft-radius spread with sticky webs. Reflex save or stuck. STR/Escape check to escape. 10 min/level. PHB p.301",
                     SpellLevel = 2, School = "Conjuration",
@@ -29,7 +30,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "whispering_wind",
+                    SpellId = SpellNames.WHISPERING_WIND,
                     Name = "Whispering Wind",
                     Description = "Sends a short message or sound to a distant location. PHB p.301",
                     SpellLevel = 2, School = "Transmutation",
@@ -45,7 +46,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "domain_wind_wall",
+                    SpellId = SpellNames.DOMAIN_WIND_WALL,
                     Name = "Wind Wall",
                     Description = "Deflects arrows, smaller creatures, and gases. Creates an invisible wall of wind.",
                     SpellLevel = 2,

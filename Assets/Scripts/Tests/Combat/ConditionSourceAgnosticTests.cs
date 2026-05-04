@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -102,7 +103,7 @@ public static class ConditionSourceAgnosticTests
                 source: caster,
                 sourceNameOverride: "Hold Person",
                 sourceCategory: "Spell",
-                sourceId: "hold_person");
+                sourceId: SpellNames.HOLD_PERSON);
 
             ConditionService.ActiveCondition spellApplied = FindCondition(service, target, CombatConditionType.Paralyzed);
             Assert(spellApplied != null && spellApplied.Source == caster,

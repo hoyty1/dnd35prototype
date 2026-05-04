@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using DND35.AI.Profiles;
 using UnityEngine;
 using UnityEngine.UI;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Central game manager handling turn flow with D&D 3.5 action economy.
@@ -2077,7 +2078,7 @@ public partial class GameManager : MonoBehaviour
         SetupStartingEquipment(fighterInventory, "Fighter");
 
         // Grapple test loadout: equip a greatsword for two-handed weapon grapple validation.
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("greatsword"), EquipSlot.RightHand);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.GREATSWORD), EquipSlot.RightHand);
 
         // Greatsword is two-handed; explicitly clear off-hand to avoid stale setup state.
         fighterInventory.CharacterInventory.LeftHandSlot = null;
@@ -2150,24 +2151,24 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
-        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
 
         InventoryComponent fighterInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
         fighterInventory.Init(fighterStats);
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAINMAIL), EquipSlot.Armor);
         fighterInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            "detect_magic_wiz", "read_magic", "grease", "mage_armor"
+            SpellNames.DETECT_MAGIC_WIZ, SpellNames.READ_MAGIC, SpellNames.GREASE, SpellNames.MAGE_ARMOR
         };
         wizardSpellComp.PreparedSpellSlotIds = new List<string>
         {
-            "grease", "grease", "grease", "grease"
+            SpellNames.GREASE, SpellNames.GREASE, SpellNames.GREASE, SpellNames.GREASE
         };
         wizardSpellComp.Init(wizardStats);
 
@@ -2252,9 +2253,9 @@ public partial class GameManager : MonoBehaviour
             rogueInventory = PC1.gameObject.AddComponent<InventoryComponent>();
         rogueInventory.Init(rogueStats);
 
-        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("rapier"), EquipSlot.RightHand);
-        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.LeftHand);
-        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("studded_leather"), EquipSlot.Armor);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.RAPIER), EquipSlot.RightHand);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.DAGGER), EquipSlot.LeftHand);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.STUDDED_LEATHER), EquipSlot.Armor);
 
         rogueInventory.CharacterInventory.RecalculateStats();
 
@@ -2308,19 +2309,19 @@ public partial class GameManager : MonoBehaviour
         // - Light crossbow equipped for ranged validation
         // - Heavy mace in inventory as melee backup
         // - 20 bolts as a placeholder ammo bundle (display/logging)
-        ItemData lightCrossbow = ItemDatabase.CloneItem("crossbow_light");
+        ItemData lightCrossbow = ItemDatabase.CloneItem(ItemIDs.CROSSBOW_LIGHT);
         if (lightCrossbow != null)
             clericInventory.CharacterInventory.DirectEquip(lightCrossbow, EquipSlot.RightHand);
 
-        ItemData heavyMace = ItemDatabase.CloneItem("mace_heavy");
+        ItemData heavyMace = ItemDatabase.CloneItem(ItemIDs.MACE_HEAVY);
         if (heavyMace != null)
             clericInventory.CharacterInventory.AddItem(heavyMace);
 
-        ItemData crossbowBolts = ItemDatabase.CloneItem("crossbow_bolts_20");
+        ItemData crossbowBolts = ItemDatabase.CloneItem(ItemIDs.CROSSBOW_BOLTS_20);
         if (crossbowBolts != null)
             clericInventory.CharacterInventory.AddItem(crossbowBolts);
 
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAINMAIL), EquipSlot.Armor);
         clericInventory.CharacterInventory.RecalculateStats();
 
         CharacterStats fighterStats = new CharacterStats(
@@ -2351,17 +2352,17 @@ public partial class GameManager : MonoBehaviour
             fighterInventory = PC2.gameObject.AddComponent<InventoryComponent>();
         fighterInventory.Init(fighterStats);
 
-        ItemData longsword = ItemDatabase.CloneItem("longsword");
+        ItemData longsword = ItemDatabase.CloneItem(ItemIDs.LONGSWORD);
         if (longsword != null)
             fighterInventory.CharacterInventory.DirectEquip(longsword, EquipSlot.RightHand);
 
-        ItemData chainmail = ItemDatabase.CloneItem("chainmail");
+        ItemData chainmail = ItemDatabase.CloneItem(ItemIDs.CHAINMAIL);
         if (chainmail != null)
             fighterInventory.CharacterInventory.DirectEquip(chainmail, EquipSlot.Armor);
 
-        ItemData heavyShield = ItemDatabase.CloneItem("shield_heavy_steel")
-            ?? ItemDatabase.CloneItem("shield_heavy_wooden")
-            ?? ItemDatabase.CloneItem("shield_light_wooden");
+        ItemData heavyShield = ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_STEEL)
+            ?? ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_WOODEN)
+            ?? ItemDatabase.CloneItem(ItemIDs.SHIELD_LIGHT_WOODEN);
         if (heavyShield != null)
             fighterInventory.CharacterInventory.DirectEquip(heavyShield, EquipSlot.LeftHand);
 
@@ -2443,21 +2444,21 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
-        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
 
         InventoryComponent rogueInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
         rogueInventory.Init(rogueStats);
-        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
-        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("short_sword"), EquipSlot.RightHand);
-        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("short_sword"), EquipSlot.LeftHand);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LEATHER_ARMOR), EquipSlot.Armor);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHORT_SWORD), EquipSlot.RightHand);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHORT_SWORD), EquipSlot.LeftHand);
         rogueInventory.CharacterInventory.RecalculateStats();
 
         InventoryComponent fighterInventory = PC3.gameObject.GetComponent<InventoryComponent>() ?? PC3.gameObject.AddComponent<InventoryComponent>();
         fighterInventory.Init(fighterStats);
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("full_plate"), EquipSlot.Armor);
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE), EquipSlot.Armor);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_STEEL), EquipSlot.LeftHand);
         fighterInventory.CharacterInventory.RecalculateStats();
 
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2543,20 +2544,20 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent fighterInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         fighterInventory.Init(fighterStats);
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("full_plate"), EquipSlot.Armor);
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE), EquipSlot.Armor);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
+        fighterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_STEEL), EquipSlot.LeftHand);
         fighterInventory.CharacterInventory.RecalculateStats();
 
         InventoryComponent rogueInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
         rogueInventory.Init(rogueStats);
-        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
-        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("short_sword"), EquipSlot.RightHand);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LEATHER_ARMOR), EquipSlot.Armor);
+        rogueInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHORT_SWORD), EquipSlot.RightHand);
         rogueInventory.CharacterInventory.RecalculateStats();
 
         InventoryComponent wizardInventory = PC3.gameObject.GetComponent<InventoryComponent>() ?? PC3.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
-        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
 
         // Predator-priority target setup: start rogue wounded and wizard invisible.
@@ -2605,7 +2606,7 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
-        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
 
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2673,16 +2674,16 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent shielderInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         shielderInventory.Init(shielderStats);
-        shielderInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        shielderInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
-        shielderInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
+        shielderInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
+        shielderInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_STEEL), EquipSlot.LeftHand);
+        shielderInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAIN_SHIRT), EquipSlot.Armor);
         shielderInventory.CharacterInventory.RecalculateStats();
 
         InventoryComponent basherInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
         basherInventory.Init(basherStats);
-        basherInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        basherInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
-        basherInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
+        basherInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
+        basherInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_STEEL), EquipSlot.LeftHand);
+        basherInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAIN_SHIRT), EquipSlot.Armor);
         basherInventory.CharacterInventory.RecalculateStats();
 
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2729,9 +2730,9 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent clericInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         clericInventory.Init(clericStats);
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.MACE_HEAVY), EquipSlot.RightHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_STEEL), EquipSlot.LeftHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAINMAIL), EquipSlot.Armor);
         clericInventory.CharacterInventory.RecalculateStats();
 
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2779,7 +2780,7 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent necromancerInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         necromancerInventory.Init(necromancerStats);
-        necromancerInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        necromancerInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         necromancerInventory.CharacterInventory.RecalculateStats();
 
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -2849,43 +2850,43 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent clericInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         clericInventory.Init(clericStats);
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.MACE_HEAVY), EquipSlot.RightHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_STEEL), EquipSlot.LeftHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAINMAIL), EquipSlot.Armor);
         clericInventory.CharacterInventory.RecalculateStats();
 
         InventoryComponent wizardInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
-        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent clericSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
         clericSpellComp.KnownSpells.Clear();
-        clericSpellComp.SelectedSpellIds = new List<string> { "detect_magic", "guidance", "light", "resistance" };
+        clericSpellComp.SelectedSpellIds = new List<string> { "detect_magic", SpellNames.GUIDANCE, SpellNames.LIGHT, "resistance" };
         clericSpellComp.PreparedSpellSlotIds = null;
         clericSpellComp.Init(clericStats);
         PrepareSummonMonsterTestSpellSlots(
             clericSpellComp,
             summonOneSpellId: "summon_monster_1_clr",
             summonTwoSpellId: "summon_monster_2_clr",
-            levelOneFallbackAId: "bless",
-            levelOneFallbackBId: "shield_of_faith",
-            levelTwoFallbackAId: "hold_person",
-            levelTwoFallbackBId: "cure_moderate_wounds");
+            levelOneFallbackAId: SpellNames.BLESS,
+            levelOneFallbackBId: SpellNames.SHIELD_OF_FAITH,
+            levelTwoFallbackAId: SpellNames.HOLD_PERSON,
+            levelTwoFallbackBId: SpellNames.CURE_MODERATE_WOUNDS);
 
         SpellcastingComponent wizardSpellComp = PC2.gameObject.GetComponent<SpellcastingComponent>() ?? PC2.gameObject.AddComponent<SpellcastingComponent>();
         wizardSpellComp.KnownSpells.Clear();
-        wizardSpellComp.SelectedSpellIds = new List<string> { "detect_magic", "ray_of_frost", "acid_splash", "read_magic" };
+        wizardSpellComp.SelectedSpellIds = new List<string> { "detect_magic", SpellNames.RAY_OF_FROST, SpellNames.ACID_SPLASH, SpellNames.READ_MAGIC };
         wizardSpellComp.PreparedSpellSlotIds = null;
         wizardSpellComp.Init(wizardStats);
         PrepareSummonMonsterTestSpellSlots(
             wizardSpellComp,
-            summonOneSpellId: "summon_monster_1",
-            summonTwoSpellId: "summon_monster_2",
-            levelOneFallbackAId: "magic_missile",
-            levelOneFallbackBId: "mage_armor",
-            levelTwoFallbackAId: "mirror_image",
-            levelTwoFallbackBId: "invisibility");
+            summonOneSpellId: SpellNames.SUMMON_MONSTER_1,
+            summonTwoSpellId: SpellNames.SUMMON_MONSTER_2,
+            levelOneFallbackAId: SpellNames.MAGIC_MISSILE,
+            levelOneFallbackBId: SpellNames.MAGE_ARMOR,
+            levelTwoFallbackAId: SpellNames.MIRROR_IMAGE,
+            levelTwoFallbackBId: SpellNames.INVISIBILITY);
 
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
         SetPCActiveState(PC2, true, CombatUI != null ? CombatUI.PC2Panel : null);
@@ -2932,21 +2933,21 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
-        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            "detect_magic_wiz", "ray_of_frost", "acid_splash", "read_magic",
-            "shield", "magic_missile", "mage_armor", "mirror_image"
+            SpellNames.DETECT_MAGIC_WIZ, SpellNames.RAY_OF_FROST, SpellNames.ACID_SPLASH, SpellNames.READ_MAGIC,
+            SpellNames.SHIELD, SpellNames.MAGIC_MISSILE, SpellNames.MAGE_ARMOR, SpellNames.MIRROR_IMAGE
         };
         wizardSpellComp.PreparedSpellSlotIds = new List<string>
         {
-            "detect_magic_wiz", "ray_of_frost", "acid_splash", "read_magic",
-            "shield", "magic_missile", "mage_armor",
-            "mirror_image", "invisibility"
+            SpellNames.DETECT_MAGIC_WIZ, SpellNames.RAY_OF_FROST, SpellNames.ACID_SPLASH, SpellNames.READ_MAGIC,
+            SpellNames.SHIELD, SpellNames.MAGIC_MISSILE, SpellNames.MAGE_ARMOR,
+            SpellNames.MIRROR_IMAGE, SpellNames.INVISIBILITY
         };
         wizardSpellComp.Init(wizardStats);
 
@@ -3000,25 +3001,25 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
-        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            "detect_magic_wiz", "read_magic", "protection_from_evil", "shield", "magic_missile"
+            SpellNames.DETECT_MAGIC_WIZ, SpellNames.READ_MAGIC, SpellNames.PROTECTION_FROM_EVIL, SpellNames.SHIELD, SpellNames.MAGIC_MISSILE
         };
         wizardSpellComp.PreparedSpellSlotIds = new List<string>
         {
-            "protection_from_evil", "protection_from_evil", "shield", "magic_missile", "magic_missile"
+            SpellNames.PROTECTION_FROM_EVIL, SpellNames.PROTECTION_FROM_EVIL, SpellNames.SHIELD, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE
         };
         wizardSpellComp.Init(wizardStats);
 
         StatusEffectManager wizardStatusMgr = PC1.gameObject.GetComponent<StatusEffectManager>() ?? PC1.gameObject.AddComponent<StatusEffectManager>();
         wizardStatusMgr.Init(wizardStats);
 
-        SpellData protectionFromEvil = SpellDatabase.GetSpell("protection_from_evil");
+        SpellData protectionFromEvil = SpellDatabase.GetSpell(SpellNames.PROTECTION_FROM_EVIL);
         if (protectionFromEvil != null)
         {
             wizardStatusMgr.AddEffect(protectionFromEvil, "Scenario Setup", casterLevel: wizardStats.Level);
@@ -3082,18 +3083,18 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent druidInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         druidInventory.Init(druidStats);
-        druidInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        druidInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         druidInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent druidSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
         druidSpellComp.KnownSpells.Clear();
         druidSpellComp.SelectedSpellIds = new List<string>
         {
-            "obscuring_mist"
+            SpellNames.OBSCURING_MIST
         };
         druidSpellComp.PreparedSpellSlotIds = new List<string>
         {
-            "obscuring_mist", "obscuring_mist", "obscuring_mist"
+            SpellNames.OBSCURING_MIST, SpellNames.OBSCURING_MIST, SpellNames.OBSCURING_MIST
         };
         druidSpellComp.Init(druidStats);
 
@@ -3127,18 +3128,18 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent wizardInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
-        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent wizardSpellComp = PC2.gameObject.GetComponent<SpellcastingComponent>() ?? PC2.gameObject.AddComponent<SpellcastingComponent>();
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            "obscuring_mist", "magic_missile"
+            SpellNames.OBSCURING_MIST, SpellNames.MAGIC_MISSILE
         };
         wizardSpellComp.PreparedSpellSlotIds = new List<string>
         {
-            "obscuring_mist", "magic_missile"
+            SpellNames.OBSCURING_MIST, SpellNames.MAGIC_MISSILE
         };
         wizardSpellComp.Init(wizardStats);
 
@@ -3196,9 +3197,9 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent fighter1Inventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         fighter1Inventory.Init(fighter1Stats);
-        fighter1Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("warhammer"), EquipSlot.RightHand);
-        fighter1Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
-        fighter1Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        fighter1Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.WARHAMMER), EquipSlot.RightHand);
+        fighter1Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_WOODEN), EquipSlot.LeftHand);
+        fighter1Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAINMAIL), EquipSlot.Armor);
         fighter1Inventory.CharacterInventory.RecalculateStats();
 
         CharacterStats fighter2Stats = new CharacterStats(
@@ -3224,9 +3225,9 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent fighter2Inventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
         fighter2Inventory.Init(fighter2Stats);
-        fighter2Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        fighter2Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
-        fighter2Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        fighter2Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
+        fighter2Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_WOODEN), EquipSlot.LeftHand);
+        fighter2Inventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAINMAIL), EquipSlot.Armor);
         fighter2Inventory.CharacterInventory.RecalculateStats();
 
         CharacterStats wizardStats = new CharacterStats(
@@ -3252,18 +3253,18 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent wizardInventory = PC3.gameObject.GetComponent<InventoryComponent>() ?? PC3.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
-        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent wizardSpellComp = PC3.gameObject.GetComponent<SpellcastingComponent>() ?? PC3.gameObject.AddComponent<SpellcastingComponent>();
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            "obscuring_mist", "magic_missile", "shield"
+            SpellNames.OBSCURING_MIST, SpellNames.MAGIC_MISSILE, SpellNames.SHIELD
         };
         wizardSpellComp.PreparedSpellSlotIds = new List<string>
         {
-            "obscuring_mist", "obscuring_mist", "magic_missile", "shield"
+            SpellNames.OBSCURING_MIST, SpellNames.OBSCURING_MIST, SpellNames.MAGIC_MISSILE, SpellNames.SHIELD
         };
         wizardSpellComp.Init(wizardStats);
 
@@ -3351,18 +3352,18 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
-        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
         wizardSpellComp.KnownSpells.Clear();
         wizardSpellComp.SelectedSpellIds = new List<string>
         {
-            "detect_magic_wiz", "ray_of_frost", "acid_splash", "disrupt_undead", "read_magic"
+            SpellNames.DETECT_MAGIC_WIZ, SpellNames.RAY_OF_FROST, SpellNames.ACID_SPLASH, SpellNames.DISRUPT_UNDEAD, SpellNames.READ_MAGIC
         };
         wizardSpellComp.PreparedSpellSlotIds = new List<string>
         {
-            "disrupt_undead", "disrupt_undead", "disrupt_undead", "disrupt_undead", "disrupt_undead"
+            SpellNames.DISRUPT_UNDEAD, SpellNames.DISRUPT_UNDEAD, SpellNames.DISRUPT_UNDEAD, SpellNames.DISRUPT_UNDEAD, SpellNames.DISRUPT_UNDEAD
         };
         wizardSpellComp.Init(wizardStats);
 
@@ -3480,7 +3481,7 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         wizardInventory.Init(wizardStats);
-        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         wizardInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
@@ -3539,18 +3540,18 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent enchanterInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         enchanterInventory.Init(enchanterStats);
-        enchanterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        enchanterInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
         enchanterInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent enchanterSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
         enchanterSpellComp.KnownSpells.Clear();
         enchanterSpellComp.SelectedSpellIds = new List<string>
         {
-            "detect_magic_wiz", "read_magic", "charm_person", "magic_missile"
+            SpellNames.DETECT_MAGIC_WIZ, SpellNames.READ_MAGIC, SpellNames.CHARM_PERSON, SpellNames.MAGIC_MISSILE
         };
         enchanterSpellComp.PreparedSpellSlotIds = new List<string>
         {
-            "charm_person", "charm_person", "magic_missile", "magic_missile"
+            SpellNames.CHARM_PERSON, SpellNames.CHARM_PERSON, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE
         };
         enchanterSpellComp.Init(enchanterStats);
 
@@ -3586,9 +3587,9 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent guardInventory = PC2.gameObject.GetComponent<InventoryComponent>() ?? PC2.gameObject.AddComponent<InventoryComponent>();
         guardInventory.Init(guardStats);
-        guardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        guardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
-        guardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        guardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
+        guardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_STEEL), EquipSlot.LeftHand);
+        guardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAINMAIL), EquipSlot.Armor);
         guardInventory.CharacterInventory.RecalculateStats();
 
         SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
@@ -3610,17 +3611,17 @@ public partial class GameManager : MonoBehaviour
             spellComp.KnownSpells.Clear();
             spellComp.SelectedSpellIds = new List<string>
             {
-                "detect_magic_wiz",
-                "read_magic",
-                "sleep",
-                "magic_missile"
+                SpellNames.DETECT_MAGIC_WIZ,
+                SpellNames.READ_MAGIC,
+                SpellNames.SLEEP,
+                SpellNames.MAGIC_MISSILE
             };
             spellComp.PreparedSpellSlotIds = new List<string>
             {
-                "sleep",
-                "sleep",
-                "magic_missile",
-                "magic_missile"
+                SpellNames.SLEEP,
+                SpellNames.SLEEP,
+                SpellNames.MAGIC_MISSILE,
+                SpellNames.MAGIC_MISSILE
             };
             spellComp.Init(PC1.Stats);
         }
@@ -3663,9 +3664,9 @@ public partial class GameManager : MonoBehaviour
 
         InventoryComponent clericInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
         clericInventory.Init(clericStats);
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
-        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.MACE_HEAVY), EquipSlot.RightHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_STEEL), EquipSlot.LeftHand);
+        clericInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAINMAIL), EquipSlot.Armor);
         clericInventory.CharacterInventory.RecalculateStats();
 
         SpellcastingComponent clericSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
@@ -4905,7 +4906,7 @@ public partial class GameManager : MonoBehaviour
         if (TryHandleAnimateRopeConditionExpiry(character, condition))
             return;
 
-        bool fromColorSpray = string.Equals(condition.SourceId, "color_spray", StringComparison.Ordinal)
+        bool fromColorSpray = string.Equals(condition.SourceId, SpellNames.COLOR_SPRAY, StringComparison.Ordinal)
             || string.Equals(condition.SourceName, "Color Spray", StringComparison.Ordinal);
         if (fromColorSpray && (normalizedType == CombatConditionType.Unconscious || normalizedType == CombatConditionType.Blinded))
             return;
@@ -8405,8 +8406,8 @@ public partial class GameManager : MonoBehaviour
         _mainHandPenalty = mainPenalty;
         _offHandPenalty = offPenalty;
 
-        string mainType = (mainWeapon != null && (mainWeapon.IsLightWeapon || mainWeapon.WeaponSize == WeaponSizeCategory.Light)) ? "light" : "normal";
-        string offType = lightOffHand ? "light" : "normal";
+        string mainType = (mainWeapon != null && (mainWeapon.IsLightWeapon || mainWeapon.WeaponSize == WeaponSizeCategory.Light)) ? SpellNames.LIGHT : "normal";
+        string offType = lightOffHand ? SpellNames.LIGHT : "normal";
 
         Debug.Log($"[DualWield] Main hand weapon: {mainWeapon?.Name ?? "None"} ({mainType})");
         Debug.Log($"[DualWield] Off-hand weapon: {offWeapon?.Name ?? "None"} ({offType})");
@@ -9873,7 +9874,7 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
-        return statusMgr != null && statusMgr.HasEffect("disguise_self");
+        return statusMgr != null && statusMgr.HasEffect(SpellNames.DISGUISE_SELF);
     }
 
     public bool HasActiveExpeditiousRetreat(CharacterController character)
@@ -9882,7 +9883,7 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
-        return statusMgr != null && statusMgr.HasEffect("expeditious_retreat");
+        return statusMgr != null && statusMgr.HasEffect(SpellNames.EXPEDITIOUS_RETREAT);
     }
 
     public bool HasActiveJump(CharacterController character)
@@ -9891,7 +9892,7 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
-        return statusMgr != null && statusMgr.HasEffect("jump");
+        return statusMgr != null && statusMgr.HasEffect(SpellNames.JUMP);
     }
 
     public bool HasActiveInvisibility(CharacterController character)
@@ -9900,7 +9901,7 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
-        return statusMgr != null && statusMgr.HasEffect("invisibility");
+        return statusMgr != null && statusMgr.HasEffect(SpellNames.INVISIBILITY);
     }
 
     public bool HasActiveSeeInvisibility(CharacterController character)
@@ -9909,7 +9910,7 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
-        return statusMgr != null && statusMgr.HasEffect("see_invisibility");
+        return statusMgr != null && statusMgr.HasEffect(SpellNames.SEE_INVISIBILITY);
     }
 
     public void OnDismissExpeditiousRetreatButtonPressed()
@@ -9919,13 +9920,13 @@ public partial class GameManager : MonoBehaviour
             return;
 
         StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
-        if (statusMgr == null || !statusMgr.HasEffect("expeditious_retreat"))
+        if (statusMgr == null || !statusMgr.HasEffect(SpellNames.EXPEDITIOUS_RETREAT))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Expeditious Retreat to dismiss.");
             return;
         }
 
-        statusMgr.RemoveEffectsBySpellId("expeditious_retreat");
+        statusMgr.RemoveEffectsBySpellId(SpellNames.EXPEDITIOUS_RETREAT);
         ExpeditiousRetreatEffectData removed = pc.RemoveExpeditiousRetreatEffect();
         int removedBonus = removed != null ? Mathf.Max(0, removed.SpeedBonusFeet) : 30;
         CombatUI?.ShowCombatLog($"<color=#88CCFF>💨 {pc.Stats.CharacterName} dismisses Expeditious Retreat (speed -{removedBonus} ft).</color>");
@@ -9940,14 +9941,14 @@ public partial class GameManager : MonoBehaviour
             return;
 
         StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
-        if (statusMgr == null || !statusMgr.HasEffect("jump"))
+        if (statusMgr == null || !statusMgr.HasEffect(SpellNames.JUMP))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Jump spell to dismiss.");
             return;
         }
 
         pc.CommitStandardAction();
-        statusMgr.RemoveEffectsBySpellId("jump");
+        statusMgr.RemoveEffectsBySpellId(SpellNames.JUMP);
 
         CombatUI?.ShowCombatLog($"<color=#88CCFF>🦘 {pc.Stats.CharacterName} dismisses Jump.</color>");
         UpdateAllStatsUI();
@@ -9961,14 +9962,14 @@ public partial class GameManager : MonoBehaviour
             return;
 
         StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
-        if (statusMgr == null || !statusMgr.HasEffect("invisibility"))
+        if (statusMgr == null || !statusMgr.HasEffect(SpellNames.INVISIBILITY))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Invisibility spell to dismiss.");
             return;
         }
 
         pc.CommitStandardAction();
-        statusMgr.RemoveEffectsBySpellId("invisibility");
+        statusMgr.RemoveEffectsBySpellId(SpellNames.INVISIBILITY);
         pc.ClearInvisibilityEffect();
 
         CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {pc.Stats.CharacterName} dismisses Invisibility.</color>");
@@ -9983,13 +9984,13 @@ public partial class GameManager : MonoBehaviour
             return;
 
         StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
-        if (statusMgr == null || !statusMgr.HasEffect("see_invisibility"))
+        if (statusMgr == null || !statusMgr.HasEffect(SpellNames.SEE_INVISIBILITY))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active See Invisibility spell to dismiss.");
             return;
         }
 
-        statusMgr.RemoveEffectsBySpellId("see_invisibility");
+        statusMgr.RemoveEffectsBySpellId(SpellNames.SEE_INVISIBILITY);
         pc.ClearSeeInvisibilityEffect();
 
         CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {pc.Stats.CharacterName} dismisses See Invisibility.</color>");
@@ -10004,14 +10005,14 @@ public partial class GameManager : MonoBehaviour
             return;
 
         StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
-        if (statusMgr == null || !statusMgr.HasEffect("disguise_self"))
+        if (statusMgr == null || !statusMgr.HasEffect(SpellNames.DISGUISE_SELF))
         {
             CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Disguise Self to dismiss.");
             return;
         }
 
         pc.CommitStandardAction();
-        statusMgr.RemoveEffectsBySpellId("disguise_self");
+        statusMgr.RemoveEffectsBySpellId(SpellNames.DISGUISE_SELF);
 
         CombatUI?.ShowCombatLog($"<color=#88CCFF>🎭 {pc.Stats.CharacterName} dismisses Disguise Self and appears as {pc.DisplayedRace}.</color>");
         UpdateAllStatsUI();
@@ -10077,7 +10078,7 @@ public partial class GameManager : MonoBehaviour
 
     private static bool IsAnimateRopeSpell(SpellData spell)
     {
-        return spell != null && string.Equals(spell.SpellId, "animate_rope", StringComparison.Ordinal);
+        return spell != null && string.Equals(spell.SpellId, SpellNames.ANIMATE_ROPE, StringComparison.Ordinal);
     }
 
     private bool TryHandleAnimateRopeComponentSelection(CharacterController caster)
@@ -10188,9 +10189,9 @@ public partial class GameManager : MonoBehaviour
             return true;
 
         string id = item.Id ?? string.Empty;
-        return string.Equals(id, "rope", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(id, "rope_hemp", StringComparison.OrdinalIgnoreCase)
-               || string.Equals(id, "rope_silk", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(id, ItemIDs.ROPE, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(id, ItemIDs.ROPE_HEMP, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(id, ItemIDs.ROPE_SILK, StringComparison.OrdinalIgnoreCase);
     }
 
     private static int GetRopeBreakDC(ItemData item)
@@ -10199,7 +10200,7 @@ public partial class GameManager : MonoBehaviour
             return rope.BreakDC;
 
         string id = item != null ? (item.Id ?? string.Empty) : string.Empty;
-        if (string.Equals(id, "rope_silk", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(id, ItemIDs.ROPE_SILK, StringComparison.OrdinalIgnoreCase))
             return 23;
 
         return 24;
@@ -10233,7 +10234,7 @@ public partial class GameManager : MonoBehaviour
 
     private static bool IsMagicWeaponSpell(SpellData spell)
     {
-        return spell != null && string.Equals(spell.SpellId, "magic_weapon", StringComparison.Ordinal);
+        return spell != null && string.Equals(spell.SpellId, SpellNames.MAGIC_WEAPON, StringComparison.Ordinal);
     }
 
     private bool TryHandleMagicWeaponWeaponSelection(CharacterController caster, CharacterController target)
@@ -10478,8 +10479,8 @@ public partial class GameManager : MonoBehaviour
                 continue;
 
             AnimateRopeEntangledConditionData ropeData = candidate.Data as AnimateRopeEntangledConditionData;
-            bool sourceMatches = string.Equals(candidate.SourceId, "animate_rope", StringComparison.Ordinal)
-                || (ropeData != null && string.Equals(ropeData.SourceSpellId, "animate_rope", StringComparison.Ordinal));
+            bool sourceMatches = string.Equals(candidate.SourceId, SpellNames.ANIMATE_ROPE, StringComparison.Ordinal)
+                || (ropeData != null && string.Equals(ropeData.SourceSpellId, SpellNames.ANIMATE_ROPE, StringComparison.Ordinal));
             if (!sourceMatches)
                 continue;
 
@@ -10591,8 +10592,8 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         AnimateRopeEntangledConditionData data = condition.Data as AnimateRopeEntangledConditionData;
-        bool isAnimateRope = string.Equals(condition.SourceId, "animate_rope", StringComparison.Ordinal)
-            || (data != null && string.Equals(data.SourceSpellId, "animate_rope", StringComparison.Ordinal));
+        bool isAnimateRope = string.Equals(condition.SourceId, SpellNames.ANIMATE_ROPE, StringComparison.Ordinal)
+            || (data != null && string.Equals(data.SourceSpellId, SpellNames.ANIMATE_ROPE, StringComparison.Ordinal));
         if (!isAnimateRope)
             return false;
 
@@ -11314,13 +11315,13 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        if (string.Equals(_pendingSpell.SpellId, "disguise_self", StringComparison.Ordinal))
+        if (string.Equals(_pendingSpell.SpellId, SpellNames.DISGUISE_SELF, StringComparison.Ordinal))
         {
             ShowDisguiseSelfRaceSelection(caster);
             return;
         }
 
-        if (string.Equals(_pendingSpell.SpellId, "resist_energy", StringComparison.Ordinal) && !_pendingResistEnergyType.HasValue)
+        if (string.Equals(_pendingSpell.SpellId, SpellNames.RESIST_ENERGY, StringComparison.Ordinal) && !_pendingResistEnergyType.HasValue)
         {
             ShowResistEnergyTypeSelection(caster);
             return;
@@ -11528,7 +11529,7 @@ public partial class GameManager : MonoBehaviour
 
     private static bool IsCauseFearSpell(SpellData spell)
     {
-        return spell != null && string.Equals(spell.SpellId, "cause_fear", StringComparison.Ordinal);
+        return spell != null && string.Equals(spell.SpellId, SpellNames.CAUSE_FEAR, StringComparison.Ordinal);
     }
 
     private bool IsLivingCreatureForFearSpell(CharacterController target)
@@ -11557,14 +11558,14 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        bool isPersonTransmutation = spell.SpellId == "enlarge_person" || spell.SpellId == "reduce_person";
+        bool isPersonTransmutation = spell.SpellId == SpellNames.ENLARGE_PERSON || spell.SpellId == SpellNames.REDUCE_PERSON;
         if (isPersonTransmutation)
         {
             // Person transmutations can target any humanoid creature (ally or enemy).
             return IsHumanoid(target);
         }
 
-        if (spell.SpellId == "daze")
+        if (spell.SpellId == SpellNames.DAZE)
         {
             // D&D 3.5e Daze: one humanoid creature of 4 HD or less.
             // Protection-from-Evil benchmark scenario intentionally allows Daze against the level 10 test wizard
@@ -11576,7 +11577,7 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
-        if (spell.SpellId == "charm_person")
+        if (spell.SpellId == SpellNames.CHARM_PERSON)
         {
             // D&D 3.5e Charm Person: one humanoid creature of 4 HD or less.
             if (!IsEnemyTeam(caster, target)) return false;
@@ -11619,7 +11620,7 @@ public partial class GameManager : MonoBehaviour
         if (caster == null || target == null || spell == null) return false;
 
         // Willing creatures can choose to fail saves. Enlarge/Reduce are the current key use-case.
-        if (spell.SpellId == "enlarge_person" || spell.SpellId == "reduce_person")
+        if (spell.SpellId == SpellNames.ENLARGE_PERSON || spell.SpellId == SpellNames.REDUCE_PERSON)
             return IsAllyTeam(caster, target);
 
         return false;
@@ -11638,7 +11639,7 @@ public partial class GameManager : MonoBehaviour
                 if (effect?.Spell == null)
                     continue;
 
-                if (string.Equals(effect.Spell.SpellId, "shield", StringComparison.OrdinalIgnoreCase)
+                if (string.Equals(effect.Spell.SpellId, SpellNames.SHIELD, StringComparison.OrdinalIgnoreCase)
                     && effect.RemainingRounds > 0)
                 {
                     return true;
@@ -11649,7 +11650,7 @@ public partial class GameManager : MonoBehaviour
         SpellcastingComponent spellComp = target.GetComponent<SpellcastingComponent>();
         if (spellComp != null
             && spellComp.ActiveBuffs != null
-            && spellComp.ActiveBuffs.TryGetValue("shield", out int rounds)
+            && spellComp.ActiveBuffs.TryGetValue(SpellNames.SHIELD, out int rounds)
             && rounds > 0)
         {
             return true;
@@ -11905,7 +11906,7 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        if (string.Equals(_pendingSpell.SpellId, "resist_energy", StringComparison.Ordinal) && !_pendingResistEnergyType.HasValue)
+        if (string.Equals(_pendingSpell.SpellId, SpellNames.RESIST_ENERGY, StringComparison.Ordinal) && !_pendingResistEnergyType.HasValue)
         {
             CombatUI?.ShowCombatLog("⚠ Resist Energy requires selecting an energy type before casting.");
             ShowResistEnergyTypeSelection(caster);
@@ -12929,19 +12930,19 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
-            if (string.Equals(_pendingSpell.SpellId, "hypnotism", StringComparison.Ordinal))
+            if (string.Equals(_pendingSpell.SpellId, SpellNames.HYPNOTISM, StringComparison.Ordinal))
             {
                 ResolveHypnotismSpell(caster, targets, aoeCells);
                 return;
             }
 
-            if (string.Equals(_pendingSpell.SpellId, "sleep", StringComparison.Ordinal))
+            if (string.Equals(_pendingSpell.SpellId, SpellNames.SLEEP, StringComparison.Ordinal))
             {
                 ResolveSleepSpell(caster, targets, aoeCells);
                 return;
             }
 
-            if (string.Equals(_pendingSpell.SpellId, "color_spray", StringComparison.Ordinal))
+            if (string.Equals(_pendingSpell.SpellId, SpellNames.COLOR_SPRAY, StringComparison.Ordinal))
             {
                 ResolveColorSpraySpell(caster, targets, aoeCells);
                 return;
@@ -13549,7 +13550,7 @@ public partial class GameManager : MonoBehaviour
         {
             Caster = caster,
             CasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Color Spray",
-            SourceSpellId = "color_spray",
+            SourceSpellId = SpellNames.COLOR_SPRAY,
             SourceEffectName = "Color Spray",
             HitDice = hd,
             HdTier = hdTier,
@@ -13674,7 +13675,7 @@ public partial class GameManager : MonoBehaviour
 
         SpellData sourceSpell = SpellDatabase.GetSpell(data.SourceSpellId);
         if (sourceSpell == null)
-            sourceSpell = new SpellData { SpellId = "color_spray", Name = "Color Spray" };
+            sourceSpell = new SpellData { SpellId = SpellNames.COLOR_SPRAY, Name = "Color Spray" };
 
         ApplyColorSprayStageConditions(character, data, sourceSpell);
         return true;
@@ -13870,7 +13871,7 @@ public partial class GameManager : MonoBehaviour
 
     private static bool IsRayOfEnfeeblementSpell(SpellData spell)
     {
-        return spell != null && string.Equals(spell.SpellId, "ray_of_enfeeblement", StringComparison.Ordinal);
+        return spell != null && string.Equals(spell.SpellId, SpellNames.RAY_OF_ENFEEBLEMENT, StringComparison.Ordinal);
     }
 
     private static int CalculateRayOfEnfeeblementPenalty(CharacterController caster)
@@ -13923,7 +13924,7 @@ public partial class GameManager : MonoBehaviour
 
     private static bool IsMelfsAcidArrowSpell(SpellData spell)
     {
-        return spell != null && string.Equals(spell.SpellId, "melfs_acid_arrow", StringComparison.Ordinal);
+        return spell != null && string.Equals(spell.SpellId, SpellNames.MELFS_ACID_ARROW, StringComparison.Ordinal);
     }
 
     private static int CalculateMelfsAcidArrowAdditionalRounds(CharacterController caster)
@@ -14015,7 +14016,7 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private ActiveSpellEffect ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
     {
-        if (spell != null && spell.SpellId == "daze")
+        if (spell != null && spell.SpellId == SpellNames.DAZE)
         {
             int dazeRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 1);
             string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
@@ -14025,7 +14026,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && spell.SpellId == "flare")
+        if (spell != null && spell.SpellId == SpellNames.FLARE)
         {
             int dazzledRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 10);
             string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
@@ -14035,7 +14036,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && spell.SpellId == "hold_person")
+        if (spell != null && spell.SpellId == SpellNames.HOLD_PERSON)
         {
             int holdRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 1);
             string sourceName = spell.Name;
@@ -14062,7 +14063,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && (spell.SpellId == "blindness_deafness_wiz" || spell.SpellId == "blindness_deafness_clr"))
+        if (spell != null && (spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_WIZ || spell.SpellId == "blindness_deafness_clr"))
         {
             int rounds = spell.BuffDurationRounds;
             string sourceName = spell.Name;
@@ -14089,7 +14090,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && spell.SpellId == "confusion")
+        if (spell != null && spell.SpellId == SpellNames.CONFUSION)
         {
             int confusionRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 1);
             string sourceName = spell.Name;
@@ -14115,7 +14116,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && spell.SpellId == "charm_person")
+        if (spell != null && spell.SpellId == SpellNames.CHARM_PERSON)
         {
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
             int charmRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
@@ -14152,7 +14153,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && spell.SpellId == "enervation")
+        if (spell != null && spell.SpellId == SpellNames.ENERVATION)
         {
             string sourceName = spell.Name;
             int negativeLevels = UnityEngine.Random.Range(1, 5);
@@ -14161,7 +14162,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && spell.SpellId == "flesh_to_stone")
+        if (spell != null && spell.SpellId == SpellNames.FLESH_TO_STONE)
         {
             string sourceName = spell.Name;
             int rounds = spell.BuffDurationRounds;
@@ -14186,7 +14187,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && spell.SpellId == "stone_to_flesh")
+        if (spell != null && spell.SpellId == SpellNames.STONE_TO_FLESH)
         {
             bool removed = target.RemoveCondition(CombatConditionType.Petrified);
             if (removed)
@@ -14194,14 +14195,14 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && (spell.SpellId == "restoration" || spell.SpellId == "greater_restoration"))
+        if (spell != null && (spell.SpellId == SpellNames.RESTORATION || spell.SpellId == SpellNames.GREATER_RESTORATION))
         {
             int removed = NegativeLevelSystem.RemoveNegativeLevels(target, int.MaxValue, spell.Name);
             CombatUI?.ShowCombatLog($"<color=#99FFCC>✨ {target.Stats.CharacterName} recovers {removed} negative level(s).</color>");
             return null;
         }
 
-        if (spell != null && spell.SpellId == "sleep")
+        if (spell != null && spell.SpellId == SpellNames.SLEEP)
         {
             int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
             int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
@@ -14241,7 +14242,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && spell.SpellId == "touch_of_fatigue")
+        if (spell != null && spell.SpellId == SpellNames.TOUCH_OF_FATIGUE)
         {
             string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
             int casterLevel = caster != null && caster.Stats != null
@@ -14274,7 +14275,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && spell.SpellId == "true_strike")
+        if (spell != null && spell.SpellId == SpellNames.TRUE_STRIKE)
         {
             CharacterController recipient = caster;
             if (recipient == null)
@@ -14287,7 +14288,7 @@ public partial class GameManager : MonoBehaviour
             }
 
             StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
-            recipientStatusMgr?.RemoveEffectsBySpellId("true_strike");
+            recipientStatusMgr?.RemoveEffectsBySpellId(SpellNames.TRUE_STRIKE);
 
             TrueStrikeEffect existing = recipient.GetComponent<TrueStrikeEffect>();
             if (existing != null)
@@ -14301,7 +14302,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && spell.SpellId == "disguise_self")
+        if (spell != null && spell.SpellId == SpellNames.DISGUISE_SELF)
         {
             CharacterController recipient = caster ?? target;
             if (recipient == null || recipient.Stats == null)
@@ -14340,7 +14341,7 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
-        if (spell != null && spell.SpellId == "expeditious_retreat")
+        if (spell != null && spell.SpellId == SpellNames.EXPEDITIOUS_RETREAT)
         {
             CharacterController recipient = caster ?? target;
             if (recipient == null || recipient.Stats == null)
@@ -14368,7 +14369,7 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
-        if (spell != null && spell.SpellId == "see_invisibility")
+        if (spell != null && spell.SpellId == SpellNames.SEE_INVISIBILITY)
         {
             CharacterController recipient = caster ?? target;
             if (recipient == null || recipient.Stats == null)
@@ -14396,7 +14397,7 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
-        if (spell != null && spell.SpellId == "invisibility")
+        if (spell != null && spell.SpellId == SpellNames.INVISIBILITY)
         {
             CharacterController recipient = target ?? caster;
             if (recipient == null || recipient.Stats == null)
@@ -14425,7 +14426,7 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
-        if (spell != null && spell.SpellId == "resist_energy")
+        if (spell != null && spell.SpellId == SpellNames.RESIST_ENERGY)
         {
             CharacterController recipient = target ?? caster;
             if (recipient == null || recipient.Stats == null)
@@ -14471,7 +14472,7 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && spell.SpellId == "protection_from_arrows")
+        if (spell != null && spell.SpellId == SpellNames.PROTECTION_FROM_ARROWS)
         {
             CharacterController recipient = target ?? caster;
             if (recipient == null || recipient.Stats == null)
@@ -14508,7 +14509,7 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
-        if (spell != null && spell.SpellId == "magic_weapon")
+        if (spell != null && spell.SpellId == SpellNames.MAGIC_WEAPON)
         {
             TryApplyMagicWeaponToPendingItem(caster, target, spell);
             UpdateAllStatsUI();
@@ -14554,7 +14555,7 @@ public partial class GameManager : MonoBehaviour
         // ===== LEGACY FALLBACK (no StatusEffectManager) =====
         var legacySpellComp = target.GetComponent<SpellcastingComponent>();
 
-        if (spell.SpellId == "mage_armor")
+        if (spell.SpellId == SpellNames.MAGE_ARMOR)
         {
             target.Stats.SpellACBonus = spell.BuffACBonus;
             if (legacySpellComp != null)
@@ -14682,32 +14683,32 @@ public partial class GameManager : MonoBehaviour
                 Debug.Log($"[SpellDuration] {msg}");
                 CombatUI?.ShowCombatLog($"<color=#FFAA44>{msg}</color>");
 
-                if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "disguise_self", StringComparison.Ordinal))
+                if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.DISGUISE_SELF, StringComparison.Ordinal))
                 {
                     CombatUI?.ShowCombatLog($"<color=#88CCFF>🎭 {character.Stats.CharacterName}'s disguise fades; visible race returns to {character.DisplayedRace}.</color>");
                 }
-                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "expeditious_retreat", StringComparison.Ordinal))
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.EXPEDITIOUS_RETREAT, StringComparison.Ordinal))
                 {
                     ExpeditiousRetreatEffectData expiredData = character.RemoveExpeditiousRetreatEffect();
                     int speedDelta = expiredData != null ? Mathf.Max(0, expiredData.SpeedBonusFeet) : Mathf.Max(0, effect.AppliedSpeedBonusFeet);
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Expeditious Retreat expires on {character.Stats.CharacterName}: speed -{speedDelta} ft.</color>");
                 }
-                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "invisibility", StringComparison.Ordinal))
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.INVISIBILITY, StringComparison.Ordinal))
                 {
                     character.ClearInvisibilityEffect();
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Invisibility expires on {character.Stats.CharacterName}.</color>");
                 }
-                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "see_invisibility", StringComparison.Ordinal))
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SEE_INVISIBILITY, StringComparison.Ordinal))
                 {
                     character.ClearSeeInvisibilityEffect();
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {character.Stats.CharacterName}'s See Invisibility expires.</color>");
                 }
-                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "glitterdust", StringComparison.Ordinal))
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.GLITTERDUST, StringComparison.Ordinal))
                 {
                     character.ClearGlitterdustEffect();
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Glitterdust fades from {character.Stats.CharacterName}.</color>");
                 }
-                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "protection_from_arrows", StringComparison.Ordinal))
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.PROTECTION_FROM_ARROWS, StringComparison.Ordinal))
                 {
                     character.Stats.ActiveProtectionFromArrowsEffect = null;
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Protection from Arrows expires on {character.Stats.CharacterName}.</color>");
@@ -14718,20 +14719,20 @@ public partial class GameManager : MonoBehaviour
             {
                 foreach (var effect in statusMgr.ActiveEffects)
                 {
-                    if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "disguise_self", StringComparison.Ordinal))
+                    if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.DISGUISE_SELF, StringComparison.Ordinal))
                         character.UpdateDisguiseSelfDuration(effect.RemainingRounds);
-                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "expeditious_retreat", StringComparison.Ordinal))
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.EXPEDITIOUS_RETREAT, StringComparison.Ordinal))
                         character.UpdateExpeditiousRetreatDuration(effect.RemainingRounds);
-                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "invisibility", StringComparison.Ordinal))
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.INVISIBILITY, StringComparison.Ordinal))
                         character.UpdateInvisibilityDuration(effect.RemainingRounds);
-                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "see_invisibility", StringComparison.Ordinal))
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SEE_INVISIBILITY, StringComparison.Ordinal))
                         character.UpdateSeeInvisibilityDuration(effect.RemainingRounds);
-                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "glitterdust", StringComparison.Ordinal))
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.GLITTERDUST, StringComparison.Ordinal))
                     {
                         character.UpdateGlitterdustDuration(effect.RemainingRounds);
                         character.SetGlitterdustBlindedState(HasCondition(character, CombatConditionType.Blinded));
                     }
-                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "protection_from_arrows", StringComparison.Ordinal))
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.PROTECTION_FROM_ARROWS, StringComparison.Ordinal))
                     {
                         ProtectionFromArrowsEffectData protection = character.Stats.ActiveProtectionFromArrowsEffect;
                         if (protection != null)

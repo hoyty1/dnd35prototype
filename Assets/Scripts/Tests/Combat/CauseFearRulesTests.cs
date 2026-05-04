@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -133,7 +134,7 @@ public static class CauseFearRulesTests
 
     private static void TestCauseFearDefinitionMatchesCoreRules()
     {
-        SpellData causeFear = SpellDatabase.GetSpell("cause_fear");
+        SpellData causeFear = SpellDatabase.GetSpell(SpellNames.CAUSE_FEAR);
         Assert(causeFear != null, "Cause Fear spell definition exists");
         if (causeFear == null)
             return;
@@ -182,7 +183,7 @@ public static class CauseFearRulesTests
             gm.PCs.Add(caster);
             gm.NPCs.Add(target);
 
-            SpellData spell = SpellDatabase.GetSpell("cause_fear");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.CAUSE_FEAR);
             SpellResult result = new SpellResult
             {
                 Spell = spell,
@@ -239,7 +240,7 @@ public static class CauseFearRulesTests
             gm.PCs.Add(caster);
             gm.NPCs.Add(target);
 
-            SpellData spell = SpellDatabase.GetSpell("cause_fear");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.CAUSE_FEAR);
             SpellResult result = new SpellResult
             {
                 Spell = spell,
@@ -280,7 +281,7 @@ public static class CauseFearRulesTests
             gm.PCs.Add(caster);
             gm.NPCs.Add(target);
 
-            SpellData spell = SpellDatabase.GetSpell("cause_fear");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.CAUSE_FEAR);
             SpellResult result = new SpellResult
             {
                 Spell = spell,
@@ -320,7 +321,7 @@ public static class CauseFearRulesTests
             gm.PCs.Add(caster);
             gm.NPCs.Add(target);
 
-            SpellData spell = SpellDatabase.GetSpell("cause_fear");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.CAUSE_FEAR);
             SpellResult result = new SpellResult
             {
                 Spell = spell,
@@ -365,7 +366,7 @@ public static class CauseFearRulesTests
                 Caster = caster,
                 CasterName = caster.Stats.CharacterName,
                 RemainingRounds = 3,
-                SourceSpellId = "cause_fear",
+                SourceSpellId = SpellNames.CAUSE_FEAR,
                 SourceEffectName = "Cause Fear"
             };
 
@@ -377,7 +378,7 @@ public static class CauseFearRulesTests
                 data: fearData,
                 sourceNameOverride: "Cause Fear",
                 sourceCategory: "Spell",
-                sourceId: "cause_fear");
+                sourceId: SpellNames.CAUSE_FEAR);
 
             var controller = new FrightenedBehaviorController();
             bool hasDecision = controller.TryBuildDecision(gm, target, out FrightenedBehaviorController.FrightenedTurnDecision decision);

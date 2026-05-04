@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Custom and scenario-specific NPC creature registrations (non-Monster Manual).
@@ -27,11 +28,11 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Goblinoid" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("studded_leather", EquipSlot.Armor),
-                new EquipmentSlotPair("morningstar", EquipSlot.RightHand),
-                new EquipmentSlotPair("shield_light_wooden", EquipSlot.LeftHand)
+                new EquipmentSlotPair(ItemIDs.STUDDED_LEATHER, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.MORNINGSTAR, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_LIGHT_WOODEN, EquipSlot.LeftHand)
             },
-            BackpackItemIds = new List<string> { "javelin" },
+            BackpackItemIds = new List<string> { ItemIDs.JAVELIN },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.6f, 0.8f, 0.3f, 1f),  // greenish
@@ -66,9 +67,9 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Goblinoid" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
-                new EquipmentSlotPair("morningstar", EquipSlot.RightHand),
-                new EquipmentSlotPair("shield_light_wooden", EquipSlot.LeftHand)
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.MORNINGSTAR, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_LIGHT_WOODEN, EquipSlot.LeftHand)
             },
             BackpackItemIds = new List<string>(),
             AIBehavior = NPCAIBehavior.AggressiveMelee,
@@ -110,10 +111,10 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Undead" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
-                new EquipmentSlotPair("shortbow", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.SHORTBOW, EquipSlot.RightHand)
             },
-            BackpackItemIds = new List<string> { "short_sword" },
+            BackpackItemIds = new List<string> { ItemIDs.SHORT_SWORD },
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Bludgeoning,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
@@ -150,9 +151,9 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Undead" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("banded_mail", EquipSlot.Armor),
-                new EquipmentSlotPair("longsword", EquipSlot.RightHand),
-                new EquipmentSlotPair("shield_heavy_steel", EquipSlot.LeftHand)
+                new EquipmentSlotPair(ItemIDs.BANDED_MAIL, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.LeftHand)
             },
             BackpackItemIds = new List<string>(),
             DamageReductionAmount = 5,
@@ -275,10 +276,10 @@ public static partial class NPCDatabase
             Feats = new List<string> { "Power Attack", "Cleave" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("hide_armor", EquipSlot.Armor),
-                new EquipmentSlotPair("greataxe", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.HIDE_ARMOR, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.GREATAXE, EquipSlot.RightHand)
             },
-            BackpackItemIds = new List<string> { "javelin", "javelin" },
+            BackpackItemIds = new List<string> { ItemIDs.JAVELIN, ItemIDs.JAVELIN },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.5f, 0.6f, 0.4f, 1f),     // olive-green skin
@@ -314,10 +315,10 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Orc" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
-                new EquipmentSlotPair("dagger", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.DAGGER, EquipSlot.RightHand)
             },
-            BackpackItemIds = new List<string> { "dagger" },
+            BackpackItemIds = new List<string> { ItemIDs.DAGGER },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
             SpriteColor = new Color(0.55f, 0.68f, 0.45f, 1f),
@@ -353,8 +354,8 @@ public static partial class NPCDatabase
             Feats = new List<string> { "Improved Grapple" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("studded_leather", EquipSlot.Armor),
-                new EquipmentSlotPair("morningstar", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.STUDDED_LEATHER, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.MORNINGSTAR, EquipSlot.RightHand)
             },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
@@ -383,8 +384,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 18,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
-                new EquipmentSlotPair("club", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.CLUB, EquipSlot.RightHand)
             },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
@@ -413,8 +414,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 16,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
-                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.QUARTERSTAFF, EquipSlot.RightHand)
             },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
@@ -443,8 +444,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 12,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
-                new EquipmentSlotPair("dagger", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.DAGGER, EquipSlot.RightHand)
             },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Grappler,
@@ -489,11 +490,11 @@ public static partial class NPCDatabase
             WeaponFocusChoice = "Longsword",
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("chainmail", EquipSlot.Armor),
-                new EquipmentSlotPair("longsword", EquipSlot.RightHand),
-                new EquipmentSlotPair("shield_heavy_steel", EquipSlot.LeftHand)
+                new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.LeftHand)
             },
-            BackpackItemIds = new List<string> { "javelin", "javelin", "potion_healing" },
+            BackpackItemIds = new List<string> { ItemIDs.JAVELIN, ItemIDs.JAVELIN, ItemIDs.POTION_HEALING },
             AIBehavior = NPCAIBehavior.DefensiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.8f, 0.5f, 0.3f, 1f),     // orange-brown
@@ -527,10 +528,10 @@ public static partial class NPCDatabase
             CreatureTags = new List<string> { "Giant" },
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("greatclub", EquipSlot.RightHand),
-                new EquipmentSlotPair("hide_armor", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.GREATCLUB, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.HIDE_ARMOR, EquipSlot.Armor)
             },
-            BackpackItemIds = new List<string> { "javelin", "javelin" },
+            BackpackItemIds = new List<string> { ItemIDs.JAVELIN, ItemIDs.JAVELIN },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Berserk,
             SpriteColor = new Color(0.65f, 0.55f, 0.45f, 1f),
@@ -1356,9 +1357,9 @@ public static partial class NPCDatabase
             BaseHitDieHP = 42,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("longsword", EquipSlot.RightHand),
-                new EquipmentSlotPair("shield_heavy_steel", EquipSlot.LeftHand),
-                new EquipmentSlotPair("chainmail", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.LeftHand),
+                new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "Human", "Good" },
@@ -1388,9 +1389,9 @@ public static partial class NPCDatabase
             BaseHitDieHP = 36,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("mace_heavy", EquipSlot.RightHand),
-                new EquipmentSlotPair("shield_heavy_steel", EquipSlot.LeftHand),
-                new EquipmentSlotPair("chainmail", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.MACE_HEAVY, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_STEEL, EquipSlot.LeftHand),
+                new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "Human", "Good" },
@@ -1425,11 +1426,11 @@ public static partial class NPCDatabase
             BaseHitDieHP = 30,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.QUARTERSTAFF, EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string>(),
-            KnownSpellIds = new List<string> { "magic_missile" },
-            PreparedSpellSlotIds = new List<string> { "magic_missile", "magic_missile", "magic_missile", "magic_missile", "magic_missile", "magic_missile", "magic_missile" },
+            KnownSpellIds = new List<string> { SpellNames.MAGIC_MISSILE },
+            PreparedSpellSlotIds = new List<string> { SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE, SpellNames.MAGIC_MISSILE },
             CreatureTags = new List<string> { "Humanoid", "Arcane", "AI:MagicMissileOnly" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Evoker,
@@ -1462,13 +1463,13 @@ public static partial class NPCDatabase
             BaseHitDieHP = 58,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.QUARTERSTAFF, EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string>(),
-            KnownSpellIds = new List<string> { "charm_person" },
+            KnownSpellIds = new List<string> { SpellNames.CHARM_PERSON },
             PreparedSpellSlotIds = new List<string>
             {
-                "charm_person", "charm_person", "charm_person", "charm_person", "charm_person", "charm_person"
+                SpellNames.CHARM_PERSON, SpellNames.CHARM_PERSON, SpellNames.CHARM_PERSON, SpellNames.CHARM_PERSON, SpellNames.CHARM_PERSON, SpellNames.CHARM_PERSON
             },
             CreatureTags = new List<string> { "Humanoid", "Arcane", "Evil", "ProtectionFromEvilTest" },
             AIBehavior = NPCAIBehavior.RangedKiter,
@@ -1503,8 +1504,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 32,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("morningstar", EquipSlot.RightHand),
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.MORNINGSTAR, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "Goblin", "Evil", "ProtectionFromEvilTest" },
@@ -1539,8 +1540,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 18,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("short_sword", EquipSlot.RightHand),
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.SHORT_SWORD, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "Human", "ProtectionFromEvilTest", "ControlTest" },
@@ -1572,8 +1573,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 15,
             EquipmentIds = new List<EquipmentSlotPair>(),
             BackpackItemIds = new List<string>(),
-            KnownSpellIds = new List<string> { "daze" },
-            PreparedSpellSlotIds = new List<string> { "daze", "daze", "daze", "daze" },
+            KnownSpellIds = new List<string> { SpellNames.DAZE },
+            PreparedSpellSlotIds = new List<string> { SpellNames.DAZE, SpellNames.DAZE, SpellNames.DAZE, SpellNames.DAZE },
             CreatureTags = new List<string> { "Humanoid", "Arcane", "ProtectionFromEvilTest", "ControlTest" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
@@ -1603,11 +1604,11 @@ public static partial class NPCDatabase
             BaseHitDieHP = 20,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("chain_shirt", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.CHAIN_SHIRT, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
-            KnownSpellIds = new List<string> { "daze" },
-            PreparedSpellSlotIds = new List<string> { "daze", "daze", "daze", "daze" },
+            KnownSpellIds = new List<string> { SpellNames.DAZE },
+            PreparedSpellSlotIds = new List<string> { SpellNames.DAZE, SpellNames.DAZE, SpellNames.DAZE, SpellNames.DAZE },
             CreatureTags = new List<string> { "Humanoid", "Divine", "Evil", "ProtectionFromEvilTest", "ControlTest" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Spellcaster,
@@ -1640,11 +1641,11 @@ public static partial class NPCDatabase
             BaseHitDieHP = 22,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.QUARTERSTAFF, EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string>(),
-            KnownSpellIds = new List<string> { "obscuring_mist" },
-            PreparedSpellSlotIds = new List<string> { "obscuring_mist", "obscuring_mist", "obscuring_mist" },
+            KnownSpellIds = new List<string> { SpellNames.OBSCURING_MIST },
+            PreparedSpellSlotIds = new List<string> { SpellNames.OBSCURING_MIST, SpellNames.OBSCURING_MIST, SpellNames.OBSCURING_MIST },
             CreatureTags = new List<string> { "Humanoid", "Arcane", "WindDispersionTest" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Evoker,
@@ -1674,11 +1675,11 @@ public static partial class NPCDatabase
             BaseHitDieHP = 20,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("quarterstaff", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.QUARTERSTAFF, EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string>(),
-            KnownSpellIds = new List<string> { "obscuring_mist", "magic_missile" },
-            PreparedSpellSlotIds = new List<string> { "obscuring_mist", "magic_missile" },
+            KnownSpellIds = new List<string> { SpellNames.OBSCURING_MIST, SpellNames.MAGIC_MISSILE },
+            PreparedSpellSlotIds = new List<string> { SpellNames.OBSCURING_MIST, SpellNames.MAGIC_MISSILE },
             CreatureTags = new List<string> { "Humanoid", "Arcane", "WindDispersionTest" },
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.Evoker,
@@ -1708,8 +1709,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 12,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("short_sword", EquipSlot.RightHand),
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.SHORT_SWORD, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "SmallTarget" },
@@ -1741,9 +1742,9 @@ public static partial class NPCDatabase
             BaseHitDieHP = 20,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("longsword", EquipSlot.RightHand),
-                new EquipmentSlotPair("shield_heavy_wooden", EquipSlot.LeftHand),
-                new EquipmentSlotPair("chainmail", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_HEAVY_WOODEN, EquipSlot.LeftHand),
+                new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "MediumTarget" },
@@ -1775,8 +1776,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 24,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("greataxe", EquipSlot.RightHand),
-                new EquipmentSlotPair("hide_armor", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.GREATAXE, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.HIDE_ARMOR, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "MediumTarget", "HighFortitude" },
@@ -1809,7 +1810,7 @@ public static partial class NPCDatabase
             BaseHitDieHP = 20,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("greatclub", EquipSlot.RightHand)
+                new EquipmentSlotPair(ItemIDs.GREATCLUB, EquipSlot.RightHand)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Giant", "WindDispersionTest", "LargeTarget" },
@@ -1841,9 +1842,9 @@ public static partial class NPCDatabase
             BaseHitDieHP = 14,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("longbow", EquipSlot.RightHand),
-                new EquipmentSlotPair("longsword", EquipSlot.LeftHand),
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.LONGBOW, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.LONGSWORD, EquipSlot.LeftHand),
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "WindDispersionTest", "ArcherControl" },
@@ -1878,8 +1879,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 28,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("longbow", EquipSlot.RightHand),
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.LONGBOW, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "North" },
@@ -1911,8 +1912,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 32,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("longbow", EquipSlot.RightHand),
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.LONGBOW, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "Northeast" },
@@ -1944,8 +1945,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 34,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("composite_longbow", EquipSlot.RightHand),
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.COMPOSITE_LONGBOW, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "East" },
@@ -1977,8 +1978,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 22,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("shortbow", EquipSlot.RightHand),
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.SHORTBOW, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "Southeast", "SmallTarget" },
@@ -2010,8 +2011,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 38,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("crossbow_heavy", EquipSlot.RightHand),
-                new EquipmentSlotPair("chainmail", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.CROSSBOW_HEAVY, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.CHAINMAIL, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "South", "Crossbow" },
@@ -2043,8 +2044,8 @@ public static partial class NPCDatabase
             BaseHitDieHP = 24,
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("shortbow", EquipSlot.RightHand),
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor)
+                new EquipmentSlotPair(ItemIDs.SHORTBOW, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor)
             },
             BackpackItemIds = new List<string>(),
             CreatureTags = new List<string> { "Humanoid", "ObscuringMistRangedOnly", "Archer", "West", "Scout" },

@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "eagles_splendor",
+                    SpellId = SpellNames.EAGLES_SPLENDOR,
                     Name = "Eagle's Splendor",
                     Description = "Subject gains +4 enhancement bonus to CHA for 1 min/level. PHB p.225",
                     SpellLevel = 2, School = "Transmutation",
@@ -34,7 +35,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "endure_elements",
+                    SpellId = SpellNames.ENDURE_ELEMENTS,
                     Name = "Endure Elements",
                     Description = "Exist comfortably in hot or cold environments. Duration 24 hours. PHB p.226",
                     SpellLevel = 1, School = "Abjuration",
@@ -51,7 +52,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "enlarge_person",
+                    SpellId = SpellNames.ENLARGE_PERSON,
                     Name = "Enlarge Person",
                     Description = "Humanoid creature doubles in size. +2 STR, -2 DEX, -1 AC/attack (size). Duration 1 min/level. PHB p.226",
                     SpellLevel = 1, School = "Transmutation",
@@ -76,7 +77,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "domain_entangle",
+                    SpellId = SpellNames.DOMAIN_ENTANGLE,
                     Name = "Entangle",
                     Description = "Grasses and weeds entangle creatures in 40-ft radius spread. Entangled creatures can break free with Strength or Escape Artist check.",
                     SpellLevel = 1,
@@ -97,7 +98,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "enthrall",
+                    SpellId = SpellNames.ENTHRALL,
                     Name = "Enthrall",
                     Description = "Captivates all within 100 ft + 10 ft/level. Will negates. Duration 1 hour or until distracted. PHB p.227",
                     SpellLevel = 2, School = "Enchantment",
@@ -116,7 +117,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "entropic_shield",
+                    SpellId = SpellNames.ENTROPIC_SHIELD,
                     Name = "Entropic Shield",
                     Description = "Ranged attacks against you have 20% miss chance. Duration 1 min/level. PHB p.227",
                     SpellLevel = 1, School = "Abjuration",
@@ -133,7 +134,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "erase",
+                    SpellId = SpellNames.ERASE,
                     Name = "Erase",
                     Description = "Mundane or magical writing vanishes. PHB p.227",
                     SpellLevel = 1, School = "Transmutation",
@@ -149,7 +150,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "enervation",
+                    SpellId = SpellNames.ENERVATION,
                     Name = "Enervation",
                     Description = "Ranged touch attack bestows 1d4 negative levels. No save. PHB p.226",
                     SpellLevel = 4, School = "Necromancy",
@@ -165,7 +166,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "expeditious_retreat",
+                    SpellId = SpellNames.EXPEDITIOUS_RETREAT,
                     Name = "Expeditious Retreat",
                     Description = "Your base land speed increases by +30 ft enhancement bonus. Duration 1 min/level (dismissible). PHB p.228",
                     SpellLevel = 1,
@@ -187,8 +188,8 @@ public static partial class SpellDatabase
                 });
 
         // Aliases
-        RegisterClassSpellAlias("eagles_splendor_clr", "eagles_splendor", "Cleric", 2);
-        RegisterClassSpellAlias("endure_elements_clr", "endure_elements", "Cleric", 1);
+        RegisterClassSpellAlias("eagles_splendor_clr", SpellNames.EAGLES_SPLENDOR, "Cleric", 2);
+        RegisterClassSpellAlias("endure_elements_clr", SpellNames.ENDURE_ELEMENTS, "Cleric", 1);
 
     }
 }

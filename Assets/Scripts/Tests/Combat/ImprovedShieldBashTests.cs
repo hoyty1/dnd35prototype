@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -67,9 +68,9 @@ public static class ImprovedShieldBashTests
 
         controller.Init(stats, Vector2Int.zero, null, null);
         inventoryComp.Init(stats);
-        inventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        inventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
-        inventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
+        inventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
+        inventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_STEEL), EquipSlot.LeftHand);
+        inventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAIN_SHIRT), EquipSlot.Armor);
         inventoryComp.CharacterInventory.RecalculateStats();
 
         return controller;
@@ -90,7 +91,7 @@ public static class ImprovedShieldBashTests
 
         controller.Init(stats, Vector2Int.right, null, null);
         inventoryComp.Init(stats);
-        inventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+        inventoryComp.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAINMAIL), EquipSlot.Armor);
         inventoryComp.CharacterInventory.RecalculateStats();
 
         return controller;

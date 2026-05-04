@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using DND35.AI;
 using DND35.AI.Profiles;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Centralized NPC AI orchestration and tactical decision-making.
@@ -1681,7 +1682,7 @@ public class AIService : MonoBehaviour
             for (int i = 0; i < castable.Count; i++)
             {
                 SpellData spell = castable[i];
-                if (spell != null && string.Equals(spell.SpellId, "magic_missile", StringComparison.OrdinalIgnoreCase))
+                if (spell != null && string.Equals(spell.SpellId, SpellNames.MAGIC_MISSILE, StringComparison.OrdinalIgnoreCase))
                     return spell;
             }
 

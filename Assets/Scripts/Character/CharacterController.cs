@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Text;
 using DND35.AI;
 using Random = UnityEngine.Random;  // Resolve ambiguity with System.Random
+using DND35e.Identifiers;
 
 public enum SpecialAttackType
 {
@@ -1031,10 +1032,10 @@ public class CharacterController : MonoBehaviour
         if (weapon.IsTwoHanded) return true;
         // Also check by name for common two-handed weapons
         string name = weapon.Name.ToLower();
-        return name.Contains("greatsword") || name.Contains("greataxe") || name.Contains("greatclub")
-            || name.Contains("longbow") || name.Contains("heavy crossbow") || name.Contains("quarterstaff")
-            || name.Contains("longspear") || name.Contains("glaive") || name.Contains("halberd")
-            || name.Contains("ranseur") || name.Contains("scythe") || name.Contains("falchion");
+        return name.Contains(ItemIDs.GREATSWORD) || name.Contains(ItemIDs.GREATAXE) || name.Contains(ItemIDs.GREATCLUB)
+            || name.Contains(ItemIDs.LONGBOW) || name.Contains("heavy crossbow") || name.Contains(ItemIDs.QUARTERSTAFF)
+            || name.Contains(ItemIDs.LONGSPEAR) || name.Contains(ItemIDs.GLAIVE) || name.Contains(ItemIDs.HALBERD)
+            || name.Contains(ItemIDs.RANSEUR) || name.Contains("scythe") || name.Contains(ItemIDs.FALCHION);
     }
 
     private SpriteRenderer _sr;
@@ -1486,7 +1487,7 @@ public class CharacterController : MonoBehaviour
 
         StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
         if (statusMgr != null)
-            statusMgr.RemoveEffectsBySpellId("invisibility");
+            statusMgr.RemoveEffectsBySpellId(SpellNames.INVISIBILITY);
 
         string actorName = Stats != null ? Stats.CharacterName : name;
         string reasonLabel = string.IsNullOrWhiteSpace(reason) ? "hostile action" : reason;
@@ -1577,7 +1578,7 @@ public class CharacterController : MonoBehaviour
             CasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : string.Empty,
             StrengthPenaltyAmount = penalty,
             RemainingRounds = rounds,
-            SourceSpellId = "ray_of_enfeeblement",
+            SourceSpellId = SpellNames.RAY_OF_ENFEEBLEMENT,
             SourceEffectName = "Ray of Enfeeblement"
         };
 
@@ -2948,7 +2949,7 @@ public class CharacterController : MonoBehaviour
         }
     }
 
-    public void Stabilize(string sourceName = "aid")
+    public void Stabilize(string sourceName = SpellNames.AID)
     {
         if (Stats == null)
             return;
@@ -6285,7 +6286,7 @@ public class CharacterController : MonoBehaviour
     {
         return effect != null
                && effect.Spell != null
-               && string.Equals(effect.Spell.SpellId, "invisibility", StringComparison.Ordinal);
+               && string.Equals(effect.Spell.SpellId, SpellNames.INVISIBILITY, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -9190,7 +9191,7 @@ public class CharacterController : MonoBehaviour
 
         string id = (handsItem.Id ?? string.Empty).ToLowerInvariant();
         string name = (handsItem.Name ?? string.Empty).ToLowerInvariant();
-        return id == "locked_gauntlet" || name.Contains("locked gauntlet");
+        return id == ItemIDs.LOCKED_GAUNTLET || name.Contains("locked gauntlet");
     }
 
     private static ItemData GetEquippedHandsItem(CharacterController character)

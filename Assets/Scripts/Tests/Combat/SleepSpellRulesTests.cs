@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -100,7 +101,7 @@ public static class SleepSpellRulesTests
 
     private static void TestSleepDefinitionMatchesCoreRules()
     {
-        SpellData sleep = SpellDatabase.GetSpell("sleep");
+        SpellData sleep = SpellDatabase.GetSpell(SpellNames.SLEEP);
         Assert(sleep != null, "Sleep spell definition exists");
         if (sleep == null)
             return;
@@ -166,7 +167,7 @@ public static class SleepSpellRulesTests
                 CasterName = caster.Stats.CharacterName,
                 RemainingRounds = 10,
                 WakeDC = 14,
-                SourceSpellId = "sleep",
+                SourceSpellId = SpellNames.SLEEP,
                 SourceEffectName = "Sleep"
             };
 
@@ -178,7 +179,7 @@ public static class SleepSpellRulesTests
                 data: asleepData,
                 sourceNameOverride: "Sleep",
                 sourceCategory: "Spell",
-                sourceId: "sleep");
+                sourceId: SpellNames.SLEEP);
             conditionService.ApplyCondition(
                 target,
                 CombatConditionType.Unconscious,
@@ -186,7 +187,7 @@ public static class SleepSpellRulesTests
                 source: caster,
                 sourceNameOverride: "Sleep",
                 sourceCategory: "Spell",
-                sourceId: "sleep");
+                sourceId: SpellNames.SLEEP);
 
             Assert(conditionService.HasCondition(target, CombatConditionType.Asleep), "Precondition: target starts asleep");
 
@@ -236,10 +237,10 @@ public static class SleepSpellRulesTests
                 CombatConditionType.Asleep,
                 10,
                 source: aider,
-                data: new AsleepConditionData { Caster = aider, CasterName = "Aider", RemainingRounds = 10, WakeDC = 10, SourceSpellId = "sleep", SourceEffectName = "Sleep" },
+                data: new AsleepConditionData { Caster = aider, CasterName = "Aider", RemainingRounds = 10, WakeDC = 10, SourceSpellId = SpellNames.SLEEP, SourceEffectName = "Sleep" },
                 sourceNameOverride: "Sleep",
                 sourceCategory: "Spell",
-                sourceId: "sleep");
+                sourceId: SpellNames.SLEEP);
             conditionService.ApplyCondition(
                 sleeper,
                 CombatConditionType.Unconscious,
@@ -247,7 +248,7 @@ public static class SleepSpellRulesTests
                 source: aider,
                 sourceNameOverride: "Sleep",
                 sourceCategory: "Spell",
-                sourceId: "sleep");
+                sourceId: SpellNames.SLEEP);
 
             bool canAid = gm.CanUseAidAnother(aider, out string reason);
             Assert(canAid, "Aid Another is available when adjacent ally is asleep");

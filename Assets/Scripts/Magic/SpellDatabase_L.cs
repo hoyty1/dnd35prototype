@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "lesser_restoration",
+                    SpellId = SpellNames.LESSER_RESTORATION,
                     Name = "Lesser Restoration",
                     Description = "Dispels magical ability penalty or repairs 1d4 ability damage. PHB p.272",
                     SpellLevel = 2, School = "Conjuration",
@@ -28,7 +29,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "levitate",
+                    SpellId = SpellNames.LEVITATE,
                     Name = "Levitate",
                     Description = "Subject moves up or down at your direction. 1 min/level. Will negates (object). PHB p.248",
                     SpellLevel = 2, School = "Transmutation",
@@ -37,7 +38,7 @@ public static partial class SpellDatabase
                     RangeSquares = 5,
                     EffectType = SpellEffectType.Buff,
                     BuffDurationRounds = 30,
-                    BuffType = "levitate",
+                    BuffType = SpellNames.LEVITATE,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
                     IsPlaceholder = true,
@@ -46,7 +47,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "light",
+                    SpellId = SpellNames.LIGHT,
                     Name = "Light",
                     Description = "Object shines like a torch for 10 min/level.",
                     SpellLevel = 0, School = "Evocation",
@@ -63,7 +64,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "test_line_60",
+                    SpellId = SpellNames.TEST_LINE_60,
                     Name = "Lightning Lance (60-ft Line)",
                     Description = "TEST SPELL: 1d6/CL electricity damage (max 10d6) in a 60-ft line. Reflex half. For testing 60-ft line AoE pattern.",
                     SpellLevel = 2, School = "Evocation [Electricity]",
@@ -87,7 +88,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "locate_object",
+                    SpellId = SpellNames.LOCATE_OBJECT,
                     Name = "Locate Object",
                     Description = "Senses direction toward object. Duration 1 min/level. PHB p.249",
                     SpellLevel = 2, School = "Divination",
@@ -104,7 +105,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "domain_longstrider",
+                    SpellId = SpellNames.DOMAIN_LONGSTRIDER,
                     Name = "Longstrider",
                     Description = "Your speed increases by 10 feet (+2 squares movement).",
                     SpellLevel = 1,
@@ -122,7 +123,7 @@ public static partial class SpellDatabase
                 });
 
         // Aliases
-        RegisterClassSpellAlias("light_clr", "light", "Cleric", 0);
+        RegisterClassSpellAlias("light_clr", SpellNames.LIGHT, "Cleric", 0);
 
     }
 }

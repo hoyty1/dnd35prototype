@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -75,7 +76,7 @@ public static class DamageModifierTests
     {
         // Fighter with STR 18 (+4) using Greatsword: 1.5× STR = +6
         var stats = MakeChar(18);
-        var weapon = ItemDatabase.Get("greatsword");
+        var weapon = ItemDatabase.Get(ItemIDs.GREATSWORD);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 6, "Greatsword 1.5x STR (STR 18, +4 mod, 1.5x = +6)", $"got {mod}");
         Assert(weapon.DmgModType == DamageModifierType.StrengthOneAndHalf, "Greatsword DmgModType is StrengthOneAndHalf");
@@ -85,7 +86,7 @@ public static class DamageModifierTests
     {
         // Fighter with STR 18 (+4) using Longsword: full STR = +4
         var stats = MakeChar(18);
-        var weapon = ItemDatabase.Get("longsword");
+        var weapon = ItemDatabase.Get(ItemIDs.LONGSWORD);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 4, "Longsword full STR (STR 18, +4)", $"got {mod}");
         Assert(weapon.DmgModType == DamageModifierType.Strength, "Longsword DmgModType is Strength");
@@ -95,7 +96,7 @@ public static class DamageModifierTests
     {
         // Rogue with STR 12 (+1) using Shortbow: no STR = 0
         var stats = MakeChar(12);
-        var weapon = ItemDatabase.Get("shortbow");
+        var weapon = ItemDatabase.Get(ItemIDs.SHORTBOW);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 0, "Shortbow no STR modifier (STR 12)", $"got {mod}");
         Assert(weapon.DmgModType == DamageModifierType.None, "Shortbow DmgModType is None");
@@ -105,7 +106,7 @@ public static class DamageModifierTests
     {
         // Fighter with STR 18 (+4) using Composite Longbow +2: capped at +2
         var stats = MakeChar(18);
-        var weapon = ItemDatabase.Get("composite_longbow_2");
+        var weapon = ItemDatabase.Get(ItemIDs.COMPOSITE_LONGBOW_2);
         Assert(weapon != null, "Composite Longbow +2 exists in database");
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 2, "Composite Longbow +2 caps STR +4 to +2", $"got {mod}");
@@ -116,7 +117,7 @@ public static class DamageModifierTests
     {
         // Fighter with STR 12 (+1) using Composite Longbow +2: only +1 (lower than rating)
         var stats = MakeChar(12);
-        var weapon = ItemDatabase.Get("composite_longbow_2");
+        var weapon = ItemDatabase.Get(ItemIDs.COMPOSITE_LONGBOW_2);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 1, "Composite Longbow +2 with STR +1 gives +1", $"got {mod}");
     }
@@ -125,7 +126,7 @@ public static class DamageModifierTests
     {
         // Fighter with STR 18 (+4) throwing Javelin: full STR = +4
         var stats = MakeChar(18);
-        var weapon = ItemDatabase.Get("javelin");
+        var weapon = ItemDatabase.Get(ItemIDs.JAVELIN);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 4, "Javelin thrown full STR (STR 18, +4)", $"got {mod}");
         Assert(weapon.IsThrown, "Javelin is marked as thrown");
@@ -136,7 +137,7 @@ public static class DamageModifierTests
     {
         // Rogue with STR 12 (+1) dual wielding, off-hand: 0.5× STR +1 = +0
         var stats = MakeChar(12);
-        var weapon = ItemDatabase.Get("dagger");
+        var weapon = ItemDatabase.Get(ItemIDs.DAGGER);
         int mod = stats.GetWeaponDamageModifier(weapon, isOffHand: true);
         Assert(mod == 0, "Off-hand dagger 0.5× STR +1 = +0 (rounded down)", $"got {mod}");
     }
@@ -145,7 +146,7 @@ public static class DamageModifierTests
     {
         // D&D 3.5: off-hand multiplies STR bonuses only; penalties apply in full.
         var stats = MakeChar(6); // -2 STR mod
-        var weapon = ItemDatabase.Get("dagger");
+        var weapon = ItemDatabase.Get(ItemIDs.DAGGER);
         int mod = stats.GetWeaponDamageModifier(weapon, isOffHand: true);
         Assert(mod == -2, "Off-hand dagger with STR -2 keeps full penalty (not halved)", $"got {mod}");
     }
@@ -154,7 +155,7 @@ public static class DamageModifierTests
     {
         // Quarterstaff is two-handed: 1.5× STR
         var stats = MakeChar(16); // +3 STR mod, 1.5x = +4
-        var weapon = ItemDatabase.Get("quarterstaff");
+        var weapon = ItemDatabase.Get(ItemIDs.QUARTERSTAFF);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 4, "Quarterstaff 1.5x STR (STR 16, +3 mod, 1.5x = +4)", $"got {mod}");
         Assert(weapon.IsTwoHanded, "Quarterstaff is two-handed");
@@ -165,7 +166,7 @@ public static class DamageModifierTests
     {
         // D&D 3.5: two-handed multiplies STR bonuses only; penalties apply in full.
         var stats = MakeChar(8); // -1 STR mod
-        var weapon = ItemDatabase.Get("greatsword");
+        var weapon = ItemDatabase.Get(ItemIDs.GREATSWORD);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == -1, "Greatsword with STR -1 keeps full penalty (not 1.5x)", $"got {mod}");
     }
@@ -174,7 +175,7 @@ public static class DamageModifierTests
     {
         // Unarmed strike: full STR
         var stats = MakeChar(14); // +2
-        var weapon = ItemDatabase.Get("unarmed_strike");
+        var weapon = ItemDatabase.Get(ItemIDs.UNARMED_STRIKE);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 2, "Unarmed Strike full STR (STR 14, +2)", $"got {mod}");
         Assert(weapon.DmgModType == DamageModifierType.Strength, "Unarmed Strike DmgModType is Strength");
@@ -183,7 +184,7 @@ public static class DamageModifierTests
     static void TestSlingNoStr()
     {
         var stats = MakeChar(18);
-        var weapon = ItemDatabase.Get("sling");
+        var weapon = ItemDatabase.Get(ItemIDs.SLING);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 0, "Sling no STR modifier", $"got {mod}");
         Assert(weapon.DmgModType == DamageModifierType.None, "Sling DmgModType is None");
@@ -192,11 +193,11 @@ public static class DamageModifierTests
     static void TestCrossbowNoStr()
     {
         var stats = MakeChar(18);
-        var weapon = ItemDatabase.Get("crossbow_light");
+        var weapon = ItemDatabase.Get(ItemIDs.CROSSBOW_LIGHT);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 0, "Light Crossbow no STR modifier", $"got {mod}");
 
-        weapon = ItemDatabase.Get("crossbow_heavy");
+        weapon = ItemDatabase.Get(ItemIDs.CROSSBOW_HEAVY);
         mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 0, "Heavy Crossbow no STR modifier", $"got {mod}");
     }
@@ -204,7 +205,7 @@ public static class DamageModifierTests
     static void TestDartThrown()
     {
         var stats = MakeChar(16); // +3
-        var weapon = ItemDatabase.Get("dart");
+        var weapon = ItemDatabase.Get(ItemIDs.DART);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 3, "Dart thrown full STR (STR 16, +3)", $"got {mod}");
         Assert(weapon.IsThrown, "Dart is marked as thrown");
@@ -214,7 +215,7 @@ public static class DamageModifierTests
     {
         // Composite longbow +0: no STR bonus even with high STR
         var stats = MakeChar(18); // +4
-        var weapon = ItemDatabase.Get("composite_longbow");
+        var weapon = ItemDatabase.Get(ItemIDs.COMPOSITE_LONGBOW);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == 0, "Composite Longbow +0 gives +0 even with STR +4", $"got {mod}");
         Assert(weapon.CompositeRating == 0, "Base composite longbow has rating 0");
@@ -224,7 +225,7 @@ public static class DamageModifierTests
     {
         // Negative STR with composite bow: negative still applies
         var stats = MakeChar(8); // -1 STR mod
-        var weapon = ItemDatabase.Get("composite_longbow_2");
+        var weapon = ItemDatabase.Get(ItemIDs.COMPOSITE_LONGBOW_2);
         int mod = stats.GetWeaponDamageModifier(weapon);
         Assert(mod == -1, "Composite Longbow +2 with STR -1 gives -1 (negative still applies)", $"got {mod}");
     }
@@ -234,23 +235,23 @@ public static class DamageModifierTests
         var stats = MakeChar(14);
 
         // Greatsword → "1.5× STR"
-        var gs = ItemDatabase.Get("greatsword");
+        var gs = ItemDatabase.Get(ItemIDs.GREATSWORD);
         Assert(stats.GetDamageModifierDescription(gs) == "1.5× STR", "Greatsword desc is '1.5× STR'");
 
         // Longsword → "STR"
-        var ls = ItemDatabase.Get("longsword");
+        var ls = ItemDatabase.Get(ItemIDs.LONGSWORD);
         Assert(stats.GetDamageModifierDescription(ls) == "STR", "Longsword desc is 'STR'");
 
         // Shortbow → ""
-        var sb = ItemDatabase.Get("shortbow");
+        var sb = ItemDatabase.Get(ItemIDs.SHORTBOW);
         Assert(stats.GetDamageModifierDescription(sb) == "", "Shortbow desc is empty");
 
         // Javelin → "thrown, STR"
-        var jav = ItemDatabase.Get("javelin");
+        var jav = ItemDatabase.Get(ItemIDs.JAVELIN);
         Assert(stats.GetDamageModifierDescription(jav) == "thrown, STR", "Javelin desc is 'thrown, STR'");
 
         // Composite longbow +2 → "composite +2"
-        var cl2 = ItemDatabase.Get("composite_longbow_2");
+        var cl2 = ItemDatabase.Get(ItemIDs.COMPOSITE_LONGBOW_2);
         Assert(stats.GetDamageModifierDescription(cl2) == "composite +2", "Composite Longbow +2 desc is 'composite +2'");
 
         // Off-hand → "0.5× STR"
@@ -260,8 +261,8 @@ public static class DamageModifierTests
     static void TestWeaponPropertiesSet()
     {
         // Verify all weapon types have DmgModType set (not default for melee)
-        string[] meleeWeapons = { "longsword", "rapier", "scimitar", "battleaxe", "warhammer",
-            "mace_heavy", "morningstar", "shortspear", "club", "sickle", "mace_light" };
+        string[] meleeWeapons = { ItemIDs.LONGSWORD, ItemIDs.RAPIER, ItemIDs.SCIMITAR, ItemIDs.BATTLEAXE, ItemIDs.WARHAMMER,
+            ItemIDs.MACE_HEAVY, ItemIDs.MORNINGSTAR, ItemIDs.SHORTSPEAR, ItemIDs.CLUB, ItemIDs.SICKLE, ItemIDs.MACE_LIGHT };
         foreach (var id in meleeWeapons)
         {
             var w = ItemDatabase.Get(id);
@@ -269,8 +270,8 @@ public static class DamageModifierTests
                 $"{id} has Strength DmgModType", w == null ? "null" : w.DmgModType.ToString());
         }
 
-        string[] twoHandedWeapons = { "greatsword", "greataxe", "greatclub", "falchion",
-            "flail_heavy", "glaive", "quarterstaff", "spear" };
+        string[] twoHandedWeapons = { ItemIDs.GREATSWORD, ItemIDs.GREATAXE, ItemIDs.GREATCLUB, ItemIDs.FALCHION,
+            ItemIDs.FLAIL_HEAVY, ItemIDs.GLAIVE, ItemIDs.QUARTERSTAFF, ItemIDs.SPEAR };
         foreach (var id in twoHandedWeapons)
         {
             var w = ItemDatabase.Get(id);
@@ -278,7 +279,7 @@ public static class DamageModifierTests
                 $"{id} has StrengthOneAndHalf DmgModType", w == null ? "null" : w.DmgModType.ToString());
         }
 
-        string[] rangedNone = { "longbow", "shortbow", "crossbow_light", "crossbow_heavy", "sling" };
+        string[] rangedNone = { ItemIDs.LONGBOW, ItemIDs.SHORTBOW, ItemIDs.CROSSBOW_LIGHT, ItemIDs.CROSSBOW_HEAVY, ItemIDs.SLING };
         foreach (var id in rangedNone)
         {
             var w = ItemDatabase.Get(id);
@@ -286,7 +287,7 @@ public static class DamageModifierTests
                 $"{id} has None DmgModType", w == null ? "null" : w.DmgModType.ToString());
         }
 
-        string[] thrownWeapons = { "javelin", "dart", "dagger", "handaxe", "shortspear", "trident", "spear" };
+        string[] thrownWeapons = { ItemIDs.JAVELIN, ItemIDs.DART, ItemIDs.DAGGER, ItemIDs.HANDAXE, ItemIDs.SHORTSPEAR, ItemIDs.TRIDENT, ItemIDs.SPEAR };
         foreach (var id in thrownWeapons)
         {
             var w = ItemDatabase.Get(id);

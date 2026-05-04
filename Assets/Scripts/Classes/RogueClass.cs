@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Rogue class definition (D&D 3.5 PHB).
@@ -51,15 +52,15 @@ public class RogueClass : ICharacterClass
     public void SetupStartingEquipment(InventoryComponent inv)
     {
         ItemDatabase.Init();
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("rapier"), EquipSlot.RightHand);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LEATHER_ARMOR), EquipSlot.Armor);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.RAPIER), EquipSlot.RightHand);
 
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("rope"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.SHORTBOW));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.DAGGER));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_SHIELD_OF_FAITH));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.ROPE));
         Debug.Log("[Rogue] Equipment: Leather Armor, Rapier, Shortbow, Dagger");
     }
 

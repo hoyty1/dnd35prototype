@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -81,7 +82,7 @@ public static class ShockingGraspMetalBonusTests
 
     private static SpellResult CastShockingGrasp(CharacterController caster, CharacterController target)
     {
-        SpellData spell = SpellDatabase.GetSpell("shocking_grasp");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.SHOCKING_GRASP);
         return SpellCaster.Cast(
             spell,
             caster.Stats,
@@ -102,7 +103,7 @@ public static class ShockingGraspMetalBonusTests
         {
             caster = CreateWizardController("MetalArmorCaster");
             target = CreateWizardController("MetalArmorTarget");
-            target.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chainmail"), EquipSlot.Armor);
+            target.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAINMAIL), EquipSlot.Armor);
 
             SpellResult result = CastShockingGrasp(caster, target);
 
@@ -129,7 +130,7 @@ public static class ShockingGraspMetalBonusTests
         {
             caster = CreateWizardController("LeatherArmorCaster");
             target = CreateWizardController("LeatherArmorTarget");
-            target.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
+            target.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LEATHER_ARMOR), EquipSlot.Armor);
 
             SpellResult result = CastShockingGrasp(caster, target);
 

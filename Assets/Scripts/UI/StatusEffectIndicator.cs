@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Draws compact status effect icons above battlefield tokens.
@@ -99,9 +100,9 @@ public class StatusEffectIndicator : MonoBehaviour
         }
 
         StatusEffectManager statusMgr = _character.GetComponent<StatusEffectManager>();
-        if (statusMgr != null && statusMgr.HasEffect("expeditious_retreat"))
+        if (statusMgr != null && statusMgr.HasEffect(SpellNames.EXPEDITIOUS_RETREAT))
         {
-            int rounds = statusMgr.GetRemainingRounds("expeditious_retreat");
+            int rounds = statusMgr.GetRemainingRounds(SpellNames.EXPEDITIOUS_RETREAT);
             int speedBonus = _character.ActiveExpeditiousRetreatEffect != null
                 ? Mathf.Max(0, _character.ActiveExpeditiousRetreatEffect.SpeedBonusFeet)
                 : 30;
@@ -116,9 +117,9 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
-        if (statusMgr != null && statusMgr.HasEffect("invisibility"))
+        if (statusMgr != null && statusMgr.HasEffect(SpellNames.INVISIBILITY))
         {
-            int rounds = statusMgr.GetRemainingRounds("invisibility");
+            int rounds = statusMgr.GetRemainingRounds(SpellNames.INVISIBILITY);
             int hideBonus = _character != null ? _character.GetInvisibilityHideBonus() : 0;
             bool moving = _character != null && _character.ActiveInvisibilityEffect != null && _character.ActiveInvisibilityEffect.IsMoving;
 
@@ -132,9 +133,9 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
-        if (statusMgr != null && statusMgr.HasEffect("see_invisibility"))
+        if (statusMgr != null && statusMgr.HasEffect(SpellNames.SEE_INVISIBILITY))
         {
-            int rounds = statusMgr.GetRemainingRounds("see_invisibility");
+            int rounds = statusMgr.GetRemainingRounds(SpellNames.SEE_INVISIBILITY);
             list.Add(new IconData
             {
                 Key = "SeeInvisibility",
@@ -174,9 +175,9 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
-        if (statusMgr != null && statusMgr.HasEffect("jump"))
+        if (statusMgr != null && statusMgr.HasEffect(SpellNames.JUMP))
         {
-            int rounds = statusMgr.GetRemainingRounds("jump");
+            int rounds = statusMgr.GetRemainingRounds(SpellNames.JUMP);
             int jumpBonus = _character.Stats != null ? Mathf.Max(0, _character.Stats.JumpEnhancementBonus) : 0;
 
             list.Add(new IconData
@@ -189,9 +190,9 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
-        if (statusMgr != null && statusMgr.HasEffect("protection_from_arrows"))
+        if (statusMgr != null && statusMgr.HasEffect(SpellNames.PROTECTION_FROM_ARROWS))
         {
-            int rounds = statusMgr.GetRemainingRounds("protection_from_arrows");
+            int rounds = statusMgr.GetRemainingRounds(SpellNames.PROTECTION_FROM_ARROWS);
             ProtectionFromArrowsEffectData protection = _character.Stats != null ? _character.Stats.ActiveProtectionFromArrowsEffect : null;
             int totalPool = protection != null ? Mathf.Max(0, protection.TotalAbsorptionPool) : 0;
             int remainingPool = protection != null ? Mathf.Max(0, protection.RemainingAbsorptionPool) : 0;

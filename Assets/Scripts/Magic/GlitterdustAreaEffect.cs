@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Persistent visual cloud for Glitterdust.
@@ -14,7 +15,7 @@ public class GlitterdustAreaEffect : PersistentAreaEffect
         base.Awake();
 
         EffectName = "Glitterdust";
-        SpellId = "glitterdust";
+        SpellId = SpellNames.GLITTERDUST;
         Shape = AreaShape.Circle;
         Radius = 2f; // 10-ft radius spread
         ShowVisual = false;

@@ -1,5 +1,6 @@
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -101,7 +102,7 @@ public static class CharmPersonRulesTests
 
     private static void TestCharmPersonDefinitionMatchesCoreRules()
     {
-        SpellData charm = SpellDatabase.GetSpell("charm_person");
+        SpellData charm = SpellDatabase.GetSpell(SpellNames.CHARM_PERSON);
         Assert(charm != null, "Charm Person spell definition exists");
         if (charm == null)
             return;
@@ -144,7 +145,7 @@ public static class CharmPersonRulesTests
             // Simulate already-being-attacked state for the +5 save bonus branch.
             target.Stats.TakeDamage(3);
 
-            SpellData charm = SpellDatabase.GetSpell("charm_person");
+            SpellData charm = SpellDatabase.GetSpell(SpellNames.CHARM_PERSON);
             int protectionBonus;
             int saveMod = InvokeGetSaveModifier(target.Stats, charm, caster, target, out protectionBonus);
 

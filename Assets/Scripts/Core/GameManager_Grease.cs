@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public partial class GameManager
 {
@@ -25,7 +26,7 @@ public partial class GameManager
 
     private static bool IsGreaseSpell(SpellData spell)
     {
-        return spell != null && spell.SpellId == "grease";
+        return spell != null && spell.SpellId == SpellNames.GREASE;
     }
 
     private bool IsPendingGreaseAreaCast()

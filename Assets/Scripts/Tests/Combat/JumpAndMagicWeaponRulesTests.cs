@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -101,7 +102,7 @@ public static class JumpAndMagicWeaponRulesTests
 
     private static void TestJumpDefinition()
     {
-        SpellData spell = SpellDatabase.GetSpell("jump");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.JUMP);
         Assert(spell != null, "Jump spell definition exists");
         if (spell == null)
             return;
@@ -122,17 +123,17 @@ public static class JumpAndMagicWeaponRulesTests
         {
             controller = CreateController("JumpScale", level: 7);
             StatusEffectManager statusMgr = controller.GetComponent<StatusEffectManager>();
-            SpellData spell = SpellDatabase.GetSpell("jump");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.JUMP);
 
             int baselineJumpBonus = controller.Stats.GetSkillBonus("Jump");
 
             ActiveSpellEffect cl1 = statusMgr.AddEffect(spell, "Tester", 1);
             Assert(cl1 != null && cl1.AppliedSkillBonus == 10, "Jump CL1 grants +10", $"actual={(cl1 != null ? cl1.AppliedSkillBonus : -1)}");
-            statusMgr.RemoveEffectsBySpellId("jump");
+            statusMgr.RemoveEffectsBySpellId(SpellNames.JUMP);
 
             ActiveSpellEffect cl3 = statusMgr.AddEffect(spell, "Tester", 3);
             Assert(cl3 != null && cl3.AppliedSkillBonus == 20, "Jump CL3 grants +20", $"actual={(cl3 != null ? cl3.AppliedSkillBonus : -1)}");
-            statusMgr.RemoveEffectsBySpellId("jump");
+            statusMgr.RemoveEffectsBySpellId(SpellNames.JUMP);
 
             ActiveSpellEffect cl7 = statusMgr.AddEffect(spell, "Tester", 7);
             Assert(cl7 != null && cl7.AppliedSkillBonus == 30, "Jump CL7 grants +30", $"actual={(cl7 != null ? cl7.AppliedSkillBonus : -1)}");
@@ -153,14 +154,14 @@ public static class JumpAndMagicWeaponRulesTests
         {
             controller = CreateController("JumpDismiss", level: 3);
             StatusEffectManager statusMgr = controller.GetComponent<StatusEffectManager>();
-            SpellData spell = SpellDatabase.GetSpell("jump");
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.JUMP);
 
             int baselineJumpBonus = controller.Stats.GetSkillBonus("Jump");
             statusMgr.AddEffect(spell, "Tester", 3);
 
             Assert(controller.Stats.JumpEnhancementBonus == 20, "Jump enhancement applied at CL3 (+20)");
 
-            statusMgr.RemoveEffectsBySpellId("jump");
+            statusMgr.RemoveEffectsBySpellId(SpellNames.JUMP);
             Assert(controller.Stats.JumpEnhancementBonus == 0, "Dismiss/removal clears Jump enhancement bonus");
             Assert(controller.Stats.GetSkillBonus("Jump") == baselineJumpBonus, "Jump skill returns to baseline after dismissal");
         }
@@ -172,7 +173,7 @@ public static class JumpAndMagicWeaponRulesTests
 
     private static void TestMagicWeaponDefinition()
     {
-        SpellData spell = SpellDatabase.GetSpell("magic_weapon");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.MAGIC_WEAPON);
         Assert(spell != null, "Magic Weapon spell definition exists");
         if (spell == null)
             return;
@@ -186,8 +187,8 @@ public static class JumpAndMagicWeaponRulesTests
 
     private static void TestMagicWeaponEnhancementAndBypass()
     {
-        ItemData weapon = ItemDatabase.CloneItem("longsword");
-        weapon.AddOrReplaceItemSpellEffect(new ItemSpellEffect("magic_weapon", "Magic Weapon", "Tester", 3, 30)
+        ItemData weapon = ItemDatabase.CloneItem(ItemIDs.LONGSWORD);
+        weapon.AddOrReplaceItemSpellEffect(new ItemSpellEffect(SpellNames.MAGIC_WEAPON, "Magic Weapon", "Tester", 3, 30)
         {
             BonusType = BonusType.Enhancement,
             EnhancementBonusAttack = 1,
@@ -202,9 +203,9 @@ public static class JumpAndMagicWeaponRulesTests
 
     private static void TestMagicWeaponHighestEnhancementOnly()
     {
-        ItemData plusTwoWeapon = ItemDatabase.CloneItem("longsword");
+        ItemData plusTwoWeapon = ItemDatabase.CloneItem(ItemIDs.LONGSWORD);
         plusTwoWeapon.EnhancementBonus = 2;
-        plusTwoWeapon.AddOrReplaceItemSpellEffect(new ItemSpellEffect("magic_weapon", "Magic Weapon", "Tester", 3, 30)
+        plusTwoWeapon.AddOrReplaceItemSpellEffect(new ItemSpellEffect(SpellNames.MAGIC_WEAPON, "Magic Weapon", "Tester", 3, 30)
         {
             BonusType = BonusType.Enhancement,
             EnhancementBonusAttack = 1,
@@ -228,8 +229,8 @@ public static class JumpAndMagicWeaponRulesTests
             defender = CreateController("MwDefender", level: 3);
 
             global::Inventory attackerInventory = attacker.GetComponent<InventoryComponent>().CharacterInventory;
-            ItemData weapon = ItemDatabase.CloneItem("longsword");
-            weapon.AddOrReplaceItemSpellEffect(new ItemSpellEffect("magic_weapon", "Magic Weapon", "Tester", 3, 30)
+            ItemData weapon = ItemDatabase.CloneItem(ItemIDs.LONGSWORD);
+            weapon.AddOrReplaceItemSpellEffect(new ItemSpellEffect(SpellNames.MAGIC_WEAPON, "Magic Weapon", "Tester", 3, 30)
             {
                 EnhancementBonusAttack = 1,
                 EnhancementBonusDamage = 1,
@@ -255,17 +256,17 @@ public static class JumpAndMagicWeaponRulesTests
 
     private static void TestMagicWeaponDurationPerWeapon()
     {
-        ItemData weaponA = ItemDatabase.CloneItem("longsword");
-        ItemData weaponB = ItemDatabase.CloneItem("dagger");
+        ItemData weaponA = ItemDatabase.CloneItem(ItemIDs.LONGSWORD);
+        ItemData weaponB = ItemDatabase.CloneItem(ItemIDs.DAGGER);
 
-        weaponA.AddOrReplaceItemSpellEffect(new ItemSpellEffect("magic_weapon", "Magic Weapon", "Tester", 3, 2)
+        weaponA.AddOrReplaceItemSpellEffect(new ItemSpellEffect(SpellNames.MAGIC_WEAPON, "Magic Weapon", "Tester", 3, 2)
         {
             EnhancementBonusAttack = 1,
             EnhancementBonusDamage = 1,
             CountsAsMagicForBypass = true
         });
 
-        weaponB.AddOrReplaceItemSpellEffect(new ItemSpellEffect("magic_weapon", "Magic Weapon", "Tester", 3, 4)
+        weaponB.AddOrReplaceItemSpellEffect(new ItemSpellEffect(SpellNames.MAGIC_WEAPON, "Magic Weapon", "Tester", 3, 4)
         {
             EnhancementBonusAttack = 1,
             EnhancementBonusDamage = 1,
@@ -293,8 +294,8 @@ public static class JumpAndMagicWeaponRulesTests
             InventoryComponent invComp = controller.GetComponent<InventoryComponent>();
             global::Inventory inv = invComp.CharacterInventory;
 
-            ItemData equipped = ItemDatabase.CloneItem("longsword");
-            ItemData backpackWeapon = ItemDatabase.CloneItem("dagger");
+            ItemData equipped = ItemDatabase.CloneItem(ItemIDs.LONGSWORD);
+            ItemData backpackWeapon = ItemDatabase.CloneItem(ItemIDs.DAGGER);
 
             inv.DirectEquip(equipped, EquipSlot.RightHand);
             bool added = inv.AddItem(backpackWeapon);

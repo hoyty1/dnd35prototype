@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "gentle_repose",
+                    SpellId = SpellNames.GENTLE_REPOSE,
                     Name = "Gentle Repose",
                     Description = "Preserves a corpse. Duration 1 day/level. PHB p.235",
                     SpellLevel = 2, School = "Necromancy",
@@ -28,7 +29,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "ghost_sound",
+                    SpellId = SpellNames.GHOST_SOUND,
                     Name = "Ghost Sound",
                     Description = "Figment sounds. Will disbelief (if interacted with).",
                     SpellLevel = 0, School = "Illusion",
@@ -47,7 +48,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "ghoul_touch",
+                    SpellId = SpellNames.GHOUL_TOUCH,
                     Name = "Ghoul Touch",
                     Description = "Touch attack paralyzes one living subject for 1d6+2 rounds. Fort negates. Sickens nearby. PHB p.235",
                     SpellLevel = 2, School = "Necromancy",
@@ -66,7 +67,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "test_cone_60",
+                    SpellId = SpellNames.TEST_CONE_60,
                     Name = "Glacial Blast (60-ft Cone)",
                     Description = "TEST SPELL: 10d6 cold damage in a 60-ft cone. Reflex half. For testing 60-ft cone AoE pattern.",
                     SpellLevel = 2, School = "Evocation",
@@ -90,7 +91,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "glitterdust",
+                    SpellId = SpellNames.GLITTERDUST,
                     Name = "Glitterdust",
                     Description = "Conjuration (Creation). Golden particles outline creatures and objects in a 10-ft radius spread. Will negates blindness only. Outlined targets lose invisibility concealment and take -40 Hide. Duration 1 round/level. Components: V, S, M (ground mica). PHB p.236",
                     SpellLevel = 2,
@@ -116,7 +117,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "grease",
+                    SpellId = SpellNames.GREASE,
                     Name = "Grease",
                     Description = "Object or 10-ft-square area becomes slippery. Reflex save to avoid falling when first affected. Balance checks while traversing. Duration 1 round/level. PHB p.237",
                     SpellLevel = 1, School = "Conjuration",
@@ -132,7 +133,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "guidance",
+                    SpellId = SpellNames.GUIDANCE,
                     Name = "Guidance",
                     Description = "+1 on one attack roll, saving throw, or skill check. Duration 1 minute or until discharged.",
                     SpellLevel = 0, School = "Divination",
@@ -150,7 +151,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "gust_of_wind",
+                    SpellId = SpellNames.GUST_OF_WIND,
                     Name = "Gust of Wind",
                     Description = "Line-shaped blast of severe wind in a 60-ft line. Fortitude negates size-based effects; also disperses fog, mist, and similar vapors in its path. PHB p.238",
                     SpellLevel = 2, School = "Evocation",

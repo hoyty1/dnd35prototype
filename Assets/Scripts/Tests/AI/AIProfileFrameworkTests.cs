@@ -4,6 +4,7 @@ using DND35.AI;
 using DND35.AI.Profiles;
 using Tests.Utilities;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.AI
 {
@@ -110,8 +111,8 @@ namespace Tests.AI
 
             try
             {
-                lightArmor.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
-                heavyArmor.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem("full_plate"), EquipSlot.Armor);
+                lightArmor.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LEATHER_ARMOR), EquipSlot.Armor);
+                heavyArmor.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE), EquipSlot.Armor);
 
                 float lightScore = profile.ScoreTarget(lightArmor, ai);
                 float heavyScore = profile.ScoreTarget(heavyArmor, ai);
@@ -140,7 +141,7 @@ namespace Tests.AI
             try
             {
                 attacker.aiProfile = profile;
-                defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
+                defender.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
 
                 bool shouldUseManeuver = aiService.ShouldUseManeuver(attacker, defender);
                 Assert(shouldUseManeuver, "AIService reads profile and opts into maneuver usage");
@@ -265,7 +266,7 @@ namespace Tests.AI
                     $"(preferred={tripChoice?.ToString() ?? "none"})");
 
                 profile.Maneuvers.AttemptTrip = false;
-                disarmTarget.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
+                disarmTarget.GetComponent<InventoryComponent>().CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
 
                 SpecialAttackType? disarmChoice = profile.GetPreferredManeuver(attacker, disarmTarget);
                 Assert(disarmChoice == SpecialAttackType.Disarm,
@@ -922,8 +923,8 @@ namespace Tests.AI
                 adjacentThreatener.IsPlayerControlled = true;
 
                 global::Inventory offHandInventory = offHandThreatener.GetComponent<InventoryComponent>().CharacterInventory;
-                offHandInventory.DirectEquip(ItemDatabase.CloneItem("shortbow"), EquipSlot.RightHand);
-                offHandInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.LeftHand);
+                offHandInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHORTBOW), EquipSlot.RightHand);
+                offHandInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.DAGGER), EquipSlot.LeftHand);
 
                 TestHelpers.SetGridPosition(archer, 0, 0);
                 TestHelpers.SetGridPosition(offHandThreatener, 1, 0);

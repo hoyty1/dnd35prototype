@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Metadata for one summonable creature choice in a Summon Monster spell list.
@@ -145,8 +146,8 @@ public static class SummonMonsterLists
         if (string.IsNullOrWhiteSpace(spellId))
             return 0;
 
-        if (spellId.StartsWith("summon_monster_1", StringComparison.Ordinal)) return 1;
-        if (spellId.StartsWith("summon_monster_2", StringComparison.Ordinal)) return 2;
+        if (spellId.StartsWith(SpellNames.SUMMON_MONSTER_1, StringComparison.Ordinal)) return 1;
+        if (spellId.StartsWith(SpellNames.SUMMON_MONSTER_2, StringComparison.Ordinal)) return 2;
         if (spellId.StartsWith("summon_monster_3", StringComparison.Ordinal)) return 3;
 
         return 0;

@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -88,7 +89,7 @@ public static class ShieldSpellRulesTests
 
     private static void TestShieldDefinitionUsesShieldBonusAndMinutePerLevelDuration()
     {
-        SpellData shield = SpellDatabase.GetSpell("shield");
+        SpellData shield = SpellDatabase.GetSpell(SpellNames.SHIELD);
 
         Assert(shield != null, "Shield definition exists");
         if (shield == null)
@@ -113,7 +114,7 @@ public static class ShieldSpellRulesTests
         try
         {
             target = CreateWizardController("ShieldTarget", 5);
-            SpellData shield = SpellDatabase.GetSpell("shield");
+            SpellData shield = SpellDatabase.GetSpell(SpellNames.SHIELD);
             StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
 
             int acBefore = target.Stats.GetArmorClass();
@@ -159,8 +160,8 @@ public static class ShieldSpellRulesTests
             caster = CreateWizardController("MissileCaster", 5);
             target = CreateWizardController("ShieldedTarget", 5);
 
-            SpellData shield = SpellDatabase.GetSpell("shield");
-            SpellData magicMissile = SpellDatabase.GetSpell("magic_missile");
+            SpellData shield = SpellDatabase.GetSpell(SpellNames.SHIELD);
+            SpellData magicMissile = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE);
             StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
             statusMgr.AddEffect(shield, "TargetCaster", casterLevel: 5);
 
@@ -203,7 +204,7 @@ public static class ShieldSpellRulesTests
             caster = CreateWizardController("UnblockedCaster", 5);
             target = CreateWizardController("UnshieldedTarget", 5);
 
-            SpellData magicMissile = SpellDatabase.GetSpell("magic_missile");
+            SpellData magicMissile = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE);
             int hpBefore = target.Stats.CurrentHP;
 
             SpellResult result = SpellCaster.Cast(

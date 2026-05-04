@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "identify",
+                    SpellId = SpellNames.IDENTIFY,
                     Name = "Identify",
                     Description = "Determines all magic properties of a single magic item. Requires 100gp pearl. PHB p.243",
                     SpellLevel = 1, School = "Divination",
@@ -27,7 +28,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "inflict_light_wounds",
+                    SpellId = SpellNames.INFLICT_LIGHT_WOUNDS,
                     Name = "Inflict Light Wounds",
                     Description = "Touch attack deals 1d8 + CL (max +5) negative energy damage. Will save half. PHB p.244",
                     SpellLevel = 1, School = "Necromancy",
@@ -48,7 +49,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "inflict_minor_wounds",
+                    SpellId = SpellNames.INFLICT_MINOR_WOUNDS,
                     Name = "Inflict Minor Wounds",
                     Description = "Touch attack deals 1 point of negative energy damage. Will save halves.",
                     SpellLevel = 0, School = "Necromancy",
@@ -67,7 +68,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "inflict_moderate_wounds",
+                    SpellId = SpellNames.INFLICT_MODERATE_WOUNDS,
                     Name = "Inflict Moderate Wounds",
                     Description = "Touch attack deals 2d8 + CL (max +10) negative energy damage. Will half. PHB p.244",
                     SpellLevel = 2, School = "Necromancy",
@@ -88,7 +89,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "invisibility",
+                    SpellId = SpellNames.INVISIBILITY,
                     Name = "Invisibility",
                     Description = "Illusion (Glamer). Subject touched (or caster) becomes invisible. Grants total concealment (50% miss chance), +20 Hide while moving / +40 while stationary. Breaks on attack or hostile spell. Duration 1 min/level, dismissible. Components: V, S, M/DF. PHB p.245",
                     SpellLevel = 2,
@@ -97,7 +98,7 @@ public static partial class SpellDatabase
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
-                    BuffType = "invisibility",
+                    BuffType = SpellNames.INVISIBILITY,
                     DurationType = DurationType.Minutes,
                     DurationValue = 1,
                     DurationScalesWithLevel = true,

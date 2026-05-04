@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public partial class GameManager
 {
@@ -15,9 +16,9 @@ public partial class GameManager
         if (caster == null || spell == null || aoeCells == null)
             return false;
 
-        bool isObscuringMist = spell.SpellId == "obscuring_mist";
-        bool isFogCloud = spell.SpellId == "fog_cloud";
-        bool isGustOfWind = spell.SpellId == "gust_of_wind";
+        bool isObscuringMist = spell.SpellId == SpellNames.OBSCURING_MIST;
+        bool isFogCloud = spell.SpellId == SpellNames.FOG_CLOUD;
+        bool isGustOfWind = spell.SpellId == SpellNames.GUST_OF_WIND;
         if (!isObscuringMist && !isFogCloud && !isGustOfWind)
             return false;
 
@@ -144,7 +145,7 @@ public partial class GameManager
     private bool TryResolveGlitterdustSpell(CharacterController caster, SpellData spell, List<CharacterController> targets, HashSet<Vector2Int> aoeCells, out string log)
     {
         log = string.Empty;
-        if (caster == null || caster.Stats == null || spell == null || !string.Equals(spell.SpellId, "glitterdust", System.StringComparison.Ordinal))
+        if (caster == null || caster.Stats == null || spell == null || !string.Equals(spell.SpellId, SpellNames.GLITTERDUST, System.StringComparison.Ordinal))
             return false;
 
         int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
@@ -182,7 +183,7 @@ public partial class GameManager
                     caster.Stats.CharacterName,
                     casterLevel);
 
-                int trackedDuration = effect != null ? effect.RemainingRounds : Mathf.Max(1, statusMgr.GetRemainingRounds("glitterdust"));
+                int trackedDuration = effect != null ? effect.RemainingRounds : Mathf.Max(1, statusMgr.GetRemainingRounds(SpellNames.GLITTERDUST));
 
                 bool blinded = false;
                 int saveRoll = Random.Range(1, 21);

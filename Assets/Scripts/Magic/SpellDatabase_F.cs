@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "false_life",
+                    SpellId = SpellNames.FALSE_LIFE,
                     Name = "False Life",
                     Description = "Gain 1d10+CL temporary hit points (max +10). Duration 1 hour/level. PHB p.229",
                     SpellLevel = 2, School = "Necromancy",
@@ -28,7 +29,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "feather_fall",
+                    SpellId = SpellNames.FEATHER_FALL,
                     Name = "Feather Fall",
                     Description = "Objects or creatures fall slowly (60 ft/round). Immediate action. PHB p.229",
                     SpellLevel = 1, School = "Transmutation",
@@ -45,7 +46,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "find_traps",
+                    SpellId = SpellNames.FIND_TRAPS,
                     Name = "Find Traps",
                     Description = "+10 insight bonus on Search checks to find traps. Duration 1 min/level. PHB p.230",
                     SpellLevel = 2, School = "Divination",
@@ -62,7 +63,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "test_cone_30",
+                    SpellId = SpellNames.TEST_CONE_30,
                     Name = "Flame Jet (30-ft Cone)",
                     Description = "TEST SPELL: 5d6 fire damage in a 30-ft cone. Reflex half. For testing 30-ft cone AoE pattern.",
                     SpellLevel = 2, School = "Evocation",
@@ -86,7 +87,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "flame_strike",
+                    SpellId = SpellNames.FLAME_STRIKE,
                     Name = "Flame Strike",
                     Description = "A vertical column of divine fire deals 1d6/level damage (max 15d6). Reflex half. Damage is split between fire and divine power (prototype: fire/positive).",
                     SpellLevel = 2, School = "Evocation",
@@ -110,7 +111,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "flesh_to_stone",
+                    SpellId = SpellNames.FLESH_TO_STONE,
                     Name = "Flesh to Stone",
                     Description = "Turns a creature to stone. Fortitude negates. PHB p.232",
                     SpellLevel = 6, School = "Transmutation",
@@ -127,7 +128,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "flaming_sphere",
+                    SpellId = SpellNames.FLAMING_SPHERE,
                     Name = "Flaming Sphere",
                     Description = "Rolling ball of fire, 2d6 fire damage. Reflex negates. Lasts 1 round/level, movable. PHB p.232",
                     SpellLevel = 2, School = "Evocation",
@@ -147,7 +148,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "flare",
+                    SpellId = SpellNames.FLARE,
                     Name = "Flare",
                     Description = "Dazzles one creature for 1 minute (–1 on attack rolls and sight-based Search/Spot checks). Fortitude negates.",
                     SpellLevel = 0, School = "Evocation",
@@ -164,7 +165,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "floating_disk",
+                    SpellId = SpellNames.FLOATING_DISK,
                     Name = "Floating Disk",
                     Description = "Creates 3-ft diameter horizontal disk that holds 100 lb/level. Follows you. 1 hr/level. PHB p.232",
                     SpellLevel = 1, School = "Evocation",
@@ -181,7 +182,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "fog_cloud",
+                    SpellId = SpellNames.FOG_CLOUD,
                     Name = "Fog Cloud",
                     Description = "Conjuration (Creation). Fog obscures all sight, including darkvision, beyond 5 feet in a 20-ft radius spread. Creatures inside gain concealment (20% miss chance), with total concealment beyond 5 feet. Duration 10 min/level. PHB p.232",
                     SpellLevel = 2, School = "Conjuration",
@@ -206,7 +207,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "foxs_cunning",
+                    SpellId = SpellNames.FOXS_CUNNING,
                     Name = "Fox's Cunning",
                     Description = "Subject gains +4 enhancement bonus to INT for 1 min/level. PHB p.233",
                     SpellLevel = 2, School = "Transmutation",

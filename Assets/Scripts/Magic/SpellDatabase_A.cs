@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "acid_arrow",
+                    SpellId = SpellNames.ACID_ARROW,
                     Name = "Acid Arrow",
                     Description = "Ranged touch attack, 2d4 acid damage + 2d4/round for 1 round per 3 CL. PHB p.196",
                     SpellLevel = 2, School = "Conjuration",
@@ -30,7 +31,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "acid_fog",
+                    SpellId = SpellNames.ACID_FOG,
                     Name = "Acid Fog",
                     Description = "Acidic vapors fill a 20-ft-radius spread. Creatures inside take a -2 attack penalty from obscuring fumes and corrosive air. No save. 1 round/level (prototype simplified).",
                     SpellLevel = 2, School = "Conjuration",
@@ -45,7 +46,7 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Debuff,
                     BuffAttackBonus = -2,
                     BuffDurationRounds = 3, // 1 round/level at CL3
-                    BuffType = "acid_fog",
+                    BuffType = SpellNames.ACID_FOG,
                     BuffBonusType = BonusType.Circumstance,
                     BonusTypeExplicitlySet = true,
                     DurationType = DurationType.Rounds,
@@ -58,7 +59,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "acid_splash",
+                    SpellId = SpellNames.ACID_SPLASH,
                     Name = "Acid Splash",
                     Description = "An orb of acid deals 1d3 acid damage on a ranged touch attack. Range: Close (25 ft + 5 ft/2 levels).",
                     SpellLevel = 0, School = "Conjuration",
@@ -77,7 +78,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "aid",
+                    SpellId = SpellNames.AID,
                     Name = "Aid",
                     Description = "+1 morale bonus on attack and saves vs fear, plus 1d8 temporary HP. Duration 1 min/level. PHB p.196",
                     SpellLevel = 2, School = "Enchantment",
@@ -98,7 +99,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "alarm",
+                    SpellId = SpellNames.ALARM,
                     Name = "Alarm",
                     Description = "Wards an area for 2 hours/level. Mental or audible alarm when creature enters. PHB p.197",
                     SpellLevel = 1, School = "Abjuration",
@@ -115,7 +116,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "alter_self",
+                    SpellId = SpellNames.ALTER_SELF,
                     Name = "Alter Self",
                     Description = "Assume form of a similar creature. +10 Disguise, may gain abilities. 10 min/level. PHB p.197",
                     SpellLevel = 2, School = "Transmutation",
@@ -132,7 +133,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "animate_rope",
+                    SpellId = SpellNames.ANIMATE_ROPE,
                     Name = "Animate Rope",
                     Description = "You hurl and animate a rope to entangle a target creature. Ranged touch attack, Reflex negates entanglement. Duration 1 round/level.",
                     SpellLevel = 1,
@@ -155,7 +156,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "arcane_lock",
+                    SpellId = SpellNames.ARCANE_LOCK,
                     Name = "Arcane Lock",
                     Description = "Magically locks a portal or chest. Permanent. PHB p.200",
                     SpellLevel = 2, School = "Abjuration",
@@ -172,7 +173,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "arcane_mark",
+                    SpellId = SpellNames.ARCANE_MARK,
                     Name = "Arcane Mark",
                     Description = "Inscribes a personal rune (visible or invisible) on an object or creature.",
                     SpellLevel = 0, School = "Universal",
@@ -188,7 +189,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "augury",
+                    SpellId = SpellNames.AUGURY,
                     Name = "Augury",
                     Description = "Learns whether an action will be good, bad, mixed, or nothing. 70% + 1%/CL success. PHB p.202",
                     SpellLevel = 2, School = "Divination",

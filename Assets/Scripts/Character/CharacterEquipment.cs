@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Encapsulates character equipment and weapon state logic used by <see cref="CharacterController"/>.
@@ -543,7 +544,7 @@ public class CharacterEquipment : MonoBehaviour
 
         string id = (item.Id ?? string.Empty).ToLowerInvariant();
         string name = (item.Name ?? string.Empty).ToLowerInvariant();
-        return id == "spiked_gauntlet" || name.Contains("spiked gauntlet");
+        return id == ItemIDs.SPIKED_GAUNTLET || name.Contains("spiked gauntlet");
     }
 
     public static bool IsShieldBashWeapon(ItemData item)
@@ -561,6 +562,6 @@ public class CharacterEquipment : MonoBehaviour
 
         string id = (item.Id ?? string.Empty).ToLowerInvariant();
         string name = (item.Name ?? string.Empty).ToLowerInvariant();
-        return id == "gauntlet" || name == "gauntlet";
+        return id == ItemIDs.GAUNTLET || name == ItemIDs.GAUNTLET;
     }
 }

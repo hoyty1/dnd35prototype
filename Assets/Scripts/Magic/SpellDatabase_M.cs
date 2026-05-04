@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "mage_armor",
+                    SpellId = SpellNames.MAGE_ARMOR,
                     Name = "Mage Armor",
                     Description = "+4 armor bonus to AC for 1 hour/level. Doesn't stack with actual armor. PHB p.249",
                     SpellLevel = 1, School = "Conjuration",
@@ -33,7 +34,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "mage_hand",
+                    SpellId = SpellNames.MAGE_HAND,
                     Name = "Mage Hand",
                     Description = "5-pound telekinesis. Move one nonmagical, unattended object up to 5 lb.",
                     SpellLevel = 0, School = "Transmutation",
@@ -50,7 +51,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "magic_missile",
+                    SpellId = SpellNames.MAGIC_MISSILE,
                     Name = "Magic Missile",
                     Description = "1d4+1 force damage per missile, auto-hit. 2 missiles at CL3. No save, no SR.",
                     SpellLevel = 1, School = "Evocation",
@@ -69,7 +70,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "melfs_acid_arrow",
+                    SpellId = SpellNames.MELFS_ACID_ARROW,
                     Name = "Melf's Acid Arrow",
                     Description = "Ranged touch attack deals 2d4 acid immediately, then 2d4 acid each round for 1 + 1/3 caster levels (max 7 rounds total at CL 18). No save, no SR.",
                     SpellLevel = 2,
@@ -94,7 +95,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "domain_magic_stone",
+                    SpellId = SpellNames.DOMAIN_MAGIC_STONE,
                     Name = "Magic Stone",
                     Description = "Three stones gain +1 on attack and deal 1d6+1 damage.",
                     SpellLevel = 1,
@@ -111,7 +112,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "magic_weapon",
+                    SpellId = SpellNames.MAGIC_WEAPON,
                     Name = "Magic Weapon",
                     Description = "Weapon touched gains +1 enhancement bonus on attack and damage rolls and counts as magic for bypass. Duration 1 min/level. PHB p.251",
                     SpellLevel = 1, School = "Transmutation",
@@ -131,7 +132,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "make_whole",
+                    SpellId = SpellNames.MAKE_WHOLE,
                     Name = "Make Whole",
                     Description = "Repairs an object of up to 10 cu.ft./level. PHB p.252",
                     SpellLevel = 2, School = "Transmutation",
@@ -147,7 +148,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "mending",
+                    SpellId = SpellNames.MENDING,
                     Name = "Mending",
                     Description = "Makes minor repairs on an object (1d4 damage repaired).",
                     SpellLevel = 0, School = "Transmutation",
@@ -164,7 +165,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "message",
+                    SpellId = SpellNames.MESSAGE,
                     Name = "Message",
                     Description = "Whispered conversation at distance. Range: 100 ft + 10 ft/level.",
                     SpellLevel = 0, School = "Transmutation",
@@ -181,7 +182,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "minor_image",
+                    SpellId = SpellNames.MINOR_IMAGE,
                     Name = "Minor Image",
                     Description = "As silent image, plus some sound. Concentration + 2 rounds. Will disbelief. PHB p.254",
                     SpellLevel = 2, School = "Illusion",
@@ -200,7 +201,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "mirror_image",
+                    SpellId = SpellNames.MIRROR_IMAGE,
                     Name = "Mirror Image",
                     Description = "Creates 1d4+1 decoy duplicates of you (CL3). Attacks may hit images instead. 1 min/level. PHB p.254",
                     SpellLevel = 2, School = "Illusion",
@@ -210,14 +211,14 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Buff,
                     BuffACBonus = 4, // Simplified: effective +4 AC from images
                     BuffDurationRounds = 30,
-                    BuffType = "mirror_image",
+                    BuffType = SpellNames.MIRROR_IMAGE,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
 
         Register(new SpellData
                 {
-                    SpellId = "mount",
+                    SpellId = SpellNames.MOUNT,
                     Name = "Mount",
                     Description = "Summons a riding horse for 2 hr/level. PHB p.256",
                     SpellLevel = 1, School = "Conjuration",
@@ -233,8 +234,8 @@ public static partial class SpellDatabase
                 });
 
         // Aliases
-        RegisterClassSpellAlias("magic_weapon_clr", "magic_weapon", "Cleric", 1);
-        RegisterClassSpellAlias("mending_clr", "mending", "Cleric", 0);
+        RegisterClassSpellAlias("magic_weapon_clr", SpellNames.MAGIC_WEAPON, "Cleric", 1);
+        RegisterClassSpellAlias("mending_clr", SpellNames.MENDING, "Cleric", 0);
 
     }
 }

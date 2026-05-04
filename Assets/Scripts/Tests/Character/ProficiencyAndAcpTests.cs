@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Character
 {
@@ -64,7 +65,7 @@ public static class ProficiencyAndAcpTests
     {
         var fighter = MakeChar("Fighter");
         var wizard = MakeChar("Wizard");
-        var longsword = ItemDatabase.Get("longsword");
+        var longsword = ItemDatabase.Get(ItemIDs.LONGSWORD);
 
         int fighterPenalty = fighter.GetWeaponNonProficiencyPenalty(longsword);
         int wizardPenalty = wizard.GetWeaponNonProficiencyPenalty(longsword);
@@ -77,7 +78,7 @@ public static class ProficiencyAndAcpTests
     {
         var fighter = MakeChar("Fighter");
         var rogue = MakeChar("Rogue");
-        var fullPlate = ItemDatabase.Get("full_plate");
+        var fullPlate = ItemDatabase.Get(ItemIDs.FULL_PLATE);
 
         fighter.EquippedArmorItem = fullPlate;
         rogue.EquippedArmorItem = fullPlate;
@@ -93,7 +94,7 @@ public static class ProficiencyAndAcpTests
     {
         var fighter = MakeChar("Fighter");
         var rogue = MakeChar("Rogue");
-        var towerShield = ItemDatabase.Get("tower_shield");
+        var towerShield = ItemDatabase.Get(ItemIDs.TOWER_SHIELD);
 
         fighter.EquippedShieldItem = towerShield;
         rogue.EquippedShieldItem = towerShield;
@@ -109,7 +110,7 @@ public static class ProficiencyAndAcpTests
     private static void TestSkillAcpWithNonProficientShield()
     {
         var rogue = MakeChar("Rogue");
-        var heavySteelShield = ItemDatabase.Get("shield_heavy_steel"); // ACP 2
+        var heavySteelShield = ItemDatabase.Get(ItemIDs.SHIELD_HEAVY_STEEL); // ACP 2
 
         rogue.EquippedShieldItem = heavySteelShield;
 
@@ -122,7 +123,7 @@ public static class ProficiencyAndAcpTests
     private static void TestSwimDoublesFinalAcp()
     {
         var rogue = MakeChar("Rogue");
-        var heavySteelShield = ItemDatabase.Get("shield_heavy_steel"); // ACP 2, doubled to 4 if non-proficient
+        var heavySteelShield = ItemDatabase.Get(ItemIDs.SHIELD_HEAVY_STEEL); // ACP 2, doubled to 4 if non-proficient
 
         rogue.EquippedShieldItem = heavySteelShield;
 
@@ -135,7 +136,7 @@ public static class ProficiencyAndAcpTests
     private static void TestEscapeArtistReceivesAcp()
     {
         var fighter = MakeChar("Fighter");
-        var chainShirt = ItemDatabase.Get("chain_shirt"); // ACP 2
+        var chainShirt = ItemDatabase.Get(ItemIDs.CHAIN_SHIRT); // ACP 2
 
         fighter.EquippedArmorItem = chainShirt;
 
@@ -150,8 +151,8 @@ public static class ProficiencyAndAcpTests
         var fighter = MakeChar("Fighter");
         fighter.DEX = 20; // +5
 
-        var fullPlate = ItemDatabase.Get("full_plate"); // Max Dex +1
-        var heavyShield = ItemDatabase.Get("shield_heavy_steel");
+        var fullPlate = ItemDatabase.Get(ItemIDs.FULL_PLATE); // Max Dex +1
+        var heavyShield = ItemDatabase.Get(ItemIDs.SHIELD_HEAVY_STEEL);
 
         var inv = new global::Inventory { OwnerStats = fighter, ArmorSlot = fullPlate, LeftHandSlot = heavyShield };
         inv.RecalculateStats();
@@ -170,7 +171,7 @@ public static class ProficiencyAndAcpTests
         var rogue = MakeChar("Rogue");
         rogue.DEX = 20; // +5
 
-        var towerShield = ItemDatabase.Get("tower_shield");
+        var towerShield = ItemDatabase.Get(ItemIDs.TOWER_SHIELD);
 
         var inv = new global::Inventory { OwnerStats = rogue, ArmorSlot = null, LeftHandSlot = towerShield };
         inv.RecalculateStats();
@@ -187,7 +188,7 @@ public static class ProficiencyAndAcpTests
     private static void TestNonAcpSkillUnaffected()
     {
         var rogue = MakeChar("Rogue");
-        var heavySteelShield = ItemDatabase.Get("shield_heavy_steel");
+        var heavySteelShield = ItemDatabase.Get(ItemIDs.SHIELD_HEAVY_STEEL);
 
         rogue.EquippedShieldItem = heavySteelShield;
 

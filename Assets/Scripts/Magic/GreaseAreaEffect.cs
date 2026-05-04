@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Persistent Grease area implementation using the reusable area-effect framework.
@@ -15,7 +16,7 @@ public class GreaseAreaEffect : PersistentAreaEffect
         base.Awake();
 
         EffectName = "Grease";
-        SpellId = "grease";
+        SpellId = SpellNames.GREASE;
         Shape = AreaShape.Square;
         SizeX = 2; // 10-ft square on 5-ft grid
         SizeY = 2;

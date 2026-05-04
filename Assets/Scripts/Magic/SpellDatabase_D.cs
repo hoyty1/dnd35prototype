@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "dancing_lights",
+                    SpellId = SpellNames.DANCING_LIGHTS,
                     Name = "Dancing Lights",
                     Description = "Creates up to four lights that move as you direct. Lasts 1 minute.",
                     SpellLevel = 0, School = "Evocation",
@@ -28,7 +29,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "darkvision",
+                    SpellId = SpellNames.DARKVISION,
                     Name = "Darkvision",
                     Description = "See 60 ft in total darkness. Duration 1 hr/level. PHB p.216",
                     SpellLevel = 2, School = "Transmutation",
@@ -45,7 +46,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "daze",
+                    SpellId = SpellNames.DAZE,
                     Name = "Daze",
                     Description = "Enchantment (Compulsion) [Mind-Affecting]. One humanoid creature of 4 HD or less is dazed for 1 round. Will negates. SR applies.",
                     SpellLevel = 0, School = "Enchantment",
@@ -66,7 +67,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "daze_monster",
+                    SpellId = SpellNames.DAZE_MONSTER,
                     Name = "Daze Monster",
                     Description = "Living creature of 6 HD or less loses next action. Will save negates. PHB p.217",
                     SpellLevel = 2, School = "Enchantment",
@@ -83,7 +84,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "death_knell",
+                    SpellId = SpellNames.DEATH_KNELL,
                     Name = "Death Knell",
                     Description = "Kills dying creature, caster gains 1d8 temp HP, +2 STR, +1 CL. Touch range. Will negates. PHB p.217",
                     SpellLevel = 2, School = "Necromancy",
@@ -102,7 +103,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "deathwatch",
+                    SpellId = SpellNames.DEATHWATCH,
                     Name = "Deathwatch",
                     Description = "Reveals how near death subjects within 30 ft are. Duration 10 min/level. PHB p.217",
                     SpellLevel = 1, School = "Necromancy",
@@ -119,7 +120,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "delay_poison",
+                    SpellId = SpellNames.DELAY_POISON,
                     Name = "Delay Poison",
                     Description = "Stops poison from harming subject for 1 hr/level. PHB p.217",
                     SpellLevel = 2, School = "Conjuration",
@@ -136,7 +137,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "domain_desecrate",
+                    SpellId = SpellNames.DOMAIN_DESECRATE,
                     Name = "Desecrate",
                     Description = "Fills area with negative energy, making undead stronger. Undead in the area gain +1 profane bonus on attack rolls, damage rolls, and saving throws.",
                     SpellLevel = 2,
@@ -155,7 +156,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "detect_evil",
+                    SpellId = SpellNames.DETECT_EVIL,
                     Name = "Detect Evil",
                     Description = "Reveals evil creatures, spells, or objects. Concentration, up to 10 min/level. PHB p.218",
                     SpellLevel = 1, School = "Divination",
@@ -174,7 +175,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "detect_magic_wiz",
+                    SpellId = SpellNames.DETECT_MAGIC_WIZ,
                     Name = "Detect Magic",
                     Description = "Detects spells and magic items within 60 ft cone. Concentration, up to 1 min/level.",
                     SpellLevel = 0, School = "Divination",
@@ -193,7 +194,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "detect_poison_wiz",
+                    SpellId = SpellNames.DETECT_POISON_WIZ,
                     Name = "Detect Poison",
                     Description = "Detects poison in one creature or small object.",
                     SpellLevel = 0, School = "Divination",
@@ -209,7 +210,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "domain_detect_secret_doors",
+                    SpellId = SpellNames.DOMAIN_DETECT_SECRET_DOORS,
                     Name = "Detect Secret Doors",
                     Description = "Reveals secret doors within 60 ft cone.",
                     SpellLevel = 1,
@@ -227,7 +228,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "detect_thoughts",
+                    SpellId = SpellNames.DETECT_THOUGHTS,
                     Name = "Detect Thoughts",
                     Description = "Allows listening to surface thoughts. Concentration, up to 1 min/level. Will negates. PHB p.220",
                     SpellLevel = 2, School = "Divination",
@@ -248,7 +249,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "detect_undead",
+                    SpellId = SpellNames.DETECT_UNDEAD,
                     Name = "Detect Undead",
                     Description = "Reveals undead within 60 ft. Concentration, up to 1 min/level. PHB p.220",
                     SpellLevel = 1, School = "Divination",
@@ -267,7 +268,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "disguise_self",
+                    SpellId = SpellNames.DISGUISE_SELF,
                     Name = "Disguise Self",
                     Description = "Illusion (Glamer). Caster appears as a humanoid of the same size category. Grants +10 competence bonus on Disguise checks. Duration 10 min/level (D). PHB p.222",
                     SpellLevel = 1,
@@ -288,7 +289,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "disrupt_undead",
+                    SpellId = SpellNames.DISRUPT_UNDEAD,
                     Name = "Disrupt Undead",
                     Description = "You fire a ray of positive energy at one undead creature. Make a ranged touch attack; on a hit it deals 1d6 positive damage. This spell has no effect on living creatures.",
                     SpellLevel = 0, School = "Necromancy",
@@ -307,7 +308,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "divine_favor",
+                    SpellId = SpellNames.DIVINE_FAVOR,
                     Name = "Divine Favor",
                     Description = "+1 luck bonus on attack and damage rolls (per 3 CL, max +3). Duration 1 minute. PHB p.224",
                     SpellLevel = 1, School = "Evocation",
@@ -330,7 +331,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "doom",
+                    SpellId = SpellNames.DOOM,
                     Name = "Doom",
                     Description = "One subject is shaken (–2 on attack, saves, skills, ability checks). Will save negates. 1 min/level. PHB p.225",
                     SpellLevel = 1, School = "Necromancy",
@@ -348,8 +349,8 @@ public static partial class SpellDatabase
                 });
 
         // Aliases
-        RegisterClassSpellAlias("detect_magic_clr", "detect_magic_wiz", "Cleric", 0);
-        RegisterClassSpellAlias("detect_poison_clr", "detect_poison_wiz", "Cleric", 0);
+        RegisterClassSpellAlias("detect_magic_clr", SpellNames.DETECT_MAGIC_WIZ, "Cleric", 0);
+        RegisterClassSpellAlias("detect_poison_clr", SpellNames.DETECT_POISON_WIZ, "Cleric", 0);
 
     }
 }

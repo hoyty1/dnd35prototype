@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Fog Cloud (PHB 3.5e): same concealment mechanics as Obscuring Mist.
@@ -16,7 +17,7 @@ public class FogCloudAreaEffect : PersistentAreaEffect
         base.Awake();
 
         EffectName = "Fog Cloud";
-        SpellId = "fog_cloud";
+        SpellId = SpellNames.FOG_CLOUD;
         Shape = AreaShape.Circle;
         Radius = 4f; // 20-ft radius
 

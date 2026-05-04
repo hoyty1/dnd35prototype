@@ -9,6 +9,7 @@
 ///
 /// This choice is made at character creation and is permanent.
 /// </summary>
+using DND35e.Identifiers;
 public enum SpontaneousCastingType
 {
     /// <summary>No spontaneous casting (non-clerics).</summary>
@@ -39,9 +40,9 @@ public static class SpontaneousCastingHelper
         {
             switch (spellLevel)
             {
-                case 0: return "cure_minor_wounds";
-                case 1: return "cure_light_wounds";
-                case 2: return "cure_moderate_wounds";
+                case 0: return SpellNames.CURE_MINOR_WOUNDS;
+                case 1: return SpellNames.CURE_LIGHT_WOUNDS;
+                case 2: return SpellNames.CURE_MODERATE_WOUNDS;
                 // Future levels:
                 // case 3: return "cure_serious_wounds";
                 // case 4: return "cure_critical_wounds";
@@ -52,9 +53,9 @@ public static class SpontaneousCastingHelper
         {
             switch (spellLevel)
             {
-                case 0: return "inflict_minor_wounds";
-                case 1: return "inflict_light_wounds";
-                case 2: return "inflict_moderate_wounds";
+                case 0: return SpellNames.INFLICT_MINOR_WOUNDS;
+                case 1: return SpellNames.INFLICT_LIGHT_WOUNDS;
+                case 2: return SpellNames.INFLICT_MODERATE_WOUNDS;
                 // Future levels:
                 // case 3: return "inflict_serious_wounds";
                 // case 4: return "inflict_critical_wounds";

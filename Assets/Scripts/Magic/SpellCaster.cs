@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Static utility class that resolves spell casting — performs rolls, applies damage/healing/buffs.
@@ -157,7 +158,7 @@ public static class SpellCaster
             int animateRopeIncrement = 0;
             if (isRanged
                 && spell != null
-                && string.Equals(spell.SpellId, "animate_rope", System.StringComparison.Ordinal)
+                && string.Equals(spell.SpellId, SpellNames.ANIMATE_ROPE, System.StringComparison.Ordinal)
                 && casterController != null
                 && targetController != null)
             {
@@ -452,7 +453,7 @@ public static class SpellCaster
             bool debuffNegatedBySave = spell.EffectType == SpellEffectType.Debuff && result.RequiredSave && result.SaveSucceeded;
             result.BuffApplied = !debuffNegatedBySave;
 
-            if (spell.SpellId == "mage_armor")
+            if (spell.SpellId == SpellNames.MAGE_ARMOR)
                 result.BuffDescription = $"+{spell.BuffACBonus} armor AC bonus (Mage Armor)";
             else if (spell.EffectType == SpellEffectType.Debuff)
                 result.BuffDescription = debuffNegatedBySave
@@ -472,7 +473,7 @@ public static class SpellCaster
         out string bonusSource)
     {
         bonusSource = string.Empty;
-        if (spell == null || !string.Equals(spell.SpellId, "shocking_grasp", System.StringComparison.Ordinal))
+        if (spell == null || !string.Equals(spell.SpellId, SpellNames.SHOCKING_GRASP, System.StringComparison.Ordinal))
             return false;
 
         if (IsTargetWearingMetalArmor(targetController))
@@ -533,12 +534,12 @@ public static class SpellCaster
 
     private static bool IsMagicMissileSpell(SpellData spell)
     {
-        return spell != null && spell.SpellId == "magic_missile";
+        return spell != null && spell.SpellId == SpellNames.MAGIC_MISSILE;
     }
 
     private static bool IsDisruptUndeadSpell(SpellData spell)
     {
-        return spell != null && spell.SpellId == "disrupt_undead";
+        return spell != null && spell.SpellId == SpellNames.DISRUPT_UNDEAD;
     }
 
     private static bool IsUndeadTarget(CharacterStats targetStats)
@@ -563,7 +564,7 @@ public static class SpellCaster
                 if (effect?.Spell == null)
                     continue;
 
-                if (effect.Spell.SpellId == "shield" && effect.RemainingRounds > 0)
+                if (effect.Spell.SpellId == SpellNames.SHIELD && effect.RemainingRounds > 0)
                     return true;
             }
         }
@@ -571,7 +572,7 @@ public static class SpellCaster
         SpellcastingComponent spellComp = targetController.GetComponent<SpellcastingComponent>();
         if (spellComp != null
             && spellComp.ActiveBuffs != null
-            && spellComp.ActiveBuffs.TryGetValue("shield", out int rounds)
+            && spellComp.ActiveBuffs.TryGetValue(SpellNames.SHIELD, out int rounds)
             && rounds > 0)
         {
             return true;
@@ -860,7 +861,7 @@ public static class SpellCaster
 
         // D&D 3.5e Charm Person: +5 bonus on save if threatened/attacked by caster side.
         if (spell.SavingThrowType == "Will"
-            && string.Equals(spell.SpellId, "charm_person", System.StringComparison.Ordinal)
+            && string.Equals(spell.SpellId, SpellNames.CHARM_PERSON, System.StringComparison.Ordinal)
             && IsBeingThreatenedBy(targetController, casterController))
         {
             baseSave += 5;

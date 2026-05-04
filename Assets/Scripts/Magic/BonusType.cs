@@ -4,6 +4,7 @@
 /// statistic do NOT stack (only the highest applies), with exceptions
 /// for Dodge, Untyped, and Luck (per house rule).
 /// </summary>
+using DND35e.Identifiers;
 public enum BonusType
 {
     /// <summary>No typed bonus — always stacks with everything.</summary>
@@ -214,26 +215,26 @@ public static class BonusTypeHelper
             case "racial": return BonusType.Racial;
             case "resistance": return BonusType.Resistance;
             case "sacred": return BonusType.Sacred;
-            case "shield": return BonusType.Shield;
+            case SpellNames.SHIELD: return BonusType.Shield;
             case "size": return BonusType.Size;
             case "protection": return BonusType.Protection;
             case "entropic": return BonusType.Entropic;
             case "concealment": return BonusType.Concealment;
-            case "sanctuary": return BonusType.Sanctuary;
+            case SpellNames.SANCTUARY: return BonusType.Sanctuary;
             case "enlarge": return BonusType.Enlarge;
             case "reduce": return BonusType.Reduce;
-            case "mirror_image": return BonusType.MirrorImage;
+            case SpellNames.MIRROR_IMAGE: return BonusType.MirrorImage;
             case "dr_arrows": return BonusType.DRArrows;
             case "energy_resistance": return BonusType.EnergyResistance;
             case "temp_hp": return BonusType.TempHP;
-            case "spectral_hand": return BonusType.SpectralHand;
-            case "levitate": return BonusType.Levitate;
+            case SpellNames.SPECTRAL_HAND: return BonusType.SpectralHand;
+            case SpellNames.LEVITATE: return BonusType.Levitate;
             case "see_invis": return BonusType.SeeInvisibility;
-            case "spider_climb": return BonusType.SpiderClimb;
+            case SpellNames.SPIDER_CLIMB: return BonusType.SpiderClimb;
             case "speed": return BonusType.Speed;
-            case "shield_other": return BonusType.ShieldOther;
+            case SpellNames.SHIELD_OTHER: return BonusType.ShieldOther;
             case "protection_alignment": return BonusType.ProtectionAlignment;
-            case "invisibility": return BonusType.Invisibility;
+            case SpellNames.INVISIBILITY: return BonusType.Invisibility;
             default:
                 UnityEngine.Debug.LogWarning($"[BonusType] Unknown BuffType string: '{buffType}', defaulting to Untyped");
                 return BonusType.Untyped;

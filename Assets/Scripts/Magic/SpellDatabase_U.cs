@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "unseen_servant",
+                    SpellId = SpellNames.UNSEEN_SERVANT,
                     Name = "Unseen Servant",
                     Description = "Invisible, mindless force that performs simple tasks. Duration 1 hr/level. PHB p.297",
                     SpellLevel = 1, School = "Conjuration",

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Cleric class definition (D&D 3.5 PHB).
@@ -36,14 +37,14 @@ public class ClericClass : ICharacterClass
     public void SetupStartingEquipment(InventoryComponent inv)
     {
         ItemDatabase.Init();
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("mace_heavy"), EquipSlot.RightHand);
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_wooden"), EquipSlot.LeftHand);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAIN_SHIRT), EquipSlot.Armor);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.MACE_HEAVY), EquipSlot.RightHand);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_WOODEN), EquipSlot.LeftHand);
 
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("crossbow_light"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.CROSSBOW_LIGHT));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_SHIELD_OF_FAITH));
         Debug.Log("[Cleric] Equipment: Chain Shirt, Heavy Shield, Heavy Mace, Light Crossbow");
     }
 
@@ -92,18 +93,18 @@ public class ClericClass : ICharacterClass
             // Cleric selects 4 orisons (D&D 3.5e PHB)
             SelectedSpellIds = new List<string>
             {
-                "cure_minor_wounds", "detect_magic_clr", "guidance", "light_clr"
+                SpellNames.CURE_MINOR_WOUNDS, "detect_magic_clr", SpellNames.GUIDANCE, "light_clr"
             },
             // Pre-prepared spell slots: 4 orisons + 4 level-1 + 3 level-2 = 11 total
             // Curated for a combat-ready healer/support cleric
             PreparedSpellSlotIds = new List<string>
             {
                 // Level 0 orisons (4 slots — unlimited use)
-                "cure_minor_wounds", "detect_magic_clr", "guidance", "light_clr",
+                SpellNames.CURE_MINOR_WOUNDS, "detect_magic_clr", SpellNames.GUIDANCE, "light_clr",
                 // Level 1 spells (4 slots: 2 base + 1 domain + 1 WIS bonus)
-                "cure_light_wounds", "cure_light_wounds", "bless", "shield_of_faith",
+                SpellNames.CURE_LIGHT_WOUNDS, SpellNames.CURE_LIGHT_WOUNDS, SpellNames.BLESS, SpellNames.SHIELD_OF_FAITH,
                 // Level 2 spells (3 slots: 1 base + 1 domain + 1 WIS bonus)
-                "cure_moderate_wounds", "spiritual_weapon", "flame_strike"
+                SpellNames.CURE_MODERATE_WOUNDS, SpellNames.SPIRITUAL_WEAPON, SpellNames.FLAME_STRIKE
             },
             ChosenAlignment = Alignment.NeutralGood,
             ChosenDeityId = "pelor",

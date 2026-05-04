@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Manages active spell effects on a single character.
@@ -144,7 +145,7 @@ public class StatusEffectManager : MonoBehaviour
         effect.AppliedDamageReductionBypass = spell.BuffDamageReductionBypass;
         effect.AppliedDamageReductionRangedOnly = spell.BuffDamageReductionRangedOnly;
 
-        if (spell.SpellId == "jump" && string.Equals(effect.AppliedSkillName, "Jump", System.StringComparison.OrdinalIgnoreCase) && effect.AppliedSkillBonus == 0)
+        if (spell.SpellId == SpellNames.JUMP && string.Equals(effect.AppliedSkillName, "Jump", System.StringComparison.OrdinalIgnoreCase) && effect.AppliedSkillBonus == 0)
         {
             int level = Mathf.Max(1, casterLevel);
             effect.AppliedSkillBonus = level >= 7 ? 30 : (level >= 3 ? 20 : 10);
@@ -166,7 +167,7 @@ public class StatusEffectManager : MonoBehaviour
 
         // Concealment / miss chance metadata (non-stacking; highest applies at attack time).
         // Keep spell-specific handling explicit to avoid accidental false positives from BuffType aliases.
-        if (spell.SpellId == "blur" || spell.SpellId == "obscuring_mist" || spell.SpellId == "fog_cloud")
+        if (spell.SpellId == SpellNames.BLUR || spell.SpellId == SpellNames.OBSCURING_MIST || spell.SpellId == SpellNames.FOG_CLOUD)
         {
             effect.MissChance = 20;
             effect.IsTotalConcealment = false;
@@ -178,13 +179,13 @@ public class StatusEffectManager : MonoBehaviour
             effect.IsTotalConcealment = true;
             effect.ConcealmentSource = spell.Name;
         }
-        else if (spell.SpellId == "invisibility")
+        else if (spell.SpellId == SpellNames.INVISIBILITY)
         {
             effect.MissChance = 50;
             effect.IsTotalConcealment = true;
             effect.ConcealmentSource = spell.Name;
         }
-        else if (spell.SpellId == "entropic_shield")
+        else if (spell.SpellId == SpellNames.ENTROPIC_SHIELD)
         {
             effect.MissChance = 20;
             effect.IsTotalConcealment = false;
@@ -244,7 +245,7 @@ public class StatusEffectManager : MonoBehaviour
 
         ActiveEffects.Remove(effect);
 
-        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, "protection_from_arrows", System.StringComparison.Ordinal) && _stats != null)
+        if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.PROTECTION_FROM_ARROWS, System.StringComparison.Ordinal) && _stats != null)
             _stats.ActiveProtectionFromArrowsEffect = null;
 
         // Also remove from SpellcastingComponent's ActiveBuffs for backward compat
@@ -369,8 +370,8 @@ public class StatusEffectManager : MonoBehaviour
         // Size-changing transmutations overlap each other by definition.
         string newId = newSpell?.SpellId ?? string.Empty;
         string existingId = existing?.Spell?.SpellId ?? string.Empty;
-        bool newIsSizeShift = newId == "enlarge_person" || newId == "reduce_person";
-        bool existingIsSizeShift = existingId == "enlarge_person" || existingId == "reduce_person";
+        bool newIsSizeShift = newId == SpellNames.ENLARGE_PERSON || newId == SpellNames.REDUCE_PERSON;
+        bool existingIsSizeShift = existingId == SpellNames.ENLARGE_PERSON || existingId == SpellNames.REDUCE_PERSON;
         if (newIsSizeShift && existingIsSizeShift) return true;
         // If both modify the same ability score
         if (!string.IsNullOrEmpty(newSpell.BuffStatName) && !string.IsNullOrEmpty(existing.AppliedStatName))
@@ -570,7 +571,7 @@ public class StatusEffectManager : MonoBehaviour
         string spellId = effect.Spell.SpellId;
         if (string.IsNullOrEmpty(spellId)) return;
 
-        if (spellId == "disguise_self")
+        if (spellId == SpellNames.DISGUISE_SELF)
         {
             if (applying)
             {
@@ -585,7 +586,7 @@ public class StatusEffectManager : MonoBehaviour
             return;
         }
 
-        if (spellId == "expeditious_retreat")
+        if (spellId == SpellNames.EXPEDITIOUS_RETREAT)
         {
             if (!applying)
                 _controller?.ClearExpeditiousRetreatEffect();
@@ -593,7 +594,7 @@ public class StatusEffectManager : MonoBehaviour
             return;
         }
 
-        if (spellId == "invisibility")
+        if (spellId == SpellNames.INVISIBILITY)
         {
             if (applying)
             {
@@ -608,7 +609,7 @@ public class StatusEffectManager : MonoBehaviour
             return;
         }
 
-        if (spellId == "glitterdust")
+        if (spellId == SpellNames.GLITTERDUST)
         {
             if (!applying)
                 _controller?.ClearGlitterdustEffect();
@@ -616,16 +617,16 @@ public class StatusEffectManager : MonoBehaviour
             return;
         }
 
-        if (spellId == "enlarge_person" || spellId == "reduce_person")
+        if (spellId == SpellNames.ENLARGE_PERSON || spellId == SpellNames.REDUCE_PERSON)
         {
-            int shift = (spellId == "enlarge_person") ? 1 : -1;
+            int shift = (spellId == SpellNames.ENLARGE_PERSON) ? 1 : -1;
 
             if (applying)
             {
                 bool sizeChanged = TryApplySizeShift(shift);
                 effect.AppliedSizeCategoryShift = sizeChanged ? shift : 0;
 
-                if (spellId == "enlarge_person")
+                if (spellId == SpellNames.ENLARGE_PERSON)
                 {
                     effect.AppliedStatName = "STR";
                     effect.AppliedStatBonus = 2;

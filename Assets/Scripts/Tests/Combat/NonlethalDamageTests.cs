@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -92,7 +93,7 @@ public static class NonlethalDamageTests
             IsRanged = false,
             IsNonlethal = true,
             Source = AttackSource.Weapon,
-            SourceName = "club"
+            SourceName = ItemIDs.CLUB
         };
 
         c.Stats.ApplyIncomingDamage(11, packet);

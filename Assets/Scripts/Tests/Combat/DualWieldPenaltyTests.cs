@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -101,8 +102,8 @@ public static class DualWieldPenaltyTests
             bool light = controller.IsOffHandWeaponLight();
             var (mainPenalty, offPenalty, lightOffHand) = controller.GetDualWieldPenalties();
 
-            string mainType = (main != null && (main.IsLightWeapon || main.WeaponSize == WeaponSizeCategory.Light)) ? "light" : "normal";
-            string offType = light ? "light" : "normal";
+            string mainType = (main != null && (main.IsLightWeapon || main.WeaponSize == WeaponSizeCategory.Light)) ? SpellNames.LIGHT : "normal";
+            string offType = light ? SpellNames.LIGHT : "normal";
 
             Debug.Log("[DualWield] Calculating penalties");
             Debug.Log($"[DualWield] Main hand weapon: {main?.Name ?? "None"} ({mainType})");
@@ -135,8 +136,8 @@ public static class DualWieldPenaltyTests
         ValidateCase(
             caseName: "No feat, normal off-hand",
             hasTWF: false,
-            mainWeaponId: "longsword",
-            offWeaponId: "longsword",
+            mainWeaponId: ItemIDs.LONGSWORD,
+            offWeaponId: ItemIDs.LONGSWORD,
             expectedMain: -6,
             expectedOff: -10,
             expectedLight: false);
@@ -148,8 +149,8 @@ public static class DualWieldPenaltyTests
         ValidateCase(
             caseName: "No feat, light off-hand",
             hasTWF: false,
-            mainWeaponId: "longsword",
-            offWeaponId: "dagger",
+            mainWeaponId: ItemIDs.LONGSWORD,
+            offWeaponId: ItemIDs.DAGGER,
             expectedMain: -4,
             expectedOff: -8,
             expectedLight: true);
@@ -161,8 +162,8 @@ public static class DualWieldPenaltyTests
         ValidateCase(
             caseName: "TWF feat, normal off-hand",
             hasTWF: true,
-            mainWeaponId: "longsword",
-            offWeaponId: "longsword",
+            mainWeaponId: ItemIDs.LONGSWORD,
+            offWeaponId: ItemIDs.LONGSWORD,
             expectedMain: -4,
             expectedOff: -4,
             expectedLight: false);
@@ -174,8 +175,8 @@ public static class DualWieldPenaltyTests
         ValidateCase(
             caseName: "TWF feat, light off-hand",
             hasTWF: true,
-            mainWeaponId: "longsword",
-            offWeaponId: "dagger",
+            mainWeaponId: ItemIDs.LONGSWORD,
+            offWeaponId: ItemIDs.DAGGER,
             expectedMain: -2,
             expectedOff: -2,
             expectedLight: true);
@@ -187,11 +188,11 @@ public static class DualWieldPenaltyTests
         CharacterController controller = null;
         try
         {
-            controller = BuildDualWieldCharacter("Two-handed blocks off-hand", hasTWF: true, mainWeaponId: "greatsword", offWeaponId: "dagger");
+            controller = BuildDualWieldCharacter("Two-handed blocks off-hand", hasTWF: true, mainWeaponId: ItemIDs.GREATSWORD, offWeaponId: ItemIDs.DAGGER);
 
             // Mirror in-game setup where a spiked gauntlet can be equipped in Hands.
             global::Inventory inv = controller.GetInventoryData();
-            inv.DirectEquip(ItemDatabase.CloneItem("spiked_gauntlet"), EquipSlot.Hands);
+            inv.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SPIKED_GAUNTLET), EquipSlot.Hands);
             inv.RecalculateStats();
 
             Assert(controller.IsTwoHanding(),

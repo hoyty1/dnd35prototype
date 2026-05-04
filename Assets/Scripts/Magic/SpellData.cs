@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using DND35e.Identifiers;
 
 [Serializable]
 public class SpellAvailability
@@ -39,7 +40,7 @@ public class SpellAvailability
 public class SpellData
 {
     // ========== IDENTITY ==========
-    public string SpellId;          // Unique key (e.g., "magic_missile")
+    public string SpellId;          // Unique key (e.g., SpellNames.MAGIC_MISSILE)
     public string Name;             // Display name (e.g., "Magic Missile")
     public string Description;      // Short description
     public int SpellLevel;          // 0 = cantrip, 1 = 1st level, etc.
@@ -342,7 +343,7 @@ public class SpellData
     // ========== BUFF/DEBUFF ==========
     public int BuffACBonus;             // AC bonus (Mage Armor = +4)
     public int BuffDurationRounds;      // Duration in rounds (0 = instantaneous, -1 = hours/level) [LEGACY - prefer DurationType system]
-    public string BuffType;             // LEGACY: "armor", "shield", "morale", etc. — use BuffBonusType enum instead
+    public string BuffType;             // LEGACY: "armor", SpellNames.SHIELD, "morale", etc. — use BuffBonusType enum instead
 
     /// <summary>
     /// D&D 3.5e bonus type enum for proper stacking rule enforcement.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Types of items in the game.
@@ -153,7 +154,7 @@ public enum ReloadActionType
 [System.Serializable]
 public class ItemData
 {
-    public string Id;           // Unique identifier (e.g., "longsword")
+    public string Id;           // Unique identifier (e.g., ItemIDs.LONGSWORD)
     public string Name;         // Display name
     public string Description;  // Tooltip description
     public ItemType Type;
@@ -269,8 +270,8 @@ public class ItemData
         {
             if (!IsCrossbowWeapon) return false;
             string id = (Id ?? string.Empty).ToLowerInvariant();
-            return id.Contains("crossbow_light")
-                || id.Contains("crossbow_heavy")
+            return id.Contains(ItemIDs.CROSSBOW_LIGHT)
+                || id.Contains(ItemIDs.CROSSBOW_HEAVY)
                 || id.Contains("crossbow_hand")
                 || id.Contains("crossbow_repeating");
         }
@@ -285,8 +286,8 @@ public class ItemData
         if (!IsCrossbowWeapon) return string.Empty;
 
         string id = (Id ?? string.Empty).ToLowerInvariant();
-        if (id.Contains("crossbow_light")) return "Rapid Reload (Light Crossbow)";
-        if (id.Contains("crossbow_heavy")) return "Rapid Reload (Heavy Crossbow)";
+        if (id.Contains(ItemIDs.CROSSBOW_LIGHT)) return "Rapid Reload (Light Crossbow)";
+        if (id.Contains(ItemIDs.CROSSBOW_HEAVY)) return "Rapid Reload (Heavy Crossbow)";
         if (id.Contains("crossbow_hand")) return "Rapid Reload (Hand Crossbow)";
         if (id.Contains("crossbow_repeating")) return "Rapid Reload (Repeating Crossbow)";
         return string.Empty;
@@ -532,7 +533,7 @@ public class ItemData
             string id = (Id ?? string.Empty).ToLowerInvariant();
             string n = (Name ?? string.Empty).ToLowerInvariant();
 
-            if (id.Contains("buckler") || n.Contains("buckler"))
+            if (id.Contains(ItemIDs.BUCKLER) || n.Contains(ItemIDs.BUCKLER))
                 return 5;
             if (id.Contains("tower") || n.Contains("tower"))
                 return 20;

@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.Serialization;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Per-character inventory with D&D 3.5e equipment slots and dynamically growing general slots.
@@ -416,7 +417,7 @@ public class Inventory
 
         string id = (item.Id ?? string.Empty).ToLowerInvariant();
         string name = (item.Name ?? string.Empty).ToLowerInvariant();
-        return id == "spiked_gauntlet" || name.Contains("spiked gauntlet");
+        return id == ItemIDs.SPIKED_GAUNTLET || name.Contains("spiked gauntlet");
     }
 
     /// <summary>Total carried weight from all equipped items and inventory contents.</summary>

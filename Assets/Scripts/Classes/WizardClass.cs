@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Wizard class definition (D&D 3.5 PHB).
@@ -37,13 +38,13 @@ public class WizardClass : ICharacterClass
     public void SetupStartingEquipment(InventoryComponent inv)
     {
         ItemDatabase.Init();
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("quarterstaff"), EquipSlot.RightHand);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
 
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("crossbow_light"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.CROSSBOW_LIGHT));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.DAGGER));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        inv.CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_SHIELD_OF_FAITH));
         Debug.Log("[Wizard] Equipment: Quarterstaff, Light Crossbow, Dagger (no armor)");
     }
 
@@ -107,15 +108,15 @@ public class WizardClass : ICharacterClass
         // 1st-level spells for spellbook: include core damage + size magic testing spells.
         data.SelectedSpellIds.AddRange(new List<string>
         {
-            "magic_missile", "burning_hands", "enlarge_person", "reduce_person",
-            "mage_armor", "shield", "sleep", "charm_person"
+            SpellNames.MAGIC_MISSILE, SpellNames.BURNING_HANDS, SpellNames.ENLARGE_PERSON, SpellNames.REDUCE_PERSON,
+            SpellNames.MAGE_ARMOR, SpellNames.SHIELD, SpellNames.SLEEP, SpellNames.CHARM_PERSON
         });
 
         // 2nd-level spells for spellbook: includes combat staples + summon test/debug options
         data.SelectedSpellIds.AddRange(new List<string>
         {
-            "scorching_ray", "summon_monster_2", "acid_fog",
-            "test_cone_30", "test_cone_60", "test_line_60"
+            SpellNames.SCORCHING_RAY, SpellNames.SUMMON_MONSTER_2, SpellNames.ACID_FOG,
+            SpellNames.TEST_CONE_30, SpellNames.TEST_CONE_60, SpellNames.TEST_LINE_60
         });
 
         data.ComputeFinalStats();
@@ -125,11 +126,11 @@ public class WizardClass : ICharacterClass
         data.PreparedSpellSlotIds = new List<string>
         {
             // 4 cantrip slots (unlimited use)
-            "ray_of_frost", "detect_magic_wiz", "acid_splash", "prestidigitation",
+            SpellNames.RAY_OF_FROST, SpellNames.DETECT_MAGIC_WIZ, SpellNames.ACID_SPLASH, SpellNames.PRESTIDIGITATION,
             // 3 1st-level slots (2 base + 1 INT bonus)
-            "magic_missile", "enlarge_person", "reduce_person",
+            SpellNames.MAGIC_MISSILE, SpellNames.ENLARGE_PERSON, SpellNames.REDUCE_PERSON,
             // 2 2nd-level slots (1 base + 1 INT bonus)
-            "scorching_ray", "summon_monster_2"
+            SpellNames.SCORCHING_RAY, SpellNames.SUMMON_MONSTER_2
         };
 
         data.SkillRanks["Concentration"] = 6;

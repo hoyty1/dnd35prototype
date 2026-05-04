@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Combat
 {
@@ -106,8 +107,8 @@ public static class ConcealmentRulesTests
 
     private static void TestFogSpellsAreImplementedAsAoEConcealment()
     {
-        SpellData obscuringMist = SpellDatabase.GetSpell("obscuring_mist");
-        SpellData fogCloud = SpellDatabase.GetSpell("fog_cloud");
+        SpellData obscuringMist = SpellDatabase.GetSpell(SpellNames.OBSCURING_MIST);
+        SpellData fogCloud = SpellDatabase.GetSpell(SpellNames.FOG_CLOUD);
 
         Assert(obscuringMist != null, "Obscuring Mist definition exists");
         Assert(fogCloud != null, "Fog Cloud definition exists");
@@ -197,7 +198,7 @@ public static class ConcealmentRulesTests
             StatusEffectManager statusMgr = target.GetComponent<StatusEffectManager>();
             var invisEffect = new ActiveSpellEffect
             {
-                Spell = new SpellData { SpellId = "invisibility", Name = "Invisibility" },
+                Spell = new SpellData { SpellId = SpellNames.INVISIBILITY, Name = "Invisibility" },
                 CasterName = "UnitTest",
                 CasterLevel = 5,
                 RemainingRounds = 5,

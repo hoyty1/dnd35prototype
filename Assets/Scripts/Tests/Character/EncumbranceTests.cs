@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Character
 {
@@ -85,7 +86,7 @@ public static class EncumbranceTests
         var stats = MakeChar("MediumLoad", str: 10, dex: 18);
         var inv = new global::Inventory { OwnerStats = stats };
 
-        inv.AddItem(ItemDatabase.CloneItem("full_plate")); // 50 lbs -> medium for STR 10 (max 100)
+        inv.AddItem(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE)); // 50 lbs -> medium for STR 10 (max 100)
 
         Assert(stats.CurrentEncumbrance == EncumbranceLevel.Medium,
             "STR 10 with 50 lbs is medium load",
@@ -103,8 +104,8 @@ public static class EncumbranceTests
         var stats = MakeChar("HeavyLoad", str: 10, dex: 18);
         var inv = new global::Inventory { OwnerStats = stats };
 
-        inv.AddItem(ItemDatabase.CloneItem("full_plate"));
-        inv.AddItem(ItemDatabase.CloneItem("full_plate")); // 100 lbs total => heavy for STR 10
+        inv.AddItem(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE));
+        inv.AddItem(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE)); // 100 lbs total => heavy for STR 10
 
         Assert(stats.CurrentEncumbrance == EncumbranceLevel.Heavy,
             "STR 10 with 100 lbs is heavy load",
@@ -125,9 +126,9 @@ public static class EncumbranceTests
         var stats = MakeChar("Overloaded", str: 10, dex: 18);
         var inv = new global::Inventory { OwnerStats = stats };
 
-        inv.AddItem(ItemDatabase.CloneItem("full_plate"));
-        inv.AddItem(ItemDatabase.CloneItem("full_plate"));
-        inv.AddItem(ItemDatabase.CloneItem("full_plate")); // 150 lbs > STR 10 max 100
+        inv.AddItem(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE));
+        inv.AddItem(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE));
+        inv.AddItem(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE)); // 150 lbs > STR 10 max 100
 
         Assert(stats.CurrentEncumbrance == EncumbranceLevel.Overloaded,
             "Carrying above heavy max is overloaded",
@@ -142,9 +143,9 @@ public static class EncumbranceTests
         var stats = MakeChar("MixedCaps", str: 18, dex: 20);
         var inv = new global::Inventory { OwnerStats = stats };
 
-        inv.DirectEquip(ItemDatabase.CloneItem("full_plate"), EquipSlot.Armor); // Armor cap +1, ACP 6
-        inv.AddItem(ItemDatabase.CloneItem("full_plate"));
-        inv.AddItem(ItemDatabase.CloneItem("half_plate")); // 50 + 50 + 50 = 150 lbs => medium for STR 18 max 300
+        inv.DirectEquip(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE), EquipSlot.Armor); // Armor cap +1, ACP 6
+        inv.AddItem(ItemDatabase.CloneItem(ItemIDs.FULL_PLATE));
+        inv.AddItem(ItemDatabase.CloneItem(ItemIDs.HALF_PLATE)); // 50 + 50 + 50 = 150 lbs => medium for STR 18 max 300
 
         Assert(stats.CurrentEncumbrance == EncumbranceLevel.Medium,
             "150 lbs at STR 18 is medium load",

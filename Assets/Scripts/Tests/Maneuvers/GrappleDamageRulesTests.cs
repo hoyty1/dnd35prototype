@@ -1,5 +1,6 @@
 using System.Reflection;
 using UnityEngine;
+using DND35e.Identifiers;
 
 namespace Tests.Maneuvers
 {
@@ -408,7 +409,7 @@ public static class GrappleDamageRulesTests
 
         // Equip a larger-die weapon to verify grapple damage still uses unarmed strike damage.
         var inv = attacker.GetComponent<InventoryComponent>();
-        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("greatsword"), EquipSlot.RightHand);
+        inv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.GREATSWORD), EquipSlot.RightHand);
 
         ForceGrappleState(attacker, defender);
         SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.DamageOpponent, AttackDamageMode.Nonlethal);
@@ -428,7 +429,7 @@ public static class GrappleDamageRulesTests
         ConfigureVeryWeakGrappler(defender);
 
         var defenderInv = defender.GetComponent<InventoryComponent>();
-        defenderInv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("greatsword"), EquipSlot.RightHand);
+        defenderInv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.GREATSWORD), EquipSlot.RightHand);
 
         ForceGrappleState(attacker, defender);
         SpecialAttackResult result = attacker.ResolveGrappleAction(GrappleActionType.UseOpponentWeapon);
@@ -447,7 +448,7 @@ public static class GrappleDamageRulesTests
         ConfigureVeryWeakGrappler(defender);
 
         var defenderInv = defender.GetComponent<InventoryComponent>();
-        ItemData defenderDagger = ItemDatabase.CloneItem("dagger");
+        ItemData defenderDagger = ItemDatabase.CloneItem(ItemIDs.DAGGER);
         defenderInv.CharacterInventory.DirectEquip(defenderDagger, EquipSlot.RightHand);
 
         ForceGrappleState(attacker, defender);
@@ -455,7 +456,7 @@ public static class GrappleDamageRulesTests
 
         Assert(result != null && result.Success, "Use Opponent's Weapon succeeds with favorable opposed grapple modifier gap");
         Assert(result != null && result.Log.Contains("-4 penalty"), "Use Opponent's Weapon combat log includes the fixed -4 attack penalty");
-        Assert(result != null && result.Log.Contains("dagger"), "Use Opponent's Weapon log names the selected opponent weapon");
+        Assert(result != null && result.Log.Contains(ItemIDs.DAGGER), "Use Opponent's Weapon log names the selected opponent weapon");
 
         ItemData equippedAfter = defenderInv.CharacterInventory.RightHandSlot;
         Assert(equippedAfter != null && equippedAfter.Name == defenderDagger.Name, "Use Opponent's Weapon does not transfer or remove defender's weapon");
@@ -471,8 +472,8 @@ public static class GrappleDamageRulesTests
         ConfigureVeryWeakGrappler(defender);
 
         var defenderInv = defender.GetComponent<InventoryComponent>();
-        defenderInv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.RightHand);
-        ItemData leftWeapon = ItemDatabase.CloneItem("sickle");
+        defenderInv.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.DAGGER), EquipSlot.RightHand);
+        ItemData leftWeapon = ItemDatabase.CloneItem(ItemIDs.SICKLE);
         defenderInv.CharacterInventory.DirectEquip(leftWeapon, EquipSlot.LeftHand);
 
         ForceGrappleState(attacker, defender);
@@ -603,7 +604,7 @@ public static class GrappleDamageRulesTests
 
     private static void TestSilentAndStillMetamagicRemoveVerbalAndSomaticComponents()
     {
-        SpellData spell = SpellDatabase.GetSpell("magic_missile");
+        SpellData spell = SpellDatabase.GetSpell(SpellNames.MAGIC_MISSILE);
         Assert(spell != null, "Magic Missile exists for metamagic component suppression test");
         if (spell == null)
             return;

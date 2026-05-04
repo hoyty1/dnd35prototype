@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Obscuring Mist (PHB 3.5e): creatures inside gain concealment (20% miss chance).
@@ -16,7 +17,7 @@ public class ObscuringMistAreaEffect : PersistentAreaEffect
         base.Awake();
 
         EffectName = "Obscuring Mist";
-        SpellId = "obscuring_mist";
+        SpellId = SpellNames.OBSCURING_MIST;
         Shape = AreaShape.Circle;
         Radius = 4f; // 20-ft radius
 

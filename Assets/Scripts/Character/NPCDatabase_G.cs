@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Monster Manual creatures: G
@@ -39,11 +40,11 @@ public static partial class NPCDatabase
             },
             EquipmentIds = new List<EquipmentSlotPair>
             {
-                new EquipmentSlotPair("leather_armor", EquipSlot.Armor),
-                new EquipmentSlotPair("morningstar", EquipSlot.RightHand),
-                new EquipmentSlotPair("shield_light_wooden", EquipSlot.LeftHand)
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.MORNINGSTAR, EquipSlot.RightHand),
+                new EquipmentSlotPair(ItemIDs.SHIELD_LIGHT_WOODEN, EquipSlot.LeftHand)
             },
-            BackpackItemIds = new List<string> { "javelin" },
+            BackpackItemIds = new List<string> { ItemIDs.JAVELIN },
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.Humanoid,
             SpriteColor = new Color(0.56f, 0.78f, 0.28f, 1f),

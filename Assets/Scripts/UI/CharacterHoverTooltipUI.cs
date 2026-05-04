@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Lightweight screen-space tooltip for battlefield character hover details.
@@ -304,7 +305,7 @@ public class CharacterHoverTooltipUI : MonoBehaviour
         if (string.Equals(lower, "tower shield", StringComparison.Ordinal))
             return "Tower Shield";
 
-        if (string.Equals(lower, "buckler", StringComparison.Ordinal))
+        if (string.Equals(lower, ItemIDs.BUCKLER, StringComparison.Ordinal))
             return "Buckler";
 
         return trimmed;

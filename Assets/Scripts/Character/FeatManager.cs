@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 // ============================================================================
 // D&D 3.5 Feat Manager - Applies feat effects to characters
@@ -159,7 +160,7 @@ public static class FeatManager
     {
         if (!stats.HasFeat("Weapon Finesse")) return false;
         if (weapon == null) return true; // Unarmed counts as light
-        return weapon.IsLightWeapon || weapon.Name.ToLower().Contains("rapier");
+        return weapon.IsLightWeapon || weapon.Name.ToLower().Contains(ItemIDs.RAPIER);
     }
 
     /// <summary>

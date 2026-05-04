@@ -4,6 +4,7 @@
 // ============================================================================
 using System.Collections.Generic;
 using UnityEngine;
+using DND35e.Identifiers;
 
 public static partial class SpellDatabase
 {
@@ -11,7 +12,7 @@ public static partial class SpellDatabase
     {
         Register(new SpellData
                 {
-                    SpellId = "domain_heat_metal",
+                    SpellId = SpellNames.DOMAIN_HEAT_METAL,
                     Name = "Heat Metal",
                     Description = "Make metal intensely hot. Creatures wearing metal armor take 1d4 to 2d4 fire damage per round.",
                     SpellLevel = 2,
@@ -32,7 +33,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "hide_from_undead",
+                    SpellId = SpellNames.HIDE_FROM_UNDEAD,
                     Name = "Hide from Undead",
                     Description = "Undead can't perceive one subject/level. Duration 10 min/level. Will negates (intelligent undead). PHB p.241",
                     SpellLevel = 1, School = "Abjuration",
@@ -49,7 +50,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "hideous_laughter",
+                    SpellId = SpellNames.HIDEOUS_LAUGHTER,
                     Name = "Hideous Laughter",
                     Description = "Subject laughs uncontrollably, falls prone. Will save negates. 1 round/level. PHB p.240",
                     SpellLevel = 2, School = "Enchantment",
@@ -66,7 +67,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "domain_hold_animal",
+                    SpellId = SpellNames.DOMAIN_HOLD_ANIMAL,
                     Name = "Hold Animal",
                     Description = "Paralyzes one animal for 1 round/level.",
                     SpellLevel = 2,
@@ -86,7 +87,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "hold_person",
+                    SpellId = SpellNames.HOLD_PERSON,
                     Name = "Hold Person",
                     Description = "Paralyzes one humanoid for 1 round/level. Will negates. PHB p.241",
                     SpellLevel = 2, School = "Enchantment",
@@ -103,7 +104,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "hold_portal",
+                    SpellId = SpellNames.HOLD_PORTAL,
                     Name = "Hold Portal",
                     Description = "Holds door shut as if locked. Duration 1 min/level. PHB p.241",
                     SpellLevel = 1, School = "Abjuration",
@@ -120,7 +121,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "hypnotic_pattern",
+                    SpellId = SpellNames.HYPNOTIC_PATTERN,
                     Name = "Hypnotic Pattern",
                     Description = "Fascinates 2d4+CL HD of creatures. Will negates. Concentration + 2 rounds. PHB p.242",
                     SpellLevel = 2, School = "Illusion",
@@ -139,7 +140,7 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = "hypnotism",
+                    SpellId = SpellNames.HYPNOTISM,
                     Name = "Hypnotism",
                     Description = "Enchantment (Compulsion) [Mind-Affecting]. Fascinates creatures in a 15-ft radius burst with a 2d4 HD pool, lowest HD first. Targets must be able to see or hear you. Will negates. Duration 2d4 rounds. SR: Yes. PHB p.242",
                     SpellLevel = 1,

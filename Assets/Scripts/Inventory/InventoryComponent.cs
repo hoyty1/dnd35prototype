@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
 /// MonoBehaviour wrapper that holds a character's Inventory.
@@ -26,23 +27,23 @@ public class InventoryComponent : MonoBehaviour
         ItemDatabase.Init();
 
         // Equipped items
-        CharacterInventory.DirectEquip(ItemDatabase.CloneItem("chain_shirt"), EquipSlot.Armor);
-        CharacterInventory.DirectEquip(ItemDatabase.CloneItem("longsword"), EquipSlot.RightHand);
-        CharacterInventory.DirectEquip(ItemDatabase.CloneItem("shield_heavy_steel"), EquipSlot.LeftHand);
-        CharacterInventory.DirectEquip(ItemDatabase.CloneItem("spiked_gauntlet"), EquipSlot.Hands);
+        CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.CHAIN_SHIRT), EquipSlot.Armor);
+        CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LONGSWORD), EquipSlot.RightHand);
+        CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHIELD_HEAVY_STEEL), EquipSlot.LeftHand);
+        CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SPIKED_GAUNTLET), EquipSlot.Hands);
 
         // Extra items in inventory - showcase variety of PHB weapons and armor
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("mace_heavy"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("greatsword"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("battleaxe"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("gauntlet"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("scale_mail"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("breastplate"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("torch"));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.MACE_HEAVY));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.DAGGER));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.GREATSWORD));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.BATTLEAXE));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.GAUNTLET));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.SCALE_MAIL));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.BREASTPLATE));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_SHIELD_OF_FAITH));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.TORCH));
 
         CharacterInventory.RecalculateStats();
     }
@@ -55,21 +56,21 @@ public class InventoryComponent : MonoBehaviour
         ItemDatabase.Init();
 
         // Equipped items - Lyra dual wields short sword + dagger
-        CharacterInventory.DirectEquip(ItemDatabase.CloneItem("leather_armor"), EquipSlot.Armor);
-        CharacterInventory.DirectEquip(ItemDatabase.CloneItem("short_sword"), EquipSlot.RightHand);
-        CharacterInventory.DirectEquip(ItemDatabase.CloneItem("dagger"), EquipSlot.LeftHand);
+        CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.LEATHER_ARMOR), EquipSlot.Armor);
+        CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.SHORT_SWORD), EquipSlot.RightHand);
+        CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.DAGGER), EquipSlot.LeftHand);
 
         // Extra items in inventory - rogue-appropriate gear
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("rapier"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("dagger"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("handaxe"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("shortbow"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("buckler"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("studded_leather"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_healing"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_greater_healing"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("potion_shield_of_faith"));
-        CharacterInventory.AddItem(ItemDatabase.CloneItem("rope"));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.RAPIER));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.DAGGER));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.HANDAXE));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.SHORTBOW));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.BUCKLER));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.STUDDED_LEATHER));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_HEALING));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_GREATER_HEALING));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.POTION_SHIELD_OF_FAITH));
+        CharacterInventory.AddItem(ItemDatabase.CloneItem(ItemIDs.ROPE));
 
         CharacterInventory.RecalculateStats();
     }
