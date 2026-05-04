@@ -11077,12 +11077,22 @@ public partial class GameManager : MonoBehaviour
 
         if (summon.Stats != null)
         {
-            if (isCelestial)
+            if (option.SummonedCreatureAlignment != Alignment.None)
+            {
+                summon.Stats.CharacterAlignment = option.SummonedCreatureAlignment;
+            }
+            else if (isCelestial)
+            {
                 summon.Stats.CharacterAlignment = Alignment.NeutralGood;
+            }
             else if (isFiendish)
+            {
                 summon.Stats.CharacterAlignment = Alignment.NeutralEvil;
+            }
             else
+            {
                 summon.Stats.CharacterAlignment = Alignment.TrueNeutral;
+            }
         }
 
         NPCs.Add(summon);
