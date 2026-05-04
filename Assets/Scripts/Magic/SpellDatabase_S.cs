@@ -68,21 +68,23 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = SpellNames.SEE_INVISIBILITY,
-                    Name = "See Invisibility",
-                    Description = "Divination. Personal. You can see invisible creatures and objects normally. Negates invisibility miss chance and invisibility Hide bonus against you (but not mundane hiding). Duration 10 min/level, dismissible. Components: V, S, M (talc and powdered silver). PHB p.275",
+                    SpellId = SpellNames.SEE_INVISIBLE,
+                    Name = "See Invisible",
+                    Description = "Divination. Personal. You can see invisible creatures and objects normally. Negates invisibility miss chance and invisibility AC bonus/Hide bonus against you (but not mundane hiding). Duration 10 min/level, dismissible. Components: V, S, M (talc and powdered silver). PHB p.275",
                     SpellLevel = 2, School = "Divination",
                     ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
-                    BuffType = SpellNames.SEE_INVISIBILITY,
+                    BuffType = SpellNames.SEE_INVISIBLE,
                     DurationType = DurationType.Minutes,
                     DurationValue = 10,
                     DurationScalesWithLevel = true,
                     IsDismissible = true,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
                 });
 
         Register(new SpellData
@@ -431,7 +433,9 @@ public static partial class SpellDatabase
                 });
 
         // Aliases
-        RegisterClassSpellAlias("see_invisibility_brd", SpellNames.SEE_INVISIBILITY, "Bard", 3);
+        RegisterAlias(SpellNames.SEE_INVISIBILITY_LEGACY, SpellNames.SEE_INVISIBLE);
+        RegisterClassSpellAlias("see_invisible_brd", SpellNames.SEE_INVISIBLE, "Bard", 3);
+        RegisterClassSpellAlias("see_invisibility_brd", SpellNames.SEE_INVISIBLE, "Bard", 3);
         RegisterClassSpellAlias("summon_monster_1_clr", SpellNames.SUMMON_MONSTER_1, "Cleric", 1);
         RegisterClassSpellAlias("summon_monster_2_clr", SpellNames.SUMMON_MONSTER_2, "Cleric", 2);
 

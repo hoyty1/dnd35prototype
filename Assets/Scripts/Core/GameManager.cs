@@ -9960,7 +9960,7 @@ public partial class GameManager : MonoBehaviour
             return false;
 
         StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
-        return statusMgr != null && statusMgr.HasEffect(SpellNames.SEE_INVISIBILITY);
+        return statusMgr != null && statusMgr.HasEffect(SpellNames.SEE_INVISIBLE);
     }
 
     public void OnDismissExpeditiousRetreatButtonPressed()
@@ -10034,16 +10034,16 @@ public partial class GameManager : MonoBehaviour
             return;
 
         StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
-        if (statusMgr == null || !statusMgr.HasEffect(SpellNames.SEE_INVISIBILITY))
+        if (statusMgr == null || !statusMgr.HasEffect(SpellNames.SEE_INVISIBLE))
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active See Invisibility spell to dismiss.");
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active See Invisible spell to dismiss.");
             return;
         }
 
-        statusMgr.RemoveEffectsBySpellId(SpellNames.SEE_INVISIBILITY);
+        statusMgr.RemoveEffectsBySpellId(SpellNames.SEE_INVISIBLE);
         pc.ClearSeeInvisibilityEffect();
 
-        CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {pc.Stats.CharacterName} dismisses See Invisibility.</color>");
+        CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {pc.Stats.CharacterName} dismisses See Invisible.</color>");
         UpdateAllStatsUI();
         ShowActionChoices();
     }
@@ -12292,7 +12292,7 @@ public partial class GameManager : MonoBehaviour
         }
 
         // Direct enemy targeting requires line of sight.
-        // See Invisibility allows direct targeting of invisible enemies, but does not bypass
+        // See Invisible allows direct targeting of invisible enemies, but does not bypass
         // other concealment blockers (fog, darkness, etc.).
         if (spell.TargetType == SpellTargetType.SingleEnemy && IsEnemyTeam(caster, target))
         {
@@ -15108,7 +15108,7 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
-        if (spell != null && spell.SpellId == SpellNames.SEE_INVISIBILITY)
+        if (spell != null && spell.SpellId == SpellNames.SEE_INVISIBLE)
         {
             CharacterController recipient = caster ?? target;
             if (recipient == null || recipient.Stats == null)
@@ -15437,10 +15437,10 @@ public partial class GameManager : MonoBehaviour
                     character.ClearInvisibilityEffect();
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Invisibility expires on {character.Stats.CharacterName}.</color>");
                 }
-                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SEE_INVISIBILITY, StringComparison.Ordinal))
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SEE_INVISIBLE, StringComparison.Ordinal))
                 {
                     character.ClearSeeInvisibilityEffect();
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {character.Stats.CharacterName}'s See Invisibility expires.</color>");
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {character.Stats.CharacterName}'s See Invisible expires.</color>");
                 }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.GLITTERDUST, StringComparison.Ordinal))
                 {
@@ -15464,7 +15464,7 @@ public partial class GameManager : MonoBehaviour
                         character.UpdateExpeditiousRetreatDuration(effect.RemainingRounds);
                     else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.INVISIBILITY, StringComparison.Ordinal))
                         character.UpdateInvisibilityDuration(effect.RemainingRounds);
-                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SEE_INVISIBILITY, StringComparison.Ordinal))
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SEE_INVISIBLE, StringComparison.Ordinal))
                         character.UpdateSeeInvisibilityDuration(effect.RemainingRounds);
                     else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.GLITTERDUST, StringComparison.Ordinal))
                     {

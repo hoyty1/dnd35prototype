@@ -1454,7 +1454,7 @@ public class CharacterController : MonoBehaviour
         if (!HasActiveSeeInvisibilityEffect)
             return false;
 
-        // See Invisibility only reveals invisible creatures/objects and does not pierce walls.
+        // See Invisible only reveals invisible creatures/objects and does not pierce walls.
         // LOS/cover constraints are handled by existing targeting and concealment systems.
         return true;
     }
@@ -1492,6 +1492,17 @@ public class CharacterController : MonoBehaviour
             return 0;
 
         return GetInvisibilityHideBonus();
+    }
+
+    public int GetInvisibilityArmorClassBonusAgainst(CharacterController attacker)
+    {
+        if (!HasActiveInvisibilityEffect || IsOutlinedByGlitterdust)
+            return 0;
+
+        if (attacker != null && attacker.CanSeeInvisible(this))
+            return 0;
+
+        return 2;
     }
 
     public int GetGlitterdustHidePenalty()
@@ -4245,6 +4256,10 @@ public class CharacterController : MonoBehaviour
             return 10;
 
         int targetAC = target.Stats.ArmorClass;
+
+        // D&D 3.5e: invisible defenders gain +2 AC only against attackers who cannot see them.
+        targetAC += target.GetInvisibilityArmorClassBonusAgainst(attacker);
+
         if (target.HasCondition(CombatConditionType.Prone))
             targetAC += isRangedAttack ? 4 : -4;
 
@@ -4696,6 +4711,26 @@ public class CharacterController : MonoBehaviour
             return emptySquareMiss;
 
         int targetAC = GetSituationalTargetArmorClass(target, this, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
+
+        bool targetIsInvisibleToRules = target != null && target.HasActiveInvisibilityEffect && !target.IsOutlinedByGlitterdust;
+        int invisibilityAcBonus = targetIsInvisibleToRules ? target.GetInvisibilityArmorClassBonusAgainst(this) : 0;
+        if (targetIsInvisibleToRules)
+        {
+            if (invisibilityAcBonus > 0)
+            {
+                string note = "Invisible target: +2 AC applied (attacker cannot see invisible).";
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                    ? note
+                    : $"{result.SpecialAttackNote} {note}";
+            }
+            else if (CanSeeInvisible(target))
+            {
+                string note = "No invisibility penalties: attacker can see invisible target.";
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                    ? note
+                    : $"{result.SpecialAttackNote} {note}";
+            }
+        }
 
         AlignmentProtectionBenefits protection = AlignmentProtectionRules.GetBenefitsAgainst(
             target,
@@ -6395,7 +6430,7 @@ public class CharacterController : MonoBehaviour
             if (IsInvisibilityConcealmentEffect(effect)
                 && ((attacker != null && attacker.CanSeeInvisible(this)) || IsOutlinedByGlitterdust))
             {
-                // See Invisibility and Glitterdust both ignore concealment granted by Invisibility only.
+                // See Invisible and Glitterdust both ignore concealment granted by Invisibility only.
                 // Other concealment sources (fog, darkness, blur, etc.) still apply normally.
                 continue;
             }

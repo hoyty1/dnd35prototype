@@ -733,8 +733,8 @@ public class ActionButtonPanel : MonoBehaviour
         bool hasActiveSeeInvisibility = context.Gm != null && context.Gm.HasActiveSeeInvisibility(pc);
         bool canDismissSeeInvisibility = hasActiveSeeInvisibility && !context.IsTurned;
         string dismissSeeInvisibilityLabel = hasActiveSeeInvisibility
-            ? "Dismiss See Invisibility (Free)"
-            : "Dismiss See Invisibility";
+            ? "Dismiss See Invisible (Free)"
+            : "Dismiss See Invisible";
         states.Set(DismissSeeInvisibilityButton, new ActionButtonState(hasActiveSeeInvisibility, canDismissSeeInvisibility, dismissSeeInvisibilityLabel));
     }
 

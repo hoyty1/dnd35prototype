@@ -3875,7 +3875,7 @@ public class CharacterStats
 
     /// <summary>
     /// Hide bonus resolver used for observer-specific perception checks.
-    /// See Invisibility removes only invisibility-derived Hide bonuses,
+    /// See Invisible removes only invisibility-derived Hide bonuses,
     /// while preserving mundane Hide modifiers (ranks, DEX, size, feats, etc.).
     /// </summary>
     public int GetHideSkillBonusAgainstObserver(CharacterController observer)

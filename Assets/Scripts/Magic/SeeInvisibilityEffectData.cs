@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Runtime metadata for an active See Invisibility effect.
+/// Runtime metadata for an active See Invisible effect.
 /// Tracks duration, active state, and caster attribution (personal spell => self-cast).
 /// </summary>
 [System.Serializable]

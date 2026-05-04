@@ -432,8 +432,14 @@ namespace DND35e.Identifiers
         /// <summary>Scorching Ray (spell id: scorching_ray)</summary>
         public const string SCORCHING_RAY = "scorching_ray";
 
-        /// <summary>See Invisibility (spell id: see_invisibility)</summary>
-        public const string SEE_INVISIBILITY = "see_invisibility";
+        /// <summary>See Invisible (spell id: see_invisible)</summary>
+        public const string SEE_INVISIBLE = "see_invisible";
+
+        /// <summary>Legacy alias id for See Invisible (spell id: see_invisibility)</summary>
+        public const string SEE_INVISIBILITY_LEGACY = "see_invisibility";
+
+        /// <summary>Backward-compatible constant for older code paths (maps to see_invisible).</summary>
+        public const string SEE_INVISIBILITY = SEE_INVISIBLE;
 
         /// <summary>Shatter (spell id: shatter)</summary>
         public const string SHATTER = "shatter";

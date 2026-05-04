@@ -101,7 +101,7 @@ public enum BonusType
     /// <summary>Levitate effect.</summary>
     Levitate,
 
-    /// <summary>See Invisibility effect.</summary>
+    /// <summary>See Invisible effect.</summary>
     SeeInvisibility,
 
     /// <summary>Spider Climb effect.</summary>
@@ -253,7 +253,7 @@ public static class BonusTypeHelper
             case BonusType.EnergyResistance: return "Energy Resistance";
             case BonusType.TempHP: return "Temp HP";
             case BonusType.SpectralHand: return "Spectral Hand";
-            case BonusType.SeeInvisibility: return "See Invisibility";
+            case BonusType.SeeInvisibility: return "See Invisible";
             case BonusType.SpiderClimb: return "Spider Climb";
             case BonusType.MirrorImage: return "Mirror Image";
             case BonusType.ShieldOther: return "Shield Other";

@@ -816,7 +816,7 @@ public class SceneBootstrap : MonoBehaviour
         combatUI.DismissInvisibilityButton = CreateGridButton(btnGrid.transform, "DismissInvisibilityBtn",
             "Dismiss Invisibility", new Color(0.22f, 0.5f, 0.68f));
         combatUI.DismissSeeInvisibilityButton = CreateGridButton(btnGrid.transform, "DismissSeeInvisibilityBtn",
-            "Dismiss See Invisibility", new Color(0.2f, 0.58f, 0.75f));
+            "Dismiss See Invisible", new Color(0.2f, 0.58f, 0.75f));
         combatUI.ReloadButton = CreateGridButton(btnGrid.transform, "ReloadBtn",
             "Reload", new Color(0.38f, 0.44f, 0.16f));
         combatUI.DropEquippedItemButton = CreateGridButton(btnGrid.transform, "DropEquippedBtn",

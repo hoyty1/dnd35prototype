@@ -138,7 +138,7 @@ public class CombatUI : MonoBehaviour
     public Button DismissExpeditiousRetreatButton; // Dismiss Expeditious Retreat (Free Action)
     public Button DismissJumpButton; // Dismiss Jump (Standard Action)
     public Button DismissInvisibilityButton; // Dismiss Invisibility (Standard Action)
-    public Button DismissSeeInvisibilityButton; // Dismiss See Invisibility (Free Action)
+    public Button DismissSeeInvisibilityButton; // Dismiss See Invisible (Free Action)
     public Text SpellSlotsText;            // Shows remaining spell slots
     [Header("Feat Controls")]
     public GameObject PowerAttackPanel;     // Panel containing Power Attack slider

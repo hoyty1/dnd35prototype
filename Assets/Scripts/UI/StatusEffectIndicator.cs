@@ -133,14 +133,14 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
-        if (statusMgr != null && statusMgr.HasEffect(SpellNames.SEE_INVISIBILITY))
+        if (statusMgr != null && statusMgr.HasEffect(SpellNames.SEE_INVISIBLE))
         {
-            int rounds = statusMgr.GetRemainingRounds(SpellNames.SEE_INVISIBILITY);
+            int rounds = statusMgr.GetRemainingRounds(SpellNames.SEE_INVISIBLE);
             list.Add(new IconData
             {
-                Key = "SeeInvisibility",
-                ShortLabel = "SI",
-                Tooltip = $"See Invisibility\nCan see invisible creatures and objects normally\nNegates invisibility miss chance and invisibility Hide bonus\nDoes not negate mundane hiding\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Key = "SeeInvisible",
+                ShortLabel = "EYE",
+                Tooltip = $"See Invisible\nYou can now see invisible creatures!\nNegates invisibility miss chance and invisibility Hide/AC bonuses\nDoes not negate mundane hiding or reveal illusions\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
                 Color = new Color(0.22f, 0.88f, 0.96f, 0.92f),
                 Duration = rounds
             });
