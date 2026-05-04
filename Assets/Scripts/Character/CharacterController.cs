@@ -330,7 +330,9 @@ public class CharacterController : MonoBehaviour
     public GlitterdustEffectData ActiveGlitterdustEffect { get; private set; }
     public MelfsAcidArrowEffectData ActiveMelfsAcidArrowEffect { get; private set; }
     private EnfeebledConditionData _activeEnfeeblementEffect;
+    private TouchOfIdiocyConditionData _activeTouchOfIdiocyEffect;
     public EnfeebledConditionData ActiveEnfeeblementEffect => _activeEnfeeblementEffect;
+    public TouchOfIdiocyConditionData ActiveTouchOfIdiocyEffect => _activeTouchOfIdiocyEffect;
     public int TotalEnfeeblementStrengthPenalty => Stats != null ? Stats.EnfeeblementStrengthPenalty : 0;
     public string ActualRace => Stats != null && !string.IsNullOrWhiteSpace(Stats.RaceName) ? Stats.RaceName : "Unknown";
     public string DisplayedRace => !string.IsNullOrWhiteSpace(_displayedRace) ? _displayedRace : ActualRace;
@@ -1651,6 +1653,91 @@ public class CharacterController : MonoBehaviour
         RefreshEnfeeblementDerivedState();
     }
 
+    public TouchOfIdiocyConditionData ApplyTouchOfIdiocyEffect(
+        int intelligenceDamage,
+        int wisdomDamage,
+        int charismaDamage,
+        int durationRemainingRounds,
+        CharacterController caster)
+    {
+        if (Stats == null)
+            return null;
+
+        int rounds = Mathf.Max(0, durationRemainingRounds);
+        if (rounds <= 0)
+            return null;
+
+        int intDamage = Mathf.Max(0, intelligenceDamage);
+        int wisDamage = Mathf.Max(0, wisdomDamage);
+        int chaDamage = Mathf.Max(0, charismaDamage);
+        if (intDamage <= 0 && wisDamage <= 0 && chaDamage <= 0)
+            return null;
+
+        // Per D&D 3.5e this spell doesn't stack with itself; refresh by replacing.
+        RemoveTouchOfIdiocyEffect();
+
+        _activeTouchOfIdiocyEffect = new TouchOfIdiocyConditionData
+        {
+            Caster = caster,
+            CasterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : string.Empty,
+            RemainingRounds = rounds,
+            IntelligenceDamage = intDamage,
+            WisdomDamage = wisDamage,
+            CharismaDamage = chaDamage,
+            SourceSpellId = SpellNames.TOUCH_OF_IDIOCY,
+            SourceEffectName = "Touch of Idiocy"
+        };
+
+        if (intDamage > 0)
+            ApplyAbilityDamage(AbilityType.INT, intDamage, "Touch of Idiocy");
+        if (wisDamage > 0)
+            ApplyAbilityDamage(AbilityType.WIS, wisDamage, "Touch of Idiocy");
+        if (chaDamage > 0)
+            ApplyAbilityDamage(AbilityType.CHA, chaDamage, "Touch of Idiocy");
+
+        return _activeTouchOfIdiocyEffect;
+    }
+
+    public TouchOfIdiocyConditionData TickTouchOfIdiocyEffect()
+    {
+        if (_activeTouchOfIdiocyEffect == null)
+            return null;
+
+        _activeTouchOfIdiocyEffect.RemainingRounds = Mathf.Max(0, _activeTouchOfIdiocyEffect.RemainingRounds - 1);
+        if (_activeTouchOfIdiocyEffect.RemainingRounds > 0)
+            return null;
+
+        return RemoveTouchOfIdiocyEffect();
+    }
+
+    public TouchOfIdiocyConditionData RemoveTouchOfIdiocyEffect()
+    {
+        if (_activeTouchOfIdiocyEffect == null)
+            return null;
+
+        TouchOfIdiocyConditionData removed = _activeTouchOfIdiocyEffect;
+        _activeTouchOfIdiocyEffect = null;
+
+        if (removed.IntelligenceDamage > 0)
+            HealAbilityDamage(AbilityType.INT, removed.IntelligenceDamage, "Touch of Idiocy expiration");
+        if (removed.WisdomDamage > 0)
+            HealAbilityDamage(AbilityType.WIS, removed.WisdomDamage, "Touch of Idiocy expiration");
+        if (removed.CharismaDamage > 0)
+            HealAbilityDamage(AbilityType.CHA, removed.CharismaDamage, "Touch of Idiocy expiration");
+
+        return removed;
+    }
+
+    public void ClearTouchOfIdiocyEffect()
+    {
+        RemoveTouchOfIdiocyEffect();
+    }
+
+    public bool IsComatoseOnlyFromTouchOfIdiocyEffect()
+    {
+        return IsComatoseOnlyFromTouchOfIdiocy();
+    }
+
     private void RefreshEnfeeblementDerivedState()
     {
         int totalPenalty = _activeEnfeeblementEffect != null
@@ -1754,6 +1841,7 @@ public class CharacterController : MonoBehaviour
         ActiveGlitterdustEffect = null;
         ActiveMelfsAcidArrowEffect = null;
         _activeEnfeeblementEffect = null;
+        _activeTouchOfIdiocyEffect = null;
         UpdateGlitterdustVisual(forceDisable: true);
         if (Stats != null)
         {
@@ -2650,6 +2738,13 @@ public class CharacterController : MonoBehaviour
         bool shouldBeHelpless = Stats.IsHelplessFromAbilityScore();
         bool shouldBeUnconscious = Stats.IsComatoseFromAbilityScore();
 
+        // Touch of Idiocy special-case: mental scores reduced to 0 by this spell do NOT cause helplessness/unconsciousness.
+        if (shouldBeHelpless && IsHelplessOnlyFromTouchOfIdiocyMentalZero())
+            shouldBeHelpless = false;
+
+        if (shouldBeUnconscious && IsComatoseOnlyFromTouchOfIdiocy())
+            shouldBeUnconscious = false;
+
         if (shouldBeHelpless && !_abilityZeroAppliedHelpless)
         {
             _abilityZeroAppliedHelpless = true;
@@ -2682,6 +2777,74 @@ public class CharacterController : MonoBehaviour
             LogAbilityScoreMessage($"☠ {Stats.CharacterName} dies (Constitution reduced to 0).");
             Stats.CurrentHP = Mathf.Min(Stats.CurrentHP, -10);
             SyncHPStateFromCurrentHP(emitLog: true);
+        }
+    }
+
+    private bool IsHelplessOnlyFromTouchOfIdiocyMentalZero()
+    {
+        if (Stats == null || _activeTouchOfIdiocyEffect == null)
+            return false;
+
+        // STR/DEX at 0 still causes helplessness normally.
+        if (Stats.IsAbilityReducedToZero(AbilityType.STR) || Stats.IsAbilityReducedToZero(AbilityType.DEX))
+            return false;
+
+        bool mentalZero = Stats.IsAbilityReducedToZero(AbilityType.INT)
+            || Stats.IsAbilityReducedToZero(AbilityType.WIS)
+            || Stats.IsAbilityReducedToZero(AbilityType.CHA);
+        if (!mentalZero)
+            return false;
+
+        return IsComatoseOnlyFromTouchOfIdiocy();
+    }
+
+    private bool IsComatoseOnlyFromTouchOfIdiocy()
+    {
+        if (Stats == null || _activeTouchOfIdiocyEffect == null)
+            return false;
+
+        return !WouldStillBeComatoseWithoutTouchOfIdiocyDamage(AbilityType.INT)
+            && !WouldStillBeComatoseWithoutTouchOfIdiocyDamage(AbilityType.WIS)
+            && !WouldStillBeComatoseWithoutTouchOfIdiocyDamage(AbilityType.CHA);
+    }
+
+    private bool WouldStillBeComatoseWithoutTouchOfIdiocyDamage(AbilityType ability)
+    {
+        if (Stats == null || !Stats.HasAbilityScore(ability))
+            return false;
+
+        if (!Stats.IsAbilityReducedToZero(ability))
+            return false;
+
+        int touchDamage = GetTouchOfIdiocyDamageForAbility(ability);
+        if (touchDamage <= 0)
+            return true;
+
+        int baseScore = Stats.GetBaseAbilityScore(ability);
+        if (baseScore == CharacterStats.NO_SCORE)
+            return false;
+
+        int totalPenalty = Stats.AbilityScoreDamage.GetTotalPenalty(ability);
+        int nonIdiocyPenalty = Mathf.Max(0, totalPenalty - touchDamage);
+        int scoreWithoutTouchOfIdiocy = Mathf.Max(0, baseScore - nonIdiocyPenalty);
+        return scoreWithoutTouchOfIdiocy <= 0;
+    }
+
+    private int GetTouchOfIdiocyDamageForAbility(AbilityType ability)
+    {
+        if (_activeTouchOfIdiocyEffect == null)
+            return 0;
+
+        switch (ability)
+        {
+            case AbilityType.INT:
+                return Mathf.Max(0, _activeTouchOfIdiocyEffect.IntelligenceDamage);
+            case AbilityType.WIS:
+                return Mathf.Max(0, _activeTouchOfIdiocyEffect.WisdomDamage);
+            case AbilityType.CHA:
+                return Mathf.Max(0, _activeTouchOfIdiocyEffect.CharismaDamage);
+            default:
+                return 0;
         }
     }
 

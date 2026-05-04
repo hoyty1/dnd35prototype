@@ -811,12 +811,12 @@ public class CharacterSheetUI : MonoBehaviour
 
         // === Ability Scores ===
         AddLine(content, "ABILITY SCORES", 12, GoldText, FontStyle.Bold, 16);
-        AddAbilityLine(content, "STR", stats.GetAbilityScoreDisplay(AbilityType.STR), stats.GetAbilityModifierDisplay(AbilityType.STR));
-        AddAbilityLine(content, "DEX", stats.GetAbilityScoreDisplay(AbilityType.DEX), stats.GetAbilityModifierDisplay(AbilityType.DEX));
-        AddAbilityLine(content, "CON", stats.GetAbilityScoreDisplay(AbilityType.CON), stats.GetAbilityModifierDisplay(AbilityType.CON));
-        AddAbilityLine(content, "INT", stats.GetAbilityScoreDisplay(AbilityType.INT), stats.GetAbilityModifierDisplay(AbilityType.INT));
-        AddAbilityLine(content, "WIS", stats.GetAbilityScoreDisplay(AbilityType.WIS), stats.GetAbilityModifierDisplay(AbilityType.WIS));
-        AddAbilityLine(content, "CHA", stats.GetAbilityScoreDisplay(AbilityType.CHA), stats.GetAbilityModifierDisplay(AbilityType.CHA));
+        AddAbilityLine(content, "STR", stats.GetAbilityScoreCurrentOverBaseDisplay(AbilityType.STR), stats.GetAbilityModifierDisplay(AbilityType.STR));
+        AddAbilityLine(content, "DEX", stats.GetAbilityScoreCurrentOverBaseDisplay(AbilityType.DEX), stats.GetAbilityModifierDisplay(AbilityType.DEX));
+        AddAbilityLine(content, "CON", stats.GetAbilityScoreCurrentOverBaseDisplay(AbilityType.CON), stats.GetAbilityModifierDisplay(AbilityType.CON));
+        AddAbilityLine(content, "INT", stats.GetAbilityScoreCurrentOverBaseDisplay(AbilityType.INT), stats.GetAbilityModifierDisplay(AbilityType.INT));
+        AddAbilityLine(content, "WIS", stats.GetAbilityScoreCurrentOverBaseDisplay(AbilityType.WIS), stats.GetAbilityModifierDisplay(AbilityType.WIS));
+        AddAbilityLine(content, "CHA", stats.GetAbilityScoreCurrentOverBaseDisplay(AbilityType.CHA), stats.GetAbilityModifierDisplay(AbilityType.CHA));
 
         bool hasNoScoreAbility = !stats.HasStrength() || !stats.HasDexterity() || !stats.HasConstitution() || !stats.HasIntelligence() || !stats.HasWisdom() || !stats.HasCharisma();
         bool hasReducedToZeroAbility = stats.IsAbilityReducedToZero(AbilityType.STR)
@@ -832,11 +832,29 @@ public class CharacterSheetUI : MonoBehaviour
         if (hasReducedToZeroAbility)
             AddLine(content, "  * = reduced to 0 by damage/drain", 9, new Color(1f, 0.72f, 0.55f), FontStyle.Italic, 12);
 
-        if (stats.IsHelplessFromAbilityScore())
+        if (selectedPC != null && selectedPC.ActiveTouchOfIdiocyEffect != null)
+        {
+            TouchOfIdiocyConditionData idiocy = selectedPC.ActiveTouchOfIdiocyEffect;
+            int roundsLeft = idiocy != null ? Mathf.Max(0, idiocy.RemainingRounds) : 0;
+            AddLine(content,
+                $"  🧠 Touch of Idiocy: INT -{Mathf.Max(0, idiocy.IntelligenceDamage)}, WIS -{Mathf.Max(0, idiocy.WisdomDamage)}, CHA -{Mathf.Max(0, idiocy.CharismaDamage)} ({roundsLeft} rounds left)",
+                9,
+                new Color(0.92f, 0.72f, 1f),
+                FontStyle.Normal,
+                12);
+        }
+
+        bool helplessFromAbility = selectedPC != null
+            ? selectedPC.HasCondition(CombatConditionType.Helpless)
+            : stats.IsHelplessFromAbilityScore();
+        if (helplessFromAbility)
             AddLine(content, "  ⚠ Helpless from ability score loss", 10, new Color(1f, 0.62f, 0.4f), FontStyle.Bold, 13);
 
-        if (stats.IsComatoseFromAbilityScore())
+        bool comatoseOnlyFromTouchOfIdiocy = selectedPC != null && selectedPC.IsComatoseOnlyFromTouchOfIdiocyEffect();
+        if (stats.IsComatoseFromAbilityScore() && !comatoseOnlyFromTouchOfIdiocy)
             AddLine(content, "  💤 Comatose from mental ability score loss", 10, new Color(1f, 0.72f, 0.46f), FontStyle.Bold, 13);
+        else if (comatoseOnlyFromTouchOfIdiocy)
+            AddLine(content, "  ✅ Touch of Idiocy special rule: remains conscious at 0 mental score", 10, new Color(0.72f, 0.96f, 0.78f), FontStyle.Bold, 13);
 
         AddSeparator(content);
 
@@ -981,7 +999,7 @@ public class CharacterSheetUI : MonoBehaviour
             ? DimText
             : (parsedMod >= 0 ? new Color(0.5f, 0.9f, 0.5f) : new Color(0.9f, 0.4f, 0.4f));
 
-        Color scoreColor = scoreDisplay == "0*"
+        Color scoreColor = scoreDisplay.StartsWith("0*", System.StringComparison.Ordinal)
             ? new Color(1f, 0.66f, 0.45f)
             : LightText;
 

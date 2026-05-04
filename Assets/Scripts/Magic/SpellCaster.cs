@@ -271,6 +271,18 @@ public static class SpellCaster
             }
         }
 
+        if (result.AttackHit && string.Equals(spell.SpellId, SpellNames.TOUCH_OF_IDIOCY, System.StringComparison.Ordinal))
+        {
+            if (!IsLivingCreature(targetStats))
+            {
+                result.Success = false;
+                result.NoEffectReason = "Immune (not a living creature).";
+                result.TargetHPBefore = targetStats.CurrentHP;
+                result.TargetHPAfter = targetStats.CurrentHP;
+                return result;
+            }
+        }
+
         if (result.AttackHit && string.Equals(spell.SpellId, SpellNames.HIDEOUS_LAUGHTER, System.StringComparison.Ordinal))
         {
             int effectiveInt = targetStats.EffectiveINTScore;

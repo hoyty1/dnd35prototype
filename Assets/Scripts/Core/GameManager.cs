@@ -816,6 +816,7 @@ public partial class GameManager : MonoBehaviour
             pc.ClearGlitterdustEffect();
             pc.ClearMelfsAcidArrowEffect();
             pc.ClearEnfeeblementEffects();
+            pc.ClearTouchOfIdiocyEffect();
             stats.ResetCurrentSizeToBase();
             pc.UpdateVisualSize(false);
 
@@ -12298,6 +12299,13 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
+        if (spell.SpellId == SpellNames.TOUCH_OF_IDIOCY)
+        {
+            if (!IsEnemyTeam(caster, target)) return false;
+            if (!IsLivingCreatureForFearSpell(target)) return false;
+            return true;
+        }
+
         // Direct enemy targeting requires line of sight.
         // See Invisible allows direct targeting of invisible enemies, but does not bypass
         // other concealment blockers (fog, darkness, etc.).
@@ -12851,15 +12859,19 @@ public partial class GameManager : MonoBehaviour
             if (!handledCauseFear && result.Success && !effectNegatedBySave)
                 handledRayOfEnfeeblement = TryResolveRayOfEnfeeblementSpellEffect(caster, target, _pendingSpell, result);
 
-            bool handledMelfsAcidArrow = false;
+            bool handledTouchOfIdiocy = false;
             if (!handledCauseFear && !handledRayOfEnfeeblement && result.Success && !effectNegatedBySave)
+                handledTouchOfIdiocy = TryResolveTouchOfIdiocySpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledMelfsAcidArrow = false;
+            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && result.Success && !effectNegatedBySave)
                 handledMelfsAcidArrow = TryResolveMelfsAcidArrowSpellEffect(caster, target, _pendingSpell, result);
 
             bool handledAnimateRope = false;
-            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledMelfsAcidArrow)
+            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow)
                 handledAnimateRope = TryResolveAnimateRopeSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -14668,6 +14680,58 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    private static bool IsTouchOfIdiocySpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.TOUCH_OF_IDIOCY, StringComparison.Ordinal);
+    }
+
+    private bool TryResolveTouchOfIdiocySpellEffect(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
+    {
+        if (!IsTouchOfIdiocySpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        if (result == null || !result.Success || (result.RequiredAttackRoll && !result.AttackHit))
+            return false;
+
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+
+        int intDamage = Random.Range(1, 7);
+        int wisDamage = Random.Range(1, 7);
+        int chaDamage = Random.Range(1, 7);
+
+        TouchOfIdiocyConditionData previous = target.ActiveTouchOfIdiocyEffect;
+        if (previous != null)
+            target.RemoveTouchOfIdiocyEffect();
+
+        int intBefore = target.Stats.GetEffectiveAbilityScore(AbilityType.INT);
+        int wisBefore = target.Stats.GetEffectiveAbilityScore(AbilityType.WIS);
+        int chaBefore = target.Stats.GetEffectiveAbilityScore(AbilityType.CHA);
+
+        TouchOfIdiocyConditionData effect = target.ApplyTouchOfIdiocyEffect(
+            intDamage,
+            wisDamage,
+            chaDamage,
+            durationRounds,
+            caster);
+
+        if (effect == null)
+            return true;
+
+        int intAfter = target.Stats.GetEffectiveAbilityScore(AbilityType.INT);
+        int wisAfter = target.Stats.GetEffectiveAbilityScore(AbilityType.WIS);
+        int chaAfter = target.Stats.GetEffectiveAbilityScore(AbilityType.CHA);
+
+        result.BuffApplied = true;
+        result.BuffDescription = $"Debuff: Int -{intDamage}, Wis -{wisDamage}, Cha -{chaDamage} for {durationRounds} rounds.";
+
+        CombatUI?.ShowCombatLog($"🧠 {target.Stats.CharacterName} is touched by idiocy for {durationRounds} rounds.");
+        CombatUI?.ShowCombatLog($"   Ability damage: INT 1d6={intDamage}, WIS 1d6={wisDamage}, CHA 1d6={chaDamage}");
+        CombatUI?.ShowCombatLog($"   INT {intBefore}→{intAfter}, WIS {wisBefore}→{wisAfter}, CHA {chaBefore}→{chaAfter}");
+
+        return true;
+    }
+
     private static bool IsMelfsAcidArrowSpell(SpellData spell)
     {
         return spell != null && string.Equals(spell.SpellId, SpellNames.MELFS_ACID_ARROW, StringComparison.Ordinal);
@@ -15575,6 +15639,16 @@ public partial class GameManager : MonoBehaviour
                 ? expiredEnfeeblement.CasterName
                 : "an unknown caster";
             CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Ray of Enfeeblement expires on {character.Stats.CharacterName}: STR +{amount} restored (source: {sourceName}).</color>");
+        }
+
+        TouchOfIdiocyConditionData expiredIdiocy = character.TickTouchOfIdiocyEffect();
+        if (expiredIdiocy != null)
+        {
+            CombatUI?.ShowCombatLog(
+                $"<color=#FFAA44>⏱ Touch of Idiocy expires on {character.Stats.CharacterName}: " +
+                $"INT +{Mathf.Max(0, expiredIdiocy.IntelligenceDamage)}, " +
+                $"WIS +{Mathf.Max(0, expiredIdiocy.WisdomDamage)}, " +
+                $"CHA +{Mathf.Max(0, expiredIdiocy.CharismaDamage)} restored.</color>");
         }
 
         TickCharacterItemSpellDurations(character);
@@ -20034,15 +20108,19 @@ public partial class GameManager : MonoBehaviour
         if (!handledCauseFear && result.Success && !effectNegatedBySave)
             handledRayOfEnfeeblement = TryResolveRayOfEnfeeblementSpellEffect(npc, target, spell, result);
 
-        bool handledMelfsAcidArrow = false;
+        bool handledTouchOfIdiocy = false;
         if (!handledCauseFear && !handledRayOfEnfeeblement && result.Success && !effectNegatedBySave)
+            handledTouchOfIdiocy = TryResolveTouchOfIdiocySpellEffect(npc, target, spell, result);
+
+        bool handledMelfsAcidArrow = false;
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && result.Success && !effectNegatedBySave)
             handledMelfsAcidArrow = TryResolveMelfsAcidArrowSpellEffect(npc, target, spell, result);
 
         bool handledAnimateRope = false;
-        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledMelfsAcidArrow)
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow)
             handledAnimateRope = TryResolveAnimateRopeSpellEffect(npc, target, spell, result);
 
-        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             ApplySpellBuff(npc, target, spell, spellComp);
 
         if (result.DamageDealt > 0)

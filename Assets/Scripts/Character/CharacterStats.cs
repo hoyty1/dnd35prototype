@@ -1510,6 +1510,27 @@ public class CharacterStats
         return FormatMod(GetAbilityModifier(GetEffectiveAbilityScore(ability)));
     }
 
+    public int GetAbilityDamage(AbilityType ability)
+    {
+        return AbilityScoreDamage.GetDamage(ability);
+    }
+
+    public int GetAbilityDrain(AbilityType ability)
+    {
+        return AbilityScoreDamage.GetDrain(ability);
+    }
+
+    public string GetAbilityScoreCurrentOverBaseDisplay(AbilityType ability)
+    {
+        if (!HasAbilityScore(ability))
+            return "—";
+
+        int baseScore = GetBaseAbilityScore(ability);
+        int currentScore = GetEffectiveAbilityScore(ability);
+        string currentDisplay = currentScore == 0 ? "0*" : currentScore.ToString();
+        return $"{currentDisplay}/{baseScore}";
+    }
+
     public int EffectiveSTRScore => GetEffectiveAbilityScore(AbilityType.STR);
     public int EffectiveDEXScore => GetEffectiveAbilityScore(AbilityType.DEX);
     public int EffectiveCONScore => GetEffectiveAbilityScore(AbilityType.CON);

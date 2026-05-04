@@ -27,6 +27,8 @@ public static class DazeMonsterAndHideousLaughterRulesTests
         SpellDatabase.Init();
 
         TestDazeMonsterDefinition();
+        TestDazeAndDazeMonsterShareDazedEffectDefinition();
+        TestDazedConditionDefinition();
         TestDazeMonsterHighHdImmunity();
         TestDazeMonsterNonLivingImmunity();
 
@@ -126,6 +128,39 @@ public static class DazeMonsterAndHideousLaughterRulesTests
         Assert(spell.IsMindAffecting, "Daze Monster is mind-affecting");
         Assert(spell.DurationType == DurationType.Rounds && spell.DurationValue == 1 && !spell.DurationScalesWithLevel,
             "Daze Monster duration is fixed at 1 round");
+    }
+
+    private static void TestDazeAndDazeMonsterShareDazedEffectDefinition()
+    {
+        SpellData daze = SpellDatabase.GetSpell(SpellNames.DAZE);
+        SpellData dazeMonster = SpellDatabase.GetSpell(SpellNames.DAZE_MONSTER);
+
+        Assert(daze != null && dazeMonster != null, "Daze and Daze Monster definitions exist");
+        if (daze == null || dazeMonster == null)
+            return;
+
+        Assert(daze.DurationType == dazeMonster.DurationType
+               && daze.DurationValue == dazeMonster.DurationValue
+               && daze.DurationScalesWithLevel == dazeMonster.DurationScalesWithLevel,
+            "Daze and Daze Monster share the same duration model");
+        Assert(daze.AllowsSavingThrow == dazeMonster.AllowsSavingThrow
+               && daze.SavingThrowType == dazeMonster.SavingThrowType,
+            "Daze and Daze Monster share same save model (Will negates)");
+        Assert(daze.SpellResistanceApplies == dazeMonster.SpellResistanceApplies,
+            "Daze and Daze Monster both apply spell resistance");
+    }
+
+    private static void TestDazedConditionDefinition()
+    {
+        ConditionDefinition dazed = ConditionRules.GetDefinition(CombatConditionType.Dazed);
+        Assert(dazed != null, "Dazed condition definition exists");
+        if (dazed == null)
+            return;
+
+        Assert(dazed.PreventsMovement && dazed.PreventsStandardActions && dazed.PreventsFullRoundActions,
+            "Dazed prevents movement and all actions");
+        Assert(!dazed.DeniesDexToAc && !dazed.CoupDeGraceVulnerable,
+            "Dazed is not helpless and does not deny Dex to AC");
     }
 
     private static void TestDazeMonsterHighHdImmunity()

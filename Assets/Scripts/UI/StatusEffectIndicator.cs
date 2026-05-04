@@ -175,6 +175,23 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (_character.ActiveTouchOfIdiocyEffect != null && _character.Stats != null)
+        {
+            TouchOfIdiocyConditionData idiocy = _character.ActiveTouchOfIdiocyEffect;
+            int rounds = idiocy != null ? Mathf.Max(0, idiocy.RemainingRounds) : 0;
+            int intDamage = _character.Stats.GetAbilityDamage(AbilityType.INT);
+            int wisDamage = _character.Stats.GetAbilityDamage(AbilityType.WIS);
+            int chaDamage = _character.Stats.GetAbilityDamage(AbilityType.CHA);
+            list.Add(new IconData
+            {
+                Key = "TouchOfIdiocy",
+                ShortLabel = "IDI",
+                Tooltip = $"Touch of Idiocy\nIntelligence damage: {intDamage}\nWisdom damage: {wisDamage}\nCharisma damage: {chaDamage}\nSpecial: does not cause unconsciousness at 0 mental scores\nDuration: {rounds} rounds",
+                Color = new Color(0.74f, 0.45f, 1f, 0.95f),
+                Duration = rounds
+            });
+        }
+
         if (statusMgr != null && statusMgr.HasEffect(SpellNames.JUMP))
         {
             int rounds = statusMgr.GetRemainingRounds(SpellNames.JUMP);

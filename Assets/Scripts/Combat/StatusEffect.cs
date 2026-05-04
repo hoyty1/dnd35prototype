@@ -192,14 +192,15 @@ public static class ConditionRules
             Type = CombatConditionType.Dazed,
             DisplayName = "Dazed",
             ShortLabel = "DA",
-            Description = "Can take no actions.",
+            Description = "Can take no actions, including movement.",
             StackingRule = ConditionStackingRule.Refresh,
+            PreventsMovement = true,
             PreventsStandardActions = true,
             PreventsFullRoundActions = true,
             PreventsSpellcasting = true,
             PreventsAoO = true,
             PreventsThreatening = true,
-            MovementMultiplier = 1f
+            MovementMultiplier = 0f
         });
 
         Add(new ConditionDefinition

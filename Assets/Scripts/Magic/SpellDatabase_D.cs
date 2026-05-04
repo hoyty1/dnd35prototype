@@ -60,6 +60,9 @@ public static partial class SpellDatabase
                     SpellResistanceApplies = true,
                     IsMindAffecting = true,
                     BlockedByProtectionFromAlignment = false,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false,
                     BuffDurationRounds = 1,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
