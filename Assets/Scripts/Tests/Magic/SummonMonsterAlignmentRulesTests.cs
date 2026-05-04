@@ -27,6 +27,8 @@ namespace Tests.Magic
             TestCeWizardCanSummonCelestials();
             TestLgClericCannotSummonDevils();
             TestCeClericCannotSummonCelestials();
+            TestSummonMonsterListLevelOptions();
+            TestSummonCreatureCountInfoRanges();
 
             Debug.Log($"====== Summon Monster Alignment Results: {_passed} passed, {_failed} failed ======");
         }
@@ -159,6 +161,30 @@ namespace Tests.Magic
 
             AssertTrue(!ContainsOption(options, "Giant Bee"), "CE cleric cannot summon celestial giant bee (LG)");
             AssertTrue(!ContainsOption(options, "Eagle"), "CE cleric cannot summon celestial eagle (CG)");
+        }
+
+        private static void TestSummonMonsterListLevelOptions()
+        {
+            List<int> sm1Levels = SummonMonsterLists.GetAvailableListLevelsForSpell(SpellNames.SUMMON_MONSTER_1);
+            List<int> sm2Levels = SummonMonsterLists.GetAvailableListLevelsForSpell(SpellNames.SUMMON_MONSTER_2);
+            List<int> sm3Levels = SummonMonsterLists.GetAvailableListLevelsForSpell("summon_monster_3");
+            List<int> sm5Levels = SummonMonsterLists.GetAvailableListLevelsForSpell("summon_monster_5");
+
+            AssertEqual(1, sm1Levels.Count, "Summon Monster I offers one list level");
+            AssertEqual(2, sm2Levels.Count, "Summon Monster II offers levels I-II");
+            AssertEqual(3, sm3Levels.Count, "Summon Monster III offers levels I-III");
+            AssertEqual(5, sm5Levels.Count, "Summon Monster V offers levels I-V");
+        }
+
+        private static void TestSummonCreatureCountInfoRanges()
+        {
+            SummonCreatureCountInfo sameLevel = SummonMonsterLists.GetCreatureCountInfo(3, 3);
+            SummonCreatureCountInfo oneLower = SummonMonsterLists.GetCreatureCountInfo(3, 2);
+            SummonCreatureCountInfo twoLower = SummonMonsterLists.GetCreatureCountInfo(3, 1);
+
+            AssertTrue(sameLevel != null && sameLevel.RangeText == "1 creature", "Same-level summon count is fixed at 1 creature");
+            AssertTrue(oneLower != null && oneLower.RangeText == "1d3 creatures (1-3)", "One-level-lower summon count is 1d3");
+            AssertTrue(twoLower != null && twoLower.RangeText == "1d4+1 creatures (2-5)", "Two-or-more-level-lower summon count is 1d4+1");
         }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using DND35.AI.Profiles;
 using UnityEngine;
 using UnityEngine.UI;
@@ -259,6 +260,8 @@ public partial class GameManager : MonoBehaviour
     private ResistEnergyType? _pendingResistEnergyType;
     private string _pendingDisguiseSelfRace;
     private SummonMonsterOption _pendingSummonSelection; // Selected summon option waiting for placement
+    private int _pendingSummonListLevel; // Selected Summon Monster list level (I/II/III...)
+    private SummonCreatureCountInfo _pendingSummonCountInfo; // Count formula/range for selected list level
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
     private string _pendingNaturalAttackLabel; // Display label for selected natural-weapon single attack
 
@@ -953,6 +956,8 @@ public partial class GameManager : MonoBehaviour
         _pendingResistEnergyType = null;
         _pendingDisguiseSelfRace = null;
         _pendingSummonSelection = null;
+        _pendingSummonListLevel = 0;
+        _pendingSummonCountInfo = null;
         _pendingNaturalAttackSequenceIndex = -1;
         _pendingNaturalAttackLabel = null;
         ResetPendingGreaseCastMode();
@@ -10038,6 +10043,8 @@ public partial class GameManager : MonoBehaviour
         _pendingMagicWeaponItem = null;
         _pendingDisguiseSelfRace = null;
         _pendingSummonSelection = null;
+        _pendingSummonListLevel = 0;
+        _pendingSummonCountInfo = null;
 
         // Casting another spell while holding a touch charge ends the held charge.
         var spellComp = pc.GetComponent<SpellcastingComponent>();
@@ -10626,12 +10633,19 @@ public partial class GameManager : MonoBehaviour
         return SummonMonsterLists.GetSummonMonsterSpellLevel(spell.SpellId) > 0;
     }
 
-    private List<SummonMonsterOption> GetSummonOptionsForSpell(SpellData spell, CharacterController caster)
+    private List<SummonMonsterOption> GetSummonOptionsForSpell(SpellData spell, CharacterController caster, int listLevel)
     {
-        if (spell == null || caster == null || caster.Stats == null)
+        if (spell == null || caster == null || caster.Stats == null || listLevel <= 0)
             return new List<SummonMonsterOption>();
 
-        return SummonMonsterLists.GetFilteredOptions(spell.SpellId, caster.Stats);
+        return SummonMonsterLists.GetFilteredOptionsForListLevel(listLevel, caster.Stats);
+    }
+
+    private string BuildSummonCountRangeText(SpellData spell, int selectedListLevel)
+    {
+        int spellLevel = spell != null ? SummonMonsterLists.GetSummonMonsterSpellLevel(spell.SpellId) : 0;
+        SummonCreatureCountInfo info = SummonMonsterLists.GetCreatureCountInfo(spellLevel, selectedListLevel);
+        return info != null ? info.RangeText : "1 creature";
     }
 
     public bool TryGetSummonCommand(CharacterController character, out SummonCommand command)
@@ -10767,31 +10781,79 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        var options = GetSummonOptionsForSpell(spell, caster);
-        if (options == null || options.Count == 0)
+        int spellLevel = SummonMonsterLists.GetSummonMonsterSpellLevel(spell.SpellId);
+        if (spellLevel <= 0)
+        {
+            CombatUI?.ShowCombatLog($"{spell.Name} is not recognized as a Summon Monster spell.");
+            ShowActionChoices();
+            return;
+        }
+
+        List<int> availableListLevels = SummonMonsterLists.GetAvailableListLevelsForSpell(spell.SpellId);
+        if (availableListLevels == null || availableListLevels.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"No summon list levels available for {spell.Name}.");
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            _pendingSummonSelection = null;
+            _pendingSummonListLevel = 0;
+            _pendingSummonCountInfo = null;
+            ShowActionChoices();
+            return;
+        }
+
+        Dictionary<int, List<SummonMonsterOption>> optionsByLevel = new Dictionary<int, List<SummonMonsterOption>>();
+        for (int i = 0; i < availableListLevels.Count; i++)
+        {
+            int listLevel = availableListLevels[i];
+            optionsByLevel[listLevel] = GetSummonOptionsForSpell(spell, caster, listLevel);
+        }
+
+        bool hasAnySummonOption = optionsByLevel.Values.Any(v => v != null && v.Count > 0);
+        if (!hasAnySummonOption)
         {
             CombatUI?.ShowCombatLog($"No valid summon options for {spell.Name} ({caster.Stats.CharacterAlignment}).");
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
             _pendingSummonSelection = null;
+            _pendingSummonListLevel = 0;
+            _pendingSummonCountInfo = null;
             ShowActionChoices();
             return;
         }
 
+        int defaultListLevel = Mathf.Clamp(spellLevel, 1, availableListLevels[availableListLevels.Count - 1]);
+
         CombatUI?.ShowSummonCreatureSelection(
-            spell.Name,
-            options.ConvertAll(o => o.BuildUiLabel()),
-            SummonMonsterLists.GetSummonRestrictionHint(caster.Stats),
-            onSelect: idx =>
+            spellName: spell.Name,
+            spellLevel: spellLevel,
+            availableListLevels: availableListLevels,
+            defaultListLevel: defaultListLevel,
+            getCreatureOptionsForLevel: selectedLevel =>
             {
-                if (idx < 0 || idx >= options.Count)
+                if (!optionsByLevel.TryGetValue(selectedLevel, out List<SummonMonsterOption> levelOptions) || levelOptions == null)
+                    return new List<string>();
+
+                return levelOptions.ConvertAll(o => o.BuildUiLabel());
+            },
+            getCountRangeTextForLevel: selectedLevel => BuildSummonCountRangeText(spell, selectedLevel),
+            restrictionHint: SummonMonsterLists.GetSummonRestrictionHint(caster.Stats),
+            onSelect: (selectedLevel, selectedIndex) =>
+            {
+                if (!optionsByLevel.TryGetValue(selectedLevel, out List<SummonMonsterOption> levelOptions)
+                    || levelOptions == null
+                    || selectedIndex < 0
+                    || selectedIndex >= levelOptions.Count)
                 {
                     ShowActionChoices();
                     return;
                 }
 
-                _pendingSummonSelection = options[idx];
+                _pendingSummonListLevel = selectedLevel;
+                _pendingSummonSelection = levelOptions[selectedIndex];
+                _pendingSummonCountInfo = SummonMonsterLists.GetCreatureCountInfo(spellLevel, selectedLevel);
                 _pendingAttackMode = PendingAttackMode.CastSpell;
                 CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
                 ShowSummonPlacementTargets(caster, spell);
@@ -10802,6 +10864,8 @@ public partial class GameManager : MonoBehaviour
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
                 _pendingSummonSelection = null;
+                _pendingSummonListLevel = 0;
+                _pendingSummonCountInfo = null;
                 ShowActionChoices();
             });
     }
@@ -10838,7 +10902,14 @@ public partial class GameManager : MonoBehaviour
 
         HighlightCharacterFootprint(caster, HighlightType.Selected);
 
-        CombatUI.SetTurnIndicator($"✦ {spell.Name}: Place {_pendingSummonSelection.BuildUiLabel()} | Range: {range * 5} ft | Right-click to cancel");
+        string listLevelLabel = _pendingSummonListLevel > 0
+            ? SummonMonsterLists.ToRomanLevel(_pendingSummonListLevel)
+            : "?";
+        string countPreview = _pendingSummonCountInfo != null
+            ? _pendingSummonCountInfo.RangeText
+            : BuildSummonCountRangeText(spell, Mathf.Max(1, _pendingSummonListLevel));
+
+        CombatUI.SetTurnIndicator($"✦ {spell.Name} (List {listLevelLabel}): Place {_pendingSummonSelection.BuildUiLabel()} | {countPreview} | Range: {range * 5} ft | Right-click to cancel");
     }
 
     private bool TryConsumePendingSpellCast(CharacterController caster)
@@ -11211,6 +11282,93 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
+    private int RollSummonCreatureCount(int spellLevel, int selectedListLevel, out string rollLog)
+    {
+        SummonCreatureCountInfo info = SummonMonsterLists.GetCreatureCountInfo(spellLevel, selectedListLevel);
+
+        if (info == null || !info.RequiresRoll)
+        {
+            rollLog = "Creature count: 1 (same-level list).";
+            return 1;
+        }
+
+        if (info.LevelDifference == 1)
+        {
+            int d3Roll = UnityEngine.Random.Range(1, 4);
+            rollLog = $"Rolling for creature count: 1d3 = {d3Roll}";
+            return d3Roll;
+        }
+
+        int d4Roll = UnityEngine.Random.Range(1, 5);
+        int total = d4Roll + 1;
+        rollLog = $"Rolling for creature count: 1d4+1 = [{d4Roll}] + 1 = {total}";
+        return total;
+    }
+
+    private SquareCell FindBestAdditionalSummonCell(CharacterController caster, Vector2Int preferredOrigin, int summonSizeSquares, int maxRangeFromCaster)
+    {
+        if (Grid == null || Grid.Cells == null || Grid.Cells.Count == 0)
+            return null;
+
+        SquareCell bestCell = null;
+        int bestScore = int.MaxValue;
+
+        foreach (KeyValuePair<Vector2Int, SquareCell> kvp in Grid.Cells)
+        {
+            SquareCell cell = kvp.Value;
+            if (cell == null)
+                continue;
+
+            if (!Grid.CanPlaceCreature(cell.Coords, summonSizeSquares))
+                continue;
+
+            if (caster != null && maxRangeFromCaster > 0)
+            {
+                int casterDistance = SquareGridUtils.GetDistance(caster.GridPosition, cell.Coords);
+                if (casterDistance > maxRangeFromCaster)
+                    continue;
+            }
+
+            int distanceFromPrimary = SquareGridUtils.GetDistance(preferredOrigin, cell.Coords);
+            int distanceFromCaster = caster != null ? SquareGridUtils.GetDistance(caster.GridPosition, cell.Coords) : 0;
+
+            // Primary key: nearest to the initially selected summon point.
+            // Secondary key: weighted toward the caster when multiple cells are similar.
+            int score = (distanceFromPrimary * 100) + (distanceFromCaster * 10);
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestCell = cell;
+            }
+        }
+
+        return bestCell;
+    }
+
+    private void RegisterActiveSummon(CharacterController summon, CharacterController caster, string sourceSpellId)
+    {
+        if (summon == null)
+            return;
+
+        int durationRounds = Mathf.Max(1, caster != null && caster.Stats != null ? caster.Stats.Level : 1);
+        var activeSummon = new ActiveSummonInstance
+        {
+            Controller = summon,
+            Caster = caster,
+            RemainingRounds = durationRounds,
+            TotalDurationRounds = durationRounds,
+            SourceSpellId = sourceSpellId,
+            IsAlliedToPCs = summon.Team == CharacterTeam.Player,
+            SmiteUsed = false,
+            CurrentCommand = SummonCommand.AttackNearest()
+        };
+        _activeSummons.Add(activeSummon);
+
+        var visual = summon.GetComponent<SummonedCreatureVisual>();
+        if (visual != null)
+            visual.SetDuration(durationRounds, durationRounds);
+    }
+
     private void PerformSummonMonsterCast(CharacterController caster, SquareCell targetCell, SummonMonsterOption option)
     {
         if (caster == null || targetCell == null || option == null || _pendingSpell == null)
@@ -11262,39 +11420,65 @@ public partial class GameManager : MonoBehaviour
 
             ClearSpellcastResourceSnapshot();
 
-            CharacterController summonCC = SpawnSummonedCreature(caster, targetCell.Coords, option);
-            if (summonCC == null)
+            int spellLevel = SummonMonsterLists.GetSummonMonsterSpellLevel(_pendingSpell.SpellId);
+            int selectedListLevel = _pendingSummonListLevel > 0 ? _pendingSummonListLevel : spellLevel;
+            SummonCreatureCountInfo countInfo = _pendingSummonCountInfo ?? SummonMonsterLists.GetCreatureCountInfo(spellLevel, selectedListLevel);
+            int creatureCount = RollSummonCreatureCount(spellLevel, selectedListLevel, out string rollLog);
+            creatureCount = Mathf.Max(1, creatureCount);
+
+            string selectedListRoman = SummonMonsterLists.ToRomanLevel(Mathf.Max(1, selectedListLevel));
+            CombatUI?.ShowCombatLog($"<color=#66E8FF>{caster.Stats.CharacterName} casts {_pendingSpell.Name} (using Level {selectedListRoman} list).</color>");
+            if (countInfo != null && countInfo.RequiresRoll)
+                CombatUI?.ShowCombatLog($"<color=#CCEEFF>{rollLog}</color>");
+
+            string summonLabel = option.BuildUiLabel();
+            CombatUI?.ShowCombatLog($"<color=#66E8FF>Summoning {creatureCount} {summonLabel}{(creatureCount == 1 ? string.Empty : "s")}...</color>");
+
+            List<CharacterController> spawnedCreatures = new List<CharacterController>(creatureCount);
+            Vector2Int primaryCell = targetCell.Coords;
+            int summonRangeSquares = Mathf.Max(1, _pendingSpell.GetRangeSquaresForCasterLevel(caster != null && caster.Stats != null ? caster.Stats.Level : 0));
+
+            for (int i = 0; i < creatureCount; i++)
             {
+                SquareCell spawnCell = i == 0
+                    ? targetCell
+                    : FindBestAdditionalSummonCell(caster, primaryCell, summonSizeSquares, summonRangeSquares);
+
+                bool stackedDueToNoSpace = false;
+                if (spawnCell == null)
+                {
+                    spawnCell = targetCell;
+                    stackedDueToNoSpace = true;
+                }
+
+                CharacterController summonCC = SpawnSummonedCreature(caster, spawnCell.Coords, option);
+                if (summonCC == null)
+                    continue;
+
+                if (stackedDueToNoSpace)
+                    CombatUI?.ShowCombatLog("<color=#FFCC66>Not enough open slots; stacking extra summons on the primary tile.</color>");
+
+                InsertIntoInitiative(summonCC, caster);
+                RegisterActiveSummon(summonCC, caster, _pendingSpell.SpellId);
+                spawnedCreatures.Add(summonCC);
+
+                string summonIndexLabel = creatureCount > 1 ? $" {i + 1}" : string.Empty;
+                CombatUI?.ShowCombatLog($"<color=#CCEEFF>{summonLabel}{summonIndexLabel} appears!</color>");
+            }
+
+            if (spawnedCreatures.Count == 0)
+            {
+                CombatUI?.ShowCombatLog("⚠ Summoning failed: no valid creatures could be spawned.");
                 ShowActionChoices();
                 return;
             }
-
-            InsertIntoInitiative(summonCC, caster);
-
-            int durationRounds = Mathf.Max(1, caster.Stats.Level);
-            var activeSummon = new ActiveSummonInstance
-            {
-                Controller = summonCC,
-                Caster = caster,
-                RemainingRounds = durationRounds,
-                TotalDurationRounds = durationRounds,
-                SourceSpellId = _pendingSpell.SpellId,
-                IsAlliedToPCs = summonCC.Team == CharacterTeam.Player,
-                SmiteUsed = false,
-                CurrentCommand = SummonCommand.AttackNearest()
-            };
-            _activeSummons.Add(activeSummon);
-
-            var visual = summonCC.GetComponent<SummonedCreatureVisual>();
-            if (visual != null)
-                visual.SetDuration(durationRounds, durationRounds);
-
-            CombatUI.ShowCombatLog($"<color=#66E8FF>✨ {caster.Stats.CharacterName} casts {_pendingSpell.Name} and summons {option.BuildUiLabel()} for {durationRounds} rounds!</color>");
 
             _pendingSpell = null;
             _pendingMetamagic = null;
             _pendingSpellFromHeldCharge = false;
             _pendingSummonSelection = null;
+            _pendingSummonListLevel = 0;
+            _pendingSummonCountInfo = null;
 
             Grid.ClearAllHighlights();
             UpdateAllStatsUI();
@@ -12669,6 +12853,8 @@ public partial class GameManager : MonoBehaviour
         _pendingAnimateRopeItem = null;
         _pendingResistEnergyType = null;
         _pendingSummonSelection = null;
+        _pendingSummonListLevel = 0;
+        _pendingSummonCountInfo = null;
         ResetPendingGreaseCastMode();
         _pendingAttackMode = PendingAttackMode.Single;
 
@@ -16999,6 +17185,9 @@ public partial class GameManager : MonoBehaviour
                 _pendingSpellFromHeldCharge = false;
                 _pendingAnimateRopeItem = null;
                 _pendingResistEnergyType = null;
+                _pendingSummonSelection = null;
+                _pendingSummonListLevel = 0;
+                _pendingSummonCountInfo = null;
                 ResetPendingGreaseCastMode();
                 ShowActionChoices();
                 return;

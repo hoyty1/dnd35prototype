@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using DND35e.Identifiers;
+using UnityEngine;
 
 /// <summary>
 /// Metadata for one summonable creature choice in a Summon Monster spell list.
@@ -72,12 +74,27 @@ public enum SummonAlignmentRequirement
     Evil
 }
 
+public sealed class SummonCreatureCountInfo
+{
+    public int SpellLevel;
+    public int SelectedListLevel;
+    public int LevelDifference;
+    public int MinCount;
+    public int MaxCount;
+    public string DiceExpression;
+    public string RangeText;
+    public bool RequiresRoll;
+}
+
 /// <summary>
 /// Centralized Summon Monster option table + filtering helpers.
 /// This supports class/alignment restrictions and keeps summon choice lists deterministic.
 /// </summary>
 public static class SummonMonsterLists
 {
+    private static readonly Regex SummonMonsterLevelRegex =
+        new Regex(@"summon_monster_(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Dictionary<int, List<SummonMonsterOption>> OptionsByLevel =
         new Dictionary<int, List<SummonMonsterOption>>
         {
@@ -93,22 +110,15 @@ public static class SummonMonsterLists
                     new SummonMonsterOption { DisplayName = "Large Shark", NpcDefinitionId = "large_shark" },
                     new SummonMonsterOption { DisplayName = "Constrictor Snake", NpcDefinitionId = "constrictor_snake" }
                 }
-            }
+            },
+            // Higher level list definitions can be added incrementally.
+            // Keeping empty entries allows UI level selection rules to stay consistent.
+            { 4, new List<SummonMonsterOption>() },
+            { 5, new List<SummonMonsterOption>() }
         };
 
     /// <summary>
     /// Summon Monster I creature list (D&D 3.5e SRD)
-    ///
-    /// Each creature has:
-    /// - Base creature ID (from NPCDatabase)
-    /// - Template (Celestial for good, Fiendish for evil)
-    /// - Alignment (restricts which casters can summon)
-    ///
-    /// Good Casters (LG, NG, CG): Can summon Celestial creatures only
-    /// Evil Casters (LE, NE, CE): Can summon Fiendish creatures only
-    /// Neutral Casters (LN, N, CN): Can choose from either list
-    ///
-    /// SRD Reference: Summon Monster I spell description
     /// </summary>
     private static List<SummonMonsterOption> GetSummonMonsterIOptions()
     {
@@ -134,9 +144,6 @@ public static class SummonMonsterLists
 
     /// <summary>
     /// Summon Monster II creature list (D&D 3.5e SRD)
-    ///
-    /// Alignment buckets are intentionally explicit to keep the summon picker
-    /// deterministic and easy to review against the SRD table.
     /// </summary>
     private static List<SummonMonsterOption> GetSummonMonsterIIOptions()
     {
@@ -161,13 +168,31 @@ public static class SummonMonsterLists
     public static List<SummonMonsterOption> GetFilteredOptions(string spellId, CharacterStats caster)
     {
         int level = GetSummonMonsterSpellLevel(spellId);
-        if (level <= 0 || !OptionsByLevel.TryGetValue(level, out var rawOptions) || rawOptions == null)
+        return GetFilteredOptionsForListLevel(level, caster);
+    }
+
+    public static List<SummonMonsterOption> GetFilteredOptionsForListLevel(int listLevel, CharacterStats caster)
+    {
+        if (listLevel <= 0 || !OptionsByLevel.TryGetValue(listLevel, out var rawOptions) || rawOptions == null)
             return new List<SummonMonsterOption>();
 
         return rawOptions
             .Where(o => o != null && o.IsAvailableTo(caster))
             .Select(CloneOption)
             .ToList();
+    }
+
+    public static List<int> GetAvailableListLevelsForSpell(string spellId)
+    {
+        int spellLevel = GetSummonMonsterSpellLevel(spellId);
+        if (spellLevel <= 0)
+            return new List<int>();
+
+        var levels = new List<int>(spellLevel);
+        for (int level = 1; level <= spellLevel; level++)
+            levels.Add(level);
+
+        return levels;
     }
 
     public static string GetSummonRestrictionHint(CharacterStats caster)
@@ -189,11 +214,80 @@ public static class SummonMonsterLists
         if (string.IsNullOrWhiteSpace(spellId))
             return 0;
 
-        if (spellId.StartsWith(SpellNames.SUMMON_MONSTER_1, StringComparison.Ordinal)) return 1;
-        if (spellId.StartsWith(SpellNames.SUMMON_MONSTER_2, StringComparison.Ordinal)) return 2;
-        if (spellId.StartsWith("summon_monster_3", StringComparison.Ordinal)) return 3;
+        Match match = SummonMonsterLevelRegex.Match(spellId);
+        if (match.Success && int.TryParse(match.Groups[1].Value, out int parsedLevel))
+            return Mathf.Max(0, parsedLevel);
 
         return 0;
+    }
+
+    public static string ToRomanLevel(int level)
+    {
+        switch (level)
+        {
+            case 1: return "I";
+            case 2: return "II";
+            case 3: return "III";
+            case 4: return "IV";
+            case 5: return "V";
+            case 6: return "VI";
+            case 7: return "VII";
+            case 8: return "VIII";
+            case 9: return "IX";
+            default: return level.ToString();
+        }
+    }
+
+    public static SummonCreatureCountInfo GetCreatureCountInfo(int spellLevel, int selectedListLevel)
+    {
+        int levelDifference = Mathf.Max(0, spellLevel - selectedListLevel);
+
+        var info = new SummonCreatureCountInfo
+        {
+            SpellLevel = spellLevel,
+            SelectedListLevel = selectedListLevel,
+            LevelDifference = levelDifference
+        };
+
+        if (levelDifference <= 0)
+        {
+            info.MinCount = 1;
+            info.MaxCount = 1;
+            info.DiceExpression = "1";
+            info.RangeText = "1 creature";
+            info.RequiresRoll = false;
+            return info;
+        }
+
+        if (levelDifference == 1)
+        {
+            info.MinCount = 1;
+            info.MaxCount = 3;
+            info.DiceExpression = "1d3";
+            info.RangeText = "1d3 creatures (1-3)";
+            info.RequiresRoll = true;
+            return info;
+        }
+
+        info.MinCount = 2;
+        info.MaxCount = 5;
+        info.DiceExpression = "1d4+1";
+        info.RangeText = "1d4+1 creatures (2-5)";
+        info.RequiresRoll = true;
+        return info;
+    }
+
+    public static int CalculateCreatureCount(int spellLevel, int selectedListLevel)
+    {
+        int levelDifference = spellLevel - selectedListLevel;
+
+        if (levelDifference <= 0)
+            return 1;
+
+        if (levelDifference == 1)
+            return UnityEngine.Random.Range(1, 4); // 1d3 = 1-3
+
+        return UnityEngine.Random.Range(1, 5) + 1; // 1d4+1 = 2-5
     }
 
     private static SummonMonsterOption CloneOption(SummonMonsterOption source)

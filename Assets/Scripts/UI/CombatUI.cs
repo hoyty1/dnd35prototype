@@ -3018,14 +3018,22 @@ public class CombatUI : MonoBehaviour
     // SUMMON CREATURE SELECTION PROMPT
     // ========================================================================
 
-    public void ShowSummonCreatureSelection(string spellName, List<string> creatureOptions,
-        string restrictionHint, System.Action<int> onSelect, System.Action onCancel)
+    public void ShowSummonCreatureSelection(
+        string spellName,
+        int spellLevel,
+        List<int> availableListLevels,
+        int defaultListLevel,
+        System.Func<int, List<string>> getCreatureOptionsForLevel,
+        System.Func<int, string> getCountRangeTextForLevel,
+        string restrictionHint,
+        System.Action<int, int> onSelect,
+        System.Action onCancel)
     {
         HideSummonCreatureSelection();
 
         Canvas canvas = GetComponentInParent<Canvas>();
         if (canvas == null) canvas = FindObjectOfType<Canvas>();
-        if (canvas == null)
+        if (canvas == null || availableListLevels == null || availableListLevels.Count == 0)
         {
             onCancel?.Invoke();
             return;
@@ -3050,8 +3058,8 @@ public class CombatUI : MonoBehaviour
         GameObject dialog = new GameObject("Dialog");
         dialog.transform.SetParent(_summonSelectionPanel.transform, false);
         RectTransform dialogRT = dialog.AddComponent<RectTransform>();
-        dialogRT.anchorMin = new Vector2(0.24f, 0.22f);
-        dialogRT.anchorMax = new Vector2(0.76f, 0.78f);
+        dialogRT.anchorMin = new Vector2(0.2f, 0.12f);
+        dialogRT.anchorMax = new Vector2(0.8f, 0.88f);
         dialogRT.offsetMin = Vector2.zero;
         dialogRT.offsetMax = Vector2.zero;
 
@@ -3061,72 +3069,176 @@ public class CombatUI : MonoBehaviour
         outline.effectColor = new Color(0.62f, 0.55f, 1f, 1f);
         outline.effectDistance = new Vector2(2f, 2f);
 
-        GameObject titleObj = new GameObject("Title");
-        titleObj.transform.SetParent(dialog.transform, false);
-        RectTransform titleRT = titleObj.AddComponent<RectTransform>();
-        titleRT.anchorMin = new Vector2(0.05f, 0.86f);
-        titleRT.anchorMax = new Vector2(0.95f, 0.98f);
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (font == null) font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+
+        Text titleText = UIFactory.CreateLabel(dialog.transform,
+            $"SUMMON MONSTER {SummonMonsterLists.ToRomanLevel(Mathf.Max(1, spellLevel))}",
+            20,
+            TextAnchor.MiddleCenter,
+            new Color(0.92f, 0.88f, 1f),
+            "Title",
+            font);
+        RectTransform titleRT = titleText.GetComponent<RectTransform>();
+        titleRT.anchorMin = new Vector2(0.05f, 0.91f);
+        titleRT.anchorMax = new Vector2(0.95f, 0.985f);
         titleRT.offsetMin = Vector2.zero;
         titleRT.offsetMax = Vector2.zero;
-
-        Text titleText = titleObj.AddComponent<Text>();
-        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (titleText.font == null) titleText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        titleText.fontSize = 18;
         titleText.fontStyle = FontStyle.Bold;
-        titleText.color = new Color(0.92f, 0.88f, 1f);
-        titleText.alignment = TextAnchor.MiddleCenter;
-        titleText.text = $"SUMMON CREATURE — {spellName}";
 
-        GameObject bodyObj = new GameObject("BodyText");
-        bodyObj.transform.SetParent(dialog.transform, false);
-        RectTransform bodyRT = bodyObj.AddComponent<RectTransform>();
-        bodyRT.anchorMin = new Vector2(0.08f, 0.76f);
-        bodyRT.anchorMax = new Vector2(0.92f, 0.86f);
+        string headerText = string.IsNullOrWhiteSpace(restrictionHint)
+            ? "Choose creature list level and creature type:"
+            : $"Choose creature list level and creature type:\n<size=12><color=#9FD0FF>{restrictionHint}</color></size>";
+        Text bodyText = UIFactory.CreateLabel(dialog.transform,
+            headerText,
+            13,
+            TextAnchor.MiddleCenter,
+            new Color(0.9f, 0.95f, 1f),
+            "BodyText",
+            font);
+        RectTransform bodyRT = bodyText.GetComponent<RectTransform>();
+        bodyRT.anchorMin = new Vector2(0.08f, 0.82f);
+        bodyRT.anchorMax = new Vector2(0.92f, 0.9f);
         bodyRT.offsetMin = Vector2.zero;
         bodyRT.offsetMax = Vector2.zero;
 
-        Text bodyText = bodyObj.AddComponent<Text>();
-        bodyText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (bodyText.font == null) bodyText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
-        bodyText.fontSize = 14;
-        bodyText.alignment = TextAnchor.MiddleCenter;
-        bodyText.color = new Color(0.9f, 0.95f, 1f);
-        bodyText.text = string.IsNullOrWhiteSpace(restrictionHint)
-            ? "Choose one creature to summon:"
-            : $"Choose one creature to summon:\n<size=12><color=#9FD0FF>{restrictionHint}</color></size>";
+        Text levelLabel = UIFactory.CreateLabel(dialog.transform,
+            "Select Summon Monster Level:",
+            14,
+            TextAnchor.MiddleLeft,
+            new Color(0.86f, 0.9f, 1f),
+            "LevelLabel",
+            font);
+        RectTransform levelLabelRT = levelLabel.GetComponent<RectTransform>();
+        levelLabelRT.anchorMin = new Vector2(0.08f, 0.74f);
+        levelLabelRT.anchorMax = new Vector2(0.45f, 0.8f);
+        levelLabelRT.offsetMin = Vector2.zero;
+        levelLabelRT.offsetMax = Vector2.zero;
+        levelLabel.fontStyle = FontStyle.Bold;
 
-        if (creatureOptions == null)
-            creatureOptions = new List<string>();
+        Text selectedLevelText = UIFactory.CreateLabel(dialog.transform,
+            string.Empty,
+            13,
+            TextAnchor.MiddleLeft,
+            new Color(0.83f, 0.92f, 1f),
+            "SelectedLevel",
+            font);
+        RectTransform selectedLevelRT = selectedLevelText.GetComponent<RectTransform>();
+        selectedLevelRT.anchorMin = new Vector2(0.08f, 0.67f);
+        selectedLevelRT.anchorMax = new Vector2(0.92f, 0.73f);
+        selectedLevelRT.offsetMin = Vector2.zero;
+        selectedLevelRT.offsetMax = Vector2.zero;
 
-        float optionsTop = 0.72f;
-        float optionsBottom = 0.2f;
-        int optionCount = Mathf.Max(1, creatureOptions.Count);
-        float totalHeight = optionsTop - optionsBottom;
-        float step = totalHeight / optionCount;
+        Text countInfoText = UIFactory.CreateLabel(dialog.transform,
+            string.Empty,
+            13,
+            TextAnchor.MiddleLeft,
+            new Color(0.95f, 0.93f, 0.72f),
+            "CountInfo",
+            font);
+        RectTransform countInfoRT = countInfoText.GetComponent<RectTransform>();
+        countInfoRT.anchorMin = new Vector2(0.08f, 0.61f);
+        countInfoRT.anchorMax = new Vector2(0.92f, 0.67f);
+        countInfoRT.offsetMin = Vector2.zero;
+        countInfoRT.offsetMax = Vector2.zero;
 
-        for (int i = 0; i < creatureOptions.Count; i++)
+        GameObject optionsAnchor = new GameObject("OptionsAnchor");
+        optionsAnchor.transform.SetParent(dialog.transform, false);
+        RectTransform optionsRT = optionsAnchor.AddComponent<RectTransform>();
+        optionsRT.anchorMin = new Vector2(0.08f, 0.14f);
+        optionsRT.anchorMax = new Vector2(0.92f, 0.59f);
+        optionsRT.offsetMin = Vector2.zero;
+        optionsRT.offsetMax = Vector2.zero;
+
+        int selectedListLevel = availableListLevels.Contains(defaultListLevel)
+            ? defaultListLevel
+            : availableListLevels[availableListLevels.Count - 1];
+
+        List<Dropdown.OptionData> dropdownOptions = new List<Dropdown.OptionData>(availableListLevels.Count);
+        for (int i = 0; i < availableListLevels.Count; i++)
+            dropdownOptions.Add(new Dropdown.OptionData(SummonMonsterLists.ToRomanLevel(availableListLevels[i])));
+
+        Dropdown levelDropdown = CreateSimpleDropdown(dialog.transform,
+            "SummonListLevelDropdown",
+            new Vector2(0.48f, 0.742f),
+            new Vector2(0.92f, 0.802f),
+            dropdownOptions,
+            Mathf.Max(0, availableListLevels.IndexOf(selectedListLevel)),
+            font);
+
+        void RefreshSelectionPanel()
         {
-            int optionIndex = i;
-            float yMax = optionsTop - (step * i);
-            float yMin = yMax - (step * 0.82f);
+            selectedLevelText.text = $"Currently selected: Level {SummonMonsterLists.ToRomanLevel(selectedListLevel)}";
+            string countRangeText = getCountRangeTextForLevel != null
+                ? getCountRangeTextForLevel(selectedListLevel)
+                : "1 creature";
+            countInfoText.text = $"Creatures summoned: {countRangeText}";
 
-            Button optionBtn = CreateTouchPromptButton(dialog,
-                $"Option_{i}",
-                creatureOptions[i],
-                new Vector2(0.1f, yMin),
-                new Vector2(0.9f, yMax),
-                new Color(0.28f, 0.26f, 0.58f, 1f));
+            for (int i = optionsRT.childCount - 1; i >= 0; i--)
+                Destroy(optionsRT.GetChild(i).gameObject);
 
-            optionBtn.onClick.AddListener(() =>
+            List<string> creatureOptions = getCreatureOptionsForLevel != null
+                ? getCreatureOptionsForLevel(selectedListLevel)
+                : null;
+
+            if (creatureOptions == null || creatureOptions.Count == 0)
             {
-                HideSummonCreatureSelection();
-                onSelect?.Invoke(optionIndex);
+                Text emptyText = UIFactory.CreateLabel(optionsRT,
+                    "No creatures available for this list level.",
+                    14,
+                    TextAnchor.MiddleCenter,
+                    new Color(0.88f, 0.7f, 0.7f),
+                    "NoSummonOptions",
+                    font);
+                RectTransform emptyRT = emptyText.GetComponent<RectTransform>();
+                emptyRT.anchorMin = Vector2.zero;
+                emptyRT.anchorMax = Vector2.one;
+                emptyRT.offsetMin = Vector2.zero;
+                emptyRT.offsetMax = Vector2.zero;
+                return;
+            }
+
+            float top = 1f;
+            float step = 1f / Mathf.Max(1, creatureOptions.Count);
+            for (int i = 0; i < creatureOptions.Count; i++)
+            {
+                int capturedIndex = i;
+                float yMax = top - (step * i);
+                float yMin = yMax - (step * 0.82f);
+
+                Button optionBtn = CreateTouchPromptButton(
+                    optionsAnchor,
+                    $"Option_{i}",
+                    creatureOptions[i],
+                    new Vector2(0.02f, yMin),
+                    new Vector2(0.98f, yMax),
+                    new Color(0.28f, 0.26f, 0.58f, 1f));
+
+                optionBtn.onClick.AddListener(() =>
+                {
+                    HideSummonCreatureSelection();
+                    onSelect?.Invoke(selectedListLevel, capturedIndex);
+                });
+            }
+        }
+
+        if (levelDropdown != null)
+        {
+            levelDropdown.onValueChanged.RemoveAllListeners();
+            levelDropdown.onValueChanged.AddListener(value =>
+            {
+                if (value >= 0 && value < availableListLevels.Count)
+                {
+                    selectedListLevel = availableListLevels[value];
+                    RefreshSelectionPanel();
+                }
             });
         }
 
+        RefreshSelectionPanel();
+
         Button cancelBtn = CreateTouchPromptButton(dialog, "Cancel", "Cancel",
-            new Vector2(0.35f, 0.06f), new Vector2(0.65f, 0.16f),
+            new Vector2(0.35f, 0.04f), new Vector2(0.65f, 0.11f),
             new Color(0.45f, 0.2f, 0.2f, 1f));
         cancelBtn.onClick.AddListener(() =>
         {
@@ -3135,6 +3247,148 @@ public class CombatUI : MonoBehaviour
         });
     }
 
+    private Dropdown CreateSimpleDropdown(
+        Transform parent,
+        string name,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        List<Dropdown.OptionData> options,
+        int defaultIndex,
+        Font font)
+    {
+        GameObject dropdownObj = new GameObject(name);
+        dropdownObj.transform.SetParent(parent, false);
+
+        RectTransform ddRT = dropdownObj.AddComponent<RectTransform>();
+        ddRT.anchorMin = anchorMin;
+        ddRT.anchorMax = anchorMax;
+        ddRT.offsetMin = Vector2.zero;
+        ddRT.offsetMax = Vector2.zero;
+
+        Image ddBG = dropdownObj.AddComponent<Image>();
+        ddBG.color = new Color(0.15f, 0.15f, 0.25f, 1f);
+
+        Dropdown dropdown = dropdownObj.AddComponent<Dropdown>();
+
+        GameObject labelGO = new GameObject("Label");
+        labelGO.transform.SetParent(dropdownObj.transform, false);
+        RectTransform labelRT = labelGO.AddComponent<RectTransform>();
+        labelRT.anchorMin = Vector2.zero;
+        labelRT.anchorMax = Vector2.one;
+        labelRT.offsetMin = new Vector2(8, 2);
+        labelRT.offsetMax = new Vector2(-28, -2);
+        Text labelText = labelGO.AddComponent<Text>();
+        labelText.font = font;
+        labelText.fontSize = 14;
+        labelText.color = Color.white;
+        labelText.alignment = TextAnchor.MiddleLeft;
+
+        GameObject arrowGO = new GameObject("Arrow");
+        arrowGO.transform.SetParent(dropdownObj.transform, false);
+        RectTransform arrowRT = arrowGO.AddComponent<RectTransform>();
+        arrowRT.anchorMin = new Vector2(1, 0);
+        arrowRT.anchorMax = new Vector2(1, 1);
+        arrowRT.pivot = new Vector2(1, 0.5f);
+        arrowRT.anchoredPosition = new Vector2(-4, 0);
+        arrowRT.sizeDelta = new Vector2(20, 0);
+        Text arrowText = arrowGO.AddComponent<Text>();
+        arrowText.font = font;
+        arrowText.fontSize = 14;
+        arrowText.color = new Color(0.7f, 0.7f, 0.9f);
+        arrowText.text = "▼";
+        arrowText.alignment = TextAnchor.MiddleCenter;
+
+        GameObject templateGO = new GameObject("Template");
+        templateGO.transform.SetParent(dropdownObj.transform, false);
+        RectTransform tempRT = templateGO.AddComponent<RectTransform>();
+        tempRT.anchorMin = new Vector2(0, 0);
+        tempRT.anchorMax = new Vector2(1, 0);
+        tempRT.pivot = new Vector2(0.5f, 1);
+        tempRT.anchoredPosition = Vector2.zero;
+        tempRT.sizeDelta = new Vector2(0, 200);
+        Image tempImg = templateGO.AddComponent<Image>();
+        tempImg.color = new Color(0.12f, 0.12f, 0.2f, 0.98f);
+        ScrollRect tempScroll = templateGO.AddComponent<ScrollRect>();
+
+        GameObject tempVP = new GameObject("Viewport");
+        tempVP.transform.SetParent(templateGO.transform, false);
+        RectTransform vpRT = tempVP.AddComponent<RectTransform>();
+        vpRT.anchorMin = Vector2.zero;
+        vpRT.anchorMax = Vector2.one;
+        vpRT.offsetMin = Vector2.zero;
+        vpRT.offsetMax = Vector2.zero;
+        tempVP.AddComponent<Image>().color = Color.white;
+        tempVP.AddComponent<Mask>().showMaskGraphic = false;
+        tempScroll.viewport = vpRT;
+
+        GameObject tempContent = new GameObject("Content");
+        tempContent.transform.SetParent(tempVP.transform, false);
+        RectTransform tcRT = tempContent.AddComponent<RectTransform>();
+        tcRT.anchorMin = new Vector2(0, 1);
+        tcRT.anchorMax = new Vector2(1, 1);
+        tcRT.pivot = new Vector2(0.5f, 1);
+        tcRT.anchoredPosition = Vector2.zero;
+        tcRT.sizeDelta = new Vector2(0, 28);
+        tempScroll.content = tcRT;
+
+        GameObject itemGO = new GameObject("Item");
+        itemGO.transform.SetParent(tempContent.transform, false);
+        RectTransform itemRT = itemGO.AddComponent<RectTransform>();
+        itemRT.anchorMin = new Vector2(0, 0.5f);
+        itemRT.anchorMax = new Vector2(1, 0.5f);
+        itemRT.sizeDelta = new Vector2(0, 28);
+        Toggle itemToggle = itemGO.AddComponent<Toggle>();
+
+        GameObject itemBG = new GameObject("Item Background");
+        itemBG.transform.SetParent(itemGO.transform, false);
+        RectTransform ibRT = itemBG.AddComponent<RectTransform>();
+        ibRT.anchorMin = Vector2.zero;
+        ibRT.anchorMax = Vector2.one;
+        ibRT.offsetMin = Vector2.zero;
+        ibRT.offsetMax = Vector2.zero;
+        Image ibImg = itemBG.AddComponent<Image>();
+        ibImg.color = new Color(0.15f, 0.15f, 0.25f, 1f);
+
+        GameObject itemCheck = new GameObject("Item Checkmark");
+        itemCheck.transform.SetParent(itemBG.transform, false);
+        RectTransform icRT = itemCheck.AddComponent<RectTransform>();
+        icRT.anchorMin = new Vector2(0, 0);
+        icRT.anchorMax = new Vector2(0, 1);
+        icRT.pivot = new Vector2(0, 0.5f);
+        icRT.anchoredPosition = new Vector2(4, 0);
+        icRT.sizeDelta = new Vector2(20, 0);
+        Image icImg = itemCheck.AddComponent<Image>();
+        icImg.color = new Color(0.3f, 0.8f, 0.3f);
+
+        GameObject itemLabel = new GameObject("Item Label");
+        itemLabel.transform.SetParent(itemGO.transform, false);
+        RectTransform ilRT = itemLabel.AddComponent<RectTransform>();
+        ilRT.anchorMin = Vector2.zero;
+        ilRT.anchorMax = Vector2.one;
+        ilRT.offsetMin = new Vector2(28, 2);
+        ilRT.offsetMax = new Vector2(-4, -2);
+        Text ilText = itemLabel.AddComponent<Text>();
+        ilText.font = font;
+        ilText.fontSize = 14;
+        ilText.color = Color.white;
+        ilText.alignment = TextAnchor.MiddleLeft;
+
+        itemToggle.targetGraphic = ibImg;
+        itemToggle.graphic = icImg;
+        itemToggle.isOn = false;
+
+        templateGO.SetActive(false);
+
+        dropdown.targetGraphic = ddBG;
+        dropdown.template = tempRT;
+        dropdown.captionText = labelText;
+        dropdown.itemText = ilText;
+        dropdown.options = options ?? new List<Dropdown.OptionData>();
+        dropdown.value = Mathf.Clamp(defaultIndex, 0, Mathf.Max(0, dropdown.options.Count - 1));
+        dropdown.RefreshShownValue();
+
+        return dropdown;
+    }
 
     // ========================================================================
     // ========================================================================
