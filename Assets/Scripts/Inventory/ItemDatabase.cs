@@ -1176,6 +1176,7 @@ public static class ItemDatabase
             { ItemIDs.MACE_LIGHT, 5 },
             { ItemIDs.MACE_HEAVY, 8 },
             { ItemIDs.SPEAR, 2 },
+            { ItemIDs.TORCH, 1 },
             { ItemIDs.LONGSWORD, 15 },
             { ItemIDs.SHORT_SWORD, 10 },
             { ItemIDs.GREATSWORD, 50 },
@@ -1371,10 +1372,27 @@ public static class ItemDatabase
         });
         Register(new ItemData
         {
-            Id = ItemIDs.TORCH, Name = "Torch", Type = ItemType.Misc,
-            Slot = EquipSlot.None,
-            Description = "A simple wooden torch. Provides light in dark places.",
+            Id = ItemIDs.TORCH, Name = "Torch", Type = ItemType.Weapon,
+            Slot = EquipSlot.EitherHand,
+            Proficiency = WeaponProficiency.Simple,
+            WeaponCat = WeaponCategory.Melee,
+            WeaponSize = WeaponSizeCategory.Light,
+            IsLightWeapon = true,
+            Description = "A wooden rod capped with tallow-soaked flax. Provides light and can be used as a weapon. Deals 1 point of fire damage (does not add Strength modifier to damage).",
+            DamageDice = 1,
+            DamageCount = 1,
+            BonusDamage = 0,
+            DmgModType = DamageModifierType.None,
+            NoStrengthToDamage = true,
+            SpecialProperties = "no_str_damage, provides_light, ignites_flammables",
+            AttackRange = 1,
+            ReachSquares = 1,
+            CanAttackAdjacent = true,
+            CritThreatMin = 20,
+            CritMultiplier = 2,
+            DamageType = "fire",
             WeightLbs = 1f,
+            BasePriceGp = 1,
             IconChar = "\u2600", IconColor = new Color(1f, 0.8f, 0.2f)
         });
 
@@ -1604,6 +1622,8 @@ public static class ItemDatabase
         clone.DealsNonlethalDamage = src.DealsNonlethalDamage;
         clone.WhipLikeArmorRestriction = src.WhipLikeArmorRestriction;
         clone.DamageType = src.DamageType;
+        clone.NoStrengthToDamage = src.NoStrengthToDamage;
+        clone.SpecialProperties = src.SpecialProperties;
         clone.CountsAsMagicForBypass = src.CountsAsMagicForBypass;
         clone.IsSilvered = src.IsSilvered;
         clone.IsColdIron = src.IsColdIron;

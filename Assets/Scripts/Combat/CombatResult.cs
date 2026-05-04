@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -334,8 +335,14 @@ public class CombatResult
             $"{DamageRollBreakdown.BaseDice}({DamageRollBreakdown.BaseRoll})"
         };
 
+        bool showZeroAbilityLine = DamageRollBreakdown.AbilityModifier == 0
+            && !string.IsNullOrWhiteSpace(DamageModifierDesc)
+            && DamageModifierDesc.IndexOf("no STR", StringComparison.OrdinalIgnoreCase) >= 0;
+
         if (DamageRollBreakdown.AbilityModifier != 0)
             pieces.Add(FormatSignedLabel(DamageRollBreakdown.AbilityModifier, DamageRollBreakdown.AbilityLabel));
+        else if (showZeroAbilityLine)
+            pieces.Add("+ 0 no STR modifier");
         if (DamageRollBreakdown.EnhancementBonus != 0)
             pieces.Add(FormatSignedLabel(DamageRollBreakdown.EnhancementBonus, "enhancement"));
         if (DamageRollBreakdown.PowerAttackBonus != 0)
@@ -520,6 +527,8 @@ public class CombatResult
                 sb.AppendLine($"    {diceStr} = {BaseDamageRoll}");
                 if (DamageModifier != 0)
                     sb.AppendLine($"    {FormatModLine(DamageModifier, string.IsNullOrEmpty(DamageModifierDesc) ? abilityName : DamageModifierDesc)}");
+                else if (!string.IsNullOrWhiteSpace(DamageModifierDesc) && DamageModifierDesc.IndexOf("no STR", StringComparison.OrdinalIgnoreCase) >= 0)
+                    sb.AppendLine("    + 0 (no STR modifier)");
             }
 
             if (PowerAttackDamageBonus > 0) sb.AppendLine($"    {FormatModLine(PowerAttackDamageBonus, "Power Attack")}");
@@ -623,7 +632,13 @@ public class CombatResult
             if (CritConfirmed)
                 sb.AppendLine($"    Damage: {CritDamageDice} = {Damage - FeatDamageBonus} (crit)");
             else
+            {
                 sb.AppendLine($"    Damage: {(!string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?")} = {BaseDamageRoll}");
+                if (DamageModifier != 0)
+                    sb.AppendLine($"      {FormatModLine(DamageModifier, string.IsNullOrEmpty(DamageModifierDesc) ? "ability" : DamageModifierDesc)}");
+                else if (!string.IsNullOrWhiteSpace(DamageModifierDesc) && DamageModifierDesc.IndexOf("no STR", StringComparison.OrdinalIgnoreCase) >= 0)
+                    sb.AppendLine("      + 0 (no STR modifier)");
+            }
             if (WeaponEnhancementDamageBonus > 0)
                 sb.AppendLine($"      {FormatModLine(WeaponEnhancementDamageBonus, "weapon enhancement")}");
 

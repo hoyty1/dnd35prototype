@@ -186,6 +186,8 @@ public class ItemData
     public bool WhipLikeArmorRestriction; // Cannot harm targets with armor/natural armor bonus +1 or higher
 
     public string DamageType;   // Legacy display/source string ("slashing", "piercing", etc.)
+    public bool NoStrengthToDamage; // Special-case weapons (e.g., torch) that never add STR to damage.
+    public string SpecialProperties; // Extensible comma-separated flags for special weapon behavior/UI.
 
     // --- Damage bypass/material/alignment properties (for DR interactions) ---
     public bool CountsAsMagicForBypass;    // Bypasses DR/magic
@@ -727,6 +729,15 @@ public class ItemData
         return DamageTextUtils.ParseDamageTypes(DamageType);
     }
 
+    /// <summary>Check whether this item declares a special property flag (case-insensitive).</summary>
+    public bool HasSpecialProperty(string property)
+    {
+        if (string.IsNullOrWhiteSpace(property) || string.IsNullOrWhiteSpace(SpecialProperties))
+            return false;
+
+        return SpecialProperties.IndexOf(property, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
     /// <summary>
     /// Build bypass tags granted by this weapon (material/alignment and physical forms).
     /// Physical damage forms are included so DR/slashing, DR/piercing, etc. can be bypassed.
@@ -826,6 +837,7 @@ public class ItemData
             if (DmgModType == DamageModifierType.Composite) props += $"Composite (+{CompositeRating} STR), ";
             else if (DmgModType == DamageModifierType.StrengthOneAndHalf) props += "1.5× STR dmg, ";
             else if (DmgModType == DamageModifierType.None && Type == ItemType.Weapon && WeaponCat == WeaponCategory.Ranged) props += "No STR to dmg, ";
+            if (NoStrengthToDamage) props += "No STR to dmg, ";
             if (props.Length > 0)
             {
                 props = props.TrimEnd(',', ' ');

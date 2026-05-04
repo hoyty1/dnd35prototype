@@ -3950,6 +3950,9 @@ public class CharacterStats
     /// <param name="isOffHand">True if this is an off-hand attack (overrides to 0.5× STR bonus)</param>
     public int GetWeaponDamageModifier(ItemData weapon, bool isOffHand = false)
     {
+        if (weapon != null && (weapon.NoStrengthToDamage || weapon.HasSpecialProperty("no_str_damage")))
+            return 0;
+
         if (isOffHand)
         {
             // Off-hand: 0.5× STR bonus, but STR penalties are applied at full value.
@@ -3994,6 +3997,9 @@ public class CharacterStats
     /// <param name="isOffHand">True if off-hand attack</param>
     public string GetDamageModifierDescription(ItemData weapon, bool isOffHand = false)
     {
+        if (weapon != null && (weapon.NoStrengthToDamage || weapon.HasSpecialProperty("no_str_damage")))
+            return "no STR modifier";
+
         if (isOffHand) return "0.5× STR";
 
         if (weapon == null) return "STR";

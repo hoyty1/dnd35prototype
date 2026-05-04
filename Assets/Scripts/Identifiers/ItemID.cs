@@ -26,6 +26,7 @@ namespace DND35e.Identifiers
         WeaponMaceLight = 2003,
         WeaponMaceHeavy = 2004,
         WeaponSpear = 2005,
+        WeaponTorch = 2006,
 
         // Weapons - Martial Melee (2100-2199)
         WeaponLongsword = 2100,
@@ -181,7 +182,7 @@ namespace DND35e.Identifiers
         GearBackpack = 6000,
         GearBedroll = 6001,
         GearRope = 6002,
-        GearTorch = 6003,
+        GearTorch = 6003, // Legacy alias for torch (use WeaponTorch for new weapon-category references)
         GearRations = 6004,
         GearWaterskin = 6005,
         GearRopeHemp = 6006,

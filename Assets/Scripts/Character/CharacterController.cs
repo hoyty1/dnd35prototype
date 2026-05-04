@@ -1038,6 +1038,14 @@ public class CharacterController : MonoBehaviour
             || name.Contains(ItemIDs.RANSEUR) || name.Contains("scythe") || name.Contains(ItemIDs.FALCHION);
     }
 
+    private static bool WeaponDisablesStrengthDamageBonuses(ItemData weapon)
+    {
+        if (weapon == null)
+            return false;
+
+        return weapon.NoStrengthToDamage || weapon.HasSpecialProperty("no_str_damage");
+    }
+
     private SpriteRenderer _sr;
     private ConditionManager _conditionManager;
     private CharacterCombatStats _combatStats;
@@ -3124,7 +3132,7 @@ public class CharacterController : MonoBehaviour
         // === FEAT: Power Attack (melee only) ===
         int powerAtkPenalty = 0;
         int powerAtkDmgBonus = 0;
-        if (isMelee && Stats.HasFeat("Power Attack") && PowerAttackValue > 0)
+        if (isMelee && Stats.HasFeat("Power Attack") && PowerAttackValue > 0 && !WeaponDisablesStrengthDamageBonuses(equippedWeapon))
         {
             powerAtkPenalty = -PowerAttackValue;
             powerAtkDmgBonus = IsWeaponTwoHanded(equippedWeapon) ? PowerAttackValue * 2 : PowerAttackValue;
@@ -3376,7 +3384,7 @@ public class CharacterController : MonoBehaviour
         // === FEAT: Power Attack (melee only) ===
         int powerAtkPenalty = 0;
         int powerAtkDmgBonus = 0;
-        if (isMelee && Stats.HasFeat("Power Attack") && PowerAttackValue > 0)
+        if (isMelee && Stats.HasFeat("Power Attack") && PowerAttackValue > 0 && !WeaponDisablesStrengthDamageBonuses(equippedWeapon))
         {
             powerAtkPenalty = -PowerAttackValue;
             powerAtkDmgBonus = IsWeaponTwoHanded(equippedWeapon) ? PowerAttackValue * 2 : PowerAttackValue;
@@ -3915,7 +3923,7 @@ public class CharacterController : MonoBehaviour
 
         int powerAtkPenalty = 0;
         int powerAtkDmgBonus = 0;
-        if (isMelee && Stats.HasFeat("Power Attack") && PowerAttackValue > 0)
+        if (isMelee && Stats.HasFeat("Power Attack") && PowerAttackValue > 0 && !WeaponDisablesStrengthDamageBonuses(mainWeapon))
         {
             powerAtkPenalty = -PowerAttackValue;
             powerAtkDmgBonus = PowerAttackValue; // one-handed while dual-wielding
@@ -4622,9 +4630,18 @@ public class CharacterController : MonoBehaviour
         result.BaseDamageDiceStr = $"{damageCount}d{damageDice}";
         result.WeaponName = weapon != null ? weapon.Name : "Unarmed strike";
 
+        bool suppressStrengthToDamage = WeaponDisablesStrengthDamageBonuses(weapon);
+
         // Calculate the damage modifier based on weapon's DamageModifierType
         int damageModifier = Stats.GetWeaponDamageModifier(weapon, isOffHand);
         string damageModDesc = Stats.GetDamageModifierDescription(weapon, isOffHand);
+        if (suppressStrengthToDamage)
+        {
+            damageModifier = 0;
+            damageModDesc = "no STR modifier";
+            result.SpecialAttackNote = "Weapon rule: Strength modifier is not added to damage.";
+        }
+
         result.DamageModifier = damageModifier;
         result.DamageModifierDesc = damageModDesc;
 
@@ -4729,7 +4746,10 @@ public class CharacterController : MonoBehaviour
         if (helplessMeleeAttackBonus > 0)
         {
             result.AddAttackBuffDebuffModifier("Melee vs helpless target", helplessMeleeAttackBonus);
-            result.SpecialAttackNote = "Target is helpless: +4 melee attack bonus applied.";
+            string helplessNote = "Target is helpless: +4 melee attack bonus applied.";
+            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                ? helplessNote
+                : $"{result.SpecialAttackNote} {helplessNote}";
         }
 
         // D&D 3.5e True Strike is consumed on the next attack roll (hit or miss).
@@ -4886,7 +4906,18 @@ public class CharacterController : MonoBehaviour
                 rawWeaponDamage = baseDmgRoll + damageModifier + bonusDamage;
                 rawWeaponDamage += featDamageBonus; // Feat bonus added after crit multiplication
                 rawWeaponDamage += weaponEnhancementDamageBonus;
-                result.CritDamageDice = $"{totalCritDice}d{damageDice}+{damageModifier + bonusDamage + weaponEnhancementDamageBonus}";
+                if (suppressStrengthToDamage && weaponEnhancementDamageBonus > 0 && critMultiplier > 1)
+                {
+                    // Torch-style weapons: critical hit doubles fixed weapon damage package,
+                    // including enhancement contribution for the weapon's base damage.
+                    rawWeaponDamage += weaponEnhancementDamageBonus * (critMultiplier - 1);
+                }
+
+                int critStatic = damageModifier + bonusDamage + weaponEnhancementDamageBonus
+                    + ((suppressStrengthToDamage && weaponEnhancementDamageBonus > 0 && critMultiplier > 1)
+                        ? weaponEnhancementDamageBonus * (critMultiplier - 1)
+                        : 0);
+                result.CritDamageDice = $"{totalCritDice}d{damageDice}+{critStatic}";
             }
             else
             {

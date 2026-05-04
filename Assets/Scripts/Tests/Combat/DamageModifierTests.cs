@@ -36,6 +36,8 @@ public static class DamageModifierTests
         TestUnarmedStrike();
         TestSlingNoStr();
         TestCrossbowNoStr();
+        TestTorchNoStrDamage();
+        TestTorchDamageModifierDescription();
         TestDartThrown();
         TestCompositeRating0();
         TestNegativeStrComposite();
@@ -202,6 +204,34 @@ public static class DamageModifierTests
         Assert(mod == 0, "Heavy Crossbow no STR modifier", $"got {mod}");
     }
 
+    static void TestTorchNoStrDamage()
+    {
+        var strong = MakeChar(18); // +4
+        var weak = MakeChar(8);    // -1
+        var torch = ItemDatabase.Get(ItemIDs.TORCH);
+
+        Assert(torch != null, "Torch exists in database");
+        Assert(torch != null && torch.Type == ItemType.Weapon, "Torch is registered as a weapon", torch == null ? "null" : torch.Type.ToString());
+        Assert(torch != null && torch.WeaponCat == WeaponCategory.Melee, "Torch is a melee weapon", torch == null ? "null" : torch.WeaponCat.ToString());
+        Assert(torch != null && torch.DamageType == "fire", "Torch deals fire damage", torch == null ? "null" : torch.DamageType);
+
+        int strongMod = strong.GetWeaponDamageModifier(torch);
+        int weakMod = weak.GetWeaponDamageModifier(torch);
+        int offHandStrongMod = strong.GetWeaponDamageModifier(torch, isOffHand: true);
+
+        Assert(strongMod == 0, "Torch ignores positive STR to damage", $"got {strongMod}");
+        Assert(weakMod == 0, "Torch ignores negative STR to damage", $"got {weakMod}");
+        Assert(offHandStrongMod == 0, "Torch off-hand also ignores STR to damage", $"got {offHandStrongMod}");
+    }
+
+    static void TestTorchDamageModifierDescription()
+    {
+        var stats = MakeChar(14);
+        var torch = ItemDatabase.Get(ItemIDs.TORCH);
+        string desc = stats.GetDamageModifierDescription(torch);
+        Assert(desc == "no STR modifier", "Torch damage description explicitly shows no STR modifier", $"got '{desc}'");
+    }
+
     static void TestDartThrown()
     {
         var stats = MakeChar(16); // +3
@@ -286,6 +316,10 @@ public static class DamageModifierTests
             Assert(w != null && w.DmgModType == DamageModifierType.None,
                 $"{id} has None DmgModType", w == null ? "null" : w.DmgModType.ToString());
         }
+
+        var torch = ItemDatabase.Get(ItemIDs.TORCH);
+        Assert(torch != null && torch.NoStrengthToDamage, "Torch has no-strength-to-damage flag", torch == null ? "null" : torch.NoStrengthToDamage.ToString());
+        Assert(torch != null && torch.DmgModType == DamageModifierType.None, "Torch uses None DmgModType for fixed damage", torch == null ? "null" : torch.DmgModType.ToString());
 
         string[] thrownWeapons = { ItemIDs.JAVELIN, ItemIDs.DART, ItemIDs.DAGGER, ItemIDs.HANDAXE, ItemIDs.SHORTSPEAR, ItemIDs.TRIDENT, ItemIDs.SPEAR };
         foreach (var id in thrownWeapons)

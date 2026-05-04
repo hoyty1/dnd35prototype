@@ -99,7 +99,7 @@ public class StoreInventory : MonoBehaviour
 
         // Adventuring gear / misc
         Add(ItemID.AmmoCrossbowBolts20, "Ammunition", 1);
-        Add(ItemID.GearTorch, "Gear", 1);
+        Add(ItemID.WeaponTorch, "Weapon", 1);
         Add(ItemID.GearRopeHemp, "Gear", 1);
         Add(ItemID.GearRopeSilk, "Gear", 10);
 

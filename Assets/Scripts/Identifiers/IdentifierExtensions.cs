@@ -26,6 +26,7 @@ namespace DND35e.Identifiers
             { ItemID.WeaponMaceLight, ItemIDs.MACE_LIGHT },
             { ItemID.WeaponMaceHeavy, ItemIDs.MACE_HEAVY },
             { ItemID.WeaponSpear, ItemIDs.SPEAR },
+            { ItemID.WeaponTorch, ItemIDs.TORCH },
 
             { ItemID.WeaponLongsword, ItemIDs.LONGSWORD },
             { ItemID.WeaponShortsword, ItemIDs.SHORT_SWORD },
@@ -163,7 +164,12 @@ namespace DND35e.Identifiers
         static IdentifierExtensions()
         {
             foreach (var kvp in ItemIdToString)
-                StringToItemId[kvp.Value] = kvp.Key;
+            {
+                // Preserve first-registered mapping for storage IDs that intentionally have legacy aliases
+                // (e.g., torch -> WeaponTorch while GearTorch remains a backward-compatible enum alias).
+                if (!StringToItemId.ContainsKey(kvp.Value))
+                    StringToItemId[kvp.Value] = kvp.Key;
+            }
 
             foreach (var kvp in SpellIdToString)
                 StringToSpellId[kvp.Value] = kvp.Key;
