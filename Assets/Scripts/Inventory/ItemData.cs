@@ -154,7 +154,12 @@ public enum ReloadActionType
 [System.Serializable]
 public class ItemData
 {
-    public string Id;           // Unique identifier (e.g., ItemIDs.LONGSWORD)
+    public string Id;           // Unique identifier (legacy storage string, e.g., ItemIDs.LONGSWORD)
+    public ItemID IdEnum        // Type-safe view over Id for Phase 2 migration
+    {
+        get => Id.ToItemID();
+        set => Id = value.ToStorageString();
+    }
     public string Name;         // Display name
     public string Description;  // Tooltip description
     public ItemType Type;
@@ -242,7 +247,12 @@ public class ItemData
 
     // --- Consumable ---
     public ConsumableEffectType ConsumableEffect; // Generic effect type for extensibility
-    public string ConsumableSpellName;            // Spell name this consumable emulates (e.g., "Cure Light Wounds")
+    public string ConsumableSpellName;            // Legacy spell identifier this consumable emulates
+    public SpellID ConsumableSpellIDEnum          // Type-safe view over ConsumableSpellName for Phase 2 migration
+    {
+        get => ConsumableSpellName.ToSpellID();
+        set => ConsumableSpellName = value.ToStorageString();
+    }
     public int ConsumableMinimumCasterLevel = 1;  // Potions use minimum caster level by default (D&D 3.5e)
     public int ConsumableModifier;                // Generic +X modifier for spell-derived consumables
     public int HealAmount;      // Legacy flat HP restore fallback

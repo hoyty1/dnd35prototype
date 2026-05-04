@@ -15,9 +15,12 @@ public class StoreInventory : MonoBehaviour
         public string Category;
         public int PriceGp;
 
+        public ItemID ItemIDEnum => ItemId.ToItemID();
+
         public ItemData GetTemplate()
         {
-            return ItemDatabase.Get(ItemId);
+            ItemID parsed = ItemId.ToItemID();
+            return parsed == ItemID.None ? ItemDatabase.Get(ItemId) : ItemDatabase.Get(parsed);
         }
     }
 
@@ -50,57 +53,63 @@ public class StoreInventory : MonoBehaviour
         _priceLookup.Clear();
 
         // Weapons
-        Add(ItemIDs.LONGSWORD, "Weapon", 15);
-        Add(ItemIDs.GREATSWORD, "Weapon", 50);
-        Add(ItemIDs.BATTLEAXE, "Weapon", 10);
-        Add(ItemIDs.GREATAXE, "Weapon", 20);
-        Add(ItemIDs.RAPIER, "Weapon", 20);
-        Add(ItemIDs.SHORT_SWORD, "Weapon", 10);
-        Add(ItemIDs.DAGGER, "Weapon", 2);
-        Add(ItemIDs.SHORTBOW, "Weapon", 30);
-        Add(ItemIDs.LONGBOW, "Weapon", 75);
-        Add(ItemIDs.CROSSBOW_HEAVY, "Weapon", 50);
-        Add(ItemIDs.CROSSBOW_LIGHT, "Weapon", 35);
-        Add(ItemIDs.MACE_HEAVY, "Weapon", 8);
-        Add(ItemIDs.MORNINGSTAR, "Weapon", 8);
-        Add(ItemIDs.WARHAMMER, "Weapon", 12);
-        Add(ItemIDs.SPEAR, "Weapon", 2);
-        Add(ItemIDs.JAVELIN, "Weapon", 1);
+        Add(ItemID.WeaponLongsword, "Weapon", 15);
+        Add(ItemID.WeaponGreatsword, "Weapon", 50);
+        Add(ItemID.WeaponBattleaxe, "Weapon", 10);
+        Add(ItemID.WeaponGreataxe, "Weapon", 20);
+        Add(ItemID.WeaponRapier, "Weapon", 20);
+        Add(ItemID.WeaponShortsword, "Weapon", 10);
+        Add(ItemID.WeaponDagger, "Weapon", 2);
+        Add(ItemID.WeaponShortbow, "Weapon", 30);
+        Add(ItemID.WeaponLongbow, "Weapon", 75);
+        Add(ItemID.WeaponCrossbowHeavy, "Weapon", 50);
+        Add(ItemID.WeaponCrossbowLight, "Weapon", 35);
+        Add(ItemID.WeaponMaceHeavy, "Weapon", 8);
+        Add(ItemID.WeaponMorningstar, "Weapon", 8);
+        Add(ItemID.WeaponWarhammer, "Weapon", 12);
+        Add(ItemID.WeaponSpear, "Weapon", 2);
+        Add(ItemID.WeaponJavelin, "Weapon", 1);
 
         // Armor
-        Add(ItemIDs.CHAIN_SHIRT, "Armor", 100);
-        Add(ItemIDs.SCALE_MAIL, "Armor", 50);
-        Add(ItemIDs.CHAINMAIL, "Armor", 150);
-        Add(ItemIDs.BREASTPLATE, "Armor", 200);
-        Add(ItemIDs.SPLINT_MAIL, "Armor", 200);
-        Add(ItemIDs.BANDED_MAIL, "Armor", 250);
-        Add(ItemIDs.HALF_PLATE, "Armor", 600);
-        Add(ItemIDs.FULL_PLATE, "Armor", 1500);
-        Add(ItemIDs.LEATHER_ARMOR, "Armor", 10);
-        Add(ItemIDs.STUDDED_LEATHER, "Armor", 25);
-        Add(ItemIDs.HIDE_ARMOR, "Armor", 15);
+        Add(ItemID.ArmorChainShirt, "Armor", 100);
+        Add(ItemID.ArmorScaleMail, "Armor", 50);
+        Add(ItemID.ArmorChainMail, "Armor", 150);
+        Add(ItemID.ArmorBreastplate, "Armor", 200);
+        Add(ItemID.ArmorSplintMail, "Armor", 200);
+        Add(ItemID.ArmorBandedMail, "Armor", 250);
+        Add(ItemID.ArmorHalfPlate, "Armor", 600);
+        Add(ItemID.ArmorPlate, "Armor", 1500);
+        Add(ItemID.ArmorLeather, "Armor", 10);
+        Add(ItemID.ArmorStuddedLeather, "Armor", 25);
+        Add(ItemID.ArmorHide, "Armor", 15);
 
         // Shields
-        Add(ItemIDs.BUCKLER, "Shield", 15);
-        Add(ItemIDs.SHIELD_LIGHT_WOODEN, "Shield", 3);
-        Add(ItemIDs.SHIELD_LIGHT_STEEL, "Shield", 9);
-        Add(ItemIDs.SHIELD_HEAVY_WOODEN, "Shield", 7);
-        Add(ItemIDs.SHIELD_HEAVY_STEEL, "Shield", 20);
-        Add(ItemIDs.TOWER_SHIELD, "Shield", 30);
+        Add(ItemID.ShieldBuckler, "Shield", 15);
+        Add(ItemID.ShieldLightWooden, "Shield", 3);
+        Add(ItemID.ShieldLightSteel, "Shield", 9);
+        Add(ItemID.ShieldHeavyWooden, "Shield", 7);
+        Add(ItemID.ShieldHeavySteel, "Shield", 20);
+        Add(ItemID.ShieldTower, "Shield", 30);
 
         // Consumables
-        Add(ItemIDs.POTION_CURE_LIGHT_WOUNDS, "Potion", 50);
-        Add(ItemIDs.POTION_SHIELD_OF_FAITH, "Potion", 50);
+        Add(ItemID.PotionCureLightWounds, "Potion", 50);
+        Add(ItemID.PotionShieldOfFaith, "Potion", 50);
 
         // Adventuring gear / misc
-        Add(ItemIDs.CROSSBOW_BOLTS_20, "Ammunition", 1);
-        Add(ItemIDs.TORCH, "Gear", 1);
-        Add(ItemIDs.ROPE_HEMP, "Gear", 1);
-        Add(ItemIDs.ROPE_SILK, "Gear", 10);
+        Add(ItemID.AmmoCrossbowBolts20, "Ammunition", 1);
+        Add(ItemID.GearTorch, "Gear", 1);
+        Add(ItemID.GearRopeHemp, "Gear", 1);
+        Add(ItemID.GearRopeSilk, "Gear", 10);
 
         Debug.Log($"[Store] Initialized with {_availableItems.Count} items");
     }
 
+    private void Add(ItemID itemId, string category, int priceGp)
+    {
+        Add(itemId.ToStorageString(), category, priceGp);
+    }
+
+    [Obsolete("Prefer Add(ItemID, string, int) for type-safe registrations.", false)]
     private void Add(string itemId, string category, int priceGp)
     {
         ItemData template = ItemDatabase.Get(itemId);
@@ -143,6 +152,12 @@ public class StoreInventory : MonoBehaviour
         return sorted;
     }
 
+    public ItemData CreateItemInstance(ItemID itemId)
+    {
+        return ItemDatabase.CloneItem(itemId);
+    }
+
+    [Obsolete("Prefer CreateItemInstance(ItemID) for compile-time type safety.", false)]
     public ItemData CreateItemInstance(string itemId)
     {
         if (string.IsNullOrWhiteSpace(itemId))
@@ -151,6 +166,13 @@ public class StoreInventory : MonoBehaviour
         return ItemDatabase.CloneItem(itemId);
     }
 
+    public bool TryGetBuyPrice(ItemID itemId, out int priceGp)
+    {
+        string storageId = itemId.ToStorageString();
+        return TryGetBuyPrice(storageId, out priceGp);
+    }
+
+    [Obsolete("Prefer TryGetBuyPrice(ItemID, out int) for compile-time type safety.", false)]
     public bool TryGetBuyPrice(string itemId, out int priceGp)
     {
         if (!string.IsNullOrWhiteSpace(itemId) && _priceLookup.TryGetValue(itemId, out priceGp))

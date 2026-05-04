@@ -1402,14 +1402,39 @@ public static class ItemDatabase
         item.AttackRange = item.ReachSquares;
     }
 
-    /// <summary>Get an item by ID. Returns null if not found.</summary>
+    /// <summary>Get an item by enum ID. Returns null if not found.</summary>
+    public static ItemData Get(ItemID id)
+    {
+        return Get(id.ToStorageString());
+    }
+
+    /// <summary>Check whether an item exists by enum ID.</summary>
+    public static bool HasItem(ItemID id)
+    {
+        string storageId = id.ToStorageString();
+        if (string.IsNullOrWhiteSpace(storageId))
+            return false;
+
+        if (!_initialized) Init();
+        return _items.ContainsKey(storageId);
+    }
+
+    /// <summary>Get an item by string ID. Returns null if not found.</summary>
+    [System.Obsolete("Prefer Get(ItemID) for compile-time type safety. String overload is kept for save compatibility.", false)]
     public static ItemData Get(string id)
     {
         if (!_initialized) Init();
         return _items.TryGetValue(id, out var item) ? item : null;
     }
 
-    /// <summary>Create a copy of an item (since items are reference types).</summary>
+    /// <summary>Create a copy of an item by enum ID (since items are reference types).</summary>
+    public static ItemData CloneItem(ItemID id)
+    {
+        return CloneItem(id.ToStorageString());
+    }
+
+    /// <summary>Create a copy of an item by string ID (since items are reference types).</summary>
+    [System.Obsolete("Prefer CloneItem(ItemID) for compile-time type safety. String overload is kept for save compatibility.", false)]
     public static ItemData CloneItem(string id)
     {
         var src = Get(id);
