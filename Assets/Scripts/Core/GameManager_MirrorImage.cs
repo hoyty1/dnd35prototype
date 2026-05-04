@@ -16,6 +16,7 @@ public partial class GameManager
 
     private readonly Dictionary<CharacterController, MirrorImageState> _mirrorImageStates = new Dictionary<CharacterController, MirrorImageState>();
     private readonly Dictionary<CharacterController, CharacterController> _mirrorImageCloneToCaster = new Dictionary<CharacterController, CharacterController>();
+    private readonly HashSet<CharacterController> _mirrorImageFollowSuppression = new HashSet<CharacterController>();
 
     private bool _isSelectingMirrorImageSwap;
     private CharacterController _mirrorImageSwapCaster;
@@ -319,6 +320,7 @@ public partial class GameManager
 
         state.Clones.Clear();
         _mirrorImageStates.Remove(caster);
+        _mirrorImageFollowSuppression.Remove(caster);
 
         if (removeStatusEffect)
         {
@@ -444,7 +446,9 @@ public partial class GameManager
             SquareCell casterDest = Grid != null ? Grid.GetCell(clonePos) : null;
             SquareCell cloneDest = Grid != null ? Grid.GetCell(casterPos) : null;
 
+            _mirrorImageFollowSuppression.Add(caster);
             caster.MoveToCell(casterDest, markAsMoved: false);
+            _mirrorImageFollowSuppression.Remove(caster);
             selectedClone.MoveToCell(cloneDest, markAsMoved: false);
 
             CombatUI?.ShowCombatLog($"<color=#B7A8FF>🪞 {caster.Stats.CharacterName} swaps positions with a Mirror Image ({casterPos.x},{casterPos.y}) ↔ ({clonePos.x},{clonePos.y}).</color>");
@@ -516,6 +520,201 @@ public partial class GameManager
             spellComp.ActiveBuffs[SpellNames.MIRROR_IMAGE] = mirrorEffect.RemainingRounds;
     }
 
+    private class MirrorImageMovePlan
+    {
+        public CharacterController Clone;
+        public SquareCell Destination;
+    }
+
+    public void NotifyCharacterMovement(CharacterController mover, Vector2Int previousPosition, Vector2Int currentPosition, string movementType = null)
+    {
+        if (mover == null || previousPosition == currentPosition)
+            return;
+
+        if (_mirrorImageFollowSuppression.Contains(mover))
+        {
+            _mirrorImageFollowSuppression.Remove(mover);
+            return;
+        }
+
+        if (!_mirrorImageStates.TryGetValue(mover, out MirrorImageState state) || state == null || state.Clones == null || state.Clones.Count == 0)
+            return;
+
+        if (IsMirrorImageClone(mover))
+            return;
+
+        Vector2Int offset = currentPosition - previousPosition;
+        if (offset == Vector2Int.zero)
+            return;
+
+        FollowMirrorImageCasterMovement(mover, state, offset, movementType);
+    }
+
+    private void FollowMirrorImageCasterMovement(CharacterController caster, MirrorImageState state, Vector2Int offset, string movementType)
+    {
+        if (caster == null || state == null || Grid == null)
+            return;
+
+        var activeClones = new List<CharacterController>();
+        for (int i = 0; i < state.Clones.Count; i++)
+        {
+            CharacterController clone = state.Clones[i];
+            if (clone == null || !IsMirrorImageClone(clone))
+                continue;
+
+            activeClones.Add(clone);
+        }
+
+        if (activeClones.Count == 0)
+            return;
+
+        for (int i = 0; i < activeClones.Count; i++)
+            Grid.ClearCreatureOccupancy(activeClones[i]);
+
+        var reservedCells = new HashSet<Vector2Int>();
+        List<Vector2Int> casterSquares = caster.GetOccupiedSquares();
+        for (int i = 0; i < casterSquares.Count; i++)
+            reservedCells.Add(casterSquares[i]);
+
+        var movePlans = new List<MirrorImageMovePlan>();
+        var dissipatedClones = new List<CharacterController>();
+        int fallbackMoves = 0;
+
+        for (int i = 0; i < activeClones.Count; i++)
+        {
+            CharacterController clone = activeClones[i];
+            Vector2Int preferredPos = clone.GridPosition + offset;
+
+            if (TryReserveMirrorImageDestination(clone, preferredPos, reservedCells, out SquareCell preferredCell))
+            {
+                movePlans.Add(new MirrorImageMovePlan
+                {
+                    Clone = clone,
+                    Destination = preferredCell
+                });
+
+                continue;
+            }
+
+            if (TryFindMirrorImageFallbackCell(caster, clone, preferredPos, reservedCells, out SquareCell fallbackCell))
+            {
+                fallbackMoves++;
+                movePlans.Add(new MirrorImageMovePlan
+                {
+                    Clone = clone,
+                    Destination = fallbackCell
+                });
+
+                continue;
+            }
+
+            dissipatedClones.Add(clone);
+        }
+
+        for (int i = 0; i < movePlans.Count; i++)
+        {
+            MirrorImageMovePlan plan = movePlans[i];
+            if (plan?.Clone == null || plan.Destination == null)
+                continue;
+
+            MoveMirrorImageCloneToDestination(plan.Clone, plan.Destination);
+        }
+
+        for (int i = 0; i < dissipatedClones.Count; i++)
+        {
+            CharacterController clone = dissipatedClones[i];
+            if (clone == null)
+                continue;
+
+            DissipateMirrorImageClone(clone, "could not keep formation while following");
+        }
+
+        if (movePlans.Count > 0)
+        {
+            string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Caster";
+            CombatUI?.ShowCombatLog($"<color=#B7A8FF>🪞 Mirror images shift to follow {casterName}.</color>");
+        }
+
+        if (fallbackMoves > 0)
+            CombatUI?.ShowCombatLog($"<color=#C7B9FF>🪞 {fallbackMoves} image(s) adjust position around obstacles.</color>");
+
+        if (dissipatedClones.Count > 0)
+            CombatUI?.ShowCombatLog($"<color=#D5C8FF>🪞 {dissipatedClones.Count} image(s) dissipate while trying to keep up.</color>");
+    }
+
+    private bool TryReserveMirrorImageDestination(CharacterController clone, Vector2Int destination, HashSet<Vector2Int> reservedCells, out SquareCell cell)
+    {
+        cell = null;
+        if (clone == null || Grid == null)
+            return false;
+
+        if (reservedCells.Contains(destination))
+            return false;
+
+        if (!Grid.CanPlaceCreature(destination, clone.GetVisualSquaresOccupied(), clone))
+            return false;
+
+        SquareCell candidate = Grid.GetCell(destination);
+        if (candidate == null)
+            return false;
+
+        reservedCells.Add(destination);
+        cell = candidate;
+        return true;
+    }
+
+    private bool TryFindMirrorImageFallbackCell(CharacterController caster, CharacterController clone, Vector2Int preferredPosition, HashSet<Vector2Int> reservedCells, out SquareCell fallbackCell)
+    {
+        fallbackCell = null;
+        if (caster == null || clone == null || Grid == null)
+            return false;
+
+        Vector2Int casterPos = caster.GridPosition;
+        int bestScore = int.MaxValue;
+
+        for (int i = 0; i < MirrorImageOffsets.Length; i++)
+        {
+            Vector2Int candidatePos = casterPos + MirrorImageOffsets[i];
+
+            if (reservedCells.Contains(candidatePos))
+                continue;
+
+            if (!Grid.CanPlaceCreature(candidatePos, clone.GetVisualSquaresOccupied(), clone))
+                continue;
+
+            SquareCell candidateCell = Grid.GetCell(candidatePos);
+            if (candidateCell == null)
+                continue;
+
+            int score = SquareGridUtils.GetDistance(preferredPosition, candidatePos) * 10 + i;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                fallbackCell = candidateCell;
+            }
+        }
+
+        if (fallbackCell == null)
+            return false;
+
+        reservedCells.Add(fallbackCell.Coords);
+        return true;
+    }
+
+    private void MoveMirrorImageCloneToDestination(CharacterController clone, SquareCell destination)
+    {
+        if (clone == null || destination == null)
+            return;
+
+        if (SquareGridUtils.IsAdjacent(clone.GridPosition, destination.Coords))
+        {
+            StartCoroutine(clone.MoveAlongPath(new List<Vector2Int> { destination.Coords }, 0.05f, markAsMoved: false));
+            return;
+        }
+
+        clone.MoveToCell(destination, markAsMoved: false);
+    }
+
     private void ClearAllMirrorImageEffects(string reason)
     {
         var casters = new List<CharacterController>(_mirrorImageStates.Keys);
@@ -530,6 +729,7 @@ public partial class GameManager
 
         _mirrorImageStates.Clear();
         _mirrorImageCloneToCaster.Clear();
+        _mirrorImageFollowSuppression.Clear();
         _isSelectingMirrorImageSwap = false;
         _mirrorImageSwapCaster = null;
     }

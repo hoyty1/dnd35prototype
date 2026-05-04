@@ -1989,6 +1989,8 @@ public class CharacterController : MonoBehaviour
 
     private bool TrySetGrapplePosition(Vector2Int destination, CharacterController overlapAllowedWith)
     {
+        Vector2Int oldPosition = GridPosition;
+
         SquareGrid grid = CurrentGrid;
         if (grid != null)
         {
@@ -2015,6 +2017,10 @@ public class CharacterController : MonoBehaviour
             grid.SetCreatureOccupancy(this, GridPosition, GetVisualSquaresOccupied());
 
         UpdatePositionForSize();
+
+        if (oldPosition != GridPosition)
+            GameManager.Instance?.NotifyCharacterMovement(this, oldPosition, GridPosition, "grapple-reposition");
+
         return true;
     }
 
@@ -2089,6 +2095,7 @@ public class CharacterController : MonoBehaviour
         if (targetCell == null || GameManager.Instance == null || GameManager.Instance.Grid == null)
             return;
 
+        Vector2Int oldPosition = GridPosition;
         SquareGrid grid = CurrentGrid;
         Vector2Int targetBasePosition = targetCell.Coords;
         if (grid != null && !grid.CanPlaceCreature(targetBasePosition, GetVisualSquaresOccupied(), this))
@@ -2102,6 +2109,9 @@ public class CharacterController : MonoBehaviour
         UpdateInvisibilityMovementState(true);
         if (markAsMoved)
             HasMovedThisTurn = true;
+
+        if (oldPosition != GridPosition)
+            GameManager.Instance?.NotifyCharacterMovement(this, oldPosition, GridPosition, markAsMoved ? "move" : "reposition");
     }
 
     /// <summary>
@@ -2116,6 +2126,7 @@ public class CharacterController : MonoBehaviour
         if (GameManager.Instance == null || GameManager.Instance.Grid == null)
             yield break;
 
+        Vector2Int oldPosition = GridPosition;
         float clampedStepDuration = Mathf.Max(0.01f, secondsPerStep);
         SquareGrid grid = CurrentGrid;
 
@@ -2170,6 +2181,9 @@ public class CharacterController : MonoBehaviour
         UpdateInvisibilityMovementState(true);
         if (markAsMoved)
             HasMovedThisTurn = true;
+
+        if (oldPosition != GridPosition)
+            GameManager.Instance?.NotifyCharacterMovement(this, oldPosition, GridPosition, markAsMoved ? "path-move" : "path-reposition");
 
     }
     /// <summary>
