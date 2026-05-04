@@ -82,6 +82,51 @@ public static partial class NPCDatabase
     }
 
     /// <summary>
+    /// Mirror Image Test Goblin (CR 1/3-ish) — lightweight ranged shooter used in
+    /// the dedicated Mirror Image test arena. Keeps pressure on the wizard from
+    /// distance with shortbow attacks while dying quickly for rapid iteration.
+    /// </summary>
+    private static void RegisterMirrorImageTestGoblin()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "mirror_image_test_goblin",
+            Name = "Mirror Test Goblin Archer",
+            ChallengeRating = "1/3",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Humanoid",
+            HitDice = 1,
+            FortitudeSaveOverride = SaveProgression.Good,
+            ReflexSaveOverride = SaveProgression.Poor,
+            WillSaveOverride = SaveProgression.Poor,
+            SizeCategory = SizeCategory.Small,
+            STR = 11,
+            DEX = 15,
+            CON = 12,
+            WIS = 9,
+            INT = 10,
+            CHA = 6,
+            BAB = 0,
+            BaseSpeed = 3,
+            BaseHitDieHP = 6,
+            CreatureTags = new List<string> { "Goblinoid", "MirrorImageTest" },
+            EquipmentIds = new List<EquipmentSlotPair>
+            {
+                new EquipmentSlotPair(ItemIDs.LEATHER_ARMOR, EquipSlot.Armor),
+                new EquipmentSlotPair(ItemIDs.SHORTBOW, EquipSlot.RightHand)
+            },
+            BackpackItemIds = new List<string> { ItemIDs.DAGGER },
+            AIBehavior = NPCAIBehavior.RangedKiter,
+            AIProfileArchetype = NPCAIProfileArchetype.Ranged,
+            SpriteColor = new Color(0.58f, 0.8f, 0.3f, 1f),
+            PanelColor = new Color(0.36f, 0.1f, 0.1f, 0.85f),
+            NameColor = new Color(1f, 0.45f, 0.45f),
+            Description = "Shortbow goblin used in the Mirror Image Test Arena for clone-targeting and dissipation validation."
+        });
+    }
+
+    /// <summary>
     /// Skeleton Archer (CR 1) — Undead ranged attacker.
     /// An animated skeleton wielding a shortbow from distance. Keeps away from
     /// melee, preferring to pepper targets with arrows. Falls back to a short

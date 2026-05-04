@@ -103,6 +103,7 @@ public partial class GameManager : MonoBehaviour
     private const string ClericSpellTestPresetId = "cleric_spell_test";
     private const string CharmPersonTestPresetId = "charm_person_test";
     private const string SleepSpellTestPresetId = "sleep_spell_test";
+    private const string MirrorImageTestPresetId = "mirror_image_test";
     private string _selectedEncounterPresetId = "goblin_raiders";
     private bool _isGrappleTestEncounter;
     private bool _isGreaseTestEncounter;
@@ -125,6 +126,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isClericSpellTestEncounter;
     private bool _isCharmPersonTestEncounter;
     private bool _isSleepSpellTestEncounter;
+    private bool _isMirrorImageTestEncounter;
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
     private bool _partyStashSeeded;
 
@@ -1373,6 +1375,7 @@ public partial class GameManager : MonoBehaviour
         _isClericSpellTestEncounter = false;
         _isCharmPersonTestEncounter = false;
         _isSleepSpellTestEncounter = false;
+        _isMirrorImageTestEncounter = false;
 
         RestoreStandardPartyLayout();
         SetupEnemyEncounter(_activeEncounterEnemyIds);
@@ -1410,6 +1413,7 @@ public partial class GameManager : MonoBehaviour
         _isClericSpellTestEncounter = string.Equals(presetId, ClericSpellTestPresetId, StringComparison.Ordinal);
         _isCharmPersonTestEncounter = string.Equals(presetId, CharmPersonTestPresetId, StringComparison.Ordinal);
         _isSleepSpellTestEncounter = string.Equals(presetId, SleepSpellTestPresetId, StringComparison.Ordinal);
+        _isMirrorImageTestEncounter = string.Equals(presetId, MirrorImageTestPresetId, StringComparison.Ordinal);
 
         if (preset != null && preset.NPCIds != null && preset.NPCIds.Count > 0)
         {
@@ -1466,6 +1470,8 @@ public partial class GameManager : MonoBehaviour
             ConfigureCharmPersonTestParty();
         else if (_isSleepSpellTestEncounter)
             ConfigureSleepSpellTestParty();
+        else if (_isMirrorImageTestEncounter)
+            ConfigureMirrorImageTestParty();
         else
             RestoreStandardPartyLayout();
 
@@ -3650,6 +3656,83 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowCombatLog("   Use Aid Another → Wake Sleeping Ally to test manual wake action.");
     }
 
+    private void ConfigureMirrorImageTestParty()
+    {
+        RaceDatabase.Init();
+        FeatDefinitions.Init();
+        ItemDatabase.Init();
+        SpellDatabase.Init();
+
+        Sprite pcAliveFallback = LoadSprite("Sprites/pc_alive");
+        Sprite pcDead = LoadSprite("Sprites/pc_dead");
+
+        CharacterStats wizardStats = new CharacterStats(
+            name: "Mirror Mage Theron",
+            level: 5,
+            characterClass: "Wizard",
+            str: 8,
+            dex: 14,
+            con: 12,
+            wis: 12,
+            intelligence: 16,
+            cha: 10,
+            bab: 2,
+            armorBonus: 2,
+            shieldBonus: 0,
+            damageDice: 4,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 30,
+            raceName: "Human"
+        );
+
+        Vector2Int wizardStart = new Vector2Int(9, 8);
+        Sprite wizardAlive = IconLoader.GetToken("Wizard") ?? pcAliveFallback;
+        PC1.Init(wizardStats, wizardStart, wizardAlive, pcDead);
+
+        InventoryComponent wizardInventory = PC1.gameObject.GetComponent<InventoryComponent>() ?? PC1.gameObject.AddComponent<InventoryComponent>();
+        wizardInventory.Init(wizardStats);
+        wizardInventory.CharacterInventory.DirectEquip(ItemDatabase.CloneItem(ItemIDs.QUARTERSTAFF), EquipSlot.RightHand);
+        wizardInventory.CharacterInventory.RecalculateStats();
+
+        SpellcastingComponent wizardSpellComp = PC1.gameObject.GetComponent<SpellcastingComponent>() ?? PC1.gameObject.AddComponent<SpellcastingComponent>();
+        wizardSpellComp.KnownSpells.Clear();
+        wizardSpellComp.SelectedSpellIds = new List<string>
+        {
+            SpellNames.DETECT_MAGIC_WIZ,
+            SpellNames.READ_MAGIC,
+            SpellNames.MAGIC_MISSILE,
+            SpellNames.MIRROR_IMAGE,
+            SpellNames.MAGE_ARMOR
+        };
+        wizardSpellComp.PreparedSpellSlotIds = new List<string>
+        {
+            SpellNames.MIRROR_IMAGE,
+            SpellNames.MIRROR_IMAGE,
+            SpellNames.MAGIC_MISSILE,
+            SpellNames.MAGE_ARMOR
+        };
+        wizardSpellComp.Init(wizardStats);
+
+        StatusEffectManager wizardStatusMgr = PC1.gameObject.GetComponent<StatusEffectManager>() ?? PC1.gameObject.AddComponent<StatusEffectManager>();
+        wizardStatusMgr.Init(wizardStats);
+
+        ConcentrationManager wizardConcentrationMgr = PC1.gameObject.GetComponent<ConcentrationManager>() ?? PC1.gameObject.AddComponent<ConcentrationManager>();
+        wizardConcentrationMgr.Init(wizardStats, PC1);
+
+        SetPCActiveState(PC1, true, CombatUI != null ? CombatUI.PC1Panel : null);
+        SetPCActiveState(PC2, false, CombatUI != null ? CombatUI.PC2Panel : null);
+        SetPCActiveState(PC3, false, CombatUI != null ? CombatUI.PC3Panel : null);
+        SetPCActiveState(PC4, false, CombatUI != null ? CombatUI.PC4Panel : null);
+
+        CombatUI?.ShowCombatLog("🪞 Mirror Image Test Arena loaded: Mirror Mage Theron (Wizard 5, HP 30, AC 14).");
+        CombatUI?.ShowCombatLog("   Turn 1 prompt: cast Mirror Image to spawn 1d4+1 clones around the caster.");
+        CombatUI?.ShowCombatLog("   End-turn flow: use swap prompt to reposition with adjacent clone and watch target redirection.");
+        CombatUI?.ShowCombatLog("   Validate outcomes: clone dissipates on hit, real caster can still be struck, and status icon/log tracks remaining images + duration.");
+    }
+
     private void ConfigureClericSpellTestParty()
     {
         RaceDatabase.Init();
@@ -4231,6 +4314,13 @@ public partial class GameManager : MonoBehaviour
         new Vector2Int(12, 9),
     };
 
+    private static readonly Vector2Int[] MirrorImageTestSpawnPositions = {
+        new Vector2Int(9, 13),
+        new Vector2Int(14, 8),
+        new Vector2Int(9, 3),
+        new Vector2Int(4, 8),
+    };
+
     private void SetupEnemyEncounter(List<string> enemyIds)
     {
         NPCDatabase.Init();
@@ -4347,6 +4437,11 @@ public partial class GameManager : MonoBehaviour
                 // Mirror wizard test spacing so cleric spell coverage can be compared directly.
                 pos = ClericSpellTestSpawnPositions[i];
             }
+            else if (_isMirrorImageTestEncounter && i < MirrorImageTestSpawnPositions.Length)
+            {
+                // Cardinal ring around the central wizard (≈25 ft) keeps all archers in LOS for clone-target validation.
+                pos = MirrorImageTestSpawnPositions[i];
+            }
             else
             {
                 pos = (i < EncounterSpawnPositions.Length)
@@ -4439,6 +4534,13 @@ public partial class GameManager : MonoBehaviour
             CombatUI?.ShowCombatLog("🧪 Grease scenario loaded: enemies are clustered in a 2x2 square (12,5) to (13,6).");
             CombatUI?.ShowCombatLog("   Use Grease (Armor) on Slippery Sam first, then validate Area and Object modes.");
             CombatUI?.ShowCombatLog("   Enemies are scripted to prioritize Slippery Sam for grapple pressure.");
+        }
+
+        if (_isMirrorImageTestEncounter)
+        {
+            CombatUI?.ShowCombatLog("🪞 Mirror Image Test Arena enemy ring: 4 goblin archers spawned at N/E/S/W ~25 ft from center.");
+            CombatUI?.ShowCombatLog("   Expected flow: cast Mirror Image, observe clone visuals, end-turn swap prompt, and clone-target redirection in combat log.");
+            CombatUI?.ShowCombatLog("   Repeat until all clones dissipate, then confirm real caster hits and remaining duration behavior.");
         }
 
         if (_isProtectionFromEvilTestEncounter)
@@ -5627,7 +5729,7 @@ public partial class GameManager : MonoBehaviour
 
     private List<CharacterController> GetForcedFirstInitiativeActors()
     {
-        if ((_isWizardSpellTestEncounter || _isClericSpellTestEncounter) && IsActiveCombatant(PC1) && PC1 != null)
+        if ((_isWizardSpellTestEncounter || _isClericSpellTestEncounter || _isMirrorImageTestEncounter) && IsActiveCombatant(PC1) && PC1 != null)
         {
             return new List<CharacterController> { PC1 };
         }

@@ -95,6 +95,7 @@ public static partial class NPCDatabase
             new EncounterPreset("cleric_spell_test", "📖 Cleric Spell Test", "Single cleric scenario with every implemented cleric spell auto-populated into prepared slots versus a low-defense target dummy.", new List<string> { "target_dummy" }),
             new EncounterPreset("charm_person_test", "💞 Charm Person Test", "Wizard enchanter scenario: humanoid target (4 HD) with nearby hostiles to validate humanoid-only targeting, threatened +5 Will save bonus, charm AI non-hostility, and healing support behavior.", new List<string> { "human_cleric", "orc_berserker" }),
             new EncounterPreset("sleep_spell_test", "💤 Sleep Spell Test", "Wizard Sleep validation: mixed-HD enemies to test 4d4 pool, lowest-HD-first targeting, 4 HD cap immunity, wake-on-damage, and Aid Another wake ally flow.", new List<string> { "skeleton_archer", "goblin_warchief", "orc_berserker", "human_cleric" }),
+            new EncounterPreset("mirror_image_test", "🪞 Mirror Image Test Arena", "Level 5 wizard duel sandbox with four shortbow goblins on cardinal points to validate clone spawn, swap, targeting redirection, dissipation, and caster-hit fallback.", new List<string> { "mirror_image_test_goblin", "mirror_image_test_goblin", "mirror_image_test_goblin", "mirror_image_test_goblin" }),
             new EncounterPreset("xp_levelup_test", "🎯 XP Level-Up Test", "1× XP Piñata Goblin (CR 15) for guaranteed level-up validation. Instant-kill target with oversized XP reward (~3,300 XP each for a level 3 party of 4).", new List<string> { "xp_pinata_goblin" }),
             new EncounterPreset("creature_showcase", "🕷️ Creature Showcase - Animals & Vermin", "Showcase encounter covering newly implemented Monster Manual animals, vermin, and viper variants.", new List<string> { "dog", "owl", "badger", "monkey", "dire_rat", "raven", "hawk", "giant_fire_beetle", "monstrous_centipede_medium", "monstrous_scorpion_medium", "monstrous_spider_medium", "viper_medium" }),
             new EncounterPreset("goblin_raiders", "Goblin Raiders", "Balanced skirmish against goblins and an archer.", new List<string> { "goblin_warchief", "hobgoblin_sergeant", "skeleton_archer" }),
@@ -146,6 +147,7 @@ public static partial class NPCDatabase
         RegisterObscuringMistRangedOnlyTestNPCs();
         RegisterZombieShambler();
         RegisterTargetDummy();
+        RegisterMirrorImageTestGoblin();
         RegisterXPPinataGoblin();
     }
 
