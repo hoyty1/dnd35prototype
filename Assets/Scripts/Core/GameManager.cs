@@ -4953,6 +4953,9 @@ public partial class GameManager : MonoBehaviour
         if (TryHandleAnimateRopeConditionExpiry(character, condition))
             return;
 
+        if (TryHandleWebConditionExpiry(character, condition))
+            return;
+
         bool fromColorSpray = string.Equals(condition.SourceId, SpellNames.COLOR_SPRAY, StringComparison.Ordinal)
             || string.Equals(condition.SourceName, "Color Spray", StringComparison.Ordinal);
         if (fromColorSpray && (normalizedType == CombatConditionType.Unconscious || normalizedType == CombatConditionType.Blinded))
@@ -10542,6 +10545,114 @@ public partial class GameManager : MonoBehaviour
         return false;
     }
 
+    private bool TryGetWebEntangledCondition(CharacterController actor, out ConditionService.ActiveCondition condition, out WebEntangledConditionData data)
+    {
+        condition = null;
+        data = null;
+
+        if (actor == null)
+            return false;
+
+        List<ConditionService.ActiveCondition> active = GetActiveConditions(actor);
+        for (int i = 0; i < active.Count; i++)
+        {
+            ConditionService.ActiveCondition candidate = active[i];
+            if (candidate == null)
+                continue;
+            if (ConditionRules.Normalize(candidate.Type) != CombatConditionType.Entangled)
+                continue;
+
+            WebEntangledConditionData webData = candidate.Data as WebEntangledConditionData;
+            bool sourceMatches = string.Equals(candidate.SourceId, SpellNames.WEB, StringComparison.Ordinal)
+                || (webData != null && string.Equals(webData.SourceSpellId, SpellNames.WEB, StringComparison.Ordinal));
+            if (!sourceMatches)
+                continue;
+
+            condition = candidate;
+            data = webData;
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool IsEntangledByWeb(CharacterController actor)
+    {
+        return TryGetWebEntangledCondition(actor, out _, out _);
+    }
+
+    public void ApplyWebEntangledCondition(CharacterController caster, CharacterController target, int durationRounds)
+    {
+        if (target == null || target.Stats == null || target.Stats.IsDead)
+            return;
+
+        var data = new WebEntangledConditionData
+        {
+            Caster = caster,
+            Target = target,
+            EscapeDC = WebAreaEffect.EscapeDc,
+            SourceSpellId = SpellNames.WEB,
+            SourceSpellName = "Web"
+        };
+
+        int rounds = Mathf.Max(1, durationRounds);
+        if (_conditionService != null)
+        {
+            _conditionService.ApplyCondition(
+                target,
+                CombatConditionType.Entangled,
+                rounds,
+                source: caster,
+                data: data,
+                sourceNameOverride: "Web",
+                sourceCategory: "Spell",
+                sourceId: SpellNames.WEB);
+        }
+        else
+        {
+            target.ApplyCondition(CombatConditionType.Entangled, rounds, "Web");
+        }
+    }
+
+    public void RemoveWebEntangledConditionsFromArea(WebAreaEffect sourceArea)
+    {
+        if (sourceArea == null)
+            return;
+
+        List<CharacterController> all = GetAllCharacters();
+        List<WebAreaEffect> activeWebs = AreaEffectManager.Instance.GetEffectsOfType<WebAreaEffect>();
+        for (int i = 0; i < all.Count; i++)
+        {
+            CharacterController character = all[i];
+            if (character == null || character.Stats == null)
+                continue;
+
+            if (!TryGetWebEntangledCondition(character, out _, out _))
+                continue;
+
+            // Only clear this entangled state if no remaining web area still covers the creature.
+            bool stillCoveredByAnyWeb = false;
+            for (int j = 0; j < activeWebs.Count; j++)
+            {
+                WebAreaEffect web = activeWebs[j];
+                if (web == null || web == sourceArea)
+                    continue;
+
+                if (web.IsCellInArea(character.GridPosition))
+                {
+                    stillCoveredByAnyWeb = true;
+                    break;
+                }
+            }
+
+            if (stillCoveredByAnyWeb)
+                continue;
+
+            character.RemoveCondition(CombatConditionType.Entangled);
+            CombatUI?.ShowCombatLog($"🕸 {character.Stats.CharacterName} is freed as the web dissipates.");
+        }
+    }
+
     private void DropAnimateRopeItemAt(Vector2Int position, ItemData ropeItem)
     {
         if (ropeItem == null || Grid == null)
@@ -10563,13 +10674,15 @@ public partial class GameManager : MonoBehaviour
             return false;
         }
 
-        if (!TryGetAnimateRopeEntangledCondition(actor, out _, out _))
+        bool hasAnimateRope = TryGetAnimateRopeEntangledCondition(actor, out _, out _);
+        bool hasWeb = TryGetWebEntangledCondition(actor, out _, out _);
+        if (!hasAnimateRope && !hasWeb)
         {
             reason = string.Empty;
             return false;
         }
 
-        if (!actor.Actions.HasStandardAction)
+        if (actor.Actions == null || !actor.Actions.HasStandardAction)
         {
             reason = "Standard action already used.";
             return false;
@@ -10578,9 +10691,23 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    public string GetEntangleEscapeActionLabel(CharacterController actor)
+    {
+        if (TryGetWebEntangledCondition(actor, out _, out _))
+            return "Web: Escape";
+        if (TryGetAnimateRopeEntangledCondition(actor, out _, out _))
+            return "Animate Rope: Escape";
+        return "Entangle: Escape";
+    }
+
     private bool TryHandleAnimateRopeEscapeAction(CharacterController actor, bool consumeStandardAction)
     {
-        if (!TryGetAnimateRopeEntangledCondition(actor, out _, out AnimateRopeEntangledConditionData ropeData))
+        if (actor == null || actor.Stats == null)
+            return false;
+
+        bool fromAnimateRope = TryGetAnimateRopeEntangledCondition(actor, out _, out AnimateRopeEntangledConditionData ropeData);
+        bool fromWeb = TryGetWebEntangledCondition(actor, out _, out WebEntangledConditionData webData);
+        if (!fromAnimateRope && !fromWeb)
             return false;
 
         if (consumeStandardAction && (actor.Actions == null || !actor.Actions.HasStandardAction || !actor.CommitStandardAction()))
@@ -10591,34 +10718,38 @@ public partial class GameManager : MonoBehaviour
 
         int strBonus = actor.Stats != null ? actor.Stats.STRMod : 0;
         int escapeArtistBonus = actor.Stats != null ? actor.Stats.GetSkillBonus("Escape Artist") : 0;
-        int breakDc = ropeData != null && ropeData.RopeBreakDC > 0 ? ropeData.RopeBreakDC : 24;
+        int breakDc = fromAnimateRope
+            ? (ropeData != null && ropeData.RopeBreakDC > 0 ? ropeData.RopeBreakDC : 24)
+            : Mathf.Max(1, webData != null && webData.EscapeDC > 0 ? webData.EscapeDC : WebAreaEffect.EscapeDc);
 
         bool useStrength = (strBonus - breakDc) >= (escapeArtistBonus - 20);
         int dc = useStrength ? breakDc : 20;
         int bonus = useStrength ? strBonus : escapeArtistBonus;
         string checkLabel = useStrength ? "Strength" : "Escape Artist";
+        string sourceLabel = fromAnimateRope ? "Animate Rope" : "Web";
 
         int roll = UnityEngine.Random.Range(1, 21);
         int total = roll + bonus;
         bool success = total >= dc;
 
-        CombatUI?.ShowCombatLog($"🪢 {actor.Stats.CharacterName} attempts to escape Animate Rope ({checkLabel}): d20 {roll} + {bonus} = {total} vs DC {dc}.");
+        string icon = fromAnimateRope ? "🪢" : "🕸";
+        CombatUI?.ShowCombatLog($"{icon} {actor.Stats.CharacterName} attempts to escape {sourceLabel} ({checkLabel}): d20 {roll} + {bonus} = {total} vs DC {dc}.");
 
         if (success)
         {
             actor.RemoveCondition(CombatConditionType.Entangled);
-            if (ropeData != null)
+            if (fromAnimateRope && ropeData != null)
             {
                 DropAnimateRopeItemAt(actor.GridPosition, ropeData.RopeItem);
                 ropeData.RopeDroppedToGround = true;
                 ropeData.LastKnownTargetPosition = actor.GridPosition;
             }
 
-            CombatUI?.ShowCombatLog($"✅ {actor.Stats.CharacterName} escapes the animated rope.");
+            CombatUI?.ShowCombatLog($"✅ {actor.Stats.CharacterName} escapes {sourceLabel}.");
         }
         else
         {
-            CombatUI?.ShowCombatLog($"❌ {actor.Stats.CharacterName} fails to escape the animated rope.");
+            CombatUI?.ShowCombatLog($"❌ {actor.Stats.CharacterName} fails to escape {sourceLabel}.");
         }
 
         UpdateAllStatsUI();
@@ -10661,6 +10792,40 @@ public partial class GameManager : MonoBehaviour
 
         CombatUI?.ShowCombatLog($"⏱ Animate Rope ends on {character.Stats.CharacterName}. The rope falls to the ground.");
         return true;
+    }
+
+    private bool TryHandleWebConditionExpiry(CharacterController character, ConditionService.ActiveCondition condition)
+    {
+        if (character == null || condition == null)
+            return false;
+
+        if (ConditionRules.Normalize(condition.Type) != CombatConditionType.Entangled)
+            return false;
+
+        WebEntangledConditionData data = condition.Data as WebEntangledConditionData;
+        bool isWeb = string.Equals(condition.SourceId, SpellNames.WEB, StringComparison.Ordinal)
+            || (data != null && string.Equals(data.SourceSpellId, SpellNames.WEB, StringComparison.Ordinal));
+        if (!isWeb)
+            return false;
+
+        CombatUI?.ShowCombatLog($"⏱ {character.Stats.CharacterName} is no longer entangled by web.");
+        return true;
+    }
+
+    public void NotifyFireDamageAtPosition(Vector2Int position, string sourceName)
+    {
+        if (string.Equals(sourceName, "Web Flames", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        List<WebAreaEffect> webEffects = AreaEffectManager.Instance.GetEffectsOfType<WebAreaEffect>();
+        for (int i = 0; i < webEffects.Count; i++)
+        {
+            WebAreaEffect web = webEffects[i];
+            if (web == null || web.IsBurning || !web.IsCellInArea(position))
+                continue;
+
+            web.Ignite(string.IsNullOrWhiteSpace(sourceName) ? "fire" : sourceName);
+        }
     }
 
     private bool IsSummonMonsterSpell(SpellData spell)
@@ -13515,6 +13680,38 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
+            if (TryResolveWebSpell(caster, _pendingSpell, targets, aoeCells, out string webLog))
+            {
+                _lastCombatLog = webLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            if (aoeCells != null
+                && string.Equals(_pendingSpell.DamageType, "fire", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (Vector2Int cell in aoeCells)
+                    NotifyFireDamageAtPosition(cell, _pendingSpell.Name);
+            }
+
             // Build the combat log header
             var logBuilder = new System.Text.StringBuilder();
             string shapeStr = _pendingSpell.AoEShapeType == AoEShape.Cone ? "cone" :
@@ -16057,6 +16254,9 @@ public partial class GameManager : MonoBehaviour
     public int GetCurrentMoveRangeSquares(CharacterController target)
     {
         if (target == null || target.Stats == null)
+            return 0;
+
+        if (IsEntangledByWeb(target))
             return 0;
 
         return Mathf.Max(0, target.Stats.MoveRange);

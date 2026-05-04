@@ -245,4 +245,68 @@ public partial class GameManager
         glitter.CasterLevel = Mathf.Max(1, casterLevel);
         glitter.Caster = caster;
     }
+
+    private bool TryResolveWebSpell(CharacterController caster, SpellData spell, List<CharacterController> targets, HashSet<Vector2Int> aoeCells, out string log)
+    {
+        log = string.Empty;
+        if (caster == null || caster.Stats == null || spell == null || !string.Equals(spell.SpellId, SpellNames.WEB, System.StringComparison.Ordinal))
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int saveDc = GetSpellSaveDC(caster, spell);
+
+        Vector3 centerPosition = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
+        CreateWebArea(centerPosition, durationRounds, casterLevel, saveDc, caster);
+
+        int totalTargets = 0;
+        int entangledTargets = 0;
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"✨ {caster.Stats.CharacterName} casts Web! (20-ft radius spread)");
+        sb.AppendLine($"  Duration: {durationRounds} rounds | Reflex DC {saveDc} negates entanglement");
+        sb.AppendLine($"  Effect: difficult terrain; entangled targets cannot move and can escape with Str/Escape Artist DC 20");
+        sb.AppendLine($"  Fire: ignites web (2d4 fire to occupants), web burns away in 1 round");
+        sb.AppendLine($"  Web section HP: {WebAreaEffect.SectionHitPoints}");
+        sb.AppendLine();
+
+        if (targets != null)
+        {
+            for (int i = 0; i < targets.Count; i++)
+            {
+                CharacterController target = targets[i];
+                if (target == null || target.Stats == null || target.Stats.IsDead)
+                    continue;
+
+                totalTargets++;
+                bool entangled = target.HasCondition(CombatConditionType.Entangled) && IsEntangledByWeb(target);
+                if (entangled)
+                    entangledTargets++;
+
+                sb.AppendLine($"  • {target.Stats.CharacterName}: {(entangled ? "entangled" : "avoided entanglement (still difficult terrain)")}");
+            }
+        }
+
+        if (totalTargets == 0)
+            sb.AppendLine("  No creatures in area at cast time.");
+
+        sb.AppendLine();
+        sb.AppendLine($"  Result: {entangledTargets}/{Mathf.Max(0, totalTargets)} creatures entangled.");
+        sb.Append("═══════════════════════════════════");
+        log = sb.ToString();
+        return true;
+    }
+
+    public void CreateWebArea(Vector3 centerPosition, int durationRounds, int casterLevel, int saveDc, CharacterController caster)
+    {
+        GameObject webObject = new GameObject("Web_Area");
+        webObject.transform.position = centerPosition;
+
+        WebAreaEffect web = webObject.AddComponent<WebAreaEffect>();
+        web.CenterPosition = centerPosition;
+        web.RoundsRemaining = Mathf.Max(1, durationRounds);
+        web.CasterLevel = Mathf.Max(1, casterLevel);
+        web.SaveDC = Mathf.Max(1, saveDc);
+        web.Caster = caster;
+    }
 }

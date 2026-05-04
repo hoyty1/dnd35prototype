@@ -832,9 +832,10 @@ public class ActionButtonPanel : MonoBehaviour
         }
         else
         {
+            string sourceEscapeLabel = context.Gm != null ? context.Gm.GetEntangleEscapeActionLabel(pc) : "Entangle: Escape";
             escapeArtistLabel = context.HasAnimateRopeEscapeAction
-                ? "Animate Rope: Escape (Std)"
-                : $"Animate Rope: Escape ({context.AnimateRopeEscapeDisabledReason})";
+                ? $"{sourceEscapeLabel} (Std)"
+                : $"{sourceEscapeLabel} ({context.AnimateRopeEscapeDisabledReason})";
         }
 
         states.Set(GrappleEscapeArtistButton, new ActionButtonState(

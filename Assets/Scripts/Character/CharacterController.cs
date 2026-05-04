@@ -2343,7 +2343,13 @@ public class CharacterController : MonoBehaviour
 
     public void NotifyIncomingDamage(DamagePacket packet, int finalDamage)
     {
-        if (finalDamage <= 0 || _regenerationAmountPerRound <= 0 || packet == null)
+        if (packet == null)
+            return;
+
+        if (finalDamage > 0 && packet.Types != null && packet.Types.Contains(DamageType.Fire) && GameManager.Instance != null)
+            GameManager.Instance.NotifyFireDamageAtPosition(GridPosition, packet.SourceName);
+
+        if (finalDamage <= 0 || _regenerationAmountPerRound <= 0)
             return;
 
         if (_regenerationSuppressedBy != DamageBypassTag.None
