@@ -4984,6 +4984,7 @@ public class CharacterController : MonoBehaviour
             }
         }
 
+        result.RebuildBreakdownsFromComputedValues();
         return result;
     }
 

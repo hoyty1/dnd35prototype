@@ -17,6 +17,37 @@ public struct AttackModifierBreakdownEntry
 }
 
 /// <summary>
+/// Structured attack-roll breakdown used for compact combat-log formula output.
+/// </summary>
+public sealed class AttackRollBreakdown
+{
+    public int D20Roll;
+    public int Total;
+    public int TargetArmorClass;
+    public bool Hit;
+    public readonly List<AttackModifierBreakdownEntry> Modifiers = new List<AttackModifierBreakdownEntry>();
+}
+
+/// <summary>
+/// Structured damage breakdown used for compact combat-log formula output.
+/// </summary>
+public sealed class DamageBreakdown
+{
+    public string SourceName = string.Empty;
+    public string BaseDice = string.Empty;
+    public int BaseRoll;
+    public int AbilityModifier;
+    public string AbilityLabel = string.Empty;
+    public int EnhancementBonus;
+    public int PowerAttackBonus;
+    public int SneakAttackDice;
+    public int SneakAttackRoll;
+    public int CriticalMultiplier = 1;
+    public int OtherBonus;
+    public readonly List<AttackModifierBreakdownEntry> OtherBonuses = new List<AttackModifierBreakdownEntry>();
+}
+
+/// <summary>
 /// Holds the result of a single attack action using D&D 3.5 mechanics.
 /// </summary>
 public class CombatResult
@@ -114,6 +145,12 @@ public class CombatResult
     public int ArmorNonProficiencyPenalty;
     public List<AttackModifierBreakdownEntry> AttackBuffDebuffModifiers = new List<AttackModifierBreakdownEntry>();
 
+    /// <summary>Structured attack-roll data for compact formula-style combat log output.</summary>
+    public AttackRollBreakdown AttackRollBreakdown = new AttackRollBreakdown();
+
+    /// <summary>Structured damage-roll data for compact formula-style combat log output.</summary>
+    public DamageBreakdown DamageRollBreakdown = new DamageBreakdown();
+
     public int BaseDamageRoll;
     public string BaseDamageDiceStr;
     public int FeatDamageBonus;
@@ -141,6 +178,186 @@ public class CombatResult
             return;
 
         AttackBuffDebuffModifiers.Add(new AttackModifierBreakdownEntry(label.Trim(), value));
+    }
+
+    /// <summary>
+    /// Rebuilds compact attack/damage breakdown objects from the canonical combat-result fields.
+    /// </summary>
+    public void RebuildBreakdownsFromComputedValues()
+    {
+        if (AttackRollBreakdown == null)
+            AttackRollBreakdown = new AttackRollBreakdown();
+        if (DamageRollBreakdown == null)
+            DamageRollBreakdown = new DamageBreakdown();
+
+        AttackRollBreakdown.D20Roll = DieRoll;
+        AttackRollBreakdown.Total = TotalRoll;
+        AttackRollBreakdown.TargetArmorClass = TargetAC;
+        AttackRollBreakdown.Hit = Hit;
+        AttackRollBreakdown.Modifiers.Clear();
+
+        if (BreakdownBAB != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("BAB", BreakdownBAB));
+        if (BreakdownAbilityMod != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry(string.IsNullOrWhiteSpace(BreakdownAbilityName) ? "STR" : BreakdownAbilityName, BreakdownAbilityMod));
+        if (SizeAttackBonus != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("size", SizeAttackBonus));
+        if (IsFlanking && FlankingBonus != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("flanking", FlankingBonus));
+        if (RacialAttackBonus != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("racial", RacialAttackBonus));
+        if (PowerAttackValue > 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("Power Attack", -PowerAttackValue));
+        if (RapidShotActive)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("Rapid Shot", -2));
+        if (PointBlankShotActive)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("Point Blank Shot", 1));
+        if (WeaponFocusBonus > 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("Weapon Focus", WeaponFocusBonus));
+        if (WeaponEnhancementAttackBonus > 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("enhancement", WeaponEnhancementAttackBonus));
+        if (CombatExpertisePenalty != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("Combat Expertise", CombatExpertisePenalty));
+        if (FightingDefensivelyAttackPenalty != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("Fighting Defensively", FightingDefensivelyAttackPenalty));
+        if (ShootingIntoMeleePenalty != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("shooting into melee", ShootingIntoMeleePenalty));
+        if (AidAnotherAttackBonus > 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("Aid Another", AidAnotherAttackBonus));
+        if (DamageModeAttackPenalty != 0)
+        {
+            string sourceLabel = string.IsNullOrEmpty(DamageModePenaltySource) ? "damage mode" : DamageModePenaltySource;
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry(sourceLabel, DamageModeAttackPenalty));
+        }
+        if (IsRangedAttack && RangePenalty != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("range", RangePenalty));
+        if (IsDualWieldAttack && BreakdownDualWieldPenalty != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry(IsOffHandAttack ? "off-hand" : "dual wield", BreakdownDualWieldPenalty));
+        if (WeaponNonProficiencyPenalty != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("weapon non-proficiency", WeaponNonProficiencyPenalty));
+        if (ArmorNonProficiencyPenalty != 0)
+            AttackRollBreakdown.Modifiers.Add(new AttackModifierBreakdownEntry("armor/shield non-proficiency", ArmorNonProficiencyPenalty));
+        if (AttackBuffDebuffModifiers != null)
+        {
+            for (int i = 0; i < AttackBuffDebuffModifiers.Count; i++)
+                AttackRollBreakdown.Modifiers.Add(AttackBuffDebuffModifiers[i]);
+        }
+
+        DamageRollBreakdown.SourceName = string.IsNullOrWhiteSpace(WeaponName) ? "Attack" : WeaponName;
+        DamageRollBreakdown.BaseDice = string.IsNullOrWhiteSpace(BaseDamageDiceStr) ? "?" : BaseDamageDiceStr;
+        DamageRollBreakdown.BaseRoll = BaseDamageRoll;
+        DamageRollBreakdown.AbilityModifier = DamageModifier;
+        DamageRollBreakdown.AbilityLabel = ResolveDamageAbilityLabel();
+        DamageRollBreakdown.EnhancementBonus = WeaponEnhancementDamageBonus;
+        DamageRollBreakdown.PowerAttackBonus = PowerAttackDamageBonus;
+        DamageRollBreakdown.SneakAttackDice = SneakAttackDice;
+        DamageRollBreakdown.SneakAttackRoll = SneakAttackDamage;
+        DamageRollBreakdown.CriticalMultiplier = CritConfirmed ? (CritMultiplier > 1 ? CritMultiplier : 2) : 1;
+        DamageRollBreakdown.OtherBonuses.Clear();
+        DamageRollBreakdown.OtherBonus = 0;
+
+        if (PointBlankShotActive)
+            DamageRollBreakdown.OtherBonuses.Add(new AttackModifierBreakdownEntry("Point Blank Shot", 1));
+        if (WeaponSpecBonus > 0)
+            DamageRollBreakdown.OtherBonuses.Add(new AttackModifierBreakdownEntry("Weapon Spec", WeaponSpecBonus));
+
+        int subtotalRaw = RawTotalDamage > 0 ? RawTotalDamage : (Damage + SneakAttackDamage);
+        int known = BaseDamageRoll + DamageModifier + WeaponEnhancementDamageBonus + PowerAttackDamageBonus + SneakAttackDamage;
+        if (PointBlankShotActive)
+            known += 1;
+        if (WeaponSpecBonus > 0)
+            known += WeaponSpecBonus;
+
+        int remainingOtherBonus = subtotalRaw - known;
+        if (remainingOtherBonus != 0)
+            DamageRollBreakdown.OtherBonuses.Add(new AttackModifierBreakdownEntry("other bonuses", remainingOtherBonus));
+
+        for (int i = 0; i < DamageRollBreakdown.OtherBonuses.Count; i++)
+            DamageRollBreakdown.OtherBonus += DamageRollBreakdown.OtherBonuses[i].Value;
+    }
+
+    private string ResolveDamageAbilityLabel()
+    {
+        string desc = DamageModifierDesc ?? string.Empty;
+        if (desc.Contains("1.5× STR")) return "Str×1.5";
+        if (desc.Contains("0.5× STR")) return "Str×0.5";
+        if (desc.Contains("DEX")) return "Dex";
+        if (desc.Contains("STR")) return "Str";
+        return string.IsNullOrWhiteSpace(desc) ? "ability" : desc;
+    }
+
+    private static string FormatSignedLabel(int value, string label)
+    {
+        if (value == 0)
+            return string.Empty;
+
+        return value > 0
+            ? $"+ {value} {label}"
+            : $"- {-value} {label}";
+    }
+
+    private string BuildCompactAttackRollFormula()
+    {
+        RebuildBreakdownsFromComputedValues();
+
+        var pieces = new List<string>
+        {
+            $"1d20({AttackRollBreakdown.D20Roll})"
+        };
+
+        for (int i = 0; i < AttackRollBreakdown.Modifiers.Count; i++)
+        {
+            AttackModifierBreakdownEntry mod = AttackRollBreakdown.Modifiers[i];
+            if (mod.Value == 0)
+                continue;
+
+            pieces.Add(FormatSignedLabel(mod.Value, mod.Label));
+        }
+
+        string critSuffix = NaturalTwenty ? " (NAT 20)" : NaturalOne ? " (NAT 1)" : string.Empty;
+        string actorPrefix = Attacker != null && Attacker.Stats != null && Defender != null && Defender.Stats != null
+            ? $"{Attacker.Stats.CharacterName} attacks {Defender.Stats.CharacterName}: "
+            : string.Empty;
+
+        string summary = actorPrefix
+            + string.Join(" ", pieces)
+            + $" = {AttackRollBreakdown.Total} vs AC {AttackRollBreakdown.TargetArmorClass} - {(AttackRollBreakdown.Hit ? "HIT!" : "MISS!")}{critSuffix}";
+        return summary.Trim();
+    }
+
+    private string BuildCompactDamageFormula()
+    {
+        RebuildBreakdownsFromComputedValues();
+
+        var pieces = new List<string>
+        {
+            $"{DamageRollBreakdown.BaseDice}({DamageRollBreakdown.BaseRoll})"
+        };
+
+        if (DamageRollBreakdown.AbilityModifier != 0)
+            pieces.Add(FormatSignedLabel(DamageRollBreakdown.AbilityModifier, DamageRollBreakdown.AbilityLabel));
+        if (DamageRollBreakdown.EnhancementBonus != 0)
+            pieces.Add(FormatSignedLabel(DamageRollBreakdown.EnhancementBonus, "enhancement"));
+        if (DamageRollBreakdown.PowerAttackBonus != 0)
+            pieces.Add(FormatSignedLabel(DamageRollBreakdown.PowerAttackBonus, "Power Attack"));
+
+        for (int i = 0; i < DamageRollBreakdown.OtherBonuses.Count; i++)
+        {
+            AttackModifierBreakdownEntry other = DamageRollBreakdown.OtherBonuses[i];
+            pieces.Add(FormatSignedLabel(other.Value, other.Label));
+        }
+
+        string sneakSuffix = string.Empty;
+        if (DamageRollBreakdown.SneakAttackDice > 0 && DamageRollBreakdown.SneakAttackRoll > 0)
+            sneakSuffix = $" + {DamageRollBreakdown.SneakAttackDice}d6({DamageRollBreakdown.SneakAttackRoll}) sneak attack";
+
+        int shownDamage = TotalDamage;
+        string coreExpression = string.Join(" ", pieces).Trim();
+
+        if (CritConfirmed)
+            return $"CRITICAL! {DamageRollBreakdown.SourceName}: [{coreExpression}] ×{DamageRollBreakdown.CriticalMultiplier}{sneakSuffix} = {shownDamage} damage";
+
+        return $"{DamageRollBreakdown.SourceName}: {coreExpression}{sneakSuffix} = {shownDamage} damage";
     }
 
     public string GetDetailedSummary()
@@ -225,6 +442,7 @@ public class CombatResult
 
         sb.AppendLine();
         sb.AppendLine("  Attack Roll:");
+        sb.AppendLine($"    <color=#8FD3FF>{BuildCompactAttackRollFormula()}</color>");
         sb.AppendLine($"    Roll: d20 = {DieRoll}");
 
         string abilityName = !string.IsNullOrEmpty(BreakdownAbilityName) ? BreakdownAbilityName : "STR";
@@ -292,6 +510,7 @@ public class CombatResult
         {
             sb.AppendLine();
             sb.AppendLine("  Damage:");
+            sb.AppendLine($"    <b><color=#FFF29A>{BuildCompactDamageFormula()}</color></b>");
             string diceStr = !string.IsNullOrEmpty(BaseDamageDiceStr) ? BaseDamageDiceStr : "?";
 
             if (CritConfirmed)
@@ -332,6 +551,7 @@ public class CombatResult
     {
         var sb = new StringBuilder();
         sb.AppendLine($"  {label}:");
+        sb.AppendLine($"    <color=#8FD3FF>{BuildCompactAttackRollFormula()}</color>");
         sb.AppendLine($"    Roll: d20 = {DieRoll}");
         sb.AppendLine($"      Damage mode: {(AttackDamageMode == AttackDamageMode.Nonlethal ? "Nonlethal" : "Lethal")}");
         if (GrappleDexDeniedToAc > 0)
@@ -399,6 +619,7 @@ public class CombatResult
         if (Hit)
         {
             sb.AppendLine();
+            sb.AppendLine($"    <b><color=#FFF29A>{BuildCompactDamageFormula()}</color></b>");
             if (CritConfirmed)
                 sb.AppendLine($"    Damage: {CritDamageDice} = {Damage - FeatDamageBonus} (crit)");
             else
