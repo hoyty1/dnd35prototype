@@ -89,9 +89,7 @@ public class StoreInventory : MonoBehaviour
 
         // Consumables
         Add("potion_cure_light_wounds", "Potion", 50);
-        Add("potion_healing", "Potion", 50);
         Add("potion_shield_of_faith", "Potion", 50);
-        Add("potion_greater_healing", "Potion", 300);
 
         // Adventuring gear / misc
         Add("crossbow_bolts_20", "Ammunition", 1);
