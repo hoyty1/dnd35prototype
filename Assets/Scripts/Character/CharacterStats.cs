@@ -82,6 +82,12 @@ public class NaturalAttackDefinition
 [System.Serializable]
 public class CharacterStats
 {
+    /// <summary>
+    /// Sentinel for abilities that are naturally absent in D&D 3.5e (displayed as "—").
+    /// Distinct from a real score of 0 (which causes severe incapacitation).
+    /// </summary>
+    public const int NO_SCORE = -1;
+
     // ========== IDENTITY ==========
     public string CharacterName;
     public int Level;
@@ -818,11 +824,17 @@ public class CharacterStats
 
     public int ApplyAbilityDamage(AbilityType ability, int amount)
     {
+        if (!HasAbilityScore(ability))
+            return 0;
+
         return AbilityScoreDamage.ApplyDamage(ability, amount);
     }
 
     public int ApplyAbilityDrain(AbilityType ability, int amount)
     {
+        if (!HasAbilityScore(ability))
+            return 0;
+
         return AbilityScoreDamage.ApplyDrain(ability, amount);
     }
 
@@ -1168,8 +1180,8 @@ public class CharacterStats
     /// </summary>
     public bool IsMindless;
 
-    /// <summary>Display-friendly intelligence string. Mindless creatures show an em dash.</summary>
-    public string IntelligenceDisplay => IsMindless ? "—" : EffectiveINTScore.ToString();
+    /// <summary>Display-friendly intelligence string. No-score creatures show an em dash.</summary>
+    public string IntelligenceDisplay => GetAbilityScoreDisplay(AbilityType.INT);
 
     /// <summary>Runtime state for Protection from Arrows (if currently active).</summary>
     [NonSerialized] public ProtectionFromArrowsEffectData ActiveProtectionFromArrowsEffect;
@@ -1263,7 +1275,20 @@ public class CharacterStats
     /// <summary>D&D 3.5 modifier: (score - 10) / 2, rounded down.</summary>
     public static int GetModifier(int abilityScore)
     {
+        if (abilityScore == NO_SCORE)
+            return 0;
+
         return Mathf.FloorToInt((abilityScore - 10) / 2f);
+    }
+
+    public static string GetAbilityScoreDisplay(int abilityScore)
+    {
+        return abilityScore == NO_SCORE ? "—" : abilityScore.ToString();
+    }
+
+    public static int GetAbilityModifier(int abilityScore)
+    {
+        return abilityScore == NO_SCORE ? 0 : GetModifier(abilityScore);
     }
 
     private static readonly int[] HeavyLoadByStrength =
@@ -1398,22 +1423,98 @@ public class CharacterStats
         }
     }
 
-    public int EffectiveSTRScore => Mathf.Max(0, STR - AbilityScoreDamage.GetTotalPenalty(AbilityType.STR));
-    public int EffectiveDEXScore => Mathf.Max(0, DEX - AbilityScoreDamage.GetTotalPenalty(AbilityType.DEX));
-    public int EffectiveCONScore => Mathf.Max(0, CON - AbilityScoreDamage.GetTotalPenalty(AbilityType.CON));
-    public int EffectiveINTScore => Mathf.Max(0, INT - AbilityScoreDamage.GetTotalPenalty(AbilityType.INT));
-    public int EffectiveWISScore => Mathf.Max(0, WIS - AbilityScoreDamage.GetTotalPenalty(AbilityType.WIS));
-    public int EffectiveCHAScore => Mathf.Max(0, CHA - AbilityScoreDamage.GetTotalPenalty(AbilityType.CHA));
+    public int GetBaseAbilityScore(AbilityType ability)
+    {
+        switch (ability)
+        {
+            case AbilityType.STR: return STR;
+            case AbilityType.DEX: return DEX;
+            case AbilityType.CON: return CON;
+            case AbilityType.INT: return INT;
+            case AbilityType.WIS: return WIS;
+            case AbilityType.CHA: return CHA;
+            default: return NO_SCORE;
+        }
+    }
 
-    public int EffectiveStrengthScore => Mathf.Max(1, EffectiveSTRScore - StrengthConditionPenalty - EnfeeblementStrengthPenalty);
-    public int EffectiveDexterityScore => Mathf.Max(0, EffectiveDEXScore - DexterityConditionPenalty);
+    public bool HasAbilityScore(AbilityType ability)
+    {
+        return GetBaseAbilityScore(ability) != NO_SCORE;
+    }
 
-    public int STRMod => GetModifier(EffectiveStrengthScore);
-    public int DEXMod => GetModifier(EffectiveDexterityScore);
-    public int CONMod => GetModifier(EffectiveCONScore);
-    public int WISMod => GetModifier(EffectiveWISScore);
-    public int INTMod => GetModifier(EffectiveINTScore);
-    public int CHAMod => GetModifier(EffectiveCHAScore);
+    public bool HasStrength() => HasAbilityScore(AbilityType.STR);
+    public bool HasDexterity() => HasAbilityScore(AbilityType.DEX);
+    public bool HasConstitution() => HasAbilityScore(AbilityType.CON);
+    public bool HasIntelligence() => HasAbilityScore(AbilityType.INT);
+    public bool HasWisdom() => HasAbilityScore(AbilityType.WIS);
+    public bool HasCharisma() => HasAbilityScore(AbilityType.CHA);
+
+    public int GetEffectiveAbilityScore(AbilityType ability)
+    {
+        int baseScore = GetBaseAbilityScore(ability);
+        if (baseScore == NO_SCORE)
+            return NO_SCORE;
+
+        return Mathf.Max(0, baseScore - AbilityScoreDamage.GetTotalPenalty(ability));
+    }
+
+    public bool IsAbilityReducedToZero(AbilityType ability)
+    {
+        return HasAbilityScore(ability) && GetEffectiveAbilityScore(ability) == 0;
+    }
+
+    public bool IsHelplessFromAbilityScore()
+    {
+        return IsAbilityReducedToZero(AbilityType.STR)
+            || IsAbilityReducedToZero(AbilityType.DEX)
+            || IsAbilityReducedToZero(AbilityType.INT)
+            || IsAbilityReducedToZero(AbilityType.WIS)
+            || IsAbilityReducedToZero(AbilityType.CHA);
+    }
+
+    public bool IsComatoseFromAbilityScore()
+    {
+        return IsAbilityReducedToZero(AbilityType.INT)
+            || IsAbilityReducedToZero(AbilityType.WIS)
+            || IsAbilityReducedToZero(AbilityType.CHA);
+    }
+
+    public string GetAbilityScoreDisplay(AbilityType ability)
+    {
+        int score = GetEffectiveAbilityScore(ability);
+        if (score == NO_SCORE)
+            return "—";
+
+        if (score == 0)
+            return "0*";
+
+        return score.ToString();
+    }
+
+    public string GetAbilityModifierDisplay(AbilityType ability)
+    {
+        if (!HasAbilityScore(ability))
+            return "—";
+
+        return FormatMod(GetAbilityModifier(GetEffectiveAbilityScore(ability)));
+    }
+
+    public int EffectiveSTRScore => GetEffectiveAbilityScore(AbilityType.STR);
+    public int EffectiveDEXScore => GetEffectiveAbilityScore(AbilityType.DEX);
+    public int EffectiveCONScore => GetEffectiveAbilityScore(AbilityType.CON);
+    public int EffectiveINTScore => GetEffectiveAbilityScore(AbilityType.INT);
+    public int EffectiveWISScore => GetEffectiveAbilityScore(AbilityType.WIS);
+    public int EffectiveCHAScore => GetEffectiveAbilityScore(AbilityType.CHA);
+
+    public int EffectiveStrengthScore => !HasStrength() ? NO_SCORE : Mathf.Max(1, EffectiveSTRScore - StrengthConditionPenalty - EnfeeblementStrengthPenalty);
+    public int EffectiveDexterityScore => !HasDexterity() ? NO_SCORE : Mathf.Max(0, EffectiveDEXScore - DexterityConditionPenalty);
+
+    public int STRMod => GetAbilityModifier(EffectiveStrengthScore);
+    public int DEXMod => GetAbilityModifier(EffectiveDexterityScore);
+    public int CONMod => GetAbilityModifier(EffectiveCONScore);
+    public int WISMod => GetAbilityModifier(EffectiveWISScore);
+    public int INTMod => GetAbilityModifier(EffectiveINTScore);
+    public int CHAMod => GetAbilityModifier(EffectiveCHAScore);
 
     /// <summary>Max HP = Base hit die HP + (CON modifier × level).</summary>
     public int MaxHP { get; private set; }
@@ -2144,8 +2245,13 @@ public class CharacterStats
         IsMindless = isMindless;
         if (IsMindless)
         {
-            INT = 0;
-            BaseINT = 0;
+            INT = NO_SCORE;
+            BaseINT = NO_SCORE;
+
+            // Mindless creatures have no Intelligence score, so existing INT damage/drain is irrelevant.
+            AbilityScoreDamage.HealDamage(AbilityType.INT, int.MaxValue);
+            AbilityScoreDamage.RemoveDrain(AbilityType.INT, int.MaxValue);
+
             if (Immunities == null)
                 Immunities = new CreatureImmunities();
             Immunities.immuneToMindAffecting = true;
@@ -2998,7 +3104,10 @@ public class CharacterStats
     /// <summary>Get a formatted string for an ability score, e.g. "STR 16 (+3)".</summary>
     public string GetAbilityString(string abilityName, int score)
     {
-        return $"{abilityName} {score} ({FormatMod(GetModifier(score))})";
+        if (score == NO_SCORE)
+            return $"{abilityName} —";
+
+        return $"{abilityName} {score} ({FormatMod(GetAbilityModifier(score))})";
     }
 
     // ========== RACIAL HELPERS ==========
@@ -3009,7 +3118,10 @@ public class CharacterStats
     /// </summary>
     public string GetAbilityStringWithRacial(string abilityName, int finalScore, int racialMod)
     {
-        string baseStr = $"{abilityName} {finalScore}({FormatMod(GetModifier(finalScore))})";
+        if (finalScore == NO_SCORE)
+            return $"{abilityName} —";
+
+        string baseStr = $"{abilityName} {finalScore}({FormatMod(GetAbilityModifier(finalScore))})";
         if (racialMod != 0)
             baseStr += $"<size=10>[{FormatMod(racialMod)}]</size>";
         return baseStr;

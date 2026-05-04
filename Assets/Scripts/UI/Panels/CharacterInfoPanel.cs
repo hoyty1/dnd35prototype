@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Dedicated panel/controller for character information display in CombatUI.
@@ -215,17 +216,13 @@ public class CharacterInfoPanel : MonoBehaviour
         if (abilityText != null)
         {
             abilityText.supportRichText = true;
-            string intDisplay = s.IsMindless
-                ? "INT —"
-                : s.GetAbilityStringWithRacial("INT", s.INT, s.GetRacialModifier("INT"));
-
             abilityText.text =
-                $"{s.GetAbilityStringWithRacial("STR", s.STR, s.GetRacialModifier("STR"))} " +
-                $"{s.GetAbilityStringWithRacial("DEX", s.DEX, s.GetRacialModifier("DEX"))} " +
-                $"{s.GetAbilityStringWithRacial("CON", s.CON, s.GetRacialModifier("CON"))}\n" +
-                $"{s.GetAbilityStringWithRacial("WIS", s.WIS, s.GetRacialModifier("WIS"))} " +
-                $"{intDisplay} " +
-                $"{s.GetAbilityStringWithRacial("CHA", s.CHA, s.GetRacialModifier("CHA"))}";
+                $"STR {s.GetAbilityScoreDisplay(AbilityType.STR)} ({s.GetAbilityModifierDisplay(AbilityType.STR)}) " +
+                $"DEX {s.GetAbilityScoreDisplay(AbilityType.DEX)} ({s.GetAbilityModifierDisplay(AbilityType.DEX)}) " +
+                $"CON {s.GetAbilityScoreDisplay(AbilityType.CON)} ({s.GetAbilityModifierDisplay(AbilityType.CON)})\n" +
+                $"WIS {s.GetAbilityScoreDisplay(AbilityType.WIS)} ({s.GetAbilityModifierDisplay(AbilityType.WIS)}) " +
+                $"INT {s.GetAbilityScoreDisplay(AbilityType.INT)} ({s.GetAbilityModifierDisplay(AbilityType.INT)}) " +
+                $"CHA {s.GetAbilityScoreDisplay(AbilityType.CHA)} ({s.GetAbilityModifierDisplay(AbilityType.CHA)})";
         }
 
         if (hpBar != null)

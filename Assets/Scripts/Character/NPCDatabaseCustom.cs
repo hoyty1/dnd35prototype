@@ -102,9 +102,8 @@ public static partial class NPCDatabase
             HitDice = 1,
             SizeCategory = SizeCategory.Medium,
             NaturalArmorBonus = 2,
-            // Skeleton: STR 13 (was a human), DEX 15 (undead agility), CON 10 (undead placeholder)
-            // WIS 10, INT 6 (mindless but can aim), CHA 1 (undead husk)
-            STR = 13, DEX = 15, CON = 10, WIS = 10, INT = 6, CHA = 1,
+            // Skeleton: mindless undead with no Intelligence score in D&D 3.5e.
+            STR = 13, DEX = 15, CON = 10, WIS = 10, INT = CharacterStats.NO_SCORE, CHA = 1,
             BAB = 0,
             BaseSpeed = 6,    // 30 ft (Medium undead)
             BaseHitDieHP = 8, // 1 HD undead, fragile
@@ -118,6 +117,7 @@ public static partial class NPCDatabase
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Bludgeoning,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
+            IsMindless = true,
             AIBehavior = NPCAIBehavior.RangedKiter,
             AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
             SpriteColor = new Color(0.85f, 0.85f, 0.75f, 1f),  // bone white
@@ -144,7 +144,7 @@ public static partial class NPCDatabase
             SizeCategory = SizeCategory.Medium,
             NaturalArmorBonus = 2,
             BaseAttackBonusOverride = 4,
-            STR = 15, DEX = 13, CON = 10, WIS = 10, INT = 0, CHA = 1,
+            STR = 15, DEX = 13, CON = 10, WIS = 10, INT = CharacterStats.NO_SCORE, CHA = 1,
             BAB = 4,
             BaseSpeed = 6,
             BaseHitDieHP = 24,
@@ -159,6 +159,7 @@ public static partial class NPCDatabase
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Bludgeoning,
             DamageImmunities = new List<DamageType> { DamageType.Cold },
+            IsMindless = true,
             AIBehavior = NPCAIBehavior.DefensiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
             SpriteColor = new Color(0.82f, 0.82f, 0.74f, 1f),
@@ -222,7 +223,7 @@ public static partial class NPCDatabase
             HitDice = 2,
             SizeCategory = SizeCategory.Medium,
             NaturalArmorBonus = 3,
-            STR = 17, DEX = 6, CON = 10, WIS = 10, INT = 0, CHA = 1,
+            STR = 17, DEX = 6, CON = 10, WIS = 10, INT = CharacterStats.NO_SCORE, CHA = 1,
             BAB = 1,
             BaseSpeed = 4,
             BaseHitDieHP = 22,
@@ -235,6 +236,7 @@ public static partial class NPCDatabase
             BackpackItemIds = new List<string>(),
             DamageReductionAmount = 5,
             DamageReductionBypass = DamageBypassTag.Slashing,
+            IsMindless = true,
             AIBehavior = NPCAIBehavior.AggressiveMelee,
             AIProfileArchetype = NPCAIProfileArchetype.UndeadMindless,
             SpriteColor = new Color(0.62f, 0.75f, 0.62f, 1f),

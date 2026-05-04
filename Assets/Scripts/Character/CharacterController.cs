@@ -2162,6 +2162,12 @@ public class CharacterController : MonoBehaviour
         if (Stats == null || amount <= 0)
             return;
 
+        if (!Stats.HasAbilityScore(ability))
+        {
+            LogAbilityScoreMessage($"🛡 {Stats.CharacterName} has no {GetAbilityName(ability)} score to damage!");
+            return;
+        }
+
         int applied = Stats.ApplyAbilityDamage(ability, amount);
         if (applied <= 0)
             return;
@@ -2175,6 +2181,12 @@ public class CharacterController : MonoBehaviour
     {
         if (Stats == null || amount <= 0)
             return;
+
+        if (!Stats.HasAbilityScore(ability))
+        {
+            LogAbilityScoreMessage($"🛡 {Stats.CharacterName} has no {GetAbilityName(ability)} score to drain!");
+            return;
+        }
 
         int applied = Stats.ApplyAbilityDrain(ability, amount);
         if (applied <= 0)
@@ -2590,21 +2602,15 @@ public class CharacterController : MonoBehaviour
         if (Stats == null)
             return;
 
-        bool strengthZero = Stats.EffectiveSTRScore <= 0;
-        bool dexterityZero = Stats.EffectiveDEXScore <= 0;
-        bool constitutionZero = Stats.EffectiveCONScore <= 0;
-        bool intelligenceZero = Stats.EffectiveINTScore <= 0;
-        bool wisdomZero = Stats.EffectiveWISScore <= 0;
-        bool charismaZero = Stats.EffectiveCHAScore <= 0;
-
-        bool shouldBeHelpless = strengthZero || dexterityZero || intelligenceZero || wisdomZero || charismaZero;
-        bool shouldBeUnconscious = intelligenceZero || wisdomZero;
+        bool constitutionZero = Stats.IsAbilityReducedToZero(AbilityType.CON);
+        bool shouldBeHelpless = Stats.IsHelplessFromAbilityScore();
+        bool shouldBeUnconscious = Stats.IsComatoseFromAbilityScore();
 
         if (shouldBeHelpless && !_abilityZeroAppliedHelpless)
         {
             _abilityZeroAppliedHelpless = true;
             ApplyCondition(CombatConditionType.Helpless, -1, "Ability Score 0");
-            LogAbilityScoreMessage($"⚠ {Stats.CharacterName} becomes helpless (an ability score reached 0).");
+            LogAbilityScoreMessage($"⚠ {Stats.CharacterName} becomes helpless (reduced ability score reached 0).");
         }
         else if (!shouldBeHelpless && _abilityZeroAppliedHelpless)
         {
@@ -2617,14 +2623,14 @@ public class CharacterController : MonoBehaviour
         {
             _abilityZeroAppliedUnconscious = true;
             ApplyCondition(CombatConditionType.Unconscious, -1, "Ability Score 0");
-            LogAbilityScoreMessage($"💤 {Stats.CharacterName} falls unconscious (Intelligence or Wisdom reached 0).");
+            LogAbilityScoreMessage($"💤 {Stats.CharacterName} becomes comatose (mental ability reduced to 0).");
         }
         else if (!shouldBeUnconscious && _abilityZeroAppliedUnconscious)
         {
             _abilityZeroAppliedUnconscious = false;
             if (_currentHPState != HPState.Unconscious && _currentHPState != HPState.Dying && _currentHPState != HPState.Stable && _currentHPState != HPState.Dead)
                 RemoveCondition(CombatConditionType.Unconscious);
-            LogAbilityScoreMessage($"✅ {Stats.CharacterName} regains consciousness from ability score recovery.");
+            LogAbilityScoreMessage($"✅ {Stats.CharacterName} recovers from comatose ability-score loss.");
         }
 
         if (constitutionZero && _currentHPState != HPState.Dead)

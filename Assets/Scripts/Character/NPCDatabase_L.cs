@@ -24,7 +24,7 @@ public static partial class NPCDatabase
             HitDice = 2,
             SizeCategory = SizeCategory.Medium,
             IsTallCreature = true,
-            STR = 11, DEX = 10, CON = 12, WIS = 11, INT = 0, CHA = 5,
+            STR = 11, DEX = 10, CON = 12, WIS = 11, INT = CharacterStats.NO_SCORE, CHA = 5,
             BAB = 2,
             NaturalArmorBonus = 4,
             NaturalAttacks = new List<NaturalAttackDefinition>

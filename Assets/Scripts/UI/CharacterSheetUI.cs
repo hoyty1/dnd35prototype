@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Linq;
+using DND35e.Identifiers;
 
 /// <summary>
 /// Comprehensive character sheet UI with character selection sidebar, tabbed stats panel,
@@ -810,12 +811,32 @@ public class CharacterSheetUI : MonoBehaviour
 
         // === Ability Scores ===
         AddLine(content, "ABILITY SCORES", 12, GoldText, FontStyle.Bold, 16);
-        AddAbilityLine(content, "STR", stats.EffectiveSTRScore, stats.STRMod);
-        AddAbilityLine(content, "DEX", stats.EffectiveDEXScore, stats.DEXMod);
-        AddAbilityLine(content, "CON", stats.EffectiveCONScore, stats.CONMod);
-        AddAbilityLine(content, "INT", stats.IntelligenceDisplay, stats.INTMod);
-        AddAbilityLine(content, "WIS", stats.EffectiveWISScore, stats.WISMod);
-        AddAbilityLine(content, "CHA", stats.EffectiveCHAScore, stats.CHAMod);
+        AddAbilityLine(content, "STR", stats.GetAbilityScoreDisplay(AbilityType.STR), stats.GetAbilityModifierDisplay(AbilityType.STR));
+        AddAbilityLine(content, "DEX", stats.GetAbilityScoreDisplay(AbilityType.DEX), stats.GetAbilityModifierDisplay(AbilityType.DEX));
+        AddAbilityLine(content, "CON", stats.GetAbilityScoreDisplay(AbilityType.CON), stats.GetAbilityModifierDisplay(AbilityType.CON));
+        AddAbilityLine(content, "INT", stats.GetAbilityScoreDisplay(AbilityType.INT), stats.GetAbilityModifierDisplay(AbilityType.INT));
+        AddAbilityLine(content, "WIS", stats.GetAbilityScoreDisplay(AbilityType.WIS), stats.GetAbilityModifierDisplay(AbilityType.WIS));
+        AddAbilityLine(content, "CHA", stats.GetAbilityScoreDisplay(AbilityType.CHA), stats.GetAbilityModifierDisplay(AbilityType.CHA));
+
+        bool hasNoScoreAbility = !stats.HasStrength() || !stats.HasDexterity() || !stats.HasConstitution() || !stats.HasIntelligence() || !stats.HasWisdom() || !stats.HasCharisma();
+        bool hasReducedToZeroAbility = stats.IsAbilityReducedToZero(AbilityType.STR)
+            || stats.IsAbilityReducedToZero(AbilityType.DEX)
+            || stats.IsAbilityReducedToZero(AbilityType.CON)
+            || stats.IsAbilityReducedToZero(AbilityType.INT)
+            || stats.IsAbilityReducedToZero(AbilityType.WIS)
+            || stats.IsAbilityReducedToZero(AbilityType.CHA);
+
+        if (hasNoScoreAbility)
+            AddLine(content, "  — = no score (immune to ability damage/drain for that ability)", 9, new Color(0.72f, 0.88f, 1f), FontStyle.Italic, 12);
+
+        if (hasReducedToZeroAbility)
+            AddLine(content, "  * = reduced to 0 by damage/drain", 9, new Color(1f, 0.72f, 0.55f), FontStyle.Italic, 12);
+
+        if (stats.IsHelplessFromAbilityScore())
+            AddLine(content, "  ⚠ Helpless from ability score loss", 10, new Color(1f, 0.62f, 0.4f), FontStyle.Bold, 13);
+
+        if (stats.IsComatoseFromAbilityScore())
+            AddLine(content, "  💤 Comatose from mental ability score loss", 10, new Color(1f, 0.72f, 0.46f), FontStyle.Bold, 13);
 
         AddSeparator(content);
 
@@ -941,13 +962,28 @@ public class CharacterSheetUI : MonoBehaviour
 
     private void AddAbilityLine(Transform content, string name, int score, int mod)
     {
-        AddAbilityLine(content, name, score.ToString(), mod);
+        AddAbilityLine(content, name, score.ToString(), FormatMod(mod));
     }
 
     private void AddAbilityLine(Transform content, string name, string scoreDisplay, int mod)
     {
-        string modStr = FormatMod(mod);
-        Color modColor = mod >= 0 ? new Color(0.5f, 0.9f, 0.5f) : new Color(0.9f, 0.4f, 0.4f);
+        AddAbilityLine(content, name, scoreDisplay, FormatMod(mod));
+    }
+
+    private void AddAbilityLine(Transform content, string name, string scoreDisplay, string modDisplay)
+    {
+        bool hasNumericModifier = modDisplay != "—";
+        int parsedMod = 0;
+        if (hasNumericModifier)
+            int.TryParse(modDisplay, out parsedMod);
+
+        Color modColor = !hasNumericModifier
+            ? DimText
+            : (parsedMod >= 0 ? new Color(0.5f, 0.9f, 0.5f) : new Color(0.9f, 0.4f, 0.4f));
+
+        Color scoreColor = scoreDisplay == "0*"
+            ? new Color(1f, 0.66f, 0.45f)
+            : LightText;
 
         var entryGO = new GameObject($"Ability_{name}");
         entryGO.transform.SetParent(content, false);
@@ -966,13 +1002,13 @@ public class CharacterSheetUI : MonoBehaviour
         MakeText(entryGO.transform, "Score",
             new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
             new Vector2(60, 0), new Vector2(30, 0),
-            scoreDisplay, 12, LightText, TextAnchor.MiddleRight, FontStyle.Bold);
+            scoreDisplay, 12, scoreColor, TextAnchor.MiddleRight, FontStyle.Bold);
 
         // Modifier
         MakeText(entryGO.transform, "Mod",
             new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
             new Vector2(100, 0), new Vector2(40, 0),
-            modStr, 12, modColor, TextAnchor.MiddleLeft);
+            modDisplay, 12, modColor, TextAnchor.MiddleLeft);
     }
 
     // ----- Skills Tab -----

@@ -1,4 +1,5 @@
 using UnityEngine;
+using DND35e.Identifiers;
 using Tests.Utilities;
 
 namespace Tests.Combat
@@ -26,9 +27,14 @@ public static class CreatureImmunityRulesTests
         NPCDatabase.Init();
 
         TestLemureDefinitionCarriesMindlessAndImmunityFlags();
+        TestLemureUsesNoScoreIntelligence();
+        TestLemureNotHelplessFromNoIntelligenceScore();
         TestLemurePoisonImmunityPreventsPoisonApplication();
         TestLemureFireImmunityBlocksFireDamage();
         TestLemureMindAffectingImmunityBlocksCharmPerson();
+        TestMindlessCreatureIsImmuneToIntelligenceDamage();
+        TestFighterReducedToIntZeroBecomesComatoseAndHelpless();
+        TestNoScoreDisplaysAsEmDash();
         TestNonImmuneTargetCanStillReceivePoison();
 
         Debug.Log($"====== Creature Immunity Rules Results: {_passed} passed, {_failed} failed ======");
@@ -58,7 +64,7 @@ public static class CreatureImmunityRulesTests
             dex: 10,
             con: 12,
             wis: 11,
-            intelligence: 0,
+            intelligence: CharacterStats.NO_SCORE,
             cha: 5,
             bab: 2,
             raceName: "Human");
@@ -87,6 +93,26 @@ public static class CreatureImmunityRulesTests
             lemure == null
                 ? "(lemure missing)"
                 : $"(mindless={lemure.IsMindless}, poison={lemure.Immunities?.immuneToPoison}, fire={lemure.Immunities?.immuneToFire}, mind={lemure.Immunities?.immuneToMindAffecting})");
+    }
+
+    private static void TestLemureUsesNoScoreIntelligence()
+    {
+        CharacterStats lemure = BuildLemureLikeStats();
+        bool ok = lemure.INT == CharacterStats.NO_SCORE
+                  && !lemure.HasIntelligence()
+                  && lemure.IntelligenceDisplay == "—";
+
+        Assert(ok,
+            "Lemure uses NO_SCORE for Intelligence",
+            $"(int={lemure.INT}, hasInt={lemure.HasIntelligence()}, display={lemure.IntelligenceDisplay})");
+    }
+
+    private static void TestLemureNotHelplessFromNoIntelligenceScore()
+    {
+        CharacterStats lemure = BuildLemureLikeStats();
+        Assert(!lemure.IsHelplessFromAbilityScore(),
+            "Lemure is not helpless from natural no-score Intelligence",
+            $"(int={lemure.INT}, effInt={lemure.EffectiveINTScore}, helpless={lemure.IsHelplessFromAbilityScore()})");
     }
 
     private static void TestLemurePoisonImmunityPreventsPoisonApplication()
@@ -143,6 +169,59 @@ public static class CreatureImmunityRulesTests
         Assert(result != null && result.MindAffectingImmunityBlocked,
             "Mindless Lemure blocks mind-affecting Charm Person",
             result == null ? "(no result)" : $"(blocked={result.MindAffectingImmunityBlocked}, reason={result.NoEffectReason})");
+    }
+
+    private static void TestMindlessCreatureIsImmuneToIntelligenceDamage()
+    {
+        CharacterController lemureController = null;
+        try
+        {
+            GameObject go = new GameObject("Lemure_Int_Damage_Test");
+            lemureController = go.AddComponent<CharacterController>();
+            lemureController.Init(BuildLemureLikeStats(), Vector2Int.zero, null, null);
+
+            int intDamageBefore = lemureController.Stats.AbilityScoreDamage.IntelligenceDamage;
+            lemureController.ApplyAbilityDamage(AbilityType.INT, 3, "Unit Test");
+            int intDamageAfter = lemureController.Stats.AbilityScoreDamage.IntelligenceDamage;
+
+            Assert(intDamageAfter == intDamageBefore,
+                "Mindless creatures are immune to Intelligence damage",
+                $"(before={intDamageBefore}, after={intDamageAfter})");
+        }
+        finally
+        {
+            TestHelpers.Cleanup(lemureController != null ? lemureController.gameObject : null);
+        }
+    }
+
+    private static void TestFighterReducedToIntZeroBecomesComatoseAndHelpless()
+    {
+        CharacterController fighter = null;
+        try
+        {
+            fighter = TestHelpers.CreateCharacter(name: "Fighter_Int_Zero", characterClass: "Fighter", level: 3, intelligence: 10);
+            fighter.ApplyAbilityDrain(AbilityType.INT, 10, "Unit Test");
+
+            bool helpless = fighter.Stats.IsHelplessFromAbilityScore() && fighter.HasCondition(CombatConditionType.Helpless);
+            bool comatose = fighter.Stats.IsComatoseFromAbilityScore() && fighter.HasCondition(CombatConditionType.Unconscious);
+
+            Assert(helpless && comatose,
+                "Fighter reduced to Int 0 becomes comatose and helpless",
+                $"(effInt={fighter.Stats.EffectiveINTScore}, helpless={helpless}, comatose={comatose})");
+        }
+        finally
+        {
+            TestHelpers.Cleanup(fighter != null ? fighter.gameObject : null);
+        }
+    }
+
+    private static void TestNoScoreDisplaysAsEmDash()
+    {
+        CharacterStats lemure = BuildLemureLikeStats();
+        Assert(lemure.GetAbilityScoreDisplay(AbilityType.INT) == "—"
+               && CharacterStats.GetAbilityScoreDisplay(CharacterStats.NO_SCORE) == "—",
+            "NO_SCORE displays as em dash",
+            $"(display={lemure.GetAbilityScoreDisplay(AbilityType.INT)})");
     }
 
     private static void TestNonImmuneTargetCanStillReceivePoison()
