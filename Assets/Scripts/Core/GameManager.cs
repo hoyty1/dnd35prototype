@@ -4714,6 +4714,29 @@ public partial class GameManager : MonoBehaviour
             stats.Immunities.MergeFrom(def.Immunities);
 
         stats.ApplyMindlessTrait(def.IsMindless);
+        stats.IsSwarm = def.IsSwarm || (def.SwarmTraits != null && def.SwarmTraits.IsSwarm);
+        stats.SwarmTraits = def.SwarmTraits != null
+            ? new SwarmTraits
+            {
+                IsSwarm = def.SwarmTraits.IsSwarm,
+                SwarmDamage = def.SwarmTraits.SwarmDamage,
+                SwarmDamageDice = def.SwarmTraits.SwarmDamageDice,
+                DistractionDC = def.SwarmTraits.DistractionDC,
+                HasPoison = def.SwarmTraits.HasPoison,
+                HasDisease = def.SwarmTraits.HasDisease,
+                HasWounding = def.SwarmTraits.HasWounding,
+                SwarmDamageType = def.SwarmTraits.SwarmDamageType,
+                PoisonId = def.SwarmTraits.PoisonId,
+                PoisonDcModifier = def.SwarmTraits.PoisonDcModifier,
+                DiseaseType = def.SwarmTraits.DiseaseType,
+                DiseaseDcModifier = def.SwarmTraits.DiseaseDcModifier
+            }
+            : new SwarmTraits();
+
+        if (stats.IsSwarm)
+            stats.SwarmTraits.IsSwarm = true;
+
+        stats.CanMakeAttacksOfOpportunity = def.CanMakeAttacksOfOpportunity;
 
         stats.SpellResistance = Mathf.Max(0, def.SpellResistance);
 

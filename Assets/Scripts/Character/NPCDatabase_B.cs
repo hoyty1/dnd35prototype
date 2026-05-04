@@ -9,6 +9,7 @@ public static partial class NPCDatabase
     private static void RegisterCreatures_B()
     {
         RegisterBadger();
+        RegisterBatSwarm();
         RegisterGiantBee();
         RegisterGiantBombardierBeetle();
     }
@@ -47,6 +48,58 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.22f, 0.19f, 0.18f, 0.85f),
             NameColor = new Color(0.93f, 0.9f, 0.9f),
             Description = "Monster Manual badger. Tunnel-capable skirmisher with claw/claw/bite routine and rage trait."
+        });
+    }
+
+    private static void RegisterBatSwarm()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "bat_swarm",
+            Name = "Bat Swarm",
+            ChallengeRating = "2",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 3,
+            BaseAttackBonusOverride = 2, // Monster Manual BAB +2
+            SizeCategory = SizeCategory.Large, // Swarm occupies 2×2 space in this prototype
+            IsTallCreature = false,
+            STR = 3, DEX = 15, CON = 10, WIS = 12, INT = 2, CHA = 4,
+            NaturalArmorBonus = 0, // AC 16 = 10 +4 size +2 Dex
+            BaseSpeed = 1, // 5 ft
+            BaseHitDieHP = 13,
+            CreatureTags = new List<string> { "Animal", "Swarm", "MM35", "Fly" },
+            IsSwarm = true,
+            CanMakeAttacksOfOpportunity = false,
+            Immunities = ImmunityPresets.SwarmImmunities(),
+            SwarmTraits = new SwarmTraits
+            {
+                IsSwarm = true,
+                SwarmDamage = 6,
+                SwarmDamageDice = "1d6",
+                SwarmDamageType = DamageType.Piercing,
+                DistractionDC = 11,
+                HasWounding = true
+            },
+            SpecialAbilities = new List<string>
+            {
+                "Swarm attack (1d6)",
+                "Distraction (Fort DC 11)",
+                "Wounding (bleeding when reduced to 0 hp)",
+                "Blindsense 20 ft",
+                "Fly 40 ft (good)",
+                "Swarm traits",
+                "Alignment: True Neutral"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.3f, 0.3f, 0.34f, 1f),
+            PanelColor = new Color(0.12f, 0.12f, 0.16f, 0.85f),
+            NameColor = new Color(0.86f, 0.86f, 0.92f),
+            Description = "Monster Manual bat swarm. Diminutive animal swarm with blindsense, distraction, and wounding blood-loss pressure."
         });
     }
 

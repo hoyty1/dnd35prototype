@@ -48,6 +48,7 @@ public enum CombatConditionType
 
     // Existing project tactical / status states
     Poisoned,
+    Bleeding,
     Grappled,
     Disarmed,
     Feinted,

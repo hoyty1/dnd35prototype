@@ -23,6 +23,7 @@ public sealed class CreatureImmunities
     public bool immuneToMindAffecting;
     public bool immuneToCriticalHits;
     public bool immuneToSneakAttack;
+    public bool immuneToWeaponDamage;
 
     public bool IsImmuneTo(DamageType damageType)
     {
@@ -87,6 +88,7 @@ public sealed class CreatureImmunities
         immuneToMindAffecting |= other.immuneToMindAffecting;
         immuneToCriticalHits |= other.immuneToCriticalHits;
         immuneToSneakAttack |= other.immuneToSneakAttack;
+        immuneToWeaponDamage |= other.immuneToWeaponDamage;
     }
 
     public CreatureImmunities Clone()
@@ -105,7 +107,8 @@ public sealed class CreatureImmunities
             immuneToDisease = immuneToDisease,
             immuneToMindAffecting = immuneToMindAffecting,
             immuneToCriticalHits = immuneToCriticalHits,
-            immuneToSneakAttack = immuneToSneakAttack
+            immuneToSneakAttack = immuneToSneakAttack,
+            immuneToWeaponDamage = immuneToWeaponDamage
         };
     }
 
@@ -125,6 +128,7 @@ public sealed class CreatureImmunities
         if (immuneToMindAffecting) yield return "Immunity to mind-affecting";
         if (immuneToCriticalHits) yield return "Immunity to critical hits";
         if (immuneToSneakAttack) yield return "Immunity to sneak attack";
+        if (immuneToWeaponDamage) yield return "Immunity to weapon damage";
     }
 }
 
@@ -191,6 +195,16 @@ public static class ImmunityPresets
             immuneToMindAffecting = true,
             immuneToCriticalHits = true,
             immuneToSneakAttack = true
+        };
+    }
+
+    public static CreatureImmunities SwarmImmunities()
+    {
+        return new CreatureImmunities
+        {
+            immuneToCriticalHits = true,
+            immuneToSneakAttack = true,
+            immuneToWeaponDamage = true
         };
     }
 

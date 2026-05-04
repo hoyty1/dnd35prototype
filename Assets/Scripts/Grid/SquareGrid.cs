@@ -227,7 +227,7 @@ public class SquareGrid : MonoBehaviour
     /// <returns>AoOPathResult with the computed path and provoked AoOs.</returns>
     public AoOPathResult FindPathAoOAware(Vector2Int start, Vector2Int destination,
         HashSet<Vector2Int> threatenedSquares, int maxRange, int moverSizeSquares = 1, CharacterController mover = null,
-        bool allowThroughAllies = true, bool allowThroughEnemies = false)
+        bool allowThroughAllies = true, bool allowThroughEnemies = false, bool allowDestinationEnemyOverlap = false)
     {
         var result = new AoOPathResult();
         if (start == destination) return result;
@@ -319,7 +319,7 @@ public class SquareGrid : MonoBehaviour
                 if (cell == null) continue;
 
                 bool isDestinationNode = neighbor == destination;
-                bool canTraverseHere = CanTraversePathNode(neighbor, moverSizeSquares, mover, isDestinationNode, allowThroughAllies, allowThroughEnemies);
+                bool canTraverseHere = CanTraversePathNode(neighbor, moverSizeSquares, mover, isDestinationNode, allowThroughAllies, allowThroughEnemies, allowDestinationEnemyOverlap);
 
                 if (!canTraverseHere) continue;
 
@@ -360,7 +360,7 @@ public class SquareGrid : MonoBehaviour
         {
             Vector2Int step = result.Path[i];
             bool isDestinationStep = step == destination;
-            bool canTraverse = CanTraversePathNode(step, moverSizeSquares, mover, isDestinationStep, allowThroughAllies, allowThroughEnemies);
+            bool canTraverse = CanTraversePathNode(step, moverSizeSquares, mover, isDestinationStep, allowThroughAllies, allowThroughEnemies, allowDestinationEnemyOverlap);
             if (!canTraverse)
             {
                 firstInvalidIndex = i;
@@ -386,7 +386,7 @@ public class SquareGrid : MonoBehaviour
     /// - Destination node must be fully unoccupied by anyone except the mover itself.
     /// </summary>
     public bool CanTraversePathNode(Vector2Int basePosition, int moverSizeSquares, CharacterController mover, bool isDestinationNode,
-        bool allowThroughAllies = true, bool allowThroughEnemies = false)
+        bool allowThroughAllies = true, bool allowThroughEnemies = false, bool allowDestinationEnemyOverlap = false)
     {
         // Validate footprint bounds/cell existence first while ignoring occupancy.
         if (!CanPlaceCreature(basePosition, moverSizeSquares, mover, ignoreOtherOccupants: true))
@@ -409,12 +409,26 @@ public class SquareGrid : MonoBehaviour
                 if (occupant == null || occupant == mover)
                     continue;
 
-                // Final destination must be unoccupied.
+                bool isAllyOccupant = mover != null && occupant.Team == mover.Team;
+
+                // Final destination is normally unoccupied, but swarms can end movement overlapping enemies.
                 if (isDestinationNode)
-                    return false;
+                {
+                    if (isAllyOccupant)
+                        return false;
+
+                    bool allowEnemyOverlapAtDestination = allowDestinationEnemyOverlap
+                        && mover != null
+                        && mover.Stats != null
+                        && mover.Stats.IsSwarm;
+
+                    if (!allowEnemyOverlapAtDestination)
+                        return false;
+
+                    continue;
+                }
 
                 // During traversal, ally/enemy pass-through is controlled by the caller.
-                bool isAllyOccupant = mover != null && occupant.Team == mover.Team;
                 if (isAllyOccupant)
                 {
                     if (!allowThroughAllies)

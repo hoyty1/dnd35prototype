@@ -688,6 +688,16 @@ public static class ConditionRules
 
         Add(new ConditionDefinition
         {
+            Type = CombatConditionType.Bleeding,
+            DisplayName = "Bleeding",
+            ShortLabel = "BLD",
+            Description = "Loses HP at the start of each turn until bleeding is stopped.",
+            StackingRule = ConditionStackingRule.Refresh,
+            MovementMultiplier = 1f
+        });
+
+        Add(new ConditionDefinition
+        {
             Type = CombatConditionType.Disarmed,
             DisplayName = "Disarmed",
             ShortLabel = "DS",

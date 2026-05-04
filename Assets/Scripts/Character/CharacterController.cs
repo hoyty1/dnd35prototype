@@ -411,6 +411,7 @@ public class CharacterController : MonoBehaviour
     [SerializeField] private int _regenerationAmountPerRound;
     [SerializeField] private DamageBypassTag _regenerationSuppressedBy = DamageBypassTag.None;
     [SerializeField] private int _regenerationSuppressedRoundsRemaining;
+    [SerializeField] private int _swarmBleedingPerRound;
 
     public int BombardierAcidSprayCooldownRounds => Mathf.Max(0, _bombardierAcidSprayCooldownRounds);
     public bool HasBombardierAcidSprayReady => _bombardierAcidSprayCooldownRounds <= 0;
@@ -1044,6 +1045,16 @@ public class CharacterController : MonoBehaviour
             return false;
 
         return weapon.NoStrengthToDamage || weapon.HasSpecialProperty("no_str_damage");
+    }
+
+    private static bool IsTorchWeapon(ItemData weapon)
+    {
+        if (weapon == null)
+            return false;
+
+        string id = (weapon.Id ?? string.Empty).Trim();
+        return string.Equals(id, ItemIDs.TORCH, StringComparison.OrdinalIgnoreCase)
+            || weapon.itemID == ItemID.WeaponTorch;
     }
 
     private SpriteRenderer _sr;
@@ -1970,7 +1981,15 @@ public class CharacterController : MonoBehaviour
                 continue;
 
             bool isDestinationStep = (i == path.Count - 1);
-            if (grid != null && !grid.CanTraversePathNode(nextCell.Coords, GetVisualSquaresOccupied(), this, isDestinationStep))
+            bool allowEnemyOverlap = Stats != null && Stats.IsSwarm;
+            if (grid != null && !grid.CanTraversePathNode(
+                    nextCell.Coords,
+                    GetVisualSquaresOccupied(),
+                    this,
+                    isDestinationStep,
+                    allowThroughAllies: true,
+                    allowThroughEnemies: allowEnemyOverlap,
+                    allowDestinationEnemyOverlap: allowEnemyOverlap))
                 break;
 
             Vector3 startPos = transform.position;
@@ -4972,6 +4991,23 @@ public class CharacterController : MonoBehaviour
             }
 
             int rawTotalDamage = rawWeaponDamage + rawSneakDamage;
+
+            bool targetIsSwarm = target != null && target.Stats != null && target.Stats.IsSwarm;
+            if (targetIsSwarm && IsTorchWeapon(weapon))
+            {
+                int torchDamage = UnityEngine.Random.Range(1, 4); // 1d3 fire vs swarms
+                rawWeaponDamage = torchDamage;
+                rawSneakDamage = 0;
+                rawTotalDamage = torchDamage;
+                result.SneakAttackApplied = false;
+                result.SneakAttackDice = 0;
+                result.SneakAttackDamage = 0;
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                    ? $"Torch vs swarm: 1d3({torchDamage}) fire damage."
+                    : $"{result.SpecialAttackNote} Torch vs swarm: 1d3({torchDamage}) fire damage.";
+            }
+
+            result.Damage = rawWeaponDamage;
             result.RawTotalDamage = rawTotalDamage;
 
             // Build damage packet for DR/resistance/immunity resolution
@@ -5739,6 +5775,12 @@ public class CharacterController : MonoBehaviour
     public bool IsTargetInCurrentWeaponRange(CharacterController target)
     {
         if (target == null || target.Stats == null || Stats == null) return false;
+
+        if (Stats.IsSwarm)
+        {
+            int swarmDistance = GetMinimumDistanceToTargetSquares(target, chebyshev: true);
+            return swarmDistance == 0;
+        }
 
         ItemData weapon = GetEquippedMainWeapon();
 
@@ -8057,6 +8099,26 @@ public class CharacterController : MonoBehaviour
 
     private SpecialAttackResult ResolveTrip(CharacterController target, int? attackBonusOverride = null)
     {
+        if (Stats != null && Stats.IsSwarm)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Trip",
+                Success = false,
+                Log = $"{Stats.CharacterName} cannot make trip attempts while in swarm form."
+            };
+        }
+
+        if (target != null && target.Stats != null && target.Stats.IsSwarm)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Trip",
+                Success = false,
+                Log = $"{target.Stats.CharacterName} is a swarm and cannot be tripped."
+            };
+        }
+
         if (IsBlockedBySummonedContactBarrier(target, out _))
             return BuildSummonedContactBarrierResult(target, "Trip");
 
@@ -8253,6 +8315,26 @@ public class CharacterController : MonoBehaviour
                 ManeuverName = "Grapple",
                 Success = false,
                 Log = "No valid grapple target."
+            };
+        }
+
+        if (Stats.IsSwarm)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Grapple",
+                Success = false,
+                Log = $"{Stats.CharacterName} cannot initiate grapples while in swarm form."
+            };
+        }
+
+        if (target.Stats.IsSwarm)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Grapple",
+                Success = false,
+                Log = $"{target.Stats.CharacterName} is a swarm and cannot be grappled."
             };
         }
 
@@ -8725,6 +8807,26 @@ public class CharacterController : MonoBehaviour
 
     private SpecialAttackResult ResolveBullRush(CharacterController target, int attackBab, int chargeBonus)
     {
+        if (Stats != null && Stats.IsSwarm)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Bull Rush",
+                Success = false,
+                Log = $"{Stats.CharacterName} cannot bull rush while in swarm form."
+            };
+        }
+
+        if (target != null && target.Stats != null && target.Stats.IsSwarm)
+        {
+            return new SpecialAttackResult
+            {
+                ManeuverName = "Bull Rush",
+                Success = false,
+                Log = $"{target.Stats.CharacterName} is a swarm and cannot be bull rushed."
+            };
+        }
+
         if (IsBlockedBySummonedContactBarrier(target, out _))
             return BuildSummonedContactBarrierResult(target, "Bull Rush");
 

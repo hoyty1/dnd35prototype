@@ -8,8 +8,69 @@ public static partial class NPCDatabase
 {
     private static void RegisterCreatures_S()
     {
+        RegisterSpiderSwarm();
         RegisterMonstrousScorpions();
         RegisterMonstrousSpiders();
+    }
+
+    private static void RegisterSpiderSwarm()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "spider_swarm",
+            Name = "Spider Swarm",
+            ChallengeRating = "1",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Vermin",
+            HitDice = 2,
+            BaseAttackBonusOverride = 1, // Monster Manual BAB +1
+            SizeCategory = SizeCategory.Large, // Swarm occupies 2×2 space in this prototype
+            IsTallCreature = false,
+            STR = 1, DEX = 17, CON = 10, WIS = 10, INT = CharacterStats.NO_SCORE, CHA = 2,
+            NaturalArmorBonus = 0, // AC 17 = 10 +4 size +3 Dex
+            BaseSpeed = 4, // 20 ft
+            BaseHitDieHP = 9,
+            CreatureTags = new List<string> { "Vermin", "Swarm", "MM35" },
+            IsMindless = true,
+            IsSwarm = true,
+            CanMakeAttacksOfOpportunity = false,
+            Immunities = ImmunityPresets.Combine(
+                ImmunityPresets.SwarmImmunities(),
+                ImmunityPresets.MindlessImmunities()),
+            SwarmTraits = new SwarmTraits
+            {
+                IsSwarm = true,
+                SwarmDamage = 6,
+                SwarmDamageDice = "1d6",
+                SwarmDamageType = DamageType.Piercing,
+                DistractionDC = 11,
+                HasPoison = true,
+                PoisonId = "medium_spider_poison",
+                PoisonDcModifier = -1 // Medium spider poison base DC 12 -> DC 11 for spider swarm
+            },
+            SpecialAbilities = new List<string>
+            {
+                "Swarm attack (1d6)",
+                "Distraction (Fort DC 11)",
+                "Poison (Fort DC 11; initial 1d3 Str; secondary 1d3 Str)",
+                "Darkvision 60 ft",
+                "Tremorsense 30 ft",
+                "Climb 20 ft",
+                "Vermin traits",
+                "Mindless (Intelligence —)",
+                "Swarm traits",
+                "Alignment: True Neutral"
+            },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.18f, 0.18f, 0.18f, 1f),
+            PanelColor = new Color(0.08f, 0.08f, 0.08f, 0.85f),
+            NameColor = new Color(0.82f, 0.82f, 0.88f),
+            Description = "Monster Manual spider swarm. Diminutive vermin swarm with toxic bite-cloud, tremorsense, and mindless vermin traits."
+        });
     }
 
     private static void RegisterMonstrousScorpions()

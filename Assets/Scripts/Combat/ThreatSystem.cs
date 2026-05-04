@@ -313,6 +313,10 @@ public static class ThreatSystem
     public static bool CanMakeAoO(CharacterController character)
     {
         if (character == null || character.Stats == null || character.Stats.IsDead) return false;
+
+        if (!character.Stats.CanMakeAttacksOfOpportunity)
+            return false;
+
         // Ranged-only characters cannot make AoOs
         if (!character.HasMeleeWeaponEquipped()) return false;
 
@@ -365,7 +369,9 @@ public static class ThreatSystem
     public static List<AoOThreatInfo> AnalyzePathForAoOs(CharacterController mover, List<Vector2Int> path, List<CharacterController> allCharacters, bool suppressFirstSquareAoO = false)
     {
         var provokedAoOs = new List<AoOThreatInfo>();
+        if (mover == null || mover.Stats == null) return provokedAoOs;
         if (path == null || path.Count == 0) return provokedAoOs;
+        if (mover.Stats.IsSwarm) return provokedAoOs;
 
         // Track which enemies have already been triggered (each gets at most their max AoOs)
         var enemyAoOUsedThisMovement = new Dictionary<CharacterController, int>();

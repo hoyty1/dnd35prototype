@@ -212,6 +212,9 @@ public class NPCDefinition
     public List<DamageType> DamageImmunities = new List<DamageType>();
     public CreatureImmunities Immunities = new CreatureImmunities();
     public bool IsMindless;
+    public bool IsSwarm;
+    public SwarmTraits SwarmTraits = new SwarmTraits();
+    public bool CanMakeAttacksOfOpportunity = true;
     public int RegenerationAmount;
     public DamageBypassTag RegenerationSuppressedBy = DamageBypassTag.None;
     public int SpellResistance;
@@ -315,6 +318,25 @@ public class NPCDefinition
             : new List<DamageType>();
         clone.Immunities = Immunities != null ? Immunities.Clone() : new CreatureImmunities();
         clone.IsMindless = IsMindless;
+        clone.IsSwarm = IsSwarm;
+        clone.SwarmTraits = SwarmTraits != null
+            ? new SwarmTraits
+            {
+                IsSwarm = SwarmTraits.IsSwarm,
+                SwarmDamage = SwarmTraits.SwarmDamage,
+                SwarmDamageDice = SwarmTraits.SwarmDamageDice,
+                DistractionDC = SwarmTraits.DistractionDC,
+                HasPoison = SwarmTraits.HasPoison,
+                HasDisease = SwarmTraits.HasDisease,
+                HasWounding = SwarmTraits.HasWounding,
+                SwarmDamageType = SwarmTraits.SwarmDamageType,
+                PoisonId = SwarmTraits.PoisonId,
+                PoisonDcModifier = SwarmTraits.PoisonDcModifier,
+                DiseaseType = SwarmTraits.DiseaseType,
+                DiseaseDcModifier = SwarmTraits.DiseaseDcModifier
+            }
+            : new SwarmTraits();
+        clone.CanMakeAttacksOfOpportunity = CanMakeAttacksOfOpportunity;
         clone.RegenerationAmount = RegenerationAmount;
         clone.RegenerationSuppressedBy = RegenerationSuppressedBy;
         clone.CreatureTags = CreatureTags != null

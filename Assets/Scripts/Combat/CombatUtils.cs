@@ -55,6 +55,10 @@ public static class CombatUtils
         if (attacker.Stats == null || target.Stats == null) return false;
         if (attacker.Stats.IsDead || target.Stats.IsDead) return false;
 
+        // Swarms do not threaten for AoOs/flanking, and swarms cannot be flanked.
+        if (attacker.Stats.IsSwarm || target.Stats.IsSwarm)
+            return false;
+
         // D&D 3.5: ranged-only wielders do not threaten for flanking/AoO.
         if (!attacker.HasMeleeWeaponEquipped()) return false;
 

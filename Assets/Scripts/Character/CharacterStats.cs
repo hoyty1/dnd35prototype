@@ -1003,6 +1003,11 @@ public class CharacterStats
     public int MaxAttacksOfOpportunity = 1;
 
     /// <summary>
+    /// Global AoO toggle for traits that never threaten/provoke AoOs (for example swarms).
+    /// </summary>
+    public bool CanMakeAttacksOfOpportunity = true;
+
+    /// <summary>
     /// Reset AoO counters at the start of this character's turn.
     /// Recalculates MaxAttacksOfOpportunity based on Combat Reflexes feat.
     /// </summary>
@@ -1179,6 +1184,12 @@ public class CharacterStats
     /// and is immune to mind-affecting effects.
     /// </summary>
     public bool IsMindless;
+
+    /// <summary>True when this creature uses D&D 3.5e swarm rules.</summary>
+    public bool IsSwarm;
+
+    /// <summary>Swarm rule payload (automatic damage/distraction/special on-hit riders).</summary>
+    public SwarmTraits SwarmTraits = new SwarmTraits();
 
     /// <summary>Display-friendly intelligence string. No-score creatures show an em dash.</summary>
     public string IntelligenceDisplay => GetAbilityScoreDisplay(AbilityType.INT);
@@ -2567,6 +2578,30 @@ public class CharacterStats
 
         if (packet.Types == null || packet.Types.Count == 0)
             packet.Types = new HashSet<DamageType> { DamageType.Untyped };
+
+        // Swarm trait immunity: weapon attacks do no damage unless the weapon attack is fire-based.
+        if (Immunities != null && Immunities.immuneToWeaponDamage && packet.Source == AttackSource.Weapon)
+        {
+            bool hasFireDamageType = packet.Types.Contains(DamageType.Fire);
+            if (!hasFireDamageType)
+            {
+                DamageType firstType = DamageType.Untyped;
+                foreach (DamageType type in packet.Types)
+                {
+                    firstType = type;
+                    break;
+                }
+
+                result.ImmunityTriggered = true;
+                result.ImmunityType = firstType;
+                result.DamageAfterImmunity = 0;
+                result.DamageAfterResistance = 0;
+                result.FinalDamage = 0;
+                result.Notes.Add("Immune to weapon damage.");
+                TakeDamage(0);
+                return result;
+            }
+        }
 
         // 1) Immunity check: any matching type negates all damage
         foreach (var type in packet.Types)

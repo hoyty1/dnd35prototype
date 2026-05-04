@@ -176,6 +176,10 @@ public class MovementService : MonoBehaviour
 
         int maxRange = Mathf.Max(1, maxRangeOverride ?? mover.Stats.MoveRange);
 
+        bool moverIsSwarm = mover != null && mover.Stats != null && mover.Stats.IsSwarm;
+        allowThroughEnemies = allowThroughEnemies || moverIsSwarm;
+        bool allowDestinationEnemyOverlap = moverIsSwarm;
+
         if (avoidThreats)
         {
             List<CharacterController> allCharacters = _allCharactersProvider != null
@@ -193,6 +197,7 @@ public class MovementService : MonoBehaviour
             maxRangeOverride: maxRange,
             allowThroughAllies: allowThroughAllies,
             allowThroughEnemies: allowThroughEnemies,
+            allowDestinationEnemyOverlap: allowDestinationEnemyOverlap,
             suppressFirstSquareAoO: suppressFirstSquareAoO);
     }
 
@@ -203,6 +208,7 @@ public class MovementService : MonoBehaviour
         int maxRangeOverride,
         bool allowThroughAllies = true,
         bool allowThroughEnemies = false,
+        bool allowDestinationEnemyOverlap = false,
         bool suppressFirstSquareAoO = false)
     {
         var result = new AoOPathResult();
@@ -220,7 +226,8 @@ public class MovementService : MonoBehaviour
             moverSizeSquares: mover.GetVisualSquaresOccupied(),
             mover: mover,
             allowThroughAllies: allowThroughAllies,
-            allowThroughEnemies: allowThroughEnemies) ?? new AoOPathResult();
+            allowThroughEnemies: allowThroughEnemies,
+            allowDestinationEnemyOverlap: allowDestinationEnemyOverlap) ?? new AoOPathResult();
 
         if (result.Path != null && result.Path.Count > 0)
             result.ProvokedAoOs = CheckForAoO(mover, result.Path, suppressFirstSquareAoO);
