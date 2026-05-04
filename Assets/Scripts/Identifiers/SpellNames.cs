@@ -273,8 +273,11 @@ namespace DND35e.Identifiers
         /// <summary>Hide from Undead (spell id: hide_from_undead)</summary>
         public const string HIDE_FROM_UNDEAD = "hide_from_undead";
 
-        /// <summary>Hideous Laughter (spell id: hideous_laughter)</summary>
-        public const string HIDEOUS_LAUGHTER = "hideous_laughter";
+        /// <summary>Tasha's Hideous Laughter (spell id: tashas_hideous_laughter)</summary>
+        public const string HIDEOUS_LAUGHTER = "tashas_hideous_laughter";
+
+        /// <summary>Legacy Hideous Laughter id (spell id: hideous_laughter)</summary>
+        public const string HIDEOUS_LAUGHTER_LEGACY = "hideous_laughter";
 
         /// <summary>Hold Person (spell id: hold_person)</summary>
         public const string HOLD_PERSON = "hold_person";

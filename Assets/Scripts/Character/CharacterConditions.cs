@@ -118,6 +118,7 @@ public class CharacterConditions : MonoBehaviour
     public bool IsInvisible => HasCondition(CombatConditionType.Invisible);
     public bool IsTurned => HasCondition(CombatConditionType.Turned);
     public bool IsDazed => HasCondition(CombatConditionType.Dazed);
+    public bool IsHideousLaughter => HasCondition(CombatConditionType.HideousLaughter);
     public bool IsDazzled => HasCondition(CombatConditionType.Dazzled);
     public bool IsFeinted => HasCondition(CombatConditionType.Feinted);
     public bool IsFlatFooted => HasCondition(CombatConditionType.FlatFooted);

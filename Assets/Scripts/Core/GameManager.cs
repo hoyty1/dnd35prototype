@@ -5766,6 +5766,10 @@ public partial class GameManager : MonoBehaviour
         List<StatusEffect> active = character.GetActiveConditions();
         for (int i = 0; i < active.Count; i++)
         {
+            CombatConditionType normalized = ConditionRules.Normalize(active[i].Type);
+            if (normalized == CombatConditionType.HideousLaughter)
+                return "is laughing uncontrollably";
+
             ConditionDefinition def = ConditionRules.GetDefinition(active[i].Type);
             if (def.PreventsStandardActions && def.PreventsFullRoundActions)
                 return $"is {def.DisplayName.ToLowerInvariant()}";
@@ -7683,6 +7687,9 @@ public partial class GameManager : MonoBehaviour
 
         if (character.HasCondition(CombatConditionType.Grappled))
             return "Cannot stand up while grappled";
+
+        if (character.HasCondition(CombatConditionType.HideousLaughter))
+            return "Cannot stand while laughing uncontrollably";
 
         if (character.HasTakenFiveFootStep)
             return "Cannot stand after taking a 5-foot step";
@@ -14755,13 +14762,67 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private ActiveSpellEffect ApplySpellBuff(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
     {
-        if (spell != null && spell.SpellId == SpellNames.DAZE)
+        if (spell != null && (spell.SpellId == SpellNames.DAZE || spell.SpellId == SpellNames.DAZE_MONSTER))
         {
-            int dazeRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 1);
+            int dazeRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, caster != null && caster.Stats != null ? caster.Stats.GetCasterLevel() : 1));
             string sourceName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name;
-            target.ApplyCondition(CombatConditionType.Dazed, dazeRounds, sourceName);
+
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Dazed,
+                    dazeRounds,
+                    source: caster,
+                    sourceNameOverride: spell.Name,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+            }
+            else
+            {
+                target.ApplyCondition(CombatConditionType.Dazed, dazeRounds, sourceName);
+            }
+
             CombatUI?.ShowCombatLog($"<color=#FFCC66>💫 {target.Stats.CharacterName} is dazed for {dazeRounds} round(s)!</color>");
-            Debug.Log($"[GameManager] Daze applied to {target.Stats.CharacterName} for {dazeRounds} round(s)");
+            Debug.Log($"[GameManager] {spell.Name} applied Dazed to {target.Stats.CharacterName} for {dazeRounds} round(s)");
+            return null;
+        }
+
+        if (spell != null && spell.SpellId == SpellNames.HIDEOUS_LAUGHTER)
+        {
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int laughterRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+            string sourceName = spell.Name;
+
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.HideousLaughter,
+                    laughterRounds,
+                    source: caster,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Prone,
+                    laughterRounds,
+                    source: caster,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+            }
+            else
+            {
+                string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
+                target.ApplyCondition(CombatConditionType.HideousLaughter, laughterRounds, fallbackSource);
+                target.ApplyCondition(CombatConditionType.Prone, laughterRounds, fallbackSource);
+            }
+
+            CombatUI?.ShowCombatLog($"<color=#FF99FF>🤣 HAHAHA! {target.Stats.CharacterName} collapses in hideous laughter and falls prone for {laughterRounds} round(s)!</color>");
+            Debug.Log($"[GameManager] Tasha's Hideous Laughter applied to {target.Stats.CharacterName} for {laughterRounds} rounds");
             return null;
         }
 

@@ -391,6 +391,10 @@ public class StatusEffectIndicator : MonoBehaviour
         CombatConditionType normalized = ConditionRules.Normalize(type);
         if (normalized == CombatConditionType.Blinded)
             return "BLIND";
+        if (normalized == CombatConditionType.Dazed)
+            return "★";
+        if (normalized == CombatConditionType.HideousLaughter)
+            return "HA";
 
         var def = ConditionRules.GetDefinition(type);
         if (!string.IsNullOrEmpty(def.ShortLabel))
@@ -414,6 +418,10 @@ public class StatusEffectIndicator : MonoBehaviour
                 return new Color(1f, 0.55f, 0.2f, 0.9f);
             case CombatConditionType.Turned:
                 return new Color(1f, 0.95f, 0.66f, 0.92f);
+            case CombatConditionType.Dazed:
+                return new Color(1f, 0.85f, 0.35f, 0.9f);
+            case CombatConditionType.HideousLaughter:
+                return new Color(0.72f, 0.42f, 1f, 0.92f);
             case CombatConditionType.Prone:
             case CombatConditionType.Grappled:
             case CombatConditionType.Pinned:

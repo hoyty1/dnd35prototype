@@ -40,6 +40,8 @@ public class SpellResult
     public int SaveMod;                 // Target's save modifier
     public int SaveTotal;               // d20 + save modifier
     public bool SaveSucceeded;
+    public int SituationalSaveBonus;
+    public string SituationalSaveBonusSource;
 
     // ========== SPELL RESISTANCE / IMMUNITY ==========
     public bool SpellResistanceChecked;
@@ -207,7 +209,7 @@ public class SpellResult
         // ========== SAVING THROW ==========
         if (RequiredSave && AttackHit)
         {
-            int baseSaveMod = SaveMod - ProtectionSaveBonus;
+            int baseSaveMod = SaveMod - ProtectionSaveBonus - SituationalSaveBonus;
             sb.AppendLine($"  {SaveType} Save:");
             sb.AppendLine($"    Base: {CharacterStats.FormatMod(baseSaveMod)}");
 
@@ -219,6 +221,14 @@ public class SpellResult
             else if (!string.IsNullOrWhiteSpace(ProtectionSourceName))
             {
                 sb.AppendLine("    (No protection bonus - caster not aligned against the ward)");
+            }
+
+            if (SituationalSaveBonus != 0)
+            {
+                string source = string.IsNullOrWhiteSpace(SituationalSaveBonusSource)
+                    ? "situational modifier"
+                    : SituationalSaveBonusSource;
+                sb.AppendLine($"    {FormatModLine(SituationalSaveBonus, source)}");
             }
 
             sb.AppendLine($"    Total: {CharacterStats.FormatMod(SaveMod)}");

@@ -249,6 +249,41 @@ public static class SpellCaster
             return result;
         }
 
+        if (result.AttackHit && string.Equals(spell.SpellId, SpellNames.DAZE_MONSTER, System.StringComparison.Ordinal))
+        {
+            if (!IsLivingCreature(targetStats))
+            {
+                result.Success = false;
+                result.NoEffectReason = "Immune (not a living creature).";
+                result.TargetHPBefore = targetStats.CurrentHP;
+                result.TargetHPAfter = targetStats.CurrentHP;
+                return result;
+            }
+
+            int hitDice = Mathf.Max(1, targetStats.HitDice > 0 ? targetStats.HitDice : targetStats.Level);
+            if (hitDice > 6)
+            {
+                result.Success = false;
+                result.NoEffectReason = $"Immune (7+ HD). Target has {hitDice} HD.";
+                result.TargetHPBefore = targetStats.CurrentHP;
+                result.TargetHPAfter = targetStats.CurrentHP;
+                return result;
+            }
+        }
+
+        if (result.AttackHit && string.Equals(spell.SpellId, SpellNames.HIDEOUS_LAUGHTER, System.StringComparison.Ordinal))
+        {
+            int effectiveInt = targetStats.EffectiveINTScore;
+            if (targetStats.IsMindless || effectiveInt <= 2)
+            {
+                result.Success = false;
+                result.NoEffectReason = $"Immune (Int 2 or less). Target Int: {effectiveInt}.";
+                result.TargetHPBefore = targetStats.CurrentHP;
+                result.TargetHPAfter = targetStats.CurrentHP;
+                return result;
+            }
+        }
+
         // Breaking charm: if the charm caster makes a hostile action against their charmed target,
         // the charm ends immediately.
         if (result.AttackHit
@@ -309,10 +344,20 @@ public static class SpellCaster
             else
             {
                 int saveRoll = Random.Range(1, 21);
-                int saveMod = GetSaveModifier(targetStats, spell, protection, casterController, targetController, out int protectionSaveBonus);
+                int saveMod = GetSaveModifier(
+                    targetStats,
+                    spell,
+                    protection,
+                    casterController,
+                    targetController,
+                    out int protectionSaveBonus,
+                    out int situationalSaveBonus,
+                    out string situationalSaveSource);
                 result.SaveRoll = saveRoll;
                 result.SaveMod = saveMod;
                 result.ProtectionSaveBonus = protectionSaveBonus;
+                result.SituationalSaveBonus = situationalSaveBonus;
+                result.SituationalSaveBonusSource = situationalSaveSource;
                 result.SaveTotal = saveRoll + saveMod;
                 result.SaveSucceeded = result.SaveTotal >= result.SaveDC;
             }
@@ -551,6 +596,22 @@ public static class SpellCaster
             return false;
 
         return string.Equals(targetStats.CreatureType.Trim(), "undead", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsLivingCreature(CharacterStats targetStats)
+    {
+        if (targetStats == null)
+            return false;
+
+        string creatureType = string.IsNullOrWhiteSpace(targetStats.CreatureType)
+            ? string.Empty
+            : targetStats.CreatureType.Trim();
+
+        if (creatureType.Equals("Undead", System.StringComparison.OrdinalIgnoreCase)
+            || creatureType.Equals("Construct", System.StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return !targetStats.IsDead;
     }
 
     private static bool HasActiveShieldSpell(CharacterController targetController)
@@ -808,9 +869,13 @@ public static class SpellCaster
         AlignmentProtectionBenefits protection,
         CharacterController casterController,
         CharacterController targetController,
-        out int protectionSaveBonus)
+        out int protectionSaveBonus,
+        out int situationalSaveBonus,
+        out string situationalSaveSource)
     {
         protectionSaveBonus = 0;
+        situationalSaveBonus = 0;
+        situationalSaveSource = string.Empty;
 
         if (stats == null || spell == null)
             return 0;
@@ -850,6 +915,24 @@ public static class SpellCaster
         {
             protectionSaveBonus = protection.ResistanceSaveBonus;
             baseSave += protectionSaveBonus;
+        }
+
+        if (string.Equals(spell.SpellId, SpellNames.HIDEOUS_LAUGHTER, System.StringComparison.Ordinal)
+            && casterController != null
+            && casterController.Stats != null
+            && targetController != null
+            && targetController.Stats != null)
+        {
+            bool differentCreatureType = !string.Equals(
+                casterController.Stats.CreatureType ?? string.Empty,
+                targetController.Stats.CreatureType ?? string.Empty,
+                System.StringComparison.OrdinalIgnoreCase);
+            if (differentCreatureType)
+            {
+                situationalSaveBonus = 4;
+                situationalSaveSource = "Different creature type (+4)";
+                baseSave += situationalSaveBonus;
+            }
         }
 
         return baseSave;

@@ -29,6 +29,7 @@ public enum CombatConditionType
     Frightened,
     Grappling,
     Helpless,
+    HideousLaughter,
     Incorporeal,
     Invisible,
     KnockedDown,

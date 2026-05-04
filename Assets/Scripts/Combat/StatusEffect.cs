@@ -216,6 +216,22 @@ public static class ConditionRules
 
         Add(new ConditionDefinition
         {
+            Type = CombatConditionType.HideousLaughter,
+            DisplayName = "Hideous Laughter",
+            ShortLabel = "HA",
+            Description = "Laughing uncontrollably. Falls prone and cannot take actions, but is not helpless.",
+            StackingRule = ConditionStackingRule.Refresh,
+            PreventsMovement = true,
+            PreventsStandardActions = true,
+            PreventsFullRoundActions = true,
+            PreventsSpellcasting = true,
+            PreventsAoO = true,
+            PreventsThreatening = true,
+            MovementMultiplier = 0f
+        });
+
+        Add(new ConditionDefinition
+        {
             Type = CombatConditionType.Dead,
             DisplayName = "Dead",
             ShortLabel = "DE",

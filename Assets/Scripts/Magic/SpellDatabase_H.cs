@@ -51,16 +51,22 @@ public static partial class SpellDatabase
         Register(new SpellData
                 {
                     SpellId = SpellNames.HIDEOUS_LAUGHTER,
-                    Name = "Hideous Laughter",
-                    Description = "Subject laughs uncontrollably, falls prone. Will save negates. 1 round/level. PHB p.240",
+                    Name = "Tasha's Hideous Laughter",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. Subject collapses into laughter, falls prone, and cannot take actions (not helpless). Int 2 or less is immune. Different creature type than caster gets +4 on save. Will negates. SR applies. Duration 1 round/level. PHB p.240",
                     SpellLevel = 2, School = "Enchantment",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Close,
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
-                    BuffDurationRounds = 3,
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    BlockedByProtectionFromAlignment = false,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 1,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -165,6 +171,11 @@ public static partial class SpellDatabase
                     DurationScalesWithLevel = false,
                     IsPlaceholder = false
                 });
+
+        // Aliases / class-level variants
+        RegisterAlias(SpellNames.HIDEOUS_LAUGHTER_LEGACY, SpellNames.HIDEOUS_LAUGHTER);
+        RegisterClassSpellAlias("tashas_hideous_laughter_brd", SpellNames.HIDEOUS_LAUGHTER, "Bard", 1);
+        RegisterClassSpellAlias("hideous_laughter_brd", SpellNames.HIDEOUS_LAUGHTER, "Bard", 1);
 
     }
 }
