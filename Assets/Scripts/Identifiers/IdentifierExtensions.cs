@@ -177,14 +177,29 @@ namespace DND35e.Identifiers
 
         public static string ToStorageString(this ItemID id)
         {
-            return ItemIdToString.TryGetValue(id, out string result) ? result : string.Empty;
+            if (ItemIdToString.TryGetValue(id, out string result))
+                return result;
+
+            // Dynamic support for enhanced enum values (e.g., WeaponLongswordPlus1 -> longsword_plus1).
+            if (TryBuildEnhancedStorageId(id, out string enhancedStorageId))
+                return enhancedStorageId;
+
+            return string.Empty;
         }
 
         public static ItemID ToItemID(this string str)
         {
-            return string.IsNullOrWhiteSpace(str)
-                ? ItemID.None
-                : (StringToItemId.TryGetValue(str, out ItemID result) ? result : ItemID.None);
+            if (string.IsNullOrWhiteSpace(str))
+                return ItemID.None;
+
+            if (StringToItemId.TryGetValue(str, out ItemID result))
+                return result;
+
+            // Dynamic support for enhanced storage ids (e.g., longsword_plus1 -> WeaponLongswordPlus1).
+            if (TryParseEnhancedStorageId(str, out ItemID enhancedResult))
+                return enhancedResult;
+
+            return ItemID.None;
         }
 
         public static string ToStorageString(this SpellID id)
@@ -219,6 +234,53 @@ namespace DND35e.Identifiers
         public static AbilityScore ToAbilityScore(this string str)
         {
             return Enum.TryParse(str, true, out AbilityScore result) ? result : AbilityScore.Strength;
+        }
+
+        private static bool TryBuildEnhancedStorageId(ItemID enhancedId, out string storageId)
+        {
+            storageId = string.Empty;
+
+            string enumName = enhancedId.ToString();
+            if (string.IsNullOrWhiteSpace(enumName))
+                return false;
+
+            if (!enumName.EndsWith("Plus1", StringComparison.Ordinal) && !enumName.EndsWith("Plus2", StringComparison.Ordinal))
+                return false;
+
+            int plusValue = enumName.EndsWith("Plus1", StringComparison.Ordinal) ? 1 : 2;
+            string baseEnumName = enumName.Substring(0, enumName.Length - "Plus1".Length);
+            if (!Enum.TryParse(baseEnumName, out ItemID baseId))
+                return false;
+
+            if (!ItemIdToString.TryGetValue(baseId, out string baseStorageId) || string.IsNullOrWhiteSpace(baseStorageId))
+                return false;
+
+            storageId = $"{baseStorageId}_plus{plusValue}";
+            return true;
+        }
+
+        private static bool TryParseEnhancedStorageId(string input, out ItemID itemId)
+        {
+            itemId = ItemID.None;
+
+            string trimmed = input?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(trimmed))
+                return false;
+
+            int plusSuffixIndex = trimmed.LastIndexOf("_plus", StringComparison.OrdinalIgnoreCase);
+            if (plusSuffixIndex <= 0 || plusSuffixIndex >= trimmed.Length - 1)
+                return false;
+
+            string baseStorageId = trimmed.Substring(0, plusSuffixIndex);
+            string plusSuffix = trimmed.Substring(plusSuffixIndex + "_plus".Length);
+            if (!int.TryParse(plusSuffix, out int plusValue) || (plusValue != 1 && plusValue != 2))
+                return false;
+
+            if (!StringToItemId.TryGetValue(baseStorageId, out ItemID baseId) || baseId == ItemID.None)
+                return false;
+
+            string enhancedEnumName = $"{baseId}Plus{plusValue}";
+            return Enum.TryParse(enhancedEnumName, out itemId);
         }
 
         private static string ToPascalCase(string value)

@@ -1544,11 +1544,12 @@ public class PreCombatInventoryUI : MonoBehaviour
         HideStackQuantityPrompt();
 
         int clampedQuantity = Mathf.Max(1, quantityToMove);
+        string displayName = item.FullNameWithEnhancement;
         if (_equipOrStashPromptText != null)
         {
             _equipOrStashPromptText.text = clampedQuantity > 1
-                ? $"{item.Name} ×{clampedQuantity}: Equip one, or move all selected to stash?"
-                : $"What would you like to do with {item.Name}?";
+                ? $"{displayName} ×{clampedQuantity}: Equip one, or move all selected to stash?"
+                : $"What would you like to do with {displayName}?";
         }
 
         if (_equipOrStashEquipButton != null)
@@ -1609,7 +1610,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         _pendingQuantityConfirm = onConfirm;
 
         if (_stackQuantityItemText != null)
-            _stackQuantityItemText.text = $"{stack.Prototype?.Name ?? "Item"} (×{stack.Quantity} available)";
+            _stackQuantityItemText.text = $"{stack.Prototype?.FullNameWithEnhancement ?? "Item"} (×{stack.Quantity} available)";
 
         if (_stackQuantitySlider != null)
         {
@@ -2120,7 +2121,7 @@ public class PreCombatInventoryUI : MonoBehaviour
             TextAnchor.MiddleCenter);
 
         string itemTextValue = item != null
-            ? (string.IsNullOrEmpty(item.IconChar) ? item.Name : $"{item.IconChar}\n{item.Name}")
+            ? (string.IsNullOrEmpty(item.IconChar) ? item.FullNameWithEnhancement : $"{item.IconChar}\n{item.FullNameWithEnhancement}")
             : "Empty";
 
         Text itemText = CreateText(
@@ -3634,7 +3635,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (_dragPreview == null || _dragPreviewText == null || item == null)
             return;
 
-        _dragPreviewText.text = $"{GetItemIcon(item)} {item.Name}";
+        _dragPreviewText.text = $"{GetItemIcon(item)} {item.FullNameWithEnhancement}";
         _dragPreview.SetActive(true);
         MoveDragPreview(Input.mousePosition);
     }
@@ -3677,7 +3678,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         string statSummary = item.GetStatSummary();
         string desc = string.IsNullOrWhiteSpace(item.Description) ? "No description." : item.Description;
         string quantityLine = quantity > 1 ? $"\nQty: {quantity}" : string.Empty;
-        _tooltipText.text = $"<b>{item.Name}</b>{quantityLine}\n{statSummary}\n\n{desc}";
+        _tooltipText.text = $"<b>{item.FullNameWithEnhancement}</b>{quantityLine}\n{statSummary}\n\n{desc}";
 
         _tooltipPanel.SetActive(true);
         _tooltipActive = true;
@@ -4015,14 +4016,18 @@ public class PreCombatInventoryUI : MonoBehaviour
 
     private string BuildCompactItemName(ItemData item)
     {
-        if (item == null || string.IsNullOrWhiteSpace(item.Name))
+        if (item == null)
+            return string.Empty;
+
+        string displayName = item.FullNameWithEnhancement;
+        if (string.IsNullOrWhiteSpace(displayName))
             return string.Empty;
 
         const int max = 10;
-        if (item.Name.Length <= max)
-            return item.Name;
+        if (displayName.Length <= max)
+            return displayName;
 
-        return item.Name.Substring(0, max - 1) + "…";
+        return displayName.Substring(0, max - 1) + "…";
     }
 
     private Color GetRarityTint(ItemData item)

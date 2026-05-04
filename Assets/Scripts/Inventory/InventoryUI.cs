@@ -458,7 +458,7 @@ public class InventoryUI : MonoBehaviour
 
         _contextMenuSlotIndex = slotIndex;
         if (_slotContextTitle != null)
-            _slotContextTitle.text = item.Name;
+            _slotContextTitle.text = item.FullNameWithEnhancement;
 
         RectTransform panelRT = PanelRoot.GetComponent<RectTransform>();
         RectTransform menuRT = _slotContextMenu.GetComponent<RectTransform>();
@@ -759,7 +759,8 @@ public class InventoryUI : MonoBehaviour
         if (bg == null || text == null) return;
         if (item != null)
         {
-            text.text = string.IsNullOrEmpty(item.IconChar) ? item.Name : $"{item.IconChar}\n{item.Name}";
+            string displayName = item.FullNameWithEnhancement;
+            text.text = string.IsNullOrEmpty(item.IconChar) ? displayName : $"{item.IconChar}\n{displayName}";
             text.color = item.IconColor;
             bg.color = SlotEquipped;
         }
@@ -796,7 +797,7 @@ public class InventoryUI : MonoBehaviour
     {
         if (item == null || _tooltipPanel == null) return;
         _tooltipPanel.SetActive(true);
-        _tooltipNameText.text = item.Name;
+        _tooltipNameText.text = item.FullNameWithEnhancement;
         _tooltipTypeText.text = item.Type.ToString();
         _tooltipStatsText.text = item.GetStatSummary();
         _tooltipDescText.text = item.Description;

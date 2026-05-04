@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using DND35e.Identifiers;
@@ -29,6 +30,8 @@ public static class ItemDatabase
         RegisterMediumArmor();
         RegisterHeavyArmor();
         RegisterShields();
+        ApplyDefaultBasePrices();
+        RegisterEnhancedEquipmentVariants();
         RegisterConsumablesAndMisc();
     }
 
@@ -1162,6 +1165,130 @@ public static class ItemDatabase
         });
     }
 
+    private static void ApplyDefaultBasePrices()
+    {
+        var basePrices = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Weapons
+            { ItemIDs.DAGGER, 2 },
+            { ItemIDs.QUARTERSTAFF, 0 },
+            { ItemIDs.CLUB, 0 },
+            { ItemIDs.MACE_LIGHT, 5 },
+            { ItemIDs.MACE_HEAVY, 8 },
+            { ItemIDs.SPEAR, 2 },
+            { ItemIDs.LONGSWORD, 15 },
+            { ItemIDs.SHORT_SWORD, 10 },
+            { ItemIDs.GREATSWORD, 50 },
+            { ItemIDs.BATTLEAXE, 10 },
+            { ItemIDs.GREATAXE, 20 },
+            { ItemIDs.WARHAMMER, 12 },
+            { ItemIDs.RAPIER, 20 },
+            { ItemIDs.SCIMITAR, 15 },
+            { ItemIDs.FALCHION, 75 },
+            { ItemIDs.FLAIL_HEAVY, 15 },
+            { ItemIDs.LANCE, 10 },
+            { ItemIDs.MORNINGSTAR, 8 },
+            { ItemIDs.JAVELIN, 1 },
+            { ItemIDs.SHORTBOW, 30 },
+            { ItemIDs.LONGBOW, 75 },
+            { ItemIDs.CROSSBOW_LIGHT, 35 },
+            { ItemIDs.CROSSBOW_HEAVY, 50 },
+            { ItemIDs.SLING, 0 },
+
+            // Armor
+            { ItemIDs.PADDED_ARMOR, 5 },
+            { ItemIDs.LEATHER_ARMOR, 10 },
+            { ItemIDs.STUDDED_LEATHER, 25 },
+            { ItemIDs.CHAIN_SHIRT, 100 },
+            { ItemIDs.HIDE_ARMOR, 15 },
+            { ItemIDs.SCALE_MAIL, 50 },
+            { ItemIDs.CHAINMAIL, 150 },
+            { ItemIDs.BREASTPLATE, 200 },
+            { ItemIDs.SPLINT_MAIL, 200 },
+            { ItemIDs.BANDED_MAIL, 250 },
+            { ItemIDs.HALF_PLATE, 600 },
+            { ItemIDs.FULL_PLATE, 1500 },
+
+            // Shields
+            { ItemIDs.BUCKLER, 15 },
+            { ItemIDs.SHIELD_LIGHT_WOODEN, 3 },
+            { ItemIDs.SHIELD_LIGHT_STEEL, 9 },
+            { ItemIDs.SHIELD_HEAVY_WOODEN, 7 },
+            { ItemIDs.SHIELD_HEAVY_STEEL, 20 },
+            { ItemIDs.TOWER_SHIELD, 30 },
+            { ItemIDs.LIGHT_SHIELD, 3 },
+            { ItemIDs.HEAVY_SHIELD, 20 }
+        };
+
+        foreach (KeyValuePair<string, int> kvp in basePrices)
+        {
+            if (_items.TryGetValue(kvp.Key, out ItemData item) && item != null)
+                item.BasePriceGp = Mathf.Max(0, kvp.Value);
+        }
+    }
+
+    private static void RegisterEnhancedEquipmentVariants()
+    {
+        var baseIds = new List<ItemID>();
+        foreach (ItemID id in Enum.GetValues(typeof(ItemID)))
+        {
+            int numeric = (int)id;
+            if (numeric < 2000 || numeric >= 3400)
+                continue;
+
+            string storageId = id.ToStorageString();
+            if (string.IsNullOrWhiteSpace(storageId))
+                continue;
+
+            if (!_items.TryGetValue(storageId, out ItemData baseItem) || baseItem == null)
+                continue;
+
+            if (!baseItem.IsWeapon && !baseItem.IsArmor && !baseItem.IsShield)
+                continue;
+
+            baseIds.Add(id);
+        }
+
+        for (int i = 0; i < baseIds.Count; i++)
+        {
+            RegisterEnhancedVariant(baseIds[i], 1);
+            RegisterEnhancedVariant(baseIds[i], 2);
+        }
+    }
+
+    private static void RegisterEnhancedVariant(ItemID baseId, int bonus)
+    {
+        if (bonus < 1 || bonus > 5)
+            return;
+
+        string enhancedEnumName = $"{baseId}Plus{bonus}";
+        if (!Enum.TryParse(enhancedEnumName, out ItemID enhancedId) || enhancedId == ItemID.None)
+            return;
+
+        string baseStorageId = baseId.ToStorageString();
+        if (string.IsNullOrWhiteSpace(baseStorageId) || !_items.TryGetValue(baseStorageId, out ItemData baseItem) || baseItem == null)
+            return;
+
+        string enhancedStorageId = enhancedId.ToStorageString();
+        if (string.IsNullOrWhiteSpace(enhancedStorageId) || _items.ContainsKey(enhancedStorageId))
+            return;
+
+        ItemData enhanced = CloneItem(baseStorageId);
+        if (enhanced == null)
+            return;
+
+        enhanced.Id = enhancedStorageId;
+        enhanced.Name = ItemData.FormatEnhancedName(baseItem.Name, bonus);
+        enhanced.Description = string.IsNullOrWhiteSpace(baseItem.Description)
+            ? $"Magically enhanced {ItemData.StripEnhancementNotation(baseItem.Name).ToLowerInvariant()} (+{bonus} enhancement)."
+            : $"{baseItem.Description}\nMagical enhancement: +{bonus}.";
+
+        enhanced.enhancementBonus = bonus;
+        enhanced.EnhancementBonus = bonus;
+
+        Register(enhanced);
+    }
+
     // ============================================================
     //  CONSUMABLES & MISCELLANEOUS
     // ============================================================
@@ -1323,6 +1450,17 @@ public static class ItemDatabase
 
     private static void Register(ItemData item)
     {
+        if (item == null || string.IsNullOrWhiteSpace(item.Id))
+            return;
+
+        if (item.enhancementBonus <= 0 && item.EnhancementBonus > 0)
+            item.enhancementBonus = item.EnhancementBonus;
+        else if (item.EnhancementBonus <= 0 && item.enhancementBonus > 0)
+            item.EnhancementBonus = item.enhancementBonus;
+
+        item.enhancementBonus = Mathf.Clamp(item.enhancementBonus, 0, 5);
+        item.EnhancementBonus = Mathf.Clamp(item.EnhancementBonus, 0, 5);
+
         ApplyWeaponSizeDefaults(item);
         ApplyReachDefaults(item);
         _items[item.Id] = item;
@@ -1494,6 +1632,8 @@ public static class ItemDatabase
         clone.ArcaneSpellFailure = src.ArcaneSpellFailure;
         clone.WeightLbs = src.WeightLbs;
         clone.VisualTags = src.VisualTags != null ? new HashSet<string>(src.VisualTags) : new HashSet<string>();
+        clone.BasePriceGp = src.BasePriceGp;
+        clone.enhancementBonus = src.enhancementBonus;
         clone.EnhancementBonus = src.EnhancementBonus;
         clone.Hardness = src.Hardness;
         clone.MaxHitPoints = src.MaxHitPoints;

@@ -290,7 +290,7 @@ public class Inventory
             }
 
             // --- Armor Bonus & Properties ---
-            OwnerStats.ArmorBonus = ArmorRobeSlot != null ? ArmorRobeSlot.ArmorBonus : 0;
+            OwnerStats.ArmorBonus = ArmorRobeSlot != null ? ArmorRobeSlot.GetTotalArmorBonus() : 0;
 
             // Max Dex cap from armor only (-1 means no limit).
             int armorMaxDex = -1;
@@ -300,7 +300,7 @@ public class Inventory
             // --- Shield Bonus & Properties ---
             OwnerStats.ShieldBonus = 0;
             if (LeftHandSlot != null && LeftHandSlot.IsShield)
-                OwnerStats.ShieldBonus = LeftHandSlot.ShieldBonus;
+                OwnerStats.ShieldBonus = LeftHandSlot.GetTotalShieldBonus();
 
             // Runtime equipped-item references for proficiency/ACP calculations
             OwnerStats.EquippedArmorItem = ArmorRobeSlot;

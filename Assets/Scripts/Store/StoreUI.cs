@@ -992,8 +992,8 @@ public class StoreUI : MonoBehaviour
 
         sorted.Sort((a, b) =>
         {
-            string aName = a != null && a.GetTemplate() != null ? (a.GetTemplate().Name ?? string.Empty) : string.Empty;
-            string bName = b != null && b.GetTemplate() != null ? (b.GetTemplate().Name ?? string.Empty) : string.Empty;
+            string aName = a != null && a.GetTemplate() != null ? (a.GetTemplate().FullNameWithEnhancement ?? string.Empty) : string.Empty;
+            string bName = b != null && b.GetTemplate() != null ? (b.GetTemplate().FullNameWithEnhancement ?? string.Empty) : string.Empty;
             int aPrice = a != null ? a.PriceGp : 0;
             int bPrice = b != null ? b.PriceGp : 0;
 
@@ -1116,7 +1116,7 @@ public class StoreUI : MonoBehaviour
             stack = new SellStack
             {
                 StackKey = key,
-                ItemName = item.Name,
+                ItemName = item.FullNameWithEnhancement,
                 RepresentativeItem = item,
                 UnitSellPrice = StoreInventory.Instance.GetSellPrice(item)
             };
@@ -1134,7 +1134,7 @@ public class StoreUI : MonoBehaviour
 
     private static string BuildSellStackKey(ItemData item)
     {
-        return item != null ? (item.Name ?? string.Empty).Trim() : string.Empty;
+        return item != null ? (item.FullNameWithEnhancement ?? string.Empty).Trim() : string.Empty;
     }
 
     private bool MatchesSellCategory(ItemData item)
@@ -1340,7 +1340,7 @@ public class StoreUI : MonoBehaviour
         infoLayout.childForceExpandWidth = true;
         infoLayout.childForceExpandHeight = false;
 
-        Text nameText = CreateText(infoObj.transform, "Name", template.Name,
+        Text nameText = CreateText(infoObj.transform, "Name", template.FullNameWithEnhancement,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
             Vector2.zero, 18, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
         LayoutElement nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
@@ -1380,7 +1380,7 @@ public class StoreUI : MonoBehaviour
 
         CreateSmallActionButton(buttonSection.transform, "BuyButton", "BUY", new Color(0.2f, 0.56f, 0.26f), () => BuyItem(entry));
 
-        Debug.Log($"[Store] Created buy entry for {template.Name} with proper width constraints");
+        Debug.Log($"[Store] Created buy entry for {template.FullNameWithEnhancement} with proper width constraints");
     }
 
     private void CreateSellRow(Transform parent, SellStack stack)
@@ -1544,11 +1544,12 @@ public class StoreUI : MonoBehaviour
             return;
         }
 
-        Debug.Log($"[Store] Buying {item.Name} for {entry.PriceGp} gp");
+        string itemDisplayName = item.FullNameWithEnhancement;
+        Debug.Log($"[Store] Buying {itemDisplayName} for {entry.PriceGp} gp");
 
         if (!GameManager.Instance.SpendGold(entry.PriceGp))
         {
-            ShowMessage($"Not enough gold for {item.Name}.", false);
+            ShowMessage($"Not enough gold for {itemDisplayName}.", false);
             return;
         }
 
@@ -1561,7 +1562,7 @@ public class StoreUI : MonoBehaviour
         }
 
         Debug.Log($"[Gold] Transaction complete. New balance: {GameManager.Instance.PartyGold} gp");
-        ShowMessage($"Purchased {item.Name} for {entry.PriceGp} gp.", true);
+        ShowMessage($"Purchased {itemDisplayName} for {entry.PriceGp} gp.", true);
         if (_sellPanel != null && _sellPanel.activeSelf)
             RebuildSellList();
     }

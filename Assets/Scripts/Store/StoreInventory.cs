@@ -91,6 +91,8 @@ public class StoreInventory : MonoBehaviour
         Add(ItemID.ShieldHeavySteel, "Shield", 20);
         Add(ItemID.ShieldTower, "Shield", 30);
 
+        AddEnhancedStoreVariants();
+
         // Consumables
         Add(ItemID.PotionCureLightWounds, "Potion", 50);
         Add(ItemID.PotionShieldOfFaith, "Potion", 50);
@@ -102,6 +104,50 @@ public class StoreInventory : MonoBehaviour
         Add(ItemID.GearRopeSilk, "Gear", 10);
 
         Debug.Log($"[Store] Initialized with {_availableItems.Count} items");
+    }
+
+    private void AddEnhancedStoreVariants()
+    {
+        var baseEntries = new List<StoreItemEntry>(_availableItems);
+        for (int i = 0; i < baseEntries.Count; i++)
+        {
+            StoreItemEntry entry = baseEntries[i];
+            if (entry == null)
+                continue;
+
+            if (!string.Equals(entry.Category, "Weapon", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(entry.Category, "Armor", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(entry.Category, "Shield", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            ItemID baseId = entry.ItemIDEnum;
+            if (baseId == ItemID.None)
+                continue;
+
+            ItemData baseTemplate = entry.GetTemplate();
+            if (baseTemplate == null)
+                continue;
+
+            for (int bonus = 1; bonus <= 2; bonus++)
+            {
+                string enhancedEnumName = $"{baseId}Plus{bonus}";
+                if (!Enum.TryParse(enhancedEnumName, out ItemID enhancedId) || enhancedId == ItemID.None)
+                    continue;
+
+                if (!ItemDatabase.HasItem(enhancedId))
+                    continue;
+
+                ItemData enhancedTemplate = ItemDatabase.Get(enhancedId);
+                if (enhancedTemplate == null)
+                    continue;
+
+                enhancedTemplate.BasePriceGp = Mathf.Max(0, entry.PriceGp);
+                int enhancedPrice = enhancedTemplate.GetEnhancedPriceGp(entry.PriceGp);
+                Add(enhancedId, entry.Category, enhancedPrice);
+            }
+        }
     }
 
     private void Add(ItemID itemId, string category, int priceGp)
@@ -119,14 +165,19 @@ public class StoreInventory : MonoBehaviour
             return;
         }
 
+        int normalizedPrice = Mathf.Max(0, priceGp);
+
+        if (template.BasePriceGp <= 0)
+            template.BasePriceGp = normalizedPrice;
+
         _availableItems.Add(new StoreItemEntry
         {
             ItemId = itemId,
             Category = category,
-            PriceGp = Mathf.Max(0, priceGp)
+            PriceGp = normalizedPrice
         });
 
-        _priceLookup[itemId] = Mathf.Max(0, priceGp);
+        _priceLookup[itemId] = normalizedPrice;
     }
 
     public List<StoreItemEntry> GetItemsByCategory(string category)
@@ -199,6 +250,9 @@ public class StoreInventory : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(item.Id) && _priceLookup.TryGetValue(item.Id, out int listed))
             return listed;
+
+        if (item.BasePriceGp > 0)
+            return item.GetEnhancedPriceGp(item.BasePriceGp);
 
         // Fallback estimate for items not in the store's direct catalog.
         switch (item.Type)

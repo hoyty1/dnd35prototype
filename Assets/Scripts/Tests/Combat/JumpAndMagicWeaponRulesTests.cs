@@ -39,6 +39,10 @@ public static class JumpAndMagicWeaponRulesTests
         TestMagicWeaponDurationPerWeapon();
         TestMagicWeaponInventorySelectionIncludesBackpack();
 
+        TestEnhancedItemIdRoundTrip();
+        TestEnhancedNameAndPricingFormula();
+        TestEnhancedArmorAndShieldAcApplication();
+
         Debug.Log($"====== Jump + Magic Weapon Results: {_passed} passed, {_failed} failed ======");
     }
 
@@ -309,6 +313,82 @@ public static class JumpAndMagicWeaponRulesTests
             Assert(success && options != null, "Magic Weapon inventory option query succeeds");
             Assert(options != null && options.Exists(w => ReferenceEquals(w, equipped)), "Magic Weapon selector includes equipped weapon");
             Assert(options != null && options.Exists(w => ReferenceEquals(w, backpackWeapon)), "Magic Weapon selector includes backpack weapon");
+        }
+        finally
+        {
+            DestroyController(controller);
+        }
+    }
+
+    private static void TestEnhancedItemIdRoundTrip()
+    {
+        string storage = ItemID.WeaponLongswordPlus1.ToStorageString();
+        Assert(string.Equals(storage, "longsword_plus1", StringComparison.OrdinalIgnoreCase),
+            "Enhanced ItemID converts to storage id",
+            $"got '{storage}'");
+
+        ItemID parsed = "longsword_plus1".ToItemID();
+        Assert(parsed == ItemID.WeaponLongswordPlus1,
+            "Enhanced storage id converts back to ItemID",
+            $"got {parsed}");
+    }
+
+    private static void TestEnhancedNameAndPricingFormula()
+    {
+        ItemData longswordPlus1 = ItemDatabase.CloneItem(ItemID.WeaponLongswordPlus1);
+        ItemData greatswordPlus2 = ItemDatabase.CloneItem(ItemID.WeaponGreatswordPlus2);
+        ItemData platePlus1 = ItemDatabase.CloneItem(ItemID.ArmorPlatePlus1);
+        ItemData chainShirtPlus2 = ItemDatabase.CloneItem(ItemID.ArmorChainShirtPlus2);
+
+        Assert(longswordPlus1 != null && longswordPlus1.enhancementBonus == 1,
+            "+1 longsword enhancementBonus field is populated");
+        Assert(longswordPlus1 != null && string.Equals(longswordPlus1.FullNameWithEnhancement, "+1 Longsword", StringComparison.Ordinal),
+            "Enhanced weapon name uses +X prefix format",
+            $"got '{(longswordPlus1 != null ? longswordPlus1.FullNameWithEnhancement : "null")}'");
+
+        Assert(longswordPlus1 != null && longswordPlus1.EnhancedPriceGp == 2015,
+            "+1 longsword price uses base + bonus²×2000",
+            $"expected 2015, got {(longswordPlus1 != null ? longswordPlus1.EnhancedPriceGp : -1)}");
+
+        Assert(greatswordPlus2 != null && greatswordPlus2.EnhancedPriceGp == 8050,
+            "+2 greatsword price uses base + bonus²×2000",
+            $"expected 8050, got {(greatswordPlus2 != null ? greatswordPlus2.EnhancedPriceGp : -1)}");
+
+        Assert(platePlus1 != null && platePlus1.EnhancedPriceGp == 2500,
+            "+1 full plate price uses base + bonus²×1000",
+            $"expected 2500, got {(platePlus1 != null ? platePlus1.EnhancedPriceGp : -1)}");
+
+        Assert(chainShirtPlus2 != null && chainShirtPlus2.EnhancedPriceGp == 4100,
+            "+2 chain shirt price uses base + bonus²×1000",
+            $"expected 4100, got {(chainShirtPlus2 != null ? chainShirtPlus2.EnhancedPriceGp : -1)}");
+    }
+
+    private static void TestEnhancedArmorAndShieldAcApplication()
+    {
+        CharacterController controller = null;
+        try
+        {
+            controller = CreateController("EnhancedAc", level: 3);
+            global::Inventory inventory = controller.GetComponent<InventoryComponent>().CharacterInventory;
+
+            ItemData armor = ItemDatabase.CloneItem(ItemID.ArmorChainShirtPlus2);
+            ItemData shield = ItemDatabase.CloneItem(ItemID.ShieldHeavySteelPlus1);
+
+            inventory.DirectEquip(armor, EquipSlot.ArmorRobe);
+            inventory.DirectEquip(shield, EquipSlot.LeftHand);
+            inventory.RecalculateStats();
+
+            Assert(controller.Stats.ArmorBonus == 6,
+                "Enhanced armor adds enhancement bonus to total armor AC",
+                $"expected 6, got {controller.Stats.ArmorBonus}");
+
+            Assert(controller.Stats.ShieldBonus == 3,
+                "Enhanced shield adds enhancement bonus to total shield AC",
+                $"expected 3, got {controller.Stats.ShieldBonus}");
+
+            Assert(controller.Stats.ArmorClass == 20,
+                "ArmorClass reflects enhanced armor and shield totals",
+                $"expected 20, got {controller.Stats.ArmorClass}");
         }
         finally
         {

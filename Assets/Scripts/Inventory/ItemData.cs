@@ -234,8 +234,14 @@ public class ItemData
     // Examples: "Light Armor", "Chain Shirt".
     public HashSet<string> VisualTags = new HashSet<string>();
 
-    // --- Item durability (used by Sunder) ---
+    // --- Item pricing + enhancement ---
+    public int BasePriceGp;         // Mundane base price in gp (before magical enhancement)
+    public int enhancementBonus;    // Serialized enhancement bonus field requested by enhancement item pipeline (0-5)
+
+    // Legacy/compatibility field still used by existing systems/tests.
     public int EnhancementBonus;    // Magic enhancement bonus to durability (+2 hardness, +10 HP per +1)
+
+    // --- Item durability (used by Sunder) ---
     public int Hardness;            // Effective hardness after enhancement
     public int MaxHitPoints;        // Maximum object HP after enhancement
     public int CurrentHitPoints;    // Runtime durability HP
@@ -322,6 +328,33 @@ public class ItemData
 
     public bool IsSunderable => IsWeapon || IsArmor || IsShield;
 
+    /// <summary>Enhancement bonus clamped to D&D 3.5e item range (0-5).</summary>
+    public int ClampedEnhancementBonus => Mathf.Clamp(ResolveEnhancementBonus(), 0, 5);
+
+    /// <summary>Human-readable item name that includes enhancement prefix when present (for example "+1 Longsword").</summary>
+    public string FullNameWithEnhancement => FormatEnhancedName(Name, ResolveEnhancementBonus());
+
+    /// <summary>Price in gp after enhancement formula is applied to BasePriceGp.</summary>
+    public int EnhancedPriceGp => GetEnhancedPriceGp(BasePriceGp);
+
+    /// <summary>
+    /// Calculate final price from a mundane base price using D&D 3.5e enhancement formulas:
+    /// weapon = base + bonus²×2000, armor/shield = base + bonus²×1000.
+    /// </summary>
+    public int GetEnhancedPriceGp(int basePriceGp)
+    {
+        int clampedBase = Mathf.Max(0, basePriceGp);
+        int bonus = ClampedEnhancementBonus;
+        if (bonus <= 0)
+            return clampedBase;
+
+        int multiplier = IsWeapon ? 2000 : (IsArmor || IsShield ? 1000 : 0);
+        if (multiplier <= 0)
+            return clampedBase;
+
+        return clampedBase + (bonus * bonus * multiplier);
+    }
+
     /// <summary>
     /// Ensure durability stats are initialized for sunderable items.
     /// Durability persists on the item once initialized.
@@ -351,25 +384,109 @@ public class ItemData
 
     public int ResolveEnhancementBonus()
     {
-        if (EnhancementBonus > 0)
-            return EnhancementBonus;
+        int explicitField = Mathf.Max(EnhancementBonus, enhancementBonus);
+        if (explicitField > 0)
+            return Mathf.Clamp(explicitField, 0, 5);
 
-        if (string.IsNullOrEmpty(Name))
+        string rawName = Name ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(rawName))
             return 0;
 
-        int plusIndex = Name.IndexOf('+');
-        if (plusIndex < 0 || plusIndex >= Name.Length - 1)
-            return 0;
+        string trimmed = rawName.Trim();
 
-        int cursor = plusIndex + 1;
-        int parsed = 0;
-        while (cursor < Name.Length && char.IsDigit(Name[cursor]))
+        // Prefix format: "+1 Longsword"
+        if (trimmed.StartsWith("+", StringComparison.Ordinal))
         {
-            parsed = (parsed * 10) + (Name[cursor] - '0');
-            cursor++;
+            int idx = 1;
+            int parsed = 0;
+            bool hasDigits = false;
+            while (idx < trimmed.Length && char.IsDigit(trimmed[idx]))
+            {
+                hasDigits = true;
+                parsed = (parsed * 10) + (trimmed[idx] - '0');
+                idx++;
+            }
+
+            if (hasDigits && (idx == trimmed.Length || char.IsWhiteSpace(trimmed[idx])))
+                return Mathf.Clamp(parsed, 0, 5);
         }
 
-        return Mathf.Max(0, parsed);
+        // Suffix format: "Longsword +1" (avoid parsing parenthetical names like "Composite Longbow (+1)").
+        int lastPlus = trimmed.LastIndexOf('+');
+        if (lastPlus > 0 && lastPlus < trimmed.Length - 1)
+        {
+            bool hasWhitespaceBefore = char.IsWhiteSpace(trimmed[lastPlus - 1]);
+            if (hasWhitespaceBefore)
+            {
+                int idx = lastPlus + 1;
+                int parsed = 0;
+                bool hasDigits = false;
+                while (idx < trimmed.Length && char.IsDigit(trimmed[idx]))
+                {
+                    hasDigits = true;
+                    parsed = (parsed * 10) + (trimmed[idx] - '0');
+                    idx++;
+                }
+
+                if (hasDigits && idx == trimmed.Length)
+                    return Mathf.Clamp(parsed, 0, 5);
+            }
+        }
+
+        return 0;
+    }
+
+    public int GetTotalArmorBonus()
+    {
+        return Mathf.Max(0, ArmorBonus) + (IsArmor ? ClampedEnhancementBonus : 0);
+    }
+
+    public int GetTotalShieldBonus()
+    {
+        return Mathf.Max(0, ShieldBonus) + (IsShield ? ClampedEnhancementBonus : 0);
+    }
+
+    public static string FormatEnhancedName(string originalName, int bonus)
+    {
+        string cleanName = StripEnhancementNotation(originalName);
+        int clamped = Mathf.Clamp(bonus, 0, 5);
+        return clamped > 0 ? $"+{clamped} {cleanName}" : cleanName;
+    }
+
+    public static string StripEnhancementNotation(string originalName)
+    {
+        string name = (originalName ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(name))
+            return string.Empty;
+
+        if (name.StartsWith("+", StringComparison.Ordinal))
+        {
+            int idx = 1;
+            while (idx < name.Length && char.IsDigit(name[idx]))
+                idx++;
+
+            if (idx > 1 && idx < name.Length && char.IsWhiteSpace(name[idx]))
+                return name.Substring(idx).TrimStart();
+        }
+
+        int lastPlus = name.LastIndexOf('+');
+        if (lastPlus > 0 && lastPlus < name.Length - 1 && char.IsWhiteSpace(name[lastPlus - 1]))
+        {
+            bool digitsOnlyToEnd = true;
+            for (int i = lastPlus + 1; i < name.Length; i++)
+            {
+                if (!char.IsDigit(name[i]))
+                {
+                    digitsOnlyToEnd = false;
+                    break;
+                }
+            }
+
+            if (digitsOnlyToEnd)
+                return name.Substring(0, lastPlus).TrimEnd();
+        }
+
+        return name;
     }
 
     public int GetHighestWeaponEnhancementBonus()
@@ -662,6 +779,13 @@ public class ItemData
             string dmg = $"{DamageCount}d{DamageDice}";
             if (BonusDamage > 0) dmg += $"+{BonusDamage}";
             stats = $"Damage: {dmg} | Crit: {GetCritRangeString()}";
+
+            int enhancementAttack = GetEnhancementAttackBonus();
+            int enhancementDamage = GetEnhancementDamageBonus();
+            if (enhancementAttack > 0 || enhancementDamage > 0)
+            {
+                stats += $"\nEnhancement: +{enhancementAttack} attack, +{enhancementDamage} damage";
+            }
             if (!string.IsNullOrEmpty(DamageType)) stats += $"\nType: {DamageType}";
             if (RangeIncrement > 0)
             {
@@ -711,14 +835,18 @@ public class ItemData
         }
         else if (Type == ItemType.Armor)
         {
-            stats = $"AC Bonus: +{ArmorBonus} ({ArmorCat})";
+            stats = $"AC Bonus: +{GetTotalArmorBonus()} ({ArmorCat})";
+            if (ClampedEnhancementBonus > 0)
+                stats += $"\nEnhancement: +{ClampedEnhancementBonus} armor";
             if (MaxDexBonus >= 0) stats += $"\nMax Dex: +{MaxDexBonus}";
             if (ArmorCheckPenalty > 0) stats += $" | Check: -{ArmorCheckPenalty}";
             if (ArcaneSpellFailure > 0) stats += $"\nSpell Fail: {ArcaneSpellFailure}%";
         }
         else if (Type == ItemType.Shield)
         {
-            stats = $"Shield Bonus: +{ShieldBonus}";
+            stats = $"Shield Bonus: +{GetTotalShieldBonus()}";
+            if (ClampedEnhancementBonus > 0)
+                stats += $"\nEnhancement: +{ClampedEnhancementBonus} shield";
             if (MaxDexBonus >= 0) stats += $"\nMax Dex: +{MaxDexBonus}";
             if (ArmorCheckPenalty > 0) stats += $" | Check: -{ArmorCheckPenalty}";
             if (ArcaneSpellFailure > 0) stats += $"\nSpell Fail: {ArcaneSpellFailure}%";

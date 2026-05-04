@@ -496,7 +496,7 @@ public class CharacterEquipment : MonoBehaviour
             return;
         }
 
-        int shieldBonus = Mathf.Max(0, shield.ShieldBonus);
+        int shieldBonus = Mathf.Max(0, shield.GetTotalShieldBonus());
         _shieldBashAcSuppressed = shieldBonus > 0;
         _suppressedShieldBonusAmount = shieldBonus;
 
@@ -516,7 +516,7 @@ public class CharacterEquipment : MonoBehaviour
 
         Inventory inv = GetInventory();
         ItemData leftHandShield = inv != null ? inv.LeftHandSlot : null;
-        int restoredShieldBonus = IsShieldBashWeapon(leftHandShield) ? Mathf.Max(0, leftHandShield.ShieldBonus) : 0;
+        int restoredShieldBonus = IsShieldBashWeapon(leftHandShield) ? Mathf.Max(0, leftHandShield.GetTotalShieldBonus()) : 0;
 
         Stats.ShieldBonus = restoredShieldBonus;
         _shieldBashAcSuppressed = false;
