@@ -10777,6 +10777,7 @@ public partial class GameManager : MonoBehaviour
         CombatUI?.ShowSummonCreatureSelection(
             spell.Name,
             options.ConvertAll(o => o.BuildUiLabel()),
+            SummonMonsterLists.GetSummonRestrictionHint(caster.Stats),
             onSelect: idx =>
             {
                 if (idx < 0 || idx >= options.Count)

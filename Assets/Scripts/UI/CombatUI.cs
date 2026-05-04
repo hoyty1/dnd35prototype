@@ -3019,7 +3019,7 @@ public class CombatUI : MonoBehaviour
     // ========================================================================
 
     public void ShowSummonCreatureSelection(string spellName, List<string> creatureOptions,
-        System.Action<int> onSelect, System.Action onCancel)
+        string restrictionHint, System.Action<int> onSelect, System.Action onCancel)
     {
         HideSummonCreatureSelection();
 
@@ -3092,7 +3092,9 @@ public class CombatUI : MonoBehaviour
         bodyText.fontSize = 14;
         bodyText.alignment = TextAnchor.MiddleCenter;
         bodyText.color = new Color(0.9f, 0.95f, 1f);
-        bodyText.text = "Choose one creature to summon:";
+        bodyText.text = string.IsNullOrWhiteSpace(restrictionHint)
+            ? "Choose one creature to summon:"
+            : $"Choose one creature to summon:\n<size=12><color=#9FD0FF>{restrictionHint}</color></size>";
 
         if (creatureOptions == null)
             creatureOptions = new List<string>();

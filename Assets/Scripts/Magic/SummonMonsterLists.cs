@@ -24,8 +24,21 @@ public sealed class SummonMonsterOption
         if (ClericOnly && !caster.IsCleric)
             return false;
 
-        bool casterIsNeutralOnGoodEvilAxis = AlignmentHelper.IsNeutralGE(caster.CharacterAlignment);
+        // D&D 3.5e: Summon Monster alignment restrictions apply to clerics.
+        // Arcane casters (e.g., wizard/sorcerer) are unrestricted and can summon
+        // any listed creature regardless of the caster's own alignment.
+        if (!caster.IsCleric)
+            return true;
 
+        // Cleric rule: summon option must be within one alignment step.
+        // This exactly matches the 3x3 alignment grid behavior and includes
+        // the True Neutral special case (within one step of every alignment).
+        if (SummonedCreatureAlignment != Alignment.None)
+            return AlignmentHelper.IsWithinOneStep(caster.CharacterAlignment, SummonedCreatureAlignment);
+
+        // Backward-compatible fallback for entries that do not yet carry
+        // explicit summoned creature alignment metadata.
+        bool casterIsNeutralOnGoodEvilAxis = AlignmentHelper.IsNeutralGE(caster.CharacterAlignment);
         switch (AlignmentRequirement)
         {
             case SummonAlignmentRequirement.Good:
@@ -155,6 +168,20 @@ public static class SummonMonsterLists
             .Where(o => o != null && o.IsAvailableTo(caster))
             .Select(CloneOption)
             .ToList();
+    }
+
+    public static string GetSummonRestrictionHint(CharacterStats caster)
+    {
+        if (caster == null)
+            return string.Empty;
+
+        if (caster.IsCleric)
+            return "As a cleric, you can only summon creatures within one step of your alignment.";
+
+        if (caster.IsWizard)
+            return "As a wizard, you can summon any creature regardless of alignment.";
+
+        return "Alignment restrictions apply only to clerics. Your class can summon any listed creature.";
     }
 
     public static int GetSummonMonsterSpellLevel(string spellId)
