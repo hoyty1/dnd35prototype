@@ -12338,9 +12338,14 @@ public partial class GameManager : MonoBehaviour
     {
         if (caster == null || target == null || spell == null) return false;
 
-        // Willing creatures can choose to fail saves. Enlarge/Reduce are the current key use-case.
-        if (spell.SpellId == SpellNames.ENLARGE_PERSON || spell.SpellId == SpellNames.REDUCE_PERSON)
-            return IsAllyTeam(caster, target);
+        // Willing creatures can choose to fail saves.
+        // Keep this explicit for known "harmless" spells we currently support with optional saves.
+        if (spell.SpellId == SpellNames.ENLARGE_PERSON
+            || spell.SpellId == SpellNames.REDUCE_PERSON
+            || spell.SpellId == SpellNames.BLUR)
+        {
+            return target == caster || IsAllyTeam(caster, target);
+        }
 
         return false;
     }
@@ -12427,8 +12432,9 @@ public partial class GameManager : MonoBehaviour
             }
         }
 
-        // For SingleAlly spells, also allow self-targeting by clicking own tile.
-        if (spell.TargetType == SpellTargetType.SingleAlly && IsValidTargetForSpell(caster, caster, spell))
+        // For friendly/support touch spells, also allow self-targeting by clicking own tile.
+        if ((spell.TargetType == SpellTargetType.SingleAlly || spell.TargetType == SpellTargetType.Touch)
+            && IsValidTargetForSpell(caster, caster, spell))
         {
             HighlightCharacterFootprint(caster, HighlightType.SpellTarget, addToSelectableCells: true);
             hasTarget = true;
@@ -12446,9 +12452,11 @@ public partial class GameManager : MonoBehaviour
             {
                 targetMsg = spell.TargetType == SpellTargetType.SingleAlly
                     ? "Click an ally (or self) to cast"
-                    : spell.TargetType == SpellTargetType.Area
-                        ? "Click a target area to cast"
-                        : "Click an enemy to cast";
+                    : spell.TargetType == SpellTargetType.Touch
+                        ? "Click a creature (ally, self, or enemy) to cast"
+                        : spell.TargetType == SpellTargetType.Area
+                            ? "Click a target area to cast"
+                            : "Click an enemy to cast";
             }
             CombatUI.SetTurnIndicator($"✦ {spell.Name}: {targetMsg} | Range: {rangeStr} | Right-click to cancel");
         }
@@ -12839,7 +12847,12 @@ public partial class GameManager : MonoBehaviour
                                         _pendingSpell.EffectType == SpellEffectType.Debuff;
 
             bool causeFearSaveReduced = IsCauseFearSpell(_pendingSpell) && result.RequiredSave && result.SaveSucceeded;
-            bool effectNegatedBySave = _pendingSpell.EffectType == SpellEffectType.Debuff
+            bool blurSaveNegated = _pendingSpell != null
+                                   && string.Equals(_pendingSpell.SpellId, SpellNames.BLUR, StringComparison.Ordinal)
+                                   && result.RequiredSave
+                                   && result.SaveSucceeded;
+            bool effectNegatedBySave = ((_pendingSpell.EffectType == SpellEffectType.Debuff)
+                                       || blurSaveNegated)
                                        && result.RequiredSave
                                        && result.SaveSucceeded
                                        && !causeFearSaveReduced;
@@ -15284,6 +15297,40 @@ public partial class GameManager : MonoBehaviour
 
                 UpdateEnemyLastKnownPositionForInvisibility(recipient);
                 CombatUI?.ShowCombatLog($"<color=#88FFEE>👁 {recipient.Stats.CharacterName} becomes invisible ({effect.GetDurationDisplayString()}).</color>");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
+        if (spell != null && spell.SpellId == SpellNames.BLUR)
+        {
+            CharacterController recipient = target ?? caster;
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            if (recipientStatusMgr == null)
+                recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+            recipientStatusMgr.Init(recipient.Stats);
+
+            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
+            ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name, casterLevel);
+            if (effect != null)
+            {
+                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                if (recipientSpellComp != null)
+                    recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
+                bool selfCast = recipient == caster;
+                string castLine = selfCast
+                    ? $"<color=#88FFEE>🌫 {casterName} casts Blur on self!</color>"
+                    : $"<color=#88FFEE>🌫 {casterName} casts Blur on {recipient.Stats.CharacterName}!</color>";
+
+                CombatUI?.ShowCombatLog(castLine);
+                CombatUI?.ShowCombatLog($"<color=#A6F3FF>   {recipient.Stats.CharacterName}'s outline becomes blurred and indistinct.</color>");
+                CombatUI?.ShowCombatLog($"<color=#A6F3FF>   Attacks against {recipient.Stats.CharacterName} have 20% miss chance ({effect.GetDurationDisplayString()}, {Mathf.Max(0, effect.RemainingRounds)} rounds).</color>");
             }
 
             UpdateAllStatsUI();
@@ -17965,8 +18012,9 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
-            // For ally spells, clicking own tile = self-target
-            if (cell.Coords == pc.GridPosition && _pendingSpell.TargetType == SpellTargetType.SingleAlly)
+            // For ally/touch spells, clicking own tile = self-target.
+            if (cell.Coords == pc.GridPosition
+                && (_pendingSpell.TargetType == SpellTargetType.SingleAlly || _pendingSpell.TargetType == SpellTargetType.Touch))
             {
                 if (IsValidTargetForSpell(pc, pc, _pendingSpell))
                 {
@@ -17974,7 +18022,7 @@ public partial class GameManager : MonoBehaviour
                 }
                 else
                 {
-                    CombatUI.ShowCombatLog($"{_pendingSpell.Name} can only target humanoids.");
+                    CombatUI.ShowCombatLog($"{_pendingSpell.Name} cannot target self right now.");
                 }
                 return;
             }
@@ -20092,7 +20140,11 @@ public partial class GameManager : MonoBehaviour
 
         bool appliesTrackedEffect = spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Debuff;
         bool causeFearSaveReduced = IsCauseFearSpell(spell) && result.RequiredSave && result.SaveSucceeded;
-        bool effectNegatedBySave = spell.EffectType == SpellEffectType.Debuff
+        bool blurSaveNegated = spell != null
+                               && string.Equals(spell.SpellId, SpellNames.BLUR, StringComparison.Ordinal)
+                               && result.RequiredSave
+                               && result.SaveSucceeded;
+        bool effectNegatedBySave = (spell.EffectType == SpellEffectType.Debuff || blurSaveNegated)
                                    && result.RequiredSave
                                    && result.SaveSucceeded
                                    && !causeFearSaveReduced;

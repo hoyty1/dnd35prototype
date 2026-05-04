@@ -1070,6 +1070,8 @@ public class CharacterController : MonoBehaviour
     private Coroutine _currentScaleAnimation;
     private Coroutine _grappleAlternateVisibilityCoroutine;
     private int _grappleDisplayPauseLocks;
+    private bool _wasBlurVisualActive;
+    private float _blurVisualTimeOffset;
 
     private const float GrappleAlternateVisibilitySeconds = 1f;
 
@@ -1211,6 +1213,8 @@ public class CharacterController : MonoBehaviour
         EnsureConditions();
         EnsureTags();
         EnsureStatusTagManager();
+        _blurVisualTimeOffset = Random.Range(0f, Mathf.PI * 2f);
+        _wasBlurVisualActive = HasActiveBlurEffect;
         RefreshInvisibilityVisual();
         RefreshAllTags();
     }
@@ -1330,7 +1334,21 @@ public class CharacterController : MonoBehaviour
     public bool HasActiveSeeInvisibilityEffect => ActiveSeeInvisibilityEffect != null && ActiveSeeInvisibilityEffect.CanSeeInvisible;
     public bool HasActiveGlitterdustEffect => ActiveGlitterdustEffect != null && ActiveGlitterdustEffect.OutlinedByDust && ActiveGlitterdustEffect.DurationRemainingRounds > 0;
     public bool HasActiveMelfsAcidArrowEffect => ActiveMelfsAcidArrowEffect != null && ActiveMelfsAcidArrowEffect.IsActive && ActiveMelfsAcidArrowEffect.RemainingDamageRounds > 0;
+    public bool HasActiveBlurEffect
+    {
+        get
+        {
+            StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+            return statusMgr != null && statusMgr.HasEffect(SpellNames.BLUR) && statusMgr.GetRemainingRounds(SpellNames.BLUR) > 0;
+        }
+    }
     public bool IsOutlinedByGlitterdust => HasActiveGlitterdustEffect;
+
+    public int GetBlurRemainingRounds()
+    {
+        StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+        return statusMgr != null ? Mathf.Max(0, statusMgr.GetRemainingRounds(SpellNames.BLUR)) : 0;
+    }
 
     public void ApplyMelfsAcidArrowEffect(int remainingDamageRounds, CharacterController caster)
     {
@@ -1594,6 +1612,40 @@ public class CharacterController : MonoBehaviour
             c.b = 1f;
         }
 
+        _sr.color = c;
+    }
+
+    private void LateUpdate()
+    {
+        bool blurActive = HasActiveBlurEffect;
+        if (blurActive != _wasBlurVisualActive)
+        {
+            _wasBlurVisualActive = blurActive;
+            RefreshInvisibilityVisual();
+        }
+
+        if (blurActive)
+            ApplyBlurVisualPulse();
+    }
+
+    private void ApplyBlurVisualPulse()
+    {
+        if (_sr == null)
+            _sr = GetComponent<SpriteRenderer>();
+
+        if (_sr == null)
+            return;
+
+        // Lightweight blur indicator: subtle oscillating cool tint to imply wavering outline.
+        float pulse = 0.12f + 0.08f * (0.5f + 0.5f * Mathf.Sin((Time.time * 9f) + _blurVisualTimeOffset));
+        Color c = _sr.color;
+        float targetRed = IsOutlinedByGlitterdust ? 1f : 0.86f;
+        float targetGreen = IsOutlinedByGlitterdust ? 0.95f : 0.92f;
+        float targetBlue = IsOutlinedByGlitterdust ? 0.7f : 1f;
+
+        c.r = Mathf.Lerp(c.r, targetRed, pulse);
+        c.g = Mathf.Lerp(c.g, targetGreen, pulse);
+        c.b = Mathf.Lerp(c.b, targetBlue, pulse);
         _sr.color = c;
     }
 
@@ -4998,6 +5050,14 @@ public class CharacterController : MonoBehaviour
                 GameManager.Instance?.CombatUI?.ShowCombatLog($"<color=#A6F3FF>👁 {attackerName} sees invisible {targetName} clearly (no concealment).</color>");
             }
 
+            if (targetMissChance > 0 && CanSeeInvisible(target) && target.HasActiveBlurEffect)
+            {
+                string note = "Blur effect remains despite magical sight.";
+                result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                    ? note
+                    : $"{result.SpecialAttackNote} {note}";
+            }
+
             if (missChance > 0)
             {
                 result.ConcealmentMissChance = missChance;
@@ -6541,6 +6601,11 @@ public class CharacterController : MonoBehaviour
     private int EvaluateEffectMissChanceAgainstAttacker(ActiveSpellEffect effect, CharacterController attacker, bool incomingIsRangedAttack)
     {
         if (effect == null)
+            return 0;
+
+        // Opponents who cannot see the subject ignore visual concealment effects such as Blur/Invisibility.
+        // They still suffer their own blinded miss chance elsewhere in attack resolution.
+        if (attacker != null && attacker.HasCondition(CombatConditionType.Blinded))
             return 0;
 
         if (effect.MissChanceAgainstRangedOnly && !incomingIsRangedAttack)

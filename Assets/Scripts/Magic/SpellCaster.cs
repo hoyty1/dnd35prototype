@@ -217,6 +217,26 @@ public static class SpellCaster
             result.AttackHit = true;
         }
 
+        // ========== CONCEALMENT MISS CHANCE (applies after successful touch/ranged touch attack roll) ==========
+        if (result.AttackHit && result.RequiredAttackRoll && casterController != null && targetController != null)
+        {
+            int targetMissChance = targetController.GetMissChance(casterController, result.IsRangedTouch);
+            int blindedCasterMissChance = casterController.HasCondition(CombatConditionType.Blinded) ? 50 : 0;
+            int missChance = Mathf.Max(targetMissChance, blindedCasterMissChance);
+
+            if (missChance > 0)
+            {
+                int concealmentRoll = Random.Range(1, 101);
+                if (concealmentRoll <= missChance)
+                {
+                    result.AttackHit = false;
+                    result.Success = false;
+                    result.NoEffectReason = $"Attack misses due to concealment ({concealmentRoll} ≤ {missChance}).";
+                    return result;
+                }
+            }
+        }
+
         // ========== PROTECTION FROM ALIGNMENT: MENTAL CONTROL BLOCK ==========
         if (result.AttackHit && IsBlockedByProtectionFromAlignment(targetController, casterController, spell))
         {

@@ -133,6 +133,19 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
+        if (_character.HasActiveBlurEffect)
+        {
+            int rounds = _character.GetBlurRemainingRounds();
+            list.Add(new IconData
+            {
+                Key = "Blur",
+                ShortLabel = "BLR",
+                Tooltip = $"Blur\nConcealment (20% miss chance)\nVisual distortion: wavering outline\nSee Invisible does not negate Blur\nDuration: {rounds} rounds",
+                Color = new Color(0.62f, 0.82f, 1f, 0.93f),
+                Duration = rounds
+            });
+        }
+
         if (statusMgr != null && statusMgr.HasEffect(SpellNames.SEE_INVISIBLE))
         {
             int rounds = statusMgr.GetRemainingRounds(SpellNames.SEE_INVISIBLE);
