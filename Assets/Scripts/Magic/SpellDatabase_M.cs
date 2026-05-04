@@ -203,15 +203,17 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.MIRROR_IMAGE,
                     Name = "Mirror Image",
-                    Description = "Creates 1d4+1 decoy duplicates of you (CL3). Attacks may hit images instead. 1 min/level. PHB p.254",
-                    SpellLevel = 2, School = "Illusion",
-                    ClassList = new[] { "Wizard" },
+                    Description = "1d4+1 illusory clones appear in adjacent cells. Clones are targetable decoys and can be swapped with at end of your turn. Duration 1 min/level.",
+                    SpellLevel = 2,
+                    School = "Illusion (Figment)",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
-                    BuffACBonus = 4, // Simplified: effective +4 AC from images
-                    BuffDurationRounds = 30,
                     BuffType = SpellNames.MIRROR_IMAGE,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

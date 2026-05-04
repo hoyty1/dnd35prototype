@@ -760,6 +760,7 @@ public partial class GameManager : MonoBehaviour
         _activeSummons.Clear();
         _summonedAllies.Clear();
         _summonedEnemies.Clear();
+        ClearAllMirrorImageEffects("combat reset");
 
         if (PCs == null || PCs.Count == 0)
             return;
@@ -1880,7 +1881,10 @@ public partial class GameManager : MonoBehaviour
 
         if (CurrentSubPhase == PlayerSubPhase.SelectingSpecialTarget)
         {
-            CancelSpecialAttackTargeting();
+            if (_isSelectingMirrorImageSwap)
+                CancelMirrorImageSwapSelectionAndSkip();
+            else
+                CancelSpecialAttackTargeting();
             return true;
         }
 
@@ -5706,6 +5710,7 @@ public partial class GameManager : MonoBehaviour
 
         CurrentPhase = TurnPhase.CombatOver;
         ClearAllActiveGreaseEffects();
+        ClearAllMirrorImageEffects("combat ended");
         _conditionService?.CleanupOnCombatEnd(GetAllCharacters());
 
         CombatUI.SetTurnIndicator(isVictory ? "VICTORY! All enemies defeated!" : "Combat has ended.");
@@ -11593,6 +11598,8 @@ public partial class GameManager : MonoBehaviour
     {
         if (maybeSummon == null) return;
 
+        ClearMirrorImageForCaster(maybeSummon, "caster slain", removeStatusEffect: true, log: true);
+
         ActiveSummonInstance summon = GetActiveSummon(maybeSummon);
         if (summon == null) return;
 
@@ -12840,6 +12847,26 @@ public partial class GameManager : MonoBehaviour
             BreakInvisibilityOnHostileSpellCast(caster, _pendingSpell, target, null);
             bool skipFriendlyTouchAttackRoll = _pendingSpell.IsMeleeTouchSpell() && IsFriendlyTarget(caster, target);
             bool forceTargetToFailSave = ShouldForceTargetToAcceptSave(caster, target, _pendingSpell);
+
+            if (TryHandleMirrorImageSpellTargetAttack(caster, target, _pendingSpell, out string mirrorSpellLog))
+            {
+                _lastCombatLog = mirrorSpellLog;
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingMetamagic = null;
+                _pendingAnimateRopeItem = null;
+                _pendingResistEnergyType = null;
+                _pendingDisguiseSelfRace = null;
+                ResetPendingGreaseCastMode();
+
+                StartCoroutine(AfterAttackDelay(caster, 1.0f));
+                return;
+            }
+
             SpellResult result = SpellCaster.Cast(_pendingSpell, caster.Stats, target.Stats, _pendingMetamagic, skipFriendlyTouchAttackRoll, forceTargetToFailSave, caster, target);
 
             // Apply tracked buff/debuff effects based on spell type
@@ -12884,7 +12911,11 @@ public partial class GameManager : MonoBehaviour
             if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow)
                 handledAnimateRope = TryResolveAnimateRopeSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            bool handledMirrorImage = false;
+            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && !effectNegatedBySave)
+                handledMirrorImage = TryResolveMirrorImageSpellEffect(caster, target, _pendingSpell, result);
+
+            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -15624,6 +15655,10 @@ public partial class GameManager : MonoBehaviour
                     character.Stats.ActiveProtectionFromArrowsEffect = null;
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Protection from Arrows expires on {character.Stats.CharacterName}.</color>");
                 }
+                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal))
+                {
+                    OnMirrorImageEffectExpired(character);
+                }
             }
 
             if (statusMgr.ActiveEffectCount > 0)
@@ -15648,6 +15683,10 @@ public partial class GameManager : MonoBehaviour
                         ProtectionFromArrowsEffectData protection = character.Stats.ActiveProtectionFromArrowsEffect;
                         if (protection != null)
                             protection.DurationRemainingRounds = effect.RemainingRounds;
+                    }
+                    else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.MIRROR_IMAGE, StringComparison.Ordinal))
+                    {
+                        SyncMirrorImageDurationForCaster(character, statusMgr);
                     }
 
                     Debug.Log($"[SpellDuration] {character.Stats.CharacterName}: {effect.GetDisplayString()}");
@@ -17559,7 +17598,10 @@ public partial class GameManager : MonoBehaviour
                 break;
 
             case PlayerSubPhase.SelectingSpecialTarget:
-                HandleSpecialAttackTargetClick(pc, cell);
+                if (_isSelectingMirrorImageSwap)
+                    HandleMirrorImageSwapCellClick(pc, cell);
+                else
+                    HandleSpecialAttackTargetClick(pc, cell);
                 break;
 
             case PlayerSubPhase.ConfirmingTurnUndead:
@@ -19243,6 +19285,9 @@ public partial class GameManager : MonoBehaviour
     private void EndActivePCTurn()
     {
         CharacterController pc = ActivePC;
+        if (TryBeginMirrorImageSwapSelection(pc))
+            return;
+
         EndAttackSequence();
         EndThrownAttackSequence();
         ResetOffHandTurnState();
@@ -20136,6 +20181,15 @@ public partial class GameManager : MonoBehaviour
 
         bool skipFriendlyTouchAttackRoll = spell.IsMeleeTouchSpell() && IsFriendlyTarget(npc, target);
         bool forceTargetToFailSave = ShouldForceTargetToAcceptSave(npc, target, spell);
+
+        if (TryHandleMirrorImageSpellTargetAttack(npc, target, spell, out string mirrorSpellLog))
+        {
+            _lastCombatLog = mirrorSpellLog;
+            CombatUI?.ShowCombatLog(_lastCombatLog);
+            UpdateAllStatsUI();
+            return true;
+        }
+
         SpellResult result = SpellCaster.Cast(spell, npc.Stats, target.Stats, null, skipFriendlyTouchAttackRoll, forceTargetToFailSave, npc, target);
 
         bool appliesTrackedEffect = spell.EffectType == SpellEffectType.Buff || spell.EffectType == SpellEffectType.Debuff;
@@ -20172,7 +20226,11 @@ public partial class GameManager : MonoBehaviour
         if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow)
             handledAnimateRope = TryResolveAnimateRopeSpellEffect(npc, target, spell, result);
 
-        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+        bool handledMirrorImage = false;
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && !effectNegatedBySave)
+            handledMirrorImage = TryResolveMirrorImageSpellEffect(npc, target, spell, result);
+
+        if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             ApplySpellBuff(npc, target, spell, spellComp);
 
         if (result.DamageDealt > 0)

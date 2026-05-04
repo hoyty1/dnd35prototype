@@ -872,6 +872,15 @@ public class AIService : MonoBehaviour
         if (npc == null || allCombatants == null)
             return null;
 
+        CharacterController mirrorPriorityTarget = _gameManager != null
+            ? _gameManager.GetMirrorImagePriorityTargetForAI(npc)
+            : null;
+        if (mirrorPriorityTarget != null)
+        {
+            Debug.Log($"[AI][MirrorImage] {npc.Stats.CharacterName} prioritizes nearest mirror-image entity: {mirrorPriorityTarget.Stats?.CharacterName}");
+            return mirrorPriorityTarget;
+        }
+
         LastKnownPositionTracker tracker = npc.GetComponent<LastKnownPositionTracker>();
         if (tracker == null)
             tracker = npc.gameObject.AddComponent<LastKnownPositionTracker>();
@@ -1684,6 +1693,18 @@ public class AIService : MonoBehaviour
     {
         if (_gameManager == null || caster == null || spell == null)
             return fallbackTarget;
+
+        CharacterController mirrorPriorityTarget = _gameManager.GetMirrorImagePriorityTargetForAI(caster);
+        if (mirrorPriorityTarget != null)
+        {
+            int mirrorDistance = SquareGridUtils.GetDistance(caster.GridPosition, mirrorPriorityTarget.GridPosition);
+            int mirrorRange = spell.GetRangeSquaresForCasterLevel(caster.Stats != null ? caster.Stats.GetCasterLevel() : 1);
+            if (mirrorRange <= 0)
+                mirrorRange = 1;
+
+            if (mirrorDistance <= mirrorRange)
+                return mirrorPriorityTarget;
+        }
 
         List<CharacterController> allCombatants = _gameManager.GetAllCharactersForAI();
         if (allCombatants == null || allCombatants.Count == 0)

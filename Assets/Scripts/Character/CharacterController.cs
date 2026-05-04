@@ -4877,6 +4877,12 @@ public class CharacterController : MonoBehaviour
         result.DamageModeAttackPenalty = damageModeAttackPenalty;
         result.DamageModePenaltySource = damageModePenaltySource ?? string.Empty;
 
+        if (GameManager.Instance != null && GameManager.Instance.TryHandleMirrorImageCloneAttacked(this, target, result, out CombatResult mirrorCloneResult))
+        {
+            mirrorCloneResult.RebuildBreakdownsFromComputedValues();
+            return mirrorCloneResult;
+        }
+
         // Store weapon crit properties on result for display
         result.CritThreatMin = critThreatMin;
         result.CritMultiplier = critMultiplier;
