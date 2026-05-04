@@ -33,11 +33,25 @@ namespace Tests.Magic
 
         private static CharacterStats CreateCaster(string characterClass, Alignment alignment)
         {
-            return new CharacterStats
-            {
-                CharacterClass = characterClass,
-                CharacterAlignment = alignment
-            };
+            // Keep test setup minimal; these tests only depend on class + alignment filtering.
+            CharacterStats caster = new CharacterStats(
+                $"Test {characterClass}", // name
+                1,                        // level
+                characterClass,
+                10, 10, 10, 10, 10, 10,  // STR, DEX, CON, WIS, INT, CHA
+                0,                        // BAB
+                0,                        // armor bonus
+                0,                        // shield bonus
+                6,                        // damage die (d6)
+                1,                        // damage count
+                0,                        // bonus damage
+                6,                        // base speed (squares)
+                1,                        // attack range
+                8                         // base hit-die HP
+            );
+
+            caster.CharacterAlignment = alignment;
+            return caster;
         }
 
         private static List<SummonMonsterOption> GetSummonMonsterIIOptions(CharacterStats caster)
