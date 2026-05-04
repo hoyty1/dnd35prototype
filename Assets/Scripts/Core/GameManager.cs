@@ -262,6 +262,7 @@ public partial class GameManager : MonoBehaviour
     private SummonMonsterOption _pendingSummonSelection; // Selected summon option waiting for placement
     private int _pendingSummonListLevel; // Selected Summon Monster list level (I/II/III...)
     private SummonCreatureCountInfo _pendingSummonCountInfo; // Count formula/range for selected list level
+    private string _pendingSummonSwarmNpcId; // Selected swarm type for Summon Swarm placement
     private int _pendingNaturalAttackSequenceIndex = -1; // Sequence index for selected natural-weapon single attack
     private string _pendingNaturalAttackLabel; // Display label for selected natural-weapon single attack
 
@@ -400,6 +401,8 @@ public partial class GameManager : MonoBehaviour
         public bool IsAlliedToPCs;
         public bool SmiteUsed;
         public SummonCommand CurrentCommand;
+        public bool IsConcentrationSummon;
+        public bool HasEnteredPostConcentrationDuration;
     }
 
     /// <summary>
@@ -958,6 +961,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSummonSelection = null;
         _pendingSummonListLevel = 0;
         _pendingSummonCountInfo = null;
+        _pendingSummonSwarmNpcId = null;
         _pendingNaturalAttackSequenceIndex = -1;
         _pendingNaturalAttackLabel = null;
         ResetPendingGreaseCastMode();
@@ -1970,6 +1974,12 @@ public partial class GameManager : MonoBehaviour
         ActiveSummonInstance active = GetActiveSummon(summon);
         if (active == null)
             return false;
+
+        if (string.Equals(active.SourceSpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
+        {
+            CombatUI?.ShowCombatLog("⚠ Summon Swarm is uncontrolled. You cannot issue commands to it.");
+            return true;
+        }
 
         CombatUI?.ShowSummonContextMenu(
             summon,
@@ -4878,6 +4888,10 @@ public partial class GameManager : MonoBehaviour
                 return ScriptableObject.CreateInstance<NecromancerAIProfile>();
             case NPCAIProfileArchetype.UndeadMindless:
                 return ScriptableObject.CreateInstance<UndeadMindlessAIProfile>();
+            case NPCAIProfileArchetype.Swarm:
+                return ScriptableObject.CreateInstance<SwarmAI>();
+            case NPCAIProfileArchetype.IndiscriminateSwarm:
+                return ScriptableObject.CreateInstance<IndiscriminateSwarmAI>();
             default:
                 return null;
         }
@@ -10068,6 +10082,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSummonSelection = null;
         _pendingSummonListLevel = 0;
         _pendingSummonCountInfo = null;
+        _pendingSummonSwarmNpcId = null;
 
         // Casting another spell while holding a touch charge ends the held charge.
         var spellComp = pc.GetComponent<SpellcastingComponent>();
@@ -10656,6 +10671,12 @@ public partial class GameManager : MonoBehaviour
         return SummonMonsterLists.GetSummonMonsterSpellLevel(spell.SpellId) > 0;
     }
 
+    private bool IsSummonSwarmSpell(SpellData spell)
+    {
+        return spell != null
+               && string.Equals(spell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal);
+    }
+
     private List<SummonMonsterOption> GetSummonOptionsForSpell(SpellData spell, CharacterController caster, int listLevel)
     {
         if (spell == null || caster == null || caster.Stats == null || listLevel <= 0)
@@ -10682,6 +10703,12 @@ public partial class GameManager : MonoBehaviour
         return true;
     }
 
+    public CharacterController GetSummonCasterForAI(CharacterController summon)
+    {
+        ActiveSummonInstance data = GetActiveSummon(summon);
+        return data != null ? data.Caster : null;
+    }
+
     public void SetSummonCommand(CharacterController summon, SummonCommand command)
     {
         if (summon == null || command == null)
@@ -10690,6 +10717,12 @@ public partial class GameManager : MonoBehaviour
         var active = GetActiveSummon(summon);
         if (active == null)
             return;
+
+        if (string.Equals(active.SourceSpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
+        {
+            CombatUI?.ShowCombatLog("⚠ Summon Swarm cannot be controlled.");
+            return;
+        }
 
         active.CurrentCommand = command;
 
@@ -10822,6 +10855,7 @@ public partial class GameManager : MonoBehaviour
             _pendingSummonSelection = null;
             _pendingSummonListLevel = 0;
             _pendingSummonCountInfo = null;
+            _pendingSummonSwarmNpcId = null;
             ShowActionChoices();
             return;
         }
@@ -10843,6 +10877,7 @@ public partial class GameManager : MonoBehaviour
             _pendingSummonSelection = null;
             _pendingSummonListLevel = 0;
             _pendingSummonCountInfo = null;
+            _pendingSummonSwarmNpcId = null;
             ShowActionChoices();
             return;
         }
@@ -10889,8 +10924,136 @@ public partial class GameManager : MonoBehaviour
                 _pendingSummonSelection = null;
                 _pendingSummonListLevel = 0;
                 _pendingSummonCountInfo = null;
+                _pendingSummonSwarmNpcId = null;
                 ShowActionChoices();
             });
+    }
+
+    private int CalculateSummonSwarmRangeFeet(int casterLevel)
+    {
+        return 25 + (5 * Mathf.Max(0, casterLevel / 2));
+    }
+
+    private List<string> BuildSummonSwarmChoiceNpcIds()
+    {
+        string[] preferred = { "bat_swarm", "rat_swarm", "spider_swarm" };
+        var validIds = new List<string>();
+
+        for (int i = 0; i < preferred.Length; i++)
+        {
+            if (NPCDatabase.Get(preferred[i]) != null)
+                validIds.Add(preferred[i]);
+        }
+
+        return validIds;
+    }
+
+    private List<string> BuildSummonSwarmChoiceLabels()
+    {
+        List<string> npcIds = BuildSummonSwarmChoiceNpcIds();
+        var labels = new List<string>();
+
+        for (int i = 0; i < npcIds.Count; i++)
+        {
+            NPCDefinition def = NPCDatabase.Get(npcIds[i]);
+            if (def == null)
+                continue;
+
+            string special = "Swarm";
+            if (def.SwarmTraits != null)
+            {
+                if (def.SwarmTraits.HasWounding)
+                    special = "Wounding";
+                else if (def.SwarmTraits.HasDisease)
+                    special = "Disease";
+                else if (def.SwarmTraits.HasPoison)
+                    special = "Poison";
+            }
+
+            int approxAc = 10 + def.NaturalArmorBonus + CharacterStats.GetModifier(def.DEX) + def.SizeCategory.GetAttackAndAcModifier();
+            labels.Add($"{def.Name}\n  {def.HitDice} HD, {Mathf.Max(1, def.BaseHitDieHP)} HP, AC {approxAc}\n  Damage: {def.SwarmTraits?.SwarmDamageDice ?? "1d6"}\n  Special: {special}");
+        }
+
+        return labels;
+    }
+
+    private void ShowSummonSwarmSelectionMenu(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || spell == null || CombatUI == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        List<string> ids = BuildSummonSwarmChoiceNpcIds();
+        List<string> labels = BuildSummonSwarmChoiceLabels();
+        if (ids.Count == 0 || labels.Count == 0)
+        {
+            CombatUI?.ShowCombatLog("No swarm creatures are available in the NPC database.");
+            ShowActionChoices();
+            return;
+        }
+
+        CombatUI.ShowPickUpItemSelection(
+            actorName: caster.Stats != null ? caster.Stats.CharacterName : "Caster",
+            itemOptions: labels,
+            onSelect: idx =>
+            {
+                if (idx < 0 || idx >= ids.Count)
+                {
+                    ShowActionChoices();
+                    return;
+                }
+
+                _pendingSummonSwarmNpcId = ids[idx];
+                _pendingAttackMode = PendingAttackMode.CastSpell;
+                CurrentSubPhase = PlayerSubPhase.SelectingAttackTarget;
+                ShowSummonSwarmPlacementTargets(caster, spell);
+            },
+            onCancel: () =>
+            {
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                _pendingSpellFromHeldCharge = false;
+                _pendingSummonSwarmNpcId = null;
+                ShowActionChoices();
+            },
+            titleOverride: "SUMMON SWARM - Select Swarm Type",
+            bodyOverride: "⚠ WARNING: Swarm is UNCONTROLLED!\nWill attack nearest creature (friend or foe).\nRequires concentration; after concentration ends, it lasts 2 more rounds.");
+    }
+
+    private void ShowSummonSwarmPlacementTargets(CharacterController caster, SpellData spell)
+    {
+        if (caster == null || spell == null || string.IsNullOrWhiteSpace(_pendingSummonSwarmNpcId))
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        Grid.ClearAllHighlights();
+        _highlightedCells.Clear();
+        CombatUI.SetActionButtonsVisible(false);
+
+        int rangeSquares = Mathf.Max(1, spell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 1));
+        List<SquareCell> cells = Grid.GetCellsInRange(caster.GridPosition, rangeSquares);
+
+        foreach (SquareCell cell in cells)
+        {
+            if (cell == null)
+                continue;
+
+            int dist = SquareGridUtils.GetDistance(caster.GridPosition, cell.Coords);
+            if (dist > rangeSquares)
+                continue;
+
+            cell.SetHighlight(HighlightType.SpellTarget);
+            _highlightedCells.Add(cell);
+        }
+
+        HighlightCharacterFootprint(caster, HighlightType.Selected);
+
+        int feet = CalculateSummonSwarmRangeFeet(caster != null && caster.Stats != null ? caster.Stats.Level : 1);
+        CombatUI.SetTurnIndicator($"✦ {spell.Name}: place swarm ({_pendingSummonSwarmNpcId}) | Range: {feet} ft | Occupied squares allowed | Right-click to cancel");
     }
 
     private void ShowSummonPlacementTargets(CharacterController caster, SpellData spell)
@@ -11283,18 +11446,57 @@ public partial class GameManager : MonoBehaviour
                 continue;
             }
 
-            summon.RemainingRounds--;
+            bool casterIncapacitated = summon.Caster == null
+                || summon.Caster.Stats == null
+                || summon.Caster.Stats.IsDead
+                || summon.Caster.HasCondition(CombatConditionType.Unconscious)
+                || summon.Caster.HasCondition(CombatConditionType.Paralyzed);
+
+            if (summon.IsConcentrationSummon
+                && !summon.HasEnteredPostConcentrationDuration
+                && casterIncapacitated
+                && IsCasterMaintainingSummonSwarmConcentration(summon.Caster))
+            {
+                ConcentrationManager casterConc = summon.Caster.GetComponent<ConcentrationManager>();
+                if (casterConc != null)
+                {
+                    string breakLog = casterConc.ForceBreakConcentration("incapacitated");
+                    if (!string.IsNullOrEmpty(breakLog))
+                        CombatUI?.ShowCombatLog($"<color=#FF6644>{breakLog}</color>");
+                }
+            }
+
+            bool holdByConcentration = summon.IsConcentrationSummon
+                && !summon.HasEnteredPostConcentrationDuration
+                && IsCasterMaintainingSummonSwarmConcentration(summon.Caster);
+
+            if (!holdByConcentration)
+            {
+                if (summon.IsConcentrationSummon && !summon.HasEnteredPostConcentrationDuration)
+                {
+                    summon.HasEnteredPostConcentrationDuration = true;
+                    summon.RemainingRounds = Mathf.Max(1, summon.TotalDurationRounds);
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>{summon.Controller.Stats.CharacterName}: concentration ended, {summon.RemainingRounds} rounds until dismissal.</color>");
+                }
+                else
+                {
+                    summon.RemainingRounds--;
+                }
+            }
 
             var visual = summon.Controller.GetComponent<SummonedCreatureVisual>();
             if (visual != null)
                 visual.SetDuration(summon.RemainingRounds, summon.TotalDurationRounds);
 
-            if (summon.RemainingRounds == 2)
-                CombatUI?.ShowCombatLog($"<color=#66E8FF>{summon.Controller.Stats.CharacterName}: 2 rounds remaining.</color>");
-            else if (summon.RemainingRounds == 1)
-                CombatUI?.ShowCombatLog($"<color=#FFCC66>{summon.Controller.Stats.CharacterName}: 1 round remaining!</color>");
+            if (!holdByConcentration)
+            {
+                if (summon.RemainingRounds == 2)
+                    CombatUI?.ShowCombatLog($"<color=#66E8FF>{summon.Controller.Stats.CharacterName}: 2 rounds remaining.</color>");
+                else if (summon.RemainingRounds == 1)
+                    CombatUI?.ShowCombatLog($"<color=#FFCC66>{summon.Controller.Stats.CharacterName}: 1 round remaining!</color>");
+            }
 
-            if (summon.RemainingRounds <= 0)
+            if (!holdByConcentration && summon.RemainingRounds <= 0)
                 expired.Add(summon);
         }
 
@@ -11368,12 +11570,20 @@ public partial class GameManager : MonoBehaviour
         return bestCell;
     }
 
-    private void RegisterActiveSummon(CharacterController summon, CharacterController caster, string sourceSpellId)
+    private void RegisterActiveSummon(
+        CharacterController summon,
+        CharacterController caster,
+        string sourceSpellId,
+        int? durationRoundsOverride = null,
+        bool concentrationSummon = false,
+        bool startsInPostConcentrationMode = false)
     {
         if (summon == null)
             return;
 
-        int durationRounds = Mathf.Max(1, caster != null && caster.Stats != null ? caster.Stats.Level : 1);
+        int defaultDuration = Mathf.Max(1, caster != null && caster.Stats != null ? caster.Stats.Level : 1);
+        int durationRounds = Mathf.Max(1, durationRoundsOverride ?? defaultDuration);
+
         var activeSummon = new ActiveSummonInstance
         {
             Controller = summon,
@@ -11383,13 +11593,111 @@ public partial class GameManager : MonoBehaviour
             SourceSpellId = sourceSpellId,
             IsAlliedToPCs = summon.Team == CharacterTeam.Player,
             SmiteUsed = false,
-            CurrentCommand = SummonCommand.AttackNearest()
+            CurrentCommand = SummonCommand.AttackNearest(),
+            IsConcentrationSummon = concentrationSummon,
+            HasEnteredPostConcentrationDuration = startsInPostConcentrationMode
         };
         _activeSummons.Add(activeSummon);
 
         var visual = summon.GetComponent<SummonedCreatureVisual>();
         if (visual != null)
             visual.SetDuration(durationRounds, durationRounds);
+    }
+
+    private void PerformSummonSwarmCast(CharacterController caster, SquareCell targetCell, string swarmNpcId)
+    {
+        if (caster == null || targetCell == null || string.IsNullOrWhiteSpace(swarmNpcId) || _pendingSpell == null)
+        {
+            ShowActionChoices();
+            return;
+        }
+
+        NPCDefinition baseDef = NPCDatabase.Get(swarmNpcId);
+        if (baseDef == null)
+        {
+            CombatUI?.ShowCombatLog($"Cannot summon swarm: missing creature definition '{swarmNpcId}'.");
+            ShowActionChoices();
+            return;
+        }
+
+        CurrentSubPhase = PlayerSubPhase.Animating;
+        CaptureSpellcastResourceSnapshot(caster);
+
+        if (!TryConsumePendingSpellCast(caster))
+        {
+            ClearSpellcastResourceSnapshot();
+            ShowActionChoices();
+            return;
+        }
+
+        ResolveSpellcastProvocation(caster, _pendingSpell, false, canProceed =>
+        {
+            if (!canProceed)
+            {
+                if (_spellcastProvocationCancelled)
+                {
+                    HandleSpellcastCancelledFromAoOPrompt(caster);
+                    return;
+                }
+
+                ClearSpellcastResourceSnapshot();
+                HandleInterruptedSpellCast(caster, 1.0f);
+                return;
+            }
+
+            ClearSpellcastResourceSnapshot();
+
+            SummonMonsterOption option = new SummonMonsterOption
+            {
+                DisplayName = baseDef.Name,
+                NpcDefinitionId = swarmNpcId,
+                TemplateId = null
+            };
+
+            CharacterController summonCC = SpawnSummonedCreature(caster, targetCell.Coords, option);
+            if (summonCC == null)
+            {
+                CombatUI?.ShowCombatLog("⚠ Summon Swarm failed: creature could not be spawned.");
+                ShowActionChoices();
+                return;
+            }
+
+            summonCC.aiProfile = ScriptableObject.CreateInstance<IndiscriminateSwarmAI>();
+            summonCC.EnemyUseCoupDeGraceOverride = false;
+
+            InsertIntoInitiative(summonCC, caster);
+
+            int persistedRounds = 2;
+            RegisterActiveSummon(
+                summonCC,
+                caster,
+                _pendingSpell.SpellId,
+                durationRoundsOverride: persistedRounds,
+                concentrationSummon: true,
+                startsInPostConcentrationMode: false);
+
+            BeginSummonSwarmConcentration(caster, _pendingSpell, summonCC);
+
+            int rangeFeet = CalculateSummonSwarmRangeFeet(caster != null && caster.Stats != null ? caster.Stats.Level : 1);
+            CombatUI?.ShowCombatLog($"<color=#66E8FF>{caster.Stats.CharacterName} casts {_pendingSpell.Name}!</color>");
+            CombatUI?.ShowCombatLog($"  Range: {rangeFeet} ft (level {Mathf.Max(1, caster.Stats.Level)} caster)");
+            CombatUI?.ShowCombatLog($"  Target location: ({targetCell.Coords.x}, {targetCell.Coords.y})");
+            CombatUI?.ShowCombatLog($"  Swarm type: {baseDef.Name}");
+            CombatUI?.ShowCombatLog($"<color=#FF8866>⚠ WARNING: The swarm is uncontrolled and will attack the nearest creature (including allies and the caster)!</color>");
+            CombatUI?.ShowCombatLog($"<color=#44AAFF>{caster.Stats.CharacterName} is concentrating on {_pendingSpell.Name}.</color>");
+
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            _pendingSpellFromHeldCharge = false;
+            _pendingSummonSwarmNpcId = null;
+            _pendingSummonSelection = null;
+            _pendingSummonListLevel = 0;
+            _pendingSummonCountInfo = null;
+
+            Grid.ClearAllHighlights();
+            UpdateAllStatsUI();
+            StartCoroutine(AfterAttackDelay(caster, 1.0f));
+        });
     }
 
     private void PerformSummonMonsterCast(CharacterController caster, SquareCell targetCell, SummonMonsterOption option)
@@ -11502,6 +11810,7 @@ public partial class GameManager : MonoBehaviour
             _pendingSummonSelection = null;
             _pendingSummonListLevel = 0;
             _pendingSummonCountInfo = null;
+            _pendingSummonSwarmNpcId = null;
 
             Grid.ClearAllHighlights();
             UpdateAllStatsUI();
@@ -11561,6 +11870,13 @@ public partial class GameManager : MonoBehaviour
         if (IsSummonMonsterSpell(_pendingSpell))
         {
             ShowSummonCreatureSelectionMenu(caster, _pendingSpell);
+            return;
+        }
+
+        // Summon Swarm: choose swarm type first, then place in range (occupied squares allowed).
+        if (IsSummonSwarmSpell(_pendingSpell))
+        {
+            ShowSummonSwarmSelectionMenu(caster, _pendingSpell);
             return;
         }
 
@@ -12878,6 +13194,7 @@ public partial class GameManager : MonoBehaviour
         _pendingSummonSelection = null;
         _pendingSummonListLevel = 0;
         _pendingSummonCountInfo = null;
+        _pendingSummonSwarmNpcId = null;
         ResetPendingGreaseCastMode();
         _pendingAttackMode = PendingAttackMode.Single;
 
@@ -15373,6 +15690,82 @@ public partial class GameManager : MonoBehaviour
     }
     // ========== CONCENTRATION MECHANICS (D&D 3.5e PHB) ==========
 
+    private bool IsCasterMaintainingSummonSwarmConcentration(CharacterController caster)
+    {
+        if (caster == null)
+            return false;
+
+        ConcentrationManager concMgr = caster.GetComponent<ConcentrationManager>();
+        if (concMgr == null || !concMgr.IsConcentrating || concMgr.ConcentratingOn == null || concMgr.ConcentratingOn.Spell == null)
+            return false;
+
+        return string.Equals(concMgr.ConcentratingOn.Spell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal);
+    }
+
+    private void BeginSummonSwarmConcentration(CharacterController caster, SpellData spell, CharacterController summonedSwarm)
+    {
+        if (caster == null || spell == null)
+            return;
+
+        ConcentrationManager concMgr = caster.GetComponent<ConcentrationManager>();
+        if (concMgr == null)
+            return;
+
+        if (concMgr.IsConcentrating
+            && concMgr.ConcentratingOn != null
+            && concMgr.ConcentratingOn.Spell != null
+            && string.Equals(concMgr.ConcentratingOn.Spell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
+        {
+            TransitionSummonSwarmToPostConcentration(caster, "new concentration spell");
+        }
+
+        ActiveSpellEffect concentrationMarker = new ActiveSpellEffect(spell, caster.Stats != null ? caster.Stats.CharacterName : "Caster", caster.Stats != null ? caster.Stats.GetCasterLevel() : 1, caster.Stats != null ? caster.Stats.CharacterName : "Caster");
+        string log = concMgr.BeginConcentration(concentrationMarker);
+        if (!string.IsNullOrEmpty(log))
+            CombatUI?.ShowCombatLog($"<color=#44AAFF>{log}</color>");
+
+        if (summonedSwarm != null)
+        {
+            ActiveSummonInstance active = GetActiveSummon(summonedSwarm);
+            if (active != null)
+            {
+                active.IsConcentrationSummon = true;
+                active.HasEnteredPostConcentrationDuration = false;
+                active.RemainingRounds = 2;
+                active.TotalDurationRounds = 2;
+            }
+        }
+    }
+
+    private void TransitionSummonSwarmToPostConcentration(CharacterController caster, string reason)
+    {
+        if (caster == null)
+            return;
+
+        bool transitionedAny = false;
+        for (int i = 0; i < _activeSummons.Count; i++)
+        {
+            ActiveSummonInstance summon = _activeSummons[i];
+            if (summon == null || summon.Caster != caster || !summon.IsConcentrationSummon)
+                continue;
+            if (!string.Equals(summon.SourceSpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
+                continue;
+
+            if (!summon.HasEnteredPostConcentrationDuration)
+            {
+                summon.HasEnteredPostConcentrationDuration = true;
+                summon.RemainingRounds = 2;
+                summon.TotalDurationRounds = 2;
+                transitionedAny = true;
+            }
+        }
+
+        if (transitionedAny)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FFAA44>Concentration on Summon Swarm ended ({reason}). Swarm will last 2 more rounds.</color>");
+        }
+    }
+
     /// <summary>
     /// Check if a character needs to make concentration checks after taking damage.
     /// Applies to both ongoing concentration spells and held touch charges.
@@ -15394,9 +15787,12 @@ public partial class GameManager : MonoBehaviour
         {
             if (hasConcentrationSpell)
             {
+                bool wasSummonSwarm = IsCasterMaintainingSummonSwarmConcentration(character);
                 string breakLog = concMgr.ForceBreakConcentration("killed");
                 if (!string.IsNullOrEmpty(breakLog))
                     CombatUI?.ShowCombatLog($"<color=#FF6644>{breakLog}</color>");
+                if (wasSummonSwarm)
+                    TransitionSummonSwarmToPostConcentration(character, "caster incapacitated");
             }
 
             if (hasHeldTouchCharge)
@@ -15434,12 +15830,16 @@ public partial class GameManager : MonoBehaviour
         // 2) Ongoing concentration spell check
         if (hasConcentrationSpell)
         {
+            bool wasSummonSwarm = IsCasterMaintainingSummonSwarmConcentration(character);
             var result = concMgr.CheckConcentrationOnDamage(damageTaken);
             if (!string.IsNullOrEmpty(result.LogMessage))
             {
                 string color = result.Success ? "#88CCFF" : "#FF6644";
                 CombatUI?.ShowCombatLog($"<color={color}>{result.LogMessage}</color>");
             }
+
+            if (!result.Success && wasSummonSwarm)
+                TransitionSummonSwarmToPostConcentration(character, "failed concentration check");
         }
 
         UpdateAllStatsUI();
@@ -15460,6 +15860,17 @@ public partial class GameManager : MonoBehaviour
         var concMgr = caster.GetComponent<ConcentrationManager>();
         if (concMgr == null || !concMgr.IsConcentrating) return true;
 
+        if (IsCasterMaintainingSummonSwarmConcentration(caster)
+            && !string.Equals(newSpell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
+        {
+            string endLog = concMgr.EndConcentration();
+            if (!string.IsNullOrEmpty(endLog))
+                CombatUI?.ShowCombatLog($"<color=#FFAA44>{endLog}</color>");
+
+            TransitionSummonSwarmToPostConcentration(caster, "caster cast another spell");
+            return true;
+        }
+
         // If the new spell is a concentration spell, the old one ends automatically
         // (handled in BeginConcentration). No check needed, casting proceeds.
         if (newSpell.DurationType == DurationType.Concentration)
@@ -15469,6 +15880,7 @@ public partial class GameManager : MonoBehaviour
 
         // Casting a non-concentration spell while concentrating requires a check
         // DC = 15 + spell level of the NEW spell
+        bool wasSummonSwarm = IsCasterMaintainingSummonSwarmConcentration(caster);
         var result = concMgr.CheckConcentrationOnCasting(newSpell.SpellLevel);
         if (!string.IsNullOrEmpty(result.LogMessage))
         {
@@ -15478,6 +15890,9 @@ public partial class GameManager : MonoBehaviour
 
         if (!result.Success)
         {
+            if (wasSummonSwarm)
+                TransitionSummonSwarmToPostConcentration(caster, "failed concentration while casting");
+
             UpdateAllStatsUI();
         }
 
@@ -15500,6 +15915,12 @@ public partial class GameManager : MonoBehaviour
         var concMgr = caster.GetComponent<ConcentrationManager>();
         if (concMgr == null) return;
 
+        if (IsCasterMaintainingSummonSwarmConcentration(caster)
+            && !string.Equals(spell.SpellId, SpellNames.SUMMON_SWARM, StringComparison.Ordinal))
+        {
+            TransitionSummonSwarmToPostConcentration(caster, "started another concentration spell");
+        }
+
         string log = concMgr.BeginConcentration(effect);
         if (!string.IsNullOrEmpty(log))
         {
@@ -15518,11 +15939,16 @@ public partial class GameManager : MonoBehaviour
         var concMgr = character.GetComponent<ConcentrationManager>();
         if (concMgr == null || !concMgr.IsConcentrating) return;
 
+        bool wasSummonSwarm = IsCasterMaintainingSummonSwarmConcentration(character);
         string log = concMgr.EndConcentration();
         if (!string.IsNullOrEmpty(log))
         {
             CombatUI?.ShowCombatLog($"<color=#FFAA44>{log}</color>");
         }
+
+        if (wasSummonSwarm)
+            TransitionSummonSwarmToPostConcentration(character, "voluntary end");
+
         UpdateAllStatsUI();
     }
 
@@ -17186,6 +17612,24 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
+            if (IsSummonSwarmSpell(_pendingSpell))
+            {
+                if (string.IsNullOrWhiteSpace(_pendingSummonSwarmNpcId))
+                {
+                    ShowSummonSwarmSelectionMenu(pc, _pendingSpell);
+                    return;
+                }
+
+                if (!_highlightedCells.Contains(cell))
+                {
+                    CombatUI.ShowCombatLog("Choose a highlighted tile in range to place the swarm.");
+                    return;
+                }
+
+                PerformSummonSwarmCast(pc, cell, _pendingSummonSwarmNpcId);
+                return;
+            }
+
             // For ally spells, clicking own tile = self-target
             if (cell.Coords == pc.GridPosition && _pendingSpell.TargetType == SpellTargetType.SingleAlly)
             {
@@ -17211,6 +17655,7 @@ public partial class GameManager : MonoBehaviour
                 _pendingSummonSelection = null;
                 _pendingSummonListLevel = 0;
                 _pendingSummonCountInfo = null;
+                _pendingSummonSwarmNpcId = null;
                 ResetPendingGreaseCastMode();
                 ShowActionChoices();
                 return;

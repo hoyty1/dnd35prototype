@@ -425,7 +425,9 @@ public enum NPCAIProfileArchetype
     Evoker,
     Abjurer,
     Necromancer,
-    UndeadMindless
+    UndeadMindless,
+    Swarm,
+    IndiscriminateSwarm
 }
 
 /// <summary>

@@ -410,19 +410,24 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.SUMMON_SWARM,
                     Name = "Summon Swarm",
-                    Description = "Summons swarm of bats, rats, or spiders. 2d6 damage/round. Concentration + 2 rounds. PHB p.289",
-                    SpellLevel = 2, School = "Conjuration",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.SingleEnemy,
-                    RangeSquares = 5,
-                    EffectType = SpellEffectType.Damage,
+                    Description = "You summon a swarm of bats, rats, or spiders (your choice). The swarm is uncontrolled and attacks the nearest living creature, friend or foe. Duration: concentration + 2 rounds.",
+                    SpellLevel = 2,
+                    School = "Conjuration (Summoning)",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Druid", "Bard" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Close,
+                    EffectType = SpellEffectType.Buff,
                     DurationType = DurationType.Concentration,
-                    DamageDice = 6, DamageCount = 2,
-                    DamageType = "swarm",
+                    DurationValue = 1,
+                    DurationScalesWithLevel = false,
                     ActionType = SpellActionType.FullRound,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Swarm summoning not implemented]"
+                    AllowsSavingThrow = false,
+                    SavingThrowType = "None",
+                    SpellResistanceApplies = false,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
                 });
 
         // Aliases

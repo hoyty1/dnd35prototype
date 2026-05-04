@@ -57,6 +57,8 @@ namespace Tests.AI
             TestConcealmentTargetingAdjustmentSupportsProfileMultiplier();
             TestThreatSystemEstimatesRangedProvocationDamage();
             TestThreatSystemCountsOffHandMeleeThreateners();
+            TestSwarmAISticksToCurrentTargetUntilDead();
+            TestIndiscriminateSwarmAITargetsNearestCreature();
 
             Debug.Log($"====== AI PROFILE RESULTS: {_passed} passed, {_failed} failed ======");
         }
@@ -945,6 +947,76 @@ namespace Tests.AI
                 TestHelpers.Cleanup(archer != null ? archer.gameObject : null,
                     offHandThreatener != null ? offHandThreatener.gameObject : null,
                     adjacentThreatener != null ? adjacentThreatener.gameObject : null);
+            }
+        }
+
+        private static void TestSwarmAISticksToCurrentTargetUntilDead()
+        {
+            CharacterController swarm = TestHelpers.CreateWarrior("Swarm_AI", level: 3);
+            CharacterController nearEnemy = TestHelpers.CreateWarrior("Enemy_Near", level: 3);
+            CharacterController fartherEnemy = TestHelpers.CreateWarrior("Enemy_Far", level: 3);
+            SwarmAI profile = ScriptableObject.CreateInstance<SwarmAI>();
+
+            try
+            {
+                TestHelpers.SetGridPosition(swarm, 0, 0);
+                TestHelpers.SetGridPosition(nearEnemy, 1, 0);
+                TestHelpers.SetGridPosition(fartherEnemy, 4, 0);
+
+                List<CharacterController> enemies = new List<CharacterController> { nearEnemy, fartherEnemy };
+                CharacterController first = profile.ResolveTarget(swarm, enemies);
+                Assert(first == nearEnemy,
+                    "Swarm AI initially selects nearest enemy",
+                    $"(selected={first?.Stats?.CharacterName ?? "null"})");
+
+                TestHelpers.SetGridPosition(fartherEnemy, 0, 1);
+                CharacterController second = profile.ResolveTarget(swarm, enemies);
+                Assert(second == nearEnemy,
+                    "Swarm AI keeps current target while it is alive",
+                    $"(selected={second?.Stats?.CharacterName ?? "null"})");
+
+                nearEnemy.Stats.CurrentHP = 0;
+                nearEnemy.Stats.IsDead = true;
+                CharacterController third = profile.ResolveTarget(swarm, enemies);
+                Assert(third == fartherEnemy,
+                    "Swarm AI switches only after current target dies",
+                    $"(selected={third?.Stats?.CharacterName ?? "null"})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(swarm != null ? swarm.gameObject : null,
+                    nearEnemy != null ? nearEnemy.gameObject : null,
+                    fartherEnemy != null ? fartherEnemy.gameObject : null,
+                    profile);
+            }
+        }
+
+        private static void TestIndiscriminateSwarmAITargetsNearestCreature()
+        {
+            CharacterController swarm = TestHelpers.CreateWarrior("Summoned_Swarm", level: 3);
+            CharacterController ally = TestHelpers.CreateWarrior("Ally_Close", level: 3);
+            CharacterController enemy = TestHelpers.CreateWarrior("Enemy_Far", level: 3);
+            IndiscriminateSwarmAI profile = ScriptableObject.CreateInstance<IndiscriminateSwarmAI>();
+
+            try
+            {
+                TestHelpers.SetGridPosition(swarm, 0, 0);
+                TestHelpers.SetGridPosition(ally, 1, 0);
+                TestHelpers.SetGridPosition(enemy, 4, 0);
+
+                List<CharacterController> everyone = new List<CharacterController> { ally, enemy };
+                CharacterController selected = profile.ResolveTarget(swarm, everyone);
+
+                Assert(selected == ally,
+                    "Indiscriminate swarm AI can target nearest creature regardless of team",
+                    $"(selected={selected?.Stats?.CharacterName ?? "null"})");
+            }
+            finally
+            {
+                TestHelpers.Cleanup(swarm != null ? swarm.gameObject : null,
+                    ally != null ? ally.gameObject : null,
+                    enemy != null ? enemy.gameObject : null,
+                    profile);
             }
         }
     }

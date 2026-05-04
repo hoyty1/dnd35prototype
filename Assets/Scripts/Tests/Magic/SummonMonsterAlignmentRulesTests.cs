@@ -29,6 +29,8 @@ namespace Tests.Magic
             TestCeClericCannotSummonCelestials();
             TestSummonMonsterListLevelOptions();
             TestSummonCreatureCountInfoRanges();
+            TestSummonSwarmSpellDefinition();
+            TestSummonSwarmCloseRangeScaling();
 
             Debug.Log($"====== Summon Monster Alignment Results: {_passed} passed, {_failed} failed ======");
         }
@@ -185,6 +187,39 @@ namespace Tests.Magic
             AssertTrue(sameLevel != null && sameLevel.RangeText == "1 creature", "Same-level summon count is fixed at 1 creature");
             AssertTrue(oneLower != null && oneLower.RangeText == "1d3 creatures (1-3)", "One-level-lower summon count is 1d3");
             AssertTrue(twoLower != null && twoLower.RangeText == "1d4+1 creatures (2-5)", "Two-or-more-level-lower summon count is 1d4+1");
+        }
+
+        private static void TestSummonSwarmSpellDefinition()
+        {
+            SpellDatabase.Init();
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.SUMMON_SWARM);
+
+            bool valid = spell != null
+                         && spell.SpellLevel == 2
+                         && spell.DurationType == DurationType.Concentration
+                         && spell.GetEffectiveRangeCategory() == SpellRangeCategory.Close
+                         && spell.IsAvailableFor("Wizard", 2)
+                         && spell.IsAvailableFor("Sorcerer", 2)
+                         && spell.IsAvailableFor("Druid", 2)
+                         && spell.IsAvailableFor("Bard", 2);
+
+            AssertTrue(valid, "Summon Swarm definition matches level/range/class requirements");
+        }
+
+        private static void TestSummonSwarmCloseRangeScaling()
+        {
+            SpellDatabase.Init();
+            SpellData spell = SpellDatabase.GetSpell(SpellNames.SUMMON_SWARM);
+            if (spell == null)
+            {
+                AssertTrue(false, "Summon Swarm range scaling test has spell data");
+                return;
+            }
+
+            // 25 + 5 ft per 2 levels => 5 + floor(CL/2) squares
+            AssertEqual(6, spell.GetRangeSquaresForCasterLevel(3), "Summon Swarm CL3 = 30 ft");
+            AssertEqual(7, spell.GetRangeSquaresForCasterLevel(5), "Summon Swarm CL5 = 35 ft");
+            AssertEqual(10, spell.GetRangeSquaresForCasterLevel(10), "Summon Swarm CL10 = 50 ft");
         }
     }
 }

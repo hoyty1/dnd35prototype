@@ -130,13 +130,19 @@ public class AIService : MonoBehaviour
             yield break;
         }
 
+        AIProfile profile = GetProfile(npc);
+        if (profile is SwarmAI swarmProfile)
+        {
+            yield return _gameManager.StartCoroutine(ExecuteSwarmTurn(npc, swarmProfile, profile is IndiscriminateSwarmAI));
+            yield break;
+        }
+
         if (isSummon)
         {
             yield return _gameManager.StartCoroutine(_gameManager.ExecuteSummonedCreatureTurnForAI(npc));
             yield break;
         }
 
-        AIProfile profile = GetProfile(npc);
         if (profile != null)
         {
             if (profile is HealerAIProfile healerProfile)
@@ -777,6 +783,81 @@ public class AIService : MonoBehaviour
         {
             yield return new WaitForSeconds(0.3f);
         }
+    }
+
+    private IEnumerator ExecuteSwarmTurn(CharacterController swarm, SwarmAI profile, bool indiscriminate)
+    {
+        if (_gameManager == null || swarm == null || swarm.Stats == null || profile == null)
+            yield break;
+
+        List<CharacterController> candidates = BuildSwarmTargetCandidates(swarm, indiscriminate);
+        CharacterController target = profile.ResolveTarget(swarm, candidates);
+
+        if (target == null)
+        {
+            _gameManager.CombatUI?.ShowCombatLog($"{swarm.Stats.CharacterName} finds no living creatures to swarm.");
+            yield return new WaitForSeconds(0.3f);
+            yield break;
+        }
+
+        _gameManager.CombatUI?.ShowCombatLog($"{swarm.Stats.CharacterName} scans for nearest creature: {target.Stats.CharacterName}.");
+
+        CharacterController summonCaster = _gameManager.GetSummonCasterForAI(swarm);
+        if (indiscriminate && target.Team == swarm.Team)
+        {
+            if (summonCaster != null && target == summonCaster)
+                _gameManager.CombatUI?.ShowCombatLog($"<color=#FF8866>⚠ {swarm.Stats.CharacterName} is attacking its summoner {target.Stats.CharacterName}!</color>");
+            else
+                _gameManager.CombatUI?.ShowCombatLog($"<color=#FF8866>⚠ {swarm.Stats.CharacterName} is uncontrolled and targets ally {target.Stats.CharacterName}!</color>");
+        }
+
+        if (!swarm.IsTargetInCurrentWeaponRange(target) && swarm.Actions.HasMoveAction)
+        {
+            yield return _gameManager.StartCoroutine(
+                _gameManager.MoveCharacterAlongComputedPathForAI(swarm, target.GridPosition, _gameManager.GetPlayerMoveSecondsPerStepForAI()));
+            swarm.Actions.UseMoveAction();
+            yield return new WaitForSeconds(0.35f);
+        }
+
+        target = profile.ResolveTarget(swarm, candidates);
+        if (target == null)
+            yield break;
+
+        if (swarm.IsTargetInCurrentWeaponRange(target))
+        {
+            _gameManager.CombatUI?.ShowCombatLog($"{swarm.Stats.CharacterName} occupies {target.Stats.CharacterName}'s space and continues swarming.");
+        }
+        else
+        {
+            _gameManager.CombatUI?.ShowCombatLog($"{swarm.Stats.CharacterName} shuffles toward {target.Stats.CharacterName}.");
+        }
+
+        yield return new WaitForSeconds(0.3f);
+    }
+
+    private List<CharacterController> BuildSwarmTargetCandidates(CharacterController swarm, bool indiscriminate)
+    {
+        List<CharacterController> allCombatants = _gameManager != null
+            ? _gameManager.GetAllCharactersForAI()
+            : null;
+
+        var candidates = new List<CharacterController>();
+        if (allCombatants == null)
+            return candidates;
+
+        for (int i = 0; i < allCombatants.Count; i++)
+        {
+            CharacterController candidate = allCombatants[i];
+            if (candidate == null || candidate == swarm || candidate.Stats == null || candidate.Stats.IsDead)
+                continue;
+
+            if (!indiscriminate && !_gameManager.IsEnemyTeamForAI(swarm, candidate))
+                continue;
+
+            candidates.Add(candidate);
+        }
+
+        return candidates;
     }
 
     private const string ArmorPriorityBehaviorTag = "Uses Armor-Based Targeting";
