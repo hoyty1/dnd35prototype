@@ -13152,8 +13152,16 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private void EnterAoETargetingMode(CharacterController caster, SpellData spell)
     {
+        int casterLevel = caster?.Stats?.GetCasterLevel() ?? 0;
+        int placementRange = spell.AoERangeSquares > 0
+            ? spell.AoERangeSquares
+            : spell.GetRangeSquaresForCasterLevel(casterLevel);
+
         // ===== SELF-CENTERED BURST: Show preview with confirmation =====
-        if (spell.AoEShapeType == AoEShape.Burst && spell.AoERangeSquares <= 0)
+        // Some burst spells (e.g., Bless) are centered on the caster. Others (e.g.,
+        // Flaming Sphere, Sleep, Web) use AoERangeSquares=0 as "use range profile"
+        // and must still prompt for target selection.
+        if (spell.AoEShapeType == AoEShape.Burst && placementRange <= 0)
         {
             Debug.Log($"[AoE] Self-centered burst: {spell.Name} — showing preview at ({caster.GridPosition.x},{caster.GridPosition.y})");
 
@@ -13216,9 +13224,7 @@ public partial class GameManager : MonoBehaviour
         // For burst spells with range > 0, show the valid placement range
         if (spell.AoEShapeType == AoEShape.Burst)
         {
-            int range = spell.AoERangeSquares > 0
-                ? spell.AoERangeSquares
-                : spell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 0);
+            int range = placementRange;
             if (range <= 0) range = 1;
 
             List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, range);
@@ -13230,8 +13236,15 @@ public partial class GameManager : MonoBehaviour
             HighlightCharacterFootprint(caster, HighlightType.SpellRange);
 
             string rangeStr = $"{range * 5} ft";
-            string sizeStr = $"{spell.AoESizeSquares * 5}-ft radius burst";
-            CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} | Range: {rangeStr} | Move mouse to preview, click to cast | Right-click to cancel");
+            if (string.Equals(spell.SpellId, SpellNames.FLAMING_SPHERE, StringComparison.Ordinal))
+            {
+                CombatUI.SetTurnIndicator($"✦ Select target location for Flaming Sphere | Range: {rangeStr} (Medium) | Click destination cell | Right-click to cancel");
+            }
+            else
+            {
+                string sizeStr = $"{spell.AoESizeSquares * 5}-ft radius burst";
+                CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} | Range: {rangeStr} | Move mouse to preview, click to cast | Right-click to cancel");
+            }
         }
         // For cone spells, highlight the caster footprint; direction is determined by mouse.
         else if (spell.AoEShapeType == AoEShape.Cone)
@@ -13318,7 +13331,7 @@ public partial class GameManager : MonoBehaviour
 
                 int range = _pendingSpell.AoERangeSquares > 0
                     ? _pendingSpell.AoERangeSquares
-                    : _pendingSpell.GetRangeSquaresForCasterLevel(pc?.Stats?.Level ?? 0);
+                    : _pendingSpell.GetRangeSquaresForCasterLevel(pc?.Stats?.GetCasterLevel() ?? 0);
                 if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, range))
                     return;
                 aoeCells = AoESystem.GetBurstCells(gridPos, _pendingSpell.AoESizeSquares, Grid);
@@ -13401,7 +13414,7 @@ public partial class GameManager : MonoBehaviour
             {
                 int range = _pendingSpell.AoERangeSquares > 0
                     ? _pendingSpell.AoERangeSquares
-                    : _pendingSpell.GetRangeSquaresForCasterLevel(pc?.Stats?.Level ?? 0);
+                    : _pendingSpell.GetRangeSquaresForCasterLevel(pc?.Stats?.GetCasterLevel() ?? 0);
                 int dist = SquareGridUtils.GetDistance(casterPos, cellPos);
                 if (dist <= range)
                     cell.SetHighlight(HighlightType.SpellRange);
@@ -13435,7 +13448,7 @@ public partial class GameManager : MonoBehaviour
         {
             int range = _pendingSpell.AoERangeSquares > 0
                 ? _pendingSpell.AoERangeSquares
-                : _pendingSpell.GetRangeSquaresForCasterLevel(caster?.Stats?.Level ?? 0);
+                : _pendingSpell.GetRangeSquaresForCasterLevel(caster?.Stats?.GetCasterLevel() ?? 0);
             if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, range))
             {
                 Debug.Log($"[AoE] Target position ({targetPos.x},{targetPos.y}) is out of range for burst");

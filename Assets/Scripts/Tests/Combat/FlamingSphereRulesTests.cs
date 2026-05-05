@@ -36,6 +36,7 @@ public static class FlamingSphereRulesTests
         SpellDatabase.Init();
 
         Test_FlamingSphere_Creation();
+        Test_FlamingSphere_UsesTargetSelectionOnCast();
         Test_FlamingSphere_MoveBetweenTwoEnemies();
         Test_FlamingSphere_DamageAndReflex();
         Test_FlamingSphere_TurnEndWarning();
@@ -280,6 +281,39 @@ public static class FlamingSphereRulesTests
             Assert(ctx.GameManager.CanControlFlamingSphere(ctx.Wizard), "Control Flaming Sphere action is available immediately after cast");
             Assert(!string.IsNullOrEmpty(castLog) && castLog.Contains("2d6") && castLog.Contains("Control Flaming Sphere"),
                 "Cast log documents 2d6 damage and control hint");
+        }
+        finally
+        {
+            CleanupScenario(ctx);
+        }
+    }
+
+    private static void Test_FlamingSphere_UsesTargetSelectionOnCast()
+    {
+        ScenarioContext ctx = null;
+        try
+        {
+            ctx = CreateScenario();
+
+            MethodInfo enterAoEMethod = typeof(GameManager).GetMethod("EnterAoETargetingMode", PrivateInstance);
+            Assert(enterAoEMethod != null, "Flaming Sphere AoE targeting entry point exists");
+            if (enterAoEMethod == null)
+                return;
+
+            enterAoEMethod.Invoke(ctx.GameManager, new object[] { ctx.Wizard, ctx.FlamingSphereSpell });
+
+            FieldInfo isAoETargetingField = typeof(GameManager).GetField("_isAoETargeting", PrivateInstance);
+            FieldInfo isConfirmingSelfAoEField = typeof(GameManager).GetField("_isConfirmingSelfAoE", PrivateInstance);
+
+            bool isAoETargeting = isAoETargetingField != null && (bool)isAoETargetingField.GetValue(ctx.GameManager);
+            bool isConfirmingSelfAoE = isConfirmingSelfAoEField != null && (bool)isConfirmingSelfAoEField.GetValue(ctx.GameManager);
+
+            Assert(ctx.GameManager.CurrentSubPhase == GameManager.PlayerSubPhase.SelectingAoETarget,
+                "Flaming Sphere cast enters AoE cell selection phase");
+            Assert(isAoETargeting,
+                "Flaming Sphere cast enables AoE targeting mode");
+            Assert(!isConfirmingSelfAoE,
+                "Flaming Sphere cast is not treated as self-centered burst");
         }
         finally
         {
