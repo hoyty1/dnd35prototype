@@ -153,9 +153,9 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.GUST_OF_WIND,
                     Name = "Gust of Wind",
-                    Description = "Line-shaped blast of severe wind in a 60-ft line. Fortitude negates size-based effects; also disperses fog, mist, and similar vapors in its path. PHB p.238",
+                    Description = "Evocation [Air]. Line-shaped blast of severe wind in a 60-ft line. Fortitude negates size-based effects; also disperses fog, mist, and similar vapors in its path. PHB p.238",
                     SpellLevel = 2, School = "Evocation",
-                    ClassList = new[] { "Wizard", "Druid" },
+                    ClassList = new[] { "Wizard", "Sorcerer", "Druid" },
                     TargetType = SpellTargetType.Area,
                     RangeSquares = 12,
                     AreaRadius = 12,

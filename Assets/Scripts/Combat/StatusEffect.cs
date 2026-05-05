@@ -148,10 +148,11 @@ public static class ConditionRules
             Type = CombatConditionType.Checked,
             DisplayName = "Checked",
             ShortLabel = "CK",
-            Description = "Severe wind checks movement and ranged attacks.",
+            Description = "Severe wind checks movement; creature cannot advance against the wind this round.",
             StackingRule = ConditionStackingRule.Refresh,
             AttackModifier = -2,
-            MovementMultiplier = 0.5f
+            PreventsMovement = true,
+            MovementMultiplier = 0f
         });
 
         Add(new ConditionDefinition

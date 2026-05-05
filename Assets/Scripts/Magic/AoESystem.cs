@@ -440,20 +440,20 @@ public static class AoESystem
 
         if (toMouse.sqrMagnitude < 0.01f) return cells;
 
-        Vector2 direction = toMouse.normalized;
+        // Snap line direction to one of 8 compass directions (N, NE, E, SE, S, SW, W, NW).
+        // This matches directional line targeting expectations for Gust of Wind and similar effects.
+        int dirIndex = GetClosestDirectionIndex(toMouse.normalized);
+        Vector2Int snappedGridDir = SquareGridUtils.Directions[dirIndex];
+        Vector2 snappedDirection = new Vector2(snappedGridDir.x, snappedGridDir.y).normalized;
 
-        // Extend the line far enough to cover the max range in any direction.
-        // Pure diagonal costs more per square (1-2-1-2), so the actual Euclidean
-        // distance needed is at most lengthSquares * 1.0 (cardinal) but we trace
-        // generously and then filter by D&D distance.
-        // Use lengthSquares + 1 as the Euclidean reach to be safe.
+        // Extend the line far enough to cover the full spell range.
         float euclideanReach = lengthSquares + 1.0f;
-        Vector2 endPoint = casterCenter + direction * euclideanReach;
+        Vector2 endPoint = casterCenter + snappedDirection * euclideanReach;
 
-        // Trace the line from caster center to the endpoint through the grid
+        // Trace the snapped line through the grid.
         cells = TraceLineThroughGrid(casterCenter, endPoint, origin, grid);
 
-        // Filter cells by D&D 3.5e distance to enforce the spell's range
+        // Enforce D&D 3.5e range by grid distance.
         var result = new HashSet<Vector2Int>();
         foreach (var cell in cells)
         {
