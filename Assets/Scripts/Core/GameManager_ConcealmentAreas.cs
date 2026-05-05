@@ -78,8 +78,8 @@ public partial class GameManager
 
         if (isDarkness)
         {
-            sb.AppendLine("  Effect: Magical darkness blocks vision into, out of, and through the area");
-            sb.AppendLine("  Effect: Creatures in darkness have concealment (20% miss chance)");
+            sb.AppendLine("  Effect: Darkness does not block vision or targeting");
+            sb.AppendLine("  Effect: 20% miss chance if attacker/target is in darkness or attack crosses darkness");
         }
         else
         {

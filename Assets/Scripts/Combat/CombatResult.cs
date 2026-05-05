@@ -499,8 +499,8 @@ public class CombatResult
             string concealDesc = string.IsNullOrWhiteSpace(ConcealmentDescription)
                 ? "Concealment"
                 : ConcealmentDescription;
-            string concealmentOutcome = MissedDueToConcealment ? "MISS" : "PASS";
-            sb.AppendLine($"  Concealment Check: d100 = {ConcealmentRoll} vs {ConcealmentMissChance}% → {concealmentOutcome} ({concealDesc})");
+            string concealmentOutcome = MissedDueToConcealment ? "MISS!" : "HIT!";
+            sb.AppendLine($"  Concealment check: 1d100({ConcealmentRoll}) - {concealmentOutcome} ({concealDesc})");
         }
 
         if (IsCritThreat)
@@ -621,8 +621,8 @@ public class CombatResult
         if (ConcealmentMissChance > 0)
         {
             string concealDesc = string.IsNullOrWhiteSpace(ConcealmentDescription) ? "Concealment" : ConcealmentDescription;
-            string concealmentOutcome = MissedDueToConcealment ? "MISS" : "PASS";
-            sb.AppendLine($"      Concealment Check: d100 = {ConcealmentRoll} vs {ConcealmentMissChance}% → {concealmentOutcome} ({concealDesc})");
+            string concealmentOutcome = MissedDueToConcealment ? "MISS!" : "HIT!";
+            sb.AppendLine($"      Concealment check: 1d100({ConcealmentRoll}) - {concealmentOutcome} ({concealDesc})");
         }
 
         if (Hit)

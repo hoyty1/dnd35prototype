@@ -12417,7 +12417,7 @@ public partial class GameManager : MonoBehaviour
 
         // Direct enemy targeting requires line of sight.
         // See Invisible allows direct targeting of invisible enemies, but does not bypass
-        // other concealment blockers (fog, darkness, etc.).
+        // true visibility blockers or total concealment sources.
         if (spell.TargetType == SpellTargetType.SingleEnemy && IsEnemyTeam(caster, target))
         {
             bool isRangedTouch = spell.IsRangedTouchSpell();
@@ -17276,7 +17276,6 @@ public partial class GameManager : MonoBehaviour
             : GetCellsInChebyshevRange(pc.GridPosition, maxRangeSquares + sizePadding);
         bool hasTarget = false;
         bool anyFlanking = false;
-        int darknessBlockedTargetCount = 0;
 
         foreach (var cell in allCells)
         {
@@ -17289,11 +17288,7 @@ public partial class GameManager : MonoBehaviour
                     continue;
 
                 if (isRangedWeapon && !pc.CanSee(cell.Occupant, incomingIsRangedAttack: true))
-                {
-                    if (DarknessAreaEffect.BlocksVision(pc, cell.Occupant))
-                        darknessBlockedTargetCount++;
                     continue;
-                }
 
                 // Check whether attacker can flank this target with any ally who actually threatens.
                 CharacterController flankPartner;
@@ -17350,12 +17345,6 @@ public partial class GameManager : MonoBehaviour
         else
         {
             string noRangeMsg = isRangedWeapon ? "No enemies within maximum range!" : "No enemies in range!";
-            if (isRangedWeapon && darknessBlockedTargetCount > 0)
-            {
-                noRangeMsg = "No line of sight through magical darkness";
-                CombatUI?.ShowCombatLog("No line of sight through magical darkness");
-            }
-
             CombatUI.SetTurnIndicator(noRangeMsg);
             StartCoroutine(ReturnToActionChoicesAfterDelay(1.5f));
         }
@@ -17439,30 +17428,6 @@ public partial class GameManager : MonoBehaviour
             return attacker.IsTargetInThrownWeaponRange(target);
 
         return attacker.IsTargetInCurrentWeaponRange(target);
-    }
-
-    private bool IsRangedLineOfSightRequiredForCurrentAttack(CharacterController attacker)
-    {
-        if (attacker == null)
-            return false;
-
-        if (IsUsingThrownAttackMode(attacker))
-            return true;
-
-        return IsAttackModeRanged(attacker, attacker.GetEquippedMainWeapon());
-    }
-
-    private bool TryLogDarknessTargetingBlock(CharacterController attacker, CharacterController target, bool requiresLineOfSight)
-    {
-        if (!requiresLineOfSight || attacker == null || target == null || target.Stats == null || target.Stats.IsDead)
-            return false;
-
-        if (!DarknessAreaEffect.BlocksVision(attacker, target))
-            return false;
-
-        CombatUI?.ShowCombatLog($"Cannot target {target.Stats.CharacterName} (blocked by darkness)");
-        CombatUI?.ShowCombatLog("No line of sight through magical darkness");
-        return true;
     }
 
     private bool HasAnyValidTargetFromPosition(CharacterController attacker, Vector2Int attackerPosition, bool rangedMode)
@@ -18215,19 +18180,8 @@ public partial class GameManager : MonoBehaviour
             }
 
             // Cancel if clicking non-highlighted cell.
-            // Keep targeting active with explicit feedback when magical darkness is the blocker.
             if (!_highlightedCells.Contains(cell))
             {
-                bool isEnemySpellTarget = _pendingSpell.TargetType == SpellTargetType.SingleEnemy
-                    && cell.IsOccupied
-                    && cell.Occupant != null
-                    && cell.Occupant != pc
-                    && !cell.Occupant.Stats.IsDead
-                    && IsEnemyTeam(pc, cell.Occupant);
-
-                if (isEnemySpellTarget && TryLogDarknessTargetingBlock(pc, cell.Occupant, requiresLineOfSight: true))
-                    return;
-
                 _pendingSpell = null;
                 _pendingMetamagic = null;
                 _pendingSpellFromHeldCharge = false;
@@ -18301,14 +18255,6 @@ public partial class GameManager : MonoBehaviour
         {
             HandleOffHandTargetClick(pc, cell);
             return;
-        }
-
-        if (cell.IsOccupied && cell.Occupant != null && cell.Occupant != pc && !cell.Occupant.Stats.IsDead && IsEnemyTeam(pc, cell.Occupant))
-        {
-            bool requiresLineOfSight = IsRangedLineOfSightRequiredForCurrentAttack(pc);
-            bool isHighlightedTarget = _highlightedCells.Contains(cell);
-            if (!isHighlightedTarget && TryLogDarknessTargetingBlock(pc, cell.Occupant, requiresLineOfSight))
-                return;
         }
 
         if (!cell.IsOccupied || cell.Occupant == pc || cell.Occupant.Stats.IsDead)

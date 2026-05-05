@@ -6667,29 +6667,34 @@ public class CharacterController : MonoBehaviour
 
     public int GetMissChance(CharacterController attacker, bool incomingIsRangedAttack = false)
     {
-        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
-        if (statusEffectManager == null || statusEffectManager.ActiveEffects == null || statusEffectManager.ActiveEffects.Count == 0)
-            return 0;
-
         int bestMissChance = 0;
-        for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
+
+        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
+        if (statusEffectManager != null && statusEffectManager.ActiveEffects != null)
         {
-            ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
-            if (effect == null || effect.MissChance <= 0)
-                continue;
-
-            if (IsInvisibilityConcealmentEffect(effect)
-                && ((attacker != null && attacker.CanSeeInvisible(this)) || IsOutlinedByGlitterdust))
+            for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
             {
-                // See Invisible and Glitterdust both ignore concealment granted by Invisibility only.
-                // Other concealment sources (fog, darkness, blur, etc.) still apply normally.
-                continue;
-            }
+                ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
+                if (effect == null || effect.MissChance <= 0)
+                    continue;
 
-            int normalized = EvaluateEffectMissChanceAgainstAttacker(effect, attacker, incomingIsRangedAttack);
-            if (normalized > bestMissChance)
-                bestMissChance = normalized;
+                if (IsInvisibilityConcealmentEffect(effect)
+                    && ((attacker != null && attacker.CanSeeInvisible(this)) || IsOutlinedByGlitterdust))
+                {
+                    // See Invisible and Glitterdust both ignore concealment granted by Invisibility only.
+                    // Other concealment sources (fog, darkness, blur, etc.) still apply normally.
+                    continue;
+                }
+
+                int normalized = EvaluateEffectMissChanceAgainstAttacker(effect, attacker, incomingIsRangedAttack);
+                if (normalized > bestMissChance)
+                    bestMissChance = normalized;
+            }
         }
+
+        // Darkness does not block LOS, but attacks involving darkness squares still have 20% miss chance.
+        if (attacker != null)
+            bestMissChance = Mathf.Max(bestMissChance, DarknessAreaEffect.GetAttackConcealmentMissChance(attacker, this));
 
         return bestMissChance;
     }
@@ -6720,9 +6725,6 @@ public class CharacterController : MonoBehaviour
     public bool CanSee(CharacterController target, bool incomingIsRangedAttack = false)
     {
         if (target == null || target.Stats == null || target.Stats.IsDead)
-            return false;
-
-        if (DarknessAreaEffect.BlocksVision(this, target))
             return false;
 
         if (!target.HasTotalConcealment(this, incomingIsRangedAttack))
@@ -6769,32 +6771,51 @@ public class CharacterController : MonoBehaviour
 
     public string GetConcealmentDescription(CharacterController attacker, bool incomingIsRangedAttack = false)
     {
-        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
-        if (statusEffectManager == null || statusEffectManager.ActiveEffects == null || statusEffectManager.ActiveEffects.Count == 0)
-            return "No concealment";
-
         int missChance = GetMissChance(attacker, incomingIsRangedAttack);
         if (missChance <= 0)
             return "No concealment";
 
-        ActiveSpellEffect sourceEffect = null;
-        for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
+        int darknessMissChance = attacker != null ? DarknessAreaEffect.GetAttackConcealmentMissChance(attacker, this) : 0;
+        if (attacker != null && darknessMissChance > 0 && darknessMissChance >= missChance)
         {
-            ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
-            if (effect == null || effect.MissChance <= 0)
-                continue;
+            bool attackerInDarkness = DarknessAreaEffect.IsPositionInMagicalDarkness(attacker.GridPosition);
+            bool targetInDarkness = DarknessAreaEffect.IsPositionInMagicalDarkness(GridPosition);
+            bool pathCrossesDarkness = DarknessAreaEffect.IsLineBlockedByMagicalDarkness(attacker.GridPosition, GridPosition, includeEndpoints: false);
 
-            if (IsInvisibilityConcealmentEffect(effect)
-                && ((attacker != null && attacker.CanSeeInvisible(this)) || IsOutlinedByGlitterdust))
-            {
-                continue;
-            }
+            var reasons = new List<string>();
+            if (targetInDarkness)
+                reasons.Add("Target is in magical darkness (20% miss chance)");
+            if (pathCrossesDarkness)
+                reasons.Add("Attack crosses darkness area (20% miss chance)");
+            if (attackerInDarkness)
+                reasons.Add("Attacker is in magical darkness (20% miss chance)");
 
-            int normalized = EvaluateEffectMissChanceAgainstAttacker(effect, attacker, incomingIsRangedAttack);
-            if (normalized == missChance)
+            if (reasons.Count > 0)
+                return string.Join("; ", reasons);
+        }
+
+        StatusEffectManager statusEffectManager = GetComponent<StatusEffectManager>();
+        ActiveSpellEffect sourceEffect = null;
+        if (statusEffectManager != null && statusEffectManager.ActiveEffects != null)
+        {
+            for (int i = 0; i < statusEffectManager.ActiveEffects.Count; i++)
             {
-                sourceEffect = effect;
-                break;
+                ActiveSpellEffect effect = statusEffectManager.ActiveEffects[i];
+                if (effect == null || effect.MissChance <= 0)
+                    continue;
+
+                if (IsInvisibilityConcealmentEffect(effect)
+                    && ((attacker != null && attacker.CanSeeInvisible(this)) || IsOutlinedByGlitterdust))
+                {
+                    continue;
+                }
+
+                int normalized = EvaluateEffectMissChanceAgainstAttacker(effect, attacker, incomingIsRangedAttack);
+                if (normalized == missChance)
+                {
+                    sourceEffect = effect;
+                    break;
+                }
             }
         }
 

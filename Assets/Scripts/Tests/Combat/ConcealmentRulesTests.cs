@@ -26,7 +26,7 @@ public static class ConcealmentRulesTests
 
         TestFogSpellsAreImplementedAsAoEConcealment();
         TestDarknessSpellDefinitionAndConcealment();
-        TestDarknessBlocksVisionIntoOutOfAndThroughArea();
+        TestDarknessDoesNotBlockVisionAndGrantsConcealmentThroughArea();
         TestAttackMissesWhenDefenderHasGuaranteedConcealment();
         TestTotalConcealmentPreventsAttackOfOpportunity();
         TestObscuringMistAppliesConcealmentToTargetsInsideWhenAttackerOutside();
@@ -187,7 +187,7 @@ public static class ConcealmentRulesTests
         }
     }
 
-    private static void TestDarknessBlocksVisionIntoOutOfAndThroughArea()
+    private static void TestDarknessDoesNotBlockVisionAndGrantsConcealmentThroughArea()
     {
         CharacterController observer = null;
         CharacterController target = null;
@@ -204,32 +204,35 @@ public static class ConcealmentRulesTests
             GameObject darknessObject = new GameObject("ConcealmentTest_DarknessVision");
             darknessArea = darknessObject.AddComponent<DarknessAreaEffect>();
 
-            // Create a darkness strip between observer and target to verify "through" vision blocking.
+            // Create a darkness strip between observer and target to verify "through" concealment.
             darknessArea.AffectedCells.Add(new Vector2Int(3, 0));
             darknessArea.AffectedCells.Add(new Vector2Int(4, 0));
             AreaEffectManager.Instance.RegisterAreaEffect(darknessArea);
 
-            Assert(DarknessAreaEffect.BlocksVision(observer, target),
-                "Darkness blocks vision through an intervening dark area");
+            Assert(!DarknessAreaEffect.BlocksVision(observer, target),
+                "Darkness does not block vision through an intervening dark area");
+            Assert(observer.CanSee(target),
+                "CharacterController.CanSee is not blocked by darkness");
 
-            // Move target into darkness to verify "into" blocking.
+            int throughMissChance = DarknessAreaEffect.GetAttackConcealmentMissChance(observer, target);
+            Assert(throughMissChance == 20,
+                "Attacks through darkness get 20% miss chance",
+                $"missChance={throughMissChance}");
+
+            // Move target into darkness to verify target-in-darkness concealment.
             target.GridPosition = new Vector2Int(3, 0);
-            Assert(DarknessAreaEffect.BlocksVision(observer, target),
-                "Darkness blocks vision into the area");
+            int targetInDarknessMissChance = DarknessAreaEffect.GetAttackConcealmentMissChance(observer, target);
+            Assert(targetInDarknessMissChance == 20,
+                "Targets in darkness get 20% miss chance",
+                $"missChance={targetInDarknessMissChance}");
 
-            // Move observer into darkness and target outside to verify "out of" blocking.
+            // Move observer into darkness and target outside to verify attacker-in-darkness concealment.
             observer.GridPosition = new Vector2Int(4, 0);
             target.GridPosition = new Vector2Int(7, 0);
-            Assert(DarknessAreaEffect.BlocksVision(observer, target),
-                "Darkness blocks vision out of the area");
-
-            // Both creatures inside the same darkness area still cannot see each other.
-            observer.GridPosition = new Vector2Int(3, 0);
-            target.GridPosition = new Vector2Int(4, 0);
-            Assert(DarknessAreaEffect.BlocksVision(observer, target),
-                "Darkness blocks vision even when both creatures are inside the same darkness area");
-            Assert(!observer.CanSee(target),
-                "CharacterController.CanSee respects magical darkness LOS blocking");
+            int attackerInDarknessMissChance = DarknessAreaEffect.GetAttackConcealmentMissChance(observer, target);
+            Assert(attackerInDarknessMissChance == 20,
+                "Attackers in darkness get 20% miss chance",
+                $"missChance={attackerInDarknessMissChance}");
         }
         finally
         {

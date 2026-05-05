@@ -31,7 +31,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.DARKNESS,
                     Name = "Darkness",
-                    Description = "Evocation [Darkness]. Creates magical darkness in a 20-ft radius spread. Creatures in the area gain concealment (20% miss chance) even against darkvision. Magical darkness blocks vision into, out of, and through the area. Duration 10 min/level (D). PHB p.216",
+                    Description = "Evocation [Darkness]. Creates magical darkness in a 20-ft radius spread. Darkness does not block line of sight, but attacks involving darkness squares have concealment (20% miss chance), even against darkvision. Duration 10 min/level (D). PHB p.216",
                     SpellLevel = 2,
                     School = "Evocation [Darkness]",
                     ClassList = new[] { "Wizard", "Sorcerer", "Bard", "Cleric" },

@@ -5,8 +5,8 @@ using DND35e.Identifiers;
 
 /// <summary>
 /// Darkness (PHB 3.5e): 20-ft radius magical darkness.
-/// - Creatures inside gain concealment (20% miss chance).
-/// - Magical darkness blocks vision into, out of, and through the area.
+/// - Darkness does NOT block line of sight or targeting.
+/// - Attacks involving darkness squares have concealment (20% miss chance).
 /// - Darkvision/low-light do not negate this spell's concealment.
 /// Visual uses black semi-transparent grid-cell shading.
 /// </summary>
@@ -14,7 +14,7 @@ public class DarknessAreaEffect : PersistentAreaEffect
 {
     private const string ConcealmentSpellId = "darkness_concealment";
 
-    // Cache all currently darkened cells so LOS checks do not iterate every area every frame.
+    // Cache all currently darkened cells so concealment/path checks do not iterate every area every frame.
     private static readonly HashSet<Vector2Int> CachedDarknessCells = new HashSet<Vector2Int>();
     private static bool DarknessCellCacheDirty = true;
 
@@ -38,8 +38,8 @@ public class DarknessAreaEffect : PersistentAreaEffect
     {
         MarkVisionCacheDirty();
         LogEffect("20-ft radius fills with magical darkness.");
-        LogEffect("Creatures in darkness gain concealment (20% miss chance).");
-        LogEffect("Vision is blocked into, out of, and through magical darkness.");
+        LogEffect("Darkness does not block vision or targeting.");
+        LogEffect("Attacks involving darkness squares have concealment (20% miss chance).");
     }
 
     private void Update()
@@ -171,10 +171,29 @@ public class DarknessAreaEffect : PersistentAreaEffect
 
     public int GetConcealmentMissChance(CharacterController attacker, CharacterController target)
     {
-        if (target == null)
+        if (attacker == null || target == null)
             return 0;
 
-        return IsCharacterInArea(target) ? 20 : 0;
+        bool attackerInDarkness = IsCharacterInArea(attacker);
+        bool targetInDarkness = IsCharacterInArea(target);
+        bool pathCrossesDarkness = false;
+
+        if (!attackerInDarkness && !targetInDarkness)
+        {
+            foreach (Vector2Int cell in EnumerateLineCells(attacker.GridPosition, target.GridPosition))
+            {
+                if (cell == attacker.GridPosition || cell == target.GridPosition)
+                    continue;
+
+                if (AffectedCells != null && AffectedCells.Contains(cell))
+                {
+                    pathCrossesDarkness = true;
+                    break;
+                }
+            }
+        }
+
+        return (attackerInDarkness || targetInDarkness || pathCrossesDarkness) ? 20 : 0;
     }
 
     private void RemoveConcealment(CharacterController character)
@@ -205,12 +224,22 @@ public class DarknessAreaEffect : PersistentAreaEffect
         }
     }
 
+    // Darkness provides concealment but never blocks line of sight.
     public static bool BlocksVision(CharacterController observer, CharacterController target)
     {
-        if (observer == null || target == null || observer == target)
-            return false;
+        return false;
+    }
 
-        return IsLineBlockedByMagicalDarkness(observer.GridPosition, target.GridPosition, includeEndpoints: true);
+    public static int GetAttackConcealmentMissChance(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null)
+            return 0;
+
+        bool attackerInDarkness = IsPositionInMagicalDarkness(attacker.GridPosition);
+        bool targetInDarkness = IsPositionInMagicalDarkness(target.GridPosition);
+        bool pathCrossesDarkness = IsLineBlockedByMagicalDarkness(attacker.GridPosition, target.GridPosition, includeEndpoints: false);
+
+        return (attackerInDarkness || targetInDarkness || pathCrossesDarkness) ? 20 : 0;
     }
 
     public static bool IsPositionInMagicalDarkness(Vector2Int position)
