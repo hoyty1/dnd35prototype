@@ -130,7 +130,7 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.FLAMING_SPHERE,
                     Name = "Flaming Sphere",
-                    Description = "Creates a rolling sphere of fire. Sphere deals 3d6 fire damage to a creature whose space it enters (Reflex negates). Lasts 1 round/level and can be directed up to 30 ft each round as a move action. PHB p.232",
+                    Description = "Creates a rolling sphere of fire. Sphere deals 2d6 fire damage to a creature whose space it enters (Reflex negates). Lasts 1 round/level and can be directed up to 30 ft each round as a move action. PHB p.232",
                     SpellLevel = 2, School = "Evocation",
                     ClassList = new[] { "Wizard", "Sorcerer", "Druid" },
                     TargetType = SpellTargetType.Area,
@@ -140,7 +140,7 @@ public static partial class SpellDatabase
                     AoERangeSquares = 0, // use Medium range progression
                     AoEFilter = AoETargetFilter.All,
                     EffectType = SpellEffectType.Damage,
-                    DamageDice = 6, DamageCount = 3, // 3d6
+                    DamageDice = 6, DamageCount = 2, // 2d6
                     DamageType = "fire",
                     AllowsSavingThrow = true,
                     SavingThrowType = "Reflex",
