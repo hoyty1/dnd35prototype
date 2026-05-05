@@ -88,8 +88,8 @@ namespace Tests.Combat
             {
                 gridObj = new GameObject("GustOfWindRulesTests_Grid");
                 SquareGrid grid = gridObj.AddComponent<SquareGrid>();
-                grid.Width = 25;
-                grid.Height = 25;
+                grid.Width = 35;
+                grid.Height = 35;
                 grid.GenerateGrid();
 
                 Vector2Int origin = new Vector2Int(12, 12);
@@ -104,7 +104,29 @@ namespace Tests.Combat
                 Assert(!hasEastOnlySnap,
                     "Line targeting no longer snaps to 8 fixed directions");
 
-                Vector2Int outOfRangeEndpoint = new Vector2Int(25, 12);
+                int furthestDistance = 0;
+                foreach (Vector2Int cell in lineCells)
+                    furthestDistance = Mathf.Max(furthestDistance, SquareGridUtils.GetDistance(origin, cell));
+
+                Assert(furthestDistance == 12,
+                    "Line targeting extends to the full 60-ft length from trajectory",
+                    $"furthestDistance={furthestDistance}");
+
+                int clickedDistance = SquareGridUtils.GetDistance(origin, endpoint);
+                bool hasCellsBeyondClickedPoint = false;
+                foreach (Vector2Int cell in lineCells)
+                {
+                    if (SquareGridUtils.GetDistance(origin, cell) > clickedDistance)
+                    {
+                        hasCellsBeyondClickedPoint = true;
+                        break;
+                    }
+                }
+
+                Assert(hasCellsBeyondClickedPoint,
+                    "Line targeting affects cells beyond the clicked square when endpoint is closer than 60 ft");
+
+                Vector2Int outOfRangeEndpoint = new Vector2Int(30, 12);
                 HashSet<Vector2Int> outOfRangeCells = AoESystem.GetLineCellsToTarget(origin, outOfRangeEndpoint, 12, grid);
                 Assert(outOfRangeCells.Count == 0,
                     "Line targeting rejects endpoints outside 60-ft range");

@@ -110,9 +110,11 @@ public class GustOfWindEffect
         WindEffectManager.Instance.RegisterWindEffect(wind);
     }
 
+    private static Sprite _gustSprite;
+
     private void SpawnWindLineVisual()
     {
-        if (caster == null)
+        if (caster == null || affectedCells == null || affectedCells.Count == 0)
             return;
 
         Vector3 dir = new Vector3(windDirection.x, windDirection.y, 0f);
@@ -120,24 +122,73 @@ public class GustOfWindEffect
             dir = Vector3.right;
         dir.Normalize();
 
-        Vector3 origin = SquareGridUtils.GridToWorld(caster.GridPosition);
-        Vector3 end = origin + (dir * 12f);
+        Vector3 perp = new Vector3(-dir.y, dir.x, 0f);
+        float zRotation = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
 
-        GameObject vfxObject = new GameObject("GustOfWind_VFX");
-        LineRenderer line = vfxObject.AddComponent<LineRenderer>();
-        line.positionCount = 2;
-        line.SetPosition(0, origin);
-        line.SetPosition(1, end);
-        line.startWidth = 0.35f;
-        line.endWidth = 0.22f;
-        line.numCapVertices = 4;
-        line.numCornerVertices = 4;
-        line.material = new Material(Shader.Find("Sprites/Default"));
-        line.startColor = new Color(0.70f, 0.90f, 1f, 0.90f);
-        line.endColor = new Color(0.40f, 0.80f, 1f, 0.18f);
-        line.sortingOrder = 12;
+        var orderedCells = new List<Vector2Int>(affectedCells);
+        Vector2 origin = caster.GridPosition;
+        orderedCells.Sort((a, b) => Vector2.Dot(((Vector2)a - origin), (Vector2)windDirection)
+            .CompareTo(Vector2.Dot(((Vector2)b - origin), (Vector2)windDirection)));
 
-        UnityEngine.Object.Destroy(vfxObject, 0.45f);
+        GameObject vfxRoot = new GameObject("GustOfWind_VFX");
+        Sprite sprite = GetGustSprite();
+
+        for (int i = 0; i < orderedCells.Count; i++)
+        {
+            Vector3 world = SquareGridUtils.GridToWorld(orderedCells[i]);
+            float t = orderedCells.Count <= 1 ? 1f : (i / (float)(orderedCells.Count - 1));
+            float alpha = Mathf.Lerp(0.78f, 0.22f, t);
+
+            CreateWindStreak(vfxRoot.transform, world, zRotation, sprite, new Color(0.68f, 0.92f, 1f, alpha), Vector3.one);
+            CreateWindStreak(vfxRoot.transform, world + (perp * 0.16f), zRotation, sprite, new Color(0.55f, 0.85f, 1f, alpha * 0.7f), new Vector3(0.78f, 0.78f, 1f));
+            CreateWindStreak(vfxRoot.transform, world - (perp * 0.16f), zRotation, sprite, new Color(0.55f, 0.85f, 1f, alpha * 0.7f), new Vector3(0.78f, 0.78f, 1f));
+        }
+
+        UnityEngine.Object.Destroy(vfxRoot, 0.5f);
+    }
+
+    private static void CreateWindStreak(Transform parent, Vector3 position, float zRotation, Sprite sprite, Color color, Vector3 scale)
+    {
+        GameObject streak = new GameObject("GustStreak");
+        streak.transform.SetParent(parent, worldPositionStays: false);
+        streak.transform.position = position;
+        streak.transform.rotation = Quaternion.Euler(0f, 0f, zRotation);
+        streak.transform.localScale = new Vector3(0.92f * scale.x, 0.34f * scale.y, 1f);
+
+        SpriteRenderer renderer = streak.AddComponent<SpriteRenderer>();
+        renderer.sprite = sprite;
+        renderer.color = color;
+        renderer.sortingOrder = 12;
+    }
+
+    private static Sprite GetGustSprite()
+    {
+        if (_gustSprite != null)
+            return _gustSprite;
+
+        Texture2D tex = new Texture2D(24, 24, TextureFormat.RGBA32, false)
+        {
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp
+        };
+
+        Vector2 center = new Vector2(11.5f, 11.5f);
+        for (int y = 0; y < tex.height; y++)
+        {
+            for (int x = 0; x < tex.width; x++)
+            {
+                float nx = (x - center.x) / center.x;
+                float ny = (y - center.y) / center.y;
+                float radial = Mathf.Clamp01(1f - Mathf.Sqrt((nx * nx) + (ny * ny)));
+                float horizontalBias = Mathf.Clamp01(1f - Mathf.Abs(ny));
+                float alpha = Mathf.Pow(radial * horizontalBias, 1.25f);
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            }
+        }
+
+        tex.Apply();
+        _gustSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 24f);
+        return _gustSprite;
     }
 
     private Vector2Int DetermineWindDirection()

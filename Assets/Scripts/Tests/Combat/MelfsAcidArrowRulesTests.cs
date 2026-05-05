@@ -46,7 +46,7 @@ public static class MelfsAcidArrowRulesTests
         }
     }
 
-    private static CharacterStats BuildStats(string name, int level, int dex = 12, int bab = -999)
+    private static CharacterStats BuildStats(string name, int level, int dex = 12, int bab = -999, string characterClass = "Wizard")
     {
         if (bab == -999)
             bab = Mathf.Max(0, level / 2);
@@ -54,7 +54,7 @@ public static class MelfsAcidArrowRulesTests
         CharacterStats stats = new CharacterStats(
             name: name,
             level: level,
-            characterClass: "Wizard",
+            characterClass: characterClass,
             str: 10,
             dex: dex,
             con: 12,
@@ -132,6 +132,7 @@ public static class MelfsAcidArrowRulesTests
         ValidateDuration(method, 15, expectedAdditionalRounds: 5);
         ValidateDuration(method, 18, expectedAdditionalRounds: 6);
         ValidateDuration(method, 24, expectedAdditionalRounds: 6);
+        ValidateDurationFallbackToCharacterLevel(method, 3, expectedAdditionalRounds: 1);
     }
 
     private static void ValidateDuration(MethodInfo method, int casterLevel, int expectedAdditionalRounds)
@@ -149,6 +150,27 @@ public static class MelfsAcidArrowRulesTests
             Assert(total == expectedTotal,
                 $"Duration total rounds at CL {casterLevel}",
                 $"expected={expectedTotal}, actual={total}");
+        }
+        finally
+        {
+            DestroyController(caster);
+        }
+    }
+
+    private static void ValidateDurationFallbackToCharacterLevel(MethodInfo method, int characterLevel, int expectedAdditionalRounds)
+    {
+        CharacterController caster = null;
+        try
+        {
+            caster = CreateController(
+                BuildStats($"FallbackCL{characterLevel}", characterLevel, characterClass: "Fighter"),
+                CharacterTeam.Player,
+                Vector2Int.zero);
+
+            int additional = (int)method.Invoke(null, new object[] { caster });
+            Assert(additional == expectedAdditionalRounds,
+                $"Duration fallback to character level when caster-level lookup is unavailable (level {characterLevel})",
+                $"expected={expectedAdditionalRounds}, actual={additional}");
         }
         finally
         {

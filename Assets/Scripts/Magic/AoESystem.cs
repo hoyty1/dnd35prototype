@@ -405,12 +405,13 @@ public static class AoESystem
     // D&D 3.5e PHB p.176: "A line-shaped spell shoots away from you in a line
     // in the direction you designate."
     //
-    // Implementation uses endpoint targeting:
+    // Implementation uses endpoint-targeted trajectory:
     //   - Line origin: center of the caster's square
-    //   - Line endpoint: center of the clicked target square
-    //   - Line length: endpoint must be within spell range (e.g., 60 ft = 12 sq)
+    //   - Player click determines direction/trajectory
+    //   - Clicked endpoint must be within spell range (e.g., 60 ft = 12 sq)
     //     using D&D 3.5e distance (alternating 1-2-1-2 diagonal cost)
-    //   - Affected squares: all squares the line segment passes through
+    //   - The line is then extended to full spell length in that trajectory
+    //   - Affected squares: all squares the full-length line segment passes through
     // ========================================================================
 
     /// <summary>
@@ -447,8 +448,14 @@ public static class AoESystem
         if (SquareGridUtils.GetDistance(origin, targetPos) > lengthSquares)
             return result;
 
+        Vector2 direction = new Vector2(targetPos.x - origin.x, targetPos.y - origin.y);
+        if (direction.sqrMagnitude < 1e-6f)
+            return result;
+
+        direction.Normalize();
+
         Vector2 start = new Vector2(origin.x, origin.y);
-        Vector2 end = new Vector2(targetPos.x, targetPos.y);
+        Vector2 end = start + (direction * lengthSquares);
 
         HashSet<Vector2Int> traced = TraceLineThroughGrid(start, end, origin, grid);
         foreach (Vector2Int cell in traced)
@@ -458,9 +465,13 @@ public static class AoESystem
                 result.Add(cell);
         }
 
-        // Ensure endpoint is included when in bounds.
-        if (targetPos != origin && grid.GetCell(targetPos) != null)
-            result.Add(targetPos);
+        // Ensure the final endpoint at maximum range is represented when valid.
+        Vector2Int maxRangeEndpoint = SquareGridUtils.WorldToGrid(end);
+        if (maxRangeEndpoint != origin && grid.GetCell(maxRangeEndpoint) != null
+            && SquareGridUtils.GetDistance(origin, maxRangeEndpoint) <= lengthSquares)
+        {
+            result.Add(maxRangeEndpoint);
+        }
 
         return result;
     }

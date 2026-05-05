@@ -14984,8 +14984,16 @@ public partial class GameManager : MonoBehaviour
 
     private static int CalculateMelfsAcidArrowAdditionalRounds(CharacterController caster)
     {
-        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
-        return Mathf.Min(6, casterLevel / 3);
+        int casterLevel = 1;
+        if (caster != null && caster.Stats != null)
+        {
+            casterLevel = caster.Stats.GetCasterLevel();
+            if (casterLevel <= 0)
+                casterLevel = Mathf.Max(1, caster.Stats.EffectiveCharacterLevel);
+        }
+
+        // D&D 3.5e: total rounds = 1 + floor(CL / 3), max total 7 rounds at CL 18.
+        return Mathf.Min(6, Mathf.Max(0, casterLevel / 3));
     }
 
     private bool TryResolveMelfsAcidArrowSpellEffect(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
