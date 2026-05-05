@@ -25,7 +25,7 @@ namespace Tests.Combat
 
             TestSpellDefinition();
             TestCheckedConditionRepresentsBlockedMovement();
-            TestLineTargetingSnapsToEightDirections();
+            TestLineTargetingUsesClickedEndpoint();
 
             Debug.Log($"====== Gust of Wind Rules Results: {_passed} passed, {_failed} failed ======");
         }
@@ -81,7 +81,7 @@ namespace Tests.Combat
                 "Checked condition movement multiplier is 0");
         }
 
-        private static void TestLineTargetingSnapsToEightDirections()
+        private static void TestLineTargetingUsesClickedEndpoint()
         {
             GameObject gridObj = null;
             try
@@ -94,18 +94,20 @@ namespace Tests.Combat
 
                 Vector2Int origin = new Vector2Int(12, 12);
 
-                // Slightly east-leaning aim should snap to EAST.
-                HashSet<Vector2Int> eastCells = AoESystem.GetLineCellsFromDirection(origin, new Vector2(20f, 12.3f), 12, grid);
-                bool hasEast = eastCells.Contains(new Vector2Int(13, 12));
-                bool hasNorthEast = eastCells.Contains(new Vector2Int(13, 13));
-                Assert(hasEast && !hasNorthEast,
-                    "Line targeting snaps near-east input to EAST lane");
+                Vector2Int endpoint = new Vector2Int(20, 13);
+                HashSet<Vector2Int> lineCells = AoESystem.GetLineCellsToTarget(origin, endpoint, 12, grid);
 
-                // Clear NE aim should snap to NORTHEAST diagonal.
-                HashSet<Vector2Int> neCells = AoESystem.GetLineCellsFromDirection(origin, new Vector2(20f, 20f), 12, grid);
-                bool hasNeStep = neCells.Contains(new Vector2Int(13, 13));
-                Assert(hasNeStep,
-                    "Line targeting supports diagonal snap (NE)");
+                Assert(lineCells.Contains(endpoint),
+                    "Line targeting includes clicked endpoint cell");
+
+                bool hasEastOnlySnap = lineCells.Contains(new Vector2Int(13, 12)) && !lineCells.Contains(new Vector2Int(13, 13));
+                Assert(!hasEastOnlySnap,
+                    "Line targeting no longer snaps to 8 fixed directions");
+
+                Vector2Int outOfRangeEndpoint = new Vector2Int(25, 12);
+                HashSet<Vector2Int> outOfRangeCells = AoESystem.GetLineCellsToTarget(origin, outOfRangeEndpoint, 12, grid);
+                Assert(outOfRangeCells.Count == 0,
+                    "Line targeting rejects endpoints outside 60-ft range");
             }
             finally
             {

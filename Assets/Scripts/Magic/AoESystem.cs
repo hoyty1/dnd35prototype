@@ -14,7 +14,7 @@ public enum AoEShape
     None,       // Single target (no AoE)
     Burst,      // Circular burst centered on a point (e.g., Bless, Fireball)
     Cone,       // Cone emanating from caster (e.g., Burning Hands, Cone of Cold)
-    Line        // Line from caster (e.g., Lightning Bolt) — mouse-direction targeting
+    Line        // Line from caster (e.g., Lightning Bolt) — click endpoint targeting
 }
 
 /// <summary>
@@ -405,62 +405,62 @@ public static class AoESystem
     // D&D 3.5e PHB p.176: "A line-shaped spell shoots away from you in a line
     // in the direction you designate."
     //
-    // Implementation uses mouse-direction targeting:
+    // Implementation uses endpoint targeting:
     //   - Line origin: center of the caster's square
-    //   - Line direction: from caster center toward current mouse position
-    //   - Line length: always extends to the full spell range (e.g., 60 ft = 12 sq)
+    //   - Line endpoint: center of the clicked target square
+    //   - Line length: endpoint must be within spell range (e.g., 60 ft = 12 sq)
     //     using D&D 3.5e distance (alternating 1-2-1-2 diagonal cost)
-    //   - Affected squares: all squares the line passes through
-    //
-    // The line always extends to maximum range regardless of mouse distance.
-    // Mouse position only determines direction; it acts like a laser pointer.
+    //   - Affected squares: all squares the line segment passes through
     // ========================================================================
 
     /// <summary>
-    /// Get all grid cells along a line from the caster's center in the direction
-    /// of the mouse position, extending to the full spell range.
-    ///
-    /// The line always extends to maximum range (lengthFeet) using D&D 3.5e
-    /// distance rules (alternating 1-2 diagonal cost). Mouse position only
-    /// determines direction — the line continues past the mouse if it's closer
-    /// than max range.
+    /// Convenience overload for line targeting from mouse position.
+    /// Mouse world position is converted to a target grid square.
     /// </summary>
-    /// <param name="origin">Caster's grid position</param>
-    /// <param name="mouseWorldPos">Current mouse position in world coordinates</param>
-    /// <param name="lengthSquares">Maximum line length in grid squares (D&D distance, e.g. 12 for 60 ft)</param>
-    /// <param name="grid">Reference to the game grid</param>
-    /// <returns>Set of grid coordinates the line passes through (excludes caster's cell)</returns>
     public static HashSet<Vector2Int> GetLineCellsFromDirection(
         Vector2Int origin, Vector2 mouseWorldPos, int lengthSquares, SquareGrid grid)
     {
-        var cells = new HashSet<Vector2Int>();
+        Vector2Int targetPos = SquareGridUtils.WorldToGrid(mouseWorldPos);
+        return GetLineCellsToTarget(origin, targetPos, lengthSquares, grid);
+    }
 
-        Vector2 casterCenter = new Vector2(origin.x, origin.y);
-        Vector2 toMouse = mouseWorldPos - casterCenter;
-
-        if (toMouse.sqrMagnitude < 0.01f) return cells;
-
-        // Snap line direction to one of 8 compass directions (N, NE, E, SE, S, SW, W, NW).
-        // This matches directional line targeting expectations for Gust of Wind and similar effects.
-        int dirIndex = GetClosestDirectionIndex(toMouse.normalized);
-        Vector2Int snappedGridDir = SquareGridUtils.Directions[dirIndex];
-        Vector2 snappedDirection = new Vector2(snappedGridDir.x, snappedGridDir.y).normalized;
-
-        // Extend the line far enough to cover the full spell range.
-        float euclideanReach = lengthSquares + 1.0f;
-        Vector2 endPoint = casterCenter + snappedDirection * euclideanReach;
-
-        // Trace the snapped line through the grid.
-        cells = TraceLineThroughGrid(casterCenter, endPoint, origin, grid);
-
-        // Enforce D&D 3.5e range by grid distance.
+    /// <summary>
+    /// Get all grid cells along a line from the caster to a clicked target square.
+    /// Returns empty if the target square is out of range.
+    /// </summary>
+    /// <param name="origin">Caster's grid position</param>
+    /// <param name="targetPos">Target endpoint grid position selected by player</param>
+    /// <param name="lengthSquares">Maximum line length in grid squares (D&D distance, e.g. 12 for 60 ft)</param>
+    /// <param name="grid">Reference to the game grid</param>
+    /// <returns>Set of grid coordinates the line passes through (excludes caster's cell)</returns>
+    public static HashSet<Vector2Int> GetLineCellsToTarget(
+        Vector2Int origin, Vector2Int targetPos, int lengthSquares, SquareGrid grid)
+    {
         var result = new HashSet<Vector2Int>();
-        foreach (var cell in cells)
+
+        if (grid == null)
+            return result;
+
+        if (targetPos == origin)
+            return result;
+
+        if (SquareGridUtils.GetDistance(origin, targetPos) > lengthSquares)
+            return result;
+
+        Vector2 start = new Vector2(origin.x, origin.y);
+        Vector2 end = new Vector2(targetPos.x, targetPos.y);
+
+        HashSet<Vector2Int> traced = TraceLineThroughGrid(start, end, origin, grid);
+        foreach (Vector2Int cell in traced)
         {
             int dndDist = SquareGridUtils.GetDistance(origin, cell);
-            if (dndDist <= lengthSquares)
+            if (dndDist <= lengthSquares && grid.GetCell(cell) != null)
                 result.Add(cell);
         }
+
+        // Ensure endpoint is included when in bounds.
+        if (targetPos != origin && grid.GetCell(targetPos) != null)
+            result.Add(targetPos);
 
         return result;
     }

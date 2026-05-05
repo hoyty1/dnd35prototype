@@ -345,7 +345,7 @@ public partial class GameManager : MonoBehaviour
     private bool _isAoETargeting;                          // Currently in AoE targeting mode
     private HashSet<Vector2Int> _currentAoECells;          // Cells currently highlighted for AoE preview
     private Vector2Int _lastAoEHoverPos = new Vector2Int(-1, -1); // Last hovered grid pos for AoE preview
-    private Vector2Int _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue); // Line direction hover key
+    private Vector2Int _lastLineHoverKey = new Vector2Int(int.MinValue, int.MinValue); // Line endpoint hover key
     private Vector2Int _lastConeHoverKey = new Vector2Int(int.MinValue, int.MinValue); // Cone mouse tilt hover key
 
     // ========== SELF-CENTERED AOE CONFIRMATION STATE ==========
@@ -13281,10 +13281,19 @@ public partial class GameManager : MonoBehaviour
         }
         else if (spell.AoEShapeType == AoEShape.Line)
         {
+            int range = Mathf.Max(1, spell.AoESizeSquares);
+            List<SquareCell> rangeCells = Grid.GetCellsInRange(caster.GridPosition, range);
+            foreach (SquareCell cell in rangeCells)
+            {
+                if (cell == null || cell.Coords == caster.GridPosition)
+                    continue;
+                cell.SetHighlight(HighlightType.SpellRange);
+            }
+
             HighlightCharacterFootprint(caster, HighlightType.Selected);
 
             string sizeStr = $"{spell.AoESizeSquares * 5}-ft line";
-            CombatUI.SetTurnIndicator($"✦ {spell.Name}: Aim {sizeStr} | Move mouse to aim, click to cast | Right-click to cancel");
+            CombatUI.SetTurnIndicator($"✦ {spell.Name}: Select target for line ({sizeStr}) | Click endpoint cell within range | Right-click to cancel");
         }
 
         Debug.Log($"[AoE] Entered AoE targeting mode: {spell.Name} ({spell.AoEShapeType}, {spell.AoESizeSquares} sq)");
@@ -13292,7 +13301,7 @@ public partial class GameManager : MonoBehaviour
 
     /// <summary>
     /// Get the current mouse position in world coordinates.
-    /// Used by AoE targeting for mouse-direction line spell targeting.
+    /// Used by AoE targeting previews (including line spell endpoint selection).
     /// </summary>
     private Vector2 GetMouseWorldPosition()
     {
@@ -13325,22 +13334,22 @@ public partial class GameManager : MonoBehaviour
 
         HashSet<Vector2Int> aoeCells = null;
 
-        // ===== LINE SPELLS: Mouse-direction targeting =====
-        // Line extends from caster center in the direction of the mouse,
-        // always to maximum spell range. Smooth, continuous aiming.
+        // ===== LINE SPELLS: click endpoint targeting =====
+        // Player picks an endpoint cell within range; preview draws the line
+        // from caster to that hovered endpoint cell.
         if (_pendingSpell.AoEShapeType == AoEShape.Line)
         {
-            // Quantize mouse direction to avoid excessive recalculation.
-            // Encode the mouse world position at ~quarter-cell resolution.
-            Vector2Int hoverKey = new Vector2Int(
-                Mathf.RoundToInt(worldPoint.x * 4f),
-                Mathf.RoundToInt(worldPoint.y * 4f));
-            if (hoverKey == _lastLineHoverKey) return;
-            _lastLineHoverKey = hoverKey;
+            Vector2Int gridPos = SquareGridUtils.WorldToGrid(worldPoint);
+            if (gridPos == _lastLineHoverKey) return;
+            _lastLineHoverKey = gridPos;
 
             ClearAoEPreviewHighlights();
-            aoeCells = AoESystem.GetLineCellsFromDirection(
-                pc.GridPosition, worldPoint, _pendingSpell.AoESizeSquares, Grid);
+
+            if (!AoESystem.IsWithinCastingRange(pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares))
+                return;
+
+            aoeCells = AoESystem.GetLineCellsToTarget(
+                pc.GridPosition, gridPos, _pendingSpell.AoESizeSquares, Grid);
         }
         else
         {
@@ -13434,7 +13443,7 @@ public partial class GameManager : MonoBehaviour
             SquareCell cell = Grid.GetCell(cellPos);
             if (cell == null) continue;
 
-            // Restore to range highlight if within burst placement range, otherwise clear
+            // Restore base range highlights (burst and line), otherwise clear.
             if (_pendingSpell != null && _pendingSpell.AoEShapeType == AoEShape.Burst)
             {
                 int range = _pendingSpell.AoERangeSquares > 0
@@ -13442,6 +13451,15 @@ public partial class GameManager : MonoBehaviour
                     : _pendingSpell.GetRangeSquaresForCasterLevel(pc?.Stats?.GetCasterLevel() ?? 0);
                 int dist = SquareGridUtils.GetDistance(casterPos, cellPos);
                 if (dist <= range)
+                    cell.SetHighlight(HighlightType.SpellRange);
+                else
+                    cell.SetHighlight(HighlightType.None);
+            }
+            else if (_pendingSpell != null && _pendingSpell.AoEShapeType == AoEShape.Line)
+            {
+                int lineRange = Mathf.Max(1, _pendingSpell.AoESizeSquares);
+                int dist = SquareGridUtils.GetDistance(casterPos, cellPos);
+                if (cellPos != casterPos && dist <= lineRange)
                     cell.SetHighlight(HighlightType.SpellRange);
                 else
                     cell.SetHighlight(HighlightType.None);
@@ -13468,7 +13486,7 @@ public partial class GameManager : MonoBehaviour
 
         Vector2Int targetPos = clickedCell.Coords;
 
-        // Validate range for burst spells
+        // Validate range for burst and line spells
         if (_pendingSpell.AoEShapeType == AoEShape.Burst)
         {
             int range = _pendingSpell.AoERangeSquares > 0
@@ -13478,6 +13496,15 @@ public partial class GameManager : MonoBehaviour
             {
                 Debug.Log($"[AoE] Target position ({targetPos.x},{targetPos.y}) is out of range for burst");
                 return; // Don't cancel, just ignore out-of-range clicks
+            }
+        }
+        else if (_pendingSpell.AoEShapeType == AoEShape.Line)
+        {
+            int lineRange = Mathf.Max(1, _pendingSpell.AoESizeSquares);
+            if (!AoESystem.IsWithinCastingRange(caster.GridPosition, targetPos, lineRange))
+            {
+                Debug.Log($"[AoE] Target position ({targetPos.x},{targetPos.y}) is out of range for line");
+                return;
             }
         }
 
@@ -13500,11 +13527,10 @@ public partial class GameManager : MonoBehaviour
         }
         else if (_pendingSpell.AoEShapeType == AoEShape.Line)
         {
-            // Line spells: mouse-direction targeting — line extends from caster
-            // center in direction of mouse, always to full spell range
-            aoeCells = AoESystem.GetLineCellsFromDirection(
-                caster.GridPosition, worldPoint, _pendingSpell.AoESizeSquares, Grid);
-            Debug.Log($"[AoE] Line direction → {aoeCells.Count} cells");
+            // Line spells: click endpoint targeting from caster to selected cell.
+            aoeCells = AoESystem.GetLineCellsToTarget(
+                caster.GridPosition, targetPos, _pendingSpell.AoESizeSquares, Grid);
+            Debug.Log($"[AoE] Line endpoint ({targetPos.x},{targetPos.y}) → {aoeCells.Count} cells");
         }
 
         if (aoeCells == null || aoeCells.Count == 0)
