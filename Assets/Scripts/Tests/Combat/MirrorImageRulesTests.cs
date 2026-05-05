@@ -168,6 +168,12 @@ namespace Tests.Combat
 
                 Assert(intercepted, "Mirror image clone attack is intercepted");
                 Assert(resolved != null && resolved.Hit, "Resolved clone attack counts as a hit on image");
+                Assert(resolved != null && resolved.TargetAC == caster.Stats.TouchArmorClass,
+                    "Mirror image clone uses caster Touch AC",
+                    $"targetAC={resolved?.TargetAC}, touchAC={caster.Stats.TouchArmorClass}");
+                Assert(resolved != null && !string.IsNullOrEmpty(resolved.SpecialAttackNote) && resolved.SpecialAttackNote.Contains("Touch AC"),
+                    "Mirror image attack note explicitly references Touch AC",
+                    $"note='{resolved?.SpecialAttackNote}'");
                 Assert(resolved != null && resolved.FinalDamageDealt == 0, "Clone attack deals zero damage");
                 Assert(marker != null && marker.IsDissipated, "Clone marked dissipated after attack");
             }

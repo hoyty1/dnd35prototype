@@ -1674,6 +1674,23 @@ public class CharacterStats
         }
     }
 
+    /// <summary>
+    /// Touch AC for attacks that ignore armor, shield, and natural armor.
+    /// Includes DEX (subject to max DEX cap), size, deflection, and other non-physical AC modifiers.
+    /// </summary>
+    public int TouchArmorClass
+    {
+        get
+        {
+            int dexToAC = DeniedDexToAcByCondition ? 0 : DEXMod;
+            if (MaxDexBonus >= 0 && dexToAC > MaxDexBonus)
+                dexToAC = MaxDexBonus;
+
+            return 10 + dexToAC + SizeModifier
+                   + MonkACBonus + FeatACBonus + RageACPenalty + DeflectionBonus + ConditionACPenalty;
+        }
+    }
+
     /// <summary>Total attack bonus = BAB + STR modifier (melee) + size modifier + morale bonus + condition penalties.</summary>
     public int AttackBonus => BaseAttackBonus + STRMod + SizeModifier + MoraleAttackBonus + ConditionAttackPenalty;
 
@@ -1683,6 +1700,12 @@ public class CharacterStats
     public int GetArmorClass()
     {
         return ArmorClass;
+    }
+
+    /// <summary>Convenience wrapper for touch AC comparisons.</summary>
+    public int GetTouchArmorClass()
+    {
+        return TouchArmorClass;
     }
 
     /// <summary>

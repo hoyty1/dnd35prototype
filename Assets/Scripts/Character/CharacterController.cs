@@ -4891,12 +4891,6 @@ public class CharacterController : MonoBehaviour
         result.DamageModeAttackPenalty = damageModeAttackPenalty;
         result.DamageModePenaltySource = damageModePenaltySource ?? string.Empty;
 
-        if (GameManager.Instance != null && GameManager.Instance.TryHandleMirrorImageCloneAttacked(this, target, result, out CombatResult mirrorCloneResult))
-        {
-            mirrorCloneResult.RebuildBreakdownsFromComputedValues();
-            return mirrorCloneResult;
-        }
-
         // Store weapon crit properties on result for display
         result.CritThreatMin = critThreatMin;
         result.CritMultiplier = critMultiplier;
@@ -4944,6 +4938,16 @@ public class CharacterController : MonoBehaviour
 
         if (TryResolveLastKnownPositionAutoMiss(target, isRangedAttack, weapon, out CombatResult emptySquareMiss))
             return emptySquareMiss;
+
+        if (GameManager.Instance != null && GameManager.Instance.TryHandleMirrorImageCloneAttacked(this, target, result, totalAtkModWithTrueStrike, out CombatResult mirrorCloneResult))
+        {
+            mirrorCloneResult.IsRangedAttack = isRangedAttack;
+            if (trueStrikeActive)
+                trueStrike.ConsumeOnAttackRoll();
+
+            mirrorCloneResult.RebuildBreakdownsFromComputedValues();
+            return mirrorCloneResult;
+        }
 
         int targetAC = GetSituationalTargetArmorClass(target, this, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
 

@@ -155,7 +155,7 @@ public partial class GameManager
         clone.transform.localScale = caster.transform.localScale;
 
         MirrorImageClone cloneMarker = cloneObj.AddComponent<MirrorImageClone>();
-        cloneMarker.Initialize(caster, cloneIndex);
+        cloneMarker.Initialize(caster, cloneIndex, caster.Stats.TouchArmorClass);
 
         return clone;
     }
@@ -198,27 +198,70 @@ public partial class GameManager
 
     public bool TryHandleMirrorImageCloneAttacked(CharacterController attacker, CharacterController target, CombatResult baseResult, out CombatResult resolved)
     {
+        return TryHandleMirrorImageCloneAttacked(attacker, target, baseResult, null, out resolved);
+    }
+
+    public bool TryHandleMirrorImageCloneAttacked(CharacterController attacker, CharacterController target, CombatResult baseResult, int? totalAttackModifier, out CombatResult resolved)
+    {
         resolved = baseResult;
 
         if (!IsMirrorImageClone(target))
             return false;
 
-        string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "Unknown";
-        string casterName = GetMirrorImageCaster(target) != null && GetMirrorImageCaster(target).Stats != null
-            ? GetMirrorImageCaster(target).Stats.CharacterName
-            : "caster";
+        MirrorImageClone marker = target != null ? target.GetComponent<MirrorImageClone>() : null;
+        CharacterController caster = GetMirrorImageCaster(target);
 
-        resolved.Hit = true;
-        resolved.NaturalOne = false;
+        string attackerName = attacker != null && attacker.Stats != null ? attacker.Stats.CharacterName : "Unknown";
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "caster";
+
+        int touchArmorClass = marker != null
+            ? Mathf.Max(0, marker.TouchArmorClass)
+            : Mathf.Max(0, caster != null && caster.Stats != null ? caster.Stats.TouchArmorClass : 10);
+
+        bool hasAttackRollContext = totalAttackModifier.HasValue && attacker != null && attacker.Stats != null;
+
+        if (hasAttackRollContext)
+        {
+            var (hit, roll, total) = attacker.Stats.RollToHitWithMod(totalAttackModifier.Value, touchArmorClass);
+            resolved.DieRoll = roll;
+            resolved.TotalRoll = total;
+            resolved.Hit = hit;
+            resolved.NaturalTwenty = roll == 20;
+            resolved.NaturalOne = roll == 1;
+        }
+        else if (resolved.DieRoll > 0)
+        {
+            int total = resolved.TotalRoll;
+            bool hit = resolved.DieRoll == 20 || (resolved.DieRoll != 1 && total >= touchArmorClass);
+            resolved.Hit = hit;
+            resolved.NaturalTwenty = resolved.DieRoll == 20;
+            resolved.NaturalOne = resolved.DieRoll == 1;
+        }
+        else
+        {
+            resolved.Hit = true;
+            resolved.NaturalTwenty = false;
+            resolved.NaturalOne = false;
+        }
+
+        resolved.TargetAC = touchArmorClass;
         resolved.MissedDueToConcealment = false;
         resolved.Damage = 0;
         resolved.BaseDamageRoll = 0;
         resolved.RawTotalDamage = 0;
         resolved.FinalDamageDealt = 0;
-        resolved.SpecialAttackNote = $"Mirror Image: {attackerName}'s attack strikes an illusion of {casterName}, which dissipates.";
         resolved.TargetKilled = false;
 
-        DissipateMirrorImageClone(target, $"attacked by {attackerName}");
+        if (resolved.Hit)
+        {
+            resolved.SpecialAttackNote = $"Mirror Image: Attack {resolved.TotalRoll} vs Touch AC {touchArmorClass} - HIT! {attackerName}'s attack strikes an illusion of {casterName}, which dissipates.";
+            DissipateMirrorImageClone(target, $"attacked by {attackerName}");
+        }
+        else
+        {
+            resolved.SpecialAttackNote = $"Mirror Image: Attack {resolved.TotalRoll} vs Touch AC {touchArmorClass} - MISS! {attackerName} fails to strike the illusion of {casterName}.";
+        }
+
         return true;
     }
 
