@@ -204,8 +204,20 @@ public partial class GameManager
 
         CharacterController occupant = GetLivingCharacterAtCell(targetCell);
         SpellResult impactResult = null;
+        Vector2Int sphereFinalCell = targetCell;
+        bool repositionedAfterInitialImpact = false;
+
         if (occupant != null)
+        {
             impactResult = ResolveFlamingSphereImpactDamage(caster, sphere, occupant, spell, "on creation");
+
+            if (TryGetInitialFlamingSphereAdjacentCellClosestToCaster(caster, targetCell, out Vector2Int adjacentCell))
+            {
+                sphere.SetGridPosition(adjacentCell);
+                sphereFinalCell = adjacentCell;
+                repositionedAfterInitialImpact = true;
+            }
+        }
 
         StringBuilder sb = new StringBuilder();
         sb.AppendLine("═══════════════════════════════════");
@@ -226,6 +238,11 @@ public partial class GameManager
 
             sb.AppendLine($"    Damage: {impactResult.DamageDealt} fire");
             sb.AppendLine($"    HP: {impactResult.TargetHPBefore} → {impactResult.TargetHPAfter}");
+
+            if (repositionedAfterInitialImpact)
+                sb.AppendLine($"  Sphere settles on near side at ({sphereFinalCell.x}, {sphereFinalCell.y}).");
+            else
+                sb.AppendLine("  Sphere cannot move to an adjacent valid square and remains in the target square.");
         }
         else
         {
@@ -476,6 +493,43 @@ public partial class GameManager
         }
 
         return bestPath != null && bestPath.Count > 0;
+    }
+
+    private bool TryGetInitialFlamingSphereAdjacentCellClosestToCaster(CharacterController caster, Vector2Int occupiedTargetCell, out Vector2Int bestCell)
+    {
+        bestCell = occupiedTargetCell;
+        if (caster == null || Grid == null)
+            return false;
+
+        Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(occupiedTargetCell);
+        bool found = false;
+        float bestDistanceSq = float.MaxValue;
+
+        for (int i = 0; i < neighbors.Length; i++)
+        {
+            Vector2Int neighbor = neighbors[i];
+            if (Grid.GetCell(neighbor) == null)
+                continue;
+
+            if (!TryGetBestFlamingSpherePath(occupiedTargetCell, neighbor, 1, out List<Vector2Int> candidatePath))
+                continue;
+
+            if (candidatePath == null || candidatePath.Count == 0 || candidatePath[candidatePath.Count - 1] != neighbor)
+                continue;
+
+            float dx = neighbor.x - caster.GridPosition.x;
+            float dy = neighbor.y - caster.GridPosition.y;
+            float distanceSq = dx * dx + dy * dy;
+
+            if (!found || distanceSq < bestDistanceSq)
+            {
+                found = true;
+                bestDistanceSq = distanceSq;
+                bestCell = neighbor;
+            }
+        }
+
+        return found;
     }
 
     private static bool IsPathResultReachDestination(AoOPathResult pathResult, Vector2Int destination)

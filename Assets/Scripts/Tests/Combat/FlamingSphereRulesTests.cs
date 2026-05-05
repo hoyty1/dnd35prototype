@@ -271,9 +271,10 @@ public static class FlamingSphereRulesTests
 
             Assert(created, "Flaming Sphere is created successfully");
             Assert(sphere != null, "Sphere entity exists after cast");
-            Assert(sphere != null && sphere.GridPosition == Enemy1Start,
-                "Sphere spawns on selected target cell",
-                $"expected={Enemy1Start}, actual={(sphere != null ? sphere.GridPosition.ToString() : "<null>")}");
+            Vector2Int expectedNearSideCell = new Vector2Int(Enemy1Start.x - 1, Enemy1Start.y);
+            Assert(sphere != null && sphere.GridPosition == expectedNearSideCell,
+                "Sphere repositions to adjacent square closest to caster after initial occupied-square impact",
+                $"expected={expectedNearSideCell}, actual={(sphere != null ? sphere.GridPosition.ToString() : "<null>")}");
             Assert(sphere != null && sphere.RemainingRounds == expectedDuration,
                 "Sphere duration initialized from caster level",
                 $"expected={expectedDuration}, actual={(sphere != null ? sphere.RemainingRounds : -1)}");
