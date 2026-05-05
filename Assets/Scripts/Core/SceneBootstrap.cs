@@ -807,6 +807,8 @@ public class SceneBootstrap : MonoBehaviour
             "Rage", new Color(0.6f, 0.2f, 0.1f));
         combatUI.CastSpellButton = CreateGridButton(btnGrid.transform, "CastSpellBtn",
             "Cast Spell", new Color(0.4f, 0.2f, 0.6f));
+        combatUI.ControlFlamingSphereButton = CreateGridButton(btnGrid.transform, "ControlFlamingSphereBtn",
+            "Control Flaming Sphere", new Color(0.84f, 0.42f, 0.14f));
         combatUI.DismissDisguiseSelfButton = CreateGridButton(btnGrid.transform, "DismissDisguiseSelfBtn",
             "Dismiss Disguise Self", new Color(0.36f, 0.2f, 0.48f));
         combatUI.DismissExpeditiousRetreatButton = CreateGridButton(btnGrid.transform, "DismissExpeditiousRetreatBtn",
@@ -1148,6 +1150,8 @@ public class SceneBootstrap : MonoBehaviour
             ui.RageButton.onClick.AddListener(() => GameManager.Instance.OnRageButtonPressed());
         if (ui.CastSpellButton != null)
             ui.CastSpellButton.onClick.AddListener(() => GameManager.Instance.OnCastSpellButtonPressed());
+        if (ui.ControlFlamingSphereButton != null)
+            ui.ControlFlamingSphereButton.onClick.AddListener(() => GameManager.Instance.OnControlFlamingSphereButtonPressed());
         if (ui.DismissDisguiseSelfButton != null)
             ui.DismissDisguiseSelfButton.onClick.AddListener(() => GameManager.Instance.OnDismissDisguiseSelfButtonPressed());
         if (ui.DismissExpeditiousRetreatButton != null)

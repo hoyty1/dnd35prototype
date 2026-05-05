@@ -133,6 +133,7 @@ public class CombatUI : MonoBehaviour
 
     [Header("Spellcasting")]
     public Button CastSpellButton;         // Cast Spell (Standard Action)
+    public Button ControlFlamingSphereButton; // Move Flaming Sphere (Move Action)
     public Button DischargeTouchButton;    // Deliver currently held touch charge (Free Action)
     public Button DismissDisguiseSelfButton; // Dismiss Disguise Self (Standard Action)
     public Button DismissExpeditiousRetreatButton; // Dismiss Expeditious Retreat (Free Action)
@@ -399,6 +400,7 @@ public class CombatUI : MonoBehaviour
             if (PowerAttackPanel != null) PowerAttackPanel.SetActive(false);
             if (RapidShotPanel != null) RapidShotPanel.SetActive(false);
             if (RageStatusText != null) RageStatusText.gameObject.SetActive(false);
+            if (ControlFlamingSphereButton != null) ControlFlamingSphereButton.gameObject.SetActive(false);
             if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
             if (DismissSeeInvisibilityButton != null) DismissSeeInvisibilityButton.gameObject.SetActive(false);
             HideSpecialAttackMenu();

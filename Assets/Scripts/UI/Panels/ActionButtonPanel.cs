@@ -56,6 +56,7 @@ public class ActionButtonPanel : MonoBehaviour
     private Button RageButton => _combatUI != null ? _combatUI.RageButton : null;
     private Text RageStatusText => _combatUI != null ? _combatUI.RageStatusText : null;
     private Button CastSpellButton => _combatUI != null ? _combatUI.CastSpellButton : null;
+    private Button ControlFlamingSphereButton => _combatUI != null ? _combatUI.ControlFlamingSphereButton : null;
     private Button DischargeTouchButton => _combatUI != null ? _combatUI.DischargeTouchButton : null;
     private Button DismissDisguiseSelfButton => _combatUI != null ? _combatUI.DismissDisguiseSelfButton : null;
     private Button DismissExpeditiousRetreatButton => _combatUI != null ? _combatUI.DismissExpeditiousRetreatButton : null;
@@ -137,6 +138,9 @@ public class ActionButtonPanel : MonoBehaviour
         public bool HasThrowableOffHandWeapon;
         public bool OffHandUsed;
         public bool OffHandAvailableThisTurn;
+        public bool HasActiveFlamingSphere;
+        public bool CanControlFlamingSphere;
+        public string ControlFlamingSphereReason;
         public bool ShowOnlyPinnedEscapeActions;
         public bool ShowOnlyPinnerActions;
         public bool HasIterativeGrappleAttack;
@@ -244,6 +248,9 @@ public class ActionButtonPanel : MonoBehaviour
         context.HasThrowableOffHandWeapon = pc.HasThrowableOffHandWeaponEquipped();
         context.OffHandUsed = context.Gm != null && context.Gm.IsOffHandAttackUsedThisTurn(pc);
         context.OffHandAvailableThisTurn = context.Gm == null || context.Gm.IsOffHandAttackAvailableThisTurn(pc);
+
+        context.HasActiveFlamingSphere = context.Gm != null && context.Gm.HasActiveFlamingSphere(pc);
+        context.CanControlFlamingSphere = context.Gm != null && context.Gm.CanControlFlamingSphere(pc, out context.ControlFlamingSphereReason);
 
         context.ShowOnlyPinnedEscapeActions = context.IsGrappling && (context.IsPinned || context.ActorPinnedInGrappleState);
         context.ShowOnlyPinnerActions = context.IsGrappling && context.IsPinningOpponent && !context.ShowOnlyPinnedEscapeActions;
@@ -696,6 +703,21 @@ public class ActionButtonPanel : MonoBehaviour
 
         states.Set(CastSpellButton, new ActionButtonState(hasCastableSpells, canCast, castSpellLabel));
 
+        bool hasActiveFlamingSphere = context.HasActiveFlamingSphere;
+        bool canControlFlamingSphere = hasActiveFlamingSphere && context.CanControlFlamingSphere && !context.IsTurned;
+        string controlFlamingSphereLabel;
+        if (!hasActiveFlamingSphere)
+            controlFlamingSphereLabel = "Control Flaming Sphere";
+        else if (context.IsTurned)
+            controlFlamingSphereLabel = "Control Flaming Sphere (Turned: no)";
+        else if (canControlFlamingSphere)
+            controlFlamingSphereLabel = "Control Flaming Sphere (Move)";
+        else
+            controlFlamingSphereLabel = string.IsNullOrWhiteSpace(context.ControlFlamingSphereReason)
+                ? "Control Flaming Sphere (Unavailable)"
+                : $"Control Flaming Sphere ({context.ControlFlamingSphereReason})";
+        states.Set(ControlFlamingSphereButton, new ActionButtonState(hasActiveFlamingSphere, canControlFlamingSphere, controlFlamingSphereLabel));
+
         _combatUI.EnsureDischargeTouchButtonExistsForActionPanel();
         SpellcastingComponent touchSpellComp = pc.GetComponent<SpellcastingComponent>();
         bool hasHeldTouchCharge = pc.Stats.IsSpellcaster && touchSpellComp != null && touchSpellComp.HasHeldTouchCharge && touchSpellComp.HeldTouchSpell != null;
@@ -968,6 +990,7 @@ public class ActionButtonPanel : MonoBehaviour
         if (DropEquippedItemButton != null) DropEquippedItemButton.gameObject.SetActive(false);
         if (PickUpItemButton != null) PickUpItemButton.gameObject.SetActive(false);
         if (DamageModeToggleButton != null) DamageModeToggleButton.gameObject.SetActive(false);
+        if (ControlFlamingSphereButton != null) ControlFlamingSphereButton.gameObject.SetActive(false);
         if (DischargeTouchButton != null) DischargeTouchButton.gameObject.SetActive(false);
         if (DismissDisguiseSelfButton != null) DismissDisguiseSelfButton.gameObject.SetActive(false);
         if (DismissExpeditiousRetreatButton != null) DismissExpeditiousRetreatButton.gameObject.SetActive(false);

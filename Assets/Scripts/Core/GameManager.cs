@@ -202,6 +202,7 @@ public partial class GameManager : MonoBehaviour
         SelectingAoETarget,
         ConfirmingSelfAoE,
         ConfirmingTurnUndead,
+        SelectingFlamingSphereTarget,
         Animating
     }
 
@@ -1807,6 +1808,7 @@ public partial class GameManager : MonoBehaviour
             case PlayerSubPhase.SelectingChargeTarget:
             case PlayerSubPhase.ConfirmingChargePath:
             case PlayerSubPhase.ConfirmingTurnUndead:
+            case PlayerSubPhase.SelectingFlamingSphereTarget:
                 return InputService.InputMode.SelectingTarget;
 
             case PlayerSubPhase.SelectingAoETarget:
@@ -1897,6 +1899,12 @@ public partial class GameManager : MonoBehaviour
         if (CurrentSubPhase == PlayerSubPhase.SelectingChargeTarget || CurrentSubPhase == PlayerSubPhase.ConfirmingChargePath)
         {
             CancelChargeTargeting();
+            return true;
+        }
+
+        if (CurrentSubPhase == PlayerSubPhase.SelectingFlamingSphereTarget)
+        {
+            CancelFlamingSphereControlSelection(showCancelLog: true);
             return true;
         }
 
@@ -5896,6 +5904,7 @@ public partial class GameManager : MonoBehaviour
         trueStrike?.CheckExpirationAtTurnEnd(endingCharacter, CurrentRound);
 
         endingCharacter?.ProcessPinnedDurationAtTurnEnd();
+        WarnFlamingSphereNotMovedAtTurnEnd(endingCharacter);
         _conditionService?.OnTurnEnd(endingCharacter);
         ProcessEndOfTurnHPState(endingCharacter);
 
@@ -5916,6 +5925,7 @@ public partial class GameManager : MonoBehaviour
         if (CurrentPhase == TurnPhase.CombatOver) return;
 
         _conditionService?.OnTurnStart(pc);
+        HandleFlamingSphereTurnStart(pc);
         ApplyMelfsAcidArrowTurnStartDamage(pc);
         pc.TickBombardierAcidSprayCooldown();
         pc.ApplyRegenerationAtTurnStart();
@@ -13870,6 +13880,31 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
+            if (TryResolveFlamingSphereAoECast(caster, _pendingSpell, aoeCells, out string flamingSphereLog))
+            {
+                _lastCombatLog = flamingSphereLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
             if (aoeCells != null
                 && string.Equals(_pendingSpell.DamageType, "fire", StringComparison.OrdinalIgnoreCase))
             {
@@ -17730,6 +17765,10 @@ public partial class GameManager : MonoBehaviour
                 HandleAoETargetClick(pc, cell);
                 break;
 
+            case PlayerSubPhase.SelectingFlamingSphereTarget:
+                HandleFlamingSphereControlClick(pc, cell);
+                break;
+
             case PlayerSubPhase.ChoosingAction:
                 break;
         }
@@ -19455,6 +19494,7 @@ public partial class GameManager : MonoBehaviour
         UpdateInitiativeUI();
 
         ExpireAidBonusesAtTurnStart(npc);
+        HandleFlamingSphereTurnStart(npc);
 
         if (ShouldSkipTurnDueToHPState(npc))
         {
