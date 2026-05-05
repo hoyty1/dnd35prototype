@@ -14,6 +14,10 @@ public class DarknessAreaEffect : PersistentAreaEffect
 {
     private const string ConcealmentSpellId = "darkness_concealment";
 
+    // Cache all currently darkened cells so LOS checks do not iterate every area every frame.
+    private static readonly HashSet<Vector2Int> CachedDarknessCells = new HashSet<Vector2Int>();
+    private static bool DarknessCellCacheDirty = true;
+
     protected override Color GridHighlightColor => new Color(0f, 0f, 0f, 0.72f);
     protected override bool UseGridHighlighting => true;
 
@@ -32,6 +36,7 @@ public class DarknessAreaEffect : PersistentAreaEffect
 
     protected override void OnAreaCreated()
     {
+        MarkVisionCacheDirty();
         LogEffect("20-ft radius fills with magical darkness.");
         LogEffect("Creatures in darkness gain concealment (20% miss chance).");
         LogEffect("Vision is blocked into, out of, and through magical darkness.");
@@ -82,6 +87,8 @@ public class DarknessAreaEffect : PersistentAreaEffect
 
     protected override void OnAreaExpires()
     {
+        MarkVisionCacheDirty();
+
         foreach (CharacterController character in CharactersInArea)
         {
             if (character != null)
@@ -94,6 +101,12 @@ public class DarknessAreaEffect : PersistentAreaEffect
 
         if (gameManager != null)
             gameManager.StartCoroutine(ReapplyDarknessHighlightsNextFrame());
+    }
+
+    protected override void OnDestroy()
+    {
+        MarkVisionCacheDirty();
+        base.OnDestroy();
     }
 
     private IEnumerator ReapplyDarknessHighlightsNextFrame()
@@ -197,59 +210,68 @@ public class DarknessAreaEffect : PersistentAreaEffect
         if (observer == null || target == null || observer == target)
             return false;
 
-        if (!AreaEffectManager.HasInstance)
+        return IsLineBlockedByMagicalDarkness(observer.GridPosition, target.GridPosition, includeEndpoints: true);
+    }
+
+    public static bool IsPositionInMagicalDarkness(Vector2Int position)
+    {
+        RebuildDarknessCellCacheIfNeeded();
+        return CachedDarknessCells.Contains(position);
+    }
+
+    public static bool IsLineBlockedByMagicalDarkness(Vector2Int from, Vector2Int to, bool includeEndpoints = true)
+    {
+        RebuildDarknessCellCacheIfNeeded();
+        if (CachedDarknessCells.Count == 0)
             return false;
 
-        List<DarknessAreaEffect> darknessAreas = AreaEffectManager.Instance.GetEffectsOfType<DarknessAreaEffect>();
-        if (darknessAreas == null || darknessAreas.Count == 0)
-            return false;
-
-        bool observerInAnyDarkness = false;
-        bool targetInAnyDarkness = false;
-        bool shareAnyDarknessArea = false;
-
-        Vector2Int observerPos = observer.GridPosition;
-        Vector2Int targetPos = target.GridPosition;
-
-        for (int i = 0; i < darknessAreas.Count; i++)
+        foreach (Vector2Int cell in EnumerateLineCells(from, to))
         {
-            DarknessAreaEffect area = darknessAreas[i];
-            if (area == null)
+            if (!includeEndpoints && (cell == from || cell == to))
                 continue;
 
-            bool observerInside = area.IsCellInArea(observerPos);
-            bool targetInside = area.IsCellInArea(targetPos);
-
-            observerInAnyDarkness |= observerInside;
-            targetInAnyDarkness |= targetInside;
-
-            if (observerInside && targetInside)
-                shareAnyDarknessArea = true;
-
-            // Outside-to-outside sight line passing through darkness is blocked.
-            if (!observerInside && !targetInside && area.BlocksLineBetween(observerPos, targetPos))
+            if (CachedDarknessCells.Contains(cell))
                 return true;
         }
-
-        // Into/out-of darkness is blocked, and different darkness pockets don't grant mutual visibility.
-        if ((observerInAnyDarkness || targetInAnyDarkness) && !shareAnyDarknessArea)
-            return true;
 
         return false;
     }
 
-    private bool BlocksLineBetween(Vector2Int from, Vector2Int to)
+    public static void InvalidateVisionCache()
     {
-        foreach (Vector2Int cell in EnumerateLineCells(from, to))
-        {
-            if (cell == from || cell == to)
-                continue;
+        DarknessCellCacheDirty = true;
+    }
 
-            if (AffectedCells.Contains(cell))
-                return true;
+    private static void MarkVisionCacheDirty()
+    {
+        InvalidateVisionCache();
+    }
+
+    private static void RebuildDarknessCellCacheIfNeeded()
+    {
+        if (!DarknessCellCacheDirty)
+            return;
+
+        CachedDarknessCells.Clear();
+
+        if (AreaEffectManager.HasInstance)
+        {
+            List<DarknessAreaEffect> darknessAreas = AreaEffectManager.Instance.GetEffectsOfType<DarknessAreaEffect>();
+            if (darknessAreas != null)
+            {
+                for (int i = 0; i < darknessAreas.Count; i++)
+                {
+                    DarknessAreaEffect area = darknessAreas[i];
+                    if (area == null || area.AffectedCells == null)
+                        continue;
+
+                    foreach (Vector2Int cell in area.AffectedCells)
+                        CachedDarknessCells.Add(cell);
+                }
+            }
         }
 
-        return false;
+        DarknessCellCacheDirty = false;
     }
 
     private static IEnumerable<Vector2Int> EnumerateLineCells(Vector2Int start, Vector2Int end)

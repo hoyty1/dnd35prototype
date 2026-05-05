@@ -33,6 +33,10 @@ public class AreaEffectManager : MonoBehaviour
             return;
 
         activeEffects.Add(effect);
+
+        if (effect is DarknessAreaEffect)
+            DarknessAreaEffect.InvalidateVisionCache();
+
         Debug.Log($"[AreaEffectManager] Registered: {effect.EffectName}");
     }
 
@@ -42,6 +46,10 @@ public class AreaEffectManager : MonoBehaviour
             return;
 
         activeEffects.Remove(effect);
+
+        if (effect is DarknessAreaEffect)
+            DarknessAreaEffect.InvalidateVisionCache();
+
         Debug.Log($"[AreaEffectManager] Unregistered: {effect.EffectName}");
     }
 

@@ -222,6 +222,14 @@ public static class ConcealmentRulesTests
             target.GridPosition = new Vector2Int(7, 0);
             Assert(DarknessAreaEffect.BlocksVision(observer, target),
                 "Darkness blocks vision out of the area");
+
+            // Both creatures inside the same darkness area still cannot see each other.
+            observer.GridPosition = new Vector2Int(3, 0);
+            target.GridPosition = new Vector2Int(4, 0);
+            Assert(DarknessAreaEffect.BlocksVision(observer, target),
+                "Darkness blocks vision even when both creatures are inside the same darkness area");
+            Assert(!observer.CanSee(target),
+                "CharacterController.CanSee respects magical darkness LOS blocking");
         }
         finally
         {

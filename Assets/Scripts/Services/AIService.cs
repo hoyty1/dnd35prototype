@@ -461,20 +461,28 @@ public class AIService : MonoBehaviour
 
         if (!npc.CanSee(closestPC, incomingIsRangedAttack: preferRangedVisibility))
         {
-            var concealedSingleTarget = new List<CharacterController> { closestPC };
-            tracker.AttemptListenChecks(concealedSingleTarget, _gameManager);
-
-            Vector2Int? lastKnown = tracker.GetLastKnownPosition(closestPC);
-            if (tracker.IsPinpointedThisRound(closestPC))
-                _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} pinpoints {closestPC.Stats.CharacterName} by sound and attacks their current position.");
-            else if (lastKnown.HasValue)
-                _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} cannot see {closestPC.Stats.CharacterName} clearly and fires at the last known position.");
-
-            if (tracker.IsPinpointedThisRound(closestPC) || lastKnown.HasValue)
+            bool blockedByDarkness = DarknessAreaEffect.BlocksVision(npc, closestPC);
+            if (!blockedByDarkness)
             {
-                yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, closestPC));
-                yield return new WaitForSeconds(0.45f);
-                yield break;
+                var concealedSingleTarget = new List<CharacterController> { closestPC };
+                tracker.AttemptListenChecks(concealedSingleTarget, _gameManager);
+
+                Vector2Int? lastKnown = tracker.GetLastKnownPosition(closestPC);
+                if (tracker.IsPinpointedThisRound(closestPC))
+                    _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} pinpoints {closestPC.Stats.CharacterName} by sound and attacks their current position.");
+                else if (lastKnown.HasValue)
+                    _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} cannot see {closestPC.Stats.CharacterName} clearly and fires at the last known position.");
+
+                if (tracker.IsPinpointedThisRound(closestPC) || lastKnown.HasValue)
+                {
+                    yield return _gameManager.StartCoroutine(_gameManager.NPCPerformAttackForAI(npc, closestPC));
+                    yield return new WaitForSeconds(0.45f);
+                    yield break;
+                }
+            }
+            else
+            {
+                _gameManager.CombatUI?.ShowCombatLog($"{npc.Stats.CharacterName} cannot target through magical darkness.");
             }
 
             if (npc.Actions.HasMoveAction)
@@ -902,12 +910,14 @@ public class AIService : MonoBehaviour
             if (ShouldExcludeTargetBecauseOfFrightenedSource(npc, candidate))
                 continue;
 
+            bool blockedByDarkness = DarknessAreaEffect.BlocksVision(npc, candidate);
+
             if (CanSeeTarget(npc, candidate))
             {
                 visibleTargets.Add(candidate);
                 tracker.UpdateLastKnownPosition(candidate);
             }
-            else if (tracker.HasLastKnownPosition(candidate))
+            else if (!blockedByDarkness && tracker.HasLastKnownPosition(candidate))
             {
                 concealedTrackedTargets.Add(candidate);
             }
@@ -1728,6 +1738,10 @@ public class AIService : MonoBehaviour
 
             int distance = SquareGridUtils.GetDistance(caster.GridPosition, candidate.GridPosition);
             if (distance > rangeSquares)
+                continue;
+
+            bool requiresLineOfSight = spell.TargetType == SpellTargetType.SingleEnemy;
+            if (requiresLineOfSight && !caster.CanSee(candidate, spell.IsRangedTouchSpell()))
                 continue;
 
             float score = GetTargetPriority(caster, candidate);
