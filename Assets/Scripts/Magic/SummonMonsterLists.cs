@@ -290,6 +290,48 @@ public static class SummonMonsterLists
         return UnityEngine.Random.Range(1, 5) + 1; // 1d4+1 = 2-5
     }
 
+    /// <summary>
+    /// Summon Monster swarm detection helper used by runtime control logic.
+    /// This intentionally combines list metadata + NPC database metadata so future
+    /// list entries (for example "Celestial Centipede Swarm") are auto-detected
+    /// without requiring manual per-entry wiring.
+    /// </summary>
+    public static bool IsSwarmOption(SummonMonsterOption option)
+    {
+        if (option == null)
+            return false;
+
+        if (ContainsSwarmText(option.DisplayName) || ContainsSwarmText(option.NpcDefinitionId))
+            return true;
+
+        NPCDefinition def = NPCDatabase.Get(option.NpcDefinitionId);
+        if (def == null)
+            return false;
+
+        if (def.IsSwarm || (def.SwarmTraits != null && def.SwarmTraits.IsSwarm))
+            return true;
+
+        if (ContainsSwarmText(def.Name) || ContainsSwarmText(def.CreatureType))
+            return true;
+
+        if (def.CreatureTags != null)
+        {
+            for (int i = 0; i < def.CreatureTags.Count; i++)
+            {
+                if (ContainsSwarmText(def.CreatureTags[i]))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsSwarmText(string value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+               && value.IndexOf("swarm", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
     private static SummonMonsterOption CloneOption(SummonMonsterOption source)
     {
         return new SummonMonsterOption

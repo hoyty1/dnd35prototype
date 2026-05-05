@@ -31,6 +31,8 @@ namespace Tests.Magic
             TestSummonCreatureCountInfoRanges();
             TestSummonSwarmSpellDefinition();
             TestSummonSwarmCloseRangeScaling();
+            TestSummonMonsterSwarmDetectionByNameAndId();
+            TestSummonMonsterSwarmDetectionByNpcMetadata();
 
             Debug.Log($"====== Summon Monster Alignment Results: {_passed} passed, {_failed} failed ======");
         }
@@ -220,6 +222,44 @@ namespace Tests.Magic
             AssertEqual(6, spell.GetRangeSquaresForCasterLevel(3), "Summon Swarm CL3 = 30 ft");
             AssertEqual(7, spell.GetRangeSquaresForCasterLevel(5), "Summon Swarm CL5 = 35 ft");
             AssertEqual(10, spell.GetRangeSquaresForCasterLevel(10), "Summon Swarm CL10 = 50 ft");
+        }
+
+        private static void TestSummonMonsterSwarmDetectionByNameAndId()
+        {
+            SummonMonsterOption byName = new SummonMonsterOption
+            {
+                DisplayName = "Celestial Centipede Swarm",
+                NpcDefinitionId = "custom_centipede"
+            };
+
+            SummonMonsterOption byId = new SummonMonsterOption
+            {
+                DisplayName = "Celestial Centipede",
+                NpcDefinitionId = "celestial_centipede_swarm"
+            };
+
+            SummonMonsterOption nonSwarm = new SummonMonsterOption
+            {
+                DisplayName = "Wolf",
+                NpcDefinitionId = "wolf"
+            };
+
+            AssertTrue(SummonMonsterLists.IsSwarmOption(byName), "Summon swarm detection catches 'Swarm' in display name");
+            AssertTrue(SummonMonsterLists.IsSwarmOption(byId), "Summon swarm detection catches 'swarm' in npc id");
+            AssertTrue(!SummonMonsterLists.IsSwarmOption(nonSwarm), "Summon swarm detection does not mark normal summons as swarms");
+        }
+
+        private static void TestSummonMonsterSwarmDetectionByNpcMetadata()
+        {
+            NPCDatabase.Init();
+
+            SummonMonsterOption metadataSwarm = new SummonMonsterOption
+            {
+                DisplayName = "Bat",
+                NpcDefinitionId = "bat_swarm"
+            };
+
+            AssertTrue(SummonMonsterLists.IsSwarmOption(metadataSwarm), "Summon swarm detection catches swarm NPC metadata");
         }
     }
 }

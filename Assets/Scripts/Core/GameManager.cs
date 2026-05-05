@@ -2000,6 +2000,12 @@ public partial class GameManager : MonoBehaviour
             return true;
         }
 
+        if (!summon.IsControllable)
+        {
+            CombatUI?.ShowCombatLog("⚠ This summoned ally is AI-controlled. Direct command menus are unavailable.");
+            return true;
+        }
+
         CombatUI?.ShowSummonContextMenu(
             summon,
             active.RemainingRounds,
@@ -11014,6 +11020,12 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        if (!summon.IsControllable)
+        {
+            CombatUI?.ShowCombatLog("⚠ This summoned ally is AI-controlled and cannot receive direct commands.");
+            return;
+        }
+
         active.CurrentCommand = command;
 
         string summonName = GetSummonDisplayName(summon);
@@ -12008,6 +12020,8 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
+        bool isSwarmSummonOption = SummonMonsterLists.IsSwarmOption(option);
+
         int summonSizeSquares = baseDef.SizeCategory.GetSpaceWidthSquares();
         if (!Grid.CanPlaceCreature(targetCell.Coords, summonSizeSquares))
         {
@@ -12056,6 +12070,8 @@ public partial class GameManager : MonoBehaviour
 
             string summonLabel = option.BuildUiLabel();
             CombatUI?.ShowCombatLog($"<color=#66E8FF>Summoning {creatureCount} {summonLabel}{(creatureCount == 1 ? string.Empty : "s")}...</color>");
+            if (isSwarmSummonOption)
+                CombatUI?.ShowCombatLog("<color=#77EE99>Swarm summons are AI-controlled allies and cannot be directly commanded.</color>");
 
             List<CharacterController> spawnedCreatures = new List<CharacterController>(creatureCount);
             Vector2Int primaryCell = targetCell.Coords;
@@ -12077,6 +12093,15 @@ public partial class GameManager : MonoBehaviour
                 CharacterController summonCC = SpawnSummonedCreature(caster, spawnCell.Coords, option);
                 if (summonCC == null)
                     continue;
+
+                if (isSwarmSummonOption)
+                {
+                    // Summoned swarms stay allied, but act under AI control.
+                    summonCC.SetControllable(false);
+
+                    if (!(summonCC.aiProfile is SwarmAI) && !(summonCC.aiProfile is IndiscriminateSwarmAI))
+                        summonCC.aiProfile = ScriptableObject.CreateInstance<SwarmAI>();
+                }
 
                 if (stackedDueToNoSpace)
                     CombatUI?.ShowCombatLog("<color=#FFCC66>Not enough open slots; stacking extra summons on the primary tile.</color>");
