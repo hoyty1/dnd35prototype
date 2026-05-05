@@ -25,6 +25,8 @@ public static class ConcealmentRulesTests
         SpellDatabase.Init();
 
         TestFogSpellsAreImplementedAsAoEConcealment();
+        TestDarknessSpellDefinitionAndConcealment();
+        TestDarknessBlocksVisionIntoOutOfAndThroughArea();
         TestAttackMissesWhenDefenderHasGuaranteedConcealment();
         TestTotalConcealmentPreventsAttackOfOpportunity();
         TestObscuringMistAppliesConcealmentToTargetsInsideWhenAttackerOutside();
@@ -133,6 +135,104 @@ public static class ConcealmentRulesTests
                 $"shape={fogCloud.AoEShapeType}, size={fogCloud.AoESizeSquares}");
             Assert(fogCloud.DurationType == DurationType.Minutes && fogCloud.DurationValue == 10 && fogCloud.DurationScalesWithLevel,
                 "Fog Cloud duration is 10 min/level");
+        }
+    }
+
+    private static void TestDarknessSpellDefinitionAndConcealment()
+    {
+        SpellData darkness = SpellDatabase.GetSpell(SpellNames.DARKNESS);
+        Assert(darkness != null, "Darkness definition exists");
+
+        if (darkness != null)
+        {
+            Assert(!darkness.IsPlaceholder, "Darkness is not placeholder");
+            Assert(darkness.TargetType == SpellTargetType.Area, "Darkness targets area");
+            Assert(darkness.RangeCategory == SpellRangeCategory.Touch, "Darkness uses touch range");
+            Assert(darkness.AoEShapeType == AoEShape.Burst && darkness.AoESizeSquares == 4,
+                "Darkness uses 20-ft radius burst",
+                $"shape={darkness.AoEShapeType}, size={darkness.AoESizeSquares}");
+            Assert(darkness.DurationType == DurationType.Minutes && darkness.DurationValue == 10 && darkness.DurationScalesWithLevel,
+                "Darkness duration is 10 min/level");
+            Assert(darkness.IsDismissible, "Darkness is dismissible");
+        }
+
+        CharacterController attacker = null;
+        CharacterController target = null;
+        DarknessAreaEffect darknessArea = null;
+
+        try
+        {
+            attacker = CreateController(BuildStats("DarknessAttacker", "Fighter", 6, Alignment.TrueNeutral, 16, 14, 14, 10, 10, 10, 6));
+            target = CreateController(BuildStats("DarknessTarget", "Wizard", 6, Alignment.TrueNeutral, 10, 12, 10, 10, 16, 10, 3));
+
+            attacker.GridPosition = new Vector2Int(0, 0);
+            target.GridPosition = new Vector2Int(2, 0);
+
+            GameObject darknessObject = new GameObject("ConcealmentTest_Darkness");
+            darknessArea = darknessObject.AddComponent<DarknessAreaEffect>();
+            darknessArea.AffectedCells.Add(target.GridPosition);
+
+            int missChance = darknessArea.GetConcealmentMissChance(attacker, target);
+            Assert(missChance == 20,
+                "Darkness grants 20% miss chance to targets inside area",
+                $"missChance={missChance}");
+        }
+        finally
+        {
+            DestroyController(attacker);
+            DestroyController(target);
+
+            if (darknessArea != null)
+                Object.DestroyImmediate(darknessArea.gameObject);
+        }
+    }
+
+    private static void TestDarknessBlocksVisionIntoOutOfAndThroughArea()
+    {
+        CharacterController observer = null;
+        CharacterController target = null;
+        DarknessAreaEffect darknessArea = null;
+
+        try
+        {
+            observer = CreateController(BuildStats("VisionObserver", "Fighter", 5, Alignment.TrueNeutral, 16, 12, 14, 10, 10, 10, 5));
+            target = CreateController(BuildStats("VisionTarget", "Rogue", 5, Alignment.TrueNeutral, 12, 16, 12, 10, 10, 10, 3));
+
+            observer.GridPosition = new Vector2Int(0, 0);
+            target.GridPosition = new Vector2Int(6, 0);
+
+            GameObject darknessObject = new GameObject("ConcealmentTest_DarknessVision");
+            darknessArea = darknessObject.AddComponent<DarknessAreaEffect>();
+
+            // Create a darkness strip between observer and target to verify "through" vision blocking.
+            darknessArea.AffectedCells.Add(new Vector2Int(3, 0));
+            darknessArea.AffectedCells.Add(new Vector2Int(4, 0));
+            AreaEffectManager.Instance.RegisterAreaEffect(darknessArea);
+
+            Assert(DarknessAreaEffect.BlocksVision(observer, target),
+                "Darkness blocks vision through an intervening dark area");
+
+            // Move target into darkness to verify "into" blocking.
+            target.GridPosition = new Vector2Int(3, 0);
+            Assert(DarknessAreaEffect.BlocksVision(observer, target),
+                "Darkness blocks vision into the area");
+
+            // Move observer into darkness and target outside to verify "out of" blocking.
+            observer.GridPosition = new Vector2Int(4, 0);
+            target.GridPosition = new Vector2Int(7, 0);
+            Assert(DarknessAreaEffect.BlocksVision(observer, target),
+                "Darkness blocks vision out of the area");
+        }
+        finally
+        {
+            DestroyController(observer);
+            DestroyController(target);
+
+            if (darknessArea != null)
+            {
+                AreaEffectManager.Instance.UnregisterAreaEffect(darknessArea);
+                Object.DestroyImmediate(darknessArea.gameObject);
+            }
         }
     }
 

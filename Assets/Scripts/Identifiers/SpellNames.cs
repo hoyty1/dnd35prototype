@@ -111,6 +111,9 @@ namespace DND35e.Identifiers
         /// <summary>Dancing Lights (spell id: dancing_lights)</summary>
         public const string DANCING_LIGHTS = "dancing_lights";
 
+        /// <summary>Darkness (spell id: darkness)</summary>
+        public const string DARKNESS = "darkness";
+
         /// <summary>Darkvision (spell id: darkvision)</summary>
         public const string DARKVISION = "darkvision";
 

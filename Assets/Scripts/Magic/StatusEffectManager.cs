@@ -167,7 +167,7 @@ public class StatusEffectManager : MonoBehaviour
 
         // Concealment / miss chance metadata (non-stacking; highest applies at attack time).
         // Keep spell-specific handling explicit to avoid accidental false positives from BuffType aliases.
-        if (spell.SpellId == SpellNames.BLUR || spell.SpellId == SpellNames.OBSCURING_MIST || spell.SpellId == SpellNames.FOG_CLOUD)
+        if (spell.SpellId == SpellNames.BLUR || spell.SpellId == SpellNames.OBSCURING_MIST || spell.SpellId == SpellNames.FOG_CLOUD || spell.SpellId == SpellNames.DARKNESS)
         {
             effect.MissChance = 20;
             effect.IsTotalConcealment = false;

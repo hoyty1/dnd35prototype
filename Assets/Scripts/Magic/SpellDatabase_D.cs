@@ -29,6 +29,34 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
+                    SpellId = SpellNames.DARKNESS,
+                    Name = "Darkness",
+                    Description = "Evocation [Darkness]. Creates magical darkness in a 20-ft radius spread. Creatures in the area gain concealment (20% miss chance) even against darkvision. Magical darkness blocks vision into, out of, and through the area. Duration 10 min/level (D). PHB p.216",
+                    SpellLevel = 2,
+                    School = "Evocation [Darkness]",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard", "Cleric" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4,
+                    AoERangeSquares = 1,
+                    AreaRadius = 4,
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    BuffBonusType = BonusType.Concealment,
+                    BonusTypeExplicitlySet = true
+                });
+
+        Register(new SpellData
+                {
                     SpellId = SpellNames.DARKVISION,
                     Name = "Darkvision",
                     Description = "See 60 ft in total darkness. Duration 1 hr/level. PHB p.216",

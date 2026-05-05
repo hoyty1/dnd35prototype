@@ -6641,6 +6641,9 @@ public class CharacterController : MonoBehaviour
 
             if (effect.SourceAreaEffect is FogCloudAreaEffect fog)
                 return Mathf.Clamp(fog.GetConcealmentMissChance(attacker, this), 0, 100);
+
+            if (effect.SourceAreaEffect is DarknessAreaEffect darkness)
+                return Mathf.Clamp(darkness.GetConcealmentMissChance(attacker, this), 0, 100);
         }
 
         return Mathf.Clamp(effect.MissChance, 0, 100);
@@ -6717,6 +6720,9 @@ public class CharacterController : MonoBehaviour
     public bool CanSee(CharacterController target, bool incomingIsRangedAttack = false)
     {
         if (target == null || target.Stats == null || target.Stats.IsDead)
+            return false;
+
+        if (DarknessAreaEffect.BlocksVision(this, target))
             return false;
 
         if (!target.HasTotalConcealment(this, incomingIsRangedAttack))

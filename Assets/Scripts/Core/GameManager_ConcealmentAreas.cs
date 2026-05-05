@@ -18,8 +18,9 @@ public partial class GameManager
 
         bool isObscuringMist = spell.SpellId == SpellNames.OBSCURING_MIST;
         bool isFogCloud = spell.SpellId == SpellNames.FOG_CLOUD;
+        bool isDarkness = spell.SpellId == SpellNames.DARKNESS;
         bool isGustOfWind = spell.SpellId == SpellNames.GUST_OF_WIND;
-        if (!isObscuringMist && !isFogCloud && !isGustOfWind)
+        if (!isObscuringMist && !isFogCloud && !isDarkness && !isGustOfWind)
             return false;
 
         int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
@@ -61,18 +62,29 @@ public partial class GameManager
 
         if (isObscuringMist)
             CreateObscuringMistArea(centerPosition, durationRounds, casterLevel, caster);
-        else
+        else if (isFogCloud)
             CreateFogCloudArea(centerPosition, durationRounds, casterLevel, caster);
+        else
+            CreateDarknessArea(centerPosition, durationRounds, casterLevel, caster);
 
         var sb = new StringBuilder();
-        string spellName = isObscuringMist ? "Obscuring Mist" : "Fog Cloud";
+        string spellName = isObscuringMist ? "Obscuring Mist" : (isFogCloud ? "Fog Cloud" : "Darkness");
         sb.AppendLine("═══════════════════════════════════");
         sb.AppendLine($"✨ {caster.Stats.CharacterName} casts {spellName}!");
         sb.AppendLine($"  Area: 20-ft radius spread ({aoeCells.Count} squares)");
         sb.AppendLine($"  Duration: {durationRounds} rounds");
         if (usedFallbackDuration)
             sb.AppendLine("  ⚠ Duration fallback was used (definition returned non-positive duration).");
-        sb.AppendLine("  Effect: Creatures inside have concealment (20% miss chance)");
+
+        if (isDarkness)
+        {
+            sb.AppendLine("  Effect: Magical darkness blocks vision into, out of, and through the area");
+            sb.AppendLine("  Effect: Creatures in darkness have concealment (20% miss chance)");
+        }
+        else
+        {
+            sb.AppendLine("  Effect: Creatures inside have concealment (20% miss chance)");
+        }
 
         if (targets != null && targets.Count > 0)
         {
@@ -116,6 +128,18 @@ public partial class GameManager
         fog.RoundsRemaining = Mathf.Max(1, durationRounds);
         fog.CasterLevel = Mathf.Max(1, casterLevel);
         fog.Caster = caster;
+    }
+
+    public void CreateDarknessArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
+    {
+        GameObject darknessObject = new GameObject("Darkness_Area");
+        darknessObject.transform.position = centerPosition;
+
+        DarknessAreaEffect darkness = darknessObject.AddComponent<DarknessAreaEffect>();
+        darkness.CenterPosition = centerPosition;
+        darkness.RoundsRemaining = Mathf.Max(1, durationRounds);
+        darkness.CasterLevel = Mathf.Max(1, casterLevel);
+        darkness.Caster = caster;
     }
 
     private Vector3 GetAreaCenterWorldPosition(HashSet<Vector2Int> cells, Vector2Int fallbackCell)
