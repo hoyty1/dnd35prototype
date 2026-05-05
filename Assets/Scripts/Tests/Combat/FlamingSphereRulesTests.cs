@@ -301,10 +301,12 @@ public static class FlamingSphereRulesTests
             int enemy2HpAfter = ctx.Enemy2.Stats.CurrentHP;
 
             Assert(created && sphere != null, "Movement test setup created Flaming Sphere");
+            Vector2Int expectedStopCell = new Vector2Int(Enemy2Start.x - 1, Enemy2Start.y);
+
             Assert(moved, "Sphere can be moved between two stationary enemies");
-            Assert(sphere != null && sphere.GridPosition == Enemy2Start,
-                "Sphere ends movement on second enemy position",
-                $"expected={Enemy2Start}, actual={(sphere != null ? sphere.GridPosition.ToString() : "<null>")}");
+            Assert(sphere != null && sphere.GridPosition == expectedStopCell,
+                "Sphere stops one square before second enemy on impact",
+                $"expected={expectedStopCell}, actual={(sphere != null ? sphere.GridPosition.ToString() : "<null>")}");
             Assert(sphere != null && sphere.MovedThisTurn, "Sphere marks moved state after reposition");
             Assert(enemy2HpAfter <= enemy2HpBefore,
                 "Second enemy is impacted or successfully negates damage on contact",

@@ -440,6 +440,7 @@ public class LevelUpUI : MonoBehaviour
         textRect.sizeDelta = new Vector2(0f, preferredHeight);
 
         TextMeshProUGUI tmp = textObj.GetComponent<TextMeshProUGUI>();
+        EnsureTMPFontAsset(tmp);
         tmp.text = text;
         tmp.fontSize = fontSize + 2;
         tmp.fontStyle = style;
@@ -490,11 +491,49 @@ public class LevelUpUI : MonoBehaviour
         textRect.offsetMax = new Vector2(-10f, -5f);
 
         TextMeshProUGUI text = textObj.GetComponent<TextMeshProUGUI>();
+        EnsureTMPFontAsset(text);
         text.text = label;
         text.fontSize = 16;
         text.fontStyle = FontStyles.Bold;
         text.alignment = TextAlignmentOptions.Center;
         text.color = Color.white;
         text.enableWordWrapping = true;
+    }
+
+    private static TMP_FontAsset _cachedTMPFontAsset;
+
+    private static void EnsureTMPFontAsset(TMP_Text text)
+    {
+        if (text == null || text.font != null)
+            return;
+
+        TMP_FontAsset fontAsset = ResolveTMPFontAsset();
+        if (fontAsset != null)
+            text.font = fontAsset;
+    }
+
+    private static TMP_FontAsset ResolveTMPFontAsset()
+    {
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        _cachedTMPFontAsset = TMP_Settings.defaultFontAsset;
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        _cachedTMPFontAsset = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        Font fallbackFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (fallbackFont == null)
+            fallbackFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (fallbackFont == null)
+            fallbackFont = Font.CreateDynamicFontFromOSFont("Arial", 16);
+
+        if (fallbackFont != null)
+            _cachedTMPFontAsset = TMP_FontAsset.CreateFontAsset(fallbackFont);
+
+        return _cachedTMPFontAsset;
     }
 }

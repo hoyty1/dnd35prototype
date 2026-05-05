@@ -574,6 +574,7 @@ public class LootCollectionUI : MonoBehaviour
         le.preferredHeight = 60f;
 
         TextMeshProUGUI text = noLoot.GetComponent<TextMeshProUGUI>();
+        EnsureTMPFontAsset(text);
         text.fontSize = 16;
         text.fontStyle = FontStyles.Italic;
         text.color = new Color(0.82f, 0.88f, 0.97f);
@@ -819,6 +820,7 @@ public class LootCollectionUI : MonoBehaviour
         le.preferredHeight = preferredHeight;
 
         TextMeshProUGUI text = go.GetComponent<TextMeshProUGUI>();
+        EnsureTMPFontAsset(text);
         text.text = content;
         text.fontSize = fontSize;
         text.fontStyle = fontStyle;
@@ -828,6 +830,43 @@ public class LootCollectionUI : MonoBehaviour
         text.overflowMode = useEllipsis ? TextOverflowModes.Ellipsis : TextOverflowModes.Overflow;
 
         return text;
+    }
+
+    private static TMP_FontAsset _cachedTMPFontAsset;
+
+    private static void EnsureTMPFontAsset(TMP_Text text)
+    {
+        if (text == null || text.font != null)
+            return;
+
+        TMP_FontAsset fontAsset = ResolveTMPFontAsset();
+        if (fontAsset != null)
+            text.font = fontAsset;
+    }
+
+    private static TMP_FontAsset ResolveTMPFontAsset()
+    {
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        _cachedTMPFontAsset = TMP_Settings.defaultFontAsset;
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        _cachedTMPFontAsset = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        Font fallbackFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (fallbackFont == null)
+            fallbackFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (fallbackFont == null)
+            fallbackFont = Font.CreateDynamicFontFromOSFont("Arial", 16);
+
+        if (fallbackFont != null)
+            _cachedTMPFontAsset = TMP_FontAsset.CreateFontAsset(fallbackFont);
+
+        return _cachedTMPFontAsset;
     }
 
     private Button CreateFooterButton(Transform parent, string label, Color color, Action onClick)

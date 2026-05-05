@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -941,10 +942,54 @@ public class ActionButtonPanel : MonoBehaviour
 
         if (!string.IsNullOrEmpty(state.Label))
         {
-            Text label = button.GetComponentInChildren<Text>();
-            if (label != null)
-                label.text = state.Label;
+            Text legacyLabel = button.GetComponentInChildren<Text>();
+            if (legacyLabel != null)
+                legacyLabel.text = state.Label;
+
+            TMP_Text tmpLabel = button.GetComponentInChildren<TMP_Text>();
+            if (tmpLabel != null)
+            {
+                EnsureTMPFontAsset(tmpLabel);
+                tmpLabel.text = state.Label;
+            }
         }
+    }
+
+    private static TMP_FontAsset _cachedTMPFontAsset;
+
+    private static void EnsureTMPFontAsset(TMP_Text text)
+    {
+        if (text == null || text.font != null)
+            return;
+
+        TMP_FontAsset fontAsset = ResolveTMPFontAsset();
+        if (fontAsset != null)
+            text.font = fontAsset;
+    }
+
+    private static TMP_FontAsset ResolveTMPFontAsset()
+    {
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        _cachedTMPFontAsset = TMP_Settings.defaultFontAsset;
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        _cachedTMPFontAsset = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        Font fallbackFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (fallbackFont == null)
+            fallbackFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (fallbackFont == null)
+            fallbackFont = Font.CreateDynamicFontFromOSFont("Arial", 16);
+
+        if (fallbackFont != null)
+            _cachedTMPFontAsset = TMP_FontAsset.CreateFontAsset(fallbackFont);
+
+        return _cachedTMPFontAsset;
     }
 
     private void UpdateRageStatus(CharacterController pc)

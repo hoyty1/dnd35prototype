@@ -298,6 +298,7 @@ public class CombatEndXPUI : MonoBehaviour
         textRect.offsetMax = Vector2.zero;
 
         TextMeshProUGUI buttonText = textObj.GetComponent<TextMeshProUGUI>();
+        EnsureTMPFontAsset(buttonText);
         buttonText.text = "Continue";
         buttonText.fontSize = 16;
         buttonText.fontStyle = FontStyles.Bold;
@@ -425,6 +426,7 @@ public class CombatEndXPUI : MonoBehaviour
         layoutElement.flexibleHeight = 0f;
 
         TextMeshProUGUI text = textObj.GetComponent<TextMeshProUGUI>();
+        EnsureTMPFontAsset(text);
         text.text = message;
         text.fontSize = fontSize + 2;
         text.fontStyle = ConvertFontStyle(style);
@@ -434,6 +436,43 @@ public class CombatEndXPUI : MonoBehaviour
         text.overflowMode = TextOverflowModes.Truncate;
 
         return textObj;
+    }
+
+    private static TMP_FontAsset _cachedTMPFontAsset;
+
+    private static void EnsureTMPFontAsset(TMP_Text text)
+    {
+        if (text == null || text.font != null)
+            return;
+
+        TMP_FontAsset fontAsset = ResolveTMPFontAsset();
+        if (fontAsset != null)
+            text.font = fontAsset;
+    }
+
+    private static TMP_FontAsset ResolveTMPFontAsset()
+    {
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        _cachedTMPFontAsset = TMP_Settings.defaultFontAsset;
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        _cachedTMPFontAsset = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+        if (_cachedTMPFontAsset != null)
+            return _cachedTMPFontAsset;
+
+        Font fallbackFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (fallbackFont == null)
+            fallbackFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (fallbackFont == null)
+            fallbackFont = Font.CreateDynamicFontFromOSFont("Arial", 16);
+
+        if (fallbackFont != null)
+            _cachedTMPFontAsset = TMP_FontAsset.CreateFontAsset(fallbackFont);
+
+        return _cachedTMPFontAsset;
     }
 
     private static FontStyles ConvertFontStyle(FontStyle style)

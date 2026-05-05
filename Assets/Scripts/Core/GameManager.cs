@@ -16909,10 +16909,13 @@ public partial class GameManager : MonoBehaviour
 
     private void UpdatePathPreview()
     {
-        // Only show preview during movement sub-phase
-        if (_pathPreview == null) return;
+        if (_pathPreview == null)
+            return;
 
-        if (CurrentSubPhase != PlayerSubPhase.Moving || ActivePC == null)
+        bool isMovementPreview = CurrentSubPhase == PlayerSubPhase.Moving && ActivePC != null;
+        bool isFlamingSpherePreview = CurrentSubPhase == PlayerSubPhase.SelectingFlamingSphereTarget && _selectedFlamingSphereForControl != null;
+
+        if (!isMovementPreview && !isFlamingSpherePreview)
         {
             if (_pathPreview.IsVisible) _pathPreview.HidePath();
             return;
@@ -16938,7 +16941,6 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        // Don't show preview if pointer is over UI
         if (_inputService != null && _inputService.IsPointerOverUI())
         {
             if (_pathPreview.IsVisible) _pathPreview.HidePath();
@@ -16950,10 +16952,9 @@ public partial class GameManager : MonoBehaviour
             : (Vector2)_mainCam.ScreenToWorldPoint(Input.mousePosition);
         Vector2Int gridCoord = SquareGridUtils.WorldToGrid(worldPoint);
 
-        // Skip recalculation if hovering over the same cell
-        if (!_pathPreview.HasCoordChanged(gridCoord)) return;
+        if (!_pathPreview.HasCoordChanged(gridCoord))
+            return;
 
-        // Check if the hovered cell is a valid movement destination
         SquareCell hoveredCell = Grid.GetCell(gridCoord);
         if (hoveredCell == null || !_highlightedCells.Contains(hoveredCell))
         {
@@ -16961,27 +16962,39 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        // Don't show path to the character's own cell
+        if (isFlamingSpherePreview)
+        {
+            FlamingSphereEntity sphere = _selectedFlamingSphereForControl;
+            if (sphere == null || gridCoord == sphere.GridPosition)
+            {
+                _pathPreview.HidePath();
+                return;
+            }
+
+            if (!TryBuildFlamingSphereTravelPath(sphere, gridCoord, out List<Vector2Int> spherePath, out _)
+                || spherePath == null
+                || spherePath.Count <= 0)
+            {
+                _pathPreview.HidePath();
+                return;
+            }
+
+            _pathPreview.ShowPath(sphere.GridPosition, spherePath, null);
+            return;
+        }
+
         CharacterController pc = ActivePC;
-        if (gridCoord == pc.GridPosition)
+        if (pc == null || gridCoord == pc.GridPosition)
         {
             _pathPreview.HidePath();
             return;
         }
 
         bool previewAllowThroughEnemies = _isSelectingOverrunDestination;
-
-        // Build threatened squares for AoO-aware pathfinding.
-        // Overrun destination preview must show the true overrun path (through enemies),
-        // so we intentionally disable threat-avoidance weighting in that mode.
         HashSet<Vector2Int> threatenedSquares = previewAllowThroughEnemies
             ? null
             : GetPreviewThreatenedSquares(pc);
 
-        // Use AoO-aware A* pathfinder.
-        // - Normal movement preview: avoids threats/enemies when possible.
-        // - Overrun destination preview: allows moving through enemies.
-        // Grapple move selection is capped at half speed; post-grapple free reposition is adjacent only.
         int previewMaxRange = _isGrappleMoveSelection
             ? Mathf.Max(1, _grappleMoveMaxRangeSquares)
             : (_isFreeAdjacentGrappleMoveSelection ? 1 : (_isSelectingWithdraw ? GetWithdrawMoveRangeSquares(pc) : GetCurrentMoveRangeSquares(pc)));
@@ -16999,15 +17012,12 @@ public partial class GameManager : MonoBehaviour
 
         if (pathResult.Path != null && pathResult.Path.Count > 0)
         {
-            // Build per-segment threat flags for visual feedback.
-            // Overrun mode intentionally disables threat-avoidance, so threatenedSquares may be null.
             var segmentThreatened = new List<bool>();
             bool hasThreatData = threatenedSquares != null;
             Vector2Int prev = pc.GridPosition;
             int segmentIndex = 0;
             foreach (var step in pathResult.Path)
             {
-                // A segment is "dangerous" if we're leaving a threatened square.
                 bool leaving = hasThreatData && threatenedSquares.Contains(prev);
                 if (_isSelectingWithdraw && segmentIndex == 0)
                     leaving = false;
@@ -17098,10 +17108,13 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     private void UpdateHoverMarker()
     {
-        if (_hoverMarker == null) return;
+        if (_hoverMarker == null)
+            return;
 
-        // Only show during movement sub-phase
-        if (CurrentSubPhase != PlayerSubPhase.Moving || ActivePC == null)
+        bool isMovementMarker = CurrentSubPhase == PlayerSubPhase.Moving && ActivePC != null;
+        bool isFlamingSphereMarker = CurrentSubPhase == PlayerSubPhase.SelectingFlamingSphereTarget && _selectedFlamingSphereForControl != null;
+
+        if (!isMovementMarker && !isFlamingSphereMarker)
         {
             if (_hoverMarker.IsVisible)
             {
@@ -17111,9 +17124,9 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        if (_mainCam == null) return;
+        if (_mainCam == null)
+            return;
 
-        // Hide if pointer is over UI
         if (_inputService != null && _inputService.IsPointerOverUI())
         {
             if (_hoverMarker.IsVisible)
@@ -17129,11 +17142,11 @@ public partial class GameManager : MonoBehaviour
             : (Vector2)_mainCam.ScreenToWorldPoint(Input.mousePosition);
         Vector2Int gridCoord = SquareGridUtils.WorldToGrid(worldPoint);
 
-        // Skip if same cell as last frame
-        if (gridCoord == _lastHoverMarkerCoord) return;
+        if (gridCoord == _lastHoverMarkerCoord)
+            return;
+
         _lastHoverMarkerCoord = gridCoord;
 
-        // Check if the hovered cell is a valid grid cell
         SquareCell hoveredCell = Grid.GetCell(gridCoord);
         if (hoveredCell == null)
         {
@@ -17141,9 +17154,23 @@ public partial class GameManager : MonoBehaviour
             return;
         }
 
-        // Determine color: white for valid movement destinations, red-ish for invalid
-        bool isValidDestination = _highlightedCells.Contains(hoveredCell)
-                                  && gridCoord != ActivePC.GridPosition;
+        bool isValidDestination;
+        if (isFlamingSphereMarker)
+        {
+            FlamingSphereEntity sphere = _selectedFlamingSphereForControl;
+            isValidDestination = sphere != null
+                && _highlightedCells.Contains(hoveredCell)
+                && gridCoord != sphere.GridPosition
+                && TryBuildFlamingSphereTravelPath(sphere, gridCoord, out List<Vector2Int> spherePath, out _)
+                && spherePath != null
+                && spherePath.Count > 0;
+        }
+        else
+        {
+            isValidDestination = _highlightedCells.Contains(hoveredCell)
+                                 && gridCoord != ActivePC.GridPosition;
+        }
+
         Color markerColor = isValidDestination
             ? Color.white
             : new Color(1f, 0.3f, 0.3f, 0.6f);

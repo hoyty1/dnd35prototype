@@ -253,22 +253,32 @@ public partial class GameManager
 
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
+        _pathPreview?.HidePath();
 
-        foreach (SquareCell gridCell in GetCellsInChebyshevRange(sphere.GridPosition, sphere.MoveRangeSquares, includeCenter: true))
+        SquareCell originCell = Grid != null ? Grid.GetCell(sphere.GridPosition) : null;
+        if (originCell != null)
+        {
+            originCell.SetHighlight(HighlightType.Selected);
+            _highlightedCells.Add(originCell);
+        }
+
+        foreach (SquareCell gridCell in GetCellsInChebyshevRange(sphere.GridPosition, sphere.MoveRangeSquares, includeCenter: false))
         {
             if (gridCell == null)
                 continue;
 
-            if (gridCell.Coords == sphere.GridPosition)
-                gridCell.SetHighlight(HighlightType.Selected);
-            else
-                gridCell.SetHighlight(HighlightType.Move);
+            if (!TryBuildFlamingSphereTravelPath(sphere, gridCell.Coords, out List<Vector2Int> previewPath, out _))
+                continue;
 
+            if (previewPath == null || previewPath.Count <= 0)
+                continue;
+
+            gridCell.SetHighlight(HighlightType.Move);
             if (!_highlightedCells.Contains(gridCell))
                 _highlightedCells.Add(gridCell);
         }
 
-        if (_highlightedCells.Count == 0)
+        if (_highlightedCells.Count <= 1)
         {
             CombatUI?.ShowCombatLog("⚠ No valid control destinations for Flaming Sphere.");
             CancelFlamingSphereControlSelection(showCancelLog: false);
@@ -315,6 +325,8 @@ public partial class GameManager
         _selectedFlamingSphereForControl = null;
         Grid.ClearAllHighlights();
         _highlightedCells.Clear();
+        _pathPreview?.HidePath();
+        _hoverMarker?.Hide();
 
         if (showCancelLog && caster != null && caster.Stats != null)
             CombatUI?.ShowCombatLog($"↩ {caster.Stats.CharacterName} cancels Flaming Sphere control.");
@@ -345,30 +357,13 @@ public partial class GameManager
             return false;
         }
 
-        List<Vector2Int> line = BuildBresenhamPath(sphere.GridPosition, destination);
-        if (line.Count <= 1)
+        if (!TryBuildFlamingSphereTravelPath(sphere, destination, out List<Vector2Int> travelPath, out CharacterController hitTarget))
             return false;
 
-        int maxSteps = Mathf.Max(1, sphere.MoveRangeSquares);
-        Vector2Int finalPos = sphere.GridPosition;
-        CharacterController hitTarget = null;
+        if (travelPath == null || travelPath.Count <= 0)
+            return false;
 
-        for (int i = 1; i < line.Count && i <= maxSteps; i++)
-        {
-            Vector2Int step = line[i];
-            SquareCell stepCell = Grid != null ? Grid.GetCell(step) : null;
-            if (stepCell == null)
-                break;
-
-            finalPos = step;
-            CharacterController occupant = stepCell.Occupant;
-            if (occupant != null && occupant.Stats != null && !occupant.Stats.IsDead)
-            {
-                hitTarget = occupant;
-                break;
-            }
-        }
-
+        Vector2Int finalPos = travelPath[travelPath.Count - 1];
         sphere.SetGridPosition(finalPos);
         sphere.MovedThisTurn = true;
         sphere.WarnedNotMovedThisTurn = false;
@@ -394,6 +389,101 @@ public partial class GameManager
 
         UpdateAllStatsUI();
         return true;
+    }
+
+    private bool TryBuildFlamingSphereTravelPath(
+        FlamingSphereEntity sphere,
+        Vector2Int requestedDestination,
+        out List<Vector2Int> path,
+        out CharacterController hitTarget)
+    {
+        path = null;
+        hitTarget = null;
+
+        if (sphere == null || Grid == null)
+            return false;
+
+        Vector2Int start = sphere.GridPosition;
+        if (requestedDestination == start)
+            return false;
+
+        CharacterController destinationOccupant = GetLivingCharacterAtCell(requestedDestination);
+        int maxRange = Mathf.Max(1, sphere.MoveRangeSquares);
+
+        if (destinationOccupant != null)
+        {
+            if (!TryGetBestFlamingSpherePathToAdjacentTarget(start, requestedDestination, maxRange, out path))
+                return false;
+
+            hitTarget = destinationOccupant;
+            return path != null && path.Count > 0;
+        }
+
+        if (!TryGetBestFlamingSpherePath(start, requestedDestination, maxRange, out path))
+            return false;
+
+        return path != null && path.Count > 0;
+    }
+
+    private bool TryGetBestFlamingSpherePath(Vector2Int start, Vector2Int destination, int maxRange, out List<Vector2Int> path)
+    {
+        path = null;
+
+        AoOPathResult pathResult = Grid.FindPathAoOAware(
+            start,
+            destination,
+            threatenedSquares: null,
+            maxRange: maxRange,
+            moverSizeSquares: 1,
+            mover: null,
+            allowThroughAllies: false,
+            allowThroughEnemies: false);
+
+        if (!IsPathResultReachDestination(pathResult, destination))
+            return false;
+
+        path = pathResult.Path;
+        return path != null && path.Count > 0;
+    }
+
+    private bool TryGetBestFlamingSpherePathToAdjacentTarget(Vector2Int start, Vector2Int occupiedTargetCell, int maxRange, out List<Vector2Int> bestPath)
+    {
+        bestPath = null;
+        int bestCost = int.MaxValue;
+        int bestSteps = int.MaxValue;
+
+        Vector2Int[] neighbors = SquareGridUtils.GetNeighbors(occupiedTargetCell);
+        for (int i = 0; i < neighbors.Length; i++)
+        {
+            Vector2Int neighbor = neighbors[i];
+            if (neighbor == start)
+                continue;
+
+            if (Grid.GetCell(neighbor) == null)
+                continue;
+
+            if (!TryGetBestFlamingSpherePath(start, neighbor, maxRange, out List<Vector2Int> candidatePath))
+                continue;
+
+            int cost = SquareGridUtils.CalculatePathCost(start, candidatePath);
+            int steps = candidatePath != null ? candidatePath.Count : int.MaxValue;
+            if (cost < bestCost || (cost == bestCost && steps < bestSteps))
+            {
+                bestCost = cost;
+                bestSteps = steps;
+                bestPath = candidatePath;
+            }
+        }
+
+        return bestPath != null && bestPath.Count > 0;
+    }
+
+    private static bool IsPathResultReachDestination(AoOPathResult pathResult, Vector2Int destination)
+    {
+        if (pathResult == null || pathResult.Path == null || pathResult.Path.Count == 0)
+            return false;
+
+        return pathResult.Path[pathResult.Path.Count - 1] == destination;
     }
 
     private SpellResult ResolveFlamingSphereImpactDamage(CharacterController caster, FlamingSphereEntity sphere, CharacterController target, SpellData spell, string context)
