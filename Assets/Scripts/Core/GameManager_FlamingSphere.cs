@@ -262,7 +262,7 @@ public partial class GameManager
             if (gridCell.Coords == sphere.GridPosition)
                 gridCell.SetHighlight(HighlightType.Selected);
             else
-                gridCell.SetHighlight(HighlightType.Movement);
+                gridCell.SetHighlight(HighlightType.Move);
 
             if (!_highlightedCells.Contains(gridCell))
                 _highlightedCells.Add(gridCell);
