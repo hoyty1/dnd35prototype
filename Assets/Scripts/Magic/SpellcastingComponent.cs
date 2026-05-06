@@ -91,10 +91,47 @@ public class SpellcastingComponent : MonoBehaviour
 
     private static bool IsDruidClass(CharacterStats stats)
     {
-        return stats != null && string.Equals(stats.CharacterClass, "Druid", System.StringComparison.OrdinalIgnoreCase);
+        return stats != null && stats.HasClass("Druid");
     }
 
     private bool UsesPreparedSlotSystem => Stats != null && (Stats.IsWizard || Stats.IsCleric || IsDruidClass(Stats));
+
+    private string GetActivePreparedCasterClass(CharacterStats stats)
+    {
+        if (stats == null)
+            return string.Empty;
+
+        string currentClass = stats.CharacterClass ?? string.Empty;
+        if (string.Equals(currentClass, "Wizard", System.StringComparison.OrdinalIgnoreCase)
+            || string.Equals(currentClass, "Cleric", System.StringComparison.OrdinalIgnoreCase)
+            || string.Equals(currentClass, "Druid", System.StringComparison.OrdinalIgnoreCase))
+            return currentClass;
+
+        string[] preparedClasses = { "Wizard", "Cleric", "Druid" };
+        string best = string.Empty;
+        int bestLevel = -1;
+        for (int i = 0; i < preparedClasses.Length; i++)
+        {
+            int classLevel = stats.GetClassLevel(preparedClasses[i]);
+            if (classLevel > bestLevel)
+            {
+                best = preparedClasses[i];
+                bestLevel = classLevel;
+            }
+        }
+
+        return bestLevel > 0 ? best : string.Empty;
+    }
+
+    private int GetActivePreparedCasterLevel(CharacterStats stats, string className)
+    {
+        if (stats == null || string.IsNullOrWhiteSpace(className))
+            return 0;
+
+        int classLevel = stats.GetClassLevel(className);
+        return Mathf.Max(1, classLevel);
+    }
+
 
     private void SyncDomainsFromStats()
     {
@@ -151,21 +188,24 @@ public class SpellcastingComponent : MonoBehaviour
         SyncDomainsFromStats();
         SpellDatabase.Init();
 
-        if (stats.IsWizard)
+        string activeCasterClass = GetActivePreparedCasterClass(stats);
+        int activeCasterLevel = GetActivePreparedCasterLevel(stats, activeCasterClass);
+
+        if (string.Equals(activeCasterClass, "Wizard", System.StringComparison.OrdinalIgnoreCase))
         {
-            InitWizard(stats.Level);
+            InitWizard(activeCasterLevel);
         }
-        else if (stats.IsCleric)
+        else if (string.Equals(activeCasterClass, "Cleric", System.StringComparison.OrdinalIgnoreCase))
         {
-            InitCleric(stats.Level);
+            InitCleric(activeCasterLevel);
         }
-        else if (IsDruidClass(stats))
+        else if (string.Equals(activeCasterClass, "Druid", System.StringComparison.OrdinalIgnoreCase))
         {
-            InitDruid(stats.Level);
+            InitDruid(activeCasterLevel);
         }
 
         // Prepared slot-based casters use the same preparation flow.
-        if (stats.IsWizard)
+        if (string.Equals(activeCasterClass, "Wizard", System.StringComparison.OrdinalIgnoreCase))
         {
             // Use creation preparation data if available, otherwise auto-prepare
             if (PreparedSpellSlotIds != null && PreparedSpellSlotIds.Count > 0)
@@ -179,7 +219,7 @@ public class SpellcastingComponent : MonoBehaviour
             }
             SyncPreparedSpellsFromSlots();
         }
-        else if (stats.IsCleric)
+        else if (string.Equals(activeCasterClass, "Cleric", System.StringComparison.OrdinalIgnoreCase))
         {
             // Use creation preparation data if available, otherwise auto-prepare
             if (PreparedSpellSlotIds != null && PreparedSpellSlotIds.Count > 0)
@@ -193,7 +233,7 @@ public class SpellcastingComponent : MonoBehaviour
             }
             SyncPreparedSpellsFromSlots();
         }
-        else if (IsDruidClass(stats))
+        else if (string.Equals(activeCasterClass, "Druid", System.StringComparison.OrdinalIgnoreCase))
         {
             if (PreparedSpellSlotIds != null && PreparedSpellSlotIds.Count > 0)
             {
@@ -209,10 +249,10 @@ public class SpellcastingComponent : MonoBehaviour
 
         ApplyNegativeLevelSlotLoss();
 
-        Debug.Log($"[Spellcasting] {stats.CharacterName} ({stats.CharacterClass}): " +
+        Debug.Log($"[Spellcasting] {stats.CharacterName} ({activeCasterClass}): " +
                   $"{KnownSpells.Count} known, {PreparedSpells.Count} prepared, slots: {GetSlotSummary()}");
 
-        if (stats.IsWizard || stats.IsCleric || IsDruidClass(stats))
+        if (!string.IsNullOrWhiteSpace(activeCasterClass))
         {
             Debug.Log($"[Spellcasting] {stats.CharacterName} slot details: {GetSlotDetails()}");
         }
@@ -336,10 +376,11 @@ public class SpellcastingComponent : MonoBehaviour
         }
 
         string characterName = !string.IsNullOrWhiteSpace(Stats.CharacterName) ? Stats.CharacterName : gameObject.name;
-        int level = Mathf.Max(1, Stats.Level);
+        string activeCasterClass = GetActivePreparedCasterClass(Stats);
+        int level = GetActivePreparedCasterLevel(Stats, activeCasterClass);
         SyncDomainsFromStats();
 
-        Debug.Log($"[Spellcasting] RefreshSpellSlots called for {characterName} ({Stats.CharacterClass}) at level {level}");
+        Debug.Log($"[Spellcasting] RefreshSpellSlots called for {characterName} ({activeCasterClass}) at level {level}");
 
         var previousSlots = SpellSlots
             .Where(slot => slot != null)
@@ -353,9 +394,9 @@ public class SpellcastingComponent : MonoBehaviour
             })
             .ToList();
 
-        if (Stats.IsWizard)
+        if (string.Equals(activeCasterClass, "Wizard", System.StringComparison.OrdinalIgnoreCase))
             SlotsMax = GetWizardSlotsForLevel(level);
-        else if (Stats.IsCleric)
+        else if (string.Equals(activeCasterClass, "Cleric", System.StringComparison.OrdinalIgnoreCase))
             SlotsMax = GetClericSlotsForLevel(level);
         else
             SlotsMax = GetDruidSlotsForLevel(level);
@@ -847,10 +888,10 @@ public class SpellcastingComponent : MonoBehaviour
         if (Stats == null)
             return available;
 
-        string className = Stats.CharacterClass ?? string.Empty;
-        bool useKnownListOnly = Stats.IsWizard ||
-                                className.Equals("Bard", System.StringComparison.OrdinalIgnoreCase) ||
-                                className.Equals("Sorcerer", System.StringComparison.OrdinalIgnoreCase);
+        string className = GetActivePreparedCasterClass(Stats);
+        bool useKnownListOnly = className.Equals("Wizard", System.StringComparison.OrdinalIgnoreCase)
+                                || className.Equals("Bard", System.StringComparison.OrdinalIgnoreCase)
+                                || className.Equals("Sorcerer", System.StringComparison.OrdinalIgnoreCase);
 
         if (useKnownListOnly)
         {
@@ -2011,7 +2052,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public int GetMagicMissileCount()
     {
-        int cl = Stats.Level;
+        int cl = Mathf.Max(1, Stats != null ? Stats.GetCasterLevel("Wizard") : 1);
         return Mathf.Min(5, 1 + (cl - 1) / 2);
     }
 

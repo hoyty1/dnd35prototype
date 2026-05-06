@@ -135,6 +135,7 @@ public static class RaceDatabase
             Stonecunning = true,
             ImmunityToSleep = false,
             AutoSearchSecretDoors = false,
+            FavoredClass = "Fighter",
 
             // Weapon Familiarity: dwarven waraxe and dwarven urgrosh treated as martial
             WeaponFamiliarity = new List<string> { "dwarven_waraxe", "dwarven_urgrosh" },
@@ -205,6 +206,7 @@ public static class RaceDatabase
             Stonecunning = false,
             ImmunityToSleep = true,     // Immune to sleep spells and effects
             AutoSearchSecretDoors = true, // Auto Search within 5 ft of secret door
+            FavoredClass = "Wizard",
 
             // Weapon Familiarity (none for elves)
             WeaponFamiliarity = new List<string>(),

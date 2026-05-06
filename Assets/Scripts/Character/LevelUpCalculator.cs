@@ -1,29 +1,13 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public static class LevelUpCalculator
 {
-    // Skill points per level by class
-    private static readonly Dictionary<string, int> SkillPointsPerLevel = new Dictionary<string, int>
-    {
-        { "Barbarian", 4 },
-        { "Bard", 6 },
-        { "Cleric", 2 },
-        { "Druid", 4 },
-        { "Fighter", 2 },
-        { "Monk", 4 },
-        { "Paladin", 2 },
-        { "Ranger", 6 },
-        { "Rogue", 8 },
-        { "Sorcerer", 2 },
-        { "Wizard", 2 }
-    };
-
     public static LevelUpData CalculateLevelUp(CharacterController character, int oldLevel, int newLevel)
     {
         CharacterStats stats = character != null ? character.Stats : null;
         string characterName = stats != null && !string.IsNullOrWhiteSpace(stats.CharacterName) ? stats.CharacterName : "Unknown";
-        string className = stats != null ? stats.CharacterClass : string.Empty;
 
         Debug.Log($"[LevelUp] Calculating level-up for {characterName}: {oldLevel} → {newLevel}");
 
@@ -40,59 +24,154 @@ public static class LevelUpCalculator
             return data;
         }
 
-        // HP increase (already rolled in CharacterStats.OnLevelUp).
-        // Prefer tracked values from CharacterStats to avoid display drift.
-        int trackedHpGain = stats.LastLevelUpHPGain;
-        if (trackedHpGain > 0)
-        {
-            data.HPGained = trackedHpGain;
-            Debug.Log($"[LevelUp] Using tracked HP gain for {characterName}: +{data.HPGained} (from {stats.LastLevelUpOldMaxHP} to {stats.LastLevelUpNewMaxHP})");
-        }
-        else
-        {
-            // Fallback for legacy characters/saves where tracking is unavailable.
-            int expectedOldHp = GetExpectedHPForLevel(className, oldLevel, stats.CONMod);
-            data.HPGained = Mathf.Max(1, stats.MaxHP - expectedOldHp);
-            Debug.LogWarning($"[LevelUp] Missing tracked HP gain for {characterName}; fallback estimate used: +{data.HPGained}");
-        }
+        stats.EnsureMulticlassDataInitialized();
 
-        // BAB and saves
-        data.OldBAB = CalculateBAB(className, oldLevel);
-        data.NewBAB = CalculateBAB(className, newLevel);
+        ClassRegistry.Init();
+        data.AvailableClasses = ClassRegistry.ClassNames != null
+            ? ClassRegistry.ClassNames.ToList()
+            : new List<string>();
 
-        data.OldFortSave = CalculateFortSave(className, oldLevel, stats.CONMod);
-        data.NewFortSave = CalculateFortSave(className, newLevel, stats.CONMod);
+        if (!string.IsNullOrWhiteSpace(stats.CharacterClass) && !data.AvailableClasses.Contains(stats.CharacterClass))
+            data.AvailableClasses.Add(stats.CharacterClass);
 
-        data.OldRefSave = CalculateRefSave(className, oldLevel, stats.DEXMod);
-        data.NewRefSave = CalculateRefSave(className, newLevel, stats.DEXMod);
+        data.SelectedClassName = !string.IsNullOrWhiteSpace(stats.CharacterClass)
+            ? stats.CharacterClass
+            : (stats.ClassLevels.Count > 0 ? stats.ClassLevels[0].ClassName : "Fighter");
 
-        data.OldWillSave = CalculateWillSave(className, oldLevel, stats.WISMod);
-        data.NewWillSave = CalculateWillSave(className, newLevel, stats.WISMod);
+        data.XPPenaltyActive = stats.HasXPPenalty;
+        data.FavoredClass = stats.FavoredClass;
 
-        // Ability score increase (every 4 levels)
+        // Baseline values before class choice is applied.
+        data.OldBAB = stats.BaseAttackBonus;
+        data.OldFortSave = stats.FortitudeSave;
+        data.OldRefSave = stats.ReflexSave;
+        data.OldWillSave = stats.WillSave;
+
+        RecalculateForSelectedClass(data, data.SelectedClassName);
+
         data.NeedsAbilityIncrease = (newLevel % 4 == 0);
-
-        // Feat selection (every 3 levels, plus fighter bonus)
-        data.NeedsFeat = NeedsFeatAtLevel(className, newLevel);
-
-        // Skill points (per level, min 1)
-        data.SkillPointsToAllocate = GetSkillPoints(className, stats.INTMod);
-
-        // Spell selection for spellcasters
-        data.NeedsSpellSelection = IsSpellcaster(stats);
+        data.NeedsFeat = NeedsFeatAtLevel(newLevel)
+            || (string.Equals(data.SelectedClassName, "Fighter", System.StringComparison.OrdinalIgnoreCase)
+                && FeatDefinitions.GetsFighterBonusFeatAtLevel(newLevel));
 
         Debug.Log($"[LevelUp] Needs: Ability={data.NeedsAbilityIncrease}, Feat={data.NeedsFeat}, Skills={data.SkillPointsToAllocate}, Spells={data.NeedsSpellSelection}");
 
         return data;
     }
 
-    private static int GetExpectedHPForLevel(string className, int level, int conMod)
+    public static void RecalculateForSelectedClass(LevelUpData data, string selectedClassName)
     {
-        int safeLevel = Mathf.Max(1, level);
-        int hitDie = Mathf.Max(4, GetHitDieSize(className));
-        int firstLevel = hitDie + conMod;
-        int laterLevels = Mathf.Max(0, safeLevel - 1) * (((hitDie + 1) / 2) + conMod);
-        return Mathf.Max(1, firstLevel + laterLevels);
+        if (data == null || data.Character == null || data.Character.Stats == null)
+            return;
+
+        CharacterStats stats = data.Character.Stats;
+        string selected = string.IsNullOrWhiteSpace(selectedClassName) ? stats.CharacterClass : selectedClassName;
+        data.SelectedClassName = selected;
+
+        int projectedClassLevel = stats.GetClassLevel(selected) + 1;
+
+        data.HPGained = EstimateHpGain(selected, stats.CONMod);
+        data.NewBAB = stats.BaseAttackBonus + EstimateBabGain(selected, projectedClassLevel);
+        data.NewFortSave = stats.CONMod + EstimateProjectedBestSave(stats, selected, projectedClassLevel, SaveKind.Fort)
+            + stats.FeatFortitudeBonus + stats.MoraleSaveBonus + stats.ConditionFortitudeModifier;
+        data.NewRefSave = stats.DEXMod + EstimateProjectedBestSave(stats, selected, projectedClassLevel, SaveKind.Ref)
+            + stats.FeatReflexBonus + stats.MoraleSaveBonus + stats.ConditionReflexModifier;
+        data.NewWillSave = stats.WISMod + EstimateProjectedBestSave(stats, selected, projectedClassLevel, SaveKind.Will)
+            + stats.FeatWillBonus + stats.RageWillBonus + stats.MoraleSaveBonus + stats.ConditionWillModifier;
+
+        data.SkillPointsToAllocate = Mathf.Max(1, ClassSkillDefinitions.GetBaseSkillPointsPerLevel(selected) + stats.INTMod);
+
+        ClassRegistry.Init();
+        ICharacterClass classDef = ClassRegistry.GetClass(selected);
+        data.NeedsSpellSelection = classDef != null && classDef.IsSpellcaster;
+        data.NeedsFeat = NeedsFeatAtLevel(data.NewLevel)
+            || (string.Equals(selected, "Fighter", System.StringComparison.OrdinalIgnoreCase)
+                && FeatDefinitions.GetsFighterBonusFeatAtLevel(data.NewLevel));
+    }
+
+    private enum SaveKind { Fort, Ref, Will }
+
+    private static int EstimateProjectedBestSave(CharacterStats stats, string selectedClass, int selectedProjectedLevel, SaveKind kind)
+    {
+        ClassRegistry.Init();
+        int best = 0;
+
+        for (int i = 0; i < stats.ClassLevels.Count; i++)
+        {
+            ClassLevelEntry entry = stats.ClassLevels[i];
+            if (entry == null || string.IsNullOrWhiteSpace(entry.ClassName))
+                continue;
+
+            int level = entry.Level;
+            if (string.Equals(entry.ClassName, selectedClass, System.StringComparison.OrdinalIgnoreCase))
+                level = selectedProjectedLevel;
+
+            ICharacterClass classDef = ClassRegistry.GetClass(entry.ClassName);
+            bool isGood = false;
+            if (classDef != null)
+            {
+                isGood = kind == SaveKind.Fort ? classDef.GoodFortitude
+                    : kind == SaveKind.Ref ? classDef.GoodReflex
+                    : classDef.GoodWill;
+            }
+
+            int value = isGood ? (2 + Mathf.Max(1, level) / 2) : (Mathf.Max(1, level) / 3);
+            if (value > best)
+                best = value;
+        }
+
+        // New class not currently present.
+        if (!stats.ClassLevels.Any(c => c != null && string.Equals(c.ClassName, selectedClass, System.StringComparison.OrdinalIgnoreCase)))
+        {
+            ICharacterClass classDef = ClassRegistry.GetClass(selectedClass);
+            bool isGood = false;
+            if (classDef != null)
+                isGood = kind == SaveKind.Fort ? classDef.GoodFortitude : kind == SaveKind.Ref ? classDef.GoodReflex : classDef.GoodWill;
+
+            int candidate = isGood ? 2 : 0;
+            best = Mathf.Max(best, candidate);
+        }
+
+        return best;
+    }
+
+    private static int EstimateBabGain(string className, int newClassLevel)
+    {
+        int oldClassLevel = Mathf.Max(0, newClassLevel - 1);
+        int oldBab = CalculateClassBab(className, oldClassLevel);
+        int newBab = CalculateClassBab(className, newClassLevel);
+        return Mathf.Max(0, newBab - oldBab);
+    }
+
+    private static int CalculateClassBab(string className, int classLevel)
+    {
+        int safeLevel = Mathf.Max(0, classLevel);
+        switch (className)
+        {
+            case "Fighter":
+            case "Barbarian":
+            case "Paladin":
+            case "Ranger":
+                return safeLevel;
+            case "Cleric":
+            case "Druid":
+            case "Monk":
+            case "Rogue":
+                return (safeLevel * 3) / 4;
+            case "Wizard":
+            case "Sorcerer":
+            case "Bard":
+                return safeLevel / 2;
+            default:
+                return safeLevel;
+        }
+    }
+
+    private static int EstimateHpGain(string className, int conMod)
+    {
+        int hitDie = GetHitDieSize(className);
+        int average = Mathf.CeilToInt(hitDie / 2f + 0.5f);
+        return Mathf.Max(1, average + conMod);
     }
 
     private static int GetHitDieSize(string className)
@@ -114,135 +193,9 @@ public static class LevelUpCalculator
         }
     }
 
-    private static int CalculateBAB(string className, int level)
+    private static bool NeedsFeatAtLevel(int level)
     {
         int safeLevel = Mathf.Max(1, level);
-
-        // Full BAB: Fighter, Barbarian, Paladin, Ranger
-        // 3/4 BAB: Cleric, Druid, Monk, Rogue
-        // 1/2 BAB: Wizard, Sorcerer, Bard
-        switch (className)
-        {
-            case "Fighter":
-            case "Barbarian":
-            case "Paladin":
-            case "Ranger":
-                return safeLevel;
-
-            case "Cleric":
-            case "Druid":
-            case "Monk":
-            case "Rogue":
-                return (safeLevel * 3) / 4;
-
-            case "Wizard":
-            case "Sorcerer":
-            case "Bard":
-                return safeLevel / 2;
-
-            default:
-                return safeLevel;
-        }
-    }
-
-    private static int CalculateFortSave(string className, int level, int conMod)
-    {
-        int safeLevel = Mathf.Max(1, level);
-        int baseSave;
-
-        // Good Fort: Barbarian, Cleric, Druid, Fighter, Monk, Paladin, Ranger
-        switch (className)
-        {
-            case "Barbarian":
-            case "Cleric":
-            case "Druid":
-            case "Fighter":
-            case "Monk":
-            case "Paladin":
-            case "Ranger":
-                baseSave = 2 + (safeLevel / 2);
-                break;
-
-            default:
-                baseSave = safeLevel / 3;
-                break;
-        }
-
-        return baseSave + conMod;
-    }
-
-    private static int CalculateRefSave(string className, int level, int dexMod)
-    {
-        int safeLevel = Mathf.Max(1, level);
-        int baseSave;
-
-        // Good Ref: Bard, Monk, Ranger, Rogue
-        switch (className)
-        {
-            case "Bard":
-            case "Monk":
-            case "Ranger":
-            case "Rogue":
-                baseSave = 2 + (safeLevel / 2);
-                break;
-
-            default:
-                baseSave = safeLevel / 3;
-                break;
-        }
-
-        return baseSave + dexMod;
-    }
-
-    private static int CalculateWillSave(string className, int level, int wisMod)
-    {
-        int safeLevel = Mathf.Max(1, level);
-        int baseSave;
-
-        // Good Will: Bard, Cleric, Druid, Monk, Sorcerer, Wizard
-        switch (className)
-        {
-            case "Bard":
-            case "Cleric":
-            case "Druid":
-            case "Monk":
-            case "Sorcerer":
-            case "Wizard":
-                baseSave = 2 + (safeLevel / 2);
-                break;
-
-            default:
-                baseSave = safeLevel / 3;
-                break;
-        }
-
-        return baseSave + wisMod;
-    }
-
-    private static bool NeedsFeatAtLevel(string className, int level)
-    {
-        int safeLevel = Mathf.Max(1, level);
-
-        // All classes: 1, 3, 6, 9, 12, 15, 18
-        bool normalFeat = FeatDefinitions.GetsGeneralFeatAtLevel(safeLevel);
-
-        // Fighter bonus feats: 1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20
-        bool fighterBonus = className == "Fighter" && FeatDefinitions.GetsFighterBonusFeatAtLevel(safeLevel);
-
-        return normalFeat || fighterBonus;
-    }
-
-    private static int GetSkillPoints(string className, int intMod)
-    {
-        int basePoints = SkillPointsPerLevel.ContainsKey(className)
-            ? SkillPointsPerLevel[className]
-            : ClassSkillDefinitions.GetBaseSkillPointsPerLevel(className);
-
-        return Mathf.Max(1, basePoints + intMod);
-    }
-
-    private static bool IsSpellcaster(CharacterStats stats)
-    {
-        return stats != null && stats.IsSpellcaster;
+        return FeatDefinitions.GetsGeneralFeatAtLevel(safeLevel);
     }
 }

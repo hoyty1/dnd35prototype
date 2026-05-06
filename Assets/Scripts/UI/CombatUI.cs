@@ -2199,7 +2199,7 @@ public class CombatUI : MonoBehaviour
 
         int highestLevel = spellComp.GetHighestSlotLevel();
         bool usesSlotSystem = spellComp.Stats != null &&
-            (spellComp.Stats.IsWizard || spellComp.Stats.IsCleric || string.Equals(spellComp.Stats.CharacterClass, "Druid", System.StringComparison.OrdinalIgnoreCase)) &&
+            (spellComp.Stats.IsWizard || spellComp.Stats.IsCleric || spellComp.Stats.HasClass("Druid")) &&
             spellComp.SpellSlots.Count > 0;
 
         for (int level = 0; level <= highestLevel; level++)

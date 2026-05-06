@@ -721,7 +721,7 @@ public class CharacterSheetUI : MonoBehaviour
         AddLine(content, stats.CharacterName, 16, GoldText, FontStyle.Bold, 18);
         string alignDisplay = stats.CharacterAlignment != Alignment.None
             ? $"  {stats.AlignmentName}" : "";
-        AddLine(content, $"Level {stats.Level}  {stats.RaceName}  {stats.CharacterClass}{alignDisplay}", 11, LightText, FontStyle.Normal, 14);
+        AddLine(content, $"Level {stats.Level}  {stats.RaceName}  {stats.ClassSummary}{alignDisplay}", 11, LightText, FontStyle.Normal, 14);
         if (!string.IsNullOrWhiteSpace(stats.ChallengeRating))
             AddLine(content, $"⚔ Challenge Rating: {stats.ChallengeRatingDisplay}", 11, new Color(0.98f, 0.86f, 0.56f), FontStyle.Bold, 14);
 
@@ -737,6 +737,9 @@ public class CharacterSheetUI : MonoBehaviour
         }
 
         AddExperienceSection(content, stats);
+        string favoredClassLabel = string.IsNullOrWhiteSpace(stats.FavoredClass) ? "None" : stats.FavoredClass;
+        string xpPenaltyLabel = stats.HasXPPenalty ? "-20% XP penalty active" : "No XP penalty";
+        AddLine(content, $"Favored Class: {favoredClassLabel} | {xpPenaltyLabel}", 10, stats.HasXPPenalty ? new Color(1f, 0.65f, 0.4f) : new Color(0.6f, 1f, 0.6f), FontStyle.Normal, 13);
         AddSeparator(content);
 
         // === HP / Movement / Initiative ===
@@ -1218,7 +1221,7 @@ public class CharacterSheetUI : MonoBehaviour
             return;
         }
 
-        AddLine(content, $"SPELLS \u2014 {stats.CharacterName} ({stats.CharacterClass})", 12, GoldText, FontStyle.Bold, 16);
+        AddLine(content, $"SPELLS \u2014 {stats.CharacterName} ({stats.ClassSummary})", 12, GoldText, FontStyle.Bold, 16);
 
         // Spell slot summary (now includes ∞ for cantrips)
         if (spellComp.SlotsMax != null)
@@ -1229,7 +1232,7 @@ public class CharacterSheetUI : MonoBehaviour
 
         AddSeparator(content);
 
-        bool usesSlotSystem = (stats.IsWizard || stats.IsCleric || string.Equals(stats.CharacterClass, "Druid", System.StringComparison.OrdinalIgnoreCase)) && spellComp.SpellSlots.Count > 0;
+        bool usesSlotSystem = (stats.IsWizard || stats.IsCleric || stats.HasClass("Druid")) && spellComp.SpellSlots.Count > 0;
 
         if (usesSlotSystem)
         {

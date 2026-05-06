@@ -9,6 +9,10 @@ public class LevelUpData
     public int NewLevel;
     public CharacterController Character;
 
+    // Multiclass selection
+    public string SelectedClassName;
+    public List<string> AvailableClasses = new List<string>();
+
     // HP increase already rolled
     public int HPGained;
 
@@ -27,6 +31,8 @@ public class LevelUpData
     public bool NeedsFeat; // Every 3 levels (or fighter bonus)
     public int SkillPointsToAllocate;
     public bool NeedsSpellSelection; // For spellcasters
+    public bool XPPenaltyActive;
+    public string FavoredClass;
 
     // Choices made
     public string SelectedAbility = ""; // STR, DEX, CON, INT, WIS, CHA

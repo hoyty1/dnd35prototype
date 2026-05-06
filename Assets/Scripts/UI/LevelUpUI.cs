@@ -24,6 +24,7 @@ public class LevelUpUI : MonoBehaviour
 
     private LevelUpStep _currentStep;
     private bool _waitingForExternalFlow;
+    private string _selectedClassForLevelUp;
 
     public void ShowForCharacter(CharacterController character, Action onComplete)
     {
@@ -39,8 +40,10 @@ public class LevelUpUI : MonoBehaviour
             return;
         }
 
-        int newLevel = Mathf.Max(1, character.Stats.Level);
-        int oldLevel = Mathf.Max(1, newLevel - 1);
+        int currentTotalLevel = Mathf.Max(1, character.Stats.Level);
+        int pending = Mathf.Max(0, character.Stats.PendingLevelUps);
+        int oldLevel = pending > 0 ? Mathf.Max(1, currentTotalLevel - pending) : Mathf.Max(1, currentTotalLevel - 1);
+        int newLevel = Mathf.Min(currentTotalLevel, oldLevel + 1);
         LevelUpData levelUpData = LevelUpCalculator.CalculateLevelUp(character, oldLevel, newLevel);
 
         ShowLevelUps(new List<LevelUpData> { levelUpData }, onComplete);
@@ -88,6 +91,7 @@ public class LevelUpUI : MonoBehaviour
         Debug.Log($"[LevelUpUI] Showing level-up for {name}");
 
         _waitingForExternalFlow = false;
+        _selectedClassForLevelUp = _currentLevelUp != null ? _currentLevelUp.SelectedClassName : null;
         _currentStep = LevelUpStep.Summary;
         ShowCurrentStep();
     }
@@ -129,8 +133,21 @@ public class LevelUpUI : MonoBehaviour
     private void CompleteCurrentCharacter()
     {
         string name = GetCharacterName(_currentLevelUp.Character);
-        Debug.Log($"[LevelUpUI] Level-up complete for {name}");
+        CharacterStats stats = _currentLevelUp != null && _currentLevelUp.Character != null ? _currentLevelUp.Character.Stats : null;
 
+        if (stats != null && stats.PendingLevelUps > 0)
+        {
+            int oldLevel = Mathf.Max(1, stats.Level - stats.PendingLevelUps);
+            int newLevel = Mathf.Min(Mathf.Max(1, stats.Level), oldLevel + 1);
+            _currentLevelUp = LevelUpCalculator.CalculateLevelUp(_currentLevelUp.Character, oldLevel, newLevel);
+            _selectedClassForLevelUp = _currentLevelUp.SelectedClassName;
+            Debug.Log($"[LevelUpUI] {name} still has pending level-ups ({stats.PendingLevelUps}). Continuing level-up flow.");
+            _currentStep = LevelUpStep.Summary;
+            ShowCurrentStep();
+            return;
+        }
+
+        Debug.Log($"[LevelUpUI] Level-up complete for {name}");
         _currentIndex++;
         ShowNextCharacter();
     }
@@ -142,10 +159,43 @@ public class LevelUpUI : MonoBehaviour
         CharacterStats stats = _currentLevelUp.Character != null ? _currentLevelUp.Character.Stats : null;
         string characterName = GetCharacterName(_currentLevelUp.Character);
 
+        if (string.IsNullOrWhiteSpace(_selectedClassForLevelUp))
+            _selectedClassForLevelUp = _currentLevelUp.SelectedClassName;
+
+        if (!string.IsNullOrWhiteSpace(_selectedClassForLevelUp))
+            LevelUpCalculator.RecalculateForSelectedClass(_currentLevelUp, _selectedClassForLevelUp);
+
         CreateTitle($"{characterName} - LEVEL {_currentLevelUp.NewLevel}!");
 
         CreateInfoText($"Previous Level: {_currentLevelUp.OldLevel}");
         CreateInfoText($"New Level: {_currentLevelUp.NewLevel}", true, Color.yellow);
+        if (stats != null)
+            CreateInfoText($"Classes: {stats.ClassSummary}", true, new Color(0.75f, 0.9f, 1f));
+
+        if (stats != null)
+        {
+            string favored = string.IsNullOrWhiteSpace(stats.FavoredClass) ? "None" : stats.FavoredClass;
+            string penalty = stats.HasXPPenalty ? "-20% XP penalty ACTIVE" : "No XP penalty";
+            Color penaltyColor = stats.HasXPPenalty ? new Color(1f, 0.6f, 0.35f) : new Color(0.6f, 1f, 0.6f);
+            CreateInfoText($"Favored Class: {favored} | {penalty}", true, penaltyColor);
+        }
+
+        CreateSeparator();
+        CreateInfoText("Choose class to advance:", true, Color.cyan);
+        if (_currentLevelUp.AvailableClasses != null)
+        {
+            for (int i = 0; i < _currentLevelUp.AvailableClasses.Count; i++)
+            {
+                string className = _currentLevelUp.AvailableClasses[i];
+                string selectedClass = className;
+                string label = selectedClass == _selectedClassForLevelUp ? $"★ {selectedClass}" : selectedClass;
+                CreateButton(label, () =>
+                {
+                    _selectedClassForLevelUp = selectedClass;
+                    ShowSummary();
+                }, 34f);
+            }
+        }
 
         CreateSeparator();
 
@@ -174,12 +224,32 @@ public class LevelUpUI : MonoBehaviour
             CreateInfoText($"• Skill Points: {_currentLevelUp.SkillPointsToAllocate} points", true, Color.green);
 
         if (_currentLevelUp.NeedsSpellSelection)
-        {
-            string className = stats != null ? stats.CharacterClass : string.Empty;
-            CreateInfoText($"• Spells: {GetSpellSummaryText(className)}", true, Color.green);
-        }
+            CreateInfoText($"• Spells: {GetSpellSummaryText(_selectedClassForLevelUp)}", true, Color.green);
 
-        CreateButton("Continue", NextStep);
+        CreateButton("Continue", () =>
+        {
+            ApplySelectedClassLevelUp();
+            NextStep();
+        });
+    }
+
+
+    private void ApplySelectedClassLevelUp()
+    {
+        CharacterStats stats = _currentLevelUp != null && _currentLevelUp.Character != null
+            ? _currentLevelUp.Character.Stats
+            : null;
+
+        if (stats == null)
+            return;
+
+        if (stats.PendingLevelUps > 0)
+        {
+            string chosenClass = string.IsNullOrWhiteSpace(_selectedClassForLevelUp) ? stats.CharacterClass : _selectedClassForLevelUp;
+            stats.ApplyPendingLevelUp(chosenClass);
+            _currentLevelUp.SelectedClassName = chosenClass;
+            LevelUpCalculator.RecalculateForSelectedClass(_currentLevelUp, chosenClass);
+        }
     }
 
     private void ShowAbilityIncrease()

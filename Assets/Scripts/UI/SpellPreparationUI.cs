@@ -257,17 +257,17 @@ public class SpellPreparationUI : MonoBehaviour
         if (character == null || character.Stats == null)
             return false;
 
-        string className = character.Stats.CharacterClass ?? string.Empty;
-        if (className.Equals("Sorcerer", StringComparison.OrdinalIgnoreCase))
+        CharacterStats stats = character.Stats;
+        if (stats.HasClass("Sorcerer") && !stats.IsWizard && !stats.IsCleric && !stats.HasClass("Druid"))
             return false;
 
         bool isPreparedCasterClass =
-            className.Equals("Wizard", StringComparison.OrdinalIgnoreCase) ||
-            className.Equals("Cleric", StringComparison.OrdinalIgnoreCase) ||
-            className.Equals("Druid", StringComparison.OrdinalIgnoreCase) ||
-            className.Equals("Bard", StringComparison.OrdinalIgnoreCase) ||
-            className.Equals("Paladin", StringComparison.OrdinalIgnoreCase) ||
-            className.Equals("Ranger", StringComparison.OrdinalIgnoreCase);
+            stats.IsWizard ||
+            stats.IsCleric ||
+            stats.HasClass("Druid") ||
+            stats.HasClass("Bard") ||
+            stats.HasClass("Paladin") ||
+            stats.HasClass("Ranger");
 
         if (!isPreparedCasterClass)
             return false;
@@ -307,7 +307,7 @@ public class SpellPreparationUI : MonoBehaviour
         UpdatePreCombatButtonState();
         Open(spellComp);
 
-        string className = character.Stats != null ? character.Stats.CharacterClass : "Caster";
+        string className = character.Stats != null ? character.Stats.ClassSummary : "Caster";
         _titleText.text = $"SPELL PREPARATION — {character.Stats.CharacterName} ({className}) [{_currentCharacterIndex + 1}/{_preparingCharacters.Count}]";
         OnPreparationConfirmed = OnCurrentCharacterDone;
     }
@@ -1483,7 +1483,7 @@ public class SpellPreparationUI : MonoBehaviour
         {
             if (_spellComp.Stats != null && _spellComp.Stats.IsCleric)
                 _spellComp.AutoPrepareClericSlots();
-            else if (_spellComp.Stats != null && string.Equals(_spellComp.Stats.CharacterClass, "Druid", StringComparison.OrdinalIgnoreCase))
+            else if (_spellComp.Stats != null && _spellComp.Stats.HasClass("Druid"))
                 _spellComp.AutoPrepareDruidSlots();
             else
                 _spellComp.AutoPrepareWizardSlots();

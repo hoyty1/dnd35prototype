@@ -167,7 +167,7 @@ public class CharacterInfoPanel : MonoBehaviour
                 displayName = GameManager.Instance.GetSummonDisplayName(ch);
 
             string crText = string.IsNullOrWhiteSpace(s.ChallengeRating) ? string.Empty : $" | CR {s.ChallengeRatingDisplay}";
-            nameText.text = $"{displayName} (Lv {s.Level} {raceStr}{s.CharacterClass}{crText}){sizeStr}";
+            nameText.text = $"{displayName} (Lv {s.Level} {raceStr}{s.ClassSummary}{crText}){sizeStr}";
             if (ch.CurrentHPState == HPState.Dead)
                 nameText.text += " (DEAD)";
         }

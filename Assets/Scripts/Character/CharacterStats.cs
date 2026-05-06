@@ -80,6 +80,32 @@ public class NaturalAttackDefinition
 }
 
 [System.Serializable]
+public class ClassLevelEntry
+{
+    public string ClassName;
+    public int Level;
+
+    public ClassLevelEntry() { }
+
+    public ClassLevelEntry(string className, int level)
+    {
+        ClassName = className;
+        Level = Mathf.Max(1, level);
+    }
+}
+
+[System.Serializable]
+public class ClassHitPointEntry
+{
+    public string ClassName;
+    public int CharacterLevel;
+    public int HitDie;
+    public int Roll;
+    public int ConstitutionBonus;
+    public int TotalGain;
+}
+
+[System.Serializable]
 public class CharacterStats
 {
     /// <summary>
@@ -91,6 +117,13 @@ public class CharacterStats
     // ========== IDENTITY ==========
     public string CharacterName;
     public int Level;
+
+    [Header("Multiclassing")]
+    public List<ClassLevelEntry> ClassLevels = new List<ClassLevelEntry>();
+    public string FavoredClass;
+    public bool HasXPPenalty;
+    public int PendingLevelUps;
+    public List<ClassHitPointEntry> HitPointGainsByClassLevel = new List<ClassHitPointEntry>();
 
     [Header("Experience")]
     public int ExperiencePoints = 0;
@@ -153,24 +186,6 @@ public class CharacterStats
     /// <summary>Domains display string (e.g., "Healing, Good").</summary>
     public string DomainsDisplay => ChosenDomains.Count > 0 ? string.Join(", ", ChosenDomains) : "None";
 
-    /// <summary>Whether this character is a Rogue (eligible for sneak attack).</summary>
-    public bool IsRogue => CharacterClass == "Rogue";
-
-    /// <summary>Whether this character is a Monk.</summary>
-    public bool IsMonk => CharacterClass == "Monk";
-
-    /// <summary>Whether this character is a Barbarian.</summary>
-    public bool IsBarbarian => CharacterClass == "Barbarian";
-
-    /// <summary>Whether this character is a Wizard.</summary>
-    public bool IsWizard => CharacterClass == "Wizard";
-
-    /// <summary>Whether this character is a Cleric.</summary>
-    public bool IsCleric => CharacterClass == "Cleric";
-
-    /// <summary>Whether this character is a Paladin.</summary>
-    public bool IsPaladin => CharacterClass == "Paladin";
-
     private static readonly HashSet<string> ArcaneSpellcastingClasses = new HashSet<string>
     {
         "Wizard", "Sorcerer", "Bard"
@@ -181,24 +196,150 @@ public class CharacterStats
         "Cleric", "Druid", "Paladin", "Ranger"
     };
 
+    public void EnsureMulticlassDataInitialized()
+    {
+        if (ClassLevels == null)
+            ClassLevels = new List<ClassLevelEntry>();
+
+        if (ClassLevels.Count == 0)
+        {
+            string fallbackClass = !string.IsNullOrWhiteSpace(CharacterClass) ? CharacterClass : "Fighter";
+            ClassLevels.Add(new ClassLevelEntry(fallbackClass, Mathf.Max(1, Level)));
+        }
+
+        for (int i = ClassLevels.Count - 1; i >= 0; i--)
+        {
+            ClassLevelEntry entry = ClassLevels[i];
+            if (entry == null || string.IsNullOrWhiteSpace(entry.ClassName) || entry.Level <= 0)
+                ClassLevels.RemoveAt(i);
+        }
+
+        if (ClassLevels.Count == 0)
+            ClassLevels.Add(new ClassLevelEntry(!string.IsNullOrWhiteSpace(CharacterClass) ? CharacterClass : "Fighter", Mathf.Max(1, Level)));
+
+        int total = 0;
+        for (int i = 0; i < ClassLevels.Count; i++)
+            total += Mathf.Max(1, ClassLevels[i].Level);
+
+        int pending = Mathf.Max(0, PendingLevelUps);
+        Level = Mathf.Max(1, total + pending);
+
+        if (string.IsNullOrWhiteSpace(CharacterClass) || !ClassLevels.Any(c => string.Equals(c.ClassName, CharacterClass, StringComparison.OrdinalIgnoreCase)))
+            CharacterClass = ClassLevels[0].ClassName;
+
+        if (string.IsNullOrWhiteSpace(FavoredClass) && Race != null)
+            FavoredClass = Race.FavoredClass;
+    }
+
+    public int GetClassLevel(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return 0;
+
+        EnsureMulticlassDataInitialized();
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry entry = ClassLevels[i];
+            if (entry != null && string.Equals(entry.ClassName, className, StringComparison.OrdinalIgnoreCase))
+                return Mathf.Max(0, entry.Level);
+        }
+
+        return 0;
+    }
+
+    public bool HasClass(string className) => GetClassLevel(className) > 0;
+
+    public string ClassSummary
+    {
+        get
+        {
+            EnsureMulticlassDataInitialized();
+            return string.Join(" / ", ClassLevels
+                .Where(c => c != null && !string.IsNullOrWhiteSpace(c.ClassName) && c.Level > 0)
+                .Select(c => $"{c.ClassName} {c.Level}"));
+        }
+    }
+
+    /// <summary>Whether this character is a Rogue (eligible for sneak attack).</summary>
+    public bool IsRogue => HasClass("Rogue");
+
+    /// <summary>Whether this character is a Monk.</summary>
+    public bool IsMonk => HasClass("Monk");
+
+    /// <summary>Whether this character is a Barbarian.</summary>
+    public bool IsBarbarian => HasClass("Barbarian");
+
+    /// <summary>Whether this character is a Wizard.</summary>
+    public bool IsWizard => HasClass("Wizard");
+
+    /// <summary>Whether this character is a Cleric.</summary>
+    public bool IsCleric => HasClass("Cleric");
+
+    /// <summary>Whether this character is a Paladin.</summary>
+    public bool IsPaladin => HasClass("Paladin");
+
     /// <summary>Whether this character is a spellcaster. Delegates to ClassRegistry.</summary>
     public bool IsSpellcaster
     {
         get
         {
+            EnsureMulticlassDataInitialized();
             ClassRegistry.Init();
-            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
-            return classDef != null && classDef.IsSpellcaster;
+            for (int i = 0; i < ClassLevels.Count; i++)
+            {
+                ICharacterClass classDef = ClassRegistry.GetClass(ClassLevels[i].ClassName);
+                if (classDef != null && classDef.IsSpellcaster)
+                    return true;
+            }
+
+            return false;
         }
+    }
+
+    private string GetPrimarySpellcastingClass()
+    {
+        EnsureMulticlassDataInitialized();
+        ClassRegistry.Init();
+
+        string bestClass = null;
+        int bestLevel = -1;
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry entry = ClassLevels[i];
+            if (entry == null)
+                continue;
+
+            ICharacterClass classDef = ClassRegistry.GetClass(entry.ClassName);
+            if (classDef == null || !classDef.IsSpellcaster)
+                continue;
+
+            if (entry.Level > bestLevel)
+            {
+                bestClass = entry.ClassName;
+                bestLevel = entry.Level;
+            }
+        }
+
+        return bestClass;
+    }
+
+    public SpellcastingType GetSpellcastingKind(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return SpellcastingType.None;
+
+        if (DivineSpellcastingClasses.Contains(className))
+            return SpellcastingType.Divine;
+
+        if (ArcaneSpellcastingClasses.Contains(className))
+            return SpellcastingType.Arcane;
+
+        return SpellcastingType.Arcane;
     }
 
     /// <summary>
     /// D&D 3.5e spellcasting type used for Arcane Spell Failure handling.
-    /// Future-proof policy:
-    /// - Known divine classes => Divine
-    /// - Known arcane classes => Arcane
-    /// - Any other spellcasting class defaults to Arcane unless explicitly mapped to Divine
-    /// - Non-spellcasters => None
+    /// Uses the highest-level spellcasting class for mixed-class characters.
     /// </summary>
     public SpellcastingType SpellcastingKind
     {
@@ -207,15 +348,8 @@ public class CharacterStats
             if (!IsSpellcaster)
                 return SpellcastingType.None;
 
-            if (DivineSpellcastingClasses.Contains(CharacterClass))
-                return SpellcastingType.Divine;
-
-            if (ArcaneSpellcastingClasses.Contains(CharacterClass))
-                return SpellcastingType.Arcane;
-
-            // Default unknown spellcasting classes to Arcane so ASF still applies unless
-            // explicitly identified as divine by new class rules.
-            return SpellcastingType.Arcane;
+            string className = GetPrimarySpellcastingClass();
+            return GetSpellcastingKind(className);
         }
     }
 
@@ -255,7 +389,7 @@ public class CharacterStats
     {
         get
         {
-            if (!IsMonk || Level < 1) return 0;
+            if (!IsMonk || GetClassLevel("Monk") < 1) return 0;
             if (ArmorBonus > 0) return 0; // Must be unarmored
             return 2; // +10 ft = 2 squares
         }
@@ -265,13 +399,13 @@ public class CharacterStats
     /// Still Mind: +2 bonus on saving throws against enchantment spells and effects.
     /// Gained at Monk level 3.
     /// </summary>
-    public int StillMindBonus => (IsMonk && Level >= 3) ? 2 : 0;
+    public int StillMindBonus => (IsMonk && GetClassLevel("Monk") >= 3) ? 2 : 0;
 
     /// <summary>
     /// Evasion: On a successful Reflex save for half damage, take no damage instead.
     /// Monk gains this at level 2. Rogue also gains at level 2.
     /// </summary>
-    public bool HasEvasion => (IsMonk && Level >= 2) || (IsRogue && Level >= 2);
+    public bool HasEvasion => (IsMonk && GetClassLevel("Monk") >= 2) || (IsRogue && GetClassLevel("Rogue") >= 2);
 
     /// <summary>
     /// Flurry of Blows attack bonuses at current level.
@@ -282,7 +416,8 @@ public class CharacterStats
     {
         if (!IsMonk) return new int[0];
         // Flurry penalty by level: Lv1=-2, Lv2=-1, Lv3+=0
-        int flurryPenalty = Level >= 3 ? 0 : (Level >= 2 ? -1 : -2);
+        int monkLevel = GetClassLevel("Monk");
+        int flurryPenalty = monkLevel >= 3 ? 0 : (monkLevel >= 2 ? -1 : -2);
         int bonus = BaseAttackBonus + STRMod + SizeModifier + flurryPenalty;
         return new int[] { bonus, bonus }; // Two attacks at same bonus
     }
@@ -316,7 +451,7 @@ public class CharacterStats
             if (IsCleric)
                 return Mathf.Max(1, 3 + CHAMod);
 
-            if (IsPaladin && Level >= 4)
+            if (IsPaladin && GetClassLevel("Paladin") >= 4)
                 return Mathf.Max(1, 3 + CHAMod);
 
             return 0;
@@ -494,13 +629,13 @@ public class CharacterStats
     /// Uncanny Dodge: Cannot be caught flat-footed, retains DEX bonus to AC.
     /// Gained at Barbarian level 2.
     /// </summary>
-    public bool HasUncannyDodge => IsBarbarian && Level >= 2;
+    public bool HasUncannyDodge => IsBarbarian && GetClassLevel("Barbarian") >= 2;
 
     /// <summary>
     /// Trap Sense: Bonus on Reflex saves vs traps and dodge bonus to AC vs traps.
     /// +1 at level 3, +2 at level 6, etc.
     /// </summary>
-    public int TrapSenseBonus => (IsBarbarian && Level >= 3) ? 1 + (Level - 3) / 3 : 0;
+    public int TrapSenseBonus => (IsBarbarian && GetClassLevel("Barbarian") >= 3) ? 1 + (GetClassLevel("Barbarian") - 3) / 3 : 0;
 
     /// <summary>
     /// Activate Barbarian Rage. Lasts 3 + CON modifier rounds.
@@ -881,12 +1016,39 @@ public class CharacterStats
 
     // ========== CLASS-BASED SAVE BONUSES (D&D 3.5) ==========
 
-    /// <summary>
-    /// Class-based Fortitude save bonus (good save progression).
-    /// Good: +2 + level/2. Poor: level/3.
-    /// Delegates to ClassRegistry for which saves are good/poor per class.
-    /// At level 3: Good=+3, Poor=+1.
-    /// </summary>
+    private static int CalculateClassBaseAttackBonus(string className, int classLevel)
+    {
+        int safeLevel = Mathf.Max(1, classLevel);
+        switch (className)
+        {
+            case "Fighter":
+            case "Barbarian":
+            case "Paladin":
+            case "Ranger":
+                return safeLevel;
+
+            case "Cleric":
+            case "Druid":
+            case "Monk":
+            case "Rogue":
+                return (safeLevel * 3) / 4;
+
+            case "Wizard":
+            case "Sorcerer":
+            case "Bard":
+                return safeLevel / 2;
+
+            default:
+                return safeLevel;
+        }
+    }
+
+    private static int CalculateClassSaveProgression(bool isGoodSave, int classLevel)
+    {
+        int safeLevel = Mathf.Max(1, classLevel);
+        return isGoodSave ? (2 + safeLevel / 2) : (safeLevel / 3);
+    }
+
     public int ClassFortSave
     {
         get
@@ -894,17 +1056,27 @@ public class CharacterStats
             if (UseCreatureTypeProgression)
                 return ProgressionCalculator.CalculateSave(CreatureFortitudeProgression, GetEffectiveProgressionLevel());
 
+            EnsureMulticlassDataInitialized();
             ClassRegistry.Init();
-            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
-            bool goodFort = classDef != null && classDef.GoodFortitude;
-            return goodFort ? (2 + Level / 2) : (Level / 3);
+
+            int best = 0;
+            for (int i = 0; i < ClassLevels.Count; i++)
+            {
+                ClassLevelEntry classLevel = ClassLevels[i];
+                if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+                    continue;
+
+                ICharacterClass classDef = ClassRegistry.GetClass(classLevel.ClassName);
+                bool goodFort = classDef != null && classDef.GoodFortitude;
+                int value = CalculateClassSaveProgression(goodFort, classLevel.Level);
+                if (value > best)
+                    best = value;
+            }
+
+            return best;
         }
     }
 
-    /// <summary>
-    /// Class-based Reflex save bonus.
-    /// Delegates to ClassRegistry for which saves are good/poor per class.
-    /// </summary>
     public int ClassRefSave
     {
         get
@@ -912,17 +1084,27 @@ public class CharacterStats
             if (UseCreatureTypeProgression)
                 return ProgressionCalculator.CalculateSave(CreatureReflexProgression, GetEffectiveProgressionLevel());
 
+            EnsureMulticlassDataInitialized();
             ClassRegistry.Init();
-            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
-            bool goodRef = classDef != null && classDef.GoodReflex;
-            return goodRef ? (2 + Level / 2) : (Level / 3);
+
+            int best = 0;
+            for (int i = 0; i < ClassLevels.Count; i++)
+            {
+                ClassLevelEntry classLevel = ClassLevels[i];
+                if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+                    continue;
+
+                ICharacterClass classDef = ClassRegistry.GetClass(classLevel.ClassName);
+                bool goodRef = classDef != null && classDef.GoodReflex;
+                int value = CalculateClassSaveProgression(goodRef, classLevel.Level);
+                if (value > best)
+                    best = value;
+            }
+
+            return best;
         }
     }
 
-    /// <summary>
-    /// Class-based Will save bonus.
-    /// Delegates to ClassRegistry for which saves are good/poor per class.
-    /// </summary>
     public int ClassWillSave
     {
         get
@@ -930,10 +1112,24 @@ public class CharacterStats
             if (UseCreatureTypeProgression)
                 return ProgressionCalculator.CalculateSave(CreatureWillProgression, GetEffectiveProgressionLevel());
 
+            EnsureMulticlassDataInitialized();
             ClassRegistry.Init();
-            ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
-            bool goodWill = classDef != null && classDef.GoodWill;
-            return goodWill ? (2 + Level / 2) : (Level / 3);
+
+            int best = 0;
+            for (int i = 0; i < ClassLevels.Count; i++)
+            {
+                ClassLevelEntry classLevel = ClassLevels[i];
+                if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+                    continue;
+
+                ICharacterClass classDef = ClassRegistry.GetClass(classLevel.ClassName);
+                bool goodWill = classDef != null && classDef.GoodWill;
+                int value = CalculateClassSaveProgression(goodWill, classLevel.Level);
+                if (value > best)
+                    best = value;
+            }
+
+            return best;
         }
     }
 
@@ -955,12 +1151,34 @@ public class CharacterStats
 
 
     /// <summary>
-    /// Effective caster level for spellcasting concentration checks.
-    /// In this prototype, caster level tracks character level for spellcasting classes.
+    /// Effective caster level for a class. When className is omitted, returns the highest
+    /// caster level among spellcasting classes for backward compatibility.
     /// </summary>
-    public int GetCasterLevel()
+    public int GetCasterLevel(string className = null)
     {
-        return IsSpellcaster ? Mathf.Max(1, EffectiveCharacterLevel) : 0;
+        if (!IsSpellcaster)
+            return 0;
+
+        EnsureMulticlassDataInitialized();
+
+        if (!string.IsNullOrWhiteSpace(className))
+            return Mathf.Max(0, GetClassLevel(className) - NegativeLevelCount);
+
+        int best = 0;
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry entry = ClassLevels[i];
+            if (entry == null)
+                continue;
+
+            ICharacterClass classDef = ClassRegistry.GetClass(entry.ClassName);
+            if (classDef == null || !classDef.IsSpellcaster)
+                continue;
+
+            best = Mathf.Max(best, Mathf.Max(0, entry.Level - NegativeLevelCount));
+        }
+
+        return best;
     }
 
     /// <summary>
@@ -1049,10 +1267,17 @@ public class CharacterStats
     {
         Feats.Clear();
         ClassRegistry.Init();
-        ICharacterClass classDef = ClassRegistry.GetClass(CharacterClass);
-        if (classDef != null)
+        EnsureMulticlassDataInitialized();
+
+        for (int i = 0; i < ClassLevels.Count; i++)
         {
-            classDef.InitFeats(this);
+            ClassLevelEntry classLevel = ClassLevels[i];
+            if (classLevel == null)
+                continue;
+
+            ICharacterClass classDef = ClassRegistry.GetClass(classLevel.ClassName);
+            if (classDef != null)
+                classDef.InitFeats(this);
         }
     }
 
@@ -1247,7 +1472,22 @@ public class CharacterStats
             if (UseCreatureTypeProgression)
                 return ProgressionCalculator.CalculateBAB(CreatureBABProgression, GetEffectiveProgressionLevel());
 
-            return _baseAttackBonus;
+            EnsureMulticlassDataInitialized();
+
+            if (ClassLevels == null || ClassLevels.Count == 0)
+                return _baseAttackBonus;
+
+            int totalBab = 0;
+            for (int i = 0; i < ClassLevels.Count; i++)
+            {
+                ClassLevelEntry classLevel = ClassLevels[i];
+                if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+                    continue;
+
+                totalBab += CalculateClassBaseAttackBonus(classLevel.ClassName, classLevel.Level);
+            }
+
+            return Mathf.Max(0, totalBab);
         }
         set => _baseAttackBonus = value;
     }
@@ -1817,6 +2057,9 @@ public class CharacterStats
         Level = level;
         HitDice = Mathf.Max(1, level);
         CharacterClass = characterClass;
+        ClassLevels = new List<ClassLevelEntry> { new ClassLevelEntry(characterClass, Mathf.Max(1, level)) };
+        PendingLevelUps = 0;
+        HitPointGainsByClassLevel = new List<ClassHitPointEntry>();
 
         // Explicit defaults before race/template overrides.
         BaseSizeCategory = global::SizeCategory.Medium;
@@ -1846,6 +2089,7 @@ public class CharacterStats
             // Use racial speed (in squares)
             BaseSpeed = Race.BaseSpeedSquares;
             BaseSizeCategory = Race.RaceSize.ToSizeCategory();
+            FavoredClass = Race.FavoredClass;
         }
         else
         {
@@ -1857,6 +2101,7 @@ public class CharacterStats
             CHA = cha;
             BaseSpeed = baseSpeed;
             BaseSizeCategory = global::SizeCategory.Medium;
+            FavoredClass = string.IsNullOrWhiteSpace(FavoredClass) ? "Any" : FavoredClass;
         }
 
         CurrentSizeCategory = BaseSizeCategory;
@@ -1893,8 +2138,24 @@ public class CharacterStats
         if (MaxHP < 1) MaxHP = 1;
         CurrentHP = MaxHP;
 
+        EnsureMulticlassDataInitialized();
+        RecalculateXPPenaltyStatus();
+
         // Auto-grant feats based on class
         InitFeats();
+    }
+
+    public int GetEffectiveXpGain(int rawGain)
+    {
+        int safeRaw = Mathf.Max(0, rawGain);
+        if (safeRaw <= 0)
+            return 0;
+
+        RecalculateXPPenaltyStatus();
+        if (!HasXPPenalty)
+            return safeRaw;
+
+        return Mathf.FloorToInt(safeRaw * 0.8f);
     }
 
     public bool AddExperience(int xp)
@@ -1906,6 +2167,7 @@ public class CharacterStats
             return false;
         }
 
+        int adjustedGain = GetEffectiveXpGain(gain);
         int oldXp = ExperiencePoints;
         int oldLevel = Mathf.Max(1, Level);
 
@@ -1916,28 +2178,22 @@ public class CharacterStats
             ExperiencePoints = minimumXpForCurrentLevel;
         }
 
-        ExperiencePoints += gain;
-        Debug.Log($"[XP] {CharacterName} gained {gain} XP (Total: {ExperiencePoints})");
+        ExperiencePoints += adjustedGain;
+        Debug.Log($"[XP] {CharacterName} gained {adjustedGain} XP (raw {gain}, penalty active: {HasXPPenalty}) (Total: {ExperiencePoints})");
 
         int newLevel = CalculateLevelFromXP(ExperiencePoints);
         bool leveledUp = newLevel > oldLevel;
 
         if (leveledUp)
         {
+            int levelsGained = Mathf.Max(1, newLevel - oldLevel);
             Level = newLevel;
-            OnLevelUp(oldLevel, newLevel);
+            PendingLevelUps += levelsGained;
+            LastLevelUpHPGain = 0;
+            LastLevelUpOldMaxHP = MaxHP;
+            LastLevelUpNewMaxHP = MaxHP;
 
-            Debug.Log($"[XP] ⭐⭐⭐ {CharacterName} LEVELED UP to {newLevel}! ⭐⭐⭐");
-
-            if (OwnerCharacter != null)
-            {
-                SpellcastingComponent spellcasting = OwnerCharacter.GetComponent<SpellcastingComponent>();
-                if (spellcasting != null)
-                {
-                    Debug.Log($"[XP] Refreshing spell slots for {CharacterName} at level {newLevel}");
-                    spellcasting.RefreshSpellSlots();
-                }
-            }
+            Debug.Log($"[XP] ⭐⭐⭐ {CharacterName} LEVELED UP to {newLevel}! Pending class selections: {PendingLevelUps} ⭐⭐⭐");
         }
         else if (newLevel < oldLevel)
         {
@@ -1947,6 +2203,102 @@ public class CharacterStats
 
         Debug.Log($"[XP] {CharacterName}: {oldLevel} → {Level} (Level up: {leveledUp}) | XP {oldXp} → {ExperiencePoints}");
         return leveledUp;
+    }
+
+    public bool ApplyPendingLevelUp(string className)
+    {
+        EnsureMulticlassDataInitialized();
+
+        if (PendingLevelUps <= 0)
+            return false;
+
+        string selectedClass = string.IsNullOrWhiteSpace(className)
+            ? (!string.IsNullOrWhiteSpace(CharacterClass) ? CharacterClass : ClassLevels[0].ClassName)
+            : className;
+
+        ClassLevelEntry classEntry = ClassLevels.FirstOrDefault(c => c != null && string.Equals(c.ClassName, selectedClass, StringComparison.OrdinalIgnoreCase));
+        if (classEntry == null)
+        {
+            classEntry = new ClassLevelEntry(selectedClass, 0);
+            ClassLevels.Add(classEntry);
+        }
+
+        classEntry.Level += 1;
+        CharacterClass = selectedClass;
+        PendingLevelUps = Mathf.Max(0, PendingLevelUps - 1);
+
+        int oldMaxHp = MaxHP;
+        int hitDieSize = GetClassHitDieSize(selectedClass);
+        int hpGain = CalculateHPGainForSingleLevel(hitDieSize, CONMod);
+
+        MaxHP += hpGain;
+        CurrentHP = Mathf.Min(TotalMaxHP, CurrentHP + hpGain);
+
+        LastLevelUpOldMaxHP = oldMaxHp;
+        LastLevelUpNewMaxHP = MaxHP;
+        LastLevelUpHPGain = hpGain;
+
+        HitPointGainsByClassLevel ??= new List<ClassHitPointEntry>();
+        HitPointGainsByClassLevel.Add(new ClassHitPointEntry
+        {
+            ClassName = selectedClass,
+            CharacterLevel = Mathf.Max(1, Level - PendingLevelUps),
+            HitDie = hitDieSize,
+            Roll = Mathf.Max(1, hpGain - CONMod),
+            ConstitutionBonus = CONMod,
+            TotalGain = hpGain
+        });
+
+        RefreshSkillClassFlags();
+        RecalculateXPPenaltyStatus();
+        Debug.Log($"[LevelUp] Applied level-up for {CharacterName}: +1 {selectedClass} (class level now {classEntry.Level}), HP +{hpGain}, pending {PendingLevelUps}");
+
+        if (OwnerCharacter != null)
+        {
+            SpellcastingComponent spellcasting = OwnerCharacter.GetComponent<SpellcastingComponent>();
+            if (spellcasting != null)
+                spellcasting.RefreshSpellSlots();
+        }
+
+        return true;
+    }
+
+    public void RecalculateXPPenaltyStatus()
+    {
+        EnsureMulticlassDataInitialized();
+
+        var relevant = ClassLevels
+            .Where(c => c != null && c.Level > 0)
+            .Select(c => new ClassLevelEntry(c.ClassName, c.Level))
+            .ToList();
+
+        if (relevant.Count <= 1)
+        {
+            HasXPPenalty = false;
+            return;
+        }
+
+        int highest = relevant.Max(c => c.Level);
+        relevant = relevant.Where(c => c.Level != highest).ToList();
+
+        if (string.Equals(FavoredClass, "Any", StringComparison.OrdinalIgnoreCase))
+        {
+            HasXPPenalty = false;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(FavoredClass))
+            relevant = relevant.Where(c => !string.Equals(c.ClassName, FavoredClass, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        if (relevant.Count <= 1)
+        {
+            HasXPPenalty = false;
+            return;
+        }
+
+        int min = relevant.Min(c => c.Level);
+        int max = relevant.Max(c => c.Level);
+        HasXPPenalty = (max - min) > 1;
     }
 
     public int CalculateLevelFromXP(int xp)
@@ -1959,64 +2311,6 @@ public class CharacterStats
         }
 
         return 1;
-    }
-
-    private void OnLevelUp(int oldLevel, int newLevel)
-    {
-        Debug.Log($"[LevelUp] ⭐ {CharacterName} leveled up! {oldLevel} → {newLevel} ⭐");
-
-        int levelsGained = Mathf.Max(1, newLevel - oldLevel);
-        int totalHpGain = 0;
-        int hitDieSize = GetClassHitDieSizeForLevelUp();
-        int oldMaxHp = MaxHP;
-        int currentConMod = CONMod;
-
-        // ========================================
-        // HP CALCULATION MODE SYSTEM
-        // ========================================
-        // TODO: This is currently stubbed out for future difficulty options.
-        // To fully expose this feature:
-        // 1. Add a settings menu UI
-        // 2. Allow player to choose HP calculation mode
-        // 3. Save/load this setting
-        // 4. Decide whether the setting is global or per-save/per-character
-        //
-        // Current modes:
-        // - Roll: Standard D&D 3.5e (roll HD + CON)
-        // - Average: Simplified (average HD + CON) - currently debug-only
-        // - Maximum: Very easy (max HD + CON) - currently debug-only
-        // ========================================
-
-        Debug.Log("[HP] === LEVEL-UP HP CALCULATION ===");
-        Debug.Log($"[HP] Character: {CharacterName}");
-        Debug.Log($"[HP] Class: {CharacterClass}");
-        Debug.Log($"[HP] Old Level: {oldLevel}");
-        Debug.Log($"[HP] New Level: {newLevel}");
-        Debug.Log($"[HP] Levels Gained: {levelsGained}");
-        Debug.Log($"[HP] Hit Die: d{hitDieSize}");
-        Debug.Log($"[HP] CON Modifier: {currentConMod}");
-
-        for (int i = 0; i < levelsGained; i++)
-        {
-            int hpGain = CalculateHPGainForSingleLevel(hitDieSize, currentConMod);
-            totalHpGain += hpGain;
-            Debug.Log($"[HP] Level +{i + 1}: gained {hpGain} HP");
-        }
-
-        MaxHP += totalHpGain;
-        CurrentHP = Mathf.Min(TotalMaxHP, CurrentHP + totalHpGain);
-
-        LastLevelUpOldMaxHP = oldMaxHp;
-        LastLevelUpNewMaxHP = MaxHP;
-        LastLevelUpHPGain = MaxHP - oldMaxHp;
-
-        Debug.Log($"[HP] HP Gained Total: {LastLevelUpHPGain}");
-        Debug.Log($"[HP] Old Max HP: {LastLevelUpOldMaxHP}");
-        Debug.Log($"[HP] New Max HP: {LastLevelUpNewMaxHP}");
-        Debug.Log("[HP] ================================");
-
-        Debug.Log($"[LevelUp] HP increased by {LastLevelUpHPGain} (now {MaxHP}, current {CurrentHP})");
-        Debug.Log("[LevelUp] TODO: implement class progression increases (BAB, saves, spells, feats, skills).");
     }
 
     private int CalculateHPGainForSingleLevel(int hitDieSize, int conMod)
@@ -2082,9 +2376,9 @@ public class CharacterStats
         }
     }
 
-    private int GetClassHitDieSizeForLevelUp()
+    private int GetClassHitDieSize(string className)
     {
-        switch (CharacterClass)
+        switch (className)
         {
             case "Barbarian": return 12;
             case "Fighter":
@@ -2099,6 +2393,11 @@ public class CharacterStats
             case "Sorcerer": return 4;
             default: return 8;
         }
+    }
+
+    private int GetClassHitDieSizeForLevelUp()
+    {
+        return GetClassHitDieSize(CharacterClass);
     }
 
     private bool IsValidNaturalAttack(NaturalAttackDefinition attack)
@@ -3271,118 +3570,58 @@ public class CharacterStats
         "balance", "climb", "escape_artist", "hide", SpellNames.JUMP, "move_silently", "sleight_of_hand", "swim", "tumble"
     };
 
-    /// <summary>Whether this class has broad simple weapon proficiency (all simple weapons).</summary>
-    public bool HasSimpleWeaponProficiency()
+    private bool HasAnyClass(string[] classNames)
     {
-        switch (CharacterClass)
+        EnsureMulticlassDataInitialized();
+        for (int i = 0; i < classNames.Length; i++)
         {
-            case "Barbarian":
-            case "Bard":
-            case "Cleric":
-            case "Fighter":
-            case "Paladin":
-            case "Ranger":
-            case "Rogue":
+            if (HasClass(classNames[i]))
                 return true;
-            default:
-                return false;
         }
+
+        return false;
     }
 
-    /// <summary>Whether this class has broad martial weapon proficiency (all martial weapons).</summary>
+    /// <summary>Whether this character has broad simple weapon proficiency (all simple weapons).</summary>
+    public bool HasSimpleWeaponProficiency()
+    {
+        return HasAnyClass(new[] { "Barbarian", "Bard", "Cleric", "Fighter", "Paladin", "Ranger", "Rogue" });
+    }
+
+    /// <summary>Whether this character has broad martial weapon proficiency (all martial weapons).</summary>
     public bool HasMartialWeaponProficiency()
     {
-        switch (CharacterClass)
-        {
-            case "Barbarian":
-            case "Fighter":
-            case "Paladin":
-            case "Ranger":
-                return true;
-            default:
-                return false;
-        }
+        return HasAnyClass(new[] { "Barbarian", "Fighter", "Paladin", "Ranger" });
     }
 
     /// <summary>Armor proficiency: light armor.</summary>
     public bool HasLightArmorProficiency()
     {
-        switch (CharacterClass)
-        {
-            case "Barbarian":
-            case "Bard":
-            case "Cleric":
-            case "Druid":
-            case "Fighter":
-            case "Paladin":
-            case "Ranger":
-            case "Rogue":
-                return true;
-            default:
-                return false;
-        }
+        return HasAnyClass(new[] { "Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Paladin", "Ranger", "Rogue" });
     }
 
     /// <summary>Armor proficiency: medium armor.</summary>
     public bool HasMediumArmorProficiency()
     {
-        switch (CharacterClass)
-        {
-            case "Barbarian":
-            case "Cleric":
-            case "Druid":
-            case "Fighter":
-            case "Paladin":
-            case "Ranger":
-                return true;
-            default:
-                return false;
-        }
+        return HasAnyClass(new[] { "Barbarian", "Cleric", "Druid", "Fighter", "Paladin", "Ranger" });
     }
 
     /// <summary>Armor proficiency: heavy armor.</summary>
     public bool HasHeavyArmorProficiency()
     {
-        switch (CharacterClass)
-        {
-            case "Cleric":
-            case "Fighter":
-            case "Paladin":
-                return true;
-            default:
-                return false;
-        }
+        return HasAnyClass(new[] { "Cleric", "Fighter", "Paladin" });
     }
 
     /// <summary>Armor proficiency: shields (excluding tower shield).</summary>
     public bool HasShieldProficiency()
     {
-        switch (CharacterClass)
-        {
-            case "Barbarian":
-            case "Bard":
-            case "Cleric":
-            case "Druid":
-            case "Fighter":
-            case "Paladin":
-            case "Ranger":
-                return true;
-            default:
-                return false;
-        }
+        return HasAnyClass(new[] { "Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Paladin", "Ranger" });
     }
 
     /// <summary>Armor proficiency: tower shield.</summary>
     public bool HasTowerShieldProficiency()
     {
-        switch (CharacterClass)
-        {
-            case "Fighter":
-            case "Paladin":
-                return true;
-            default:
-                return false;
-        }
+        return HasAnyClass(new[] { "Fighter", "Paladin" });
     }
 
     /// <summary>
@@ -3428,16 +3667,32 @@ public class CharacterStats
     {
         if (string.IsNullOrEmpty(weaponId)) return false;
 
-        switch (CharacterClass)
+        EnsureMulticlassDataInitialized();
+        for (int i = 0; i < ClassLevels.Count; i++)
         {
-            case "Bard": return BardSpecificWeaponProficiencies.Contains(weaponId);
-            case "Druid": return DruidSpecificWeaponProficiencies.Contains(weaponId);
-            case "Monk": return MonkSpecificWeaponProficiencies.Contains(weaponId);
-            case "Rogue": return RogueSpecificWeaponProficiencies.Contains(weaponId);
-            case "Wizard": return WizardSpecificWeaponProficiencies.Contains(weaponId);
-            case "Sorcerer": return WizardSpecificWeaponProficiencies.Contains(weaponId);
-            default: return false;
+            string className = ClassLevels[i] != null ? ClassLevels[i].ClassName : null;
+            switch (className)
+            {
+                case "Bard":
+                    if (BardSpecificWeaponProficiencies.Contains(weaponId)) return true;
+                    break;
+                case "Druid":
+                    if (DruidSpecificWeaponProficiencies.Contains(weaponId)) return true;
+                    break;
+                case "Monk":
+                    if (MonkSpecificWeaponProficiencies.Contains(weaponId)) return true;
+                    break;
+                case "Rogue":
+                    if (RogueSpecificWeaponProficiencies.Contains(weaponId)) return true;
+                    break;
+                case "Wizard":
+                case "Sorcerer":
+                    if (WizardSpecificWeaponProficiencies.Contains(weaponId)) return true;
+                    break;
+            }
         }
+
+        return false;
     }
 
     /// <summary>
@@ -3745,8 +4000,20 @@ public class CharacterStats
     /// <param name="level">Character level</param>
     public void InitializeSkills(string characterClass, int level)
     {
+        EnsureMulticlassDataInitialized();
+
         Skills.Clear();
-        HashSet<string> classSkills = ClassSkillDefinitions.GetClassSkills(characterClass);
+        HashSet<string> classSkills = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry classLevel = ClassLevels[i];
+            if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+                continue;
+
+            foreach (string skillName in ClassSkillDefinitions.GetClassSkills(classLevel.ClassName))
+                classSkills.Add(skillName);
+        }
 
         foreach (var skillDef in ClassSkillDefinitions.AllSkills)
         {
@@ -3755,12 +4022,52 @@ public class CharacterStats
             Skills[skillDef.name] = skill;
         }
 
-        TotalSkillPoints = ClassSkillDefinitions.CalculateSkillPoints(characterClass, level, INTMod);
+        int totalSkillPoints = 0;
+        int runningCharacterLevel = 0;
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry classLevel = ClassLevels[i];
+            if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+                continue;
+
+            int perLevelBase = Mathf.Max(1, ClassSkillDefinitions.GetBaseSkillPointsPerLevel(classLevel.ClassName) + INTMod);
+            for (int classLevelIndex = 1; classLevelIndex <= classLevel.Level; classLevelIndex++)
+            {
+                int points = (runningCharacterLevel == 0) ? perLevelBase * 4 : perLevelBase;
+                totalSkillPoints += points;
+                runningCharacterLevel++;
+            }
+        }
+
+        TotalSkillPoints = totalSkillPoints;
         AvailableSkillPoints = TotalSkillPoints;
 
-        Debug.Log($"[Skills] {CharacterName} ({characterClass} Lv{level}): {TotalSkillPoints} skill points " +
-                  $"({ClassSkillDefinitions.GetBaseSkillPointsPerLevel(characterClass)} + {INTMod} INT mod" +
-                  (level == 1 ? " × 4 at level 1)" : $" × {level} levels)"));
+        Debug.Log($"[Skills] {CharacterName} ({ClassSummary}): {TotalSkillPoints} skill points (INT mod {INTMod})");
+    }
+
+    public void RefreshSkillClassFlags()
+    {
+        if (Skills == null || Skills.Count == 0)
+            return;
+
+        EnsureMulticlassDataInitialized();
+
+        HashSet<string> classSkills = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry classLevel = ClassLevels[i];
+            if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+                continue;
+
+            foreach (string skillName in ClassSkillDefinitions.GetClassSkills(classLevel.ClassName))
+                classSkills.Add(skillName);
+        }
+
+        foreach (KeyValuePair<string, Skill> kvp in Skills)
+        {
+            if (kvp.Value != null)
+                kvp.Value.IsClassSkill = classSkills.Contains(kvp.Key);
+        }
     }
 
     /// <summary>

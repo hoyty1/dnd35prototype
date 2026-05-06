@@ -152,6 +152,7 @@ public class ExperienceCalculator : MonoBehaviour
             string charName = !string.IsNullOrWhiteSpace(character.Stats.CharacterName) ? character.Stats.CharacterName : "Unknown";
             int oldLevel = Mathf.Max(1, character.Stats.Level);
             int oldXp = character.Stats.ExperiencePoints;
+            int effectiveXpGain = character.Stats.GetEffectiveXpGain(result.TotalXPPerCharacter);
 
             bool addExperienceReportedLevelUp = character.Stats.AddExperience(result.TotalXPPerCharacter);
 
@@ -164,7 +165,7 @@ public class ExperienceCalculator : MonoBehaviour
                 Debug.LogWarning($"[XP] Level-up mismatch for {charName}: AddExperience={addExperienceReportedLevelUp}, computed={leveledUp}");
             }
 
-            result.CharacterXPGained[character] = result.TotalXPPerCharacter;
+            result.CharacterXPGained[character] = effectiveXpGain;
             result.CharacterLeveledUp[character] = leveledUp;
 
             Debug.Log($"[XP] {charName}: Level {oldLevel} → {newLevel}, LeveledUp={leveledUp}, XP {oldXp} → {newXp}");

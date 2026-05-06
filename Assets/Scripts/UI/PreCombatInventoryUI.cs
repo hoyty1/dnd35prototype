@@ -1834,7 +1834,7 @@ public class PreCombatInventoryUI : MonoBehaviour
                 int maxHp = Mathf.Max(1, stats.MaxHP);
                 int ac = stats.ArmorClass;
                 _characterHeaderText.text =
-                    $"{stats.CharacterName}  •  {stats.CharacterClass} Lv {Mathf.Max(1, stats.Level)}  •  HP {hp}/{maxHp}  •  AC {ac}";
+                    $"{stats.CharacterName}  •  {stats.ClassSummary} Lv {Mathf.Max(1, stats.Level)}  •  HP {hp}/{maxHp}  •  AC {ac}";
             }
         }
     }
@@ -1926,7 +1926,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         CreateText(
             tab.transform,
             "Class",
-            character.Stats.CharacterClass,
+            character.Stats.ClassSummary,
             new Vector2(0f, 0f),
             new Vector2(1f, 0.5f),
             new Vector2(0f, 0.5f),
@@ -3988,7 +3988,7 @@ public class PreCombatInventoryUI : MonoBehaviour
         if (ch == null || ch.Stats == null)
             return "👤";
 
-        string cls = ch.Stats.CharacterClass ?? string.Empty;
+        string cls = ch.Stats.ClassSummary ?? string.Empty;
         if (cls.IndexOf("wizard", StringComparison.OrdinalIgnoreCase) >= 0) return "🧙";
         if (cls.IndexOf("cleric", StringComparison.OrdinalIgnoreCase) >= 0) return "⛪";
         if (cls.IndexOf("rogue", StringComparison.OrdinalIgnoreCase) >= 0) return "🗡";

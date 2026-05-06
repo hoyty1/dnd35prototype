@@ -179,14 +179,15 @@ public class CharacterCreationManager : MonoBehaviour
             return;
         }
 
-        if (!IsSpellcaster(stats.CharacterClass))
+        string progressionClass = !string.IsNullOrWhiteSpace(_levelUpData?.SelectedClassName) ? _levelUpData.SelectedClassName : stats.CharacterClass;
+        if (!IsSpellcaster(progressionClass))
         {
-            Debug.Log($"[CharacterCreation] {stats.CharacterClass} is not a spellcaster");
+            Debug.Log($"[CharacterCreation] {progressionClass} is not a spellcaster");
             CompleteLevelUp();
             return;
         }
 
-        if (string.Equals(stats.CharacterClass, "Cleric", StringComparison.OrdinalIgnoreCase)
+        if (string.Equals(progressionClass, "Cleric", StringComparison.OrdinalIgnoreCase)
             && (stats.ChosenDomains == null || stats.ChosenDomains.Count == 0)
             && !_domainSelectionAttemptedThisFlow)
         {
@@ -195,7 +196,7 @@ public class CharacterCreationManager : MonoBehaviour
             return;
         }
 
-        Debug.Log($"[CharacterCreation] {stats.CharacterClass} can learn new spells");
+        Debug.Log($"[CharacterCreation] {progressionClass} can learn new spells");
 
         SpellSelectionUI spellUI = FindOrCreateSpellSelectionUI();
         if (spellUI == null)
