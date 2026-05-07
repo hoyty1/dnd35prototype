@@ -33,6 +33,8 @@ namespace Tests.Magic
             TestWizardPrimaryMulticlassDoesNotAutoFillWizardSpellbook();
             TestWizardPrimaryFallbackDoesNotApplyToClericPrimaryMulticlass();
             TestLearnSpellForClassStaysWithinSelectedCasterClass();
+            TestWizardInitialSpellbookSelectionCountUsesIntModifier();
+            TestWizardInitialSpellbookSelectionLevelDetection();
 
             Debug.Log($"====== Wizard Spell Progression Results: {_passed} passed, {_failed} failed ======");
         }
@@ -324,6 +326,70 @@ namespace Tests.Magic
             finally
             {
                 DestroySpellcasting(sc);
+            }
+        }
+
+        private static void TestWizardInitialSpellbookSelectionCountUsesIntModifier()
+        {
+            int intModThree = SpellSelectionUI.GetInitialWizardSpellbookSpellCount(3);
+            int intModZero = SpellSelectionUI.GetInitialWizardSpellbookSpellCount(0);
+            int intModNegative = SpellSelectionUI.GetInitialWizardSpellbookSpellCount(-2);
+
+            CharacterStats wizardOne = CreateWizardStats("WizardOneCount", wizardLevel: 1, intelligence: 16);
+            CharacterStats wizardTwo = CreateWizardStats("WizardTwoCount", wizardLevel: 2, intelligence: 16);
+            int wizardOneSelectionCount = SpellSelectionUI.GetWizardLevelUpSpellSelectionCount(wizardOne);
+            int wizardTwoSelectionCount = SpellSelectionUI.GetWizardLevelUpSpellSelectionCount(wizardTwo);
+
+            Assert(intModThree == 6, "Wizard initial spellbook count is 3 + INT mod (INT mod +3 => 6)", $"expected 6, got {intModThree}");
+            Assert(intModZero == 3, "Wizard initial spellbook count supports non-bonus INT (INT mod +0 => 3)", $"expected 3, got {intModZero}");
+            Assert(intModNegative == 1, "Wizard initial spellbook count has floor of 1 for low INT", $"expected 1, got {intModNegative}");
+            Assert(wizardOneSelectionCount == 6, "Wizard 1 level-up selection count uses initial spellbook formula", $"expected 6, got {wizardOneSelectionCount}");
+            Assert(wizardTwoSelectionCount == 2, "Wizard 2+ level-up selection count remains 2 spells", $"expected 2, got {wizardTwoSelectionCount}");
+        }
+
+        private static void TestWizardInitialSpellbookSelectionLevelDetection()
+        {
+            CharacterStats firstWizardLevel = null;
+            CharacterStats higherWizardLevel = null;
+            try
+            {
+                firstWizardLevel = new CharacterStats(
+                    name: "FighterToWizard",
+                    level: 3,
+                    characterClass: "Wizard",
+                    str: 14,
+                    dex: 12,
+                    con: 12,
+                    wis: 10,
+                    intelligence: 16,
+                    cha: 8,
+                    bab: 2,
+                    armorBonus: 0,
+                    shieldBonus: 0,
+                    damageDice: 8,
+                    damageCount: 1,
+                    bonusDamage: 0,
+                    baseSpeed: 6,
+                    atkRange: 1,
+                    baseHitDieHP: 20,
+                    raceName: "Human");
+                firstWizardLevel.ClassLevels = new List<ClassLevelEntry>
+                {
+                    new ClassLevelEntry("Fighter", 2),
+                    new ClassLevelEntry("Wizard", 1)
+                };
+
+                higherWizardLevel = CreateWizardStats("WizardLv2Detect", wizardLevel: 2, intelligence: 16);
+
+                bool firstLevelDetected = SpellSelectionUI.IsInitialWizardSpellbookSelectionLevel(firstWizardLevel);
+                bool higherLevelDetected = SpellSelectionUI.IsInitialWizardSpellbookSelectionLevel(higherWizardLevel);
+
+                Assert(firstLevelDetected, "Wizard initial spellbook detection is true at Wizard class level 1");
+                Assert(!higherLevelDetected, "Wizard initial spellbook detection is false above Wizard class level 1");
+            }
+            catch (Exception ex)
+            {
+                Assert(false, "Wizard initial spellbook selection level detection did not throw", ex.Message);
             }
         }
     }

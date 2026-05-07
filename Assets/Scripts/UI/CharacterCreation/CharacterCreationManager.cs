@@ -417,13 +417,18 @@ public class CharacterCreationManager : MonoBehaviour
 
         spellcasting.RefreshSpellSlots();
 
-        if (string.Equals(progressionClass, "Wizard", StringComparison.OrdinalIgnoreCase)
-            && (createdDuringLevelUp || wizardKnownBeforeRefresh == 0))
+        if (string.Equals(progressionClass, "Wizard", StringComparison.OrdinalIgnoreCase))
         {
-            // New multiclass wizard entries should start from cantrips + chosen progression,
-            // not inherit fallback full-list loading from other prepared classes.
-            spellcasting.ResetKnownSpellsForClass("Wizard", keepCantrips: true);
-            spellcasting.ClearPreparedSpells();
+            int wizardClassLevel = _levelingCharacter.Stats.GetClassLevel("Wizard");
+            bool isInitialWizardLevel = wizardClassLevel == 1;
+
+            if (isInitialWizardLevel || createdDuringLevelUp || wizardKnownBeforeRefresh == 0)
+            {
+                // New multiclass wizard entries should start from cantrips only.
+                // First-level spellbook entries are chosen by the user in spell selection.
+                spellcasting.ResetKnownSpellsForClass("Wizard", keepCantrips: true);
+                spellcasting.ClearPreparedSpells();
+            }
         }
 
         return spellcasting;

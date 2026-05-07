@@ -67,6 +67,7 @@ public class SpellSelectionUI : MonoBehaviour
     private HashSet<string> _alreadyKnownSpellIds = new HashSet<string>();
     private int _levelUpSpellsToSelect;
     private int _levelUpMaxSpellLevel;
+    private bool _isWizardInitialSpellbookSelection;
     private readonly HashSet<int> _levelUpAvailableSpellLevels = new HashSet<int>();
 
     // Layout constants
@@ -357,6 +358,7 @@ public class SpellSelectionUI : MonoBehaviour
         _alreadyKnownSpellIds.Clear();
         _levelUpSpellsToSelect = 0;
         _levelUpMaxSpellLevel = 0;
+        _isWizardInitialSpellbookSelection = false;
         _levelUpAvailableSpellLevels.Clear();
     }
 
@@ -404,6 +406,26 @@ public class SpellSelectionUI : MonoBehaviour
         onComplete?.Invoke(new List<string>());
     }
 
+    public static bool IsInitialWizardSpellbookSelectionLevel(CharacterStats stats)
+    {
+        return stats != null && stats.GetClassLevel("Wizard") == 1;
+    }
+
+    public static int GetInitialWizardSpellbookSpellCount(int intModifier)
+    {
+        return Mathf.Max(1, 3 + intModifier);
+    }
+
+    public static int GetWizardLevelUpSpellSelectionCount(CharacterStats stats)
+    {
+        if (stats == null)
+            return 0;
+
+        return IsInitialWizardSpellbookSelectionLevel(stats)
+            ? GetInitialWizardSpellbookSpellCount(stats.INTMod)
+            : 2;
+    }
+
     private void OpenForLevelUpWizard()
     {
         if (_levelUpCharacter == null || _levelUpCharacter.Stats == null || _levelUpSpellcasting == null)
@@ -420,11 +442,23 @@ public class SpellSelectionUI : MonoBehaviour
         _maxSpells2nd = 0;
         _cantripSelectionRequired = false;
         _autoAddedCantripCount = 0;
-        _levelUpSpellsToSelect = 2;
         _selectedSpellIds.Clear();
 
+        _isWizardInitialSpellbookSelection = IsInitialWizardSpellbookSelectionLevel(_levelUpCharacter.Stats);
+        _levelUpSpellsToSelect = GetWizardLevelUpSpellSelectionCount(_levelUpCharacter.Stats);
+
         LoadExistingLevelUpSpells();
-        DetermineLevelUpSpellRange();
+
+        if (_isWizardInitialSpellbookSelection)
+        {
+            _levelUpAvailableSpellLevels.Clear();
+            _levelUpAvailableSpellLevels.Add(1);
+            _levelUpMaxSpellLevel = 1;
+        }
+        else
+        {
+            DetermineLevelUpSpellRange();
+        }
 
         SpellDatabase.Init();
         _availableSpells.Clear();
@@ -445,7 +479,7 @@ public class SpellSelectionUI : MonoBehaviour
         Debug.Log($"[SpellSelection] Wizard {characterName} leveling up:");
         Debug.Log($"[SpellSelection] - Current spellbook: {_alreadyKnownSpellIds.Count} spells");
         Debug.Log($"[SpellSelection] - Can select: {_levelUpSpellsToSelect} new spells");
-        Debug.Log($"[SpellSelection] - Can choose from levels: 0-{_levelUpMaxSpellLevel}");
+        Debug.Log($"[SpellSelection] - Can choose from levels: {string.Join(",", _levelUpAvailableSpellLevels.OrderBy(l => l))}");
 
         foreach (string knownSpellId in _alreadyKnownSpellIds.OrderBy(id => id))
         {
@@ -454,8 +488,10 @@ public class SpellSelectionUI : MonoBehaviour
             Debug.Log($"[SpellSelection] - Already knows: {knownLabel}");
         }
 
-        _titleText.text = "SPELL SELECTION - LEVEL UP";
-        _subtitleText.text = $"Select {_levelUpSpellsToSelect} new spells for your spellbook.";
+        _titleText.text = _isWizardInitialSpellbookSelection ? "INITIAL WIZARD SPELLBOOK" : "SPELL SELECTION - LEVEL UP";
+        _subtitleText.text = _isWizardInitialSpellbookSelection
+            ? $"Select {_levelUpSpellsToSelect} 1st-level spells for your wizard spellbook."
+            : $"Select {_levelUpSpellsToSelect} new spells for your spellbook.";
 
         _overlayPanel.SetActive(true);
         IsOpen = true;
@@ -853,9 +889,10 @@ public class SpellSelectionUI : MonoBehaviour
         if (_isLevelUpMode)
         {
             int selectedCount = _selectedSpellIds.Count;
+            int knownInCurrentSelectionPool = _availableSpells.Count(spell => spell != null && _alreadyKnownSpellIds.Contains(spell.SpellId));
             string selectedColor = selectedCount >= _levelUpSpellsToSelect ? "#44FF44" : "#FFDD44";
             _selectionCountText.text = $"<color={selectedColor}>Selected: {selectedCount}/{_levelUpSpellsToSelect}</color>   |   " +
-                                       $"<color=#AAAAAA>Already Known: {_alreadyKnownSpellIds.Count}</color>";
+                                       $"<color=#AAAAAA>Already Known (in list): {knownInCurrentSelectionPool}</color>";
             _confirmButton.interactable = selectedCount == _levelUpSpellsToSelect;
         }
         else if (_className == "Wizard")
