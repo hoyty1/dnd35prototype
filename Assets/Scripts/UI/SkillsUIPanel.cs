@@ -209,7 +209,7 @@ public class SkillsUIPanel : MonoBehaviour
         _titleText.text = $"SKILL ALLOCATION - {stats.CharacterName}";
         _confirmButton.gameObject.SetActive(true);
         _closeButton.gameObject.SetActive(false); // Can't close during allocation
-        _logText.text = "★ = Class skill for any class (max Lv+3); cost follows advancing class";
+        _logText.text = "★ = Class skill for any class (max Lv+3); class skills are always 1 point/rank";
         UpdateLegendText();
         PopulateSkillRows();
         RefreshAllRows();
@@ -249,7 +249,7 @@ public class SkillsUIPanel : MonoBehaviour
     /// <summary>
     /// Reuses the allocation UI for level-up skill point spending.
     /// Grants the requested points before opening the panel.
-    /// Cost uses the advancing class, while max ranks remain based on any class skill.
+    /// Cost and max-rank checks both follow the multiclass house rule in CharacterStats.
     /// </summary>
     public void ShowForLevelUp(CharacterController character, int newSkillPoints, int classPoolSkillPoints, string advancingClassName, System.Action onComplete)
     {
@@ -354,8 +354,7 @@ public class SkillsUIPanel : MonoBehaviour
 
         if (_allocationMode)
         {
-            string classLabel = string.IsNullOrWhiteSpace(_allocationClassName) ? "selected class" : _allocationClassName;
-            _legendText.text = $"<color=#E6D966>★ Max ranks use ANY class skill (Lv+3)</color>  |  <color=#AAAAAA>Cost this level uses {classLabel} (1 if class skill, else 2)</color>";
+            _legendText.text = "<color=#E6D966>★ Max ranks use ANY class skill (Lv+3)</color>  |  <color=#AAAAAA>Cost: 1 if any class has the skill, else 2</color>";
         }
         else
         {

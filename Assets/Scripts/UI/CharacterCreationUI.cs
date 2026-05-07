@@ -1664,28 +1664,14 @@ public class CharacterCreationUI : MonoBehaviour
             int intMod = CharacterStats.GetModifier(data.FinalINT);
             Debug.Log($"[CharCreation] Wizard spell selection: INT mod = {intMod}, FinalINT = {data.FinalINT}");
 
-            // STEP 1: Build Spellbook (all cantrips auto-added, select higher-level spells)
+            // Wizard creation chooses spellbook spells only.
+            // Prepared slots are not selected during creation; preparation happens later.
             SpellUI.OnSpellsConfirmed = (selectedSpellIds) =>
             {
                 data.SelectedSpellIds = new List<string>(selectedSpellIds);
-                Debug.Log($"[CharCreation] Wizard spellbook built: {selectedSpellIds.Count} spells total");
-
-                // STEP 2: Prepare Spells (assign spells from spellbook to slots)
-                if (SpellPrepUI != null)
-                {
-                    SpellPrepUI.OnCreationPreparationConfirmed = (preparedSlotIds) =>
-                    {
-                        data.PreparedSpellSlotIds = new List<string>(preparedSlotIds);
-                        Debug.Log($"[CharCreation] Wizard spell preparation complete: {preparedSlotIds.Count} slots");
-                        ShowStep(Step.Review);
-                    };
-                    SpellPrepUI.OpenForCreation(data.SelectedSpellIds, intMod, Mathf.Max(1, data.CharacterLevel), data.CharacterName);
-                }
-                else
-                {
-                    Debug.LogWarning("[CharCreation] SpellPrepUI not available, skipping preparation step.");
-                    ShowStep(Step.Review);
-                }
+                data.PreparedSpellSlotIds = new List<string>();
+                Debug.Log($"[CharCreation] Wizard spellbook built: {selectedSpellIds.Count} spells total (no preparation step at creation)");
+                ShowStep(Step.Review);
             };
             SpellUI.OpenForWizard(intMod, Mathf.Max(1, data.CharacterLevel));
         }
@@ -2225,7 +2211,7 @@ public class CharacterCreationUI : MonoBehaviour
                 break;
 
             case Step.SelectSpells:
-                _stepText.text = "Step 11 of 12: Select Spells (incl. Cantrips)";
+                _stepText.text = "Step 11 of 12: Select Spells / Spellbook";
                 StartSpellSelection();
                 break;
 

@@ -4119,10 +4119,9 @@ public class CharacterStats
         if (string.IsNullOrWhiteSpace(skillName) || Skills == null || !Skills.ContainsKey(skillName))
             return 2;
 
-        if (!string.IsNullOrWhiteSpace(advancingClassName))
-            return IsSkillClassSkillForClass(skillName, advancingClassName) ? 1 : 2;
-
-        return Skills[skillName].SkillPointCost;
+        // House rule: if a skill is a class skill for ANY class the character has,
+        // it always costs 1 point per rank (even while leveling another class).
+        return IsSkillClassSkillForAnyClass(skillName) ? 1 : 2;
     }
 
     public int GetSkillMaxRanks(string skillName)
@@ -4137,9 +4136,9 @@ public class CharacterStats
 
     /// <summary>
     /// Add one rank to a skill.
-    /// D&D 3.5 multiclass rules:
+    /// House rule:
     /// - Maximum ranks use whether ANY class has the skill as a class skill.
-    /// - Cost uses the ADVANCING class (if provided) for this level-up allocation.
+    /// - Cost is 1 point/rank if ANY of the character's classes has the skill; otherwise 2.
     /// Returns false if: not enough points, max ranks reached, or skill not found.
     /// </summary>
     public bool AddSkillRank(string skillName, string advancingClassName = null)
@@ -4175,8 +4174,7 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Remove one rank from a skill and refund points using the same cost context as allocation.
-    /// For level-up allocation, pass advancingClassName so refunds follow that class's 1:1 or 2:1 cost.
+    /// Remove one rank from a skill and refund points using the same multiclass house-rule cost.
     /// </summary>
     public bool RemoveSkillRank(string skillName, string advancingClassName = null)
     {

@@ -6,7 +6,7 @@ namespace Tests.Character
 /// <summary>
 /// Regression tests for multiclass skill rules:
 /// - Max ranks are based on whether ANY class has the skill as class skill.
-/// - Cost is based on the ADVANCING class used for the current level-up allocation.
+/// - House rule: cost is 1 if ANY class has the skill as a class skill; otherwise 2.
 /// </summary>
 public static class MulticlassSkillRulesTests
 {
@@ -26,7 +26,7 @@ public static class MulticlassSkillRulesTests
         ClassRegistry.Init();
 
         TestMaxRanksUseAnyClassSkill();
-        TestSkillCostUsesAdvancingClass();
+        TestSkillCostUsesAnyClassHouseRule();
         TestCrossClassSkillCapsAndCosts();
         TestClassSpecificSkillPointPools();
 
@@ -96,7 +96,7 @@ public static class MulticlassSkillRulesTests
             $"expected 8, got {diplomacyMax}");
     }
 
-    private static void TestSkillCostUsesAdvancingClass()
+    private static void TestSkillCostUsesAnyClassHouseRule()
     {
         CharacterStats stats = BuildFighter3Cleric2();
 
@@ -106,22 +106,22 @@ public static class MulticlassSkillRulesTests
         Assert(clericCost == 1,
             "Diplomacy costs 1 when advancing Cleric",
             $"got {clericCost}");
-        Assert(fighterCost == 2,
-            "Diplomacy costs 2 when advancing Fighter",
+        Assert(fighterCost == 1,
+            "House rule: Diplomacy costs 1 when advancing Fighter if any class has it",
             $"got {fighterCost}");
 
         stats.AvailableSkillPoints = 10;
         int before = stats.AvailableSkillPoints;
         bool addedAsFighter = stats.AddSkillRank("Diplomacy", "Fighter");
         Assert(addedAsFighter, "Can add Diplomacy rank while advancing Fighter");
-        Assert(stats.AvailableSkillPoints == before - 2,
-            "Fighter advancement spends 2 points for Diplomacy",
-            $"expected {before - 2}, got {stats.AvailableSkillPoints}");
+        Assert(stats.AvailableSkillPoints == before - 1,
+            "House rule: Fighter advancement spends 1 point for Diplomacy",
+            $"expected {before - 1}, got {stats.AvailableSkillPoints}");
 
         bool removedAsFighter = stats.RemoveSkillRank("Diplomacy", "Fighter");
-        Assert(removedAsFighter, "Can remove Diplomacy rank with Fighter cost context");
+        Assert(removedAsFighter, "Can remove Diplomacy rank with Fighter context");
         Assert(stats.AvailableSkillPoints == before,
-            "Removing Fighter-context rank refunds 2",
+            "House rule: removing rank refunds 1 when any class grants class-skill status",
             $"expected {before}, got {stats.AvailableSkillPoints}");
 
         bool addedAsCleric = stats.AddSkillRank("Diplomacy", "Cleric");
