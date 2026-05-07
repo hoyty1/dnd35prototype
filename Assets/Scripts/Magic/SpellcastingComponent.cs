@@ -549,15 +549,13 @@ public class SpellcastingComponent : MonoBehaviour
 
             bool hasOtherPreparedCaster = Stats != null &&
                 ((Stats.GetClassLevel("Cleric") > 0) || (Stats.GetClassLevel("Druid") > 0));
-            bool wizardIsPrimaryClass = Stats != null &&
-                string.Equals(Stats.CharacterClass, "Wizard", System.StringComparison.OrdinalIgnoreCase);
 
-            if (!hasOtherPreparedCaster || wizardIsPrimaryClass)
+            if (!hasOtherPreparedCaster)
             {
-                // Backward-compatible fallback for wizard-primary initialization.
+                // Backward-compatible fallback for single-class wizard initialization only.
                 foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1)) AddKnownSpellForClass(className, spell);
                 foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2)) AddKnownSpellForClass(className, spell);
-                Debug.Log("[Spellcasting] Wizard: no spell selection found, added fallback level 1-2 spells for wizard-primary initialization.");
+                Debug.Log("[Spellcasting] Wizard: no spell selection found, added fallback level 1-2 spells for single-class initialization.");
             }
             else
             {
@@ -1199,10 +1197,10 @@ public class SpellcastingComponent : MonoBehaviour
         if (!IsValidSpellForSlot(spell, slot, logOnFailure: true))
             return false;
 
-        // Wizards must have spell in spellbook; Clerics can prepare any known cleric spell
-        if (spell != null && !KnownSpells.Contains(spell))
+        // Enforce class-specific availability (wizard spellbook vs class full-list casters).
+        if (spell != null && !string.IsNullOrWhiteSpace(slot.CasterClassName) && !IsSpellKnownByClass(slot.CasterClassName, spell))
         {
-            Debug.LogWarning($"[Spellcasting] {spell.Name} is not in the spell list!");
+            Debug.LogWarning($"[Spellcasting] {spell.Name} is not in {slot.CasterClassName}'s available spell list!");
             return false;
         }
 

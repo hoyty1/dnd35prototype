@@ -30,6 +30,7 @@ namespace Tests.Magic
             TestWizardLevel3UnlocksSecondLevelSlots();
             TestMulticlassPreparedSlotsAreSeparatedPerClass();
             TestMulticlassCastingConsumesCorrectClassSlotPool();
+            TestWizardPrimaryMulticlassDoesNotAutoFillWizardSpellbook();
             TestWizardPrimaryFallbackDoesNotApplyToClericPrimaryMulticlass();
             TestLearnSpellForClassStaysWithinSelectedCasterClass();
 
@@ -246,6 +247,30 @@ namespace Tests.Magic
                 Assert(clericAfterWizardCast == clericBefore, "Casting wizard spell does not consume cleric level-1 slot", $"before={clericBefore}, after={clericAfterWizardCast}");
                 Assert(wizardAfterClericCast == wizardAfterWizardCast, "Casting cleric spell does not consume wizard level-1 slot", $"before={wizardAfterWizardCast}, after={wizardAfterClericCast}");
                 Assert(clericAfterClericCast == clericBefore - 1, "Casting cleric spell consumes cleric level-1 slot", $"before={clericBefore}, after={clericAfterClericCast}");
+            }
+            finally
+            {
+                DestroySpellcasting(sc);
+            }
+        }
+
+        private static void TestWizardPrimaryMulticlassDoesNotAutoFillWizardSpellbook()
+        {
+            SpellcastingComponent sc = null;
+            try
+            {
+                CharacterStats stats = CreateWizardClericStats("WizardPrimary");
+                stats.CharacterClass = "Wizard";
+                sc = CreateSpellcasting(stats, "WizardPrimary_Test");
+
+                List<SpellData> wizardKnown = sc.GetKnownSpellsForClass("Wizard");
+                int wizardCantrips = wizardKnown.Count(s => s != null && s.SpellLevel == 0);
+                int wizardNonCantrips = wizardKnown.Count(s => s != null && s.SpellLevel > 0);
+
+                Assert(wizardCantrips > 0, "Wizard-primary multiclass keeps wizard cantrips in spellbook");
+                Assert(wizardNonCantrips == 0,
+                    "Wizard-primary multiclass does not auto-fill wizard non-cantrip spellbook",
+                    $"expected 0 non-cantrips, got {wizardNonCantrips}");
             }
             finally
             {
