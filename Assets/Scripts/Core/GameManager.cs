@@ -1196,14 +1196,7 @@ public partial class GameManager : MonoBehaviour
         if (spellComp == null || spellComp.SpellSlots == null)
             return false;
 
-        for (int i = 0; i < spellComp.SpellSlots.Count; i++)
-        {
-            SpellSlot slot = spellComp.SpellSlots[i];
-            if (slot != null && slot.HasSpell && !slot.DisabledByNegativeLevel)
-                return true;
-        }
-
-        return false;
+        return spellComp.GetPreparedCasterClassNames().Any(className => spellComp.HasPreparedSpellForClass(className));
     }
 
     private List<CharacterController> GetUnpreparedPreparedCasters(List<CharacterController> partyMembers)
@@ -1218,7 +1211,11 @@ public partial class GameManager : MonoBehaviour
             if (!IsPreparedCaster(member))
                 continue;
 
-            if (!HasAnyPreparedSpell(member))
+            SpellcastingComponent spellComp = member.GetComponent<SpellcastingComponent>();
+            if (spellComp == null)
+                continue;
+
+            if (spellComp.GetUnpreparedCasterClassNames().Count > 0)
                 unprepared.Add(member);
         }
 
@@ -1237,11 +1234,20 @@ public partial class GameManager : MonoBehaviour
             if (!IsPreparedCaster(member))
                 continue;
 
+            SpellcastingComponent spellComp = member.GetComponent<SpellcastingComponent>();
+            if (spellComp == null)
+                continue;
+
             string name = member != null && member.Stats != null ? member.Stats.CharacterName : "Unknown";
-            bool prepared = HasAnyPreparedSpell(member);
-            lines.Add(prepared
-                ? $"✓ {name}: Prepared"
-                : $"⚠️ {name}: Not Prepared");
+            List<string> missingClasses = spellComp.GetUnpreparedCasterClassNames();
+            if (missingClasses.Count == 0)
+            {
+                lines.Add($"✓ {name}: Prepared");
+            }
+            else
+            {
+                lines.Add($"⚠️ {name}: Missing {string.Join(", ", missingClasses)} prep");
+            }
         }
 
         return lines;
@@ -1365,14 +1371,21 @@ public partial class GameManager : MonoBehaviour
 
         if (unpreparedCasters.Count > 0)
         {
-            string[] names = new string[unpreparedCasters.Count];
+            List<string> warnings = new List<string>();
             for (int i = 0; i < unpreparedCasters.Count; i++)
-                names[i] = unpreparedCasters[i] != null && unpreparedCasters[i].Stats != null
-                    ? unpreparedCasters[i].Stats.CharacterName
-                    : "Unknown";
+            {
+                CharacterController caster = unpreparedCasters[i];
+                string name = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+                SpellcastingComponent spellComp = caster != null ? caster.GetComponent<SpellcastingComponent>() : null;
+                List<string> missingClasses = spellComp != null ? spellComp.GetUnpreparedCasterClassNames() : new List<string>();
 
-            string nameList = string.Join(", ", names);
-            string message = $"Warning: {nameList} have not prepared spells. They will be unable to cast spells in combat. Prepare spells now?";
+                if (missingClasses.Count == 0)
+                    warnings.Add($"{name}: spells not prepared");
+                else
+                    warnings.Add($"{name}: {string.Join(", ", missingClasses)} spells not prepared");
+            }
+
+            string message = "Warning:\n" + string.Join("\n", warnings) + "\n\nUnprepared classes cannot cast spells in combat. Prepare spells now?";
 
             if (CombatUI != null)
             {

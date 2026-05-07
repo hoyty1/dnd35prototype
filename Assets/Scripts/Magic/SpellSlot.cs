@@ -44,8 +44,14 @@ public class SpellSlot
     /// </summary>
     public string DomainHint;
 
+    /// <summary>
+    /// Spellcasting class this slot belongs to (e.g., "Wizard", "Cleric").
+    /// Used for multiclass prepared casters to keep class slot pools independent.
+    /// </summary>
+    public string CasterClassName;
+
     /// <summary>Create a new empty spell slot at the given level.</summary>
-    public SpellSlot(int level, bool isDomainSlot = false)
+    public SpellSlot(int level, bool isDomainSlot = false, string casterClassName = null)
     {
         Level = level;
         PreparedSpell = null;
@@ -53,10 +59,11 @@ public class SpellSlot
         DisabledByNegativeLevel = false;
         IsDomainSlot = isDomainSlot;
         DomainHint = null;
+        CasterClassName = casterClassName;
     }
 
     /// <summary>Create a spell slot with a specific spell already prepared.</summary>
-    public SpellSlot(int level, SpellData spell, bool isDomainSlot = false)
+    public SpellSlot(int level, SpellData spell, bool isDomainSlot = false, string casterClassName = null)
     {
         Level = level;
         PreparedSpell = spell;
@@ -64,6 +71,7 @@ public class SpellSlot
         DisabledByNegativeLevel = false;
         IsDomainSlot = isDomainSlot;
         DomainHint = null;
+        CasterClassName = casterClassName;
     }
 
     /// <summary>Whether this slot can be cast (has a spell, isn't used, and isn't disabled).</summary>
@@ -109,6 +117,7 @@ public class SpellSlot
         string spellName = PreparedSpell != null ? PreparedSpell.Name : "(empty)";
         string status = DisabledByNegativeLevel ? "DISABLED" : (IsUsed ? "USED" : "ready");
         string domainTag = IsDomainSlot ? " [DOMAIN]" : string.Empty;
-        return $"Lv{Level}{domainTag} [{spellName}] ({status})";
+        string classTag = string.IsNullOrWhiteSpace(CasterClassName) ? string.Empty : $" [{CasterClassName}]";
+        return $"Lv{Level}{domainTag}{classTag} [{spellName}] ({status})";
     }
 }

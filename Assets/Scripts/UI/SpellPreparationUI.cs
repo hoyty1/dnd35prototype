@@ -54,6 +54,9 @@ public class SpellPreparationUI : MonoBehaviour
     private Action _preCombatBackCallback;
     private Action _preCombatStartEncounterCallback;
     private bool _isPreCombatFlowActive;
+    private readonly List<string> _currentCharacterCasterClasses = new List<string>();
+    private int _currentCasterClassIndex = -1;
+    private string _activeCasterClassName = string.Empty;
 
     // Slot UI rows
     private List<SlotRowUI> _slotRows = new List<SlotRowUI>();
@@ -302,13 +305,49 @@ public class SpellPreparationUI : MonoBehaviour
             return;
         }
 
-        Debug.Log($"[SpellPrep] Showing preparation for {character.Stats.CharacterName}");
+        _currentCharacterCasterClasses.Clear();
+        _currentCharacterCasterClasses.AddRange(spellComp.GetPreparedCasterClassNames());
+        _currentCasterClassIndex = 0;
+
+        if (_currentCharacterCasterClasses.Count == 0)
+        {
+            AdvanceToNextCharacter();
+            return;
+        }
+
+        ShowCurrentClassForCharacter();
+    }
+
+    private void ShowCurrentClassForCharacter()
+    {
+        if (_currentCharacterIndex < 0 || _currentCharacterIndex >= _preparingCharacters.Count)
+        {
+            FinishPreparationFlow();
+            return;
+        }
+
+        CharacterController character = _preparingCharacters[_currentCharacterIndex];
+        SpellcastingComponent spellComp = character != null ? character.GetComponent<SpellcastingComponent>() : null;
+        if (spellComp == null)
+        {
+            AdvanceToNextCharacter();
+            return;
+        }
+
+        if (_currentCasterClassIndex < 0 || _currentCasterClassIndex >= _currentCharacterCasterClasses.Count)
+        {
+            AdvanceToNextCharacter();
+            return;
+        }
+
+        _activeCasterClassName = _currentCharacterCasterClasses[_currentCasterClassIndex];
+
+        Debug.Log($"[SpellPrep] Showing {_activeCasterClassName} preparation for {character.Stats.CharacterName}");
 
         UpdatePreCombatButtonState();
-        Open(spellComp);
+        Open(spellComp, _activeCasterClassName);
 
-        string className = character.Stats != null ? character.Stats.ClassSummary : "Caster";
-        _titleText.text = $"SPELL PREPARATION — {character.Stats.CharacterName} ({className}) [{_currentCharacterIndex + 1}/{_preparingCharacters.Count}]";
+        _titleText.text = $"PREPARE {_activeCasterClassName.ToUpperInvariant()} SPELLS — {character.Stats.CharacterName} [{_currentCharacterIndex + 1}/{_preparingCharacters.Count}] ({_currentCasterClassIndex + 1}/{_currentCharacterCasterClasses.Count})";
         OnPreparationConfirmed = OnCurrentCharacterDone;
     }
 
@@ -320,7 +359,14 @@ public class SpellPreparationUI : MonoBehaviour
         CharacterController current = (_currentCharacterIndex >= 0 && _currentCharacterIndex < _preparingCharacters.Count)
             ? _preparingCharacters[_currentCharacterIndex]
             : null;
-        Debug.Log($"[SpellPrep] Done with {(current != null && current.Stats != null ? current.Stats.CharacterName : "unknown character")}");
+        Debug.Log($"[SpellPrep] Done with {(current != null && current.Stats != null ? current.Stats.CharacterName : "unknown character")} ({_activeCasterClassName})");
+
+        _currentCasterClassIndex++;
+        if (_currentCasterClassIndex < _currentCharacterCasterClasses.Count)
+        {
+            ShowCurrentClassForCharacter();
+            return;
+        }
 
         AdvanceToNextCharacter();
     }
@@ -346,6 +392,9 @@ public class SpellPreparationUI : MonoBehaviour
         Debug.Log("[SpellPrep] Back to pre-combat menu requested.");
         _isPreCombatFlowActive = false;
         OnPreparationConfirmed = null;
+        _currentCharacterCasterClasses.Clear();
+        _currentCasterClassIndex = -1;
+        _activeCasterClassName = string.Empty;
         Close();
 
         Action callback = _preCombatBackCallback;
@@ -363,6 +412,9 @@ public class SpellPreparationUI : MonoBehaviour
         Debug.Log("[SpellPrep] Start encounter requested from spell preparation window.");
         _isPreCombatFlowActive = false;
         OnPreparationConfirmed = null;
+        _currentCharacterCasterClasses.Clear();
+        _currentCasterClassIndex = -1;
+        _activeCasterClassName = string.Empty;
         Close();
 
         Action callback = _preCombatStartEncounterCallback;
@@ -390,6 +442,9 @@ public class SpellPreparationUI : MonoBehaviour
 
         _isPreCombatFlowActive = false;
         OnPreparationConfirmed = null;
+        _currentCharacterCasterClasses.Clear();
+        _currentCasterClassIndex = -1;
+        _activeCasterClassName = string.Empty;
 
         if (_skipCharacterButton != null)
             _skipCharacterButton.gameObject.SetActive(false);
@@ -453,6 +508,11 @@ public class SpellPreparationUI : MonoBehaviour
     /// </summary>
     public void Open(SpellcastingComponent spellComp)
     {
+        Open(spellComp, null);
+    }
+
+    public void Open(SpellcastingComponent spellComp, string casterClassName)
+    {
         if (spellComp == null || spellComp.Stats == null)
         {
             Debug.LogWarning("[SpellPreparationUI] Missing spellcasting data; cannot open.");
@@ -466,13 +526,16 @@ public class SpellPreparationUI : MonoBehaviour
         }
 
         _spellComp = spellComp;
+        _activeCasterClassName = string.IsNullOrWhiteSpace(casterClassName)
+            ? (spellComp.GetPreparedCasterClassNames().FirstOrDefault() ?? string.Empty)
+            : casterClassName;
         _clericDomains = spellComp.Domains != null ? new List<string>(spellComp.Domains) : new List<string>();
         _domainSlotIndices.Clear();
 
-        string domainSuffix = (_clericDomains.Count > 0 && spellComp.Stats.IsCleric)
+        string domainSuffix = (_clericDomains.Count > 0 && string.Equals(_activeCasterClassName, "Cleric", StringComparison.OrdinalIgnoreCase))
             ? $" — Domains: {string.Join(", ", _clericDomains)}"
             : string.Empty;
-        _titleText.text = $"SPELL PREPARATION — {spellComp.Stats.CharacterName}{domainSuffix}";
+        _titleText.text = $"PREPARE {_activeCasterClassName} SPELLS — {spellComp.Stats.CharacterName}{domainSuffix}";
 
         PopulateSlotList();
         RefreshSummary();
@@ -741,21 +804,22 @@ public class SpellPreparationUI : MonoBehaviour
         float spacing = 4f;
         _domainSlotIndices.Clear();
 
-        int maxLevel = _spellComp.SlotsMax != null ? _spellComp.SlotsMax.Length - 1 : 0;
+        int[] classSlotsMax = _spellComp.GetSlotsMaxForClass(_activeCasterClassName);
+        int maxLevel = classSlotsMax != null ? classSlotsMax.Length - 1 : 0;
         for (int spellLevel = 0; spellLevel <= maxLevel; spellLevel++)
         {
-            List<SpellSlot> slotsAtLevel = _spellComp.GetSlotsForLevel(spellLevel);
+            List<SpellSlot> slotsAtLevel = _spellComp.GetSlotsForClassAtLevel(_activeCasterClassName, spellLevel);
             if (slotsAtLevel.Count == 0)
                 continue;
 
             Debug.Log($"[SpellPrep] Creating section for spell level {spellLevel}");
             if (spellLevel > 0) yPos -= 8f;
 
-            string cantripName = (_spellComp.Stats != null && _spellComp.Stats.IsCleric)
+            string cantripName = string.Equals(_activeCasterClassName, "Cleric", StringComparison.OrdinalIgnoreCase)
                 ? "ORISONS" : "CANTRIPS";
 
-            int regularSlots = _spellComp.GetMaxSpellSlotsAtLevel(spellLevel);
-            int domainSlots = _spellComp.GetMaxDomainSlotsAtLevel(spellLevel);
+            int regularSlots = _spellComp.GetMaxSpellSlotsAtLevelForClass(_activeCasterClassName, spellLevel);
+            int domainSlots = _spellComp.GetMaxDomainSlotsAtLevelForClass(_activeCasterClassName, spellLevel);
             int totalSlots = slotsAtLevel.Count;
             Debug.Log($"[SpellPrep] Level {spellLevel}: {regularSlots} regular + {domainSlots} domain = {totalSlots} total");
 
@@ -819,7 +883,7 @@ public class SpellPreparationUI : MonoBehaviour
         }
         else
         {
-            row.AvailableSpells = _spellComp.KnownSpells
+            row.AvailableSpells = _spellComp.GetKnownSpellsForClass(_activeCasterClassName)
                 .Where(s => s != null && s.SpellLevel == slot.Level)
                 .OrderBy(s => s.Name)
                 .ToList();
@@ -840,11 +904,11 @@ public class SpellPreparationUI : MonoBehaviour
         bg.color = new Color(0.1f, 0.1f, 0.15f, 0.6f);
 
         // Slot label (left side)
-        List<SpellSlot> levelSlots = _spellComp.GetSlotsForLevel(slot.Level);
+        List<SpellSlot> levelSlots = _spellComp.GetSlotsForClassAtLevel(_activeCasterClassName, slot.Level);
         int levelSlotNum = levelSlots.IndexOf(slot) + 1;
         int domainSlotNum = levelSlots.Where(s => s.IsDomainSlot).ToList().IndexOf(slot) + 1;
 
-        string cantripLabel = (_spellComp.Stats != null && _spellComp.Stats.IsCleric) ? "Orison" : "Cantrip";
+        string cantripLabel = string.Equals(_activeCasterClassName, "Cleric", StringComparison.OrdinalIgnoreCase) ? "Orison" : "Cantrip";
         string slotLabel;
         if (slot.Level == 0)
             slotLabel = $"{cantripLabel} Slot {levelSlotNum}:";
@@ -1433,7 +1497,7 @@ public class SpellPreparationUI : MonoBehaviour
     {
         if (slotIndex < 0 || slotIndex >= _slotRows.Count) return;
         var row = _slotRows[slotIndex];
-        int levelSlotIndex = _spellComp.GetSlotsForLevel(row.Slot.Level).IndexOf(row.Slot);
+        int levelSlotIndex = _spellComp.GetSlotsForClassAtLevel(_activeCasterClassName, row.Slot.Level).IndexOf(row.Slot);
 
         Debug.Log($"[SpellPrep] Change clicked for level {row.Slot.Level} slot {Mathf.Max(0, levelSlotIndex)}, domain={row.Slot.IsDomainSlot}");
 
@@ -1481,12 +1545,12 @@ public class SpellPreparationUI : MonoBehaviour
         }
         else
         {
-            if (_spellComp.Stats != null && _spellComp.Stats.IsCleric)
-                _spellComp.AutoPrepareClericSlots();
-            else if (_spellComp.Stats != null && _spellComp.Stats.HasClass("Druid"))
-                _spellComp.AutoPrepareDruidSlots();
+            if (string.Equals(_activeCasterClassName, "Cleric", StringComparison.OrdinalIgnoreCase))
+                _spellComp.AutoPrepareClericSlots(_activeCasterClassName);
+            else if (string.Equals(_activeCasterClassName, "Druid", StringComparison.OrdinalIgnoreCase))
+                _spellComp.AutoPrepareDruidSlots(_activeCasterClassName);
             else
-                _spellComp.AutoPrepareWizardSlots();
+                _spellComp.AutoPrepareWizardSlots(_activeCasterClassName);
         }
 
         // Refresh dropdown selections
@@ -1535,25 +1599,27 @@ public class SpellPreparationUI : MonoBehaviour
 
     private void RefreshSummary()
     {
-        if (_spellComp == null || _spellComp.SlotsMax == null) return;
+        if (_spellComp == null) return;
+        int[] classSlotsMax = _spellComp.GetSlotsMaxForClass(_activeCasterClassName);
+        if (classSlotsMax == null || classSlotsMax.Length == 0) return;
 
         var parts = new List<string>();
-        for (int level = 0; level < _spellComp.SlotsMax.Length; level++)
+        for (int level = 0; level < classSlotsMax.Length; level++)
         {
-            var slotsAtLevel = _spellComp.GetSlotsForLevel(level);
+            var slotsAtLevel = _spellComp.GetSlotsForClassAtLevel(_activeCasterClassName, level);
             int filled = slotsAtLevel.Count(s => s.HasSpell);
             int total = slotsAtLevel.Count;
 
             if (level == 0)
             {
-                string cantripLabel = (_spellComp.Stats != null && _spellComp.Stats.IsCleric) ? "Orisons" : "Cantrips";
+                string cantripLabel = string.Equals(_activeCasterClassName, "Cleric", StringComparison.OrdinalIgnoreCase) ? "Orisons" : "Cantrips";
                 string color = filled >= total ? "#44FF44" : "#FFDD44";
                 parts.Add($"<color={color}>{cantripLabel}: {filled}/{total} (\u221e)</color>");
             }
             else
             {
-                int domainSlots = _spellComp.GetMaxDomainSlotsAtLevel(level);
-                int regularSlots = _spellComp.GetMaxSpellSlotsAtLevel(level);
+                int domainSlots = _spellComp.GetMaxDomainSlotsAtLevelForClass(_activeCasterClassName, level);
+                int regularSlots = _spellComp.GetMaxSpellSlotsAtLevelForClass(_activeCasterClassName, level);
                 string label = domainSlots > 0
                     ? $"Lv{level} ({regularSlots}+{domainSlots}D)"
                     : $"Lv{level}";

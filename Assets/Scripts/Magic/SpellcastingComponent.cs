@@ -132,6 +132,149 @@ public class SpellcastingComponent : MonoBehaviour
         return Mathf.Max(1, classLevel);
     }
 
+    private readonly Dictionary<string, List<SpellData>> _knownSpellsByClass = new Dictionary<string, List<SpellData>>(System.StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int[]> _slotsMaxByClass = new Dictionary<string, int[]>(System.StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int[]> _slotsRemainingByClass = new Dictionary<string, int[]>(System.StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int[]> _regularSlotsMaxByClass = new Dictionary<string, int[]>(System.StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int[]> _domainSlotsMaxByClass = new Dictionary<string, int[]>(System.StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _preparedCasterClasses = new List<string>();
+    private string _activePreparationClassName = string.Empty;
+
+    public List<string> GetPreparedCasterClassNames()
+    {
+        if (_preparedCasterClasses.Count > 0)
+            return new List<string>(_preparedCasterClasses);
+
+        var result = new List<string>();
+        if (Stats == null)
+            return result;
+
+        if (Stats.GetClassLevel("Wizard") > 0) result.Add("Wizard");
+        if (Stats.GetClassLevel("Cleric") > 0) result.Add("Cleric");
+        if (Stats.GetClassLevel("Druid") > 0) result.Add("Druid");
+        return result;
+    }
+
+    public bool HasPreparedCasterClass(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return false;
+        return GetPreparedCasterClassNames().Any(c => string.Equals(c, className, System.StringComparison.OrdinalIgnoreCase));
+    }
+
+    public bool HasPreparedSpellForClass(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return false;
+
+        return SpellSlots.Any(slot =>
+            slot != null &&
+            string.Equals(slot.CasterClassName, className, System.StringComparison.OrdinalIgnoreCase) &&
+            slot.HasSpell &&
+            !slot.DisabledByNegativeLevel);
+    }
+
+    public List<string> GetUnpreparedCasterClassNames()
+    {
+        List<string> result = new List<string>();
+        foreach (string className in GetPreparedCasterClassNames())
+        {
+            if (!HasPreparedSpellForClass(className))
+                result.Add(className);
+        }
+
+        return result;
+    }
+
+    public List<SpellData> GetKnownSpellsForClass(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return new List<SpellData>();
+
+        if (_knownSpellsByClass.TryGetValue(className, out List<SpellData> spells) && spells != null)
+            return spells.Where(s => s != null).ToList();
+
+        return KnownSpells.Where(s => s != null).ToList();
+    }
+
+    public List<SpellSlot> GetSlotsForClass(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return new List<SpellSlot>();
+
+        return SpellSlots
+            .Where(s => s != null && string.Equals(s.CasterClassName, className, System.StringComparison.OrdinalIgnoreCase))
+            .OrderBy(s => s.Level)
+            .ThenBy(s => s.IsDomainSlot ? 1 : 0)
+            .ToList();
+    }
+
+    public List<SpellSlot> GetSlotsForClassAtLevel(string className, int level)
+    {
+        return GetSlotsForClass(className)
+            .Where(s => s.Level == level)
+            .ToList();
+    }
+
+    public int[] GetSlotsMaxForClass(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return new int[0];
+
+        if (_slotsMaxByClass.TryGetValue(className, out int[] slots) && slots != null)
+            return (int[])slots.Clone();
+
+        return new int[0];
+    }
+
+    public int[] GetSlotsRemainingForClass(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return new int[0];
+
+        if (_slotsRemainingByClass.TryGetValue(className, out int[] slots) && slots != null)
+            return (int[])slots.Clone();
+
+        return new int[0];
+    }
+
+    public int GetMaxSpellSlotsAtLevelForClass(string className, int spellLevel)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return 0;
+
+        if (!_regularSlotsMaxByClass.TryGetValue(className, out int[] regular) || regular == null)
+            return 0;
+
+        if (spellLevel < 0 || spellLevel >= regular.Length)
+            return 0;
+
+        return regular[spellLevel];
+    }
+
+    public int GetMaxDomainSlotsAtLevelForClass(string className, int spellLevel)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return 0;
+
+        if (!_domainSlotsMaxByClass.TryGetValue(className, out int[] domain) || domain == null)
+            return 0;
+
+        if (spellLevel < 0 || spellLevel >= domain.Length)
+            return 0;
+
+        return domain[spellLevel];
+    }
+
+    private bool IsSpellKnownByClass(string className, SpellData spell)
+    {
+        if (spell == null || string.IsNullOrWhiteSpace(className))
+            return false;
+
+        List<SpellData> classKnown = GetKnownSpellsForClass(className);
+        return classKnown.Any(s => s != null && s.SpellId == spell.SpellId);
+    }
+
 
     private void SyncDomainsFromStats()
     {
@@ -181,6 +324,7 @@ public class SpellcastingComponent : MonoBehaviour
 
     /// <summary>
     /// Initialize spellcasting for a character based on their class and level.
+    /// Supports multiclass prepared casters by tracking slots/spells per class.
     /// </summary>
     public void Init(CharacterStats stats)
     {
@@ -188,73 +332,134 @@ public class SpellcastingComponent : MonoBehaviour
         SyncDomainsFromStats();
         SpellDatabase.Init();
 
-        string activeCasterClass = GetActivePreparedCasterClass(stats);
-        int activeCasterLevel = GetActivePreparedCasterLevel(stats, activeCasterClass);
+        KnownSpells.Clear();
+        PreparedSpells.Clear();
+        SpellSlots.Clear();
+        _knownSpellsByClass.Clear();
+        _slotsMaxByClass.Clear();
+        _slotsRemainingByClass.Clear();
+        _regularSlotsMaxByClass.Clear();
+        _domainSlotsMaxByClass.Clear();
+        _preparedCasterClasses.Clear();
 
-        if (string.Equals(activeCasterClass, "Wizard", System.StringComparison.OrdinalIgnoreCase))
+        string[] classOrder = { "Wizard", "Cleric", "Druid" };
+        for (int i = 0; i < classOrder.Length; i++)
         {
-            InitWizard(activeCasterLevel);
-        }
-        else if (string.Equals(activeCasterClass, "Cleric", System.StringComparison.OrdinalIgnoreCase))
-        {
-            InitCleric(activeCasterLevel);
-        }
-        else if (string.Equals(activeCasterClass, "Druid", System.StringComparison.OrdinalIgnoreCase))
-        {
-            InitDruid(activeCasterLevel);
+            string className = classOrder[i];
+            int classLevel = GetActivePreparedCasterLevel(stats, className);
+            if (classLevel <= 0)
+                continue;
+
+            if (stats == null || stats.GetClassLevel(className) <= 0)
+                continue;
+
+            InitializePreparedCasterClass(className, classLevel);
+            _preparedCasterClasses.Add(className);
         }
 
-        // Prepared slot-based casters use the same preparation flow.
-        // If PreparedSpellSlotIds is explicitly provided (including an empty list),
-        // respect it and do NOT auto-prepare on init.
-        if (string.Equals(activeCasterClass, "Wizard", System.StringComparison.OrdinalIgnoreCase))
+        _activePreparationClassName = _preparedCasterClasses.Count > 0
+            ? _preparedCasterClasses[0]
+            : string.Empty;
+
+        if (_preparedCasterClasses.Count == 1 && PreparedSpellSlotIds != null)
         {
-            if (PreparedSpellSlotIds != null)
-            {
-                ApplyPreparedSpellSlotIds();
-                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied explicit preparation data ({PreparedSpellSlotIds.Count} entries). Auto-prepare skipped.");
-            }
-            else
-            {
-                AutoPrepareWizardSlots();
-            }
-            SyncPreparedSpellsFromSlots();
+            ApplyPreparedSpellSlotIds();
+            Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied explicit preparation data ({PreparedSpellSlotIds.Count} entries). Auto-prepare skipped.");
         }
-        else if (string.Equals(activeCasterClass, "Cleric", System.StringComparison.OrdinalIgnoreCase))
+        else
         {
-            if (PreparedSpellSlotIds != null)
+            for (int i = 0; i < _preparedCasterClasses.Count; i++)
             {
-                ApplyPreparedSpellSlotIds();
-                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied explicit preparation data ({PreparedSpellSlotIds.Count} entries). Auto-prepare skipped.");
+                string className = _preparedCasterClasses[i];
+                if (string.Equals(className, "Wizard", System.StringComparison.OrdinalIgnoreCase))
+                    AutoPrepareWizardSlots(className);
+                else if (string.Equals(className, "Cleric", System.StringComparison.OrdinalIgnoreCase))
+                    AutoPrepareClericSlots(className);
+                else if (string.Equals(className, "Druid", System.StringComparison.OrdinalIgnoreCase))
+                    AutoPrepareDruidSlots(className);
             }
-            else
-            {
-                AutoPrepareClericSlots();
-            }
-            SyncPreparedSpellsFromSlots();
-        }
-        else if (string.Equals(activeCasterClass, "Druid", System.StringComparison.OrdinalIgnoreCase))
-        {
-            if (PreparedSpellSlotIds != null)
-            {
-                ApplyPreparedSpellSlotIds();
-                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied explicit preparation data ({PreparedSpellSlotIds.Count} entries). Auto-prepare skipped.");
-            }
-            else
-            {
-                AutoPrepareDruidSlots();
-            }
-            SyncPreparedSpellsFromSlots();
         }
 
         ApplyNegativeLevelSlotLoss();
+        SyncPreparedSpellsFromSlots();
+        SyncPrimaryClassLegacyView();
 
-        Debug.Log($"[Spellcasting] {stats.CharacterName} ({activeCasterClass}): " +
-                  $"{KnownSpells.Count} known, {PreparedSpells.Count} prepared, slots: {GetSlotSummary()}");
+        string classSummary = _preparedCasterClasses.Count > 0 ? string.Join("/", _preparedCasterClasses) : "None";
+        Debug.Log($"[Spellcasting] {stats.CharacterName} ({classSummary}): {KnownSpells.Count} known, {PreparedSpells.Count} prepared, slots: {GetSlotSummary()}");
 
-        if (!string.IsNullOrWhiteSpace(activeCasterClass))
-        {
+        if (_preparedCasterClasses.Count > 0)
             Debug.Log($"[Spellcasting] {stats.CharacterName} slot details: {GetSlotDetails()}");
+    }
+
+    private void InitializePreparedCasterClass(string className, int level)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return;
+
+        if (!_knownSpellsByClass.ContainsKey(className))
+            _knownSpellsByClass[className] = new List<SpellData>();
+
+        if (string.Equals(className, "Wizard", System.StringComparison.OrdinalIgnoreCase))
+            InitWizard(level, className);
+        else if (string.Equals(className, "Cleric", System.StringComparison.OrdinalIgnoreCase))
+            InitCleric(level, className);
+        else if (string.Equals(className, "Druid", System.StringComparison.OrdinalIgnoreCase))
+            InitDruid(level, className);
+    }
+
+    private void SyncPrimaryClassLegacyView()
+    {
+        if (_preparedCasterClasses.Count == 0)
+        {
+            SlotsMax = new int[0];
+            SlotsRemaining = new int[0];
+            _regularSlotsMax = new int[0];
+            _domainSlotsMax = new int[0];
+            return;
+        }
+
+        string className = _preparedCasterClasses[0];
+        _activePreparationClassName = className;
+        SlotsMax = GetSlotsMaxForClass(className);
+        SlotsRemaining = GetSlotsRemainingForClass(className);
+        _regularSlotsMax = _regularSlotsMaxByClass.TryGetValue(className, out int[] regular) ? (int[])regular.Clone() : new int[0];
+        _domainSlotsMax = _domainSlotsMaxByClass.TryGetValue(className, out int[] domain) ? (int[])domain.Clone() : new int[0];
+    }
+
+    private void AddKnownSpellForClass(string className, SpellData spell)
+    {
+        if (string.IsNullOrWhiteSpace(className) || spell == null)
+            return;
+
+        if (!_knownSpellsByClass.TryGetValue(className, out List<SpellData> classKnown) || classKnown == null)
+        {
+            classKnown = new List<SpellData>();
+            _knownSpellsByClass[className] = classKnown;
+        }
+
+        if (!classKnown.Any(s => s != null && s.SpellId == spell.SpellId))
+            classKnown.Add(spell);
+
+        if (!KnownSpells.Any(s => s != null && s.SpellId == spell.SpellId))
+            KnownSpells.Add(spell);
+    }
+
+    private void AppendSpellSlotsForClass(string className)
+    {
+        int[] slotsMax = GetSlotsMaxForClass(className);
+        if (slotsMax == null || slotsMax.Length == 0)
+            return;
+
+        for (int spellLevel = 0; spellLevel < slotsMax.Length; spellLevel++)
+        {
+            int regularSlots = GetMaxSpellSlotsAtLevelForClass(className, spellLevel);
+            int domainSlots = GetMaxDomainSlotsAtLevelForClass(className, spellLevel);
+
+            for (int i = 0; i < regularSlots; i++)
+                SpellSlots.Add(new SpellSlot(spellLevel, isDomainSlot: false, casterClassName: className));
+
+            for (int i = 0; i < domainSlots; i++)
+                SpellSlots.Add(new SpellSlot(spellLevel, isDomainSlot: true, casterClassName: className));
         }
     }
 
@@ -262,34 +467,33 @@ public class SpellcastingComponent : MonoBehaviour
     /// Initialize Wizard spellcasting with D&D 3.5e slot-based preparation.
     /// Creates individual SpellSlot objects for each available slot.
     /// </summary>
-    private void InitWizard(int level)
+    private void InitWizard(int level, string className = "Wizard")
     {
         int safeLevel = Mathf.Max(1, level);
-        SlotsMax = GetWizardSlotsForLevel(safeLevel);
-        SlotsRemaining = (int[])SlotsMax.Clone();
-        InitializeSpellSlotCollection();
+        int[] slots = GetWizardSlotsForLevel(safeLevel);
+        _slotsMaxByClass[className] = (int[])slots.Clone();
+        _slotsRemainingByClass[className] = (int[])slots.Clone();
+        _regularSlotsMaxByClass[className] = (int[])_regularSlotsMax.Clone();
+        _domainSlotsMaxByClass[className] = (int[])_domainSlotsMax.Clone();
+        AppendSpellSlotsForClass(className);
 
-        Debug.Log($"[Spellcasting] Wizard created {SpellSlots.Count} spell slots at level {safeLevel}: {GetSlotArrayDebugString(SlotsMax)}");
+        Debug.Log($"[Spellcasting] {className} created {GetSlotsForClass(className).Count} spell slots at level {safeLevel}: {GetSlotArrayDebugString(slots)}");
 
-        // Load spells into spellbook (KnownSpells)
         if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
         {
             foreach (string spellId in SelectedSpellIds)
             {
                 SpellData spell = SpellDatabase.GetSpell(spellId);
                 if (spell != null)
-                {
-                    KnownSpells.Add(spell);
-                }
+                    AddKnownSpellForClass(className, spell);
             }
-            Debug.Log($"[Spellcasting] Wizard loaded {SelectedSpellIds.Count} selected spells into spellbook.");
+            Debug.Log($"[Spellcasting] {className} loaded {SelectedSpellIds.Count} selected spells into spellbook.");
         }
         else
         {
-            // Backwards compatibility: if no selection made, know all spells
-            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0));
-            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1));
-            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2));
+            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0)) AddKnownSpellForClass(className, spell);
+            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1)) AddKnownSpellForClass(className, spell);
+            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2)) AddKnownSpellForClass(className, spell);
             Debug.Log("[Spellcasting] Wizard: no spell selection found, added all available spells to spellbook.");
         }
     }
@@ -298,49 +502,49 @@ public class SpellcastingComponent : MonoBehaviour
     /// Initialize Cleric spellcasting with D&D 3.5e slot-based preparation.
     /// Clerics can prepare ANY cleric spell of appropriate level (no spellbook restriction).
     /// </summary>
-    private void InitCleric(int level)
+    private void InitCleric(int level, string className = "Cleric")
     {
         int safeLevel = Mathf.Max(1, level);
-        SlotsMax = GetClericSlotsForLevel(safeLevel);
-        SlotsRemaining = (int[])SlotsMax.Clone();
-        InitializeSpellSlotCollection();
+        int[] slots = GetClericSlotsForLevel(safeLevel);
+        _slotsMaxByClass[className] = (int[])slots.Clone();
+        _slotsRemainingByClass[className] = (int[])slots.Clone();
+        _regularSlotsMaxByClass[className] = (int[])_regularSlotsMax.Clone();
+        _domainSlotsMaxByClass[className] = (int[])_domainSlotsMax.Clone();
+        AppendSpellSlotsForClass(className);
 
-        Debug.Log($"[Spellcasting] Cleric created {SpellSlots.Count} spell slots at level {safeLevel}: {GetSlotArrayDebugString(SlotsMax)}");
+        Debug.Log($"[Spellcasting] {className} created {GetSlotsForClass(className).Count} spell slots at level {safeLevel}: {GetSlotArrayDebugString(slots)}");
 
-        // For orisons (level 0): only add selected ones if available
         if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
         {
-            // Add selected orisons
             foreach (string spellId in SelectedSpellIds)
             {
                 SpellData spell = SpellDatabase.GetSpell(spellId);
                 if (spell != null && spell.SpellLevel == 0)
-                {
-                    KnownSpells.Add(spell);
-                }
+                    AddKnownSpellForClass(className, spell);
             }
-            Debug.Log($"[Spellcasting] Cleric loaded {SelectedSpellIds.Count} selected orisons.");
+            Debug.Log($"[Spellcasting] {className} loaded {SelectedSpellIds.Count} selected orisons.");
         }
         else
         {
-            // Backwards compatibility: if no selection made, know all orisons
-            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 0));
+            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Cleric", 0)) AddKnownSpellForClass(className, spell);
             Debug.Log("[Spellcasting] Cleric: no orison selection found, added all orisons.");
         }
 
-        // Clerics know ALL 1st and 2nd level spells (prepared caster — full list)
-        KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 1));
-        KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Cleric", 2));
+        foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Cleric", 1)) AddKnownSpellForClass(className, spell);
+        foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Cleric", 2)) AddKnownSpellForClass(className, spell);
     }
 
-    private void InitDruid(int level)
+    private void InitDruid(int level, string className = "Druid")
     {
         int safeLevel = Mathf.Max(1, level);
-        SlotsMax = GetDruidSlotsForLevel(safeLevel);
-        SlotsRemaining = (int[])SlotsMax.Clone();
-        InitializeSpellSlotCollection();
+        int[] slots = GetDruidSlotsForLevel(safeLevel);
+        _slotsMaxByClass[className] = (int[])slots.Clone();
+        _slotsRemainingByClass[className] = (int[])slots.Clone();
+        _regularSlotsMaxByClass[className] = (int[])_regularSlotsMax.Clone();
+        _domainSlotsMaxByClass[className] = (int[])_domainSlotsMax.Clone();
+        AppendSpellSlotsForClass(className);
 
-        Debug.Log($"[Spellcasting] Druid created {SpellSlots.Count} spell slots at level {safeLevel}: {GetSlotArrayDebugString(SlotsMax)}");
+        Debug.Log($"[Spellcasting] {className} created {GetSlotsForClass(className).Count} spell slots at level {safeLevel}: {GetSlotArrayDebugString(slots)}");
 
         if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
         {
@@ -348,15 +552,15 @@ public class SpellcastingComponent : MonoBehaviour
             {
                 SpellData spell = SpellDatabase.GetSpell(spellId);
                 if (spell != null)
-                    KnownSpells.Add(spell);
+                    AddKnownSpellForClass(className, spell);
             }
-            Debug.Log($"[Spellcasting] Druid loaded {SelectedSpellIds.Count} selected spells.");
+            Debug.Log($"[Spellcasting] {className} loaded {SelectedSpellIds.Count} selected spells.");
         }
         else
         {
-            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Druid", 0));
-            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Druid", 1));
-            KnownSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Druid", 2));
+            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Druid", 0)) AddKnownSpellForClass(className, spell);
+            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Druid", 1)) AddKnownSpellForClass(className, spell);
+            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Druid", 2)) AddKnownSpellForClass(className, spell);
             Debug.Log("[Spellcasting] Druid: no spell selection found, added all available spells (Lv0-2).");
         }
     }
@@ -376,16 +580,13 @@ public class SpellcastingComponent : MonoBehaviour
         }
 
         string characterName = !string.IsNullOrWhiteSpace(Stats.CharacterName) ? Stats.CharacterName : gameObject.name;
-        string activeCasterClass = GetActivePreparedCasterClass(Stats);
-        int level = GetActivePreparedCasterLevel(Stats, activeCasterClass);
         SyncDomainsFromStats();
-
-        Debug.Log($"[Spellcasting] RefreshSpellSlots called for {characterName} ({activeCasterClass}) at level {level}");
 
         var previousSlots = SpellSlots
             .Where(slot => slot != null)
             .Select(slot => new SpellSlotSnapshot
             {
+                ClassName = slot.CasterClassName,
                 Level = slot.Level,
                 PreparedSpell = slot.PreparedSpell,
                 IsUsed = slot.IsUsed,
@@ -394,21 +595,56 @@ public class SpellcastingComponent : MonoBehaviour
             })
             .ToList();
 
-        if (string.Equals(activeCasterClass, "Wizard", System.StringComparison.OrdinalIgnoreCase))
-            SlotsMax = GetWizardSlotsForLevel(level);
-        else if (string.Equals(activeCasterClass, "Cleric", System.StringComparison.OrdinalIgnoreCase))
-            SlotsMax = GetClericSlotsForLevel(level);
-        else
-            SlotsMax = GetDruidSlotsForLevel(level);
+        var previousKnownByClass = new Dictionary<string, List<SpellData>>(System.StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in _knownSpellsByClass)
+            previousKnownByClass[kvp.Key] = kvp.Value != null ? kvp.Value.Where(s => s != null).ToList() : new List<SpellData>();
 
-        SlotsRemaining = (int[])SlotsMax.Clone();
-        InitializeSpellSlotCollection();
+        KnownSpells.Clear();
+        PreparedSpells.Clear();
+        SpellSlots.Clear();
+        _knownSpellsByClass.Clear();
+        _slotsMaxByClass.Clear();
+        _slotsRemainingByClass.Clear();
+        _regularSlotsMaxByClass.Clear();
+        _domainSlotsMaxByClass.Clear();
+        _preparedCasterClasses.Clear();
+
+        string[] classOrder = { "Wizard", "Cleric", "Druid" };
+        for (int i = 0; i < classOrder.Length; i++)
+        {
+            string className = classOrder[i];
+            int classLevel = GetActivePreparedCasterLevel(Stats, className);
+            if (classLevel <= 0 || Stats.GetClassLevel(className) <= 0)
+                continue;
+
+            InitializePreparedCasterClass(className, classLevel);
+            _preparedCasterClasses.Add(className);
+
+            if (previousKnownByClass.TryGetValue(className, out List<SpellData> prevKnown) && prevKnown != null && prevKnown.Count > 0)
+            {
+                _knownSpellsByClass[className] = prevKnown
+                    .Where(s => s != null)
+                    .GroupBy(s => s.SpellId)
+                    .Select(g => g.First())
+                    .ToList();
+            }
+        }
+
+        KnownSpells.Clear();
+        foreach (var kvp in _knownSpellsByClass)
+        {
+            for (int i = 0; i < kvp.Value.Count; i++)
+            {
+                SpellData spell = kvp.Value[i];
+                if (spell != null && !KnownSpells.Any(s => s != null && s.SpellId == spell.SpellId))
+                    KnownSpells.Add(spell);
+            }
+        }
+
         RestoreSlotStateFromSnapshot(previousSlots);
-        // Do not auto-fill newly gained slots on refresh/level-up.
-        // Spell preparation is handled explicitly in pre-combat.
-
         SyncPreparedSpellsFromSlots();
         ApplyNegativeLevelSlotLoss();
+        SyncPrimaryClassLegacyView();
 
         Debug.Log($"[Spellcasting] Refresh complete for {characterName}: {GetSlotSummary()}");
     }
@@ -583,27 +819,26 @@ public class SpellcastingComponent : MonoBehaviour
         if (previousSlots == null || previousSlots.Count == 0)
             return;
 
-        var previousByLevel = previousSlots
-            .GroupBy(s => s.Level)
+        var previousByClassLevel = previousSlots
+            .GroupBy(s => $"{s.ClassName}|{s.Level}|{(s.IsDomainSlot ? 1 : 0)}")
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var currentByLevel = SpellSlots
-            .GroupBy(s => s.Level)
+        var currentByClassLevel = SpellSlots
+            .Where(s => s != null)
+            .GroupBy(s => $"{s.CasterClassName}|{s.Level}|{(s.IsDomainSlot ? 1 : 0)}")
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        foreach (var kvp in currentByLevel)
+        foreach (var kvp in currentByClassLevel)
         {
-            int level = kvp.Key;
-            List<SpellSlot> currentSlots = kvp.Value;
-
-            if (!previousByLevel.TryGetValue(level, out List<SpellSlotSnapshot> previousLevelSlots))
+            if (!previousByClassLevel.TryGetValue(kvp.Key, out List<SpellSlotSnapshot> previousGroup))
                 continue;
 
-            int sharedCount = Mathf.Min(currentSlots.Count, previousLevelSlots.Count);
+            List<SpellSlot> currentGroup = kvp.Value;
+            int sharedCount = Mathf.Min(currentGroup.Count, previousGroup.Count);
             for (int i = 0; i < sharedCount; i++)
             {
-                SpellSlot current = currentSlots[i];
-                SpellSlotSnapshot previous = previousLevelSlots[i];
+                SpellSlot current = currentGroup[i];
+                SpellSlotSnapshot previous = previousGroup[i];
 
                 current.PreparedSpell = previous.PreparedSpell;
                 current.IsUsed = previous.IsUsed;
@@ -663,6 +898,7 @@ public class SpellcastingComponent : MonoBehaviour
 
     private sealed class SpellSlotSnapshot
     {
+        public string ClassName;
         public int Level;
         public SpellData PreparedSpell;
         public bool IsUsed;
@@ -706,32 +942,33 @@ public class SpellcastingComponent : MonoBehaviour
 
     public void AutoPrepareWizardSlots()
     {
-        if (Stats == null || !Stats.IsWizard) return;
+        AutoPrepareWizardSlots("Wizard");
+    }
 
-        for (int level = 0; level < SlotsMax.Length; level++)
+    public void AutoPrepareWizardSlots(string className)
+    {
+        if (Stats == null || Stats.GetClassLevel(className) <= 0) return;
+
+        int[] classSlots = GetSlotsMaxForClass(className);
+        List<SpellData> classKnown = GetKnownSpellsForClass(className);
+        for (int level = 0; level < classSlots.Length; level++)
         {
-            var slotsAtLevel = GetSlotsForLevel(level);
-            var spellsAtLevel = KnownSpells.Where(s => s.SpellLevel == level).ToList();
+            var slotsAtLevel = GetSlotsForClassAtLevel(className, level);
+            var spellsAtLevel = classKnown.Where(s => s.SpellLevel == level).ToList();
 
             if (spellsAtLevel.Count == 0)
             {
-                // No spells known at this level — leave slots empty
                 foreach (var slot in slotsAtLevel)
                     slot.Clear();
                 continue;
             }
 
-            // Fill each slot with a spell, cycling through available spells
             for (int i = 0; i < slotsAtLevel.Count; i++)
-            {
                 slotsAtLevel[i].Prepare(spellsAtLevel[i % spellsAtLevel.Count]);
-            }
         }
 
-        // Sync the numeric SlotsRemaining from actual slot state
         SyncSlotsRemainingFromSpellSlots();
-
-        Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared wizard spell slots");
+        Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared {className} spell slots");
     }
 
     /// <summary>
@@ -743,15 +980,22 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public void AutoPrepareClericSlots()
     {
-        if (Stats == null || !Stats.IsCleric) return;
+        AutoPrepareClericSlots("Cleric");
+    }
 
-        for (int level = 0; level < SlotsMax.Length; level++)
+    public void AutoPrepareClericSlots(string className)
+    {
+        if (Stats == null || Stats.GetClassLevel(className) <= 0) return;
+
+        int[] classSlots = GetSlotsMaxForClass(className);
+        List<SpellData> classKnown = GetKnownSpellsForClass(className);
+        for (int level = 0; level < classSlots.Length; level++)
         {
-            var slotsAtLevel = GetSlotsForLevel(level);
+            var slotsAtLevel = GetSlotsForClassAtLevel(className, level);
             var regularSlotsAtLevel = slotsAtLevel.Where(s => s != null && !s.IsDomainSlot).ToList();
             var domainSlotsAtLevel = slotsAtLevel.Where(s => s != null && s.IsDomainSlot).ToList();
 
-            var spellsAtLevel = KnownSpells.Where(s => s != null && s.SpellLevel == level).ToList();
+            var spellsAtLevel = classKnown.Where(s => s != null && s.SpellLevel == level).ToList();
             var functional = spellsAtLevel.Where(s => !s.IsPlaceholder).ToList();
             var regularCandidates = functional.Count > 0 ? functional : spellsAtLevel;
 
@@ -778,22 +1022,29 @@ public class SpellcastingComponent : MonoBehaviour
                     domainSlotsAtLevel[i].Prepare(domainCandidates[i % domainCandidates.Count]);
             }
 
-            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared level {level} cleric slots " +
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared {className} level {level} slots " +
                       $"(regular={regularSlotsAtLevel.Count}, domain={domainSlotsAtLevel.Count}, regularCandidates={regularCandidates.Count}, domainCandidates={domainCandidates.Count})");
         }
 
         SyncSlotsRemainingFromSpellSlots();
-        Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared cleric spell slots");
+        Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared {className} spell slots");
     }
 
     public void AutoPrepareDruidSlots()
     {
-        if (Stats == null || !IsDruidClass(Stats)) return;
+        AutoPrepareDruidSlots("Druid");
+    }
 
-        for (int level = 0; level < SlotsMax.Length; level++)
+    public void AutoPrepareDruidSlots(string className)
+    {
+        if (Stats == null || Stats.GetClassLevel(className) <= 0) return;
+
+        int[] classSlots = GetSlotsMaxForClass(className);
+        List<SpellData> classKnown = GetKnownSpellsForClass(className);
+        for (int level = 0; level < classSlots.Length; level++)
         {
-            var slotsAtLevel = GetSlotsForLevel(level);
-            var spellsAtLevel = KnownSpells.Where(s => s.SpellLevel == level).ToList();
+            var slotsAtLevel = GetSlotsForClassAtLevel(className, level);
+            var spellsAtLevel = classKnown.Where(s => s.SpellLevel == level).ToList();
 
             if (spellsAtLevel.Count == 0)
             {
@@ -808,12 +1059,12 @@ public class SpellcastingComponent : MonoBehaviour
             for (int i = 0; i < slotsAtLevel.Count; i++)
                 slotsAtLevel[i].Prepare(candidates[i % candidates.Count]);
 
-            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared {slotsAtLevel.Count} level-{level} druid slots " +
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared {slotsAtLevel.Count} level-{level} {className} slots " +
                       $"(from {spellsAtLevel.Count} known, {functional.Count} functional)");
         }
 
         SyncSlotsRemainingFromSpellSlots();
-        Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared druid spell slots");
+        Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared {className} spell slots");
     }
 
     private bool IsDomainSpellForCharacter(SpellData spell)
@@ -853,6 +1104,13 @@ public class SpellcastingComponent : MonoBehaviour
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(slot.CasterClassName) && !IsSpellKnownByClass(slot.CasterClassName, spell))
+        {
+            if (logOnFailure)
+                Debug.LogWarning($"[Spellcasting] {spell.Name} is not available for {slot.CasterClassName} slots.");
+            return false;
+        }
+
         return true;
     }
 
@@ -886,28 +1144,7 @@ public class SpellcastingComponent : MonoBehaviour
     {
         SpellDatabase.Init();
 
-        var available = new List<SpellData>();
-
-        if (Stats == null)
-            return available;
-
-        string className = GetActivePreparedCasterClass(Stats);
-        bool useKnownListOnly = className.Equals("Wizard", System.StringComparison.OrdinalIgnoreCase)
-                                || className.Equals("Bard", System.StringComparison.OrdinalIgnoreCase)
-                                || className.Equals("Sorcerer", System.StringComparison.OrdinalIgnoreCase);
-
-        if (useKnownListOnly)
-        {
-            available.AddRange(KnownSpells);
-        }
-        else
-        {
-            available.AddRange(SpellDatabase.GetSpellsForClass(className));
-            if (available.Count == 0)
-                available.AddRange(KnownSpells);
-        }
-
-        return available
+        return KnownSpells
             .Where(s => s != null)
             .GroupBy(s => s.SpellId)
             .Select(g => g.First())
@@ -975,13 +1212,21 @@ public class SpellcastingComponent : MonoBehaviour
             return;
         }
 
-        if (KnownSpells.Any(s => s != null && s.SpellId == spell.SpellId))
+        bool alreadyKnownAny = KnownSpells.Any(s => s != null && s.SpellId == spell.SpellId);
+
+        List<string> preparedClasses = GetPreparedCasterClassNames();
+        for (int i = 0; i < preparedClasses.Count; i++)
         {
-            Debug.Log($"[Spellcasting] Spell already known: {spell.Name}");
-            return;
+            string className = preparedClasses[i];
+            if (!spell.IsAvailableFor(className, spell.SpellLevel))
+                continue;
+
+            AddKnownSpellForClass(className, spell);
         }
 
-        KnownSpells.Add(spell);
+        if (!alreadyKnownAny && !KnownSpells.Any(s => s != null && s.SpellId == spell.SpellId))
+            KnownSpells.Add(spell);
+
         if (SelectedSpellIds == null)
             SelectedSpellIds = new List<string>();
         if (!SelectedSpellIds.Contains(spell.SpellId))
@@ -1001,7 +1246,9 @@ public class SpellcastingComponent : MonoBehaviour
             return;
 
         SpellSlot emptySlot = SpellSlots.FirstOrDefault(s =>
-            s != null && s.Level == spell.SpellLevel && !s.HasSpell && !s.DisabledByNegativeLevel);
+            s != null &&
+            string.Equals(s.CasterClassName, "Wizard", System.StringComparison.OrdinalIgnoreCase) &&
+            s.Level == spell.SpellLevel && !s.HasSpell && !s.DisabledByNegativeLevel);
 
         if (emptySlot == null)
             return;
@@ -1085,7 +1332,7 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public void ClearAllWizardSlots()
     {
-        foreach (var slot in SpellSlots)
+        foreach (var slot in SpellSlots.Where(s => s != null && string.Equals(s.CasterClassName, "Wizard", System.StringComparison.OrdinalIgnoreCase)))
             slot.Clear();
         SyncSlotsRemainingFromSpellSlots();
         SyncPreparedSpellsFromSlots();
@@ -1272,6 +1519,40 @@ public class SpellcastingComponent : MonoBehaviour
         return GetUniqueAvailableSpells(level);
     }
 
+    private string GetPreferredCastingClassForSpell(SpellData spell)
+    {
+        if (spell == null)
+            return string.Empty;
+
+        List<string> candidates = new List<string>();
+        foreach (string className in GetPreparedCasterClassNames())
+        {
+            bool classHasPrepared = SpellSlots.Any(s =>
+                s != null &&
+                string.Equals(s.CasterClassName, className, System.StringComparison.OrdinalIgnoreCase) &&
+                s.PreparedSpell != null &&
+                s.PreparedSpell.SpellId == spell.SpellId &&
+                ((spell.SpellLevel == 0 && !s.DisabledByNegativeLevel) || (spell.SpellLevel > 0 && !s.IsUsed && !s.DisabledByNegativeLevel)));
+
+            if (classHasPrepared)
+                candidates.Add(className);
+        }
+
+        if (candidates.Count == 0)
+            return string.Empty;
+
+        if (candidates.Count == 1)
+            return candidates[0];
+
+        foreach (string className in candidates)
+        {
+            if (spell.IsAvailableFor(className, spell.SpellLevel))
+                return className;
+        }
+
+        return candidates[0];
+    }
+
     /// <summary>
     /// Cast a spell by consuming the first available slot with that spell.
     /// Cantrips (level 0) are unlimited — the slot is NOT consumed.
@@ -1282,13 +1563,16 @@ public class SpellcastingComponent : MonoBehaviour
     {
         if (spell == null) return false;
 
+        string preferredClass = GetPreferredCastingClassForSpell(spell);
+
         // Cantrips are unlimited — just check if prepared, don't consume
         if (spell.SpellLevel == 0)
         {
             bool isPrepared = SpellSlots.Any(s =>
                 s.PreparedSpell != null &&
                 s.PreparedSpell.SpellId == spell.SpellId &&
-                !s.DisabledByNegativeLevel);
+                !s.DisabledByNegativeLevel &&
+                (string.IsNullOrWhiteSpace(preferredClass) || string.Equals(s.CasterClassName, preferredClass, System.StringComparison.OrdinalIgnoreCase)));
 
             if (!isPrepared)
             {
@@ -1296,14 +1580,15 @@ public class SpellcastingComponent : MonoBehaviour
                 return false;
             }
 
-            Debug.Log($"[Spellcasting] {Stats.CharacterName} cast cantrip {spell.Name} (unlimited, no slot consumed)");
+            Debug.Log($"[Spellcasting] {Stats.CharacterName} cast cantrip {spell.Name} ({preferredClass}) (unlimited, no slot consumed)");
             return true;
         }
 
         // Level 1+ spells consume a slot
         var slot = SpellSlots.FirstOrDefault(s =>
             s.PreparedSpell != null &&
-            s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed);
+            s.PreparedSpell.SpellId == spell.SpellId && !s.IsUsed &&
+            (string.IsNullOrWhiteSpace(preferredClass) || string.Equals(s.CasterClassName, preferredClass, System.StringComparison.OrdinalIgnoreCase)));
 
         if (slot == null)
         {
@@ -1344,11 +1629,11 @@ public class SpellcastingComponent : MonoBehaviour
         // For cantrips: always available if there are any cantrip slots (cantrips are unlimited)
         if (spellLevel == 0)
         {
-            return SpellSlots.Any(s => s.Level == 0 && s.HasSpell && !s.DisabledByNegativeLevel);
+            return SpellSlots.Any(s => string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) && s.Level == 0 && s.HasSpell && !s.DisabledByNegativeLevel);
         }
 
         // For level 1+: need at least one unused non-domain slot at this level.
-        return SpellSlots.Any(s => s.Level == spellLevel && !s.IsUsed && s.HasSpell && !s.IsDomainSlot);
+        return SpellSlots.Any(s => string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) && s.Level == spellLevel && !s.IsUsed && s.HasSpell && !s.IsDomainSlot);
     }
 
     /// <summary>
@@ -1388,7 +1673,7 @@ public class SpellcastingComponent : MonoBehaviour
         }
 
         // Level 1+: consume an unused non-domain slot at this level.
-        var slot = SpellSlots.FirstOrDefault(s => s.Level == spellLevel && !s.IsUsed && s.HasSpell && !s.IsDomainSlot);
+        var slot = SpellSlots.FirstOrDefault(s => string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) && s.Level == spellLevel && !s.IsUsed && s.HasSpell && !s.IsDomainSlot);
         if (slot == null)
         {
             Debug.LogWarning($"[Spellcasting] No available slot at level {spellLevel} for spontaneous casting!");
@@ -1423,6 +1708,7 @@ public class SpellcastingComponent : MonoBehaviour
 
         // Find the specific slot with this spell that is unused
         var slot = SpellSlots.FirstOrDefault(s =>
+            string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) &&
             s.HasSpell && !s.IsUsed && !s.IsDomainSlot &&
             s.PreparedSpell.SpellId == sacrificedSpellId);
 
@@ -1474,13 +1760,14 @@ public class SpellcastingComponent : MonoBehaviour
         // For cantrips: always available if prepared (unlimited)
         if (spell.SpellLevel == 0)
         {
-            return SpellSlots.Any(s => s.Level == 0 && s.HasSpell && s.PreparedSpell.SpellId == spell.SpellId && !s.DisabledByNegativeLevel);
+            return SpellSlots.Any(s => string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) && s.Level == 0 && s.HasSpell && s.PreparedSpell.SpellId == spell.SpellId && !s.DisabledByNegativeLevel);
         }
 
         // Domain slots cannot be converted (D&D 3.5e rule).
         // If the same spell appears in both regular and domain slots, conversion is allowed only when
         // at least one regular prepared slot exists and is unused.
         return SpellSlots.Any(s =>
+            string.Equals(s.CasterClassName, "Cleric", System.StringComparison.OrdinalIgnoreCase) &&
             s.Level == spell.SpellLevel && !s.IsUsed && s.HasSpell && !s.IsDomainSlot &&
             s.PreparedSpell.SpellId == spell.SpellId);
     }
@@ -1532,18 +1819,40 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     private void SyncSlotsRemainingFromSpellSlots()
     {
-        if (SlotsMax == null) return;
-        for (int level = 0; level < SlotsMax.Length; level++)
+        foreach (string className in GetPreparedCasterClassNames())
         {
-            if (level == 0)
+            if (!_slotsMaxByClass.TryGetValue(className, out int[] classSlotsMax) || classSlotsMax == null)
+                continue;
+
+            int[] remaining = new int[classSlotsMax.Length];
+            for (int level = 0; level < classSlotsMax.Length; level++)
             {
-                // Cantrips are unlimited — count all prepared (not empty) slots as available
-                SlotsRemaining[level] = SpellSlots.Count(s => s.Level == 0 && s.HasSpell && !s.DisabledByNegativeLevel);
+                if (level == 0)
+                {
+                    remaining[level] = SpellSlots.Count(s =>
+                        s != null &&
+                        string.Equals(s.CasterClassName, className, System.StringComparison.OrdinalIgnoreCase) &&
+                        s.Level == 0 && s.HasSpell && !s.DisabledByNegativeLevel);
+                }
+                else
+                {
+                    remaining[level] = SpellSlots.Count(s =>
+                        s != null &&
+                        string.Equals(s.CasterClassName, className, System.StringComparison.OrdinalIgnoreCase) &&
+                        s.Level == level && s.CanCast);
+                }
             }
-            else
-            {
-                SlotsRemaining[level] = SpellSlots.Count(s => s.Level == level && s.CanCast);
-            }
+
+            _slotsRemainingByClass[className] = remaining;
+        }
+
+        if (_preparedCasterClasses.Count > 0)
+        {
+            string primary = _preparedCasterClasses[0];
+            SlotsMax = GetSlotsMaxForClass(primary);
+            SlotsRemaining = GetSlotsRemainingForClass(primary);
+            _regularSlotsMax = _regularSlotsMaxByClass.TryGetValue(primary, out int[] regular) ? (int[])regular.Clone() : new int[0];
+            _domainSlotsMax = _domainSlotsMaxByClass.TryGetValue(primary, out int[] domain) ? (int[])domain.Clone() : new int[0];
         }
     }
 
@@ -1793,17 +2102,19 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public int GetHighestSlotLevel()
     {
-        if (SlotsMax == null || SlotsMax.Length == 0)
+        if (SpellSlots == null || SpellSlots.Count == 0)
             return -1;
 
-        for (int level = SlotsMax.Length - 1; level >= 0; level--)
+        int highest = -1;
+        for (int i = 0; i < SpellSlots.Count; i++)
         {
-            int totalSlotsAtLevel = GetMaxSpellSlotsAtLevel(level) + GetMaxDomainSlotsAtLevel(level);
-            if (totalSlotsAtLevel > 0)
-                return level;
+            SpellSlot slot = SpellSlots[i];
+            if (slot == null)
+                continue;
+            highest = Mathf.Max(highest, slot.Level);
         }
 
-        return -1;
+        return highest;
     }
 
     /// <summary>
@@ -1811,8 +2122,10 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public bool HasSlotAtLevel(int level)
     {
-        if (SlotsRemaining == null || level < 0 || level >= SlotsRemaining.Length) return false;
-        return SlotsRemaining[level] > 0;
+        if (level < 0)
+            return false;
+
+        return SpellSlots.Any(s => s != null && s.Level == level && (level == 0 ? s.HasSpell && !s.DisabledByNegativeLevel : s.CanCast));
     }
 
     /// <summary>
@@ -1876,7 +2189,10 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public int GetSpellDC(SpellData spell)
     {
-        int castingMod = Stats.IsWizard ? Stats.INTMod : Stats.WISMod;
+        string castingClass = GetPreferredCastingClassForSpell(spell);
+        int castingMod = string.Equals(castingClass, "Wizard", System.StringComparison.OrdinalIgnoreCase)
+            ? Stats.INTMod
+            : Stats.WISMod;
         return 10 + spell.SpellLevel + castingMod;
     }
 
@@ -2071,22 +2387,33 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>Get a summary string of remaining spell slots.</summary>
     public string GetSlotSummary()
     {
-        if (SlotsRemaining == null || SlotsRemaining.Length == 0) return "None";
-        var parts = new List<string>();
-        for (int i = 0; i < SlotsRemaining.Length; i++)
+        List<string> classNames = GetPreparedCasterClassNames();
+        if (classNames.Count == 0)
+            return "None";
+
+        var classParts = new List<string>();
+        for (int c = 0; c < classNames.Count; c++)
         {
-            string label = i == 0 ? "Cantrips" : $"Lv{i}";
-            if (i == 0)
+            string className = classNames[c];
+            int[] classMax = GetSlotsMaxForClass(className);
+            int[] classRemaining = GetSlotsRemainingForClass(className);
+            if (classMax == null || classRemaining == null || classMax.Length == 0)
+                continue;
+
+            var parts = new List<string>();
+            for (int i = 0; i < classMax.Length; i++)
             {
-                // Cantrips are unlimited
-                parts.Add($"{label}: \u221e (unlimited)");
+                string label = i == 0 ? "L0" : $"L{i}";
+                if (i == 0)
+                    parts.Add($"{label}:∞");
+                else
+                    parts.Add($"{label}:{classRemaining[i]}/{classMax[i]}");
             }
-            else
-            {
-                parts.Add($"{label}: {SlotsRemaining[i]}/{SlotsMax[i]}");
-            }
+
+            classParts.Add($"{className}[{string.Join(", ", parts)}]");
         }
-        return string.Join(", ", parts);
+
+        return classParts.Count > 0 ? string.Join(" | ", classParts) : "None";
     }
 
     /// <summary>
@@ -2112,15 +2439,35 @@ public class SpellcastingComponent : MonoBehaviour
     /// <summary>Get remaining slots for a specific spell level.</summary>
     public int GetSlotsRemaining(int level)
     {
-        if (SlotsRemaining == null || level >= SlotsRemaining.Length) return 0;
-        return SlotsRemaining[level];
+        if (level < 0)
+            return 0;
+
+        int total = 0;
+        foreach (string className in GetPreparedCasterClassNames())
+        {
+            int[] classRemaining = GetSlotsRemainingForClass(className);
+            if (classRemaining != null && level < classRemaining.Length)
+                total += classRemaining[level];
+        }
+
+        return total;
     }
 
     /// <summary>Get maximum slots for a specific spell level.</summary>
     public int GetMaxSlots(int level)
     {
-        if (SlotsMax == null || level >= SlotsMax.Length) return 0;
-        return SlotsMax[level];
+        if (level < 0)
+            return 0;
+
+        int total = 0;
+        foreach (string className in GetPreparedCasterClassNames())
+        {
+            int[] classMax = GetSlotsMaxForClass(className);
+            if (classMax != null && level < classMax.Length)
+                total += classMax[level];
+        }
+
+        return total;
     }
 
     /// <summary>

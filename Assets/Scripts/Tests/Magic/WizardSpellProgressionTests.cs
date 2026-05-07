@@ -1,12 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
 namespace Tests.Magic
 {
     /// <summary>
-    /// Regression checks for wizard spell progression during level-up.
-    /// Ensures Wizard 2 cannot access 2nd-level slots/spells, and Wizard 3 can.
+    /// Regression checks for wizard spell progression and multiclass prepared-caster separation.
     /// </summary>
     public static class WizardSpellProgressionTests
     {
@@ -28,6 +28,8 @@ namespace Tests.Magic
 
             TestWizardLevel2HasNoSecondLevelSlotsEvenWithHighInt();
             TestWizardLevel3UnlocksSecondLevelSlots();
+            TestMulticlassPreparedSlotsAreSeparatedPerClass();
+            TestMulticlassCastingConsumesCorrectClassSlotPool();
 
             Debug.Log($"====== Wizard Spell Progression Results: {_passed} passed, {_failed} failed ======");
         }
@@ -70,6 +72,40 @@ namespace Tests.Magic
                 raceName: "Human");
         }
 
+        private static CharacterStats CreateWizardClericStats(string name)
+        {
+            CharacterStats stats = new CharacterStats(
+                name: name,
+                level: 4,
+                characterClass: "Wizard",
+                str: 10,
+                dex: 12,
+                con: 12,
+                wis: 16,
+                intelligence: 16,
+                cha: 10,
+                bab: 2,
+                armorBonus: 0,
+                shieldBonus: 0,
+                damageDice: 4,
+                damageCount: 1,
+                bonusDamage: 0,
+                baseSpeed: 6,
+                atkRange: 1,
+                baseHitDieHP: 18,
+                raceName: "Human");
+
+            stats.ClassLevels = new List<ClassLevelEntry>
+            {
+                new ClassLevelEntry("Wizard", 2),
+                new ClassLevelEntry("Cleric", 2)
+            };
+            stats.Level = 4;
+            stats.CharacterClass = "Wizard";
+            stats.ChosenDomains = new List<string> { "Healing" };
+            return stats;
+        }
+
         private static SpellcastingComponent CreateSpellcasting(CharacterStats stats, string goName)
         {
             GameObject go = new GameObject(goName);
@@ -89,7 +125,7 @@ namespace Tests.Magic
             SpellcastingComponent sc = null;
             try
             {
-                CharacterStats stats = CreateWizardStats("WizardLv2", 2, intelligence: 18); // INT mod +4
+                CharacterStats stats = CreateWizardStats("WizardLv2", 2, intelligence: 18);
                 sc = CreateSpellcasting(stats, "WizardLv2_Test");
 
                 int cantripSlots = sc.GetSpellSlotsPerDay(0);
@@ -113,7 +149,7 @@ namespace Tests.Magic
             SpellcastingComponent sc = null;
             try
             {
-                CharacterStats stats = CreateWizardStats("WizardLv3", 3, intelligence: 18); // INT mod +4
+                CharacterStats stats = CreateWizardStats("WizardLv3", 3, intelligence: 18);
                 sc = CreateSpellcasting(stats, "WizardLv3_Test");
 
                 int secondLevelSlots = sc.GetSpellSlotsPerDay(2);
@@ -129,6 +165,85 @@ namespace Tests.Magic
                     .FirstOrDefault();
 
                 Assert(!string.IsNullOrWhiteSpace(knownSecondLevelSpell), "Wizard 3 has access to known 2nd-level spells");
+            }
+            finally
+            {
+                DestroySpellcasting(sc);
+            }
+        }
+
+        private static void TestMulticlassPreparedSlotsAreSeparatedPerClass()
+        {
+            SpellcastingComponent sc = null;
+            try
+            {
+                sc = CreateSpellcasting(CreateWizardClericStats("MultiPrep"), "MulticlassSlots_Test");
+
+                List<string> classes = sc.GetPreparedCasterClassNames();
+                Assert(classes.Contains("Wizard"), "Wizard/Cleric includes Wizard caster class");
+                Assert(classes.Contains("Cleric"), "Wizard/Cleric includes Cleric caster class");
+
+                List<SpellSlot> wizardSlots = sc.GetSlotsForClass("Wizard");
+                List<SpellSlot> clericSlots = sc.GetSlotsForClass("Cleric");
+                Assert(wizardSlots.Count > 0, "Wizard/Cleric has wizard slots");
+                Assert(clericSlots.Count > 0, "Wizard/Cleric has cleric slots");
+                Assert(wizardSlots.All(s => string.Equals(s.CasterClassName, "Wizard", StringComparison.OrdinalIgnoreCase)), "Wizard slots tagged Wizard");
+                Assert(clericSlots.All(s => string.Equals(s.CasterClassName, "Cleric", StringComparison.OrdinalIgnoreCase)), "Cleric slots tagged Cleric");
+
+                SpellData bless = SpellDatabase.GetSpell("bless");
+                SpellData magicMissile = SpellDatabase.GetSpell("magic_missile");
+                Assert(bless != null && magicMissile != null, "Required spells exist for multiclass prep test");
+
+                SpellSlot wizardLv1 = wizardSlots.FirstOrDefault(s => s.Level == 1 && !s.IsDomainSlot);
+                SpellSlot clericLv1 = clericSlots.FirstOrDefault(s => s.Level == 1 && !s.IsDomainSlot);
+                Assert(wizardLv1 != null && clericLv1 != null, "Wizard/Cleric has regular level-1 slots in both classes");
+
+                int wizardGlobalIndex = sc.SpellSlots.IndexOf(wizardLv1);
+                int clericGlobalIndex = sc.SpellSlots.IndexOf(clericLv1);
+                bool wizardAcceptsWizardSpell = sc.PrepareSpellInSlot(wizardGlobalIndex, magicMissile);
+                bool clericAcceptsClericSpell = sc.PrepareSpellInSlot(clericGlobalIndex, bless);
+                bool wizardRejectsClericSpell = !sc.PrepareSpellInSlot(wizardGlobalIndex, bless);
+                bool clericRejectsWizardSpell = !sc.PrepareSpellInSlot(clericGlobalIndex, magicMissile);
+
+                Assert(wizardAcceptsWizardSpell, "Wizard slot accepts wizard spellbook spell");
+                Assert(clericAcceptsClericSpell, "Cleric slot accepts cleric list spell");
+                Assert(wizardRejectsClericSpell, "Wizard slot rejects cleric-only spell");
+                Assert(clericRejectsWizardSpell, "Cleric slot rejects wizard-only spell");
+            }
+            finally
+            {
+                DestroySpellcasting(sc);
+            }
+        }
+
+        private static void TestMulticlassCastingConsumesCorrectClassSlotPool()
+        {
+            SpellcastingComponent sc = null;
+            try
+            {
+                sc = CreateSpellcasting(CreateWizardClericStats("MultiCast"), "MulticlassCast_Test");
+
+                SpellData magicMissile = SpellDatabase.GetSpell("magic_missile");
+                SpellData bless = SpellDatabase.GetSpell("bless");
+                Assert(magicMissile != null && bless != null, "Required spells exist for multiclass casting test");
+
+                int wizardBefore = sc.GetSlotsRemainingForClass("Wizard")[1];
+                int clericBefore = sc.GetSlotsRemainingForClass("Cleric")[1];
+
+                bool castWizardSpell = sc.CastSpellFromSlot(magicMissile);
+                int wizardAfterWizardCast = sc.GetSlotsRemainingForClass("Wizard")[1];
+                int clericAfterWizardCast = sc.GetSlotsRemainingForClass("Cleric")[1];
+
+                bool castClericSpell = sc.CastSpellFromSlot(bless);
+                int wizardAfterClericCast = sc.GetSlotsRemainingForClass("Wizard")[1];
+                int clericAfterClericCast = sc.GetSlotsRemainingForClass("Cleric")[1];
+
+                Assert(castWizardSpell, "Wizard spell cast succeeds for multiclass caster");
+                Assert(castClericSpell, "Cleric spell cast succeeds for multiclass caster");
+                Assert(wizardAfterWizardCast == wizardBefore - 1, "Casting wizard spell consumes wizard level-1 slot", $"before={wizardBefore}, after={wizardAfterWizardCast}");
+                Assert(clericAfterWizardCast == clericBefore, "Casting wizard spell does not consume cleric level-1 slot", $"before={clericBefore}, after={clericAfterWizardCast}");
+                Assert(wizardAfterClericCast == wizardAfterWizardCast, "Casting cleric spell does not consume wizard level-1 slot", $"before={wizardAfterWizardCast}, after={wizardAfterClericCast}");
+                Assert(clericAfterClericCast == clericBefore - 1, "Casting cleric spell consumes cleric level-1 slot", $"before={clericBefore}, after={clericAfterClericCast}");
             }
             finally
             {
