@@ -1546,10 +1546,26 @@ public partial class GameManager : MonoBehaviour
         {
             if (pcSlots[i] == null) continue;
             CharacterCreationData data = pcDataArray[i];
-            data.ComputeFinalStats();
+
+            bool hasCustomRolledStats = data != null
+                && data.RolledStats != null
+                && Array.Exists(data.RolledStats, rolled => rolled > 0);
 
             int baseCreationLevel = Mathf.Max(1, data.CharacterLevel);
             int targetLevel = Mathf.Max(baseCreationLevel, data.TargetLevel);
+
+            if (hasCustomRolledStats)
+            {
+                // Custom creation should always build at level 1 first, then use pending level-ups.
+                baseCreationLevel = 1;
+                targetLevel = Mathf.Max(baseCreationLevel, data.TargetLevel);
+                data.CharacterLevel = baseCreationLevel;
+                data.TargetLevel = targetLevel;
+            }
+
+            data.ComputeFinalStats();
+
+            Debug.Log($"[GameManager][CreationFlow] {data.CharacterName}: customRolled={hasCustomRolledStats}, baseLevel={baseCreationLevel}, targetLevel={targetLevel}, pendingToQueue={Mathf.Max(0, targetLevel - baseCreationLevel)}");
 
             int armorBonus, shieldBonus, damageDice;
             GetClassDefaults(data.ClassName, out armorBonus, out shieldBonus, out damageDice);

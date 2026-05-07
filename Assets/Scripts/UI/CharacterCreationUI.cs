@@ -2054,9 +2054,14 @@ public class CharacterCreationUI : MonoBehaviour
         var data = CreatedCharacters[CurrentCharacterIndex];
         data.CharacterName = string.IsNullOrEmpty(_nameInput.text) ?
             $"Hero {CurrentCharacterIndex + 1}" : _nameInput.text;
+
+        // Custom creation always builds the base character at level 1 first.
+        data.CharacterLevel = 1;
+        data.TargetLevel = Mathf.Max(1, data.TargetLevel);
         data.ComputeFinalStats();
 
         Debug.Log($"[CharCreation] Created {data.CharacterName}: {data.RaceName} {data.ClassName} " +
+                  $"baseLevel={data.CharacterLevel}, targetLevel={data.TargetLevel}, " +
                   $"STR {data.FinalSTR} DEX {data.FinalDEX} CON {data.FinalCON} " +
                   $"INT {data.FinalINT} WIS {data.FinalWIS} CHA {data.FinalCHA} HP {data.HP}");
 
