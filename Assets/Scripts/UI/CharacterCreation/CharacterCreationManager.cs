@@ -71,41 +71,168 @@ public class CharacterCreationManager : MonoBehaviour
 
     private void ShowFeatSelection()
     {
-        if (_levelUpData == null || !_levelUpData.NeedsFeat)
+        if (_levelUpData == null || !_levelUpData.NeedsFeat || _levelUpData.TotalFeatsToSelect <= 0)
         {
             ShowSkillSelection();
             return;
         }
 
+        CharacterStats stats = _levelingCharacter != null ? _levelingCharacter.Stats : null;
+        if (stats == null)
+        {
+            ShowSkillSelection();
+            return;
+        }
+
+        ShowGeneralFeatSelection(stats);
+    }
+
+    private void ShowGeneralFeatSelection(CharacterStats stats)
+    {
+        int generalFeats = _levelUpData != null ? Mathf.Max(0, _levelUpData.GeneralFeatsToSelect) : 0;
+        if (generalFeats <= 0)
+        {
+            ShowFighterBonusFeatSelection(stats);
+            return;
+        }
+
+        string title = generalFeats == 1 ? "Select Level-Up Feat" : $"Select {generalFeats} Level-Up Feats";
+        OpenFeatSelection(
+            stats,
+            generalFeats,
+            fighterBonusOnly: false,
+            title: title,
+            subtitle: "General feats from total character level progression.",
+            onConfirmed: selectedFeats =>
+            {
+                ApplySelectedFeats(stats, selectedFeats);
+                ShowFighterBonusFeatSelection(stats);
+            });
+    }
+
+    private void ShowFighterBonusFeatSelection(CharacterStats stats)
+    {
+        int fighterBonusFeats = _levelUpData != null ? Mathf.Max(0, _levelUpData.FighterBonusFeatsToSelect) : 0;
+        if (fighterBonusFeats <= 0)
+        {
+            ShowMonkBonusFeatSelection(stats);
+            return;
+        }
+
+        string title = fighterBonusFeats == 1 ? "Select Fighter Bonus Feat" : $"Select {fighterBonusFeats} Fighter Bonus Feats";
+        OpenFeatSelection(
+            stats,
+            fighterBonusFeats,
+            fighterBonusOnly: true,
+            title: title,
+            subtitle: "Bonus feats from Fighter class level progression.",
+            onConfirmed: selectedFeats =>
+            {
+                ApplySelectedFeats(stats, selectedFeats);
+                ShowMonkBonusFeatSelection(stats);
+            });
+    }
+
+    private void ShowMonkBonusFeatSelection(CharacterStats stats)
+    {
+        int monkBonusLevel = _levelUpData != null ? Mathf.Max(0, _levelUpData.MonkBonusFeatLevelToSelect) : 0;
+        if (monkBonusLevel <= 0)
+        {
+            ShowWizardBonusFeatSelection(stats);
+            return;
+        }
+
+        OpenFeatSelection(
+            stats,
+            1,
+            fighterBonusOnly: false,
+            title: $"Select Monk Bonus Feat (Level {monkBonusLevel})",
+            subtitle: "Monk bonus feat from Monk class level progression.",
+            monkBonusLevel: monkBonusLevel,
+            onConfirmed: selectedFeats =>
+            {
+                ApplySelectedFeats(stats, selectedFeats);
+                ShowWizardBonusFeatSelection(stats);
+            });
+    }
+
+    private void ShowWizardBonusFeatSelection(CharacterStats stats)
+    {
+        int wizardBonusFeats = _levelUpData != null ? Mathf.Max(0, _levelUpData.WizardBonusFeatsToSelect) : 0;
+        if (wizardBonusFeats <= 0)
+        {
+            ShowSkillSelection();
+            return;
+        }
+
+        string title = wizardBonusFeats == 1 ? "Select Wizard Bonus Feat" : $"Select {wizardBonusFeats} Wizard Bonus Feats";
+        OpenFeatSelection(
+            stats,
+            wizardBonusFeats,
+            fighterBonusOnly: false,
+            title: title,
+            subtitle: "Bonus feats from Wizard class level progression (metamagic/item creation/spell mastery).",
+            wizardBonus: true,
+            onConfirmed: selectedFeats =>
+            {
+                ApplySelectedFeats(stats, selectedFeats);
+                ShowSkillSelection();
+            });
+    }
+
+    private void OpenFeatSelection(
+        CharacterStats stats,
+        int featsToSelect,
+        bool fighterBonusOnly,
+        string title,
+        string subtitle,
+        Action<List<string>> onConfirmed,
+        int monkBonusLevel = 0,
+        bool wizardBonus = false)
+    {
         FeatSelectionUI featUI = FindOrCreateFeatSelectionUI();
         if (featUI == null)
         {
             Debug.LogWarning("[CharacterCreationManager] FeatSelectionUI unavailable. Skipping feat step.");
-            ShowSkillSelection();
+            onConfirmed?.Invoke(new List<string>());
             return;
         }
 
-        featUI.ShowForLevelUp(_levelingCharacter, 1, selectedFeats =>
+        int safeFeatCount = Mathf.Max(0, featsToSelect);
+        if (safeFeatCount <= 0)
         {
-            CharacterStats stats = _levelingCharacter != null ? _levelingCharacter.Stats : null;
-            if (stats != null && selectedFeats != null)
+            onConfirmed?.Invoke(new List<string>());
+            return;
+        }
+
+        featUI.OnFeatsConfirmed = selected => onConfirmed?.Invoke(selected ?? new List<string>());
+        featUI.OpenForSelection(
+            stats,
+            safeFeatCount,
+            fighterBonusOnly: fighterBonusOnly,
+            title: title,
+            subtitle: subtitle,
+            monkBonusLevel: monkBonusLevel,
+            wizardBonus: wizardBonus);
+    }
+
+    private static void ApplySelectedFeats(CharacterStats stats, List<string> selectedFeats)
+    {
+        if (stats == null || selectedFeats == null)
+            return;
+
+        for (int i = 0; i < selectedFeats.Count; i++)
+        {
+            string featName = selectedFeats[i];
+            if (string.IsNullOrWhiteSpace(featName))
+                continue;
+
+            if (!stats.Feats.Contains(featName))
             {
-                for (int i = 0; i < selectedFeats.Count; i++)
-                {
-                    string featName = selectedFeats[i];
-                    if (string.IsNullOrWhiteSpace(featName))
-                        continue;
-
-                    if (!stats.Feats.Contains(featName))
-                    {
-                        stats.Feats.Add(featName);
-                        Debug.Log($"[CharacterCreationManager] Applied level-up feat: {featName}");
-                    }
-                }
+                stats.Feats.Add(featName);
+                Debug.Log($"[CharacterCreationManager] Applied level-up feat: {featName}");
             }
-
-            ShowSkillSelection();
-        });
+        }
     }
 
     private void ShowSkillSelection()

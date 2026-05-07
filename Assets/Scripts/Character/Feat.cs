@@ -70,7 +70,7 @@ public class FeatPrerequisite
                 return stats.HasFeat(ParamString);
 
             case PrerequisiteType.ClassLevel:
-                return stats.CharacterClass == ParamString && stats.Level >= ParamValue;
+                return stats.GetClassLevel(ParamString) >= ParamValue;
 
             case PrerequisiteType.SkillRanks:
                 if (stats.Skills != null && stats.Skills.ContainsKey(ParamString))
@@ -81,18 +81,19 @@ public class FeatPrerequisite
                 // Supports broad categories (Simple/Martial) and specific weapon names used by Rapid Reload.
                 return stats.IsProficientWithWeaponByName(ParamString);
             case PrerequisiteType.CasterLevel:
-                // Caster level check - for spellcasting classes, caster level equals class level
-                // Wizard, Sorcerer, Cleric, Druid, Bard, etc. qualify
-                // Simplified: check if the character is a spellcasting class and level >= required
-                string cls = stats.CharacterClass;
-                bool isCaster = cls == "Wizard" || cls == "Sorcerer" || cls == "Cleric" ||
-                                cls == "Druid" || cls == "Bard" || cls == "Ranger" || cls == "Paladin";
-                if (!isCaster) return false;
-                // Ranger/Paladin get caster levels at half progression (starting at level 4)
-                int casterLevel = stats.Level;
-                if (cls == "Ranger" || cls == "Paladin")
-                    casterLevel = Mathf.Max(0, stats.Level - 3); // half caster, starts at 4th
-                return casterLevel >= ParamValue;
+                // Caster level prerequisites are satisfied by any spellcasting class reaching the threshold.
+                // For this prototype: full casters use class level; Ranger/Paladin use class level - 3.
+                int highestCasterLevel = 0;
+
+                highestCasterLevel = Mathf.Max(highestCasterLevel, stats.GetClassLevel("Wizard"));
+                highestCasterLevel = Mathf.Max(highestCasterLevel, stats.GetClassLevel("Sorcerer"));
+                highestCasterLevel = Mathf.Max(highestCasterLevel, stats.GetClassLevel("Cleric"));
+                highestCasterLevel = Mathf.Max(highestCasterLevel, stats.GetClassLevel("Druid"));
+                highestCasterLevel = Mathf.Max(highestCasterLevel, stats.GetClassLevel("Bard"));
+                highestCasterLevel = Mathf.Max(highestCasterLevel, Mathf.Max(0, stats.GetClassLevel("Ranger") - 3));
+                highestCasterLevel = Mathf.Max(highestCasterLevel, Mathf.Max(0, stats.GetClassLevel("Paladin") - 3));
+
+                return highestCasterLevel >= ParamValue;
 
             default:
                 return true;

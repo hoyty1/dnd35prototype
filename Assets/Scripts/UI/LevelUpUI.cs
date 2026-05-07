@@ -243,7 +243,11 @@ public class LevelUpUI : MonoBehaviour
             CreateInfoText("• Ability Score: +1 to one ability", true, Color.green);
 
         if (_currentLevelUp.NeedsFeat)
-            CreateInfoText("• Feat: Choose 1 new feat", true, Color.green);
+        {
+            int featCount = Mathf.Max(1, _currentLevelUp.TotalFeatsToSelect);
+            string featText = featCount == 1 ? "• Feat: Choose 1 new feat" : $"• Feats: Choose {featCount} new feats";
+            CreateInfoText(featText, true, Color.green);
+        }
 
         if (_currentLevelUp.SkillPointsToAllocate > 0)
         {

@@ -5260,8 +5260,9 @@ public class CharacterController : MonoBehaviour
                 }
                 else
                 {
-                    int sneakDice = CombatUtils.GetSneakAttackDice(Stats.Level);
-                    rawSneakDamage = CombatUtils.RollSneakAttackDamage(Stats.Level);
+                    int rogueLevel = Stats.GetClassLevel("Rogue");
+                    int sneakDice = CombatUtils.GetSneakAttackDice(rogueLevel);
+                    rawSneakDamage = CombatUtils.RollSneakAttackDamage(rogueLevel);
                     result.SneakAttackApplied = true;
                     result.SneakAttackDice = sneakDice;
                     result.SneakAttackDamage = rawSneakDamage;
@@ -9350,7 +9351,8 @@ public class CharacterController : MonoBehaviour
         bool sneakApplied = false;
         if (Stats.IsRogue)
         {
-            sneakDamage = CombatUtils.RollSneakAttackDamage(Stats.Level);
+            int rogueLevel = Stats.GetClassLevel("Rogue");
+            sneakDamage = CombatUtils.RollSneakAttackDamage(rogueLevel);
             sneakApplied = sneakDamage > 0;
         }
 

@@ -27,8 +27,13 @@ public class LevelUpData
     public int NewWillSave;
 
     // Level-up choices
-    public bool NeedsAbilityIncrease; // Every 4 levels
-    public bool NeedsFeat; // Every 3 levels (or fighter bonus)
+    public bool NeedsAbilityIncrease; // Every 4 total levels
+    public bool NeedsFeat; // Any feat selection required this level-up
+    public int GeneralFeatsToSelect; // Total-level progression feats (1,3,6,...)
+    public int FighterBonusFeatsToSelect; // Fighter class-level progression feats
+    public int WizardBonusFeatsToSelect; // Wizard class-level progression feats (5,10,15,20)
+    public int MonkBonusFeatLevelToSelect; // Monk class-level bonus feat milestone (1,2,6) or 0
+    public int TotalFeatsToSelect => GeneralFeatsToSelect + FighterBonusFeatsToSelect + WizardBonusFeatsToSelect + (MonkBonusFeatLevelToSelect > 0 ? 1 : 0);
     public int SkillPointsNew;
     public int SkillPointsFromClassPool;
     public int SkillPointsToAllocate;

@@ -50,11 +50,9 @@ public static class LevelUpCalculator
         RecalculateForSelectedClass(data, data.SelectedClassName);
 
         data.NeedsAbilityIncrease = (newLevel % 4 == 0);
-        data.NeedsFeat = NeedsFeatAtLevel(newLevel)
-            || (string.Equals(data.SelectedClassName, "Fighter", System.StringComparison.OrdinalIgnoreCase)
-                && FeatDefinitions.GetsFighterBonusFeatAtLevel(newLevel));
+        ApplyFeatProgression(data, data.SelectedClassName, projectedClassLevel: stats.GetClassLevel(data.SelectedClassName) + 1);
 
-        Debug.Log($"[LevelUp] Needs: Ability={data.NeedsAbilityIncrease}, Feat={data.NeedsFeat}, Skills={data.SkillPointsToAllocate}, Spells={data.NeedsSpellSelection}");
+        Debug.Log($"[LevelUp] Needs: Ability={data.NeedsAbilityIncrease}, Feat={data.NeedsFeat} (General={data.GeneralFeatsToSelect}, FighterBonus={data.FighterBonusFeatsToSelect}, MonkBonusLevel={data.MonkBonusFeatLevelToSelect}, WizardBonus={data.WizardBonusFeatsToSelect}), Skills={data.SkillPointsToAllocate}, Spells={data.NeedsSpellSelection}");
 
         return data;
     }
@@ -89,9 +87,33 @@ public static class LevelUpCalculator
         ClassRegistry.Init();
         ICharacterClass classDef = ClassRegistry.GetClass(selected);
         data.NeedsSpellSelection = classDef != null && classDef.IsSpellcaster;
-        data.NeedsFeat = NeedsFeatAtLevel(data.NewLevel)
-            || (string.Equals(selected, "Fighter", System.StringComparison.OrdinalIgnoreCase)
-                && FeatDefinitions.GetsFighterBonusFeatAtLevel(data.NewLevel));
+        ApplyFeatProgression(data, selected, projectedClassLevel);
+    }
+
+    private static void ApplyFeatProgression(LevelUpData data, string selectedClassName, int projectedClassLevel)
+    {
+        if (data == null)
+            return;
+
+        int safeTotalLevel = Mathf.Max(1, data.NewLevel);
+        int safeClassLevel = Mathf.Max(1, projectedClassLevel);
+
+        data.GeneralFeatsToSelect = NeedsFeatAtLevel(safeTotalLevel) ? 1 : 0;
+
+        bool isFighter = string.Equals(selectedClassName, "Fighter", System.StringComparison.OrdinalIgnoreCase);
+        bool isWizard = string.Equals(selectedClassName, "Wizard", System.StringComparison.OrdinalIgnoreCase);
+        bool isMonk = string.Equals(selectedClassName, "Monk", System.StringComparison.OrdinalIgnoreCase);
+
+        data.FighterBonusFeatsToSelect = (isFighter && FeatDefinitions.GetsFighterBonusFeatAtLevel(safeClassLevel)) ? 1 : 0;
+        data.WizardBonusFeatsToSelect = (isWizard && FeatDefinitions.GetsWizardBonusFeatAtLevel(safeClassLevel)) ? 1 : 0;
+        data.MonkBonusFeatLevelToSelect = (isMonk && GetsMonkBonusFeatAtLevel(safeClassLevel)) ? safeClassLevel : 0;
+
+        data.NeedsFeat = data.TotalFeatsToSelect > 0;
+    }
+
+    private static bool GetsMonkBonusFeatAtLevel(int monkClassLevel)
+    {
+        return monkClassLevel == 1 || monkClassLevel == 2 || monkClassLevel == 6;
     }
 
     private enum SaveKind { Fort, Ref, Will }
