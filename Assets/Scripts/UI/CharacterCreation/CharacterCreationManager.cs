@@ -220,15 +220,15 @@ public class CharacterCreationManager : MonoBehaviour
             return;
         }
 
-        spellUI.ShowForLevelUp(_levelingCharacter, selectedSpellIds =>
+        spellUI.ShowForLevelUp(_levelingCharacter, progressionClass, selectedSpellIds =>
         {
-            ApplyLevelUpSpellSelection(selectedSpellIds);
+            ApplyLevelUpSpellSelection(progressionClass, selectedSpellIds);
             Debug.Log("[CharacterCreation] Spells selected, level-up complete");
             CompleteLevelUp();
         });
     }
 
-    private void ApplyLevelUpSpellSelection(List<string> selectedSpellIds)
+    private void ApplyLevelUpSpellSelection(string progressionClass, List<string> selectedSpellIds)
     {
         if (_levelingCharacter == null || selectedSpellIds == null || selectedSpellIds.Count == 0)
             return;
@@ -249,8 +249,9 @@ public class CharacterCreationManager : MonoBehaviour
             if (string.IsNullOrWhiteSpace(spellId))
                 continue;
 
-            bool alreadyKnown = spellcasting.KnownSpells.Exists(s => s != null && s.SpellId == spellId);
-            spellcasting.LearnSpell(spellId);
+            bool alreadyKnown = spellcasting.GetKnownSpellsForClass(progressionClass)
+                .Exists(s => s != null && s.SpellId == spellId);
+            spellcasting.LearnSpellForClass(progressionClass, spellId);
             if (!alreadyKnown)
                 learnedCount++;
         }
@@ -270,6 +271,10 @@ public class CharacterCreationManager : MonoBehaviour
 
         SpellcastingComponent spellcasting = _levelingCharacter.GetComponent<SpellcastingComponent>();
         bool createdDuringLevelUp = false;
+        int wizardKnownBeforeRefresh = 0;
+
+        if (spellcasting != null)
+            wizardKnownBeforeRefresh = spellcasting.GetKnownSpellsForClass("Wizard").Count;
 
         if (spellcasting == null)
         {
@@ -283,15 +288,17 @@ public class CharacterCreationManager : MonoBehaviour
             Debug.Log($"[CharacterCreationManager] Added SpellcastingComponent for {characterName} before level-up spell selection.");
         }
 
-        if (createdDuringLevelUp && string.Equals(progressionClass, "Wizard", StringComparison.OrdinalIgnoreCase))
+        spellcasting.RefreshSpellSlots();
+
+        if (string.Equals(progressionClass, "Wizard", StringComparison.OrdinalIgnoreCase)
+            && (createdDuringLevelUp || wizardKnownBeforeRefresh == 0))
         {
-            // New multiclass wizard entries should learn spells via the level-up selection UI,
-            // not from fallback auto-population during component initialization.
-            spellcasting.KnownSpells.Clear();
+            // New multiclass wizard entries should start from cantrips + chosen progression,
+            // not inherit fallback full-list loading from other prepared classes.
+            spellcasting.ResetKnownSpellsForClass("Wizard", keepCantrips: true);
             spellcasting.ClearPreparedSpells();
         }
 
-        spellcasting.RefreshSpellSlots();
         return spellcasting;
     }
 

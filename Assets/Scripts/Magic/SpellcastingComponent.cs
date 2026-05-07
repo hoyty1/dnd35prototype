@@ -275,6 +275,54 @@ public class SpellcastingComponent : MonoBehaviour
         return classKnown.Any(s => s != null && s.SpellId == spell.SpellId);
     }
 
+    public bool ClassKnowsAllSpells(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return false;
+
+        return string.Equals(className, "Cleric", System.StringComparison.OrdinalIgnoreCase)
+            || string.Equals(className, "Druid", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void ResetKnownSpellsForClass(string className, bool keepCantrips)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return;
+
+        if (!_knownSpellsByClass.TryGetValue(className, out List<SpellData> classKnown) || classKnown == null)
+            classKnown = new List<SpellData>();
+
+        if (keepCantrips)
+        {
+            SpellDatabase.Init();
+            classKnown = SpellDatabase.GetSpellsForClassAtLevel(className, 0)
+                .Where(s => s != null)
+                .GroupBy(s => s.SpellId)
+                .Select(g => g.First())
+                .ToList();
+        }
+        else
+        {
+            classKnown = new List<SpellData>();
+        }
+
+        _knownSpellsByClass[className] = classKnown;
+
+        KnownSpells.Clear();
+        foreach (var kvp in _knownSpellsByClass)
+        {
+            if (kvp.Value == null)
+                continue;
+
+            for (int i = 0; i < kvp.Value.Count; i++)
+            {
+                SpellData spell = kvp.Value[i];
+                if (spell != null && !KnownSpells.Any(s => s != null && s.SpellId == spell.SpellId))
+                    KnownSpells.Add(spell);
+            }
+        }
+    }
+
 
     private void SyncDomainsFromStats()
     {
@@ -481,20 +529,40 @@ public class SpellcastingComponent : MonoBehaviour
 
         if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
         {
+            int loadedCount = 0;
             foreach (string spellId in SelectedSpellIds)
             {
                 SpellData spell = SpellDatabase.GetSpell(spellId);
-                if (spell != null)
-                    AddKnownSpellForClass(className, spell);
+                if (spell == null || !spell.IsAvailableFor("Wizard", spell.SpellLevel))
+                    continue;
+
+                AddKnownSpellForClass(className, spell);
+                loadedCount++;
             }
-            Debug.Log($"[Spellcasting] {className} loaded {SelectedSpellIds.Count} selected spells into spellbook.");
+            Debug.Log($"[Spellcasting] {className} loaded {loadedCount} selected wizard spells into spellbook.");
         }
         else
         {
-            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0)) AddKnownSpellForClass(className, spell);
-            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1)) AddKnownSpellForClass(className, spell);
-            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2)) AddKnownSpellForClass(className, spell);
-            Debug.Log("[Spellcasting] Wizard: no spell selection found, added all available spells to spellbook.");
+            // Always grant wizard cantrips.
+            foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0))
+                AddKnownSpellForClass(className, spell);
+
+            bool hasOtherPreparedCaster = Stats != null &&
+                ((Stats.GetClassLevel("Cleric") > 0) || (Stats.GetClassLevel("Druid") > 0));
+            bool wizardIsPrimaryClass = Stats != null &&
+                string.Equals(Stats.CharacterClass, "Wizard", System.StringComparison.OrdinalIgnoreCase);
+
+            if (!hasOtherPreparedCaster || wizardIsPrimaryClass)
+            {
+                // Backward-compatible fallback for wizard-primary initialization.
+                foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1)) AddKnownSpellForClass(className, spell);
+                foreach (SpellData spell in SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2)) AddKnownSpellForClass(className, spell);
+                Debug.Log("[Spellcasting] Wizard: no spell selection found, added fallback level 1-2 spells for wizard-primary initialization.");
+            }
+            else
+            {
+                Debug.Log("[Spellcasting] Wizard multiclass init: cantrips granted, higher-level spells must be learned via wizard progression.");
+            }
         }
     }
 
@@ -516,13 +584,17 @@ public class SpellcastingComponent : MonoBehaviour
 
         if (SelectedSpellIds != null && SelectedSpellIds.Count > 0)
         {
+            int loadedOrisons = 0;
             foreach (string spellId in SelectedSpellIds)
             {
                 SpellData spell = SpellDatabase.GetSpell(spellId);
-                if (spell != null && spell.SpellLevel == 0)
+                if (spell != null && spell.SpellLevel == 0 && spell.IsAvailableFor("Cleric", spell.SpellLevel))
+                {
                     AddKnownSpellForClass(className, spell);
+                    loadedOrisons++;
+                }
             }
-            Debug.Log($"[Spellcasting] {className} loaded {SelectedSpellIds.Count} selected orisons.");
+            Debug.Log($"[Spellcasting] {className} loaded {loadedOrisons} selected orisons.");
         }
         else
         {
@@ -1188,10 +1260,18 @@ public class SpellcastingComponent : MonoBehaviour
     }
 
     /// <summary>
-    /// Learns a new spell and adds it to the spellbook if not already known.
+    /// Learns a new spell for the currently active primary class.
     /// Accepts spell ID (preferred) or spell name.
     /// </summary>
     public void LearnSpell(string spellIdOrName)
+    {
+        LearnSpellForClass(_activePreparationClassName, spellIdOrName);
+    }
+
+    /// <summary>
+    /// Learns a new spell for a specific caster class (e.g. Wizard during wizard level-up).
+    /// </summary>
+    public void LearnSpellForClass(string className, string spellIdOrName)
     {
         if (string.IsNullOrWhiteSpace(spellIdOrName))
             return;
@@ -1212,29 +1292,36 @@ public class SpellcastingComponent : MonoBehaviour
             return;
         }
 
-        bool alreadyKnownAny = KnownSpells.Any(s => s != null && s.SpellId == spell.SpellId);
-
-        List<string> preparedClasses = GetPreparedCasterClassNames();
-        for (int i = 0; i < preparedClasses.Count; i++)
+        string targetClass = className;
+        if (string.IsNullOrWhiteSpace(targetClass))
         {
-            string className = preparedClasses[i];
-            if (!spell.IsAvailableFor(className, spell.SpellLevel))
-                continue;
-
-            AddKnownSpellForClass(className, spell);
+            targetClass = GetPreparedCasterClassNames().FirstOrDefault(c => spell.IsAvailableFor(c, spell.SpellLevel));
         }
 
-        if (!alreadyKnownAny && !KnownSpells.Any(s => s != null && s.SpellId == spell.SpellId))
-            KnownSpells.Add(spell);
+        if (string.IsNullOrWhiteSpace(targetClass))
+        {
+            Debug.LogWarning($"[Spellcasting] No eligible caster class found to learn {spell.Name}.");
+            return;
+        }
+
+        if (!spell.IsAvailableFor(targetClass, spell.SpellLevel))
+        {
+            Debug.LogWarning($"[Spellcasting] {spell.Name} is not on the {targetClass} spell list.");
+            return;
+        }
+
+        bool alreadyKnownForClass = IsSpellKnownByClass(targetClass, spell);
+        if (!alreadyKnownForClass)
+            AddKnownSpellForClass(targetClass, spell);
 
         if (SelectedSpellIds == null)
             SelectedSpellIds = new List<string>();
         if (!SelectedSpellIds.Contains(spell.SpellId))
             SelectedSpellIds.Add(spell.SpellId);
 
-        Debug.Log($"[Spellcasting] ✓ Added {spell.Name} (level {spell.SpellLevel}) to spellbook");
+        Debug.Log($"[Spellcasting] ✓ Added {spell.Name} (level {spell.SpellLevel}) to {targetClass} spell list");
 
-        if (Stats != null && Stats.IsWizard)
+        if (string.Equals(targetClass, "Wizard", System.StringComparison.OrdinalIgnoreCase))
             AutoPrepareNewWizardSpell(spell);
 
         SyncPreparedSpellsFromSlots();

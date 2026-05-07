@@ -364,7 +364,7 @@ public class SpellSelectionUI : MonoBehaviour
     /// Reuses the creation spell selection panel during level-up.
     /// Wizards select 2 new spells from any spell level they can currently cast.
     /// </summary>
-    public void ShowForLevelUp(CharacterController character, Action<List<string>> onComplete)
+    public void ShowForLevelUp(CharacterController character, string progressionClass, Action<List<string>> onComplete)
     {
         if (character == null || character.Stats == null)
         {
@@ -379,9 +379,11 @@ public class SpellSelectionUI : MonoBehaviour
         _levelUpCharacter = character;
         _levelUpSpellcasting = character.GetComponent<SpellcastingComponent>();
 
-        string className = character.Stats.CharacterClass ?? string.Empty;
+        string className = string.IsNullOrWhiteSpace(progressionClass)
+            ? (character.Stats.CharacterClass ?? string.Empty)
+            : progressionClass;
         string characterName = !string.IsNullOrWhiteSpace(character.Stats.CharacterName) ? character.Stats.CharacterName : character.name;
-        Debug.Log($"[SpellSelection] ShowForLevelUp called for {characterName}");
+        Debug.Log($"[SpellSelection] ShowForLevelUp called for {characterName} ({className})");
 
         if (_levelUpSpellcasting == null)
         {

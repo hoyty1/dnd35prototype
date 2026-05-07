@@ -30,6 +30,8 @@ namespace Tests.Magic
             TestWizardLevel3UnlocksSecondLevelSlots();
             TestMulticlassPreparedSlotsAreSeparatedPerClass();
             TestMulticlassCastingConsumesCorrectClassSlotPool();
+            TestWizardPrimaryFallbackDoesNotApplyToClericPrimaryMulticlass();
+            TestLearnSpellForClassStaysWithinSelectedCasterClass();
 
             Debug.Log($"====== Wizard Spell Progression Results: {_passed} passed, {_failed} failed ======");
         }
@@ -244,6 +246,55 @@ namespace Tests.Magic
                 Assert(clericAfterWizardCast == clericBefore, "Casting wizard spell does not consume cleric level-1 slot", $"before={clericBefore}, after={clericAfterWizardCast}");
                 Assert(wizardAfterClericCast == wizardAfterWizardCast, "Casting cleric spell does not consume wizard level-1 slot", $"before={wizardAfterWizardCast}, after={wizardAfterClericCast}");
                 Assert(clericAfterClericCast == clericBefore - 1, "Casting cleric spell consumes cleric level-1 slot", $"before={clericBefore}, after={clericAfterClericCast}");
+            }
+            finally
+            {
+                DestroySpellcasting(sc);
+            }
+        }
+
+        private static void TestWizardPrimaryFallbackDoesNotApplyToClericPrimaryMulticlass()
+        {
+            SpellcastingComponent sc = null;
+            try
+            {
+                CharacterStats stats = CreateWizardClericStats("ClericPrimary");
+                stats.CharacterClass = "Cleric";
+                sc = CreateSpellcasting(stats, "ClericPrimary_Test");
+
+                List<SpellData> wizardKnown = sc.GetKnownSpellsForClass("Wizard");
+                int wizardNonCantrips = wizardKnown.Count(s => s != null && s.SpellLevel > 0);
+
+                Assert(sc.ClassKnowsAllSpells("Cleric"), "Cleric class reports full spell access");
+                Assert(!sc.ClassKnowsAllSpells("Wizard"), "Wizard class does not report full spell access");
+                Assert(wizardNonCantrips == 0,
+                    "Cleric-primary multiclass does not auto-fill wizard non-cantrip spellbook",
+                    $"expected 0 non-cantrips, got {wizardNonCantrips}");
+            }
+            finally
+            {
+                DestroySpellcasting(sc);
+            }
+        }
+
+        private static void TestLearnSpellForClassStaysWithinSelectedCasterClass()
+        {
+            SpellcastingComponent sc = null;
+            try
+            {
+                CharacterStats stats = CreateWizardClericStats("ClassScopedLearn");
+                stats.CharacterClass = "Cleric";
+                sc = CreateSpellcasting(stats, "ClassScopedLearn_Test");
+
+                sc.LearnSpellForClass("Wizard", "magic_missile");
+
+                bool wizardHasMagicMissile = sc.GetKnownSpellsForClass("Wizard")
+                    .Any(s => s != null && s.SpellId == "magic_missile");
+                bool clericHasMagicMissile = sc.GetKnownSpellsForClass("Cleric")
+                    .Any(s => s != null && s.SpellId == "magic_missile");
+
+                Assert(wizardHasMagicMissile, "Wizard learns chosen wizard spell via class-scoped learning");
+                Assert(!clericHasMagicMissile, "Wizard spell learning does not leak into Cleric known list");
             }
             finally
             {
