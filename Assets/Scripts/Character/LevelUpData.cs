@@ -29,6 +29,8 @@ public class LevelUpData
     // Level-up choices
     public bool NeedsAbilityIncrease; // Every 4 levels
     public bool NeedsFeat; // Every 3 levels (or fighter bonus)
+    public int SkillPointsNew;
+    public int SkillPointsFromClassPool;
     public int SkillPointsToAllocate;
     public bool NeedsSpellSelection; // For spellcasters
     public bool XPPenaltyActive;

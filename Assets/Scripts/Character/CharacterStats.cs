@@ -123,6 +123,13 @@ public class CharacterStats
     public string FavoredClass;
     public bool HasXPPenalty;
     public int PendingLevelUps;
+
+    /// <summary>
+    /// Unspent level-up skill points tracked separately per class name.
+    /// Example keys: "Fighter", "Wizard".
+    /// </summary>
+    public Dictionary<string, int> classSkillPointPools = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
     public List<ClassHitPointEntry> HitPointGainsByClassLevel = new List<ClassHitPointEntry>();
 
     [Header("Experience")]
@@ -229,6 +236,45 @@ public class CharacterStats
 
         if (string.IsNullOrWhiteSpace(FavoredClass) && Race != null)
             FavoredClass = Race.FavoredClass;
+
+        EnsureClassSkillPointPoolsInitialized();
+    }
+
+    public void EnsureClassSkillPointPoolsInitialized()
+    {
+        if (classSkillPointPools == null)
+            classSkillPointPools = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        // Ensure known classes always have an explicit entry for backwards-compatible defaults.
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry classLevel = ClassLevels[i];
+            if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+                continue;
+
+            if (!classSkillPointPools.ContainsKey(classLevel.ClassName))
+                classSkillPointPools[classLevel.ClassName] = 0;
+            else
+                classSkillPointPools[classLevel.ClassName] = Mathf.Max(0, classSkillPointPools[classLevel.ClassName]);
+        }
+    }
+
+    public int GetClassSkillPointPool(string className)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return 0;
+
+        EnsureClassSkillPointPoolsInitialized();
+        return classSkillPointPools.TryGetValue(className, out int points) ? Mathf.Max(0, points) : 0;
+    }
+
+    public void SetClassSkillPointPool(string className, int value)
+    {
+        if (string.IsNullOrWhiteSpace(className))
+            return;
+
+        EnsureClassSkillPointPoolsInitialized();
+        classSkillPointPools[className] = Mathf.Max(0, value);
     }
 
     public int GetClassLevel(string className)
@@ -3970,6 +4016,7 @@ public class CharacterStats
     public void InitializeSkills(string characterClass, int level)
     {
         EnsureMulticlassDataInitialized();
+        EnsureClassSkillPointPoolsInitialized();
 
         Skills.Clear();
         HashSet<string> classSkills = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

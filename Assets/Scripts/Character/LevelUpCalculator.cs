@@ -79,7 +79,12 @@ public static class LevelUpCalculator
         data.NewWillSave = stats.WISMod + EstimateProjectedBestSave(stats, selected, projectedClassLevel, SaveKind.Will)
             + stats.FeatWillBonus + stats.RageWillBonus + stats.MoraleSaveBonus + stats.ConditionWillModifier;
 
-        data.SkillPointsToAllocate = Mathf.Max(1, ClassSkillDefinitions.GetBaseSkillPointsPerLevel(selected) + stats.INTMod);
+        int baseSkillPointsPerLevel = Mathf.Max(1, ClassSkillDefinitions.GetBaseSkillPointsPerLevel(selected) + stats.INTMod);
+        int newSkillPoints = projectedClassLevel <= 1 ? baseSkillPointsPerLevel * 4 : baseSkillPointsPerLevel;
+        int pooledSkillPoints = stats.GetClassSkillPointPool(selected);
+        data.SkillPointsNew = newSkillPoints;
+        data.SkillPointsFromClassPool = pooledSkillPoints;
+        data.SkillPointsToAllocate = Mathf.Max(0, newSkillPoints + pooledSkillPoints);
 
         ClassRegistry.Init();
         ICharacterClass classDef = ClassRegistry.GetClass(selected);

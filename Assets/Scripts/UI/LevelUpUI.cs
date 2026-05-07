@@ -233,7 +233,19 @@ public class LevelUpUI : MonoBehaviour
             CreateInfoText("• Feat: Choose 1 new feat", true, Color.green);
 
         if (_currentLevelUp.SkillPointsToAllocate > 0)
-            CreateInfoText($"• Skill Points: {_currentLevelUp.SkillPointsToAllocate} points", true, Color.green);
+        {
+            if (_currentLevelUp.SkillPointsFromClassPool > 0)
+            {
+                CreateInfoText(
+                    $"• Skill Points: {_currentLevelUp.SkillPointsNew} (new) + {_currentLevelUp.SkillPointsFromClassPool} ({_selectedClassForLevelUp} pool) = {_currentLevelUp.SkillPointsToAllocate} available",
+                    true,
+                    Color.green);
+            }
+            else
+            {
+                CreateInfoText($"• Skill Points: {_currentLevelUp.SkillPointsNew} available", true, Color.green);
+            }
+        }
 
         if (_currentLevelUp.NeedsSpellSelection)
             CreateInfoText($"• Spells: {GetSpellSummaryText(_selectedClassForLevelUp)}", true, Color.green);

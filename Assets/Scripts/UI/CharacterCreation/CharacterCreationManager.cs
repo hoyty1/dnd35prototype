@@ -111,6 +111,8 @@ public class CharacterCreationManager : MonoBehaviour
     private void ShowSkillSelection()
     {
         int points = _levelUpData != null ? Mathf.Max(0, _levelUpData.SkillPointsToAllocate) : 0;
+        int newSkillPoints = _levelUpData != null ? Mathf.Max(0, _levelUpData.SkillPointsNew) : 0;
+        int classPoolPoints = _levelUpData != null ? Mathf.Max(0, _levelUpData.SkillPointsFromClassPool) : 0;
         if (points <= 0)
         {
             ShowSpellSelection();
@@ -129,7 +131,7 @@ public class CharacterCreationManager : MonoBehaviour
             ? _levelUpData.SelectedClassName
             : (_levelingCharacter != null && _levelingCharacter.Stats != null ? _levelingCharacter.Stats.CharacterClass : null);
 
-        skillsUI.ShowForLevelUp(_levelingCharacter, points, advancingClass, ShowSpellSelection);
+        skillsUI.ShowForLevelUp(_levelingCharacter, newSkillPoints, classPoolPoints, advancingClass, ShowSpellSelection);
     }
 
     private void ShowDomainSelection()

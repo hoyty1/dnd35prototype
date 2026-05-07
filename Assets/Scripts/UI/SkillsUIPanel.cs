@@ -37,6 +37,13 @@ public class SkillsUIPanel : MonoBehaviour
     private string _allocationClassName;
     private readonly Dictionary<string, int> _sessionAddedRanksBySkill = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
+    private bool _isLevelUpAllocationSession;
+    private int _levelUpNewSkillPoints;
+    private int _levelUpPoolSkillPoints;
+    private int _levelUpSessionTotalPoints;
+    private int _preLevelUpAvailableSkillPoints;
+    private int _preLevelUpTotalSkillPoints;
+
     // Per-skill UI rows
     private List<SkillRowUI> _skillRows = new List<SkillRowUI>();
 
@@ -190,6 +197,9 @@ public class SkillsUIPanel : MonoBehaviour
     /// </summary>
     public void OpenForAllocation(CharacterStats stats, string allocationClassName = null)
     {
+        if (!_isLevelUpAllocationSession)
+            ResetLevelUpAllocationContext(false);
+
         _stats = stats;
         _allocationMode = true;
         _allocationClassName = string.IsNullOrWhiteSpace(allocationClassName)
@@ -212,6 +222,8 @@ public class SkillsUIPanel : MonoBehaviour
     /// </summary>
     public void OpenForDisplay(CharacterStats stats)
     {
+        ResetLevelUpAllocationContext(false);
+
         _stats = stats;
         _allocationMode = false;
         _allocationClassName = null;
@@ -239,7 +251,7 @@ public class SkillsUIPanel : MonoBehaviour
     /// Grants the requested points before opening the panel.
     /// Cost uses the advancing class, while max ranks remain based on any class skill.
     /// </summary>
-    public void ShowForLevelUp(CharacterController character, int skillPointsToAllocate, string advancingClassName, System.Action onComplete)
+    public void ShowForLevelUp(CharacterController character, int newSkillPoints, int classPoolSkillPoints, string advancingClassName, System.Action onComplete)
     {
         if (character == null || character.Stats == null)
         {
@@ -249,22 +261,41 @@ public class SkillsUIPanel : MonoBehaviour
         }
 
         CharacterStats stats = character.Stats;
-        int pointsToGrant = Mathf.Max(0, skillPointsToAllocate);
+        _allocationClassName = string.IsNullOrWhiteSpace(advancingClassName) ? stats.CharacterClass : advancingClassName;
+        if (string.IsNullOrWhiteSpace(_allocationClassName))
+            _allocationClassName = "Fighter";
 
-        if (pointsToGrant <= 0)
+        stats.EnsureClassSkillPointPoolsInitialized();
+
+        int normalizedNewPoints = Mathf.Max(0, newSkillPoints);
+        int normalizedPoolPoints = stats.GetClassSkillPointPool(_allocationClassName);
+        if (Mathf.Max(0, classPoolSkillPoints) != normalizedPoolPoints)
         {
-            Debug.Log($"[SkillsUI] No level-up skill points to allocate for {stats.CharacterName}.");
+            Debug.Log($"[SkillsUI] Level-up pool mismatch for {_allocationClassName}: caller={Mathf.Max(0, classPoolSkillPoints)}, stats={normalizedPoolPoints}. Using stats value.");
+        }
+
+        int sessionPoints = Mathf.Max(0, normalizedNewPoints + normalizedPoolPoints);
+        if (sessionPoints <= 0)
+        {
+            Debug.Log($"[SkillsUI] No level-up skill points to allocate for {stats.CharacterName} ({_allocationClassName}).");
             onComplete?.Invoke();
             return;
         }
 
-        stats.TotalSkillPoints += pointsToGrant;
-        stats.AvailableSkillPoints += pointsToGrant;
+        _isLevelUpAllocationSession = true;
+        _levelUpNewSkillPoints = normalizedNewPoints;
+        _levelUpPoolSkillPoints = normalizedPoolPoints;
+        _levelUpSessionTotalPoints = sessionPoints;
+        _preLevelUpTotalSkillPoints = stats.TotalSkillPoints;
+        _preLevelUpAvailableSkillPoints = stats.AvailableSkillPoints;
 
-        _allocationClassName = string.IsNullOrWhiteSpace(advancingClassName) ? stats.CharacterClass : advancingClassName;
+        // Use the existing allocation pipeline with session-local counters.
+        stats.TotalSkillPoints = sessionPoints;
+        stats.AvailableSkillPoints = sessionPoints;
+
         ResetAllocationSessionTracking();
 
-        Debug.Log($"[SkillsUI] Level-up allocation for {stats.CharacterName}: granted {pointsToGrant} points (available now {stats.AvailableSkillPoints}), advancing class {_allocationClassName}.");
+        Debug.Log($"[SkillsUI] Level-up allocation for {stats.CharacterName}: {_levelUpNewSkillPoints} new + {_levelUpPoolSkillPoints} {_allocationClassName} pool = {_levelUpSessionTotalPoints} available.");
 
         OnAllocationConfirmed = onComplete;
         OpenForAllocation(stats, _allocationClassName);
@@ -290,6 +321,22 @@ public class SkillsUIPanel : MonoBehaviour
     private void ResetAllocationSessionTracking()
     {
         _sessionAddedRanksBySkill.Clear();
+    }
+
+    private void ResetLevelUpAllocationContext(bool restorePreSessionCounters)
+    {
+        if (restorePreSessionCounters && _isLevelUpAllocationSession && _stats != null)
+        {
+            _stats.TotalSkillPoints = _preLevelUpTotalSkillPoints;
+            _stats.AvailableSkillPoints = _preLevelUpAvailableSkillPoints;
+        }
+
+        _isLevelUpAllocationSession = false;
+        _levelUpNewSkillPoints = 0;
+        _levelUpPoolSkillPoints = 0;
+        _levelUpSessionTotalPoints = 0;
+        _preLevelUpAvailableSkillPoints = 0;
+        _preLevelUpTotalSkillPoints = 0;
     }
 
     private int GetCurrentSkillCost(Skill skill)
@@ -447,7 +494,14 @@ public class SkillsUIPanel : MonoBehaviour
 
         // Update skill points display
         int spent = _stats.TotalSkillPoints - _stats.AvailableSkillPoints;
-        _skillPointsText.text = $"Skill Points: {_stats.AvailableSkillPoints} remaining  ({spent} / {_stats.TotalSkillPoints} spent)";
+        if (_isLevelUpAllocationSession)
+        {
+            _skillPointsText.text = $"Skill Points: {_levelUpNewSkillPoints} (new) + {_levelUpPoolSkillPoints} ({_allocationClassName} pool) = {_stats.AvailableSkillPoints} available";
+        }
+        else
+        {
+            _skillPointsText.text = $"Skill Points: {_stats.AvailableSkillPoints} remaining  ({spent} / {_stats.TotalSkillPoints} spent)";
+        }
 
         if (_stats.AvailableSkillPoints > 0)
             _skillPointsText.color = new Color(0.9f, 0.85f, 0.4f);
@@ -622,6 +676,20 @@ public class SkillsUIPanel : MonoBehaviour
         else
         {
             Debug.Log($"[Skills] {_stats.CharacterName} confirmed skill allocation (all points spent).");
+        }
+
+        if (_stats != null && _isLevelUpAllocationSession)
+        {
+            int unspentForClass = Mathf.Max(0, _stats.AvailableSkillPoints);
+            string poolClass = string.IsNullOrWhiteSpace(_allocationClassName) ? _stats.CharacterClass : _allocationClassName;
+            _stats.SetClassSkillPointPool(poolClass, unspentForClass);
+
+            // Persist only newly granted points into total, while restoring baseline counters for normal runtime use.
+            _stats.TotalSkillPoints = _preLevelUpTotalSkillPoints + Mathf.Max(0, _levelUpNewSkillPoints);
+            _stats.AvailableSkillPoints = _preLevelUpAvailableSkillPoints;
+
+            Debug.Log($"[SkillsUI] Saved {unspentForClass} unspent points to {poolClass} pool. Pools now tracked per class.");
+            ResetLevelUpAllocationContext(false);
         }
 
         // Log final skill summary

@@ -28,6 +28,7 @@ public static class MulticlassSkillRulesTests
         TestMaxRanksUseAnyClassSkill();
         TestSkillCostUsesAdvancingClass();
         TestCrossClassSkillCapsAndCosts();
+        TestClassSpecificSkillPointPools();
 
         Debug.Log($"====== Multiclass Skill Results: {_passed} passed, {_failed} failed ======");
     }
@@ -147,6 +148,34 @@ public static class MulticlassSkillRulesTests
         Assert(fighterCost == 2 && clericCost == 2,
             "Cross-class skill costs 2 regardless of advancing class",
             $"fighter {fighterCost}, cleric {clericCost}");
+    }
+
+    private static void TestClassSpecificSkillPointPools()
+    {
+        CharacterStats stats = BuildFighter3Cleric2();
+
+        stats.SetClassSkillPointPool("Fighter", 5);
+        stats.SetClassSkillPointPool("Wizard", 2);
+
+        int fighterNew = Mathf.Max(1, ClassSkillDefinitions.GetBaseSkillPointsPerLevel("Fighter") + stats.INTMod);
+        int wizardFirstLevelNew = Mathf.Max(1, ClassSkillDefinitions.GetBaseSkillPointsPerLevel("Wizard") + stats.INTMod) * 4;
+
+        int fighterAvailable = fighterNew + stats.GetClassSkillPointPool("Fighter");
+        int wizardAvailable = wizardFirstLevelNew + stats.GetClassSkillPointPool("Wizard");
+
+        Assert(fighterAvailable == fighterNew + 5,
+            "Fighter level-up uses Fighter pool only",
+            $"expected {fighterNew + 5}, got {fighterAvailable}");
+        Assert(wizardAvailable == wizardFirstLevelNew + 2,
+            "Wizard first level uses Wizard pool only",
+            $"expected {wizardFirstLevelNew + 2}, got {wizardAvailable}");
+        Assert(stats.GetClassSkillPointPool("Cleric") == 0,
+            "Uninitialized class pools default to 0");
+
+        stats.SetClassSkillPointPool("Fighter", 2);
+        Assert(stats.GetClassSkillPointPool("Wizard") == 2,
+            "Updating Fighter pool does not affect Wizard pool",
+            $"wizard pool changed to {stats.GetClassSkillPointPool("Wizard")}");
     }
 }
 }
