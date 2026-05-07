@@ -40,10 +40,23 @@ public class LevelUpUI : MonoBehaviour
             return;
         }
 
-        int currentTotalLevel = Mathf.Max(1, character.Stats.Level);
         int pending = Mathf.Max(0, character.Stats.PendingLevelUps);
-        int oldLevel = pending > 0 ? Mathf.Max(1, currentTotalLevel - pending) : Mathf.Max(1, currentTotalLevel - 1);
-        int newLevel = Mathf.Min(currentTotalLevel, oldLevel + 1);
+        int appliedLevel = 0;
+        if (character.Stats.ClassLevels != null)
+        {
+            for (int i = 0; i < character.Stats.ClassLevels.Count; i++)
+            {
+                ClassLevelEntry entry = character.Stats.ClassLevels[i];
+                if (entry != null)
+                    appliedLevel += Mathf.Max(0, entry.Level);
+            }
+        }
+
+        if (appliedLevel <= 0)
+            appliedLevel = Mathf.Max(1, character.Stats.Level - pending);
+
+        int oldLevel = Mathf.Max(1, appliedLevel);
+        int newLevel = pending > 0 ? oldLevel + 1 : Mathf.Max(2, character.Stats.Level);
         LevelUpData levelUpData = LevelUpCalculator.CalculateLevelUp(character, oldLevel, newLevel);
 
         ShowLevelUps(new List<LevelUpData> { levelUpData }, onComplete);
@@ -138,8 +151,22 @@ public class LevelUpUI : MonoBehaviour
 
         if (stats != null && stats.PendingLevelUps > 0)
         {
-            int oldLevel = Mathf.Max(1, stats.Level - stats.PendingLevelUps);
-            int newLevel = Mathf.Min(Mathf.Max(1, stats.Level), oldLevel + 1);
+            int appliedLevel = 0;
+            if (stats.ClassLevels != null)
+            {
+                for (int i = 0; i < stats.ClassLevels.Count; i++)
+                {
+                    ClassLevelEntry entry = stats.ClassLevels[i];
+                    if (entry != null)
+                        appliedLevel += Mathf.Max(0, entry.Level);
+                }
+            }
+
+            if (appliedLevel <= 0)
+                appliedLevel = Mathf.Max(1, stats.Level - stats.PendingLevelUps);
+
+            int oldLevel = Mathf.Max(1, appliedLevel);
+            int newLevel = oldLevel + 1;
             _currentLevelUp = LevelUpCalculator.CalculateLevelUp(_currentLevelUp.Character, oldLevel, newLevel);
             _selectedClassForLevelUp = _currentLevelUp.SelectedClassName;
             EnsureAvailableClassesForCurrentLevelUp();

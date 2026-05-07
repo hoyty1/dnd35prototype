@@ -639,8 +639,7 @@ public partial class GameManager : MonoBehaviour
         WaitingForCharacterCreation = false;
         Debug.Log($"[GameManager] Character creation complete (2 PCs): {pc1Data.CharacterName}, {pc2Data.CharacterName}");
         SetupCreatedCharacters(new CharacterCreationData[] { pc1Data, pc2Data });
-        UpdateAllStatsUI();
-        PromptEncounterSelection();
+        ProcessCreationLevelUpsThenPromptEncounterSelection();
     }
 
     /// <summary>
@@ -660,10 +659,41 @@ public partial class GameManager : MonoBehaviour
         WaitingForCharacterCreation = false;
         Debug.Log($"[GameManager] Character creation complete ({pcDataArray.Length} PCs)");
         SetupCreatedCharacters(pcDataArray);
-        UpdateAllStatsUI();
-        PromptEncounterSelection();
+        ProcessCreationLevelUpsThenPromptEncounterSelection();
     }
 
+
+    private void ProcessCreationLevelUpsThenPromptEncounterSelection()
+    {
+        UpdateAllStatsUI();
+
+        List<CharacterController> charactersNeedingLevelUp = new List<CharacterController>();
+        if (PCs != null)
+        {
+            for (int i = 0; i < PCs.Count; i++)
+            {
+                CharacterController pc = PCs[i];
+                if (pc == null || pc.Stats == null)
+                    continue;
+
+                if (pc.Stats.PendingLevelUps > 0)
+                    charactersNeedingLevelUp.Add(pc);
+            }
+        }
+
+        if (charactersNeedingLevelUp.Count == 0)
+        {
+            PromptEncounterSelection();
+            return;
+        }
+
+        Debug.Log($"[GameManager] Processing creation level-up sequence for {charactersNeedingLevelUp.Count} character(s).");
+        ShowLevelUpUISequence(charactersNeedingLevelUp, 0, () =>
+        {
+            UpdateAllStatsUI();
+            PromptEncounterSelection();
+        });
+    }
 
     private void PromptEncounterSelection()
     {
@@ -1518,12 +1548,15 @@ public partial class GameManager : MonoBehaviour
             CharacterCreationData data = pcDataArray[i];
             data.ComputeFinalStats();
 
+            int baseCreationLevel = Mathf.Max(1, data.CharacterLevel);
+            int targetLevel = Mathf.Max(baseCreationLevel, data.TargetLevel);
+
             int armorBonus, shieldBonus, damageDice;
             GetClassDefaults(data.ClassName, out armorBonus, out shieldBonus, out damageDice);
 
             CharacterStats stats = new CharacterStats(
                 name: data.CharacterName,
-                level: 3,
+                level: baseCreationLevel,
                 characterClass: data.ClassName,
                 str: data.STR, dex: data.DEX, con: data.CON,
                 wis: data.WIS, intelligence: data.INT, cha: data.CHA,
@@ -1569,7 +1602,7 @@ public partial class GameManager : MonoBehaviour
             SetupStartingEquipment(inv, data.ClassName);
 
             // Skills
-            stats.InitializeSkills(data.ClassName, 3);
+            stats.InitializeSkills(data.ClassName, baseCreationLevel);
             if (data.SkillRanks != null)
             {
                 foreach (var kvp in data.SkillRanks)
@@ -1595,6 +1628,12 @@ public partial class GameManager : MonoBehaviour
             if (!string.IsNullOrEmpty(data.SkillFocusChoice))
                 stats.SkillFocusChoice = data.SkillFocusChoice;
             FeatManager.ApplyPassiveFeats(stats);
+
+            if (targetLevel > baseCreationLevel)
+            {
+                stats.PendingLevelUps = Mathf.Max(0, stats.PendingLevelUps + (targetLevel - baseCreationLevel));
+                Debug.Log($"[GameManager] {data.CharacterName}: queued {stats.PendingLevelUps} pending level-up(s) for creation progression ({baseCreationLevel} -> {targetLevel}).");
+            }
 
             Debug.Log($"[GameManager] {data.CharacterName} ({data.RaceName} {data.ClassName}): " +
                       $"STR {stats.STR} DEX {stats.DEX} CON {stats.CON} " +

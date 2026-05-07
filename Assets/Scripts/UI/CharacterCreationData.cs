@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 /// <summary>
 /// Stores all data for a character being created through the character creation UI.
@@ -19,6 +20,10 @@ public class CharacterCreationData
 
     // Step 4: Class
     public string ClassName; // "Fighter" or "Rogue"
+
+    // Character level state for creation flow
+    public int CharacterLevel = 3;
+    public int TargetLevel = 3;
 
     // Step 4b: Alignment
     public Alignment ChosenAlignment = Alignment.None;
@@ -80,29 +85,46 @@ public class CharacterCreationData
         FinalWIS = WIS + (Race != null ? Race.WISModifier : 0);
         FinalCHA = CHA + (Race != null ? Race.CHAModifier : 0);
 
+        int safeLevel = Mathf.Max(1, CharacterLevel);
+
         // Look up class definition from registry
         ClassRegistry.Init();
         ICharacterClass classDef = ClassRegistry.GetClass(ClassName);
-        if (classDef != null)
-        {
-            HitDie = classDef.HitDie;
-            BAB = classDef.BABAtLevel3;
-        }
-        else
-        {
-            HitDie = 6;
-            BAB = 2; // Default fallback
-        }
+        HitDie = classDef != null ? classDef.HitDie : 6;
+        BAB = CalculateClassBab(ClassName, safeLevel);
 
-        // HP: Roll max at level 1, average for 2-3 (simplified: use fixed values)
-        // Level 3: HitDie + 2*(HitDie/2+1) + CON_mod * 3
+        // HP: Max at level 1, average thereafter
         int conMod = CharacterStats.GetModifier(FinalCON);
-        int baseHP = HitDie + (HitDie / 2 + 1) * 2; // max at 1, avg+1 at 2-3
-        HP = baseHP + conMod * 3;
+        int baseHP = HitDie + Mathf.Max(0, safeLevel - 1) * (HitDie / 2 + 1);
+        HP = baseHP + conMod * safeLevel;
         if (HP < 1) HP = 1;
 
         // Speed from race
         BaseSpeed = Race != null ? Race.BaseSpeedSquares : 6;
+    }
+
+    private static int CalculateClassBab(string className, int level)
+    {
+        int safeLevel = Mathf.Max(1, level);
+        switch (className)
+        {
+            case "Fighter":
+            case "Barbarian":
+            case "Paladin":
+            case "Ranger":
+                return safeLevel;
+            case "Cleric":
+            case "Druid":
+            case "Monk":
+            case "Rogue":
+                return (safeLevel * 3) / 4;
+            case "Wizard":
+            case "Sorcerer":
+            case "Bard":
+                return safeLevel / 2;
+            default:
+                return safeLevel;
+        }
     }
 
     /// <summary>Get a formatted stat line with racial mods shown.</summary>

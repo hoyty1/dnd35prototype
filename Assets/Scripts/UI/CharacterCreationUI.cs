@@ -170,7 +170,13 @@ public class CharacterCreationUI : MonoBehaviour
         if (_font == null) _font = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
         for (int i = 0; i < TotalPCs; i++)
-            CreatedCharacters[i] = new CharacterCreationData();
+        {
+            CreatedCharacters[i] = new CharacterCreationData
+            {
+                CharacterLevel = 1,
+                TargetLevel = 3
+            };
+        }
 
         // Root panel - dark overlay covering entire screen
         _overlayPanel = CreatePanel(canvas.transform, "CCOverlay",
@@ -754,6 +760,8 @@ public class CharacterCreationUI : MonoBehaviour
     {
         if (_selectedClass == null) return;
         CreatedCharacters[CurrentCharacterIndex].ClassName = _selectedClass;
+        CreatedCharacters[CurrentCharacterIndex].CharacterLevel = 1;
+        CreatedCharacters[CurrentCharacterIndex].TargetLevel = 3;
         ShowStep(Step.ChooseAlignment);
     }
 
@@ -1354,7 +1362,7 @@ public class CharacterCreationUI : MonoBehaviour
         // Create a temporary CharacterStats to use for skill allocation
         _tempStatsForSkills = new CharacterStats(
             name: data.CharacterName.Length > 0 ? data.CharacterName : (CurrentCharacterIndex == 0 ? "Hero 1" : "Hero 2"),
-            level: 3,
+            level: Mathf.Max(1, data.CharacterLevel),
             characterClass: data.ClassName,
             str: data.STR, dex: data.DEX, con: data.CON,
             wis: data.WIS, intelligence: data.INT, cha: data.CHA,
@@ -1366,7 +1374,7 @@ public class CharacterCreationUI : MonoBehaviour
             raceName: data.RaceName
         );
 
-        _tempStatsForSkills.InitializeSkills(data.ClassName, 3);
+        _tempStatsForSkills.InitializeSkills(data.ClassName, Mathf.Max(1, data.CharacterLevel));
 
         if (SkillsUI != null)
         {
@@ -1415,7 +1423,7 @@ public class CharacterCreationUI : MonoBehaviour
         // Create a temp stats for prerequisite checking
         var tempStats = new CharacterStats(
             name: data.CharacterName.Length > 0 ? data.CharacterName : (CurrentCharacterIndex == 0 ? "Hero 1" : "Hero 2"),
-            level: 3,
+            level: Mathf.Max(1, data.CharacterLevel),
             characterClass: data.ClassName,
             str: data.FinalSTR, dex: data.FinalDEX, con: data.FinalCON,
             wis: data.FinalWIS, intelligence: data.FinalINT, cha: data.FinalCHA,
@@ -1439,12 +1447,13 @@ public class CharacterCreationUI : MonoBehaviour
 
         if (FeatUI != null)
         {
-            // General feats: 2 at level 3 (lvl 1 + lvl 3)
-            int generalFeats = 2;
+            // During custom creation we only allocate level 1 feats here.
+            int creationLevel = Mathf.Max(1, data.CharacterLevel);
+            int generalFeats = FeatDefinitions.GetGeneralFeatCountAtLevel(creationLevel);
 
-            // Human bonus feat adds 1 more
+            // Human bonus feat adds 1 more at level 1.
             bool isHuman = data.RaceName == "Human";
-            if (isHuman) generalFeats++;
+            if (isHuman && creationLevel >= 1) generalFeats++;
 
             // Build descriptive title and subtitle
             string featTitle;
@@ -1486,8 +1495,21 @@ public class CharacterCreationUI : MonoBehaviour
         // Class-specific bonus feats
         if (data.ClassName == "Fighter")
         {
-            int bonusFeats = 2; // Level 1 + Level 2 bonus feats
-            Debug.Log($"[CharCreation] Fighter: selecting {bonusFeats} bonus feats");
+            int creationLevel = Mathf.Max(1, data.CharacterLevel);
+            int bonusFeats = 0;
+            for (int level = 1; level <= creationLevel; level++)
+            {
+                if (FeatDefinitions.GetsFighterBonusFeatAtLevel(level))
+                    bonusFeats++;
+            }
+
+            if (bonusFeats <= 0)
+            {
+                ShowStep(Step.SelectSpells);
+                return;
+            }
+
+            Debug.Log($"[CharCreation] Fighter: selecting {bonusFeats} bonus feat(s) for level {creationLevel}");
 
             string title = bonusFeats == 1
                 ? "Select Fighter Bonus Feat"
@@ -1495,23 +1517,30 @@ public class CharacterCreationUI : MonoBehaviour
 
             FeatUI.OnFeatsConfirmed = (bonusSelected) => OnBonusFeatsSelected(bonusSelected);
             FeatUI.OpenForSelection(tempStats, bonusFeats, true,
-                title, "Combat feats only — granted by Fighter class at levels 1 and 2");
+                title, "Combat feats only — granted by current fighter level");
         }
         else if (data.ClassName == "Monk")
         {
-            // D&D 3.5e Monk bonus feats: sequential selection
-            // Level 1: Improved Grapple or Stunning Fist
-            // Level 2: Combat Reflexes or Deflect Arrows
-            // Level 6+: also Improved Disarm or Improved Trip
-            // Monks do NOT need to meet prerequisites for these bonus feats
-            Debug.Log($"[CharCreation] Monk: starting sequential bonus feat selection (level 1 first)");
+            int creationLevel = Mathf.Max(1, data.CharacterLevel);
+            Debug.Log($"[CharCreation] Monk: selecting bonus feat(s) for level {creationLevel}");
 
             data.BonusFeats.Clear();
-            FeatUI.OnFeatsConfirmed = (bonusSelected) => OnMonkBonusFeatLevel1Selected(bonusSelected, tempStats);
-            FeatUI.OpenForSelection(tempStats, 1, false,
-                "Select Monk Bonus Feat (Level 1)",
-                "Choose: Improved Grapple or Stunning Fist — prerequisites are bypassed",
-                monkBonusLevel: 1);
+            if (creationLevel >= 2)
+            {
+                FeatUI.OnFeatsConfirmed = (bonusSelected) => OnMonkBonusFeatLevel1Selected(bonusSelected, tempStats);
+                FeatUI.OpenForSelection(tempStats, 1, false,
+                    "Select Monk Bonus Feat (Level 1)",
+                    "Choose: Improved Grapple or Stunning Fist — prerequisites are bypassed",
+                    monkBonusLevel: 1);
+            }
+            else
+            {
+                FeatUI.OnFeatsConfirmed = (bonusSelected) => OnBonusFeatsSelected(bonusSelected);
+                FeatUI.OpenForSelection(tempStats, 1, false,
+                    "Select Monk Bonus Feat (Level 1)",
+                    "Choose: Improved Grapple or Stunning Fist — prerequisites are bypassed",
+                    monkBonusLevel: 1);
+            }
         }
         else if (data.ClassName == "Wizard")
         {
@@ -1529,7 +1558,7 @@ public class CharacterCreationUI : MonoBehaviour
             // At level 3, Wizards don't get any bonus feats yet.
             // This system is ready for level 5+ when leveling is implemented.
             // ================================================================
-            int wizLevel = 3; // current character level
+            int wizLevel = Mathf.Max(1, data.CharacterLevel);
             int bonusFeats = FeatDefinitions.GetWizardBonusFeatCount(wizLevel);
 
             if (bonusFeats > 0)
@@ -1650,7 +1679,7 @@ public class CharacterCreationUI : MonoBehaviour
                         Debug.Log($"[CharCreation] Wizard spell preparation complete: {preparedSlotIds.Count} slots");
                         ShowStep(Step.Review);
                     };
-                    SpellPrepUI.OpenForCreation(data.SelectedSpellIds, intMod, 3, data.CharacterName);
+                    SpellPrepUI.OpenForCreation(data.SelectedSpellIds, intMod, Mathf.Max(1, data.CharacterLevel), data.CharacterName);
                 }
                 else
                 {
@@ -1658,7 +1687,7 @@ public class CharacterCreationUI : MonoBehaviour
                     ShowStep(Step.Review);
                 }
             };
-            SpellUI.OpenForWizard(intMod, 3);
+            SpellUI.OpenForWizard(intMod, Mathf.Max(1, data.CharacterLevel));
         }
         else if (data.ClassName == "Cleric")
         {
@@ -1681,7 +1710,7 @@ public class CharacterCreationUI : MonoBehaviour
                         Debug.Log($"[CharCreation] Cleric spell preparation complete: {preparedSlotIds.Count} slots");
                         ShowStep(Step.Review);
                     };
-                    SpellPrepUI.OpenForClericCreation(wisMod, 3, data.CharacterName, data.ChosenDomains);
+                    SpellPrepUI.OpenForClericCreation(wisMod, Mathf.Max(1, data.CharacterLevel), data.CharacterName, data.ChosenDomains);
                 }
                 else
                 {
@@ -1861,7 +1890,7 @@ public class CharacterCreationUI : MonoBehaviour
         string domainsStr = data.ChosenDomains.Count > 0 ? string.Join(", ", data.ChosenDomains) : "None";
 
         string review = $"══════════ CHARACTER SHEET ══════════\n\n";
-        review += $"Race: {data.RaceName}   Class: {data.ClassName}   Level: 3{sizeStr}\n";
+        review += $"Race: {data.RaceName}   Class: {data.ClassName}   Level: {Mathf.Max(1, data.CharacterLevel)}{sizeStr}\n";
         review += $"Alignment: {alignStr}\n";
         review += $"Deity: {deityStr}\n";
         if (data.ClassName == "Cleric" && data.ChosenDomains.Count > 0)
@@ -2829,7 +2858,7 @@ public class CharacterCreationUI : MonoBehaviour
     {
         string s = "";
         s += $"══════════ CHARACTER SHEET ══════════\n\n";
-        s += $"{data.CharacterName} — {data.RaceName} {data.ClassName}, Level 3\n\n";
+        s += $"{data.CharacterName} — {data.RaceName} {data.ClassName}, Level {Mathf.Max(1, data.CharacterLevel)}\n\n";
 
         // Ability scores
         s += "--- Ability Scores ---\n";
