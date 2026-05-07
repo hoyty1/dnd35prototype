@@ -4039,12 +4039,63 @@ public class CharacterStats
         }
     }
 
+    public bool IsSkillClassSkillForAnyClass(string skillName)
+    {
+        if (string.IsNullOrWhiteSpace(skillName))
+            return false;
+
+        EnsureMulticlassDataInitialized();
+
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry classLevel = ClassLevels[i];
+            if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+                continue;
+
+            if (ClassSkillDefinitions.GetClassSkills(classLevel.ClassName).Contains(skillName))
+                return true;
+        }
+
+        return false;
+    }
+
+    public bool IsSkillClassSkillForClass(string skillName, string className)
+    {
+        if (string.IsNullOrWhiteSpace(skillName) || string.IsNullOrWhiteSpace(className))
+            return false;
+
+        return ClassSkillDefinitions.GetClassSkills(className).Contains(skillName);
+    }
+
+    public int GetSkillPointCost(string skillName, string advancingClassName = null)
+    {
+        if (string.IsNullOrWhiteSpace(skillName) || Skills == null || !Skills.ContainsKey(skillName))
+            return 2;
+
+        if (!string.IsNullOrWhiteSpace(advancingClassName))
+            return IsSkillClassSkillForClass(skillName, advancingClassName) ? 1 : 2;
+
+        return Skills[skillName].SkillPointCost;
+    }
+
+    public int GetSkillMaxRanks(string skillName)
+    {
+        if (string.IsNullOrWhiteSpace(skillName))
+            return Mathf.Max(0, (Level + 3) / 2);
+
+        bool classSkillForAnyClass = IsSkillClassSkillForAnyClass(skillName);
+        int classMax = Level + 3;
+        return classSkillForAnyClass ? classMax : classMax / 2;
+    }
+
     /// <summary>
     /// Add one rank to a skill.
-    /// D&D 3.5 costs: Class skills = 1 skill point per rank, Cross-class = 2 skill points per rank.
+    /// D&D 3.5 multiclass rules:
+    /// - Maximum ranks use whether ANY class has the skill as a class skill.
+    /// - Cost uses the ADVANCING class (if provided) for this level-up allocation.
     /// Returns false if: not enough points, max ranks reached, or skill not found.
     /// </summary>
-    public bool AddSkillRank(string skillName)
+    public bool AddSkillRank(string skillName, string advancingClassName = null)
     {
         if (!Skills.ContainsKey(skillName))
         {
@@ -4053,7 +4104,7 @@ public class CharacterStats
         }
 
         Skill skill = Skills[skillName];
-        int cost = skill.SkillPointCost;
+        int cost = GetSkillPointCost(skillName, advancingClassName);
 
         if (AvailableSkillPoints < cost)
         {
@@ -4061,7 +4112,7 @@ public class CharacterStats
             return false;
         }
 
-        int maxRanks = skill.GetMaxRanks(Level);
+        int maxRanks = GetSkillMaxRanks(skillName);
         if (skill.Ranks >= maxRanks)
         {
             Debug.Log($"[Skills] {skillName} already at max ranks ({maxRanks}) for level {Level}.");
@@ -4070,17 +4121,17 @@ public class CharacterStats
 
         skill.Ranks++;
         AvailableSkillPoints -= cost;
-        string costLabel = skill.IsClassSkill ? "class" : "cross-class";
-        Debug.Log($"[Skills] Added rank to {skillName} ({costLabel}, cost {cost}): now {skill.Ranks}/{maxRanks} ({AvailableSkillPoints} points remaining)");
+        string costLabel = cost == 1 ? "class" : "cross-class";
+        string advancingContext = string.IsNullOrWhiteSpace(advancingClassName) ? "" : $", advancing {advancingClassName}";
+        Debug.Log($"[Skills] Added rank to {skillName} ({costLabel}, cost {cost}{advancingContext}): now {skill.Ranks}/{maxRanks} ({AvailableSkillPoints} points remaining)");
         return true;
     }
 
     /// <summary>
-    /// Remove one rank from a skill. Refunds the correct amount of skill points.
-    /// D&D 3.5: Class skills refund 1 point, Cross-class skills refund 2 points.
-    /// Returns false if skill has 0 ranks or skill not found.
+    /// Remove one rank from a skill and refund points using the same cost context as allocation.
+    /// For level-up allocation, pass advancingClassName so refunds follow that class's 1:1 or 2:1 cost.
     /// </summary>
-    public bool RemoveSkillRank(string skillName)
+    public bool RemoveSkillRank(string skillName, string advancingClassName = null)
     {
         if (!Skills.ContainsKey(skillName))
         {
@@ -4095,10 +4146,11 @@ public class CharacterStats
             return false;
         }
 
-        int refund = skill.SkillPointCost;
+        int refund = GetSkillPointCost(skillName, advancingClassName);
         skill.Ranks--;
         AvailableSkillPoints += refund;
-        Debug.Log($"[Skills] Removed rank from {skillName} (refunded {refund}): now {skill.Ranks} ({AvailableSkillPoints} points remaining)");
+        string advancingContext = string.IsNullOrWhiteSpace(advancingClassName) ? "" : $", advancing {advancingClassName}";
+        Debug.Log($"[Skills] Removed rank from {skillName} (refunded {refund}{advancingContext}): now {skill.Ranks} ({AvailableSkillPoints} points remaining)");
         return true;
     }
 

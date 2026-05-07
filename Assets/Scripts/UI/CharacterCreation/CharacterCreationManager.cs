@@ -125,7 +125,11 @@ public class CharacterCreationManager : MonoBehaviour
             return;
         }
 
-        skillsUI.ShowForLevelUp(_levelingCharacter, points, ShowSpellSelection);
+        string advancingClass = !string.IsNullOrWhiteSpace(_levelUpData?.SelectedClassName)
+            ? _levelUpData.SelectedClassName
+            : (_levelingCharacter != null && _levelingCharacter.Stats != null ? _levelingCharacter.Stats.CharacterClass : null);
+
+        skillsUI.ShowForLevelUp(_levelingCharacter, points, advancingClass, ShowSpellSelection);
     }
 
     private void ShowDomainSelection()

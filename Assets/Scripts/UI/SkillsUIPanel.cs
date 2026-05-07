@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -27,10 +28,14 @@ public class SkillsUIPanel : MonoBehaviour
     private CanvasGroup _canvasGroup; // Controls raycast blocking
     private Text _titleText;
     private Text _skillPointsText;
+    private Text _legendText;
     private GameObject _scrollContent;
     private Button _confirmButton;
     private Button _closeButton;
     private Text _logText;
+
+    private string _allocationClassName;
+    private readonly Dictionary<string, int> _sessionAddedRanksBySkill = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
     // Per-skill UI rows
     private List<SkillRowUI> _skillRows = new List<SkillRowUI>();
@@ -91,9 +96,9 @@ public class SkillsUIPanel : MonoBehaviour
 
         // Legend for class/cross-class
         float legendY = PANEL_H / 2 - 80;
-        MakeText(_rootPanel.transform, "SkillLegend",
+        _legendText = MakeText(_rootPanel.transform, "SkillLegend",
             new Vector2(0, legendY), new Vector2(PANEL_W - 40, 18),
-            "<color=#E6D966>★ Class Skill (Cost: 1 pt/rank, Max: Lv+3)</color>  |  <color=#AAAAAA>○ Cross-Class (Cost: 2 pts/rank, Max: (Lv+3)/2)</color>",
+            string.Empty,
             11, new Color(0.7f, 0.7f, 0.7f), TextAnchor.MiddleCenter);
 
         // Column headers
@@ -183,14 +188,19 @@ public class SkillsUIPanel : MonoBehaviour
     /// <summary>
     /// Open the skills panel in allocation mode (for character creation).
     /// </summary>
-    public void OpenForAllocation(CharacterStats stats)
+    public void OpenForAllocation(CharacterStats stats, string allocationClassName = null)
     {
         _stats = stats;
         _allocationMode = true;
+        _allocationClassName = string.IsNullOrWhiteSpace(allocationClassName)
+            ? (stats != null ? stats.CharacterClass : null)
+            : allocationClassName;
+        ResetAllocationSessionTracking();
         _titleText.text = $"SKILL ALLOCATION - {stats.CharacterName}";
         _confirmButton.gameObject.SetActive(true);
         _closeButton.gameObject.SetActive(false); // Can't close during allocation
-        _logText.text = "★ = Class skill (1 pt/rank)  |  ○ = Cross-class (2 pts/rank)";
+        _logText.text = "★ = Class skill for any class (max Lv+3); cost follows advancing class";
+        UpdateLegendText();
         PopulateSkillRows();
         RefreshAllRows();
         SetPanelVisible(true);
@@ -204,10 +214,13 @@ public class SkillsUIPanel : MonoBehaviour
     {
         _stats = stats;
         _allocationMode = false;
+        _allocationClassName = null;
+        ResetAllocationSessionTracking();
         _titleText.text = $"SKILLS - {stats.CharacterName}";
         _confirmButton.gameObject.SetActive(false);
         _closeButton.gameObject.SetActive(true);
         _logText.text = "Click a skill name to roll a skill check.";
+        UpdateLegendText();
         PopulateSkillRows();
         RefreshAllRows();
         SetPanelVisible(true);
@@ -224,8 +237,9 @@ public class SkillsUIPanel : MonoBehaviour
     /// <summary>
     /// Reuses the allocation UI for level-up skill point spending.
     /// Grants the requested points before opening the panel.
+    /// Cost uses the advancing class, while max ranks remain based on any class skill.
     /// </summary>
-    public void ShowForLevelUp(CharacterController character, int skillPointsToAllocate, System.Action onComplete)
+    public void ShowForLevelUp(CharacterController character, int skillPointsToAllocate, string advancingClassName, System.Action onComplete)
     {
         if (character == null || character.Stats == null)
         {
@@ -247,10 +261,14 @@ public class SkillsUIPanel : MonoBehaviour
         stats.TotalSkillPoints += pointsToGrant;
         stats.AvailableSkillPoints += pointsToGrant;
 
-        Debug.Log($"[SkillsUI] Level-up allocation for {stats.CharacterName}: granted {pointsToGrant} points (available now {stats.AvailableSkillPoints}).");
+        _allocationClassName = string.IsNullOrWhiteSpace(advancingClassName) ? stats.CharacterClass : advancingClassName;
+        ResetAllocationSessionTracking();
+
+        Debug.Log($"[SkillsUI] Level-up allocation for {stats.CharacterName}: granted {pointsToGrant} points (available now {stats.AvailableSkillPoints}), advancing class {_allocationClassName}.");
 
         OnAllocationConfirmed = onComplete;
-        OpenForAllocation(stats);
+        OpenForAllocation(stats, _allocationClassName);
+        UpdateLegendText();
     }
 
     /// <summary>
@@ -266,6 +284,35 @@ public class SkillsUIPanel : MonoBehaviour
             _canvasGroup.alpha = visible ? 1f : 0f;
             _canvasGroup.interactable = visible;
             _canvasGroup.blocksRaycasts = visible;
+        }
+    }
+
+    private void ResetAllocationSessionTracking()
+    {
+        _sessionAddedRanksBySkill.Clear();
+    }
+
+    private int GetCurrentSkillCost(Skill skill)
+    {
+        if (_stats == null || skill == null)
+            return 2;
+
+        return _stats.GetSkillPointCost(skill.SkillName, _allocationMode ? _allocationClassName : null);
+    }
+
+    private void UpdateLegendText()
+    {
+        if (_legendText == null)
+            return;
+
+        if (_allocationMode)
+        {
+            string classLabel = string.IsNullOrWhiteSpace(_allocationClassName) ? "selected class" : _allocationClassName;
+            _legendText.text = $"<color=#E6D966>★ Max ranks use ANY class skill (Lv+3)</color>  |  <color=#AAAAAA>Cost this level uses {classLabel} (1 if class skill, else 2)</color>";
+        }
+        else
+        {
+            _legendText.text = "<color=#E6D966>★ Class Skill (Max: Lv+3)</color>  |  <color=#AAAAAA>○ Cross-Class (Max: (Lv+3)/2)</color>";
         }
     }
 
@@ -348,11 +395,12 @@ public class SkillsUIPanel : MonoBehaviour
 
         nameBtn.onClick.AddListener(() => OnSkillNameClicked(skill));
 
-        // Cost display — shows how many skill points per rank
-        Color costColor = skill.IsClassSkill ? new Color(0.5f, 0.9f, 0.5f) : new Color(0.9f, 0.6f, 0.3f);
+        // Cost display — shows how many skill points per rank under current allocation class context.
+        int initialCost = GetCurrentSkillCost(skill);
+        Color costColor = initialCost == 1 ? new Color(0.5f, 0.9f, 0.5f) : new Color(0.9f, 0.6f, 0.3f);
         row.CostText = MakeText(rowGO.transform, "Cost",
             new Vector2(-100, 0), new Vector2(50, ROW_HEIGHT),
-            skill.SkillPointCost.ToString(), 13, costColor, TextAnchor.MiddleCenter);
+            initialCost.ToString(), 13, costColor, TextAnchor.MiddleCenter);
 
         // Ranks display
         row.RanksText = MakeText(rowGO.transform, "Ranks",
@@ -420,8 +468,14 @@ public class SkillsUIPanel : MonoBehaviour
         Skill skill = row.Skill;
         int abilityMod = _stats.GetAbilityModForSkill(skill);
         int totalBonus = skill.GetTotalBonus(abilityMod);
-        int maxRanks = skill.GetMaxRanks(_stats.Level);
-        int cost = skill.SkillPointCost;
+        int maxRanks = _stats.GetSkillMaxRanks(skill.SkillName);
+        int cost = GetCurrentSkillCost(skill);
+
+        if (row.CostText != null)
+        {
+            row.CostText.text = cost.ToString();
+            row.CostText.color = cost == 1 ? new Color(0.5f, 0.9f, 0.5f) : new Color(0.9f, 0.6f, 0.3f);
+        }
 
         // Ranks — show current/max
         row.RanksText.text = $"{skill.Ranks}/{maxRanks}";
@@ -446,7 +500,7 @@ public class SkillsUIPanel : MonoBehaviour
         breakdown += $" {modStr}{skill.KeyAbility}";
         if (skill.TrainedOnly && skill.Ranks == 0)
             breakdown += " [need training]";
-        if (!skill.IsClassSkill)
+        if (cost > 1)
             breakdown += " (×2 cost)";
 
         row.BreakdownText.text = breakdown;
@@ -459,7 +513,8 @@ public class SkillsUIPanel : MonoBehaviour
         }
         if (row.RemoveButton != null)
         {
-            row.RemoveButton.interactable = skill.Ranks > 0;
+            _sessionAddedRanksBySkill.TryGetValue(skill.SkillName, out int addedThisSession);
+            row.RemoveButton.interactable = addedThisSession > 0;
         }
     }
 
@@ -467,18 +522,31 @@ public class SkillsUIPanel : MonoBehaviour
 
     private void OnAddRankClicked(Skill skill)
     {
-        if (_stats == null) return;
-        if (_stats.AddSkillRank(skill.SkillName))
+        if (_stats == null || skill == null) return;
+
+        if (_stats.AddSkillRank(skill.SkillName, _allocationMode ? _allocationClassName : null))
         {
+            _sessionAddedRanksBySkill.TryGetValue(skill.SkillName, out int added);
+            _sessionAddedRanksBySkill[skill.SkillName] = added + 1;
             RefreshAllRows();
         }
     }
 
     private void OnRemoveRankClicked(Skill skill)
     {
-        if (_stats == null) return;
-        if (_stats.RemoveSkillRank(skill.SkillName))
+        if (_stats == null || skill == null) return;
+
+        _sessionAddedRanksBySkill.TryGetValue(skill.SkillName, out int addedThisSession);
+        if (addedThisSession <= 0)
+            return;
+
+        if (_stats.RemoveSkillRank(skill.SkillName, _allocationMode ? _allocationClassName : null))
         {
+            if (addedThisSession <= 1)
+                _sessionAddedRanksBySkill.Remove(skill.SkillName);
+            else
+                _sessionAddedRanksBySkill[skill.SkillName] = addedThisSession - 1;
+
             RefreshAllRows();
         }
     }
