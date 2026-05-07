@@ -25,7 +25,8 @@ public class FamiliarSelectionUI : MonoBehaviour
         if (_font == null) _font = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
         _overlayPanel = CreatePanel(canvas.transform, "FamiliarOverlay", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0, 0, 0, 0.86f));
-        _rootPanel = CreatePanel(_overlayPanel.transform, "FamiliarPanel", new Vector2(760, 620), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.11f, 0.12f, 0.19f, 0.98f));
+        // Centered fixed-size panel. Anchors must be normalized (0..1), size goes in sizeDelta.
+        _rootPanel = CreatePanel(_overlayPanel.transform, "FamiliarPanel", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760, 620), new Color(0.11f, 0.12f, 0.19f, 0.98f));
 
         CreateText(_rootPanel.transform, "Title", new Vector2(0, 278), new Vector2(700, 42), "WIZARD FAMILIAR", 22, Color.white, TextAnchor.MiddleCenter);
         CreateText(_rootPanel.transform, "Subtitle", new Vector2(0, 244), new Vector2(700, 24), "Choose a familiar (or none)", 14, new Color(0.8f, 0.85f, 1f), TextAnchor.MiddleCenter);

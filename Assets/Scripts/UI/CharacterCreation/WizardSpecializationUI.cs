@@ -29,7 +29,8 @@ public class WizardSpecializationUI : MonoBehaviour
         if (_font == null) _font = Font.CreateDynamicFontFromOSFont("Arial", 14);
 
         _overlayPanel = CreatePanel(canvas.transform, "WizardSpecOverlay", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0, 0, 0, 0.86f));
-        _rootPanel = CreatePanel(_overlayPanel.transform, "WizardSpecPanel", new Vector2(760, 620), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.11f, 0.12f, 0.19f, 0.98f));
+        // Centered fixed-size panel. Anchors must be normalized (0..1), size goes in sizeDelta.
+        _rootPanel = CreatePanel(_overlayPanel.transform, "WizardSpecPanel", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760, 620), new Color(0.11f, 0.12f, 0.19f, 0.98f));
 
         CreateText(_rootPanel.transform, "Title", new Vector2(0, 278), new Vector2(700, 42), "WIZARD SCHOOL SPECIALIZATION", 22, Color.white, TextAnchor.MiddleCenter);
 
