@@ -447,8 +447,9 @@ public class SpellcastingComponent : MonoBehaviour
                 break;
         }
 
-        int bonusFirst = intMod >= 1 ? 1 : 0;
-        int bonusSecond = intMod >= 2 ? 1 : 0;
+        // D&D 3.5e: bonus slots never grant access to a spell level you cannot already cast.
+        int bonusFirst = baseFirst > 0 && intMod >= 1 ? 1 : 0;
+        int bonusSecond = baseSecond > 0 && intMod >= 2 ? 1 : 0;
 
         _regularSlotsMax = new[] { baseCantrips, baseFirst + bonusFirst, baseSecond + bonusSecond };
         _domainSlotsMax = new int[_regularSlotsMax.Length];
@@ -548,8 +549,9 @@ public class SpellcastingComponent : MonoBehaviour
                 break;
         }
 
-        int bonusFirst = wisMod >= 1 ? 1 : 0;
-        int bonusSecond = wisMod >= 2 ? 1 : 0;
+        // D&D 3.5e: bonus slots never grant access to a spell level you cannot already cast.
+        int bonusFirst = baseFirst > 0 && wisMod >= 1 ? 1 : 0;
+        int bonusSecond = baseSecond > 0 && wisMod >= 2 ? 1 : 0;
 
         _regularSlotsMax = new[] { baseCantrips, baseFirst + bonusFirst, baseSecond + bonusSecond };
         _domainSlotsMax = new int[_regularSlotsMax.Length];

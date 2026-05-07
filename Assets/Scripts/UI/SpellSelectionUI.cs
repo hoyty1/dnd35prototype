@@ -67,6 +67,7 @@ public class SpellSelectionUI : MonoBehaviour
     private HashSet<string> _alreadyKnownSpellIds = new HashSet<string>();
     private int _levelUpSpellsToSelect;
     private int _levelUpMaxSpellLevel;
+    private readonly HashSet<int> _levelUpAvailableSpellLevels = new HashSet<int>();
 
     // Layout constants
     private const float PANEL_W = 1020f;
@@ -356,6 +357,7 @@ public class SpellSelectionUI : MonoBehaviour
         _alreadyKnownSpellIds.Clear();
         _levelUpSpellsToSelect = 0;
         _levelUpMaxSpellLevel = 0;
+        _levelUpAvailableSpellLevels.Clear();
     }
 
     /// <summary>
@@ -424,7 +426,7 @@ public class SpellSelectionUI : MonoBehaviour
 
         SpellDatabase.Init();
         _availableSpells.Clear();
-        for (int level = 0; level <= _levelUpMaxSpellLevel; level++)
+        foreach (int level in _levelUpAvailableSpellLevels.OrderBy(l => l))
         {
             _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", level));
         }
@@ -457,9 +459,9 @@ public class SpellSelectionUI : MonoBehaviour
         IsOpen = true;
 
         _currentFilterLevel = -1;
-        if (_filter0Button != null) _filter0Button.gameObject.SetActive(_levelUpMaxSpellLevel >= 0);
-        if (_filter1Button != null) _filter1Button.gameObject.SetActive(_levelUpMaxSpellLevel >= 1);
-        if (_filter2Button != null) _filter2Button.gameObject.SetActive(_levelUpMaxSpellLevel >= 2);
+        if (_filter0Button != null) _filter0Button.gameObject.SetActive(_levelUpAvailableSpellLevels.Contains(0));
+        if (_filter1Button != null) _filter1Button.gameObject.SetActive(_levelUpAvailableSpellLevels.Contains(1));
+        if (_filter2Button != null) _filter2Button.gameObject.SetActive(_levelUpAvailableSpellLevels.Contains(2));
 
         PopulateSpellList();
         RefreshUI();
@@ -487,22 +489,39 @@ public class SpellSelectionUI : MonoBehaviour
     private void DetermineLevelUpSpellRange()
     {
         _levelUpMaxSpellLevel = 0;
+        _levelUpAvailableSpellLevels.Clear();
 
         if (_levelUpSpellcasting == null)
             return;
 
         int highestSlotLevel = _levelUpSpellcasting.GetHighestSlotLevel();
-        _levelUpMaxSpellLevel = Mathf.Max(0, highestSlotLevel);
+        for (int level = 0; level <= Mathf.Max(0, highestSlotLevel); level++)
+        {
+            if (_levelUpSpellcasting.GetSpellSlotsPerDay(level) > 0)
+                _levelUpAvailableSpellLevels.Add(level);
+        }
+
+        if (_levelUpAvailableSpellLevels.Count == 0)
+            _levelUpAvailableSpellLevels.Add(0);
+
+        _levelUpMaxSpellLevel = _levelUpAvailableSpellLevels.Max();
 
         while (_levelUpMaxSpellLevel > 0)
         {
             var spellsAtLevel = SpellDatabase.GetSpellsForClassAtLevel("Wizard", _levelUpMaxSpellLevel);
             if (spellsAtLevel != null && spellsAtLevel.Count > 0)
                 break;
+
+            _levelUpAvailableSpellLevels.Remove(_levelUpMaxSpellLevel);
             _levelUpMaxSpellLevel--;
         }
 
-        Debug.Log($"[SpellSelection] Wizard level-up: Select {_levelUpSpellsToSelect} new spells");
+        if (_levelUpAvailableSpellLevels.Count == 0)
+            _levelUpAvailableSpellLevels.Add(0);
+
+        _levelUpMaxSpellLevel = _levelUpAvailableSpellLevels.Max();
+
+        Debug.Log($"[SpellSelection] Wizard level-up: Select {_levelUpSpellsToSelect} new spells (levels: {string.Join(",", _levelUpAvailableSpellLevels.OrderBy(l => l))})");
     }
 
     private bool IsKnownInLevelUpMode(SpellData spell)
