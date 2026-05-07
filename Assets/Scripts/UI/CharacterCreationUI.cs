@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class CharacterCreationUI : MonoBehaviour
 {
     // ========== STATE ==========
-    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, ChooseAlignment, ChooseDeity, ChooseDomains, ChooseSpontaneousCasting, AllocateSkills, SelectFeats, SelectSpells, Review }
+    public enum Step { RollStats, AssignStats, ChooseRace, ChooseClass, ChooseAlignment, ChooseDeity, ChooseDomains, ChooseSpontaneousCasting, AllocateSkills, SelectFeats, SelectWizardSpecialization, SelectWizardFamiliar, SelectSpells, Review }
 
     public Step CurrentStep = Step.RollStats;
     public int CurrentCharacterIndex = 0; // 0 = PC1, 1 = PC2, 2 = PC3, 3 = PC4
@@ -39,6 +39,8 @@ public class CharacterCreationUI : MonoBehaviour
     // Reference to spell selection UI for spell selection step
     public SpellSelectionUI SpellUI;
     public SpellPreparationUI SpellPrepUI;
+    public WizardSpecializationUI WizardSpecializationUI;
+    public FamiliarSelectionUI FamiliarSelectionUI;
 
     // ========== UI REFERENCES ==========
     private GameObject _rootPanel;
@@ -1521,7 +1523,7 @@ public class CharacterCreationUI : MonoBehaviour
 
             if (bonusFeats <= 0)
             {
-                ShowStep(Step.SelectSpells);
+                GoToWizardFeatureOrSpellStep();
                 return;
             }
 
@@ -1590,12 +1592,12 @@ public class CharacterCreationUI : MonoBehaviour
             else
             {
                 Debug.Log($"[CharCreation] Wizard at level {wizLevel}: no bonus feats yet (first at level 5)");
-                ShowStep(Step.SelectSpells);
+                GoToWizardFeatureOrSpellStep();
             }
         }
         else
         {
-            ShowStep(Step.SelectSpells);
+            GoToWizardFeatureOrSpellStep();
         }
     }
 
@@ -1605,7 +1607,7 @@ public class CharacterCreationUI : MonoBehaviour
         data.BonusFeats = new List<string>(feats);
 
         Debug.Log($"[CharCreation] Bonus feats selected: {string.Join(", ", feats)}");
-        ShowStep(Step.SelectSpells);
+        GoToWizardFeatureOrSpellStep();
     }
 
     /// <summary>Called after selecting the Monk level 1 bonus feat. Proceeds to level 2 selection.</summary>
@@ -1644,7 +1646,104 @@ public class CharacterCreationUI : MonoBehaviour
 
         // At level 6+, there would be another selection for Improved Disarm or Improved Trip
         // For now (level 3), we're done with monk bonus feats
-        ShowStep(Step.SelectSpells);
+        GoToWizardFeatureOrSpellStep();
+    }
+
+    private void GoToWizardFeatureOrSpellStep()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        if (data != null && string.Equals(data.ClassName, "Wizard", StringComparison.OrdinalIgnoreCase))
+            ShowStep(Step.SelectWizardSpecialization);
+        else
+            ShowStep(Step.SelectSpells);
+    }
+
+    private void StartWizardSpecializationSelection()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        if (data == null)
+        {
+            ShowStep(Step.SelectSpells);
+            return;
+        }
+
+        if (!string.Equals(data.ClassName, "Wizard", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowStep(Step.SelectSpells);
+            return;
+        }
+
+        if (WizardSpecializationUI == null)
+        {
+            Canvas canvas = _rootPanel != null ? _rootPanel.GetComponentInParent<Canvas>() : FindObjectOfType<Canvas>();
+            if (canvas != null)
+            {
+                GameObject uiObj = new GameObject("WizardSpecializationUI", typeof(RectTransform));
+                uiObj.transform.SetParent(canvas.transform, false);
+                WizardSpecializationUI = uiObj.AddComponent<WizardSpecializationUI>();
+                WizardSpecializationUI.BuildUI(canvas);
+            }
+        }
+
+        if (WizardSpecializationUI == null)
+        {
+            Debug.LogWarning("[CharCreation] WizardSpecializationUI unavailable, defaulting to generalist.");
+            data.WizardSpecialization = WizardSpecialization.CreateGeneralist();
+            ShowStep(Step.SelectWizardFamiliar);
+            return;
+        }
+
+        WizardSpecialization initial = data.WizardSpecialization ?? WizardSpecialization.CreateGeneralist();
+        WizardSpecializationUI.Show(initial, selected =>
+        {
+            data.WizardSpecialization = selected ?? WizardSpecialization.CreateGeneralist();
+            data.WizardSpecialization.Normalize();
+            ShowStep(Step.SelectWizardFamiliar);
+        });
+    }
+
+    private void StartWizardFamiliarSelection()
+    {
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        if (data == null)
+        {
+            ShowStep(Step.SelectSpells);
+            return;
+        }
+
+        if (!string.Equals(data.ClassName, "Wizard", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowStep(Step.SelectSpells);
+            return;
+        }
+
+        if (FamiliarSelectionUI == null)
+        {
+            Canvas canvas = _rootPanel != null ? _rootPanel.GetComponentInParent<Canvas>() : FindObjectOfType<Canvas>();
+            if (canvas != null)
+            {
+                GameObject uiObj = new GameObject("FamiliarSelectionUI", typeof(RectTransform));
+                uiObj.transform.SetParent(canvas.transform, false);
+                FamiliarSelectionUI = uiObj.AddComponent<FamiliarSelectionUI>();
+                FamiliarSelectionUI.BuildUI(canvas);
+            }
+        }
+
+        if (FamiliarSelectionUI == null)
+        {
+            Debug.LogWarning("[CharCreation] FamiliarSelectionUI unavailable, defaulting to no familiar.");
+            data.WizardFamiliar = WizardFamiliar.CreateNone();
+            ShowStep(Step.SelectSpells);
+            return;
+        }
+
+        WizardFamiliar initial = data.WizardFamiliar ?? WizardFamiliar.CreateNone();
+        FamiliarSelectionUI.Show(initial, selected =>
+        {
+            data.WizardFamiliar = selected ?? WizardFamiliar.CreateNone();
+            data.WizardFamiliar.RebuildBonuses();
+            ShowStep(Step.SelectSpells);
+        });
     }
 
     // ========== STEP 5c: SELECT SPELLS ==========
@@ -1689,7 +1788,7 @@ public class CharacterCreationUI : MonoBehaviour
                 Debug.Log($"[CharCreation] Wizard spellbook built: {selectedSpellIds.Count} spells total (no preparation step at creation)");
                 ShowStep(Step.Review);
             };
-            SpellUI.OpenForWizard(intMod, Mathf.Max(1, data.CharacterLevel));
+            SpellUI.OpenForWizard(intMod, Mathf.Max(1, data.CharacterLevel), data.WizardSpecialization);
         }
         else if (data.ClassName == "Cleric")
         {
@@ -1881,6 +1980,26 @@ public class CharacterCreationUI : MonoBehaviour
 
         string review = $"══════════ CHARACTER SHEET ══════════\n\n";
         review += $"Race: {data.RaceName}   Class: {data.ClassName}   Level: {Mathf.Max(1, data.CharacterLevel)}{sizeStr}\n";
+        if (string.Equals(data.ClassName, "Wizard", StringComparison.OrdinalIgnoreCase))
+        {
+            WizardSpecialization spec = data.WizardSpecialization ?? WizardSpecialization.CreateGeneralist();
+            spec.Normalize();
+            if (spec.IsGeneralist)
+            {
+                review += "Specialization: Generalist\n";
+            }
+            else
+            {
+                review += $"Specialization: {spec.GetSpecialistTitle()} ({spec.specializationSchool})\n";
+                review += $"Prohibited Schools: {(spec.prohibitedSchools.Count > 0 ? string.Join(", ", spec.prohibitedSchools) : "None")}\n";
+            }
+
+            WizardFamiliar familiar = data.WizardFamiliar ?? WizardFamiliar.CreateNone();
+            familiar.RebuildBonuses();
+            review += familiar.hasFamiliar
+                ? $"Familiar: {familiar.familiarType}\n"
+                : "Familiar: None\n";
+        }
         review += $"Alignment: {alignStr}\n";
         review += $"Deity: {deityStr}\n";
         if (data.ClassName == "Cleric" && data.ChosenDomains.Count > 0)
@@ -2205,23 +2324,33 @@ public class CharacterCreationUI : MonoBehaviour
 
             case Step.AllocateSkills:
                 // Skills allocation is handled by the SkillsUIPanel overlay
-                _stepText.text = "Step 9 of 12: Allocate Skills";
+                _stepText.text = "Step 9 of 14: Allocate Skills";
                 StartSkillAllocation();
                 break;
 
             case Step.SelectFeats:
-                _stepText.text = "Step 10 of 12: Select Feats";
+                _stepText.text = "Step 10 of 14: Select Feats";
                 StartFeatSelection();
                 break;
 
+            case Step.SelectWizardSpecialization:
+                _stepText.text = "Step 11 of 14: Wizard Specialization";
+                StartWizardSpecializationSelection();
+                break;
+
+            case Step.SelectWizardFamiliar:
+                _stepText.text = "Step 12 of 14: Wizard Familiar";
+                StartWizardFamiliarSelection();
+                break;
+
             case Step.SelectSpells:
-                _stepText.text = "Step 11 of 12: Select Spells / Spellbook";
+                _stepText.text = "Step 13 of 14: Select Spells / Spellbook";
                 StartSpellSelection();
                 break;
 
             case Step.Review:
                 _step5Panel.SetActive(true);
-                _stepText.text = "Step 12 of 12: Review & Name";
+                _stepText.text = "Step 14 of 14: Review & Name";
                 _nameInput.text = "";
                 RefreshReview();
                 break;
@@ -2262,13 +2391,27 @@ public class CharacterCreationUI : MonoBehaviour
                     FeatUI.Close();
                 ShowStep(Step.AllocateSkills);
                 break;
+            case Step.SelectWizardSpecialization:
+                if (WizardSpecializationUI != null && WizardSpecializationUI.IsOpen)
+                    WizardSpecializationUI.Close();
+                ShowStep(Step.SelectFeats);
+                break;
+            case Step.SelectWizardFamiliar:
+                if (FamiliarSelectionUI != null && FamiliarSelectionUI.IsOpen)
+                    FamiliarSelectionUI.Close();
+                ShowStep(Step.SelectWizardSpecialization);
+                break;
             case Step.SelectSpells:
                 // Close spell UI and preparation UI if open
                 if (SpellUI != null && SpellUI.IsOpen)
                     SpellUI.Close();
                 if (SpellPrepUI != null && SpellPrepUI.IsOpen)
                     SpellPrepUI.Close();
-                ShowStep(Step.SelectFeats);
+                var spellBackData = CreatedCharacters[CurrentCharacterIndex];
+                if (spellBackData != null && string.Equals(spellBackData.ClassName, "Wizard", StringComparison.OrdinalIgnoreCase))
+                    ShowStep(Step.SelectWizardFamiliar);
+                else
+                    ShowStep(Step.SelectFeats);
                 break;
             case Step.Review: ShowStep(Step.SelectSpells); break;
         }

@@ -55,6 +55,7 @@ public class SpellSelectionUI : MonoBehaviour
     private int _currentFilterLevel = -1; // -1 = all, 0/1/2 = specific level
     private bool _cantripSelectionRequired; // true if player must select cantrips
     private int _autoAddedCantripCount;    // number of cantrips auto-added (wizard mode)
+    private WizardSpecialization _wizardSpecializationFilter;
 
     private List<SpellData> _availableSpells = new List<SpellData>();
     private HashSet<string> _selectedSpellIds = new HashSet<string>();
@@ -242,8 +243,15 @@ public class SpellSelectionUI : MonoBehaviour
     /// </summary>
     public void OpenForWizard(int intModifier, int characterLevel)
     {
+        OpenForWizard(intModifier, characterLevel, null);
+    }
+
+    public void OpenForWizard(int intModifier, int characterLevel, WizardSpecialization specialization)
+    {
         _isLevelUpMode = false;
         _className = "Wizard";
+        _wizardSpecializationFilter = specialization ?? WizardSpecialization.CreateGeneralist();
+        _wizardSpecializationFilter.Normalize();
         _intMod = intModifier;
 
         int safeCharacterLevel = Mathf.Max(1, characterLevel);
@@ -261,25 +269,27 @@ public class SpellSelectionUI : MonoBehaviour
         SpellDatabase.Init();
         _availableSpells.Clear();
 
-        // Auto-add ALL wizard cantrips to the spellbook
-        var allCantrips = SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0);
+        // Auto-add wizard cantrips excluding prohibited schools.
+        var allCantrips = SpellDatabase.GetSpellsForClassAtLevel("Wizard", 0)
+            .Where(s => s != null && !IsBlockedByWizardSpecialization(s))
+            .ToList();
         foreach (var cantrip in allCantrips)
-        {
             _selectedSpellIds.Add(cantrip.SpellId);
-        }
         _autoAddedCantripCount = allCantrips.Count;
 
-        // Only show spells currently available at this creation level.
-        _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1));
+        // Only show spells currently available at this creation level, excluding prohibited schools.
+        _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1).Where(s => s != null && !IsBlockedByWizardSpecialization(s)));
         if (_maxSpells2nd > 0)
-            _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2));
+            _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2).Where(s => s != null && !IsBlockedByWizardSpecialization(s)));
 
         // Sort: by level, then by name
-        _availableSpells.Sort((a, b) =>
-        {
-            int cmp = a.SpellLevel.CompareTo(b.SpellLevel);
-            return cmp != 0 ? cmp : string.Compare(a.Name, b.Name, StringComparison.Ordinal);
-        });
+        _availableSpells = _availableSpells
+            .Where(s => s != null)
+            .GroupBy(s => s.SpellId)
+            .Select(g => g.First())
+            .OrderBy(s => s.SpellLevel)
+            .ThenBy(s => s.Name)
+            .ToList();
 
         _titleText.text = "WIZARD SPELLBOOK SELECTION";
         _subtitleText.text = _maxSpells2nd > 0
@@ -311,6 +321,7 @@ public class SpellSelectionUI : MonoBehaviour
     {
         _isLevelUpMode = false;
         _className = "Cleric";
+        _wizardSpecializationFilter = WizardSpecialization.CreateGeneralist();
         _maxCantrips = 4;
         _maxSpells1st = 0; // Clerics don't select higher-level spells (they know all)
         _maxSpells2nd = 0;
@@ -360,6 +371,7 @@ public class SpellSelectionUI : MonoBehaviour
         _levelUpMaxSpellLevel = 0;
         _isWizardInitialSpellbookSelection = false;
         _levelUpAvailableSpellLevels.Clear();
+        _wizardSpecializationFilter = WizardSpecialization.CreateGeneralist();
     }
 
     /// <summary>
@@ -397,9 +409,15 @@ public class SpellSelectionUI : MonoBehaviour
 
         if (string.Equals(className, "Wizard", StringComparison.OrdinalIgnoreCase))
         {
+            _wizardSpecializationFilter = character.Stats != null
+                ? (character.Stats.WizardSpecialization ?? WizardSpecialization.CreateGeneralist())
+                : WizardSpecialization.CreateGeneralist();
+            _wizardSpecializationFilter.Normalize();
             OpenForLevelUpWizard();
             return;
         }
+
+        _wizardSpecializationFilter = WizardSpecialization.CreateGeneralist();
 
         Debug.Log($"[SpellSelection] Level-up spell selection not required for class '{className}'.");
         _isLevelUpMode = false;
@@ -468,7 +486,7 @@ public class SpellSelectionUI : MonoBehaviour
         }
 
         _availableSpells = _availableSpells
-            .Where(s => s != null)
+            .Where(s => s != null && !IsBlockedByWizardSpecialization(s))
             .GroupBy(s => s.SpellId)
             .Select(g => g.First())
             .OrderBy(s => s.SpellLevel)
@@ -568,6 +586,18 @@ public class SpellSelectionUI : MonoBehaviour
             return false;
 
         return _alreadyKnownSpellIds.Contains(spell.SpellId);
+    }
+
+    private bool IsBlockedByWizardSpecialization(SpellData spell)
+    {
+        if (spell == null)
+            return false;
+
+        if (_wizardSpecializationFilter == null || _wizardSpecializationFilter.IsGeneralist)
+            return false;
+
+        string school = WizardSpecialization.NormalizeSchoolName(spell.School);
+        return _wizardSpecializationFilter.IsProhibitedSchool(school);
     }
 
     // ========== POPULATE LIST ==========

@@ -1756,6 +1756,19 @@ public partial class GameManager : MonoBehaviour
             // Set spontaneous casting type for clerics
             stats.SpontaneousCasting = data.SpontaneousCasting;
 
+            // Wizard specialization/familiar choices (wizard level 1 feature) from creation.
+            if (data.WizardSpecialization != null)
+            {
+                stats.WizardSpecialization = data.WizardSpecialization;
+                stats.WizardSpecialization.Normalize();
+            }
+            else
+            {
+                stats.WizardSpecialization = WizardSpecialization.CreateGeneralist();
+            }
+
+            stats.ApplyWizardFamiliar(data.WizardFamiliar ?? WizardFamiliar.CreateNone());
+
             // Use class-specific token sprite for grid display; fallback to generic
             Sprite pcAlive = IconLoader.GetToken(data.ClassName) ?? pcAliveFallback;
             Vector2Int startPos = (i < pcPositions.Length) ? pcPositions[i] : new Vector2Int(3, 6 + i * 3);

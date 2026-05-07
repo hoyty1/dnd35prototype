@@ -193,6 +193,61 @@ public class CharacterStats
     /// <summary>Domains display string (e.g., "Healing, Good").</summary>
     public string DomainsDisplay => ChosenDomains.Count > 0 ? string.Join(", ", ChosenDomains) : "None";
 
+    // ========== WIZARD SPECIALIZATION & FAMILIAR ==========
+    public WizardSpecialization WizardSpecialization = WizardSpecialization.CreateGeneralist();
+    public WizardFamiliar WizardFamiliar = WizardFamiliar.CreateNone();
+
+    public bool IsWizardSpecialist => WizardSpecialization != null && !WizardSpecialization.IsGeneralist;
+
+    public bool IsSpellFromProhibitedSchool(SpellData spell)
+    {
+        if (spell == null || WizardSpecialization == null || WizardSpecialization.IsGeneralist)
+            return false;
+
+        string school = WizardSpecialization.NormalizeSchoolName(spell.School);
+        return WizardSpecialization.IsProhibitedSchool(school);
+    }
+
+    public string WizardSpecializationDisplay => IsWizardSpecialist ? WizardSpecialization.GetSpecialistTitle() : "Generalist";
+
+    public string WizardProhibitedSchoolsDisplay
+    {
+        get
+        {
+            if (!IsWizardSpecialist || WizardSpecialization.prohibitedSchools == null || WizardSpecialization.prohibitedSchools.Count == 0)
+                return "None";
+            return string.Join(", ", WizardSpecialization.prohibitedSchools);
+        }
+    }
+
+    public string WizardFamiliarDisplay
+    {
+        get
+        {
+            if (WizardFamiliar == null || !WizardFamiliar.hasFamiliar || string.IsNullOrWhiteSpace(WizardFamiliar.familiarType))
+                return "None";
+
+            WizardFamiliar.EnsureBonusesInitialized();
+            string bonusText = WizardFamiliar.serializedBonuses != null && WizardFamiliar.serializedBonuses.Count > 0
+                ? string.Join(", ", WizardFamiliar.serializedBonuses.Select(b => $"{(b.value >= 0 ? "+" : string.Empty)}{b.value} {b.key}"))
+                : "special bonus";
+            return $"{WizardFamiliar.familiarType} ({bonusText})";
+        }
+    }
+
+    public void ApplyWizardFamiliar(WizardFamiliar familiar)
+    {
+        int oldHpBonus = WizardFamiliar != null ? WizardFamiliar.HitPointBonus : 0;
+
+        WizardFamiliar = familiar ?? WizardFamiliar.CreateNone();
+        WizardFamiliar.RebuildBonuses();
+
+        int newHpBonus = WizardFamiliar.HitPointBonus;
+        int delta = newHpBonus - oldHpBonus;
+        if (delta != 0)
+            CurrentHP = Mathf.Clamp(CurrentHP + delta, -10, TotalMaxHP);
+    }
+
     private static readonly HashSet<string> ArcaneSpellcastingClasses = new HashSet<string>
     {
         "Wizard", "Sorcerer", "Bard"
@@ -236,6 +291,14 @@ public class CharacterStats
 
         if (string.IsNullOrWhiteSpace(FavoredClass) && Race != null)
             FavoredClass = Race.FavoredClass;
+
+        if (WizardSpecialization == null)
+            WizardSpecialization = WizardSpecialization.CreateGeneralist();
+        WizardSpecialization.Normalize();
+
+        if (WizardFamiliar == null)
+            WizardFamiliar = WizardFamiliar.CreateNone();
+        WizardFamiliar.EnsureBonusesInitialized();
 
         EnsureClassSkillPointPoolsInitialized();
     }
@@ -303,6 +366,23 @@ public class CharacterStats
             return string.Join(" / ", ClassLevels
                 .Where(c => c != null && !string.IsNullOrWhiteSpace(c.ClassName) && c.Level > 0)
                 .Select(c => $"{c.ClassName} {c.Level}"));
+        }
+    }
+
+    public string ClassSummaryWithWizardSpecialization
+    {
+        get
+        {
+            EnsureMulticlassDataInitialized();
+            return string.Join(" / ", ClassLevels
+                .Where(c => c != null && !string.IsNullOrWhiteSpace(c.ClassName) && c.Level > 0)
+                .Select(c =>
+                {
+                    string classLabel = $"{c.ClassName} {c.Level}";
+                    if (string.Equals(c.ClassName, "Wizard", StringComparison.OrdinalIgnoreCase) && IsWizardSpecialist)
+                        classLabel += $" ({WizardSpecialization.GetSpecialistTitle()})";
+                    return classLabel;
+                }));
         }
     }
 
@@ -1149,10 +1229,10 @@ public class CharacterStats
     }
 
     /// <summary>Total Fortitude save: CON mod + class base + feat bonus + morale bonus + condition modifiers.</summary>
-    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + ConditionFortitudeModifier;
+    public int FortitudeSave => CONMod + ClassFortSave + FeatFortitudeBonus + MoraleSaveBonus + ConditionFortitudeModifier + (WizardFamiliar != null ? WizardFamiliar.FortitudeBonus : 0);
 
     /// <summary>Total Reflex save: DEX mod + class base + feat bonus + morale bonus + condition modifiers.</summary>
-    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + ConditionReflexModifier;
+    public int ReflexSave => DEXMod + ClassRefSave + FeatReflexBonus + MoraleSaveBonus + ConditionReflexModifier + (WizardFamiliar != null ? WizardFamiliar.ReflexBonus : 0);
 
     /// <summary>Total Will save: WIS mod + class base + feat bonus + rage bonus + morale bonus + condition modifiers.</summary>
     public int WillSave => WISMod + ClassWillSave + FeatWillBonus + RageWillBonus + MoraleSaveBonus + ConditionWillModifier;
@@ -1313,8 +1393,8 @@ public class CharacterStats
     /// <summary>HP bonus from feats (Toughness).</summary>
     public int FeatHPBonus => FeatManager.GetTotalHPBonus(this);
 
-    /// <summary>Total Max HP including feat bonuses, spell bonuses, and negative level reduction.</summary>
-    public int TotalMaxHP => Mathf.Max(1, MaxHP + FeatHPBonus + BonusMaxHP - NegativeLevelHpPenalty);
+    /// <summary>Total Max HP including feat bonuses, spell bonuses, familiar bonuses, and negative level reduction.</summary>
+    public int TotalMaxHP => Mathf.Max(1, MaxHP + FeatHPBonus + BonusMaxHP + (WizardFamiliar != null ? WizardFamiliar.HitPointBonus : 0) - NegativeLevelHpPenalty);
 
     /// <summary>AC bonus from Dodge feat.</summary>
     public int FeatACBonus => FeatManager.GetACBonus(this);
@@ -4257,6 +4337,15 @@ public class CharacterStats
         return modifier;
     }
 
+    private int GetFamiliarSkillModifier(string skillName)
+    {
+        if (WizardFamiliar == null || !WizardFamiliar.hasFamiliar || string.IsNullOrWhiteSpace(skillName))
+            return 0;
+
+        WizardFamiliar.EnsureBonusesInitialized();
+        return WizardFamiliar.GetBonus(skillName);
+    }
+
     /// <summary>
     /// Get the total bonus for a skill (ranks + ability mod + feat bonuses + condition modifiers).
     /// Returns 0 if skill not found.
@@ -4274,7 +4363,8 @@ public class CharacterStats
         int acpPenalty = GetArmorCheckPenaltyForSkill(skillName);
         int conditionModifier = GetConditionSkillModifier(skillName);
         int spellModifier = GetSpellSkillModifier(skillName);
-        return baseBonus + featBonus + acpPenalty + conditionModifier + spellModifier;
+        int familiarModifier = GetFamiliarSkillModifier(skillName);
+        return baseBonus + featBonus + acpPenalty + conditionModifier + spellModifier + familiarModifier;
     }
 
     /// <summary>

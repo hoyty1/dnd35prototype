@@ -17,6 +17,8 @@ public class CharacterCreationManager : MonoBehaviour
     private SkillsUIPanel _skillsUI;
     private SpellSelectionUI _spellSelectionUI;
     private DomainSelectionUI _domainSelectionUI;
+    private WizardSpecializationUI _wizardSpecializationUI;
+    private FamiliarSelectionUI _familiarSelectionUI;
     private bool _domainSelectionAttemptedThisFlow;
 
     /// <summary>
@@ -242,7 +244,7 @@ public class CharacterCreationManager : MonoBehaviour
         int classPoolPoints = _levelUpData != null ? Mathf.Max(0, _levelUpData.SkillPointsFromClassPool) : 0;
         if (points <= 0)
         {
-            ShowSpellSelection();
+            ShowWizardLevelOneChoices();
             return;
         }
 
@@ -250,7 +252,7 @@ public class CharacterCreationManager : MonoBehaviour
         if (skillsUI == null)
         {
             Debug.LogWarning("[CharacterCreationManager] SkillsUIPanel unavailable. Skipping skill step.");
-            ShowSpellSelection();
+            ShowWizardLevelOneChoices();
             return;
         }
 
@@ -258,7 +260,68 @@ public class CharacterCreationManager : MonoBehaviour
             ? _levelUpData.SelectedClassName
             : (_levelingCharacter != null && _levelingCharacter.Stats != null ? _levelingCharacter.Stats.CharacterClass : null);
 
-        skillsUI.ShowForLevelUp(_levelingCharacter, newSkillPoints, classPoolPoints, advancingClass, ShowSpellSelection);
+        skillsUI.ShowForLevelUp(_levelingCharacter, newSkillPoints, classPoolPoints, advancingClass, ShowWizardLevelOneChoices);
+    }
+
+    private void ShowWizardLevelOneChoices()
+    {
+        if (_levelingCharacter == null || _levelingCharacter.Stats == null)
+        {
+            ShowSpellSelection();
+            return;
+        }
+
+        CharacterStats stats = _levelingCharacter.Stats;
+        string selectedClass = _levelUpData != null ? _levelUpData.SelectedClassName : string.Empty;
+        bool isWizardProgression = string.Equals(selectedClass, "Wizard", StringComparison.OrdinalIgnoreCase);
+        bool isWizardLevelOne = stats.GetClassLevel("Wizard") == 1;
+
+        if (!isWizardProgression || !isWizardLevelOne)
+        {
+            ShowSpellSelection();
+            return;
+        }
+
+        ShowWizardSpecializationSelection();
+    }
+
+    private void ShowWizardSpecializationSelection()
+    {
+        WizardSpecializationUI specializationUI = FindOrCreateWizardSpecializationUI();
+        if (specializationUI == null)
+        {
+            Debug.LogWarning("[CharacterCreationManager] WizardSpecializationUI unavailable. Defaulting to generalist.");
+            _levelingCharacter.Stats.WizardSpecialization = WizardSpecialization.CreateGeneralist();
+            ShowWizardFamiliarSelection();
+            return;
+        }
+
+        WizardSpecialization initial = _levelingCharacter.Stats.WizardSpecialization ?? WizardSpecialization.CreateGeneralist();
+        specializationUI.Show(initial, selected =>
+        {
+            _levelingCharacter.Stats.WizardSpecialization = selected ?? WizardSpecialization.CreateGeneralist();
+            _levelingCharacter.Stats.WizardSpecialization.Normalize();
+            ShowWizardFamiliarSelection();
+        });
+    }
+
+    private void ShowWizardFamiliarSelection()
+    {
+        FamiliarSelectionUI familiarUI = FindOrCreateFamiliarSelectionUI();
+        if (familiarUI == null)
+        {
+            Debug.LogWarning("[CharacterCreationManager] FamiliarSelectionUI unavailable. Defaulting to no familiar.");
+            _levelingCharacter.Stats.ApplyWizardFamiliar(WizardFamiliar.CreateNone());
+            ShowSpellSelection();
+            return;
+        }
+
+        WizardFamiliar initial = _levelingCharacter.Stats.WizardFamiliar ?? WizardFamiliar.CreateNone();
+        familiarUI.Show(initial, selected =>
+        {
+            _levelingCharacter.Stats.ApplyWizardFamiliar(selected ?? WizardFamiliar.CreateNone());
+            ShowSpellSelection();
+        });
     }
 
     private void ShowDomainSelection()
@@ -553,5 +616,45 @@ public class CharacterCreationManager : MonoBehaviour
         _domainSelectionUI = uiObj.AddComponent<DomainSelectionUI>();
         _domainSelectionUI.BuildUI(canvas);
         return _domainSelectionUI;
+    }
+
+    private WizardSpecializationUI FindOrCreateWizardSpecializationUI()
+    {
+        if (_wizardSpecializationUI != null)
+            return _wizardSpecializationUI;
+
+        _wizardSpecializationUI = FindObjectOfType<WizardSpecializationUI>();
+        if (_wizardSpecializationUI != null)
+            return _wizardSpecializationUI;
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+            return null;
+
+        GameObject uiObj = new GameObject("WizardSpecializationUI", typeof(RectTransform));
+        uiObj.transform.SetParent(canvas.transform, false);
+        _wizardSpecializationUI = uiObj.AddComponent<WizardSpecializationUI>();
+        _wizardSpecializationUI.BuildUI(canvas);
+        return _wizardSpecializationUI;
+    }
+
+    private FamiliarSelectionUI FindOrCreateFamiliarSelectionUI()
+    {
+        if (_familiarSelectionUI != null)
+            return _familiarSelectionUI;
+
+        _familiarSelectionUI = FindObjectOfType<FamiliarSelectionUI>();
+        if (_familiarSelectionUI != null)
+            return _familiarSelectionUI;
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+            return null;
+
+        GameObject uiObj = new GameObject("FamiliarSelectionUI", typeof(RectTransform));
+        uiObj.transform.SetParent(canvas.transform, false);
+        _familiarSelectionUI = uiObj.AddComponent<FamiliarSelectionUI>();
+        _familiarSelectionUI.BuildUI(canvas);
+        return _familiarSelectionUI;
     }
 }

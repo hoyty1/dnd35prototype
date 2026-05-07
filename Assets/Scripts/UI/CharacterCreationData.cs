@@ -44,6 +44,12 @@ public class CharacterCreationData
     /// </summary>
     public SpontaneousCastingType SpontaneousCasting = SpontaneousCastingType.None;
 
+    // Step 4f: Wizard specialization (wizard level 1 only)
+    public WizardSpecialization WizardSpecialization = WizardSpecialization.CreateGeneralist();
+
+    // Step 4g: Wizard familiar (wizard level 1 only)
+    public WizardFamiliar WizardFamiliar = WizardFamiliar.CreateNone();
+
     // Step 5: Skills
     public Dictionary<string, int> SkillRanks = new Dictionary<string, int>();
 
