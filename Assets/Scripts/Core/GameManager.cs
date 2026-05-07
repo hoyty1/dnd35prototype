@@ -1166,6 +1166,87 @@ public partial class GameManager : MonoBehaviour
         return partyMembers;
     }
 
+    private bool IsPreparedCaster(CharacterController character)
+    {
+        if (character == null || character.Stats == null)
+            return false;
+
+        CharacterStats stats = character.Stats;
+        bool isPreparedCasterClass =
+            stats.IsWizard ||
+            stats.IsCleric ||
+            stats.HasClass("Druid") ||
+            stats.HasClass("Bard") ||
+            stats.HasClass("Paladin") ||
+            stats.HasClass("Ranger");
+
+        if (!isPreparedCasterClass)
+            return false;
+
+        SpellcastingComponent spellComp = character.GetComponent<SpellcastingComponent>();
+        return spellComp != null && spellComp.SpellSlots != null && spellComp.SpellSlots.Count > 0;
+    }
+
+    private bool HasAnyPreparedSpell(CharacterController character)
+    {
+        if (character == null)
+            return false;
+
+        SpellcastingComponent spellComp = character.GetComponent<SpellcastingComponent>();
+        if (spellComp == null || spellComp.SpellSlots == null)
+            return false;
+
+        for (int i = 0; i < spellComp.SpellSlots.Count; i++)
+        {
+            SpellSlot slot = spellComp.SpellSlots[i];
+            if (slot != null && slot.HasSpell && !slot.DisabledByNegativeLevel)
+                return true;
+        }
+
+        return false;
+    }
+
+    private List<CharacterController> GetUnpreparedPreparedCasters(List<CharacterController> partyMembers)
+    {
+        List<CharacterController> unprepared = new List<CharacterController>();
+        if (partyMembers == null)
+            return unprepared;
+
+        for (int i = 0; i < partyMembers.Count; i++)
+        {
+            CharacterController member = partyMembers[i];
+            if (!IsPreparedCaster(member))
+                continue;
+
+            if (!HasAnyPreparedSpell(member))
+                unprepared.Add(member);
+        }
+
+        return unprepared;
+    }
+
+    private List<string> BuildSpellPreparationStatusLines(List<CharacterController> partyMembers)
+    {
+        List<string> lines = new List<string>();
+        if (partyMembers == null)
+            return lines;
+
+        for (int i = 0; i < partyMembers.Count; i++)
+        {
+            CharacterController member = partyMembers[i];
+            if (!IsPreparedCaster(member))
+                continue;
+
+            string name = member != null && member.Stats != null ? member.Stats.CharacterName : "Unknown";
+            bool prepared = HasAnyPreparedSpell(member);
+            lines.Add(prepared
+                ? $"✓ {name}: Prepared"
+                : $"⚠️ {name}: Not Prepared");
+        }
+
+        return lines;
+    }
+
     private StoreInventory EnsureStoreInventoryInitialized()
     {
         StoreInventory storeInventory = StoreInventory.Instance;
@@ -1204,7 +1285,8 @@ public partial class GameManager : MonoBehaviour
                 PartyStash.Unlock();
                 PreCombatHubUI?.Close();
                 PromptEncounterSelection();
-            });
+            },
+            spellcasterStatusLines: BuildSpellPreparationStatusLines(partyMembers));
     }
 
     private void OpenInventoryFromPreCombat(List<CharacterController> partyMembers)
@@ -1268,12 +1350,59 @@ public partial class GameManager : MonoBehaviour
         EnsurePartyStashInitialized();
         PartyStash.Unlock();
         WaitingForPreCombatInventory = true;
+
+        List<CharacterController> partyMembers = GetActivePartyMembersForPreCombat();
+        PreCombatHubUI?.UpdateSpellPreparationStatus(BuildSpellPreparationStatusLines(partyMembers));
         PreCombatHubUI?.ShowMenu();
     }
 
     private void StartEncounterFromPreCombat(string source)
     {
         Debug.Log($"[PreCombatHub] Start encounter requested from {source}");
+
+        List<CharacterController> partyMembers = GetActivePartyMembersForPreCombat();
+        List<CharacterController> unpreparedCasters = GetUnpreparedPreparedCasters(partyMembers);
+
+        if (unpreparedCasters.Count > 0)
+        {
+            string[] names = new string[unpreparedCasters.Count];
+            for (int i = 0; i < unpreparedCasters.Count; i++)
+                names[i] = unpreparedCasters[i] != null && unpreparedCasters[i].Stats != null
+                    ? unpreparedCasters[i].Stats.CharacterName
+                    : "Unknown";
+
+            string nameList = string.Join(", ", names);
+            string message = $"Warning: {nameList} have not prepared spells. They will be unable to cast spells in combat. Prepare spells now?";
+
+            if (CombatUI != null)
+            {
+                CombatUI.ShowConfirmationDialog(
+                    title: "Unprepared Spellcasters",
+                    message: message,
+                    confirmLabel: "Prepare Spells",
+                    cancelLabel: "Fight Anyway",
+                    onConfirm: () =>
+                    {
+                        if (StoreUI != null && StoreUI.IsOpen)
+                            StoreUI.Close();
+                        if (PreCombatInventoryUI != null && PreCombatInventoryUI.IsOpen)
+                            PreCombatInventoryUI.Close(suppressCallback: true);
+
+                        OpenSpellPreparationFromPreCombat(unpreparedCasters);
+                    },
+                    onCancel: () => ForceStartEncounterFromPreCombat(source + ".FightAnyway"));
+                return;
+            }
+
+            Debug.LogWarning("[PreCombatHub] CombatUI unavailable for unprepared warning. Proceeding to combat.");
+        }
+
+        ForceStartEncounterFromPreCombat(source);
+    }
+
+    private void ForceStartEncounterFromPreCombat(string source)
+    {
+        Debug.Log($"[PreCombatHub] Forcing encounter start from {source}");
         WaitingForPreCombatInventory = false;
 
         PreCombatHubUI?.Close();
@@ -1664,8 +1793,9 @@ public partial class GameManager : MonoBehaviour
                 // Pass selected spell IDs from character creation (Wizard spellbook choices)
                 if (data.SelectedSpellIds != null && data.SelectedSpellIds.Count > 0)
                     spellComp.SelectedSpellIds = new System.Collections.Generic.List<string>(data.SelectedSpellIds);
-                // Pass prepared spell slot IDs from character creation (Wizard spell preparation choices)
-                if (data.PreparedSpellSlotIds != null && data.PreparedSpellSlotIds.Count > 0)
+                // Pass prepared spell slot IDs from character creation.
+                // Important: an explicitly empty list means "start with no prepared spells".
+                if (data.PreparedSpellSlotIds != null)
                     spellComp.PreparedSpellSlotIds = new System.Collections.Generic.List<string>(data.PreparedSpellSlotIds);
                 spellComp.Init(stats);
                 Debug.Log($"[GameManager] {data.CharacterName}: Spellcasting initialized - {spellComp.GetSlotSummary()}");

@@ -1677,39 +1677,27 @@ public class CharacterCreationUI : MonoBehaviour
         }
         else if (data.ClassName == "Cleric")
         {
-            data.ComputeFinalStats();
-            int wisMod = CharacterStats.GetModifier(data.FinalWIS);
-            Debug.Log($"[CharCreation] Cleric spell selection: WIS mod = {wisMod}, FinalWIS = {data.FinalWIS}");
-
-            // STEP 1: Select Orisons (level 0 spells — clerics choose which ones to prepare)
-            SpellUI.OnSpellsConfirmed = (selectedSpellIds) =>
-            {
-                data.SelectedSpellIds = new List<string>(selectedSpellIds);
-                Debug.Log($"[CharCreation] Cleric orisons selected: {selectedSpellIds.Count} spells");
-
-                // STEP 2: Prepare Spells (assign spells from full cleric list to slots)
-                if (SpellPrepUI != null)
-                {
-                    SpellPrepUI.OnCreationPreparationConfirmed = (preparedSlotIds) =>
-                    {
-                        data.PreparedSpellSlotIds = new List<string>(preparedSlotIds);
-                        Debug.Log($"[CharCreation] Cleric spell preparation complete: {preparedSlotIds.Count} slots");
-                        ShowStep(Step.Review);
-                    };
-                    SpellPrepUI.OpenForClericCreation(wisMod, Mathf.Max(1, data.CharacterLevel), data.CharacterName, data.ChosenDomains);
-                }
-                else
-                {
-                    Debug.LogWarning("[CharCreation] SpellPrepUI not available, skipping preparation step.");
-                    ShowStep(Step.Review);
-                }
-            };
-            SpellUI.OpenForCleric();
+            // Clerics do not prepare spells during character creation.
+            // They pick deity/domains only and prepare in pre-combat.
+            data.SelectedSpellIds = new List<string>();
+            data.PreparedSpellSlotIds = new List<string>();
+            Debug.Log("[CharCreation] Cleric skips spell preparation during creation (domains only). Prepared list starts empty.");
+            ShowStep(Step.Review);
+        }
+        else if (data.ClassName == "Druid")
+        {
+            // Druids prepare spells in pre-combat only.
+            data.SelectedSpellIds = new List<string>();
+            data.PreparedSpellSlotIds = new List<string>();
+            Debug.Log("[CharCreation] Druid skips spell preparation during creation. Prepared list starts empty.");
+            ShowStep(Step.Review);
         }
         else
         {
-            // Other spellcaster classes (future: Sorcerer, Druid, etc.)
-            Debug.Log($"[CharCreation] {data.ClassName} spell selection not yet implemented.");
+            // Other spellcaster classes (e.g., Sorcerer/Bard) currently have no creation spell step here.
+            // Ensure prepared slots still start empty.
+            data.PreparedSpellSlotIds = new List<string>();
+            Debug.Log($"[CharCreation] {data.ClassName} spell selection not implemented in creation; prepared list starts empty.");
             ShowStep(Step.Review);
         }
     }

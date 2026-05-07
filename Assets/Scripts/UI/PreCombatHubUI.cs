@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -23,6 +24,7 @@ public class PreCombatHubUI : MonoBehaviour
 {
     private GameObject _root;
     private Text _subtitleText;
+    private Text _spellStatusText;
 
     private Action _onOpenStore;
     private Action _onOpenInventory;
@@ -37,7 +39,8 @@ public class PreCombatHubUI : MonoBehaviour
         Action onOpenInventory,
         Action onOpenSpellPreparation,
         Action onStartEncounter,
-        Action onBackToEncounterSelection)
+        Action onBackToEncounterSelection,
+        List<string> spellcasterStatusLines = null)
     {
         EnsureBuilt();
         if (_root == null)
@@ -50,6 +53,7 @@ public class PreCombatHubUI : MonoBehaviour
         _onBackToEncounterSelection = onBackToEncounterSelection;
 
         _subtitleText.text = "Choose your final preparations before battle.";
+        UpdateSpellPreparationStatus(spellcasterStatusLines);
         _root.transform.SetAsLastSibling();
         _root.SetActive(true);
 
@@ -85,6 +89,20 @@ public class PreCombatHubUI : MonoBehaviour
         _onBackToEncounterSelection = null;
     }
 
+    public void UpdateSpellPreparationStatus(List<string> spellcasterStatusLines)
+    {
+        if (_spellStatusText == null)
+            return;
+
+        if (spellcasterStatusLines == null || spellcasterStatusLines.Count == 0)
+        {
+            _spellStatusText.text = "No prepared spellcasters in party.";
+            return;
+        }
+
+        _spellStatusText.text = "Spellcaster Readiness\n" + string.Join("\n", spellcasterStatusLines);
+    }
+
     private void EnsureBuilt()
     {
         if (_root != null)
@@ -113,6 +131,15 @@ public class PreCombatHubUI : MonoBehaviour
             new Vector2(0.12f, 0.88f), new Vector2(0.88f, 0.93f), new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero, 20, FontStyle.Italic,
             new Color(0.8f, 0.87f, 1f, 1f), TextAnchor.MiddleCenter);
+
+        GameObject spellStatusPanel = CreatePanel(_root.transform, "SpellStatusPanel",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 292f), new Vector2(620f, 140f), new Color(0.06f, 0.08f, 0.14f, 0.85f));
+
+        _spellStatusText = CreateText(spellStatusPanel.transform, "SpellStatusText", "",
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(580f, 116f), 16, FontStyle.Normal,
+            new Color(0.87f, 0.93f, 1f, 1f), TextAnchor.UpperLeft);
 
         float firstButtonY = 180f;
         float step = 94f;

@@ -205,13 +205,14 @@ public class SpellcastingComponent : MonoBehaviour
         }
 
         // Prepared slot-based casters use the same preparation flow.
+        // If PreparedSpellSlotIds is explicitly provided (including an empty list),
+        // respect it and do NOT auto-prepare on init.
         if (string.Equals(activeCasterClass, "Wizard", System.StringComparison.OrdinalIgnoreCase))
         {
-            // Use creation preparation data if available, otherwise auto-prepare
-            if (PreparedSpellSlotIds != null && PreparedSpellSlotIds.Count > 0)
+            if (PreparedSpellSlotIds != null)
             {
                 ApplyPreparedSpellSlotIds();
-                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied {PreparedSpellSlotIds.Count} preparation choices from character creation.");
+                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied explicit preparation data ({PreparedSpellSlotIds.Count} entries). Auto-prepare skipped.");
             }
             else
             {
@@ -221,11 +222,10 @@ public class SpellcastingComponent : MonoBehaviour
         }
         else if (string.Equals(activeCasterClass, "Cleric", System.StringComparison.OrdinalIgnoreCase))
         {
-            // Use creation preparation data if available, otherwise auto-prepare
-            if (PreparedSpellSlotIds != null && PreparedSpellSlotIds.Count > 0)
+            if (PreparedSpellSlotIds != null)
             {
                 ApplyPreparedSpellSlotIds();
-                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied {PreparedSpellSlotIds.Count} preparation choices from character creation.");
+                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied explicit preparation data ({PreparedSpellSlotIds.Count} entries). Auto-prepare skipped.");
             }
             else
             {
@@ -235,10 +235,10 @@ public class SpellcastingComponent : MonoBehaviour
         }
         else if (string.Equals(activeCasterClass, "Druid", System.StringComparison.OrdinalIgnoreCase))
         {
-            if (PreparedSpellSlotIds != null && PreparedSpellSlotIds.Count > 0)
+            if (PreparedSpellSlotIds != null)
             {
                 ApplyPreparedSpellSlotIds();
-                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied {PreparedSpellSlotIds.Count} preparation choices from character creation.");
+                Debug.Log($"[Spellcasting] {stats.CharacterName}: Applied explicit preparation data ({PreparedSpellSlotIds.Count} entries). Auto-prepare skipped.");
             }
             else
             {
@@ -404,7 +404,8 @@ public class SpellcastingComponent : MonoBehaviour
         SlotsRemaining = (int[])SlotsMax.Clone();
         InitializeSpellSlotCollection();
         RestoreSlotStateFromSnapshot(previousSlots);
-        PrepareAnyEmptySlotsAfterRefresh();
+        // Do not auto-fill newly gained slots on refresh/level-up.
+        // Spell preparation is handled explicitly in pre-combat.
 
         SyncPreparedSpellsFromSlots();
         ApplyNegativeLevelSlotLoss();
