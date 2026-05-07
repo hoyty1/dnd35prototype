@@ -92,6 +92,7 @@ public class LevelUpUI : MonoBehaviour
 
         _waitingForExternalFlow = false;
         _selectedClassForLevelUp = _currentLevelUp != null ? _currentLevelUp.SelectedClassName : null;
+        EnsureAvailableClassesForCurrentLevelUp();
         _currentStep = LevelUpStep.Summary;
         ShowCurrentStep();
     }
@@ -141,6 +142,7 @@ public class LevelUpUI : MonoBehaviour
             int newLevel = Mathf.Min(Mathf.Max(1, stats.Level), oldLevel + 1);
             _currentLevelUp = LevelUpCalculator.CalculateLevelUp(_currentLevelUp.Character, oldLevel, newLevel);
             _selectedClassForLevelUp = _currentLevelUp.SelectedClassName;
+            EnsureAvailableClassesForCurrentLevelUp();
             Debug.Log($"[LevelUpUI] {name} still has pending level-ups ({stats.PendingLevelUps}). Continuing level-up flow.");
             _currentStep = LevelUpStep.Summary;
             ShowCurrentStep();
@@ -159,13 +161,23 @@ public class LevelUpUI : MonoBehaviour
         CharacterStats stats = _currentLevelUp.Character != null ? _currentLevelUp.Character.Stats : null;
         string characterName = GetCharacterName(_currentLevelUp.Character);
 
+        EnsureAvailableClassesForCurrentLevelUp();
+
         if (string.IsNullOrWhiteSpace(_selectedClassForLevelUp))
             _selectedClassForLevelUp = _currentLevelUp.SelectedClassName;
+
+        if (string.IsNullOrWhiteSpace(_selectedClassForLevelUp)
+            && _currentLevelUp.AvailableClasses != null
+            && _currentLevelUp.AvailableClasses.Count > 0)
+        {
+            _selectedClassForLevelUp = _currentLevelUp.AvailableClasses[0];
+        }
 
         if (!string.IsNullOrWhiteSpace(_selectedClassForLevelUp))
             LevelUpCalculator.RecalculateForSelectedClass(_currentLevelUp, _selectedClassForLevelUp);
 
         CreateTitle($"{characterName} - LEVEL {_currentLevelUp.NewLevel}!");
+        CreateInfoText("You gained a level! Choose which class to advance.", true, new Color(0.85f, 0.95f, 1f));
 
         CreateInfoText($"Previous Level: {_currentLevelUp.OldLevel}");
         CreateInfoText($"New Level: {_currentLevelUp.NewLevel}", true, Color.yellow);
@@ -377,6 +389,50 @@ public class LevelUpUI : MonoBehaviour
         managerObj.transform.SetParent(canvas.transform, false);
         _characterCreationManager = managerObj.AddComponent<CharacterCreationManager>();
         return _characterCreationManager;
+    }
+
+    private void EnsureAvailableClassesForCurrentLevelUp()
+    {
+        if (_currentLevelUp == null || _currentLevelUp.Character == null || _currentLevelUp.Character.Stats == null)
+            return;
+
+        CharacterStats stats = _currentLevelUp.Character.Stats;
+        ClassRegistry.Init();
+
+        if (_currentLevelUp.AvailableClasses == null)
+            _currentLevelUp.AvailableClasses = new List<string>();
+
+        HashSet<string> existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < _currentLevelUp.AvailableClasses.Count; i++)
+        {
+            string className = _currentLevelUp.AvailableClasses[i];
+            if (!string.IsNullOrWhiteSpace(className))
+                existing.Add(className);
+        }
+
+        string[] classNames = ClassRegistry.ClassNames;
+        if (classNames != null)
+        {
+            for (int i = 0; i < classNames.Length; i++)
+            {
+                string className = classNames[i];
+                if (string.IsNullOrWhiteSpace(className) || existing.Contains(className))
+                    continue;
+
+                _currentLevelUp.AvailableClasses.Add(className);
+                existing.Add(className);
+            }
+        }
+
+        string fallbackClass = !string.IsNullOrWhiteSpace(stats.CharacterClass)
+            ? stats.CharacterClass
+            : (stats.ClassLevels != null && stats.ClassLevels.Count > 0 ? stats.ClassLevels[0].ClassName : null);
+
+        if (!string.IsNullOrWhiteSpace(fallbackClass) && !existing.Contains(fallbackClass))
+            _currentLevelUp.AvailableClasses.Add(fallbackClass);
+
+        if (string.IsNullOrWhiteSpace(_currentLevelUp.SelectedClassName))
+            _currentLevelUp.SelectedClassName = fallbackClass;
     }
 
     private static string GetSpellSummaryText(string className)

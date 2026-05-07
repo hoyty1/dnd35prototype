@@ -429,6 +429,11 @@ public class SkillsUIPanel : MonoBehaviour
                 new Vector2(65, 0), new Vector2(26, 24),
                 "-", new Color(0.5f, 0.2f, 0.2f), Color.white, 14);
             row.RemoveButton.onClick.AddListener(() => OnRemoveRankClicked(skill));
+
+            row.MaxButton = MakeButton(rowGO.transform, "MaxRank",
+                new Vector2(126, 0), new Vector2(46, 24),
+                "Max", new Color(0.2f, 0.36f, 0.6f), Color.white, 11);
+            row.MaxButton.onClick.AddListener(() => OnMaxRankClicked(skill));
         }
 
         _skillRows.Add(row);
@@ -511,6 +516,12 @@ public class SkillsUIPanel : MonoBehaviour
             bool canAdd = _stats.AvailableSkillPoints >= cost && skill.Ranks < maxRanks;
             row.AddButton.interactable = canAdd;
         }
+        if (row.MaxButton != null)
+        {
+            int ranksRemaining = Mathf.Max(0, maxRanks - skill.Ranks);
+            int affordableRanks = cost > 0 ? (_stats.AvailableSkillPoints / cost) : 0;
+            row.MaxButton.interactable = ranksRemaining > 0 && affordableRanks > 0;
+        }
         if (row.RemoveButton != null)
         {
             _sessionAddedRanksBySkill.TryGetValue(skill.SkillName, out int addedThisSession);
@@ -528,6 +539,39 @@ public class SkillsUIPanel : MonoBehaviour
         {
             _sessionAddedRanksBySkill.TryGetValue(skill.SkillName, out int added);
             _sessionAddedRanksBySkill[skill.SkillName] = added + 1;
+            RefreshAllRows();
+        }
+    }
+
+    private void OnMaxRankClicked(Skill skill)
+    {
+        if (_stats == null || skill == null)
+            return;
+
+        int cost = GetCurrentSkillCost(skill);
+        if (cost <= 0)
+            return;
+
+        int maxRanks = _stats.GetSkillMaxRanks(skill.SkillName);
+        int ranksRemaining = Mathf.Max(0, maxRanks - skill.Ranks);
+        int affordableRanks = _stats.AvailableSkillPoints / cost;
+        int ranksToAdd = Mathf.Min(ranksRemaining, affordableRanks);
+
+        if (ranksToAdd <= 0)
+            return;
+
+        int added = 0;
+        for (int i = 0; i < ranksToAdd; i++)
+        {
+            if (!_stats.AddSkillRank(skill.SkillName, _allocationMode ? _allocationClassName : null))
+                break;
+            added++;
+        }
+
+        if (added > 0)
+        {
+            _sessionAddedRanksBySkill.TryGetValue(skill.SkillName, out int addedThisSession);
+            _sessionAddedRanksBySkill[skill.SkillName] = addedThisSession + added;
             RefreshAllRows();
         }
     }
@@ -671,6 +715,7 @@ public class SkillsUIPanel : MonoBehaviour
         public Text BreakdownText;
         public Button AddButton;
         public Button RemoveButton;
+        public Button MaxButton;
     }
 }
 
