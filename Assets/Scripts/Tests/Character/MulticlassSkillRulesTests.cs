@@ -5,8 +5,8 @@ namespace Tests.Character
 {
 /// <summary>
 /// Regression tests for multiclass skill rules:
-/// - Max ranks are based on whether ANY class has the skill as class skill.
-/// - House rule: cost is 1 if ANY class has the skill as a class skill; otherwise 2.
+/// - Max ranks use class-skill status (Lv+3 vs (Lv+3)/2).
+/// - Skill point cost is based on the CURRENT class being advanced.
 /// </summary>
 public static class MulticlassSkillRulesTests
 {
@@ -26,7 +26,7 @@ public static class MulticlassSkillRulesTests
         ClassRegistry.Init();
 
         TestMaxRanksUseAnyClassSkill();
-        TestSkillCostUsesAnyClassHouseRule();
+        TestSkillCostUsesAdvancingClass();
         TestCrossClassSkillCapsAndCosts();
         TestClassSpecificSkillPointPools();
 
@@ -89,14 +89,16 @@ public static class MulticlassSkillRulesTests
         int diplomacyMax = stats.GetSkillMaxRanks("Diplomacy");
 
         Assert(stats.Level == 5, "Fighter3/Cleric2 total level is 5", $"got {stats.Level}");
-        Assert(stats.IsSkillClassSkillForAnyClass("Diplomacy"),
-            "Diplomacy is class skill for at least one class (Cleric)");
+        Assert(stats.IsSkillClassSkillForClass("Diplomacy", "Cleric"),
+            "Diplomacy is class skill for Cleric");
+        Assert(!stats.IsSkillClassSkillForClass("Diplomacy", "Fighter"),
+            "Diplomacy is cross-class for Fighter");
         Assert(diplomacyMax == 8,
             "Max rank uses ANY class skill rule (Lv+3)",
             $"expected 8, got {diplomacyMax}");
     }
 
-    private static void TestSkillCostUsesAnyClassHouseRule()
+    private static void TestSkillCostUsesAdvancingClass()
     {
         CharacterStats stats = BuildFighter3Cleric2();
 
@@ -106,22 +108,22 @@ public static class MulticlassSkillRulesTests
         Assert(clericCost == 1,
             "Diplomacy costs 1 when advancing Cleric",
             $"got {clericCost}");
-        Assert(fighterCost == 1,
-            "House rule: Diplomacy costs 1 when advancing Fighter if any class has it",
+        Assert(fighterCost == 2,
+            "Diplomacy costs 2 when advancing Fighter (cross-class for Fighter)",
             $"got {fighterCost}");
 
         stats.AvailableSkillPoints = 10;
         int before = stats.AvailableSkillPoints;
         bool addedAsFighter = stats.AddSkillRank("Diplomacy", "Fighter");
         Assert(addedAsFighter, "Can add Diplomacy rank while advancing Fighter");
-        Assert(stats.AvailableSkillPoints == before - 1,
-            "House rule: Fighter advancement spends 1 point for Diplomacy",
-            $"expected {before - 1}, got {stats.AvailableSkillPoints}");
+        Assert(stats.AvailableSkillPoints == before - 2,
+            "Fighter advancement spends 2 points for Diplomacy",
+            $"expected {before - 2}, got {stats.AvailableSkillPoints}");
 
         bool removedAsFighter = stats.RemoveSkillRank("Diplomacy", "Fighter");
         Assert(removedAsFighter, "Can remove Diplomacy rank with Fighter context");
         Assert(stats.AvailableSkillPoints == before,
-            "House rule: removing rank refunds 1 when any class grants class-skill status",
+            "Removing rank refunds 2 for Fighter cross-class purchase",
             $"expected {before}, got {stats.AvailableSkillPoints}");
 
         bool addedAsCleric = stats.AddSkillRank("Diplomacy", "Cleric");
@@ -140,8 +142,8 @@ public static class MulticlassSkillRulesTests
         int fighterCost = stats.GetSkillPointCost("Disable Device", "Fighter");
         int clericCost = stats.GetSkillPointCost("Disable Device", "Cleric");
 
-        Assert(!stats.IsSkillClassSkillForAnyClass("Disable Device"),
-            "Disable Device is cross-class for all current classes");
+        Assert(!stats.IsSkillClassSkillForClass("Disable Device", "Fighter") && !stats.IsSkillClassSkillForClass("Disable Device", "Cleric"),
+            "Disable Device is cross-class for Fighter and Cleric");
         Assert(max == 4,
             "Cross-class max rank uses (Lv+3)/2",
             $"expected 4, got {max}");

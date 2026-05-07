@@ -4086,26 +4086,6 @@ public class CharacterStats
         }
     }
 
-    public bool IsSkillClassSkillForAnyClass(string skillName)
-    {
-        if (string.IsNullOrWhiteSpace(skillName))
-            return false;
-
-        EnsureMulticlassDataInitialized();
-
-        for (int i = 0; i < ClassLevels.Count; i++)
-        {
-            ClassLevelEntry classLevel = ClassLevels[i];
-            if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
-                continue;
-
-            if (ClassSkillDefinitions.GetClassSkills(classLevel.ClassName).Contains(skillName))
-                return true;
-        }
-
-        return false;
-    }
-
     public bool IsSkillClassSkillForClass(string skillName, string className)
     {
         if (string.IsNullOrWhiteSpace(skillName) || string.IsNullOrWhiteSpace(className))
@@ -4119,26 +4099,28 @@ public class CharacterStats
         if (string.IsNullOrWhiteSpace(skillName) || Skills == null || !Skills.ContainsKey(skillName))
             return 2;
 
-        // House rule: if a skill is a class skill for ANY class the character has,
-        // it always costs 1 point per rank (even while leveling another class).
-        return IsSkillClassSkillForAnyClass(skillName) ? 1 : 2;
+        string classContext = string.IsNullOrWhiteSpace(advancingClassName)
+            ? CharacterClass
+            : advancingClassName;
+
+        bool isClassSkillForCurrentLevel = IsSkillClassSkillForClass(skillName, classContext);
+        return isClassSkillForCurrentLevel ? 1 : 2;
     }
 
     public int GetSkillMaxRanks(string skillName)
     {
-        if (string.IsNullOrWhiteSpace(skillName))
+        if (string.IsNullOrWhiteSpace(skillName) || Skills == null || !Skills.TryGetValue(skillName, out Skill skill) || skill == null)
             return Mathf.Max(0, (Level + 3) / 2);
 
-        bool classSkillForAnyClass = IsSkillClassSkillForAnyClass(skillName);
         int classMax = Level + 3;
-        return classSkillForAnyClass ? classMax : classMax / 2;
+        return skill.IsClassSkill ? classMax : classMax / 2;
     }
 
     /// <summary>
     /// Add one rank to a skill.
-    /// House rule:
-    /// - Maximum ranks use whether ANY class has the skill as a class skill.
-    /// - Cost is 1 point/rank if ANY of the character's classes has the skill; otherwise 2.
+    /// Cost is based on the class currently being advanced:
+    /// - Class skill for advancing class: 1 point/rank
+    /// - Cross-class for advancing class: 2 points/rank
     /// Returns false if: not enough points, max ranks reached, or skill not found.
     /// </summary>
     public bool AddSkillRank(string skillName, string advancingClassName = null)
@@ -4174,7 +4156,7 @@ public class CharacterStats
     }
 
     /// <summary>
-    /// Remove one rank from a skill and refund points using the same multiclass house-rule cost.
+    /// Remove one rank from a skill and refund points using the current advancing-class cost.
     /// </summary>
     public bool RemoveSkillRank(string skillName, string advancingClassName = null)
     {
