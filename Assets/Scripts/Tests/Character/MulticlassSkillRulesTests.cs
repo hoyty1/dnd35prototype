@@ -29,6 +29,8 @@ public static class MulticlassSkillRulesTests
         TestSkillCostUsesAdvancingClass();
         TestCrossClassSkillCapsAndCosts();
         TestClassSpecificSkillPointPools();
+        TestPendingLevelUpSingleClassProgression();
+        TestPendingLevelUpMulticlassFirstLevelProgression();
 
         Debug.Log($"====== Multiclass Skill Results: {_passed} passed, {_failed} failed ======");
     }
@@ -178,6 +180,66 @@ public static class MulticlassSkillRulesTests
         Assert(stats.GetClassSkillPointPool("Wizard") == 2,
             "Updating Fighter pool does not affect Wizard pool",
             $"wizard pool changed to {stats.GetClassSkillPointPool("Wizard")}");
+    }
+
+    private static CharacterStats BuildBaseLevelOne(string name, string baseClass)
+    {
+        CharacterStats stats = new CharacterStats(
+            name: name,
+            level: 1,
+            characterClass: baseClass,
+            str: 14,
+            dex: 12,
+            con: 12,
+            wis: 12,
+            intelligence: 12,
+            cha: 12,
+            bab: 1,
+            armorBonus: 0,
+            shieldBonus: 0,
+            damageDice: 8,
+            damageCount: 1,
+            bonusDamage: 0,
+            baseSpeed: 6,
+            atkRange: 1,
+            baseHitDieHP: 10,
+            raceName: "Human");
+
+        stats.EnsureMulticlassDataInitialized();
+        return stats;
+    }
+
+    private static void TestPendingLevelUpSingleClassProgression()
+    {
+        CharacterStats stats = BuildBaseLevelOne("LevelSingle", "Cleric");
+
+        stats.PendingLevelUps = 1;
+        stats.EnsureMulticlassDataInitialized();
+        bool applied = stats.ApplyPendingLevelUp("Cleric");
+
+        Assert(applied, "Single-class level-up applies successfully");
+        Assert(stats.Level == 2, "Single-class total level increases by exactly 1", $"expected 2, got {stats.Level}");
+        Assert(stats.GetClassLevel("Cleric") == 2, "Single-class class level increases by exactly 1", $"expected 2, got {stats.GetClassLevel("Cleric")}");
+        Assert(stats.PendingLevelUps == 0, "Single-class pending level-ups decremented to 0", $"got {stats.PendingLevelUps}");
+    }
+
+    private static void TestPendingLevelUpMulticlassFirstLevelProgression()
+    {
+        CharacterStats stats = BuildBaseLevelOne("LevelMulti", "Cleric");
+
+        stats.PendingLevelUps = 1;
+        stats.EnsureMulticlassDataInitialized();
+        stats.ApplyPendingLevelUp("Cleric"); // Cleric 2, total level 2
+
+        stats.PendingLevelUps = 1;
+        stats.EnsureMulticlassDataInitialized();
+        bool appliedFighter = stats.ApplyPendingLevelUp("Fighter"); // should become Cleric 2 / Fighter 1, total 3
+
+        Assert(appliedFighter, "Multiclass first-level application succeeds");
+        Assert(stats.Level == 3, "Multiclass total level increases by exactly 1", $"expected 3, got {stats.Level}");
+        Assert(stats.GetClassLevel("Cleric") == 2, "Existing class level remains unchanged", $"expected 2, got {stats.GetClassLevel("Cleric")}");
+        Assert(stats.GetClassLevel("Fighter") == 1, "New class starts at level 1 (not level 2)", $"expected 1, got {stats.GetClassLevel("Fighter")}");
+        Assert(stats.PendingLevelUps == 0, "Multiclass pending level-ups decremented to 0", $"got {stats.PendingLevelUps}");
     }
 }
 }

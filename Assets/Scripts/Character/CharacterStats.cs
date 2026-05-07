@@ -2234,11 +2234,16 @@ public class CharacterStats
         ClassLevelEntry classEntry = ClassLevels.FirstOrDefault(c => c != null && string.Equals(c.ClassName, selectedClass, StringComparison.OrdinalIgnoreCase));
         if (classEntry == null)
         {
-            classEntry = new ClassLevelEntry(selectedClass, 0);
+            // Important: adding a brand-new multiclass entry should start at level 1.
+            // ClassLevelEntry clamps to minimum level 1, so do not increment again in this branch.
+            classEntry = new ClassLevelEntry(selectedClass, 1);
             ClassLevels.Add(classEntry);
         }
+        else
+        {
+            classEntry.Level += 1;
+        }
 
-        classEntry.Level += 1;
         CharacterClass = selectedClass;
         PendingLevelUps = Mathf.Max(0, PendingLevelUps - 1);
 
