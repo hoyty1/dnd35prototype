@@ -221,21 +221,7 @@ public class LevelUpUI : MonoBehaviour
 
         CreateSeparator();
         CreateInfoText("Choose class to advance:", true, Color.cyan);
-        if (_currentLevelUp.AvailableClasses != null)
-        {
-            for (int i = 0; i < _currentLevelUp.AvailableClasses.Count; i++)
-            {
-                string className = _currentLevelUp.AvailableClasses[i];
-                string selectedClass = className;
-                string label = selectedClass == _selectedClassForLevelUp ? $"★ {selectedClass}" : selectedClass;
-                CreateButton(label, () =>
-                {
-                    _selectedClassForLevelUp = selectedClass;
-                    ShowSummary();
-                }, 34f);
-            }
-        }
-
+        CreateClassSelectionList(_currentLevelUp.AvailableClasses, _selectedClassForLevelUp);
         CreateSeparator();
 
         CreateInfoText("GAINS:", true);
@@ -301,6 +287,142 @@ public class LevelUpUI : MonoBehaviour
             _currentLevelUp.SelectedClassName = chosenClass;
             LevelUpCalculator.RecalculateForSelectedClass(_currentLevelUp, chosenClass);
         }
+    }
+
+    private void CreateClassSelectionList(List<string> availableClasses, string selectedClassName)
+    {
+        if (_contentContainer == null)
+            return;
+
+        GameObject listRoot = new GameObject("ClassSelectionList", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+        listRoot.transform.SetParent(_contentContainer, false);
+
+        RectTransform listRootRect = listRoot.GetComponent<RectTransform>();
+        listRootRect.anchorMin = new Vector2(0f, 0.5f);
+        listRootRect.anchorMax = new Vector2(1f, 0.5f);
+        listRootRect.pivot = new Vector2(0.5f, 0.5f);
+
+        LayoutElement listLayout = listRoot.GetComponent<LayoutElement>();
+        listLayout.preferredHeight = 300f;
+        listLayout.minHeight = 300f;
+        listLayout.flexibleWidth = 1f;
+
+        Image listBg = listRoot.GetComponent<Image>();
+        listBg.color = new Color(0.05f, 0.08f, 0.14f, 0.92f);
+
+        GameObject viewportObj = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+        viewportObj.transform.SetParent(listRoot.transform, false);
+
+        RectTransform viewportRect = viewportObj.GetComponent<RectTransform>();
+        viewportRect.anchorMin = new Vector2(0f, 0f);
+        viewportRect.anchorMax = new Vector2(1f, 1f);
+        viewportRect.offsetMin = new Vector2(12f, 10f);
+        viewportRect.offsetMax = new Vector2(-34f, -10f);
+
+        Image viewportImage = viewportObj.GetComponent<Image>();
+        viewportImage.color = new Color(0f, 0f, 0f, 0.16f);
+
+        Mask viewportMask = viewportObj.GetComponent<Mask>();
+        viewportMask.showMaskGraphic = false;
+
+        GameObject scrollbarObj = CreateScrollbar(listRoot.transform);
+        Scrollbar scrollbar = scrollbarObj.GetComponent<Scrollbar>();
+
+        ScrollRect scrollRect = listRoot.AddComponent<ScrollRect>();
+        scrollRect.horizontal = false;
+        scrollRect.vertical = true;
+        scrollRect.viewport = viewportRect;
+        scrollRect.scrollSensitivity = 40f;
+        scrollRect.movementType = ScrollRect.MovementType.Clamped;
+        scrollRect.verticalScrollbar = scrollbar;
+        scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+
+        GameObject contentObj = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+        contentObj.transform.SetParent(viewportObj.transform, false);
+
+        RectTransform contentRect = contentObj.GetComponent<RectTransform>();
+        contentRect.anchorMin = new Vector2(0f, 1f);
+        contentRect.anchorMax = new Vector2(1f, 1f);
+        contentRect.pivot = new Vector2(0.5f, 1f);
+        contentRect.anchoredPosition = Vector2.zero;
+        contentRect.sizeDelta = Vector2.zero;
+
+        VerticalLayoutGroup contentLayout = contentObj.GetComponent<VerticalLayoutGroup>();
+        contentLayout.padding = new RectOffset(6, 6, 6, 6);
+        contentLayout.spacing = 8f;
+        contentLayout.childAlignment = TextAnchor.UpperCenter;
+        contentLayout.childControlWidth = true;
+        contentLayout.childControlHeight = false;
+        contentLayout.childForceExpandWidth = true;
+        contentLayout.childForceExpandHeight = false;
+
+        ContentSizeFitter fitter = contentObj.GetComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        scrollRect.content = contentRect;
+
+        if (availableClasses == null)
+            return;
+
+        for (int i = 0; i < availableClasses.Count; i++)
+        {
+            string className = availableClasses[i];
+            string capturedClass = className;
+            string label = capturedClass == selectedClassName ? $"★ {capturedClass}" : capturedClass;
+            CreateButton(label, () =>
+            {
+                _selectedClassForLevelUp = capturedClass;
+                ShowSummary();
+            }, 92f, contentObj.transform);
+        }
+
+        Canvas.ForceUpdateCanvases();
+        scrollRect.verticalNormalizedPosition = 1f;
+    }
+
+    private static GameObject CreateScrollbar(Transform parent)
+    {
+        GameObject scrollbarObj = new GameObject("Scrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+        scrollbarObj.transform.SetParent(parent, false);
+
+        RectTransform scrollbarRect = scrollbarObj.GetComponent<RectTransform>();
+        scrollbarRect.anchorMin = new Vector2(1f, 0f);
+        scrollbarRect.anchorMax = new Vector2(1f, 1f);
+        scrollbarRect.pivot = new Vector2(1f, 1f);
+        scrollbarRect.offsetMin = new Vector2(-20f, 10f);
+        scrollbarRect.offsetMax = new Vector2(-8f, -10f);
+
+        Image scrollbarTrack = scrollbarObj.GetComponent<Image>();
+        scrollbarTrack.color = new Color(0.15f, 0.2f, 0.3f, 0.95f);
+
+        GameObject slidingArea = new GameObject("Sliding Area", typeof(RectTransform));
+        slidingArea.transform.SetParent(scrollbarObj.transform, false);
+
+        RectTransform slidingAreaRect = slidingArea.GetComponent<RectTransform>();
+        slidingAreaRect.anchorMin = Vector2.zero;
+        slidingAreaRect.anchorMax = Vector2.one;
+        slidingAreaRect.offsetMin = new Vector2(2f, 2f);
+        slidingAreaRect.offsetMax = new Vector2(-2f, -2f);
+
+        GameObject handleObj = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+        handleObj.transform.SetParent(slidingArea.transform, false);
+
+        RectTransform handleRect = handleObj.GetComponent<RectTransform>();
+        handleRect.anchorMin = Vector2.zero;
+        handleRect.anchorMax = Vector2.one;
+        handleRect.offsetMin = Vector2.zero;
+        handleRect.offsetMax = Vector2.zero;
+
+        Image handleImage = handleObj.GetComponent<Image>();
+        handleImage.color = new Color(0.36f, 0.56f, 0.92f, 1f);
+
+        Scrollbar scrollbar = scrollbarObj.GetComponent<Scrollbar>();
+        scrollbar.direction = Scrollbar.Direction.BottomToTop;
+        scrollbar.targetGraphic = handleImage;
+        scrollbar.handleRect = handleRect;
+        scrollbar.size = 0.2f;
+
+        return scrollbarObj;
     }
 
     private void ShowAbilityIncrease()
@@ -632,13 +754,19 @@ public class LevelUpUI : MonoBehaviour
         sepRect.sizeDelta = new Vector2(0f, 14f);
     }
 
-    private void CreateButton(string label, Action onClick, float height = 40f)
+    private void CreateButton(string label, Action onClick, float height = 40f, Transform parentOverride = null)
     {
+        Transform parent = parentOverride != null ? parentOverride : _contentContainer;
+        if (parent == null)
+            return;
+
         GameObject btnObj = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
-        btnObj.transform.SetParent(_contentContainer, false);
+        btnObj.transform.SetParent(parent, false);
 
         LayoutElement layout = btnObj.GetComponent<LayoutElement>();
         layout.preferredHeight = height;
+        layout.minHeight = height;
+        layout.flexibleHeight = 0f;
 
         Image btnBg = btnObj.GetComponent<Image>();
         btnBg.color = new Color(0.16f, 0.37f, 0.71f, 1f);
