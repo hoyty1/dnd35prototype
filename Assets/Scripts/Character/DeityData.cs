@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// Represents a deity from the D&D 3.5e Greyhawk pantheon.
-/// Clerics must choose a deity, which determines their available domains.
+/// Characters who choose a deity must be within one alignment step of it.
 /// </summary>
 [System.Serializable]
 public class DeityData
@@ -42,7 +42,7 @@ public class DeityData
 
     /// <summary>
     /// Check if a character alignment is compatible with this deity.
-    /// D&D 3.5e rule: cleric must be within one step of deity's alignment.
+    /// D&D 3.5e rule: worshipper must be within one step of deity's alignment.
     /// </summary>
     public bool IsAlignmentCompatible(Alignment characterAlignment)
     {

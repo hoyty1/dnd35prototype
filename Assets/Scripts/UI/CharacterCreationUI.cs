@@ -920,7 +920,7 @@ public class CharacterCreationUI : MonoBehaviour
 
         MakeText(_stepDeityPanel.transform, "DeityTooltip",
             new Vector2(0, 230), new Vector2(700, 30),
-            "Choose a deity for your character. Clerics must worship a deity within one step of their alignment.",
+            "Choose a deity for your character. Deities must be within one step of your alignment.",
             12, new Color(0.7f, 0.7f, 0.9f), TextAnchor.MiddleCenter);
 
         _deityRestrictionText = MakeText(_stepDeityPanel.transform, "DeityRestriction",
@@ -998,10 +998,9 @@ public class CharacterCreationUI : MonoBehaviour
 
     private void OnDeitySelected(int index)
     {
-        List<DeityData> allDeities = DeityDatabase.GetAllDeities();
-        if (index < 0 || index >= allDeities.Count) return;
+        if (index < 0 || index >= _currentDeityList.Count) return;
 
-        DeityData deity = allDeities[index];
+        DeityData deity = _currentDeityList[index];
         _selectedDeityId = deity.DeityId;
 
         // Update info display
@@ -1020,34 +1019,40 @@ public class CharacterCreationUI : MonoBehaviour
     private void RefreshDeityButtons()
     {
         var data = CreatedCharacters[CurrentCharacterIndex];
-        List<DeityData> allDeities = DeityDatabase.GetAllDeities();
         bool isCleric = data.ClassName == "Cleric";
 
-        for (int i = 0; i < allDeities.Count && i < _deityButtons.Length; i++)
+        _currentDeityList = DeityDatabase.GetCompatibleDeities(data.ChosenAlignment);
+
+        bool selectedStillValid = !string.IsNullOrEmpty(_selectedDeityId)
+            && _currentDeityList.Exists(d => d.DeityId == _selectedDeityId);
+
+        if (!selectedStillValid)
+        {
+            _selectedDeityId = "";
+            _confirmDeityButton.interactable = false;
+            _deityInfoText.text = "Select a deity to see details.";
+        }
+
+        for (int i = 0; i < _deityButtons.Length; i++)
         {
             if (_deityButtons[i] == null) continue;
-            DeityData deity = allDeities[i];
 
-            bool compatible = deity.IsAlignmentCompatible(data.ChosenAlignment);
+            bool hasDeityAtIndex = i < _currentDeityList.Count;
+            _deityButtons[i].gameObject.SetActive(hasDeityAtIndex);
+            if (!hasDeityAtIndex) continue;
+
+            DeityData deity = _currentDeityList[i];
+            Text buttonText = _deityButtons[i].GetComponentInChildren<Text>();
+            if (buttonText != null)
+                buttonText.text = $"{deity.Name} ({deity.AlignmentAbbr})";
 
             var colors = _deityButtons[i].colors;
-            if (deity.DeityId == _selectedDeityId)
-            {
-                colors.normalColor = new Color(0.6f, 0.55f, 0.1f); // Gold for selected
-            }
-            else if (!compatible && isCleric)
-            {
-                colors.normalColor = new Color(0.15f, 0.15f, 0.2f, 0.5f); // Dimmed
-            }
-            else
-            {
-                colors.normalColor = new Color(0.2f, 0.2f, 0.35f);
-            }
+            colors.normalColor = deity.DeityId == _selectedDeityId
+                ? new Color(0.6f, 0.55f, 0.1f)
+                : new Color(0.2f, 0.2f, 0.35f);
             colors.highlightedColor = colors.normalColor * 1.3f;
             _deityButtons[i].colors = colors;
-
-            // Disable incompatible deities for clerics
-            _deityButtons[i].interactable = !isCleric || compatible;
+            _deityButtons[i].interactable = true;
         }
 
         // Clerics MUST choose a deity; hide skip for clerics
@@ -1058,10 +1063,21 @@ public class CharacterCreationUI : MonoBehaviour
     private void OnConfirmDeity()
     {
         if (string.IsNullOrEmpty(_selectedDeityId)) return;
-        CreatedCharacters[CurrentCharacterIndex].ChosenDeityId = _selectedDeityId;
+
+        var data = CreatedCharacters[CurrentCharacterIndex];
+        DeityData selectedDeity = DeityDatabase.GetDeity(_selectedDeityId);
+        bool isCompatible = selectedDeity != null && selectedDeity.IsAlignmentCompatible(data.ChosenAlignment);
+        if (!isCompatible)
+        {
+            _deityRestrictionText.text = "Selected deity is not within one step of your alignment.";
+            _confirmDeityButton.interactable = false;
+            return;
+        }
+
+        data.ChosenDeityId = _selectedDeityId;
 
         // If cleric, go to domain selection; otherwise skip to skills
-        if (CreatedCharacters[CurrentCharacterIndex].ClassName == "Cleric")
+        if (data.ClassName == "Cleric")
         {
             ShowStep(Step.ChooseDomains);
         }
@@ -2155,8 +2171,8 @@ public class CharacterCreationUI : MonoBehaviour
                 _deityInfoText.text = "Select a deity to see details.";
                 _confirmDeityButton.interactable = false;
                 string deityNote = CreatedCharacters[CurrentCharacterIndex].ClassName == "Cleric"
-                    ? "Clerics must choose a deity within one step of their alignment."
-                    : "Deity is optional for non-cleric characters.";
+                    ? "All characters may only choose deities within one step. Clerics must choose one."
+                    : "Deity is optional, but if chosen it must be within one step of your alignment.";
                 _deityRestrictionText.text = deityNote;
                 RefreshDeityButtons();
                 break;

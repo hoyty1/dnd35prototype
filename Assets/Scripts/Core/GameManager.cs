@@ -1733,9 +1733,23 @@ public partial class GameManager : MonoBehaviour
             // Set alignment from character creation data
             stats.CharacterAlignment = data.ChosenAlignment;
 
-            // Set deity and domains from character creation data
-            stats.DeityId = data.ChosenDeityId ?? "";
-            stats.ChosenDomains = data.ChosenDomains != null
+            // Set deity and domains from character creation data.
+            // D&D 3.5e: all characters can only worship a deity within one step of their alignment.
+            DeityDatabase.Init();
+            string chosenDeityId = data.ChosenDeityId ?? "";
+            if (!string.IsNullOrEmpty(chosenDeityId))
+            {
+                DeityData chosenDeity = DeityDatabase.GetDeity(chosenDeityId);
+                bool deityCompatible = chosenDeity != null && chosenDeity.IsAlignmentCompatible(stats.CharacterAlignment);
+                if (!deityCompatible)
+                {
+                    Debug.LogWarning($"[GameManager][CreationFlow] Removing incompatible deity '{chosenDeityId}' for {data.CharacterName} ({stats.CharacterAlignment}).");
+                    chosenDeityId = "";
+                }
+            }
+
+            stats.DeityId = chosenDeityId;
+            stats.ChosenDomains = !string.IsNullOrEmpty(chosenDeityId) && data.ChosenDomains != null
                 ? new System.Collections.Generic.List<string>(data.ChosenDomains)
                 : new System.Collections.Generic.List<string>();
 
