@@ -244,12 +244,14 @@ public class SpellSelectionUI : MonoBehaviour
         _className = "Wizard";
         _intMod = intModifier;
 
+        int safeCharacterLevel = Mathf.Max(1, characterLevel);
+
         // D&D 3.5e PHB p.57: All cantrips are automatically in the spellbook (no selection needed)
-        // At level 1: 3 + INT mod 1st-level spells
-        // Levels 2-3: +2 spells each of any castable level → at level 3: 2 extra for 2nd-level
+        // At level 1: 3 + INT mod 1st-level spells.
+        // Level 2+ gains are handled by level-up flow; during creation we must respect current level.
         _maxCantrips = 0; // Cantrips are auto-added, no selection needed
         _maxSpells1st = Mathf.Max(1, 3 + intModifier);
-        _maxSpells2nd = 2;
+        _maxSpells2nd = safeCharacterLevel >= 3 ? 2 : 0;
         _cantripSelectionRequired = false; // Cantrips auto-added
 
         _selectedSpellIds.Clear();
@@ -265,9 +267,10 @@ public class SpellSelectionUI : MonoBehaviour
         }
         _autoAddedCantripCount = allCantrips.Count;
 
-        // Only show higher-level spells for selection
+        // Only show spells currently available at this creation level.
         _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 1));
-        _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2));
+        if (_maxSpells2nd > 0)
+            _availableSpells.AddRange(SpellDatabase.GetSpellsForClassAtLevel("Wizard", 2));
 
         // Sort: by level, then by name
         _availableSpells.Sort((a, b) =>
@@ -277,7 +280,9 @@ public class SpellSelectionUI : MonoBehaviour
         });
 
         _titleText.text = "WIZARD SPELLBOOK SELECTION";
-        _subtitleText.text = $"All {_autoAddedCantripCount} cantrips auto-added. Select {_maxSpells1st} 1st-level and {_maxSpells2nd} 2nd-level spells.";
+        _subtitleText.text = _maxSpells2nd > 0
+            ? $"All {_autoAddedCantripCount} cantrips auto-added. Select {_maxSpells1st} 1st-level and {_maxSpells2nd} 2nd-level spells."
+            : $"All {_autoAddedCantripCount} cantrips auto-added. Select {_maxSpells1st} 1st-level spells.";
 
         _overlayPanel.SetActive(true);
         IsOpen = true;
@@ -287,6 +292,10 @@ public class SpellSelectionUI : MonoBehaviour
         // Hide cantrip filter button when cantrips are auto-added
         if (_filter0Button != null)
             _filter0Button.gameObject.SetActive(false);
+        if (_filter1Button != null)
+            _filter1Button.gameObject.SetActive(true);
+        if (_filter2Button != null)
+            _filter2Button.gameObject.SetActive(_maxSpells2nd > 0);
 
         PopulateSpellList();
         RefreshUI();

@@ -1790,8 +1790,17 @@ public class SpellcastingComponent : MonoBehaviour
     /// </summary>
     public int GetHighestSlotLevel()
     {
-        if (SlotsRemaining == null) return -1;
-        return SlotsRemaining.Length - 1;
+        if (SlotsMax == null || SlotsMax.Length == 0)
+            return -1;
+
+        for (int level = SlotsMax.Length - 1; level >= 0; level--)
+        {
+            int totalSlotsAtLevel = GetMaxSpellSlotsAtLevel(level) + GetMaxDomainSlotsAtLevel(level);
+            if (totalSlotsAtLevel > 0)
+                return level;
+        }
+
+        return -1;
     }
 
     /// <summary>

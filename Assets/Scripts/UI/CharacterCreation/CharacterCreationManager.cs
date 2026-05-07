@@ -193,6 +193,14 @@ public class CharacterCreationManager : MonoBehaviour
             return;
         }
 
+        SpellcastingComponent spellcasting = EnsureSpellcastingComponentForLevelUp(progressionClass);
+        if (spellcasting == null)
+        {
+            Debug.LogWarning($"[CharacterCreationManager] Unable to initialize SpellcastingComponent for {progressionClass}. Skipping spell step.");
+            CompleteLevelUp();
+            return;
+        }
+
         if (string.Equals(progressionClass, "Cleric", StringComparison.OrdinalIgnoreCase)
             && (stats.ChosenDomains == null || stats.ChosenDomains.Count == 0)
             && !_domainSelectionAttemptedThisFlow)
@@ -250,6 +258,41 @@ public class CharacterCreationManager : MonoBehaviour
         spellcasting.SyncPreparedSpellsFromSlots();
 
         Debug.Log($"[CharacterCreationManager] Applied {learnedCount} level-up spell selection(s) for {_levelingCharacter.Stats.CharacterName}.");
+    }
+
+    private SpellcastingComponent EnsureSpellcastingComponentForLevelUp(string progressionClass)
+    {
+        if (_levelingCharacter == null || _levelingCharacter.Stats == null)
+            return null;
+
+        if (!IsSpellcaster(progressionClass))
+            return _levelingCharacter.GetComponent<SpellcastingComponent>();
+
+        SpellcastingComponent spellcasting = _levelingCharacter.GetComponent<SpellcastingComponent>();
+        bool createdDuringLevelUp = false;
+
+        if (spellcasting == null)
+        {
+            spellcasting = _levelingCharacter.gameObject.AddComponent<SpellcastingComponent>();
+            spellcasting.Init(_levelingCharacter.Stats);
+            createdDuringLevelUp = true;
+
+            string characterName = !string.IsNullOrWhiteSpace(_levelingCharacter.Stats.CharacterName)
+                ? _levelingCharacter.Stats.CharacterName
+                : _levelingCharacter.name;
+            Debug.Log($"[CharacterCreationManager] Added SpellcastingComponent for {characterName} before level-up spell selection.");
+        }
+
+        if (createdDuringLevelUp && string.Equals(progressionClass, "Wizard", StringComparison.OrdinalIgnoreCase))
+        {
+            // New multiclass wizard entries should learn spells via the level-up selection UI,
+            // not from fallback auto-population during component initialization.
+            spellcasting.KnownSpells.Clear();
+            spellcasting.ClearPreparedSpells();
+        }
+
+        spellcasting.RefreshSpellSlots();
+        return spellcasting;
     }
 
     private bool IsSpellcaster(string className)
