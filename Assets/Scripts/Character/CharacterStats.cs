@@ -1049,6 +1049,26 @@ public class CharacterStats
         return isGoodSave ? (2 + safeLevel / 2) : (safeLevel / 3);
     }
 
+    private int GetTotalClassSaveBonus(Func<ICharacterClass, bool> isGoodSaveSelector)
+    {
+        EnsureMulticlassDataInitialized();
+        ClassRegistry.Init();
+
+        int total = 0;
+        for (int i = 0; i < ClassLevels.Count; i++)
+        {
+            ClassLevelEntry classLevel = ClassLevels[i];
+            if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
+                continue;
+
+            ICharacterClass classDef = ClassRegistry.GetClass(classLevel.ClassName);
+            bool isGoodSave = classDef != null && isGoodSaveSelector(classDef);
+            total += CalculateClassSaveProgression(isGoodSave, classLevel.Level);
+        }
+
+        return total;
+    }
+
     public int ClassFortSave
     {
         get
@@ -1056,24 +1076,7 @@ public class CharacterStats
             if (UseCreatureTypeProgression)
                 return ProgressionCalculator.CalculateSave(CreatureFortitudeProgression, GetEffectiveProgressionLevel());
 
-            EnsureMulticlassDataInitialized();
-            ClassRegistry.Init();
-
-            int best = 0;
-            for (int i = 0; i < ClassLevels.Count; i++)
-            {
-                ClassLevelEntry classLevel = ClassLevels[i];
-                if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
-                    continue;
-
-                ICharacterClass classDef = ClassRegistry.GetClass(classLevel.ClassName);
-                bool goodFort = classDef != null && classDef.GoodFortitude;
-                int value = CalculateClassSaveProgression(goodFort, classLevel.Level);
-                if (value > best)
-                    best = value;
-            }
-
-            return best;
+            return GetTotalClassSaveBonus(classDef => classDef.GoodFortitude);
         }
     }
 
@@ -1084,24 +1087,7 @@ public class CharacterStats
             if (UseCreatureTypeProgression)
                 return ProgressionCalculator.CalculateSave(CreatureReflexProgression, GetEffectiveProgressionLevel());
 
-            EnsureMulticlassDataInitialized();
-            ClassRegistry.Init();
-
-            int best = 0;
-            for (int i = 0; i < ClassLevels.Count; i++)
-            {
-                ClassLevelEntry classLevel = ClassLevels[i];
-                if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
-                    continue;
-
-                ICharacterClass classDef = ClassRegistry.GetClass(classLevel.ClassName);
-                bool goodRef = classDef != null && classDef.GoodReflex;
-                int value = CalculateClassSaveProgression(goodRef, classLevel.Level);
-                if (value > best)
-                    best = value;
-            }
-
-            return best;
+            return GetTotalClassSaveBonus(classDef => classDef.GoodReflex);
         }
     }
 
@@ -1112,24 +1098,7 @@ public class CharacterStats
             if (UseCreatureTypeProgression)
                 return ProgressionCalculator.CalculateSave(CreatureWillProgression, GetEffectiveProgressionLevel());
 
-            EnsureMulticlassDataInitialized();
-            ClassRegistry.Init();
-
-            int best = 0;
-            for (int i = 0; i < ClassLevels.Count; i++)
-            {
-                ClassLevelEntry classLevel = ClassLevels[i];
-                if (classLevel == null || string.IsNullOrWhiteSpace(classLevel.ClassName))
-                    continue;
-
-                ICharacterClass classDef = ClassRegistry.GetClass(classLevel.ClassName);
-                bool goodWill = classDef != null && classDef.GoodWill;
-                int value = CalculateClassSaveProgression(goodWill, classLevel.Level);
-                if (value > best)
-                    best = value;
-            }
-
-            return best;
+            return GetTotalClassSaveBonus(classDef => classDef.GoodWill);
         }
     }
 
