@@ -52,6 +52,9 @@ public class CharacterCreationData
 
     // Step 5: Skills
     public Dictionary<string, int> SkillRanks = new Dictionary<string, int>();
+    /// <summary>Unspent skill points remaining after character creation allocation.
+    /// These carry over into the class skill point pool for the first level-up.</summary>
+    public int UnspentSkillPoints;
 
     // Step 5b: Feats
     public List<string> SelectedFeats = new List<string>();

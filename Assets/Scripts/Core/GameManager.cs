@@ -1797,6 +1797,19 @@ public partial class GameManager : MonoBehaviour
                 }
             }
 
+            // Preserve any unspent skill points from character creation into the class pool
+            // so they carry over and are available during the first level-up.
+            // Use the explicit UnspentSkillPoints from creation data if available, otherwise
+            // fall back to the remaining AvailableSkillPoints after rank allocation.
+            int unspentFromCreation = data.UnspentSkillPoints > 0 ? data.UnspentSkillPoints : Mathf.Max(0, stats.AvailableSkillPoints);
+            if (unspentFromCreation > 0)
+            {
+                stats.EnsureClassSkillPointPoolsInitialized();
+                int existingPool = stats.GetClassSkillPointPool(data.ClassName);
+                stats.SetClassSkillPointPool(data.ClassName, existingPool + unspentFromCreation);
+                Debug.Log($"[GameManager] {data.CharacterName}: saved {unspentFromCreation} unspent skill points to {data.ClassName} pool (total pool: {existingPool + unspentFromCreation}).");
+            }
+
             // Feats
             if (data.SelectedFeats != null && data.SelectedFeats.Count > 0)
             {

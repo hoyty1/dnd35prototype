@@ -1421,7 +1421,8 @@ public class CharacterCreationUI : MonoBehaviour
         }
 
         int totalSpent = _tempStatsForSkills.TotalSkillPoints - _tempStatsForSkills.AvailableSkillPoints;
-        Debug.Log($"[CharCreation] Skill allocation complete: {totalSpent}/{_tempStatsForSkills.TotalSkillPoints} points spent, {data.SkillRanks.Count} skills with ranks.");
+        data.UnspentSkillPoints = Mathf.Max(0, _tempStatsForSkills.AvailableSkillPoints);
+        Debug.Log($"[CharCreation] Skill allocation complete: {totalSpent}/{_tempStatsForSkills.TotalSkillPoints} points spent, {data.SkillRanks.Count} skills with ranks, {data.UnspentSkillPoints} unspent (saved for level-up pool).");
 
         _tempStatsForSkills = null;
         ShowStep(Step.SelectFeats);
@@ -2053,6 +2054,10 @@ public class CharacterCreationUI : MonoBehaviour
                 int ranks = kvp.Value;
                 review += $"  {skillName}: {ranks} ranks\n";
             }
+        }
+        if (data.UnspentSkillPoints > 0)
+        {
+            review += $"  ({data.UnspentSkillPoints} unspent skill points saved for later)\n";
         }
 
         // Show selected feats
@@ -3069,6 +3074,8 @@ public class CharacterCreationUI : MonoBehaviour
             s += "--- Skills ---\n";
             foreach (var kvp in data.SkillRanks)
                 s += $"  {kvp.Key}: {kvp.Value} ranks\n";
+            if (data.UnspentSkillPoints > 0)
+                s += $"  ({data.UnspentSkillPoints} unspent skill points saved for later)\n";
             s += "\n";
         }
 
