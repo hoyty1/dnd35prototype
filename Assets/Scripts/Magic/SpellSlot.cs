@@ -39,6 +39,13 @@ public class SpellSlot
     public bool IsDomainSlot;
 
     /// <summary>
+    /// True when this slot is a wizard specialist bonus slot.
+    /// Specialist slots can only be prepared with spells from the wizard's specialization school.
+    /// Works like cleric domain slots but restricted to specialist school instead of domains.
+    /// </summary>
+    public bool IsSpecialistSlot;
+
+    /// <summary>
     /// Optional domain hint for UI/debugging (e.g., "Healing").
     /// Not required for validation because validation can use the full domain list.
     /// </summary>
@@ -51,25 +58,27 @@ public class SpellSlot
     public string CasterClassName;
 
     /// <summary>Create a new empty spell slot at the given level.</summary>
-    public SpellSlot(int level, bool isDomainSlot = false, string casterClassName = null)
+    public SpellSlot(int level, bool isDomainSlot = false, string casterClassName = null, bool isSpecialistSlot = false)
     {
         Level = level;
         PreparedSpell = null;
         IsUsed = false;
         DisabledByNegativeLevel = false;
         IsDomainSlot = isDomainSlot;
+        IsSpecialistSlot = isSpecialistSlot;
         DomainHint = null;
         CasterClassName = casterClassName;
     }
 
     /// <summary>Create a spell slot with a specific spell already prepared.</summary>
-    public SpellSlot(int level, SpellData spell, bool isDomainSlot = false, string casterClassName = null)
+    public SpellSlot(int level, SpellData spell, bool isDomainSlot = false, string casterClassName = null, bool isSpecialistSlot = false)
     {
         Level = level;
         PreparedSpell = spell;
         IsUsed = false;
         DisabledByNegativeLevel = false;
         IsDomainSlot = isDomainSlot;
+        IsSpecialistSlot = isSpecialistSlot;
         DomainHint = null;
         CasterClassName = casterClassName;
     }
@@ -116,8 +125,8 @@ public class SpellSlot
     {
         string spellName = PreparedSpell != null ? PreparedSpell.Name : "(empty)";
         string status = DisabledByNegativeLevel ? "DISABLED" : (IsUsed ? "USED" : "ready");
-        string domainTag = IsDomainSlot ? " [DOMAIN]" : string.Empty;
+        string bonusTag = IsDomainSlot ? " [DOMAIN]" : (IsSpecialistSlot ? " [SPECIALIST]" : string.Empty);
         string classTag = string.IsNullOrWhiteSpace(CasterClassName) ? string.Empty : $" [{CasterClassName}]";
-        return $"Lv{Level}{domainTag}{classTag} [{spellName}] ({status})";
+        return $"Lv{Level}{bonusTag}{classTag} [{spellName}] ({status})";
     }
 }

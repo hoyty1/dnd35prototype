@@ -205,7 +205,7 @@ public class SpellcastingComponent : MonoBehaviour
         return SpellSlots
             .Where(s => s != null && string.Equals(s.CasterClassName, className, System.StringComparison.OrdinalIgnoreCase))
             .OrderBy(s => s.Level)
-            .ThenBy(s => s.IsDomainSlot ? 1 : 0)
+            .ThenBy(s => s.IsDomainSlot ? 2 : s.IsSpecialistSlot ? 1 : 0)
             .ToList();
     }
 
@@ -498,16 +498,30 @@ public class SpellcastingComponent : MonoBehaviour
         if (slotsMax == null || slotsMax.Length == 0)
             return;
 
+        bool isWizardSpecialist = string.Equals(className, "Wizard", System.StringComparison.OrdinalIgnoreCase)
+            && Stats != null && Stats.IsWizardSpecialist;
+
         for (int spellLevel = 0; spellLevel < slotsMax.Length; spellLevel++)
         {
             int regularSlots = GetMaxSpellSlotsAtLevelForClass(className, spellLevel);
-            int domainSlots = GetMaxDomainSlotsAtLevelForClass(className, spellLevel);
+            int bonusSlots = GetMaxDomainSlotsAtLevelForClass(className, spellLevel);
 
             for (int i = 0; i < regularSlots; i++)
                 SpellSlots.Add(new SpellSlot(spellLevel, isDomainSlot: false, casterClassName: className));
 
-            for (int i = 0; i < domainSlots; i++)
-                SpellSlots.Add(new SpellSlot(spellLevel, isDomainSlot: true, casterClassName: className));
+            for (int i = 0; i < bonusSlots; i++)
+            {
+                if (isWizardSpecialist)
+                {
+                    // Wizard specialist bonus slots: marked as specialist, not domain
+                    SpellSlots.Add(new SpellSlot(spellLevel, isDomainSlot: false, casterClassName: className, isSpecialistSlot: true));
+                }
+                else
+                {
+                    // Cleric/Druid domain slots
+                    SpellSlots.Add(new SpellSlot(spellLevel, isDomainSlot: true, casterClassName: className));
+                }
+            }
         }
     }
 
@@ -661,7 +675,8 @@ public class SpellcastingComponent : MonoBehaviour
                 PreparedSpell = slot.PreparedSpell,
                 IsUsed = slot.IsUsed,
                 DisabledByNegativeLevel = slot.DisabledByNegativeLevel,
-                IsDomainSlot = slot.IsDomainSlot
+                IsDomainSlot = slot.IsDomainSlot,
+                IsSpecialistSlot = slot.IsSpecialistSlot
             })
             .ToList();
 
@@ -758,8 +773,32 @@ public class SpellcastingComponent : MonoBehaviour
         int bonusSecond = baseSecond > 0 && intMod >= 2 ? 1 : 0;
 
         _regularSlotsMax = new[] { baseCantrips, baseFirst + bonusFirst, baseSecond + bonusSecond };
+
+        // D&D 3.5e PHB: Specialist wizards get +1 bonus slot per spell level they can cast.
+        // These bonus slots can ONLY be filled with spells from the specialist school.
+        // Works like cleric domain slots but for the specialist school.
+        bool isSpecialist = Stats != null && Stats.IsWizardSpecialist;
         _domainSlotsMax = new int[_regularSlotsMax.Length];
-        return (int[])_regularSlotsMax.Clone();
+        if (isSpecialist)
+        {
+            for (int spellLevel = 0; spellLevel < _regularSlotsMax.Length; spellLevel++)
+            {
+                // Grant +1 specialist slot at each level the wizard can cast (has base slots > 0)
+                _domainSlotsMax[spellLevel] = _regularSlotsMax[spellLevel] > 0 ? 1 : 0;
+            }
+        }
+
+        int[] totalSlots = new int[_regularSlotsMax.Length];
+        for (int i = 0; i < totalSlots.Length; i++)
+            totalSlots[i] = _regularSlotsMax[i] + _domainSlotsMax[i];
+
+        if (isSpecialist)
+        {
+            Debug.Log($"[Spellcasting] Wizard specialist ({Stats.WizardSpecialization.specializationSchool}) bonus slots: " +
+                      string.Join(", ", _domainSlotsMax.Select((s, i) => $"L{i}={s}")));
+        }
+
+        return totalSlots;
     }
 
     private int[] GetClericSlotsForLevel(int level)
@@ -890,12 +929,12 @@ public class SpellcastingComponent : MonoBehaviour
             return;
 
         var previousByClassLevel = previousSlots
-            .GroupBy(s => $"{s.ClassName}|{s.Level}|{(s.IsDomainSlot ? 1 : 0)}")
+            .GroupBy(s => $"{s.ClassName}|{s.Level}|{(s.IsDomainSlot ? "D" : s.IsSpecialistSlot ? "S" : "R")}")
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var currentByClassLevel = SpellSlots
             .Where(s => s != null)
-            .GroupBy(s => $"{s.CasterClassName}|{s.Level}|{(s.IsDomainSlot ? 1 : 0)}")
+            .GroupBy(s => $"{s.CasterClassName}|{s.Level}|{(s.IsDomainSlot ? "D" : s.IsSpecialistSlot ? "S" : "R")}")
             .ToDictionary(g => g.Key, g => g.ToList());
 
         foreach (var kvp in currentByClassLevel)
@@ -974,6 +1013,7 @@ public class SpellcastingComponent : MonoBehaviour
         public bool IsUsed;
         public bool DisabledByNegativeLevel;
         public bool IsDomainSlot;
+        public bool IsSpecialistSlot;
     }
 
     // ========== SPELL SLOT PREPARATION ==========
@@ -1021,20 +1061,46 @@ public class SpellcastingComponent : MonoBehaviour
 
         int[] classSlots = GetSlotsMaxForClass(className);
         List<SpellData> classKnown = GetKnownSpellsForClass(className);
+        bool isSpecialist = Stats.IsWizardSpecialist;
+
         for (int level = 0; level < classSlots.Length; level++)
         {
             var slotsAtLevel = GetSlotsForClassAtLevel(className, level);
+            var regularSlotsAtLevel = slotsAtLevel.Where(s => s != null && !s.IsSpecialistSlot).ToList();
+            var specialistSlotsAtLevel = slotsAtLevel.Where(s => s != null && s.IsSpecialistSlot).ToList();
+
             var spellsAtLevel = classKnown.Where(s => s.SpellLevel == level).ToList();
 
+            // Auto-prepare regular slots
             if (spellsAtLevel.Count == 0)
             {
-                foreach (var slot in slotsAtLevel)
+                foreach (var slot in regularSlotsAtLevel)
                     slot.Clear();
-                continue;
+            }
+            else
+            {
+                for (int i = 0; i < regularSlotsAtLevel.Count; i++)
+                    regularSlotsAtLevel[i].Prepare(spellsAtLevel[i % spellsAtLevel.Count]);
             }
 
-            for (int i = 0; i < slotsAtLevel.Count; i++)
-                slotsAtLevel[i].Prepare(spellsAtLevel[i % spellsAtLevel.Count]);
+            // Auto-prepare specialist slots with specialist school spells only
+            if (isSpecialist && specialistSlotsAtLevel.Count > 0)
+            {
+                List<SpellData> specialistSpells = GetAvailableSpecialistSpells(level);
+                if (specialistSpells.Count == 0)
+                {
+                    foreach (var slot in specialistSlotsAtLevel)
+                        slot.Clear();
+                }
+                else
+                {
+                    for (int i = 0; i < specialistSlotsAtLevel.Count; i++)
+                        specialistSlotsAtLevel[i].Prepare(specialistSpells[i % specialistSpells.Count]);
+                }
+            }
+
+            Debug.Log($"[Spellcasting] {Stats.CharacterName}: Auto-prepared {className} level {level} slots " +
+                      $"(regular={regularSlotsAtLevel.Count}, specialist={specialistSlotsAtLevel.Count})");
         }
 
         SyncSlotsRemainingFromSpellSlots();
@@ -1174,6 +1240,19 @@ public class SpellcastingComponent : MonoBehaviour
             }
         }
 
+        // Wizard specialist slots: can only prepare spells from the specialist school.
+        if (slot.IsSpecialistSlot)
+        {
+            bool validSpecialistSpell = IsSpecialistSchoolSpell(spell);
+            if (!validSpecialistSpell)
+            {
+                string school = Stats != null && Stats.IsWizardSpecialist ? Stats.WizardSpecialization.specializationSchool : "?";
+                if (logOnFailure)
+                    Debug.LogWarning($"[Spellcasting] {spell.Name} ({spell.School}) is not from specialist school ({school}) for specialist slot Lv{slot.Level}.");
+                return false;
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(slot.CasterClassName) && !IsSpellKnownByClass(slot.CasterClassName, spell))
         {
             if (logOnFailure)
@@ -1182,6 +1261,40 @@ public class SpellcastingComponent : MonoBehaviour
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Returns true if the spell belongs to the wizard's specialist school.
+    /// </summary>
+    private bool IsSpecialistSchoolSpell(SpellData spell)
+    {
+        if (spell == null || Stats == null || !Stats.IsWizardSpecialist)
+            return false;
+
+        string specSchool = Stats.WizardSpecialization.specializationSchool;
+        if (string.IsNullOrWhiteSpace(specSchool))
+            return false;
+
+        return string.Equals(spell.School, specSchool, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Get available spells for specialist slots at a given level.
+    /// Returns only spells from the wizard's specialization school that are in the spellbook.
+    /// </summary>
+    public List<SpellData> GetAvailableSpecialistSpells(int spellLevel)
+    {
+        if (Stats == null || !Stats.IsWizardSpecialist)
+            return new List<SpellData>();
+
+        string specSchool = Stats.WizardSpecialization.specializationSchool;
+        List<SpellData> known = GetKnownSpellsForClass("Wizard");
+
+        return known
+            .Where(s => s != null && s.SpellLevel == spellLevel &&
+                        string.Equals(s.School, specSchool, System.StringComparison.OrdinalIgnoreCase))
+            .OrderBy(s => s.Name)
+            .ToList();
     }
 
     /// <summary>
@@ -1431,7 +1544,7 @@ public class SpellcastingComponent : MonoBehaviour
     {
         return SpellSlots
             .Where(s => s != null && s.Level == level)
-            .OrderBy(s => s.IsDomainSlot ? 1 : 0)
+            .OrderBy(s => s.IsDomainSlot ? 2 : s.IsSpecialistSlot ? 1 : 0)
             .ToList();
     }
 
@@ -1463,6 +1576,20 @@ public class SpellcastingComponent : MonoBehaviour
 
         SpellSlot slot = slotsAtLevel[slotIndex];
         return slot != null && slot.IsDomainSlot;
+    }
+
+    /// <summary>
+    /// Returns true if a level-local slot index points to a specialist slot.
+    /// Specialist slots are bonus slots for wizard specialists, restricted to specialist school spells.
+    /// </summary>
+    public bool IsSpecialistSlot(int spellLevel, int slotIndex)
+    {
+        List<SpellSlot> slotsAtLevel = GetSlotsForLevel(spellLevel);
+        if (slotIndex < 0 || slotIndex >= slotsAtLevel.Count)
+            return false;
+
+        SpellSlot slot = slotsAtLevel[slotIndex];
+        return slot != null && slot.IsSpecialistSlot;
     }
 
     /// <summary>Get the prepared spell name at the provided level-local slot index.</summary>
@@ -2019,7 +2146,9 @@ public class SpellcastingComponent : MonoBehaviour
             string spellName = slot.HasSpell ? slot.PreparedSpell.Name : "(empty)";
             string slotLabel = slot.IsDomainSlot
                 ? $"DomainSlot{slotNum}(L{slot.Level})"
-                : $"Slot{slotNum}(L{slot.Level})";
+                : slot.IsSpecialistSlot
+                    ? $"SpecSlot{slotNum}(L{slot.Level})"
+                    : $"Slot{slotNum}(L{slot.Level})";
             parts.Add($"{status} {slotLabel}: {spellName}");
             slotNum++;
         }

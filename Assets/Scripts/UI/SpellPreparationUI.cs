@@ -74,6 +74,10 @@ public class SpellPreparationUI : MonoBehaviour
     private List<SpellData> _domainSpellsLevel2 = new List<SpellData>();
     private HashSet<int> _domainSlotIndices = new HashSet<int>(); // which slot indices are domain slots
 
+    // Specialist slot tracking for wizards
+    private HashSet<int> _specialistSlotIndices = new HashSet<int>(); // which slot indices are specialist slots
+    private string _wizardSpecialistSchool = string.Empty; // specialist school name for labels
+
     // Layout
     private const float PANEL_W = 1200f;
     private const float PANEL_H = 860f;
@@ -531,11 +535,23 @@ public class SpellPreparationUI : MonoBehaviour
             : casterClassName;
         _clericDomains = spellComp.Domains != null ? new List<string>(spellComp.Domains) : new List<string>();
         _domainSlotIndices.Clear();
+        _specialistSlotIndices.Clear();
 
-        string domainSuffix = (_clericDomains.Count > 0 && string.Equals(_activeCasterClassName, "Cleric", StringComparison.OrdinalIgnoreCase))
-            ? $" — Domains: {string.Join(", ", _clericDomains)}"
-            : string.Empty;
-        _titleText.text = $"PREPARE {_activeCasterClassName} SPELLS — {spellComp.Stats.CharacterName}{domainSuffix}";
+        // Detect wizard specialist for title suffix
+        _wizardSpecialistSchool = string.Empty;
+        if (string.Equals(_activeCasterClassName, "Wizard", StringComparison.OrdinalIgnoreCase)
+            && spellComp.Stats != null && spellComp.Stats.IsWizardSpecialist)
+        {
+            _wizardSpecialistSchool = spellComp.Stats.WizardSpecialization.specializationSchool;
+        }
+
+        string suffix = string.Empty;
+        if (_clericDomains.Count > 0 && string.Equals(_activeCasterClassName, "Cleric", StringComparison.OrdinalIgnoreCase))
+            suffix = $" — Domains: {string.Join(", ", _clericDomains)}";
+        else if (!string.IsNullOrEmpty(_wizardSpecialistSchool))
+            suffix = $" — {spellComp.Stats.WizardSpecialization.GetSpecialistTitle()} (Specialist: {_wizardSpecialistSchool})";
+
+        _titleText.text = $"PREPARE {_activeCasterClassName} SPELLS — {spellComp.Stats.CharacterName}{suffix}";
 
         PopulateSlotList();
         RefreshSummary();
@@ -557,11 +573,26 @@ public class SpellPreparationUI : MonoBehaviour
     /// <param name="characterName">Character name for display</param>
     public void OpenForCreation(List<string> spellbookIds, int intModifier, int characterLevel, string characterName)
     {
+        OpenForCreation(spellbookIds, intModifier, characterLevel, characterName, null);
+    }
+
+    /// <summary>
+    /// Open wizard spell preparation with specialist awareness.
+    /// Specialist slots are the last slot at each spell level the wizard can cast.
+    /// Specialist slots can only be filled with spells from the specialist school.
+    /// </summary>
+    public void OpenForCreation(List<string> spellbookIds, int intModifier, int characterLevel, string characterName, WizardSpecialization specialization)
+    {
         _isCreationMode = true;
         _isClericCreationMode = false;
         _spellComp = null;
 
         SpellDatabase.Init();
+
+        // Store specialist info
+        _specialistSlotIndices.Clear();
+        bool isSpecialist = specialization != null && !specialization.IsGeneralist;
+        _wizardSpecialistSchool = isSpecialist ? specialization.specializationSchool : string.Empty;
 
         // Build known spells from spellbook IDs
         _creationKnownSpells.Clear();
@@ -577,22 +608,64 @@ public class SpellPreparationUI : MonoBehaviour
         int intMod = Mathf.Max(0, intModifier);
         int bonus1st = intMod >= 1 ? 1 : 0;
         int bonus2nd = intMod >= 2 ? 1 : 0;
-        _creationSlotsMax = new int[] { 4, 2 + bonus1st, 1 + bonus2nd };
+
+        int[] regularSlots = new int[] { 4, 2 + bonus1st, 1 + bonus2nd };
+        int[] specialistSlots = new int[regularSlots.Length];
+
+        if (isSpecialist)
+        {
+            for (int lvl = 0; lvl < regularSlots.Length; lvl++)
+            {
+                specialistSlots[lvl] = regularSlots[lvl] > 0 ? 1 : 0;
+            }
+        }
+
+        _creationSlotsMax = new int[regularSlots.Length];
+        for (int i = 0; i < regularSlots.Length; i++)
+            _creationSlotsMax[i] = regularSlots[i] + specialistSlots[i];
 
         // Create temporary spell slots
         _creationSlots.Clear();
+        int slotIdx = 0;
         for (int spellLevel = 0; spellLevel < _creationSlotsMax.Length; spellLevel++)
         {
-            for (int i = 0; i < _creationSlotsMax[spellLevel]; i++)
+            for (int i = 0; i < regularSlots[spellLevel]; i++)
             {
                 _creationSlots.Add(new SpellSlot(spellLevel));
+                slotIdx++;
+            }
+            for (int i = 0; i < specialistSlots[spellLevel]; i++)
+            {
+                _creationSlots.Add(new SpellSlot(spellLevel, isSpecialistSlot: true));
+                _specialistSlotIndices.Add(slotIdx);
+                slotIdx++;
             }
         }
 
         // Auto-prepare: distribute spells across slots
         AutoPrepareCreationSlots();
 
-        _titleText.text = $"SPELL PREPARATION — {characterName}";
+        // Auto-prepare specialist slots with specialist school spells
+        if (isSpecialist)
+        {
+            foreach (int si in _specialistSlotIndices)
+            {
+                if (si < _creationSlots.Count)
+                {
+                    SpellSlot specSlot = _creationSlots[si];
+                    var specSpells = _creationKnownSpells
+                        .Where(s => s.SpellLevel == specSlot.Level &&
+                                    string.Equals(s.School, _wizardSpecialistSchool, StringComparison.OrdinalIgnoreCase))
+                        .OrderBy(s => s.Name)
+                        .ToList();
+                    if (specSpells.Count > 0)
+                        specSlot.Prepare(specSpells[0]);
+                }
+            }
+        }
+
+        string specSuffix = isSpecialist ? $" — {specialization.GetSpecialistTitle()} (Specialist: {_wizardSpecialistSchool})" : "";
+        _titleText.text = $"SPELL PREPARATION — {characterName}{specSuffix}";
 
         PopulateCreationSlotList();
         RefreshCreationSummary();
@@ -602,7 +675,8 @@ public class SpellPreparationUI : MonoBehaviour
 
         Debug.Log($"[SpellPreparationUI] Creation mode: {_creationKnownSpells.Count} spells in book, " +
                   $"slots: L0={_creationSlotsMax[0]}, L1={_creationSlotsMax[1]}, L2={_creationSlotsMax[2]} " +
-                  $"(INT mod {intModifier}, bonus 1st={bonus1st}, bonus 2nd={bonus2nd})");
+                  $"(INT mod {intModifier}, bonus 1st={bonus1st}, bonus 2nd={bonus2nd})" +
+                  (isSpecialist ? $", specialist={_wizardSpecialistSchool}, specSlots={_specialistSlotIndices.Count}" : ""));
     }
 
     /// <summary>
@@ -761,6 +835,7 @@ public class SpellPreparationUI : MonoBehaviour
         IsOpen = false;
         _isCreationMode = false;
         _isClericCreationMode = false;
+        _wizardSpecialistSchool = string.Empty;
 
         if (_skipCharacterButton != null)
             _skipCharacterButton.gameObject.SetActive(false);
@@ -803,6 +878,7 @@ public class SpellPreparationUI : MonoBehaviour
         float rowHeight = 40f;
         float spacing = 4f;
         _domainSlotIndices.Clear();
+        _specialistSlotIndices.Clear();
 
         int[] classSlotsMax = _spellComp.GetSlotsMaxForClass(_activeCasterClassName);
         int maxLevel = classSlotsMax != null ? classSlotsMax.Length - 1 : 0;
@@ -820,8 +896,9 @@ public class SpellPreparationUI : MonoBehaviour
 
             int regularSlots = _spellComp.GetMaxSpellSlotsAtLevelForClass(_activeCasterClassName, spellLevel);
             int domainSlots = _spellComp.GetMaxDomainSlotsAtLevelForClass(_activeCasterClassName, spellLevel);
+            int specialistSlots = slotsAtLevel.Count(s => s.IsSpecialistSlot);
             int totalSlots = slotsAtLevel.Count;
-            Debug.Log($"[SpellPrep] Level {spellLevel}: {regularSlots} regular + {domainSlots} domain = {totalSlots} total");
+            Debug.Log($"[SpellPrep] Level {spellLevel}: {regularSlots} regular + {domainSlots} domain + {specialistSlots} specialist = {totalSlots} total");
 
             string levelLabel = spellLevel == 0
                 ? $"═══ {cantripName} (Level 0 — Unlimited) ═══"
@@ -852,11 +929,13 @@ public class SpellPreparationUI : MonoBehaviour
                 int slotIndex = _slotRows.Count;
                 if (slot.IsDomainSlot)
                     _domainSlotIndices.Add(slotIndex);
+                if (slot.IsSpecialistSlot)
+                    _specialistSlotIndices.Add(slotIndex);
 
                 var rowUI = CreateSlotRow(scrollContent, slot, slotIndex, yPos);
                 _slotRows.Add(rowUI);
 
-                Debug.Log($"[SpellPrep] Created slot {levelSlotIndex} at level {spellLevel}, domain={slot.IsDomainSlot}");
+                Debug.Log($"[SpellPrep] Created slot {levelSlotIndex} at level {spellLevel}, domain={slot.IsDomainSlot}, specialist={slot.IsSpecialistSlot}");
                 yPos -= (rowHeight + spacing);
             }
         }
@@ -873,13 +952,19 @@ public class SpellPreparationUI : MonoBehaviour
         row.SlotIndex = index;
 
         bool isDomainSlot = slot.IsDomainSlot;
+        bool isSpecialistSlot = slot.IsSpecialistSlot;
 
         // Domain slots only allow domain spells from chosen domains.
+        // Specialist slots only allow spells from the specialist school.
         if (isDomainSlot)
         {
             row.AvailableSpells = _spellComp.GetAvailableDomainSpells(slot.Level)
                 .OrderBy(s => s.Name)
                 .ToList();
+        }
+        else if (isSpecialistSlot)
+        {
+            row.AvailableSpells = _spellComp.GetAvailableSpecialistSpells(slot.Level);
         }
         else
         {
@@ -909,21 +994,28 @@ public class SpellPreparationUI : MonoBehaviour
         int domainSlotNum = levelSlots.Where(s => s.IsDomainSlot).ToList().IndexOf(slot) + 1;
 
         string cantripLabel = string.Equals(_activeCasterClassName, "Cleric", StringComparison.OrdinalIgnoreCase) ? "Orison" : "Cantrip";
+        string specSchoolLabel = !string.IsNullOrEmpty(_wizardSpecialistSchool) ? _wizardSpecialistSchool : "Specialist";
         string slotLabel;
         if (slot.Level == 0)
             slotLabel = $"{cantripLabel} Slot {levelSlotNum}:";
         else if (isDomainSlot)
             slotLabel = $"🌟 Domain Slot {domainSlotNum}:";
+        else if (isSpecialistSlot)
+            slotLabel = $"⭐ {specSchoolLabel} Slot:";
         else
             slotLabel = $"Level {slot.Level} Slot {levelSlotNum}:";
 
-        Color labelColor = isDomainSlot ? new Color(1f, 0.85f, 0.3f) : new Color(0.8f, 0.8f, 0.7f);
+        Color labelColor = isDomainSlot ? new Color(1f, 0.85f, 0.3f)
+            : isSpecialistSlot ? new Color(0.6f, 0.9f, 1f)
+            : new Color(0.8f, 0.8f, 0.7f);
         row.LabelText = MakeText(row.Row.transform, "Label",
             new Vector2(-280, 0), new Vector2(180, 30),
             slotLabel, 13, labelColor, TextAnchor.MiddleRight);
 
         if (isDomainSlot)
             bg.color = new Color(0.15f, 0.12f, 0.05f, 0.75f);
+        else if (isSpecialistSlot)
+            bg.color = new Color(0.05f, 0.1f, 0.18f, 0.75f);
 
         // Dropdown for spell selection (right side)
         GameObject dropdownObj = new GameObject("Dropdown");
@@ -1175,11 +1267,21 @@ public class SpellPreparationUI : MonoBehaviour
 
         // Get available spells at this level from spellbook
         // For domain slots, restrict to domain spells only
+        // For specialist slots, restrict to specialist school spells only
         bool isDomainSlotForFilter = _domainSlotIndices.Contains(index);
+        bool isSpecialistSlotForFilter = _specialistSlotIndices.Contains(index);
         if (isDomainSlotForFilter && slot.Level >= 1)
         {
             List<SpellData> domSpells = slot.Level == 1 ? _domainSpellsLevel1 : _domainSpellsLevel2;
             row.AvailableSpells = domSpells.OrderBy(s => s.Name).ToList();
+        }
+        else if (isSpecialistSlotForFilter && !string.IsNullOrEmpty(_wizardSpecialistSchool))
+        {
+            row.AvailableSpells = _creationKnownSpells
+                .Where(s => s.SpellLevel == slot.Level &&
+                            string.Equals(s.School, _wizardSpecialistSchool, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(s => s.Name)
+                .ToList();
         }
         else
         {
@@ -1215,23 +1317,33 @@ public class SpellPreparationUI : MonoBehaviour
         }
         string l0SlotLabel = _isClericCreationMode ? "Orison" : "Cantrip";
         bool isDomainSlot = _domainSlotIndices.Contains(index);
+        bool isSpecialistSlot = _specialistSlotIndices.Contains(index);
+        string specSchoolLabel = !string.IsNullOrEmpty(_wizardSpecialistSchool) ? _wizardSpecialistSchool : "Specialist";
         string slotLabel;
         if (slot.Level == 0)
             slotLabel = $"{l0SlotLabel} Slot {levelSlotNum}:";
         else if (isDomainSlot)
             slotLabel = $"Lv{slot.Level} DOMAIN Slot:";
+        else if (isSpecialistSlot)
+            slotLabel = $"⭐ {specSchoolLabel} Slot:";
         else
             slotLabel = $"Level {slot.Level} Slot {levelSlotNum}:";
 
-        Color labelColor = isDomainSlot ? new Color(1f, 0.85f, 0.3f) : new Color(0.8f, 0.8f, 0.7f);
+        Color labelColor = isDomainSlot ? new Color(1f, 0.85f, 0.3f)
+            : isSpecialistSlot ? new Color(0.6f, 0.9f, 1f)
+            : new Color(0.8f, 0.8f, 0.7f);
         row.LabelText = MakeText(row.Row.transform, "Label",
             new Vector2(-280, 0), new Vector2(180, 30),
             slotLabel, 13, labelColor, TextAnchor.MiddleRight);
 
-        // Domain slot background tint
+        // Domain/Specialist slot background tint
         if (isDomainSlot)
         {
             bg.color = new Color(0.15f, 0.12f, 0.05f, 0.7f);
+        }
+        else if (isSpecialistSlot)
+        {
+            bg.color = new Color(0.05f, 0.1f, 0.18f, 0.75f);
         }
 
         // Dropdown for spell selection
@@ -1620,9 +1732,14 @@ public class SpellPreparationUI : MonoBehaviour
             {
                 int domainSlots = _spellComp.GetMaxDomainSlotsAtLevelForClass(_activeCasterClassName, level);
                 int regularSlots = _spellComp.GetMaxSpellSlotsAtLevelForClass(_activeCasterClassName, level);
-                string label = domainSlots > 0
-                    ? $"Lv{level} ({regularSlots}+{domainSlots}D)"
-                    : $"Lv{level}";
+                int specialistSlots = slotsAtLevel.Count(s => s.IsSpecialistSlot);
+                string label;
+                if (domainSlots > 0)
+                    label = $"Lv{level} ({regularSlots}+{domainSlots}D)";
+                else if (specialistSlots > 0)
+                    label = $"Lv{level} ({regularSlots}+{specialistSlots}S)";
+                else
+                    label = $"Lv{level}";
                 string color = filled >= total ? "#44FF44" : "#FFDD44";
                 parts.Add($"<color={color}>{label}: {filled}/{total}</color>");
             }
