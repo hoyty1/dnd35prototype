@@ -141,24 +141,6 @@ public static partial class SpellDatabase
 
         Register(new SpellData
                 {
-                    SpellId = SpellNames.CHROMATIC_ORB,
-                    Name = "Chromatic Orb",
-                    Description = "Ranged touch attack deals 1d8 damage (type varies by caster level). At CL3: fire, 1d8.",
-                    SpellLevel = 1, School = "Evocation",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.SingleEnemy,
-                    RangeSquares = 5,
-                    IsTouch = true,
-                    IsRangedTouch = true,
-                    EffectType = SpellEffectType.Damage,
-                    DamageDice = 8, DamageCount = 1,
-                    DamageType = "fire",
-                    ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
-                });
-
-        Register(new SpellData
-                {
                     SpellId = SpellNames.COLOR_SPRAY,
                     Name = "Color Spray",
                     Description = "Illusion (Pattern) [Mind-Affecting]. Creatures in a 15-ft cone are stunned, blinded, and possibly knocked unconscious based on HD. Will negates. SR: Yes. Duration special (cascading by HD). PHB p.210",

@@ -72,9 +72,6 @@ namespace DND35e.Identifiers
         /// <summary>Chill Touch (spell id: chill_touch)</summary>
         public const string CHILL_TOUCH = "chill_touch";
 
-        /// <summary>Chromatic Orb (spell id: chromatic_orb)</summary>
-        public const string CHROMATIC_ORB = "chromatic_orb";
-
         /// <summary>Color Spray (spell id: color_spray)</summary>
         public const string COLOR_SPRAY = "color_spray";
 
