@@ -16293,6 +16293,61 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
+        // ===== SPECTRAL HAND — D&D 3.5e PHB p.282 =====
+        // Necromancy. Sor/Wiz 2. V, S. 1 standard action.
+        // Range: Medium (100 ft + 10 ft/level). Duration: 1 min/level (D).
+        // No save, no SR. Caster loses 1d4 HP (regained on spell end, NOT if hand destroyed).
+        // Hand HP = HP lost. Hand AC = 22 + Int mod. +2 melee touch attack.
+        // Can deliver touch spells of 4th level or lower.
+        if (spell != null && spell.SpellId == SpellNames.SPECTRAL_HAND)
+        {
+            CharacterController recipient = caster; // Personal range — always self
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
+            int intMod = recipient.Stats.INTMod;
+
+            // Roll 1d4 for HP loss / hand HP
+            int handHP = SpectralHandEffectData.RollHandHP();
+
+            // Check if caster has enough HP (must have at least 1 HP after loss)
+            if (recipient.Stats.CurrentHP <= handHP)
+            {
+                CombatUI?.ShowCombatLog($"<color=#FF8888>👻 {recipient.Stats.CharacterName} does not have enough HP to create Spectral Hand (needs >{handHP} HP).</color>");
+                return null;
+            }
+
+            // Create the effect data
+            SpectralHandEffectData spectralHandEffect = SpectralHandEffectData.CreateWithHP(handHP, casterLevel, intMod, recipient);
+
+            // Track via StatusEffectManager for duration and dispel
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            if (recipientStatusMgr == null)
+                recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+            recipientStatusMgr.Init(recipient.Stats);
+
+            ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, recipient.Stats.CharacterName, casterLevel);
+            if (effect != null)
+            {
+                // Apply the effect (handles HP loss)
+                recipient.ApplySpectralHandEffect(spectralHandEffect);
+
+                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                if (recipientSpellComp != null)
+                    recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                CombatUI?.ShowCombatLog($"<color=#88FF88>👻 {recipient.Stats.CharacterName} casts Spectral Hand — loses {handHP} HP. " +
+                                        $"Hand HP: {handHP}, AC: {spectralHandEffect.HandAC} " +
+                                        $"(22 + Int {intMod:+#;-#;+0}) [{effect.GetDurationDisplayString()}]</color>");
+                Debug.Log($"[GameManager] Spectral Hand applied to {recipient.Stats.CharacterName}: " +
+                          $"Hand HP {handHP}, AC {spectralHandEffect.HandAC}, CL {casterLevel}");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
         // ===== FALSE LIFE — D&D 3.5e PHB p.229 =====
         // Personal spell: 1d10 + min(CL, 10) temp HP, 1 hour/level, no save, no SR.
         // Temp HP are lost before regular HP and cannot be healed.

@@ -342,21 +342,50 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // SPECTRAL HAND  (PHB p.282)
+        // Necromancy
+        // Level: Sor/Wiz 2
+        // Components: V, S
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Effect: One spectral hand
+        // Duration: 1 min./level (D)
+        // Saving Throw: None
+        // Spell Resistance: No
+        //
+        // Creates ghostly hand from caster's life force. Caster loses 1d4 HP
+        // (returned when spell ends, NOT if hand is destroyed). Hand delivers
+        // touch spells of 4th level or lower at range with +2 melee touch attack.
+        // Hand AC: 22 + Int modifier. Incorporeal. Improved Evasion. Cannot flank.
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.SPECTRAL_HAND,
                     Name = "Spectral Hand",
-                    Description = "Creates ghostly hand to deliver touch spells at range. +2 on touch attacks via hand. 1 min/level. PHB p.282",
+                    Description = "Necromancy. Creates a ghostly glowing hand from your life force. "
+                        + "You lose 1d4 HP (regained when spell ends, but NOT if hand is destroyed). "
+                        + "Hand delivers touch spells of 4th level or lower at medium range. "
+                        + "+2 bonus on melee touch attack rolls via hand. "
+                        + "Hand HP: 1-4 (equal to HP lost). Hand AC: 22 + Int mod. "
+                        + "Incorporeal, improved evasion, uses caster's saves. Cannot flank. "
+                        + "Components: V, S. PHB p.282",
                     SpellLevel = 2, School = "Necromancy",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Medium,
                     EffectType = SpellEffectType.Buff,
-                    BuffAttackBonus = 2,
-                    BuffDurationRounds = 30,
                     BuffType = SpellNames.SPECTRAL_HAND,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
                 });
 
         Register(new SpellData

@@ -334,6 +334,7 @@ public class CharacterController : MonoBehaviour
     public FalseLifeEffectData ActiveFalseLifeEffect { get; private set; }
     public GhoulTouchEffectData ActiveGhoulTouchEffect { get; private set; }
     public ScareEffectData ActiveScareEffect { get; private set; }
+    public SpectralHandEffectData ActiveSpectralHandEffect { get; private set; }
     private readonly System.Collections.Generic.List<CommandUndeadEffectData> _commandedUndeadList = new System.Collections.Generic.List<CommandUndeadEffectData>();
     private EnfeebledConditionData _activeEnfeeblementEffect;
     private TouchOfIdiocyConditionData _activeTouchOfIdiocyEffect;
@@ -2012,6 +2013,82 @@ public class CharacterController : MonoBehaviour
             RemoveCondition(CombatConditionType.Shaken);
 
         Debug.Log($"[Scare] {Stats?.CharacterName}: Scare effect removed");
+    }
+
+    // ===================== SPECTRAL HAND EFFECT =====================
+
+    /// <summary>Whether this character has an active Spectral Hand.</summary>
+    public bool HasActiveSpectralHandEffect => ActiveSpectralHandEffect != null && ActiveSpectralHandEffect.IsHandAvailable;
+
+    /// <summary>
+    /// Apply a Spectral Hand effect to this character.
+    /// The caster loses HP equal to the hand's HP on creation.
+    /// </summary>
+    public void ApplySpectralHandEffect(SpectralHandEffectData effectData)
+    {
+        if (effectData == null || Stats == null) return;
+
+        // Remove existing spectral hand if any
+        if (ActiveSpectralHandEffect != null && ActiveSpectralHandEffect.IsActive)
+        {
+            RemoveSpectralHandEffect();
+        }
+
+        ActiveSpectralHandEffect = effectData;
+
+        // Apply HP loss to caster
+        Stats.CurrentHP -= effectData.CasterHPLost;
+        if (Stats.CurrentHP < 0) Stats.CurrentHP = 0;
+
+        Debug.Log($"[SpectralHand] {Stats.CharacterName}: Spectral Hand created. Lost {effectData.CasterHPLost} HP. " +
+                  $"Hand HP: {effectData.CurrentHandHP}, AC: {effectData.HandAC}");
+    }
+
+    /// <summary>
+    /// Remove the active Spectral Hand effect. Restores HP if hand was not destroyed.
+    /// </summary>
+    public void RemoveSpectralHandEffect()
+    {
+        if (ActiveSpectralHandEffect == null) return;
+
+        int hpRestored = ActiveSpectralHandEffect.EndSpell("effect removed");
+
+        if (hpRestored > 0 && Stats != null)
+        {
+            Stats.CurrentHP = Mathf.Min(Stats.CurrentHP + hpRestored, Stats.TotalMaxHP);
+            Debug.Log($"[SpectralHand] {Stats.CharacterName}: Regained {hpRestored} HP (spell ended normally)");
+        }
+
+        ActiveSpectralHandEffect = null;
+        Debug.Log($"[SpectralHand] {Stats?.CharacterName}: Spectral Hand effect removed");
+    }
+
+    /// <summary>
+    /// Handle destruction of the spectral hand. Caster does NOT regain HP.
+    /// </summary>
+    public void DestroySpectralHand()
+    {
+        if (ActiveSpectralHandEffect == null) return;
+
+        ActiveSpectralHandEffect.DestroyHand();
+        ActiveSpectralHandEffect = null;
+        Debug.Log($"[SpectralHand] {Stats?.CharacterName}: Spectral Hand destroyed — HP loss is permanent");
+    }
+
+    /// <summary>
+    /// Get the touch attack bonus from Spectral Hand (+2) if delivering through hand.
+    /// </summary>
+    public int GetSpectralHandTouchAttackBonus()
+    {
+        return HasActiveSpectralHandEffect ? SpectralHandEffectData.TOUCH_ATTACK_BONUS : 0;
+    }
+
+    /// <summary>
+    /// Check if a spell can be delivered through the active spectral hand.
+    /// </summary>
+    public bool CanDeliverSpellThroughSpectralHand(SpellData spell)
+    {
+        return HasActiveSpectralHandEffect && ActiveSpectralHandEffect.CanDeliverSpell(spell);
     }
 
     // ===================== CONDITION QUERY HELPERS =====================
