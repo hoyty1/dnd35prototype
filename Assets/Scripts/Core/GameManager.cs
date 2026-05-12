@@ -395,6 +395,9 @@ public partial class GameManager : MonoBehaviour
     private readonly HashSet<CharacterController> _summonedEnemies = new HashSet<CharacterController>();
     private readonly List<ActiveSummonInstance> _activeSummons = new List<ActiveSummonInstance>();
 
+    // ── Magic Circle tracking ──────────────────────────────────────────
+    private readonly List<MagicCircleEffectData> _activeMagicCircles = new List<MagicCircleEffectData>();
+
     private class ActiveSummonInstance
     {
         public CharacterController Controller;
@@ -6072,6 +6075,9 @@ public partial class GameManager : MonoBehaviour
         // Tick summon durations (Summon Monster: 1 round/level)
         TickSummonDurations();
 
+        // Tick Magic Circle emanation durations
+        TickMagicCircles();
+
         // Tick persistent Grease zones/objects.
         TickActiveGreaseEffects();
 
@@ -6093,6 +6099,7 @@ public partial class GameManager : MonoBehaviour
         Debug.Log($"[LootFlow] OnCombatEnded triggered | frame={Time.frameCount} | activeNPCs={(NPCs != null ? NPCs.Count : 0)} | activePCs={(PCs != null ? PCs.Count : 0)} | aliveEnemiesBefore={aliveEnemiesBefore} | allNpcsDead={allNpcsDead} | allPcsDead={allPcsDead} | victory={isVictory}");
 
         CurrentPhase = TurnPhase.CombatOver;
+        _activeMagicCircles.Clear();
         ClearAllActiveGreaseEffects();
         ClearAllMirrorImageEffects("combat ended");
         _conditionService?.CleanupOnCombatEnd(GetAllCharacters());
@@ -11419,6 +11426,167 @@ public partial class GameManager : MonoBehaviour
             onCancel: null);
     }
 
+    // ============================================================
+    //  MAGIC CIRCLE AREA EFFECT MANAGEMENT
+    // ============================================================
+
+    /// <summary>
+    /// Register a new Magic Circle area effect centered on the touched creature.
+    /// Called when a Magic Circle spell is successfully cast.
+    /// </summary>
+    public void RegisterMagicCircle(MagicCircleEffectData data)
+    {
+        if (data == null || data.CenterCreature == null)
+            return;
+
+        // Remove any existing Magic Circle centered on the same creature
+        for (int i = _activeMagicCircles.Count - 1; i >= 0; i--)
+        {
+            if (_activeMagicCircles[i].CenterCreature == data.CenterCreature)
+            {
+                _activeMagicCircles.RemoveAt(i);
+            }
+        }
+
+        _activeMagicCircles.Add(data);
+        Debug.Log($"[MagicCircle] {data.GetSpellName()} registered on {data.CenterCreature.Stats?.CharacterName}, CL {data.CasterLevel}, {data.RemainingRounds} rounds");
+    }
+
+    /// <summary>
+    /// Remove a Magic Circle effect (on death, dispel, etc.).
+    /// </summary>
+    public void RemoveMagicCircle(CharacterController centerCreature)
+    {
+        if (centerCreature == null) return;
+        for (int i = _activeMagicCircles.Count - 1; i >= 0; i--)
+        {
+            if (_activeMagicCircles[i].CenterCreature == centerCreature)
+            {
+                Debug.Log($"[MagicCircle] Removed {_activeMagicCircles[i].GetSpellName()} from {centerCreature.Stats?.CharacterName}");
+                _activeMagicCircles.RemoveAt(i);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tick all active Magic Circles (call each round). Removes expired ones.
+    /// </summary>
+    public void TickMagicCircles()
+    {
+        for (int i = _activeMagicCircles.Count - 1; i >= 0; i--)
+        {
+            var mc = _activeMagicCircles[i];
+            if (mc.CenterCreature == null || mc.CenterCreature.IsDead || !mc.Tick())
+            {
+                Debug.Log($"[MagicCircle] Expired: {mc.GetSpellName()}");
+                _activeMagicCircles.RemoveAt(i);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Get Magic Circle protection benefits for a creature against an attacker's alignment.
+    /// Checks if the creature is within any active Magic Circle emanation that wards against the given alignment.
+    /// Returns the best (highest) benefits found.
+    /// </summary>
+    public AlignmentProtectionBenefits GetMagicCircleBenefitsAgainst(CharacterController creature, Alignment sourceAlignment)
+    {
+        var benefits = new AlignmentProtectionBenefits();
+        if (creature == null || _activeMagicCircles.Count == 0)
+            return benefits;
+
+        for (int i = 0; i < _activeMagicCircles.Count; i++)
+        {
+            var mc = _activeMagicCircles[i];
+            if (mc == null || mc.CenterCreature == null || mc.CenterCreature.IsDead)
+                continue;
+
+            // Check if creature is in the area
+            if (!mc.IsCreatureInArea(creature))
+                continue;
+
+            // Check if attacker matches the warded alignment
+            if (!mc.IsAttackerOfWardedAlignment(sourceAlignment))
+                continue;
+
+            benefits.HasMatch = true;
+            benefits.DeflectionAcBonus = Mathf.Max(benefits.DeflectionAcBonus, 2);
+            benefits.ResistanceSaveBonus = Mathf.Max(benefits.ResistanceSaveBonus, 2);
+            benefits.BlocksMentalControl = true;
+            benefits.BlocksSummonedContact = true;
+
+            if (string.IsNullOrEmpty(benefits.SourceSpellName))
+                benefits.SourceSpellName = mc.GetSpellName();
+        }
+
+        return benefits;
+    }
+
+    /// <summary>
+    /// Check if a creature is within any active Magic Circle that protects against the given alignment.
+    /// Used for mental control suppression checks.
+    /// </summary>
+    public bool IsProtectedByMagicCircle(CharacterController creature, AlignmentProtectionType wardedAlignment)
+    {
+        if (creature == null || _activeMagicCircles.Count == 0)
+            return false;
+
+        for (int i = 0; i < _activeMagicCircles.Count; i++)
+        {
+            var mc = _activeMagicCircles[i];
+            if (mc == null || mc.CenterCreature == null || mc.CenterCreature.IsDead)
+                continue;
+
+            if (mc.WardedAlignment != wardedAlignment)
+                continue;
+
+            if (mc.IsCreatureInArea(creature))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Check if a creature is within any active Magic Circle.
+    /// </summary>
+    public bool IsInAnyMagicCircle(CharacterController creature)
+    {
+        if (creature == null || _activeMagicCircles.Count == 0)
+            return false;
+
+        for (int i = 0; i < _activeMagicCircles.Count; i++)
+        {
+            var mc = _activeMagicCircles[i];
+            if (mc != null && mc.CenterCreature != null && !mc.CenterCreature.IsDead && mc.IsCreatureInArea(creature))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Get all active Magic Circle effects (read-only access for tests/queries).
+    /// </summary>
+    public List<MagicCircleEffectData> GetActiveMagicCircles()
+    {
+        return new List<MagicCircleEffectData>(_activeMagicCircles);
+    }
+
+    /// <summary>
+    /// Get the Magic Circle effect centered on a specific creature, or null.
+    /// </summary>
+    public MagicCircleEffectData GetMagicCircleOnCreature(CharacterController creature)
+    {
+        if (creature == null) return null;
+        for (int i = 0; i < _activeMagicCircles.Count; i++)
+        {
+            if (_activeMagicCircles[i].CenterCreature == creature)
+                return _activeMagicCircles[i];
+        }
+        return null;
+    }
+
     private void ShowSummonCreatureSelectionMenu(CharacterController caster, SpellData spell)
     {
         if (caster == null || spell == null)
@@ -16530,6 +16698,23 @@ public partial class GameManager : MonoBehaviour
                 if (targetSpellComp != null)
                 {
                     targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+                }
+
+                // ── Magic Circle area emanation registration ──
+                if (AlignmentProtectionRules.IsMagicCircleSpell(spell.SpellId))
+                {
+                    AlignmentProtectionRules.TryGetProtectionTypeForSpell(spell.SpellId, out AlignmentProtectionType mcWardType);
+                    var mcData = new MagicCircleEffectData
+                    {
+                        WardedAlignment = mcWardType,
+                        CenterCreature = target,
+                        CasterLevel = casterLevel,
+                        RemainingRounds = effect.RemainingRounds,
+                        SourceSpellId = spell.SpellId,
+                        CasterName = caster.Stats.CharacterName
+                    };
+                    RegisterMagicCircle(mcData);
+                    CombatUI?.ShowCombatLog($"<color=#88CCFF>🔵 {spell.Name} emanation (10-ft radius) centered on {target.Stats.CharacterName}.</color>");
                 }
 
                 string durStr = effect.GetDurationDisplayString();

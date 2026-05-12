@@ -110,6 +110,126 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Magic stone projectiles not implemented]"
                 });
 
+        // =================================================================
+        // Magic Circle against Evil (PHB p.249)
+        // Abjuration [Good] — Cleric 3, Paladin 3, Sorcerer/Wizard 3
+        // =================================================================
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.MAGIC_CIRCLE_AGAINST_EVIL,
+                    Name = "Magic Circle against Evil",
+                    Description = "10-ft radius emanation from touched creature wards against evil: +2 deflection AC, +2 resistance saves vs evil creatures; blocks mental control and bodily contact by summoned evil creatures. Duration 10 min/level. PHB p.249",
+                    SpellLevel = 3,
+                    School = "Abjuration [Good]",
+                    ClassList = new[] { "Cleric", "Paladin", "Sorcerer", "Wizard" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Buff,
+                    BuffDeflectionBonus = 2,
+                    BuffSaveBonus = 2,
+                    BuffType = "protection",
+                    BuffBonusType = BonusType.Deflection,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // =================================================================
+        // Magic Circle against Good (PHB p.249)
+        // Abjuration [Evil] — Cleric 3, Sorcerer/Wizard 3 (NOT Paladin)
+        // =================================================================
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.MAGIC_CIRCLE_AGAINST_GOOD,
+                    Name = "Magic Circle against Good",
+                    Description = "10-ft radius emanation from touched creature wards against good: +2 deflection AC, +2 resistance saves vs good creatures; blocks mental control and bodily contact by summoned good creatures. Duration 10 min/level. PHB p.249",
+                    SpellLevel = 3,
+                    School = "Abjuration [Evil]",
+                    ClassList = new[] { "Cleric", "Sorcerer", "Wizard" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Buff,
+                    BuffDeflectionBonus = 2,
+                    BuffSaveBonus = 2,
+                    BuffType = "protection",
+                    BuffBonusType = BonusType.Deflection,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // =================================================================
+        // Magic Circle against Law (PHB p.249)
+        // Abjuration [Chaotic] — Cleric 3, Sorcerer/Wizard 3 (NOT Paladin)
+        // =================================================================
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.MAGIC_CIRCLE_AGAINST_LAW,
+                    Name = "Magic Circle against Law",
+                    Description = "10-ft radius emanation from touched creature wards against lawful: +2 deflection AC, +2 resistance saves vs lawful creatures; blocks mental control and bodily contact by summoned lawful creatures. Duration 10 min/level. PHB p.249",
+                    SpellLevel = 3,
+                    School = "Abjuration [Chaotic]",
+                    ClassList = new[] { "Cleric", "Sorcerer", "Wizard" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Buff,
+                    BuffDeflectionBonus = 2,
+                    BuffSaveBonus = 2,
+                    BuffType = "protection",
+                    BuffBonusType = BonusType.Deflection,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // =================================================================
+        // Magic Circle against Chaos (PHB p.249)
+        // Abjuration [Lawful] — Cleric 3, Paladin 3, Sorcerer/Wizard 3
+        // =================================================================
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.MAGIC_CIRCLE_AGAINST_CHAOS,
+                    Name = "Magic Circle against Chaos",
+                    Description = "10-ft radius emanation from touched creature wards against chaotic: +2 deflection AC, +2 resistance saves vs chaotic creatures; blocks mental control and bodily contact by summoned chaotic creatures. Duration 10 min/level. PHB p.249",
+                    SpellLevel = 3,
+                    School = "Abjuration [Lawful]",
+                    ClassList = new[] { "Cleric", "Paladin", "Sorcerer", "Wizard" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Buff,
+                    BuffDeflectionBonus = 2,
+                    BuffSaveBonus = 2,
+                    BuffType = "protection",
+                    BuffBonusType = BonusType.Deflection,
+                    BonusTypeExplicitlySet = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.MAGIC_WEAPON,

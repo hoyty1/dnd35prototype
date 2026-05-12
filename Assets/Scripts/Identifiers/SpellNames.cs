@@ -345,6 +345,18 @@ namespace DND35e.Identifiers
         /// <summary>Magic Missile (spell id: magic_missile)</summary>
         public const string MAGIC_MISSILE = "magic_missile";
 
+        /// <summary>Magic Circle against Chaos (spell id: magic_circle_against_chaos)</summary>
+        public const string MAGIC_CIRCLE_AGAINST_CHAOS = "magic_circle_against_chaos";
+
+        /// <summary>Magic Circle against Evil (spell id: magic_circle_against_evil)</summary>
+        public const string MAGIC_CIRCLE_AGAINST_EVIL = "magic_circle_against_evil";
+
+        /// <summary>Magic Circle against Good (spell id: magic_circle_against_good)</summary>
+        public const string MAGIC_CIRCLE_AGAINST_GOOD = "magic_circle_against_good";
+
+        /// <summary>Magic Circle against Law (spell id: magic_circle_against_law)</summary>
+        public const string MAGIC_CIRCLE_AGAINST_LAW = "magic_circle_against_law";
+
         /// <summary>Magic Weapon (spell id: magic_weapon)</summary>
         public const string MAGIC_WEAPON = "magic_weapon";
 

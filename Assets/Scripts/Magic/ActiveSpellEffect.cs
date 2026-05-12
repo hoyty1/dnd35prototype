@@ -347,15 +347,19 @@ public static class AlignmentProtectionRules
         switch (spellId)
         {
             case SpellNames.PROTECTION_FROM_EVIL:
+            case SpellNames.MAGIC_CIRCLE_AGAINST_EVIL:
                 type = AlignmentProtectionType.Evil;
                 return true;
             case SpellNames.PROTECTION_FROM_GOOD:
+            case SpellNames.MAGIC_CIRCLE_AGAINST_GOOD:
                 type = AlignmentProtectionType.Good;
                 return true;
             case SpellNames.PROTECTION_FROM_LAW:
+            case SpellNames.MAGIC_CIRCLE_AGAINST_LAW:
                 type = AlignmentProtectionType.Law;
                 return true;
             case SpellNames.PROTECTION_FROM_CHAOS:
+            case SpellNames.MAGIC_CIRCLE_AGAINST_CHAOS:
                 type = AlignmentProtectionType.Chaos;
                 return true;
             // Backward compatibility aliases.
@@ -367,6 +371,49 @@ public static class AlignmentProtectionRules
                 return true;
             case "domain_protection_from_chaos":
                 type = AlignmentProtectionType.Chaos;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Check if a spell is a Magic Circle variant (as opposed to Protection from Alignment).
+    /// </summary>
+    public static bool IsMagicCircleSpell(string spellId)
+    {
+        if (string.IsNullOrWhiteSpace(spellId))
+            return false;
+
+        switch (spellId)
+        {
+            case SpellNames.MAGIC_CIRCLE_AGAINST_EVIL:
+            case SpellNames.MAGIC_CIRCLE_AGAINST_GOOD:
+            case SpellNames.MAGIC_CIRCLE_AGAINST_LAW:
+            case SpellNames.MAGIC_CIRCLE_AGAINST_CHAOS:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Check if a spell is a Protection from Alignment variant (not Magic Circle).
+    /// </summary>
+    public static bool IsProtectionFromAlignmentSpell(string spellId)
+    {
+        if (string.IsNullOrWhiteSpace(spellId))
+            return false;
+
+        switch (spellId)
+        {
+            case SpellNames.PROTECTION_FROM_EVIL:
+            case SpellNames.PROTECTION_FROM_GOOD:
+            case SpellNames.PROTECTION_FROM_LAW:
+            case SpellNames.PROTECTION_FROM_CHAOS:
+            case "domain_protection_from_good":
+            case "domain_protection_from_law":
+            case "domain_protection_from_chaos":
                 return true;
             default:
                 return false;
@@ -411,42 +458,62 @@ public static class AlignmentProtectionRules
         if (protectedTarget == null)
             return benefits;
 
+        // ── Check direct Protection from Alignment effects on the target ──
         StatusEffectManager statusMgr = protectedTarget.GetComponent<StatusEffectManager>();
-        if (statusMgr == null || statusMgr.ActiveEffects == null || statusMgr.ActiveEffects.Count == 0)
-            return benefits;
+        bool hasDirectProtection = false;
 
-        for (int i = 0; i < statusMgr.ActiveEffects.Count; i++)
+        if (statusMgr != null && statusMgr.ActiveEffects != null && statusMgr.ActiveEffects.Count > 0)
         {
-            ActiveSpellEffect effect = statusMgr.ActiveEffects[i];
-            if (effect == null)
-                continue;
+            for (int i = 0; i < statusMgr.ActiveEffects.Count; i++)
+            {
+                ActiveSpellEffect effect = statusMgr.ActiveEffects[i];
+                if (effect == null)
+                    continue;
 
-            AlignmentProtectionType against = effect.ProtectionAgainstAlignment;
-            if (against == AlignmentProtectionType.None && effect.Spell != null)
-                TryGetProtectionTypeForSpell(effect.Spell.SpellId, out against);
+                AlignmentProtectionType against = effect.ProtectionAgainstAlignment;
+                if (against == AlignmentProtectionType.None && effect.Spell != null)
+                    TryGetProtectionTypeForSpell(effect.Spell.SpellId, out against);
 
-            if (!Matches(against, sourceAlignment))
-                continue;
+                if (!Matches(against, sourceAlignment))
+                    continue;
 
-            int deflection = effect.ProtectionDeflectionBonus;
-            if (deflection <= 0 && effect.Spell != null)
-                deflection = Mathf.Max(effect.Spell.BuffDeflectionBonus, effect.Spell.BuffACBonus);
+                hasDirectProtection = true;
+                int deflection = effect.ProtectionDeflectionBonus;
+                if (deflection <= 0 && effect.Spell != null)
+                    deflection = Mathf.Max(effect.Spell.BuffDeflectionBonus, effect.Spell.BuffACBonus);
 
-            int resistance = effect.ProtectionResistanceBonus;
-            if (resistance <= 0 && effect.Spell != null)
-                resistance = effect.Spell.BuffSaveBonus;
+                int resistance = effect.ProtectionResistanceBonus;
+                if (resistance <= 0 && effect.Spell != null)
+                    resistance = effect.Spell.BuffSaveBonus;
 
-            benefits.HasMatch = true;
-            benefits.DeflectionAcBonus = Mathf.Max(benefits.DeflectionAcBonus, Mathf.Max(0, deflection));
-            benefits.ResistanceSaveBonus = Mathf.Max(benefits.ResistanceSaveBonus, Mathf.Max(0, resistance));
-            // Protection from alignment always grants these two ward effects.
-            bool blocksMental = true;
-            bool blocksSummoned = true;
-            benefits.BlocksMentalControl = benefits.BlocksMentalControl || blocksMental;
-            benefits.BlocksSummonedContact = benefits.BlocksSummonedContact || blocksSummoned;
+                benefits.HasMatch = true;
+                benefits.DeflectionAcBonus = Mathf.Max(benefits.DeflectionAcBonus, Mathf.Max(0, deflection));
+                benefits.ResistanceSaveBonus = Mathf.Max(benefits.ResistanceSaveBonus, Mathf.Max(0, resistance));
+                // Protection from alignment always grants these two ward effects.
+                benefits.BlocksMentalControl = true;
+                benefits.BlocksSummonedContact = true;
 
-            if (string.IsNullOrEmpty(benefits.SourceSpellName) && effect.Spell != null)
-                benefits.SourceSpellName = effect.Spell.Name;
+                if (string.IsNullOrEmpty(benefits.SourceSpellName) && effect.Spell != null)
+                    benefits.SourceSpellName = effect.Spell.Name;
+            }
+        }
+
+        // ── Check Magic Circle area effects (emanation from nearby creatures) ──
+        // Magic Circle does NOT stack with Protection from Alignment — take the best.
+        if (GameManager.Instance != null)
+        {
+            AlignmentProtectionBenefits mcBenefits = GameManager.Instance.GetMagicCircleBenefitsAgainst(protectedTarget, sourceAlignment);
+            if (mcBenefits.HasMatch)
+            {
+                benefits.HasMatch = true;
+                benefits.DeflectionAcBonus = Mathf.Max(benefits.DeflectionAcBonus, mcBenefits.DeflectionAcBonus);
+                benefits.ResistanceSaveBonus = Mathf.Max(benefits.ResistanceSaveBonus, mcBenefits.ResistanceSaveBonus);
+                benefits.BlocksMentalControl = benefits.BlocksMentalControl || mcBenefits.BlocksMentalControl;
+                benefits.BlocksSummonedContact = benefits.BlocksSummonedContact || mcBenefits.BlocksSummonedContact;
+
+                if (string.IsNullOrEmpty(benefits.SourceSpellName))
+                    benefits.SourceSpellName = mcBenefits.SourceSpellName;
+            }
         }
 
         return benefits;
