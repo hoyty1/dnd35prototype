@@ -5374,6 +5374,35 @@ public partial class GameManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Breaks Command Undead control when the caster (or their allies) threatens the commanded undead.
+    /// PHB p.211: Any act by the caster or the caster's apparent allies that threatens the
+    /// commanded undead breaks the spell immediately.
+    /// </summary>
+    public void BreakCommandUndeadOnHostileAction(CharacterController attacker, CharacterController target)
+    {
+        if (attacker == null || target == null || target.Stats == null)
+            return;
+
+        if (!target.IsCommandedUndead)
+            return;
+
+        CharacterController controller = target.CommandUndeadController;
+        if (controller == null)
+            return;
+
+        // Check if attacker is the caster or an ally of the caster
+        bool isCasterOrAlly = (attacker == controller) || !IsEnemyTeam(attacker, controller);
+
+        if (isCasterOrAlly)
+        {
+            string attackerName = attacker.Stats != null ? attacker.Stats.CharacterName : "Unknown";
+            CombatUI?.ShowCombatLog($"<color=#FF6666>💔 {target.Stats.CharacterName} is no longer commanded! " +
+                $"Threatening act by {attackerName} broke the Command Undead spell.</color>");
+            target.BreakCommandUndeadControl($"Threatening act by {attackerName}");
+        }
+    }
+
     private bool IsHostileSpellCast(CharacterController caster, SpellData spell, CharacterController primaryTarget, List<CharacterController> areaTargets, out CharacterController hostileTarget)
     {
         hostileTarget = null;
@@ -13273,11 +13302,18 @@ public partial class GameManager : MonoBehaviour
                                    && string.Equals(_pendingSpell.SpellId, SpellNames.BLUR, StringComparison.Ordinal)
                                    && result.RequiredSave
                                    && result.SaveSucceeded;
+
+            // D&D 3.5e PHB p.211: Command Undead — nonintelligent undead get no saving throw.
+            bool commandUndeadNoSaveOverride = _pendingSpell != null
+                && _pendingSpell.SpellId == SpellNames.COMMAND_UNDEAD
+                && target != null && !target.IsIntelligentUndead();
+
             bool effectNegatedBySave = ((_pendingSpell.EffectType == SpellEffectType.Debuff)
                                        || blurSaveNegated)
                                        && result.RequiredSave
                                        && result.SaveSucceeded
-                                       && !causeFearSaveReduced;
+                                       && !causeFearSaveReduced
+                                       && !commandUndeadNoSaveOverride;
             if (effectNegatedBySave)
             {
                 CombatUI?.ShowCombatLog($"🛡 {target.Stats.CharacterName} resists {_pendingSpell.Name} with a successful {result.SaveType} save.");
@@ -15467,6 +15503,49 @@ public partial class GameManager : MonoBehaviour
                 CombatUI?.ShowCombatLog($"<color=#FF9966>🔔 {target.Stats.CharacterName} is deafened by {spell.Name}!</color>");
                 Debug.Log($"[GameManager] {spell.Name} applied Deafness to {target.Stats.CharacterName} (permanent)");
             }
+            return null;
+        }
+
+        // ================================================================
+        // Command Undead — D&D 3.5e PHB p.211
+        // Grants control over one undead creature. No HD limit.
+        // Nonintelligent: no save, obey all commands including suicidal.
+        // Intelligent: Will save (already resolved), Friendly attitude,
+        //   CHA check for unusual orders, never obey suicidal orders.
+        // Duration: 1 day/level. Threatening acts break control.
+        // ================================================================
+        if (spell != null && spell.SpellId == SpellNames.COMMAND_UNDEAD)
+        {
+            if (target == null || target.Stats == null)
+                return null;
+
+            // Validate target is undead
+            if (!target.CanBeCommandedAsUndead())
+            {
+                CombatUI?.ShowCombatLog($"⚠ {spell.Name} has no effect — {target.Stats.CharacterName} is not undead.");
+                Debug.Log($"[GameManager] {spell.Name} failed: {target.Stats.CharacterName} is not undead (CreatureType={target.Stats.CreatureType})");
+                return null;
+            }
+
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            bool isIntelligent = target.IsIntelligentUndead();
+
+            CommandUndeadEffectData effectData;
+            if (isIntelligent)
+            {
+                effectData = CommandUndeadEffectData.CreateForIntelligent(caster, target, casterLevel);
+                CombatUI?.ShowCombatLog($"<color=#9966FF>💀 {target.Stats.CharacterName} is now commanded by {caster.Stats.CharacterName}! (intelligent undead — Friendly attitude, {casterLevel} day(s))</color>");
+            }
+            else
+            {
+                effectData = CommandUndeadEffectData.CreateForNonintelligent(caster, target, casterLevel);
+                CombatUI?.ShowCombatLog($"<color=#9966FF>💀 {target.Stats.CharacterName} is now commanded by {caster.Stats.CharacterName}! (mindless undead — full obedience, {casterLevel} day(s))</color>");
+            }
+
+            target.ApplyCommandUndeadEffect(effectData);
+
+            Debug.Log($"[GameManager] Command Undead applied: {target.Stats.CharacterName} commanded by {caster.Stats.CharacterName} " +
+                      $"(intelligent={isIntelligent}, duration={effectData.DurationRemainingRounds} rounds, casterLevel={casterLevel})");
             return null;
         }
 
@@ -20713,10 +20792,17 @@ public partial class GameManager : MonoBehaviour
                                && string.Equals(spell.SpellId, SpellNames.BLUR, StringComparison.Ordinal)
                                && result.RequiredSave
                                && result.SaveSucceeded;
+
+        // D&D 3.5e PHB p.211: Command Undead — nonintelligent undead get no saving throw.
+        bool commandUndeadNoSaveOverrideNPC = spell != null
+            && spell.SpellId == SpellNames.COMMAND_UNDEAD
+            && target != null && !target.IsIntelligentUndead();
+
         bool effectNegatedBySave = (spell.EffectType == SpellEffectType.Debuff || blurSaveNegated)
                                    && result.RequiredSave
                                    && result.SaveSucceeded
-                                   && !causeFearSaveReduced;
+                                   && !causeFearSaveReduced
+                                   && !commandUndeadNoSaveOverrideNPC;
 
         if (effectNegatedBySave)
             CombatUI?.ShowCombatLog($"🛡 {target.Stats.CharacterName} resists {spell.Name} with a successful {result.SaveType} save.");

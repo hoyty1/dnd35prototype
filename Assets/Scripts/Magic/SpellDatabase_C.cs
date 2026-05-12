@@ -183,23 +183,37 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ============================================================
+        // Command Undead — Necromancy, Sor/Wiz 2
+        // PHB p.211. Grants control over one undead creature.
+        // V, S, M (raw meat + bone splinter). Range: Close.
+        // Duration: 1 day/level. SR: Yes.
+        // Save: Will negates (intelligent undead only).
+        // Unintelligent undead get no save and obey all commands.
+        // Intelligent undead: Friendly attitude, opposed CHA for
+        //   unusual orders, never obey suicidal orders.
+        // Threatening acts by caster/allies break control.
+        // ============================================================
         Register(new SpellData
                 {
                     SpellId = SpellNames.COMMAND_UNDEAD,
                     Name = "Command Undead",
-                    Description = "Undead creature obeys your commands. Will save for intelligent undead. 1 day/level. PHB p.211",
+                    Description = "Necromancy. One undead creature obeys your commands. Nonintelligent undead get no save and obey all orders including suicidal ones. Intelligent undead receive a Will save; if failed, they perceive you as Friendly and won't attack, but refuse suicidal orders and require opposed CHA checks for unusual orders. Threatening acts break control. V, S, M (raw meat and bone splinter). Duration 1 day/level. SR: Yes. PHB p.211",
                     SpellLevel = 2, School = "Necromancy",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.SingleEnemy,
-                    RangeSquares = 5,
+                    RangeCategory = SpellRangeCategory.Close,
                     EffectType = SpellEffectType.Debuff,
-                    AllowsSavingThrow = true,
+                    AllowsSavingThrow = true, // Will negates for intelligent undead; runtime skips save for nonintelligent
                     SavingThrowType = "Will",
-                    BuffDurationRounds = -1,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Days,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = -1, // Special: duration handled by CommandUndeadEffectData
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Undead control not implemented]"
+                    IsPlaceholder = false
                 });
 
         Register(new SpellData

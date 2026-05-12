@@ -330,6 +330,8 @@ public class CharacterController : MonoBehaviour
     public GlitterdustEffectData ActiveGlitterdustEffect { get; private set; }
     public MelfsAcidArrowEffectData ActiveMelfsAcidArrowEffect { get; private set; }
     public BlindnessDeafnessEffectData ActiveBlindnessDeafnessEffect { get; private set; }
+    public CommandUndeadEffectData ActiveCommandUndeadEffect { get; private set; }
+    private readonly System.Collections.Generic.List<CommandUndeadEffectData> _commandedUndeadList = new System.Collections.Generic.List<CommandUndeadEffectData>();
     private EnfeebledConditionData _activeEnfeeblementEffect;
     private TouchOfIdiocyConditionData _activeTouchOfIdiocyEffect;
     public EnfeebledConditionData ActiveEnfeeblementEffect => _activeEnfeeblementEffect;
@@ -1755,6 +1757,106 @@ public class CharacterController : MonoBehaviour
         if (HasCondition(CombatConditionType.Deafened))
             return 20;
         return 0;
+    }
+
+    // ======================== COMMAND UNDEAD METHODS ========================
+
+    /// <summary>
+    /// Returns true if this character is currently under a Command Undead spell effect.
+    /// </summary>
+    public bool IsCommandedUndead => ActiveCommandUndeadEffect != null && ActiveCommandUndeadEffect.IsActive;
+
+    /// <summary>
+    /// Returns the caster who controls this undead via Command Undead, or null.
+    /// </summary>
+    public CharacterController CommandUndeadController => IsCommandedUndead ? ActiveCommandUndeadEffect.Caster : null;
+
+    /// <summary>
+    /// Returns the list of undead this character has under Command Undead control.
+    /// </summary>
+    public System.Collections.Generic.List<CommandUndeadEffectData> CommandedUndeadList => _commandedUndeadList;
+
+    /// <summary>
+    /// Returns true if this character can be targeted by Command Undead (must be undead creature type).
+    /// </summary>
+    public bool CanBeCommandedAsUndead()
+    {
+        if (Stats == null) return false;
+        string creatureType = string.IsNullOrWhiteSpace(Stats.CreatureType)
+            ? string.Empty
+            : Stats.CreatureType.Trim().ToLowerInvariant();
+        return creatureType == "undead";
+    }
+
+    /// <summary>
+    /// Returns true if this undead is intelligent (Int ≥ 1).
+    /// PHB p.211: Intelligent undead get a Will save; nonintelligent do not.
+    /// </summary>
+    public bool IsIntelligentUndead()
+    {
+        if (Stats == null) return false;
+        if (Stats.IsMindless) return false;
+        // INT of NO_SCORE (represented as -999 or similar) means no Intelligence score
+        return Stats.INT >= 1;
+    }
+
+    /// <summary>
+    /// Applies a Command Undead effect to this character (the target undead).
+    /// Called after SR and save checks pass.
+    /// </summary>
+    public void ApplyCommandUndeadEffect(CommandUndeadEffectData effectData)
+    {
+        if (effectData == null) return;
+
+        // Remove any existing Command Undead effect first
+        RemoveCommandUndeadEffect();
+
+        ActiveCommandUndeadEffect = effectData;
+
+        // Register this effect on the caster's controlled list
+        if (effectData.Caster != null)
+        {
+            effectData.Caster._commandedUndeadList.Add(effectData);
+        }
+
+        Debug.Log($"[CommandUndead] {Stats?.CharacterName} is now commanded by {effectData.CasterName} " +
+                  $"(intelligent={effectData.IsIntelligent}, duration={effectData.DurationRemainingRounds} rounds)");
+    }
+
+    /// <summary>
+    /// Removes the active Command Undead effect from this character.
+    /// Also removes the effect from the caster's controlled list.
+    /// </summary>
+    public void RemoveCommandUndeadEffect()
+    {
+        if (ActiveCommandUndeadEffect == null) return;
+
+        var oldEffect = ActiveCommandUndeadEffect;
+        oldEffect.BreakControl("Effect removed");
+
+        // Remove from caster's tracked list
+        if (oldEffect.Caster != null)
+        {
+            oldEffect.Caster._commandedUndeadList.Remove(oldEffect);
+        }
+
+        ActiveCommandUndeadEffect = null;
+
+        Debug.Log($"[CommandUndead] {Stats?.CharacterName}: Command Undead effect removed");
+    }
+
+    /// <summary>
+    /// Breaks Command Undead control due to a threatening act by the caster or their allies.
+    /// PHB p.211: Any threatening act by caster or apparent allies breaks the spell.
+    /// </summary>
+    public void BreakCommandUndeadControl(string reason = "Threatening act")
+    {
+        if (ActiveCommandUndeadEffect == null || !ActiveCommandUndeadEffect.IsActive) return;
+
+        string casterName = ActiveCommandUndeadEffect.CasterName ?? "Unknown";
+        Debug.Log($"[CommandUndead] {Stats?.CharacterName}: Control by {casterName} broken — {reason}");
+
+        RemoveCommandUndeadEffect();
     }
 
     private void RefreshInvisibilityVisual()
@@ -3752,6 +3854,7 @@ public class CharacterController : MonoBehaviour
         if (GameManager.Instance != null)
         {
             GameManager.Instance.BreakCharmOnHostileAction(this, target);
+            GameManager.Instance.BreakCommandUndeadOnHostileAction(this, target);
             GameManager.Instance.BreakFascinationOnHostileAction(this, target, "attack");
             GameManager.Instance.BreakFascinationFromLoudNoise(this, target != null ? target.GridPosition : GridPosition, radiusSquares: 4);
         }

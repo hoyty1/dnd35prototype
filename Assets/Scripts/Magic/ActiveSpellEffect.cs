@@ -152,6 +152,13 @@ public class ActiveSpellEffect
                     return hourRounds * level;
                 return hourRounds;
 
+            case DurationType.Days:
+                // 1 day = 14400 rounds (24h × 60min × 10 rounds/min)
+                int dayRounds = baseValue * 14400;
+                if (spell.DurationScalesWithLevel)
+                    return dayRounds * level;
+                return dayRounds;
+
             case DurationType.Permanent:
                 return -1; // Until dispelled
 
@@ -302,6 +309,9 @@ public enum DurationType
 
     /// <summary>Effect is permanent until dispelled.</summary>
     Permanent,
+
+    /// <summary>Duration measured in days (1 day = 14400 rounds).</summary>
+    Days,
 
     /// <summary>Effect lasts while the caster maintains concentration.</summary>
     Concentration
