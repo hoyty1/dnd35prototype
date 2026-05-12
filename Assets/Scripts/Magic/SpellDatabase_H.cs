@@ -125,23 +125,57 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Door mechanics not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // Hypnotic Pattern — PHB p.242
+        // Illusion (Pattern) [Mind-Affecting]
+        // Level: Bard 2, Sorcerer/Wizard 2
+        // Components: V (Bard only), S, M (a glowing stick of incense
+        //   or a crystal rod filled with phosphorescent material)
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Effect: Colorful lights in a 10-ft.-radius spread
+        // Duration: Concentration + 2 rounds
+        // Saving Throw: Will negates
+        // Spell Resistance: Yes
+        //
+        // A twisting pattern of subtle, shifting colors weaves through
+        // the air, fascinating creatures within it. Roll 2d4 and add
+        // your caster level to determine the total number of Hit Dice
+        // of creatures affected. Creatures with the fewest HD are
+        // affected first; and, among creatures with equal HD, those
+        // who are closest to the spell's point of origin are affected
+        // first. HD that are not sufficient to affect a creature are
+        // wasted. Affected creatures become fascinated by the pattern
+        // of colors. Sightless creatures are not affected.
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.HYPNOTIC_PATTERN,
                     Name = "Hypnotic Pattern",
-                    Description = "Fascinates 2d4+CL HD of creatures. Will negates. Concentration + 2 rounds. PHB p.242",
-                    SpellLevel = 2, School = "Illusion",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.SingleEnemy,
-                    RangeSquares = 22,
+                    Description = "Illusion (Pattern) [Mind-Affecting]. A twisting pattern of subtle, shifting colors weaves through the air, fascinating creatures within it. Roll 2d4 and add your caster level to determine the total number of Hit Dice of creatures affected. Creatures with the fewest HD are affected first. Affected creatures become fascinated. Sightless creatures are not affected. Will negates. SR: Yes. Duration: Concentration + 2 rounds. Components: V (Bard only), S, M (a glowing stick of incense or a crystal rod filled with phosphorescent material). PHB p.242",
+                    SpellLevel = 2,
+                    School = "Illusion",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 2, // 10-ft.-radius spread
+                    AoERangeSquares = 0, // use Medium range profile
+                    AoEFilter = AoETargetFilter.EnemiesOnly,
                     EffectType = SpellEffectType.Debuff,
-                    DurationType = DurationType.Concentration,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    BlockedByProtectionFromAlignment = false,
+                    DurationType = DurationType.Concentration,
+                    DurationValue = 2, // +2 rounds after concentration ends
+                    DurationScalesWithLevel = false,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true,
-                    IsPlaceholder = true,
-                    PlaceholderReason = "[PLACEHOLDER - Fascination mechanics not implemented]"
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
                 });
 
         Register(new SpellData
