@@ -144,7 +144,7 @@ public class GhoulTouchEffectData
         // Check special abilities for poison immunity
         if (creature.Stats.SpecialAbilities != null)
         {
-            for (int i = 0; i < creature.Stats.SpecialAbilities.Length; i++)
+            for (int i = 0; i < creature.Stats.SpecialAbilities.Count; i++)
             {
                 string ability = creature.Stats.SpecialAbilities[i];
                 if (string.IsNullOrWhiteSpace(ability))

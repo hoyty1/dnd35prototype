@@ -308,7 +308,7 @@ public static class GhoulTouchRulesTests
         CharacterController caster = CreateController(casterStats, CharacterTeam.Player, new Vector2Int(0, 0));
 
         CharacterStats poisonImmuneStats = BuildStats("PoisonImmune", "Fighter", 2, 2, "Humanoid");
-        poisonImmuneStats.SpecialAbilities = new[] { "Poison Immunity" };
+        poisonImmuneStats.SpecialAbilities = new System.Collections.Generic.List<string> { "Poison Immunity" };
         CharacterController poisonImmune = CreateController(poisonImmuneStats, CharacterTeam.Enemy, new Vector2Int(1, 0));
 
         CharacterStats normalStats = BuildStats("Normal", "Fighter", 2, 2, "Humanoid");

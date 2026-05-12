@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using DND35.AI;
 using DND35.AI.Profiles;
+using DND35.Magic;
 using UnityEngine;
 using DND35e.Identifiers;
 
@@ -1905,5 +1906,84 @@ public class AIService : MonoBehaviour
             return RangeCalculator.GetMaxRangeSquares(weapon.RangeIncrement, weapon.IsThrown);
 
         return 1;
+    }
+
+    // ==================== AI COUNTERSPELL SUPPORT ====================
+
+    /// <summary>
+    /// Evaluate whether an NPC spellcaster should ready a counterspell this turn.
+    /// AI readies counterspell when:
+    /// - The NPC is a spellcaster with available spell slots
+    /// - There are enemy spellcasters that pose a threat
+    /// - The NPC has Spellcraft ranks (for spell identification)
+    /// - The NPC has Dispel Magic or likely-to-be-cast enemy spells prepared
+    /// </summary>
+    /// <param name="npc">The NPC to evaluate.</param>
+    /// <returns>True if the AI decided to ready a counterspell.</returns>
+    public bool TryAIReadyCounterspell(CharacterController npc)
+    {
+        if (npc == null || npc.Stats == null || npc.Stats.IsDead) return false;
+        if (!npc.Actions.HasStandardAction) return false;
+
+        // Must be a spellcaster
+        var spellComp = npc.GetComponent<SpellcastingComponent>();
+        if (spellComp == null || !spellComp.CanCastSpells) return false;
+
+        // Need at least some Spellcraft or Dispel Magic to be useful
+        int spellcraftBonus = npc.Stats.GetSkillBonus("Spellcraft");
+        bool hasDispelMagic = npc.HasDispelMagicAvailable();
+        if (spellcraftBonus <= 0 && !hasDispelMagic) return false;
+
+        // Find enemy spellcasters that are alive and nearby
+        CharacterController bestTarget = null;
+        int bestThreat = 0;
+
+        foreach (var c in _gameManager.GetAllCharactersForAI())
+        {
+            if (c == null || c.Stats == null || c.Stats.IsDead) continue;
+            if (c.Team == npc.Team) continue; // Skip allies
+
+            // Check if they're a spellcaster
+            if (!c.Stats.IsSpellcaster) continue;
+
+            var enemySpellComp = c.GetComponent<SpellcastingComponent>();
+            if (enemySpellComp == null || !enemySpellComp.HasAnyCastablePreparedSpell()) continue;
+
+            int distance = SquareGridUtils.GetDistance(npc.GridPosition, c.GridPosition);
+            int casterLevel = Mathf.Max(1, npc.Stats.GetCasterLevel());
+            int dispelRange = (100 + 10 * casterLevel) / 5;
+
+            if (distance > dispelRange) continue;
+
+            // Threat based on caster level and proximity
+            int threat = c.Stats.GetCasterLevel() * 10 - distance;
+            if (threat > bestThreat)
+            {
+                bestThreat = threat;
+                bestTarget = c;
+            }
+        }
+
+        if (bestTarget == null) return false;
+
+        // AI decision: ready counterspell if there's a significant threat
+        // Only do this ~30% of the time to keep AI varied
+        if (UnityEngine.Random.Range(0, 100) > 30) return false;
+
+        int currentRound = _gameManager.CurrentRoundNumber;
+        bool readied = npc.ReadyCounterspell(bestTarget, currentRound);
+
+        if (readied)
+        {
+            // AI prefers same-spell counter over Dispel Magic (auto-success vs check)
+            // But will use Dispel Magic as fallback
+            if (npc.ReadiedCounterspell != null)
+                npc.ReadiedCounterspell.PreferDispelMagic = !hasDispelMagic ? false : (spellcraftBonus < 5);
+
+            _gameManager.CombatUI?.ShowCombatLog(
+                $"<color=#FFD700>⚡ {npc.Stats.CharacterName} readies a counterspell against {bestTarget.Stats.CharacterName}!</color>");
+        }
+
+        return readied;
     }
 }

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using DND35.AI.Profiles;
+using DND35.Magic;
 using UnityEngine;
 using UnityEngine.UI;
 using DND35e.Identifiers;
@@ -13266,6 +13267,33 @@ public partial class GameManager : MonoBehaviour
 
             ClearSpellcastResourceSnapshot();
 
+            // ── COUNTERSPELL CHECK ──
+            // D&D 3.5e PHB: Before spell effects resolve, check for readied counterspells.
+            // Only actual spells can be counterspelled (not SLAs, Su, or Ex abilities).
+            if (!isDeliveringHeldCharge)
+            {
+                CounterspellResult counterspellResult = TryResolveCounterspell(caster, _pendingSpell);
+                if (counterspellResult != null && counterspellResult.Success)
+                {
+                    // Spell was successfully countered — it has no effect
+                    Debug.Log($"[Counterspell] {_pendingSpell.Name} was countered! No spell effect.");
+                    UpdateAllStatsUI();
+                    Grid.ClearAllHighlights();
+
+                    _pendingSpell = null;
+                    _pendingSpellFromHeldCharge = false;
+                    _pendingMetamagic = null;
+                    _pendingAnimateRopeItem = null;
+                    _pendingResistEnergyType = null;
+                    _pendingDisguiseSelfRace = null;
+                    ResetPendingGreaseCastMode();
+
+                    StartCoroutine(AfterAttackDelay(caster, 1.0f));
+                    return;
+                }
+                // If counterspell attempted but failed (Dispel Magic miss), spell proceeds normally
+            }
+
             // Resolve the spell with metamagic.
             // D&D 3.5e: willing friendly targets for melee touch delivery should auto-succeed.
             BreakInvisibilityOnHostileSpellCast(caster, _pendingSpell, target, null);
@@ -14152,6 +14180,28 @@ public partial class GameManager : MonoBehaviour
             }
 
             ClearSpellcastResourceSnapshot();
+
+            // ── COUNTERSPELL CHECK (AoE spell cast path) ──
+            {
+                CounterspellResult aoeCounterspellResult = TryResolveCounterspell(caster, _pendingSpell);
+                if (aoeCounterspellResult != null && aoeCounterspellResult.Success)
+                {
+                    Debug.Log($"[Counterspell] AoE spell {_pendingSpell.Name} was countered! No effect.");
+                    UpdateAllStatsUI();
+                    Grid.ClearAllHighlights();
+
+                    _pendingSpell = null;
+                    _pendingSpellFromHeldCharge = false;
+                    _pendingMetamagic = null;
+                    _pendingAnimateRopeItem = null;
+                    _pendingResistEnergyType = null;
+                    _pendingDisguiseSelfRace = null;
+                    ResetPendingGreaseCastMode();
+
+                    StartCoroutine(AfterAttackDelay(caster, 1.0f));
+                    return;
+                }
+            }
 
             BreakInvisibilityOnHostileSpellCast(caster, _pendingSpell, null, targets);
 
@@ -21226,6 +21276,15 @@ public partial class GameManager : MonoBehaviour
 
         BreakInvisibilityOnHostileSpellCast(npc, spell, target, null);
 
+        // ── COUNTERSPELL CHECK (NPC spell cast path) ──
+        CounterspellResult npcCounterspellResult = TryResolveCounterspell(npc, spell);
+        if (npcCounterspellResult != null && npcCounterspellResult.Success)
+        {
+            Debug.Log($"[Counterspell] NPC {npc.Stats.CharacterName}'s {spell.Name} was countered! No effect.");
+            UpdateAllStatsUI();
+            return true; // Spell was cast (slot consumed) but countered
+        }
+
         bool skipFriendlyTouchAttackRoll = spell.IsMeleeTouchSpell() && IsFriendlyTarget(npc, target);
         bool forceTargetToFailSave = ShouldForceTargetToAcceptSave(npc, target, spell);
 
@@ -22025,5 +22084,279 @@ public partial class GameManager : MonoBehaviour
         }
 
         // For other spells, StatusEffectManager.RemoveEffect() handles the stat reversal
+    }
+
+    // ==================== COUNTERSPELL SYSTEM ====================
+
+    /// <summary>
+    /// Check all characters for readied counterspells that should trigger when a given caster
+    /// begins casting a spell. Returns the result of the first successful counterspell attempt,
+    /// or null if no counterspell was attempted or all failed.
+    /// 
+    /// D&D 3.5e PHB Counterspell Flow:
+    /// 1. Caster begins casting → triggers readied counterspell actions
+    /// 2. Counterspeller identifies spell via Spellcraft (DC 15 + spell level)
+    /// 3. Counterspeller uses same spell (auto-success) or Dispel Magic (dispel check)
+    /// 4. Both sides expend spell slots regardless of outcome
+    /// </summary>
+    /// <param name="caster">The character casting the spell.</param>
+    /// <param name="spell">The spell being cast.</param>
+    /// <param name="isSpellLikeAbility">True if this is an SLA (cannot be counterspelled).</param>
+    /// <returns>CounterspellResult if a counterspell was attempted, null otherwise.</returns>
+    public CounterspellResult TryResolveCounterspell(CharacterController caster, SpellData spell, bool isSpellLikeAbility = false)
+    {
+        if (caster == null || spell == null) return null;
+
+        // SLAs, supernatural, and extraordinary abilities cannot be counterspelled (PHB)
+        if (isSpellLikeAbility)
+        {
+            Debug.Log($"[Counterspell] {spell.Name} is a spell-like ability — cannot be counterspelled.");
+            return null;
+        }
+
+        // Find all characters with active counterspells that should trigger
+        List<CharacterController> allChars = GetAllCharacters();
+        CounterspellData triggeringCounterspell = null;
+        CharacterController counterspeller = null;
+
+        foreach (var c in allChars)
+        {
+            if (c == null || c.Stats == null || c.Stats.IsDead) continue;
+            if (!c.HasReadiedCounterspell) continue;
+            if (!c.ReadiedCounterspell.ShouldTriggerFor(caster)) continue;
+
+            // Check range: counterspeller must be able to see the caster
+            // Simplified: check if within a reasonable distance (120 ft / 24 squares for most spells)
+            int distance = SquareGridUtils.GetDistance(c.GridPosition, caster.GridPosition);
+
+            // For range check, we use the maximum of:
+            // - The range of any spell the counterspeller could use to counter
+            // - Medium range (100 ft + 10 ft/level) for Dispel Magic
+            int casterLevel = Mathf.Max(1, c.Stats.GetCasterLevel());
+            int dispelRange = (100 + 10 * casterLevel) / 5; // Convert feet to squares (5ft per square)
+
+            if (distance > dispelRange && distance > 24) // Rough max range check
+            {
+                Debug.Log($"[Counterspell] {c.Stats.CharacterName}: Out of range to counterspell {caster.Stats.CharacterName} (distance {distance * 5}ft).");
+                continue;
+            }
+
+            triggeringCounterspell = c.ReadiedCounterspell;
+            counterspeller = c;
+            break; // Only one counterspell triggers at a time
+        }
+
+        if (triggeringCounterspell == null || counterspeller == null)
+            return null;
+
+        // Mark the readied action as triggered
+        triggeringCounterspell.MarkTriggered();
+
+        string casterName = caster.Stats.CharacterName;
+        string counterName = counterspeller.Stats.CharacterName;
+
+        CombatUI?.ShowCombatLog($"<color=#FFD700>⚡ {counterName}'s readied counterspell triggers against {casterName}!</color>");
+        Debug.Log($"[Counterspell] {counterName}'s readied counterspell triggers! {casterName} is casting {spell.Name}.");
+
+        // Step 1: Try to identify the spell via Spellcraft (free action)
+        bool spellIdentified = counterspeller.RollSpellcraftIdentification(
+            spell.SpellLevel, out int scRoll, out int scTotal, out int scDC);
+
+        CounterspellResult result = new CounterspellResult
+        {
+            Counterspeller = counterspeller,
+            OriginalCaster = caster,
+            EnemySpell = spell,
+            SpellIdentified = spellIdentified,
+            SpellcraftRoll = scTotal,
+            SpellcraftDC = scDC
+        };
+
+        if (spellIdentified)
+        {
+            CombatUI?.ShowCombatLog($"🔍 {counterName} identifies {spell.Name}! (Spellcraft {scTotal} vs DC {scDC})");
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog($"❌ {counterName} fails to identify the spell. (Spellcraft {scTotal} vs DC {scDC})");
+        }
+
+        // Step 2: Try same-spell counter (requires identification)
+        if (spellIdentified)
+        {
+            // Check for designated counter pairs first (Haste/Slow, Bless/Bane, etc.)
+            string designatedCounter = DesignatedCounterPairs.GetDesignatedCounter(spell.SpellId);
+            if (designatedCounter != null && counterspeller.HasSpellAvailableForCounter(designatedCounter))
+            {
+                return ResolveDesignatedCounterspell(counterspeller, caster, spell, designatedCounter, result);
+            }
+
+            // Check for same spell
+            if (counterspeller.HasSpellAvailableForCounter(spell.SpellId))
+            {
+                return ResolveSameSpellCounterspell(counterspeller, caster, spell, result);
+            }
+        }
+
+        // Step 3: Fall back to Dispel Magic (doesn't require identification)
+        if (counterspeller.HasDispelMagicAvailable())
+        {
+            return ResolveDispelMagicCounterspell(counterspeller, caster, spell, result);
+        }
+
+        // No counter method available
+        result.Success = false;
+        result.Method = "None";
+        result.LogMessage = $"⚠ {counterName} cannot counter {spell.Name} — no suitable spell available.";
+        CombatUI?.ShowCombatLog(result.LogMessage);
+        Debug.Log($"[Counterspell] {counterName}: No counter method available for {spell.Name}.");
+
+        // Clear the readied counterspell since it was triggered but couldn't be used
+        counterspeller.ClearReadiedCounterspell();
+
+        return result;
+    }
+
+    /// <summary>
+    /// Resolve a same-spell counterspell attempt.
+    /// PHB: Automatic success, no check needed. Both spells negate each other.
+    /// </summary>
+    private CounterspellResult ResolveSameSpellCounterspell(
+        CharacterController counterspeller, CharacterController caster,
+        SpellData enemySpell, CounterspellResult result)
+    {
+        string counterName = counterspeller.Stats.CharacterName;
+        string casterName = caster.Stats.CharacterName;
+
+        // Consume counterspeller's spell slot
+        bool consumed = counterspeller.ConsumeSpellSlotForCounter(enemySpell.SpellId);
+
+        result.Success = true;
+        result.Method = "SameSpell";
+        result.CounterSpellUsed = enemySpell;
+        result.LogMessage = $"<color=#00FF00>✨ {counterName} counters {casterName}'s {enemySpell.Name} with their own {enemySpell.Name}! Both spells are negated.</color>";
+
+        CombatUI?.ShowCombatLog(result.LogMessage);
+        Debug.Log($"[Counterspell] SAME SPELL COUNTER: {counterName} uses {enemySpell.Name} to counter {casterName}'s {enemySpell.Name}. Automatic success!");
+
+        counterspeller.ClearReadiedCounterspell();
+        return result;
+    }
+
+    /// <summary>
+    /// Resolve a designated counter pair counterspell (e.g., Haste vs Slow).
+    /// PHB: Works like same-spell counter — automatic negation.
+    /// </summary>
+    private CounterspellResult ResolveDesignatedCounterspell(
+        CharacterController counterspeller, CharacterController caster,
+        SpellData enemySpell, string counterSpellId, CounterspellResult result)
+    {
+        string counterName = counterspeller.Stats.CharacterName;
+        string casterName = caster.Stats.CharacterName;
+
+        SpellData counterSpell = SpellDatabase.GetSpell(counterSpellId);
+        string counterSpellName = counterSpell != null ? counterSpell.Name : counterSpellId;
+
+        // Consume counterspeller's spell slot
+        bool consumed = counterspeller.ConsumeSpellSlotForCounter(counterSpellId);
+
+        result.Success = true;
+        result.Method = "DesignatedCounter";
+        result.CounterSpellUsed = counterSpell;
+        result.LogMessage = $"<color=#00FF00>✨ {counterName} counters {casterName}'s {enemySpell.Name} with {counterSpellName}! Both spells are negated.</color>";
+
+        CombatUI?.ShowCombatLog(result.LogMessage);
+        Debug.Log($"[Counterspell] DESIGNATED COUNTER: {counterName} uses {counterSpellName} to counter {casterName}'s {enemySpell.Name}. Automatic success!");
+
+        counterspeller.ClearReadiedCounterspell();
+        return result;
+    }
+
+    /// <summary>
+    /// Resolve a Dispel Magic counterspell attempt.
+    /// PHB: Requires a dispel check (1d20 + CL, max +10) vs DC (11 + enemy CL).
+    /// Not automatic — can fail.
+    /// </summary>
+    private CounterspellResult ResolveDispelMagicCounterspell(
+        CharacterController counterspeller, CharacterController caster,
+        SpellData enemySpell, CounterspellResult result)
+    {
+        string counterName = counterspeller.Stats.CharacterName;
+        string casterName = caster.Stats.CharacterName;
+
+        int counterCL = Mathf.Max(1, counterspeller.Stats.GetCasterLevel());
+        int enemyCL = Mathf.Max(1, caster.Stats.GetCasterLevel());
+
+        // Consume Dispel Magic spell slot regardless of success/failure
+        bool consumed = counterspeller.ConsumeSpellSlotForCounter(SpellNames.DISPEL_MAGIC);
+
+        // Dispel check: 1d20 + CL (max +10 for Dispel Magic) vs DC 11 + enemy CL
+        int clCapped = Mathf.Min(counterCL, 10);
+        int d20Roll = UnityEngine.Random.Range(1, 21);
+        int dispelTotal = d20Roll + clCapped;
+        int dispelDC = 11 + enemyCL;
+
+        result.DispelCheckTotal = dispelTotal;
+        result.DispelCheckDC = dispelDC;
+
+        SpellData dispelSpell = SpellDatabase.GetSpell(SpellNames.DISPEL_MAGIC);
+        result.CounterSpellUsed = dispelSpell;
+        result.Method = "DispelMagic";
+
+        bool success = dispelTotal >= dispelDC;
+        result.Success = success;
+
+        if (success)
+        {
+            result.LogMessage = $"<color=#00FF00>✨ {counterName} counters {casterName}'s {enemySpell.Name} with Dispel Magic! " +
+                               $"(d20({d20Roll}) + CL {clCapped} = {dispelTotal} vs DC {dispelDC})</color>";
+            Debug.Log($"[Counterspell] DISPEL COUNTER SUCCESS: {counterName} dispel check {dispelTotal} >= DC {dispelDC}. {enemySpell.Name} countered!");
+        }
+        else
+        {
+            result.LogMessage = $"<color=#FF6666>❌ {counterName} fails to counter {casterName}'s {enemySpell.Name} with Dispel Magic. " +
+                               $"(d20({d20Roll}) + CL {clCapped} = {dispelTotal} vs DC {dispelDC})</color>";
+            Debug.Log($"[Counterspell] DISPEL COUNTER FAILED: {counterName} dispel check {dispelTotal} < DC {dispelDC}. {enemySpell.Name} resolves normally.");
+        }
+
+        CombatUI?.ShowCombatLog(result.LogMessage);
+        counterspeller.ClearReadiedCounterspell();
+        return result;
+    }
+
+    /// <summary>
+    /// Expire all readied counterspells for a character (called at start of their turn).
+    /// PHB: "Readied action expires at start of your next turn if not used."
+    /// </summary>
+    public void ExpireReadiedCounterspell(CharacterController character)
+    {
+        if (character != null && character.HasReadiedCounterspell)
+        {
+            Debug.Log($"[Counterspell] {character.Stats.CharacterName}: Readied counterspell expired (start of turn).");
+            CombatUI?.ShowCombatLog($"⏰ {character.Stats.CharacterName}'s readied counterspell expires.");
+            character.ClearReadiedCounterspell();
+        }
+    }
+
+    /// <summary>
+    /// Get the current combat round number. Used for counterspell expiration tracking.
+    /// Alias for CurrentRound from the turn service.
+    /// </summary>
+    public int CurrentRoundNumber => CurrentRound;
+
+    /// <summary>
+    /// Static helper: Perform a counterspell dispel check (for testing).
+    /// Same formula as PerformDispelCheck but specifically for counterspell context.
+    /// 1d20 + CL (max +10 for Dispel, +20 for Greater Dispel) vs DC 11 + enemy CL.
+    /// </summary>
+    public static bool PerformCounterspellDispelCheck(int counterCL, int enemyCL, int maxCLBonus = 10)
+    {
+        int clCapped = Mathf.Min(counterCL, maxCLBonus);
+        int roll = UnityEngine.Random.Range(1, 21);
+        int total = roll + clCapped;
+        int dc = 11 + enemyCL;
+        bool success = total >= dc;
+        Debug.Log($"[Counterspell] Dispel check: d20({roll}) + CL({clCapped}) = {total} vs DC {dc} (11 + {enemyCL}) → {(success ? "SUCCESS" : "FAIL")}");
+        return success;
     }
 }

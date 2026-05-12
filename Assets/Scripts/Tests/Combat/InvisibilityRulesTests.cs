@@ -235,12 +235,12 @@ public static class InvisibilityRulesTests
             defender = CreateController("Defender", "Fighter", 5);
 
             // Verify no bonus when visible
-            int visibleBonus = attacker.GetInvisibleAttackerBonus();
+            int visibleBonus = attacker.GetInvisibleAttackerBonus(defender);
             Assert(visibleBonus == 0, "No invisible attacker bonus when visible", $"got={visibleBonus}");
 
             // Apply invisibility and verify +2 bonus
             ApplyInvisibility(attacker, attacker, 5);
-            int invisBonus = attacker.GetInvisibleAttackerBonus();
+            int invisBonus = attacker.GetInvisibleAttackerBonus(defender);
             Assert(invisBonus == 2, "Invisible attacker gets +2 attack bonus (PHB p.141)", $"got={invisBonus}");
         }
         finally
@@ -264,12 +264,12 @@ public static class InvisibilityRulesTests
             defender = CreateController("DexDefender", "Fighter", 5);
 
             // When visible, should NOT deny Dex to AC
-            bool deniesWhenVisible = attacker.ShouldDenyTargetDexToAC();
+            bool deniesWhenVisible = attacker.ShouldDenyTargetDexToAC(defender);
             Assert(!deniesWhenVisible, "Visible attacker does not deny target Dex to AC");
 
             // When invisible, SHOULD deny Dex to AC
             ApplyInvisibility(attacker, attacker, 5);
-            bool deniesWhenInvis = attacker.ShouldDenyTargetDexToAC();
+            bool deniesWhenInvis = attacker.ShouldDenyTargetDexToAC(defender);
             Assert(deniesWhenInvis, "Invisible attacker denies target Dex to AC (PHB p.141)");
         }
         finally
@@ -287,12 +287,12 @@ public static class InvisibilityRulesTests
     private static void TestBreaksOnAttackFlag()
     {
         // Test standard invisibility effect data
-        var stdEffect = InvisibilityEffectData.CreateStandardInvisibility(10, null, "TestCaster");
+        var stdEffect = InvisibilityEffectData.CreateStandardInvisibility(10, null);
         Assert(stdEffect.BreaksOnAttack, "Standard invisibility BreaksOnAttack is true");
         Assert(stdEffect.IsStandardInvisibility, "Standard invisibility IsStandardInvisibility is true");
 
         // Test greater invisibility effect data
-        var greaterEffect = InvisibilityEffectData.CreateGreaterInvisibility(10, null, "TestCaster");
+        var greaterEffect = InvisibilityEffectData.CreateGreaterInvisibility(10, null);
         Assert(!greaterEffect.BreaksOnAttack, "Greater invisibility BreaksOnAttack is false");
         Assert(!greaterEffect.IsStandardInvisibility, "Greater invisibility IsStandardInvisibility is false");
 
@@ -307,7 +307,7 @@ public static class InvisibilityRulesTests
     private static void TestFactoryMethods()
     {
         // Standard Invisibility (spell-based)
-        var std = InvisibilityEffectData.CreateStandardInvisibility(10, null, "Gandalf");
+        var std = InvisibilityEffectData.CreateStandardInvisibility(10, null);
         Assert(std.SourceType == InvisibilitySourceType.Spell, "Standard factory: SourceType is Spell");
         Assert(std.SourceSpellId == SpellNames.INVISIBILITY, "Standard factory: SourceSpellId is 'invisibility'");
         Assert(std.IsDismissible, "Standard factory: IsDismissible is true");
@@ -315,21 +315,21 @@ public static class InvisibilityRulesTests
         Assert(std.HideBonusMoving == 20, "Standard factory: +20 Hide moving");
 
         // Greater Invisibility (spell-based)
-        var greater = InvisibilityEffectData.CreateGreaterInvisibility(10, null, "Gandalf");
+        var greater = InvisibilityEffectData.CreateGreaterInvisibility(10, null);
         Assert(greater.SourceType == InvisibilitySourceType.Spell, "Greater factory: SourceType is Spell");
         Assert(greater.SourceSpellId == "greater_invisibility", "Greater factory: SourceSpellId is 'greater_invisibility'");
         Assert(!greater.BreaksOnAttack, "Greater factory: BreaksOnAttack is false");
         Assert(greater.IsDismissible, "Greater factory: IsDismissible is true");
 
         // Magic Item source
-        var ring = InvisibilityEffectData.CreateFromMagicItem(100, "Ring of Invisibility", breaksOnAttack: true);
+        var ring = InvisibilityEffectData.CreateFromMagicItem("Ring of Invisibility", breaksOnAttack: true, durationRounds: 100);
         Assert(ring.SourceType == InvisibilitySourceType.MagicItem, "MagicItem factory: SourceType is MagicItem");
         Assert(ring.SourceName == "Ring of Invisibility", "MagicItem factory: SourceName is correct");
         Assert(ring.BreaksOnAttack, "MagicItem factory: BreaksOnAttack respected");
 
         // Supernatural ability source
-        var ability = InvisibilityEffectData.CreateFromAbility(5, "Pixie Invisibility",
-            InvisibilitySourceType.Supernatural, breaksOnAttack: false);
+        var ability = InvisibilityEffectData.CreateFromAbility("Pixie Invisibility",
+            InvisibilitySourceType.Supernatural, breaksOnAttack: false, durationRounds: 5);
         Assert(ability.SourceType == InvisibilitySourceType.Supernatural, "Ability factory: SourceType is Supernatural");
         Assert(!ability.BreaksOnAttack, "Ability factory: BreaksOnAttack=false respected");
         Assert(ability.SourceName == "Pixie Invisibility", "Ability factory: SourceName correct");
@@ -341,20 +341,20 @@ public static class InvisibilityRulesTests
     private static void TestSourceTracking()
     {
         // Spell-based source tracking
-        var spellEffect = InvisibilityEffectData.CreateStandardInvisibility(10, null, "Wizard");
+        var spellEffect = InvisibilityEffectData.CreateStandardInvisibility(10, null);
         Assert(spellEffect.IsSpellBased, "Spell effect IsSpellBased is true");
         Assert(spellEffect.MatchesSpellId(SpellNames.INVISIBILITY), "MatchesSpellId matches 'invisibility'");
         Assert(!spellEffect.MatchesSpellId("greater_invisibility"), "MatchesSpellId does not match 'greater_invisibility'");
         Assert(spellEffect.GetAttackBonus() == 2, "GetAttackBonus returns +2");
 
         // Magic item source tracking
-        var itemEffect = InvisibilityEffectData.CreateFromMagicItem(100, "Cloak of Invisibility", breaksOnAttack: false);
+        var itemEffect = InvisibilityEffectData.CreateFromMagicItem("Cloak of Invisibility", breaksOnAttack: false, durationRounds: 100);
         Assert(!itemEffect.IsSpellBased, "Magic item IsSpellBased is false");
         Assert(itemEffect.SourceType == InvisibilitySourceType.MagicItem, "Magic item SourceType correct");
         Assert(itemEffect.GetAttackBonus() == 2, "Magic item invisibility still gives +2 attack bonus");
 
         // Hide bonus based on movement state
-        var effect = InvisibilityEffectData.CreateStandardInvisibility(10, null, "Test");
+        var effect = InvisibilityEffectData.CreateStandardInvisibility(10, null);
         effect.IsMoving = false;
         Assert(effect.GetCurrentHideBonus() == 40, "GetCurrentHideBonus stationary = 40");
         effect.IsMoving = true;

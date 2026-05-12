@@ -5,6 +5,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using DND35.AI;
+using DND35.Magic;
 using Random = UnityEngine.Random;  // Resolve ambiguity with System.Random
 using DND35e.Identifiers;
 
@@ -9033,6 +9034,9 @@ public class CharacterController : MonoBehaviour
         _turnsStartedCount++;
         PruneExpiredFeintWindows();
 
+        // D&D 3.5e PHB: Readied actions expire at the start of your next turn
+        ClearReadiedCounterspell();
+
         HasMovedThisTurn = false;
         UpdateInvisibilityMovementState(false);
         HasTakenFiveFootStep = false;
@@ -10784,5 +10788,152 @@ public class CharacterController : MonoBehaviour
                       $"AC now {Stats.ArmorClass} (rage -2 penalty applied)");
         }
         return success;
+    }
+
+    // ==================== COUNTERSPELL SYSTEM ====================
+
+    /// <summary>
+    /// Active readied counterspell data. Null when no counterspell is readied.
+    /// D&D 3.5e PHB: Counterspelling requires a readied action (standard action on your turn).
+    /// </summary>
+    public CounterspellData ReadiedCounterspell { get; private set; }
+
+    /// <summary>
+    /// Whether this character currently has an active, untriggered counterspell readied.
+    /// </summary>
+    public bool HasReadiedCounterspell => ReadiedCounterspell != null && ReadiedCounterspell.IsActive;
+
+    /// <summary>
+    /// Ready a counterspell action targeting a specific enemy caster.
+    /// Consumes the character's standard action for this turn.
+    /// PHB: "On your turn, you declare a Ready action (standard action consumed)."
+    /// </summary>
+    /// <param name="watchedCaster">Specific enemy caster to watch. Null to watch any enemy.</param>
+    /// <param name="currentRound">Current combat round number.</param>
+    /// <returns>True if counterspell was successfully readied.</returns>
+    public bool ReadyCounterspell(CharacterController watchedCaster, int currentRound)
+    {
+        if (!Actions.HasStandardAction)
+        {
+            Debug.Log($"[Counterspell] {Stats.CharacterName}: Cannot ready counterspell — no standard action available.");
+            return false;
+        }
+
+        // Must be a spellcaster with available spell slots
+        var spellComp = GetComponent<SpellcastingComponent>();
+        if (spellComp == null || !spellComp.CanCastSpells)
+        {
+            Debug.Log($"[Counterspell] {Stats.CharacterName}: Cannot ready counterspell — not a spellcaster.");
+            return false;
+        }
+
+        if (!spellComp.HasAnyCastablePreparedSpell())
+        {
+            Debug.Log($"[Counterspell] {Stats.CharacterName}: Cannot ready counterspell — no spell slots available.");
+            return false;
+        }
+
+        // Consume standard action
+        CommitStandardAction();
+
+        // Create counterspell data
+        ReadiedCounterspell = new CounterspellData
+        {
+            Counterspeller = this,
+            WatchedCaster = watchedCaster,
+            WatchAnyEnemy = (watchedCaster == null),
+            SpellcraftBonus = Stats.GetSkillBonus("Spellcraft"),
+            PreferDispelMagic = false,
+            HasTriggered = false,
+            ReadiedOnRound = currentRound
+        };
+
+        string targetDesc = watchedCaster != null
+            ? watchedCaster.Stats.CharacterName
+            : "any enemy";
+        Debug.Log($"[Counterspell] {Stats.CharacterName}: Readied counterspell against {targetDesc} (Spellcraft +{ReadiedCounterspell.SpellcraftBonus})");
+
+        return true;
+    }
+
+    /// <summary>
+    /// Clear the readied counterspell (e.g., at start of next turn, or after triggering).
+    /// </summary>
+    public void ClearReadiedCounterspell()
+    {
+        if (ReadiedCounterspell != null)
+        {
+            Debug.Log($"[Counterspell] {Stats.CharacterName}: Readied counterspell cleared.");
+            ReadiedCounterspell.Clear();
+            ReadiedCounterspell = null;
+        }
+    }
+
+    /// <summary>
+    /// Roll a Spellcraft check to identify a spell being cast.
+    /// DC = 15 + spell level (PHB).
+    /// </summary>
+    /// <param name="spellLevel">Level of the spell being cast.</param>
+    /// <param name="roll">The d20 roll result.</param>
+    /// <param name="total">Total check result (d20 + Spellcraft bonus).</param>
+    /// <param name="dc">The DC to beat (15 + spell level).</param>
+    /// <returns>True if the spell was successfully identified.</returns>
+    public bool RollSpellcraftIdentification(int spellLevel, out int roll, out int total, out int dc)
+    {
+        dc = 15 + spellLevel;
+        int bonus = Stats.GetSkillBonus("Spellcraft");
+        roll = Random.Range(1, 21);
+        total = roll + bonus;
+        bool success = total >= dc;
+        Debug.Log($"[Counterspell] {Stats.CharacterName}: Spellcraft check d20({roll}) + {bonus} = {total} vs DC {dc} → {(success ? "IDENTIFIED" : "FAILED")}");
+        return success;
+    }
+
+    /// <summary>
+    /// Check if this character has a specific spell prepared and available to cast.
+    /// Used for same-spell counterspell checking.
+    /// Metamagic is ignored for matching (PHB).
+    /// </summary>
+    public bool HasSpellAvailableForCounter(string spellId)
+    {
+        if (string.IsNullOrEmpty(spellId)) return false;
+        var spellComp = GetComponent<SpellcastingComponent>();
+        if (spellComp == null) return false;
+
+        SpellData spell = SpellDatabase.GetSpell(spellId);
+        if (spell == null) return false;
+
+        return spellComp.CanCast(spell);
+    }
+
+    /// <summary>
+    /// Check if this character has Dispel Magic available to cast.
+    /// </summary>
+    public bool HasDispelMagicAvailable()
+    {
+        return HasSpellAvailableForCounter(SpellNames.DISPEL_MAGIC);
+    }
+
+    /// <summary>
+    /// Consume a spell slot for the counterspell (same spell or Dispel Magic).
+    /// Both caster and counterspeller lose their spell slots per PHB.
+    /// </summary>
+    /// <param name="spellId">The spell ID to consume.</param>
+    /// <returns>True if the spell slot was successfully consumed.</returns>
+    public bool ConsumeSpellSlotForCounter(string spellId)
+    {
+        if (string.IsNullOrEmpty(spellId)) return false;
+        var spellComp = GetComponent<SpellcastingComponent>();
+        if (spellComp == null) return false;
+
+        SpellData spell = SpellDatabase.GetSpell(spellId);
+        if (spell == null) return false;
+
+        bool consumed = spellComp.CastSpellFromSlot(spell);
+        if (consumed)
+            Debug.Log($"[Counterspell] {Stats.CharacterName}: Consumed spell slot for {spell.Name}.");
+        else
+            Debug.LogWarning($"[Counterspell] {Stats.CharacterName}: Failed to consume spell slot for {spell.Name}!");
+        return consumed;
     }
 }

@@ -76,7 +76,7 @@ public static class SpectralHandRulesTests
         var cc = go.AddComponent<CharacterController>();
         var stats = MakeWizardStats(name, level, intel);
         stats.CurrentHP = 20; // Give enough HP for testing
-        cc.Init(stats);
+        cc.Init(stats, Vector2Int.zero, null, null);
         return cc;
     }
 
