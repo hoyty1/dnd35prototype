@@ -16348,6 +16348,66 @@ public partial class GameManager : MonoBehaviour
             return effect;
         }
 
+        // ===== ATTRIBUTE ENHANCEMENT SPELLS — D&D 3.5e PHB =====
+        // Bear's Endurance (CON), Bull's Strength (STR), Cat's Grace (DEX),
+        // Eagle's Splendor (CHA), Fox's Cunning (INT), Owl's Wisdom (WIS)
+        // All grant +4 enhancement bonus to one ability score, 1 min/level, Touch.
+        // Enhancement bonuses don't stack (same type to same stat). Different stats coexist.
+        // Bear's Endurance: +2 HP per HD (real HP, not temp). Loss can kill.
+        if (spell != null && AttributeEnhancementEffectData.IsAttributeEnhancementSpell(spell.SpellId))
+        {
+            if (target == null || target.Stats == null)
+                return null;
+
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int targetHD = target.Stats.HitDice > 0 ? target.Stats.HitDice : target.Stats.Level;
+
+            // Create the attribute enhancement effect data
+            AttributeEnhancementEffectData enhancementEffect = AttributeEnhancementEffectData.Create(
+                spell.SpellId, casterLevel, targetHD, caster);
+
+            // Track via StatusEffectManager for duration and dispel (handles stat bonus apply/reverse)
+            StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+            if (targetStatusMgr == null)
+                targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
+            targetStatusMgr.Init(target.Stats);
+
+            ActiveSpellEffect effect = targetStatusMgr.AddEffect(spell,
+                caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown", casterLevel);
+
+            if (effect != null)
+            {
+                // Apply the attribute enhancement effect (handles HP for Bear's Endurance, non-stacking)
+                target.ApplyAttributeEnhancement(enhancementEffect);
+
+                // Track in SpellcastingComponent for backward compat
+                SpellcastingComponent targetSpellComp = target.GetComponent<SpellcastingComponent>();
+                if (targetSpellComp != null)
+                    targetSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                // Build log message
+                string abilityName = enhancementEffect.AbilityName;
+                string spellName = enhancementEffect.SourceName;
+                string hpNote = enhancementEffect.IsBearsEndurance && enhancementEffect.GrantedBonusHP > 0
+                    ? $", +{enhancementEffect.GrantedBonusHP} HP ({targetHD} HD × 2)"
+                    : "";
+                string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+
+                CombatUI?.ShowCombatLog($"<color=#88FF88>💪 {casterName} casts {spellName} on {target.Stats.CharacterName} — " +
+                    $"+{enhancementEffect.BonusAmount} enhancement bonus to {abilityName}{hpNote} " +
+                    $"[{effect.GetDurationDisplayString()}]</color>");
+                Debug.Log($"[GameManager] {spellName} applied to {target.Stats.CharacterName}: " +
+                    $"+{enhancementEffect.BonusAmount} {abilityName}, CL {casterLevel}{hpNote}");
+            }
+            else
+            {
+                Debug.Log($"[GameManager] {spell.Name} NOT applied — StatusEffectManager stacking rules prevented it");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
         // ===== FALSE LIFE — D&D 3.5e PHB p.229 =====
         // Personal spell: 1d10 + min(CL, 10) temp HP, 1 hour/level, no save, no SR.
         // Temp HP are lost before regular HP and cannot be healed.

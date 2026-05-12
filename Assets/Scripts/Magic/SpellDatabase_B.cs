@@ -52,9 +52,9 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.BEARS_ENDURANCE,
                     Name = "Bear's Endurance",
-                    Description = "Subject gains +4 enhancement bonus to CON for 1 min/level. PHB p.203",
+                    Description = "Subject gains +4 enhancement bonus to CON for 1 min/level. Grants +2 HP per Hit Die (real HP, not temporary). When spell ends, HP removed — can cause death. PHB p.203",
                     SpellLevel = 2, School = "Transmutation",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
@@ -67,6 +67,11 @@ public static partial class SpellDatabase
                     DurationType = DurationType.Minutes,
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -203,9 +208,9 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.BULLS_STRENGTH,
                     Name = "Bull's Strength",
-                    Description = "Subject gains +4 enhancement bonus to STR for 1 min/level. PHB p.207",
+                    Description = "Subject gains +4 enhancement bonus to STR for 1 min/level. Affects melee attack, damage, and Str-based skills. PHB p.207",
                     SpellLevel = 2, School = "Transmutation",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
@@ -218,6 +223,11 @@ public static partial class SpellDatabase
                     DurationType = DurationType.Minutes,
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -247,9 +257,15 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
-        // Aliases
+        // Aliases — Bear's Endurance: Cleric 2, Druid 2, Ranger 2
         RegisterClassSpellAlias("bears_endurance_clr", SpellNames.BEARS_ENDURANCE, "Cleric", 2);
+        RegisterClassSpellAlias("bears_endurance_drd", SpellNames.BEARS_ENDURANCE, "Druid", 2);
+        RegisterClassSpellAlias("bears_endurance_rgr", SpellNames.BEARS_ENDURANCE, "Ranger", 2);
+
+        // Aliases — Bull's Strength: Cleric 2, Druid 2, Paladin 2
         RegisterClassSpellAlias("bulls_strength_clr", SpellNames.BULLS_STRENGTH, "Cleric", 2);
+        RegisterClassSpellAlias("bulls_strength_drd", SpellNames.BULLS_STRENGTH, "Druid", 2);
+        RegisterClassSpellAlias("bulls_strength_pal", SpellNames.BULLS_STRENGTH, "Paladin", 2);
 
     }
 }

@@ -72,9 +72,9 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.OWLS_WISDOM,
                     Name = "Owl's Wisdom",
-                    Description = "Subject gains +4 enhancement bonus to WIS for 1 min/level. PHB p.259",
+                    Description = "Subject gains +4 enhancement bonus to WIS for 1 min/level. Affects Will saves, Wis-based skills, and Cleric/Druid/Ranger spell DCs. Does NOT grant bonus spells. PHB p.259",
                     SpellLevel = 2, School = "Transmutation",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
@@ -87,13 +87,23 @@ public static partial class SpellDatabase
                     DurationType = DurationType.Minutes,
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
 
         // Aliases
         RegisterClassSpellAlias("obscuring_mist_clr", SpellNames.OBSCURING_MIST, "Cleric", 1);
+
+        // Aliases — Owl's Wisdom: Cleric 2, Druid 2, Paladin 2, Ranger 2
         RegisterClassSpellAlias("owls_wisdom_clr", SpellNames.OWLS_WISDOM, "Cleric", 2);
+        RegisterClassSpellAlias("owls_wisdom_drd", SpellNames.OWLS_WISDOM, "Druid", 2);
+        RegisterClassSpellAlias("owls_wisdom_pal", SpellNames.OWLS_WISDOM, "Paladin", 2);
+        RegisterClassSpellAlias("owls_wisdom_rgr", SpellNames.OWLS_WISDOM, "Ranger", 2);
 
     }
 }

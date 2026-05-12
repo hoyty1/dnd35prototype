@@ -55,9 +55,9 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.CATS_GRACE,
                     Name = "Cat's Grace",
-                    Description = "Subject gains +4 enhancement bonus to DEX for 1 min/level. PHB p.208",
+                    Description = "Subject gains +4 enhancement bonus to DEX for 1 min/level. Affects AC, Reflex saves, initiative, and Dex-based skills. PHB p.208",
                     SpellLevel = 2, School = "Transmutation",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
@@ -70,6 +70,11 @@ public static partial class SpellDatabase
                     DurationType = DurationType.Minutes,
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -353,6 +358,10 @@ public static partial class SpellDatabase
         // Aliases
         RegisterClassSpellAlias("cause_fear_clr", SpellNames.CAUSE_FEAR, "Cleric", 1);
         RegisterClassSpellAlias("comprehend_languages_clr", SpellNames.COMPREHEND_LANGUAGES, "Cleric", 1);
+
+        // Aliases — Cat's Grace: Druid 2, Ranger 2 (NOT Cleric)
+        RegisterClassSpellAlias("cats_grace_drd", SpellNames.CATS_GRACE, "Druid", 2);
+        RegisterClassSpellAlias("cats_grace_rgr", SpellNames.CATS_GRACE, "Ranger", 2);
 
     }
 }

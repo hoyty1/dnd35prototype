@@ -219,9 +219,9 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.FOXS_CUNNING,
                     Name = "Fox's Cunning",
-                    Description = "Subject gains +4 enhancement bonus to INT for 1 min/level. PHB p.233",
+                    Description = "Subject gains +4 enhancement bonus to INT for 1 min/level. Affects Int-based skills and Wizard spell DCs. Does NOT grant bonus skill points or spells. PHB p.233",
                     SpellLevel = 2, School = "Transmutation",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
@@ -234,6 +234,11 @@ public static partial class SpellDatabase
                     DurationType = DurationType.Minutes,
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

@@ -335,6 +335,11 @@ public class CharacterController : MonoBehaviour
     public GhoulTouchEffectData ActiveGhoulTouchEffect { get; private set; }
     public ScareEffectData ActiveScareEffect { get; private set; }
     public SpectralHandEffectData ActiveSpectralHandEffect { get; private set; }
+
+    /// <summary>Active attribute enhancement effects (one per ability score). Keyed by AbilityType.</summary>
+    private readonly System.Collections.Generic.Dictionary<AbilityType, AttributeEnhancementEffectData> _activeAttributeEnhancements
+        = new System.Collections.Generic.Dictionary<AbilityType, AttributeEnhancementEffectData>();
+
     private readonly System.Collections.Generic.List<CommandUndeadEffectData> _commandedUndeadList = new System.Collections.Generic.List<CommandUndeadEffectData>();
     private EnfeebledConditionData _activeEnfeeblementEffect;
     private TouchOfIdiocyConditionData _activeTouchOfIdiocyEffect;
@@ -1921,6 +1926,149 @@ public class CharacterController : MonoBehaviour
         ActiveFalseLifeEffect = null;
 
         Debug.Log($"[FalseLife] {Stats?.CharacterName}: False Life effect removed");
+    }
+
+    // ===================== ATTRIBUTE ENHANCEMENT EFFECTS =====================
+
+    /// <summary>Check if this character has an active attribute enhancement on a specific ability.</summary>
+    public bool HasActiveAttributeEnhancement(AbilityType ability)
+    {
+        return _activeAttributeEnhancements.ContainsKey(ability) && _activeAttributeEnhancements[ability].IsActive;
+    }
+
+    /// <summary>Get the active attribute enhancement effect for a specific ability, or null.</summary>
+    public AttributeEnhancementEffectData GetActiveAttributeEnhancement(AbilityType ability)
+    {
+        _activeAttributeEnhancements.TryGetValue(ability, out var data);
+        return data != null && data.IsActive ? data : null;
+    }
+
+    /// <summary>Get all active attribute enhancement effects.</summary>
+    public System.Collections.Generic.List<AttributeEnhancementEffectData> GetAllActiveAttributeEnhancements()
+    {
+        var list = new System.Collections.Generic.List<AttributeEnhancementEffectData>();
+        foreach (var kvp in _activeAttributeEnhancements)
+        {
+            if (kvp.Value != null && kvp.Value.IsActive)
+                list.Add(kvp.Value);
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Apply an attribute enhancement effect to this character.
+    /// Handles D&D 3.5e non-stacking: if an enhancement bonus to the same ability
+    /// already exists, only the highest applies (duration refreshes if same spell).
+    /// For Bear's Endurance: grants bonus HP (2 per HD) added to current and max HP.
+    /// </summary>
+    public void ApplyAttributeEnhancement(AttributeEnhancementEffectData effectData)
+    {
+        if (effectData == null || Stats == null) return;
+
+        AbilityType ability = effectData.EnhancedAbility;
+
+        // Check for existing enhancement on the same ability
+        if (_activeAttributeEnhancements.TryGetValue(ability, out var existing) && existing != null && existing.IsActive)
+        {
+            if (effectData.BonusAmount <= existing.BonusAmount)
+            {
+                // Same or lower bonus — don't stack, just refresh duration if same spell
+                if (effectData.SourceSpellId == existing.SourceSpellId)
+                {
+                    existing.DurationRemainingRounds = Mathf.Max(existing.DurationRemainingRounds, effectData.DurationRemainingRounds);
+                    Debug.Log($"[AttributeEnhancement] {Stats.CharacterName}: {effectData.SourceName} duration refreshed");
+                }
+                else
+                {
+                    Debug.Log($"[AttributeEnhancement] {Stats.CharacterName}: {effectData.SourceName} (+{effectData.BonusAmount}) " +
+                              $"not applied — existing enhancement (+{existing.BonusAmount}) is equal or higher");
+                }
+                return;
+            }
+
+            // New is higher — remove old first
+            Debug.Log($"[AttributeEnhancement] {Stats.CharacterName}: Replacing {existing.SourceName} (+{existing.BonusAmount}) " +
+                      $"with {effectData.SourceName} (+{effectData.BonusAmount})");
+            RemoveAttributeEnhancementInternal(existing);
+        }
+
+        _activeAttributeEnhancements[ability] = effectData;
+
+        // For Bear's Endurance: add bonus HP
+        if (effectData.IsBearsEndurance && effectData.GrantedBonusHP > 0)
+        {
+            Stats.BonusMaxHP += effectData.GrantedBonusHP;
+            Stats.CurrentHP += effectData.GrantedBonusHP;
+            Debug.Log($"[AttributeEnhancement] {Stats.CharacterName}: Bear's Endurance grants +{effectData.GrantedBonusHP} HP " +
+                      $"({effectData.GrantedBonusHP / 2} HD × 2 HP/HD)");
+        }
+
+        Debug.Log($"[AttributeEnhancement] {Stats.CharacterName}: {effectData.SourceName} applied — " +
+                  $"+{effectData.BonusAmount} enhancement bonus to {effectData.AbilityName}");
+    }
+
+    /// <summary>
+    /// Remove an attribute enhancement effect. For Bear's Endurance, removes the bonus HP
+    /// from both current and max HP — this can kill the character if current HP drops to 0 or below.
+    /// Returns true if the removal caused the character to drop to 0 or fewer HP.
+    /// </summary>
+    public bool RemoveAttributeEnhancement(AbilityType ability)
+    {
+        if (!_activeAttributeEnhancements.TryGetValue(ability, out var existing) || existing == null)
+            return false;
+
+        bool causedDeath = RemoveAttributeEnhancementInternal(existing);
+        _activeAttributeEnhancements.Remove(ability);
+        return causedDeath;
+    }
+
+    /// <summary>
+    /// Remove an attribute enhancement by spell ID. Used when a specific spell expires/is dispelled.
+    /// Returns true if the removal caused the character to drop to 0 or fewer HP.
+    /// </summary>
+    public bool RemoveAttributeEnhancementBySpellId(string spellId)
+    {
+        AbilityType ability = AttributeEnhancementEffectData.GetAbilityForSpell(spellId);
+        if (!_activeAttributeEnhancements.TryGetValue(ability, out var existing) || existing == null)
+            return false;
+        if (existing.SourceSpellId != spellId)
+            return false;
+
+        bool causedDeath = RemoveAttributeEnhancementInternal(existing);
+        _activeAttributeEnhancements.Remove(ability);
+        return causedDeath;
+    }
+
+    /// <summary>Internal helper to reverse an attribute enhancement effect.</summary>
+    private bool RemoveAttributeEnhancementInternal(AttributeEnhancementEffectData effectData)
+    {
+        if (effectData == null || Stats == null) return false;
+
+        bool causedDeath = false;
+
+        // For Bear's Endurance: remove bonus HP — can kill!
+        if (effectData.IsBearsEndurance && effectData.GrantedBonusHP > 0)
+        {
+            Stats.BonusMaxHP = Mathf.Max(0, Stats.BonusMaxHP - effectData.GrantedBonusHP);
+            Stats.CurrentHP -= effectData.GrantedBonusHP;
+
+            Debug.Log($"[AttributeEnhancement] {Stats.CharacterName}: Bear's Endurance HP removed — " +
+                      $"lost {effectData.GrantedBonusHP} HP (now {Stats.CurrentHP}/{Stats.TotalMaxHP})");
+
+            if (Stats.CurrentHP <= 0)
+            {
+                causedDeath = true;
+                Debug.Log($"[AttributeEnhancement] ☠ {Stats.CharacterName}: Dropped to {Stats.CurrentHP} HP " +
+                          $"after Bear's Endurance ended — dying/dead!");
+            }
+        }
+
+        effectData.Expire("effect removed");
+
+        Debug.Log($"[AttributeEnhancement] {Stats.CharacterName}: {effectData.SourceName} removed — " +
+                  $"+{effectData.BonusAmount} {effectData.AbilityName} enhancement bonus removed");
+
+        return causedDeath;
     }
 
     // ===================== GHOUL TOUCH EFFECT =====================

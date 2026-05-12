@@ -14,9 +14,9 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.EAGLES_SPLENDOR,
                     Name = "Eagle's Splendor",
-                    Description = "Subject gains +4 enhancement bonus to CHA for 1 min/level. PHB p.225",
+                    Description = "Subject gains +4 enhancement bonus to CHA for 1 min/level. Affects Cha-based skills and Sorcerer/Bard/Paladin spell DCs. Does NOT grant bonus spells. PHB p.225",
                     SpellLevel = 2, School = "Transmutation",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
                     TargetType = SpellTargetType.SingleAlly,
                     RangeCategory = SpellRangeCategory.Touch,
                     EffectType = SpellEffectType.Buff,
@@ -29,6 +29,11 @@ public static partial class SpellDatabase
                     DurationType = DurationType.Minutes,
                     DurationValue = 1,
                     DurationScalesWithLevel = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
@@ -187,8 +192,9 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
-        // Aliases
+        // Aliases — Eagle's Splendor: Cleric 2, Paladin 2
         RegisterClassSpellAlias("eagles_splendor_clr", SpellNames.EAGLES_SPLENDOR, "Cleric", 2);
+        RegisterClassSpellAlias("eagles_splendor_pal", SpellNames.EAGLES_SPLENDOR, "Paladin", 2);
         RegisterClassSpellAlias("endure_elements_clr", SpellNames.ENDURE_ELEMENTS, "Cleric", 1);
 
     }

@@ -496,14 +496,15 @@ public class StatusEffectManager : MonoBehaviour
         ApplySpellSpecificAdjustments(effect, applying: true);
 
         // Stat buff(s) (STR, DEX, CON, etc.)
+        string sourceId = effect.Spell?.SpellId;
         if (!string.IsNullOrEmpty(effect.AppliedStatName) && effect.AppliedStatBonus != 0)
         {
-            ApplyStatBonus(effect.AppliedStatName, effect.AppliedStatBonus);
+            ApplyStatBonus(effect.AppliedStatName, effect.AppliedStatBonus, sourceId);
         }
 
         if (!string.IsNullOrEmpty(effect.AppliedSecondaryStatName) && effect.AppliedSecondaryStatBonus != 0)
         {
-            ApplyStatBonus(effect.AppliedSecondaryStatName, effect.AppliedSecondaryStatBonus);
+            ApplyStatBonus(effect.AppliedSecondaryStatName, effect.AppliedSecondaryStatBonus, sourceId);
         }
 
         if (!string.IsNullOrEmpty(effect.AppliedSkillName) && effect.AppliedSkillBonus != 0)
@@ -560,14 +561,15 @@ public class StatusEffectManager : MonoBehaviour
 
         ApplySpellSpecificAdjustments(effect, applying: false);
 
+        string reverseSourceId = effect.Spell?.SpellId;
         if (!string.IsNullOrEmpty(effect.AppliedStatName) && effect.AppliedStatBonus != 0)
         {
-            ApplyStatBonus(effect.AppliedStatName, -effect.AppliedStatBonus);
+            ApplyStatBonus(effect.AppliedStatName, -effect.AppliedStatBonus, reverseSourceId);
         }
 
         if (!string.IsNullOrEmpty(effect.AppliedSecondaryStatName) && effect.AppliedSecondaryStatBonus != 0)
         {
-            ApplyStatBonus(effect.AppliedSecondaryStatName, -effect.AppliedSecondaryStatBonus);
+            ApplyStatBonus(effect.AppliedSecondaryStatName, -effect.AppliedSecondaryStatBonus, reverseSourceId);
         }
 
         if (!string.IsNullOrEmpty(effect.AppliedSkillName) && effect.AppliedSkillBonus != 0)
@@ -590,6 +592,17 @@ public class StatusEffectManager : MonoBehaviour
             if (!applying)
             {
                 _controller?.RemoveFalseLifeEffect();
+            }
+            return;
+        }
+
+        // Attribute Enhancement Spells: Bear's Endurance, Bull's Strength, Cat's Grace,
+        // Eagle's Splendor, Fox's Cunning, Owl's Wisdom
+        if (AttributeEnhancementEffectData.IsAttributeEnhancementSpell(spellId))
+        {
+            if (!applying && _controller != null)
+            {
+                _controller.RemoveAttributeEnhancementBySpellId(spellId);
             }
             return;
         }
@@ -697,7 +710,7 @@ public class StatusEffectManager : MonoBehaviour
     }
 
     /// <summary>Apply a bonus to a specific ability score.</summary>
-    private void ApplyStatBonus(string statName, int bonus)
+    private void ApplyStatBonus(string statName, int bonus, string sourceSpellId = null)
     {
         if (_stats == null) return;
 
@@ -707,12 +720,17 @@ public class StatusEffectManager : MonoBehaviour
             case "DEX": _stats.DEX += bonus; break;
             case "CON":
                 _stats.CON += bonus;
-                // CON changes affect HP: +1 HP per level per +2 CON
-                int hpChange = (_stats.Level * (bonus / 2));
-                if (bonus > 0)
-                    _stats.BonusMaxHP += hpChange;
-                else
-                    _stats.BonusMaxHP = Mathf.Max(0, _stats.BonusMaxHP + hpChange);
+                // Bear's Endurance handles HP through CharacterController.ApplyAttributeEnhancement
+                // using Hit Dice (not Level). Skip generic HP calc for attribute enhancement spells.
+                if (sourceSpellId == null || !AttributeEnhancementEffectData.IsAttributeEnhancementSpell(sourceSpellId))
+                {
+                    // CON changes affect HP: +1 HP per level per +2 CON
+                    int hpChange = (_stats.Level * (bonus / 2));
+                    if (bonus > 0)
+                        _stats.BonusMaxHP += hpChange;
+                    else
+                        _stats.BonusMaxHP = Mathf.Max(0, _stats.BonusMaxHP + hpChange);
+                }
                 break;
             case "INT": _stats.INT += bonus; break;
             case "WIS": _stats.WIS += bonus; break;
