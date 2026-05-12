@@ -117,17 +117,34 @@ public class StatusEffectIndicator : MonoBehaviour
             });
         }
 
-        if (statusMgr != null && statusMgr.HasEffect(SpellNames.INVISIBILITY))
+        // Display invisibility status from any source (spell, item, ability)
+        if (_character != null && _character.HasActiveInvisibilityEffect)
         {
-            int rounds = statusMgr.GetRemainingRounds(SpellNames.INVISIBILITY);
-            int hideBonus = _character != null ? _character.GetInvisibilityHideBonus() : 0;
-            bool moving = _character != null && _character.ActiveInvisibilityEffect != null && _character.ActiveInvisibilityEffect.IsMoving;
+            var invisData = _character.ActiveInvisibilityEffect;
+            int rounds = invisData.DurationRemainingRounds;
+            int hideBonus = _character.GetInvisibilityHideBonus();
+            bool moving = invisData.IsMoving;
+            string sourceName = !string.IsNullOrEmpty(invisData.SourceName) ? invisData.SourceName : "Invisibility";
+            string breakNote = invisData.BreaksOnAttack ? "Breaks on attack/hostile action" : "Does NOT break on attack";
 
             list.Add(new IconData
             {
                 Key = "Invisibility",
                 ShortLabel = "INV",
-                Tooltip = $"Invisibility\nTotal concealment (50% miss chance)\nHide bonus: +{hideBonus} ({(moving ? "moving" : "stationary")})\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Tooltip = $"{sourceName}\nTotal concealment ({invisData.ConcealmentMissChance}% miss chance)\n+2 attack bonus vs sighted opponents\nOpponents denied Dex to AC\nHide bonus: +{hideBonus} ({(moving ? "moving" : "stationary")})\n{breakNote}\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                Color = new Color(0.38f, 0.72f, 0.95f, 0.92f),
+                Duration = rounds
+            });
+        }
+        else if (statusMgr != null && statusMgr.HasEffect(SpellNames.INVISIBILITY))
+        {
+            // Fallback for edge cases where StatusEffectManager has the effect but ActiveInvisibilityEffect is null
+            int rounds = statusMgr.GetRemainingRounds(SpellNames.INVISIBILITY);
+            list.Add(new IconData
+            {
+                Key = "Invisibility",
+                ShortLabel = "INV",
+                Tooltip = $"Invisibility\nTotal concealment (50% miss chance)\n+2 attack bonus vs sighted opponents\nOpponents denied Dex to AC\nBreaks on attack/hostile action\nDuration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
                 Color = new Color(0.38f, 0.72f, 0.95f, 0.92f),
                 Duration = rounds
             });

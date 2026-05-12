@@ -179,7 +179,9 @@ public class StatusEffectManager : MonoBehaviour
             effect.IsTotalConcealment = true;
             effect.ConcealmentSource = spell.Name;
         }
-        else if (spell.SpellId == SpellNames.INVISIBILITY)
+        else if (spell.SpellId == SpellNames.INVISIBILITY
+                 || spell.SpellId == "greater_invisibility"
+                 || spell.SpellId == "improved_invisibility")
         {
             effect.MissChance = 50;
             effect.IsTotalConcealment = true;

@@ -1388,12 +1388,36 @@ public class CharacterController : MonoBehaviour
             return;
 
         if (ActiveInvisibilityEffect == null)
-            ActiveInvisibilityEffect = new InvisibilityEffectData();
-
-        ActiveInvisibilityEffect.IsInvisible = true;
-        ActiveInvisibilityEffect.DurationRemainingRounds = rounds;
+            ActiveInvisibilityEffect = InvisibilityEffectData.CreateStandardInvisibility(rounds, caster);
+        else
+        {
+            ActiveInvisibilityEffect.IsInvisible = true;
+            ActiveInvisibilityEffect.DurationRemainingRounds = rounds;
+            ActiveInvisibilityEffect.IsMoving = isMoving;
+            ActiveInvisibilityEffect.SetCaster(caster);
+            // Preserve default standard invisibility settings
+            if (string.IsNullOrEmpty(ActiveInvisibilityEffect.SourceSpellId))
+            {
+                ActiveInvisibilityEffect.SourceSpellId = SpellNames.INVISIBILITY;
+                ActiveInvisibilityEffect.SourceName = "Invisibility";
+                ActiveInvisibilityEffect.SourceType = InvisibilitySourceType.Spell;
+                ActiveInvisibilityEffect.BreaksOnAttack = true;
+            }
+        }
         ActiveInvisibilityEffect.IsMoving = isMoving;
-        ActiveInvisibilityEffect.SetCaster(caster);
+        RefreshInvisibilityVisual();
+    }
+
+    /// <summary>
+    /// Applies an invisibility effect using a pre-configured InvisibilityEffectData.
+    /// Used by Greater Invisibility, magic items, and special abilities.
+    /// </summary>
+    public void ApplyInvisibilityEffectData(InvisibilityEffectData effectData)
+    {
+        if (effectData == null || !effectData.IsInvisible)
+            return;
+
+        ActiveInvisibilityEffect = effectData;
         RefreshInvisibilityVisual();
     }
 
@@ -1500,7 +1524,7 @@ public class CharacterController : MonoBehaviour
         if (!HasActiveInvisibilityEffect || IsOutlinedByGlitterdust)
             return 0;
 
-        return ActiveInvisibilityEffect.IsMoving ? 20 : 40;
+        return ActiveInvisibilityEffect.GetCurrentHideBonus();
     }
 
     public int GetInvisibilityHideBonusAgainst(CharacterController observer)
@@ -1530,26 +1554,103 @@ public class CharacterController : MonoBehaviour
         return IsOutlinedByGlitterdust ? -40 : 0;
     }
 
+    /// <summary>
+    /// Attempts to break invisibility due to a hostile action.
+    /// For standard Invisibility (BreaksOnAttack=true), the effect ends.
+    /// For Greater Invisibility (BreaksOnAttack=false), the effect persists.
+    /// Returns true if invisibility was actually broken.
+    /// </summary>
     public bool BreakInvisibility(string reason, CharacterController hostileTarget = null)
     {
         if (!HasActiveInvisibilityEffect)
             return false;
 
+        // Greater Invisibility and similar effects do NOT break on attack/hostile action
+        if (!ActiveInvisibilityEffect.BreaksOnAttack)
+            return false;
+
+        string sourceSpellId = ActiveInvisibilityEffect.SourceSpellId;
+
         StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
         if (statusMgr != null)
-            statusMgr.RemoveEffectsBySpellId(SpellNames.INVISIBILITY);
+        {
+            // Remove the specific spell effect that created this invisibility
+            if (!string.IsNullOrEmpty(sourceSpellId))
+                statusMgr.RemoveEffectsBySpellId(sourceSpellId);
+            else
+                statusMgr.RemoveEffectsBySpellId(SpellNames.INVISIBILITY);
+        }
 
         string actorName = Stats != null ? Stats.CharacterName : name;
+        string sourceName = ActiveInvisibilityEffect.SourceName ?? "invisibility";
         string reasonLabel = string.IsNullOrWhiteSpace(reason) ? "hostile action" : reason;
         string targetLabel = hostileTarget != null && hostileTarget.Stats != null
             ? $" against {hostileTarget.Stats.CharacterName}"
             : string.Empty;
-        GameManager.Instance?.CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {actorName}'s invisibility ends ({reasonLabel}{targetLabel}).</color>");
+        GameManager.Instance?.CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {actorName}'s {sourceName} ends ({reasonLabel}{targetLabel}).</color>");
 
         if (HasCondition(CombatConditionType.Invisible))
             RemoveCondition(CombatConditionType.Invisible);
 
         ClearInvisibilityEffect();
+        return true;
+    }
+
+    /// <summary>
+    /// Forces invisibility to end regardless of BreaksOnAttack setting.
+    /// Used for dispel, antimagic, or when the duration expires.
+    /// </summary>
+    public void ForceEndInvisibility(string reason = null)
+    {
+        if (!HasActiveInvisibilityEffect)
+            return;
+
+        string sourceSpellId = ActiveInvisibilityEffect.SourceSpellId;
+
+        StatusEffectManager statusMgr = GetComponent<StatusEffectManager>();
+        if (statusMgr != null && !string.IsNullOrEmpty(sourceSpellId))
+            statusMgr.RemoveEffectsBySpellId(sourceSpellId);
+
+        if (HasCondition(CombatConditionType.Invisible))
+            RemoveCondition(CombatConditionType.Invisible);
+
+        string actorName = Stats != null ? Stats.CharacterName : name;
+        string reasonLabel = string.IsNullOrWhiteSpace(reason) ? "effect ended" : reason;
+        GameManager.Instance?.CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {actorName}'s invisibility ends ({reasonLabel}).</color>");
+
+        ClearInvisibilityEffect();
+    }
+
+    /// <summary>
+    /// Returns the invisible attacker's attack roll bonus (+2 per PHB p.141).
+    /// This should be captured BEFORE BreakInvisibility is called during an attack.
+    /// </summary>
+    public int GetInvisibleAttackerBonus(CharacterController target)
+    {
+        if (!HasActiveInvisibilityEffect || IsOutlinedByGlitterdust)
+            return 0;
+
+        // If the target can see invisible creatures, no bonus
+        if (target != null && target.CanSeeInvisible(this))
+            return 0;
+
+        return ActiveInvisibilityEffect.GetAttackBonus();
+    }
+
+    /// <summary>
+    /// Returns true if this invisible attacker should deny the target's Dex bonus to AC.
+    /// PHB p.141: A defender who can't see the attacker loses Dex bonus to AC.
+    /// This should be checked BEFORE BreakInvisibility is called during an attack.
+    /// </summary>
+    public bool ShouldDenyTargetDexToAC(CharacterController target)
+    {
+        if (!HasActiveInvisibilityEffect || IsOutlinedByGlitterdust)
+            return false;
+
+        // If the target can see invisible creatures, they keep Dex
+        if (target != null && target.CanSeeInvisible(this))
+            return false;
+
         return true;
     }
 
@@ -4931,9 +5032,24 @@ public class CharacterController : MonoBehaviour
 
         int blindedTargetAttackBonus = target != null && target.HasCondition(CombatConditionType.Blinded) ? 2 : 0;
 
-        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus;
+        // D&D 3.5e PHB p.141: Invisible attacker gains +2 on attack rolls against sighted opponents.
+        // IMPORTANT: Capture BEFORE breaking invisibility so the attack that breaks it still benefits.
+        int invisibleAttackerBonus = GetInvisibleAttackerBonus(target);
+        bool attackerWasInvisible = invisibleAttackerBonus > 0;
 
-        // D&D 3.5e: making an attack roll (or attempting to attack) breaks invisibility immediately.
+        // D&D 3.5e PHB p.141: Defender who can't see attacker loses Dex bonus to AC.
+        // Capture BEFORE breaking invisibility.
+        bool denyTargetDexFromInvisibility = ShouldDenyTargetDexToAC(target);
+        int deniedDexFromInvisibility = 0;
+        if (denyTargetDexFromInvisibility && target != null && target.Stats != null)
+        {
+            deniedDexFromInvisibility = GetDexBonusAppliedToArmorClass(target);
+        }
+
+        int totalAtkModWithTrueStrike = totalAtkMod + weaponEnhancementAttackBonus + trueStrikeBonus + helplessMeleeAttackBonus + blindedTargetAttackBonus + invisibleAttackerBonus;
+
+        // D&D 3.5e: making an attack roll (or attempting to attack) breaks standard invisibility.
+        // Greater Invisibility does NOT break on attack (BreaksOnAttack=false).
         BreakInvisibility("attack roll", target);
 
         if (TryResolveLastKnownPositionAutoMiss(target, isRangedAttack, weapon, out CombatResult emptySquareMiss))
@@ -4950,6 +5066,26 @@ public class CharacterController : MonoBehaviour
         }
 
         int targetAC = GetSituationalTargetArmorClass(target, this, isRangedAttack) + Mathf.Max(0, situationalTargetAcBonus);
+
+        // D&D 3.5e PHB p.141: Defender who can't see the attacker loses Dex bonus to AC.
+        // Applied from the pre-break invisible attacker state captured above.
+        if (deniedDexFromInvisibility > 0)
+        {
+            targetAC -= deniedDexFromInvisibility;
+            string note = $"Invisible attacker: target denied DEX bonus to AC (-{deniedDexFromInvisibility}).";
+            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                ? note
+                : $"{result.SpecialAttackNote} {note}";
+        }
+
+        // Log invisible attacker bonus in the attack note
+        if (attackerWasInvisible)
+        {
+            string note = $"Invisible attacker: +{invisibleAttackerBonus} attack bonus.";
+            result.SpecialAttackNote = string.IsNullOrEmpty(result.SpecialAttackNote)
+                ? note
+                : $"{result.SpecialAttackNote} {note}";
+        }
 
         bool targetIsInvisibleToRules = target != null && target.HasActiveInvisibilityEffect && !target.IsOutlinedByGlitterdust;
         int invisibilityAcBonus = targetIsInvisibleToRules ? target.GetInvisibilityArmorClassBonusAgainst(this) : 0;
@@ -6654,11 +6790,20 @@ public class CharacterController : MonoBehaviour
         return Mathf.Clamp(effect.MissChance, 0, 100);
     }
 
+        /// <summary>
+    /// Returns true if this ActiveSpellEffect is from any variant of invisibility.
+    /// Used to determine if See Invisibility / Glitterdust can negate the concealment.
+    /// Supports standard Invisibility, Greater Invisibility, and future variants.
+    /// </summary>
     private static bool IsInvisibilityConcealmentEffect(ActiveSpellEffect effect)
     {
-        return effect != null
-               && effect.Spell != null
-               && string.Equals(effect.Spell.SpellId, SpellNames.INVISIBILITY, StringComparison.Ordinal);
+        if (effect == null || effect.Spell == null)
+            return false;
+
+        string spellId = effect.Spell.SpellId;
+        return string.Equals(spellId, SpellNames.INVISIBILITY, StringComparison.Ordinal)
+               || string.Equals(spellId, "greater_invisibility", StringComparison.Ordinal)
+               || string.Equals(spellId, "improved_invisibility", StringComparison.Ordinal);
     }
 
     /// <summary>

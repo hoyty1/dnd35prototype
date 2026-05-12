@@ -10319,8 +10319,14 @@ public partial class GameManager : MonoBehaviour
         if (character == null)
             return false;
 
+        // Check the runtime invisibility effect first (supports all sources)
+        if (character.HasActiveInvisibilityEffect)
+            return true;
+
+        // Fallback: check StatusEffectManager for spell-based invisibility
         StatusEffectManager statusMgr = character.GetComponent<StatusEffectManager>();
-        return statusMgr != null && statusMgr.HasEffect(SpellNames.INVISIBILITY);
+        return statusMgr != null && (statusMgr.HasEffect(SpellNames.INVISIBILITY)
+            || statusMgr.HasEffect("greater_invisibility"));
     }
 
     public bool HasActiveSeeInvisibility(CharacterController character)
@@ -10380,18 +10386,32 @@ public partial class GameManager : MonoBehaviour
         if (pc == null || !pc.Actions.HasStandardAction)
             return;
 
-        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
-        if (statusMgr == null || !statusMgr.HasEffect(SpellNames.INVISIBILITY))
+        if (!pc.HasActiveInvisibilityEffect)
         {
-            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active Invisibility spell to dismiss.");
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName} has no active invisibility effect to dismiss.");
             return;
         }
 
+        // Check if the effect is dismissible
+        if (pc.ActiveInvisibilityEffect != null && !pc.ActiveInvisibilityEffect.IsDismissible)
+        {
+            CombatUI?.ShowCombatLog($"⚠ {pc.Stats.CharacterName}'s invisibility cannot be dismissed.");
+            return;
+        }
+
+        string sourceSpellId = pc.ActiveInvisibilityEffect?.SourceSpellId;
+        string sourceName = pc.ActiveInvisibilityEffect?.SourceName ?? "Invisibility";
+
+        StatusEffectManager statusMgr = pc.GetComponent<StatusEffectManager>();
+        if (statusMgr != null && !string.IsNullOrEmpty(sourceSpellId))
+            statusMgr.RemoveEffectsBySpellId(sourceSpellId);
+        else if (statusMgr != null)
+            statusMgr.RemoveEffectsBySpellId(SpellNames.INVISIBILITY);
+
         pc.CommitStandardAction();
-        statusMgr.RemoveEffectsBySpellId(SpellNames.INVISIBILITY);
         pc.ClearInvisibilityEffect();
 
-        CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {pc.Stats.CharacterName} dismisses Invisibility.</color>");
+        CombatUI?.ShowCombatLog($"<color=#88CCFF>👁 {pc.Stats.CharacterName} dismisses {sourceName}.</color>");
         UpdateAllStatsUI();
         ShowActionChoices();
     }
@@ -16082,10 +16102,12 @@ public partial class GameManager : MonoBehaviour
                     int speedDelta = expiredData != null ? Mathf.Max(0, expiredData.SpeedBonusFeet) : Mathf.Max(0, effect.AppliedSpeedBonusFeet);
                     CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Expeditious Retreat expires on {character.Stats.CharacterName}: speed -{speedDelta} ft.</color>");
                 }
-                else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.INVISIBILITY, StringComparison.Ordinal))
+                else if (effect.Spell != null && (string.Equals(effect.Spell.SpellId, SpellNames.INVISIBILITY, StringComparison.Ordinal)
+                    || string.Equals(effect.Spell.SpellId, "greater_invisibility", StringComparison.Ordinal)
+                    || string.Equals(effect.Spell.SpellId, "improved_invisibility", StringComparison.Ordinal)))
                 {
                     character.ClearInvisibilityEffect();
-                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ Invisibility expires on {character.Stats.CharacterName}.</color>");
+                    CombatUI?.ShowCombatLog($"<color=#FFAA44>⏱ {effect.Spell.Name} expires on {character.Stats.CharacterName}.</color>");
                 }
                 else if (effect.Spell != null && string.Equals(effect.Spell.SpellId, SpellNames.SEE_INVISIBLE, StringComparison.Ordinal))
                 {
