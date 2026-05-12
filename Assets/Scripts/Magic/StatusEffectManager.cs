@@ -195,6 +195,16 @@ public class StatusEffectManager : MonoBehaviour
             effect.MissChanceAgainstRangedOnly = true;
         }
 
+        // Blindness/Deafness spell: permanent condition effect.
+        // The actual condition (Blinded/Deafened) is applied via CharacterController.ApplyBlindnessEffect/ApplyDeafnessEffect.
+        // StatusEffectManager tracks the spell effect for dispel/duration management.
+        if (spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_WIZ
+            || spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_CLR
+            || spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_BRD)
+        {
+            effect.RemainingRounds = -1; // Permanent until removed
+        }
+
         // Apply stat modifications
         ApplyStatModifications(effect);
         effect.IsApplied = true;

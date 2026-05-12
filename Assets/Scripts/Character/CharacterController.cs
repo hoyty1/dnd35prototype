@@ -329,6 +329,7 @@ public class CharacterController : MonoBehaviour
     public SeeInvisibilityEffectData ActiveSeeInvisibilityEffect { get; private set; }
     public GlitterdustEffectData ActiveGlitterdustEffect { get; private set; }
     public MelfsAcidArrowEffectData ActiveMelfsAcidArrowEffect { get; private set; }
+    public BlindnessDeafnessEffectData ActiveBlindnessDeafnessEffect { get; private set; }
     private EnfeebledConditionData _activeEnfeeblementEffect;
     private TouchOfIdiocyConditionData _activeTouchOfIdiocyEffect;
     public EnfeebledConditionData ActiveEnfeeblementEffect => _activeEnfeeblementEffect;
@@ -1658,6 +1659,102 @@ public class CharacterController : MonoBehaviour
     {
         ActiveInvisibilityEffect = null;
         RefreshInvisibilityVisual();
+    }
+
+    // ======================== BLINDNESS / DEAFNESS EFFECT ========================
+
+    /// <summary>Whether this character has an active blindness/deafness effect from the spell system.</summary>
+    public bool HasActiveBlindnessDeafnessEffect => ActiveBlindnessDeafnessEffect != null && ActiveBlindnessDeafnessEffect.IsActive;
+
+    /// <summary>
+    /// Returns true if this character is blinded (from any source: spell effect data OR condition system).
+    /// Checks both the dedicated BlindnessDeafnessEffectData and the condition system for redundancy.
+    /// </summary>
+    public bool IsBlind()
+    {
+        if (ActiveBlindnessDeafnessEffect != null && ActiveBlindnessDeafnessEffect.IsBlindness)
+            return true;
+        return HasCondition(CombatConditionType.Blinded);
+    }
+
+    /// <summary>
+    /// Returns true if this character is deafened (from any source: spell effect data OR condition system).
+    /// </summary>
+    public bool IsDeaf()
+    {
+        if (ActiveBlindnessDeafnessEffect != null && ActiveBlindnessDeafnessEffect.IsDeafness)
+            return true;
+        return HasCondition(CombatConditionType.Deafened);
+    }
+
+    /// <summary>
+    /// Applies a blindness effect from the Blindness/Deafness spell.
+    /// Also applies the Blinded condition to the condition system for combat integration.
+    /// PHB p.206, p.305: -2 AC, lose Dex to AC, 50% miss chance, half speed.
+    /// </summary>
+    public void ApplyBlindnessEffect(BlindnessDeafnessEffectData effectData)
+    {
+        if (effectData == null) return;
+        ActiveBlindnessDeafnessEffect = effectData;
+
+        // Also apply the Blinded condition for combat system integration
+        // The condition system already handles -2 AC, DeniedDexToAC, 0.5x movement, etc.
+        int rounds = effectData.DurationRemainingRounds; // -1 = permanent
+        string sourceName = effectData.SourceName ?? "Blindness";
+        ApplyCondition(CombatConditionType.Blinded, rounds, sourceName);
+
+        Debug.Log($"[BlindnessDeafness] {Stats?.CharacterName}: Blinded by {sourceName} (permanent={effectData.IsPermanent})");
+    }
+
+    /// <summary>
+    /// Applies a deafness effect from the Blindness/Deafness spell.
+    /// Also applies the Deafened condition to the condition system for combat integration.
+    /// PHB p.206, p.307: -4 initiative, 20% verbal spell failure.
+    /// </summary>
+    public void ApplyDeafnessEffect(BlindnessDeafnessEffectData effectData)
+    {
+        if (effectData == null) return;
+        ActiveBlindnessDeafnessEffect = effectData;
+
+        // Also apply the Deafened condition for combat system integration
+        // The condition system already handles -4 initiative modifier.
+        int rounds = effectData.DurationRemainingRounds; // -1 = permanent
+        string sourceName = effectData.SourceName ?? "Deafness";
+        ApplyCondition(CombatConditionType.Deafened, rounds, sourceName);
+
+        Debug.Log($"[BlindnessDeafness] {Stats?.CharacterName}: Deafened by {sourceName} (permanent={effectData.IsPermanent})");
+    }
+
+    /// <summary>
+    /// Removes the active blindness/deafness spell effect and the associated condition.
+    /// Called by Remove Blindness/Deafness spell, Dispel Magic, or caster dismissal.
+    /// </summary>
+    public void RemoveBlindnessDeafnessEffect()
+    {
+        if (ActiveBlindnessDeafnessEffect == null) return;
+
+        string effectName = ActiveBlindnessDeafnessEffect.IsBlindness ? "Blindness" : "Deafness";
+        CombatConditionType conditionToRemove = ActiveBlindnessDeafnessEffect.IsBlindness
+            ? CombatConditionType.Blinded
+            : CombatConditionType.Deafened;
+
+        Debug.Log($"[BlindnessDeafness] {Stats?.CharacterName}: {effectName} removed");
+
+        ActiveBlindnessDeafnessEffect = null;
+        RemoveCondition(conditionToRemove);
+    }
+
+    /// <summary>
+    /// Returns the verbal component spell failure chance from deafness.
+    /// PHB p.307: 20% chance of spell failure for spells with verbal components.
+    /// </summary>
+    public int GetDeafnessSpellFailureChance()
+    {
+        if (ActiveBlindnessDeafnessEffect != null && ActiveBlindnessDeafnessEffect.IsDeafness)
+            return ActiveBlindnessDeafnessEffect.GetVerbalSpellFailureChance();
+        if (HasCondition(CombatConditionType.Deafened))
+            return 20;
+        return 0;
     }
 
     private void RefreshInvisibilityVisual()

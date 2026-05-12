@@ -15438,30 +15438,35 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
-        if (spell != null && (spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_WIZ || spell.SpellId == "blindness_deafness_clr"))
+        if (spell != null && (spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_WIZ
+            || spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_CLR
+            || spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_BRD))
         {
-            int rounds = spell.BuffDurationRounds;
-            string sourceName = spell.Name;
+            int casterLevel = caster != null && caster.Stats != null ? caster.Stats.Level : 1;
 
-            if (_conditionService != null)
+            // D&D 3.5e PHB p.206: Caster chooses blindness or deafness at cast time.
+            // For AI casters, randomly choose. For player casters, default to blindness
+            // (the more tactically impactful choice). Future: add UI prompt for player choice.
+            bool chooseBlindness = true;
+            if (caster != null && !caster.IsPlayerControlled)
             {
-                _conditionService.ApplyCondition(
-                    target,
-                    CombatConditionType.Deafened,
-                    rounds,
-                    source: caster,
-                    sourceNameOverride: sourceName,
-                    sourceCategory: "Spell",
-                    sourceId: spell.SpellId);
+                chooseBlindness = Random.Range(0, 2) == 0; // 50/50 for AI
+            }
+
+            if (chooseBlindness)
+            {
+                var blindEffect = BlindnessDeafnessEffectData.CreateSpellBlindness(spell.SpellId, caster, casterLevel);
+                target.ApplyBlindnessEffect(blindEffect);
+                CombatUI?.ShowCombatLog($"<color=#FF9966>🔲 {target.Stats.CharacterName} is blinded by {spell.Name}!</color>");
+                Debug.Log($"[GameManager] {spell.Name} applied Blindness to {target.Stats.CharacterName} (permanent)");
             }
             else
             {
-                string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
-                target.ApplyCondition(CombatConditionType.Deafened, rounds, fallbackSource);
+                var deafEffect = BlindnessDeafnessEffectData.CreateSpellDeafness(spell.SpellId, caster, casterLevel);
+                target.ApplyDeafnessEffect(deafEffect);
+                CombatUI?.ShowCombatLog($"<color=#FF9966>🔔 {target.Stats.CharacterName} is deafened by {spell.Name}!</color>");
+                Debug.Log($"[GameManager] {spell.Name} applied Deafness to {target.Stats.CharacterName} (permanent)");
             }
-
-            CombatUI?.ShowCombatLog($"<color=#FF9966>🔔 {target.Stats.CharacterName} is deafened by {spell.Name}!</color>");
-            Debug.Log($"[GameManager] {spell.Name} applied Deafened to {target.Stats.CharacterName}");
             return null;
         }
 

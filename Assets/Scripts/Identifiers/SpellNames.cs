@@ -45,8 +45,17 @@ namespace DND35e.Identifiers
         /// <summary>Bless (spell id: bless)</summary>
         public const string BLESS = "bless";
 
+        /// <summary>Blindness/Deafness - generic constant for any class variant.</summary>
+        public const string BLINDNESS_DEAFNESS = "blindness_deafness_wiz";
+
         /// <summary>Blindness/Deafness (spell id: blindness_deafness_wiz)</summary>
         public const string BLINDNESS_DEAFNESS_WIZ = "blindness_deafness_wiz";
+
+        /// <summary>Blindness/Deafness - Cleric variant (spell id: blindness_deafness_clr)</summary>
+        public const string BLINDNESS_DEAFNESS_CLR = "blindness_deafness_clr";
+
+        /// <summary>Blindness/Deafness - Bard variant (spell id: blindness_deafness_brd)</summary>
+        public const string BLINDNESS_DEAFNESS_BRD = "blindness_deafness_brd";
 
         /// <summary>Blur (spell id: blur)</summary>
         public const string BLUR = "blur";

@@ -101,19 +101,71 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ── Blindness/Deafness (PHB p.206) ──
+        // Necromancy. V only. Medium range. Fortitude negates. SR: Yes.
+        // Permanent (D). Caster chooses blindness or deafness at cast time.
+        // Wizard/Sorcerer 2
         Register(new SpellData
                 {
                     SpellId = SpellNames.BLINDNESS_DEAFNESS_WIZ,
                     Name = "Blindness/Deafness",
-                    Description = "Makes subject blind or deaf. Fortitude negates. Permanent. PHB p.206",
+                    Description = "Makes subject blind or deaf. Fortitude negates. Permanent (D). Components: V. PHB p.206",
                     SpellLevel = 2, School = "Necromancy",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Medium,
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Fortitude",
-                    BuffDurationRounds = -1,
+                    SpellResistanceApplies = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = false,
+                    BuffDurationRounds = -1, // Permanent
+                    IsDismissible = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // Bard 2
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.BLINDNESS_DEAFNESS_BRD,
+                    Name = "Blindness/Deafness",
+                    Description = "Makes subject blind or deaf. Fortitude negates. Permanent (D). Components: V. PHB p.206",
+                    SpellLevel = 2, School = "Necromancy",
+                    ClassList = new[] { "Bard" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    SpellResistanceApplies = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = false,
+                    BuffDurationRounds = -1, // Permanent
+                    IsDismissible = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
+        // Cleric 3
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.BLINDNESS_DEAFNESS_CLR,
+                    Name = "Blindness/Deafness",
+                    Description = "Makes subject blind or deaf. Fortitude negates. Permanent (D). Components: V. PHB p.206",
+                    SpellLevel = 3, School = "Necromancy",
+                    ClassList = new[] { "Cleric" },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    SpellResistanceApplies = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = false,
+                    BuffDurationRounds = -1, // Permanent
+                    IsDismissible = true,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });
