@@ -15244,7 +15244,7 @@ public partial class GameManager : MonoBehaviour
             targetStatusMgr.Init(target.Stats);
         }
 
-        targetStatusMgr.AddEffect(spell, ghoulEffect.ParalysisDurationRounds, caster?.Stats);
+        targetStatusMgr.AddEffect(spell, casterName, caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1);
 
         if (result != null)
         {
@@ -15770,7 +15770,7 @@ public partial class GameManager : MonoBehaviour
             bool chooseBlindness = true;
             if (caster != null && !caster.IsPlayerControlled)
             {
-                chooseBlindness = Random.Range(0, 2) == 0; // 50/50 for AI
+                chooseBlindness = UnityEngine.Random.Range(0, 2) == 0; // 50/50 for AI
             }
 
             if (chooseBlindness)
@@ -16450,6 +16450,16 @@ public partial class GameManager : MonoBehaviour
 
             UpdateAllStatsUI();
             return effect;
+        }
+
+        // ===== DISPEL MAGIC — D&D 3.5e PHB p.223 =====
+        // Targeted dispel: make one dispel check (1d20 + CL, max +10) vs DC 11 + spell's CL.
+        // Check spells in descending CL order. Remove at most ONE spell per casting.
+        // Auto-succeeds against own spells.
+        if (spell != null && spell.SpellId == SpellNames.DISPEL_MAGIC)
+        {
+            PerformTargetedDispel(caster, target);
+            return null; // Dispel Magic is instantaneous — no ongoing effect to track
         }
 
         // Use StatusEffectManager for tracked buff application
@@ -21714,5 +21724,306 @@ public partial class GameManager : MonoBehaviour
             }
         }
         Debug.Log("[GameManager] Quickened spell tracking reset for new round");
+    }
+
+    // =====================================================================
+    //  DISPEL MAGIC — D&D 3.5e PHB p.223
+    //  Core dispel check system and targeted/area dispel mechanics.
+    // =====================================================================
+
+    /// <summary>
+    /// Perform the D&D 3.5e dispel check.
+    /// Formula: 1d20 + min(casterLevel, 10) vs DC 11 + targetSpellCasterLevel.
+    /// Auto-succeeds against own spells.
+    /// Returns true if the check succeeds.
+    /// </summary>
+    public static bool PerformDispelCheck(int casterLevel, int targetSpellCasterLevel, bool isOwnSpell)
+    {
+        if (isOwnSpell) return true;
+
+        int clampedCL = Mathf.Min(casterLevel, 10);
+        int roll = UnityEngine.Random.Range(1, 21); // 1d20
+        int total = roll + clampedCL;
+        int dc = 11 + targetSpellCasterLevel;
+
+        Debug.Log($"[DispelMagic] Dispel check: 1d20({roll}) + CL({clampedCL}) = {total} vs DC {dc} (11 + {targetSpellCasterLevel})");
+        return total >= dc;
+    }
+
+    /// <summary>
+    /// Perform the D&D 3.5e dispel check and return the total roll (for comparing against multiple DCs).
+    /// Formula: 1d20 + min(casterLevel, 10).
+    /// </summary>
+    public static int RollDispelCheck(int casterLevel)
+    {
+        int clampedCL = Mathf.Min(casterLevel, 10);
+        int roll = UnityEngine.Random.Range(1, 21); // 1d20
+        int total = roll + clampedCL;
+        Debug.Log($"[DispelMagic] Dispel roll: 1d20({roll}) + CL({clampedCL}) = {total}");
+        return total;
+    }
+
+    /// <summary>
+    /// Calculate the DC to dispel a spell effect.
+    /// DC = 11 + target spell's caster level.
+    /// </summary>
+    public static int GetDispelDC(int targetSpellCasterLevel)
+    {
+        return 11 + targetSpellCasterLevel;
+    }
+
+    /// <summary>
+    /// Perform a targeted dispel on a single creature.
+    /// D&D 3.5e PHB p.223:
+    /// 1. Roll one dispel check: 1d20 + CL (max +10)
+    /// 2. Compare against spells in descending CL order (highest first)
+    /// 3. Auto-succeed against own spells
+    /// 4. Remove at most ONE spell
+    /// 5. Handle special cleanup for specific spells (Bear's Endurance, Spectral Hand, etc.)
+    /// </summary>
+    public void PerformTargetedDispel(CharacterController caster, CharacterController target)
+    {
+        if (caster == null || target == null || target.Stats == null)
+        {
+            CombatUI?.ShowCombatLog("⚠ Dispel Magic: Invalid target.");
+            return;
+        }
+
+        string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+        string targetName = target.Stats.CharacterName;
+        int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+
+        StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+        if (targetStatusMgr == null || targetStatusMgr.ActiveEffects == null || targetStatusMgr.ActiveEffects.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"<color=#AAAAFF>🔮 {casterName} casts Dispel Magic on {targetName} — no active spell effects to dispel.</color>");
+            Debug.Log($"[DispelMagic] {casterName} targets {targetName} — no active effects found");
+            return;
+        }
+
+        // Get list of dispellable effects sorted by caster level (descending), then by spell level (descending)
+        var dispellableEffects = new System.Collections.Generic.List<ActiveSpellEffect>();
+        foreach (var effect in targetStatusMgr.ActiveEffects)
+        {
+            if (effect == null || effect.Spell == null)
+                continue;
+            // Cannot dispel instantaneous effects (they already happened)
+            if (effect.Spell.DurationType == DurationType.Instantaneous)
+                continue;
+            dispellableEffects.Add(effect);
+        }
+
+        if (dispellableEffects.Count == 0)
+        {
+            CombatUI?.ShowCombatLog($"<color=#AAAAFF>🔮 {casterName} casts Dispel Magic on {targetName} — no dispellable effects found.</color>");
+            Debug.Log($"[DispelMagic] {casterName} targets {targetName} — all effects are instantaneous or non-dispellable");
+            return;
+        }
+
+        // Sort by caster level descending (highest first), then by remaining rounds descending as tiebreaker
+        dispellableEffects.Sort((a, b) =>
+        {
+            int clCompare = b.CasterLevel.CompareTo(a.CasterLevel);
+            if (clCompare != 0) return clCompare;
+            return b.RemainingRounds.CompareTo(a.RemainingRounds);
+        });
+
+        // Roll once: 1d20 + min(CL, 10)
+        int dispelRoll = RollDispelCheck(casterLevel);
+
+        CombatUI?.ShowCombatLog($"<color=#AAAAFF>🔮 {casterName} casts Dispel Magic on {targetName} (dispel check: {dispelRoll})</color>");
+
+        bool dispelledSomething = false;
+        foreach (var effect in dispellableEffects)
+        {
+            bool isOwnSpell = !string.IsNullOrEmpty(effect.CasterName) &&
+                              string.Equals(effect.CasterName, casterName, System.StringComparison.OrdinalIgnoreCase);
+
+            if (isOwnSpell)
+            {
+                // Auto-success against own spells
+                DispelSingleEffect(target, targetStatusMgr, effect, casterName, "(auto-success, own spell)");
+                dispelledSomething = true;
+                break;
+            }
+
+            int dc = GetDispelDC(effect.CasterLevel);
+            if (dispelRoll >= dc)
+            {
+                DispelSingleEffect(target, targetStatusMgr, effect, casterName, $"(roll {dispelRoll} ≥ DC {dc})");
+                dispelledSomething = true;
+                break;
+            }
+            else
+            {
+                Debug.Log($"[DispelMagic] Failed to dispel {effect.Spell.Name} (CL {effect.CasterLevel}): " +
+                          $"roll {dispelRoll} < DC {dc}");
+            }
+        }
+
+        if (!dispelledSomething)
+        {
+            CombatUI?.ShowCombatLog($"<color=#FF8888>❌ Dispel Magic fails — could not overcome any spell on {targetName}.</color>");
+            Debug.Log($"[DispelMagic] All dispel checks failed on {targetName}");
+        }
+
+        UpdateAllStatsUI();
+    }
+
+    /// <summary>
+    /// Perform an area dispel affecting all characters within range.
+    /// D&D 3.5e PHB p.223: 20-ft radius burst.
+    /// Simplified: targets all characters in combat (within range).
+    /// Each creature gets a separate targeted dispel (max 1 spell removed per creature).
+    /// Magic items are NOT affected by area dispel.
+    /// </summary>
+    public void PerformAreaDispel(CharacterController caster, System.Collections.Generic.List<CharacterController> targets)
+    {
+        if (caster == null || targets == null || targets.Count == 0)
+        {
+            CombatUI?.ShowCombatLog("⚠ Dispel Magic (area): No targets in range.");
+            return;
+        }
+
+        string casterName = caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+        CombatUI?.ShowCombatLog($"<color=#AAAAFF>🔮 {casterName} casts Dispel Magic (area dispel) — targeting {targets.Count} creature(s)</color>");
+
+        foreach (var target in targets)
+        {
+            if (target == null || target.Stats == null || target.Stats.IsDead)
+                continue;
+
+            PerformTargetedDispel(caster, target);
+        }
+    }
+
+    /// <summary>
+    /// Remove a single spell effect from a target and handle special cleanup.
+    /// Called when a dispel check succeeds against a specific effect.
+    /// </summary>
+    private void DispelSingleEffect(CharacterController target, StatusEffectManager statusMgr, ActiveSpellEffect effect, string casterName, string checkDetail)
+    {
+        if (effect == null || effect.Spell == null) return;
+
+        string spellName = effect.Spell.Name;
+        string spellId = effect.Spell.SpellId;
+        string targetName = target.Stats != null ? target.Stats.CharacterName : "Unknown";
+
+        CombatUI?.ShowCombatLog($"<color=#88FF88>✅ Dispel Magic succeeds — {spellName} dispelled from {targetName} {checkDetail}</color>");
+        Debug.Log($"[DispelMagic] Dispelled {spellName} (CL {effect.CasterLevel}) from {targetName} {checkDetail}");
+
+        // Handle special effect cleanup before removing the tracked effect
+        HandleDispelSpecialCleanup(target, spellId, effect);
+
+        // Remove the effect from StatusEffectManager (handles stat reversal)
+        statusMgr.RemoveEffect(effect);
+    }
+
+    /// <summary>
+    /// Handle special cleanup when specific spells are dispelled.
+    /// Some spells have side effects on removal (e.g., Bear's Endurance can kill from HP loss).
+    /// </summary>
+    private void HandleDispelSpecialCleanup(CharacterController target, string spellId, ActiveSpellEffect effect)
+    {
+        if (target == null || string.IsNullOrEmpty(spellId)) return;
+
+        // --- Bear's Endurance / attribute enhancements ---
+        // Removing CON enhancement reduces max HP, which can kill the target
+        if (spellId == SpellNames.BEARS_ENDURANCE || spellId == SpellNames.BULLS_STRENGTH ||
+            spellId == SpellNames.CATS_GRACE || spellId == SpellNames.EAGLES_SPLENDOR ||
+            spellId == SpellNames.FOXS_CUNNING || spellId == SpellNames.OWLS_WISDOM)
+        {
+            // The attribute enhancement system handles HP adjustments on removal
+            string abilityName = "";
+            AbilityType ability = AbilityType.STR;
+            switch (spellId)
+            {
+                case SpellNames.BEARS_ENDURANCE: ability = AbilityType.CON; abilityName = "CON"; break;
+                case SpellNames.BULLS_STRENGTH: ability = AbilityType.STR; abilityName = "STR"; break;
+                case SpellNames.CATS_GRACE: ability = AbilityType.DEX; abilityName = "DEX"; break;
+                case SpellNames.EAGLES_SPLENDOR: ability = AbilityType.CHA; abilityName = "CHA"; break;
+                case SpellNames.FOXS_CUNNING: ability = AbilityType.INT; abilityName = "INT"; break;
+                case SpellNames.OWLS_WISDOM: ability = AbilityType.WIS; abilityName = "WIS"; break;
+            }
+
+            bool causedDeath = target.RemoveAttributeEnhancement(ability);
+            if (causedDeath && target.Stats != null)
+            {
+                CombatUI?.ShowCombatLog($"<color=#FF4444>💀 Dispelling {effect.Spell.Name} killed {target.Stats.CharacterName}! (HP loss from {abilityName} reduction)</color>");
+                target.OnDeath();
+                HandleSummonDeathCleanup(target);
+            }
+            return;
+        }
+
+        // --- Spectral Hand ---
+        // Dispelling Spectral Hand: caster regains HP (hand wasn't destroyed, it was dispelled)
+        if (spellId == SpellNames.SPECTRAL_HAND)
+        {
+            target.RemoveSpectralHandEffect(); // This restores HP to caster
+            Debug.Log($"[DispelMagic] Spectral Hand dispelled — caster regains lost HP");
+            return;
+        }
+
+        // --- Invisibility ---
+        if (spellId == SpellNames.INVISIBILITY)
+        {
+            target.ForceEndInvisibility("dispelled");
+            return;
+        }
+
+        // --- See Invisibility ---
+        if (spellId == SpellNames.SEE_INVISIBLE || spellId == SpellNames.SEE_INVISIBILITY_LEGACY)
+        {
+            target.ClearSeeInvisibilityEffect();
+            return;
+        }
+
+        // --- Command Undead ---
+        if (spellId == SpellNames.COMMAND_UNDEAD)
+        {
+            if (target.ActiveCommandUndeadEffect != null)
+            {
+                target.RemoveCommandUndeadEffect();
+                CombatUI?.ShowCombatLog($"<color=#FF8888>💀 Command Undead control broken on {target.Stats?.CharacterName}!</color>");
+            }
+            return;
+        }
+
+        // --- False Life ---
+        if (spellId == SpellNames.FALSE_LIFE)
+        {
+            target.RemoveFalseLifeEffect();
+            return;
+        }
+
+        // --- Disguise Self ---
+        if (spellId == SpellNames.DISGUISE_SELF)
+        {
+            target.ClearDisguiseSelfEffect();
+            return;
+        }
+
+        // --- Expeditious Retreat ---
+        if (spellId == SpellNames.EXPEDITIOUS_RETREAT)
+        {
+            target.ClearExpeditiousRetreatEffect();
+            return;
+        }
+
+        // --- Blur ---
+        // Blur is handled by StatusEffectManager.RemoveEffect() reversing the concealment stats.
+        // No dedicated cleanup method needed.
+
+        // --- Blindness/Deafness ---
+        if (spellId == SpellNames.BLINDNESS_DEAFNESS_WIZ ||
+            spellId == SpellNames.BLINDNESS_DEAFNESS_CLR ||
+            spellId == SpellNames.BLINDNESS_DEAFNESS_BRD)
+        {
+            target.RemoveBlindnessDeafnessEffect();
+            return;
+        }
+
+        // For other spells, StatusEffectManager.RemoveEffect() handles the stat reversal
     }
 }

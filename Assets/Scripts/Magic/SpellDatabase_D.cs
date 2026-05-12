@@ -385,9 +385,49 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ================================================================
+        //  DISPEL MAGIC — Abjuration, 3rd level (PHB p.223)
+        // ================================================================
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DISPEL_MAGIC,
+                    Name = "Dispel Magic",
+                    Description = "Abjuration. You can use Dispel Magic to end ongoing spells on a creature or object, " +
+                        "or to suppress a magic item's properties. A dispelled spell ends as if its duration had run out. " +
+                        "Targeted Dispel: one dispel check (1d20 + caster level, max +10) vs DC 11 + spell's caster level, " +
+                        "removes at most one spell (checked highest CL first). " +
+                        "Area Dispel: 20-ft radius burst, targeted dispel on each creature/object (magic items unaffected). " +
+                        "Auto-succeeds against your own spells. PHB p.223",
+                    SpellLevel = 3,
+                    School = "Abjuration",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard", "Cleric", "Paladin", "Druid" },
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 3),
+                        new SpellAvailability("Cleric", 3),
+                        new SpellAvailability("Druid", 4),
+                        new SpellAvailability("Paladin", 3),
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    // Targeted mode: can target any creature (enemy or ally)
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Debuff,
+                    DurationType = DurationType.Instantaneous,
+                    DurationValue = 0,
+                    DurationScalesWithLevel = false,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
         // Aliases
         RegisterClassSpellAlias("detect_magic_clr", SpellNames.DETECT_MAGIC_WIZ, "Cleric", 0);
         RegisterClassSpellAlias("detect_poison_clr", SpellNames.DETECT_POISON_WIZ, "Cleric", 0);
+        // Druid alias for Dispel Magic at level 4
+        RegisterClassSpellAlias("dispel_magic_drd", SpellNames.DISPEL_MAGIC, "Druid", 4);
 
     }
 }

@@ -153,6 +153,9 @@ namespace DND35e.Identifiers
         /// <summary>Detect Undead (spell id: detect_undead)</summary>
         public const string DETECT_UNDEAD = "detect_undead";
 
+        /// <summary>Dispel Magic (spell id: dispel_magic)</summary>
+        public const string DISPEL_MAGIC = "dispel_magic";
+
         /// <summary>Disguise Self (spell id: disguise_self)</summary>
         public const string DISGUISE_SELF = "disguise_self";
 
