@@ -87,23 +87,50 @@ public static partial class SpellDatabase
                     HasSomaticComponent = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // SHATTER  (PHB p.278)
+        // Evocation [Sonic]
+        // Level: Brd 2, Clr 2, Chaos 2, Destruction 2, Sor/Wiz 2
+        // Components: V, S, M/DF (a chip of mica)
+        // Casting Time: 1 standard action
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Target or Area: 5-ft.-radius spread; or one solid object or
+        //   one crystalline creature
+        // Duration: Instantaneous
+        // Saving Throw: Will negates (object); Will negates (object) or
+        //   Fortitude half; see text
+        // Spell Resistance: Yes
+        //
+        // Area mode shatters nonmagical objects of brittle material in a
+        // 5-ft. spread (Will negates per object, weight limit 1 lb/level).
+        // Single-target mode: against a crystalline creature deals
+        // 1d6 sonic damage per caster level (max 10d6), Fortitude half.
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.SHATTER,
                     Name = "Shatter",
-                    Description = "Sonic vibration damages objects or crystalline creatures. 1d6/level (max 10d6) sonic. PHB p.278",
-                    SpellLevel = 2, School = "Evocation",
-                    ClassList = new[] { "Wizard" },
+                    Description = "Sonic vibration damages objects or crystalline creatures. "
+                        + "Area: shatters nonmagical objects of brittle material in a 5-ft. spread (Will negates per object, weight ≤1 lb/level). "
+                        + "Single target: 1d6 sonic damage per caster level (max 10d6) to a crystalline creature (Fortitude half). "
+                        + "Components: V, S, M/DF (a chip of mica). PHB p.278",
+                    SpellLevel = 2, School = "Evocation [Sonic]",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard", "Cleric" },
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Close,
+                    AreaRadius = 1, // 5-ft.-radius spread (area mode)
                     EffectType = SpellEffectType.Damage,
-                    DamageDice = 6, DamageCount = 3, // 3d6 at CL3
+                    DamageDice = 6, DamageCount = 1, // 1d6 per caster level (scaled at cast time, max 10d6)
                     DamageType = "sonic",
                     AllowsSavingThrow = true,
-                    SavingThrowType = "Will",
-                    SaveHalves = false,
+                    SavingThrowType = "Fortitude", // Fortitude half vs crystalline creatures
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Instantaneous,
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
                 });
 
         Register(new SpellData
