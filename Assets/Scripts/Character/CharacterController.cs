@@ -331,6 +331,7 @@ public class CharacterController : MonoBehaviour
     public MelfsAcidArrowEffectData ActiveMelfsAcidArrowEffect { get; private set; }
     public BlindnessDeafnessEffectData ActiveBlindnessDeafnessEffect { get; private set; }
     public CommandUndeadEffectData ActiveCommandUndeadEffect { get; private set; }
+    public FalseLifeEffectData ActiveFalseLifeEffect { get; private set; }
     private readonly System.Collections.Generic.List<CommandUndeadEffectData> _commandedUndeadList = new System.Collections.Generic.List<CommandUndeadEffectData>();
     private EnfeebledConditionData _activeEnfeeblementEffect;
     private TouchOfIdiocyConditionData _activeTouchOfIdiocyEffect;
@@ -1857,6 +1858,66 @@ public class CharacterController : MonoBehaviour
         Debug.Log($"[CommandUndead] {Stats?.CharacterName}: Control by {casterName} broken — {reason}");
 
         RemoveCommandUndeadEffect();
+    }
+
+    // ===================== FALSE LIFE EFFECT =====================
+
+    /// <summary>Whether this character has an active False Life effect with remaining temp HP.</summary>
+    public bool HasActiveFalseLifeEffect => ActiveFalseLifeEffect != null && ActiveFalseLifeEffect.IsActive && ActiveFalseLifeEffect.HasTempHP;
+
+    /// <summary>
+    /// Apply a False Life effect to this character.
+    /// If an existing False Life is active, follows D&D 3.5e non-stacking rules:
+    /// use the higher temp HP value (do not add them together).
+    /// </summary>
+    public void ApplyFalseLifeEffect(FalseLifeEffectData effectData)
+    {
+        if (effectData == null || Stats == null) return;
+
+        // Non-stacking: if existing False Life is active, keep higher value
+        if (ActiveFalseLifeEffect != null && ActiveFalseLifeEffect.IsActive && ActiveFalseLifeEffect.HasTempHP)
+        {
+            if (effectData.CurrentTempHP <= ActiveFalseLifeEffect.CurrentTempHP)
+            {
+                Debug.Log($"[FalseLife] {Stats.CharacterName}: New False Life ({effectData.CurrentTempHP} temp HP) " +
+                          $"not applied — existing ({ActiveFalseLifeEffect.CurrentTempHP} temp HP) is higher or equal");
+                return;
+            }
+
+            // New is higher — remove old temp HP from stats before applying new
+            Debug.Log($"[FalseLife] {Stats.CharacterName}: Replacing False Life ({ActiveFalseLifeEffect.CurrentTempHP} temp HP) " +
+                      $"with higher value ({effectData.CurrentTempHP} temp HP)");
+            Stats.TempHP = Mathf.Max(0, Stats.TempHP - ActiveFalseLifeEffect.CurrentTempHP);
+            ActiveFalseLifeEffect.Discharge("replaced by higher False Life");
+        }
+
+        ActiveFalseLifeEffect = effectData;
+
+        // Apply temp HP to stats
+        Stats.TempHP += effectData.CurrentTempHP;
+
+        Debug.Log($"[FalseLife] {Stats.CharacterName}: False Life applied — {effectData.CurrentTempHP} temp HP " +
+                  $"(CL {effectData.CasterLevel}, duration {effectData.DurationRemainingRounds} rounds)");
+    }
+
+    /// <summary>
+    /// Remove the active False Life effect, clearing remaining temp HP from stats.
+    /// Called when the spell is dispelled, expires, or is otherwise removed.
+    /// </summary>
+    public void RemoveFalseLifeEffect()
+    {
+        if (ActiveFalseLifeEffect == null) return;
+
+        if (ActiveFalseLifeEffect.IsActive && Stats != null)
+        {
+            // Remove remaining temp HP from stats
+            Stats.TempHP = Mathf.Max(0, Stats.TempHP - ActiveFalseLifeEffect.CurrentTempHP);
+        }
+
+        ActiveFalseLifeEffect.Discharge("effect removed");
+        ActiveFalseLifeEffect = null;
+
+        Debug.Log($"[FalseLife] {Stats?.CharacterName}: False Life effect removed");
     }
 
     private void RefreshInvisibilityVisual()

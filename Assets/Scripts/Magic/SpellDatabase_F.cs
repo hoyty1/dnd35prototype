@@ -14,15 +14,18 @@ public static partial class SpellDatabase
                 {
                     SpellId = SpellNames.FALSE_LIFE,
                     Name = "False Life",
-                    Description = "Gain 1d10+CL temporary hit points (max +10). Duration 1 hour/level. PHB p.229",
+                    Description = "Gain 1d10 + caster level (max +10) temporary hit points. Temp HP are lost before regular HP and cannot be healed. Duration 1 hour/level or until discharged. PHB p.229",
                     SpellLevel = 2, School = "Necromancy",
                     ClassList = new[] { "Wizard" },
                     TargetType = SpellTargetType.Self,
                     RangeCategory = SpellRangeCategory.Personal,
                     EffectType = SpellEffectType.Buff,
-                    BuffTempHP = 8, // ~average of 1d10+3 at CL3
-                    BuffDurationRounds = -1,
+                    BuffTempHP = 0, // Calculated at cast time: 1d10 + min(CL, 10)
+                    DurationType = DurationType.Hours,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
                     BuffType = "temp_hp",
+                    SpellResistanceApplies = false,
                     ActionType = SpellActionType.Standard,
                     ProvokesAoO = true
                 });

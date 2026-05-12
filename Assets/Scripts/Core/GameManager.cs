@@ -16009,6 +16009,50 @@ public partial class GameManager : MonoBehaviour
             return null;
         }
 
+        // ===== FALSE LIFE — D&D 3.5e PHB p.229 =====
+        // Personal spell: 1d10 + min(CL, 10) temp HP, 1 hour/level, no save, no SR.
+        // Temp HP are lost before regular HP and cannot be healed.
+        // Multiple False Life castings do NOT stack — use the higher value.
+        if (spell != null && spell.SpellId == SpellNames.FALSE_LIFE)
+        {
+            CharacterController recipient = caster; // Personal range — always self
+            if (recipient == null || recipient.Stats == null)
+                return null;
+
+            int casterLevel = Mathf.Max(1, recipient.Stats.GetCasterLevel());
+
+            // Roll temp HP: 1d10 + min(CL, 10)
+            FalseLifeEffectData falseLifeEffect = FalseLifeEffectData.CreateFalseLife(casterLevel, recipient);
+
+            // Track via StatusEffectManager for duration and dispel
+            StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+            if (recipientStatusMgr == null)
+                recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+            recipientStatusMgr.Init(recipient.Stats);
+
+            ActiveSpellEffect effect = recipientStatusMgr.AddEffect(spell, recipient.Stats.CharacterName, casterLevel);
+            if (effect != null)
+            {
+                // Apply the rolled temp HP via CharacterController (handles non-stacking)
+                recipient.ApplyFalseLifeEffect(falseLifeEffect);
+
+                SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+                if (recipientSpellComp != null)
+                    recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+                CombatUI?.ShowCombatLog($"<color=#88FF88>💀 {recipient.Stats.CharacterName} casts False Life — gains {falseLifeEffect.CurrentTempHP} temporary HP " +
+                                        $"(1d10+{Mathf.Min(casterLevel, 10)}) [{effect.GetDurationDisplayString()}]</color>");
+                Debug.Log($"[GameManager] False Life applied to {recipient.Stats.CharacterName}: {falseLifeEffect.CurrentTempHP} temp HP, CL {casterLevel}");
+            }
+            else
+            {
+                Debug.Log($"[GameManager] False Life NOT applied — StatusEffectManager stacking rules prevented it");
+            }
+
+            UpdateAllStatsUI();
+            return effect;
+        }
+
         // Use StatusEffectManager for tracked buff application
         var statusMgr = target.GetComponent<StatusEffectManager>();
         if (statusMgr != null)

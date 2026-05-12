@@ -471,8 +471,9 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.AppliedDeflectionBonus != 0)
             _stats.DeflectionBonus += effect.AppliedDeflectionBonus;
 
-        // Temp HP
-        if (effect.AppliedTempHP != 0)
+        // Temp HP — False Life is handled separately via FalseLifeEffectData (1d10+CL calculation).
+        // Only apply static temp HP for other spells that use BuffTempHP directly.
+        if (effect.AppliedTempHP != 0 && effect.Spell != null && effect.Spell.SpellId != SpellNames.FALSE_LIFE)
             _stats.TempHP += effect.AppliedTempHP;
 
         // Land speed enhancement bonus (feet).
@@ -539,7 +540,8 @@ public class StatusEffectManager : MonoBehaviour
         if (effect.AppliedDeflectionBonus != 0)
             _stats.DeflectionBonus -= effect.AppliedDeflectionBonus;
 
-        if (effect.AppliedTempHP != 0)
+        // False Life temp HP removal is handled by CharacterController.RemoveFalseLifeEffect()
+        if (effect.AppliedTempHP != 0 && (effect.Spell == null || effect.Spell.SpellId != SpellNames.FALSE_LIFE))
         {
             _stats.TempHP = Mathf.Max(0, _stats.TempHP - effect.AppliedTempHP);
         }
@@ -582,6 +584,15 @@ public class StatusEffectManager : MonoBehaviour
 
         string spellId = effect.Spell.SpellId;
         if (string.IsNullOrEmpty(spellId)) return;
+
+        if (spellId == SpellNames.FALSE_LIFE)
+        {
+            if (!applying)
+            {
+                _controller?.RemoveFalseLifeEffect();
+            }
+            return;
+        }
 
         if (spellId == SpellNames.DISGUISE_SELF)
         {
