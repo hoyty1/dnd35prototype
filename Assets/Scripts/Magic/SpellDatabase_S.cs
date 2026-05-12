@@ -30,21 +30,46 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Attack prevention not fully implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // SCARE  (PHB p.274)
+        // Necromancy [Fear, Mind-Affecting]
+        // Level: Brd 2, Sor/Wiz 2
+        // Components: V, S, M (a bit of bone from an undead skeleton, zombie,
+        //   ghoul, ghast, or mummy)
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Targets: One living creature per three levels, no two of which can
+        //   be more than 30 ft. apart
+        // Duration: 1 round/level or 1 round; see text
+        // Saving Throw: Will partial
+        // Spell Resistance: Yes
+        //
+        // Functions like Cause Fear except it can target multiple creatures.
+        // Creatures with 6+ HD are completely immune.
+        // Failed save: Frightened for 1 round/level.
+        // Successful save: Shaken for 1 round.
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.SCARE,
                     Name = "Scare",
-                    Description = "Frightens creatures of less than 6 HD. Will save negates. 1 round/level. PHB p.274",
+                    Description = "Necromancy [Fear, Mind-Affecting]. Causes living creatures of less than 6 HD to become frightened (Will partial). Failed save: frightened for 1 round/level (must flee, -2 penalties). Successful save: shaken for 1 round (-2 penalties). Targets 1 creature per 3 caster levels, no two more than 30 ft apart. Creatures with 6+ HD are immune. Components: V, S, M (bone from undead). PHB p.274",
                     SpellLevel = 2, School = "Necromancy",
-                    ClassList = new[] { "Wizard" },
-                    TargetType = SpellTargetType.SingleEnemy,
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
+                    TargetType = SpellTargetType.SingleEnemy, // Runtime handles multi-target
                     RangeCategory = SpellRangeCategory.Medium,
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Will",
-                    BuffDurationRounds = 3,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 3, // Fallback; actual is caster level rounds
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
                 });
 
         Register(new SpellData

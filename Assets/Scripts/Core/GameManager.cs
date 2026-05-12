@@ -13298,6 +13298,7 @@ public partial class GameManager : MonoBehaviour
                                         _pendingSpell.EffectType == SpellEffectType.Debuff;
 
             bool causeFearSaveReduced = IsCauseFearSpell(_pendingSpell) && result.RequiredSave && result.SaveSucceeded;
+            bool scareSaveReduced = IsScareSpell(_pendingSpell) && result.RequiredSave && result.SaveSucceeded;
             bool blurSaveNegated = _pendingSpell != null
                                    && string.Equals(_pendingSpell.SpellId, SpellNames.BLUR, StringComparison.Ordinal)
                                    && result.RequiredSave
@@ -13313,6 +13314,7 @@ public partial class GameManager : MonoBehaviour
                                        && result.RequiredSave
                                        && result.SaveSucceeded
                                        && !causeFearSaveReduced
+                                       && !scareSaveReduced
                                        && !commandUndeadNoSaveOverride;
             if (effectNegatedBySave)
             {
@@ -13326,27 +13328,35 @@ public partial class GameManager : MonoBehaviour
 
             bool handledCauseFear = TryResolveCauseFearSpellEffect(caster, target, _pendingSpell, result);
 
+            bool handledGhoulTouch = false;
+            if (!handledCauseFear)
+                handledGhoulTouch = TryResolveGhoulTouchSpellEffect(caster, target, _pendingSpell, result);
+
+            bool handledScare = false;
+            if (!handledCauseFear && !handledGhoulTouch)
+                handledScare = TryResolveScareSpellEffect(caster, target, _pendingSpell, result);
+
             bool handledRayOfEnfeeblement = false;
-            if (!handledCauseFear && result.Success && !effectNegatedBySave)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && result.Success && !effectNegatedBySave)
                 handledRayOfEnfeeblement = TryResolveRayOfEnfeeblementSpellEffect(caster, target, _pendingSpell, result);
 
             bool handledTouchOfIdiocy = false;
-            if (!handledCauseFear && !handledRayOfEnfeeblement && result.Success && !effectNegatedBySave)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && result.Success && !effectNegatedBySave)
                 handledTouchOfIdiocy = TryResolveTouchOfIdiocySpellEffect(caster, target, _pendingSpell, result);
 
             bool handledMelfsAcidArrow = false;
-            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && result.Success && !effectNegatedBySave)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && result.Success && !effectNegatedBySave)
                 handledMelfsAcidArrow = TryResolveMelfsAcidArrowSpellEffect(caster, target, _pendingSpell, result);
 
             bool handledAnimateRope = false;
-            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow)
                 handledAnimateRope = TryResolveAnimateRopeSpellEffect(caster, target, _pendingSpell, result);
 
             bool handledMirrorImage = false;
-            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && !effectNegatedBySave)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && result.Success && !effectNegatedBySave)
                 handledMirrorImage = TryResolveMirrorImageSpellEffect(caster, target, _pendingSpell, result);
 
-            if (!handledCauseFear && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
+            if (!handledCauseFear && !handledGhoulTouch && !handledScare && !handledRayOfEnfeeblement && !handledTouchOfIdiocy && !handledMelfsAcidArrow && !handledAnimateRope && !handledMirrorImage && result.Success && appliesTrackedEffect && !effectNegatedBySave)
             {
                 var appliedEffect = ApplySpellBuff(caster, target, _pendingSpell, spellComp);
 
@@ -15163,6 +15173,280 @@ public partial class GameManager : MonoBehaviour
         }
 
         CombatUI?.ShowCombatLog($"😱 {targetName} fails Will save - Frightened for {frightenedRounds} rounds! ({casterName} is the source of fear)");
+        return true;
+    }
+
+    // ======================== GHOUL TOUCH SPELL HANDLER ========================
+
+    private static bool IsGhoulTouchSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.GHOUL_TOUCH, StringComparison.Ordinal);
+    }
+
+    private bool TryResolveGhoulTouchSpellEffect(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
+    {
+        if (!IsGhoulTouchSpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        string targetName = target.Stats.CharacterName;
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+
+        CombatUI?.ShowCombatLog($"✨ {casterName} casts Ghoul Touch on {targetName}.");
+
+        // Ghoul Touch only works on living humanoids
+        if (!IsLivingCreatureForFearSpell(target))
+        {
+            if (result != null)
+            {
+                result.Success = false;
+                result.NoEffectReason = $"{targetName} is not a living creature.";
+            }
+            CombatUI?.ShowCombatLog($"🧟 {targetName} is immune to Ghoul Touch (not a living creature).");
+            return true;
+        }
+
+        if (!IsHumanoid(target))
+        {
+            if (result != null)
+            {
+                result.Success = false;
+                result.NoEffectReason = $"{targetName} is not a humanoid.";
+            }
+            CombatUI?.ShowCombatLog($"⚠ {targetName} is immune to Ghoul Touch (not a humanoid).");
+            return true;
+        }
+
+        // Touch attack must hit
+        if (result != null && result.RequiredAttackRoll && !result.AttackHit)
+        {
+            CombatUI?.ShowCombatLog($"❌ {casterName}'s Ghoul Touch misses {targetName}.");
+            return true;
+        }
+
+        // Fort save negates
+        if (result != null && result.RequiredSave && result.SaveSucceeded)
+        {
+            CombatUI?.ShowCombatLog($"🛡 {targetName} resists Ghoul Touch with a successful Fortitude save.");
+            return true;
+        }
+
+        // Failed save: apply paralysis + stench
+        GhoulTouchEffectData ghoulEffect = GhoulTouchEffectData.CreateGhoulTouch(caster, target);
+
+        // Apply paralysis via CharacterController
+        target.ApplyGhoulTouchEffect(ghoulEffect);
+
+        // Track via StatusEffectManager for dispel/duration
+        StatusEffectManager targetStatusMgr = target.GetComponent<StatusEffectManager>();
+        if (targetStatusMgr == null)
+        {
+            targetStatusMgr = target.gameObject.AddComponent<StatusEffectManager>();
+            targetStatusMgr.Init(target.Stats);
+        }
+
+        targetStatusMgr.AddEffect(spell, ghoulEffect.ParalysisDurationRounds, caster?.Stats);
+
+        if (result != null)
+        {
+            result.BuffApplied = true;
+            result.BuffDescription = $"Debuff: Paralyzed for {ghoulEffect.ParalysisDurationRounds} rounds (stench aura active).";
+        }
+
+        CombatUI?.ShowCombatLog($"<color=#FF6666>⛓ {targetName} is paralyzed by Ghoul Touch for {ghoulEffect.ParalysisDurationRounds} rounds!</color>");
+        CombatUI?.ShowCombatLog($"<color=#99CC66>☠ Carrion stench emanates from {targetName} (10-ft radius, sickens living creatures).</color>");
+
+        // Apply stench to nearby creatures immediately
+        ApplyGhoulTouchStench(caster, target, ghoulEffect);
+
+        Debug.Log($"[GameManager] Ghoul Touch: {targetName} paralyzed for {ghoulEffect.ParalysisDurationRounds} rounds, stench active");
+        return true;
+    }
+
+    /// <summary>
+    /// Apply Ghoul Touch stench aura to living creatures within 10 ft of the paralyzed target.
+    /// Each creature makes a Fort save or becomes sickened. Caster is exempt. Poison effect.
+    /// </summary>
+    private void ApplyGhoulTouchStench(CharacterController caster, CharacterController paralyzedTarget, GhoulTouchEffectData ghoulEffect)
+    {
+        if (paralyzedTarget == null || !ghoulEffect.IsStenchActive)
+            return;
+
+        var allCharacters = GetAllCharacters();
+        if (allCharacters == null) return;
+
+        int spellDC = 10 + 2; // Base DC for a level 2 spell; caster ability mod added below
+        if (caster != null && caster.Stats != null)
+        {
+            int casterAbilityMod = Mathf.Max(caster.Stats.INTMod, caster.Stats.CHAMod);
+            spellDC = 10 + 2 + casterAbilityMod; // 10 + spell level + ability mod
+        }
+
+        foreach (CharacterController creature in allCharacters)
+        {
+            if (creature == null || creature == paralyzedTarget) continue;
+
+            if (!ghoulEffect.IsValidStenchTarget(creature)) continue;
+            if (ghoulEffect.IsCreaturePoisonImmune(creature))
+            {
+                CombatUI?.ShowCombatLog($"🛡 {creature.Stats.CharacterName} is immune to poison (stench has no effect).");
+                continue;
+            }
+
+            // Check distance (10 ft = 2 squares)
+            int distance = Mathf.Max(
+                Mathf.Abs(creature.GridPosition.x - paralyzedTarget.GridPosition.x),
+                Mathf.Abs(creature.GridPosition.y - paralyzedTarget.GridPosition.y));
+
+            if (distance > ghoulEffect.StenchRadiusSquares) continue;
+
+            // Fort save vs sickened
+            int fortSave = UnityEngine.Random.Range(1, 21) + (creature.Stats != null ? creature.Stats.FortitudeSave : 0);
+            bool saved = fortSave >= spellDC;
+
+            if (saved)
+            {
+                CombatUI?.ShowCombatLog($"🛡 {creature.Stats.CharacterName} resists the carrion stench (Fort {fortSave} vs DC {spellDC}).");
+            }
+            else
+            {
+                // Apply sickened condition
+                if (_conditionService != null)
+                {
+                    _conditionService.ApplyCondition(
+                        creature,
+                        CombatConditionType.Sickened,
+                        ghoulEffect.ParalysisRemainingRounds,
+                        source: caster,
+                        sourceNameOverride: "Ghoul Touch (stench)",
+                        sourceCategory: "Spell",
+                        sourceId: SpellNames.GHOUL_TOUCH);
+                }
+                else
+                {
+                    creature.ApplyCondition(CombatConditionType.Sickened, ghoulEffect.ParalysisRemainingRounds,
+                        "Ghoul Touch stench");
+                }
+
+                CombatUI?.ShowCombatLog($"<color=#CCCC66>🤢 {creature.Stats.CharacterName} is sickened by the carrion stench! (-2 to attacks, damage, saves, checks) Fort {fortSave} vs DC {spellDC}</color>");
+            }
+        }
+    }
+
+    // ======================== SCARE SPELL HANDLER ========================
+
+    private static bool IsScareSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.SCARE, StringComparison.Ordinal);
+    }
+
+    private bool TryResolveScareSpellEffect(CharacterController caster, CharacterController target, SpellData spell, SpellResult result)
+    {
+        if (!IsScareSpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        string targetName = target.Stats.CharacterName;
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Unknown";
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+
+        CombatUI?.ShowCombatLog($"✨ {casterName} casts Scare on {targetName}.");
+
+        // Check mind-affecting immunity
+        if (result != null && result.MindAffectingImmunityBlocked)
+            return true;
+
+        // Must be a living creature
+        if (!IsLivingCreatureForFearSpell(target))
+        {
+            if (result != null)
+            {
+                result.Success = false;
+                result.NoEffectReason = $"{targetName} is immune to fear (not a living creature).";
+            }
+            CombatUI?.ShowCombatLog($"🧟 {targetName} is immune to Scare (not a living creature).");
+            return true;
+        }
+
+        // HD limit: 6+ HD are completely immune
+        int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+        if (ScareEffectData.IsImmuneByHD(targetHd))
+        {
+            if (result != null)
+            {
+                result.Success = false;
+                result.NoEffectReason = $"{targetName} has {targetHd} HD (6+ HD immune to Scare).";
+            }
+            CombatUI?.ShowCombatLog($"⚠ {targetName} ({targetHd} HD) is too powerful to be affected by Scare.");
+            return true;
+        }
+
+        // Will save partial
+        if (result != null && result.RequiredSave && result.SaveSucceeded)
+        {
+            // Successful save: shaken for 1 round
+            ScareEffectData shakenEffect = ScareEffectData.CreateShaken(caster);
+            target.ApplyScareEffect(shakenEffect);
+
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Shaken,
+                    1,
+                    source: caster,
+                    sourceNameOverride: spell.Name,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+            }
+
+            if (result != null)
+            {
+                result.BuffApplied = true;
+                result.BuffDescription = "Debuff: Shaken for 1 round (successful Will save reduces Scare).";
+            }
+
+            CombatUI?.ShowCombatLog($"😰 {targetName} resists the worst of Scare and is shaken for 1 round (-2 to attacks, saves, checks).");
+            return true;
+        }
+
+        // Failed save: frightened for 1 round/level
+        int frightenedRounds = Mathf.Max(1, casterLevel);
+        ScareEffectData frightenedEffect = ScareEffectData.CreateFrightened(casterLevel, caster);
+        target.ApplyScareEffect(frightenedEffect);
+
+        var fearData = new FrightenedConditionData
+        {
+            Caster = caster,
+            CasterName = casterName,
+            RemainingRounds = frightenedRounds,
+            SourceSpellId = spell.SpellId,
+            SourceEffectName = spell.Name
+        };
+
+        if (_conditionService != null)
+        {
+            _conditionService.ApplyCondition(
+                target,
+                CombatConditionType.Frightened,
+                frightenedRounds,
+                source: caster,
+                data: fearData,
+                sourceNameOverride: spell.Name,
+                sourceCategory: "Spell",
+                sourceId: spell.SpellId);
+        }
+        else
+        {
+            target.ApplyCondition(CombatConditionType.Frightened, frightenedRounds, casterName);
+        }
+
+        if (result != null)
+        {
+            result.BuffApplied = true;
+            result.BuffDescription = $"Debuff: Frightened for {frightenedRounds} rounds.";
+        }
+
+        CombatUI?.ShowCombatLog($"😱 {targetName} fails Will save - Frightened for {frightenedRounds} rounds! Must flee from {casterName}. (-2 to attacks, saves, checks)");
+        Debug.Log($"[GameManager] Scare: {targetName} frightened for {frightenedRounds} rounds by {casterName}");
         return true;
     }
 

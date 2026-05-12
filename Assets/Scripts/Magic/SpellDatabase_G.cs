@@ -46,13 +46,32 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Illusion mechanics not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // GHOUL TOUCH  (PHB p.235)
+        // Necromancy
+        // Level: Sor/Wiz 2
+        // Components: V, S, M (cloth from a ghoul or earth from a ghoul's lair)
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Living humanoid touched
+        // Duration: 1d6+2 rounds
+        // Saving Throw: Fortitude negates
+        // Spell Resistance: Yes
+        //
+        // Imbues the caster's hand with negative energy. On a successful
+        // melee touch attack against a living humanoid, the target must
+        // make a Fort save or become paralyzed for 1d6+2 rounds.
+        // A paralyzed target exudes a carrion stench in a 10-ft radius
+        // that sickens nearby living creatures (Fort negates, poison effect).
+        // No recurring saves (unlike Hold Person).
+        // ──────────────────────────────────────────────────────────────
         Register(new SpellData
                 {
                     SpellId = SpellNames.GHOUL_TOUCH,
                     Name = "Ghoul Touch",
-                    Description = "Touch attack paralyzes one living subject for 1d6+2 rounds. Fort negates. Sickens nearby. PHB p.235",
+                    Description = "Necromancy. Imbues your hand with negative energy. Melee touch attack paralyzes one living humanoid for 1d6+2 rounds (Fort negates). Paralyzed target exudes carrion stench in 10-ft radius that sickens living creatures (Fort negates, poison effect). No recurring saves. Components: V, S, M (cloth from a ghoul or earth from a ghoul's lair). PHB p.235",
                     SpellLevel = 2, School = "Necromancy",
-                    ClassList = new[] { "Wizard" },
+                    ClassList = new[] { "Wizard", "Sorcerer" },
                     TargetType = SpellTargetType.SingleEnemy,
                     RangeCategory = SpellRangeCategory.Touch,
                     IsTouch = true,
@@ -60,9 +79,12 @@ public static partial class SpellDatabase
                     EffectType = SpellEffectType.Debuff,
                     AllowsSavingThrow = true,
                     SavingThrowType = "Fortitude",
-                    BuffDurationRounds = 5, // 1d6+2 avg
+                    SpellResistanceApplies = true,
+                    BuffDurationRounds = 5, // Placeholder — actual duration is 1d6+2 rolled at cast time
                     ActionType = SpellActionType.Standard,
-                    ProvokesAoO = true
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true
                 });
 
         Register(new SpellData

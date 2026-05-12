@@ -332,6 +332,8 @@ public class CharacterController : MonoBehaviour
     public BlindnessDeafnessEffectData ActiveBlindnessDeafnessEffect { get; private set; }
     public CommandUndeadEffectData ActiveCommandUndeadEffect { get; private set; }
     public FalseLifeEffectData ActiveFalseLifeEffect { get; private set; }
+    public GhoulTouchEffectData ActiveGhoulTouchEffect { get; private set; }
+    public ScareEffectData ActiveScareEffect { get; private set; }
     private readonly System.Collections.Generic.List<CommandUndeadEffectData> _commandedUndeadList = new System.Collections.Generic.List<CommandUndeadEffectData>();
     private EnfeebledConditionData _activeEnfeeblementEffect;
     private TouchOfIdiocyConditionData _activeTouchOfIdiocyEffect;
@@ -1918,6 +1920,130 @@ public class CharacterController : MonoBehaviour
         ActiveFalseLifeEffect = null;
 
         Debug.Log($"[FalseLife] {Stats?.CharacterName}: False Life effect removed");
+    }
+
+    // ===================== GHOUL TOUCH EFFECT =====================
+
+    /// <summary>Whether this character has an active Ghoul Touch paralysis effect.</summary>
+    public bool HasActiveGhoulTouchEffect => ActiveGhoulTouchEffect != null && ActiveGhoulTouchEffect.IsParalyzed;
+
+    /// <summary>
+    /// Apply a Ghoul Touch effect to this character.
+    /// Sets paralysis condition and activates stench aura.
+    /// </summary>
+    public void ApplyGhoulTouchEffect(GhoulTouchEffectData effectData)
+    {
+        if (effectData == null || Stats == null) return;
+
+        ActiveGhoulTouchEffect = effectData;
+
+        // Apply Paralyzed condition via the condition system
+        ApplyCondition(CombatConditionType.Paralyzed, effectData.ParalysisDurationRounds,
+            effectData.CasterName ?? "Ghoul Touch");
+
+        // Also apply Helpless condition (paralysis implies helpless in D&D 3.5e)
+        ApplyCondition(CombatConditionType.Helpless, effectData.ParalysisDurationRounds,
+            effectData.CasterName ?? "Ghoul Touch");
+
+        Debug.Log($"[GhoulTouch] {Stats.CharacterName}: Paralyzed for {effectData.ParalysisDurationRounds} rounds (stench aura active)");
+    }
+
+    /// <summary>
+    /// Remove the active Ghoul Touch effect from this character.
+    /// Clears paralysis and stench aura.
+    /// </summary>
+    public void RemoveGhoulTouchEffect()
+    {
+        if (ActiveGhoulTouchEffect == null) return;
+
+        ActiveGhoulTouchEffect.Expire("effect removed");
+        ActiveGhoulTouchEffect = null;
+
+        // Remove conditions
+        RemoveCondition(CombatConditionType.Paralyzed);
+        RemoveCondition(CombatConditionType.Helpless);
+
+        Debug.Log($"[GhoulTouch] {Stats?.CharacterName}: Ghoul Touch effect removed");
+    }
+
+    // ===================== SCARE EFFECT =====================
+
+    /// <summary>Whether this character has an active Scare fear effect.</summary>
+    public bool HasActiveScareEffect => ActiveScareEffect != null && ActiveScareEffect.IsActive;
+
+    /// <summary>
+    /// Apply a Scare effect to this character.
+    /// Applies Frightened or Shaken condition based on the effect data.
+    /// </summary>
+    public void ApplyScareEffect(ScareEffectData effectData)
+    {
+        if (effectData == null || Stats == null) return;
+
+        ActiveScareEffect = effectData;
+
+        if (effectData.IsFrightened)
+        {
+            ApplyCondition(CombatConditionType.Frightened, effectData.DurationRemainingRounds,
+                effectData.CasterName ?? "Scare");
+            Debug.Log($"[Scare] {Stats.CharacterName}: Frightened for {effectData.DurationRemainingRounds} rounds");
+        }
+        else if (effectData.IsShaken)
+        {
+            ApplyCondition(CombatConditionType.Shaken, effectData.DurationRemainingRounds,
+                effectData.CasterName ?? "Scare");
+            Debug.Log($"[Scare] {Stats.CharacterName}: Shaken for {effectData.DurationRemainingRounds} round(s)");
+        }
+    }
+
+    /// <summary>
+    /// Remove the active Scare effect from this character.
+    /// </summary>
+    public void RemoveScareEffect()
+    {
+        if (ActiveScareEffect == null) return;
+
+        FearLevel level = ActiveScareEffect.CurrentFearLevel;
+        ActiveScareEffect.Expire("effect removed");
+        ActiveScareEffect = null;
+
+        if (level == FearLevel.Frightened)
+            RemoveCondition(CombatConditionType.Frightened);
+        else if (level == FearLevel.Shaken)
+            RemoveCondition(CombatConditionType.Shaken);
+
+        Debug.Log($"[Scare] {Stats?.CharacterName}: Scare effect removed");
+    }
+
+    // ===================== CONDITION QUERY HELPERS =====================
+
+    /// <summary>Returns true if this character is currently paralyzed (from any source).</summary>
+    public bool IsParalyzed()
+    {
+        if (ActiveGhoulTouchEffect != null && ActiveGhoulTouchEffect.IsParalyzed)
+            return true;
+        return HasCondition(CombatConditionType.Paralyzed);
+    }
+
+    /// <summary>Returns true if this character is currently frightened (from any source).</summary>
+    public bool IsFrightened()
+    {
+        if (ActiveScareEffect != null && ActiveScareEffect.IsFrightened)
+            return true;
+        return HasCondition(CombatConditionType.Frightened);
+    }
+
+    /// <summary>Returns true if this character is currently shaken (from any source).</summary>
+    public bool IsShaken()
+    {
+        if (ActiveScareEffect != null && ActiveScareEffect.IsShaken)
+            return true;
+        return HasCondition(CombatConditionType.Shaken);
+    }
+
+    /// <summary>Returns true if this character is currently sickened (from any source).</summary>
+    public bool IsSickened()
+    {
+        return HasCondition(CombatConditionType.Sickened);
     }
 
     private void RefreshInvisibilityVisual()
