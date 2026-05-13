@@ -423,6 +423,56 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // DEEP SLUMBER  (PHB p.217)
+        // Enchantment (Compulsion) [Mind-Affecting]
+        // Level: Bard 3, Sor/Wiz 3
+        // Components: V, S, M (fine sand, rose petals, or a live cricket)
+        // Casting Time: 1 round
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Area: One or more living creatures within a 10-ft.-radius burst
+        // Duration: 1 min./level
+        // Saving Throw: Will negates
+        // Spell Resistance: Yes
+        //
+        // As Sleep, except that it affects 10 HD of creatures.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DEEP_SLUMBER,
+                    Name = "Deep Slumber",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. As Sleep, except it affects up to 10 HD of creatures (no 4 HD cap). "
+                        + "Creatures in the 10-ft radius burst with the lowest HD are affected first. Will negates. SR: Yes. "
+                        + "Duration 1 min/level. PHB p.217",
+                    SpellLevel = 3,
+                    School = "Enchantment",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 3),
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Close,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 2, // 10-ft radius
+                    AoERangeSquares = 0, // use Close range profile
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    BlockedByProtectionFromAlignment = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 10, // legacy fallback; runtime uses duration system
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterClassSpellAlias("detect_magic_clr", SpellNames.DETECT_MAGIC_WIZ, "Cleric", 0);
         RegisterClassSpellAlias("detect_poison_clr", SpellNames.DETECT_POISON_WIZ, "Cleric", 0);

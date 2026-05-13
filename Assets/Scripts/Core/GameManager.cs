@@ -14576,6 +14576,12 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
+            if (string.Equals(_pendingSpell.SpellId, SpellNames.DEEP_SLUMBER, StringComparison.Ordinal))
+            {
+                ResolveDeepSlumberSpell(caster, targets, aoeCells);
+                return;
+            }
+
             if (string.Equals(_pendingSpell.SpellId, SpellNames.COLOR_SPRAY, StringComparison.Ordinal))
             {
                 ResolveColorSpraySpell(caster, targets, aoeCells);
@@ -15088,6 +15094,130 @@ public partial class GameManager : MonoBehaviour
         {
             Debug.Log("[CombatEnd] Victory condition met after Sleep spell resolution.");
             HandleCombatVictoryDetected("ResolveSleepSpell");
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+
+        if (AreAllPCsDead())
+        {
+            CurrentPhase = TurnPhase.CombatOver;
+            CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
+            CombatUI.SetActionButtonsVisible(false);
+            _pendingSpell = null;
+            _pendingMetamagic = null;
+            return;
+        }
+
+        _pendingSpell = null;
+        _pendingMetamagic = null;
+        StartCoroutine(AfterAttackDelay(caster, 1.5f));
+    }
+
+    /// <summary>
+    /// Resolve Deep Slumber spell (PHB p.217).
+    /// As Sleep, but affects up to 10 HD of creatures (no per-creature HD cap).
+    /// Lowest HD creatures affected first; Will negates; SR applies.
+    /// </summary>
+    private void ResolveDeepSlumberSpell(CharacterController caster, List<CharacterController> targets, HashSet<Vector2Int> aoeCells)
+    {
+        if (caster == null || caster.Stats == null || _pendingSpell == null)
+            return;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int castingAbilityMod = GetSpellSaveAbilityModifier(caster, _pendingSpell);
+        int saveDc = 10 + _pendingSpell.SpellLevel + castingAbilityMod;
+        int hdPool = 10; // Deep Slumber: flat 10 HD (no dice roll, unlike Sleep's 4d4)
+        int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(_pendingSpell, casterLevel));
+
+        // Gather eligible candidates — Deep Slumber has no per-creature HD cap (unlike Sleep's 4 HD limit)
+        List<CharacterController> candidates = new List<CharacterController>();
+        for (int i = 0; i < targets.Count; i++)
+        {
+            CharacterController target = targets[i];
+            if (target == null || target.Stats == null || target.Stats.IsDead)
+                continue;
+            if (IsImmuneToSleepEffects(target))
+                continue;
+            // No per-creature HD cap for Deep Slumber (unlike Sleep which skips > 4 HD)
+            candidates.Add(target);
+        }
+
+        // Sort by HD ascending (lowest first), then by distance from caster
+        candidates.Sort((a, b) =>
+        {
+            int aHd = GetTargetHitDice(a);
+            int bHd = GetTargetHitDice(b);
+            int hdCompare = aHd.CompareTo(bHd);
+            if (hdCompare != 0)
+                return hdCompare;
+
+            int distA = SquareGridUtils.GetDistance(caster.GridPosition, a.GridPosition);
+            int distB = SquareGridUtils.GetDistance(caster.GridPosition, b.GridPosition);
+            return distA.CompareTo(distB);
+        });
+
+        var logBuilder = new System.Text.StringBuilder();
+        logBuilder.AppendLine("═══════════════════════════════════");
+        logBuilder.AppendLine($"✨ {caster.Stats.CharacterName} casts Deep Slumber! (10-ft burst)");
+        logBuilder.AppendLine($"  HD Pool: {hdPool} (flat) | Duration: {sleepRounds} rounds | Will DC {saveDc}");
+        logBuilder.AppendLine($"  Candidates: {candidates.Count} in area ({aoeCells.Count} squares)");
+        logBuilder.AppendLine();
+
+        int remainingPool = hdPool;
+        int affectedCount = 0;
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            CharacterController target = candidates[i];
+            int targetHd = Mathf.Max(1, GetTargetHitDice(target));
+            if (targetHd > remainingPool)
+            {
+                logBuilder.AppendLine($"  • {target.Stats.CharacterName} ({targetHd} HD) exceeds remaining pool ({remainingPool}) — skipped.");
+                continue;
+            }
+
+            remainingPool -= targetHd;
+
+            // Spell Resistance check
+            if (_pendingSpell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            {
+                int srRoll = UnityEngine.Random.Range(1, 21);
+                int srTotal = srRoll + casterLevel;
+                if (srTotal < target.Stats.SpellResistance)
+                {
+                    logBuilder.AppendLine($"  • {target.Stats.CharacterName}: SR blocks effect (d20 {srRoll} + CL {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance}).");
+                    continue;
+                }
+            }
+
+            // Will save
+            int saveRoll = UnityEngine.Random.Range(1, 21);
+            int saveTotal = saveRoll + target.Stats.WillSave;
+            if (saveTotal >= saveDc)
+            {
+                logBuilder.AppendLine($"  • {target.Stats.CharacterName}: Will save succeeds ({saveTotal} vs DC {saveDc}).");
+                continue;
+            }
+
+            ApplySleepState(caster, target, sleepRounds, saveDc, _pendingSpell);
+            affectedCount++;
+            logBuilder.AppendLine($"  • {target.Stats.CharacterName}: falls into deep slumber for {sleepRounds} rounds (Will {saveTotal} vs DC {saveDc}).");
+        }
+
+        logBuilder.AppendLine();
+        logBuilder.AppendLine($"  Result: {affectedCount} target(s) in deep slumber. Remaining HD pool: {remainingPool}.");
+        logBuilder.Append("═══════════════════════════════════");
+
+        _lastCombatLog = logBuilder.ToString();
+        CombatUI?.ShowCombatLog(_lastCombatLog);
+        UpdateAllStatsUI();
+        Grid.ClearAllHighlights();
+
+        if (AreAllNPCsDead())
+        {
+            Debug.Log("[CombatEnd] Victory condition met after Deep Slumber spell resolution.");
+            HandleCombatVictoryDetected("ResolveDeepSlumberSpell");
             _pendingSpell = null;
             _pendingMetamagic = null;
             return;
@@ -16339,6 +16469,19 @@ public partial class GameManager : MonoBehaviour
 
             CombatUI?.ShowCombatLog($"<color=#99CCFF>💤 {target.Stats.CharacterName} falls asleep for {sleepRounds} round(s)!</color>");
             Debug.Log($"[GameManager] Sleep applied Asleep/Unconscious to {target.Stats.CharacterName} for {sleepRounds} rounds");
+            return null;
+        }
+
+        if (spell != null && spell.SpellId == SpellNames.DEEP_SLUMBER)
+        {
+            int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+            int sleepRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+            int wakeDc = 10 + spell.SpellLevel + GetSpellSaveAbilityModifier(caster, spell);
+
+            ApplySleepState(caster, target, sleepRounds, wakeDc, spell);
+
+            CombatUI?.ShowCombatLog($"<color=#9999FF>💤 {target.Stats.CharacterName} falls into deep slumber for {sleepRounds} round(s)!</color>");
+            Debug.Log($"[GameManager] Deep Slumber applied Asleep/Unconscious to {target.Stats.CharacterName} for {sleepRounds} rounds");
             return null;
         }
 

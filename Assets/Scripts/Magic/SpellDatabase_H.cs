@@ -206,6 +206,60 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // HEROISM  (PHB p.240)
+        // Enchantment (Compulsion) [Mind-Affecting]
+        // Level: Bard 2, Sor/Wiz 3
+        // Components: V, S
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Creature touched
+        // Duration: 10 min./level
+        // Saving Throw: Will negates (harmless)
+        // Spell Resistance: Yes (harmless)
+        //
+        // This spell imbues a single creature with great bravery and
+        // morale in battle. The target gains a +2 morale bonus on
+        // attack rolls, saves, and skill checks.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.HEROISM,
+                    Name = "Heroism",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. Imbues a single creature with great bravery. "
+                        + "The target gains a +2 morale bonus on attack rolls, saves, and skill checks. "
+                        + "Duration 10 min/level. Will negates (harmless). SR: Yes (harmless). PHB p.240",
+                    SpellLevel = 3,
+                    School = "Enchantment",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 2),
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Buff,
+                    BuffAttackBonus = 2,
+                    BuffSaveBonus = 2,
+                    BuffDamageBonus = 0,
+                    BuffType = "morale",
+                    BuffBonusType = BonusType.Morale,
+                    BonusTypeExplicitlySet = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    IsPlaceholder = false
+                });
+
         // Aliases / class-level variants
         RegisterAlias(SpellNames.HIDEOUS_LAUGHTER_LEGACY, SpellNames.HIDEOUS_LAUGHTER);
         RegisterClassSpellAlias("tashas_hideous_laughter_brd", SpellNames.HIDEOUS_LAUGHTER, "Bard", 1);

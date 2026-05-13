@@ -579,5 +579,11 @@ namespace DND35e.Identifiers
         /// <summary>Zone of Truth (spell id: zone_of_truth)</summary>
         public const string ZONE_OF_TRUTH = "zone_of_truth";
 
+        /// <summary>Deep Slumber (spell id: deep_slumber)</summary>
+        public const string DEEP_SLUMBER = "deep_slumber";
+
+        /// <summary>Heroism (spell id: heroism)</summary>
+        public const string HEROISM = "heroism";
+
     }
 }
