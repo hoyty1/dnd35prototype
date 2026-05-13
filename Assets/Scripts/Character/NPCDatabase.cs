@@ -24,6 +24,9 @@ public static partial class NPCDatabase
         // Register all non-Monster Manual creatures first.
         RegisterCustomCreatures();
 
+        // Register official Monster Manual summon baseline creatures (SM I–III).
+        RegisterSummonMonsterBaseCreatures();
+
         // Register Monster Manual creatures from alphabetical files.
         // These intentionally override summon alias IDs such as dog/owl/raven.
         RegisterCreatures_B();
@@ -134,7 +137,6 @@ public static partial class NPCDatabase
         RegisterBrownBear();
         RegisterDireBear();
         RegisterWolfPackHunter();
-        RegisterSummonMonsterBaseCreatures();
         RegisterFiendishWolf();
         RegisterFiendishDireBear();
         RegisterHumanPaladin();
