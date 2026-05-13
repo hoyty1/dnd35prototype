@@ -100,17 +100,7 @@ public static class SummonMonsterLists
         {
             { 1, GetSummonMonsterIOptions() },
             { 2, GetSummonMonsterIIOptions() },
-            {
-                3, new List<SummonMonsterOption>
-                {
-                    new SummonMonsterOption { DisplayName = "Black Bear", NpcDefinitionId = "black_bear", TemplateId = "celestial", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Good },
-                    new SummonMonsterOption { DisplayName = "Dire Wolf", NpcDefinitionId = "dire_wolf", TemplateId = "fiendish", ClericOnly = true, AlignmentRequirement = SummonAlignmentRequirement.Evil },
-                    new SummonMonsterOption { DisplayName = "Ape", NpcDefinitionId = "ape" },
-                    new SummonMonsterOption { DisplayName = "Dire Badger", NpcDefinitionId = "dire_badger" },
-                    new SummonMonsterOption { DisplayName = "Large Shark", NpcDefinitionId = "large_shark" },
-                    new SummonMonsterOption { DisplayName = "Constrictor Snake", NpcDefinitionId = "constrictor_snake" }
-                }
-            },
+            { 3, GetSummonMonsterIIIOptions() },
             // Higher level list definitions can be added incrementally.
             // Keeping empty entries allows UI level selection rules to stay consistent.
             { 4, new List<SummonMonsterOption>() },
@@ -162,6 +152,46 @@ public static class SummonMonsterLists
             new SummonMonsterOption { DisplayName = "Monstrous Scorpion, Large", NpcDefinitionId = "monstrous_scorpion_large", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.NeutralEvil },
             new SummonMonsterOption { DisplayName = "Monstrous Spider, Medium", NpcDefinitionId = "monstrous_spider_medium", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.ChaoticEvil },
             new SummonMonsterOption { DisplayName = "Snake, Medium Viper", NpcDefinitionId = "viper_medium", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.ChaoticEvil }
+        };
+    }
+
+    /// <summary>
+    /// Summon Monster III creature list (D&D 3.5e SRD/MM)
+    /// All 19 creatures with proper celestial/fiendish templates and alignment restrictions.
+    /// </summary>
+    private static List<SummonMonsterOption> GetSummonMonsterIIIOptions()
+    {
+        return new List<SummonMonsterOption>
+        {
+            // Celestial (Good) — Animals & Magical Beasts
+            new SummonMonsterOption { DisplayName = "Black Bear", NpcDefinitionId = "black_bear", TemplateId = "celestial", AlignmentRequirement = SummonAlignmentRequirement.Good, SummonedCreatureAlignment = Alignment.LawfulGood },
+            new SummonMonsterOption { DisplayName = "Bison", NpcDefinitionId = "bison", TemplateId = "celestial", AlignmentRequirement = SummonAlignmentRequirement.Good, SummonedCreatureAlignment = Alignment.NeutralGood },
+            new SummonMonsterOption { DisplayName = "Dire Badger", NpcDefinitionId = "dire_badger", TemplateId = "celestial", AlignmentRequirement = SummonAlignmentRequirement.Good, SummonedCreatureAlignment = Alignment.NeutralGood },
+            new SummonMonsterOption { DisplayName = "Hippogriff", NpcDefinitionId = "hippogriff", TemplateId = "celestial", AlignmentRequirement = SummonAlignmentRequirement.Good, SummonedCreatureAlignment = Alignment.ChaoticGood },
+
+            // Fiendish (Evil) — Animals & Vermin
+            new SummonMonsterOption { DisplayName = "Crocodile", NpcDefinitionId = "crocodile", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.LawfulEvil },
+            new SummonMonsterOption { DisplayName = "Dire Weasel", NpcDefinitionId = "dire_weasel", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.NeutralEvil },
+            new SummonMonsterOption { DisplayName = "Dire Bat", NpcDefinitionId = "dire_bat", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.NeutralEvil },
+            new SummonMonsterOption { DisplayName = "Wolverine", NpcDefinitionId = "wolverine", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.ChaoticEvil },
+            new SummonMonsterOption { DisplayName = "Constrictor Snake", NpcDefinitionId = "constrictor_snake", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.ChaoticEvil },
+            new SummonMonsterOption { DisplayName = "Huge Monstrous Centipede", NpcDefinitionId = "huge_monstrous_centipede", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.ChaoticEvil },
+            new SummonMonsterOption { DisplayName = "Large Viper", NpcDefinitionId = "large_viper", TemplateId = "fiendish", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.NeutralEvil },
+
+            // Neutral / Any alignment — available to all casters
+            new SummonMonsterOption { DisplayName = "Ape", NpcDefinitionId = "ape" },
+            new SummonMonsterOption { DisplayName = "Boar", NpcDefinitionId = "boar" },
+            new SummonMonsterOption { DisplayName = "Large Shark", NpcDefinitionId = "large_shark" },
+
+            // Elementals — available to all casters
+            new SummonMonsterOption { DisplayName = "Small Air Elemental", NpcDefinitionId = "small_air_elemental" },
+            new SummonMonsterOption { DisplayName = "Small Earth Elemental", NpcDefinitionId = "small_earth_elemental" },
+            new SummonMonsterOption { DisplayName = "Small Fire Elemental", NpcDefinitionId = "small_fire_elemental" },
+            new SummonMonsterOption { DisplayName = "Small Water Elemental", NpcDefinitionId = "small_water_elemental" },
+
+            // Evil outsiders — Evil alignment only
+            new SummonMonsterOption { DisplayName = "Dretch (Demon)", NpcDefinitionId = "dretch", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.ChaoticEvil },
+            new SummonMonsterOption { DisplayName = "Hell Hound", NpcDefinitionId = "hell_hound", AlignmentRequirement = SummonAlignmentRequirement.Evil, SummonedCreatureAlignment = Alignment.LawfulEvil }
         };
     }
 
