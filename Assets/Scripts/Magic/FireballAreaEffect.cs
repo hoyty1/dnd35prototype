@@ -1,7 +1,12 @@
 using UnityEngine;
+using DND35e.Identifiers;
 
 /// <summary>
-/// Fireball spell area effect example.
+/// Fireball (PHB 3.5e p.231): 20-ft radius burst of fire.
+/// - 1d6 fire damage per caster level (maximum 10d6)
+/// - Reflex save for half damage
+/// - SR applies
+/// - Instantaneous duration
 /// Uses a circular radius and deals damage to all creatures in the burst.
 /// </summary>
 public class FireballAreaEffect : PersistentAreaEffect
@@ -11,7 +16,7 @@ public class FireballAreaEffect : PersistentAreaEffect
         base.Awake();
 
         EffectName = "Fireball";
-        SpellId = "fireball";
+        SpellId = SpellNames.FIREBALL;
         Shape = AreaShape.Circle;
         Radius = 4f; // 20-ft radius (4 squares)
 

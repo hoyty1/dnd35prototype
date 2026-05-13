@@ -2440,7 +2440,7 @@ public class SpellcastingComponent : MonoBehaviour
             dexToAC = target.MaxDexBonus;
 
         return 10 + dexToAC + target.SizeModifier + target.DeflectionBonus
-               + target.FeatACBonus + target.MonkACBonus + target.RageACPenalty;
+               + target.FeatACBonus + target.MonkACBonus + target.RageACPenalty + target.SpellRageACPenalty;
     }
 
     /// <summary>

@@ -64,6 +64,58 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Trap detection not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // FIREBALL  (PHB p.231)
+        // Evocation [Fire]
+        // Level: Sor/Wiz 3
+        // Components: V, S, M (a tiny ball of bat guano and sulfur)
+        // Casting Time: 1 standard action
+        // Range: Long (400 ft. + 40 ft./level)
+        // Area: 20-ft.-radius spread
+        // Duration: Instantaneous
+        // Saving Throw: Reflex half
+        // Spell Resistance: Yes
+        //
+        // A fireball spell is an explosion of flame that detonates
+        // with a low roar and deals 1d6 points of fire damage per
+        // caster level (maximum 10d6) to every creature within the area.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.FIREBALL,
+                    Name = "Fireball",
+                    Description = "Evocation [Fire]. An explosion of flame deals 1d6 fire damage per caster level (max 10d6) "
+                        + "in a 20-ft.-radius spread. Reflex half. SR: Yes. PHB p.231",
+                    SpellLevel = 3,
+                    School = "Evocation [Fire]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Long,
+                    AreaRadius = 4,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4, // 20-ft radius = 4 squares
+                    AoERangeSquares = 0, // use Long range profile
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 6,
+                    DamageCount = 1, // Placeholder; actual dice = min(CL, 10) resolved at cast time
+                    DamageType = "fire",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.TEST_CONE_30,

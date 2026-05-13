@@ -209,6 +209,68 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Extradimensional space not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // RAGE  (PHB p.268)
+        // Enchantment (Compulsion) [Mind-Affecting]
+        // Level: Bard 2, Sor/Wiz 3
+        // Components: V, S
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Targets: One willing living creature per three levels, no two
+        //   of which may be more than 30 ft. apart
+        // Duration: Concentration + 1 round/level (max 10 rounds)
+        // Saving Throw: None
+        // Spell Resistance: Yes (harmless)
+        //
+        // Each affected creature gains a +2 morale bonus to Strength and
+        // Constitution, and a +1 morale bonus on Will saves. (In 3.5e PHB
+        // the bonus is +2 morale Str/Con and +1 morale Will; some sources
+        // list +4/+4/+2 for the Barbarian class feature version. We use
+        // the PHB spell version here.)
+        //
+        // An affected creature also takes a -2 penalty to AC. The spell
+        // does not stack with the barbarian's rage class feature.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.RAGE,
+                    Name = "Rage",
+                    Description = "Enchantment (Compulsion) [Mind-Affecting]. Willing target gains +2 morale bonus to Str and Con, "
+                        + "+1 morale bonus on Will saves, and takes -2 penalty to AC. "
+                        + "Cannot use Concentration, Int-, Dex-, or Cha-based skills (except Balance, Escape Artist, Intimidate, Ride). "
+                        + "Duration: Concentration + 1 round/level (max 10 rounds after concentration ends). "
+                        + "No save (willing). SR: Yes (harmless). PHB p.268",
+                    SpellLevel = 3,
+                    School = "Enchantment",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 2),
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    EffectType = SpellEffectType.Buff,
+                    BuffStatName = "STR",
+                    BuffStatBonus = 2,
+                    BuffSaveBonus = 1,
+                    BuffACBonus = -2,
+                    BuffType = "morale",
+                    BuffBonusType = BonusType.Morale,
+                    BonusTypeExplicitlySet = true,
+                    AllowsSavingThrow = false, // Willing target
+                    SpellResistanceApplies = true,
+                    IsMindAffecting = true,
+                    DurationType = DurationType.Concentration,
+                    DurationValue = 1, // +1 round/level after concentration
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterClassSpellAlias("read_magic_clr", SpellNames.READ_MAGIC, "Cleric", 0);
         RegisterClassSpellAlias("resist_energy_clr", SpellNames.RESIST_ENERGY, "Cleric", 2);

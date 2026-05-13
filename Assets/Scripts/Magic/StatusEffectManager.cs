@@ -607,6 +607,20 @@ public class StatusEffectManager : MonoBehaviour
             return;
         }
 
+        // Rage spell: reset the SpellRageACPenalty and morale Will bonus on removal
+        if (spellId == SpellNames.RAGE)
+        {
+            if (!applying)
+            {
+                _stats.SpellRageACPenalty = 0;
+                // MoraleSaveBonus is decremented via AppliedSaveBonus in ReverseStatModifications,
+                // but we applied +1 directly in ApplyRageSpellBuff, so reverse it here
+                _stats.MoraleSaveBonus = Mathf.Max(0, _stats.MoraleSaveBonus - 1);
+                // STR and CON are reversed by the ApplyStatBuff reversal path
+            }
+            return;
+        }
+
         if (spellId == SpellNames.DISGUISE_SELF)
         {
             if (applying)

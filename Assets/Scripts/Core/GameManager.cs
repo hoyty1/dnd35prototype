@@ -14564,6 +14564,76 @@ public partial class GameManager : MonoBehaviour
                 return;
             }
 
+            // Lightning Bolt & Fireball — scalable AoE damage (1d6/CL, max 10d6)
+            if (TryResolveScaledAoEDamageSpell(caster, _pendingSpell, targets, aoeCells, out string scaledDamagLog))
+            {
+                _lastCombatLog = scaledDamagLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                // Check for victory/defeat
+                if (AreAllNPCsDead())
+                {
+                    HandleCombatVictoryDetected("ResolveScaledAoEDamageSpell");
+                    _pendingSpell = null;
+                    _pendingMetamagic = null;
+                    return;
+                }
+                else if (AreAllPCsDead())
+                {
+                    CurrentPhase = TurnPhase.CombatOver;
+                    CombatUI.SetTurnIndicator("DEFEAT! All party members have fallen!");
+                    CombatUI.SetActionButtonsVisible(false);
+                    _pendingSpell = null;
+                    _pendingMetamagic = null;
+                    return;
+                }
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
+            // Daylight — persistent light area effect that counters/dispels darkness
+            if (TryResolveDaylightSpell(caster, _pendingSpell, targets, aoeCells, out string daylightLog))
+            {
+                _lastCombatLog = daylightLog;
+
+                if (isSpontaneous)
+                {
+                    string sacrificeInfo = !string.IsNullOrEmpty(spontaneousSacrificedSpellId)
+                        ? $"Sacrificed: {spontaneousSacrificedSpellId}"
+                        : "Converted prepared spell";
+                    _lastCombatLog = $"⟳ {caster.Stats.CharacterName} spontaneously casts {_pendingSpell.Name}! ({sacrificeInfo})\n" + _lastCombatLog;
+                }
+
+                if (isQuickened)
+                    _lastCombatLog = $"⚡ {caster.Stats.CharacterName} casts QUICKENED {_pendingSpell.Name}! (Free Action)\n" + _lastCombatLog;
+
+                CombatUI.ShowCombatLog(_lastCombatLog);
+                UpdateAllStatsUI();
+                Grid.ClearAllHighlights();
+
+                _pendingSpell = null;
+                _pendingMetamagic = null;
+                StartCoroutine(AfterAttackDelay(caster, 1.5f));
+                return;
+            }
+
             if (string.Equals(_pendingSpell.SpellId, SpellNames.HYPNOTISM, StringComparison.Ordinal))
             {
                 ResolveHypnotismSpell(caster, targets, aoeCells);
@@ -16247,29 +16317,12 @@ public partial class GameManager : MonoBehaviour
 
         if (spell != null && spell.SpellId == SpellNames.HOLD_PERSON)
         {
-            int holdRounds = Mathf.Max(1, spell.BuffDurationRounds > 0 ? spell.BuffDurationRounds : 1);
-            string sourceName = spell.Name;
+            return ApplyHoldPersonBuff(caster, target, spell, spellComp);
+        }
 
-            if (_conditionService != null)
-            {
-                _conditionService.ApplyCondition(
-                    target,
-                    CombatConditionType.Paralyzed,
-                    holdRounds,
-                    source: caster,
-                    sourceNameOverride: sourceName,
-                    sourceCategory: "Spell",
-                    sourceId: spell.SpellId);
-            }
-            else
-            {
-                string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
-                target.ApplyCondition(CombatConditionType.Paralyzed, holdRounds, fallbackSource);
-            }
-
-            CombatUI?.ShowCombatLog($"<color=#FF9966>⛓ {target.Stats.CharacterName} is paralyzed by Hold Person for {holdRounds} round(s)!</color>");
-            Debug.Log($"[GameManager] Hold Person applied Paralyzed to {target.Stats.CharacterName} for {holdRounds} rounds");
-            return null;
+        if (spell != null && spell.SpellId == SpellNames.RAGE)
+        {
+            return ApplyRageSpellBuff(caster, target, spell, spellComp);
         }
 
         if (spell != null && (spell.SpellId == SpellNames.BLINDNESS_DEAFNESS_WIZ

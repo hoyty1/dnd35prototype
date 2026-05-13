@@ -585,5 +585,17 @@ namespace DND35e.Identifiers
         /// <summary>Heroism (spell id: heroism)</summary>
         public const string HEROISM = "heroism";
 
+        /// <summary>Lightning Bolt (spell id: lightning_bolt)</summary>
+        public const string LIGHTNING_BOLT = "lightning_bolt";
+
+        /// <summary>Fireball (spell id: fireball)</summary>
+        public const string FIREBALL = "fireball";
+
+        /// <summary>Daylight (spell id: daylight)</summary>
+        public const string DAYLIGHT = "daylight";
+
+        /// <summary>Rage (spell id: rage)</summary>
+        public const string RAGE = "rage";
+
     }
 }

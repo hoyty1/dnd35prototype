@@ -122,6 +122,59 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Speed buff not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // LIGHTNING BOLT  (PHB p.248)
+        // Evocation [Electricity]
+        // Level: Sor/Wiz 3
+        // Components: V, S, M (a bit of fur and an amber, crystal, or glass rod)
+        // Casting Time: 1 standard action
+        // Range: 120 ft.
+        // Area: 120-ft. line (5 ft. wide)
+        // Duration: Instantaneous
+        // Saving Throw: Reflex half
+        // Spell Resistance: Yes
+        //
+        // You release a powerful stroke of electrical energy that deals
+        // 1d6 points of electricity damage per caster level (maximum 10d6)
+        // to each creature within its area. The bolt begins at your
+        // fingertips.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.LIGHTNING_BOLT,
+                    Name = "Lightning Bolt",
+                    Description = "Evocation [Electricity]. You release a powerful stroke of electrical energy in a 120-ft line. "
+                        + "Deals 1d6 electricity damage per caster level (max 10d6). Reflex half. SR: Yes. PHB p.248",
+                    SpellLevel = 3,
+                    School = "Evocation [Electricity]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeSquares = 24,          // 120 ft = 24 squares
+                    AreaRadius = 24,
+                    AoEShapeType = AoEShape.Line,
+                    AoESizeSquares = 24,        // 120 ft = 24 squares length
+                    AoERangeSquares = 0,        // Line originates from caster
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Damage,
+                    DamageDice = 6,
+                    DamageCount = 1, // Placeholder; actual dice = min(CL, 10) resolved at cast time
+                    DamageType = "electricity",
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Reflex",
+                    SaveHalves = true,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterClassSpellAlias("light_clr", SpellNames.LIGHT, "Cleric", 0);
 

@@ -1129,8 +1129,14 @@ public class CharacterStats
         return healed;
     }
 
-    /// <summary>Rage AC penalty (-2 while raging).</summary>
+    /// <summary>Rage AC penalty (-2 while raging via barbarian class feature).</summary>
     public int RageACPenalty => IsRaging ? -2 : 0;
+
+    /// <summary>
+    /// AC penalty from the Rage spell (3rd-level Sor/Wiz). Set to -2 when the
+    /// spell is active, reset to 0 when it expires. Separate from barbarian rage.
+    /// </summary>
+    public int SpellRageACPenalty;
 
     /// <summary>Rage Will save bonus (+2 while raging).</summary>
     public int RageWillBonus => IsRaging ? 2 : 0;
@@ -2008,7 +2014,7 @@ public class CharacterStats
             // Use the higher of ArmorBonus (from equipment) or SpellACBonus (from spells).
             int effectiveArmorBonus = Mathf.Max(ArmorBonus, SpellACBonus);
             return 10 + dexToAC + effectiveArmorBonus + ShieldBonus + NaturalArmorBonus + SizeModifier
-                   + MonkACBonus + FeatACBonus + RageACPenalty + DeflectionBonus + ConditionACPenalty;
+                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + DeflectionBonus + ConditionACPenalty;
         }
     }
 
@@ -2025,7 +2031,7 @@ public class CharacterStats
                 dexToAC = MaxDexBonus;
 
             return 10 + dexToAC + SizeModifier
-                   + MonkACBonus + FeatACBonus + RageACPenalty + DeflectionBonus + ConditionACPenalty;
+                   + MonkACBonus + FeatACBonus + RageACPenalty + SpellRageACPenalty + DeflectionBonus + ConditionACPenalty;
         }
     }
 

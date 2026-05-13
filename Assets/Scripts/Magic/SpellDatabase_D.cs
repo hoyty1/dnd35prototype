@@ -473,6 +473,71 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // DAYLIGHT  (PHB p.216)
+        // Evocation [Light]
+        // Level: Bard 3, Cleric 3, Druid 3, Paladin 3, Sor/Wiz 3
+        // Components: V, S
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Object touched
+        // Duration: 10 min./level (D)
+        // Saving Throw: None
+        // Spell Resistance: No
+        //
+        // The object touched sheds light as bright as full daylight
+        // in a 60-foot radius, and dim light for an additional 60 feet
+        // beyond that. Creatures that take penalties in bright light
+        // take them while within the 60-foot radius of this magical light.
+        //
+        // Daylight brought into an area of magical darkness (or vice versa)
+        // is temporarily negated, so that the otherwise prevailing light
+        // conditions exist in the overlapping areas of effect.
+        //
+        // Daylight counters or dispels any darkness spell of equal or
+        // lower level, such as darkness.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.DAYLIGHT,
+                    Name = "Daylight",
+                    Description = "Evocation [Light]. Object touched sheds bright light in a 60-ft radius (12 squares). "
+                        + "Counters and dispels Darkness spells of 3rd level or lower. "
+                        + "Duration 10 min/level (D). No save. No SR. PHB p.216",
+                    SpellLevel = 3,
+                    School = "Evocation [Light]",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Bard", 3),
+                        new SpellAvailability("Cleric", 3),
+                        new SpellAvailability("Druid", 3),
+                        new SpellAvailability("Paladin", 3),
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 12, // 60-ft radius = 12 squares
+                    AoERangeSquares = 1, // touch-placed
+                    AreaRadius = 12,
+                    AoEFilter = AoETargetFilter.All,
+                    EffectType = SpellEffectType.Buff,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = false,
+                    BuffBonusType = BonusType.Untyped,
+                    BonusTypeExplicitlySet = false,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         // Aliases
         RegisterClassSpellAlias("detect_magic_clr", SpellNames.DETECT_MAGIC_WIZ, "Cleric", 0);
         RegisterClassSpellAlias("detect_poison_clr", SpellNames.DETECT_POISON_WIZ, "Cleric", 0);
