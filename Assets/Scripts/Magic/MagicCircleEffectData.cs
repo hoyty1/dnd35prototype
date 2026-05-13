@@ -4,8 +4,8 @@ using DND35e.Identifiers;
 
 /// <summary>
 /// Runtime data for Magic Circle against Evil/Good/Law/Chaos (D&D 3.5e PHB).
-/// Tracks the 10-ft radius emanation centered on the touched creature.
-/// Standard action version only (not the 10-minute ritual containment version).
+/// Inherits generic emanation behavior from EmanationEffectData and adds
+/// alignment-specific warding mechanics.
 ///
 /// Effects:
 ///   1. +2 deflection bonus to AC vs creatures of warded alignment
@@ -18,94 +18,34 @@ using DND35e.Identifiers;
 /// Does NOT stack with Protection from [Alignment] spells.
 /// </summary>
 [System.Serializable]
-public class MagicCircleEffectData
+public class MagicCircleEffectData : EmanationEffectData
 {
+    // ═══════════════════════════════════════════════════════════════════
+    //  MAGIC CIRCLE-SPECIFIC PROPERTIES
+    // ═══════════════════════════════════════════════════════════════════
+
     /// <summary>The alignment component being warded against (Evil, Good, Law, Chaos).</summary>
     public AlignmentProtectionType WardedAlignment = AlignmentProtectionType.None;
 
-    /// <summary>The creature this emanation is centered on (the touched creature).</summary>
-    [System.NonSerialized] public CharacterController CenterCreature;
-
-    /// <summary>Caster level for SR checks against summoned creature barrier.</summary>
-    public int CasterLevel;
-
-    /// <summary>Remaining duration in rounds.</summary>
-    public int RemainingRounds;
-
-    /// <summary>Radius in grid units (10 ft = 2 squares at 5ft/square).</summary>
-    public int RadiusSquares = 2;
-
-    /// <summary>Radius in feet for display purposes.</summary>
-    public float RadiusFeet = 10f;
-
-    /// <summary>The spell ID that created this effect.</summary>
-    public string SourceSpellId;
-
-    /// <summary>Name of the caster for logging.</summary>
-    public string CasterName;
-
-    /// <summary>
-    /// Check if a creature is within the Magic Circle emanation area.
-    /// Uses simplified grid distance (all allies within RadiusSquares of center creature).
-    /// </summary>
-    public bool IsCreatureInArea(CharacterController creature)
-    {
-        if (creature == null || CenterCreature == null)
-            return false;
-
-        // The center creature is always in its own area
-        if (creature == CenterCreature)
-            return true;
-
-        // Use grid position distance
-        Vector2Int centerPos = CenterCreature.GridPosition;
-        Vector2Int creaturePos = creature.GridPosition;
-        int dx = Mathf.Abs(centerPos.x - creaturePos.x);
-        int dy = Mathf.Abs(centerPos.y - creaturePos.y);
-
-        // Chebyshev distance for grid-based 10-ft radius (2 squares)
-        int distance = Mathf.Max(dx, dy);
-        return distance <= RadiusSquares;
-    }
+    // ═══════════════════════════════════════════════════════════════════
+    //  ALIGNMENT-SPECIFIC METHODS
+    // ═══════════════════════════════════════════════════════════════════
 
     /// <summary>
     /// Check if an attacker's alignment matches the warded alignment component.
+    /// Uses AlignmentProtectionRules for proper alignment axis matching.
     /// </summary>
+    /// <param name="attackerAlignment">The attacker's full alignment.</param>
+    /// <returns>True if the attacker's alignment is warded against.</returns>
     public bool IsAttackerOfWardedAlignment(Alignment attackerAlignment)
     {
         return AlignmentProtectionRules.Matches(WardedAlignment, attackerAlignment);
     }
 
     /// <summary>
-    /// Get all allies within the emanation area.
-    /// </summary>
-    public List<CharacterController> GetCreaturesInArea(List<CharacterController> allCharacters)
-    {
-        var result = new List<CharacterController>();
-        if (allCharacters == null || CenterCreature == null)
-            return result;
-
-        for (int i = 0; i < allCharacters.Count; i++)
-        {
-            if (allCharacters[i] != null && !allCharacters[i].IsDead && IsCreatureInArea(allCharacters[i]))
-                result.Add(allCharacters[i]);
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Tick the duration. Returns true if the effect is still active.
-    /// </summary>
-    public bool Tick()
-    {
-        if (RemainingRounds > 0)
-            RemainingRounds--;
-        return RemainingRounds > 0;
-    }
-
-    /// <summary>
     /// Get the spell name for this Magic Circle variant.
     /// </summary>
+    /// <returns>Display name (e.g., "Magic Circle against Evil").</returns>
     public string GetSpellName()
     {
         switch (WardedAlignment)
@@ -118,18 +58,56 @@ public class MagicCircleEffectData
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    //  EMANATION BASE CLASS OVERRIDES
+    // ═══════════════════════════════════════════════════════════════════
+
     /// <summary>
-    /// Get a display string for the remaining duration.
+    /// Returns the spell name for this Magic Circle variant.
     /// </summary>
-    public string GetDurationDisplay()
+    public override string GetEffectName()
     {
-        if (RemainingRounds <= 0) return "Expired";
-        int minutes = RemainingRounds / 10;
-        int rounds = RemainingRounds % 10;
-        if (minutes > 0 && rounds > 0)
-            return $"{minutes} min {rounds} rnd";
-        if (minutes > 0)
-            return $"{minutes} min";
-        return $"{rounds} rnd";
+        return GetSpellName();
+    }
+
+    /// <summary>
+    /// Called when a creature enters the Magic Circle area.
+    /// Currently logs for debugging; future: apply immediate protections.
+    /// </summary>
+    public override void OnCreatureEntersArea(CharacterController creature)
+    {
+        // Magic Circle benefits are checked dynamically via GetMagicCircleBenefitsAgainst,
+        // so no persistent effects need to be applied on entry.
+        // This hook is available for future extensions (e.g., visual indicators).
+    }
+
+    /// <summary>
+    /// Called when a creature leaves the Magic Circle area.
+    /// Currently no persistent effects to remove; benefits stop when out of area.
+    /// </summary>
+    public override void OnCreatureLeavesArea(CharacterController creature)
+    {
+        // Magic Circle benefits are checked dynamically, so leaving the area
+        // naturally stops the benefits without needing explicit removal.
+    }
+
+    /// <summary>
+    /// Apply Magic Circle benefits to a creature in the area.
+    /// Benefits are actually resolved dynamically via GameManager.GetMagicCircleBenefitsAgainst().
+    /// </summary>
+    public override void ApplyEffectsToCreature(CharacterController creature)
+    {
+        // Benefits (+2 deflection AC, +2 resistance saves, mental control block,
+        // summoned contact block) are resolved at query time in GameManager,
+        // not applied as persistent modifications.
+    }
+
+    /// <summary>
+    /// Remove Magic Circle effects from a creature (on expiration/dismissal).
+    /// Since benefits are dynamic, cleanup is handled by removing the emanation.
+    /// </summary>
+    public override void RemoveEffectsFromCreature(CharacterController creature)
+    {
+        // No persistent effects to remove — benefits are query-based.
     }
 }

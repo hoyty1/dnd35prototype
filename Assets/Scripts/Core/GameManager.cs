@@ -395,8 +395,9 @@ public partial class GameManager : MonoBehaviour
     private readonly HashSet<CharacterController> _summonedEnemies = new HashSet<CharacterController>();
     private readonly List<ActiveSummonInstance> _activeSummons = new List<ActiveSummonInstance>();
 
-    // ── Magic Circle tracking ──────────────────────────────────────────
-    private readonly List<MagicCircleEffectData> _activeMagicCircles = new List<MagicCircleEffectData>();
+    // ── Emanation tracking (Magic Circles, future: Prayer, Auras, etc.) ──
+    /// <summary>All active emanation effects (Magic Circles, future: Prayer, Auras, etc.).</summary>
+    private readonly List<EmanationEffectData> _activeEmanations = new List<EmanationEffectData>();
 
     private class ActiveSummonInstance
     {
@@ -6075,8 +6076,8 @@ public partial class GameManager : MonoBehaviour
         // Tick summon durations (Summon Monster: 1 round/level)
         TickSummonDurations();
 
-        // Tick Magic Circle emanation durations
-        TickMagicCircles();
+        // Tick all emanation durations (Magic Circles, etc.)
+        TickEmanations();
 
         // Tick persistent Grease zones/objects.
         TickActiveGreaseEffects();
@@ -6099,7 +6100,7 @@ public partial class GameManager : MonoBehaviour
         Debug.Log($"[LootFlow] OnCombatEnded triggered | frame={Time.frameCount} | activeNPCs={(NPCs != null ? NPCs.Count : 0)} | activePCs={(PCs != null ? PCs.Count : 0)} | aliveEnemiesBefore={aliveEnemiesBefore} | allNpcsDead={allNpcsDead} | allPcsDead={allPcsDead} | victory={isVictory}");
 
         CurrentPhase = TurnPhase.CombatOver;
-        _activeMagicCircles.Clear();
+        _activeEmanations.Clear();
         ClearAllActiveGreaseEffects();
         ClearAllMirrorImageEffects("combat ended");
         _conditionService?.CleanupOnCombatEnd(GetAllCharacters());
@@ -11426,60 +11427,123 @@ public partial class GameManager : MonoBehaviour
             onCancel: null);
     }
 
-    // ============================================================
-    //  MAGIC CIRCLE AREA EFFECT MANAGEMENT
-    // ============================================================
+    // ═══════════════════════════════════════════════════════════════════
+    //  EMANATION AREA EFFECT MANAGEMENT
+    // ═══════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Register a new Magic Circle area effect centered on the touched creature.
-    /// Called when a Magic Circle spell is successfully cast.
+    /// Register any emanation effect. Replaces an existing emanation of the same type
+    /// centered on the same creature (one emanation per type per creature).
     /// </summary>
-    public void RegisterMagicCircle(MagicCircleEffectData data)
+    /// <param name="emanation">The emanation to register.</param>
+    public void RegisterEmanation(EmanationEffectData emanation)
     {
-        if (data == null || data.CenterCreature == null)
+        if (emanation == null)
             return;
 
-        // Remove any existing Magic Circle centered on the same creature
-        for (int i = _activeMagicCircles.Count - 1; i >= 0; i--)
+        // For mobile emanations, require a valid center creature
+        if (!emanation.CenterPosition.HasValue && emanation.CenterCreature == null)
+            return;
+
+        // Remove any existing emanation of the same concrete type on the same center
+        var emanationType = emanation.GetType();
+        for (int i = _activeEmanations.Count - 1; i >= 0; i--)
         {
-            if (_activeMagicCircles[i].CenterCreature == data.CenterCreature)
+            var existing = _activeEmanations[i];
+            if (existing.GetType() == emanationType && existing.CenterCreature == emanation.CenterCreature)
             {
-                _activeMagicCircles.RemoveAt(i);
+                _activeEmanations.RemoveAt(i);
             }
         }
 
-        _activeMagicCircles.Add(data);
-        Debug.Log($"[MagicCircle] {data.GetSpellName()} registered on {data.CenterCreature.Stats?.CharacterName}, CL {data.CasterLevel}, {data.RemainingRounds} rounds");
+        _activeEmanations.Add(emanation);
+        Debug.Log($"[Emanation] {emanation.GetEffectName()} registered on {emanation.CenterCreature?.Stats?.CharacterName ?? "fixed position"}, CL {emanation.CasterLevel}, {emanation.RemainingRounds} rounds");
+    }
+
+    /// <summary>
+    /// Unregister all emanations centered on a specific creature.
+    /// Called on death, dispel, etc.
+    /// </summary>
+    /// <param name="centerCreature">The creature whose emanations should be removed.</param>
+    public void UnregisterEmanation(CharacterController centerCreature)
+    {
+        if (centerCreature == null) return;
+        for (int i = _activeEmanations.Count - 1; i >= 0; i--)
+        {
+            if (_activeEmanations[i].CenterCreature == centerCreature)
+            {
+                Debug.Log($"[Emanation] Removed {_activeEmanations[i].GetEffectName()} from {centerCreature.Stats?.CharacterName}");
+                _activeEmanations.RemoveAt(i);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tick all active emanations (call each round). Removes expired or invalid ones.
+    /// </summary>
+    public void TickEmanations()
+    {
+        for (int i = _activeEmanations.Count - 1; i >= 0; i--)
+        {
+            var em = _activeEmanations[i];
+            if (em.ShouldRemove() || !em.Tick())
+            {
+                Debug.Log($"[Emanation] Expired: {em.GetEffectName()}");
+                _activeEmanations.RemoveAt(i);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Get all active emanations (read-only copy for tests/queries).
+    /// </summary>
+    public List<EmanationEffectData> GetActiveEmanations()
+    {
+        return new List<EmanationEffectData>(_activeEmanations);
+    }
+
+    /// <summary>
+    /// Get all active emanations of a specific type.
+    /// </summary>
+    /// <typeparam name="T">The emanation subclass type to filter by.</typeparam>
+    /// <returns>List of active emanations of the requested type.</returns>
+    public List<T> GetActiveEmanationsOfType<T>() where T : EmanationEffectData
+    {
+        var result = new List<T>();
+        for (int i = 0; i < _activeEmanations.Count; i++)
+        {
+            if (_activeEmanations[i] is T typed)
+                result.Add(typed);
+        }
+        return result;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  MAGIC CIRCLE-SPECIFIC CONVENIENCE METHODS
+    //  (Delegate to generic emanation system, filter by MagicCircleEffectData)
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Register a Magic Circle emanation. Convenience wrapper around RegisterEmanation.
+    /// </summary>
+    public void RegisterMagicCircle(MagicCircleEffectData data)
+    {
+        RegisterEmanation(data);
     }
 
     /// <summary>
     /// Remove a Magic Circle effect (on death, dispel, etc.).
+    /// Removes only MagicCircleEffectData emanations centered on the creature.
     /// </summary>
     public void RemoveMagicCircle(CharacterController centerCreature)
     {
         if (centerCreature == null) return;
-        for (int i = _activeMagicCircles.Count - 1; i >= 0; i--)
+        for (int i = _activeEmanations.Count - 1; i >= 0; i--)
         {
-            if (_activeMagicCircles[i].CenterCreature == centerCreature)
+            if (_activeEmanations[i] is MagicCircleEffectData mc && mc.CenterCreature == centerCreature)
             {
-                Debug.Log($"[MagicCircle] Removed {_activeMagicCircles[i].GetSpellName()} from {centerCreature.Stats?.CharacterName}");
-                _activeMagicCircles.RemoveAt(i);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Tick all active Magic Circles (call each round). Removes expired ones.
-    /// </summary>
-    public void TickMagicCircles()
-    {
-        for (int i = _activeMagicCircles.Count - 1; i >= 0; i--)
-        {
-            var mc = _activeMagicCircles[i];
-            if (mc.CenterCreature == null || mc.CenterCreature.IsDead || !mc.Tick())
-            {
-                Debug.Log($"[MagicCircle] Expired: {mc.GetSpellName()}");
-                _activeMagicCircles.RemoveAt(i);
+                Debug.Log($"[MagicCircle] Removed {mc.GetSpellName()} from {centerCreature.Stats?.CharacterName}");
+                _activeEmanations.RemoveAt(i);
             }
         }
     }
@@ -11492,13 +11556,15 @@ public partial class GameManager : MonoBehaviour
     public AlignmentProtectionBenefits GetMagicCircleBenefitsAgainst(CharacterController creature, Alignment sourceAlignment)
     {
         var benefits = new AlignmentProtectionBenefits();
-        if (creature == null || _activeMagicCircles.Count == 0)
+        if (creature == null || _activeEmanations.Count == 0)
             return benefits;
 
-        for (int i = 0; i < _activeMagicCircles.Count; i++)
+        for (int i = 0; i < _activeEmanations.Count; i++)
         {
-            var mc = _activeMagicCircles[i];
-            if (mc == null || mc.CenterCreature == null || mc.CenterCreature.IsDead)
+            if (!(_activeEmanations[i] is MagicCircleEffectData mc))
+                continue;
+
+            if (mc.CenterCreature == null || mc.CenterCreature.IsDead)
                 continue;
 
             // Check if creature is in the area
@@ -11528,13 +11594,15 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     public bool IsProtectedByMagicCircle(CharacterController creature, AlignmentProtectionType wardedAlignment)
     {
-        if (creature == null || _activeMagicCircles.Count == 0)
+        if (creature == null || _activeEmanations.Count == 0)
             return false;
 
-        for (int i = 0; i < _activeMagicCircles.Count; i++)
+        for (int i = 0; i < _activeEmanations.Count; i++)
         {
-            var mc = _activeMagicCircles[i];
-            if (mc == null || mc.CenterCreature == null || mc.CenterCreature.IsDead)
+            if (!(_activeEmanations[i] is MagicCircleEffectData mc))
+                continue;
+
+            if (mc.CenterCreature == null || mc.CenterCreature.IsDead)
                 continue;
 
             if (mc.WardedAlignment != wardedAlignment)
@@ -11552,13 +11620,15 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     public bool IsInAnyMagicCircle(CharacterController creature)
     {
-        if (creature == null || _activeMagicCircles.Count == 0)
+        if (creature == null || _activeEmanations.Count == 0)
             return false;
 
-        for (int i = 0; i < _activeMagicCircles.Count; i++)
+        for (int i = 0; i < _activeEmanations.Count; i++)
         {
-            var mc = _activeMagicCircles[i];
-            if (mc != null && mc.CenterCreature != null && !mc.CenterCreature.IsDead && mc.IsCreatureInArea(creature))
+            if (!(_activeEmanations[i] is MagicCircleEffectData mc))
+                continue;
+
+            if (mc.CenterCreature != null && !mc.CenterCreature.IsDead && mc.IsCreatureInArea(creature))
                 return true;
         }
 
@@ -11570,7 +11640,7 @@ public partial class GameManager : MonoBehaviour
     /// </summary>
     public List<MagicCircleEffectData> GetActiveMagicCircles()
     {
-        return new List<MagicCircleEffectData>(_activeMagicCircles);
+        return GetActiveEmanationsOfType<MagicCircleEffectData>();
     }
 
     /// <summary>
@@ -11579,10 +11649,10 @@ public partial class GameManager : MonoBehaviour
     public MagicCircleEffectData GetMagicCircleOnCreature(CharacterController creature)
     {
         if (creature == null) return null;
-        for (int i = 0; i < _activeMagicCircles.Count; i++)
+        for (int i = 0; i < _activeEmanations.Count; i++)
         {
-            if (_activeMagicCircles[i].CenterCreature == creature)
-                return _activeMagicCircles[i];
+            if (_activeEmanations[i] is MagicCircleEffectData mc && mc.CenterCreature == creature)
+                return mc;
         }
         return null;
     }
