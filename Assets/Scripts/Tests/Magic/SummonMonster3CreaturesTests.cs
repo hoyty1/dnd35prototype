@@ -434,9 +434,9 @@ namespace Tests.Magic
         {
             List<SummonMonsterOption> options = GetLevel3Options();
             // 19 creatures, but some appear as both celestial and fiendish variants
-            // Expected: 21 total entries (see SummonMonsterLists.GetSummonMonsterIIIOptions)
-            AssertTrue(options != null && options.Count >= 19,
-                "Summon Monster III list has at least 19 entries for all creatures");
+            // Expected: 19 total entries (see SummonMonsterLists.GetSummonMonsterIIIOptions)
+            AssertTrue(options != null && options.Count == 19,
+                $"Summon Monster III list has exactly 19 entries (got {(options != null ? options.Count : 0)})");
         }
 
         private static void TestSummonMonsterIIIContainsAllCreatures()
