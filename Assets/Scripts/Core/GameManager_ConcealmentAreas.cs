@@ -20,7 +20,9 @@ public partial class GameManager
         bool isFogCloud = spell.SpellId == SpellNames.FOG_CLOUD;
         bool isDarkness = spell.SpellId == SpellNames.DARKNESS;
         bool isGustOfWind = spell.SpellId == SpellNames.GUST_OF_WIND;
-        if (!isObscuringMist && !isFogCloud && !isDarkness && !isGustOfWind)
+        bool isSleetStorm = spell.SpellId == SpellNames.SLEET_STORM;
+        bool isStinkingCloud = spell.SpellId == SpellNames.STINKING_CLOUD;
+        if (!isObscuringMist && !isFogCloud && !isDarkness && !isGustOfWind && !isSleetStorm && !isStinkingCloud)
             return false;
 
         int casterLevel = caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
@@ -44,6 +46,73 @@ public partial class GameManager
                 gustLog.AppendLine("  No creatures are caught in the gust.");
             gustLog.Append("═══════════════════════════════════");
             log = gustLog.ToString();
+            return true;
+        }
+
+        // Handle Sleet Storm
+        if (isSleetStorm)
+        {
+            int sleetDuration = Mathf.Max(1, casterLevel); // 1 round/level
+            Vector3 sleetCenter = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
+            CreateSleetStormArea(sleetCenter, sleetDuration, casterLevel, caster);
+
+            var sleetLog = new StringBuilder();
+            sleetLog.AppendLine("═══════════════════════════════════");
+            sleetLog.AppendLine($"✨ {caster.Stats.CharacterName} casts Sleet Storm!");
+            sleetLog.AppendLine($"  Area: 40-ft radius cylinder ({aoeCells.Count} squares)");
+            sleetLog.AppendLine($"  Duration: {sleetDuration} rounds");
+            sleetLog.AppendLine("  • Blocks all sight (including darkvision) — total concealment beyond 5 ft");
+            sleetLog.AppendLine("  • Icy ground: DC 10 Balance to move at half speed; fail by 5+ = fall prone");
+            sleetLog.AppendLine("  • Concentration DC 5 + spell level to cast inside");
+            sleetLog.AppendLine("  • No save, no SR");
+
+            if (targets != null && targets.Count > 0)
+            {
+                sleetLog.Append("  Currently affected: ");
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    if (i > 0) sleetLog.Append(", ");
+                    sleetLog.Append(targets[i] != null && targets[i].Stats != null ? targets[i].Stats.CharacterName : "Unknown");
+                }
+                sleetLog.AppendLine();
+            }
+
+            sleetLog.Append("═══════════════════════════════════");
+            log = sleetLog.ToString();
+            return true;
+        }
+
+        // Handle Stinking Cloud
+        if (isStinkingCloud)
+        {
+            int cloudDuration = Mathf.Max(1, casterLevel); // 1 round/level
+            int saveDc = GetSpellSaveDC(caster, spell);
+            Vector3 cloudCenter = GetAreaCenterWorldPosition(aoeCells, caster.GridPosition);
+            CreateStinkingCloudArea(cloudCenter, cloudDuration, casterLevel, saveDc, caster);
+
+            var cloudLog = new StringBuilder();
+            cloudLog.AppendLine("═══════════════════════════════════");
+            cloudLog.AppendLine($"✨ {caster.Stats.CharacterName} casts Stinking Cloud!");
+            cloudLog.AppendLine($"  Area: 20-ft radius spread ({aoeCells.Count} squares)");
+            cloudLog.AppendLine($"  Duration: {cloudDuration} rounds | Fort DC {saveDc}");
+            cloudLog.AppendLine("  • Fort save each round or become nauseated (can only take move action)");
+            cloudLog.AppendLine("  • Nausea persists 1d4+1 rounds after leaving");
+            cloudLog.AppendLine("  • Vision blocked (like Fog Cloud)");
+            cloudLog.AppendLine("  • Immune: undead, constructs, non-breathers, poison immune");
+
+            if (targets != null && targets.Count > 0)
+            {
+                cloudLog.Append("  Currently affected: ");
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    if (i > 0) cloudLog.Append(", ");
+                    cloudLog.Append(targets[i] != null && targets[i].Stats != null ? targets[i].Stats.CharacterName : "Unknown");
+                }
+                cloudLog.AppendLine();
+            }
+
+            cloudLog.Append("═══════════════════════════════════");
+            log = cloudLog.ToString();
             return true;
         }
 
@@ -164,6 +233,31 @@ public partial class GameManager
         int centerX = Mathf.RoundToInt(sumX / count);
         int centerY = Mathf.RoundToInt(sumY / count);
         return SquareGridUtils.GridToWorld(centerX, centerY);
+    }
+
+    public void CreateSleetStormArea(Vector3 centerPosition, int durationRounds, int casterLevel, CharacterController caster)
+    {
+        GameObject sleetObject = new GameObject("SleetStorm_Area");
+        sleetObject.transform.position = centerPosition;
+
+        SleetStormAreaEffect sleet = sleetObject.AddComponent<SleetStormAreaEffect>();
+        sleet.CenterPosition = centerPosition;
+        sleet.RoundsRemaining = Mathf.Max(1, durationRounds);
+        sleet.CasterLevel = Mathf.Max(1, casterLevel);
+        sleet.Caster = caster;
+    }
+
+    public void CreateStinkingCloudArea(Vector3 centerPosition, int durationRounds, int casterLevel, int saveDc, CharacterController caster)
+    {
+        GameObject cloudObject = new GameObject("StinkingCloud_Area");
+        cloudObject.transform.position = centerPosition;
+
+        StinkingCloudAreaEffect cloud = cloudObject.AddComponent<StinkingCloudAreaEffect>();
+        cloud.CenterPosition = centerPosition;
+        cloud.RoundsRemaining = Mathf.Max(1, durationRounds);
+        cloud.CasterLevel = Mathf.Max(1, casterLevel);
+        cloud.SaveDC = Mathf.Max(1, saveDc);
+        cloud.Caster = caster;
     }
 
     private bool TryResolveGlitterdustSpell(CharacterController caster, SpellData spell, List<CharacterController> targets, HashSet<Vector2Int> aoeCells, out string log)

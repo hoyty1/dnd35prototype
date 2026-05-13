@@ -304,6 +304,101 @@ public static partial class SpellDatabase
                     IsPlaceholder = false
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // SLEET STORM  (PHB p.281)
+        // Conjuration (Creation) [Cold]
+        // Level: Drd 3, Sor/Wiz 3
+        // Components: V, S, M/DF (a pinch of dust and a few drops of water)
+        // Casting Time: 1 standard action
+        // Range: Long (400 ft. + 40 ft./level)
+        // Area: Cylinder (40-ft. radius, 20 ft. high)
+        // Duration: 1 round/level
+        // Saving Throw: None
+        // Spell Resistance: No
+        //
+        // Driving sleet blocks all sight (including darkvision) within the area.
+        // Icy ground requires DC 10 Balance check to move (fail by 5+ = fall prone).
+        // Movement at half speed. Concentration DC 5 + spell level to cast.
+        // Extinguishes torches and small fires.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.SLEET_STORM,
+                    Name = "Sleet Storm",
+                    Description = "Conjuration (Creation) [Cold]. Driving sleet blocks all sight (including darkvision) within a 40-ft radius cylinder. "
+                        + "Icy ground: DC 10 Balance check to move at half speed; fail by 5+ = fall prone. "
+                        + "Concentration DC 5 + spell level to cast inside. Extinguishes torches and small fires. "
+                        + "No save. No SR. Components: V, S, M/DF. PHB p.281",
+                    SpellLevel = 3, School = "Conjuration (Creation) [Cold]",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Druid" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Long,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 8, // 40-ft radius = 8 squares
+                    AoERangeSquares = 0, // use Long range profile
+                    AoEFilter = AoETargetFilter.All,
+                    AreaRadius = 8, // 40-ft radius
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = false,
+                    SavingThrowType = "None",
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
+        // ──────────────────────────────────────────────────────────────
+        // STINKING CLOUD  (PHB p.284)
+        // Conjuration (Creation)
+        // Level: Sor/Wiz 3
+        // Components: V, S, M (a rotten egg or several skunk cabbage leaves)
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Effect: Cloud spreads in 20-ft. radius, 20 ft. high
+        // Duration: 1 round/level
+        // Saving Throw: Fortitude negates; see text
+        // Spell Resistance: No
+        //
+        // Creates bank of fog. Living creatures in cloud must Fort save each round
+        // or become nauseated (can only take move action). Nausea persists 1d4+1
+        // rounds after leaving cloud. Immune: undead, constructs, no breathe, poison immune.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.STINKING_CLOUD,
+                    Name = "Stinking Cloud",
+                    Description = "Conjuration (Creation). Creates a 20-ft radius bank of nauseating fog. "
+                        + "Living creatures must Fort save each round or become nauseated (can only take move action). "
+                        + "Nausea persists 1d4+1 rounds after leaving. Immune: undead, constructs, non-breathers, poison immune. "
+                        + "Vision blocked like Fog Cloud. Components: V, S, M (rotten egg or skunk cabbage). PHB p.284",
+                    SpellLevel = 3, School = "Conjuration (Creation)",
+                    ClassList = new[] { "Wizard", "Sorcerer" },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Burst,
+                    AoESizeSquares = 4, // 20-ft radius = 4 squares
+                    AoERangeSquares = 0, // use Medium range profile
+                    AoEFilter = AoETargetFilter.All,
+                    AreaRadius = 4, // 20-ft radius
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    SpellResistanceApplies = false,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.DOMAIN_SOFTEN_EARTH,

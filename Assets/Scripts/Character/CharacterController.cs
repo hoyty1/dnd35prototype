@@ -2272,6 +2272,71 @@ public class CharacterController : MonoBehaviour
         return HasCondition(CombatConditionType.Sickened);
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // NAUSEATED CONDITION (Stinking Cloud, etc.)
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Whether this creature is currently nauseated.
+    /// Nauseated creatures can only take a single move action per turn.
+    /// They cannot attack, cast spells, concentrate, or make AoO.
+    /// </summary>
+    public bool IsNauseated => HasCondition(CombatConditionType.Nauseated);
+
+    /// <summary>
+    /// Apply the nauseated condition for a specified number of rounds.
+    /// Use rounds = -1 for indefinite duration (e.g., while in Stinking Cloud).
+    /// </summary>
+    public void ApplyNauseatedCondition(int rounds, string sourceName = "Nauseated")
+    {
+        ApplyCondition(CombatConditionType.Nauseated, rounds, sourceName);
+    }
+
+    /// <summary>
+    /// Remove the nauseated condition.
+    /// </summary>
+    public void RemoveNauseatedCondition()
+    {
+        RemoveCondition(CombatConditionType.Nauseated);
+    }
+
+    /// <summary>
+    /// Check if creature is in any active Sleet Storm area (for movement/attack modifiers).
+    /// </summary>
+    public bool IsInSleetStorm => SleetStormAreaEffect.IsCreatureInAnySleetStorm(this);
+
+    /// <summary>
+    /// Get the movement speed modifier for Sleet Storm (half speed = 0.5).
+    /// Returns 1.0 if not in any sleet storm.
+    /// </summary>
+    public float GetSleetStormMovementModifier()
+    {
+        return IsInSleetStorm ? 0.5f : 1.0f;
+    }
+
+    /// <summary>
+    /// Get the ranged attack penalty from Sleet Storm concealment.
+    /// Returns 0 if not in any sleet storm; attacks into/from sleet use concealment miss chance instead.
+    /// </summary>
+    public int GetSleetStormRangedAttackPenalty()
+    {
+        // Sleet Storm doesn't impose a flat penalty to ranged attacks per RAW;
+        // instead it uses concealment miss chance (20% at 5 ft, 50% beyond).
+        // This method returns 0 — the penalty is handled by concealment system.
+        return 0;
+    }
+
+    /// <summary>
+    /// Get the Concentration DC modifier for casting in a Sleet Storm.
+    /// Returns 0 if not in any sleet storm.
+    /// DC = 5 + level of spell being cast (weather distraction).
+    /// </summary>
+    public int GetSleetStormConcentrationDC(int spellLevelBeingCast)
+    {
+        if (!IsInSleetStorm) return 0;
+        return SleetStormAreaEffect.GetConcentrationDCModifier(spellLevelBeingCast);
+    }
+
     private void RefreshInvisibilityVisual()
     {
         RefreshInvisibilityVisualForObserver(null);

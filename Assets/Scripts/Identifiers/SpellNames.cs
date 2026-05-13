@@ -507,6 +507,9 @@ namespace DND35e.Identifiers
         /// <summary>Silent Image (spell id: silent_image)</summary>
         public const string SILENT_IMAGE = "silent_image";
 
+        /// <summary>Sleet Storm (spell id: sleet_storm)</summary>
+        public const string SLEET_STORM = "sleet_storm";
+
         /// <summary>Sleep (spell id: sleep)</summary>
         public const string SLEEP = "sleep";
 
@@ -524,6 +527,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Status (spell id: status)</summary>
         public const string STATUS = "status";
+
+        /// <summary>Stinking Cloud (spell id: stinking_cloud)</summary>
+        public const string STINKING_CLOUD = "stinking_cloud";
 
         /// <summary>Stone to Flesh (spell id: stone_to_flesh)</summary>
         public const string STONE_TO_FLESH = "stone_to_flesh";
