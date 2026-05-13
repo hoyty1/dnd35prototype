@@ -9,6 +9,9 @@ public static partial class NPCDatabase
     private static void RegisterCreatures_L()
     {
         RegisterLemure();
+    
+        RegisterSummonLargeShark();
+        RegisterSummonLargeViper();
     }
 
     private static void RegisterLemure()
@@ -66,4 +69,76 @@ public static partial class NPCDatabase
             Description = "Monster Manual lemure devil. Sluggish fiend with infernal resistances and relentless regeneration."
         });
     }
+
+
+    private static void RegisterSummonLargeShark()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "large_shark",
+            Name = "Large Shark",
+            ChallengeRating = "2",
+            Level = 4,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 4,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 17, DEX = 15, CON = 13, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 4,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 8,
+            BaseHitDieHP = 26,
+            CreatureTags = new List<string> { "Animal", "Aquatic", "SummonBase" },
+            HasScent = true,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.62f, 0.7f, 0.78f, 1f),
+            PanelColor = new Color(0.14f, 0.18f, 0.22f, 0.85f),
+            NameColor = new Color(0.88f, 0.94f, 0.99f),
+            Description = "Summon Monster baseline large shark."
+        });
+    }
+
+    private static void RegisterSummonLargeViper()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "large_viper",
+            Name = "Large Viper",
+            ChallengeRating = "2",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 10, DEX = 17, CON = 11, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 3,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                // Bite +4 melee (1d4 plus poison) — uses Weapon Finesse (Dex to attack)
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 4, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true, PoisonOnHitId = "large_viper_poison" }
+            },
+            BaseSpeed = 4, // 20 ft., climb 20 ft., swim 20 ft.
+            BaseHitDieHP = 13,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Poison (Fort DC 11, 1d6 Con/1d6 Con)", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.45f, 0.55f, 0.3f, 1f),
+            PanelColor = new Color(0.18f, 0.22f, 0.1f, 0.85f),
+            NameColor = new Color(0.88f, 0.94f, 0.72f),
+            Description = "Large viper snake. Bite +4 (1d4 + poison Fort DC 11, 1d6 Con/1d6 Con). Weapon Finesse. MM 3.5e p.280."
+        });
+    }
+
 }

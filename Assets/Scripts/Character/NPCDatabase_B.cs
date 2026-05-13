@@ -12,6 +12,10 @@ public static partial class NPCDatabase
         RegisterBatSwarm();
         RegisterGiantBee();
         RegisterGiantBombardierBeetle();
+    
+        RegisterSummonBlackBear();
+        RegisterSummonBison();
+        RegisterSummonBoar();
     }
 
     private static void RegisterBadger()
@@ -194,6 +198,114 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.16f, 0.1f, 0.06f, 0.85f),
             NameColor = new Color(0.92f, 0.8f, 0.62f),
             Description = "Monster Manual giant bombardier beetle. Armored vermin that sprays boiling acid in a short cone."
+        });
+    }
+
+
+
+    private static void RegisterSummonBlackBear()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "black_bear",
+            Name = "Black Bear",
+            ChallengeRating = "2",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 19, DEX = 13, CON = 15, WIS = 12, INT = 2, CHA = 6,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Claw", DamageDice = 4, DamageCount = 1, Count = 2, BonusDamageSource = DamageBonusSource.Strength, Range = 1, IsPrimary = true },
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 6, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthHalf, Range = 1, IsPrimary = false }
+            },
+            BaseSpeed = 8, // 40 ft.
+            BaseHitDieHP = 19,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Low-light vision", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.28f, 0.2f, 0.13f, 1f),
+            PanelColor = new Color(0.14f, 0.09f, 0.06f, 0.85f),
+            NameColor = new Color(0.9f, 0.78f, 0.62f),
+            Description = "Black bear. 2 claws +6 (1d4+4), bite +1 (1d6+2). +4 racial Swim. MM 3.5e p.269."
+        });
+    }
+
+    private static void RegisterSummonBison()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "bison",
+            Name = "Bison",
+            ChallengeRating = "2",
+            Level = 5,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 5,
+            SizeCategory = SizeCategory.Large,
+            IsTallCreature = false,
+            STR = 22, DEX = 10, CON = 16, WIS = 11, INT = 2, CHA = 4,
+            NaturalArmorBonus = 4,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Gore", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 8, // 40 ft.
+            BaseHitDieHP = 37,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Stampede (1d12 per 5 bison, Ref DC 18 half)", "Low-light vision", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.55f, 0.42f, 0.28f, 1f),
+            PanelColor = new Color(0.22f, 0.16f, 0.1f, 0.85f),
+            NameColor = new Color(0.92f, 0.82f, 0.68f),
+            Description = "Bison. Gore +8 (1d8+9). Stampede ability. MM 3.5e p.270."
+        });
+    }
+
+    private static void RegisterSummonBoar()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "boar",
+            Name = "Boar",
+            ChallengeRating = "2",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 15, DEX = 10, CON = 17, WIS = 13, INT = 2, CHA = 4,
+            NaturalArmorBonus = 6,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Gore", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 8, // 40 ft.
+            BaseHitDieHP = 25,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Ferocity (fights below 0 hp until −10)", "Low-light vision", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.52f, 0.38f, 0.3f, 1f),
+            PanelColor = new Color(0.2f, 0.14f, 0.1f, 0.85f),
+            NameColor = new Color(0.9f, 0.8f, 0.72f),
+            Description = "Boar with ferocity — continues fighting below 0 HP until −10. Gore +4 (1d8+3). MM 3.5e p.270."
         });
     }
 

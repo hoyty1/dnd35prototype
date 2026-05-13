@@ -11,6 +11,8 @@ public static partial class NPCDatabase
         RegisterSpiderSwarm();
         RegisterMonstrousScorpions();
         RegisterMonstrousSpiders();
+    
+        RegisterSummonSmallViper();
     }
 
     private static void RegisterSpiderSwarm()
@@ -200,6 +202,41 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.1f, 0.1f, 0.1f, 0.85f),
             NameColor = new Color(0.86f, 0.86f, 0.9f),
             Description = $"Monster Manual {name.ToLowerInvariant()}. Web-spinning ambush vermin with toxic bite and tremorsense."
+        });
+    }
+
+
+
+    private static void RegisterSummonSmallViper()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "small_viper",
+            Name = "Small Viper",
+            Level = 1,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 1,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 6, DEX = 17, CON = 11, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 1,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 6,
+            BaseHitDieHP = 6,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasScent = true,
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.45f, 0.72f, 0.34f, 1f),
+            PanelColor = new Color(0.15f, 0.23f, 0.12f, 0.85f),
+            NameColor = new Color(0.84f, 0.94f, 0.8f),
+            Description = "Summon Monster baseline Small Viper."
         });
     }
 

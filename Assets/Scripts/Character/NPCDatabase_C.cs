@@ -9,6 +9,9 @@ public static partial class NPCDatabase
     private static void RegisterCreatures_C()
     {
         RegisterMonstrousCentipedes();
+    
+        RegisterSummonCrocodile();
+        RegisterSummonConstrictorSnake();
     }
 
     private static void RegisterMonstrousCentipedes()
@@ -71,6 +74,82 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.22f, 0.08f, 0.07f, 0.85f),
             NameColor = new Color(0.96f, 0.78f, 0.74f),
             Description = $"Monster Manual {name.ToLowerInvariant()}. Poisonous vermin striker with climb mobility and vermin immunities."
+        });
+    }
+
+
+
+    private static void RegisterSummonCrocodile()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "crocodile",
+            Name = "Crocodile",
+            ChallengeRating = "2",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 19, DEX = 12, CON = 17, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 4,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 8, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 4, // 20 ft. land, swim 30 ft.
+            BaseHitDieHP = 22,
+            CreatureTags = new List<string> { "Animal", "Aquatic", "SummonBase" },
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Improved grab", "Hold breath (68 rounds)", "Low-light vision", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.42f, 0.56f, 0.34f, 1f),
+            PanelColor = new Color(0.12f, 0.2f, 0.1f, 0.85f),
+            NameColor = new Color(0.84f, 0.93f, 0.78f),
+            Description = "Crocodile with improved grab on bite. Hold breath 68 rounds. +8 Swim, +4 Hide in water. MM 3.5e p.271."
+        });
+    }
+
+    private static void RegisterSummonConstrictorSnake()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "constrictor_snake",
+            Name = "Constrictor Snake",
+            ChallengeRating = "2",
+            Level = 3,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 3,
+            SizeCategory = SizeCategory.Medium,
+            IsTallCreature = false,
+            STR = 17, DEX = 17, CON = 13, WIS = 12, INT = 1, CHA = 2,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Bite", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 4, // 20 ft., climb 20 ft., swim 20 ft.
+            BaseHitDieHP = 19,
+            CreatureTags = new List<string> { "Animal", "SummonBase" },
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Bite",
+            HasScent = true,
+            SpecialAbilities = new List<string> { "Constrict (1d3+4)", "Improved grab", "Scent" },
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.56f, 0.64f, 0.28f, 1f),
+            PanelColor = new Color(0.2f, 0.23f, 0.1f, 0.85f),
+            NameColor = new Color(0.9f, 0.95f, 0.74f),
+            Description = "Constrictor snake. Bite +5 (1d3+4), improved grab, constrict 1d3+4. MM 3.5e p.280."
         });
     }
 

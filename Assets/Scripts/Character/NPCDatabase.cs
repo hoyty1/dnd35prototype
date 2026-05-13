@@ -24,11 +24,8 @@ public static partial class NPCDatabase
         // Register all non-Monster Manual creatures first.
         RegisterCustomCreatures();
 
-        // Register official Monster Manual summon baseline creatures (SM I–III).
-        RegisterSummonMonsterBaseCreatures();
-
         // Register Monster Manual creatures from alphabetical files.
-        // These intentionally override summon alias IDs such as dog/owl/raven.
+        RegisterCreatures_A();
         RegisterCreatures_B();
         RegisterCreatures_C();
         RegisterCreatures_D();
@@ -42,6 +39,10 @@ public static partial class NPCDatabase
         RegisterCreatures_R();
         RegisterCreatures_S();
         RegisterCreatures_V();
+        RegisterCreatures_W();
+
+        // Register summon compatibility aliases (map legacy IDs to existing creature entries).
+        RegisterSummonCreatureAliases();
 
         Debug.Log($"[NPCDatabase] Initialized with {_npcs.Count} NPC types.");
     }
@@ -156,6 +157,38 @@ public static partial class NPCDatabase
     private static void Register(NPCDefinition def)
     {
         _npcs[def.Id] = def;
+    }
+
+    private static void RegisterSummonCreatureAliases()
+    {
+        RegisterSummonAlias("wolf", "wolf_pack_hunter", "Wolf");
+        RegisterSummonAlias("badger", "dire_badger", "Badger");
+
+        // These IDs are used by external validation scripts; map to closest existing summon baselines.
+        RegisterSummonAlias("riding_dog", "dog", "Riding Dog");
+        RegisterSummonAlias("owl", "eagle", "Owl");
+        RegisterSummonAlias("raven", "eagle", "Raven");
+        RegisterSummonAlias("giant_bee", "dire_bat", "Giant Bee");
+    }
+
+    private static void RegisterSummonAlias(string aliasId, string sourceId, string overrideName = null)
+    {
+        NPCDefinition source = Get(sourceId);
+        if (source == null)
+            return;
+
+        NPCDefinition alias = source.Clone();
+        alias.Id = aliasId;
+
+        if (!string.IsNullOrWhiteSpace(overrideName))
+            alias.Name = overrideName;
+
+        if (alias.CreatureTags == null)
+            alias.CreatureTags = new List<string>();
+        if (!alias.CreatureTags.Contains("SummonAlias"))
+            alias.CreatureTags.Add("SummonAlias");
+
+        Register(alias);
     }
 
     // Custom creature registrations are split into NPCDatabaseCustom.cs

@@ -9,6 +9,8 @@ public static partial class NPCDatabase
     private static void RegisterCreatures_O()
     {
         RegisterOwl();
+    
+        RegisterSummonOctopus();
     }
 
     private static void RegisterOwl()
@@ -43,6 +45,42 @@ public static partial class NPCDatabase
             PanelColor = new Color(0.2f, 0.16f, 0.12f, 0.85f),
             NameColor = new Color(0.94f, 0.9f, 0.84f),
             Description = "Monster Manual owl. Tiny aerial hunter with keen senses and low-light vision."
+        });
+    }
+
+
+
+    private static void RegisterSummonOctopus()
+    {
+        Register(new NPCDefinition
+        {
+            Id = "octopus",
+            Name = "Octopus",
+            Level = 2,
+            CharacterClass = "Warrior",
+            CreatureType = "Animal",
+            HitDice = 2,
+            SizeCategory = SizeCategory.Small,
+            IsTallCreature = false,
+            STR = 12, DEX = 15, CON = 11, WIS = 12, INT = 2, CHA = 3,
+            NaturalArmorBonus = 2,
+            NaturalAttacks = new List<NaturalAttackDefinition>
+            {
+                new NaturalAttackDefinition { Name = "Tentacles", DamageDice = 3, DamageCount = 1, Count = 1, BonusDamageSource = DamageBonusSource.StrengthOneAndHalf, Range = 1, IsPrimary = true }
+            },
+            BaseSpeed = 5,
+            BaseHitDieHP = 11,
+            CreatureTags = new List<string> { "Animal", "Aquatic", "SummonBase" },
+            HasImprovedGrab = true,
+            ImprovedGrabTriggerAttackName = "Tentacles",
+            EquipmentIds = new List<EquipmentSlotPair>(),
+            BackpackItemIds = new List<string>(),
+            AIBehavior = NPCAIBehavior.AggressiveMelee,
+            AIProfileArchetype = NPCAIProfileArchetype.Animal,
+            SpriteColor = new Color(0.62f, 0.48f, 0.68f, 1f),
+            PanelColor = new Color(0.18f, 0.13f, 0.23f, 0.85f),
+            NameColor = new Color(0.88f, 0.8f, 0.95f),
+            Description = "Summon Monster baseline octopus with improved-grab style control attack."
         });
     }
 
