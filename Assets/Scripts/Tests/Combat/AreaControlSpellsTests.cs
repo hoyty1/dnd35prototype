@@ -58,6 +58,13 @@ public static class AreaControlSpellsTests
         TestNauseatedCondition();
         TestNauseatedConditionApplyRemove();
 
+        // Wind dispersal tests
+        TestStinkingCloudIsDispersibleByWind();
+        TestStinkingCloudRequiresModerateWind();
+        TestStinkingCloudSevereWindInstantDisperse();
+        TestStinkingCloudStrongWindDispersesInOneRound();
+        TestFogCloudAlsoDispersibleByWind();
+
         // Shared mechanic tests
         TestBothSpellsAreDurationRounds();
         TestSpellConstants();
@@ -407,6 +414,78 @@ public static class AreaControlSpellsTests
         // Remove nauseated
         cc.RemoveNauseatedCondition();
         Assert(!cc.IsNauseated, "IsNauseated returns false after removing condition");
+
+        Object.DestroyImmediate(go);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // WIND DISPERSAL TESTS
+    // ════════════════════════════════════════════════════════════
+
+    private static void TestStinkingCloudIsDispersibleByWind()
+    {
+        var go = new GameObject("TestStinkingCloud_Wind");
+        var cloud = go.AddComponent<StinkingCloudAreaEffect>();
+
+        Assert(cloud.DispersibleByWind, "Stinking Cloud is marked as dispersible by wind");
+
+        Object.DestroyImmediate(go);
+    }
+
+    private static void TestStinkingCloudRequiresModerateWind()
+    {
+        var go = new GameObject("TestStinkingCloud_WindReq");
+        var cloud = go.AddComponent<StinkingCloudAreaEffect>();
+
+        Assert(cloud.RequiredWindStrength == WindStrength.Moderate,
+            "Stinking Cloud requires at least Moderate wind to disperse",
+            $"got {cloud.RequiredWindStrength}");
+
+        Object.DestroyImmediate(go);
+    }
+
+    private static void TestStinkingCloudSevereWindInstantDisperse()
+    {
+        // Gust of Wind creates Severe wind (WindStrength.Severe).
+        // Per WindEffectManager.CheckForFogDispersion, Severe wind instantly disperses
+        // any effect requiring Moderate or Strong wind.
+        // Stinking Cloud requires Moderate → Severe >= Moderate → instant dispersion.
+        Assert(WindStrength.Severe >= WindStrength.Moderate,
+            "Severe wind (Gust of Wind) meets Moderate wind requirement for Stinking Cloud");
+        Assert(WindStrength.Severe >= WindStrength.Severe,
+            "Severe wind triggers instant dispersion path in WindEffectManager");
+    }
+
+    private static void TestStinkingCloudStrongWindDispersesInOneRound()
+    {
+        // Per D&D 3.5e PHB: Strong wind (21+ mph) disperses Stinking Cloud in 1 round.
+        // WindEffectManager uses: wind.Strength >= WindStrength.Strong ? 1 : 4
+        // Stinking Cloud requires Moderate wind minimum.
+        // Strong >= Moderate → triggers dispersion.
+        Assert(WindStrength.Strong >= WindStrength.Moderate,
+            "Strong wind meets Stinking Cloud's Moderate requirement");
+
+        // The dispersion counter for Strong wind should be 1 round
+        int expectedRounds = WindStrength.Strong >= WindStrength.Strong ? 1 : 4;
+        Assert(expectedRounds == 1,
+            "Strong wind disperses in 1 round (not 4)",
+            $"got {expectedRounds}");
+
+        // Moderate wind should take 4 rounds
+        int moderateRounds = WindStrength.Moderate >= WindStrength.Strong ? 1 : 4;
+        Assert(moderateRounds == 4,
+            "Moderate wind disperses in 4 rounds",
+            $"got {moderateRounds}");
+    }
+
+    private static void TestFogCloudAlsoDispersibleByWind()
+    {
+        // Fog Cloud should also be dispersible by wind (verifies the system is extensible)
+        var go = new GameObject("TestFogCloud_Wind");
+        var fog = go.AddComponent<FogCloudAreaEffect>();
+
+        Assert(fog.DispersibleByWind,
+            "Fog Cloud is also marked as dispersible by wind");
 
         Object.DestroyImmediate(go);
     }

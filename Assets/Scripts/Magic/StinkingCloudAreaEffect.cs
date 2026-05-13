@@ -142,17 +142,35 @@ public class StinkingCloudAreaEffect : PersistentAreaEffect
             {
                 RemoveConcealment(character);
 
-                // Creatures still nauseated when cloud expires get lingering nausea
+                // Creatures still nauseated when cloud expires get lingering nausea.
+                // Apply as a timed condition directly so it persists after this object is destroyed
+                // (e.g. when dispersed by Gust of Wind).
                 if (_nauseatedCreatures.Contains(character))
                 {
                     int lingeringRounds = Random.Range(1, 5) + 1; // 1d4+1
-                    _lingeringNausea[character] = lingeringRounds;
+                    // Re-apply with explicit duration so the condition system ticks it down
+                    character.ApplyCondition(CombatConditionType.Nauseated, lingeringRounds, "Stinking Cloud (lingering)");
                     LogEffect($"  {character.Stats.CharacterName} remains nauseated for {lingeringRounds} rounds after cloud expires.");
                 }
             }
         }
 
+        // Also convert any existing lingering nausea entries to timed conditions
+        foreach (var kvp in _lingeringNausea)
+        {
+            CharacterController creature = kvp.Key;
+            if (creature != null && creature.Stats != null && !creature.Stats.IsDead)
+            {
+                int remaining = kvp.Value;
+                if (remaining > 0)
+                {
+                    creature.ApplyCondition(CombatConditionType.Nauseated, remaining, "Stinking Cloud (lingering)");
+                }
+            }
+        }
+
         _nauseatedCreatures.Clear();
+        _lingeringNausea.Clear();
         RemoveGridHighlight();
         LogEffect("Stinking Cloud dissipates.");
     }
