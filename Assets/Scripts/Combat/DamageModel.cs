@@ -87,12 +87,15 @@ public class DamageResolutionResult
 {
     public int RawDamage;
     public int DamageAfterImmunity;
+    public int ProtectionFromEnergyAbsorbed;
+    public int DamageAfterProtectionFromEnergy;
     public int ResistanceApplied;
     public int DamageAfterResistance;
     public int DamageReductionApplied;
     public int FinalDamage;
     public bool ImmunityTriggered;
     public DamageType ImmunityType = DamageType.Untyped;
+    public bool ProtectionFromEnergyDischarged;
     public List<string> Notes = new List<string>();
 
     public int TotalPrevented => Math.Max(0, RawDamage - FinalDamage);
@@ -106,6 +109,7 @@ public class DamageResolutionResult
             parts.Add($"Immune to {DamageTextUtils.GetDamageTypeDisplay(ImmunityType)} (blocked {RawDamage})");
         else
         {
+            if (ProtectionFromEnergyAbsorbed > 0) parts.Add($"Protection absorbs {ProtectionFromEnergyAbsorbed}");
             if (ResistanceApplied > 0) parts.Add($"Resist {ResistanceApplied}");
             if (DamageReductionApplied > 0) parts.Add($"DR {DamageReductionApplied}");
         }

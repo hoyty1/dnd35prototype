@@ -161,6 +161,39 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ================================================================
+        // Protection from Energy (D&D 3.5e PHB p.266)
+        // Abjuration; Cleric 3, Druid 3, Ranger 2, Sorcerer/Wizard 3
+        // Touch, 10 min/level or until discharged
+        // Absorbs 12 pts/CL (max 120) of chosen energy type
+        // ================================================================
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.PROTECTION_FROM_ENERGY,
+                    Name = "Protection from Energy",
+                    Description = "Grants temporary protection from one energy type (acid, cold, electricity, fire, or sonic). Absorbs 12 points of damage per caster level (max 120) before being discharged. PHB p.266",
+                    SpellLevel = 3,
+                    School = "Abjuration",
+                    ClassList = new[] { "Cleric", "Druid", "Sorcerer", "Wizard" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Buff,
+                    BuffType = "energy_protection",
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 10,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = -1,
+                    IsDismissible = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Fortitude",
+                    AllowsSpellResistance = true
+                });
+
+        // Ranger gets it at level 2
+        RegisterClassSpellAlias("protection_from_energy_rgr", SpellNames.PROTECTION_FROM_ENERGY, "Ranger", 2);
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.PURIFY_FOOD_DRINK,

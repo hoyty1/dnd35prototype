@@ -277,6 +277,30 @@ public class StatusEffectIndicator : MonoBehaviour
             }
         }
 
+        if (_character.Stats != null && _character.Stats.ActiveProtectionFromEnergyEffects != null && _character.Stats.ActiveProtectionFromEnergyEffects.Count > 0)
+        {
+            for (int i = 0; i < _character.Stats.ActiveProtectionFromEnergyEffects.Count; i++)
+            {
+                ProtectionFromEnergyEffectData protEnergy = _character.Stats.ActiveProtectionFromEnergyEffects[i];
+                if (protEnergy == null || protEnergy.RemainingAbsorptionPoints <= 0)
+                    continue;
+
+                string typeLabel = protEnergy.GetDisplayLabel();
+                int rounds = protEnergy.DurationRemainingRounds;
+                list.Add(new IconData
+                {
+                    Key = $"ProtEnergy_{typeLabel}_{protEnergy.RemainingAbsorptionPoints}",
+                    ShortLabel = "PE",
+                    Tooltip = $"Protection from Energy ({char.ToUpperInvariant(typeLabel[0]) + typeLabel.Substring(1)})\n"
+                            + $"Absorbs {typeLabel} damage\n"
+                            + $"Points: {protEnergy.RemainingAbsorptionPoints}/{protEnergy.MaxAbsorptionPoints}\n"
+                            + $"Duration: {(rounds < 0 ? "∞" : $"{Mathf.Max(0, rounds)} rounds")}",
+                    Color = new Color(0.25f, 0.75f, 0.55f, 0.92f),
+                    Duration = rounds
+                });
+            }
+        }
+
         bool hasFatigueCondition = _character.Stats.HasFatiguedCondition;
         bool hasExhaustedCondition = _character.Stats.HasExhaustedCondition;
 

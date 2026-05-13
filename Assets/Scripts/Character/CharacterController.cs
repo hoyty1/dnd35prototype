@@ -2616,6 +2616,8 @@ public class CharacterController : MonoBehaviour
             Stats.ActiveProtectionFromArrowsEffect = null;
             if (Stats.ActiveResistEnergyEffects != null)
                 Stats.ActiveResistEnergyEffects.Clear();
+            if (Stats.ActiveProtectionFromEnergyEffects != null)
+                Stats.ActiveProtectionFromEnergyEffects.Clear();
         }
         _displayedRace = ActualRace;
         RefreshInvisibilityVisual();

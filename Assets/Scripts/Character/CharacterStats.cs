@@ -1520,6 +1520,9 @@ public class CharacterStats
     /// <summary>Runtime Resist Energy effects (can hold different energy types simultaneously).</summary>
     [NonSerialized] public List<ResistEnergyEffectData> ActiveResistEnergyEffects = new List<ResistEnergyEffectData>();
 
+    /// <summary>Runtime Protection from Energy effects (one per energy type, different types can coexist).</summary>
+    [NonSerialized] public List<ProtectionFromEnergyEffectData> ActiveProtectionFromEnergyEffects = new List<ProtectionFromEnergyEffectData>();
+
     /// <summary>Owning character controller (bound by CharacterController.Init).</summary>
     [NonSerialized] public CharacterController OwnerCharacter;
 
@@ -3064,7 +3067,45 @@ public class CharacterStats
             }
         }
 
-        // 2) Resistance check: use highest resistance among matching damage types
+        // 2a) Protection from Energy: absorbs energy damage BEFORE resistance
+        //     Per PHB p.266: Protection from Energy absorbs first, then Resist Energy applies to remainder.
+        int damageAfterProtection = result.DamageAfterImmunity;
+        int totalProtAbsorbed = 0;
+        bool anyProtDischarged = false;
+
+        if (ActiveProtectionFromEnergyEffects != null && ActiveProtectionFromEnergyEffects.Count > 0)
+        {
+            foreach (DamageType type in packet.Types)
+            {
+                if (damageAfterProtection <= 0) break;
+
+                int absorbed = AbsorbDamageWithProtectionFromEnergy(damageAfterProtection, type, out bool discharged, out int remainingPool);
+                if (absorbed > 0)
+                {
+                    totalProtAbsorbed += absorbed;
+                    damageAfterProtection -= absorbed;
+                    string typeLabel = DamageTextUtils.GetDamageTypeDisplay(type);
+
+                    if (discharged)
+                    {
+                        anyProtDischarged = true;
+                        result.Notes.Add($"Protection from Energy ({typeLabel}) absorbs {absorbed} damage — discharged!");
+                    }
+                    else
+                    {
+                        result.Notes.Add($"Protection from Energy ({typeLabel}) absorbs {absorbed} damage ({remainingPool} pts remaining)");
+                    }
+                }
+            }
+        }
+
+        result.ProtectionFromEnergyAbsorbed = totalProtAbsorbed;
+        result.DamageAfterProtectionFromEnergy = Mathf.Max(0, damageAfterProtection);
+        result.ProtectionFromEnergyDischarged = anyProtDischarged;
+
+        // 2b) Resistance check: use highest resistance among matching damage types
+        //     Applied to damage remaining AFTER Protection from Energy
+        int damageForResistance = result.DamageAfterProtectionFromEnergy;
         int typedResistance = 0;
         foreach (var type in packet.Types)
         {
@@ -3079,13 +3120,13 @@ public class CharacterStats
         int resistEnergyResistance = GetResistEnergyResistanceForTypes(packet.Types, out DamageType resistEnergyTypeMatched);
         int finalResistance = Mathf.Max(typedResistance, resistEnergyResistance);
 
-        result.ResistanceApplied = Mathf.Min(result.RawDamage, Mathf.Max(0, finalResistance));
-        result.DamageAfterResistance = Mathf.Max(0, result.RawDamage - result.ResistanceApplied);
+        result.ResistanceApplied = Mathf.Min(damageForResistance, Mathf.Max(0, finalResistance));
+        result.DamageAfterResistance = Mathf.Max(0, damageForResistance - result.ResistanceApplied);
 
         if (resistEnergyResistance > 0 && resistEnergyResistance >= typedResistance && resistEnergyTypeMatched != DamageType.Untyped && result.ResistanceApplied > 0)
         {
             string typeLabel = DamageTextUtils.GetDamageTypeDisplay(resistEnergyTypeMatched);
-            result.Notes.Add($"{result.RawDamage} {typeLabel} damage reduced to {result.DamageAfterResistance} by Resist Energy ({typeLabel} {resistEnergyResistance})");
+            result.Notes.Add($"{damageForResistance} {typeLabel} damage reduced to {result.DamageAfterResistance} by Resist Energy ({typeLabel} {resistEnergyResistance})");
         }
 
         // 3) DR check: applies only to physical weapon-like attacks (weapon or natural)
@@ -3403,6 +3444,112 @@ public class CharacterStats
         }
 
         return Mathf.Max(0, resistance);
+    }
+
+    // ================================================================
+    //  PROTECTION FROM ENERGY
+    // ================================================================
+
+    /// <summary>
+    /// Sets a Protection from Energy effect. Same energy type replaces previous.
+    /// Different energy types coexist independently.
+    /// </summary>
+    public void SetProtectionFromEnergyEffect(ProtectionFromEnergyEffectData newEffect)
+    {
+        if (newEffect == null)
+            return;
+
+        if (ActiveProtectionFromEnergyEffects == null)
+            ActiveProtectionFromEnergyEffects = new List<ProtectionFromEnergyEffectData>();
+
+        DamageType incomingType = newEffect.ToDamageType();
+
+        // Replace existing protection of same energy type
+        for (int i = ActiveProtectionFromEnergyEffects.Count - 1; i >= 0; i--)
+        {
+            ProtectionFromEnergyEffectData existing = ActiveProtectionFromEnergyEffects[i];
+            if (existing != null && existing.ToDamageType() == incomingType)
+                ActiveProtectionFromEnergyEffects.RemoveAt(i);
+        }
+
+        ActiveProtectionFromEnergyEffects.Add(newEffect);
+    }
+
+    /// <summary>
+    /// Gets the active Protection from Energy effect for a specific damage type.
+    /// Returns null if no active protection exists for that type.
+    /// </summary>
+    public ProtectionFromEnergyEffectData GetProtectionFromEnergy(DamageType type)
+    {
+        if (ActiveProtectionFromEnergyEffects == null || ActiveProtectionFromEnergyEffects.Count == 0)
+            return null;
+
+        for (int i = 0; i < ActiveProtectionFromEnergyEffects.Count; i++)
+        {
+            ProtectionFromEnergyEffectData effect = ActiveProtectionFromEnergyEffects[i];
+            if (effect != null && effect.ToDamageType() == type && effect.IsActive)
+                return effect;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Checks if the character has active Protection from Energy for any of the given damage types.
+    /// </summary>
+    public bool HasProtectionFromEnergy(HashSet<DamageType> types)
+    {
+        if (types == null || types.Count == 0 || ActiveProtectionFromEnergyEffects == null || ActiveProtectionFromEnergyEffects.Count == 0)
+            return false;
+
+        foreach (DamageType type in types)
+        {
+            if (GetProtectionFromEnergy(type) != null)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Removes a Protection from Energy effect for a specific damage type.
+    /// </summary>
+    public void RemoveProtectionFromEnergy(DamageType type)
+    {
+        if (ActiveProtectionFromEnergyEffects == null)
+            return;
+
+        for (int i = ActiveProtectionFromEnergyEffects.Count - 1; i >= 0; i--)
+        {
+            ProtectionFromEnergyEffectData effect = ActiveProtectionFromEnergyEffects[i];
+            if (effect != null && effect.ToDamageType() == type)
+                ActiveProtectionFromEnergyEffects.RemoveAt(i);
+        }
+    }
+
+    /// <summary>
+    /// Absorbs energy damage through Protection from Energy.
+    /// Returns the amount absorbed. Handles discharge when pool reaches 0.
+    /// Must be called BEFORE energy resistance is applied.
+    /// </summary>
+    public int AbsorbDamageWithProtectionFromEnergy(int damage, DamageType type, out bool discharged, out int remaining)
+    {
+        discharged = false;
+        remaining = 0;
+
+        ProtectionFromEnergyEffectData effect = GetProtectionFromEnergy(type);
+        if (effect == null || damage <= 0)
+            return 0;
+
+        int absorbed = effect.AbsorbDamage(damage);
+        remaining = effect.RemainingAbsorptionPoints;
+        discharged = effect.IsDischarged;
+
+        if (discharged)
+        {
+            RemoveProtectionFromEnergy(type);
+        }
+
+        return absorbed;
     }
 
     public void AddDamageResistance(DamageType type, int amount)

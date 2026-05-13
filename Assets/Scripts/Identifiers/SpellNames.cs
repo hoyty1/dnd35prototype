@@ -414,6 +414,24 @@ namespace DND35e.Identifiers
         /// <summary>Protection from Law (spell id: protection_from_law)</summary>
         public const string PROTECTION_FROM_LAW = "protection_from_law";
 
+        /// <summary>Protection from Energy, Acid (spell id: protection_from_energy_acid)</summary>
+        public const string PROTECTION_FROM_ENERGY_ACID = "protection_from_energy_acid";
+
+        /// <summary>Protection from Energy, Cold (spell id: protection_from_energy_cold)</summary>
+        public const string PROTECTION_FROM_ENERGY_COLD = "protection_from_energy_cold";
+
+        /// <summary>Protection from Energy, Electricity (spell id: protection_from_energy_electricity)</summary>
+        public const string PROTECTION_FROM_ENERGY_ELECTRICITY = "protection_from_energy_electricity";
+
+        /// <summary>Protection from Energy, Fire (spell id: protection_from_energy_fire)</summary>
+        public const string PROTECTION_FROM_ENERGY_FIRE = "protection_from_energy_fire";
+
+        /// <summary>Protection from Energy, Sonic (spell id: protection_from_energy_sonic)</summary>
+        public const string PROTECTION_FROM_ENERGY_SONIC = "protection_from_energy_sonic";
+
+        /// <summary>Protection from Energy (generic, spell id: protection_from_energy)</summary>
+        public const string PROTECTION_FROM_ENERGY = "protection_from_energy";
+
         /// <summary>Purify Food and Drink (spell id: purify_food_drink)</summary>
         public const string PURIFY_FOOD_DRINK = "purify_food_drink";
 
