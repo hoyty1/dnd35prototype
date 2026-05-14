@@ -267,6 +267,7 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.None,
             RangeIncrement = 80,
+            RequiresAmmoType = AmmunitionType.Bolt,
             RequiresReload = true,
             IsLoaded = true,
             ReloadAction = ReloadActionType.MoveAction,
@@ -286,6 +287,7 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.None,
             RangeIncrement = 120,
+            RequiresAmmoType = AmmunitionType.Bolt,
             RequiresReload = true,
             IsLoaded = true,
             ReloadAction = ReloadActionType.FullRound,
@@ -294,13 +296,55 @@ public static class ItemDatabase
             IconChar = "\u2732", IconColor = new Color(0.5f, 0.5f, 0.5f)
         });
 
-        // Ammo bundle placeholder used by Turn Undead mechanics test scenarios.
-        // (No per-shot ammo consumption yet; this exists for inventory visibility/logging.)
+        // --- Ammunition Items (D&D 3.5 PHB) ---
+        // Arrows (20): 1 gp, 3 lbs per 20
         Register(new ItemData
         {
-            Id = ItemIDs.CROSSBOW_BOLTS_20, Name = "Crossbow Bolts (20)", Type = ItemType.Misc,
+            Id = ItemIDs.AMMO_ARROW, Name = "Arrows (20)", Type = ItemType.Ammunition,
             Slot = EquipSlot.None,
+            AmmoType = AmmunitionType.Arrow,
+            Quantity = 20, MaxQuantity = 20,
+            Description = "A quiver of 20 arrows for use with bows.",
+            BasePriceGp = 1,
+            WeightLbs = 3f,
+            IconChar = "↑", IconColor = new Color(0.7f, 0.55f, 0.3f)
+        });
+
+        // Crossbow Bolts (20): 1 gp, 1 lb per 10
+        Register(new ItemData
+        {
+            Id = ItemIDs.AMMO_BOLT, Name = "Crossbow Bolts (20)", Type = ItemType.Ammunition,
+            Slot = EquipSlot.None,
+            AmmoType = AmmunitionType.Bolt,
+            Quantity = 20, MaxQuantity = 20,
+            Description = "A case of 20 crossbow bolts.",
+            BasePriceGp = 1,
+            WeightLbs = 2f,
+            IconChar = "•", IconColor = new Color(0.6f, 0.6f, 0.6f)
+        });
+
+        // Sling Bullets (10): 1 sp, 5 lbs per 10
+        Register(new ItemData
+        {
+            Id = ItemIDs.AMMO_SLING_BULLET, Name = "Sling Bullets (10)", Type = ItemType.Ammunition,
+            Slot = EquipSlot.None,
+            AmmoType = AmmunitionType.SlingBullet,
+            Quantity = 10, MaxQuantity = 10,
+            Description = "A pouch of 10 sling bullets.",
+            BasePriceGp = 0,
+            WeightLbs = 5f,
+            IconChar = "○", IconColor = new Color(0.5f, 0.5f, 0.5f)
+        });
+
+        // Legacy ammo bundle placeholder (kept for backward compatibility with existing saves/tests)
+        Register(new ItemData
+        {
+            Id = ItemIDs.CROSSBOW_BOLTS_20, Name = "Crossbow Bolts (20) [Legacy]", Type = ItemType.Ammunition,
+            Slot = EquipSlot.None,
+            AmmoType = AmmunitionType.Bolt,
+            Quantity = 20, MaxQuantity = 20,
             Description = "A bundle of 20 crossbow bolts.",
+            BasePriceGp = 1,
             WeightLbs = 2f,
             IconChar = "\u2022", IconColor = new Color(0.7f, 0.65f, 0.45f)
         });
@@ -349,6 +393,7 @@ public static class ItemDatabase
             DamageDice = 4, DamageCount = 1, BonusDamage = 0, AttackRange = 50,
             DamageType = "bludgeoning",
             DmgModType = DamageModifierType.None,
+            RequiresAmmoType = AmmunitionType.SlingBullet,
             RangeIncrement = 50,
             CritThreatMin = 20, CritMultiplier = 2,
             WeightLbs = 0f,
@@ -738,6 +783,7 @@ public static class ItemDatabase
             IsTwoHanded = true,
             DamageType = "piercing",
             DmgModType = DamageModifierType.None,
+            RequiresAmmoType = AmmunitionType.Arrow,
             RangeIncrement = 100,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 3f,
@@ -755,6 +801,7 @@ public static class ItemDatabase
             IsTwoHanded = true,
             DamageType = "piercing",
             DmgModType = DamageModifierType.None,
+            RequiresAmmoType = AmmunitionType.Arrow,
             RangeIncrement = 60,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 2f,
@@ -773,6 +820,7 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.Composite,
             CompositeRating = 0,
+            RequiresAmmoType = AmmunitionType.Arrow,
             RangeIncrement = 110,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 3f,
@@ -791,6 +839,7 @@ public static class ItemDatabase
             DamageType = "piercing",
             DmgModType = DamageModifierType.Composite,
             CompositeRating = 0,
+            RequiresAmmoType = AmmunitionType.Arrow,
             RangeIncrement = 70,
             CritThreatMin = 20, CritMultiplier = 3,
             WeightLbs = 2f,
@@ -811,6 +860,7 @@ public static class ItemDatabase
                 DamageType = "piercing",
                 DmgModType = DamageModifierType.Composite,
                 CompositeRating = rating,
+                RequiresAmmoType = AmmunitionType.Arrow,
                 RangeIncrement = 110,
                 CritThreatMin = 20, CritMultiplier = 3,
                 WeightLbs = 3f,
@@ -832,6 +882,7 @@ public static class ItemDatabase
                 DamageType = "piercing",
                 DmgModType = DamageModifierType.Composite,
                 CompositeRating = rating,
+                RequiresAmmoType = AmmunitionType.Arrow,
                 RangeIncrement = 70,
                 CritThreatMin = 20, CritMultiplier = 3,
                 WeightLbs = 2f,
@@ -1639,6 +1690,10 @@ public static class ItemDatabase
         clone.RequiresReload = src.RequiresReload;
         clone.IsLoaded = src.IsLoaded;
         clone.ReloadAction = src.ReloadAction;
+        clone.RequiresAmmoType = src.RequiresAmmoType;
+        clone.AmmoType = src.AmmoType;
+        clone.Quantity = src.Quantity;
+        clone.MaxQuantity = src.MaxQuantity;
         clone.CritThreatMin = src.CritThreatMin;
         clone.CritMultiplier = src.CritMultiplier;
 
@@ -1679,7 +1734,11 @@ public static class ItemDatabase
                     BonusType = effect.BonusType,
                     EnhancementBonusAttack = effect.EnhancementBonusAttack,
                     EnhancementBonusDamage = effect.EnhancementBonusDamage,
-                    CountsAsMagicForBypass = effect.CountsAsMagicForBypass
+                    CountsAsMagicForBypass = effect.CountsAsMagicForBypass,
+                    BonusDamageDice = effect.BonusDamageDice,
+                    BonusDamageType = effect.BonusDamageType,
+                    CritThreatRangeModifier = effect.CritThreatRangeModifier,
+                    EnchantedAmmoRemaining = effect.EnchantedAmmoRemaining
                 });
             }
         }

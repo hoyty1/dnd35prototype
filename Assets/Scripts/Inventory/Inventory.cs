@@ -496,4 +496,110 @@ public class Inventory
 
     /// <summary>Count empty general slots.</summary>
     public int EmptySlots => Mathf.Max(0, (GeneralSlots != null ? GeneralSlots.Length : 0) - ItemCount);
+
+    // ===== Ammunition Management =====
+
+    /// <summary>
+    /// Find the best ammunition stack in inventory matching the required type.
+    /// Prioritizes enchanted ammo (with active spell effects) over normal ammo.
+    /// Returns null if no matching ammunition is found.
+    /// </summary>
+    public ItemData FindBestAmmo(AmmunitionType ammoType)
+    {
+        if (ammoType == AmmunitionType.None || GeneralSlots == null)
+            return null;
+
+        ItemData bestEnchanted = null;
+        ItemData bestNormal = null;
+
+        for (int i = 0; i < GeneralSlots.Length; i++)
+        {
+            ItemData item = GeneralSlots[i];
+            if (item == null || !item.IsAmmunition || item.AmmoType != ammoType || item.Quantity <= 0)
+                continue;
+
+            bool hasEnchantment = item.ActiveSpellEffects != null && item.ActiveSpellEffects.Count > 0;
+
+            if (hasEnchantment)
+            {
+                // Among enchanted stacks, prefer the one with fewest remaining (use enchanted first)
+                if (bestEnchanted == null || item.Quantity < bestEnchanted.Quantity)
+                    bestEnchanted = item;
+            }
+            else
+            {
+                if (bestNormal == null || item.Quantity > bestNormal.Quantity)
+                    bestNormal = item;
+            }
+        }
+
+        // Enchanted ammo is consumed first per task spec
+        return bestEnchanted ?? bestNormal;
+    }
+
+    /// <summary>
+    /// Get total ammunition count of a given type across all inventory stacks.
+    /// </summary>
+    public int GetTotalAmmoCount(AmmunitionType ammoType)
+    {
+        if (ammoType == AmmunitionType.None || GeneralSlots == null)
+            return 0;
+
+        int total = 0;
+        for (int i = 0; i < GeneralSlots.Length; i++)
+        {
+            ItemData item = GeneralSlots[i];
+            if (item != null && item.IsAmmunition && item.AmmoType == ammoType)
+                total += item.Quantity;
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// Consume one round of ammunition from the best available stack.
+    /// Returns the consumed ammo stack (for enchantment info), or null if no ammo available.
+    /// Automatically removes depleted stacks from inventory.
+    /// </summary>
+    public ItemData ConsumeOneAmmo(AmmunitionType ammoType)
+    {
+        ItemData ammo = FindBestAmmo(ammoType);
+        if (ammo == null)
+            return null;
+
+        if (!ammo.ConsumeOneAmmo())
+            return null;
+
+        // If enchanted, consume one enchanted charge from any active spell effect
+        if (ammo.ActiveSpellEffects != null)
+        {
+            for (int i = ammo.ActiveSpellEffects.Count - 1; i >= 0; i--)
+            {
+                ItemSpellEffect effect = ammo.ActiveSpellEffects[i];
+                if (effect != null && effect.EnchantedAmmoRemaining > 0)
+                {
+                    effect.ConsumeOneEnchantedAmmo();
+                    // Remove spent enchantments
+                    if (effect.EnchantedAmmoRemaining <= 0)
+                        ammo.ActiveSpellEffects.RemoveAt(i);
+                    break;
+                }
+            }
+        }
+
+        // Remove depleted ammo stacks
+        if (ammo.Quantity <= 0)
+        {
+            RemoveItem(ammo);
+        }
+
+        return ammo;
+    }
+
+    /// <summary>
+    /// Check if the character has any ammunition matching the given type.
+    /// </summary>
+    public bool HasAmmo(AmmunitionType ammoType)
+    {
+        return FindBestAmmo(ammoType) != null;
+    }
 }

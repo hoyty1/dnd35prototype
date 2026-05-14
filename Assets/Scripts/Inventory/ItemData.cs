@@ -12,7 +12,8 @@ public enum ItemType
     Armor,
     Shield,
     Consumable,
-    Misc
+    Misc,
+    Ammunition
 }
 
 /// <summary>
@@ -137,6 +138,17 @@ public enum MaterialComposition
 }
 
 /// <summary>
+/// Ammunition compatibility type linking projectile weapons to their ammo.
+/// </summary>
+public enum AmmunitionType
+{
+    None,
+    Arrow,       // Used by longbow, shortbow, composite bows
+    Bolt,        // Used by crossbows
+    SlingBullet  // Used by slings
+}
+
+/// <summary>
 /// D&D 3.5 reload action required for crossbows.
 /// </summary>
 public enum ReloadActionType
@@ -203,6 +215,16 @@ public class ItemData
     public bool IsLoaded = true;             // Runtime state: starts loaded
     public ReloadActionType ReloadAction;    // Base reload action without Rapid Reload
     public bool IsAlignedChaotic;          // Bypasses DR/chaotic
+
+    // --- Ammunition Properties (D&D 3.5) ---
+    /// <summary>For projectile weapons: type of ammunition consumed per shot.</summary>
+    public AmmunitionType RequiresAmmoType = AmmunitionType.None;
+    /// <summary>For ammunition items: what type this ammo is (Arrow, Bolt, SlingBullet).</summary>
+    public AmmunitionType AmmoType = AmmunitionType.None;
+    /// <summary>For ammunition items: how many individual rounds remain in this stack.</summary>
+    public int Quantity;
+    /// <summary>For ammunition items: maximum stack size (e.g. 20 for a bundle of 20 arrows).</summary>
+    public int MaxQuantity;
 
     // --- Damage Modifier Properties (D&D 3.5) ---
     public DamageModifierType DmgModType;  // How STR (or other) applies to damage
@@ -275,6 +297,24 @@ public class ItemData
     /// <summary>Create an empty/null item.</summary>
     public static ItemData Empty => null;
 
+
+    /// <summary>True if this is an ammunition item with remaining quantity.</summary>
+    public bool IsAmmunition => Type == ItemType.Ammunition;
+
+    /// <summary>True if this ammunition stack has at least one round remaining.</summary>
+    public bool HasAmmoRemaining => IsAmmunition && Quantity > 0;
+
+    /// <summary>True if this projectile weapon requires ammunition to fire.</summary>
+    public bool IsProjectileWeapon => IsWeapon && WeaponCat == WeaponCategory.Ranged && RequiresAmmoType != AmmunitionType.None;
+
+    /// <summary>Consume one round of ammunition. Returns true if successful.</summary>
+    public bool ConsumeOneAmmo()
+    {
+        if (!IsAmmunition || Quantity <= 0)
+            return false;
+        Quantity--;
+        return true;
+    }
 
     /// <summary>True if this item is one of the supported crossbow weapon types.</summary>
     public bool IsCrossbowWeapon => IsWeapon && RequiresReload;
@@ -904,6 +944,28 @@ public class ItemData
             {
                 // Backward-compatible fallback for legacy consumables.
                 stats = $"Heals: {HealAmount} HP";
+            }
+        }
+
+        if (Type == ItemType.Ammunition)
+        {
+            stats = $"Ammunition ({AmmoType})";
+            stats += $"\nQuantity: {Quantity}/{MaxQuantity}";
+
+            // Show enchantment info from spell effects
+            if (ActiveSpellEffects != null && ActiveSpellEffects.Count > 0)
+            {
+                foreach (var eff in ActiveSpellEffects)
+                {
+                    if (eff == null) continue;
+                    string label = string.IsNullOrWhiteSpace(eff.SpellName) ? "Enchanted" : eff.SpellName;
+                    string details = "";
+                    if (!string.IsNullOrEmpty(eff.BonusDamageDice))
+                        details += $" +{eff.BonusDamageDice} {eff.BonusDamageType}";
+                    if (eff.EnhancementBonusAttack > 0 || eff.EnhancementBonusDamage > 0)
+                        details += $" (+{eff.EnhancementBonusAttack} atk/+{eff.EnhancementBonusDamage} dmg)";
+                    stats += $"\n{label}{details} ({eff.GetDurationDisplayString()}, {eff.EnchantedAmmoRemaining} enchanted)";
+                }
             }
         }
 

@@ -501,6 +501,15 @@ public class CombatFlowService : MonoBehaviour
             return;
         }
 
+        // Ammo check for projectile weapons in iterative sequence
+        if (attackWeapon != null && attackWeapon.IsProjectileWeapon && !CheckAmmoAvailable(attacker, attackWeapon))
+        {
+            Debug.Log("[AttackFlow] No ammo available, ending attack sequence.");
+            _gameManager.Combat_EndAttackSequence();
+            _gameManager.Combat_ShowActionChoices();
+            return;
+        }
+
         bool useNaturalFullAttackStep = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Melee
             && ShouldUseNaturalAttackStep(attacker, attackWeapon);
 
@@ -550,6 +559,10 @@ public class CombatFlowService : MonoBehaviour
 
             _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
             _gameManager.Combat_ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
+
+            // Consume ammunition for projectile weapons (1 per shot in iterative sequence)
+            if (attackWeapon != null && attackWeapon.IsProjectileWeapon)
+                ConsumeAmmoForAttack(attacker, attackWeapon);
 
             string modeLabel = _gameManager.Combat_GetCurrentAttackType() == GameManager.AttackType.Thrown ? "Thrown" : "Melee";
             string dwPenaltyInfo = _gameManager.Combat_IsDualWielding()
@@ -707,6 +720,13 @@ public class CombatFlowService : MonoBehaviour
         if (IsRangedOrThrownAttack(rangeInfo) && !ResolveRangedAttackAoOIfProvoked(attacker))
             return;
 
+        // Ammo check for projectile weapons (before attack resolution)
+        if (attackWeapon != null && attackWeapon.IsProjectileWeapon && !CheckAmmoAvailable(attacker, attackWeapon))
+        {
+            _gameManager.Combat_ShowActionChoices();
+            return;
+        }
+
         CombatResult result;
         string naturalAttackModeLog = null;
         int selectedNaturalAttackIndex = -1;
@@ -757,6 +777,11 @@ public class CombatFlowService : MonoBehaviour
 
         _gameManager.Combat_TryResolveFreeTripOnHit(attacker, target, result, rangeInfo);
         _gameManager.Combat_ResolveThrownWeaponAfterAttack(attacker, target, attackWeapon);
+
+        // Consume ammunition for projectile weapons (1 per shot)
+        if (attackWeapon != null && attackWeapon.IsProjectileWeapon)
+            ConsumeAmmoForAttack(attacker, attackWeapon);
+
         _gameManager.Combat_RegisterWeaponAttackCommitted(attacker);
 
         if (useSelectedNaturalAttack)
@@ -975,5 +1000,77 @@ public class CombatFlowService : MonoBehaviour
         if (result.TargetKilled)
             Debug.Log($"[Combat] {defenderName} has been slain!");
         Debug.Log("[Combat] ═══════════════════════════════════════");
+    }
+
+    // ===== Ammunition Consumption System =====
+
+    /// <summary>
+    /// Check whether the attacker has sufficient ammunition for a ranged attack with the given weapon.
+    /// If the weapon requires ammo and none is available, shows a warning and returns false.
+    /// </summary>
+    public bool CheckAmmoAvailable(CharacterController attacker, ItemData weapon)
+    {
+        if (attacker == null || weapon == null)
+            return true; // Not a ranged weapon or no weapon = no ammo needed
+
+        if (weapon.RequiresAmmoType == AmmunitionType.None)
+            return true; // Thrown weapons, darts, etc. don't consume separate ammo
+
+        Inventory inv = _gameManager?.Combat_GetCharacterInventory(attacker);
+        if (inv == null)
+            return true; // Safety fallback
+
+        if (!inv.HasAmmo(weapon.RequiresAmmoType))
+        {
+            string ammoName = weapon.RequiresAmmoType.ToString();
+            string charName = attacker.Stats != null ? attacker.Stats.CharacterName : "Attacker";
+            _gameManager?.CombatUI?.ShowCombatLog($"⚠ {charName} has no {ammoName} ammunition! Cannot fire {weapon.Name}.");
+            Debug.LogWarning($"[Ammo] {charName} attempted ranged attack with {weapon.Name} but has no {ammoName} ammo.");
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Consume one round of ammunition after a ranged attack is resolved.
+    /// Returns the consumed ammo item (may have enchantments), or null if no ammo was consumed.
+    /// Logs ammo consumption and remaining count to combat log.
+    /// </summary>
+    public ItemData ConsumeAmmoForAttack(CharacterController attacker, ItemData weapon)
+    {
+        if (attacker == null || weapon == null || weapon.RequiresAmmoType == AmmunitionType.None)
+            return null;
+
+        Inventory inv = _gameManager?.Combat_GetCharacterInventory(attacker);
+        if (inv == null)
+            return null;
+
+        ItemData consumedAmmo = inv.ConsumeOneAmmo(weapon.RequiresAmmoType);
+        if (consumedAmmo == null)
+        {
+            Debug.LogWarning($"[Ammo] Failed to consume ammo for {weapon.Name} - none available.");
+            return null;
+        }
+
+        string charName = attacker.Stats != null ? attacker.Stats.CharacterName : "Attacker";
+        int remaining = inv.GetTotalAmmoCount(weapon.RequiresAmmoType);
+        string ammoName = weapon.RequiresAmmoType.ToString();
+
+        // Build enchantment info for combat log
+        string enchantInfo = "";
+        if (consumedAmmo.ActiveSpellEffects != null && consumedAmmo.ActiveSpellEffects.Count > 0)
+        {
+            foreach (var eff in consumedAmmo.ActiveSpellEffects)
+            {
+                if (eff != null && !string.IsNullOrEmpty(eff.BonusDamageDice))
+                    enchantInfo += $" [+{eff.BonusDamageDice} {eff.BonusDamageType}]";
+            }
+        }
+
+        Debug.Log($"[Ammo] {charName} consumed 1 {ammoName}{enchantInfo}. {remaining} remaining.");
+        _gameManager?.CombatUI?.ShowCombatLog($"🏹 {charName} uses 1 {ammoName}{enchantInfo}. ({remaining} remaining)");
+
+        return consumedAmmo;
     }
 }

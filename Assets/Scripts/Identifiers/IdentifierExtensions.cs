@@ -70,9 +70,9 @@ namespace DND35e.Identifiers
             { ItemID.ShieldHeavySteel, ItemIDs.SHIELD_HEAVY_STEEL },
             { ItemID.ShieldTower, ItemIDs.TOWER_SHIELD },
 
-            { ItemID.AmmoArrow, "ammo_arrow" },
-            { ItemID.AmmoBolt, "ammo_bolt" },
-            { ItemID.AmmoSlingBullet, "ammo_sling_bullet" },
+            { ItemID.AmmoArrow, ItemIDs.AMMO_ARROW },
+            { ItemID.AmmoBolt, ItemIDs.AMMO_BOLT },
+            { ItemID.AmmoSlingBullet, ItemIDs.AMMO_SLING_BULLET },
             { ItemID.AmmoCrossbowBolts20, ItemIDs.CROSSBOW_BOLTS_20 },
 
             { ItemID.ScrollMagicMissile, "scroll_magic_missile" },

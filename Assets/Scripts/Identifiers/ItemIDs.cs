@@ -56,6 +56,15 @@ namespace DND35e.Identifiers
         /// <summary>Item id: composite_shortbow_4</summary>
         public const string COMPOSITE_SHORTBOW_4 = "composite_shortbow_4";
 
+        /// <summary>Item id: ammo_arrow</summary>
+        public const string AMMO_ARROW = "ammo_arrow";
+
+        /// <summary>Item id: ammo_bolt</summary>
+        public const string AMMO_BOLT = "ammo_bolt";
+
+        /// <summary>Item id: ammo_sling_bullet</summary>
+        public const string AMMO_SLING_BULLET = "ammo_sling_bullet";
+
         /// <summary>Item id: crossbow_bolts_20</summary>
         public const string CROSSBOW_BOLTS_20 = "crossbow_bolts_20";
 

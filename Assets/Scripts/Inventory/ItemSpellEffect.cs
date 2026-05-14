@@ -14,6 +14,16 @@ public class ItemSpellEffect
     public int EnhancementBonusDamage;
     public bool CountsAsMagicForBypass;
 
+    // --- Ammunition enchantment properties (Flame Arrow, Keen Edge, etc.) ---
+    /// <summary>Bonus damage dice expression added per arrow (e.g. "1d6" for Flame Arrow).</summary>
+    public string BonusDamageDice;
+    /// <summary>Damage type of the bonus dice (e.g. "fire", "acid", "poison").</summary>
+    public string BonusDamageType;
+    /// <summary>Modifier to critical threat range minimum (e.g. -1 means 20→19, or 19-20→18-20 for Keen Edge).</summary>
+    public int CritThreatRangeModifier;
+    /// <summary>Number of enchanted ammunition rounds remaining for this spell effect.</summary>
+    public int EnchantedAmmoRemaining;
+
     public ItemSpellEffect() { }
 
     public ItemSpellEffect(string spellId, string spellName, string casterName, int casterLevel, int remainingRounds)
@@ -23,6 +33,18 @@ public class ItemSpellEffect
         CasterName = casterName;
         CasterLevel = casterLevel;
         RemainingRounds = remainingRounds;
+    }
+
+    /// <summary>True if this spell effect has ammo enchantment properties (Flame Arrow, etc.).</summary>
+    public bool IsAmmoEnchantment => EnchantedAmmoRemaining > 0 || !string.IsNullOrEmpty(BonusDamageDice) || CritThreatRangeModifier != 0;
+
+    /// <summary>Consume one enchanted ammo charge. Returns true if charges remain after consumption.</summary>
+    public bool ConsumeOneEnchantedAmmo()
+    {
+        if (EnchantedAmmoRemaining <= 0)
+            return false;
+        EnchantedAmmoRemaining--;
+        return EnchantedAmmoRemaining > 0;
     }
 
     public bool Tick()

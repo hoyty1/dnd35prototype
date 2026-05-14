@@ -124,4 +124,7 @@ public partial class GameManager
 
     public string Combat_BuildFlankingIndicator(bool isFlanking, CharacterController flankPartner)
         => CombatUI != null ? CombatUI.BuildFlankingIndicator(isFlanking, flankPartner) : string.Empty;
+
+    public Inventory Combat_GetCharacterInventory(CharacterController character)
+        => GetCharacterInventory(character);
 }
