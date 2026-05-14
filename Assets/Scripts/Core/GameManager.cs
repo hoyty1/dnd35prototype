@@ -131,48 +131,49 @@ public partial class GameManager : MonoBehaviour
     private readonly List<string> _activeEncounterEnemyIds = new List<string>();
     private bool _partyStashSeeded;
 
-    // Party resources (runtime-only for now).
+    // Party resources — delegated to EconomyService (legacy accessors kept for backward compatibility).
     private int partyGold = 1000;
     public event Action<int> OnGoldChanged;
 
+    /// <summary>Public accessor to the EconomyService for systems that need direct access.</summary>
+    public EconomyService Economy => _economyService;
+
     public int PartyGold
     {
-        get => partyGold;
+        get => _economyService != null ? _economyService.PartyGold : partyGold;
         set
         {
-            int clamped = Mathf.Max(0, value);
-            if (partyGold == clamped)
-                return;
-
-            partyGold = clamped;
-            Debug.Log($"[Gold] Party gold is now {partyGold} gp");
-            OnGoldChanged?.Invoke(partyGold);
+            if (_economyService != null)
+                _economyService.PartyGold = value;
+            else
+            {
+                int clamped = Mathf.Max(0, value);
+                if (partyGold == clamped)
+                    return;
+                partyGold = clamped;
+                Debug.Log($"[Gold] Party gold is now {partyGold} gp");
+                OnGoldChanged?.Invoke(partyGold);
+            }
         }
     }
 
     public bool SpendGold(int amount)
     {
-        if (amount <= 0)
-            return true;
+        if (_economyService != null)
+            return _economyService.SpendGold(amount);
 
-        if (partyGold >= amount)
-        {
-            PartyGold -= amount;
-            Debug.Log($"[Gold] Spent {amount} gp. Remaining: {partyGold} gp");
-            return true;
-        }
-
-        Debug.LogWarning($"[Gold] Not enough gold! Need {amount} gp, have {partyGold} gp");
+        // Fallback (before service init)
+        if (amount <= 0) return true;
+        if (partyGold >= amount) { PartyGold -= amount; return true; }
         return false;
     }
 
     public void AddGold(int amount)
     {
-        if (amount <= 0)
-            return;
-
-        PartyGold += amount;
-        Debug.Log($"[Gold] Gained {amount} gp. Total: {partyGold} gp");
+        if (_economyService != null)
+            _economyService.AddGold(amount);
+        else if (amount > 0)
+            PartyGold += amount;
     }
 
     // Endless combat-loop session stats (persist while the session is running).
@@ -217,6 +218,7 @@ public partial class GameManager : MonoBehaviour
     [SerializeField] private ConditionService _conditionService;
     [SerializeField] private AIService _aiService;
     [SerializeField] private CombatFlowService _combatFlowService;
+    [SerializeField] private EconomyService _economyService;
 
     private ConfusedBehaviorController _confusedBehaviorController;
     private CharmedBehaviorController _charmedBehaviorController;
@@ -465,6 +467,16 @@ public partial class GameManager : MonoBehaviour
 
         _combatFlowService ??= gameObject.GetComponent<CombatFlowService>() ?? gameObject.AddComponent<CombatFlowService>();
         _combatFlowService.Initialize(this);
+
+        _economyService ??= gameObject.GetComponent<EconomyService>() ?? gameObject.AddComponent<EconomyService>();
+        _economyService.Initialize(this, () => CombatUI, partyGold);
+        // Sync: EconomyService now owns the gold state; wire the event back to GameManager's legacy event.
+        _economyService.OnGoldChanged += gold => OnGoldChanged?.Invoke(gold);
+        // Transfer stash ownership to EconomyService.
+        if (PartyStash != null)
+            _economyService.PartyStash = PartyStash;
+        else
+            PartyStash = _economyService.PartyStash;
 
         _confusedBehaviorController ??= new ConfusedBehaviorController();
         _charmedBehaviorController ??= new CharmedBehaviorController();
@@ -765,12 +777,19 @@ public partial class GameManager : MonoBehaviour
 
     private void EnsurePartyStashInitialized()
     {
-        PartyStash ??= new PartyStash();
-
-        if (!_partyStashSeeded)
+        if (_economyService != null)
         {
-            PartyStash.SeedDefaultItemsIfEmpty();
-            _partyStashSeeded = true;
+            _economyService.EnsurePartyStashInitialized();
+            PartyStash = _economyService.PartyStash;
+        }
+        else
+        {
+            PartyStash ??= new PartyStash();
+            if (!_partyStashSeeded)
+            {
+                PartyStash.SeedDefaultItemsIfEmpty();
+                _partyStashSeeded = true;
+            }
         }
 
         if (CurrentPhase != TurnPhase.PCTurn && CurrentPhase != TurnPhase.NPCTurn)
@@ -1266,6 +1285,9 @@ public partial class GameManager : MonoBehaviour
 
     private StoreInventory EnsureStoreInventoryInitialized()
     {
+        if (_economyService != null)
+            return _economyService.EnsureStoreInventoryInitialized();
+
         StoreInventory storeInventory = StoreInventory.Instance;
         if (storeInventory == null)
             storeInventory = gameObject.GetComponent<StoreInventory>() ?? gameObject.AddComponent<StoreInventory>();
