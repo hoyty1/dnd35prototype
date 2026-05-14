@@ -1,9 +1,10 @@
 // ============================================================================
 // GameManager_NewSpells.cs — Resolution logic for Lightning Bolt, Fireball,
-// Daylight, Rage, Hold Person, Displacement, Wind Wall, and Invisibility
-// Sphere spells (PHB 3.5e).
+// Daylight, Rage, Hold Person, Displacement, Wind Wall, Invisibility Sphere,
+// Halt Undead, Ray of Exhaustion, and Vampiric Touch spells (PHB 3.5e).
 // Part of the GameManager partial class.
 // ============================================================================
+using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -657,6 +658,372 @@ public partial class GameManager
         {
             sphere.EndForCreature(attacker, reason);
         }
+        return true;
+    }
+
+    // ================================================================
+    //  HALT UNDEAD — PHB p.239
+    //  Up to 3 undead within 30 ft of each other; 1 round/level paralyze.
+    //  Nonintelligent undead get NO save. Intelligent undead get Will save.
+    //  SR: Yes.
+    // ================================================================
+
+    /// <summary>
+    /// Resolves Halt Undead spell. Filters the AoE target list to undead only,
+    /// caps to 3 closest to the caster, performs SR check, and (for intelligent
+    /// undead only) a Will save. On failure, applies Paralyzed + Helpless for
+    /// 1 round per caster level.
+    /// Called from PerformAoESpellCast when the pending spell matches.
+    /// </summary>
+    private bool TryResolveHaltUndeadSpell(
+        CharacterController caster,
+        SpellData spell,
+        List<CharacterController> targets,
+        HashSet<Vector2Int> aoeCells,
+        out string log)
+    {
+        log = string.Empty;
+        if (caster == null || caster.Stats == null || spell == null)
+            return false;
+
+        if (!string.Equals(spell.SpellId, SpellNames.HALT_UNDEAD, StringComparison.Ordinal))
+            return false;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+        int saveDc = GetSpellSaveDC(caster, spell);
+
+        // Filter to undead only
+        List<CharacterController> undeadCandidates = new List<CharacterController>();
+        if (targets != null)
+        {
+            foreach (CharacterController t in targets)
+            {
+                if (t == null || t.Stats == null || t.Stats.IsDead) continue;
+                if (!t.CanBeCommandedAsUndead()) continue;
+                undeadCandidates.Add(t);
+            }
+        }
+
+        // Cap to 3, choose closest to caster (per PHB targeting rules)
+        Vector2Int casterCell = caster.GridPosition;
+        undeadCandidates.Sort((a, b) =>
+        {
+            int da = Mathf.Max(Mathf.Abs(a.GridPosition.x - casterCell.x), Mathf.Abs(a.GridPosition.y - casterCell.y));
+            int db = Mathf.Max(Mathf.Abs(b.GridPosition.x - casterCell.x), Mathf.Abs(b.GridPosition.y - casterCell.y));
+            return da.CompareTo(db);
+        });
+        int affectedCount = Mathf.Min(3, undeadCandidates.Count);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("═══════════════════════════════════");
+        sb.AppendLine($"💀 {caster.Stats.CharacterName} casts Halt Undead!");
+        sb.AppendLine($"  School: Necromancy | Level: 3 | Range: Medium");
+        sb.AppendLine($"  Targets: up to 3 undead (no two more than 30 ft apart)");
+        sb.AppendLine($"  Duration: {durationRounds} round(s) | Will DC {saveDc} (intelligent only) | SR: Yes");
+        sb.AppendLine();
+
+        if (undeadCandidates.Count == 0)
+        {
+            sb.AppendLine($"  No undead in area — spell has no effect.");
+            sb.Append("═══════════════════════════════════");
+            log = sb.ToString();
+            return true;
+        }
+
+        // 30-ft constraint: ensure no two affected creatures are more than 6 squares apart.
+        // Build a chosen list starting from the closest, then add others within 6 squares of any chosen.
+        List<CharacterController> chosen = new List<CharacterController>();
+        for (int i = 0; i < undeadCandidates.Count && chosen.Count < affectedCount; i++)
+        {
+            CharacterController cand = undeadCandidates[i];
+            if (chosen.Count == 0)
+            {
+                chosen.Add(cand);
+                continue;
+            }
+            // Check max chebyshev distance to any chosen
+            bool withinRange = true;
+            for (int j = 0; j < chosen.Count; j++)
+            {
+                int dist = Mathf.Max(
+                    Mathf.Abs(cand.GridPosition.x - chosen[j].GridPosition.x),
+                    Mathf.Abs(cand.GridPosition.y - chosen[j].GridPosition.y));
+                if (dist > 6) // 30 ft = 6 squares
+                {
+                    withinRange = false;
+                    break;
+                }
+            }
+            if (withinRange)
+                chosen.Add(cand);
+        }
+
+        sb.AppendLine($"  Affected undead: {chosen.Count} of {undeadCandidates.Count} undead in area");
+        sb.AppendLine();
+
+        int targetIndex = 0;
+        foreach (CharacterController target in chosen)
+        {
+            if (target == null || target.Stats == null || target.Stats.IsDead)
+                continue;
+
+            targetIndex++;
+            sb.AppendLine($"  --- Target {targetIndex}: {target.Stats.CharacterName} ---");
+
+            // Spell Resistance check
+            if (spell.SpellResistanceApplies && target.Stats.SpellResistance > 0)
+            {
+                int srRoll = UnityEngine.Random.Range(1, 21);
+                int srTotal = srRoll + casterLevel;
+                bool srOvercome = srTotal >= target.Stats.SpellResistance;
+                sb.AppendLine($"  SR Check: d20({srRoll}) + {casterLevel} = {srTotal} vs SR {target.Stats.SpellResistance} → {(srOvercome ? "OVERCAME SR" : "BLOCKED by SR")}");
+                if (!srOvercome)
+                {
+                    sb.AppendLine($"  {target.Stats.CharacterName} resists Halt Undead via Spell Resistance!");
+                    sb.AppendLine();
+                    continue;
+                }
+            }
+
+            // Save check (only intelligent undead get a save)
+            bool isIntelligent = target.IsIntelligentUndead();
+            bool savePassed = false;
+            if (isIntelligent)
+            {
+                int willRoll = UnityEngine.Random.Range(1, 21);
+                int willMod = target.Stats.WillSave;
+                int willTotal = willRoll + willMod;
+                savePassed = willTotal >= saveDc;
+                sb.AppendLine($"  Will save (intelligent undead): d20({willRoll}) + {willMod} = {willTotal} vs DC {saveDc} → {(savePassed ? "SAVED (negated)" : "FAILED")}");
+            }
+            else
+            {
+                sb.AppendLine($"  No save (mindless undead — automatic failure).");
+            }
+
+            if (savePassed)
+            {
+                sb.AppendLine($"  {target.Stats.CharacterName} resists Halt Undead!");
+                sb.AppendLine();
+                continue;
+            }
+
+            // Apply paralysis + helpless conditions
+            string sourceName = spell.Name;
+            if (_conditionService != null)
+            {
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Paralyzed,
+                    durationRounds,
+                    source: caster,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+
+                _conditionService.ApplyCondition(
+                    target,
+                    CombatConditionType.Helpless,
+                    durationRounds,
+                    source: caster,
+                    sourceNameOverride: sourceName,
+                    sourceCategory: "Spell",
+                    sourceId: spell.SpellId);
+            }
+            else
+            {
+                string fallbackSource = caster.Stats.CharacterName;
+                target.ApplyCondition(CombatConditionType.Paralyzed, durationRounds, fallbackSource);
+                target.ApplyCondition(CombatConditionType.Helpless, durationRounds, fallbackSource);
+            }
+
+            sb.AppendLine($"  ⛓ {target.Stats.CharacterName} is paralyzed by Halt Undead for {durationRounds} round(s)!");
+            sb.AppendLine();
+        }
+
+        sb.Append("═══════════════════════════════════");
+        log = sb.ToString();
+        return true;
+    }
+
+    // ================================================================
+    //  RAY OF EXHAUSTION — PHB p.269
+    //  Ranged touch attack. On hit: target Exhausted for 1 min/level
+    //  (-6 STR, -6 DEX, half speed, no run/charge).
+    //  Successful Fort save → Fatigued instead. SR: Yes.
+    // ================================================================
+
+    private static bool IsRayOfExhaustionSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.RAY_OF_EXHAUSTION, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Ray of Exhaustion. The ray must hit (ranged touch attack).
+    /// On hit: applies Exhausted for 1 min/level. A successful Fort save
+    /// reduces the effect to Fatigued instead.
+    /// Called from the touch/ray spell pipeline in PC and NPC casts.
+    /// </summary>
+    private bool TryResolveRayOfExhaustionSpellEffect(
+        CharacterController caster,
+        CharacterController target,
+        SpellData spell,
+        SpellResult result)
+    {
+        if (!IsRayOfExhaustionSpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        if (result == null)
+            return true;
+
+        // Ranged touch missed → no effect
+        if (result.RequiredAttackRoll && !result.AttackHit)
+        {
+            CombatUI?.ShowCombatLog($"❌ Ray of Exhaustion misses {target.Stats.CharacterName}.");
+            return true;
+        }
+
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        int durationRounds = Mathf.Max(1, ActiveSpellEffect.CalculateDurationRounds(spell, casterLevel));
+
+        // PHB: Fortitude partial. Failed save = Exhausted. Successful save = Fatigued.
+        bool savePassed = result.RequiredSave && result.SaveSucceeded;
+        CombatConditionType conditionToApply = savePassed
+            ? CombatConditionType.Fatigued
+            : CombatConditionType.Exhausted;
+        string conditionName = savePassed ? "Fatigued" : "Exhausted";
+        string sourceName = spell.Name;
+
+        if (_conditionService != null)
+        {
+            _conditionService.ApplyCondition(
+                target,
+                conditionToApply,
+                durationRounds,
+                source: caster,
+                sourceNameOverride: sourceName,
+                sourceCategory: "Spell",
+                sourceId: spell.SpellId);
+        }
+        else
+        {
+            string fallbackSource = caster != null && caster.Stats != null ? caster.Stats.CharacterName : sourceName;
+            target.ApplyCondition(conditionToApply, durationRounds, fallbackSource);
+        }
+
+        result.BuffApplied = true;
+        result.BuffDescription = savePassed
+            ? $"Debuff: Fatigued for {durationRounds} round(s) (Fort save reduced)."
+            : $"Debuff: Exhausted (-6 STR/DEX, half speed) for {durationRounds} round(s).";
+
+        if (savePassed)
+        {
+            CombatUI?.ShowCombatLog($"<color=#9966FF>🩸 {target.Stats.CharacterName} resists the worst of the ray with a Fort save — only Fatigued for {durationRounds} round(s).</color>");
+        }
+        else
+        {
+            CombatUI?.ShowCombatLog($"<color=#9933CC>🩸 {target.Stats.CharacterName} is Exhausted by Ray of Exhaustion! (-6 STR, -6 DEX, half speed) for {durationRounds} round(s).</color>");
+        }
+
+        Debug.Log($"[GameManager] Ray of Exhaustion applied {conditionName} to {target.Stats.CharacterName} for {durationRounds} rounds (CL {casterLevel}, savePassed={savePassed})");
+        return true;
+    }
+
+    // ================================================================
+    //  VAMPIRIC TOUCH — PHB p.281
+    //  Melee touch attack. Deals 1d6 negative energy damage per 2 CL
+    //  (max 10d6). Caster gains temp HP equal to damage dealt
+    //  (capped at caster's max HP), lasting 1 hour. SR: Yes.
+    // ================================================================
+
+    private static bool IsVampiricTouchSpell(SpellData spell)
+    {
+        return spell != null && string.Equals(spell.SpellId, SpellNames.VAMPIRIC_TOUCH, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Resolves Vampiric Touch. The melee touch must hit. Rolls
+    /// 1d6/2CL (max 10d6) negative energy damage. Caster gains temporary
+    /// HP equal to damage dealt, capped at caster's max HP, for 1 hour.
+    /// Called from the touch/ray spell pipeline in PC and NPC casts.
+    /// </summary>
+    private bool TryResolveVampiricTouchSpellEffect(
+        CharacterController caster,
+        CharacterController target,
+        SpellData spell,
+        SpellResult result)
+    {
+        if (!IsVampiricTouchSpell(spell) || target == null || target.Stats == null)
+            return false;
+
+        if (result == null)
+            return true;
+
+        // Melee touch missed → no effect
+        if (result.RequiredAttackRoll && !result.AttackHit)
+        {
+            CombatUI?.ShowCombatLog($"❌ Vampiric Touch misses {target.Stats.CharacterName}.");
+            return true;
+        }
+
+        if (caster == null || caster.Stats == null)
+            return true;
+
+        int casterLevel = Mathf.Max(1, caster.Stats.GetCasterLevel());
+
+        // SR is already checked by the base spell pipeline (SpellCaster.cs).
+        // If this method is called with result.Success = true, SR has already passed.
+
+        // Roll damage: 1d6 per 2 caster levels, max 10d6
+        int diceCount = Mathf.Clamp(casterLevel / 2, 1, 10);
+        int damage = 0;
+        for (int i = 0; i < diceCount; i++)
+            damage += UnityEngine.Random.Range(1, 7);
+
+        int hpBefore = target.Stats.CurrentHP;
+        target.Stats.TakeDamage(damage);
+        int hpAfter = target.Stats.CurrentHP;
+
+        result.DamageDealt = damage;
+        result.DamageRolled = damage;
+        result.DamageType = "negative";
+        result.TargetHPBefore = hpBefore;
+        result.TargetHPAfter = hpAfter;
+        result.TargetKilled = target.Stats.IsDead;
+
+        CombatUI?.ShowCombatLog($"<color=#9933CC>🖤 {caster.Stats.CharacterName}'s Vampiric Touch deals {damage} negative energy damage to {target.Stats.CharacterName} ({hpBefore} → {hpAfter} HP).</color>");
+
+        // Concentration on damage is checked downstream in the touch pipeline (uses result.DamageDealt).
+
+        // Caster gains temp HP equal to damage dealt, capped at caster's max HP
+        int casterMaxHP = Mathf.Max(1, caster.Stats.MaxHP);
+        int tempHP = Mathf.Min(damage, casterMaxHP);
+
+        if (tempHP > 0)
+        {
+            // Vampiric Touch temp HP lasts 1 hour = 600 rounds
+            int durationRounds = 600;
+            FalseLifeEffectData vampiricTempHP = FalseLifeEffectData.CreateGenericTempHP(
+                SpellNames.VAMPIRIC_TOUCH,
+                "Vampiric Touch",
+                tempHP,
+                casterLevel,
+                durationRounds,
+                caster);
+
+            caster.ApplyFalseLifeEffect(vampiricTempHP);
+
+            CombatUI?.ShowCombatLog($"<color=#FF6666>🩸 {caster.Stats.CharacterName} drains {tempHP} temporary HP from {target.Stats.CharacterName} (lasts 1 hour).</color>");
+        }
+
+        if (target.Stats.IsDead)
+        {
+            CombatUI?.ShowCombatLog($"<color=#660033>💀 {target.Stats.CharacterName} is slain by Vampiric Touch!</color>");
+            // OnDeath/HandleSummonDeathCleanup are called downstream in the touch pipeline (uses result.TargetKilled).
+        }
+
+        Debug.Log($"[GameManager] Vampiric Touch: {caster.Stats.CharacterName} dealt {damage} negative damage to {target.Stats.CharacterName}, gained {tempHP} temp HP (CL {casterLevel}, {diceCount}d6)");
         return true;
     }
 }

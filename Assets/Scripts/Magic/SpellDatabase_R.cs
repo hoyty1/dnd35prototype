@@ -33,6 +33,58 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // RAY OF EXHAUSTION  (PHB p.269)
+        // Necromancy
+        // Level: Sor/Wiz 3
+        // Components: V, S, M (a few drops of sweat)
+        // Casting Time: 1 standard action
+        // Range: Close (25 ft. + 5 ft./2 levels)
+        // Effect: Ray
+        // Duration: 1 min./level
+        // Saving Throw: Fortitude partial; see text
+        // Spell Resistance: Yes
+        //
+        // A black ray projects from your pointing finger. You must
+        // succeed on a ranged touch attack with the ray to strike a
+        // target. The subject is immediately exhausted for the spell's
+        // duration. A successful Fortitude save means the creature is
+        // only fatigued.
+        //
+        // Exhausted: -6 STR/DEX, half movement speed, cannot run/charge.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.RAY_OF_EXHAUSTION,
+                    Name = "Ray of Exhaustion",
+                    Description = "Necromancy. Ranged touch attack. On hit, target is Exhausted (-6 STR, -6 DEX, "
+                        + "half movement speed, cannot run/charge) for 1 min/level. A successful Fortitude save "
+                        + "reduces the effect to Fatigued instead. SR: Yes. PHB p.269",
+                    SpellLevel = 3,
+                    School = "Necromancy",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Close,
+                    IsTouch = true,
+                    IsRangedTouch = true,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,        // Fortitude reduces to fatigued
+                    SavingThrowType = "Fortitude",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.RAY_OF_FROST,

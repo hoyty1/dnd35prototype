@@ -282,6 +282,9 @@ namespace DND35e.Identifiers
         /// <summary>Gust of Wind (spell id: gust_of_wind)</summary>
         public const string GUST_OF_WIND = "gust_of_wind";
 
+        /// <summary>Halt Undead (spell id: halt_undead)</summary>
+        public const string HALT_UNDEAD = "halt_undead";
+
         /// <summary>Hide from Undead (spell id: hide_from_undead)</summary>
         public const string HIDE_FROM_UNDEAD = "hide_from_undead";
 
@@ -444,6 +447,9 @@ namespace DND35e.Identifiers
         /// <summary>Ray of Enfeeblement (spell id: ray_of_enfeeblement)</summary>
         public const string RAY_OF_ENFEEBLEMENT = "ray_of_enfeeblement";
 
+        /// <summary>Ray of Exhaustion (spell id: ray_of_exhaustion)</summary>
+        public const string RAY_OF_EXHAUSTION = "ray_of_exhaustion";
+
         /// <summary>Ray of Frost (spell id: ray_of_frost)</summary>
         public const string RAY_OF_FROST = "ray_of_frost";
 
@@ -566,6 +572,9 @@ namespace DND35e.Identifiers
 
         /// <summary>Unseen Servant (spell id: unseen_servant)</summary>
         public const string UNSEEN_SERVANT = "unseen_servant";
+
+        /// <summary>Vampiric Touch (spell id: vampiric_touch)</summary>
+        public const string VAMPIRIC_TOUCH = "vampiric_touch";
 
         /// <summary>Ventriloquism (spell id: ventriloquism)</summary>
         public const string VENTRILOQUISM = "ventriloquism";

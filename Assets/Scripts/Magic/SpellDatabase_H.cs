@@ -31,6 +31,67 @@ public static partial class SpellDatabase
                     PlaceholderReason = "[PLACEHOLDER - Ongoing damage over rounds not implemented]"
                 });
 
+        // ──────────────────────────────────────────────────────────────
+        // HALT UNDEAD  (PHB p.239)
+        // Necromancy
+        // Level: Sor/Wiz 3
+        // Components: V, S, M (a pinch of sulfur and powdered garlic)
+        // Casting Time: 1 standard action
+        // Range: Medium (100 ft. + 10 ft./level)
+        // Targets: Up to three undead, no two of which can be more than
+        //          30 ft. apart
+        // Duration: 1 round/level
+        // Saving Throw: Will negates (see text)
+        // Spell Resistance: Yes
+        //
+        // This spell renders as many as three undead creatures immobile.
+        // A nonintelligent undead creature gets no saving throw; an
+        // intelligent undead creature does. If the spell is successful,
+        // it renders the undead creature immobile for the duration of
+        // the spell (similar to the effect of hold person on a living
+        // creature). The effect is broken if the halted creatures are
+        // attacked or take damage.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.HALT_UNDEAD,
+                    Name = "Halt Undead",
+                    Description = "Necromancy. Renders up to three undead creatures immobile (paralyzed) for 1 round/level. "
+                        + "Targets cannot be more than 30 ft. apart. Nonintelligent undead get no save; "
+                        + "intelligent undead get a Will save to negate. SR: Yes. PHB p.239",
+                    SpellLevel = 3,
+                    School = "Necromancy",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.Area,
+                    RangeCategory = SpellRangeCategory.Medium,
+                    AoEShapeType = AoEShape.Burst,
+                    // 30 ft between any two = 6 squares; using radius 3 ensures
+                    // any two affected creatures fall within a 30-ft diameter span.
+                    AoESizeSquares = 3,
+                    AoERangeSquares = 0, // use Medium range profile
+                    // Halt Undead can target any undead — but in our combat the typical caster
+                    // wants to halt enemies. Using EnemiesOnly avoids incidentally paralyzing
+                    // friendly summoned undead. Resolution method also filters to undead only.
+                    AoEFilter = AoETargetFilter.EnemiesOnly,
+                    EffectType = SpellEffectType.Debuff,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Rounds,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    BuffDurationRounds = 1, // legacy fallback
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.HIDE_FROM_UNDEAD,

@@ -10,6 +10,55 @@ public static partial class SpellDatabase
 {
     private static void RegisterSpellsV()
     {
+        // ──────────────────────────────────────────────────────────────
+        // VAMPIRIC TOUCH  (PHB p.281)
+        // Necromancy [Negative Energy]
+        // Level: Sor/Wiz 3
+        // Components: V, S
+        // Casting Time: 1 standard action
+        // Range: Touch
+        // Target: Living creature touched
+        // Duration: Instantaneous/1 hour; see text
+        // Saving Throw: None
+        // Spell Resistance: Yes
+        //
+        // You must succeed on a melee touch attack. Your touch deals
+        // 1d6 points of damage for every two caster levels (max 10d6).
+        // You gain temporary hit points equal to the damage you deal.
+        // However, you can't gain more temporary hit points than the
+        // subject's current hit points + 10, which is enough to kill
+        // the subject. The temporary hit points disappear 1 hour later.
+        // ──────────────────────────────────────────────────────────────
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.VAMPIRIC_TOUCH,
+                    Name = "Vampiric Touch",
+                    Description = "Necromancy [Negative Energy]. Melee touch attack. Deals 1d6 negative energy damage "
+                        + "per 2 caster levels (max 10d6). Caster gains temporary hit points equal to damage dealt "
+                        + "(capped by caster's max HP), lasting 1 hour. SR: Yes. PHB p.281",
+                    SpellLevel = 3,
+                    School = "Necromancy",
+                    AvailableFor = new List<SpellAvailability>
+                    {
+                        new SpellAvailability("Sorcerer", 3),
+                        new SpellAvailability("Wizard", 3)
+                    },
+                    TargetType = SpellTargetType.SingleEnemy,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    IsTouch = true,
+                    IsMeleeTouch = true,
+                    EffectType = SpellEffectType.Damage,
+                    DamageType = "negative",
+                    AllowsSavingThrow = false,
+                    SpellResistanceApplies = true,
+                    DurationType = DurationType.Instantaneous,
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true,
+                    HasVerbalComponent = true,
+                    HasSomaticComponent = true,
+                    IsPlaceholder = false
+                });
+
         Register(new SpellData
                 {
                     SpellId = SpellNames.VENTRILOQUISM,
