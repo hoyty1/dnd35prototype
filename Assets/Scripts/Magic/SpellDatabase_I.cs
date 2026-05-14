@@ -136,5 +136,50 @@ public static partial class SpellDatabase
                     ProvokesAoO = true
                 });
 
+        // ═══════════════════════════════════════════════════════════════
+        // Invisibility Sphere — PHB p.245
+        // School: Illusion (Glamer)
+        // Level: Bard 3, Sorcerer/Wizard 3
+        // Components: V, S, M (an eyelash encased in a bit of gum arabic)
+        // Casting Time: 1 standard action
+        // Range: Personal or Touch
+        // Area: 10-ft.-radius emanation around the creature or object touched
+        // Duration: 1 min./level (D)
+        // Saving Throw: Will negates (harmless) or Will negates (harmless, object)
+        // Spell Resistance: Yes (harmless) or Yes (harmless, object)
+        //
+        // The creature or object to which this spell is cast becomes the center
+        // of a 10-ft.-radius emanation that turns all creatures within it
+        // invisible. Creatures inside the area can see each other and the
+        // recipient but lose invisibility (and the spell ends for them) if they
+        // leave the emanation. Creatures that enter the area after the spell is
+        // cast do NOT become invisible. Creatures within the area become visible
+        // if they attack any creature.
+        //
+        // If the recipient (the center of the emanation) attacks, all creatures
+        // affected by the sphere become visible at once and the spell ends.
+        // ═══════════════════════════════════════════════════════════════
+        Register(new SpellData
+                {
+                    SpellId = SpellNames.INVISIBILITY_SPHERE,
+                    Name = "Invisibility Sphere",
+                    Description = "Illusion (Glamer). Recipient becomes the center of a 10-ft-radius emanation that turns all creatures within it invisible. Affected creatures can see one another. A creature that leaves the emanation becomes visible (the spell ends for it). New creatures entering the area do NOT become invisible. If any affected creature other than the recipient attacks, only that creature becomes visible. If the recipient attacks, the entire spell ends and all become visible. Components: V, S, M (eyelash in gum arabic). Duration 1 min/level (D). Will negates (harmless). SR: Yes (harmless). PHB p.245",
+                    SpellLevel = 3,
+                    School = "Illusion",
+                    ClassList = new[] { "Wizard", "Sorcerer", "Bard" },
+                    TargetType = SpellTargetType.SingleAlly,
+                    RangeCategory = SpellRangeCategory.Touch,
+                    EffectType = SpellEffectType.Buff,
+                    BuffType = SpellNames.INVISIBILITY_SPHERE,
+                    DurationType = DurationType.Minutes,
+                    DurationValue = 1,
+                    DurationScalesWithLevel = true,
+                    IsDismissible = true,
+                    AllowsSavingThrow = true,
+                    SavingThrowType = "Will",
+                    ActionType = SpellActionType.Standard,
+                    ProvokesAoO = true
+                });
+
     }
 }

@@ -180,6 +180,7 @@ public class StatusEffectManager : MonoBehaviour
             effect.ConcealmentSource = spell.Name;
         }
         else if (spell.SpellId == SpellNames.INVISIBILITY
+                 || spell.SpellId == SpellNames.INVISIBILITY_SPHERE
                  || spell.SpellId == "greater_invisibility"
                  || spell.SpellId == "improved_invisibility")
         {
@@ -656,6 +657,20 @@ public class StatusEffectManager : MonoBehaviour
                 _controller?.ClearInvisibilityEffect();
             }
 
+            return;
+        }
+
+        // Invisibility Sphere: the recipient's tracking effect represents the entire
+        // sphere. The actual per-creature invisibility for the recipient and any
+        // affected creatures is managed by the InvisibilitySphereEffect emanation
+        // (see GameManager_NewSpells.ApplyInvisibilitySphere). When this tracking
+        // effect is removed (expiration/dispel/dismiss), end the sphere for all.
+        if (spellId == SpellNames.INVISIBILITY_SPHERE)
+        {
+            if (!applying && _controller != null && GameManager.Instance != null)
+            {
+                GameManager.Instance.EndInvisibilitySphereForRecipient(_controller, "spell ended");
+            }
             return;
         }
 

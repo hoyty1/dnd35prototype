@@ -318,6 +318,9 @@ namespace DND35e.Identifiers
         /// <summary>Invisibility (spell id: invisibility)</summary>
         public const string INVISIBILITY = "invisibility";
 
+        /// <summary>Invisibility Sphere (spell id: invisibility_sphere)</summary>
+        public const string INVISIBILITY_SPHERE = "invisibility_sphere";
+
         /// <summary>Jump (spell id: jump)</summary>
         public const string JUMP = "jump";
 

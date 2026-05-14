@@ -11492,14 +11492,26 @@ public partial class GameManager : MonoBehaviour
 
     /// <summary>
     /// Tick all active emanations (call each round). Removes expired or invalid ones.
+    /// Also refreshes Invisibility Sphere membership: creatures who have moved
+    /// outside the emanation lose invisibility immediately at round boundaries.
     /// </summary>
     public void TickEmanations()
     {
+        // Refresh Invisibility Sphere membership BEFORE ticking so that
+        // creatures who have left the emanation become visible during the
+        // round end / round start visual update pass.
+        RefreshInvisibilitySpheres();
+
         for (int i = _activeEmanations.Count - 1; i >= 0; i--)
         {
             var em = _activeEmanations[i];
             if (em.ShouldRemove() || !em.Tick())
             {
+                // For Invisibility Sphere, ensure all initially-affected creatures
+                // are made visible before we drop the emanation.
+                if (em is InvisibilitySphereEffect sphere)
+                    sphere.EndForAll("duration expired");
+
                 Debug.Log($"[Emanation] Expired: {em.GetEffectName()}");
                 _activeEmanations.RemoveAt(i);
             }
@@ -16744,6 +16756,11 @@ public partial class GameManager : MonoBehaviour
 
             UpdateAllStatsUI();
             return effect;
+        }
+
+        if (spell != null && spell.SpellId == SpellNames.INVISIBILITY_SPHERE)
+        {
+            return ApplyInvisibilitySphere(caster, target, spell, spellComp);
         }
 
         if (spell != null && spell.SpellId == SpellNames.INVISIBILITY)

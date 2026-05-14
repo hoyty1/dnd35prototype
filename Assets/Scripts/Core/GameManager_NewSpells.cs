@@ -1,6 +1,7 @@
 // ============================================================================
 // GameManager_NewSpells.cs — Resolution logic for Lightning Bolt, Fireball,
-// Daylight, Rage, Hold Person, Displacement, and Wind Wall spells (PHB 3.5e).
+// Daylight, Rage, Hold Person, Displacement, Wind Wall, and Invisibility
+// Sphere spells (PHB 3.5e).
 // Part of the GameManager partial class.
 // ============================================================================
 using System.Collections.Generic;
@@ -484,5 +485,178 @@ public partial class GameManager
 
         if (providedCells != null && providedCells.Count > 0)
             windWall.SetExplicitCells(providedCells);
+    }
+
+    // ================================================================
+    //  INVISIBILITY SPHERE — Mobile Emanation (PHB p.245)
+    // ================================================================
+
+    /// <summary>
+    /// Applies the Invisibility Sphere spell (Bard 3, Sorcerer/Wizard 3).
+    /// Per PHB p.245: 10-ft-radius emanation centered on the recipient.
+    ///   - All creatures within the emanation at cast time become invisible.
+    ///   - The area moves with the recipient (mobile emanation).
+    ///   - Creatures that LEAVE the emanation become visible immediately.
+    ///   - Creatures that ENTER the emanation later do NOT become invisible.
+    ///   - If a creature OTHER THAN the recipient attacks, only that creature
+    ///     becomes visible.
+    ///   - If the RECIPIENT attacks, the entire spell ends.
+    ///
+    /// Called from ApplySpellBuff when spell.SpellId == INVISIBILITY_SPHERE.
+    /// </summary>
+    private ActiveSpellEffect ApplyInvisibilitySphere(CharacterController caster, CharacterController target, SpellData spell, SpellcastingComponent spellComp)
+    {
+        CharacterController recipient = target ?? caster;
+        if (recipient == null || recipient.Stats == null || spell == null)
+            return null;
+
+        // Track the spell on the recipient so duration/dispel/dismiss
+        // work via the standard StatusEffectManager path.
+        StatusEffectManager recipientStatusMgr = recipient.GetComponent<StatusEffectManager>();
+        if (recipientStatusMgr == null)
+            recipientStatusMgr = recipient.gameObject.AddComponent<StatusEffectManager>();
+        recipientStatusMgr.Init(recipient.Stats);
+
+        int casterLevel = caster != null && caster.Stats != null ? Mathf.Max(1, caster.Stats.GetCasterLevel()) : 1;
+        ActiveSpellEffect effect = recipientStatusMgr.AddEffect(
+            spell,
+            caster != null && caster.Stats != null ? caster.Stats.CharacterName : spell.Name,
+            casterLevel);
+
+        if (effect == null)
+        {
+            UpdateAllStatsUI();
+            return null;
+        }
+
+        SpellcastingComponent recipientSpellComp = recipient.GetComponent<SpellcastingComponent>();
+        if (recipientSpellComp != null)
+            recipientSpellComp.ActiveBuffs[spell.SpellId] = effect.RemainingRounds;
+
+        int durationRounds = Mathf.Max(1, effect.RemainingRounds);
+
+        // Build & register the emanation
+        var sphere = InvisibilitySphereEffect.Create(recipient, caster, durationRounds, casterLevel);
+        RegisterEmanation(sphere);
+
+        // Capture initial affected creatures (everyone within 10 ft of recipient)
+        List<CharacterController> all = GetAllCharacters();
+        sphere.ApplyInitialAffectedCreatures(all);
+
+        // Logging
+        string casterName = caster != null && caster.Stats != null ? caster.Stats.CharacterName : "Caster";
+        bool selfCast = recipient == caster;
+        string castLine = selfCast
+            ? $"<color=#88CCFF>👻 {casterName} casts Invisibility Sphere on self!</color>"
+            : $"<color=#88CCFF>👻 {casterName} casts Invisibility Sphere on {recipient.Stats.CharacterName}!</color>";
+        CombatUI?.ShowCombatLog(castLine);
+
+        int affectedCount = sphere.InitiallyAffectedCreatures != null ? sphere.InitiallyAffectedCreatures.Count : 0;
+        CombatUI?.ShowCombatLog($"<color=#A6F3FF>   A 10-ft emanation forms around {recipient.Stats.CharacterName}; {affectedCount} creature(s) become invisible.</color>");
+
+        if (affectedCount > 0)
+        {
+            var sb = new StringBuilder("<color=#A6F3FF>   Affected: ");
+            for (int i = 0; i < sphere.InitiallyAffectedCreatures.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                var c = sphere.InitiallyAffectedCreatures[i];
+                sb.Append(c != null && c.Stats != null ? c.Stats.CharacterName : "?");
+            }
+            sb.Append("</color>");
+            CombatUI?.ShowCombatLog(sb.ToString());
+        }
+
+        CombatUI?.ShowCombatLog($"<color=#A6F3FF>   Duration: {effect.GetDurationDisplayString()}. Leaving the sphere or attacking ends invisibility.</color>");
+
+        UpdateEnemyLastKnownPositionForInvisibility(recipient);
+        UpdateAllStatsUI();
+        return effect;
+    }
+
+    /// <summary>
+    /// Per-round refresh of all active Invisibility Sphere emanations.
+    /// Removes invisibility from creatures who have stepped out of the sphere.
+    /// Called from TickEmanations (and may be invoked after movement actions).
+    /// </summary>
+    public void RefreshInvisibilitySpheres()
+    {
+        var spheres = GetActiveEmanationsOfType<InvisibilitySphereEffect>();
+        for (int i = 0; i < spheres.Count; i++)
+        {
+            spheres[i]?.RefreshMembership();
+        }
+    }
+
+    /// <summary>
+    /// Ends an Invisibility Sphere centered on the given recipient (e.g. when
+    /// the recipient attacks, the spell expires/is dismissed, or is dispelled).
+    /// All initially-affected creatures become visible at once.
+    /// </summary>
+    /// <param name="recipient">The creature on whom the sphere is centered.</param>
+    /// <param name="reason">Free-text reason shown in the combat log.</param>
+    public void EndInvisibilitySphereForRecipient(CharacterController recipient, string reason = "spell ended")
+    {
+        if (recipient == null) return;
+
+        var spheres = GetActiveEmanationsOfType<InvisibilitySphereEffect>();
+        for (int i = 0; i < spheres.Count; i++)
+        {
+            var s = spheres[i];
+            if (s == null || s.HasEnded) continue;
+            if (s.CenterCreature != recipient) continue;
+
+            s.EndForAll(reason);
+        }
+    }
+
+    /// <summary>
+    /// Returns the active Invisibility Sphere this creature is currently
+    /// invisible from, or null if none.
+    /// </summary>
+    public InvisibilitySphereEffect GetInvisibilitySphereAffecting(CharacterController creature)
+    {
+        if (creature == null) return null;
+
+        var spheres = GetActiveEmanationsOfType<InvisibilitySphereEffect>();
+        for (int i = 0; i < spheres.Count; i++)
+        {
+            var s = spheres[i];
+            if (s == null || s.HasEnded) continue;
+            if (s.IsCreatureAffected(creature))
+                return s;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Handles an attack made by a creature that is invisible due to an
+    /// Invisibility Sphere. Per PHB p.245:
+    ///   - If the attacker is the recipient → ALL affected creatures become visible.
+    ///   - Otherwise → only that one creature becomes visible.
+    /// Returns true if a sphere matched and was processed (so the standard
+    /// invisibility-on-attack flow can be skipped for this attacker).
+    /// </summary>
+    public bool TryHandleInvisibilitySphereAttack(CharacterController attacker, string reason = "attacked")
+    {
+        if (attacker == null) return false;
+
+        var sphere = GetInvisibilitySphereAffecting(attacker);
+        if (sphere == null) return false;
+
+        if (sphere.CenterCreature == attacker)
+        {
+            sphere.EndForAll(reason);
+
+            // Also clean the recipient's tracking ActiveSpellEffect so the duration
+            // bar / dismiss UI clears on the same round as the sphere ending.
+            StatusEffectManager mgr = attacker.GetComponent<StatusEffectManager>();
+            mgr?.RemoveEffectsBySpellId(SpellNames.INVISIBILITY_SPHERE);
+        }
+        else
+        {
+            sphere.EndForCreature(attacker, reason);
+        }
+        return true;
     }
 }

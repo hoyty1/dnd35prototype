@@ -1602,6 +1602,20 @@ public class CharacterController : MonoBehaviour
         if (!HasActiveInvisibilityEffect)
             return false;
 
+        // INVISIBILITY SPHERE (PHB p.245): Per-creature invisibility from a
+        // sphere has BreaksOnAttack=false, but attack handling is still required.
+        //   - If the recipient (sphere center) attacks → entire sphere ends.
+        //   - If any other affected creature attacks → only that creature visible.
+        if (ActiveInvisibilityEffect.MatchesSpellId(SpellNames.INVISIBILITY_SPHERE))
+        {
+            if (GameManager.Instance != null &&
+                GameManager.Instance.TryHandleInvisibilitySphereAttack(this, reason ?? "hostile action"))
+            {
+                return true;
+            }
+            // If sphere lookup failed, fall through to standard handling.
+        }
+
         // Greater Invisibility and similar effects do NOT break on attack/hostile action
         if (!ActiveInvisibilityEffect.BreaksOnAttack)
             return false;

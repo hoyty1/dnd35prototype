@@ -42,4 +42,7 @@ public static class AreaEffectColors
 
     // Wind / air
     public static readonly Color WindWall = new Color(0.7f, 0.85f, 1.0f, 0.45f);
+
+    // Illusion (concealment / invisibility emanations)
+    public static readonly Color InvisibilitySphere = new Color(0.6f, 0.7f, 1.0f, 0.35f);
 }
